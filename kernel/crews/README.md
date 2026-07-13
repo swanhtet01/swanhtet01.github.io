@@ -99,6 +99,10 @@ HTTP (`../api/crew.mjs`, LIVE at `console.supermega.dev/api/crew`):
 
 Adding a task is: **write or forge one JSON → it's registered, gated, runnable, and served.**
 
+The separate ops-gated `../api/agent-company.mjs` manager runs bounded multi-crew cycles. It accepts
+only the fixed roster, isolates evidence per specialist, budgets role calls before execution, claims
+one durable cycle id, and returns draft-only partial results without cross-agent context or writes.
+
 ## Shipped crews
 
 | slug | plan | what it does |

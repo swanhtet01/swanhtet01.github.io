@@ -15,6 +15,7 @@ broader system boundaries.
 | `owner-evidence.mjs` + `api/owner-evidence.mjs` | Reviewed LINE/Viber evidence preview, immutable storage, and bounded read | live |
 | `approval-actions.mjs` + `api/approvals.mjs` | Immutable owner approval and idempotent ClickUp execution | live |
 | `crews/` + `crew-run.mjs` | Contract-enforced, draft-only multi-role tasks | 5 live |
+| `agent-company.mjs` + `api/agent-company.mjs` | Bounded supervisor cycles across the fixed crew roster | live |
 | `public/` + `api/` | Ops console, status, workcell activation, and scheduled delivery | live |
 
 ## Gateway
@@ -53,6 +54,21 @@ client's private Telegram bot and operator-reviewed LINE/Viber updates. Reviewed
 previewed first, frozen by payload hash, and inserted into an immutable service-role-only table.
 The agent receives only the bounded read tool and cannot write to the inbox.
 
+## Agent Company Cycles
+
+`POST /api/agent-company` is the protected manager layer over the five validated crews. Callers must
+choose `action: "plan"` or `action: "run"`, a stable client and cycle id, one or two allowlisted
+specialists, and separate evidence for each specialist. A plan reports the exact role-call budget
+before any model call. A run atomically claims the cycle in durable storage, then executes the crews
+sequentially through the existing gateway.
+
+The supervisor is deliberately not another model. It cannot invent agents, delegate recursively,
+share one specialist's output with another, or call a connector. It preserves partial results in one
+traceable envelope and returns drafts only; every external side effect remains behind the separate
+approval path. Reusing a claimed cycle id is blocked to prevent duplicate spend.
+Completed specialist and final envelopes are also stored under the claimed run id, so an idempotent
+replay can return a finished result or expose the recoverable partial results without spending again.
+
 ## Core Environment
 
 - `ANTHROPIC_API_KEY` or another configured gateway provider.
@@ -78,6 +94,8 @@ in recovery instead of being retried blindly.
 - The token cap can modestly overshoot under highly concurrent calls because storage updates are not
   a database-side atomic increment in every store mode.
 - The default cron is one daily UTC schedule. Each isolated client deployment sets its own UTC time.
+- Agent Company cycles are synchronous waves capped at two specialists and eight planned role calls.
+  Failed or partial waves require a new explicit cycle id; there is no automatic retry or hidden loop.
 
 ## Next
 
