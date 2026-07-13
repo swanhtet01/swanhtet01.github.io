@@ -10,11 +10,12 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from html.parser import HTMLParser
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 
-USER_AGENT = "supermega-portfolio-live-health/4.0"
+USER_AGENT = "supermega-portfolio-live-health/4.1"
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -28,6 +29,35 @@ class HttpResult:
     status: int
     headers: dict[str, str]
     body: bytes
+
+
+class ModuleScriptParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.sources: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag != "script":
+            return
+        values = dict(attrs)
+        if values.get("type") == "module" and values.get("src"):
+            self.sources.append(str(values["src"]))
+
+
+def app_module_url(body: str, app_url: str) -> str | None:
+    parser = ModuleScriptParser()
+    parser.feed(body)
+    app = urlparse(app_url)
+    for source in parser.sources:
+        resolved = urlparse(urljoin(app_url, source))
+        if (
+            resolved.scheme == "https"
+            and resolved.netloc == app.netloc
+            and resolved.path.startswith("/assets/")
+            and resolved.path.endswith(".js")
+        ):
+            return resolved.geturl()
+    return None
 
 
 def fetch(url: str, *, timeout: float, attempts: int, follow_redirects: bool = True) -> HttpResult:
@@ -193,10 +223,13 @@ def run(
     if status_response.status != 200 or mismatches:
         failures.append(api_result)
 
+    app_home_body = ""
     for route in ("home", "factory"):
         url = urljoin(app_url, route)
         response = fetch(url, timeout=timeout, attempts=attempts)
         body = response.body.decode("utf-8", errors="replace")
+        if route == "home":
+            app_home_body = body
         missing = [token for token in ['<title>Shop - SuperMega</title>', '<div id="root"></div>', 'type="module"'] if token not in body]
         result = {
             "kind": "app_route",
@@ -209,6 +242,26 @@ def run(
         results.append(result)
         if response.status != 200 or len(response.body) < 1000 or missing:
             failures.append(result)
+
+    module_url = app_module_url(app_home_body, app_url)
+    module_response = fetch(module_url, timeout=timeout, attempts=attempts) if module_url else None
+    module_body = module_response.body.decode("utf-8", errors="replace") if module_response else ""
+    module_result = {
+        "kind": "shop_brand_bundle",
+        "url": module_url or app_url,
+        "status": module_response.status if module_response else 0,
+        "bytes": len(module_response.body) if module_response else 0,
+        "missing": [] if module_url else ["same-origin /assets/*.js module"],
+        "unexpected": [token for token in ("MegaOS", "Mega OS") if token in module_body],
+    }
+    results.append(module_result)
+    if (
+        module_response is None
+        or module_response.status != 200
+        or len(module_response.body) < 1000
+        or module_result["unexpected"]
+    ):
+        failures.append(module_result)
 
     app_health_url = urljoin(app_url, "api/health")
     app_health_response = fetch(app_health_url, timeout=timeout, attempts=attempts)

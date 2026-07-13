@@ -56,7 +56,7 @@ def healthy_responses() -> dict[str, checker.HttpResult]:
     app_shell = page(
         "<title>Shop - SuperMega</title>",
         '<div id="root"></div>',
-        'type="module"',
+        '<script type="module" crossorigin src="/assets/index-current.js"></script>',
     )
     console = page(
         "<title>SuperMega Console</title>",
@@ -129,6 +129,9 @@ def healthy_responses() -> dict[str, checker.HttpResult]:
         ),
         f"{APP}home": result(f"{APP}home", app_shell),
         f"{APP}factory": result(f"{APP}factory", app_shell),
+        f"{APP}assets/index-current.js": result(
+            f"{APP}assets/index-current.js", "Shop" + ("x" * 1400)
+        ),
         f"{APP}api/health": result(f"{APP}api/health", app_health),
         CONSOLE: result(CONSOLE, console),
         f"{CONSOLE}api/status": result(f"{CONSOLE}api/status", kernel_status),
@@ -152,10 +155,10 @@ class PortfolioHealthTest(unittest.TestCase):
         with patch.object(checker, "fetch", side_effect=fake_fetch):
             return checker.run(BASE, WWW, APP, CONSOLE, timeout=1, attempts=1)
 
-    def test_healthy_portfolio_passes_all_fifteen_checks(self):
+    def test_healthy_portfolio_passes_all_sixteen_checks(self):
         report = self.run_report(healthy_responses())
         self.assertEqual(report["status"], "ready")
-        self.assertEqual(report["checks"], 15)
+        self.assertEqual(report["checks"], 16)
         self.assertEqual(report["failures"], [])
 
     def test_missing_plant_link_fails_public_page(self):
@@ -182,6 +185,17 @@ class PortfolioHealthTest(unittest.TestCase):
         self.assertEqual(report["status"], "error")
         health_failure = next(item for item in report["failures"] if item["kind"] == "app_health")
         self.assertIn("proof.productionCloudDurability", health_failure["mismatches"])
+
+    def test_retired_megaos_name_fails_shop_bundle(self):
+        for retired_name in ("MegaOS", "Mega OS"):
+            with self.subTest(retired_name=retired_name):
+                responses = healthy_responses()
+                asset_url = f"{APP}assets/index-current.js"
+                responses[asset_url] = result(asset_url, f"Shop {retired_name}" + ("x" * 1400))
+                report = self.run_report(responses)
+                self.assertEqual(report["status"], "error")
+                failure = next(item for item in report["failures"] if item["kind"] == "shop_brand_bundle")
+                self.assertEqual(failure["unexpected"], [retired_name])
 
     def test_missing_review_gate_fails_agent_company_page(self):
         responses = healthy_responses()
