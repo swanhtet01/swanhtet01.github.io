@@ -127,18 +127,32 @@ runner, scheduler, or model supervisor. Start from the redacted example and keep
 outside version control:
 
 ```powershell
-$env:SUPERMEGA_OPS_KEY = '<owner-provided in this terminal only>'
-npm run agent-company:operate -- --manifest C:\secure-local\work-order.json
-Remove-Item Env:SUPERMEGA_OPS_KEY
+npm run agent-company:operate -- --manifest C:\secure-local\work-order.json --preflight
+$secureOpsKey = Read-Host 'Ops key' -AsSecureString
+$opsKeyBuffer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureOpsKey)
+try {
+  $env:SUPERMEGA_OPS_KEY = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($opsKeyBuffer)
+  npm run agent-company:operate -- --manifest C:\secure-local\work-order.json
+} finally {
+  Remove-Item Env:SUPERMEGA_OPS_KEY -ErrorAction SilentlyContinue
+  [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($opsKeyBuffer)
+}
 ```
 
-The default is plan-only. Queueing requires exact `QUEUE <runId>` confirmation, dispatch requires a
-separate exact `RUN <workOrderId>` confirmation, and optional internal evaluation requires the four
-fixed checks plus `EVALUATE <workOrderId>`. The command then retrieves the deterministic delivery
-proof. It rejects credential-shaped manifest fields before network access, fixes the API host to
-`console.supermega.dev`, accepts the Ops key only from the process environment, and has no customer
-review or connector-write command. Customer decisions still belong in the console after the operator
-has exact evidence from an allowed source.
+`--preflight` is offline and keyless. It validates the redacted manifest against the same local roster,
+crew definitions, role budget, and no-write controls used by the server, prints evidence byte counts
+without evidence content, and computes the exact expected run ID, work-order ID, and `expectedPlanHash`
+that the durable queue must return. It creates no claim and makes no network or model call. Normal
+operation refuses planning or queue creation if any identity differs. It also fingerprints the exact
+server plan the owner reviews and refuses dispatch if the durable queue or terminal result contains a
+different plan. The default remains plan-only.
+Queueing requires exact `QUEUE <runId>` confirmation, dispatch requires a separate exact
+`RUN <workOrderId>` confirmation, and optional internal evaluation requires the four fixed checks plus
+`EVALUATE <workOrderId>`. The command then retrieves the deterministic delivery proof. It rejects
+credential-shaped manifest fields before network access, fixes the API host to `console.supermega.dev`,
+accepts the Ops key only from the process environment, and has no customer review or connector-write
+command. Customer decisions still belong in the console after the operator has exact evidence from an
+allowed source.
 
 ## Core Environment
 
