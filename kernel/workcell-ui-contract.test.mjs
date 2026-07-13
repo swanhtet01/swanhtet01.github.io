@@ -34,12 +34,25 @@ test('console builds a canonical client activation plan without collecting crede
   assert.match(html, /id="activationForm"/)
   assert.match(html, /api\('POST','\/api\/workcell-plan',\{scope:\$\('#activationScope'\)\.value\.trim\(\),manifest\}\)/)
   assert.match(html, /id="activationDownloadManifest"/)
+  assert.match(html, /src="\/workcell-manifest-import\.js"/)
+  assert.match(html, /id="activationManifestFile" type="file" accept="\.json,application\/json"/)
+  assert.match(html, /id="activationImportManifest"/)
+  assert.match(html, /SuperMegaManifestImport\.parseActivationManifest\(await file\.text\(\)\)/)
+  assert.match(html, /Manifest imported\. Add the client-owned ClickUp List ID\./)
+  assert.match(html, /id="activationTokenCap" type="number" min="10000" max="5000000"/)
+  assert.match(html, /tokenCap:Number\(\$\('#activationTokenCap'\)\.value\)/)
+  assert.match(html, /if\(location\.hash==='\#activation'\)/)
+  assert.match(html, /Enter the ops passcode to load live workcell status\./)
+  assert.match(html, /if\(activeView==='workcells'\)/)
   assert.match(html, /activationPlan\.requiredSecretInputs/)
   assert.match(html, /\.activation-fields input,\.activation-fields select\{min-height:44px\}/)
   assert.match(html, /@media\(max-width:520px\)/)
   const panel = html.match(/<div class="activation" id="activationPanel"[\s\S]*?<div id="workcellGrid"/)?.[0] || ''
   assert.ok(panel)
   assert.doesNotMatch(panel, /type="password"|name="[^"]*(?:secret|token|key)/i)
+  const importFunction = html.match(/async function importActivationManifestFile\(\)\{[\s\S]*?\n\}/)?.[0] || ''
+  assert.ok(importFunction)
+  assert.doesNotMatch(importFunction, /\bapi\s*\(|fetch\s*\(/)
 })
 
 test('Vercel serves the guarded workcell function before the generic API route', async () => {
