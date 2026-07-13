@@ -285,6 +285,14 @@ def run(
         "connectors.total": 69,
         "connectors.registrationErrors": 0,
         "ai.primary": "anthropic",
+        "agentCompany.plannerReady": True,
+        "agentCompany.actionMode": "draft_only",
+        "agentCompany.maxAgents": 2,
+        "agentCompany.maxRoleBudget": 8,
+        "agentCompany.probeMode": "plan_only",
+        "agentCompany.modelRequest": False,
+        "agentCompany.durableClaimCreated": False,
+        "agentCompany.externalWrites": False,
     }
     kernel_status_mismatches = {
         path: {"expected": expected, "actual": nested_value(kernel_status_payload, path)}
