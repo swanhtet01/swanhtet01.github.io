@@ -63,6 +63,146 @@ function list(value) {
     .filter(Boolean)
 }
 
+function safeWorkcellActivationHandoff(value) {
+  const source = parseJsonObject(value)
+  if (text(source.handoff_type) !== 'isolated_workcell_provisioner') return null
+
+  const profiles = {
+    'cash-close': {
+      packageName: 'Cash Close',
+      requiresClickupList: false,
+      providerInputs: ['SUPERMEGA_NEW_CLIENT_PAYPAL_CLIENT_ID', 'SUPERMEGA_NEW_CLIENT_PAYPAL_CLIENT_SECRET'],
+    },
+    'pipeline-control': {
+      packageName: 'Pipeline Control',
+      requiresClickupList: true,
+      providerInputs: [
+        'SUPERMEGA_NEW_CLIENT_PIPEDRIVE_ACCESS_TOKEN|SUPERMEGA_NEW_CLIENT_PIPEDRIVE_API_TOKEN',
+        'SUPERMEGA_NEW_CLIENT_CLICKUP_ACCESS_TOKEN|SUPERMEGA_NEW_CLIENT_CLICKUP_API_TOKEN',
+      ],
+    },
+    'owner-command': {
+      packageName: 'Owner Command',
+      requiresClickupList: true,
+      providerInputs: [
+        'SUPERMEGA_NEW_CLIENT_PAYPAL_CLIENT_ID',
+        'SUPERMEGA_NEW_CLIENT_PAYPAL_CLIENT_SECRET',
+        'SUPERMEGA_NEW_CLIENT_PIPEDRIVE_ACCESS_TOKEN|SUPERMEGA_NEW_CLIENT_PIPEDRIVE_API_TOKEN',
+        'SUPERMEGA_NEW_CLIENT_CLICKUP_ACCESS_TOKEN|SUPERMEGA_NEW_CLIENT_CLICKUP_API_TOKEN',
+      ],
+    },
+  }
+  const runtimeWorkcellSlug = text(source.runtime_workcell_slug)
+  const profile = profiles[runtimeWorkcellSlug]
+  if (!profile) return null
+
+  const sourceManifest = parseJsonObject(source.manifest_draft)
+  const leadId = truncate(source.lead_id, 80).replace(/[^a-zA-Z0-9._:-]/g, '-')
+  const clientSlug = slugPart(sourceManifest.clientSlug, '')
+  if (clientSlug.length < 3) return null
+  const projectName = `supermega-wc-${clientSlug}`
+  const manifestFile = `workcells/${clientSlug}.json`
+  const clientName = truncate(sourceManifest.clientName, 120)
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim() || 'Client'
+  const clickupListId = truncate(sourceManifest.clickupListId, 120).replace(/[^a-zA-Z0-9_-]/g, '')
+  const missingManifestFields = profile.requiresClickupList && !clickupListId ? ['clickupListId'] : []
+  const deliveryUtcCandidate = truncate(sourceManifest.deliveryUtc, 5)
+  const deliveryUtc = /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(deliveryUtcCandidate) ? deliveryUtcCandidate : '01:30'
+  const timeZone = truncate(sourceManifest.timeZone, 80) || 'Asia/Yangon'
+  const currency = truncate(sourceManifest.currency, 6).toUpperCase().replace(/[^A-Z]/g, '') || 'MMK'
+  const lookbackCandidate = Number(sourceManifest.lookbackHours)
+  const lookbackHours = Number.isInteger(lookbackCandidate) && lookbackCandidate >= 1 && lookbackCandidate <= 168 ? lookbackCandidate : 24
+  const tokenCapCandidate = Number(sourceManifest.tokenCap)
+  const tokenCap = Number.isInteger(tokenCapCandidate) && tokenCapCandidate >= 1000 && tokenCapCandidate <= 500000 ? tokenCapCandidate : 150000
+  const manifestDraft = {
+    version: 1,
+    clientSlug,
+    clientName,
+    clientId: `workcell-${clientSlug}`,
+    projectName,
+    workcells: [runtimeWorkcellSlug],
+    timeZone,
+    currency,
+    lookbackHours,
+    clickupListId,
+    deliveryUtc,
+    tokenCap,
+  }
+  const requiredSecretInputs = [
+    'SUPERMEGA_NEW_CLIENT_OPS_KEY',
+    'SUPERMEGA_NEW_CLIENT_ANTHROPIC_API_KEY|SUPERMEGA_NEW_CLIENT_CLAUDE_API_KEY|SUPERMEGA_NEW_CLIENT_OPENROUTER_API_KEY',
+    'SUPERMEGA_NEW_CLIENT_SUPABASE_URL',
+    'SUPERMEGA_NEW_CLIENT_SUPABASE_SERVICE_ROLE_KEY',
+    'SUPERMEGA_NEW_CLIENT_TELEGRAM_BOT_TOKEN',
+    'SUPERMEGA_NEW_CLIENT_TELEGRAM_ALERT_CHAT_ID|SUPERMEGA_NEW_CLIENT_TELEGRAM_CHAT_ID',
+    ...profile.providerInputs,
+  ]
+  const optionalBootstrapInputs = ['SUPERMEGA_NEW_CLIENT_SUPABASE_DB_URL', 'SUPERMEGA_NEW_CLIENT_CRON_SECRET']
+  const operatorSteps = [
+    'Confirm the buyer accepted the first proof and approved isolated activation.',
+    ...(profile.requiresClickupList ? ['Collect the exact client-owned ClickUp list ID and place it in the manifest draft.'] : []),
+    'Create or confirm the client-owned Supabase project; never reuse the shared console or another client project.',
+    'Load every required credential through the isolated provisioning environment, never through the public form, email, logs, or the manifest file.',
+    'Run the plan command and review the normalized manifest, missing inputs, project target, and schedule before applying.',
+    `Apply only with the exact confirmation PROVISION ${projectName}.`,
+    'Use client-owned test data for the first authenticated read-only run and keep every proposed write in the Approval Inbox.',
+  ]
+  const status = missingManifestFields.length ? 'needs_manifest_inputs' : 'needs_client_credentials'
+  const packet = [
+    `# ${profile.packageName} isolated activation handoff`,
+    '',
+    `Status: ${status}`,
+    `Lead: ${leadId || 'not set'}`,
+    `Runtime workcell: ${runtimeWorkcellSlug}`,
+    `Manifest file: ${manifestFile}`,
+    `Project: ${projectName}`,
+    'Apply allowed: false',
+    '',
+    '## Missing manifest fields',
+    ...(missingManifestFields.length ? missingManifestFields.map((item) => `- ${item}`) : ['- none']),
+    '',
+    '## Required secret input names',
+    ...requiredSecretInputs.map((item) => `- ${item}`),
+    '',
+    '## Bootstrap-only optional inputs',
+    ...optionalBootstrapInputs.map((item) => `- ${item}`),
+    '',
+    '## Operator steps',
+    ...operatorSteps.map((item, index) => `${index + 1}. ${item}`),
+    '',
+    '## Boundary',
+    '- No credential value belongs in this packet or manifest.',
+    '- No project creation, schema write, provider action, send, or payment occurs from this console.',
+    '- Apply remains blocked until client-owned inputs and exact owner confirmation are present.',
+  ].join('\n')
+
+  return {
+    status,
+    handoff_type: 'isolated_workcell_provisioner',
+    runtime_workcell_slug: runtimeWorkcellSlug,
+    lead_id: leadId,
+    manifest_file: manifestFile,
+    manifest_draft: manifestDraft,
+    missing_manifest_fields: missingManifestFields,
+    required_secret_input_names: requiredSecretInputs,
+    optional_bootstrap_input_names: optionalBootstrapInputs,
+    plan_command: `npm run workcell:provision -- --manifest ${manifestFile} --scope <vercel-team>`,
+    apply_command: `npm run workcell:provision -- --apply --manifest ${manifestFile} --scope <vercel-team> --confirm "PROVISION ${projectName}"`,
+    exact_apply_confirmation: `PROVISION ${projectName}`,
+    provisioner_source: 'kernel/workcell-provision.mjs',
+    schema_source: 'kernel/supabase/workcell-client.sql',
+    operator_steps: operatorSteps,
+    manifest_ready: missingManifestFields.length === 0,
+    credentials_present: false,
+    apply_allowed: false,
+    external_action_state: 'blocked_until_owner_approval_and_client_inputs',
+    real_mrr_delta: 0,
+    packet,
+  }
+}
+
 function csvCell(value) {
   return `"${text(value).replace(/"/g, '""')}"`
 }
@@ -2827,6 +2967,7 @@ function firstProofPacket(row) {
   const solutionRoute = parseJsonObject(result.solution_route || task.solution_route || payload.solution_route)
   const implementationBlueprintPack = parseJsonObject(result.implementation_blueprint_pack || task.implementation_blueprint_pack || payload.implementation_blueprint_pack)
   const clientKickoffPack = parseJsonObject(result.client_kickoff_pack || task.client_kickoff_pack || payload.client_kickoff_pack)
+  const workcellActivationHandoff = safeWorkcellActivationHandoff(result.workcell_activation_handoff || task.workcell_activation_handoff || payload.workcell_activation_handoff)
   const sourcePackRequest = parseJsonObject(result.source_pack_request || task.source_pack_request || payload.source_pack_request)
   const sourcePackRequestApproval = parseJsonObject(result.source_pack_request_approval || sourcePackRequest.approval || payload.source_pack_request_approval)
   const clientSourcePackSubmission = parseJsonObject(result.client_source_pack_submission || payload.client_source_pack_submission)
@@ -3160,6 +3301,9 @@ function firstProofPacket(row) {
     client_kickoff_pack: Object.keys(clientKickoffPack).length ? clientKickoffPack : null,
     client_kickoff_packet: text(clientKickoffPack.packet),
     client_kickoff_json: Object.keys(clientKickoffPack).length ? JSON.stringify(clientKickoffPack, null, 2) : '',
+    workcell_activation_handoff: workcellActivationHandoff,
+    workcell_activation_packet: workcellActivationHandoff ? workcellActivationHandoff.packet : '',
+    workcell_activation_manifest_json: workcellActivationHandoff ? JSON.stringify(workcellActivationHandoff.manifest_draft, null, 2) : '',
     source_pack_request: sourcePackRequestForOutput,
     source_pack_request_packet: text(sourcePackRequest.client_message),
     source_pack_request_json: Object.keys(sourcePackRequest).length ? JSON.stringify(sourcePackRequest, null, 2) : '',
@@ -8486,6 +8630,7 @@ handler.__test = {
   buildActivationSourcePack,
   buildActivationFirstProof,
   buildFirstProductionRunRecord,
+  safeWorkcellActivationHandoff,
   firstProofPacket,
   operatorRuntimeSummary,
   autopilotCommandBoard,

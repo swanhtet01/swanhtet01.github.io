@@ -7111,11 +7111,13 @@ const publicOperatorConsoleHtml = `<!doctype html>
   <style>${unicornShellStyle}
     .operator-main{padding:clamp(24px,4vw,48px) 0 72px}
     .operator-grid{display:grid;grid-template-columns:minmax(280px,.9fr) minmax(320px,1.4fr);gap:18px;align-items:start}
-    .operator-panel{border:1px solid var(--line);background:var(--paper);padding:18px}
+    .operator-grid>*{min-width:0}
+    .operator-panel{min-width:0;border:1px solid var(--line);background:var(--paper);padding:18px}
     .operator-panel h2{font-size:18px;margin:0 0 12px}
+    .operator-panel .btn{min-height:44px}
     .operator-stack{display:grid;gap:12px}
     .operator-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-    .operator-input{width:100%;min-height:42px;border:1px solid var(--line);background:transparent;color:var(--ink);padding:10px 12px;font:inherit}
+    .operator-input{width:100%;min-height:44px;border:1px solid var(--line);background:transparent;color:var(--ink);padding:10px 12px;font:inherit}
     .operator-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px}
     .operator-kpi{border:1px solid var(--line);padding:12px;background:color-mix(in srgb,var(--paper) 92%,var(--ink) 8%)}
     .operator-kpi strong{display:block;font-size:24px;line-height:1}
@@ -7137,16 +7139,18 @@ const publicOperatorConsoleHtml = `<!doctype html>
     .operator-money-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px}
     .operator-money-cell{border:1px solid var(--line);padding:10px}
     .operator-money-cell strong{display:block;font-size:20px;line-height:1.1}
-    .operator-list{display:grid;gap:10px}
-    .operator-item{border:1px solid var(--line);padding:14px;background:transparent}
+    .operator-list{display:grid;gap:10px;min-width:0}
+    .operator-item{min-width:0;border:1px solid var(--line);padding:14px;background:transparent;overflow-wrap:anywhere}
     .operator-meta{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0;color:var(--muted);font-size:13px}
-    .operator-chip{border:1px solid var(--line);padding:3px 7px}
-    .operator-proof{margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+    .operator-chip{border:1px solid var(--line);padding:3px 7px;overflow-wrap:anywhere}
+    .operator-proof{min-width:0;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
     .operator-proof-link{display:inline-flex;margin-top:10px;color:var(--ink);font-weight:900;text-decoration:underline;text-underline-offset:3px}
-    .operator-proof-section{margin-top:10px}
+    .operator-proof-section{min-width:0;margin-top:10px}
     .operator-proof-section span{display:block;color:var(--muted);font-size:12px;font-weight:950;letter-spacing:.1em;text-transform:uppercase}
     .operator-proof ul{margin:8px 0 0;padding-left:18px}
-    .operator-reply{width:100%;min-height:150px;margin-top:8px;border:1px solid var(--line);background:color-mix(in srgb,var(--paper) 93%,var(--ink) 7%);color:var(--ink);padding:10px;font:inherit;font-size:13px;line-height:1.45;resize:vertical}
+    .operator-reply{box-sizing:border-box;width:100%;max-width:100%;min-width:0;min-height:150px;margin-top:8px;border:1px solid var(--line);background:color-mix(in srgb,var(--paper) 93%,var(--ink) 7%);color:var(--ink);padding:10px;font:inherit;font-size:13px;line-height:1.45;resize:vertical}
+    .operator-command{min-height:76px}
+    .operator-boundary{margin-top:8px;padding:10px;border-left:3px solid var(--accent);background:color-mix(in srgb,var(--paper) 92%,var(--accent) 8%);font-size:13px;line-height:1.45}
     .operator-output{white-space:pre-wrap;overflow:auto;max-height:240px;border:1px solid var(--line);padding:12px;font-size:13px;background:color-mix(in srgb,var(--paper) 90%,var(--ink) 10%)}
     @media(max-width:840px){.operator-grid{grid-template-columns:1fr}.operator-kpis,.operator-money-grid{grid-template-columns:1fr}}
   </style>
@@ -7241,7 +7245,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
       return {
         status:'ready',
         runtime_status:'sample_only',
-        metrics:{open_action_count:2,recent_lead_count:1,recent_action_count:2,proof_backed_mrr_mmk:900000,bank_verified_mrr_mmk:0,bank_unverified_mrr_mmk:900000},
+        metrics:{open_action_count:3,recent_lead_count:2,recent_action_count:3,proof_backed_mrr_mmk:900000,bank_verified_mrr_mmk:0,bank_unverified_mrr_mmk:900000},
         behavior_summary:{
           status:'ready',
           source:'sample_private_queue',
@@ -8026,6 +8030,54 @@ const publicOperatorConsoleHtml = `<!doctype html>
             human_gate:'owner approval before send/write/payment actions'
           }
         },{
+          action_id:'SAMPLE-CASH-CLOSE-ACTIVATION',
+          lead_id:'SAMPLE-CASH-CLOSE',
+          task_id:'SAMPLE-CASH-CLOSE-ACTIVATION',
+          action_type:'lead_followup',
+          status:'queued',
+          priority:'high',
+          owner:'Revenue Pod',
+          title:'Cash Close isolated activation handoff',
+          next_step:'Review the manifest and collect client-owned credentials outside the browser before provisioning.',
+          approval_required:true,
+          approval_state:'pending',
+          notification_channel:'console',
+          notification_status:'sample',
+          first_proof:{
+            status:'queued_for_runner',
+            template_id:'cash-close',
+            template_name:'Cash Close',
+            first_proof_target:'One read-only cash-close preview with gross receipts, fees, net cash, transaction count, exceptions, and source trace.',
+            title:'Cash Close activation for sample buyer',
+            workcell_activation_handoff:{
+              status:'needs_client_credentials',
+              handoff_type:'isolated_workcell_provisioner',
+              runtime_workcell_slug:'cash-close',
+              lead_id:'SAMPLE-CASH-CLOSE',
+              manifest_file:'workcells/sample-cash-close-a1b2c3.json',
+              manifest_draft:{version:1,clientSlug:'sample-cash-close-a1b2c3',clientName:'Sample Cash Close Buyer',clientId:'workcell-sample-cash-close-a1b2c3',projectName:'supermega-wc-sample-cash-close-a1b2c3',workcells:['cash-close'],timeZone:'Asia/Yangon',currency:'MMK',lookbackHours:24,clickupListId:'',deliveryUtc:'01:30',tokenCap:150000},
+              missing_manifest_fields:[],
+              required_secret_input_names:['SUPERMEGA_NEW_CLIENT_OPS_KEY','SUPERMEGA_NEW_CLIENT_ANTHROPIC_API_KEY|SUPERMEGA_NEW_CLIENT_CLAUDE_API_KEY|SUPERMEGA_NEW_CLIENT_OPENROUTER_API_KEY','SUPERMEGA_NEW_CLIENT_SUPABASE_URL','SUPERMEGA_NEW_CLIENT_SUPABASE_SERVICE_ROLE_KEY','SUPERMEGA_NEW_CLIENT_TELEGRAM_BOT_TOKEN','SUPERMEGA_NEW_CLIENT_TELEGRAM_ALERT_CHAT_ID|SUPERMEGA_NEW_CLIENT_TELEGRAM_CHAT_ID','SUPERMEGA_NEW_CLIENT_PAYPAL_CLIENT_ID','SUPERMEGA_NEW_CLIENT_PAYPAL_CLIENT_SECRET'],
+              optional_bootstrap_input_names:['SUPERMEGA_NEW_CLIENT_SUPABASE_DB_URL','SUPERMEGA_NEW_CLIENT_CRON_SECRET'],
+              plan_command:'npm run workcell:provision -- --manifest workcells/sample-cash-close-a1b2c3.json --scope <vercel-team>',
+              apply_command:'npm run workcell:provision -- --apply --manifest workcells/sample-cash-close-a1b2c3.json --scope <vercel-team> --confirm "PROVISION supermega-wc-sample-cash-close-a1b2c3"',
+              exact_apply_confirmation:'PROVISION supermega-wc-sample-cash-close-a1b2c3',
+              operator_steps:['Confirm the buyer accepted the first proof and approved isolated activation.','Create or confirm the client-owned Supabase project; never reuse the shared console or another client project.','Load every required credential through the isolated provisioning environment, never through the public form, email, logs, or the manifest file.','Run the plan command and review the normalized manifest, missing inputs, project target, and schedule before applying.','Apply only with the exact confirmation PROVISION supermega-wc-sample-cash-close-a1b2c3.','Use client-owned test data for the first authenticated read-only run and keep every proposed write in the Approval Inbox.'],
+              manifest_ready:true,
+              credentials_present:false,
+              apply_allowed:false,
+              external_action_state:'blocked_until_owner_approval_and_client_inputs',
+              real_mrr_delta:0,
+              packet:'# Cash Close isolated activation handoff\\n\\nStatus: needs_client_credentials\\nRuntime workcell: cash-close\\nManifest file: workcells/sample-cash-close-a1b2c3.json\\nProject: supermega-wc-sample-cash-close-a1b2c3\\nApply allowed: false\\n\\nNo credential value belongs in this packet or manifest.'
+            },
+            workcell_activation_packet:'# Cash Close isolated activation handoff\\n\\nStatus: needs_client_credentials\\nRuntime workcell: cash-close\\nManifest file: workcells/sample-cash-close-a1b2c3.json\\nProject: supermega-wc-sample-cash-close-a1b2c3\\nApply allowed: false\\n\\nNo credential value belongs in this packet or manifest.',
+            workcell_activation_manifest_json:JSON.stringify({version:1,clientSlug:'sample-cash-close-a1b2c3',clientName:'Sample Cash Close Buyer',clientId:'workcell-sample-cash-close-a1b2c3',projectName:'supermega-wc-sample-cash-close-a1b2c3',workcells:['cash-close'],timeZone:'Asia/Yangon',currency:'MMK',lookbackHours:24,clickupListId:'',deliveryUtc:'01:30',tokenCap:150000},null,2),
+            checklist:['Review the sanitized manifest.','Collect credentials outside the browser.','Run plan before the separately gated apply command.'],
+            acceptance_tests:['No credential values are present.','Apply remains blocked pending owner confirmation.'],
+            approval_required:true,
+            human_gate:'owner approval and client-owned inputs before provisioning'
+          }
+        },{
           action_id:'AUTO-SAMPLE-SOURCE',
           lead_id:'SAMPLE-SETUP',
           task_id:'AUTO-SAMPLE-SOURCE',
@@ -8115,6 +8167,22 @@ const publicOperatorConsoleHtml = `<!doctype html>
       if(!proof || (!proof.client_kickoff_packet && !proof.client_kickoff_json))return '';
       const id = 'client-kickoff-'+index;
       return '<div class="operator-proof-section"><span>Client kickoff pack</span><textarea class="operator-reply" id="'+id+'" readonly>'+esc(proof.client_kickoff_packet || proof.client_kickoff_json || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+id+'">Copy kickoff pack</button></div>';
+    }
+    function proofWorkcellActivationHandoff(proof, index){
+      const handoff = proof && proof.workcell_activation_handoff;
+      if(!handoff || handoff.handoff_type !== 'isolated_workcell_provisioner')return '';
+      const packetId = 'workcell-activation-packet-'+index;
+      const manifestId = 'workcell-activation-manifest-'+index;
+      const planId = 'workcell-activation-plan-'+index;
+      const applyId = 'workcell-activation-apply-'+index;
+      const manifestJson = proof.workcell_activation_manifest_json || JSON.stringify(handoff.manifest_draft || {},null,2);
+      const packet = proof.workcell_activation_packet || handoff.packet || '';
+      const missing = Array.isArray(handoff.missing_manifest_fields) ? handoff.missing_manifest_fields : [];
+      const requiredInputs = Array.isArray(handoff.required_secret_input_names) ? handoff.required_secret_input_names : [];
+      const optionalInputs = Array.isArray(handoff.optional_bootstrap_input_names) ? handoff.optional_bootstrap_input_names : [];
+      const steps = Array.isArray(handoff.operator_steps) ? handoff.operator_steps : [];
+      const inputs = requiredInputs.concat(optionalInputs.map(function(item){return item+' (optional bootstrap)'}));
+      return '<div class="operator-proof-section operator-workcell-handoff" data-workcell-activation-handoff="isolated_workcell_provisioner"><span>Workcell activation handoff</span><div class="operator-meta"><span class="operator-chip">'+esc(handoff.runtime_workcell_slug || '')+'</span><span class="operator-chip">'+esc(handoff.status || 'needs_client_inputs')+'</span><span class="operator-chip">'+esc(handoff.manifest_ready ? 'manifest ready' : 'manifest incomplete')+'</span><span class="operator-chip">apply blocked</span></div><div class="operator-boundary"><strong>Review-only handoff.</strong> No credential values belong in this console. Copying a command does not run it; provisioning stays in the separately authenticated CLI with exact owner confirmation.</div>'+proofList('Missing manifest fields',missing.length ? missing : ['None'])+proofList('Required input names',inputs)+proofList('Operator steps',steps)+'<textarea class="operator-reply" id="'+packetId+'" readonly>'+esc(packet)+'</textarea><div class="operator-row"><button class="btn secondary operator-copy" type="button" data-copy-target="'+packetId+'">Copy activation handoff</button></div><textarea class="operator-reply" id="'+manifestId+'" readonly>'+esc(manifestJson)+'</textarea><div class="operator-row"><button class="btn secondary operator-copy" type="button" data-copy-target="'+manifestId+'">Copy manifest draft</button><button class="btn secondary" type="button" data-download-workcell-manifest="'+manifestId+'" data-manifest-name="'+esc(handoff.manifest_file || 'workcell-manifest.json')+'">Download manifest draft</button></div><textarea class="operator-reply operator-command" id="'+planId+'" readonly>'+esc(handoff.plan_command || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+planId+'">Copy plan command</button><textarea class="operator-reply operator-command" id="'+applyId+'" readonly>'+esc(handoff.apply_command || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+applyId+'">Copy gated apply command</button></div>';
     }
     function proofSourcePackRequest(action, proof, index){
       const request = proof && proof.source_pack_request;
@@ -8334,6 +8402,21 @@ const publicOperatorConsoleHtml = `<!doctype html>
         }catch(fallbackError){}
         setStatus({status:'copy_failed', target:id, reason:String(error.message||error)});
       }
+    }
+    function downloadWorkcellManifest(button){
+      const targetId = button.getAttribute('data-download-workcell-manifest') || '';
+      const el = document.getElementById(targetId);
+      if(!el){setStatus({status:'download_failed',reason:'manifest_target_missing'});return}
+      let parsed;
+      try{parsed=JSON.parse(el.value || el.textContent || '{}')}catch(error){setStatus({status:'download_failed',reason:'manifest_json_invalid'});return}
+      const requestedName = button.getAttribute('data-manifest-name') || 'workcell-manifest.json';
+      const fileName = (requestedName.split('/').pop() || 'workcell-manifest.json').replace(/[^a-zA-Z0-9._-]/g,'-').slice(0,96) || 'workcell-manifest.json';
+      const blob = new Blob([JSON.stringify(parsed,null,2)+'\\n'],{type:'application/json'});
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href=url; link.download=fileName; document.body.appendChild(link); link.click(); link.remove();
+      setTimeout(function(){URL.revokeObjectURL(url)},0);
+      setStatus({status:'manifest_downloaded',file:fileName,note:'Review the plan separately. No provisioning was run.'});
     }
     function statePatch(command){
       const patches = {
@@ -8992,10 +9075,11 @@ const publicOperatorConsoleHtml = `<!doctype html>
       if(!actions.length){actionsEl.innerHTML = '<div class="operator-item">No recent actions.</div>';return}
       actionsEl.innerHTML = actions.map(function(action,index){
         const proof = action.first_proof;
-        const proofHtml = proof ? '<div class="operator-proof"><strong>'+esc(proof.title || 'First proof')+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(proof.status)+'</span><span class="operator-chip">'+esc(proof.template_id)+'</span><span class="operator-chip">'+esc(proof.human_gate)+'</span></div><div>'+esc(proof.first_proof_target || '')+'</div>'+proofStarterLink(proof)+proofSolutionRoute(proof,index)+proofImplementationBlueprint(proof,index)+proofIntakeJob(proof,index)+proofClientKickoff(proof,index)+proofSourcePackRequest(action,proof,index)+proofList('Checklist',proof.checklist)+proofList('Acceptance tests',proof.acceptance_tests)+sourcePackControl(action,index)+proofActivationSourceControl(action,index)+proofBuyerReply(proof,index)+proofDeliveryPacket(proof,index)+proofReviewRequest(proof,index)+pilotClosePacket(proof,index)+pilotOrderRoom(action,proof,index)+'</div>' : '';
+        const proofHtml = proof ? '<div class="operator-proof"><strong>'+esc(proof.title || 'First proof')+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(proof.status)+'</span><span class="operator-chip">'+esc(proof.template_id)+'</span><span class="operator-chip">'+esc(proof.human_gate)+'</span></div><div>'+esc(proof.first_proof_target || '')+'</div>'+proofStarterLink(proof)+proofSolutionRoute(proof,index)+proofImplementationBlueprint(proof,index)+proofIntakeJob(proof,index)+proofClientKickoff(proof,index)+proofWorkcellActivationHandoff(proof,index)+proofSourcePackRequest(action,proof,index)+proofList('Checklist',proof.checklist)+proofList('Acceptance tests',proof.acceptance_tests)+sourcePackControl(action,index)+proofActivationSourceControl(action,index)+proofBuyerReply(proof,index)+proofDeliveryPacket(proof,index)+proofReviewRequest(proof,index)+pilotClosePacket(proof,index)+pilotOrderRoom(action,proof,index)+'</div>' : '';
         return '<article class="operator-item"><strong>'+esc(action.title || action.action_type)+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(action.status)+'</span><span class="operator-chip">'+esc(action.priority)+'</span><span class="operator-chip">'+esc(action.approval_state)+'</span><span>'+esc(action.lead_id)+'</span></div><div>'+esc(action.next_step || '')+'</div>'+salesAutopilotDraft(action,index)+proofHtml+'</article>';
       }).join('');
       actionsEl.querySelectorAll('[data-copy-target]').forEach(function(button){button.addEventListener('click',function(){copyDraft(button.getAttribute('data-copy-target'))})});
+      actionsEl.querySelectorAll('[data-download-workcell-manifest]').forEach(function(button){button.addEventListener('click',function(){downloadWorkcellManifest(button)})});
       actionsEl.querySelectorAll('[data-state-command]').forEach(function(button){button.addEventListener('click',function(){persistOrderRoomState(button)})});
       actionsEl.querySelectorAll('[data-scope-price-command]').forEach(function(button){button.addEventListener('click',function(){recordScopePriceApproval(button)})});
       actionsEl.querySelectorAll('[data-pilot-payment-proof-command]').forEach(function(button){button.addEventListener('click',function(){recordPilotPaymentProof(button)})});
