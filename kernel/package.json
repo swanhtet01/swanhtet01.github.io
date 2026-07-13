@@ -8,6 +8,7 @@
     "connector:resilience": "node ../tools/test_connector_resilience.mjs",
     "crew:resilience": "node ../tools/test_crew_resilience.mjs",
     "workcell:provision": "node scripts/provision-workcell-client.mjs",
+    "workcell:activate": "node scripts/activate-workcell-client.mjs",
     "verify": "npm test && npm run brand:verify && npm run connector:resilience && npm run crew:resilience",
     "deploy:prod": "npm run verify && npx vercel deploy --prod -y"
   },
