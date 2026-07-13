@@ -11,6 +11,7 @@
     "api/crew.mjs": { "maxDuration": 45 },
     "api/workcell-plan.mjs": { "maxDuration": 10 },
     "api/workcells.mjs": { "maxDuration": 45 },
+    "api/owner-evidence.mjs": { "maxDuration": 15 },
     "api/approvals.mjs": { "maxDuration": 30 }
   },
   "crons": [
@@ -26,6 +27,7 @@
     { "src": "/api/crew", "dest": "/api/crew" },
     { "src": "/api/workcell-plan", "dest": "/api/workcell-plan" },
     { "src": "/api/workcells", "dest": "/api/workcells" },
+    { "src": "/api/owner-evidence", "dest": "/api/owner-evidence" },
     { "src": "/api/approvals", "dest": "/api/approvals" },
     { "src": "/api/(.*)", "dest": "/api/index" },
     { "src": "/status", "dest": "/status.html" },

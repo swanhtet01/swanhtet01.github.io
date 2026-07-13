@@ -84,6 +84,7 @@ test('required secrets derive from selected workcells and plan output never cont
   assert.equal(plan.missingSecrets.length, 0)
   assert.equal(plan.missingSecretInputs.length, 0)
   assert.ok(plan.secretNames.includes('CRON_SECRET'))
+  assert.ok(plan.variableNames.includes('WORKCELL_OWNER_EVIDENCE_ENABLED'))
   assert.ok(plan.requiredSecretInputs.includes('SUPERMEGA_NEW_CLIENT_SUPABASE_SERVICE_ROLE_KEY'))
   assert.ok(plan.requiredSecretInputs.some((name) => name.startsWith('SUPERMEGA_NEW_CLIENT_SUPABASE_DB_URL ')))
   assert.equal(plan.schemaBootstrap.supplied, false)
@@ -244,15 +245,15 @@ test('data-spine preflight proves table access and atomic claims without leaving
     },
     randomBytes: () => Buffer.from('fixed-probe'),
   })
-  assert.deepEqual(result.tables, ['supermega_console_activity', 'supermega_token_ledger', 'supermega_ai_cache', 'supermega_action_queue'])
+  assert.deepEqual(result.tables, ['supermega_console_activity', 'supermega_token_ledger', 'supermega_ai_cache', 'supermega_action_queue', 'supermega_owner_evidence'])
   assert.equal(result.idempotentClaim, true)
   assert.equal(result.approvalCas, true)
   assert.equal(result.probeCleaned, true)
   assert.deepEqual(calls.map((call) => call.options?.method || 'GET'), [
-    'GET', 'GET', 'GET', 'GET', 'POST', 'POST', 'DELETE', 'POST', 'PATCH', 'PATCH', 'DELETE',
+    'GET', 'GET', 'GET', 'GET', 'GET', 'POST', 'POST', 'DELETE', 'POST', 'PATCH', 'PATCH', 'DELETE',
   ])
   assert.equal(calls.every((call) => call.options.headers.apikey === 'supabase-secret'), true)
-  assert.equal(JSON.parse(calls[4].options.body).id, JSON.parse(calls[5].options.body).id)
+  assert.equal(JSON.parse(calls[5].options.body).id, JSON.parse(calls[6].options.body).id)
   assert.doesNotMatch(JSON.stringify(result), /supabase-secret/)
   await assert.rejects(
     verifyClientDataSpine(resolved, { fetch: async () => ({ ok: false, status: 404 }) }),
@@ -481,12 +482,15 @@ test('project inspection auth or network failures never become create operations
 
 test('client SQL bootstrap contains the exact durable workcell contract', async () => {
   const sql = await readFile(new URL('./supabase/workcell-client.sql', import.meta.url), 'utf8')
-  for (const table of ['supermega_console_activity', 'supermega_token_ledger', 'supermega_ai_cache', 'supermega_action_queue']) {
+  for (const table of ['supermega_console_activity', 'supermega_token_ledger', 'supermega_ai_cache', 'supermega_action_queue', 'supermega_owner_evidence']) {
     assert.match(sql, new RegExp(`create table if not exists public\\.${table}`))
     assert.match(sql, new RegExp(`alter table public\\.${table} enable row level security`))
     assert.match(sql, new RegExp(`revoke all on public\\.${table} from anon, authenticated`))
   }
   assert.match(sql, /create index if not exists supermega_action_queue_status_created_idx/)
+  assert.match(sql, /create index if not exists supermega_owner_evidence_occurred_idx/)
+  assert.match(sql, /grant select, insert on public\.supermega_owner_evidence to service_role/)
+  assert.doesNotMatch(sql, /grant select, insert, update, delete on public\.supermega_owner_evidence/)
   assert.match(sql, /notify pgrst, 'reload schema'/)
   assert.match(sql, /primary key \(tenant_id, "window"\)/)
 })
@@ -496,6 +500,7 @@ test('live verifier requires healthy status and every selected workcell', async 
     { ok: true, service: 'supermega-kernel', connectors: { total: 69, registrationErrors: 0 } },
     { ok: true, workcells: [{ slug: 'owner-command', configured: true, actionDraftSupported: true, actionDraftReady: true, missing: [] }] },
     { ok: true, approvals: [] },
+    { ok: true, configured: true, count: 0, evidence: [] },
   ]
   const fetchCalls = []
   const fetch = async (url, options = {}) => {
@@ -512,8 +517,10 @@ test('live verifier requires healthy status and every selected workcell', async 
   assert.equal(result.workcells[0].configured, true)
   assert.equal(result.approvalInbox.ready, true)
   assert.equal(result.approvalInbox.count, 0)
+  assert.equal(result.ownerEvidenceInbox.ready, true)
   assert.equal(fetchCalls[1].options.headers['x-ops-key'], 'ops-secret')
   assert.equal(fetchCalls[2].options.headers['x-ops-key'], 'ops-secret')
+  assert.equal(fetchCalls[3].options.headers['x-ops-key'], 'ops-secret')
   assert.doesNotMatch(JSON.stringify(result), /ops-secret/)
 
   await assert.rejects(
@@ -552,6 +559,7 @@ test('live verifier requires healthy status and every selected workcell', async 
     { ok: true, service: 'supermega-kernel', connectors: { total: 69, registrationErrors: 0 } },
     { ok: true, workcells: [{ slug: 'owner-command', configured: true, actionDraftSupported: true, actionDraftReady: false, missing: [] }] },
     { ok: true, approvals: [] },
+    { ok: true, configured: true, count: 0, evidence: [] },
   ]
   const noActionResult = await verifyProvisionedClient('https://client.vercel.app', {
     fetch: async () => ({ ok: true, async json() { return noActionResponses.shift() } }),
@@ -560,4 +568,20 @@ test('live verifier requires healthy status and every selected workcell', async 
     actionWorkcells: [],
   })
   assert.equal(noActionResult.workcells[0].configured, true)
+
+  const missingEvidenceResponses = [
+    { ok: true, service: 'supermega-kernel', connectors: { total: 69, registrationErrors: 0 } },
+    { ok: true, workcells: [{ slug: 'owner-command', configured: true, actionDraftSupported: true, actionDraftReady: false, missing: [] }] },
+    { ok: true, approvals: [] },
+    { ok: true, configured: false, count: 0, evidence: [] },
+  ]
+  await assert.rejects(
+    verifyProvisionedClient('https://client.vercel.app', {
+      fetch: async () => ({ ok: true, async json() { return missingEvidenceResponses.shift() } }),
+      opsKey: 'ops-secret',
+      workcells: ['owner-command'],
+      actionWorkcells: [],
+    }),
+    /provision_owner_evidence_inbox_check_failed/,
+  )
 })

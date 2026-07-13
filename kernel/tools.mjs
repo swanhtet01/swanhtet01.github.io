@@ -11,6 +11,7 @@ import paypal from './connectors/payment-paypal.mjs'
 import pipedrive from './connectors/crm-pipedrive.mjs'
 import clickup from './connectors/data-clickup.mjs'
 import telegram from './connectors/messaging-telegram.mjs'
+import { ownerEvidenceConfigured, readOwnerEvidence } from './owner-evidence.mjs'
 
 export const TOOLS = {
   platform_status: {
@@ -199,7 +200,7 @@ export const TOOLS = {
     },
   },
   owner_updates_read: {
-    description: 'Read a bounded time window of incoming messages from the configured private Telegram owner chat. Read-only: does not acknowledge updates, send messages, or expose other chats.',
+    description: 'Read a bounded time window of owner evidence from the configured private Telegram chat and immutable reviewed LINE/Viber inbox. Read-only: does not acknowledge, send, modify, or expose other chats.',
     input_schema: {
       type: 'object',
       properties: {
@@ -210,14 +211,48 @@ export const TOOLS = {
       required: ['start_date', 'end_date'],
       additionalProperties: false,
     },
-    available: () => { try { return telegram.ownerChatConfigured() } catch { return false } },
+    available: () => {
+      try { return telegram.ownerChatConfigured() || ownerEvidenceConfigured() } catch { return false }
+    },
     run: async ({ start_date, end_date, limit = 100 } = {}) => {
-      const result = await telegram.readOwnerUpdates({ startDate: start_date, endDate: end_date, limit })
-      if (!result.ok) throw new Error(result.reason || 'messaging-telegram_read_failed')
+      const boundedLimit = Math.max(1, Math.min(100, Number.parseInt(String(limit), 10) || 100))
+      const readers = []
+      if (telegram.ownerChatConfigured()) {
+        readers.push({
+          source: 'telegram',
+          promise: telegram.readOwnerUpdates({ startDate: start_date, endDate: end_date, limit: boundedLimit }),
+        })
+      }
+      if (ownerEvidenceConfigured()) {
+        readers.push({
+          source: 'reviewed-evidence',
+          promise: readOwnerEvidence({ startDate: start_date, endDate: end_date, limit: boundedLimit }),
+        })
+      }
+      if (!readers.length) throw new Error('owner_updates_not_configured')
+      const results = await Promise.all(readers.map(async (reader) => {
+        try { return { source: reader.source, result: await reader.promise } }
+        catch { return { source: reader.source, result: { ok: false, reason: 'owner_updates_read_failed' } } }
+      }))
+      const successful = results.filter((entry) => entry.result?.ok)
+      if (!successful.length) throw new Error(results[0]?.result?.reason || 'owner_updates_read_failed')
+      const updates = successful.flatMap((entry) => entry.result.updates.map((update) => ({
+        ...update,
+        source: update.source || entry.source,
+      })))
+      updates.sort((left, right) => String(left.at || '').localeCompare(String(right.at || ''))
+        || String(left.evidenceId || left.updateId || '').localeCompare(String(right.evidenceId || right.updateId || '')))
+      const bounded = updates.slice(-boundedLimit)
       return {
-        updates: result.updates.slice(0, 100),
-        fetched: result.fetched,
-        truncated: Boolean(result.truncated),
+        updates: bounded,
+        fetched: successful.reduce((sum, entry) => sum + Number(entry.result.fetched || 0), 0),
+        truncated: updates.length > bounded.length || successful.some((entry) => entry.result.truncated),
+        sourceStatus: results.map((entry) => ({
+          source: entry.source,
+          ok: Boolean(entry.result?.ok),
+          items: entry.result?.ok ? entry.result.updates.length : 0,
+          reason: entry.result?.ok ? null : String(entry.result?.reason || 'owner_updates_read_failed').slice(0, 80),
+        })),
       }
     },
   },
