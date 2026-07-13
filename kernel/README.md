@@ -69,7 +69,7 @@ approval path. Reusing a claimed cycle id is blocked to prevent duplicate spend.
 Completed specialist and final envelopes are also stored under the claimed run id, so an idempotent
 replay can return a finished result or expose the recoverable partial results without spending again.
 
-For durable delegation, the same endpoint accepts four additional explicit actions:
+For durable delegation and delivery proof, the same endpoint accepts six additional explicit actions:
 
 - `work-order-create` validates and stores the exact cycle plan without a model call.
 - `work-order-list` returns up to 40 client-bound order summaries, filtered in the store by kind and
@@ -77,6 +77,12 @@ For durable delegation, the same endpoint accepts four additional explicit actio
 - `work-order-get` returns assignments, budgets, byte counts, evidence fingerprints, and any result.
 - `work-order-run` requires the saved 64-character plan hash and exact `RUN <workOrderId>`
   confirmation, then reuses `runCompanyCycle`; there is no second runner or recursive delegation.
+- `work-order-proof` returns a deterministic customer delivery packet with result and packet hashes,
+  bounded specialist outputs, role-call usage, evidence fingerprints, and execution controls. It never
+  returns queued raw evidence.
+- `work-order-review` stores one immutable accepted or changes-requested decision against the exact
+  result hash. It requires the exact customer statement, source, reviewer name, recorder name, and an
+  `ACCEPT ...` or `REQUEST CHANGES ...` confirmation bound to that result.
 
 The work-order id is deterministic for one client and cycle. Re-creating the same exact plan replays
 the saved order, while changed evidence under the same cycle id is a conflict. Dispatch first saves
@@ -84,6 +90,10 @@ the `running` state, so storage failure blocks model spend. A concurrent or lost
 the cycle runner's durable claim and either returns the saved result or reports the existing run.
 Queued evidence remains inside the service-role-only cache record and is replaced by fingerprints
 after a terminal dispatch state.
+Customer review records are explicitly `operator_recorded_customer_review` with
+`customerAuthenticated: false`; they are evidence copied by the operator from email, chat, call, or
+an in-person conversation, not a customer login or digital signature. A different review cannot
+overwrite the first immutable record. Revised work requires a new cycle and work order.
 
 ## Core Environment
 
@@ -114,6 +124,7 @@ in recovery instead of being retried blindly.
   Failed or partial waves require a new explicit cycle id; there is no automatic retry or hidden loop.
 - Planned work orders retain their bounded evidence in the protected cache until dispatch. There is
   no unattended dispatcher or retention sweeper; an owner still reviews and dispatches each order.
+- Customer review is operator-recorded provenance, not cryptographic proof of customer identity.
 
 ## Next
 
@@ -121,5 +132,7 @@ in recovery instead of being retried blindly.
    provisioner. A matching bootstrap-only Supabase database URL applies the schema automatically;
    pre-applying `supabase/workcell-client.sql` remains the fallback.
 2. Complete the client-owned test ClickUp draft, approval, execution, and recovery proof.
-3. Move from one cron per client deployment to a durable scheduler when a shared control plane is
+3. Dispatch one legitimate reviewed work order, download its delivery proof, record the customer's
+   exact decision from an allowed source, and retain the accepted or changes-requested packet.
+4. Move from one cron per client deployment to a durable scheduler when a shared control plane is
    justified by real client volume.

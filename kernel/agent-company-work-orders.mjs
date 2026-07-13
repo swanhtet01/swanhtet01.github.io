@@ -16,14 +16,30 @@ export const MAX_COMPANY_WORK_ORDERS = 40
 
 const ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/
 const FINAL_STATUSES = new Set(['completed', 'partial', 'blocked', 'failed'])
+const REVIEWABLE_STATUSES = new Set(['completed', 'partial'])
 const CREATE_FIELDS = new Set(['clientId', 'cycleId', 'agents', 'evidence', 'roleBudget'])
 const LIST_FIELDS = new Set(['clientId', 'limit'])
 const GET_FIELDS = new Set(['clientId', 'workOrderId'])
 const RUN_FIELDS = new Set(['clientId', 'workOrderId', 'planHash', 'confirmation'])
+const PROOF_FIELDS = new Set(['clientId', 'workOrderId'])
+const REVIEW_FIELDS = new Set([
+  'clientId',
+  'workOrderId',
+  'resultHash',
+  'decision',
+  'reviewerName',
+  'source',
+  'statement',
+  'recordedBy',
+  'confirmation',
+])
+const REVIEW_DECISIONS = new Set(['accepted', 'changes_requested'])
+const REVIEW_SOURCES = new Set(['email', 'chat', 'call', 'in_person'])
 
 const failure = (reason, extra = {}) => ({ ok: false, reason, ...extra })
 const isRecord = (value) => value && typeof value === 'object' && !Array.isArray(value)
 const recordKey = (workOrderId) => `company-work-order-record:${workOrderId}`
+const reviewRecordKey = (workOrderId) => `company-work-order-review-record:${workOrderId}`
 
 function onlyFields(input, allowed) {
   if (!isRecord(input)) return failure('company_work_order_invalid_request')
@@ -36,6 +52,20 @@ function normalizeId(value, reason) {
   return ID_RE.test(normalized) ? normalized : failure(reason)
 }
 
+function normalizeLine(value, maxLength, reason) {
+  const normalized = String(value || '').trim()
+  if (!normalized || normalized.length > maxLength || /[\r\n\u0000-\u001f\u007f]/.test(normalized)) return failure(reason)
+  return normalized
+}
+
+function normalizeStatement(value) {
+  const normalized = String(value || '').trim()
+  if (!normalized || normalized.length > 1200 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(normalized)) {
+    return failure('company_work_order_review_invalid_statement')
+  }
+  return normalized
+}
+
 function stableStringify(value) {
   if (value === null || typeof value !== 'object') return JSON.stringify(value)
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`
@@ -45,6 +75,8 @@ function stableStringify(value) {
 function sha256(value) {
   return createHash('sha256').update(String(value)).digest('hex')
 }
+
+const reviewClaimId = (workOrderId) => `company-work-order-review:${sha256(workOrderId).slice(0, 40)}`
 
 function sameHash(left, right) {
   if (!/^[a-f0-9]{64}$/.test(String(left)) || !/^[a-f0-9]{64}$/.test(String(right))) return false
@@ -84,7 +116,7 @@ function publicWorkOrder(record, { includeResult = true } = {}) {
       bytes: assignment.evidenceBytes,
       digest: record.evidenceDigests[assignment.agentId],
     })),
-    ...(result ? { result } : {}),
+    ...(result ? { result, resultHash: sha256(stableStringify(result)) } : {}),
   }
 }
 
@@ -96,6 +128,98 @@ async function readWorkOrder(workOrderId, options = {}) {
   } catch {
     return null
   }
+}
+
+async function readWorkOrderReview(workOrderId, options = {}) {
+  const read = options.getWorkOrderReview || options.getWorkOrder || getCachedResponse
+  try {
+    const record = await read(reviewRecordKey(workOrderId))
+    return isRecord(record) && record.workOrderId === workOrderId ? record : null
+  } catch {
+    return null
+  }
+}
+
+function publicWorkOrderReview(record) {
+  if (!isRecord(record)) return null
+  return {
+    reviewId: record.reviewId,
+    binding: 'operator_recorded_customer_review',
+    customerAuthenticated: false,
+    decision: record.decision,
+    reviewerName: record.reviewerName,
+    source: record.source,
+    statement: record.statement,
+    recordedBy: record.recordedBy,
+    recordedAt: record.recordedAt,
+    resultHash: record.resultHash,
+    reviewHash: record.reviewHash,
+  }
+}
+
+function deliveryResults(record) {
+  const assignments = Array.isArray(record.plan?.assignments) ? record.plan.assignments : []
+  const assignmentByAgent = new Map(assignments.map((assignment) => [assignment.agentId, assignment]))
+  const results = Array.isArray(record.result?.results) ? record.result.results : []
+  return results.map((result) => {
+    const assignment = assignmentByAgent.get(result.agentId) || {}
+    return {
+      agentId: String(result.agentId || ''),
+      name: String(assignment.name || result.agentId || ''),
+      department: String(result.department || assignment.department || ''),
+      status: String(result.status || 'unknown'),
+      ...(result.output !== undefined ? { output: result.output } : {}),
+      ...(result.reason ? { reason: String(result.reason).slice(0, 120) } : {}),
+    }
+  })
+}
+
+function buildDeliveryProof(record, review = null) {
+  const exactResultHash = sha256(stableStringify(record.result))
+  const results = deliveryResults(record)
+  const packet = {
+    version: 1,
+    kind: 'agent_company_delivery_proof',
+    workOrder: {
+      workOrderId: record.workOrderId,
+      clientId: record.clientId,
+      cycleId: record.cycleId,
+      status: record.status,
+      planHash: record.planHash,
+      createdAt: record.createdAt,
+      completedAt: record.completedAt || null,
+    },
+    delivery: {
+      resultHash: exactResultHash,
+      status: record.result.status,
+      actionMode: record.result.actionMode || record.plan?.actionMode || 'draft_only',
+      specialists: results,
+      budget: {
+        plannedRoleCalls: Number(record.plan?.budget?.plannedRoles || 0),
+        usedRoleCalls: Number(record.result?.budget?.usedRoleCalls || 0),
+      },
+    },
+    evidenceFingerprints: record.plan.assignments.map((assignment) => ({
+      agentId: assignment.agentId,
+      bytes: assignment.evidenceBytes,
+      digest: record.evidenceDigests[assignment.agentId],
+    })),
+    controls: {
+      approvalRequired: record.plan?.approvalRequired === true,
+      execution: record.plan?.controls?.execution || 'sequential',
+      dynamicDelegation: record.plan?.controls?.dynamicDelegation === true,
+      crossAgentContext: record.plan?.controls?.crossAgentContext === true,
+      externalWrites: record.plan?.controls?.externalWrites === true,
+      rawEvidenceIncluded: false,
+    },
+    review: publicWorkOrderReview(review),
+  }
+  return { ...packet, packetHash: sha256(stableStringify(packet)) }
+}
+
+function reviewConfirmation(decision, workOrderId, resultHash) {
+  const command = decision === 'accepted' ? 'ACCEPT' : 'REQUEST CHANGES'
+  return `${command} ${workOrderId} ${resultHash}`
 }
 
 export async function createCompanyWorkOrder(input, options = {}) {
@@ -176,7 +300,12 @@ export async function getCompanyWorkOrder(input, options = {}) {
   if (isRecord(workOrderId)) return workOrderId
   const record = await readWorkOrder(workOrderId, options)
   if (!record || record.clientId !== clientId) return failure('company_work_order_not_found')
-  return { ok: true, mode: 'work_order_get', workOrder: publicWorkOrder(record) }
+  const review = await readWorkOrderReview(workOrderId, options)
+  return {
+    ok: true,
+    mode: 'work_order_get',
+    workOrder: { ...publicWorkOrder(record), review: publicWorkOrderReview(review) },
+  }
 }
 
 export async function listCompanyWorkOrders(input, options = {}) {
@@ -295,9 +424,139 @@ export async function runCompanyWorkOrder(input, options = {}) {
   }
 }
 
+export async function getCompanyWorkOrderProof(input, options = {}) {
+  const fields = onlyFields(input, PROOF_FIELDS)
+  if (!fields.ok) return fields
+  const clientId = normalizeId(input.clientId, 'company_invalid_client_id')
+  if (isRecord(clientId)) return clientId
+  const workOrderId = normalizeId(input.workOrderId, 'company_work_order_invalid_id')
+  if (isRecord(workOrderId)) return workOrderId
+  const record = await readWorkOrder(workOrderId, options)
+  if (!record || record.clientId !== clientId) return failure('company_work_order_not_found')
+  if (!REVIEWABLE_STATUSES.has(record.status) || !isRecord(record.result)) {
+    return failure('company_work_order_proof_unavailable', { status: record.status, workOrderId })
+  }
+  const review = await readWorkOrderReview(workOrderId, options)
+  return {
+    ok: true,
+    mode: 'work_order_proof',
+    reviewState: review ? review.decision : 'unreviewed',
+    proofPacket: buildDeliveryProof(record, review),
+  }
+}
+
+export async function reviewCompanyWorkOrder(input, options = {}) {
+  const fields = onlyFields(input, REVIEW_FIELDS)
+  if (!fields.ok) return fields
+  const clientId = normalizeId(input.clientId, 'company_invalid_client_id')
+  if (isRecord(clientId)) return clientId
+  const workOrderId = normalizeId(input.workOrderId, 'company_work_order_invalid_id')
+  if (isRecord(workOrderId)) return workOrderId
+  const record = await readWorkOrder(workOrderId, options)
+  if (!record || record.clientId !== clientId) return failure('company_work_order_not_found')
+  if (!REVIEWABLE_STATUSES.has(record.status) || !isRecord(record.result)) {
+    return failure('company_work_order_not_reviewable', { status: record.status, workOrderId })
+  }
+
+  const exactResultHash = sha256(stableStringify(record.result))
+  if (!sameHash(input.resultHash, exactResultHash)) {
+    return failure('company_work_order_review_result_mismatch', { status: 'conflict', workOrderId })
+  }
+  const decision = String(input.decision || '').trim()
+  if (!REVIEW_DECISIONS.has(decision)) return failure('company_work_order_review_invalid_decision')
+  const source = String(input.source || '').trim()
+  if (!REVIEW_SOURCES.has(source)) return failure('company_work_order_review_invalid_source')
+  const reviewerName = normalizeLine(input.reviewerName, 120, 'company_work_order_review_invalid_reviewer')
+  if (isRecord(reviewerName)) return reviewerName
+  const recordedBy = normalizeLine(input.recordedBy, 120, 'company_work_order_review_invalid_recorder')
+  if (isRecord(recordedBy)) return recordedBy
+  const statement = normalizeStatement(input.statement)
+  if (isRecord(statement)) return statement
+  const requiredConfirmation = reviewConfirmation(decision, workOrderId, exactResultHash)
+  if (String(input.confirmation || '') !== requiredConfirmation) {
+    return failure('company_work_order_review_confirmation_required', {
+      workOrderId,
+      confirmation: requiredConfirmation,
+    })
+  }
+
+  const reviewInput = {
+    workOrderId,
+    clientId,
+    resultHash: exactResultHash,
+    decision,
+    reviewerName,
+    source,
+    statement,
+    recordedBy,
+  }
+  const reviewHash = sha256(stableStringify(reviewInput))
+  const reviewId = reviewClaimId(workOrderId)
+  const reserve = options.claimActivity || claimActivity
+  const release = options.releaseActivityClaim || releaseActivityClaim
+  const save = options.putWorkOrderReview || options.putWorkOrder || putCachedResponse
+  const requireDurableClaim = options.requireDurableClaim !== false
+  let claim
+  try {
+    claim = await reserve({
+      id: reviewId,
+      kind: 'agent_company_work_order_review',
+      summary: `${decision} review recorded for cycle ${record.cycleId}`,
+      ref: clientId,
+    })
+  } catch {
+    claim = { fresh: false, durable: false }
+  }
+  if (!claim?.fresh) {
+    if (!claim?.durable) return failure('company_work_order_review_store_unavailable', { status: 'blocked' })
+    const existing = await readWorkOrderReview(workOrderId, options)
+    if (!existing) return failure('company_work_order_review_already_claimed', { status: 'duplicate', workOrderId })
+    if (!sameHash(existing.reviewHash, reviewHash)) {
+      return failure('company_work_order_review_conflict', { status: 'conflict', workOrderId })
+    }
+    return {
+      ok: true,
+      mode: 'work_order_review',
+      replayed: true,
+      review: publicWorkOrderReview(existing),
+      proofPacket: buildDeliveryProof(record, existing),
+    }
+  }
+  if (requireDurableClaim && !claim.durable) {
+    try { await release(reviewId) } catch { /* no review was persisted */ }
+    return failure('company_work_order_review_durable_claim_required', { status: 'blocked', workOrderId })
+  }
+
+  const storedReview = {
+    version: 1,
+    reviewId,
+    ...reviewInput,
+    reviewHash,
+    binding: 'operator_recorded_customer_review',
+    customerAuthenticated: false,
+    recordedAt: String(options.now?.() || new Date().toISOString()),
+  }
+  let stored = false
+  try { stored = Boolean(await save(reviewRecordKey(workOrderId), storedReview)) }
+  catch { stored = false }
+  if (!stored) {
+    try { await release(reviewId) } catch { /* allow an explicit retry */ }
+    return failure('company_work_order_review_store_unavailable', { status: 'blocked', workOrderId })
+  }
+  return {
+    ok: true,
+    mode: 'work_order_review',
+    replayed: false,
+    review: publicWorkOrderReview(storedReview),
+    proofPacket: buildDeliveryProof(record, storedReview),
+  }
+}
+
 export default {
   createCompanyWorkOrder,
+  getCompanyWorkOrderProof,
   getCompanyWorkOrder,
   listCompanyWorkOrders,
+  reviewCompanyWorkOrder,
   runCompanyWorkOrder,
 }
