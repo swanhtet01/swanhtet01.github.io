@@ -50,6 +50,11 @@ for (const entry of expectedFunctions) {
   if (!actualFunctions.includes(entry)) fail('required_public_function_missing', { entry })
 }
 
+const publicDatastoreShim = resolve(functionsDir, 'contact-submissions.js.func', 'api', 'lib', 'supermega-datastore.js')
+if (!existsSync(publicDatastoreShim) || !readFileSync(publicDatastoreShim, 'utf8').includes('public_direct_postgres_disabled')) {
+  fail('public_contact_runtime_shim_missing')
+}
+
 const home = readText('index.html')
 const contact = readText('contact/index.html')
 const privacy = readText('privacy/index.html')

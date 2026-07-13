@@ -1,4 +1,4 @@
-import { cp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { cp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 
 const root = process.cwd()
@@ -6,25 +6,54 @@ const outputDir = resolve(root, '.vercel', 'output')
 const staticDir = resolve(outputDir, 'static')
 const functionsDir = resolve(outputDir, 'functions', 'api')
 
-const blobFunctionDependencies = ['@vercel/blob']
-const pgFunctionDependencies = [
-  'pg',
-  'pg-cloudflare',
-  'pg-connection-string',
-  'pg-int8',
-  'pg-pool',
-  'pg-protocol',
-  'pg-types',
-  'pgpass',
-  'postgres-array',
-  'postgres-bytea',
-  'postgres-date',
-  'postgres-interval',
-  'split2',
-  'xtend',
-]
-
 const faviconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="SuperMega"><rect x="4" y="4" width="56" height="56" rx="15" fill="#111827"/><rect x="4.75" y="4.75" width="54.5" height="54.5" rx="14.25" fill="none" stroke="#ffffff" stroke-opacity="0.12"/><path d="M21 23 31.5 32 21 41" fill="none" stroke="#2563eb" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><path d="M35 41h12" fill="none" stroke="#2563eb" stroke-width="5" stroke-linecap="round"/></svg>\n`
+
+// The public site accepts only contact requests. It uses the contact handler's Supabase REST
+// fallback when those variables are configured and never opens a direct Postgres connection.
+// This keeps the public artifact small and prevents dormant operator-database access from leaking
+// into the simple front-door runtime.
+const publicDatastoreShim = `function supabaseConfigured() {
+  return Boolean(String(process.env.SUPABASE_URL || '').trim() && String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim())
+}
+
+function datastoreStatus() {
+  return {
+    status: supabaseConfigured() ? 'configured' : 'not_configured',
+    provider: 'supabase_rest',
+    env: 'SUPABASE_URL_and_SUPABASE_SERVICE_ROLE_KEY',
+    source: 'public_contact_runtime',
+  }
+}
+
+function postgresConfigured() {
+  return false
+}
+
+async function ping() {
+  return {
+    ok: true,
+    reachable: false,
+    configured: false,
+    detail: supabaseConfigured() ? 'supabase_rest_configured' : 'no_db_configured',
+  }
+}
+
+async function publicDirectPostgresDisabled() {
+  return { status: 'skipped', reason: 'public_direct_postgres_disabled' }
+}
+
+module.exports = {
+  datastoreStatus,
+  postgresConfigured,
+  ping,
+  query: publicDirectPostgresDisabled,
+  saveLeadLedger: publicDirectPostgresDisabled,
+  savePipelineAction: publicDirectPostgresDisabled,
+  saveSalesRun: publicDirectPostgresDisabled,
+  latestSalesRun: publicDirectPostgresDisabled,
+  pipelineSnapshot: publicDirectPostgresDisabled,
+}
+`
 
 const sharedStyle = `
   :root {
@@ -390,42 +419,12 @@ async function writeStatic(relativePath, content) {
   await writeFile(destination, content, 'utf8')
 }
 
-async function copyNodeDependency(dependency, functionDir, copiedDependencies) {
-  if (copiedDependencies.has(dependency)) return
-  copiedDependencies.add(dependency)
-  const source = resolve(root, 'node_modules', dependency)
-  try {
-    await stat(source)
-  } catch (error) {
-    if (error?.code === 'ENOENT') return
-    throw error
-  }
-
-  const destination = resolve(functionDir, 'node_modules', dependency)
-  await cp(source, destination, { recursive: true, force: true })
-  try {
-    const packageJson = JSON.parse(await readFile(resolve(source, 'package.json'), 'utf8'))
-    const children = Object.keys({ ...(packageJson.dependencies || {}), ...(packageJson.optionalDependencies || {}) })
-    for (const child of children) await copyNodeDependency(child, functionDir, copiedDependencies)
-  } catch (error) {
-    if (error?.code === 'ENOENT') return
-    throw error
-  }
-}
-
 async function writeNodeFunction(name) {
   const functionDir = resolve(functionsDir, `${name}.func`)
   await mkdir(resolve(functionDir, 'api'), { recursive: true })
   await cp(resolve(root, 'api', name), resolve(functionDir, 'api', name), { force: true })
   await cp(resolve(root, 'api', 'lib'), resolve(functionDir, 'api', 'lib'), { recursive: true, force: true })
-
-  const source = await readFile(resolve(root, 'api', name), 'utf8')
-  const dependencies = [
-    ...(source.includes('supermega-blob-queue') || source.includes('@vercel/blob') ? blobFunctionDependencies : []),
-    ...(source.includes('supermega-datastore') || /require\\(['\"]pg['\"]\\)/.test(source) ? pgFunctionDependencies : []),
-  ]
-  const copiedDependencies = new Set()
-  for (const dependency of dependencies) await copyNodeDependency(dependency, functionDir, copiedDependencies)
+  await writeFile(resolve(functionDir, 'api', 'lib', 'supermega-datastore.js'), publicDatastoreShim, 'utf8')
 
   await writeFile(resolve(functionDir, 'package.json'), `${JSON.stringify({ type: 'commonjs' }, null, 2)}\n`, 'utf8')
   await writeFile(
