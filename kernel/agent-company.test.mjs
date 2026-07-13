@@ -23,10 +23,14 @@ const cycle = (patch = {}) => ({
 
 test('agent roster is fixed, bounded, and backed by validated crews', async () => {
   const roster = listCompanyAgents()
-  assert.equal(roster.length, 5)
+  assert.equal(roster.length, 8)
   assert.equal(MAX_CYCLE_AGENTS, 2)
   assert.equal(MAX_CYCLE_ROLE_BUDGET, 8)
   assert.equal(new Set(roster.map((agent) => agent.id)).size, roster.length)
+  assert.deepEqual(
+    roster.slice(-3).map((agent) => agent.id),
+    ['sales-qualifier', 'delivery-planner', 'quality-reviewer'],
+  )
   const plan = await planCompanyCycle(cycle())
   assert.equal(plan.ok, true)
   assert.equal(plan.actionMode, 'draft_only')

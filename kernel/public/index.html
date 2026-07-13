@@ -100,6 +100,7 @@
   .company-plan{border-left:3px solid var(--accent);background:var(--accent-soft);padding:16px 18px;margin-top:18px;scroll-margin-top:120px}.company-plan-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}.company-plan-head h3{font-size:17px}.company-plan-summary{display:flex;gap:7px;flex-wrap:wrap;margin:12px 0}.company-run-id{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11px;color:var(--muted);overflow-wrap:anywhere}
   .company-assignments{display:grid;gap:8px;margin:14px 0}.company-assignment{display:grid;grid-template-columns:minmax(180px,.7fr) minmax(0,1.3fr);gap:12px;padding:11px 0;border-top:1px solid var(--line)}.company-assignment b{display:block}.company-assignment .roles{color:var(--muted);font-size:12px;overflow-wrap:anywhere}.company-confirm{display:flex;align-items:flex-start;gap:9px;min-height:44px;margin:0}.company-confirm input{width:20px;height:20px;margin:1px 0 0;flex:0 0 auto}.company-plan-actions{display:flex;align-items:center;gap:12px;border-top:1px solid var(--line);padding-top:14px}.company-plan-actions button{min-height:44px}
   .company-results{margin-top:20px}.company-results-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:12px}.company-results-head h3{font-size:18px}.company-result-list{display:grid;gap:10px}.company-result{border:1px solid var(--line);border-radius:8px;background:var(--surf);padding:15px}.company-result-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.company-result pre{max-height:340px;margin:12px 0 0;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--deep);overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.55 Consolas,"Courier New",monospace}.company-result .err-banner{margin-top:10px}.company-new-cycle{min-height:44px}
+  .company-work-orders{min-width:0;border-top:1px solid var(--line);margin-top:24px;padding-top:20px}.company-work-orders-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:12px}.company-work-orders-head h3{font-size:18px}.company-work-orders-head button{min-height:44px}.company-order-list{display:grid;gap:8px;min-width:0}.company-order-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:center;width:100%;min-width:0;min-height:64px;padding:11px 13px;text-align:left;background:var(--surf-2)}.company-order-row:hover{border-color:rgba(59,130,246,.5)}.company-order-name{display:block;font-weight:700;overflow-wrap:anywhere}.company-order-meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}.company-order-detail{min-width:0;border-left:3px solid var(--accent);background:var(--accent-soft);padding:16px 18px;margin-top:14px}.company-order-detail-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;min-width:0}.company-order-detail-head>*{min-width:0}.company-order-detail-head .muted{overflow-wrap:anywhere}.company-order-detail-head h4{font-family:"Space Grotesk",Inter,sans-serif;font-size:16px;margin:0}.company-order-detail .company-assignments{margin-bottom:8px}.company-order-fingerprint{font:11px/1.5 Consolas,"Courier New",monospace;color:var(--muted);overflow-wrap:anywhere}.company-order-actions{display:flex;align-items:center;gap:12px;border-top:1px solid var(--line);padding-top:14px;margin-top:14px}.company-order-actions button{min-height:44px}.company-order-confirm{display:flex;align-items:flex-start;gap:9px;min-height:44px;margin:0}.company-order-confirm input{width:20px;height:20px;margin:1px 0 0;flex:0 0 auto}
   .approval-toolbar{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:14px}.approval-toolbar h2{font-size:20px}.approval-toolbar button{min-height:44px}
   .approval-summary{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px}.approval-list{display:grid;gap:12px}
   .approval-card{border:1px solid var(--line);border-radius:8px;background:var(--surf);padding:17px}.approval-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:13px}
@@ -118,7 +119,7 @@
     .cols{grid-template-columns:1fr}.two{grid-template-columns:1fr}.activation-fields,.owner-evidence-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.activation-output{grid-template-columns:1fr}.owner-evidence-fields .evidence-text{grid-column:1/-1}.company-agent{grid-template-columns:1fr}.company-scope{grid-template-columns:repeat(2,minmax(0,1fr))}.company-scope .field:last-child{grid-column:1/-1}
   }
   @media(max-width:520px){
-    .workcell-toolbar,.approval-toolbar,.owner-evidence-head,.company-toolbar,.company-plan-head,.company-results-head{align-items:stretch;flex-direction:column}.workcell-toolbar button,.approval-toolbar button{width:100%}.activation{padding:15px}.activation-import{align-items:stretch;flex-direction:column}.activation-import button{width:100%}.activation-fields,.owner-evidence-fields,.company-scope{grid-template-columns:1fr}.company-scope .field:last-child{grid-column:1}.activation-actions,.owner-evidence-actions,.company-actions,.company-plan-actions{align-items:stretch;flex-direction:column}.activation-actions button,.owner-evidence-actions button,.company-actions button,.company-plan-actions button,.company-new-cycle{width:100%}.owner-evidence-fields .evidence-text{grid-column:1}.owner-evidence-confirm{align-items:flex-start}.company-assignment{grid-template-columns:1fr;gap:5px}.company-agent.selected{padding:13px}
+    .workcell-toolbar,.approval-toolbar,.owner-evidence-head,.company-toolbar,.company-plan-head,.company-results-head,.company-work-orders-head,.company-order-detail-head{align-items:stretch;flex-direction:column}.workcell-toolbar button,.approval-toolbar button,.company-work-orders-head button{width:100%}.activation{padding:15px}.activation-import{align-items:stretch;flex-direction:column}.activation-import button{width:100%}.activation-fields,.owner-evidence-fields,.company-scope{grid-template-columns:1fr}.company-scope .field:last-child{grid-column:1}.activation-actions,.owner-evidence-actions,.company-actions,.company-plan-actions,.company-order-actions{align-items:stretch;flex-direction:column}.activation-actions button,.owner-evidence-actions button,.company-actions button,.company-plan-actions button,.company-order-actions button,.company-new-cycle{width:100%}.owner-evidence-fields .evidence-text{grid-column:1}.owner-evidence-confirm{align-items:flex-start}.company-assignment,.company-order-row{grid-template-columns:1fr;gap:5px}.company-agent.selected{padding:13px}.company-order-row .badge{justify-self:start}
     .workcell .wc-actions{align-items:stretch;flex-direction:column}.workcell .wc-actions button{width:100%}.approval-head{align-items:flex-start}.approval-details{grid-template-columns:1fr;gap:2px}.approval-details dd{margin-bottom:9px}.approval-actions{align-items:stretch;flex-direction:column}.approval-confirm{margin:0}.approval-actions button{width:100%}
   }
 </style>
@@ -177,9 +178,14 @@
       <div class="company-plan-summary" id="companyPlanSummary"></div>
       <div class="company-run-id" id="companyRunId"></div>
       <div class="company-assignments" id="companyAssignments"></div>
-      <div class="company-plan-actions"><label class="company-confirm"><input id="companyConfirm" type="checkbox" /> I reviewed this exact client, evidence, assignments, and budget</label><button class="primary" id="companyRunButton" type="button" disabled>Run reviewed cycle</button></div>
+      <div class="company-plan-actions"><label class="company-confirm"><input id="companyConfirm" type="checkbox" /> I reviewed this exact client, evidence, assignments, and budget</label><button id="companyQueueButton" type="button" disabled>Queue work order</button><button class="primary" id="companyRunButton" type="button" disabled>Run reviewed cycle</button></div>
     </div>
     <div class="company-results" id="companyResults" role="status" aria-live="polite"></div>
+    <section class="company-work-orders" aria-labelledby="companyWorkOrdersTitle">
+      <div class="company-work-orders-head"><div><h3 id="companyWorkOrdersTitle">Work orders</h3><div class="muted">Durable reviewed plans for this client</div></div><button id="companyQueueRefresh" type="button">Refresh queue</button></div>
+      <div class="company-order-list" id="companyOrderList"><div class="empty">Set a client ID to load its queue.</div></div>
+      <div class="company-order-detail" id="companyOrderDetail" hidden></div>
+    </section>
   </section>
 
   <section id="view-workcells" hidden>
@@ -315,7 +321,7 @@ const usd=(n)=>'$'+Number(n||0).toLocaleString()
 const getOpsKey=()=>$('#opsKey').value.trim()
 const hasOpsKey=()=>getOpsKey().length>0
 let dealLead=null, lastPacket=null
-let companyRoster=[], companyDraft=null, companyAgentLimit=2
+let companyRoster=[], companyDraft=null, companyAgentLimit=2, companyWorkOrders=[]
 
 function nextCompanyCycleId(){
   const now=new Date(),iso=now.toISOString()
@@ -329,7 +335,11 @@ $('#opsKey').addEventListener('change',()=>{
   const key=getOpsKey()
   if(key)localStorage.setItem('sm.ops',key);else localStorage.removeItem('sm.ops')
   companyRoster=[]
+  companyWorkOrders=[]
   invalidateCompanyPlan()
+  $('#companyOrderDetail').hidden=true
+  $('#companyOrderDetail').innerHTML=''
+  $('#companyResults').innerHTML=''
   loadProtectedState()
   const activeView=document.querySelector('nav button.active')?.dataset.view
   if(activeView==='workcells'){
@@ -337,8 +347,12 @@ $('#opsKey').addEventListener('change',()=>{
     else $('#workcellGrid').innerHTML='<div class="empty">Enter the ops passcode to load live workcell status.</div>'
   }
   if(activeView==='company'){
-    if(key)loadCompanyAgents()
-    else $('#companyRoster').innerHTML='<div class="empty">Enter the ops passcode to load the specialist roster.</div>'
+    if(key){loadCompanyAgents();loadCompanyWorkOrders()}
+    else{
+      $('#companyRoster').innerHTML='<div class="empty">Enter the ops passcode to load the specialist roster.</div>'
+      $('#companyOrderList').innerHTML='<div class="empty">Enter the ops passcode to load work orders.</div>'
+      $('#companyState').textContent='Locked'
+    }
   }
 })
 $('#opsKey').addEventListener('keydown',(event)=>{if(event.key==='Enter')event.currentTarget.blur()})
@@ -371,6 +385,8 @@ function invalidateCompanyPlan(message=''){
   $('#companyConfirm').disabled=false
   $('#companyRunButton').disabled=true
   $('#companyRunButton').textContent='Run reviewed cycle'
+  $('#companyQueueButton').disabled=true
+  $('#companyQueueButton').textContent='Queue work order'
   if(message)$('#companyState').textContent=message
 }
 function syncCompanyAgent(row,checkbox){
@@ -438,6 +454,7 @@ function renderCompanyPlan(plan,input){
   $('#companyAssignments').innerHTML=(plan.assignments||[]).map(assignment=>`<div class="company-assignment"><div><b>${esc(assignment.name)}</b><span class="muted">${esc(assignment.department)} / ${esc(assignment.crew)}</span></div><div class="roles">${esc((assignment.roles||[]).map(role=>`${role.title} (${role.tier})`).join(' -> '))}<br />Returns: ${esc((assignment.returns||[]).join(', '))}</div></div>`).join('')
   $('#companyConfirm').checked=false
   $('#companyRunButton').disabled=true
+  $('#companyQueueButton').disabled=true
   $('#companyPlan').hidden=false
   $('#companyResults').innerHTML=''
   $('#companyState').textContent='Plan ready. Review before running.'
@@ -466,6 +483,74 @@ function renderCompanyResults(response){
   $('#companyNewCycle').onclick=startNewCompanyCycle
   $('#companyResults').scrollIntoView({behavior:'smooth',block:'nearest'})
 }
+function renderCompanyWorkOrderList(orders=[]){
+  companyWorkOrders=orders
+  const box=$('#companyOrderList')
+  box.innerHTML=orders.length?orders.map(order=>{
+    const names=(order.plan&&order.plan.assignments||[]).map(item=>item.name).join(', ')
+    const created=order.createdAt?new Date(order.createdAt).toLocaleString():''
+    return `<button class="company-order-row" type="button" data-company-order="${esc(order.workOrderId)}"><span><span class="company-order-name">${esc(order.cycleId)}</span><span class="muted">${esc(names||'No assignments')} / ${esc(created)}</span><span class="company-order-meta"><span class="badge">${esc(order.plan&&order.plan.budget&&order.plan.budget.plannedRoles||0)} role calls</span><span class="badge">${esc((order.plan&&order.plan.assignments||[]).length)} specialists</span></span></span>${companyStatusBadge(order.status)}</button>`
+  }).join(''):'<div class="empty">No work orders for this client.</div>'
+  box.querySelectorAll('[data-company-order]').forEach(button=>button.addEventListener('click',()=>openCompanyWorkOrder(button.dataset.companyOrder)))
+}
+async function loadCompanyWorkOrders(){
+  const box=$('#companyOrderList'),clientId=$('#companyClientId').value.trim()
+  $('#companyOrderDetail').hidden=true
+  if(!hasOpsKey()){box.innerHTML='<div class="empty">Enter the ops passcode to load work orders.</div>';return}
+  if(!clientId){box.innerHTML='<div class="empty">Set a client ID to load its queue.</div>';return}
+  box.innerHTML='<div class="loading-pulse">Loading work orders...</div>'
+  let response
+  try{response=await api('POST','/api/agent-company',{action:'work-order-list',clientId,limit:20})}
+  catch(error){box.innerHTML=`<div class="err-banner">Could not load work orders: ${esc(String(error.message||'network error'))}</div>`;return}
+  if(!response.ok){box.innerHTML=`<div class="err-banner">${esc(response.reason||'Could not load work orders')}</div>`;return}
+  renderCompanyWorkOrderList(response.workOrders||[])
+}
+function renderCompanyWorkOrderDetail(order){
+  const box=$('#companyOrderDetail'),plan=order.plan||{},assignments=plan.assignments||[],budget=plan.budget||{}
+  const assignmentHtml=assignments.map(assignment=>`<div class="company-assignment"><div><b>${esc(assignment.name)}</b><span class="muted">${esc(assignment.department)} / ${esc(assignment.crew)}</span></div><div class="roles">${esc((assignment.roles||[]).map(role=>`${role.title} (${role.tier})`).join(' -> '))}<br />Evidence: ${esc(assignment.evidenceBytes)} bytes</div></div>`).join('')
+  const evidenceHtml=(order.evidence||[]).map(item=>`<div class="company-order-fingerprint">${esc(item.agentId)}: ${esc(item.digest)} (${esc(item.bytes)} bytes)</div>`).join('')
+  const canDispatch=order.status==='planned'||order.status==='running'
+  const actions=canDispatch?`<div class="company-order-actions"><label class="company-order-confirm"><input id="companyOrderConfirm" type="checkbox" /> I reviewed this stored plan, evidence fingerprints, assignments, and budget</label><button class="primary" id="companyOrderRun" type="button" disabled>${order.status==='running'?'Check saved result':'Dispatch work order'}</button></div>`:order.result?'<div class="company-order-actions"><button id="companyOrderResult" type="button">Open cycle result</button></div>':''
+  box.innerHTML=`<div class="company-order-detail-head"><div><h4>${esc(order.cycleId)}</h4><div class="muted">${esc(order.workOrderId)}</div></div>${companyStatusBadge(order.status)}</div><div class="company-plan-summary"><span class="badge">${esc(assignments.length)} specialists</span><span class="badge">${esc(budget.plannedRoles||0)} / ${esc(budget.roleLimit||0)} role calls</span><span class="badge">no writes</span></div><div class="company-order-fingerprint">Plan: ${esc(order.planHash)}</div><div class="company-assignments">${assignmentHtml}</div>${evidenceHtml}${actions}`
+  box.hidden=false
+  const confirm=$('#companyOrderConfirm'),run=$('#companyOrderRun')
+  if(confirm&&run){confirm.addEventListener('change',()=>{run.disabled=!confirm.checked});run.addEventListener('click',()=>runQueuedCompanyWorkOrder(order))}
+  $('#companyOrderResult')?.addEventListener('click',()=>renderCompanyResults(order.result))
+  box.scrollIntoView({behavior:'smooth',block:'nearest'})
+}
+async function openCompanyWorkOrder(workOrderId){
+  const clientId=$('#companyClientId').value.trim(),box=$('#companyOrderDetail')
+  box.hidden=false;box.innerHTML='<div class="loading-pulse">Loading work order...</div>'
+  let response
+  try{response=await api('POST','/api/agent-company',{action:'work-order-get',clientId,workOrderId})}
+  catch(error){box.innerHTML=`<div class="err-banner">${esc(String(error.message||'Could not load work order'))}</div>`;return}
+  if(!response.ok){box.innerHTML=`<div class="err-banner">${esc(response.reason||'Could not load work order')}</div>`;return}
+  renderCompanyWorkOrderDetail(response.workOrder)
+}
+async function queueReviewedCompanyWorkOrder(){
+  if(!companyDraft||!$('#companyConfirm').checked)return
+  const button=$('#companyQueueButton');button.disabled=true;button.textContent='Queueing...';$('#companyState').textContent='Saving the exact plan without model spend...'
+  try{
+    const response=await api('POST','/api/agent-company',{action:'work-order-create',...companyDraft.input})
+    if(!response.ok){$('#companyState').textContent=response.reason||'Work order was not queued';return}
+    $('#companyState').textContent=response.replayed?'Saved work order loaded':'Work order queued. No model call was made.'
+    await loadCompanyWorkOrders()
+    renderCompanyWorkOrderDetail(response.workOrder)
+  }catch(error){$('#companyState').textContent=String(error.message||'Queue unavailable').slice(0,120)}
+  finally{button.disabled=!$('#companyConfirm').checked||!companyDraft;button.textContent='Queue work order'}
+}
+async function runQueuedCompanyWorkOrder(order){
+  const button=$('#companyOrderRun')
+  if(!button||!$('#companyOrderConfirm')?.checked)return
+  button.disabled=true;button.textContent='Dispatching...';$('#companyState').textContent='Dispatching the saved plan through the bounded runner...'
+  let response
+  try{response=await api('POST','/api/agent-company',{action:'work-order-run',clientId:order.clientId,workOrderId:order.workOrderId,planHash:order.planHash,confirmation:`RUN ${order.workOrderId}`})}
+  catch(error){$('#companyState').textContent=String(error.message||'Dispatch unavailable').slice(0,120);button.disabled=false;button.textContent='Check saved result';return}
+  if(response.cycleResult)renderCompanyResults(response.cycleResult)
+  $('#companyState').textContent=response.ok?'Work order finished':response.reason||'Work order is still running'
+  await loadCompanyWorkOrders()
+  if(response.workOrder)renderCompanyWorkOrderDetail(response.workOrder)
+}
 function startNewCompanyCycle(){
   $('#companyCycleId').value=nextCompanyCycleId()
   $('#companyRoster').querySelectorAll('[data-company-agent]').forEach(row=>{
@@ -478,9 +563,16 @@ function startNewCompanyCycle(){
   $('#companyClientId').focus()
 }
 $('#companyForm').addEventListener('input',event=>{
-  if(event.target.id==='companyClientId')localStorage.setItem('sm.company.client',event.target.value.trim())
+  if(event.target.id==='companyClientId'){
+    localStorage.setItem('sm.company.client',event.target.value.trim())
+    companyWorkOrders=[]
+    $('#companyOrderDetail').hidden=true
+    $('#companyOrderList').innerHTML='<div class="empty">Client changed. Refresh the queue.</div>'
+  }
   if(companyDraft)invalidateCompanyPlan('Inputs changed. Plan the cycle again.')
 })
+$('#companyClientId').addEventListener('change',loadCompanyWorkOrders)
+$('#companyQueueRefresh').addEventListener('click',loadCompanyWorkOrders)
 $('#companyForm').addEventListener('submit',async event=>{
   event.preventDefault()
   const input=companyCycleInput()
@@ -494,7 +586,12 @@ $('#companyForm').addEventListener('submit',async event=>{
   }catch(error){invalidateCompanyPlan(String(error.message||'Plan failed').slice(0,120))}
   finally{button.disabled=false;button.textContent='Plan cycle'}
 })
-$('#companyConfirm').addEventListener('change',event=>{$('#companyRunButton').disabled=!event.currentTarget.checked||!companyDraft})
+$('#companyConfirm').addEventListener('change',event=>{
+  const disabled=!event.currentTarget.checked||!companyDraft
+  $('#companyRunButton').disabled=disabled
+  $('#companyQueueButton').disabled=disabled
+})
+$('#companyQueueButton').addEventListener('click',queueReviewedCompanyWorkOrder)
 $('#companyRunButton').addEventListener('click',async()=>{
   if(!companyDraft||!$('#companyConfirm').checked)return
   const button=$('#companyRunButton');button.disabled=true;$('#companyConfirm').disabled=true;button.textContent='Running...';$('#companyState').textContent='Running specialists sequentially...'
@@ -519,7 +616,7 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
   if(b.dataset.view==='pipeline')loadProjects()
   if(b.dataset.view==='leads')loadLeads()
   if(b.dataset.view==='outreach')loadOutreach()
-  if(b.dataset.view==='company')loadCompanyAgents()
+  if(b.dataset.view==='company'){loadCompanyAgents();loadCompanyWorkOrders()}
   if(b.dataset.view==='workcells')loadWorkcells()
   if(b.dataset.view==='approvals')loadApprovals()
   if(b.dataset.view==='connectors')loadConnectors()
@@ -1055,8 +1152,11 @@ if(location.hash==='#company'){
   const companyTab=document.querySelector('nav button[data-view="company"]')
   document.querySelectorAll('nav button').forEach(button=>button.classList.toggle('active',button===companyTab))
   for(const view of ['overview','leads','pipeline','outreach','deal','operator','company','workcells','approvals','connectors']) $('#view-'+view).hidden=view!=='company'
-  if(hasOpsKey())loadCompanyAgents()
-  else $('#companyRoster').innerHTML='<div class="empty">Enter the ops passcode to load the specialist roster.</div>'
+  if(hasOpsKey()){loadCompanyAgents();loadCompanyWorkOrders()}
+  else{
+    $('#companyRoster').innerHTML='<div class="empty">Enter the ops passcode to load the specialist roster.</div>'
+    $('#companyOrderList').innerHTML='<div class="empty">Enter the ops passcode to load work orders.</div>'
+  }
 }else if(location.hash==='#activation'){
   const workcellsTab=document.querySelector('nav button[data-view="workcells"]')
   document.querySelectorAll('nav button').forEach(button=>button.classList.toggle('active',button===workcellsTab))

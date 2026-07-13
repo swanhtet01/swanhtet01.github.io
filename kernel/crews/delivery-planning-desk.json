@@ -1,0 +1,48 @@
+{
+  "slug": "delivery-planning-desk",
+  "name": "Delivery Planning Desk",
+  "version": 1,
+  "description": "Converts an accepted outcome and source pack into a bounded delivery plan with dependencies, owner inputs, and objective acceptance checks.",
+  "intake": {
+    "accepts": [
+      "accepted outcome",
+      "scope notes",
+      "approved source inventory",
+      "delivery constraints",
+      "acceptance rules"
+    ],
+    "description": "An owner-approved delivery brief. Missing dependencies remain blockers rather than invented assumptions."
+  },
+  "roles": [
+    {
+      "id": "intake",
+      "title": "Intake",
+      "tier": "bulk",
+      "goal": "Normalize the accepted outcome, scope boundary, approved sources, constraints, and acceptance rules. Flag every unresolved input."
+    },
+    {
+      "id": "plan-builder",
+      "title": "Delivery Planner",
+      "tier": "reason",
+      "goal": "Build the smallest sequenced milestone plan that can prove the accepted outcome. Bind each milestone to dependencies, owner inputs, and an observable completion condition."
+    },
+    {
+      "id": "boundary-reviewer",
+      "title": "Boundary Reviewer",
+      "tier": "bulk",
+      "goal": "Check the plan for scope drift, hidden writes, missing approvals, unsupported dates, and vague acceptance language. Keep external actions blocked until separately approved."
+    }
+  ],
+  "output_contract": {
+    "format": "json",
+    "fields": [
+      "milestones",
+      "dependencies",
+      "owner_inputs",
+      "acceptance_tests",
+      "delivery_risks",
+      "blocked_actions"
+    ],
+    "description": "A bounded delivery packet with objective proof gates and no implicit external execution."
+  }
+}

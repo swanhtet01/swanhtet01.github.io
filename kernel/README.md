@@ -14,8 +14,8 @@ broader system boundaries.
 | `workcells.mjs` + `workcell-run.mjs` | Cash Close, Pipeline Control, and Owner Command products | live |
 | `owner-evidence.mjs` + `api/owner-evidence.mjs` | Reviewed LINE/Viber evidence preview, immutable storage, and bounded read | live |
 | `approval-actions.mjs` + `api/approvals.mjs` | Immutable owner approval and idempotent ClickUp execution | live |
-| `crews/` + `crew-run.mjs` | Contract-enforced, draft-only multi-role tasks | 5 live |
-| `agent-company.mjs` + `api/agent-company.mjs` | Bounded supervisor cycles across the fixed crew roster | live |
+| `crews/` + `crew-run.mjs` | Contract-enforced, draft-only multi-role tasks | 8 live |
+| `agent-company.mjs` + `agent-company-work-orders.mjs` | Bounded supervisor cycles and durable reviewed delegation | live |
 | `public/` + `api/` | Ops console, status, workcell activation, and scheduled delivery | live |
 
 ## Gateway
@@ -56,7 +56,7 @@ The agent receives only the bounded read tool and cannot write to the inbox.
 
 ## Agent Company Cycles
 
-`POST /api/agent-company` is the protected manager layer over the five validated crews. Callers must
+`POST /api/agent-company` is the protected manager layer over the eight validated crews. Callers must
 choose `action: "plan"` or `action: "run"`, a stable client and cycle id, one or two allowlisted
 specialists, and separate evidence for each specialist. A plan reports the exact role-call budget
 before any model call. A run atomically claims the cycle in durable storage, then executes the crews
@@ -68,6 +68,22 @@ traceable envelope and returns drafts only; every external side effect remains b
 approval path. Reusing a claimed cycle id is blocked to prevent duplicate spend.
 Completed specialist and final envelopes are also stored under the claimed run id, so an idempotent
 replay can return a finished result or expose the recoverable partial results without spending again.
+
+For durable delegation, the same endpoint accepts four additional explicit actions:
+
+- `work-order-create` validates and stores the exact cycle plan without a model call.
+- `work-order-list` returns up to 40 client-bound order summaries, filtered in the store by kind and
+  client. Raw queued evidence is never returned.
+- `work-order-get` returns assignments, budgets, byte counts, evidence fingerprints, and any result.
+- `work-order-run` requires the saved 64-character plan hash and exact `RUN <workOrderId>`
+  confirmation, then reuses `runCompanyCycle`; there is no second runner or recursive delegation.
+
+The work-order id is deterministic for one client and cycle. Re-creating the same exact plan replays
+the saved order, while changed evidence under the same cycle id is a conflict. Dispatch first saves
+the `running` state, so storage failure blocks model spend. A concurrent or lost-response retry hits
+the cycle runner's durable claim and either returns the saved result or reports the existing run.
+Queued evidence remains inside the service-role-only cache record and is replaced by fingerprints
+after a terminal dispatch state.
 
 ## Core Environment
 
@@ -96,6 +112,8 @@ in recovery instead of being retried blindly.
 - The default cron is one daily UTC schedule. Each isolated client deployment sets its own UTC time.
 - Agent Company cycles are synchronous waves capped at two specialists and eight planned role calls.
   Failed or partial waves require a new explicit cycle id; there is no automatic retry or hidden loop.
+- Planned work orders retain their bounded evidence in the protected cache until dispatch. There is
+  no unattended dispatcher or retention sweeper; an owner still reviews and dispatches each order.
 
 ## Next
 

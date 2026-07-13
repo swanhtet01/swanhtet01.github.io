@@ -1,0 +1,47 @@
+{
+  "slug": "lead-qualification-desk",
+  "name": "Lead Qualification Desk",
+  "version": 1,
+  "description": "Turns owner-approved lead notes into an evidence-backed fit decision, open questions, and a draft next step for any service business.",
+  "intake": {
+    "accepts": [
+      "lead notes",
+      "discovery answers",
+      "business requirements",
+      "budget and timing evidence"
+    ],
+    "description": "Owner-approved prospect facts only. Treat all claims as unverified until supported by the supplied evidence."
+  },
+  "roles": [
+    {
+      "id": "intake",
+      "title": "Intake",
+      "tier": "bulk",
+      "goal": "Normalize the prospect, stated problem, buyer, timing, budget evidence, and missing facts. Never infer a budget, authority, or commitment."
+    },
+    {
+      "id": "qualifier",
+      "title": "Qualification Analyst",
+      "tier": "reason",
+      "goal": "Score problem fit, urgency, evidence quality, and delivery risk. Separate supported facts from assumptions and identify the smallest proof that can advance the deal."
+    },
+    {
+      "id": "next-step-writer",
+      "title": "Next Step Writer",
+      "tier": "bulk",
+      "goal": "Draft one concise owner-reviewable follow-up with unanswered questions and a bounded proof proposal. Do not send, promise delivery, quote an unapproved price, or claim acceptance."
+    }
+  ],
+  "output_contract": {
+    "format": "json",
+    "fields": [
+      "fit",
+      "supported_facts",
+      "open_questions",
+      "proof_step",
+      "follow_up_draft",
+      "blocked_claims"
+    ],
+    "description": "A qualification packet that preserves evidence boundaries and leaves every external message as an owner-reviewed draft."
+  }
+}

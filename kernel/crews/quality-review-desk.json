@@ -1,0 +1,48 @@
+{
+  "slug": "quality-review-desk",
+  "name": "Quality Review Desk",
+  "version": 1,
+  "description": "Reviews an AI or human-produced deliverable against its sources and acceptance rules before an owner decides whether it can ship.",
+  "intake": {
+    "accepts": [
+      "draft deliverable",
+      "source trace",
+      "acceptance rules",
+      "test evidence",
+      "known limitations"
+    ],
+    "description": "The exact draft, approved sources, and acceptance evidence. A missing source or test is a finding, not permission to guess."
+  },
+  "roles": [
+    {
+      "id": "intake",
+      "title": "Intake",
+      "tier": "bulk",
+      "goal": "Normalize the deliverable, source trace, acceptance rules, tests, and declared limitations. Reject ambiguous versions and missing review targets."
+    },
+    {
+      "id": "evidence-auditor",
+      "title": "Evidence Auditor",
+      "tier": "reason",
+      "goal": "Test important claims against supplied sources, find contradictions and unsupported conclusions, and grade each acceptance rule as pass, fail, or unproven."
+    },
+    {
+      "id": "release-reviewer",
+      "title": "Release Reviewer",
+      "tier": "bulk",
+      "goal": "Produce a concise ship, revise, or block recommendation with exact remediation. Never approve on the owner's behalf or conceal an unproven check."
+    }
+  ],
+  "output_contract": {
+    "format": "json",
+    "fields": [
+      "verdict",
+      "acceptance_results",
+      "findings",
+      "source_gaps",
+      "remediation",
+      "release_boundary"
+    ],
+    "description": "A proof-linked quality packet whose release recommendation remains advisory until owner approval."
+  }
+}
