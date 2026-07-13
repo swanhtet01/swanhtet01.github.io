@@ -97,9 +97,11 @@ for (const scriptName of ['vercel:deploy', 'vercel:deploy:prod', 'deploy:public:
 for (const required of [
   'SuperMega Public - Verified Prebuilt Release',
   'codex/public-enterprise-site',
-  'actions/checkout@v6',
+  'Fetch exact canonical public source',
+  'git ls-remote --exit-code',
+  'https://codeload.github.com/${GITHUB_REPOSITORY}/tar.gz/${SOURCE_SHA}',
+  '--strip-components=1',
   'actions/setup-node@v6',
-  'persist-credentials: false',
   'node-version: 24',
   'package-manager-cache: false',
   'VERCEL_ORG_ID: team_wI4l7ZgSxcEztQPSlCCYVeJ5',
@@ -108,6 +110,8 @@ for (const required of [
   'npm run vercel:guard',
   'npm run public:prebuilt',
   'vercel@56.1.0 deploy --prebuilt --prod',
+  'githubCommitSha=${{ steps.source.outputs.sha }}',
+  'githubCommitRef=codex/public-enterprise-site',
   'npm run public:verify:live',
 ]) {
   if (!releaseWorkflow.includes(required)) fail(`public_release_workflow_missing_${required}`)
@@ -117,12 +121,12 @@ if (releaseWorkflow.includes('npm ci')) {
   fail('public_release_must_not_require_missing_root_lockfile')
 }
 
-if (/actions\/(?:checkout|setup-node)@v[1-5]\b/.test(releaseWorkflow)) {
-  fail('public_release_deprecated_action_runtime_forbidden')
+if (releaseWorkflow.includes('actions/checkout@')) {
+  fail('public_release_checkout_action_forbidden')
 }
 
-if (/persist-credentials:\s*true/.test(releaseWorkflow)) {
-  fail('public_release_checkout_credentials_must_not_persist')
+if (/actions\/setup-node@v[1-5]\b/.test(releaseWorkflow)) {
+  fail('public_release_deprecated_action_runtime_forbidden')
 }
 
 if (/vercel(?:@\S+)? deploy --prod/.test(releaseWorkflow)) {
@@ -130,6 +134,7 @@ if (/vercel(?:@\S+)? deploy --prod/.test(releaseWorkflow)) {
 }
 
 const workflowOrder = [
+  'Fetch exact canonical public source',
   'vercel@56.1.0 pull --yes --environment=production',
   'npm run vercel:guard',
   'npm run public:prebuilt',
