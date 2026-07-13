@@ -97,7 +97,10 @@ for (const scriptName of ['vercel:deploy', 'vercel:deploy:prod', 'deploy:public:
 for (const required of [
   'SuperMega Public - Verified Prebuilt Release',
   'codex/public-enterprise-site',
+  'actions/checkout@v6',
+  'actions/setup-node@v6',
   'node-version: 24',
+  'package-manager-cache: false',
   'VERCEL_ORG_ID: team_wI4l7ZgSxcEztQPSlCCYVeJ5',
   'VERCEL_PROJECT_ID: prj_Yaf0cZYbiFXcLkMcKaAm4alPWMhR',
   'vercel@56.1.0 pull --yes --environment=production',
@@ -111,6 +114,10 @@ for (const required of [
 
 if (releaseWorkflow.includes('npm ci')) {
   fail('public_release_must_not_require_missing_root_lockfile')
+}
+
+if (/actions\/(?:checkout|setup-node)@v[1-5]\b/.test(releaseWorkflow)) {
+  fail('public_release_deprecated_action_runtime_forbidden')
 }
 
 if (/vercel(?:@\S+)? deploy --prod/.test(releaseWorkflow)) {
