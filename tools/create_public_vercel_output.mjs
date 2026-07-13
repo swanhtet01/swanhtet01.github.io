@@ -274,10 +274,11 @@ const headerHtml = `${themeBootstrap}
       <span class="brand-text">supermega<span class="domain">.dev</span></span>
     </a>
     <nav class="nav" aria-label="Primary">
-      <a class="nav-link optional-nav" href="https://demo.supermega.dev/" target="_blank" rel="noopener noreferrer">Demo</a>
+      <a class="nav-link optional-nav" href="https://app.supermega.dev/?demo=shop" target="_blank" rel="noopener noreferrer">Shop</a>
+      <a class="nav-link optional-nav" href="https://app.supermega.dev/?demo=plant" target="_blank" rel="noopener noreferrer">Plant</a>
       <a class="nav-link optional-nav" href="/contact/">Contact</a>
       <button class="icon-button" type="button" data-theme-toggle aria-label="Use dark mode" title="Use dark mode"><svg class="theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path></svg><svg class="theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 15.2A8.5 8.5 0 0 1 8.8 3.5 8.5 8.5 0 1 0 20.5 15.2Z"></path></svg></button>
-      <a class="btn primary header-cta" href="https://app.supermega.dev/?demo=shop" target="_blank" rel="noopener noreferrer">Open workspace</a>
+      <a class="btn primary header-cta" href="/contact/?from=ai-agent-solution">Agent solution</a>
     </nav>
   </header>
 </div>
@@ -285,7 +286,7 @@ ${themeToggleScript}`
 
 const footerHtml = `<div class="footer-frame"><footer>
   <span class="footer-brand"><span class="footer-command">&gt;_</span> supermega.dev</span>
-  <span class="footer-links"><a href="https://app.supermega.dev/?demo=shop" target="_blank" rel="noopener noreferrer">Workspace</a><a href="https://demo.supermega.dev/" target="_blank" rel="noopener noreferrer">Demo</a><a href="/contact/">Contact</a><a href="/privacy/">Privacy</a></span>
+  <span class="footer-links"><a href="https://app.supermega.dev/?demo=shop" target="_blank" rel="noopener noreferrer">Shop</a><a href="https://app.supermega.dev/?demo=plant" target="_blank" rel="noopener noreferrer">Plant</a><a href="/contact/?from=ai-agent-solution">AI agents</a><a href="/privacy/">Privacy</a></span>
 </footer></div>`
 
 function socialMeta(title, description, url) {
@@ -325,8 +326,8 @@ const liveStatusScript = `<script>(function(){var node=document.querySelector('[
 const homeMotionScript = `<script>(function(){if(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches)return;var hero=document.querySelector('[data-hero]'),media=document.querySelector('[data-hero-media]');if(!hero||!media)return;hero.addEventListener('pointermove',function(event){if(event.pointerType==='touch')return;var box=hero.getBoundingClientRect(),x=(event.clientX-box.left)/box.width-.5,y=(event.clientY-box.top)/box.height-.5;media.style.setProperty('--tilt-x',String(y*-1.2)+'deg');media.style.setProperty('--tilt-y',String(x*1.6)+'deg');});hero.addEventListener('pointerleave',function(){media.style.setProperty('--tilt-x','0deg');media.style.setProperty('--tilt-y','0deg');});var queued=false;function update(){queued=false;media.style.setProperty('--scroll-lift',String(Math.max(-22,window.scrollY*-.035))+'px');}window.addEventListener('scroll',function(){if(!queued){queued=true;requestAnimationFrame(update);}},{passive:true});})();</script>`
 
 const homeHtml = documentHtml({
-  title: 'supermega.dev | Intelligent workspace for daily operations',
-  description: 'Open a working Shop workspace, explore the live demo, or bring SuperMega the workflow your team should not have to repeat.',
+  title: 'supermega.dev | Shop, Plant and AI Agent Solutions',
+  description: 'Open working Shop and Plant products, or bring SuperMega one repeated knowledge-work process for a private, approval-gated AI agent solution.',
   canonical: 'https://supermega.dev/',
   style: `
     .home-main { width: 100%; overflow: clip; }
@@ -521,16 +522,16 @@ const homeHtml = documentHtml({
     }
   `,
   content: `<main class="home-main">
-  <section class="hero" data-hero aria-labelledby="workspace-heading">
+  <section class="hero" data-hero aria-labelledby="portfolio-heading">
     <div class="hero-inner">
       <div class="hero-copy">
-        <div class="hero-command"><strong>&gt;_</strong><span>workspace / live</span></div>
-        <h1 id="workspace-heading">The intelligent workspace for daily operations.</h1>
-        <p>Start with a working Shop, explore a live demo, or bring us the workflow your team should not have to repeat.</p>
+        <div class="hero-command"><strong>&gt;_</strong><span>products / live</span></div>
+        <h1 id="portfolio-heading">Shop. Plant. AI Agent Solutions.</h1>
+        <p>Run retail operations, see the factory floor, or put one repeated office workflow into a private agent with an explicit approval boundary.</p>
         <div class="hero-actions">
           <a class="btn primary" href="https://app.supermega.dev/?demo=shop" target="_blank" rel="noopener noreferrer">Open Shop</a>
-          <a class="btn secondary" href="https://demo.supermega.dev/" target="_blank" rel="noopener noreferrer">Explore demo</a>
-          <a class="hero-contact" href="/contact/">Contact us <span aria-hidden="true">&#8594;</span></a>
+          <a class="btn secondary" href="https://app.supermega.dev/?demo=plant" target="_blank" rel="noopener noreferrer">Open Plant</a>
+          <a class="hero-contact" href="/contact/?from=ai-agent-solution">Build an agent solution <span aria-hidden="true">&#8594;</span></a>
         </div>
       </div>
     </div>
@@ -542,28 +543,28 @@ const homeHtml = documentHtml({
 
   <section class="entry-section page-frame" id="start" aria-labelledby="start-heading">
     <div class="section-intro">
-      <div><div class="eyebrow">Start with what is live</div><h2 id="start-heading">Choose the shortest path in.</h2></div>
-      <p>No catalog to decode. Open the working app, explore the demo, or tell us what needs to run better.</p>
+      <div><div class="eyebrow">Two products. One agent layer.</div><h2 id="start-heading">Start with a real operating outcome.</h2></div>
+      <p>Shop and Plant are working products. AI Agent Solutions are configured per client around one repeated workflow and approved data access.</p>
     </div>
     <div class="destination-list">
-      <a class="destination" href="https://app.supermega.dev/?demo=shop" target="_blank" rel="noopener noreferrer"><span class="destination-index">01 / APP</span><span class="destination-copy"><strong>Open Shop</strong><span>Enter the current account-free workspace and work with the real interface.</span></span><span class="destination-arrow" aria-hidden="true">&#8599;</span></a>
-      <a class="destination" href="https://demo.supermega.dev/" target="_blank" rel="noopener noreferrer"><span class="destination-index">02 / DEMO</span><span class="destination-copy"><strong>Explore live demos</strong><span>Choose a business context and move through the experience before setup.</span></span><span class="destination-arrow" aria-hidden="true">&#8599;</span></a>
-      <a class="destination" href="/contact/"><span class="destination-index">03 / DIRECT</span><span class="destination-copy"><strong>Bring a workflow</strong><span>Describe the repeated work that needs a clearer system and get a direct response.</span></span><span class="destination-arrow" aria-hidden="true">&#8594;</span></a>
+      <a class="destination" href="https://app.supermega.dev/?demo=shop" target="_blank" rel="noopener noreferrer"><span class="destination-index">01 / SHOP</span><span class="destination-copy"><strong>Shop</strong><span>Sales, customers, stock, receivables, and books in one account-free working demo.</span></span><span class="destination-arrow" aria-hidden="true">&#8599;</span></a>
+      <a class="destination" href="https://app.supermega.dev/?demo=plant" target="_blank" rel="noopener noreferrer"><span class="destination-index">02 / PLANT</span><span class="destination-copy"><strong>Plant</strong><span>Floor status, machine activity, and structured shift events in a working factory demo.</span></span><span class="destination-arrow" aria-hidden="true">&#8599;</span></a>
+      <a class="destination" href="/contact/?from=ai-agent-solution"><span class="destination-index">03 / AGENT</span><span class="destination-copy"><strong>AI Agent Solutions</strong><span>Private workcells that read approved sources, prepare evidence-linked outputs, and keep external actions approval-gated.</span></span><span class="destination-arrow" aria-hidden="true">&#8594;</span></a>
     </div>
   </section>
 
   <section class="continuity-band" aria-labelledby="continuity-heading">
     <div class="continuity-inner page-frame">
       <div class="continuity-copy">
-        <div class="eyebrow">One working surface</div>
-        <h2 id="continuity-heading">At the desk, counter, or on the move.</h2>
-        <p>The workspace adapts without changing the job. Sales, customers, accounting, and imports stay in one operating context.</p>
-        <div class="continuity-list" aria-label="Supported workspace sizes">
-          <div class="continuity-line"><span>Phone</span><strong>Fast daily actions and live visibility</strong></div>
-          <div class="continuity-line"><span>Tablet</span><strong>Touch-first work with full context</strong></div>
-          <div class="continuity-line"><span>Desktop</span><strong>Complete navigation and operational depth</strong></div>
+        <div class="eyebrow">One product core</div>
+        <h2 id="continuity-heading">Run the operation. Add agents at the edge.</h2>
+        <p>Shop and Plant share the same account, tenant, recovery, audit, and approval foundation. Agent workcells stay isolated and connect only to approved sources.</p>
+        <div class="continuity-list" aria-label="SuperMega product lines">
+          <div class="continuity-line"><span>Shop</span><strong>Sales, customers, stock, receivables, and books</strong></div>
+          <div class="continuity-line"><span>Plant</span><strong>Floor state, machine history, and shift events</strong></div>
+          <div class="continuity-line"><span>Agents</span><strong>Evidence-linked drafts with approval-gated actions</strong></div>
         </div>
-        <a class="btn secondary" href="https://app.supermega.dev/?demo=shop" target="_blank" rel="noopener noreferrer">Open the workspace</a>
+        <a class="btn secondary" href="https://app.supermega.dev/?demo=shop" target="_blank" rel="noopener noreferrer">Open Shop</a>
       </div>
       <div class="device-stage" aria-label="Current Shop workspace on a phone">
         <div class="phone-shell"><img src="/live-shop-mobile.png" alt="Current mobile Shop workspace with sales and stock status" /></div>
@@ -575,8 +576,8 @@ const homeHtml = documentHtml({
   <section class="final-cta">
     <div class="final-cta-inner page-frame">
       <div class="final-command" aria-hidden="true">&gt;_</div>
-      <h2>Bring us the work that should run better.</h2>
-      <a class="btn primary" href="/contact/">Start a conversation</a>
+      <h2>Start with one product or one repeated workflow.</h2>
+      <a class="btn primary" href="/contact/">Tell us the outcome</a>
     </div>
   </section>
 </main>
@@ -692,7 +693,7 @@ const notFoundHtml = documentHtml({
     .not-found .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; }
     @media (max-width: 720px) { .not-found { width: min(100% - 32px, 1240px); min-height: 72svh; } .not-found h1 { font-size: 40px; } }
   `,
-  content: `<main class="not-found"><div class="not-found-command">&gt;_ 404 / not-found</div><h1>That route is gone.</h1><p>Return to the current front door, open the workspace, or explore the demo.</p><div class="actions"><a class="btn primary" href="/">Home</a><a class="btn secondary" href="https://app.supermega.dev/?demo=shop" target="_blank" rel="noopener noreferrer">Open workspace</a></div></main>`,
+  content: `<main class="not-found"><div class="not-found-command">&gt;_ 404 / not-found</div><h1>That route is gone.</h1><p>Return to SuperMega, open Shop, or open Plant.</p><div class="actions"><a class="btn primary" href="/">Home</a><a class="btn secondary" href="https://app.supermega.dev/?demo=shop" target="_blank" rel="noopener noreferrer">Shop</a><a class="btn secondary" href="https://app.supermega.dev/?demo=plant" target="_blank" rel="noopener noreferrer">Plant</a></div></main>`,
 })
 
 const vercelConfig = {
