@@ -9,6 +9,7 @@ on:
     paths:
       - .github/workflows/supermega-public-live-health.yml
       - tools/check_public_live_health.py
+      - tools/test_public_live_health.py
   workflow_dispatch:
   schedule:
     # 08:15 Asia/Rangoon daily.
@@ -39,5 +40,15 @@ jobs:
             "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_SHA}/tools/check_public_live_health.py" \
             --output "${RUNNER_TEMP}/check_public_live_health.py"
 
-      - name: Check current public funnel
+          curl --fail --silent --show-error --location \
+            --proto '=https' --proto-redir '=https' \
+            --retry 3 --retry-all-errors \
+            "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_SHA}/tools/test_public_live_health.py" \
+            --output "${RUNNER_TEMP}/test_public_live_health.py"
+
+      - name: Test portfolio health checker
+        working-directory: ${{ runner.temp }}
+        run: python -m unittest -v test_public_live_health.py
+
+      - name: Check current public portfolio
         run: python "${RUNNER_TEMP}/check_public_live_health.py"

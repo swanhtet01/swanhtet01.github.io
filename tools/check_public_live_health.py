@@ -14,7 +14,7 @@ from typing import Any
 from urllib.parse import urljoin
 
 
-USER_AGENT = "supermega-public-live-health/2.0"
+USER_AGENT = "supermega-portfolio-live-health/3.0"
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -76,36 +76,70 @@ def nested_value(payload: dict[str, Any], path: str) -> Any:
     return value
 
 
-def run(base_url: str, www_url: str, *, timeout: float, attempts: int) -> dict[str, Any]:
+def run(base_url: str, www_url: str, app_url: str, *, timeout: float, attempts: int) -> dict[str, Any]:
     base_url = base_url.rstrip("/") + "/"
     www_url = www_url.rstrip("/") + "/"
+    app_url = app_url.rstrip("/") + "/"
     failures: list[dict[str, Any]] = []
     results: list[dict[str, Any]] = []
 
     page_checks = [
-        (base_url, ["<title>SuperMega | Open Shop or try a demo</title>", "Open Shop", "Try demo", "Contact"]),
-        (www_url, ["<title>SuperMega | Open Shop or try a demo</title>", "Open Shop", "Try demo", "Contact"]),
+        (
+            base_url,
+            [
+                "<title>supermega.dev | Shop, Plant and AI Agent Solutions</title>",
+                '<h1 id="portfolio-heading">Shop. Plant. AI Agent Solutions.</h1>',
+                "https://app.supermega.dev/?demo=shop",
+                "https://app.supermega.dev/?demo=plant",
+                "/contact/?from=ai-agent-solution",
+                "external actions approval-gated",
+                "data-public-status",
+            ],
+        ),
+        (
+            www_url,
+            [
+                "<title>supermega.dev | Shop, Plant and AI Agent Solutions</title>",
+                '<h1 id="portfolio-heading">Shop. Plant. AI Agent Solutions.</h1>',
+                "https://app.supermega.dev/?demo=shop",
+                "https://app.supermega.dev/?demo=plant",
+                "/contact/?from=ai-agent-solution",
+                "external actions approval-gated",
+                "data-public-status",
+            ],
+        ),
         (
             urljoin(base_url, "contact/"),
             [
-                "Tell us what needs to work better.",
+                "<title>Contact | supermega.dev</title>",
+                "What needs to work better?",
                 'action="/api/contact-submissions"',
                 'name="name"',
                 'name="email"',
                 'name="company"',
                 'name="goal"',
+                "No account or data connection is made before you approve it.",
             ],
         ),
-        (urljoin(base_url, "privacy/"), ["<title>Privacy | SuperMega</title>", "Only the details needed to reply."]),
+        (urljoin(base_url, "privacy/"), ["<title>Privacy | supermega.dev</title>", "Only the details needed to reply."]),
     ]
 
     for url, tokens in page_checks:
         response = fetch(url, timeout=timeout, attempts=attempts)
         body = response.body.decode("utf-8", errors="replace")
         missing = [token for token in tokens if token not in body]
-        result = {"kind": "page", "url": url, "status": response.status, "bytes": len(response.body), "missing": missing}
+        forbidden = ["MegaOS", "DeskPOS", ">Studio<", "Try demo", "https://demo.supermega.dev/"] if url in (base_url, www_url) else []
+        unexpected = [token for token in forbidden if token in body]
+        result = {
+            "kind": "page",
+            "url": url,
+            "status": response.status,
+            "bytes": len(response.body),
+            "missing": missing,
+            "unexpected": unexpected,
+        }
         results.append(result)
-        if response.status != 200 or len(response.body) < 1000 or missing:
+        if response.status != 200 or len(response.body) < 1000 or missing or unexpected:
             failures.append(result)
 
     for path in ("products/", "pricing/", "ai-agents/", "offers/"):
@@ -134,8 +168,6 @@ def run(base_url: str, www_url: str, *, timeout: float, attempts: int) -> dict[s
         "ops_intake.status": "ready",
         "ops_intake.target": "https://supermega-machine.vercel.app/api/intake",
         "ops_intake.contract": "body_secret",
-        "deskpos_pipeline.status": "ready",
-        "deskpos_pipeline.target": "https://pos.supermega.dev/api/pipeline-leads",
     }
     mismatches = {
         path: {"expected": expected, "actual": nested_value(status_payload, path)}
@@ -152,6 +184,61 @@ def run(base_url: str, www_url: str, *, timeout: float, attempts: int) -> dict[s
     if status_response.status != 200 or mismatches:
         failures.append(api_result)
 
+    for route in ("home", "factory"):
+        url = urljoin(app_url, route)
+        response = fetch(url, timeout=timeout, attempts=attempts)
+        body = response.body.decode("utf-8", errors="replace")
+        missing = [token for token in ['<title>Shop - SuperMega</title>', '<div id="root"></div>', 'type="module"'] if token not in body]
+        result = {
+            "kind": "app_route",
+            "route": route,
+            "url": url,
+            "status": response.status,
+            "bytes": len(response.body),
+            "missing": missing,
+        }
+        results.append(result)
+        if response.status != 200 or len(response.body) < 1000 or missing:
+            failures.append(result)
+
+    app_health_url = urljoin(app_url, "api/health")
+    app_health_response = fetch(app_health_url, timeout=timeout, attempts=attempts)
+    try:
+        app_health_payload = json.loads(app_health_response.body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        app_health_payload = {}
+
+    expected_app_health = {
+        "ok": True,
+        "status": "ready",
+        "service": "supermega-product-app",
+        "contractVersion": 1,
+        "portfolio.products": ["shop", "plant"],
+        "portfolio.demos.shop.entry": "/?demo=shop",
+        "portfolio.demos.shop.route": "/home",
+        "portfolio.demos.plant.entry": "/?demo=plant",
+        "portfolio.demos.plant.route": "/factory",
+        "portfolio.agentSolutions.intake": "https://supermega.dev/contact/?from=ai-agent-solution",
+        "portfolio.agentSolutions.externalActions": "approval-gated",
+        "proof.workingDemos": True,
+        "proof.productionCloudDurability": "not-asserted",
+        "proof.realCustomerAcceptance": "not-asserted",
+    }
+    app_health_mismatches = {
+        path: {"expected": expected, "actual": nested_value(app_health_payload, path)}
+        for path, expected in expected_app_health.items()
+        if nested_value(app_health_payload, path) != expected
+    }
+    app_health_result = {
+        "kind": "app_health",
+        "url": app_health_url,
+        "status": app_health_response.status,
+        "mismatches": app_health_mismatches,
+    }
+    results.append(app_health_result)
+    if app_health_response.status != 200 or app_health_mismatches:
+        failures.append(app_health_result)
+
     return {
         "status": "ready" if not failures else "error",
         "checks": len(results),
@@ -164,6 +251,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-url", default="https://supermega.dev")
     parser.add_argument("--www-url", default="https://www.supermega.dev")
+    parser.add_argument("--app-url", default="https://app.supermega.dev")
     parser.add_argument("--timeout", type=float, default=30.0)
     parser.add_argument("--attempts", type=int, default=3)
     args = parser.parse_args()
@@ -171,7 +259,7 @@ def main() -> int:
         parser.error("timeout and attempts must be positive")
 
     try:
-        report = run(args.base_url, args.www_url, timeout=args.timeout, attempts=args.attempts)
+        report = run(args.base_url, args.www_url, args.app_url, timeout=args.timeout, attempts=args.attempts)
     except Exception as error:  # Keep Actions output concise and secret-free.
         report = {"status": "error", "reason": str(error)}
 
