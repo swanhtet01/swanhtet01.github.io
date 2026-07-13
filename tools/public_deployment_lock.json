@@ -1,11 +1,11 @@
 {
-    "public_host":  "supermega-public-h4mztimwq-swanhtet01s-projects.vercel.app",
-    "deployment_id":  "dpl_Dt74ZYNyyjHBpEFLBjiuYw23MmiV",
-    "locked_at":  "2026-07-13T00:20:31.7718445Z",
+    "public_host":  "supermega-public-c1eevqgyr-swanhtet01s-projects.vercel.app",
+    "deployment_id":  "dpl_Rj31kSjtdbfYYRCoDsMWCemCZp3h",
+    "locked_at":  "2026-07-13T01:11:11.1548901Z",
     "domains":  [
                     "supermega.dev",
                     "www.supermega.dev"
                 ],
     "project":  "supermega-public",
-    "reason":  "Sanitized runtime workcell activation handoff is reviewable, copyable, and downloadable in the Operator Console with no credential fields or browser-side apply path; merged artifact verified on the separated public project and attached to public domains."
+    "reason":  "The sanitized Operator workcell handoff now opens the live locked activation planner without credential URL parameters; merged artifact and mobile cross-domain handoff verified on the separated public project and attached to public domains."
 }
