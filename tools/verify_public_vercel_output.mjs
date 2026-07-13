@@ -30,7 +30,7 @@ if (!existsSync(configPath)) fail('missing_public_config')
 const config = JSON.parse(readFileSync(configPath, 'utf8'))
 const routes = Array.isArray(config.routes) ? config.routes : []
 
-const expectedStaticEntries = new Set(['404.html', 'contact', 'favicon.svg', 'index.html', 'privacy', 'robots.txt', 'site.webmanifest', 'sitemap.xml', 'sw.js'])
+const expectedStaticEntries = new Set(['404.html', 'contact', 'favicon.svg', 'index.html', 'live-shop-dashboard.png', 'privacy', 'robots.txt', 'site.webmanifest', 'sitemap.xml', 'sw.js'])
 const actualStaticEntries = readdirSync(staticDir)
 for (const entry of actualStaticEntries) {
   if (!expectedStaticEntries.has(entry)) fail('retired_public_static_entry_present', { entry })
@@ -77,6 +77,7 @@ for (const required of [
   'https://demo.supermega.dev/',
   'Need something built?',
   'src="/favicon.svg"',
+  'src="/live-shop-dashboard.png"',
   'site.webmanifest',
 ]) {
   if (!home.includes(required)) fail('homepage_front_door_contract_missing', { required })

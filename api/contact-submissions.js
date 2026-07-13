@@ -97,7 +97,7 @@ function receiptHtml(res, record) {
     <a class="primary" href="${escapeHtml(sourcePackUrl)}">Open source pack room</a>
     <a class="primary" href="mailto:${escapeHtml(notifyEmail)}?subject=${subject}&body=${body}">Send source links</a>
     <a href="/contact/">Send another request</a>
-    <a href="/products/">View products</a>
+    <a href="https://app.supermega.dev/?demo=shop">Open Shop</a>
   </div>
 </main>
 </html>`)
