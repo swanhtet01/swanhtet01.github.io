@@ -99,6 +99,7 @@ for (const required of [
   'codex/public-enterprise-site',
   'actions/checkout@v6',
   'actions/setup-node@v6',
+  'persist-credentials: false',
   'node-version: 24',
   'package-manager-cache: false',
   'VERCEL_ORG_ID: team_wI4l7ZgSxcEztQPSlCCYVeJ5',
@@ -118,6 +119,10 @@ if (releaseWorkflow.includes('npm ci')) {
 
 if (/actions\/(?:checkout|setup-node)@v[1-5]\b/.test(releaseWorkflow)) {
   fail('public_release_deprecated_action_runtime_forbidden')
+}
+
+if (/persist-credentials:\s*true/.test(releaseWorkflow)) {
+  fail('public_release_checkout_credentials_must_not_persist')
 }
 
 if (/vercel(?:@\S+)? deploy --prod/.test(releaseWorkflow)) {
