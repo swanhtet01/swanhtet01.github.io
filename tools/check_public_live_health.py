@@ -15,7 +15,7 @@ from typing import Any
 from urllib.parse import urljoin, urlparse
 
 
-USER_AGENT = "supermega-portfolio-live-health/4.1"
+USER_AGENT = "supermega-portfolio-live-health/4.2"
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -121,6 +121,7 @@ def run(
     console_url = console_url.rstrip("/") + "/"
     failures: list[dict[str, Any]] = []
     results: list[dict[str, Any]] = []
+    agent_intake_url = urljoin(base_url, "contact/?from=ai-agent-solution")
 
     page_checks = [
         (
@@ -160,6 +161,23 @@ def run(
                 "No account or data connection is made before you approve it.",
             ],
         ),
+        (
+            agent_intake_url,
+            [
+                "search.get('from')==='ai-agent-solution'",
+                "document.title='AI Agent Solution | supermega.dev'",
+                "What should your agent handle every week?",
+                "Request an agent proof",
+                "What does your team repeat?",
+                "Request first proof",
+                "one redacted sample and one reviewed output",
+                'action="/api/contact-submissions"',
+                'name="name"',
+                'name="email"',
+                'name="company"',
+                'name="goal"',
+            ],
+        ),
         (urljoin(base_url, "privacy/"), ["<title>Privacy | supermega.dev</title>", "Only the details needed to reply."]),
     ]
 
@@ -167,10 +185,25 @@ def run(
         response = fetch(url, timeout=timeout, attempts=attempts)
         body = response.body.decode("utf-8", errors="replace")
         missing = [token for token in tokens if token not in body]
-        forbidden = ["MegaOS", "DeskPOS", ">Studio<", "Try demo", "https://demo.supermega.dev/"] if url in (base_url, www_url) else []
+        if url in (base_url, www_url):
+            forbidden = ["MegaOS", "DeskPOS", ">Studio<", "Try demo", "https://demo.supermega.dev/"]
+        elif url == agent_intake_url:
+            forbidden = [
+                "MegaOS",
+                "DeskPOS",
+                'name="workflow"',
+                'name="requested_package"',
+                'name="product_area"',
+                'name="template_id"',
+                'name="source_links"',
+                "/site/agent-templates/",
+                "General enquiry",
+            ]
+        else:
+            forbidden = []
         unexpected = [token for token in forbidden if token in body]
         result = {
-            "kind": "page",
+            "kind": "agent_intake_page" if url == agent_intake_url else "page",
             "url": url,
             "status": response.status,
             "bytes": len(response.body),
