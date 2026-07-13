@@ -120,6 +120,22 @@ function truncate(value, maxLength) {
   return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 3)}...` : normalized
 }
 
+function contactEntryIntent(payload = {}) {
+  for (const value of [payload.page_path, payload.source_url]) {
+    const raw = text(value)
+    if (!raw) continue
+    try {
+      const url = new URL(raw, 'https://supermega.dev')
+      if (!['supermega.dev', 'www.supermega.dev'].includes(url.hostname)) continue
+      if (url.pathname.replace(/\/+$/, '') !== '/contact') continue
+      if (url.searchParams.get('from') === 'ai-agent-solution') return 'ai-agent-solution'
+    } catch {
+      // Ignore malformed attribution and continue with the neutral intake route.
+    }
+  }
+  return ''
+}
+
 function escapeHtml(value) {
   return text(value)
     .replace(/&/g, '&amp;')
@@ -442,6 +458,28 @@ const solutionRouteCatalog = [
   },
 ]
 
+const generalDiscoveryRoute = {
+  template_id: 'outcome-discovery',
+  package_name: 'Outcome Discovery',
+  product_area: 'Custom Solutions & AI Agents',
+  delivery_lane: 'operator_discovery',
+  keywords: [],
+  first_proof_target: 'Define one repeated workflow, one approved sample source, and one useful output to test before any build or connection.',
+  source_requests: ['one example of the repeated task', 'one redacted sample source', 'the result the buyer would accept as useful'],
+  sales_motion: 'Clarify one measurable outcome and the smallest safe proof before recommending a product or agent route.',
+}
+
+const agentSolutionDiscoveryRoute = {
+  template_id: 'agent-solution-discovery',
+  package_name: 'AI Agent Solutions',
+  product_area: 'Custom Solutions & AI Agents',
+  delivery_lane: 'agent_solution_discovery',
+  keywords: [],
+  first_proof_target: 'One source-traced draft output from one redacted approved sample, reviewed against the buyer\'s stated useful result.',
+  source_requests: ['one redacted example of the repeated task', 'the information used to complete it', 'one example of the output the buyer considers useful'],
+  sales_motion: 'Prove one useful output first, then scope only the approved sources, schedule, and actions the buyer actually needs.',
+}
+
 function buildSolutionRoute(record = {}) {
   const explicitTemplate = text(record.template_id)
   const blob = [
@@ -458,20 +496,32 @@ function buildSolutionRoute(record = {}) {
   ].join(' ').toLowerCase()
   const ranked = solutionRouteCatalog
     .map((route) => {
-      let score = route.template_id === explicitTemplate ? 80 : 0
-      if (text(record.public_package).toLowerCase() === route.package_name.toLowerCase()) score += 45
-      if (text(record.requested_package).toLowerCase() === route.package_name.toLowerCase()) score += 35
+      const explicit_match = Boolean(explicitTemplate && route.template_id === explicitTemplate)
+      const public_package_match = Boolean(text(record.public_package) && text(record.public_package).toLowerCase() === route.package_name.toLowerCase())
+      const requested_package_match = Boolean(text(record.requested_package) && text(record.requested_package).toLowerCase() === route.package_name.toLowerCase())
+      let score = explicit_match ? 80 : 0
+      if (public_package_match) score += 45
+      if (requested_package_match) score += 35
       if (text(record.product_area).toLowerCase() === route.product_area.toLowerCase()) score += 18
       const matched_keywords = route.keywords.filter((keyword) => blob.includes(keyword.toLowerCase()))
       score += Math.min(42, matched_keywords.length * 7)
-      return { route, score, matched_keywords }
+      return { route, score, matched_keywords, explicit_match, public_package_match, requested_package_match }
     })
     .sort((a, b) => b.score - a.score)
-  const winner = ranked[0]
-  const route = winner?.route || solutionRouteCatalog[solutionRouteCatalog.length - 1]
+  const specificWinner = ranked.find((candidate) => (
+    candidate.explicit_match
+    || candidate.public_package_match
+    || candidate.requested_package_match
+    || candidate.matched_keywords.length > 0
+  ))
+  const fallbackRoute = contactEntryIntent(record) === 'ai-agent-solution'
+    ? agentSolutionDiscoveryRoute
+    : generalDiscoveryRoute
+  const winner = specificWinner || { route: fallbackRoute, score: 0, matched_keywords: [] }
+  const route = winner.route
   const matchedKeywords = winner?.matched_keywords || []
   const fitScore = Math.max(20, Math.min(100, winner?.score || 20))
-  const templateId = explicitTemplate || route.template_id
+  const templateId = winner.explicit_match ? explicitTemplate : route.template_id
   const runtimeWorkcell = runtimeWorkcellCatalog[templateId] || null
   const requestedPackage = text(record.requested_package)
   const publicPackage = text(record.public_package)
@@ -482,9 +532,9 @@ function buildSolutionRoute(record = {}) {
       ? requestedPackage
       : route.package_name
   const firstProofTarget = text(record.first_proof_target) || text(record.first_output) || route.first_proof_target
-  const starterKitUrl = text(record.starter_kit_url) || (runtimeWorkcell ? '' : `/site/agent-templates/${templateId}.json`)
+  const starterKitUrl = text(record.starter_kit_url)
   const priceHint = text(record.price_hint) || 'quote after first proof review'
-  const status = fitScore >= 55 || explicitTemplate ? 'route_ready' : 'needs_operator_review'
+  const status = fitScore >= 55 || winner.explicit_match ? 'route_ready' : 'needs_operator_review'
   const sourceRequests = route.source_requests
   const deliveryPath = [
     'Confirm buyer goal and first proof target.',
@@ -1130,9 +1180,9 @@ function buildIntakeJob(record, acceptanceTests = []) {
       workcell_id: sourceToScreenOrder.workcell_id,
     }] : []),
     {
-      source_type: runtimeWorkcell ? 'runtime_contract' : 'starter_kit',
-      status: record.starter_kit_url || runtimeWorkcell ? 'provided' : 'missing',
-      value: record.starter_kit_url || (runtimeWorkcell ? `runtime-workcell:${runtimeWorkcell.template_id}` : (record.template_id ? `/site/agent-templates/${record.template_id}.json` : 'SELECT_TEMPLATE_STARTER_KIT')),
+      source_type: runtimeWorkcell ? 'runtime_contract' : 'solution_route',
+      status: 'provided',
+      value: runtimeWorkcell ? `runtime-workcell:${runtimeWorkcell.template_id}` : `solution-route:${record.template_id || 'operator-discovery'}`,
     },
     {
       source_type: 'approval_boundary',
@@ -1144,7 +1194,7 @@ function buildIntakeJob(record, acceptanceTests = []) {
     .filter((item) => item.status === 'missing')
     .map((item) => item.source_type)
   const firstRunSteps = [
-    'Read the starter kit and buyer goal.',
+    'Review the saved solution route and buyer goal.',
     'Open only the approved sample sources.',
     'Extract the minimum facts needed for the first proof.',
     `Draft the first proof: ${proofTarget}`,
@@ -1415,7 +1465,7 @@ function buildFirstProofTaskPayload(record) {
   const sourceToScreenOrder = buildSourceToScreenOrder(routedRecord)
   const acceptanceTests = listFromText(routedRecord.acceptance_tests)
   const proofTarget = sourceToScreenOrder?.proof_target || routedRecord.first_proof_target || routedRecord.first_output || routedRecord.requested_package || 'First useful output'
-  const starterKitUrl = routedRecord.starter_kit_url || (!runtimeWorkcell && routedRecord.template_id ? `/site/agent-templates/${routedRecord.template_id}.json` : '')
+  const starterKitUrl = routedRecord.starter_kit_url || ''
   const templateName = routedRecord.public_package || routedRecord.requested_package || routedRecord.template_id || 'Custom SUPERMEGA template'
   const intakeJob = buildIntakeJob(routedRecord, acceptanceTests)
   const workcellActivationHandoff = buildRuntimeWorkcellActivationHandoff(routedRecord, solutionRoute, intakeJob)
@@ -1470,7 +1520,7 @@ function buildFirstProofTaskPayload(record) {
       .filter((item) => item.status === 'provided')
       .map((item) => `${item.source_type}: ${item.value}`),
     checklist: [
-      starterKitUrl ? `Open starter kit: ${starterKitUrl}` : 'Confirm the selected template and starter kit.',
+      starterKitUrl ? `Open the explicitly supplied starter kit: ${starterKitUrl}` : 'Review the saved solution route and first-proof boundary.',
       'Review buyer goal, company context, source links, and attached file manifest.',
       'Request the smallest missing sample needed to prove the first output.',
       `Build the first proof: ${proofTarget}`,
@@ -1686,15 +1736,19 @@ async function savePipelineAction({ record }) {
 
 function buildLeadRecord({ leadId, taskId, payload, req }) {
   const score = leadScore(payload)
+  const entryIntent = contactEntryIntent(payload)
+  const agentIntent = entryIntent === 'ai-agent-solution'
   const sourceLinks = truncate(payload.source_links, 700)
   const firstStep = truncate(payload.first_step, 160)
-  const publicPackage = truncate(payload.public_package, 160)
-  const firstProofTarget = truncate(payload.first_proof_target, 300)
+  const publicPackage = truncate(payload.public_package, 160) || (agentIntent ? 'AI Agent Solutions' : '')
+  const firstProofTarget = truncate(payload.first_proof_target, 300) || (agentIntent
+    ? 'One source-traced draft output from one redacted approved sample, reviewed against the buyer\'s stated useful result.'
+    : '')
   const acceptanceTests = truncate(payload.acceptance_tests, 900)
   const launchBlockers = truncate(payload.launch_blockers, 500)
   const automationBoundary = truncate(payload.automation_boundary, 700)
-  const firstOutput = truncate(payload.requested_package, 120) || truncate(payload.first_output, 120) || truncate(payload.workflow, 120) || 'First useful output'
-  const productArea = truncate(payload.product_area, 160)
+  const firstOutput = truncate(payload.requested_package, 120) || truncate(payload.first_output, 120) || truncate(payload.workflow, 120) || (agentIntent ? 'AI Agent Solutions' : 'First useful output')
+  const productArea = truncate(payload.product_area, 160) || (agentIntent ? 'Custom Solutions & AI Agents' : '')
   const templateId = truncate(payload.template_id, 100)
   const templateStatus = truncate(payload.template_status, 80)
   const templateSourceCategory = truncate(payload.template_source_category, 120)
@@ -1749,7 +1803,7 @@ function buildLeadRecord({ leadId, taskId, payload, req }) {
     email: truncate(payload.email, 180).toLowerCase(),
     phone: truncate(payload.phone, 80),
     company: truncate(payload.company, 180),
-    workflow: truncate(payload.workflow, 120) || 'Workflow system',
+    workflow: truncate(payload.workflow, 120) || (agentIntent ? 'AI Agent Solutions discovery' : 'Workflow system'),
     requested_package: firstOutput,
     public_package: publicPackage,
     first_output: firstOutput,
@@ -2353,6 +2407,8 @@ async function handler(req, res) {
 }
 
 handler.__test = {
+  contactEntryIntent,
+  buildLeadRecord,
   buildSolutionRoute,
   buildRuntimeWorkcellActivationHandoff,
   buildImplementationBlueprintPack,

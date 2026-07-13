@@ -1,5 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
-  "outputDirectory": "showroom/dist"
+  "ignoreCommand": "node tools/skip_public_source_deploy.mjs"
 }
