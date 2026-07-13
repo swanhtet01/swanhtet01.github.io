@@ -180,10 +180,10 @@
       <div class="activation-result" id="activationResult" hidden>
         <div class="activation-summary" id="activationSummary"></div>
         <div class="activation-output">
-          <div><h4>Client manifest</h4><pre class="activation-code" id="activationManifest"></pre><div class="activation-commands"><code class="activation-command" id="activationPlanCommand"></code><code class="activation-command" id="activationApplyCommand"></code></div></div>
+          <div><h4>Client manifest</h4><pre class="activation-code" id="activationManifest"></pre><div class="activation-commands"><code class="activation-command" id="activationGuidedCommand"></code><code class="activation-command" id="activationPlanCommand"></code><code class="activation-command" id="activationApplyCommand"></code></div></div>
           <div><h4>Credential inputs</h4><div class="activation-inputs" id="activationInputs"></div></div>
         </div>
-        <div class="row"><button type="button" id="activationCopyManifest">Copy manifest</button><button type="button" id="activationDownloadManifest">Download manifest</button><button type="button" id="activationCopyInputs">Copy input list</button></div>
+        <div class="row"><button type="button" id="activationCopyManifest">Copy manifest</button><button type="button" id="activationDownloadManifest">Download manifest</button><button type="button" id="activationCopyGuided">Copy guided command</button><button type="button" id="activationCopyInputs">Copy input list</button></div>
       </div>
     </div>
     <div id="workcellGrid" class="workcell-grid"><div class="loading-pulse">Loading workcells...</div></div>
@@ -500,7 +500,7 @@ const WORKCELL_MISSING={
   'input:WORKCELL_CLICKUP_LIST_ID':'Choose a ClickUp list',
   unknown_workcell:'Unknown workcell'
 }
-let activationSlugEdited=false, activationManifest=null, activationPlan=null
+let activationSlugEdited=false, activationManifest=null, activationPlan=null, activationGuidedCommand=''
 const activationSlug=(value)=>{
   const slug=String(value||'').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,40)
   return slug.length>1?slug:'client'
@@ -529,6 +529,7 @@ function populateActivationManifest(manifest){
   activationSlugEdited=true
   activationManifest=null
   activationPlan=null
+  activationGuidedCommand=''
   $('#activationResult').hidden=true
   syncActivationInputs()
 }
@@ -568,9 +569,12 @@ function renderActivationPlan(response){
   const manifestText=JSON.stringify(activationManifest,null,2)
   const fileName=`${activationManifest.clientSlug}.json`
   const manifestPath=`workcells/${fileName}`
+  const guidedCommand=`npm run workcell:activate -- --manifest ${manifestPath} --scope ${activationPlan.scope}`
   const planCommand=`npm run workcell:provision -- --manifest ${manifestPath} --scope ${activationPlan.scope}`
   const applyCommand=`npm run workcell:provision -- --apply --manifest ${manifestPath} --scope ${activationPlan.scope} --confirm "${activationPlan.confirmation}"`
+  activationGuidedCommand=guidedCommand
   $('#activationManifest').textContent=manifestText
+  $('#activationGuidedCommand').textContent=`Guided: ${guidedCommand}`
   $('#activationPlanCommand').textContent=`Plan: ${planCommand}`
   $('#activationApplyCommand').textContent=`Apply: ${applyCommand}`
   $('#activationInputs').innerHTML=(activationPlan.requiredSecretInputs||[]).map(name=>`<code>${esc(name)}</code>`).join('')
@@ -610,6 +614,7 @@ $('#activationForm').addEventListener('submit',async event=>{
   finally{button.disabled=false;button.textContent='Generate activation plan'}
 })
 $('#activationCopyManifest').onclick=()=>activationManifest&&copyActivationText(JSON.stringify(activationManifest,null,2),'Manifest copied')
+$('#activationCopyGuided').onclick=()=>activationGuidedCommand&&copyActivationText(activationGuidedCommand,'Guided command copied')
 $('#activationCopyInputs').onclick=()=>activationPlan&&copyActivationText((activationPlan.requiredSecretInputs||[]).join('\n'),'Input list copied')
 $('#activationDownloadManifest').onclick=()=>{
   if(!activationManifest)return

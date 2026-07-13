@@ -112,6 +112,19 @@ environment:
 npm run workcell:provision -- --apply --manifest <client.json> --scope <vercel-team> --confirm "PROVISION <project-name>"
 ```
 
+For the normal first-client path, use the guided command instead of manually exporting those inputs:
+
+```text
+npm run workcell:activate -- --manifest <client.json> --scope <vercel-team>
+```
+
+It requires an interactive terminal, masks every client value, stores nothing on disk or in
+`process.env`, prints the same value-free plan, and asks for the exact project confirmation before
+calling the provisioner. Schema bootstrap is offered by default; its database URL remains
+bootstrap-only and is scrubbed with the other inputs when the command exits. The low-level
+`workcell:provision` command remains the auditable non-interactive path for controlled CI or
+preloaded secure environments.
+
 Apply refuses dirty source and an existing project by default. `--allow-existing` is the explicit
 upgrade path. Before touching Vercel, it validates/applies the optional bootstrap transaction,
 checks the full shape of all four tables, inserts the same delivery claim twice to prove duplicate

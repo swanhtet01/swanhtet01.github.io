@@ -45,6 +45,10 @@ test('console builds a canonical client activation plan without collecting crede
   assert.match(html, /Enter the ops passcode to load live workcell status\./)
   assert.match(html, /if\(activeView==='workcells'\)/)
   assert.match(html, /activationPlan\.requiredSecretInputs/)
+  assert.match(html, /id="activationGuidedCommand"/)
+  assert.match(html, /id="activationCopyGuided"/)
+  assert.match(html, /npm run workcell:activate -- --manifest/)
+  assert.match(html, /copyActivationText\(activationGuidedCommand,'Guided command copied'\)/)
   assert.match(html, /\.activation-fields input,\.activation-fields select\{min-height:44px\}/)
   assert.match(html, /@media\(max-width:520px\)/)
   const panel = html.match(/<div class="activation" id="activationPanel"[\s\S]*?<div id="workcellGrid"/)?.[0] || ''
