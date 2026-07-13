@@ -12,8 +12,10 @@ import {
 import {
   createCompanyWorkOrder,
   getCompanyWorkOrder,
+  getCompanyWorkOrderProof,
   listCompanyWorkOrders,
   MAX_COMPANY_WORK_ORDERS,
+  reviewCompanyWorkOrder,
   runCompanyWorkOrder,
 } from '../agent-company-work-orders.mjs'
 
@@ -31,6 +33,9 @@ function statusFor(result) {
     'company_work_order_already_claimed',
     'company_work_order_conflict',
     'company_work_order_plan_mismatch',
+    'company_work_order_review_already_claimed',
+    'company_work_order_review_conflict',
+    'company_work_order_review_result_mismatch',
     'company_work_order_running',
   ].includes(result.reason)) return 409
   if ([
@@ -39,8 +44,10 @@ function statusFor(result) {
     'company_work_order_durable_claim_required',
     'company_work_order_state_unavailable',
     'company_work_order_store_unavailable',
+    'company_work_order_review_durable_claim_required',
+    'company_work_order_review_store_unavailable',
   ].includes(result.reason)) return 503
-  if (result.reason === 'company_role_budget_exceeded') return 422
+  if (['company_role_budget_exceeded', 'company_work_order_not_reviewable', 'company_work_order_proof_unavailable'].includes(result.reason)) return 422
   if (result.status === 'failed') return 502
   return 400
 }
@@ -67,6 +74,9 @@ export async function handleAgentCompany(request = {}, options = {}) {
           maxList: MAX_COMPANY_WORK_ORDERS,
           explicitDispatch: true,
           rawEvidenceReturned: false,
+          deliveryProof: true,
+          operatorRecordedReview: true,
+          customerAuthenticated: false,
         },
       },
     }
@@ -85,6 +95,8 @@ export async function handleAgentCompany(request = {}, options = {}) {
     'work-order-list',
     'work-order-get',
     'work-order-run',
+    'work-order-proof',
+    'work-order-review',
   ].includes(action)) {
     return { status: 400, json: { ok: false, reason: 'company_invalid_action' } }
   }
@@ -99,12 +111,16 @@ export async function handleAgentCompany(request = {}, options = {}) {
   const listOrders = options.listCompanyWorkOrders || listCompanyWorkOrders
   const getOrder = options.getCompanyWorkOrder || getCompanyWorkOrder
   const runOrder = options.runCompanyWorkOrder || runCompanyWorkOrder
+  const getProof = options.getCompanyWorkOrderProof || getCompanyWorkOrderProof
+  const reviewOrder = options.reviewCompanyWorkOrder || reviewCompanyWorkOrder
   const result = action === 'plan' ? await plan(body)
     : action === 'run' ? await run(body)
       : action === 'work-order-create' ? await createOrder(body)
         : action === 'work-order-list' ? await listOrders(body)
           : action === 'work-order-get' ? await getOrder(body)
-            : await runOrder(body)
+            : action === 'work-order-run' ? await runOrder(body)
+              : action === 'work-order-proof' ? await getProof(body)
+                : await reviewOrder(body)
   return { status: statusFor(result), json: result }
 }
 

@@ -4,7 +4,9 @@ import assert from 'node:assert/strict'
 import {
   createCompanyWorkOrder,
   getCompanyWorkOrder,
+  getCompanyWorkOrderProof,
   listCompanyWorkOrders,
+  reviewCompanyWorkOrder,
   runCompanyWorkOrder,
 } from './agent-company-work-orders.mjs'
 
@@ -41,6 +43,32 @@ function harness() {
       now: () => '2026-07-14T00:00:00.000Z',
     },
   }
+}
+
+async function completeOrder(state) {
+  const created = await createCompanyWorkOrder(work(), state.options)
+  return runCompanyWorkOrder({
+    clientId: created.workOrder.clientId,
+    workOrderId: created.workOrder.workOrderId,
+    planHash: created.workOrder.planHash,
+    confirmation: `RUN ${created.workOrder.workOrderId}`,
+  }, {
+    ...state.options,
+    runCompanyCycle: async (input) => ({
+      ok: true,
+      mode: 'run',
+      status: 'completed',
+      runId: created.workOrder.plan.runId,
+      clientId: input.clientId,
+      cycleId: input.cycleId,
+      actionMode: 'draft_only',
+      results: [
+        { ok: true, status: 'completed', agentId: 'sales-qualifier', department: 'Revenue', output: { fit: 'strong', nextStep: 'Owner review' } },
+        { ok: true, status: 'completed', agentId: 'quality-reviewer', department: 'Quality', output: { verdict: 'pass' } },
+      ],
+      budget: { usedRoleCalls: 6 },
+    }),
+  })
 }
 
 test('creation durably queues one exact reviewed plan without running a model', async () => {
@@ -191,6 +219,176 @@ test('completed dispatches replay without another specialist call', async () => 
   assert.equal(runs, 1)
 })
 
+test('completed work orders produce deterministic customer delivery proof without raw evidence', async () => {
+  const state = harness()
+  const completed = await completeOrder(state)
+  const proof = await getCompanyWorkOrderProof({
+    clientId: 'client-acme',
+    workOrderId: completed.workOrder.workOrderId,
+  }, state.options)
+  assert.equal(proof.ok, true)
+  assert.equal(proof.mode, 'work_order_proof')
+  assert.equal(proof.reviewState, 'unreviewed')
+  assert.equal(proof.proofPacket.kind, 'agent_company_delivery_proof')
+  assert.match(proof.proofPacket.delivery.resultHash, /^[a-f0-9]{64}$/)
+  assert.match(proof.proofPacket.packetHash, /^[a-f0-9]{64}$/)
+  assert.equal(proof.proofPacket.delivery.specialists.length, 2)
+  assert.equal(proof.proofPacket.delivery.specialists[0].output.fit, 'strong')
+  assert.deepEqual(proof.proofPacket.delivery.budget, { plannedRoleCalls: 6, usedRoleCalls: 6 })
+  assert.equal(proof.proofPacket.controls.externalWrites, false)
+  assert.equal(proof.proofPacket.controls.rawEvidenceIncluded, false)
+  assert.equal(proof.proofPacket.review, null)
+  assert.equal(JSON.stringify(proof).includes('Manual close takes two days'), false)
+
+  const replay = await getCompanyWorkOrderProof({
+    clientId: 'client-acme',
+    workOrderId: completed.workOrder.workOrderId,
+  }, state.options)
+  assert.equal(replay.proofPacket.packetHash, proof.proofPacket.packetHash)
+  assert.equal((await getCompanyWorkOrderProof({
+    clientId: 'client-other',
+    workOrderId: completed.workOrder.workOrderId,
+  }, state.options)).reason, 'company_work_order_not_found')
+})
+
+test('proof and customer review stay unavailable until a work order has a saved result', async () => {
+  const state = harness()
+  const created = await createCompanyWorkOrder(work(), state.options)
+  const input = {
+    clientId: 'client-acme',
+    workOrderId: created.workOrder.workOrderId,
+  }
+
+  const proof = await getCompanyWorkOrderProof(input, state.options)
+  assert.equal(proof.reason, 'company_work_order_proof_unavailable')
+  assert.equal(proof.status, 'planned')
+
+  const review = await reviewCompanyWorkOrder({
+    ...input,
+    resultHash: '0'.repeat(64),
+    decision: 'accepted',
+    reviewerName: 'Aye Aye',
+    source: 'chat',
+    statement: 'Accepted.',
+    recordedBy: 'Swan',
+    confirmation: 'not-applicable',
+  }, state.options)
+  assert.equal(review.reason, 'company_work_order_not_reviewable')
+  assert.equal(review.status, 'planned')
+})
+
+test('operator-recorded customer review is durably bound to one exact result', async () => {
+  const state = harness()
+  const completed = await completeOrder(state)
+  const proof = await getCompanyWorkOrderProof({
+    clientId: 'client-acme',
+    workOrderId: completed.workOrder.workOrderId,
+  }, state.options)
+  const resultHash = proof.proofPacket.delivery.resultHash
+  const review = {
+    clientId: 'client-acme',
+    workOrderId: completed.workOrder.workOrderId,
+    resultHash,
+    decision: 'accepted',
+    reviewerName: 'Aye Aye',
+    source: 'chat',
+    statement: 'Accepted. The qualified next-step list is usable by our sales team.',
+    recordedBy: 'Swan',
+    confirmation: `ACCEPT ${completed.workOrder.workOrderId} ${resultHash}`,
+  }
+
+  assert.equal((await reviewCompanyWorkOrder({ ...review, resultHash: '0'.repeat(64) }, state.options)).reason, 'company_work_order_review_result_mismatch')
+  assert.equal((await reviewCompanyWorkOrder({ ...review, source: 'internal' }, state.options)).reason, 'company_work_order_review_invalid_source')
+  assert.equal((await reviewCompanyWorkOrder({ ...review, confirmation: 'ACCEPT something else' }, state.options)).reason, 'company_work_order_review_confirmation_required')
+  const saved = await reviewCompanyWorkOrder(review, state.options)
+  assert.equal(saved.ok, true)
+  assert.equal(saved.mode, 'work_order_review')
+  assert.equal(saved.replayed, false)
+  assert.equal(saved.review.binding, 'operator_recorded_customer_review')
+  assert.equal(saved.review.customerAuthenticated, false)
+  assert.equal(saved.review.decision, 'accepted')
+  assert.equal(saved.review.resultHash, resultHash)
+  assert.match(saved.review.reviewHash, /^[a-f0-9]{64}$/)
+  assert.notEqual(saved.proofPacket.packetHash, proof.proofPacket.packetHash)
+  assert.equal(saved.proofPacket.review.statement, review.statement)
+
+  const fetched = await getCompanyWorkOrder({
+    clientId: 'client-acme',
+    workOrderId: completed.workOrder.workOrderId,
+  }, state.options)
+  assert.equal(fetched.workOrder.review.decision, 'accepted')
+  assert.equal(fetched.workOrder.review.customerAuthenticated, false)
+  assert.equal(JSON.stringify(fetched).includes('Manual close takes two days'), false)
+})
+
+test('customer review is replay-safe, immutable, and fails closed without durable storage', async () => {
+  const state = harness()
+  const completed = await completeOrder(state)
+  const proof = await getCompanyWorkOrderProof({
+    clientId: 'client-acme',
+    workOrderId: completed.workOrder.workOrderId,
+  }, state.options)
+  const resultHash = proof.proofPacket.delivery.resultHash
+  const review = {
+    clientId: 'client-acme',
+    workOrderId: completed.workOrder.workOrderId,
+    resultHash,
+    decision: 'changes_requested',
+    reviewerName: 'Aye Aye',
+    source: 'call',
+    statement: 'Please add the buyer owner and due date to each next step.',
+    recordedBy: 'Swan',
+    confirmation: `REQUEST CHANGES ${completed.workOrder.workOrderId} ${resultHash}`,
+  }
+  const first = await reviewCompanyWorkOrder(review, state.options)
+  assert.equal(first.ok, true)
+  assert.equal(first.review.decision, 'changes_requested')
+  const replay = await reviewCompanyWorkOrder(review, state.options)
+  assert.equal(replay.ok, true)
+  assert.equal(replay.replayed, true)
+  const conflict = await reviewCompanyWorkOrder({ ...review, statement: 'A different statement.' }, state.options)
+  assert.equal(conflict.reason, 'company_work_order_review_conflict')
+
+  const fresh = harness()
+  const freshCompleted = await completeOrder(fresh)
+  const freshProof = await getCompanyWorkOrderProof({ clientId: 'client-acme', workOrderId: freshCompleted.workOrder.workOrderId }, fresh.options)
+  const freshHash = freshProof.proofPacket.delivery.resultHash
+  let released = ''
+  const blocked = await reviewCompanyWorkOrder({
+    ...review,
+    workOrderId: freshCompleted.workOrder.workOrderId,
+    resultHash: freshHash,
+    confirmation: `REQUEST CHANGES ${freshCompleted.workOrder.workOrderId} ${freshHash}`,
+  }, {
+    ...fresh.options,
+    claimActivity: async () => ({ fresh: true, durable: false }),
+    releaseActivityClaim: async (id) => { released = id; return true },
+  })
+  assert.equal(blocked.reason, 'company_work_order_review_durable_claim_required')
+  assert.match(released, /^company-work-order-review:/)
+
+  const writeFailure = harness()
+  const writeFailureCompleted = await completeOrder(writeFailure)
+  const writeFailureProof = await getCompanyWorkOrderProof({
+    clientId: 'client-acme',
+    workOrderId: writeFailureCompleted.workOrder.workOrderId,
+  }, writeFailure.options)
+  const writeFailureHash = writeFailureProof.proofPacket.delivery.resultHash
+  let releasedAfterWrite = ''
+  const notStored = await reviewCompanyWorkOrder({
+    ...review,
+    workOrderId: writeFailureCompleted.workOrder.workOrderId,
+    resultHash: writeFailureHash,
+    confirmation: `REQUEST CHANGES ${writeFailureCompleted.workOrder.workOrderId} ${writeFailureHash}`,
+  }, {
+    ...writeFailure.options,
+    putWorkOrderReview: async () => null,
+    releaseActivityClaim: async (id) => { releasedAfterWrite = id; return true },
+  })
+  assert.equal(notStored.reason, 'company_work_order_review_store_unavailable')
+  assert.match(releasedAfterWrite, /^company-work-order-review:/)
+})
+
 test('dispatch never spends when the running state cannot be persisted', async () => {
   const state = harness()
   const created = await createCompanyWorkOrder(work(), state.options)
@@ -213,4 +411,6 @@ test('work-order actions reject unknown fields and unbounded listing', async () 
   assert.equal((await createCompanyWorkOrder({ ...work(), execute: true })).reason, 'company_work_order_unknown_field')
   assert.equal((await listCompanyWorkOrders({ clientId: 'client-acme', limit: 41 })).reason, 'company_work_order_invalid_limit')
   assert.equal((await runCompanyWorkOrder({ clientId: 'client-acme', workOrderId: 'x', planHash: 'x', confirmation: 'x', action: true })).reason, 'company_work_order_unknown_field')
+  assert.equal((await getCompanyWorkOrderProof({ clientId: 'client-acme', workOrderId: 'x', output: true })).reason, 'company_work_order_unknown_field')
+  assert.equal((await reviewCompanyWorkOrder({ clientId: 'client-acme', workOrderId: 'x', accept: true })).reason, 'company_work_order_unknown_field')
 })
