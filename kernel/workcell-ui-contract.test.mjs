@@ -39,6 +39,8 @@ test('console builds a canonical client activation plan without collecting crede
   assert.match(html, /id="activationImportManifest"/)
   assert.match(html, /SuperMegaManifestImport\.parseActivationManifest\(await file\.text\(\)\)/)
   assert.match(html, /Manifest imported\. Add the client-owned ClickUp List ID\./)
+  assert.match(html, /selected==='pipeline-control'/)
+  assert.match(html, /ClickUp List ID \(optional action queue\)/)
   assert.match(html, /id="activationTokenCap" type="number" min="10000" max="5000000"/)
   assert.match(html, /tokenCap:Number\(\$\('#activationTokenCap'\)\.value\)/)
   assert.match(html, /if\(location\.hash==='\#activation'\)/)

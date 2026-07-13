@@ -18,7 +18,7 @@ const request = {
       timeZone: 'Asia/Yangon',
       currency: 'MMK',
       lookbackHours: 24,
-      clickupListId: '123456789',
+      clickupListId: '',
       deliveryUtc: '01:30',
     },
   },
@@ -42,6 +42,8 @@ test('activation planner returns a normalized no-secret plan without mutation', 
   assert.equal(result.json.manifest.projectName, 'supermega-wc-acme-trading')
   assert.equal(result.json.plan.confirmation, 'PROVISION supermega-wc-acme-trading')
   assert.ok(result.json.plan.missingSecretInputs.includes('SUPERMEGA_NEW_CLIENT_SUPABASE_URL'))
+  assert.ok(result.json.plan.missingSecretInputs.includes('SUPERMEGA_NEW_CLIENT_TELEGRAM_BOT_TOKEN'))
+  assert.equal(result.json.plan.missingSecretInputs.some((name) => /PAYPAL|PIPEDRIVE|CLICKUP/.test(name)), false)
   assert.ok(result.json.plan.requiredSecretInputs.some((name) => name.startsWith('SUPERMEGA_NEW_CLIENT_SUPABASE_DB_URL ')))
   assert.equal(result.json.plan.schemaBootstrap.supplied, false)
   assert.equal(result.json.plan.schemaBootstrap.targetProjectRef, null)

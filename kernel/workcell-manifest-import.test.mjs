@@ -21,7 +21,7 @@ function manifest(workcell = 'cash-close') {
     timeZone: 'Asia/Yangon',
     currency: 'MMK',
     lookbackHours: 24,
-    clickupListId: workcell === 'cash-close' ? '' : '123456789',
+    clickupListId: workcell === 'pipeline-control' ? '123456789' : '',
     deliveryUtc: '01:30',
     tokenCap: 150000,
   }
@@ -52,11 +52,16 @@ test('browser manifest parser derives canonical optional identifiers', async () 
 
 test('browser manifest parser accepts an incomplete ClickUp handoff for operator completion', async () => {
   const parse = await loadParser()
-  for (const workcell of ['pipeline-control', 'owner-command']) {
-    const parsed = parse({ ...manifest(workcell), clickupListId: '' })
-    assert.equal(parsed.workcells[0], workcell)
-    assert.equal(parsed.clickupListId, '')
-  }
+  const parsed = parse({ ...manifest('pipeline-control'), clickupListId: '' })
+  assert.equal(parsed.workcells[0], 'pipeline-control')
+  assert.equal(parsed.clickupListId, '')
+})
+
+test('browser manifest parser accepts Owner Command without ClickUp', async () => {
+  const parse = await loadParser()
+  const parsed = parse(manifest('owner-command'))
+  assert.equal(parsed.workcells[0], 'owner-command')
+  assert.equal(parsed.clickupListId, '')
 })
 
 test('browser manifest parser rejects wrappers, secret fields, and boundary changes', async () => {

@@ -167,7 +167,7 @@
           <div class="field"><label for="activationClientName">Client name</label><input id="activationClientName" autocomplete="organization" required /></div>
           <div class="field"><label for="activationClientSlug">Deployment slug</label><input id="activationClientSlug" autocomplete="off" pattern="[a-z0-9][a-z0-9\-]{1,39}" required /></div>
           <div class="field"><label for="activationWorkcell">Workcell</label><select id="activationWorkcell"><option value="owner-command">Owner Command</option><option value="cash-close">Cash Close</option><option value="pipeline-control">Pipeline Control</option></select></div>
-          <div class="field" id="activationClickupField"><label for="activationClickup">ClickUp List ID</label><input id="activationClickup" inputmode="numeric" pattern="[0-9]{1,32}" required /></div>
+          <div class="field" id="activationClickupField"><label for="activationClickup" id="activationClickupLabel">ClickUp List ID</label><input id="activationClickup" inputmode="numeric" pattern="[0-9]{1,32}" /></div>
           <div class="field"><label for="activationTimeZone">Time zone</label><input id="activationTimeZone" value="Asia/Yangon" required /></div>
           <div class="field"><label for="activationCurrency">Currency</label><input id="activationCurrency" value="MMK" maxlength="8" required /></div>
           <div class="field"><label for="activationDelivery">Daily delivery (UTC)</label><input id="activationDelivery" type="time" value="01:30" required /></div>
@@ -497,6 +497,7 @@ const WORKCELL_MISSING={
   'tool:settled_transactions_read':'Connect PayPal',
   'tool:crm_deals_read':'Connect Pipedrive',
   'tool:work_tasks_read':'Connect ClickUp',
+  'tool:owner_updates_read':'Connect the private owner Telegram bot',
   'input:WORKCELL_CLICKUP_LIST_ID':'Choose a ClickUp list',
   unknown_workcell:'Unknown workcell'
 }
@@ -506,10 +507,13 @@ const activationSlug=(value)=>{
   return slug.length>1?slug:'client'
 }
 function syncActivationInputs(){
-  const needsClickUp=$('#activationWorkcell').value!=='cash-close'
-  $('#activationClickupField').hidden=!needsClickUp
+  const selected=$('#activationWorkcell').value
+  const supportsClickUp=selected!=='cash-close'
+  const needsClickUp=selected==='pipeline-control'
+  $('#activationClickupField').hidden=!supportsClickUp
   $('#activationClickup').required=needsClickUp
-  $('#activationClickup').disabled=!needsClickUp
+  $('#activationClickup').disabled=!supportsClickUp
+  $('#activationClickupLabel').textContent=needsClickUp?'ClickUp List ID':'ClickUp List ID (optional action queue)'
 }
 function openActivationPanel(focusSelector='#activationClientName'){
   $('#activationPanel').hidden=false
@@ -544,7 +548,7 @@ async function importActivationManifestFile(){
   try{
     const manifest=SuperMegaManifestImport.parseActivationManifest(await file.text())
     populateActivationManifest(manifest)
-    const needsClickUp=manifest.workcells[0]!=='cash-close'&&!manifest.clickupListId
+    const needsClickUp=manifest.workcells[0]==='pipeline-control'&&!manifest.clickupListId
     $('#activationState').textContent=needsClickUp
       ? 'Manifest imported. Add the client-owned ClickUp List ID.'
       : 'Manifest imported. Generate the plan to validate it.'

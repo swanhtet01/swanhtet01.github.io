@@ -62,7 +62,7 @@ function safeJson(value) {
 }
 
 function itemCount(data) {
-  for (const key of ['transactions', 'deals', 'tasks', 'rows', 'values']) {
+  for (const key of ['transactions', 'deals', 'tasks', 'updates', 'rows', 'values']) {
     if (Array.isArray(data?.[key])) return data[key].length
   }
   return 0

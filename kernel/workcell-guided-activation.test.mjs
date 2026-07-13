@@ -19,7 +19,7 @@ const MANIFEST = {
   timeZone: 'Asia/Yangon',
   currency: 'MMK',
   lookbackHours: 24,
-  clickupListId: '123456789',
+  clickupListId: '',
   deliveryUtc: '01:30',
   tokenCap: 150000,
 }
@@ -61,11 +61,12 @@ class FakeOutput {
 
 test('guided inputs derive only client-scoped names for the selected workcell', () => {
   const groups = guidedInputGroups(MANIFEST)
-  assert.ok(groups.length >= 8)
+  assert.equal(groups.length, 6)
   assert.ok(groups.every((group) => group.inputNames.every((name) => name.startsWith('SUPERMEGA_NEW_CLIENT_'))))
-  assert.ok(groups.some((group) => group.inputNames.includes('SUPERMEGA_NEW_CLIENT_CLICKUP_ACCESS_TOKEN')))
-  assert.ok(groups.some((group) => group.inputNames.includes('SUPERMEGA_NEW_CLIENT_PAYPAL_CLIENT_SECRET')))
-  assert.ok(groups.some((group) => group.inputNames.includes('SUPERMEGA_NEW_CLIENT_PIPEDRIVE_ACCESS_TOKEN')))
+  assert.ok(groups.some((group) => group.inputNames.includes('SUPERMEGA_NEW_CLIENT_TELEGRAM_BOT_TOKEN')))
+  assert.equal(groups.some((group) => group.inputNames.includes('SUPERMEGA_NEW_CLIENT_CLICKUP_ACCESS_TOKEN')), false)
+  assert.equal(groups.some((group) => group.inputNames.includes('SUPERMEGA_NEW_CLIENT_PAYPAL_CLIENT_SECRET')), false)
+  assert.equal(groups.some((group) => group.inputNames.includes('SUPERMEGA_NEW_CLIENT_PIPEDRIVE_ACCESS_TOKEN')), false)
 })
 
 test('guided collector chooses one alias per group and keeps bootstrap separate', async () => {

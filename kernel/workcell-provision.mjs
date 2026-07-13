@@ -76,7 +76,7 @@ export function validateClientManifest(input) {
   }
   if (!workcells.length || workcells.length > 3) throw new Error('manifest_workcells_1_to_3_required')
 
-  const clickupRequired = workcells.some((slug) => slug === 'pipeline-control' || slug === 'owner-command')
+  const clickupRequired = workcells.some((slug) => slug === 'pipeline-control')
   const clickupListId = text(input.clickupListId, 32)
   if (clickupRequired && !CLICKUP_LIST_RE.test(clickupListId)) throw new Error('manifest_clickup_list_id_required')
   if (clickupListId && !CLICKUP_LIST_RE.test(clickupListId)) throw new Error('manifest_invalid_clickup_list_id')
@@ -103,7 +103,11 @@ export function validateClientManifest(input) {
 }
 
 function needsConnector(manifest, connector) {
-  return manifest.workcells.some((slug) => getWorkcell(slug)?.requiredConnectors.includes(connector))
+  return manifest.workcells.some((slug) => {
+    const definition = getWorkcell(slug)
+    return definition?.requiredConnectors.includes(connector)
+      || Boolean(manifest.clickupListId && definition?.optionalConnectors?.includes(connector))
+  })
 }
 
 function clientSecret(target, sourceSuffix = target) {
@@ -552,6 +556,7 @@ export async function verifyProvisionedClient(deploymentUrl, options = {}) {
   const fetchImpl = options.fetch || fetch
   const opsKey = options.opsKey
   const selectedSlugs = options.workcells || []
+  const actionWorkcells = new Set(options.actionWorkcells || selectedSlugs.filter((slug) => slug === 'pipeline-control' || slug === 'owner-command'))
   const statusResponse = await fetchImpl(`${deploymentUrl}/api/status`, { signal: AbortSignal.timeout(15_000) })
   const status = await statusResponse.json().catch(() => null)
   if (!statusResponse.ok || !status?.ok) throw new Error('provision_status_check_failed')
@@ -566,7 +571,7 @@ export async function verifyProvisionedClient(deploymentUrl, options = {}) {
     const row = rows.find((item) => item.slug === slug)
     if (!row) throw new Error(`provision_workcell_missing:${slug}`)
     if (!row.configured) throw new Error(`provision_workcell_not_configured:${slug}`)
-    const actionExpected = slug === 'pipeline-control' || slug === 'owner-command'
+    const actionExpected = actionWorkcells.has(slug)
     if (actionExpected && (!row.actionDraftSupported || !row.actionDraftReady)) {
       throw new Error(`provision_workcell_action_not_ready:${slug}`)
     }
@@ -645,6 +650,9 @@ export async function applyProvisionPlan(manifestInput, options = {}) {
     const verification = await (options.verify || verifyProvisionedClient)(deploymentUrl, {
       opsKey: resolved.secrets.get('SUPERMEGA_OPS_KEY'),
       workcells: resolved.manifest.workcells,
+      actionWorkcells: resolved.manifest.clickupListId
+        ? resolved.manifest.workcells.filter((slug) => slug === 'pipeline-control' || slug === 'owner-command')
+        : [],
     })
     return {
       ok: true,
