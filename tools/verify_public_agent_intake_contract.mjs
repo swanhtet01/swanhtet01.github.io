@@ -20,12 +20,16 @@ const contact = await readFile(resolve('.vercel/output/static/contact/index.html
 for (const required of [
   'data-contact-heading',
   'data-contact-goal-label',
-  "search.get('from')==='ai-agent-solution'",
+  "entryIntent==='ai-agent-solution'",
   'What do you want to improve?',
   'Start here',
   'What should work better?',
   "idleSubmitLabel='Contact us'",
   'one reviewed example',
+  "entryIntent==='shop-workspace'?'Shop':entryIntent==='plant-workspace'?'Plant':''",
+  "text('[data-contact-heading]','Request a private '+workspaceProduct+' workspace.')",
+  "text('[data-contact-goal-label]','What should be ready first?')",
+  "idleSubmitLabel='Request workspace'",
 ]) {
   assert.ok(contact.includes(required), `missing agent intake copy: ${required}`)
 }
@@ -53,8 +57,11 @@ for (const source of [...contact.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(
 
 assert.equal(contactEntryIntent({ page_path: '/contact/?from=ai-agent-solution' }), 'ai-agent-solution')
 assert.equal(contactEntryIntent({ source_url: 'https://www.supermega.dev/contact/?from=ai-agent-solution' }), 'ai-agent-solution')
+assert.equal(contactEntryIntent({ page_path: '/contact/?from=shop-workspace' }), 'shop-workspace')
+assert.equal(contactEntryIntent({ source_url: 'https://www.supermega.dev/contact/?from=plant-workspace' }), 'plant-workspace')
 assert.equal(contactEntryIntent({ page_path: '/contact/?from=shop' }), '')
 assert.equal(contactEntryIntent({ source_url: 'https://example.com/contact/?from=ai-agent-solution' }), '')
+assert.equal(contactEntryIntent({ source_url: 'https://example.com/contact/?from=shop-workspace' }), '')
 
 function lead(payload = {}) {
   return buildLeadRecord({
@@ -83,6 +90,35 @@ assert.equal(vagueAgentRoute.delivery_lane, 'agent_solution_discovery')
 assert.equal(vagueAgentRoute.status, 'needs_operator_review')
 assert.equal(vagueAgentRoute.starter_kit_url, '')
 assert.deepEqual(vagueAgentRoute.matched_keywords, [])
+
+const shopWorkspaceLead = lead({ page_path: '/contact/?from=shop-workspace' })
+assert.equal(shopWorkspaceLead.workflow, 'Shop private workspace request')
+assert.equal(shopWorkspaceLead.requested_package, 'Shop private workspace')
+assert.equal(shopWorkspaceLead.public_package, 'Shop private workspace')
+assert.equal(shopWorkspaceLead.product_area, 'Shop')
+assert.equal(shopWorkspaceLead.template_id, 'deskpos-quickstart')
+assert.equal(shopWorkspaceLead.onboarding_stage, 'workspace_request')
+assert.equal(shopWorkspaceLead.access_policy, 'approval_required')
+assert.equal(shopWorkspaceLead.workspace_status, 'not_created_until_approved')
+assert.equal(shopWorkspaceLead.lead_stage, 'qualified')
+assert.match(shopWorkspaceLead.first_proof_target, /buyer-approved starting data/i)
+const shopWorkspaceRoute = buildSolutionRoute(shopWorkspaceLead)
+assert.equal(shopWorkspaceRoute.template_id, 'deskpos-quickstart')
+assert.equal(shopWorkspaceRoute.delivery_lane, 'pos_launch_workcell')
+assert.equal(shopWorkspaceRoute.status, 'route_ready')
+
+const plantWorkspaceLead = lead({ source_url: 'https://supermega.dev/contact/?from=plant-workspace' })
+assert.equal(plantWorkspaceLead.workflow, 'Plant private workspace request')
+assert.equal(plantWorkspaceLead.requested_package, 'Plant private workspace')
+assert.equal(plantWorkspaceLead.public_package, 'Plant private workspace')
+assert.equal(plantWorkspaceLead.product_area, 'Plant')
+assert.equal(plantWorkspaceLead.template_id, 'factory-ops-ledger')
+assert.equal(plantWorkspaceLead.onboarding_stage, 'workspace_request')
+assert.equal(plantWorkspaceLead.lead_stage, 'qualified')
+const plantWorkspaceRoute = buildSolutionRoute(plantWorkspaceLead)
+assert.equal(plantWorkspaceRoute.template_id, 'factory-ops-ledger')
+assert.equal(plantWorkspaceRoute.delivery_lane, 'factory_ops_workcell')
+assert.equal(plantWorkspaceRoute.status, 'route_ready')
 
 const reportingLead = lead({
   page_path: '/contact/?from=ai-agent-solution',
@@ -118,5 +154,6 @@ console.log(JSON.stringify({
   visible_fields: 4,
   fallback_route: vagueAgentRoute.template_id,
   specific_route: reportingRoute.template_id,
+  workspace_routes: [shopWorkspaceRoute.template_id, plantWorkspaceRoute.template_id],
   phantom_starter_kit_paths: 0,
 }))
