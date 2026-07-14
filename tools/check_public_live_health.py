@@ -15,7 +15,7 @@ from typing import Any
 from urllib.parse import urljoin, urlparse
 
 
-USER_AGENT = "supermega-portfolio-live-health/4.3"
+USER_AGENT = "supermega-portfolio-live-health/4.4"
 DEMO_MAX_BYTES = 256 * 1024
 
 
@@ -317,20 +317,18 @@ def run(
 
     expected_status = {
         "status": "ready",
-        "lead_ledger": "configured",
-        "pipeline_actions": "configured",
-        "primary_datastore.status": "configured",
-        "fallback_queue.status": "ready",
-        "fallback_queue.email_delivery": "configured",
-        "ops_intake.status": "ready",
-        "ops_intake.target": "https://supermega-machine.vercel.app/api/intake",
-        "ops_intake.contract": "body_secret",
+        "service": "supermega-contact",
     }
     mismatches = {
         path: {"expected": expected, "actual": nested_value(status_payload, path)}
         for path, expected in expected_status.items()
         if nested_value(status_payload, path) != expected
     }
+    if set(status_payload) != set(expected_status):
+        mismatches["payload_keys"] = {
+            "expected": sorted(expected_status),
+            "actual": sorted(status_payload),
+        }
     api_result = {
         "kind": "conversion_api",
         "url": status_url,
@@ -340,6 +338,36 @@ def run(
     results.append(api_result)
     if status_response.status != 200 or mismatches:
         failures.append(api_result)
+
+    diagnostics_url = f"{status_url}?detail=1"
+    diagnostics_response = fetch(diagnostics_url, timeout=timeout, attempts=attempts)
+    try:
+        diagnostics_payload = json.loads(diagnostics_response.body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        diagnostics_payload = {}
+    expected_diagnostics = {
+        "status": "error",
+        "reason": "operator_auth_required",
+    }
+    diagnostics_mismatches = {
+        path: {"expected": expected, "actual": nested_value(diagnostics_payload, path)}
+        for path, expected in expected_diagnostics.items()
+        if nested_value(diagnostics_payload, path) != expected
+    }
+    if set(diagnostics_payload) != set(expected_diagnostics):
+        diagnostics_mismatches["payload_keys"] = {
+            "expected": sorted(expected_diagnostics),
+            "actual": sorted(diagnostics_payload),
+        }
+    diagnostics_result = {
+        "kind": "conversion_diagnostics_guard",
+        "url": diagnostics_url,
+        "status": diagnostics_response.status,
+        "mismatches": diagnostics_mismatches,
+    }
+    results.append(diagnostics_result)
+    if diagnostics_response.status != 401 or diagnostics_mismatches:
+        failures.append(diagnostics_result)
 
     app_home_body = ""
     for route in ("home", "factory"):

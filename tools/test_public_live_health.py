@@ -101,18 +101,7 @@ def healthy_responses() -> dict[str, checker.HttpResult]:
         "CANCEL AND SCRUB ${order.workOrderId} ${order.planHash}",
         "cancelled excluded from delivery metrics",
     )
-    contact_status = {
-        "status": "ready",
-        "lead_ledger": "configured",
-        "pipeline_actions": "configured",
-        "primary_datastore": {"status": "configured"},
-        "fallback_queue": {"status": "ready", "email_delivery": "configured"},
-        "ops_intake": {
-            "status": "ready",
-            "target": "https://supermega-machine.vercel.app/api/intake",
-            "contract": "body_secret",
-        },
-    }
+    contact_status = {"status": "ready", "service": "supermega-contact"}
     app_health = {
         "ok": True,
         "status": "ready",
@@ -162,6 +151,11 @@ def healthy_responses() -> dict[str, checker.HttpResult]:
         f"{BASE}api/contact-submissions/status": result(
             f"{BASE}api/contact-submissions/status", contact_status
         ),
+        f"{BASE}api/contact-submissions/status?detail=1": result(
+            f"{BASE}api/contact-submissions/status?detail=1",
+            {"status": "error", "reason": "operator_auth_required"},
+            status=401,
+        ),
         f"{APP}home": result(f"{APP}home", app_shell),
         f"{APP}factory": result(f"{APP}factory", app_shell),
         f"{APP}assets/index-current.js": result(
@@ -200,11 +194,37 @@ class PortfolioHealthTest(unittest.TestCase):
         with patch.object(checker, "fetch", side_effect=fake_fetch):
             return checker.run(BASE, WWW, APP, DEMO, CONSOLE, timeout=1, attempts=1)
 
-    def test_healthy_portfolio_passes_all_eighteen_checks(self):
+    def test_healthy_portfolio_passes_all_nineteen_checks(self):
         report = self.run_report(healthy_responses())
         self.assertEqual(report["status"], "ready")
-        self.assertEqual(report["checks"], 18)
+        self.assertEqual(report["checks"], 19)
         self.assertEqual(report["failures"], [])
+
+    def test_public_contact_status_rejects_internal_fields(self):
+        responses = healthy_responses()
+        status_url = f"{BASE}api/contact-submissions/status"
+        payload = json.loads(responses[status_url].body)
+        payload["lead_ledger"] = "configured"
+        responses[status_url] = result(status_url, payload)
+        report = self.run_report(responses)
+        self.assertEqual(report["status"], "error")
+        failure = next(item for item in report["failures"] if item["kind"] == "conversion_api")
+        self.assertIn("payload_keys", failure["mismatches"])
+
+    def test_unprotected_contact_diagnostics_fails_guard(self):
+        responses = healthy_responses()
+        diagnostics_url = f"{BASE}api/contact-submissions/status?detail=1"
+        responses[diagnostics_url] = result(
+            diagnostics_url,
+            {"status": "ready", "lead_ledger": "configured"},
+        )
+        report = self.run_report(responses)
+        self.assertEqual(report["status"], "error")
+        failure = next(
+            item for item in report["failures"] if item["kind"] == "conversion_diagnostics_guard"
+        )
+        self.assertEqual(failure["status"], 200)
+        self.assertIn("payload_keys", failure["mismatches"])
 
     def test_retired_product_name_fails_demo_page(self):
         responses = healthy_responses()
