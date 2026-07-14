@@ -101,7 +101,10 @@ for (const required of [
   'data-product-preview-button="plant"',
   'src="/live-shop-workspace.png"',
   "src:'/live-plant-workspace.png'",
-  'Return with your password or an email code.',
+  'Demos open immediately on this device. Private workspaces are verified before handover.',
+  'Request your workspace',
+  'SuperMega sets it up and verifies it before handover.',
+  'Bring approved rows when your private workspace is ready, or start fresh.',
   'data-public-status',
   "fetch('/api/health'",
   'Point of sale, customers, stock, receivables, and books.',
@@ -111,7 +114,7 @@ for (const required of [
   if (!home.includes(required)) fail('homepage_front_door_contract_missing', { required })
 }
 
-for (const forbidden of ['https://demo.supermega.dev/', 'The intelligent workspace for daily operations.', 'Explore live demos', 'Open workspace', 'target="_blank"', 'target=_blank', 'window.open(', 'rotate(', 'data-hero-media', 'Current build', 'Build an agent solution', '>Agent solution<', 'AI Agent Solutions', 'Need a repeated task handled?', 'id="products"']) {
+for (const forbidden of ['https://demo.supermega.dev/', 'The intelligent workspace for daily operations.', 'Explore live demos', 'Open workspace', 'target="_blank"', 'target=_blank', 'window.open(', 'rotate(', 'data-hero-media', 'Current build', 'Build an agent solution', '>Agent solution<', 'AI Agent Solutions', 'Need a repeated task handled?', 'id="products"', 'Use one account across desktop, tablet, and mobile.', 'Create a workspace only when you want to keep your work and use it across devices.', 'Create with email and password. Return with your password or an email code.']) {
   if (home.includes(forbidden)) fail('homepage_keeps_superseded_portfolio_copy', { forbidden })
 }
 

@@ -45,12 +45,15 @@ function verifyHome(html, label) {
     'src="/live-shop-workspace.png"',
     "src:'/live-plant-workspace.png'",
     'Try first. Add data later.',
+    'Private workspaces are verified before handover.',
+    'Request your workspace',
+    'SuperMega sets it up and verifies it before handover.',
     'Need something different?',
     '>Contact us</a>',
   ]) {
     assert(html.includes(required), `${label}_missing_${required.slice(0, 32)}`)
   }
-  for (const forbidden of ['MegaOS', 'DeskPOS', 'General enquiry', 'target="_blank"', 'target=_blank', 'window.open(', 'rotate(', 'Build an agent solution', '>Agent solution<', 'AI Agent Solutions', 'Need a repeated task handled?', '>SM<']) {
+  for (const forbidden of ['MegaOS', 'DeskPOS', 'General enquiry', 'target="_blank"', 'target=_blank', 'window.open(', 'rotate(', 'Build an agent solution', '>Agent solution<', 'AI Agent Solutions', 'Need a repeated task handled?', '>SM<', 'Use one account across desktop, tablet, and mobile.', 'Create a workspace only when you want to keep your work and use it across devices.', 'Create with email and password. Return with your password or an email code.']) {
     assert(!html.includes(forbidden), `${label}_retired_${forbidden}`)
   }
 }
