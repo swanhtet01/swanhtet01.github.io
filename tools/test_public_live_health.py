@@ -38,9 +38,12 @@ def healthy_responses() -> dict[str, checker.HttpResult]:
         '<h1 id="portfolio-heading">Run the operation. See what matters.</h1>',
         "https://app.supermega.dev/?demo=shop",
         "https://app.supermega.dev/?demo=plant",
-        "/contact/?from=ai-agent-solution",
+        "/contact/",
         "Try first. Add data later.",
-        "Need a repeated task handled?",
+        "Private workspaces are verified before handover.",
+        "Request your workspace",
+        "SuperMega sets it up and verifies it before handover.",
+        "Need something different?",
         "data-public-status",
     )
     contact = page(
@@ -359,6 +362,24 @@ class PortfolioHealthTest(unittest.TestCase):
         self.assertEqual(report["status"], "error")
         failure = next(item for item in report["failures"] if item["kind"] == "page" and item["url"] == BASE)
         self.assertIn("DeskPOS", failure["unexpected"])
+
+    def test_unproven_account_claim_fails_public_page(self):
+        for claim in (
+            "Use one account across desktop, tablet, and mobile.",
+            "Create a workspace only when you want to keep your work and use it across devices.",
+            "Create with email and password. Return with your password or an email code.",
+        ):
+            with self.subTest(claim=claim):
+                responses = healthy_responses()
+                responses[BASE] = result(BASE, responses[BASE].body.decode() + claim)
+                report = self.run_report(responses)
+                self.assertEqual(report["status"], "error")
+                failure = next(
+                    item
+                    for item in report["failures"]
+                    if item["kind"] == "page" and item["url"] == BASE
+                )
+                self.assertIn(claim, failure["unexpected"])
 
     def test_unproven_cloud_claim_fails_health_contract(self):
         responses = healthy_responses()
