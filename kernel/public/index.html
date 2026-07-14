@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="robots" content="noindex,nofollow" />
-<title>SuperMega Console</title>
+<title>SuperMega Operations</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 <style>
   .company-operations{scroll-margin-top:110px}
@@ -15,7 +15,7 @@
   [hidden]{display:none!important}
   body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,"Noto Sans Myanmar","Segoe UI",system-ui,sans-serif;font-size:14px;line-height:1.5}
   h1,h2,h3{font-family:"Space Grotesk",Inter,system-ui,sans-serif;letter-spacing:0;margin:0}
-  header{display:flex;align-items:center;gap:14px;padding:14px 22px;border-bottom:1px solid var(--line);background:#0b1726;position:sticky;top:0;z-index:5}
+  header{display:flex;align-items:center;gap:14px;padding:14px max(22px,calc((100vw - 1240px)/2));border-bottom:1px solid var(--line);background:#0b1726;position:sticky;top:0;z-index:6}
   .brand{font-family:"Space Grotesk",Inter,sans-serif;font-weight:600;font-size:18px}.brand b{color:var(--accent);margin-right:5px}.brand span{color:var(--muted);font-size:13px;font-weight:500}
   .badge{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:4px 9px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
   .badge.on{color:var(--good);border-color:rgba(52,211,153,.35);background:rgba(52,211,153,.09)}.badge.off{color:var(--bad);border-color:rgba(248,113,113,.35);background:rgba(248,113,113,.08)}
@@ -25,20 +25,25 @@
   input:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}.key{max-width:180px;min-height:44px}
   button{cursor:pointer;border:1px solid var(--line);border-radius:8px;background:var(--surf);padding:8px 14px;font-weight:600}
   button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}button.primary:hover{background:var(--accent-2)}button.sm{padding:5px 10px;font-size:12px}button:disabled{opacity:.5;cursor:wait}
-  nav{display:flex;gap:6px;padding:14px 22px 0;flex-wrap:wrap}
-  nav button{min-height:44px;border-radius:8px 8px 0 0;border-bottom:0;background:transparent;border-color:transparent;color:var(--muted)}
+  nav{display:flex;align-items:flex-end;gap:18px;padding:10px max(22px,calc((100vw - 1240px)/2)) 0;border-bottom:1px solid var(--line);background:rgba(6,16,29,.88);position:sticky;top:73px;z-index:5}
+  .nav-primary{display:flex;gap:3px;min-width:max-content}.nav-primary button,.nav-more summary{min-height:44px}
+  nav button{min-height:44px;border-radius:6px 6px 0 0;border-bottom:0;background:transparent;border-color:transparent;color:var(--muted);white-space:nowrap}
   nav button.active{background:var(--surf);border-color:var(--line);color:var(--ink)}
-  main{padding:18px 22px 70px;max-width:1180px}
+  .nav-more{position:relative;flex:0 0 auto}.nav-more summary{display:flex;align-items:center;padding:8px 14px;color:var(--muted);font-weight:600;cursor:pointer;list-style:none;border:1px solid transparent;border-bottom:0;border-radius:6px 6px 0 0}.nav-more summary::-webkit-details-marker{display:none}.nav-more summary::after{content:'+';margin-left:8px;color:var(--accent-2)}.nav-more[open] summary{color:var(--ink);background:var(--surf);border-color:var(--line)}.nav-more[open] summary::after{content:'-'}
+  .nav-menu{position:absolute;top:48px;right:0;display:grid;min-width:210px;padding:7px;border:1px solid var(--line);border-radius:8px;background:#0b1726;box-shadow:var(--shadow)}.nav-menu button{width:100%;border:0;border-radius:6px;text-align:left}.nav-menu button.active{border:1px solid var(--line);border-radius:6px}
+  main{width:100%;max-width:1240px;margin:0 auto;padding:28px 22px 70px}
   .panel{background:var(--surf);border:1px solid var(--line);border-radius:8px;padding:18px;box-shadow:var(--shadow)}
   .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.grid{display:grid;gap:12px}
   .muted{color:var(--muted)}.empty{color:var(--muted);padding:18px;text-align:center;border:1px dashed var(--line);border-radius:8px}
-  /* dashboard */
-  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
-  .stat{border:1px solid var(--line);border-radius:8px;padding:15px 16px;background:var(--surf)}
+  /* command center */
+  .command-head{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;padding:8px 0 24px}.command-head h1{font-size:32px}.command-head p{max-width:620px;margin:7px 0 0;color:var(--muted);font-size:15px}.command-kicker{display:block;color:var(--accent-2);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:7px}.command-actions{display:flex;gap:9px;flex-wrap:wrap;justify-content:flex-end}.command-actions button{min-height:44px;white-space:nowrap}
+  .command-flow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin-bottom:26px}.flow-step{min-height:92px;padding:14px 16px;border:0;border-right:1px solid var(--line);border-radius:0;background:transparent;text-align:left}.flow-step:last-child{border-right:0}.flow-step:hover{background:var(--surf-2)}.flow-step small{display:block;color:var(--accent-2);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}.flow-step b{display:block;margin-top:5px;font-family:"Space Grotesk",Inter,sans-serif;font-size:16px}.flow-step span{display:block;margin-top:3px;color:var(--muted);font-size:12px;font-weight:400}
+  .command-section-head,.module-toolbar{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:12px}.command-section-head h2,.module-toolbar h2{font-size:20px}.command-section-head button{min-height:44px}.module-toolbar{padding-bottom:14px;border-bottom:1px solid var(--line);margin-bottom:18px}.module-toolbar .muted{margin-top:4px}.command-grid{display:grid;grid-template-columns:1.25fr .75fr;gap:28px;margin-top:24px}.command-section{min-width:0;border-top:1px solid var(--line);padding-top:17px}
+  .stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .stat{min-width:0;padding:15px 16px;border-right:1px solid var(--line)}.stat:last-child{border-right:0}
   .stat small{display:block;color:var(--muted);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
   .stat b{display:block;margin-top:6px;font-family:"Space Grotesk",Inter,sans-serif;font-size:30px;letter-spacing:0}
   .stat span{color:var(--muted);font-size:12px}
-  .two{display:grid;grid-template-columns:1.4fr 1fr;gap:14px;margin-top:14px}
   .feed{display:grid;gap:8px}.feed div{font-size:13px;padding:8px 0;border-bottom:1px solid var(--line)}.feed div:last-child{border:0}
   .feed b{font-weight:600}.feed .k{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);font-weight:700;margin-right:7px}
   .bars{display:grid;gap:7px}.bar{display:grid;grid-template-columns:90px 1fr auto;gap:9px;align-items:center;font-size:12.5px}
@@ -126,10 +131,13 @@
   @media(max-width:820px){
     header{display:grid;grid-template-columns:max-content max-content minmax(0,1fr);gap:8px 10px;padding:12px 16px}
     .brand{grid-column:1/-1;white-space:nowrap}.grow{display:none}.key{grid-column:1/-1;max-width:none}
-    nav{padding:14px 16px 0}main{padding:18px 16px 70px}.company-usage-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
-    .cols{grid-template-columns:1fr}.two{grid-template-columns:1fr}.activation-fields,.owner-evidence-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.activation-output{grid-template-columns:1fr}.owner-evidence-fields .evidence-text{grid-column:1/-1}.company-invite-fields,.company-playbook-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.company-invite-fields button,.company-playbook-fields button{grid-column:1/-1}.company-access-row{grid-template-columns:auto minmax(0,1fr) auto}.company-access-expiry{grid-column:2;text-align:left}.company-playbook-stage{grid-template-columns:42px minmax(160px,.7fr) minmax(180px,1.3fr)}.company-playbook-stage-actions{grid-column:2/-1;justify-items:start}.company-agent{grid-template-columns:1fr}.company-scope{grid-template-columns:repeat(2,minmax(0,1fr))}.company-scope .field:last-child{grid-column:1/-1}.company-roster-tools{grid-template-columns:repeat(2,minmax(0,1fr))}.company-roster-count{grid-column:1/-1;justify-content:flex-start}.company-health-summary{grid-template-columns:repeat(3,minmax(0,1fr))}.company-health-stat:nth-child(3){border-right:0}.company-toolbar,.company-playbook-plan,.company-plan,.company-results,.company-operations,.company-order-detail{scroll-margin-top:160px}
+    nav{display:block;position:static;padding:10px 16px 0;overflow:visible}.nav-primary{width:100%;max-width:100%;min-width:0;overflow-x:auto;scrollbar-width:thin}.nav-more{border-top:1px solid var(--line)}.nav-more summary{width:max-content}.nav-menu{position:static;width:100%;max-width:100%;grid-template-columns:repeat(5,minmax(150px,1fr));overflow-x:auto;min-width:0;margin-bottom:8px;box-shadow:none}.nav-menu button{min-height:44px}
+    main{padding:24px 16px 70px}.command-flow{grid-template-columns:repeat(2,minmax(0,1fr))}.flow-step:nth-child(2){border-right:0}.flow-step:nth-child(-n+2){border-bottom:1px solid var(--line)}.command-grid{grid-template-columns:1fr;gap:24px}.stats{grid-template-columns:repeat(3,minmax(0,1fr))}.company-usage-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .cols{grid-template-columns:1fr}.activation-fields,.owner-evidence-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.activation-output{grid-template-columns:1fr}.owner-evidence-fields .evidence-text{grid-column:1/-1}.company-invite-fields,.company-playbook-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.company-invite-fields button,.company-playbook-fields button{grid-column:1/-1}.company-access-row{grid-template-columns:auto minmax(0,1fr) auto}.company-access-expiry{grid-column:2;text-align:left}.company-playbook-stage{grid-template-columns:42px minmax(160px,.7fr) minmax(180px,1.3fr)}.company-playbook-stage-actions{grid-column:2/-1;justify-items:start}.company-agent{grid-template-columns:1fr}.company-scope{grid-template-columns:repeat(2,minmax(0,1fr))}.company-scope .field:last-child{grid-column:1/-1}.company-roster-tools{grid-template-columns:repeat(2,minmax(0,1fr))}.company-roster-count{grid-column:1/-1;justify-content:flex-start}.company-health-summary{grid-template-columns:repeat(3,minmax(0,1fr))}.company-health-stat:nth-child(3){border-right:0}.company-toolbar,.company-playbook-plan,.company-plan,.company-results,.company-operations,.company-order-detail{scroll-margin-top:160px}
   }
   @media(max-width:520px){
+    .nav-primary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:3px;overflow:visible}.nav-primary button{border:1px solid transparent;border-radius:6px;white-space:normal}.nav-primary button:first-child{grid-column:1/-1}.nav-primary button.active{border-color:var(--line)}.nav-menu{grid-template-columns:1fr;overflow:visible}
+    .command-head,.module-toolbar{align-items:stretch;flex-direction:column}.command-head{padding-top:0}.command-head h1{font-size:28px}.command-actions{display:grid;grid-template-columns:1fr;justify-content:stretch}.command-actions button{width:100%}.command-flow{grid-template-columns:1fr}.flow-step,.flow-step:nth-child(2){border-right:0;border-bottom:1px solid var(--line)}.flow-step:last-child{border-bottom:0}.stats{grid-template-columns:1fr}.stat{border-right:0;border-bottom:1px solid var(--line)}.stat:last-child{border-bottom:0}.stat b{font-size:25px}.command-section-head{align-items:center}
     .workcell-toolbar,.approval-toolbar,.owner-evidence-head,.company-toolbar,.company-access-head,.company-access-admin-head,.company-playbook-head,.company-missions-head,.company-plan-head,.company-results-head,.company-work-orders-head,.company-order-detail-head{align-items:stretch;flex-direction:column}.workcell-toolbar button,.approval-toolbar button,.company-access-head button,.company-access-admin-head button,.company-missions-head button,.company-work-orders-head button{width:100%}.activation{padding:15px}.activation-import{align-items:stretch;flex-direction:column}.activation-import button{width:100%}.activation-fields,.owner-evidence-fields,.company-access-form,.company-invite-fields,.company-playbook-fields,.company-scope{grid-template-columns:1fr}.company-playbook-fields button{grid-column:1}.company-access-session,.company-code-output{align-items:stretch;flex-direction:column}.company-access-session button,.company-code-output button{width:100%}.company-access-row{grid-template-columns:1fr;gap:5px}.company-access-expiry{grid-column:1;text-align:left}.company-access-row .badge,.company-access-row button{justify-self:start}.company-access-row button{width:100%}.company-playbook-stage{grid-template-columns:34px minmax(0,1fr);gap:7px}.company-playbook-stage-copy,.company-playbook-stage-actions{grid-column:1/-1}.company-playbook-stage-actions{justify-items:stretch;min-width:0}.company-playbook-stage-actions button{width:100%}.company-prepared-stage{align-items:stretch;flex-direction:column}.company-review-fields{grid-template-columns:1fr}.company-scope .field:last-child,.company-review-fields .statement{grid-column:1}.activation-actions,.owner-evidence-actions,.company-actions,.company-playbook-create,.company-mission-advance-actions,.company-plan-actions,.company-order-actions,.company-cancel-actions,.company-review-actions{align-items:stretch;flex-direction:column}.activation-actions button,.owner-evidence-actions button,.company-actions button,.company-playbook-create button,.company-mission-advance-actions button,.company-plan-actions button,.company-order-actions button,.company-cancel-actions button,.company-review-actions button,.company-new-cycle{width:100%}.owner-evidence-fields .evidence-text{grid-column:1}.owner-evidence-confirm{align-items:flex-start}.company-assignment,.company-mission-row,.company-order-row,.company-target{grid-template-columns:1fr;gap:5px}.company-agent.selected{padding:13px}.company-order-row .badge,.company-mission-row .badge{justify-self:start}
     .company-operations-head,.company-usage-head,.company-workforce-head{align-items:stretch;flex-direction:column}.company-operations-controls,.company-evaluation-actions{align-items:stretch;flex-direction:column}.company-operations-controls button,.company-evaluation-actions button{width:100%}.company-operations-controls .field,.company-review-actions .field,.company-evaluation-actions .field{width:100%}.company-health-summary{grid-template-columns:1fr}.company-usage-summary{grid-template-columns:1fr}.company-health-stat,.company-health-stat:nth-child(3){border-right:0;border-bottom:1px solid var(--line)}.company-health-stat:last-child{border-bottom:0}.company-usage-foot{align-items:flex-start;flex-direction:column}.company-review-grid{grid-template-columns:1fr}.company-evaluation-grid{grid-template-columns:1fr}.company-roster-tools{grid-template-columns:1fr}.company-roster-count{grid-column:1}.company-workforce-row{grid-template-columns:1fr;gap:4px}.company-target-value,.company-workforce-value{text-align:left}
     .workcell .wc-actions{align-items:stretch;flex-direction:column}.workcell .wc-actions button{width:100%}.approval-head{align-items:flex-start}.approval-details{grid-template-columns:1fr;gap:2px}.approval-details dd{margin-bottom:9px}.approval-actions{align-items:stretch;flex-direction:column}.approval-confirm{margin:0}.approval-actions button{width:100%}
@@ -138,43 +146,63 @@
 </head>
 <body>
 <header>
-  <span class="brand"><b>&gt;_</b>SuperMega <span>console</span></span>
+  <span class="brand"><b>&gt;_</b>SuperMega <span>operations</span></span>
   <span class="badge" id="modeBadge">store: …</span>
   <span class="badge" id="aiBadge">ai: …</span>
   <span class="grow"></span>
-  <input class="key" id="opsKey" type="password" autocomplete="current-password" aria-label="owner key" placeholder="owner key" />
+  <input class="key" id="opsKey" type="password" autocomplete="current-password" aria-label="Owner key for protected operations" placeholder="Owner key" />
 </header>
-<nav>
-  <button data-view="overview" class="active">Overview</button>
-  <button data-view="leads">Leads</button>
-  <button data-view="pipeline">Pipeline</button>
-  <button data-view="outreach">Outreach</button>
-  <button data-view="deal">Run a deal</button>
-  <button data-view="operator">Ask</button>
-  <button data-view="company">Company</button>
-  <button data-view="workcells">Workcells</button>
-  <button data-view="approvals">Approvals</button>
-  <button data-view="connectors">Connectors</button>
+<nav aria-label="Operations navigation">
+  <div class="nav-primary">
+    <button data-view="overview" class="active">Command</button>
+    <button data-view="company">Agent work</button>
+    <button data-view="approvals">Review queue</button>
+    <button data-view="workcells">Client operations</button>
+    <button data-view="connectors">Data sources</button>
+  </div>
+  <details class="nav-more" id="businessTools">
+    <summary>Business tools</summary>
+    <div class="nav-menu">
+      <button data-view="leads">Request intake</button>
+      <button data-view="pipeline">Projects</button>
+      <button data-view="outreach">Follow-ups</button>
+      <button data-view="deal">Deal desk</button>
+      <button data-view="operator">Analyst</button>
+    </div>
+  </details>
 </nav>
 <main>
   <section id="view-overview">
-    <div class="stats" id="stats"></div>
-    <div class="two">
-      <div class="panel"><h3 style="font-size:15px;margin-bottom:12px">Pipeline by stage</h3><div class="bars" id="bars"></div></div>
-      <div class="panel"><h3 style="font-size:15px;margin-bottom:12px">Recent activity</h3><div class="feed" id="feed"></div></div>
+    <div class="command-head">
+      <div><span class="command-kicker">Operations control room</span><h1>Command center</h1><p>Move client work from request to delegated agents, reviewed action, and proven delivery.</p></div>
+      <div class="command-actions"><button class="primary" type="button" data-open-view="company">Delegate work</button><button type="button" data-open-view="approvals">Review actions</button></div>
     </div>
-    <p class="muted" style="font-size:12px;margin-top:14px">Roadmap, in progress: per-client AI Operate loop (draft→approve→act) and the graduation tracker (3rd repeat → product).</p>
+    <div class="command-flow" aria-label="Operating flow">
+      <button class="flow-step" type="button" data-open-view="leads"><small>01 · Intake</small><b>Capture the request</b><span>Record the client and required outcome.</span></button>
+      <button class="flow-step" type="button" data-open-view="company"><small>02 · Delegate</small><b>Plan agent work</b><span>Choose a fixed playbook and reviewed evidence.</span></button>
+      <button class="flow-step" type="button" data-open-view="approvals"><small>03 · Review</small><b>Approve exact actions</b><span>Nothing external runs without a human gate.</span></button>
+      <button class="flow-step" type="button" data-open-view="pipeline"><small>04 · Deliver</small><b>Track completion</b><span>Move accepted work through delivery.</span></button>
+    </div>
+    <section aria-labelledby="liveOperationTitle">
+      <div class="command-section-head"><h2 id="liveOperationTitle">Live operation</h2><span class="badge" id="overviewStatus">owner key required</span></div>
+      <div class="stats" id="stats"></div>
+    </section>
+    <div class="command-grid">
+      <section class="command-section" aria-labelledby="deliveryStagesTitle"><div class="command-section-head"><h2 id="deliveryStagesTitle">Delivery stages</h2><button type="button" data-open-view="pipeline">Open projects</button></div><div class="bars" id="bars"></div></section>
+      <section class="command-section" aria-labelledby="latestMovementTitle"><div class="command-section-head"><h2 id="latestMovementTitle">Latest movement</h2></div><div class="feed" id="feed"></div></section>
+    </div>
   </section>
 
   <section id="view-connectors" hidden>
+    <div class="module-toolbar"><div><h2>Data sources</h2><div class="muted">See which approved systems are ready for agent and client work.</div></div></div>
     <div id="connGrid" class="conn-grid"><div class="loading-pulse">Loading connectors…</div></div>
-    <p class="muted" style="font-size:12px">Each connector is a live integration. "Configured" = env var present; "OK" = health probe passed. Set missing env vars in the Vercel project settings.</p>
+    <p class="muted" style="font-size:12px">Live means the source is connected and its health check passed. A disconnected source cannot be used by agent work.</p>
   </section>
 
   <section id="view-company" hidden>
     <div class="company-toolbar">
-      <div><h2>Agent company</h2><div class="muted">Plan, queue, dispatch, evaluate, and deliver one bounded specialist wave</div></div>
-      <span class="badge">draft only</span>
+      <div><h2>Agent work</h2><div class="muted">Delegate a business outcome to fixed specialists, then review every stage before delivery.</div></div>
+      <span class="badge">review gated</span>
     </div>
     <section class="company-access" aria-labelledby="companyAccessTitle">
       <div class="company-access-head"><div><h3 id="companyAccessTitle">Workspace access</h3><div class="muted" id="companyAccessSummary">Sign in with a one-time code</div></div><span class="badge" id="companyAccessBadge">signed out</span></div>
@@ -251,8 +279,8 @@
 
   <section id="view-workcells" hidden>
     <div class="workcell-toolbar">
-      <div><h2>Operator workcells</h2><div class="muted">Cash, pipeline, and owner command</div></div>
-      <button class="primary" id="activationOpen" type="button">New client plan</button>
+      <div><h2>Client operations</h2><div class="muted">Run repeatable owner command, cash close, and pipeline control work.</div></div>
+      <button class="primary" id="activationOpen" type="button">Set up client</button>
     </div>
     <div class="activation" id="activationPanel" hidden>
       <div class="activation-head">
@@ -316,7 +344,7 @@
 
   <section id="view-approvals" hidden>
     <div class="approval-toolbar">
-      <div><h2>Action approvals</h2><div class="muted">Owner-reviewed external actions</div></div>
+      <div><h2>Review queue</h2><div class="muted">Inspect and approve the exact external action before it can run.</div></div>
       <button id="approvalRefresh" type="button">Refresh</button>
     </div>
     <div class="approval-summary" id="approvalSummary"></div>
@@ -324,27 +352,30 @@
   </section>
 
   <section id="view-leads" hidden>
+    <div class="module-toolbar"><div><h2>Request intake</h2><div class="muted">Capture a client request once, then turn it into a project or a deal brief.</div></div></div>
     <div class="panel" id="addLead" style="margin-bottom:14px">
-      <h3 style="font-size:15px;margin-bottom:10px">Add a lead</h3>
+      <h3 style="font-size:15px;margin-bottom:10px">Capture a request</h3>
       <div class="row">
         <input id="l-name" placeholder="Name" style="max-width:160px" />
         <input id="l-company" placeholder="Company" style="max-width:180px" />
         <input id="l-contact" placeholder="Contact (Viber / email)" style="max-width:200px" />
         <input id="l-message" placeholder="What they need…" style="flex:1;min-width:180px" />
-        <button class="primary" id="l-add">Add</button>
+        <button class="primary" id="l-add">Save request</button>
       </div>
     </div>
     <div class="grid" id="leads"></div>
   </section>
 
-  <section id="view-pipeline" hidden><div class="cols" id="pipeline"></div></section>
+  <section id="view-pipeline" hidden><div class="module-toolbar"><div><h2>Projects</h2><div class="muted">Track scoped work from deposit through live delivery and support.</div></div></div><div class="cols" id="pipeline"></div></section>
 
   <section id="view-outreach" hidden>
+    <div class="module-toolbar"><div><h2>Follow-ups</h2><div class="muted">Review saved drafts and control every client message.</div></div></div>
     <p class="muted" style="margin-bottom:12px">Saved deal packets. Drafts only — approve, then send from your own Viber/email. Nothing is sent automatically.</p>
     <div id="outreach"></div>
   </section>
 
   <section id="view-deal" hidden>
+    <div class="module-toolbar"><div><h2>Deal desk</h2><div class="muted">Turn a real workflow problem into a reviewable scope and client follow-up.</div></div></div>
     <div class="row" style="align-items:flex-start;gap:18px">
       <div class="panel" style="flex:0 0 320px">
         <h3 style="font-size:15px;margin-bottom:12px">Generate a deal packet</h3>
@@ -361,8 +392,9 @@
   </section>
 
   <section id="view-operator" hidden>
+    <div class="module-toolbar"><div><h2>Business analyst</h2><div class="muted">Ask a read-only question grounded in connected business data.</div></div></div>
     <div class="panel">
-      <h3 style="font-size:15px;margin-bottom:10px">Ask the Operator</h3>
+      <h3 style="font-size:15px;margin-bottom:10px">Ask a business question</h3>
       <p class="muted" style="font-size:12px;margin-bottom:12px">Ask anything about your business. The AI picks read-only tools (leads, pipeline, platform health, the web), gathers the <b>real</b> data, and answers — grounded in what it found. It never moves money or sends anything.</p>
       <div class="row">
         <input id="op-goal" placeholder="e.g. How many leads this week, by stage — and what's in the pipeline?" style="flex:1;min-width:220px" />
@@ -378,7 +410,6 @@
 const $=(s)=>document.querySelector(s)
 const esc=(s)=>String(s==null?'':s).replace(/[&<>"']/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
 const toast=(m)=>{const t=$('#toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1800)}
-const usd=(n)=>'$'+Number(n||0).toLocaleString()
 const getOpsKey=()=>$('#opsKey').value.trim()
 const hasOpsKey=()=>getOpsKey().length>0
 let dealLead=null, lastPacket=null
@@ -1222,38 +1253,48 @@ $('#companyConfirm').addEventListener('change',event=>{
 })
 $('#companyQueueButton').addEventListener('click',queueReviewedCompanyWorkOrder)
 
-document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
-  document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('active',x===b))
-  for(const v of ['overview','leads','pipeline','outreach','deal','operator','company','workcells','approvals','connectors']) $('#view-'+v).hidden=v!==b.dataset.view
-  if(b.dataset.view==='overview')loadOverview()
-  if(b.dataset.view==='pipeline')loadProjects()
-  if(b.dataset.view==='leads')loadLeads()
-  if(b.dataset.view==='outreach')loadOutreach()
-  if(b.dataset.view==='company')openCompanyWorkspace()
-  if(b.dataset.view==='workcells')loadWorkcells()
-  if(b.dataset.view==='approvals')loadApprovals()
-  if(b.dataset.view==='connectors')loadConnectors()
-})
+const CONSOLE_VIEWS=['overview','leads','pipeline','outreach','deal','operator','company','workcells','approvals','connectors']
+function openConsoleView(view){
+  if(!CONSOLE_VIEWS.includes(view))return
+  const button=document.querySelector(`nav button[data-view="${view}"]`)
+  document.querySelectorAll('nav button').forEach(item=>item.classList.toggle('active',item===button))
+  for(const name of CONSOLE_VIEWS) $('#view-'+name).hidden=name!==view
+  if(button?.closest('.nav-menu'))$('#businessTools').removeAttribute('open')
+  if(view==='overview')loadOverview()
+  if(view==='pipeline')loadProjects()
+  if(view==='leads')loadLeads()
+  if(view==='outreach')loadOutreach()
+  if(view==='company')openCompanyWorkspace()
+  if(view==='workcells')loadWorkcells()
+  if(view==='approvals')loadApprovals()
+  if(view==='connectors')loadConnectors()
+}
+document.querySelectorAll('nav button').forEach(button=>button.addEventListener('click',()=>openConsoleView(button.dataset.view)))
+document.querySelectorAll('[data-open-view]').forEach(button=>button.addEventListener('click',()=>openConsoleView(button.dataset.openView)))
 
-function renderOverview(s={}){
+function renderOverview(s={},locked=false){
+  const bs=(s.projects&&s.projects.byStatus)||{}
+  const number=(value)=>locked?'--':Number(value||0).toLocaleString()
+  const active=(bs.scoping||0)+(bs.deposit||0)+(bs.building||0)
   $('#stats').innerHTML=[
-    ['Leads',(s.leads&&s.leads.total)||0,'in the funnel'],
-    ['Pipeline value',usd(s.projects&&s.projects.pipelineUsd),'open builds'],
-    ['Deposits in',usd(s.deposits&&s.deposits.usd),(s.deposits&&s.deposits.count||0)+' paid'],
-    ['Care MRR',usd(s.mrrUsd)+'/mo','recurring'],
-    ['Live',(s.projects&&s.projects.live)||0,'shipped'],
-    ['Deals',s.deals||0,'packets']
+    ['Requests',number(s.leads&&s.leads.total),'captured'],
+    ['Active projects',number(active),'before go-live'],
+    ['Live clients',number((bs.live||0)+(bs.care||0)),'operating now'],
+    ['Deposits',number(s.deposits&&s.deposits.count),'confirmed'],
+    ['Deal briefs',number(s.deals),'saved']
   ].map(([t,v,sub])=>`<div class="stat"><small>${t}</small><b>${v}</b><span>${sub}</span></div>`).join('')
-  const bs=(s.projects&&s.projects.byStatus)||{}; const order=['scoping','deposit','building','live','care']; const max=Math.max(1,...order.map(k=>bs[k]||0))
-  $('#bars').innerHTML=order.map(k=>`<div class="bar"><span class="muted">${k}</span><i style="width:${Math.round((bs[k]||0)/max*100)}%"></i><span>${bs[k]||0}</span></div>`).join('')||'<div class="muted">No projects yet.</div>'
+  const stages=[['scoping','Scoping'],['deposit','Deposit'],['building','Building'],['live','Live'],['care','Support']],max=Math.max(1,...stages.map(([key])=>bs[key]||0))
+  $('#bars').innerHTML=stages.map(([key,label])=>`<div class="bar"><span class="muted">${label}</span><i style="width:${locked?0:Math.round((bs[key]||0)/max*100)}%"></i><span>${number(bs[key])}</span></div>`).join('')
   const act=(s.activity||[])
   $('#feed').innerHTML=act.length?act.map(a=>`<div><span class="k">${esc(a.kind)}</span>${esc(a.summary)}</div>`).join(''):'<div class="muted">No activity yet.</div>'
+  $('#overviewStatus').textContent=locked?'owner key required':'live data'
+  $('#overviewStatus').className='badge '+(locked?'':'on')
 }
 
 function renderLockedOverview(){
   $('#modeBadge').textContent='store: locked';$('#modeBadge').className='badge'
   $('#aiBadge').textContent='ai: locked';$('#aiBadge').className='badge'
-  renderOverview()
+  renderOverview({},true)
   $('#feed').innerHTML='<div class="muted">Enter the owner key to load live activity.</div>'
 }
 
@@ -1264,6 +1305,7 @@ function loadProtectedState(){
 
 async function loadOverview(){
   if(!hasOpsKey()){renderLockedOverview();return}
+  $('#overviewStatus').textContent='loading';$('#overviewStatus').className='badge'
   $('#stats').innerHTML='<div class="loading-pulse">Loading overview…</div>'
   let r
   try{r=await api('GET','/api/dashboard')}catch(e){$('#stats').innerHTML=`<div class="err-banner">Could not load overview — ${esc(String(e.message||'network error'))}</div>`;return}
@@ -1291,15 +1333,12 @@ async function loadLeads(){
     box.appendChild(el)
   }
   box.querySelectorAll('[data-conv]').forEach(b=>b.onclick=async()=>{const x=await api('POST','/api/leads/'+encodeURIComponent(b.dataset.conv)+'?action=convert',{});if(x.ok){toast('Project created');loadLeads()}})
-  box.querySelectorAll('[data-deal]').forEach(b=>b.onclick=()=>{const l=r.leads.find(x=>x.id===b.dataset.deal);dealLead=l;document.querySelector('nav button[data-view="deal"]').click();$('#d-name').value=l.name||'';$('#d-company').value=l.company||'';$('#d-contact').value=l.contact||'';$('#d-workflow').value=l.message||'';$('#d-leadtag').textContent='for '+(l.company||l.name||'lead')})
+  box.querySelectorAll('[data-deal]').forEach(b=>b.onclick=()=>{const l=r.leads.find(x=>x.id===b.dataset.deal);dealLead=l;openConsoleView('deal');$('#d-name').value=l.name||'';$('#d-company').value=l.company||'';$('#d-contact').value=l.contact||'';$('#d-workflow').value=l.message||'';$('#d-leadtag').textContent='for '+(l.company||l.name||'request')})
 }
 
-const P_COLS=[['scoping','Scoping'],['deposit','Deposit'],['building','Building'],['live','Live'],['care','Care']]
+const P_COLS=[['scoping','Scoping'],['deposit','Deposit'],['building','Building'],['live','Live'],['care','Support']]
 const P_NEXT={scoping:'deposit',deposit:'building',building:'live',live:'care'}
-// MUST mirror OFFER_USD in console/api.mjs EXACTLY — this only displays the price/deposit;
-// the Stripe charge uses OFFER_USD. dashboard 1800, build 1800, care-plan 79 (was 1500/2000/300,
-// which are prices pricing.json explicitly KILLED and made the console misquote vs the charge).
-const PRICE={'tool-week':600,dashboard:1800,'ai-agent':2500,'design-ship':6000,'care-plan':79,build:1800}
+const P_LABEL={scoping:'scoping',deposit:'deposit',building:'building',live:'live',care:'support'}
 async function loadProjects(){
   const box=$('#pipeline');box.innerHTML='<div class="loading-pulse">Loading pipeline…</div>'
   let pr,dl
@@ -1311,11 +1350,11 @@ async function loadProjects(){
     const items=(pr.projects||[]).filter(p=>p.status===key)
     col.innerHTML=`<h3>${label} · ${items.length}</h3>`
     for(const p of items){
-      const adv=P_NEXT[p.status];const price=PRICE[p.offer]||PRICE.build;const dep=Math.round(price*0.5)
+      const adv=P_NEXT[p.status],price=Number(p.price_mmk||0),priceLabel=price>0?`${price.toLocaleString()} MMK`:'Price not set'
       const deal=dealByProj[p.id]||dealByProj['lead:'+p.lead_id]
       const c=document.createElement('div');c.className='card'
-      c.innerHTML=`<b>${esc(p.offer||'build')}</b><div class="sub">${usd(price)} · deposit ${usd(dep)} · ${esc(p.deposit_status||'unpaid')}</div>
-        <div class="row">${p.deposit_status!=='paid'?`<button class="sm" data-dep="${p.id}">Deposit paid</button><button class="sm" data-stripepay="${p.id}">Stripe link</button>`:''}${adv?`<button class="sm" data-padv="${p.id}" data-to="${adv}">→ ${adv}</button>`:''}${deal?`<button class="sm" data-prop="${deal.id}">Proposal</button>`:''}</div>`
+      c.innerHTML=`<b>${esc(p.offer||'project')}</b><div class="sub">${priceLabel} · deposit ${esc(p.deposit_status||'unpaid')}</div>
+        <div class="row">${p.deposit_status!=='paid'?`<button class="sm" data-dep="${p.id}">Record deposit</button>`:''}${adv?`<button class="sm" data-padv="${p.id}" data-to="${adv}">Move to ${P_LABEL[adv]}</button>`:''}${deal?`<button class="sm" data-prop="${deal.id}">Proposal</button>`:''}</div>`
       col.appendChild(c)
     }
     if(!items.length)col.innerHTML+='<div class="muted" style="font-size:12px;padding:6px">—</div>'
@@ -1323,21 +1362,6 @@ async function loadProjects(){
   }
   box.querySelectorAll('[data-padv]').forEach(b=>b.onclick=async()=>{await api('PATCH','/api/projects/'+b.dataset.padv,{status:b.dataset.to});loadProjects()})
   box.querySelectorAll('[data-dep]').forEach(b=>b.onclick=async()=>{await api('PATCH','/api/projects/'+b.dataset.dep,{deposit_status:'paid',deposit_method:'KBZPay/MMQR'});loadProjects();toast('Deposit recorded')})
-  const stripeInFlight = new Set()
-  box.querySelectorAll('[data-stripepay]').forEach(b=>b.onclick=async()=>{
-    const pid = b.dataset.stripepay
-    if (stripeInFlight.has(pid)) return
-    stripeInFlight.add(pid)
-    b.disabled=true;b.textContent='Creating…'
-    try {
-      const x=await api('POST','/api/projects/'+pid+'?action=pay',{})
-      if(x.ok&&x.url){window.open(x.url,'_blank');toast('Stripe checkout opened — share the link with the client')}
-      else{toast('Error: '+(x.reason||'stripe_failed'))}
-    } finally {
-      stripeInFlight.delete(pid)
-      b.disabled=false;b.textContent='Stripe link'
-    }
-  })
   box.querySelectorAll('[data-prop]').forEach(b=>b.onclick=()=>{const d=(dl.deals||[]).find(x=>x.id===b.dataset.prop);if(d)openProposal(d)})
 }
 
@@ -1639,7 +1663,7 @@ function renderWorkcellOutput(r){
   const exceptions=(x.exceptions||[]).length?`<div class="err-banner">${(x.exceptions||[]).map(e=>`<div>${esc(e)}</div>`).join('')}</div>`:''
   const queue=r.approvalQueue&&r.approvalQueue.requested?(r.approvalQueue.ok?'<div class="owner-action" style="margin-top:10px"><b>Action draft queued</b><div>Waiting for owner review.</div><button type="button" data-open-approvals style="margin-top:10px;min-height:44px">Review action</button></div>':`<div class="err-banner" style="margin-top:10px">Action draft not queued: ${esc(r.approvalQueue.reason||'store unavailable')}</div>`):''
   out.innerHTML=`<div class="panel"><h3>${esc(r.name||r.slug)}</h3><div>${esc(x.headline||'')}</div>${metrics?`<div class="metrics">${metrics}</div>`:''}${priorities?`<ol>${priorities}</ol>`:''}${exceptions}<div class="owner-action"><b>Owner action</b><div>${esc(x.owner_action||'')}</div></div>${queue}<p class="muted" style="font-size:11px;margin-top:10px">Sources: ${(r.sources||[]).map(s=>`${esc(s.tool)} (${Number(s.items)||0})`).join(', ')||'none'}${r.delivery&&r.delivery.requested?` | Delivery: ${r.delivery.sent?'sent':'failed'}`:''}</p></div>`
-  out.querySelector('[data-open-approvals]')?.addEventListener('click',()=>document.querySelector('nav button[data-view="approvals"]').click())
+  out.querySelector('[data-open-approvals]')?.addEventListener('click',()=>openConsoleView('approvals'))
 }
 async function runWorkcell(slug,button){
   const card=button.closest('.workcell')
@@ -1762,17 +1786,10 @@ async function refresh(){
   $('#aiBadge').className='badge '+(r.aiConfigured?'on':'off')
 }
 if(location.hash==='#company'){
-  const companyTab=document.querySelector('nav button[data-view="company"]')
-  document.querySelectorAll('nav button').forEach(button=>button.classList.toggle('active',button===companyTab))
-  for(const view of ['overview','leads','pipeline','outreach','deal','operator','company','workcells','approvals','connectors']) $('#view-'+view).hidden=view!=='company'
-  openCompanyWorkspace()
+  openConsoleView('company')
 }else if(location.hash==='#activation'){
-  const workcellsTab=document.querySelector('nav button[data-view="workcells"]')
-  document.querySelectorAll('nav button').forEach(button=>button.classList.toggle('active',button===workcellsTab))
-  for(const view of ['overview','leads','pipeline','outreach','deal','operator','company','workcells','approvals','connectors']) $('#view-'+view).hidden=view!=='workcells'
+  openConsoleView('workcells')
   openActivationPanel('#activationManifestFile')
-  if(hasOpsKey())loadWorkcells()
-  else $('#workcellGrid').innerHTML='<div class="empty">Enter the owner key to load live workcell status.</div>'
 }
 loadProtectedState()
 </script>
