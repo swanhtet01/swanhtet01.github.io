@@ -405,6 +405,76 @@ export async function putCachedResponse(cacheKey, payload) {
   return true
 }
 
+// Bounded internal index for cache-backed control records. Callers must still validate every
+// payload before using it; this only narrows the durable read by key prefix and tenant metadata.
+export async function listCachedResponseRecords({
+  prefix,
+  clientId = '',
+  status = '',
+  expiresAfter = '',
+  limit = 200,
+} = {}) {
+  const normalizedPrefix = String(prefix || '').trim()
+  const normalizedClientId = String(clientId || '').trim()
+  const normalizedStatus = String(status || '').trim()
+  const normalizedExpiry = String(expiresAfter || '').trim()
+  const boundedLimit = Number(limit)
+  const validExpiry = !normalizedExpiry
+    || (Number.isFinite(new Date(normalizedExpiry).getTime()) && new Date(normalizedExpiry).toISOString() === normalizedExpiry)
+  if (!/^[A-Za-z0-9][A-Za-z0-9.:-]{0,159}$/.test(normalizedPrefix)
+    || (normalizedClientId && !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/.test(normalizedClientId))
+    || (normalizedStatus && !/^[a-z][a-z_]{0,39}$/.test(normalizedStatus))
+    || !validExpiry
+    || !Number.isInteger(boundedLimit)
+    || boundedLimit < 1
+    || boundedLimit > 250) {
+    throw new Error('invalid_cached_response_list_query')
+  }
+
+  if (mode === 'supabase') {
+    const query = [
+      `cache_key=like.${encodeURIComponent(normalizedPrefix)}*`,
+      normalizedClientId ? `payload->>clientId=eq.${encodeURIComponent(normalizedClientId)}` : '',
+      normalizedStatus ? `payload->>status=eq.${encodeURIComponent(normalizedStatus)}` : '',
+      normalizedExpiry ? `payload->>expiresAt=gt.${encodeURIComponent(normalizedExpiry)}` : '',
+      'select=cache_key,payload',
+      'order=created_at.desc',
+      `limit=${boundedLimit}`,
+    ].filter(Boolean).join('&')
+    const rows = await rest('GET', `supermega_ai_cache?${query}`)
+    return {
+      durable: true,
+      records: rows.map((row) => ({ key: row.cache_key, payload: row.payload })),
+    }
+  }
+  if (mode === 'postgres') {
+    await ensurePgTables()
+    const clauses = ['cache_key like $1']
+    const values = [`${normalizedPrefix}%`]
+    if (normalizedClientId) { values.push(normalizedClientId); clauses.push(`payload->>'clientId'=$${values.length}`) }
+    if (normalizedStatus) { values.push(normalizedStatus); clauses.push(`payload->>'status'=$${values.length}`) }
+    if (normalizedExpiry) { values.push(normalizedExpiry); clauses.push(`payload->>'expiresAt'>$${values.length}`) }
+    values.push(boundedLimit)
+    const rows = await q(
+      `select cache_key, payload from supermega_ai_cache where ${clauses.join(' and ')} order by created_at desc limit $${values.length}`,
+      values,
+    )
+    return {
+      durable: true,
+      records: rows.map((row) => ({ key: row.cache_key, payload: row.payload })),
+    }
+  }
+
+  let records = [...mem.aiCache.entries()]
+    .map(([key, payload]) => ({ key, payload }))
+    .filter((record) => record.key.startsWith(normalizedPrefix))
+  if (normalizedClientId) records = records.filter((record) => record.payload?.clientId === normalizedClientId)
+  if (normalizedStatus) records = records.filter((record) => record.payload?.status === normalizedStatus)
+  if (normalizedExpiry) records = records.filter((record) => String(record.payload?.expiresAt || '') > normalizedExpiry)
+  records.sort((left, right) => String(right.payload?.issuedAt || '').localeCompare(String(left.payload?.issuedAt || '')))
+  return { durable: false, records: records.slice(0, boundedLimit) }
+}
+
 // Atomically replace one cached payload only while its status, plan hash, and optional revision
 // still match. Work orders use status + planHash; staged missions also bind every transition to a
 // monotonically increasing revision so concurrent operators cannot both advance the same stage.
@@ -716,4 +786,4 @@ export async function ping() {
   return { ok: false, mode, detail: 'unknown_mode' }
 }
 
-export default { mode, listLeads, getLead, insertLead, updateLead, listClients, listProjects, createClient, getClient, createProject, updateProject, getProject, markDepositPaid, convertedLeadIds, saveDeal, listDeals, updateDeal, logActivity, claimActivity, releaseActivityClaim, listActivity, getTokenUsage, addTokenUsage, getCachedResponse, putCachedResponse, transitionCachedResponse, createApprovalRecord, getApprovalRecord, listApprovalRecords, transitionApprovalRecord, recordPaymentEvent, ping, bumpGraduation, recordBuildModules, listGraduation }
+export default { mode, listLeads, getLead, insertLead, updateLead, listClients, listProjects, createClient, getClient, createProject, updateProject, getProject, markDepositPaid, convertedLeadIds, saveDeal, listDeals, updateDeal, logActivity, claimActivity, releaseActivityClaim, listActivity, getTokenUsage, addTokenUsage, getCachedResponse, putCachedResponse, listCachedResponseRecords, transitionCachedResponse, createApprovalRecord, getApprovalRecord, listApprovalRecords, transitionApprovalRecord, recordPaymentEvent, ping, bumpGraduation, recordBuildModules, listGraduation }

@@ -88,3 +88,76 @@ test('cache transition is compare-and-swap in memory and uses bounded PostgREST 
     restoreEnvironment(saved)
   }
 })
+
+test('cache control-record listing is prefix-bounded, tenant-filtered, and reports durability', async () => {
+  const saved = captureEnvironment()
+  const originalFetch = globalThis.fetch
+  const prefix = `agent-company-list-${Date.now()}:`
+  try {
+    for (const name of STORE_ENV) delete process.env[name]
+    const memoryStore = await import(`./store.mjs?agent-company-memory-list=${Date.now()}`)
+    await memoryStore.putCachedResponse(`${prefix}one`, {
+      clientId: 'client-acme',
+      status: 'active',
+      issuedAt: '2026-07-14T09:00:00.000Z',
+      expiresAt: '2026-07-14T10:00:00.000Z',
+    })
+    await memoryStore.putCachedResponse(`${prefix}other`, {
+      clientId: 'client-other',
+      status: 'active',
+      issuedAt: '2026-07-14T09:01:00.000Z',
+      expiresAt: '2026-07-14T10:00:00.000Z',
+    })
+    const local = await memoryStore.listCachedResponseRecords({
+      prefix,
+      clientId: 'client-acme',
+      status: 'active',
+      expiresAfter: '2026-07-14T09:30:00.000Z',
+      limit: 10,
+    })
+    assert.equal(local.durable, false)
+    assert.deepEqual(local.records.map((record) => record.key), [`${prefix}one`])
+    await assert.rejects(
+      memoryStore.listCachedResponseRecords({ prefix: 'agent-company:*', limit: 10 }),
+      /invalid_cached_response_list_query/,
+    )
+    await assert.rejects(
+      memoryStore.listCachedResponseRecords({ prefix: 'agent_company:', limit: 10 }),
+      /invalid_cached_response_list_query/,
+    )
+
+    process.env.SUPABASE_URL = 'https://project.supabase.co'
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role'
+    let request
+    globalThis.fetch = async (url, init) => {
+      request = { url: String(url), init }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => [{ cache_key: `${prefix}one`, payload: { clientId: 'client-acme', status: 'active' } }],
+        text: async () => '',
+      }
+    }
+    const supabaseStore = await import(`./store.mjs?agent-company-supabase-list=${Date.now()}`)
+    const remote = await supabaseStore.listCachedResponseRecords({
+      prefix,
+      clientId: 'client-acme',
+      status: 'active',
+      expiresAfter: '2026-07-14T09:30:00.000Z',
+      limit: 11,
+    })
+    assert.equal(remote.durable, true)
+    assert.equal(remote.records[0].key, `${prefix}one`)
+    assert.equal(request.init.method, 'GET')
+    assert.match(request.url, /supermega_ai_cache\?cache_key=like\./)
+    assert.match(request.url, /payload->>clientId=eq\.client-acme/)
+    assert.match(request.url, /payload->>status=eq\.active/)
+    assert.match(request.url, /payload->>expiresAt=gt\./)
+    assert.match(request.url, /select=cache_key,payload/)
+    assert.match(request.url, /order=created_at\.desc/)
+    assert.match(request.url, /limit=11/)
+  } finally {
+    globalThis.fetch = originalFetch
+    restoreEnvironment(saved)
+  }
+})

@@ -10,6 +10,7 @@ import {
 import {
   claimActivity,
   getCachedResponse,
+  listCachedResponseRecords,
   putCachedResponse,
   releaseActivityClaim,
   transitionCachedResponse,
@@ -31,6 +32,14 @@ const SHA256_RE = /^[a-f0-9]{64}$/
 const ISSUE_FIELDS = new Set(['clientId', 'operatorId', 'role', 'expiresInMinutes', 'sessionHours'])
 const EXCHANGE_FIELDS = new Set(['code'])
 const SESSION_FIELDS = new Set(['token'])
+const ACCESS_LIST_FIELDS = new Set(['clientId'])
+const ACCESS_REVOKE_FIELDS = new Set(['clientId', 'accessType', 'accessId'])
+const ACCESS_TYPES = new Set(['code', 'session'])
+const MAX_ACTIVE_ACCESS_RECORDS = 200
+const INVITE_KEY_PREFIX = 'agent-company-sign-in-code:'
+const SESSION_KEY_PREFIX = 'agent-company-operator-session:'
+const CODE_ACCESS_ID_RE = /^company-code:[a-f0-9]{40}$/
+const SESSION_ACCESS_ID_RE = /^company-session:[a-f0-9]{40}$/
 
 const VIEWER_ACTIONS = Object.freeze([
   'mission-get',
@@ -56,8 +65,8 @@ const ROLE_ACTIONS = Object.freeze({
 const failure = (reason, extra = {}) => ({ ok: false, reason, ...extra })
 const isRecord = (value) => value && typeof value === 'object' && !Array.isArray(value)
 const sha256 = (value) => createHash('sha256').update(String(value)).digest('hex')
-const inviteKey = (digest) => `agent-company-sign-in-code:${digest}`
-const sessionKey = (digest) => `agent-company-operator-session:${digest}`
+const inviteKey = (digest) => `${INVITE_KEY_PREFIX}${digest}`
+const sessionKey = (digest) => `${SESSION_KEY_PREFIX}${digest}`
 
 function onlyFields(input, allowed, reason = 'company_auth_invalid_request') {
   if (!isRecord(input)) return failure(reason)
@@ -147,7 +156,7 @@ function validSignInCodeRecord(record) {
   if (!isRecord(record)
     || record.version !== 1
     || record.kind !== 'agent_company_sign_in_code'
-    || !['active', 'consumed'].includes(record.status)
+    || !['active', 'consumed', 'revoked'].includes(record.status)
     || !Number.isInteger(record.revision)
     || record.revision < 1
     || !CLIENT_ID_RE.test(String(record.clientId || ''))
@@ -209,6 +218,41 @@ function publicSession(record) {
   }
 }
 
+function storedRecordDigest(entry, prefix) {
+  if (!isRecord(entry)) return null
+  const key = String(entry.key || '')
+  if (!key.startsWith(prefix)) return null
+  const digest = key.slice(prefix.length)
+  return SHA256_RE.test(digest) ? digest : null
+}
+
+function publicPendingCode(record, digest) {
+  return {
+    accessId: `company-code:${digest.slice(0, 40)}`,
+    accessType: 'code',
+    status: 'pending',
+    clientId: record.clientId,
+    operatorId: record.operatorId,
+    role: record.role,
+    issuedAt: record.issuedAt,
+    expiresAt: record.expiresAt,
+    sessionHours: record.sessionHours,
+  }
+}
+
+function publicActiveSession(record) {
+  return {
+    accessId: record.sessionId,
+    accessType: 'session',
+    status: 'active',
+    clientId: record.clientId,
+    operatorId: record.operatorId,
+    role: record.role,
+    issuedAt: record.issuedAt,
+    expiresAt: record.expiresAt,
+  }
+}
+
 async function readStoredRecord(key, options = {}) {
   const read = options.getRecord || getCachedResponse
   try {
@@ -224,6 +268,22 @@ async function saveStoredRecord(key, record, options = {}) {
     return Boolean(await save(key, record))
   } catch {
     return false
+  }
+}
+
+async function listStoredRecords(query, options = {}) {
+  const list = options.listRecords || listCachedResponseRecords
+  try {
+    const result = await list(query)
+    if (!isRecord(result) || !Array.isArray(result.records)) {
+      return failure('company_access_store_unavailable')
+    }
+    if (options.requireDurableList !== false && result.durable !== true) {
+      return failure('company_access_store_unavailable')
+    }
+    return { ok: true, records: result.records }
+  } catch {
+    return failure('company_access_store_unavailable')
   }
 }
 
@@ -380,6 +440,70 @@ export async function issueCompanyOperatorCode(input, options = {}) {
   }
 }
 
+export async function listCompanyAccess(input, options = {}) {
+  const fields = onlyFields(input, ACCESS_LIST_FIELDS)
+  if (!fields.ok) return fields
+  const clientId = normalizeId(input.clientId, CLIENT_ID_RE, 'company_invalid_client_id')
+  if (isRecord(clientId)) return clientId
+  const now = nowDate(options)
+  if (!now) return failure('company_auth_clock_invalid')
+  const query = {
+    clientId,
+    status: 'active',
+    expiresAfter: now.toISOString(),
+    limit: MAX_ACTIVE_ACCESS_RECORDS + 1,
+  }
+  const codeRecords = await listStoredRecords({ ...query, prefix: INVITE_KEY_PREFIX }, options)
+  if (!codeRecords.ok) return codeRecords
+  const sessionRecords = await listStoredRecords({ ...query, prefix: SESSION_KEY_PREFIX }, options)
+  if (!sessionRecords.ok) return sessionRecords
+  if (codeRecords.records.length > MAX_ACTIVE_ACCESS_RECORDS
+    || sessionRecords.records.length > MAX_ACTIVE_ACCESS_RECORDS) {
+    return failure('company_access_limit_exceeded', { status: 'blocked' })
+  }
+
+  const codes = []
+  for (const entry of codeRecords.records) {
+    const digest = storedRecordDigest(entry, INVITE_KEY_PREFIX)
+    const record = entry?.payload
+    if (!digest
+      || !validSignInCodeRecord(record)
+      || record.status !== 'active'
+      || record.clientId !== clientId
+      || new Date(record.expiresAt).getTime() <= now.getTime()) {
+      return failure('company_access_record_invalid', { status: 'blocked' })
+    }
+    codes.push(publicPendingCode(record, digest))
+  }
+
+  const sessions = []
+  for (const entry of sessionRecords.records) {
+    const digest = storedRecordDigest(entry, SESSION_KEY_PREFIX)
+    const record = entry?.payload
+    if (!digest
+      || !validOperatorSessionRecord(record, digest)
+      || record.status !== 'active'
+      || record.clientId !== clientId
+      || new Date(record.expiresAt).getTime() <= now.getTime()) {
+      return failure('company_access_record_invalid', { status: 'blocked' })
+    }
+    sessions.push(publicActiveSession(record))
+  }
+
+  const newestFirst = (left, right) => String(right.issuedAt).localeCompare(String(left.issuedAt))
+  codes.sort(newestFirst)
+  sessions.sort(newestFirst)
+  return {
+    ok: true,
+    mode: 'company_access_list',
+    complete: true,
+    clientId,
+    sessions,
+    codes,
+    counts: { sessions: sessions.length, codes: codes.length },
+  }
+}
+
 async function revokeStoredSession(record, options = {}) {
   if (!isRecord(record) || record.status !== 'active') return { updated: false, durable: true }
   const now = nowDate(options)
@@ -390,6 +514,22 @@ async function revokeStoredSession(record, options = {}) {
     revokedAt: now?.toISOString() || record.expiresAt,
   }
   return transitionStoredRecord(sessionKey(record.tokenDigest), {
+    status: record.status,
+    planHash: record.planHash,
+    revision: record.revision,
+  }, next, options)
+}
+
+async function revokeStoredInvite(record, digest, options = {}) {
+  if (!isRecord(record) || record.status !== 'active') return { updated: false, durable: true }
+  const now = nowDate(options)
+  const next = {
+    ...record,
+    status: 'revoked',
+    revision: record.revision + 1,
+    revokedAt: now?.toISOString() || record.expiresAt,
+  }
+  return transitionStoredRecord(inviteKey(digest), {
     status: record.status,
     planHash: record.planHash,
     revision: record.revision,
@@ -528,6 +668,71 @@ export async function revokeCompanyOperatorSession(input, options = {}) {
   return { ok: true, mode: 'company_operator_session_revoke', replayed: false }
 }
 
+export async function revokeCompanyAccess(input, options = {}) {
+  const fields = onlyFields(input, ACCESS_REVOKE_FIELDS)
+  if (!fields.ok) return fields
+  const clientId = normalizeId(input.clientId, CLIENT_ID_RE, 'company_invalid_client_id')
+  if (isRecord(clientId)) return clientId
+  const accessType = String(input.accessType || '').trim().toLowerCase()
+  if (!ACCESS_TYPES.has(accessType)) return failure('company_access_invalid_type')
+  const accessId = String(input.accessId || '').trim()
+  const accessPattern = accessType === 'code' ? CODE_ACCESS_ID_RE : SESSION_ACCESS_ID_RE
+  if (!accessPattern.test(accessId)) return failure('company_access_invalid_id')
+  const shortDigest = accessId.slice(accessId.indexOf(':') + 1)
+  const keyPrefix = accessType === 'code' ? INVITE_KEY_PREFIX : SESSION_KEY_PREFIX
+  const listed = await listStoredRecords({
+    prefix: `${keyPrefix}${shortDigest}`,
+    clientId,
+    limit: 2,
+  }, options)
+  if (!listed.ok) return listed
+  if (listed.records.length === 0) {
+    return { ok: true, mode: 'company_access_revoke', accessType, accessId, replayed: true }
+  }
+  if (listed.records.length !== 1) {
+    return failure('company_access_record_invalid', { status: 'blocked' })
+  }
+  const entry = listed.records[0]
+  const digest = storedRecordDigest(entry, keyPrefix)
+  const record = entry?.payload
+  const expectedAccessId = accessType === 'code'
+    ? `company-code:${String(digest || '').slice(0, 40)}`
+    : record?.sessionId
+  const valid = accessType === 'code'
+    ? validSignInCodeRecord(record)
+    : validOperatorSessionRecord(record, digest)
+  if (!digest || !valid || record.clientId !== clientId || expectedAccessId !== accessId) {
+    return failure('company_access_record_invalid', { status: 'blocked' })
+  }
+  if (record.status === 'revoked') {
+    return { ok: true, mode: 'company_access_revoke', accessType, accessId, replayed: true }
+  }
+  if (accessType === 'code' && record.status !== 'active') {
+    return failure('company_access_conflict', { status: 'conflict' })
+  }
+
+  const transitioned = accessType === 'code'
+    ? await revokeStoredInvite(record, digest, options)
+    : await revokeStoredSession(record, options)
+  if (transitioned.updated && transitioned.durable) {
+    return { ok: true, mode: 'company_access_revoke', accessType, accessId, replayed: false }
+  }
+  if (!transitioned.durable) {
+    return failure('company_access_store_unavailable', { status: 'blocked' })
+  }
+
+  const reread = await readStoredRecord(accessType === 'code' ? inviteKey(digest) : sessionKey(digest), options)
+  if (!reread.ok) return failure('company_access_store_unavailable', { status: 'blocked' })
+  const current = reread.record
+  const currentValid = accessType === 'code'
+    ? validSignInCodeRecord(current)
+    : validOperatorSessionRecord(current, digest)
+  if (currentValid && current.clientId === clientId && current.status === 'revoked') {
+    return { ok: true, mode: 'company_access_revoke', accessType, accessId, replayed: true }
+  }
+  return failure('company_access_conflict', { status: 'conflict' })
+}
+
 export async function authorizeCompanyRequest(request = {}, options = {}) {
   const env = options.env || process.env
   const providedKey = headerValue(request.headers, 'x-ops-key').trim()
@@ -570,5 +775,7 @@ export default {
   exchangeCompanyOperatorCode,
   getCompanyOperatorSession,
   issueCompanyOperatorCode,
+  listCompanyAccess,
+  revokeCompanyAccess,
   revokeCompanyOperatorSession,
 }

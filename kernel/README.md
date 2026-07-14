@@ -18,7 +18,7 @@ broader system boundaries.
 | `agent-company.mjs` + `agent-company-work-orders.mjs` | Bounded supervisor cycles and durable reviewed delegation | live |
 | `agent-company-playbooks.mjs` + `agent-company-missions.mjs` | Fixed sellable outcomes with durable server-verified stages | live |
 | `agent-company-operations.mjs` | Immutable outcome review and metadata-only operating targets | live |
-| `agent-company-operator-auth.mjs` + `api/agent-company-auth.mjs` | One-use tenant sign-in codes and role-scoped HttpOnly sessions | live |
+| `agent-company-operator-auth.mjs` + `api/agent-company-auth.mjs` | One-use tenant codes, role-scoped HttpOnly sessions, and owner revocation | live |
 | `agent-company-operator.mjs` + `scripts/operate-agent-company.mjs` | Guided plan, queue, dispatch, evaluation, and proof client | operator-run |
 | `public/` + `api/` | Ops console, status, workcell activation, and scheduled delivery | live |
 
@@ -78,7 +78,10 @@ tenant-bound HttpOnly, Secure, SameSite session. The server stores only code and
 fingerprints, revalidates immutable tenant, role, and expiry metadata on every request, and enforces
 operator, reviewer, or viewer permissions before Agent Company actions run. Cookie-authenticated
 writes also require the console's explicit same-origin request marker. The owner key remains a
-separate bootstrap and CLI path and is never copied into an operator session.
+separate bootstrap and CLI path and is never copied into an operator session. Owner bootstrap access
+can list active sessions and unredeemed codes for one tenant and revoke either entry atomically. That
+inventory returns only operator, role, status, and time metadata; it never returns a code, session
+token, credential fingerprint, or plan integrity field.
 
 `playbook-plan` maps one client mission to one of eight fixed business outcomes. Each plan names the
 exact ordered specialists, crew contracts, stage cycle ids, role budgets, returned fields, and handoff
@@ -224,8 +227,8 @@ in recovery instead of being retried blindly.
 
 1. Dispatch one legitimate redacted work order, record its internal checklist evaluation, download
    the delivery proof, and record the customer's exact decision from an allowed source.
-2. After that proof, add authenticated tenant operators and customer-authenticated acceptance; the
-   shared internal passcode is not a sellable multi-tenant identity layer.
+2. After that proof, add operator recovery and customer-authenticated acceptance, then SSO/MFA where
+   a tenant requires it. Owner-issued tenant sessions and targeted revocation are already live.
 3. Then add an opt-in durable dispatcher, bounded evidence-retention sweeper, and alerts over the
    measured target states. Do not introduce recursive delegation.
 4. Generate the isolated client plan, load its client-scoped inputs, and run the exact-confirmation

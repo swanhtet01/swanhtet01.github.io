@@ -48,6 +48,58 @@ test('only the owner key can issue a bounded operator code', async () => {
   assert.deepEqual(calls, [{ clientId: 'client-acme', operatorId: 'ops.alice', role: 'operator' }])
 })
 
+test('only owner bootstrap access can list and revoke redacted tenant access', async () => {
+  const calls = []
+  const listCompanyAccess = async (body) => {
+    calls.push(['list', body])
+    return {
+      ok: true,
+      mode: 'company_access_list',
+      complete: true,
+      clientId: body.clientId,
+      sessions: [{ accessId: `company-session:${'a'.repeat(40)}`, operatorId: 'ops.alice', role: 'operator' }],
+      codes: [],
+      counts: { sessions: 1, codes: 0 },
+    }
+  }
+  const revokeCompanyAccess = async (body) => {
+    calls.push(['revoke', body])
+    return { ok: true, mode: 'company_access_revoke', ...body, replayed: false }
+  }
+  const listed = await handleAgentCompanyAuth(ownerRequest({
+    action: 'list-access',
+    clientId: 'client-acme',
+  }), { opsKey: KEY, listCompanyAccess })
+  assert.equal(listed.status, 200)
+  assert.equal(listed.json.counts.sessions, 1)
+  assert.doesNotMatch(JSON.stringify(listed.json), /sessionToken|tokenDigest|planHash|oneTimeCode/)
+
+  const revoked = await handleAgentCompanyAuth(ownerRequest({
+    action: 'revoke-access',
+    clientId: 'client-acme',
+    accessType: 'session',
+    accessId: `company-session:${'a'.repeat(40)}`,
+  }), { opsKey: KEY, revokeCompanyAccess })
+  assert.equal(revoked.status, 200)
+  assert.deepEqual(calls, [
+    ['list', { clientId: 'client-acme' }],
+    ['revoke', { clientId: 'client-acme', accessType: 'session', accessId: `company-session:${'a'.repeat(40)}` }],
+  ])
+
+  const sessionAttempt = await handleAgentCompanyAuth({
+    method: 'POST',
+    headers: { [COMPANY_REQUEST_HEADER]: '1' },
+    body: { action: 'list-access', clientId: 'client-acme' },
+  }, {
+    authorizeCompanyRequest: async () => ({
+      ok: true,
+      auth: { mode: 'session', clientId: 'client-acme', operatorId: 'ops.alice', role: 'operator' },
+    }),
+  })
+  assert.equal(sessionAttempt.status, 403)
+  assert.equal(sessionAttempt.json.reason, 'owner_access_required')
+})
+
 test('code exchange returns only an HttpOnly cookie and public session metadata', async () => {
   const result = await handleAgentCompanyAuth({
     method: 'POST',
