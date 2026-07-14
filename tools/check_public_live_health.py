@@ -15,8 +15,9 @@ from typing import Any
 from urllib.parse import urljoin, urlparse
 
 
-USER_AGENT = "supermega-portfolio-live-health/4.4"
+USER_AGENT = "supermega-portfolio-live-health/4.5"
 DEMO_MAX_BYTES = 256 * 1024
+POS_MAX_BYTES = 256 * 1024
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -124,6 +125,7 @@ def run(
     www_url: str,
     app_url: str,
     demo_url: str,
+    pos_url: str,
     console_url: str,
     *,
     timeout: float,
@@ -133,6 +135,7 @@ def run(
     www_url = www_url.rstrip("/") + "/"
     app_url = app_url.rstrip("/") + "/"
     demo_url = demo_url.rstrip("/") + "/"
+    pos_url = pos_url.rstrip("/") + "/"
     console_url = console_url.rstrip("/") + "/"
     failures: list[dict[str, Any]] = []
     results: list[dict[str, Any]] = []
@@ -298,6 +301,114 @@ def run(
         or demo_header_mismatches
     ):
         failures.append(demo_result)
+
+    pos_response = fetch(
+        pos_url,
+        timeout=timeout,
+        attempts=attempts,
+        follow_redirects=False,
+        max_bytes=POS_MAX_BYTES,
+    )
+    try:
+        pos_body = pos_response.body.decode("utf-8")
+        pos_encoding_error = False
+    except UnicodeDecodeError:
+        pos_body = ""
+        pos_encoding_error = True
+    pos_tokens = [
+        "<title>Shop ",
+        "the simple POS for Myanmar businesses</title>",
+        '<link rel="canonical" href="https://pos.supermega.dev/" />',
+        '<meta property="og:site_name" content="Shop" />',
+        '"name": "Shop"',
+        '<div id="root"></div>',
+    ]
+    pos_forbidden = [
+        "MegaOS",
+        "Mega OS",
+        "<title>DeskPOS",
+        'content="DeskPOS',
+        "spa-desk-pilot.vercel.app",
+    ]
+    pos_result = {
+        "kind": "shop_pos_page",
+        "url": pos_url,
+        "status": pos_response.status,
+        "bytes": len(pos_response.body),
+        "response_url_changed": pos_response.url != pos_url,
+        "encoding_error": pos_encoding_error,
+        "missing": [token for token in pos_tokens if token not in pos_body],
+        "unexpected": [token for token in pos_forbidden if token in pos_body],
+    }
+    results.append(pos_result)
+    if (
+        pos_response.status != 200
+        or pos_response.url != pos_url
+        or len(pos_response.body) < 1000
+        or len(pos_response.body) > POS_MAX_BYTES
+        or pos_encoding_error
+        or pos_result["missing"]
+        or pos_result["unexpected"]
+    ):
+        failures.append(pos_result)
+
+    pos_health_url = urljoin(pos_url, "api/health")
+    pos_health_response = fetch(pos_health_url, timeout=timeout, attempts=attempts)
+    try:
+        pos_health_payload = json.loads(pos_health_response.body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        pos_health_payload = {}
+    expected_pos_health = {
+        "ok": True,
+        "service": "supermega-shop-pos",
+        "status": "ready",
+    }
+    pos_health_mismatches = {
+        path: {"expected": expected, "actual": nested_value(pos_health_payload, path)}
+        for path, expected in expected_pos_health.items()
+        if nested_value(pos_health_payload, path) != expected
+    }
+    if set(pos_health_payload) != set(expected_pos_health):
+        pos_health_mismatches["payload_keys"] = {
+            "expected": sorted(expected_pos_health),
+            "actual": sorted(pos_health_payload),
+        }
+    pos_health_result = {
+        "kind": "shop_pos_health",
+        "url": pos_health_url,
+        "status": pos_health_response.status,
+        "mismatches": pos_health_mismatches,
+    }
+    results.append(pos_health_result)
+    if pos_health_response.status != 200 or pos_health_mismatches:
+        failures.append(pos_health_result)
+
+    pos_diagnostics_url = f"{pos_health_url}?detail=1"
+    pos_diagnostics_response = fetch(pos_diagnostics_url, timeout=timeout, attempts=attempts)
+    try:
+        pos_diagnostics_payload = json.loads(pos_diagnostics_response.body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        pos_diagnostics_payload = {}
+    expected_pos_diagnostics = {"error": "operator_auth_required"}
+    pos_diagnostics_mismatches = {
+        path: {"expected": expected, "actual": nested_value(pos_diagnostics_payload, path)}
+        for path, expected in expected_pos_diagnostics.items()
+        if nested_value(pos_diagnostics_payload, path) != expected
+    }
+    if set(pos_diagnostics_payload) != set(expected_pos_diagnostics):
+        pos_diagnostics_mismatches["payload_keys"] = {
+            "expected": sorted(expected_pos_diagnostics),
+            "actual": sorted(pos_diagnostics_payload),
+        }
+    pos_diagnostics_result = {
+        "kind": "shop_pos_diagnostics_guard",
+        "url": pos_diagnostics_url,
+        "status": pos_diagnostics_response.status,
+        "mismatches": pos_diagnostics_mismatches,
+    }
+    results.append(pos_diagnostics_result)
+    if pos_diagnostics_response.status != 401 or pos_diagnostics_mismatches:
+        failures.append(pos_diagnostics_result)
 
     for path in ("products/", "pricing/", "ai-agents/", "offers/"):
         url = urljoin(base_url, path)
@@ -562,6 +673,7 @@ def main() -> int:
     parser.add_argument("--www-url", default="https://www.supermega.dev")
     parser.add_argument("--app-url", default="https://app.supermega.dev")
     parser.add_argument("--demo-url", default="https://demo.supermega.dev")
+    parser.add_argument("--pos-url", default="https://pos.supermega.dev")
     parser.add_argument("--console-url", default="https://console.supermega.dev")
     parser.add_argument("--timeout", type=float, default=30.0)
     parser.add_argument("--attempts", type=int, default=3)
@@ -575,6 +687,7 @@ def main() -> int:
             args.www_url,
             args.app_url,
             args.demo_url,
+            args.pos_url,
             args.console_url,
             timeout=args.timeout,
             attempts=args.attempts,
