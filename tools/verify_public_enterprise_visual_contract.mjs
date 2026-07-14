@@ -44,6 +44,9 @@ for (const required of [
   "src:'/live-plant-workspace.png'",
   '<h2 id="workspaces-heading">Open a workspace.</h2>',
   'Try first. Add data later.',
+  'Private workspaces are verified before handover.',
+  'Request your workspace',
+  'SuperMega sets it up and verifies it before handover.',
   'Need something different?',
   '>Contact us</a>',
   'href="/favicon.svg"',
@@ -51,7 +54,7 @@ for (const required of [
   if (!home.includes(required)) fail('homepage_front_door_contract_missing', { required })
 }
 
-for (const forbidden of ['<figure class="site-hero-screen"', '<img src="/site/shots/live-product-', 'Explore products', 'Custom Solutions &amp; AI Agents', 'supermega-portal-card.png', 'https://demo.supermega.dev/', 'AI Agent Solutions', 'Need a repeated task handled?', 'rotate(', 'id="products"']) {
+for (const forbidden of ['<figure class="site-hero-screen"', '<img src="/site/shots/live-product-', 'Explore products', 'Custom Solutions &amp; AI Agents', 'supermega-portal-card.png', 'https://demo.supermega.dev/', 'AI Agent Solutions', 'Need a repeated task handled?', 'rotate(', 'id="products"', 'Use one account across desktop, tablet, and mobile.', 'Create a workspace only when you want to keep your work and use it across devices.', 'Create with email and password. Return with your password or an email code.']) {
   if (home.includes(forbidden)) fail('homepage_stale_catalog_visual_or_copy', { forbidden })
 }
 

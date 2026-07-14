@@ -520,7 +520,7 @@ const homeHtml = documentHtml({
   <section class="entry-section page-frame" id="workspaces" aria-labelledby="workspaces-heading">
     <div class="section-intro">
       <div><div class="eyebrow">Shop + Plant</div><h2 id="workspaces-heading">Open a workspace.</h2></div>
-      <p>Use one account across desktop, tablet, and mobile. Demos open immediately in this browser.</p>
+      <p>Demos open immediately on this device. Private workspaces are verified before handover.</p>
     </div>
     <div class="destination-list">
       <a class="destination" href="https://app.supermega.dev/?demo=shop"><span class="destination-index">01 / SHOP</span><span class="destination-copy"><strong>Shop</strong><span>Point of sale, customers, stock, receivables, and books.</span></span><span class="destination-arrow" aria-hidden="true">&#8594;</span></a>
@@ -532,12 +532,12 @@ const homeHtml = documentHtml({
     <div class="start-inner page-frame" data-reveal>
       <div class="start-intro">
         <div><div class="eyebrow">New here?</div><h2 id="start-heading">Try first. Add data later.</h2></div>
-        <p>The demo needs no account. Create a workspace only when you want to keep your work and use it across devices.</p>
+        <p>The demo needs no account. Request a private workspace when you are ready to keep business data.</p>
       </div>
       <div class="start-steps">
         <div class="start-step"><span>01 / TRY</span><strong>Open a demo</strong><p>Choose Shop or Plant and use the working screens immediately.</p></div>
-        <div class="start-step"><span>02 / ACCOUNT</span><strong>Create your workspace</strong><p>Create with email and password. Return with your password or an email code.</p></div>
-        <div class="start-step"><span>03 / DATA</span><strong>Bring your data</strong><p>Import your own rows when you are ready, or start fresh.</p></div>
+        <div class="start-step"><span>02 / PRIVATE</span><strong>Request your workspace</strong><p>SuperMega sets it up and verifies it before handover.</p></div>
+        <div class="start-step"><span>03 / DATA</span><strong>Bring your data</strong><p>Bring approved rows when your private workspace is ready, or start fresh.</p></div>
       </div>
       <div class="start-actions">
         <a class="btn primary" href="https://app.supermega.dev/?demo=shop">Try Shop</a>
