@@ -29,20 +29,20 @@ if (!existsSync(configPath)) fail('missing_public_config')
 const config = JSON.parse(readFileSync(configPath, 'utf8'))
 
 requireTokens('home', home, [
-  '<title>supermega.dev | Shop, Plant and AI Agent Solutions</title>',
-  '<h1 id="portfolio-heading">Shop. Plant. AI Agent Solutions.</h1>',
+  '<title>supermega.dev | Shop and Plant</title>',
+  '<h1 id="portfolio-heading">Run the operation. See what matters.</h1>',
   'supermega<span class="domain">.dev</span>',
   '&gt;_</span>',
   'https://app.supermega.dev/?demo=shop',
   'https://app.supermega.dev/?demo=plant',
-  'Two products. One agent layer.',
+  'Two working products',
+  'Try first. Add data later.',
   '<strong>Shop</strong>',
   '<strong>Plant</strong>',
-  '<strong>AI Agent Solutions</strong>',
-  'Build an agent solution',
-  'external actions approval-gated',
+  'AI Agent Solutions',
+  'Need a repeated task handled?',
+  '>Contact us</a>',
   'src="/live-shop-workspace.png"',
-  'src="/live-shop-mobile.png"',
   '/favicon.svg',
 ])
 
@@ -58,6 +58,12 @@ for (const forbidden of [
   'The intelligent workspace for daily operations.',
   'Explore live demos',
   'Open workspace',
+  'target="_blank"',
+  'rotate(',
+  'data-hero-media',
+  'Current build',
+  'Build an agent solution',
+  '>Agent solution<',
 ]) {
   if (home.includes(forbidden)) fail('catalog_copy_or_stale_product_visual_on_home', { forbidden })
 }

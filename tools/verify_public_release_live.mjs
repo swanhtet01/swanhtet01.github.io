@@ -38,14 +38,16 @@ async function get(url, accept) {
 
 function verifyHome(html, label) {
   for (const required of [
-    '<title>supermega.dev | Shop, Plant and AI Agent Solutions</title>',
-    '<h1 id="portfolio-heading">Shop. Plant. AI Agent Solutions.</h1>',
+    '<title>supermega.dev | Shop and Plant</title>',
+    '<h1 id="portfolio-heading">Run the operation. See what matters.</h1>',
     'href="/contact/?from=ai-agent-solution"',
-    'Build an agent solution',
+    'Try first. Add data later.',
+    'Need a repeated task handled?',
+    '>Contact us</a>',
   ]) {
     assert(html.includes(required), `${label}_missing_${required.slice(0, 32)}`)
   }
-  for (const forbidden of ['MegaOS', 'DeskPOS', 'General enquiry']) {
+  for (const forbidden of ['MegaOS', 'DeskPOS', 'General enquiry', 'target="_blank"', 'rotate(', 'Build an agent solution', '>Agent solution<']) {
     assert(!html.includes(forbidden), `${label}_retired_${forbidden}`)
   }
 }
@@ -53,10 +55,10 @@ function verifyHome(html, label) {
 function verifyAgentIntake(html) {
   for (const required of [
     "search.get('from')==='ai-agent-solution'",
-    'What should your agent handle every week?',
-    'What does your team repeat?',
-    'one redacted sample and one reviewed output',
-    'Request first proof',
+    'What do you want to improve?',
+    'What should work better?',
+    'one reviewed example',
+    "idleSubmitLabel='Contact us'",
     'action="/api/contact-submissions"',
   ]) {
     assert(html.includes(required), `agent_intake_missing_${required.slice(0, 32)}`)
