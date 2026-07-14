@@ -145,24 +145,26 @@ def run(
         (
             base_url,
             [
-                "<title>supermega.dev | Shop, Plant and AI Agent Solutions</title>",
-                '<h1 id="portfolio-heading">Shop. Plant. AI Agent Solutions.</h1>',
+                "<title>supermega.dev | Shop and Plant</title>",
+                '<h1 id="portfolio-heading">Run the operation. See what matters.</h1>',
                 "https://app.supermega.dev/?demo=shop",
                 "https://app.supermega.dev/?demo=plant",
                 "/contact/?from=ai-agent-solution",
-                "external actions approval-gated",
+                "Try first. Add data later.",
+                "Need a repeated task handled?",
                 "data-public-status",
             ],
         ),
         (
             www_url,
             [
-                "<title>supermega.dev | Shop, Plant and AI Agent Solutions</title>",
-                '<h1 id="portfolio-heading">Shop. Plant. AI Agent Solutions.</h1>',
+                "<title>supermega.dev | Shop and Plant</title>",
+                '<h1 id="portfolio-heading">Run the operation. See what matters.</h1>',
                 "https://app.supermega.dev/?demo=shop",
                 "https://app.supermega.dev/?demo=plant",
                 "/contact/?from=ai-agent-solution",
-                "external actions approval-gated",
+                "Try first. Add data later.",
+                "Need a repeated task handled?",
                 "data-public-status",
             ],
         ),
@@ -183,12 +185,11 @@ def run(
             agent_intake_url,
             [
                 "search.get('from')==='ai-agent-solution'",
-                "document.title='AI Agent Solution | supermega.dev'",
-                "What should your agent handle every week?",
-                "Request an agent proof",
-                "What does your team repeat?",
-                "Request first proof",
-                "one redacted sample and one reviewed output",
+                "What do you want to improve?",
+                "Start here",
+                "What should work better?",
+                "idleSubmitLabel='Contact us'",
+                "one reviewed example",
                 'action="/api/contact-submissions"',
                 'name="name"',
                 'name="email"',
@@ -204,7 +205,17 @@ def run(
         body = response.body.decode("utf-8", errors="replace")
         missing = [token for token in tokens if token not in body]
         if url in (base_url, www_url):
-            forbidden = ["MegaOS", "DeskPOS", ">Studio<", "Try demo", "https://demo.supermega.dev/"]
+            forbidden = [
+                "MegaOS",
+                "DeskPOS",
+                ">Studio<",
+                "Try demo",
+                "https://demo.supermega.dev/",
+                'target="_blank"',
+                "rotate(",
+                "Build an agent solution",
+                ">Agent solution<",
+            ]
         elif url == agent_intake_url:
             forbidden = [
                 "MegaOS",
@@ -487,7 +498,7 @@ def run(
         body = response.body.decode("utf-8", errors="replace")
         if route == "home":
             app_home_body = body
-        missing = [token for token in ['<title>Shop - SuperMega</title>', '<div id="root"></div>', 'type="module"'] if token not in body]
+        missing = [token for token in ['<title>Shop | supermega.dev</title>', '<div id="root"></div>', 'type="module"'] if token not in body]
         result = {
             "kind": "app_route",
             "route": route,
