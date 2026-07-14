@@ -90,6 +90,7 @@ for (const required of [
   'https://app.supermega.dev/?demo=shop',
   'https://app.supermega.dev/?demo=plant',
   'operational software / live',
+  'class="hero-lead">Less chasing. More running.</strong>',
   '<h2 id="workspaces-heading">Start close to the real work.</h2>',
   'Use working screens',
   'Set up with you',
