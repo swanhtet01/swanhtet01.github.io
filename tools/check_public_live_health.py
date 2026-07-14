@@ -140,6 +140,10 @@ def run(
     failures: list[dict[str, Any]] = []
     results: list[dict[str, Any]] = []
     agent_intake_url = urljoin(base_url, "contact/?from=ai-agent-solution")
+    workspace_intake_kinds = {
+        urljoin(base_url, "contact/?from=shop-workspace"): "shop_workspace_intake_page",
+        urljoin(base_url, "contact/?from=plant-workspace"): "plant_workspace_intake_page",
+    }
 
     page_checks = [
         (
@@ -190,7 +194,7 @@ def run(
         (
             agent_intake_url,
             [
-                "search.get('from')==='ai-agent-solution'",
+                "entryIntent==='ai-agent-solution'",
                 "What do you want to improve?",
                 "Start here",
                 "What should work better?",
@@ -203,6 +207,22 @@ def run(
                 'name="goal"',
             ],
         ),
+        *[
+            (
+                url,
+                [
+                    "entryIntent==='shop-workspace'?'Shop':entryIntent==='plant-workspace'?'Plant':''",
+                    "text('[data-contact-heading]','Request a private '+workspaceProduct+' workspace.')",
+                    "idleSubmitLabel='Request workspace'",
+                    'action="/api/contact-submissions"',
+                    'name="name"',
+                    'name="email"',
+                    'name="company"',
+                    'name="goal"',
+                ],
+            )
+            for url in workspace_intake_kinds
+        ],
         (urljoin(base_url, "privacy/"), ["<title>Privacy | supermega.dev</title>", "Only the details needed to reply."]),
     ]
 
@@ -227,7 +247,7 @@ def run(
                 "Create a workspace only when you want to keep your work and use it across devices.",
                 "Create with email and password. Return with your password or an email code.",
             ]
-        elif url == agent_intake_url:
+        elif url == agent_intake_url or url in workspace_intake_kinds:
             forbidden = [
                 "MegaOS",
                 "DeskPOS",
@@ -242,8 +262,9 @@ def run(
         else:
             forbidden = []
         unexpected = [token for token in forbidden if token in body]
+        kind = "agent_intake_page" if url == agent_intake_url else workspace_intake_kinds.get(url, "page")
         result = {
-            "kind": "agent_intake_page" if url == agent_intake_url else "page",
+            "kind": kind,
             "url": url,
             "status": response.status,
             "bytes": len(response.body),
@@ -583,10 +604,12 @@ def run(
     console_page_response = fetch(console_url, timeout=timeout, attempts=attempts)
     console_page_body = console_page_response.body.decode("utf-8", errors="replace")
     console_page_tokens = [
-        "<title>SuperMega Console</title>",
+        "<title>SuperMega Operations</title>",
+        "Operations control room",
+        "<h1>Command center</h1>",
+        "Move client work from request to delegated agents, reviewed action, and proven delivery.",
         'data-view="company"',
         'id="view-company"',
-        "Plan, queue, dispatch, evaluate, and deliver one bounded specialist wave",
         "I reviewed this exact client, evidence, assignments, and budget",
         "api('POST','/api/agent-company',{action:'plan',...input})",
         "api('POST','/api/agent-company',{action:'work-order-create',...companyDraft.input})",

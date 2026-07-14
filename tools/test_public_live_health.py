@@ -21,6 +21,8 @@ DEMO = "https://demo.example/"
 POS = "https://pos.example/"
 CONSOLE = "https://console.example/"
 AGENT_INTAKE = f"{BASE}contact/?from=ai-agent-solution"
+SHOP_WORKSPACE_INTAKE = f"{BASE}contact/?from=shop-workspace"
+PLANT_WORKSPACE_INTAKE = f"{BASE}contact/?from=plant-workspace"
 
 
 def result(url: str, body: str | dict, *, status: int = 200, headers: dict[str, str] | None = None):
@@ -57,11 +59,14 @@ def healthy_responses() -> dict[str, checker.HttpResult]:
         "No account or data connection is made before you approve it.",
     )
     agent_contact = page(
-        "search.get('from')==='ai-agent-solution'",
+        "entryIntent==='ai-agent-solution'",
+        "entryIntent==='shop-workspace'?'Shop':entryIntent==='plant-workspace'?'Plant':''",
         "What do you want to improve?",
         "Start here",
         "What should work better?",
         "idleSubmitLabel='Contact us'",
+        "text('[data-contact-heading]','Request a private '+workspaceProduct+' workspace.')",
+        "idleSubmitLabel='Request workspace'",
         "one reviewed example",
         'action="/api/contact-submissions"',
         'name="name"',
@@ -96,10 +101,12 @@ def healthy_responses() -> dict[str, checker.HttpResult]:
         '<div id="root"></div>',
     )
     console = page(
-        "<title>SuperMega Console</title>",
+        "<title>SuperMega Operations</title>",
+        "Operations control room",
+        "<h1>Command center</h1>",
+        "Move client work from request to delegated agents, reviewed action, and proven delivery.",
         'data-view="company"',
         'id="view-company"',
-        "Plan, queue, dispatch, evaluate, and deliver one bounded specialist wave",
         "I reviewed this exact client, evidence, assignments, and budget",
         "api('POST','/api/agent-company',{action:'plan',...input})",
         "api('POST','/api/agent-company',{action:'work-order-create',...companyDraft.input})",
@@ -158,6 +165,8 @@ def healthy_responses() -> dict[str, checker.HttpResult]:
         WWW: result(WWW, home),
         f"{BASE}contact/": result(f"{BASE}contact/", contact),
         AGENT_INTAKE: result(AGENT_INTAKE, agent_contact),
+        SHOP_WORKSPACE_INTAKE: result(SHOP_WORKSPACE_INTAKE, agent_contact),
+        PLANT_WORKSPACE_INTAKE: result(PLANT_WORKSPACE_INTAKE, agent_contact),
         f"{BASE}privacy/": result(f"{BASE}privacy/", privacy),
         f"{BASE}api/contact-submissions/status": result(
             f"{BASE}api/contact-submissions/status", contact_status
@@ -215,10 +224,10 @@ class PortfolioHealthTest(unittest.TestCase):
         with patch.object(checker, "fetch", side_effect=fake_fetch):
             return checker.run(BASE, WWW, APP, DEMO, POS, CONSOLE, timeout=1, attempts=1)
 
-    def test_healthy_portfolio_passes_all_twenty_two_checks(self):
+    def test_healthy_portfolio_passes_all_twenty_four_checks(self):
         report = self.run_report(healthy_responses())
         self.assertEqual(report["status"], "ready")
-        self.assertEqual(report["checks"], 22)
+        self.assertEqual(report["checks"], 24)
         self.assertEqual(report["failures"], [])
 
     def test_shop_pos_health_rejects_internal_fields(self):
@@ -347,6 +356,17 @@ class PortfolioHealthTest(unittest.TestCase):
         self.assertEqual(report["status"], "error")
         failure = next(item for item in report["failures"] if item["kind"] == "agent_intake_page")
         self.assertIn('name="workflow"', failure["unexpected"])
+
+    def test_missing_workspace_context_fails_product_intake(self):
+        responses = healthy_responses()
+        responses[SHOP_WORKSPACE_INTAKE] = result(
+            SHOP_WORKSPACE_INTAKE,
+            responses[SHOP_WORKSPACE_INTAKE].body.decode().replace("idleSubmitLabel='Request workspace'", ""),
+        )
+        report = self.run_report(responses)
+        self.assertEqual(report["status"], "error")
+        failure = next(item for item in report["failures"] if item["kind"] == "shop_workspace_intake_page")
+        self.assertIn("idleSubmitLabel='Request workspace'", failure["missing"])
 
     def test_missing_plant_link_fails_public_page(self):
         responses = healthy_responses()
