@@ -29,6 +29,14 @@ import {
   listCompanyPlaybooks,
   planCompanyPlaybook,
 } from '../agent-company-playbooks.mjs'
+import {
+  advanceCompanyMissionStage,
+  createCompanyMission,
+  getCompanyMission,
+  listCompanyMissions,
+  MAX_COMPANY_MISSIONS,
+  queueCompanyMissionStage,
+} from '../agent-company-missions.mjs'
 
 function constantTimeEqual(a, b) {
   const left = crypto.createHash('sha256').update(String(a)).digest()
@@ -38,7 +46,7 @@ function constantTimeEqual(a, b) {
 
 function statusFor(result) {
   if (result.ok) return 200
-  if (result.reason === 'company_work_order_not_found') return 404
+  if (['company_work_order_not_found', 'company_mission_not_found'].includes(result.reason)) return 404
   if ([
     'company_cycle_already_claimed',
     'company_work_order_already_claimed',
@@ -55,6 +63,17 @@ function statusFor(result) {
     'company_evaluation_already_claimed',
     'company_evaluation_conflict',
     'company_evaluation_terminal_result_required',
+    'company_mission_already_claimed',
+    'company_mission_conflict',
+    'company_mission_handoff_mismatch',
+    'company_mission_invalid_state',
+    'company_mission_plan_mismatch',
+    'company_mission_result_mismatch',
+    'company_mission_stage_conflict',
+    'company_mission_stage_locked',
+    'company_mission_transition_conflict',
+    'company_mission_work_order_mismatch',
+    'company_mission_accepted_evaluation_required',
   ].includes(result.reason)) return 409
   if ([
     'company_claim_unavailable',
@@ -67,6 +86,9 @@ function statusFor(result) {
     'company_evaluation_durable_claim_required',
     'company_evaluation_store_unavailable',
     'company_operations_store_unavailable',
+    'company_mission_durable_claim_required',
+    'company_mission_store_unavailable',
+    'company_mission_work_order_unavailable',
   ].includes(result.reason)) return 503
   if ([
     'company_role_budget_exceeded',
@@ -105,6 +127,17 @@ export async function handleAgentCompany(request = {}, options = {}) {
           crossStageContext: false,
           handoff: 'owner_reviewed_redacted_output_only',
         },
+        missions: {
+          enabled: true,
+          durable: true,
+          maxList: MAX_COMPANY_MISSIONS,
+          serverVerifiedStageGates: true,
+          acceptedEvaluationRequired: true,
+          reviewedHandoffDigestRequired: true,
+          rawHandoffsStored: false,
+          automaticQueue: false,
+          automaticDispatch: false,
+        },
         workOrders: {
           enabled: true,
           maxList: MAX_COMPANY_WORK_ORDERS,
@@ -139,6 +172,11 @@ export async function handleAgentCompany(request = {}, options = {}) {
   if (![
     'plan',
     'playbook-plan',
+    'mission-create',
+    'mission-list',
+    'mission-get',
+    'mission-stage-queue',
+    'mission-stage-advance',
     'run',
     'work-order-create',
     'work-order-list',
@@ -159,6 +197,11 @@ export async function handleAgentCompany(request = {}, options = {}) {
 
   const plan = options.planCompanyCycle || planCompanyCycle
   const planPlaybook = options.planCompanyPlaybook || planCompanyPlaybook
+  const createMission = options.createCompanyMission || createCompanyMission
+  const listMissions = options.listCompanyMissions || listCompanyMissions
+  const getMission = options.getCompanyMission || getCompanyMission
+  const queueMissionStage = options.queueCompanyMissionStage || queueCompanyMissionStage
+  const advanceMissionStage = options.advanceCompanyMissionStage || advanceCompanyMissionStage
   const run = options.runCompanyCycle || runCompanyCycle
   const createOrder = options.createCompanyWorkOrder || createCompanyWorkOrder
   const listOrders = options.listCompanyWorkOrders || listCompanyWorkOrders
@@ -171,16 +214,21 @@ export async function handleAgentCompany(request = {}, options = {}) {
   const operationsReport = options.buildCompanyOperationsReport || buildCompanyOperationsReport
   const result = action === 'plan' ? await plan(body)
     : action === 'playbook-plan' ? await planPlaybook(body)
-      : action === 'run' ? await run(body)
-      : action === 'work-order-create' ? await createOrder(body)
-        : action === 'work-order-list' ? await listOrders(body)
-          : action === 'work-order-get' ? await getOrder(body)
-            : action === 'work-order-run' ? await runOrder(body)
-              : action === 'work-order-cancel' ? await cancelOrder(body)
-                : action === 'work-order-proof' ? await getProof(body)
-                  : action === 'work-order-review' ? await reviewOrder(body)
-                    : action === 'work-order-evaluate' ? await evaluateOrder(body)
-                      : await operationsReport(body)
+      : action === 'mission-create' ? await createMission(body)
+        : action === 'mission-list' ? await listMissions(body)
+          : action === 'mission-get' ? await getMission(body)
+            : action === 'mission-stage-queue' ? await queueMissionStage(body)
+              : action === 'mission-stage-advance' ? await advanceMissionStage(body)
+                : action === 'run' ? await run(body)
+                  : action === 'work-order-create' ? await createOrder(body)
+                    : action === 'work-order-list' ? await listOrders(body)
+                      : action === 'work-order-get' ? await getOrder(body)
+                        : action === 'work-order-run' ? await runOrder(body)
+                          : action === 'work-order-cancel' ? await cancelOrder(body)
+                            : action === 'work-order-proof' ? await getProof(body)
+                              : action === 'work-order-review' ? await reviewOrder(body)
+                                : action === 'work-order-evaluate' ? await evaluateOrder(body)
+                                  : await operationsReport(body)
   return { status: statusFor(result), json: result }
 }
 

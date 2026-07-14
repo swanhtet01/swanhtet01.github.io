@@ -16,7 +16,7 @@ broader system boundaries.
 | `approval-actions.mjs` + `api/approvals.mjs` | Immutable owner approval and idempotent ClickUp execution | live |
 | `crews/` + `crew-run.mjs` | Contract-enforced, draft-only multi-role tasks | 15 live |
 | `agent-company.mjs` + `agent-company-work-orders.mjs` | Bounded supervisor cycles and durable reviewed delegation | live |
-| `agent-company-playbooks.mjs` | Fixed sellable outcomes with staged, owner-reviewed handoffs | plan-only |
+| `agent-company-playbooks.mjs` + `agent-company-missions.mjs` | Fixed sellable outcomes with durable server-verified stages | live |
 | `agent-company-operations.mjs` | Immutable outcome review and metadata-only operating targets | live |
 | `agent-company-operator.mjs` + `scripts/operate-agent-company.mjs` | Guided plan, queue, dispatch, evaluation, and proof client | operator-run |
 | `public/` + `api/` | Ops console, status, workcell activation, and scheduled delivery | live |
@@ -74,15 +74,26 @@ replay can return a finished result or expose the recoverable partial results wi
 
 `playbook-plan` maps one client mission to one of eight fixed business outcomes. Each plan names the
 exact ordered specialists, crew contracts, stage cycle ids, role budgets, returned fields, and handoff
-gate before any model call or durable write. The console can prepare one stage in the existing cycle
-form, but later stages stay disabled until the operator confirms the prior stage has an accepted
-internal evaluation and the redacted handoff has been reviewed. Playbooks never queue, dispatch,
-forward raw output, or create a second runner; every stage remains a separate reviewed work order.
+gate before any model call or durable write. `mission-create` freezes that exact plan in durable state.
+Only stage one starts ready. `mission-stage-queue` binds its reviewed evidence to one existing durable
+work order, and `mission-stage-advance` unlocks exactly one later stage only after the server verifies
+the previous terminal result hash, work-order plan hash, accepted four-check evaluation, current
+mission revision, and reviewed handoff fingerprint. Mission records retain hashes and byte counts,
+never raw handoffs. Playbooks never dispatch, forward raw output, or create a second runner; every
+stage remains a separately reviewed work order.
 See [AGENT-COMPANY-OPERATING-GUIDE.md](AGENT-COMPANY-OPERATING-GUIDE.md) for the sellable outcome
 catalog and operating sequence.
 
-For durable delegation, delivery proof, and operating evidence, the same endpoint accepts nine
-additional explicit actions:
+For durable delegation, delivery proof, and operating evidence, the same endpoint accepts explicit
+mission and work-order actions:
+
+- `mission-create`, `mission-list`, and `mission-get` create and inspect client-bound durable playbook
+  state without queueing work or making a model call.
+- `mission-stage-queue` requires an exact mission-plan confirmation, queues only the server-reported
+  ready stage, and binds its evidence fingerprint to one deterministic work order.
+- `mission-stage-advance` requires the exact mission, stage, work order, and result hash. It verifies
+  the accepted immutable evaluation and atomically advances the mission revision. For non-final
+  stages, the supplied reviewed redacted handoff is persisted only as a digest and byte count.
 
 - `work-order-create` validates and stores the exact cycle plan without a model call.
 - `work-order-list` returns up to 40 client-bound order summaries, filtered in the store by kind and
@@ -191,8 +202,8 @@ in recovery instead of being retried blindly.
 - The default cron is one daily UTC schedule. Each isolated client deployment sets its own UTC time.
 - Agent Company cycles are synchronous waves capped at two specialists and eight planned role calls.
   Failed or partial waves require a new explicit cycle id; there is no automatic retry or hidden loop.
-- Playbook plans are deterministic but not durable mission records. They prepare one stage at a time;
-  the operator remains responsible for verifying the previous evaluation and redacted handoff.
+- Durable missions remain operator-staged. The server verifies stage eligibility, but no mission
+  automatically queues or dispatches work and no stage receives raw prior output automatically.
 - Planned work orders retain their bounded evidence in the protected cache until dispatch or an
   explicit cancel-and-scrub decision. There is no unattended dispatcher or retention sweeper.
 - Customer review is operator-recorded provenance, not cryptographic proof of customer identity.
@@ -205,8 +216,8 @@ in recovery instead of being retried blindly.
 
 1. Dispatch one legitimate redacted work order, record its internal checklist evaluation, download
    the delivery proof, and record the customer's exact decision from an allowed source.
-2. After that proof, add authenticated tenant operators and durable mission/stage state so handoff
-   eligibility can be verified server-side rather than only confirmed in the console.
+2. After that proof, add authenticated tenant operators and customer-authenticated acceptance; the
+   shared internal passcode is not a sellable multi-tenant identity layer.
 3. Then add an opt-in durable dispatcher, bounded evidence-retention sweeper, and alerts over the
    measured target states. Do not introduce recursive delegation.
 4. Generate the isolated client plan, load its client-scoped inputs, and run the exact-confirmation

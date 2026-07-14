@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import {
   buildCompanyOperationsReport,
   evaluateCompanyWorkOrder,
+  getCompanyWorkOrderEvaluation,
 } from './agent-company-operations.mjs'
 
 const HASH = 'a'.repeat(64)
@@ -85,6 +86,27 @@ test('terminal work-order evaluation is hash-bound, checklist-bound, immutable, 
     checks: { accurate: false, complete: true, usable: true, boundarySafe: true },
   }), state.options)
   assert.equal(conflict.reason, 'company_evaluation_conflict')
+})
+
+test('saved evaluation lookup is tenant-bound and metadata-only', async () => {
+  const state = evaluationHarness()
+  const saved = await evaluateCompanyWorkOrder(evaluationInput(), state.options)
+  const found = await getCompanyWorkOrderEvaluation({
+    clientId: 'client-acme',
+    workOrderId: order().workOrderId,
+  }, state.options)
+  assert.equal(found.ok, true)
+  assert.deepEqual(found.evaluation, saved.evaluation)
+  assert.equal(JSON.stringify(found).includes('model output'), false)
+  assert.equal((await getCompanyWorkOrderEvaluation({
+    clientId: 'client-other',
+    workOrderId: order().workOrderId,
+  }, state.options)).reason, 'company_evaluation_not_found')
+  assert.equal((await getCompanyWorkOrderEvaluation({
+    clientId: 'client-acme',
+    workOrderId: order().workOrderId,
+    includeOutput: true,
+  }, state.options)).reason, 'company_operations_unknown_field')
 })
 
 test('evaluation rejects non-terminal work, mismatched plans, weak verdicts, and unknown fields', async () => {

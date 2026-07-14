@@ -36,20 +36,21 @@ test('cache transition is compare-and-swap in memory and uses bounded PostgREST 
     for (const name of STORE_ENV) delete process.env[name]
     const memoryStore = await import(`./store.mjs?agent-company-memory-transition=${Date.now()}`)
     const key = `agent-company-transition-${Date.now()}`
-    await memoryStore.putCachedResponse(key, { status: 'planned', planHash, input: { private: true } })
+    await memoryStore.putCachedResponse(key, { status: 'planned', planHash, revision: 1, input: { private: true } })
     const first = await memoryStore.transitionCachedResponse(
       key,
-      { status: 'planned', planHash },
-      { status: 'cancelled', planHash, input: null },
+      { status: 'planned', planHash, revision: 1 },
+      { status: 'cancelled', planHash, revision: 2, input: null },
     )
     assert.equal(first.updated, true)
-    assert.deepEqual(await memoryStore.getCachedResponse(key), { status: 'cancelled', planHash, input: null })
+    assert.deepEqual(await memoryStore.getCachedResponse(key), { status: 'cancelled', planHash, revision: 2, input: null })
     const stale = await memoryStore.transitionCachedResponse(
       key,
-      { status: 'planned', planHash },
-      { status: 'running', planHash },
+      { status: 'cancelled', planHash, revision: 1 },
+      { status: 'running', planHash, revision: 2 },
     )
     assert.deepEqual(stale, { updated: false, durable: false, reason: 'transition_conflict' })
+    assert.equal((await memoryStore.transitionCachedResponse(key, { status: 'cancelled', planHash, revision: 0 }, {})).reason, 'invalid_transition')
     assert.equal((await memoryStore.transitionCachedResponse(key, { status: 'planned', planHash: 'bad' }, {})).reason, 'invalid_transition')
 
     process.env.SUPABASE_URL = 'https://project.supabase.co'
@@ -67,19 +68,21 @@ test('cache transition is compare-and-swap in memory and uses bounded PostgREST 
     const supabaseStore = await import(`./store.mjs?agent-company-supabase-transition=${Date.now()}`)
     const remote = await supabaseStore.transitionCachedResponse(
       key,
-      { status: 'planned', planHash },
-      { status: 'running', planHash, input: { private: true } },
+      { status: 'planned', planHash, revision: 4 },
+      { status: 'running', planHash, revision: 5, input: { private: true } },
     )
     assert.deepEqual(remote, { updated: true, durable: true })
     assert.equal(request.init.method, 'PATCH')
     assert.match(request.url, /supermega_ai_cache\?cache_key=eq\./)
     assert.match(request.url, /payload->>status=eq\.planned/)
     assert.match(request.url, /payload->>planHash=eq\.a{64}/)
+    assert.match(request.url, /payload->>revision=eq\.4/)
     assert.match(request.url, /select=cache_key/)
-    assert.deepEqual(JSON.parse(request.init.body).payload, { status: 'running', planHash, input: { private: true } })
+    assert.deepEqual(JSON.parse(request.init.body).payload, { status: 'running', planHash, revision: 5, input: { private: true } })
 
     const source = readFileSync(new URL('./store.mjs', import.meta.url), 'utf8')
     assert.match(source, /where cache_key=\$1 and payload->>'status'=\$2 and payload->>'planHash'=\$3/)
+    assert.match(source, /and payload->>'revision'=\$4/)
   } finally {
     globalThis.fetch = originalFetch
     restoreEnvironment(saved)
