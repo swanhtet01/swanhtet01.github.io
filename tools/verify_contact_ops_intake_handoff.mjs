@@ -34,6 +34,7 @@ const originalFetch = globalThis.fetch
 const originalSecret = process.env.SUPERMEGA_INTAKE_SECRET
 const originalUrl = process.env.SUPERMEGA_OPS_INTAKE_URL
 const originalDeskposPipelineUrl = process.env.DESKPOS_PIPELINE_URL
+const originalShopPipelineIngestToken = process.env.SHOP_PIPELINE_INGEST_TOKEN
 const originalOpsKey = process.env.SUPERMEGA_OPS_KEY
 const originalSupabaseUrl = process.env.SUPABASE_URL
 const originalSupabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -41,6 +42,7 @@ const originalResendApiKey = process.env.RESEND_API_KEY
 const calls = []
 const secret = 'contract-test-secret'
 const opsKey = 'contract-test-ops-key'
+const shopIngestToken = 'contract-test-shop-ingest-token'
 const contactSource = readFileSync(new URL('../api/contact-submissions.js', import.meta.url), 'utf8')
 const handlerSource = contactSource.slice(
   contactSource.indexOf('async function handler'),
@@ -91,6 +93,7 @@ async function invokeHealth(method) {
 try {
   process.env.SUPERMEGA_INTAKE_SECRET = secret
   process.env.SUPERMEGA_OPS_KEY = opsKey
+  process.env.SHOP_PIPELINE_INGEST_TOKEN = shopIngestToken
   process.env.SUPABASE_URL = 'https://contract-test.supabase.co'
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'contract-test-service-role-key'
   process.env.RESEND_API_KEY = 'contract-test-resend-key'
@@ -102,7 +105,7 @@ try {
       return {
         ok: true,
         status: 200,
-        json: async () => ({ accepted: true, leadCount: 1, lead: { id: 'SHOP-LEAD-1' } }),
+        json: async () => ({ accepted: true, duplicate: false, leadCount: 1, lead: { id: 'SHOP-LEAD-1' } }),
       }
     }
     return {
@@ -264,6 +267,7 @@ try {
 
   const shopPayload = deskposPipelinePayload(shopRecord)
   assert.equal(shopPayload.businessName, 'Example Shop')
+  assert.equal(shopPayload.externalId, 'LEAD-SHOP-1')
   assert.equal(shopPayload.vertical, 'retail')
   assert.match(shopPayload.notes, /Product: Shop/)
   assert.match(shopPayload.notes, /Template: deskpos-quickstart/)
@@ -274,13 +278,16 @@ try {
   assert.equal(calls.length, 1)
   assert.equal(calls[0].url, 'https://pos.supermega.dev/api/pipeline-leads')
   assert.equal(calls[0].options.method, 'POST')
+  assert.equal(calls[0].options.headers.Authorization, `Bearer ${shopIngestToken}`)
   assert.deepEqual(JSON.parse(calls[0].options.body), shopPayload)
   assert.deepEqual(shopForward, {
     status: 'ready',
     target: 'https://pos.supermega.dev/api/pipeline-leads',
+    duplicate: false,
     lead_count: 1,
     shop_lead_id: 'SHOP-LEAD-1',
   })
+  assert.equal(JSON.stringify(shopForward).includes(shopIngestToken), false)
   assert.deepEqual(await forwardDeskposPipeline({ record: plantRecord }), {
     status: 'skipped',
     reason: 'not_shop_lead',
@@ -324,6 +331,14 @@ try {
   assert.deepEqual(unsafe, { status: 'skipped', reason: 'unsafe_ops_intake_url' })
   assert.equal(calls.length, 2)
 
+  delete process.env.SHOP_PIPELINE_INGEST_TOKEN
+  assert.equal(contactDiagnostics().shop_pipeline.status, 'not_configured')
+  assert.deepEqual(await forwardDeskposPipeline({ record: shopRecord }), {
+    status: 'skipped',
+    reason: 'shop_pipeline_not_configured',
+  })
+  assert.equal(calls.length, 2)
+
   delete process.env.SUPERMEGA_INTAKE_SECRET
   delete process.env.SUPERMEGA_OPS_INTAKE_URL
   const missing = await forwardOpsIntake({ record: {} })
@@ -336,6 +351,8 @@ try {
   else process.env.SUPERMEGA_OPS_INTAKE_URL = originalUrl
   if (originalDeskposPipelineUrl === undefined) delete process.env.DESKPOS_PIPELINE_URL
   else process.env.DESKPOS_PIPELINE_URL = originalDeskposPipelineUrl
+  if (originalShopPipelineIngestToken === undefined) delete process.env.SHOP_PIPELINE_INGEST_TOKEN
+  else process.env.SHOP_PIPELINE_INGEST_TOKEN = originalShopPipelineIngestToken
   if (originalOpsKey === undefined) delete process.env.SUPERMEGA_OPS_KEY
   else process.env.SUPERMEGA_OPS_KEY = originalOpsKey
   if (originalSupabaseUrl === undefined) delete process.env.SUPABASE_URL

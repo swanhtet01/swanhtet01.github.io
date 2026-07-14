@@ -926,9 +926,13 @@ function deskposPipelineTarget() {
   return envText('DESKPOS_PIPELINE_URL') || 'https://pos.supermega.dev/api/pipeline-leads'
 }
 
+function shopPipelineIngestToken() {
+  return envText('SHOP_PIPELINE_INGEST_TOKEN')
+}
+
 function deskposPipelineStatus() {
   return {
-    status: 'ready',
+    status: shopPipelineIngestToken() ? 'ready' : 'not_configured',
     mode: 'public_contact_to_shop_queue',
     target: deskposPipelineTarget(),
   }
@@ -998,6 +1002,7 @@ function deskposPipelinePayload(record) {
   return {
     businessName: record.company || record.name,
     contact: [record.email, record.phone].filter(Boolean).join(' / '),
+    externalId: record.lead_id,
     notes: truncate([
       record.lead_id ? `Lead ${record.lead_id}` : '',
       record.product_area ? `Product: ${record.product_area}` : '',
@@ -1023,10 +1028,17 @@ async function forwardDeskposPipeline({ record }) {
   if (!isSafeDeskposPipelineUrl(target)) {
     return { status: 'skipped', reason: 'unsafe_shop_pipeline_url' }
   }
+  const ingestToken = shopPipelineIngestToken()
+  if (!ingestToken) {
+    return { status: 'skipped', reason: 'shop_pipeline_not_configured' }
+  }
   try {
     const response = await fetch(target, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        Authorization: `Bearer ${ingestToken}`,
+        'content-type': 'application/json',
+      },
       signal: AbortSignal.timeout(5000),
       body: JSON.stringify(deskposPipelinePayload(record)),
     })
@@ -1037,6 +1049,7 @@ async function forwardDeskposPipeline({ record }) {
     return {
       status: 'ready',
       target,
+      duplicate: Boolean(body.duplicate),
       lead_count: body.leadCount ?? null,
       shop_lead_id: body.lead?.id || null,
     }
