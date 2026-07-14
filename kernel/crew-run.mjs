@@ -27,6 +27,41 @@ import {
 
 export const MAX_CREW_UNTRUSTED_BYTES = 16_384
 export const MAX_CREW_UNTRUSTED_CHARS = 12_000
+export const MAX_CREW_USAGE_TOKENS_PER_CALL = 10_000_000
+
+const KNOWN_TIERS = new Set(Object.keys(gateway.TIERS))
+
+function boundedLabel(value, maxLength = 120) {
+  const label = String(value || '').trim()
+  return label ? label.slice(0, maxLength) : null
+}
+
+function boundedTokenCount(value) {
+  const count = Number(value)
+  return Number.isSafeInteger(count) && count >= 0 && count <= MAX_CREW_USAGE_TOKENS_PER_CALL
+    ? count
+    : null
+}
+
+function usageRecord(role, response) {
+  const promptTokens = boundedTokenCount(response?.usage?.input_tokens)
+  const completionTokens = boundedTokenCount(response?.usage?.output_tokens)
+  const reportedTier = response?.tier
+  const tier = reportedTier === undefined || reportedTier === null
+    ? role.tier
+    : KNOWN_TIERS.has(reportedTier) ? reportedTier : null
+  return {
+    role: role.id,
+    requestedTier: role.tier,
+    tier,
+    provider: boundedLabel(response?.provider, 40),
+    model: boundedLabel(response?.model),
+    cached: response?.cached === true,
+    usage: promptTokens === null || completionTokens === null
+      ? null
+      : { input_tokens: promptTokens, output_tokens: completionTokens },
+  }
+}
 
 function untrustedTextWithinLimit(value) {
   return value.length <= MAX_CREW_UNTRUSTED_CHARS
@@ -159,8 +194,15 @@ export async function runCrew(slug, intake, o = {}) {
     } catch {
       return guardedResult({ ok: false, slug: def.slug, reason: 'crew_role_failed', role: role.id, usageByRole })
     }
-    usageByRole.push({ role: role.id, tier: role.tier, model: r && r.model, usage: (r && r.usage) || null })
-    trace.push({ role: role.id, title: role.title, tier: role.tier })
+    const measuredUsage = usageRecord(role, r)
+    usageByRole.push(measuredUsage)
+    trace.push({
+      role: role.id,
+      title: role.title,
+      requestedTier: role.tier,
+      tier: measuredUsage.tier,
+      cached: measuredUsage.cached,
+    })
     if (isLast) {
       prior = r && r.data
     } else {

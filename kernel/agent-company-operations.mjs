@@ -3,12 +3,22 @@
 
 import { createHash, timingSafeEqual } from 'node:crypto'
 
-import { listCompanyAgents } from './agent-company.mjs'
+import {
+  listCompanyAgents,
+  MAX_CYCLE_ROLE_BUDGET,
+} from './agent-company.mjs'
 import {
   getCompanyWorkOrder,
   listCompanyWorkOrders,
   MAX_COMPANY_WORK_ORDERS,
 } from './agent-company-work-orders.mjs'
+import {
+  FREE_PLAN,
+  monthlyUsageFor,
+  policyFor,
+  resolvePlan,
+  TIER_COST_WEIGHTS,
+} from './gateway.mjs'
 import {
   claimActivity,
   getCachedResponse,
@@ -17,6 +27,7 @@ import {
 } from './store.mjs'
 
 export const COMPANY_OPERATIONS_WINDOWS = Object.freeze([7, 30, 90])
+export const COMPANY_USAGE_UNITS = 'bulk_equivalent_tokens'
 export const COMPANY_OPERATIONS_TARGETS = Object.freeze({
   minimumSamples: 5,
   queueP90Minutes: 1440,
@@ -37,6 +48,8 @@ const EVALUATION_FIELDS = new Set(['clientId', 'workOrderId', 'planHash', 'verdi
 const GET_EVALUATION_FIELDS = new Set(['clientId', 'workOrderId'])
 const REPORT_FIELDS = new Set(['clientId', 'windowDays'])
 const CHECK_FIELDS = Object.freeze(['accurate', 'complete', 'usable', 'boundarySafe'])
+const USAGE_TIERS = Object.freeze(Object.keys(TIER_COST_WEIGHTS))
+const MAX_USAGE_TOKENS_PER_CALL = 10_000_000
 
 const failure = (reason, extra = {}) => ({ ok: false, reason, ...extra })
 const isRecord = (value) => value && typeof value === 'object' && !Array.isArray(value)
@@ -224,6 +237,164 @@ function targetState(sample, met) {
   return sample < COMPANY_OPERATIONS_TARGETS.minimumSamples ? 'collecting' : met ? 'met' : 'missed'
 }
 
+function boundedUsageNumber(value, max = Number.MAX_SAFE_INTEGER) {
+  const number = Number(value)
+  return Number.isSafeInteger(number) && number >= 0 && number <= max ? number : null
+}
+
+function emptyUsageSummary() {
+  return {
+    roleCalls: 0,
+    modelCalls: 0,
+    cacheHits: 0,
+    measuredCalls: 0,
+    unmeasuredCalls: 0,
+    rawPromptTokens: 0,
+    rawCompletionTokens: 0,
+    weightedPromptUnits: 0,
+    weightedCompletionUnits: 0,
+    weightedTotalUnits: 0,
+    byTier: Object.fromEntries(USAGE_TIERS.map((tier) => [tier, {
+      roleCalls: 0,
+      modelCalls: 0,
+      cacheHits: 0,
+      measuredCalls: 0,
+      weightedTotalUnits: 0,
+    }])),
+  }
+}
+
+function mergeUsage(target, source) {
+  for (const field of [
+    'roleCalls',
+    'modelCalls',
+    'cacheHits',
+    'measuredCalls',
+    'unmeasuredCalls',
+    'rawPromptTokens',
+    'rawCompletionTokens',
+    'weightedPromptUnits',
+    'weightedCompletionUnits',
+    'weightedTotalUnits',
+  ]) target[field] += boundedUsageNumber(source?.[field]) || 0
+  for (const tier of USAGE_TIERS) {
+    const sourceTier = source?.byTier?.[tier]
+    if (!sourceTier) continue
+    for (const field of ['roleCalls', 'modelCalls', 'cacheHits', 'measuredCalls', 'weightedTotalUnits']) {
+      target.byTier[tier][field] += boundedUsageNumber(sourceTier[field]) || 0
+    }
+  }
+  return target
+}
+
+function summarizeUsageByRole(value) {
+  const summary = emptyUsageSummary()
+  const allEntries = Array.isArray(value) ? value : []
+  const entries = allEntries.slice(0, MAX_CYCLE_ROLE_BUDGET)
+  summary.roleCalls = allEntries.length
+  summary.unmeasuredCalls = Math.max(0, allEntries.length - entries.length)
+  for (const entry of entries) {
+    const tier = USAGE_TIERS.includes(entry?.tier) ? entry.tier : null
+    if (tier) summary.byTier[tier].roleCalls += 1
+    if (entry?.cached === true) {
+      summary.cacheHits += 1
+      if (tier) summary.byTier[tier].cacheHits += 1
+      continue
+    }
+    summary.modelCalls += 1
+    if (tier) summary.byTier[tier].modelCalls += 1
+    const promptTokens = boundedUsageNumber(entry?.usage?.input_tokens, MAX_USAGE_TOKENS_PER_CALL)
+    const completionTokens = boundedUsageNumber(entry?.usage?.output_tokens, MAX_USAGE_TOKENS_PER_CALL)
+    if (!tier || promptTokens === null || completionTokens === null) {
+      summary.unmeasuredCalls += 1
+      continue
+    }
+    const weight = TIER_COST_WEIGHTS[tier]
+    const weightedPromptUnits = promptTokens * weight
+    const weightedCompletionUnits = completionTokens * weight
+    summary.measuredCalls += 1
+    summary.rawPromptTokens += promptTokens
+    summary.rawCompletionTokens += completionTokens
+    summary.weightedPromptUnits += weightedPromptUnits
+    summary.weightedCompletionUnits += weightedCompletionUnits
+    summary.weightedTotalUnits += weightedPromptUnits + weightedCompletionUnits
+    summary.byTier[tier].measuredCalls += 1
+    summary.byTier[tier].weightedTotalUnits += weightedPromptUnits + weightedCompletionUnits
+  }
+  return summary
+}
+
+async function buildUsageEconomics(clientId, orders, options = {}) {
+  const sampled = emptyUsageSummary()
+  for (const order of orders) mergeUsage(sampled, order.usage)
+  const sampledUsage = {
+    orders: orders.length,
+    terminalOrders: orders.filter((order) => TERMINAL_STATUSES.has(order.status)).length,
+    measuredOrders: orders.filter((order) => Number(order.usage?.measuredCalls) > 0).length,
+    ...sampled,
+  }
+
+  const resolveTenantPlan = options.resolvePlan || resolvePlan
+  const getPolicy = options.policyFor || policyFor
+  const getMonthlyUsage = options.monthlyUsageFor || monthlyUsageFor
+  let plan = FREE_PLAN
+  let planSource = 'server'
+  try {
+    const resolved = String(await resolveTenantPlan(clientId) || '').trim().toLowerCase()
+    if (/^[a-z][a-z0-9_-]{0,31}$/.test(resolved)) plan = resolved
+    else planSource = 'fallback'
+  } catch {
+    planSource = 'fallback'
+  }
+
+  let capUnits = null
+  try { capUnits = boundedUsageNumber(getPolicy(plan, {}).cap) }
+  catch { capUnits = null }
+  let ledger = null
+  try { ledger = await getMonthlyUsage(clientId) }
+  catch { ledger = null }
+  const ledgerPromptUnits = boundedUsageNumber(ledger?.inTokens)
+  const ledgerCompletionUnits = boundedUsageNumber(ledger?.outTokens)
+  const ledgerModelCalls = boundedUsageNumber(ledger?.calls)
+  const ledgerTotalUnits = ledgerPromptUnits !== null && ledgerCompletionUnits !== null
+    ? ledgerPromptUnits + ledgerCompletionUnits
+    : null
+  const source = ['spine+local-max', 'memory'].includes(ledger?.source) ? ledger.source : 'unavailable'
+  const window = /^\d{4}-\d{2}$/.test(String(ledger?.window || '')) ? ledger.window : null
+  const available = Number.isSafeInteger(ledgerTotalUnits)
+    && ledgerModelCalls !== null
+    && source !== 'unavailable'
+    && window !== null
+  const weightedPromptUnits = available ? ledgerPromptUnits : null
+  const weightedCompletionUnits = available ? ledgerCompletionUnits : null
+  const weightedTotalUnits = available ? ledgerTotalUnits : null
+  const modelCalls = available ? ledgerModelCalls : null
+  const capEnforced = capUnits !== null && capUnits > 0
+  const remainingUnits = available && capEnforced ? Math.max(0, capUnits - weightedTotalUnits) : null
+  const utilizationRate = available && capEnforced
+    ? Math.round((weightedTotalUnits / capUnits) * 10_000) / 10_000
+    : null
+  return {
+    units: COMPANY_USAGE_UNITS,
+    plan,
+    planSource,
+    monthly: {
+      available,
+      window,
+      weightedPromptUnits,
+      weightedCompletionUnits,
+      weightedTotalUnits,
+      modelCalls,
+      capUnits,
+      capEnforced,
+      remainingUnits,
+      utilizationRate,
+      source,
+    },
+    sampled: sampledUsage,
+  }
+}
+
 function evaluateOrder(order, evaluation, nowMs) {
   const plan = isRecord(order.plan) ? order.plan : {}
   const assignments = Array.isArray(plan.assignments) ? plan.assignments : []
@@ -253,6 +424,7 @@ function evaluateOrder(order, evaluation, nowMs) {
   const agents = assignments.map((assignment) => {
     const specialist = resultByAgent.get(assignment.agentId)
     const usedRoleCalls = Number(specialist?.usedRoleCalls)
+    const usage = summarizeUsageByRole(specialist?.usageByRole)
     return {
       agentId: assignment.agentId,
       name: assignment.name || assignment.agentId,
@@ -261,8 +433,11 @@ function evaluateOrder(order, evaluation, nowMs) {
       status: specialist?.status || (terminal ? 'missing' : order.status),
       plannedRoleCalls: Number.isFinite(Number(assignment.roleCount)) ? Number(assignment.roleCount) : null,
       usedRoleCalls: Number.isFinite(usedRoleCalls) ? usedRoleCalls : null,
+      usage,
     }
   })
+  const usage = emptyUsageSummary()
+  for (const agent of agents) mergeUsage(usage, agent.usage)
   return {
     workOrderId: order.workOrderId,
     cycleId: order.cycleId,
@@ -289,6 +464,7 @@ function evaluateOrder(order, evaluation, nowMs) {
     ) : null,
     evaluation: evaluationPublic,
     agents,
+    usage,
   }
 }
 
@@ -304,6 +480,10 @@ function buildWorkforce(orders) {
     terminalAssignments: 0,
     completedAssignments: 0,
     usedRoleCalls: 0,
+    modelCalls: 0,
+    cacheHits: 0,
+    measuredCalls: 0,
+    weightedTotalUnits: 0,
   }]))
   for (const order of orders) {
     for (const agent of order.agents || []) {
@@ -317,12 +497,20 @@ function buildWorkforce(orders) {
         terminalAssignments: 0,
         completedAssignments: 0,
         usedRoleCalls: 0,
+        modelCalls: 0,
+        cacheHits: 0,
+        measuredCalls: 0,
+        weightedTotalUnits: 0,
       }
       current.assignedOrders += 1
       if (['planned', 'running'].includes(order.status)) current.activeAssignments += 1
       if (TERMINAL_STATUSES.has(order.status)) current.terminalAssignments += 1
       if (agent.status === 'completed') current.completedAssignments += 1
       if (Number.isFinite(agent.usedRoleCalls)) current.usedRoleCalls += agent.usedRoleCalls
+      current.modelCalls += boundedUsageNumber(agent.usage?.modelCalls) || 0
+      current.cacheHits += boundedUsageNumber(agent.usage?.cacheHits) || 0
+      current.measuredCalls += boundedUsageNumber(agent.usage?.measuredCalls) || 0
+      current.weightedTotalUnits += boundedUsageNumber(agent.usage?.weightedTotalUnits) || 0
       byId.set(agent.agentId, current)
     }
   }
@@ -339,6 +527,10 @@ function buildWorkforce(orders) {
     totalAssignments: utilized.reduce((total, agent) => total + agent.assignedOrders, 0),
     activeAssignments: utilized.reduce((total, agent) => total + agent.activeAssignments, 0),
     usedRoleCalls: utilized.reduce((total, agent) => total + agent.usedRoleCalls, 0),
+    modelCalls: utilized.reduce((total, agent) => total + agent.modelCalls, 0),
+    cacheHits: utilized.reduce((total, agent) => total + agent.cacheHits, 0),
+    measuredCalls: utilized.reduce((total, agent) => total + agent.measuredCalls, 0),
+    weightedTotalUnits: utilized.reduce((total, agent) => total + agent.weightedTotalUnits, 0),
     agents: utilized,
   }
 }
@@ -415,6 +607,7 @@ export async function buildCompanyOperationsReport(input, options = {}) {
   const evaluated = terminal.filter((order) => order.evaluation)
   const { measures, targets } = buildTargets(orders)
   const workforce = buildWorkforce(orders)
+  const usage = await buildUsageEconomics(clientId, orders, options)
   const overduePlanned = orders.filter((order) => order.status === 'planned' && order.ageMinutes > COMPANY_OPERATIONS_TARGETS.queueP90Minutes).length
   const overdueRunning = orders.filter((order) => order.status === 'running' && (
     !order.startedAt
@@ -454,6 +647,7 @@ export async function buildCompanyOperationsReport(input, options = {}) {
     measures,
     targets,
     workforce,
+    usage,
     attention: {
       overduePlanned,
       overdueRunning,
@@ -476,6 +670,7 @@ export async function buildCompanyOperationsReport(input, options = {}) {
       modelOutputReturned: false,
       specialistOutputReturned: false,
       customerSlaClaimed: false,
+      currencyCostClaimed: false,
     },
     orders,
   }
