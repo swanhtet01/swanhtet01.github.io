@@ -40,14 +40,17 @@ function verifyHome(html, label) {
   for (const required of [
     '<title>supermega.dev | Shop and Plant</title>',
     '<h1 id="portfolio-heading">Run the operation. See what matters.</h1>',
-    'href="/contact/?from=ai-agent-solution"',
+    '<h2 id="workspaces-heading">Open a workspace.</h2>',
+    'data-product-preview',
+    'src="/live-shop-workspace.png"',
+    "src:'/live-plant-workspace.png'",
     'Try first. Add data later.',
-    'Need a repeated task handled?',
+    'Need something different?',
     '>Contact us</a>',
   ]) {
     assert(html.includes(required), `${label}_missing_${required.slice(0, 32)}`)
   }
-  for (const forbidden of ['MegaOS', 'DeskPOS', 'General enquiry', 'target="_blank"', 'rotate(', 'Build an agent solution', '>Agent solution<']) {
+  for (const forbidden of ['MegaOS', 'DeskPOS', 'General enquiry', 'target="_blank"', 'target=_blank', 'window.open(', 'rotate(', 'Build an agent solution', '>Agent solution<', 'AI Agent Solutions', 'Need a repeated task handled?', '>SM<']) {
     assert(!html.includes(forbidden), `${label}_retired_${forbidden}`)
   }
 }

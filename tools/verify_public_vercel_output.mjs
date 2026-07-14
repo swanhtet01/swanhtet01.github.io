@@ -30,13 +30,19 @@ if (!existsSync(configPath)) fail('missing_public_config')
 const config = JSON.parse(readFileSync(configPath, 'utf8'))
 const routes = Array.isArray(config.routes) ? config.routes : []
 
-const expectedStaticEntries = new Set(['404.html', 'contact', 'favicon.svg', 'index.html', 'live-shop-mobile.png', 'live-shop-workspace.png', 'privacy', 'robots.txt', 'site.webmanifest', 'sitemap.xml', 'sw.js'])
+const expectedStaticEntries = new Set(['404.html', 'contact', 'favicon.svg', 'index.html', 'live-plant-workspace.png', 'live-shop-workspace.png', 'privacy', 'robots.txt', 'site.webmanifest', 'sitemap.xml', 'sw.js'])
 const actualStaticEntries = readdirSync(staticDir)
 for (const entry of actualStaticEntries) {
   if (!expectedStaticEntries.has(entry)) fail('retired_public_static_entry_present', { entry })
 }
 for (const entry of expectedStaticEntries) {
   if (!actualStaticEntries.includes(entry)) fail('required_public_static_entry_missing', { entry })
+}
+for (const entry of ['live-shop-workspace.png', 'live-plant-workspace.png']) {
+  const image = readFileSync(resolve(staticDir, entry))
+  const width = image.length >= 24 ? image.readUInt32BE(16) : 0
+  const height = image.length >= 24 ? image.readUInt32BE(20) : 0
+  if (width !== 1600 || height !== 480) fail('public_workspace_capture_has_wrong_geometry', { entry, width, height })
 }
 
 const expectedFunctions = new Set(['contact-submissions.js.func', 'health.js.func', 'not-found.js.func'])
@@ -73,7 +79,7 @@ for (const [relativePath, html] of pages) {
   for (const required of ['&gt;_</span>', 'backdrop-filter: blur(24px)', 'supermega<span class="domain">.dev</span>']) {
     if (!html.includes(required)) fail('public_page_missing_terminal_brand_contract', { relativePath, required })
   }
-  for (const forbidden of ['>Products<', '>Pricing<', '>AI workers<', '/site/shots/', 'supermega-portal-card.png', 'WorkDesk', 'AgentOps', 'Source-to-Screen', 'AI Workcell', 'live-shop-dashboard.png', '<h1 id="supermega-heading">SuperMega</h1>', '/icon.svg', 'M-rune']) {
+  for (const forbidden of ['>Products<', '>Pricing<', '>AI workers<', '/site/shots/', 'supermega-portal-card.png', 'WorkDesk', 'AgentOps', 'Source-to-Screen', 'AI Workcell', 'live-shop-dashboard.png', '<h1 id="supermega-heading">SuperMega</h1>', '/icon.svg', 'M-rune', '>SM<']) {
     if (html.includes(forbidden)) fail('public_page_contains_retired_catalog_content', { relativePath, forbidden })
   }
 }
@@ -83,14 +89,19 @@ for (const required of [
   '<h1 id="portfolio-heading">Run the operation. See what matters.</h1>',
   'https://app.supermega.dev/?demo=shop',
   'https://app.supermega.dev/?demo=plant',
-  'Two working products',
+  'Shop + Plant',
+  '<h2 id="workspaces-heading">Open a workspace.</h2>',
   'Try first. Add data later.',
   '<strong>Shop</strong>',
   '<strong>Plant</strong>',
-  'AI Agent Solutions',
-  'Need a repeated task handled?',
+  'Need something different?',
   '>Contact us</a>',
+  'data-product-preview',
+  'data-product-preview-button="shop"',
+  'data-product-preview-button="plant"',
   'src="/live-shop-workspace.png"',
+  "src:'/live-plant-workspace.png'",
+  'Return with your password or an email code.',
   'data-public-status',
   "fetch('/api/health'",
   'Point of sale, customers, stock, receivables, and books.',
@@ -100,7 +111,7 @@ for (const required of [
   if (!home.includes(required)) fail('homepage_front_door_contract_missing', { required })
 }
 
-for (const forbidden of ['https://demo.supermega.dev/', 'The intelligent workspace for daily operations.', 'Explore live demos', 'Open workspace', 'target="_blank"', 'rotate(', 'data-hero-media', 'Current build', 'Build an agent solution', '>Agent solution<']) {
+for (const forbidden of ['https://demo.supermega.dev/', 'The intelligent workspace for daily operations.', 'Explore live demos', 'Open workspace', 'target="_blank"', 'target=_blank', 'window.open(', 'rotate(', 'data-hero-media', 'Current build', 'Build an agent solution', '>Agent solution<', 'AI Agent Solutions', 'Need a repeated task handled?', 'id="products"']) {
   if (home.includes(forbidden)) fail('homepage_keeps_superseded_portfolio_copy', { forbidden })
 }
 

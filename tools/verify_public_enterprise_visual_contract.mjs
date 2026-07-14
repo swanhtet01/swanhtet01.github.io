@@ -30,27 +30,32 @@ for (const [relativePath, html] of pages) {
   for (const required of ['data-theme="light"', 'data-theme="dark"', 'prefers-color-scheme', 'prefers-reduced-motion', 'data-theme-toggle']) {
     if (!html.includes(required)) fail('public_page_missing_theme_contract', { relativePath, required })
   }
-  for (const forbidden of ['>Products<', '>Pricing<', '>AI workers<']) {
+  for (const forbidden of ['>Products<', '>Pricing<', '>AI workers<', 'target="_blank"', 'target=_blank', 'window.open(', '>SM<']) {
     if (html.includes(forbidden)) fail('public_page_keeps_catalog_navigation', { relativePath, forbidden })
   }
 }
 
 for (const required of [
-  'https://app.supermega.dev/',
-  'https://demo.supermega.dev/',
-  'target="_blank"',
-  'rel="noopener noreferrer"',
-  'One place to start',
-  'Need something built?',
-  'class="launch-mark"',
-  'src="/favicon.svg"',
+  'https://app.supermega.dev/?demo=shop',
+  'https://app.supermega.dev/?demo=plant',
+  '<h1 id="portfolio-heading">Run the operation. See what matters.</h1>',
+  'data-product-preview',
+  'src="/live-shop-workspace.png"',
+  "src:'/live-plant-workspace.png'",
+  '<h2 id="workspaces-heading">Open a workspace.</h2>',
+  'Try first. Add data later.',
+  'Need something different?',
+  '>Contact us</a>',
+  'href="/favicon.svg"',
 ]) {
   if (!home.includes(required)) fail('homepage_front_door_contract_missing', { required })
 }
 
-for (const forbidden of ['<figure class="site-hero-screen"', '<img src="/site/shots/live-product-', 'Explore products', 'Custom Solutions &amp; AI Agents', 'supermega-portal-card.png']) {
+for (const forbidden of ['<figure class="site-hero-screen"', '<img src="/site/shots/live-product-', 'Explore products', 'Custom Solutions &amp; AI Agents', 'supermega-portal-card.png', 'https://demo.supermega.dev/', 'AI Agent Solutions', 'Need a repeated task handled?', 'rotate(', 'id="products"']) {
   if (home.includes(forbidden)) fail('homepage_stale_catalog_visual_or_copy', { forbidden })
 }
+
+if (!contact.includes('.header-cta { display: none; }')) fail('contact_page_keeps_redundant_start_control')
 
 for (const forbidden of ['placeholder="Drive folder', 'placeholder="Example:', 'Role-aware onboarding', 'Device-aware onboarding', 'Adaptive setup plan', 'First proof planner']) {
   if (contact.includes(forbidden)) fail('contact_surface_is_not_blank_or_honest', { forbidden })
