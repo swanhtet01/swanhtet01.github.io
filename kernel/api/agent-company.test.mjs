@@ -42,6 +42,15 @@ test('GET returns the protected fixed roster and hard limits', async () => {
   assert.equal(result.json.playbooks.dynamicDelegation, false)
   assert.equal(result.json.playbooks.crossStageContext, false)
   assert.equal(result.json.playbooks.handoff, 'owner_reviewed_redacted_output_only')
+  assert.equal(result.json.missions.enabled, true)
+  assert.equal(result.json.missions.durable, true)
+  assert.equal(result.json.missions.maxList, 20)
+  assert.equal(result.json.missions.serverVerifiedStageGates, true)
+  assert.equal(result.json.missions.acceptedEvaluationRequired, true)
+  assert.equal(result.json.missions.reviewedHandoffDigestRequired, true)
+  assert.equal(result.json.missions.rawHandoffsStored, false)
+  assert.equal(result.json.missions.automaticQueue, false)
+  assert.equal(result.json.missions.automaticDispatch, false)
   assert.equal(result.json.workOrders.enabled, true)
   assert.equal(result.json.workOrders.explicitDispatch, true)
   assert.equal(result.json.workOrders.rawEvidenceReturned, false)
@@ -90,6 +99,35 @@ test('POST playbook planning delegates only to the plan-only workforce contract'
   assert.equal(result.status, 200)
   assert.equal(result.json.mode, 'playbook_plan')
   assert.deepEqual(calls, [{ clientId: 'client-acme', missionId: 'mission-1', playbookId: 'source-to-decision' }])
+})
+
+test('protected mission actions delegate only to the durable staged mission contract', async () => {
+  const calls = []
+  const options = {
+    opsKey: KEY,
+    createCompanyMission: async (body) => { calls.push(['create', body]); return { ok: true, mode: 'mission_create' } },
+    listCompanyMissions: async (body) => { calls.push(['list', body]); return { ok: true, mode: 'mission_list' } },
+    getCompanyMission: async (body) => { calls.push(['get', body]); return { ok: true, mode: 'mission_get' } },
+    queueCompanyMissionStage: async (body) => { calls.push(['queue', body]); return { ok: true, mode: 'mission_stage_queue' } },
+    advanceCompanyMissionStage: async (body) => { calls.push(['advance', body]); return { ok: true, mode: 'mission_stage_advance' } },
+  }
+  const missionRunId = `company-mission:${'1'.repeat(40)}`
+  const planHash = 'a'.repeat(64)
+  const workOrderId = `company-order:${'2'.repeat(40)}`
+  const stageId = 'mission-1:stage:1'
+  const actions = [
+    ['mission-create', { clientId: 'client-acme', missionId: 'mission-1', playbookId: 'source-to-decision' }],
+    ['mission-list', { clientId: 'client-acme', limit: 10 }],
+    ['mission-get', { clientId: 'client-acme', missionRunId }],
+    ['mission-stage-queue', { clientId: 'client-acme', missionRunId, missionPlanHash: planHash, stageId, evidence: 'approved facts', confirmation: `QUEUE ${missionRunId} ${stageId} ${planHash}` }],
+    ['mission-stage-advance', { clientId: 'client-acme', missionRunId, missionPlanHash: planHash, stageId, workOrderId, resultHash: 'b'.repeat(64), nextStageEvidence: 'reviewed handoff', confirmation: `ADVANCE ${missionRunId} ${stageId} ${workOrderId} ${'b'.repeat(64)}` }],
+  ]
+  for (const [action, body] of actions) {
+    const result = await handleAgentCompany(request({ body: { action, ...body } }), options)
+    assert.equal(result.status, 200)
+  }
+  assert.deepEqual(calls.map(([name]) => name), ['create', 'list', 'get', 'queue', 'advance'])
+  assert.equal(calls.every(([, body]) => !('action' in body)), true)
 })
 
 test('isolated deployments reject a different client id', async () => {
@@ -213,6 +251,30 @@ test('work-order API maps isolation, conflicts, and unavailable storage without 
     cancelCompanyWorkOrder: async () => ({ ok: false, reason: 'company_work_order_store_unavailable' }),
   })
   assert.equal(cancelUnavailable.status, 503)
+
+  const missionNotFound = await handleAgentCompany(request({
+    body: { action: 'mission-get', clientId: 'client-acme', missionRunId: 'company-mission:none' },
+  }), {
+    opsKey: KEY,
+    getCompanyMission: async () => ({ ok: false, reason: 'company_mission_not_found' }),
+  })
+  assert.equal(missionNotFound.status, 404)
+
+  const missionGate = await handleAgentCompany(request({
+    body: { action: 'mission-stage-advance', clientId: 'client-acme' },
+  }), {
+    opsKey: KEY,
+    advanceCompanyMissionStage: async () => ({ ok: false, reason: 'company_mission_accepted_evaluation_required' }),
+  })
+  assert.equal(missionGate.status, 409)
+
+  const missionUnavailable = await handleAgentCompany(request({
+    body: { action: 'mission-create', clientId: 'client-acme' },
+  }), {
+    opsKey: KEY,
+    createCompanyMission: async () => ({ ok: false, reason: 'company_mission_store_unavailable' }),
+  })
+  assert.equal(missionUnavailable.status, 503)
 })
 
 test('API runtime has no connector, approval execution, or process-launch path', async () => {

@@ -13,6 +13,7 @@ spend, internal evaluation, delivery proof, and a separately recorded customer d
 - An all-crew adversarial security evaluation that poisons both owner intake and model-to-model
   handoffs before every release.
 - Durable client-bound work orders with exact plan hashes and evidence fingerprints.
+- Durable client-bound missions with revision-bound state transitions and server-verified stage gates.
 - Explicit queue, dispatch, cancel-and-scrub, internal evaluation, proof, and review controls.
 - Metadata-only health and workforce utilization for 7, 30, or 90 days.
 
@@ -39,14 +40,18 @@ owner ratification.
    **Plan delegation**. This is plan-only and makes no model call.
 3. Review every stage, specialist, role budget, output contract, handoff gate, mission ID, and plan
    hash.
-4. Select **Prepare stage 1**. Add only approved evidence for that specialist.
-5. Plan the cycle, review the exact client, evidence, assignment, and budget, then queue it. Queueing
+4. Confirm the exact plan and select **Create durable mission**. This stores plan metadata only and
+   makes no model call.
+5. Open the mission and select **Prepare stage 1**. Add only approved evidence for that specialist.
+6. Plan the cycle, review the exact client, evidence, assignment, and budget, then queue it. Queueing
    stores the plan but makes no model call.
-6. Open the queued order, review its plan hash and evidence fingerprints, then explicitly dispatch.
-7. Record the immutable internal checklist evaluation and download the delivery proof.
-8. For a later stage, first obtain an accepted evaluation, redact the prior output, review the exact
-   handoff, check the stage gate, and prepare that stage as a new work order.
-9. Record customer acceptance or changes requested only from an allowed source. The record is
+7. Open the queued order, review its plan hash and evidence fingerprints, then explicitly dispatch.
+8. Record the immutable internal checklist evaluation and download the delivery proof.
+9. Return to the mission. For a later stage, provide only the reviewed redacted handoff package and
+   select **Verify & unlock next stage**. The server verifies the exact terminal result, work-order
+   plan hash, accepted evaluation, mission revision, and handoff fingerprint before unlocking one
+   stage. The mission record stores the fingerprint and byte count, never the raw handoff.
+10. Record customer acceptance or changes requested only from an allowed source. The record is
    operator-copied evidence, not a customer login or digital signature.
 
 ## Non-Negotiable Boundaries
@@ -67,6 +72,10 @@ owner ratification.
   evidence or model output.
 - Every stage has its own cycle ID, role budget, queue decision, dispatch decision, evaluation, and
   proof.
+- Mission transitions compare status, plan hash, and a monotonic revision atomically. A stale or
+  concurrent operator cannot unlock the same stage twice.
+- The first stage is the only initially ready stage. Every later stage requires the exact previous
+  work order, terminal result hash, accepted four-check evaluation, and reviewed handoff digest.
 - Failed, partial, or revision-required work starts a new cycle; there is no hidden retry loop.
 - Secrets never belong in evidence, manifests, chat, source, or command arguments.
 - Pricing is not inferred from the roster or playbook catalog.
@@ -77,20 +86,18 @@ owner ratification.
    the exact evaluation, proof packet, and customer decision. This remains the evidence gate.
 2. **Tenant identity:** replace the shared internal passcode experience with authenticated tenant
    operators, role-based access, session expiry, and customer-authenticated acceptance.
-3. **Durable missions:** persist playbook plans and stage links so the server can verify accepted
-   evaluation and handoff eligibility before preparing the next stage.
-4. **Async execution:** after proof, add an opt-in durable dispatcher, leases, bounded retries,
+3. **Async execution:** after proof, add an opt-in durable dispatcher, leases, bounded retries,
    evidence-retention expiry, and dead-letter recovery. Keep recursive delegation disabled.
-5. **Tracing and evals:** the deterministic all-crew security suite now covers poisoned input,
+4. **Tracing and evals:** the deterministic all-crew security suite now covers poisoned input,
    poisoned handoffs, tool absence, output smuggling, provider-error leakage, and shape limits. After
    the first retained proof, add model-backed accuracy datasets and retain structured stage, handoff,
    guardrail, latency, cost, and verdict events for every playbook.
-6. **Usage and commercial controls:** meter role calls and provider cost per client and playbook, then
+5. **Usage and commercial controls:** meter role calls and provider cost per client and playbook, then
    define plan entitlements and measured service targets from real samples.
-7. **Connector permissions:** add tenant-scoped OAuth and explicit action-specific approvals before
+6. **Connector permissions:** add tenant-scoped OAuth and explicit action-specific approvals before
    any new external write capability.
-8. **Customer onboarding:** provide guided source templates, sample data, empty-state help, recovery,
+7. **Customer onboarding:** provide guided source templates, sample data, empty-state help, recovery,
    and a first-run checklist for each playbook.
 
-These are ordered gates. More agents without retained proof, tenant isolation, durable mission state,
-and eval coverage would increase operational risk without making the product more sellable.
+These are ordered gates. More agents without retained proof, tenant isolation, and eval coverage
+would increase operational risk without making the product more sellable.

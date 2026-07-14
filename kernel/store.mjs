@@ -405,15 +405,19 @@ export async function putCachedResponse(cacheKey, payload) {
   return true
 }
 
-// Atomically replace one cached work-order payload only while its status and plan hash still match.
-// This prevents a dispatch and a cancellation from both winning after reading the same planned row.
+// Atomically replace one cached payload only while its status, plan hash, and optional revision
+// still match. Work orders use status + planHash; staged missions also bind every transition to a
+// monotonically increasing revision so concurrent operators cannot both advance the same stage.
 export async function transitionCachedResponse(cacheKey, expected, payload) {
   const key = String(cacheKey || '').trim()
   const status = String(expected?.status || '').trim()
   const planHash = String(expected?.planHash || '').trim()
+  const hasRevision = expected?.revision !== undefined
+  const revision = Number(expected?.revision)
   const valid = key
     && /^[a-z][a-z_]{0,39}$/.test(status)
     && /^[a-f0-9]{64}$/.test(planHash)
+    && (!hasRevision || (Number.isInteger(revision) && revision >= 1))
     && payload && typeof payload === 'object' && !Array.isArray(payload)
   if (!valid) return { updated: false, durable: mode !== 'memory', reason: 'invalid_transition' }
 
@@ -423,6 +427,7 @@ export async function transitionCachedResponse(cacheKey, expected, payload) {
         `cache_key=eq.${encodeURIComponent(key)}`,
         `payload->>status=eq.${encodeURIComponent(status)}`,
         `payload->>planHash=eq.${encodeURIComponent(planHash)}`,
+        ...(hasRevision ? [`payload->>revision=eq.${revision}`] : []),
         'select=cache_key',
       ].join('&')
       const rows = await rest('PATCH', `supermega_ai_cache?${query}`, { payload })
@@ -436,13 +441,22 @@ export async function transitionCachedResponse(cacheKey, expected, payload) {
   if (mode === 'postgres') {
     try {
       await ensurePgTables()
-      const rows = await q(
-        `update supermega_ai_cache
-         set payload=$4
-         where cache_key=$1 and payload->>'status'=$2 and payload->>'planHash'=$3
-         returning cache_key`,
-        [key, status, planHash, JSON.stringify(payload)],
-      )
+      const rows = hasRevision
+        ? await q(
+          `update supermega_ai_cache
+           set payload=$5
+           where cache_key=$1 and payload->>'status'=$2 and payload->>'planHash'=$3
+             and payload->>'revision'=$4
+           returning cache_key`,
+          [key, status, planHash, String(revision), JSON.stringify(payload)],
+        )
+        : await q(
+          `update supermega_ai_cache
+           set payload=$4
+           where cache_key=$1 and payload->>'status'=$2 and payload->>'planHash'=$3
+           returning cache_key`,
+          [key, status, planHash, JSON.stringify(payload)],
+        )
       return rows.length === 1
         ? { updated: true, durable: true }
         : { updated: false, durable: true, reason: 'transition_conflict' }
@@ -452,7 +466,10 @@ export async function transitionCachedResponse(cacheKey, expected, payload) {
   }
 
   const current = mem.aiCache.get(key)
-  if (!current || current.status !== status || current.planHash !== planHash) {
+  if (!current
+    || current.status !== status
+    || current.planHash !== planHash
+    || (hasRevision && current.revision !== revision)) {
     return { updated: false, durable: false, reason: 'transition_conflict' }
   }
   mem.aiCache.set(key, payload)

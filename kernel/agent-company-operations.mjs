@@ -34,6 +34,7 @@ const HASH_RE = /^[a-f0-9]{64}$/
 const TERMINAL_STATUSES = new Set(['completed', 'partial', 'blocked', 'failed'])
 const VERDICTS = new Set(['accepted', 'revision_required'])
 const EVALUATION_FIELDS = new Set(['clientId', 'workOrderId', 'planHash', 'verdict', 'checks', 'confirmation'])
+const GET_EVALUATION_FIELDS = new Set(['clientId', 'workOrderId'])
 const REPORT_FIELDS = new Set(['clientId', 'windowDays'])
 const CHECK_FIELDS = Object.freeze(['accurate', 'complete', 'usable', 'boundarySafe'])
 
@@ -83,6 +84,7 @@ function publicEvaluation(record) {
     evaluationId: record.evaluationId,
     workOrderId: record.workOrderId,
     clientId: record.clientId,
+    planHash: record.planHash,
     verdict: record.verdict,
     checks: record.checks,
     evaluatedAt: record.evaluatedAt,
@@ -98,6 +100,18 @@ async function readEvaluation(workOrderId, options = {}) {
   } catch {
     return null
   }
+}
+
+export async function getCompanyWorkOrderEvaluation(input, options = {}) {
+  const fields = onlyFields(input, GET_EVALUATION_FIELDS)
+  if (!fields.ok) return fields
+  const clientId = normalizeId(input.clientId, 'company_invalid_client_id')
+  if (isRecord(clientId)) return clientId
+  const workOrderId = normalizeId(input.workOrderId, 'company_work_order_invalid_id')
+  if (isRecord(workOrderId)) return workOrderId
+  const evaluation = await readEvaluation(workOrderId, options)
+  if (!evaluation || evaluation.clientId !== clientId) return failure('company_evaluation_not_found')
+  return { ok: true, mode: 'work_order_evaluation_get', evaluation: publicEvaluation(evaluation) }
 }
 
 export async function evaluateCompanyWorkOrder(input, options = {}) {
