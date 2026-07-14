@@ -183,7 +183,7 @@ try {
         $appWorkflowUrl = (gh workflow run '.github/workflows/supermega-app-cloud-run.yml' --repo $Repo -f project_id=$ProjectId -f region=$Region -f service=$Service).Trim()
     }
     if ($DeployWebsite) {
-        $websiteWorkflowUrl = (gh workflow run '.github/workflows/showroom-pages.yml' --repo $Repo).Trim()
+        $websiteWorkflowUrl = (gh workflow run '.github/workflows/supermega-public-release.yml' --repo $Repo --ref main).Trim()
     }
 
     @{

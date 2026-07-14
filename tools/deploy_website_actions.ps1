@@ -1,5 +1,6 @@
+[CmdletBinding()]
 param(
-    [string]$Repo = "",
+    [string]$Repo = "swanhtet01/swanhtet01.github.io",
     [string]$Token = "",
     [string]$Branch = "main",
     [string]$Domain = "supermega.dev",
@@ -11,317 +12,142 @@ param(
     [int]$DomainWaitMinutes = 20,
     [switch]$SkipPages,
     [switch]$SkipPagesDomainEnsure,
-    [switch]$SkipCloudRun
+    [switch]$SkipCloudRun,
+    [switch]$DryRun
 )
 
 $ErrorActionPreference = "Stop"
+$workflowFile = "supermega-public-release.yml"
+$workflowName = "SuperMega Public - Verified Prebuilt Release"
 
-function Resolve-RepoAndToken {
-    param(
-        [string]$RepoOverride,
-        [string]$TokenOverride
-    )
-
-    $remote = git remote get-url origin
-
-    $repoValue = $RepoOverride
-    if ([string]::IsNullOrWhiteSpace($repoValue)) {
-        $repoMatch = [regex]::Match($remote, "(?i)github\.com[:/](?:[^@/]+@)?(.+?)(?:\.git)?$")
-        if (-not $repoMatch.Success) {
-            throw "Cannot parse repository name from origin remote URL."
-        }
-        $repoValue = $repoMatch.Groups[1].Value
-    }
-
-    $tokenValue = $TokenOverride
-    $tokenSource = "parameter"
-    if ([string]::IsNullOrWhiteSpace($tokenValue)) {
-        $tokenValue = $env:GITHUB_TOKEN
-        $tokenSource = "env:GITHUB_TOKEN"
-    }
-    if ([string]::IsNullOrWhiteSpace($tokenValue)) {
-        $tokenMatch = [regex]::Match($remote, "https://([^@]+)@github.com/")
-        if ($tokenMatch.Success) {
-            $tokenValue = $tokenMatch.Groups[1].Value
-            $tokenSource = "origin_remote_url"
-            Write-Warning "Using token parsed from origin URL. Prefer passing -Token or setting GITHUB_TOKEN instead."
-        }
-    }
-    if ([string]::IsNullOrWhiteSpace($tokenValue)) {
-        throw "GitHub token not provided. Pass -Token or set GITHUB_TOKEN."
-    }
-
-    return @{
-        token = $tokenValue
-        repo = $repoValue
-        token_source = $tokenSource
+function Require-Command {
+    param([string]$Name)
+    if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
+        throw "Missing required command: $Name"
     }
 }
 
-function Invoke-GitHubApi {
+function Get-WorkflowRun {
     param(
-        [string]$Method,
-        [string]$Uri,
-        [hashtable]$Headers,
-        [object]$Body
-    )
-
-    if ($null -ne $Body) {
-        $json = $Body | ConvertTo-Json -Depth 10
-        return Invoke-RestMethod -Method $Method -Uri $Uri -Headers $Headers -Body $json
-    }
-    return Invoke-RestMethod -Method $Method -Uri $Uri -Headers $Headers
-}
-
-function Get-PagesSettings {
-    param(
-        [hashtable]$Headers,
-        [string]$RepoName
-    )
-    $uri = "https://api.github.com/repos/$RepoName/pages"
-    return Invoke-GitHubApi -Method "Get" -Uri $uri -Headers $Headers -Body $null
-}
-
-function Set-PagesSettings {
-    param(
-        [hashtable]$Headers,
         [string]$RepoName,
-        [hashtable]$Body
+        [long]$RunId
     )
-    $uri = "https://api.github.com/repos/$RepoName/pages"
-    return Invoke-GitHubApi -Method "Put" -Uri $uri -Headers $Headers -Body $Body
+
+    $json = & gh run view $RunId --repo $RepoName --json status,conclusion,url,headSha,workflowName 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not read workflow run $RunId. $($json | Out-String)"
+    }
+    return ($json | Out-String | ConvertFrom-Json)
 }
 
-function Ensure-PagesDomain {
-    param(
-        [hashtable]$Headers,
-        [string]$RepoName,
-        [string]$ExpectedDomain,
-        [int]$TimeoutMinutes
-    )
+if ($Repo -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') {
+    throw "Repo must use owner/name format."
+}
+if ($Branch -ne "main") {
+    throw "The verified public release is registered on main. Use -Branch main."
+}
+if ($Domain -ne "supermega.dev") {
+    throw "The verified public release is locked to supermega.dev."
+}
+if ($WaitMinutes -lt 1 -or $WaitMinutes -gt 60) {
+    throw "WaitMinutes must be between 1 and 60."
+}
 
-    if ([string]::IsNullOrWhiteSpace($ExpectedDomain)) {
-        throw "ExpectedDomain cannot be empty."
-    }
-
-    $pages = Get-PagesSettings -Headers $Headers -RepoName $RepoName
-    if ($pages.cname -ne $ExpectedDomain) {
-        Write-Host ("Setting GitHub Pages custom domain -> " + $ExpectedDomain)
-        Set-PagesSettings -Headers $Headers -RepoName $RepoName -Body @{
-            cname = $ExpectedDomain
-        } | Out-Null
-        Start-Sleep -Seconds 4
-    }
-
-    $deadline = (Get-Date).AddMinutes($TimeoutMinutes)
-    $certState = ""
-    while ((Get-Date) -lt $deadline) {
-        $pages = Get-PagesSettings -Headers $Headers -RepoName $RepoName
-        $certState = [string]($pages.https_certificate.state)
-        if ($certState -eq "approved") {
-            break
-        }
-        Start-Sleep -Seconds 10
-    }
-
-    $pages = Get-PagesSettings -Headers $Headers -RepoName $RepoName
-    $certState = [string]($pages.https_certificate.state)
-    if ($certState -eq "approved" -and -not [bool]$pages.https_enforced) {
-        try {
-            Set-PagesSettings -Headers $Headers -RepoName $RepoName -Body @{
-                cname = $ExpectedDomain
-                https_enforced = $true
-            } | Out-Null
-            Start-Sleep -Seconds 2
-            $pages = Get-PagesSettings -Headers $Headers -RepoName $RepoName
-        }
-        catch {
-            Write-Warning ("Could not enable HTTPS enforcement yet: " + $_.Exception.Message)
-        }
-    }
-
-    return @{
-        cname = $pages.cname
-        html_url = $pages.html_url
-        status = $pages.status
-        protected_domain_state = $pages.protected_domain_state
-        https_enforced = $pages.https_enforced
-        https_certificate_state = $pages.https_certificate.state
-        https_certificate_description = $pages.https_certificate.description
+foreach ($legacyParameter in @(
+    "ProjectId",
+    "Region",
+    "Service",
+    "ServiceAccountJson",
+    "DomainWaitMinutes",
+    "SkipPages",
+    "SkipPagesDomainEnsure",
+    "SkipCloudRun"
+)) {
+    if ($PSBoundParameters.ContainsKey($legacyParameter)) {
+        Write-Warning "$legacyParameter is retained for command compatibility but is ignored. Public hosting is Vercel-only."
     }
 }
 
-function Get-PythonPath {
-    $candidates = @(
-        "C:\Users\swann\OneDrive - BDA\.venv\Scripts\python.exe",
-        (Join-Path $PSScriptRoot "..\.venv\Scripts\python.exe")
-    )
-    foreach ($candidate in $candidates) {
-        if (Test-Path -LiteralPath $candidate) {
-            return (Resolve-Path -LiteralPath $candidate).Path
-        }
-    }
-    $py = Get-Command py -ErrorAction SilentlyContinue
-    if ($py) {
-        return $py.Source
-    }
-    throw "Python executable not found for secret sync helper."
+Require-Command -Name "gh"
+
+$previousToken = $env:GH_TOKEN
+if (-not [string]::IsNullOrWhiteSpace($Token)) {
+    $env:GH_TOKEN = $Token
 }
 
-function Ensure-PyNaCl {
-    param([string]$PythonExe)
+try {
+    $pagesText = (& gh api "repos/$Repo/pages" 2>&1 | Out-String).Trim()
+    $pagesEnabled = $LASTEXITCODE -eq 0
+    if (-not $pagesEnabled -and $pagesText -notmatch 'HTTP 404|Not Found') {
+        throw "Could not verify the retired GitHub Pages state. $pagesText"
+    }
 
-    & $PythonExe -c "import nacl; print('ok')" | Out-Null
-    if ($LASTEXITCODE -eq 0) {
+    $plan = [ordered]@{
+        status = if ($DryRun) { "dry_run" } else { "pending" }
+        repo = $Repo
+        hosting = "vercel"
+        domain = $Domain
+        workflow = $workflowFile
+        dispatch_ref = "main"
+        source_ref = "codex/public-enterprise-site"
+        legacy_pages_enabled = $pagesEnabled
+        mutates_customer_data = $false
+    }
+
+    if ($DryRun) {
+        $plan | ConvertTo-Json -Depth 4
         return
     }
-    Write-Host "Installing PyNaCl into environment for GitHub secret encryption..."
-    & $PythonExe -m pip install pynacl --disable-pip-version-check
+    if ($pagesEnabled) {
+        throw "Legacy GitHub Pages is still enabled for $Repo. Disable it before releasing through Vercel."
+    }
+
+    $startedAt = (Get-Date).ToUniversalTime()
+    $dispatchOutput = (& gh workflow run $workflowFile --repo $Repo --ref main 2>&1 | Out-String).Trim()
     if ($LASTEXITCODE -ne 0) {
-        throw "Failed to install PyNaCl."
+        throw "Could not dispatch $workflowFile. $dispatchOutput"
     }
-}
 
-function Start-WorkflowRun {
-    param(
-        [string]$WorkflowFile,
-        [hashtable]$Headers,
-        [string]$RepoName,
-        [string]$Ref,
-        [hashtable]$Inputs
-    )
-
-    $dispatchUri = "https://api.github.com/repos/$RepoName/actions/workflows/$WorkflowFile/dispatches"
-    $dispatchTime = (Get-Date).ToUniversalTime()
-    $body = @{ ref = $Ref }
-    if ($Inputs.Count -gt 0) {
-        $body["inputs"] = $Inputs
-    }
-    Invoke-GitHubApi -Method "Post" -Uri $dispatchUri -Headers $Headers -Body $body | Out-Null
-
-    $runsUri = "https://api.github.com/repos/$RepoName/actions/workflows/$WorkflowFile/runs?per_page=20"
-    for ($i = 0; $i -lt 24; $i++) {
-        Start-Sleep -Seconds 5
-        $runs = Invoke-GitHubApi -Method "Get" -Uri $runsUri -Headers $Headers -Body $null
-        foreach ($run in $runs.workflow_runs) {
-            $created = [datetime]::Parse($run.created_at).ToUniversalTime()
-            if ($run.event -eq "workflow_dispatch" -and $run.head_branch -eq $Ref -and $created -ge $dispatchTime.AddSeconds(-30)) {
-                return $run
-            }
+    $runMatch = [regex]::Match($dispatchOutput, '/actions/runs/(\d+)')
+    $runId = if ($runMatch.Success) { [long]$runMatch.Groups[1].Value } else { 0 }
+    $lookupDeadline = (Get-Date).AddSeconds(30)
+    while ($runId -eq 0 -and (Get-Date) -lt $lookupDeadline) {
+        Start-Sleep -Seconds 2
+        $runsJson = & gh run list --repo $Repo --workflow $workflowName --event workflow_dispatch --limit 5 --json databaseId,createdAt 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not find the dispatched public release. $($runsJson | Out-String)"
+        }
+        $candidate = @($runsJson | Out-String | ConvertFrom-Json) |
+            Where-Object { ([datetime]$_.createdAt).ToUniversalTime() -ge $startedAt.AddMinutes(-1) } |
+            Sort-Object { [datetime]$_.createdAt } -Descending |
+            Select-Object -First 1
+        if ($candidate) {
+            $runId = [long]$candidate.databaseId
         }
     }
-    throw "Dispatched $WorkflowFile but could not resolve run id."
-}
+    if ($runId -eq 0) {
+        throw "The public release was dispatched, but its run id could not be resolved."
+    }
 
-function Wait-WorkflowRun {
-    param(
-        [string]$RepoName,
-        [hashtable]$Headers,
-        [long]$RunId,
-        [int]$TimeoutMinutes
-    )
-
-    $deadline = (Get-Date).AddMinutes($TimeoutMinutes)
-    $runUri = "https://api.github.com/repos/$RepoName/actions/runs/$RunId"
-    while ((Get-Date) -lt $deadline) {
-        $run = Invoke-GitHubApi -Method "Get" -Uri $runUri -Headers $Headers -Body $null
+    $deadline = (Get-Date).AddMinutes($WaitMinutes)
+    do {
+        $run = Get-WorkflowRun -RepoName $Repo -RunId $runId
         if ($run.status -eq "completed") {
-            return $run
-        }
-        Start-Sleep -Seconds 10
-    }
-    throw "Timed out waiting for workflow run $RunId."
-}
-
-$repoRoot = Split-Path -Parent $PSScriptRoot
-Push-Location $repoRoot
-try {
-    $resolved = Resolve-RepoAndToken -RepoOverride $Repo -TokenOverride $Token
-    $token = $resolved.token
-    $Repo = $resolved.repo
-
-    $headers = @{
-        Authorization = ("Bearer " + $token)
-        Accept = "application/vnd.github+json"
-        "X-GitHub-Api-Version" = "2022-11-28"
-        "User-Agent" = "supermega-deploy"
-    }
-
-    $python = Get-PythonPath
-    Ensure-PyNaCl -PythonExe $python
-
-    $serviceAccountPath = $ServiceAccountJson
-    if (-not [System.IO.Path]::IsPathRooted($serviceAccountPath)) {
-        $serviceAccountPath = Join-Path $repoRoot $serviceAccountPath
-    }
-    if (-not (Test-Path -LiteralPath $serviceAccountPath)) {
-        throw "Service account JSON not found: $serviceAccountPath"
-    }
-    $serviceAccountPath = (Resolve-Path -LiteralPath $serviceAccountPath).Path
-
-    Write-Host "Syncing GCP_SA_KEY repository secret..."
-    & $python (Join-Path $PSScriptRoot "github_secret_sync.py") `
-        --repo $Repo `
-        --token $token `
-        --name "GCP_SA_KEY" `
-        --value-file $serviceAccountPath
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to set repository secret GCP_SA_KEY."
-    }
-
-    $results = @()
-
-    if (-not $SkipPages) {
-        Write-Host "Dispatching showroom-pages workflow..."
-        $pagesRun = Start-WorkflowRun -WorkflowFile "showroom-pages.yml" -Headers $headers -RepoName $Repo -Ref $Branch -Inputs @{}
-        $pagesDone = Wait-WorkflowRun -RepoName $Repo -Headers $headers -RunId $pagesRun.id -TimeoutMinutes $WaitMinutes
-        $results += @{
-            workflow = "showroom-pages.yml"
-            run_id = $pagesDone.id
-            status = $pagesDone.status
-            conclusion = $pagesDone.conclusion
-            html_url = $pagesDone.html_url
-        }
-
-        if (-not $SkipPagesDomainEnsure) {
-            Write-Host "Ensuring GitHub Pages domain/TLS state..."
-            $domainState = Ensure-PagesDomain -Headers $headers -RepoName $Repo -ExpectedDomain $Domain -TimeoutMinutes $DomainWaitMinutes
-            $results += @{
-                workflow = "pages-domain-state"
-                run_id = ""
-                status = $domainState.status
-                conclusion = $domainState.https_certificate_state
-                html_url = $domainState.html_url
-                cname = $domainState.cname
-                protected_domain_state = $domainState.protected_domain_state
-                https_enforced = $domainState.https_enforced
-                certificate_description = $domainState.https_certificate_description
+            if ($run.conclusion -ne "success") {
+                throw "Public release $runId completed with conclusion '$($run.conclusion)'. $($run.url)"
             }
+            $plan.status = "ready"
+            $plan.run_id = $runId
+            $plan.run_url = $run.url
+            $plan.head_sha = $run.headSha
+            $plan | ConvertTo-Json -Depth 4
+            return
         }
-    }
+        Start-Sleep -Seconds 5
+    } while ((Get-Date) -lt $deadline)
 
-    if (-not $SkipCloudRun) {
-        Write-Host "Dispatching showroom-cloud-run workflow..."
-        $cloudInputs = @{
-            project_id = $ProjectId
-            region = $Region
-            service = $Service
-        }
-        $cloudRun = Start-WorkflowRun -WorkflowFile "showroom-cloud-run.yml" -Headers $headers -RepoName $Repo -Ref $Branch -Inputs $cloudInputs
-        $cloudDone = Wait-WorkflowRun -RepoName $Repo -Headers $headers -RunId $cloudRun.id -TimeoutMinutes $WaitMinutes
-        $results += @{
-            workflow = "showroom-cloud-run.yml"
-            run_id = $cloudDone.id
-            status = $cloudDone.status
-            conclusion = $cloudDone.conclusion
-            html_url = $cloudDone.html_url
-        }
-    }
-
-    Write-Host ""
-    Write-Host "Deployment orchestration summary:"
-    $results | ConvertTo-Json -Depth 6
+    throw "Timed out waiting for public release $runId after $WaitMinutes minutes."
 }
 finally {
-    Pop-Location
+    $env:GH_TOKEN = $previousToken
 }
