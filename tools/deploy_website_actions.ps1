@@ -19,6 +19,7 @@ param(
 $ErrorActionPreference = "Stop"
 $workflowFile = "supermega-public-release.yml"
 $workflowName = "SuperMega Public - Verified Prebuilt Release"
+$repoRoot = Split-Path -Parent $PSScriptRoot
 
 function Require-Command {
     param([string]$Name)
@@ -77,9 +78,34 @@ if (-not [string]::IsNullOrWhiteSpace($Token)) {
 
 try {
     $pagesText = (& gh api "repos/$Repo/pages" 2>&1 | Out-String).Trim()
-    $pagesEnabled = $LASTEXITCODE -eq 0
-    if (-not $pagesEnabled -and $pagesText -notmatch 'HTTP 404|Not Found') {
-        throw "Could not verify the retired GitHub Pages state. $pagesText"
+    $pagesServicePresent = $LASTEXITCODE -eq 0
+    $pagesBuildType = "absent"
+    $pagesCname = $null
+    if ($pagesServicePresent) {
+        try {
+            $pages = $pagesText | ConvertFrom-Json
+            $pagesBuildType = [string]$pages.build_type
+            $pagesCname = [string]$pages.cname
+        }
+        catch {
+            throw "Could not parse the GitHub Pages state. $pagesText"
+        }
+    }
+    elseif ($pagesText -notmatch 'HTTP 404|Not Found') {
+        throw "Could not read the GitHub Pages state. $pagesText"
+    }
+
+    $legacyWorkflowPath = Join-Path $repoRoot ".github\workflows\showroom-pages.yml"
+    $verifiedWorkflowPath = Join-Path $repoRoot ".github\workflows\$workflowFile"
+    $legacyWorkflowPresent = Test-Path -LiteralPath $legacyWorkflowPath
+    $legacyPagesEnabled = $legacyWorkflowPresent -or (
+        $pagesServicePresent -and (
+            $pagesBuildType -ne "workflow" -or
+            -not [string]::IsNullOrWhiteSpace($pagesCname)
+        )
+    )
+    if (-not (Test-Path -LiteralPath $verifiedWorkflowPath)) {
+        throw "Verified public release workflow is missing: $verifiedWorkflowPath"
     }
 
     $plan = [ordered]@{
@@ -90,7 +116,11 @@ try {
         workflow = $workflowFile
         dispatch_ref = "main"
         source_ref = "codex/public-enterprise-site"
-        legacy_pages_enabled = $pagesEnabled
+        pages_service = if ($pagesServicePresent) { "present" } else { "absent" }
+        pages_build_type = $pagesBuildType
+        pages_cname = $pagesCname
+        legacy_pages_workflow_present = $legacyWorkflowPresent
+        legacy_pages_enabled = $legacyPagesEnabled
         mutates_customer_data = $false
     }
 
@@ -98,8 +128,8 @@ try {
         $plan | ConvertTo-Json -Depth 4
         return
     }
-    if ($pagesEnabled) {
-        throw "Legacy GitHub Pages is still enabled for $Repo. Disable it before releasing through Vercel."
+    if ($legacyPagesEnabled) {
+        throw "Legacy GitHub Pages still owns a branch, custom domain, or deploy workflow for $Repo. Keep Pages in workflow mode with no CNAME and release supermega.dev only through Vercel."
     }
 
     $startedAt = (Get-Date).ToUniversalTime()

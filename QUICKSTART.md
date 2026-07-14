@@ -45,7 +45,7 @@ Open on this machine:
 Open from other devices on same network:
 - `http://<this-computer-ip>:8787`
 
-## 4) Build the public showroom (supermega.dev source)
+## 4) Build the legacy showroom prototype locally
 
 ```powershell
 cd .\showroom
@@ -54,9 +54,19 @@ npm run build
 npm run lint
 ```
 
-Deployment target:
-- GitHub Pages workflow: `.github/workflows/showroom-pages.yml`
+Production target:
+- Canonical source: `codex/public-enterprise-site`
+- Verified release: `.github/workflows/supermega-public-release.yml`
+- Hosting: Vercel only
 - Domain: `https://supermega.dev`
+
+```powershell
+# Read-only release plan
+powershell -ExecutionPolicy Bypass -File .\tools\deploy_website_actions.ps1 -DryRun
+
+# Verified production release
+powershell -ExecutionPolicy Bypass -File .\tools\deploy_website_actions.ps1
+```
 
 ## 4b) Run the full app in one container
 
@@ -81,7 +91,7 @@ Includes:
 - Gmail token presence check
 - next command suggestions
 
-## 6) Cloud Run fallback preflight (if your network blocks supermega.dev on Pages)
+## 6) Legacy Cloud Run prototype preflight (not the public domain owner)
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\tools\supermega_machine.ps1 -Action cloudrun-preflight -ProjectId supermega-468612 -Region asia-southeast1 -Service supermega-showroom
