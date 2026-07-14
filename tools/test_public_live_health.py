@@ -34,12 +34,13 @@ def page(*tokens: str) -> str:
 
 def healthy_responses() -> dict[str, checker.HttpResult]:
     home = page(
-        "<title>supermega.dev | Shop, Plant and AI Agent Solutions</title>",
-        '<h1 id="portfolio-heading">Shop. Plant. AI Agent Solutions.</h1>',
+        "<title>supermega.dev | Shop and Plant</title>",
+        '<h1 id="portfolio-heading">Run the operation. See what matters.</h1>',
         "https://app.supermega.dev/?demo=shop",
         "https://app.supermega.dev/?demo=plant",
         "/contact/?from=ai-agent-solution",
-        "external actions approval-gated",
+        "Try first. Add data later.",
+        "Need a repeated task handled?",
         "data-public-status",
     )
     contact = page(
@@ -54,12 +55,11 @@ def healthy_responses() -> dict[str, checker.HttpResult]:
     )
     agent_contact = page(
         "search.get('from')==='ai-agent-solution'",
-        "document.title='AI Agent Solution | supermega.dev'",
-        "What should your agent handle every week?",
-        "Request an agent proof",
-        "What does your team repeat?",
-        "Request first proof",
-        "one redacted sample and one reviewed output",
+        "What do you want to improve?",
+        "Start here",
+        "What should work better?",
+        "idleSubmitLabel='Contact us'",
+        "one reviewed example",
         'action="/api/contact-submissions"',
         'name="name"',
         'name="email"',
@@ -71,7 +71,7 @@ def healthy_responses() -> dict[str, checker.HttpResult]:
         "Only the details needed to reply.",
     )
     app_shell = page(
-        "<title>Shop - SuperMega</title>",
+        "<title>Shop | supermega.dev</title>",
         '<div id="root"></div>',
         '<script type="module" crossorigin src="/assets/index-current.js"></script>',
     )
@@ -326,13 +326,13 @@ class PortfolioHealthTest(unittest.TestCase):
         responses = healthy_responses()
         responses[AGENT_INTAKE] = result(
             AGENT_INTAKE,
-            responses[AGENT_INTAKE].body.decode().replace("Request first proof", ""),
+            responses[AGENT_INTAKE].body.decode().replace("idleSubmitLabel='Contact us'", ""),
         )
         report = self.run_report(responses)
         self.assertEqual(report["status"], "error")
         failure = next(item for item in report["failures"] if item["kind"] == "agent_intake_page")
         self.assertEqual(failure["url"], AGENT_INTAKE)
-        self.assertIn("Request first proof", failure["missing"])
+        self.assertIn("idleSubmitLabel='Contact us'", failure["missing"])
 
     def test_technical_intake_field_fails_first_proof_route(self):
         responses = healthy_responses()
