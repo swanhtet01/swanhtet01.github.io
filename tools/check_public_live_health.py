@@ -15,9 +15,10 @@ from typing import Any
 from urllib.parse import urljoin, urlparse
 
 
-USER_AGENT = "supermega-portfolio-live-health/4.5"
+USER_AGENT = "supermega-portfolio-live-health/4.6"
 DEMO_MAX_BYTES = 256 * 1024
 POS_MAX_BYTES = 256 * 1024
+PIPELINE_MAX_BYTES = 8 * 1024
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -452,6 +453,112 @@ def run(
     results.append(pos_diagnostics_result)
     if pos_diagnostics_response.status != 401 or pos_diagnostics_mismatches:
         failures.append(pos_diagnostics_result)
+
+    pipeline_url = urljoin(pos_url, "api/pipeline-leads")
+    pipeline_response = fetch(
+        pipeline_url,
+        timeout=timeout,
+        attempts=attempts,
+        follow_redirects=False,
+        max_bytes=PIPELINE_MAX_BYTES,
+    )
+    try:
+        pipeline_body = pipeline_response.body.decode("utf-8")
+        pipeline_payload = json.loads(pipeline_body)
+        if not isinstance(pipeline_payload, dict):
+            pipeline_payload = {}
+        pipeline_encoding_error = False
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        pipeline_body = ""
+        pipeline_payload = {}
+        pipeline_encoding_error = True
+
+    expected_pipeline = {
+        "configured": True,
+        "dataBoundary": "Stores Shop prospect metadata only; do not submit customer sales, payment payloads, or private shop data.",
+        "detail": "Shop lead intake is ready.",
+        "mode": "shop-lead-intake",
+        "ok": True,
+        "protectedRead": True,
+        "store.provider": "vercel-blob-private",
+        "writeProtected": True,
+        "authorized": False,
+        "leads": [],
+    }
+    pipeline_mismatches = {
+        path: {"expected": expected, "actual": nested_value(pipeline_payload, path)}
+        for path, expected in expected_pipeline.items()
+        if nested_value(pipeline_payload, path) != expected
+    }
+    expected_pipeline_keys = {
+        "authorized",
+        "checkedAt",
+        "configured",
+        "dataBoundary",
+        "detail",
+        "leadCount",
+        "leads",
+        "mode",
+        "ok",
+        "protectedRead",
+        "store",
+        "updatedAt",
+        "writeProtected",
+    }
+    if set(pipeline_payload) != expected_pipeline_keys:
+        pipeline_mismatches["payload_keys"] = {
+            "expected": sorted(expected_pipeline_keys),
+            "actual": sorted(pipeline_payload),
+        }
+    pipeline_store = pipeline_payload.get("store")
+    if not isinstance(pipeline_store, dict) or set(pipeline_store) != {"provider"}:
+        pipeline_mismatches["store_keys"] = {
+            "expected": ["provider"],
+            "actual": sorted(pipeline_store)
+            if isinstance(pipeline_store, dict)
+            else type(pipeline_store).__name__,
+        }
+    lead_count = pipeline_payload.get("leadCount")
+    if isinstance(lead_count, bool) or not isinstance(lead_count, int) or lead_count < 0:
+        pipeline_mismatches["leadCount"] = {
+            "expected": "non-negative integer",
+            "actual": lead_count,
+        }
+    for field in ("checkedAt", "updatedAt"):
+        value = pipeline_payload.get(field)
+        if not isinstance(value, str) or not value:
+            pipeline_mismatches[field] = {"expected": "non-empty timestamp", "actual": value}
+    pipeline_unexpected = [
+        token
+        for token in ("DeskPOS", "MegaOS", "deskpos-pipeline", "pathname")
+        if token in pipeline_body
+    ]
+    pipeline_cache_control = header_value(pipeline_response.headers, "cache-control")
+    if pipeline_cache_control.lower() != "no-store":
+        pipeline_mismatches["cache-control"] = {
+            "expected": "no-store",
+            "actual": pipeline_cache_control,
+        }
+    pipeline_result = {
+        "kind": "shop_pipeline_guard",
+        "url": pipeline_url,
+        "status": pipeline_response.status,
+        "bytes": len(pipeline_response.body),
+        "response_url_changed": pipeline_response.url != pipeline_url,
+        "encoding_error": pipeline_encoding_error,
+        "mismatches": pipeline_mismatches,
+        "unexpected": pipeline_unexpected,
+    }
+    results.append(pipeline_result)
+    if (
+        pipeline_response.status != 200
+        or pipeline_response.url != pipeline_url
+        or len(pipeline_response.body) > PIPELINE_MAX_BYTES
+        or pipeline_encoding_error
+        or pipeline_mismatches
+        or pipeline_unexpected
+    ):
+        failures.append(pipeline_result)
 
     for path in ("products/", "pricing/", "ai-agents/", "offers/"):
         url = urljoin(base_url, path)

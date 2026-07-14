@@ -192,6 +192,25 @@ def healthy_responses() -> dict[str, checker.HttpResult]:
             {"error": "operator_auth_required"},
             status=401,
         ),
+        f"{POS}api/pipeline-leads": result(
+            f"{POS}api/pipeline-leads",
+            {
+                "checkedAt": "2026-07-14T16:27:03.781Z",
+                "configured": True,
+                "dataBoundary": "Stores Shop prospect metadata only; do not submit customer sales, payment payloads, or private shop data.",
+                "detail": "Shop lead intake is ready.",
+                "leadCount": 1,
+                "mode": "shop-lead-intake",
+                "ok": True,
+                "protectedRead": True,
+                "store": {"provider": "vercel-blob-private"},
+                "updatedAt": "2026-06-29T07:50:10.273Z",
+                "writeProtected": True,
+                "authorized": False,
+                "leads": [],
+            },
+            headers={"Cache-Control": "no-store"},
+        ),
         DEMO: result(
             DEMO,
             demo,
@@ -224,10 +243,10 @@ class PortfolioHealthTest(unittest.TestCase):
         with patch.object(checker, "fetch", side_effect=fake_fetch):
             return checker.run(BASE, WWW, APP, DEMO, POS, CONSOLE, timeout=1, attempts=1)
 
-    def test_healthy_portfolio_passes_all_twenty_four_checks(self):
+    def test_healthy_portfolio_passes_all_twenty_five_checks(self):
         report = self.run_report(healthy_responses())
         self.assertEqual(report["status"], "ready")
-        self.assertEqual(report["checks"], 24)
+        self.assertEqual(report["checks"], 25)
         self.assertEqual(report["failures"], [])
 
     def test_shop_pos_health_rejects_internal_fields(self):
@@ -255,6 +274,64 @@ class PortfolioHealthTest(unittest.TestCase):
         )
         self.assertEqual(failure["status"], 200)
         self.assertIn("payload_keys", failure["mismatches"])
+
+    def test_shop_pipeline_guard_requires_protected_empty_public_posture(self):
+        pipeline_url = f"{POS}api/pipeline-leads"
+        for field, value in (
+            ("writeProtected", False),
+            ("protectedRead", False),
+            ("authorized", True),
+            ("leads", [{"id": "must-not-be-public"}]),
+        ):
+            with self.subTest(field=field):
+                responses = healthy_responses()
+                payload = json.loads(responses[pipeline_url].body)
+                payload[field] = value
+                responses[pipeline_url] = result(
+                    pipeline_url,
+                    payload,
+                    headers={"Cache-Control": "no-store"},
+                )
+                report = self.run_report(responses)
+                self.assertEqual(report["status"], "error")
+                failure = next(
+                    item for item in report["failures"] if item["kind"] == "shop_pipeline_guard"
+                )
+                self.assertIn(field, failure["mismatches"])
+
+    def test_shop_pipeline_guard_rejects_internal_path_and_retired_identity(self):
+        responses = healthy_responses()
+        pipeline_url = f"{POS}api/pipeline-leads"
+        payload = json.loads(responses[pipeline_url].body)
+        payload["store"]["pathname"] = "deskpos-pipeline/leads/latest.json"
+        payload["dataBoundary"] = "Stores DeskPOS prospect metadata."
+        responses[pipeline_url] = result(
+            pipeline_url,
+            payload,
+            headers={"Cache-Control": "no-store"},
+        )
+        report = self.run_report(responses)
+        self.assertEqual(report["status"], "error")
+        failure = next(item for item in report["failures"] if item["kind"] == "shop_pipeline_guard")
+        self.assertIn("store_keys", failure["mismatches"])
+        self.assertIn("DeskPOS", failure["unexpected"])
+        self.assertIn("deskpos-pipeline", failure["unexpected"])
+        self.assertIn("pathname", failure["unexpected"])
+
+    def test_shop_pipeline_guard_rejects_cacheable_or_oversized_responses(self):
+        pipeline_url = f"{POS}api/pipeline-leads"
+        for response in (
+            result(pipeline_url, json.loads(healthy_responses()[pipeline_url].body)),
+            result(pipeline_url, "x" * (checker.PIPELINE_MAX_BYTES + 1)),
+        ):
+            with self.subTest(bytes=len(response.body)):
+                responses = healthy_responses()
+                responses[pipeline_url] = response
+                report = self.run_report(responses)
+                self.assertEqual(report["status"], "error")
+                self.assertTrue(
+                    any(item["kind"] == "shop_pipeline_guard" for item in report["failures"])
+                )
 
     def test_retired_identity_or_legacy_host_fails_shop_pos_page(self):
         for token in ("MegaOS", "<title>DeskPOS", "spa-desk-pilot.vercel.app"):
