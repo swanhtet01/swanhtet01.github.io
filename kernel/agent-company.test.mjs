@@ -129,6 +129,19 @@ test('runner uses a durable claim, executes serially, and isolates each agent ev
         output: { slug, evidence_seen: intake },
         usageByRole: [{ role: 'intake', tier: 'bulk' }],
         trace: [{ role: 'intake', tier: 'bulk' }],
+        guardrails: {
+          version: 1,
+          intakeTreatedAsUntrustedData: true,
+          handoffsResanitized: true,
+          outputFieldsAllowlisted: true,
+          externalToolAccess: false,
+          externalWrites: false,
+          persistentMemory: false,
+          maxUntrustedBytes: 16384,
+          maxUntrustedChars: 12000,
+          maxRoles: 8,
+          maxOutputFields: 24,
+        },
       }
     },
   })
@@ -145,6 +158,20 @@ test('runner uses a durable claim, executes serially, and isolates each agent ev
   assert.equal(result.persistedAgentResults, 2)
   assert.equal(result.durableResultStored, true)
   assert.equal(result.retry, null)
+  assert.deepEqual(result.results[0].guardrails, {
+    version: 1,
+    intakeTreatedAsUntrustedData: true,
+    handoffsResanitized: true,
+    outputFieldsAllowlisted: true,
+    externalToolAccess: false,
+    externalWrites: false,
+    persistentMemory: false,
+    maxUntrustedBytes: 16384,
+    maxUntrustedChars: 12000,
+    maxRoles: 8,
+    maxOutputFields: 24,
+  })
+  assert.deepEqual(result.trace[0].guardrails, result.results[0].guardrails)
 })
 
 test('runner preserves partial results and never feeds one specialist output to another', async () => {

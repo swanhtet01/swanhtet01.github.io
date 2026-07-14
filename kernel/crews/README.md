@@ -8,10 +8,15 @@ Every crew is one file: `crews/{slug}.json`. The loader (`../crew-runner.mjs`) e
 validates them; `crew-runner.test.mjs` keeps the shipped definitions honest. **Execution is live**
 (`../crew-run.mjs`): `runCrew(slug, intake, {clientId})` folds the roles through `gateway.complete()`
 with each role's tier and the tenant's `clientId` — so the plan gate, the cost-weighted cap, provider
-failover, and injection-stripping all apply, never the SDK directly. It enforces the `output_contract`
-(a missing field → `crew_contract_violation`) and has **no send/write/pay** capability: it drafts and
+failover, and injection-stripping all apply, never the SDK directly. Every intermediate role output
+is sanitized again before it becomes the next role's untrusted intake. It enforces the
+`output_contract` as an exact allowlist (a missing or undeclared field ->
+`crew_contract_violation`) and has **no send/write/pay** capability: it drafts and
 returns `blocked_actions`/`approval_queue` as data — the approve → act gate stays with the human.
 Adversarially gated by `../../tools/test_crew_resilience.mjs` (wired into `verify` + CI).
+`../crew-security.test.mjs` additionally runs every shipped crew through poisoned intake, poisoned
+handoffs, output smuggling, provider-error leakage, and no-tool/no-memory assertions. The runtime
+returns only content-free guardrail metadata alongside the result.
 
 ## Schema
 
@@ -62,11 +67,16 @@ Adversarially gated by `../../tools/test_crew_resilience.mjs` (wired into `verif
    role genuinely needs cross-checking or judgment. The gateway still applies the tenant's plan on
    top (free tenants are forced to `bulk` regardless).
 3. **Output contract is law.** `output_contract.fields` is what downstream code may rely on.
-   Changing it means bumping `version`.
-4. **The legal bright line is structural.** Any crew with `requires_account_access: true` fails
+   Changing it means bumping `version`. Field names are unique lowercase snake_case, with at most 24
+   fields; extra model-produced fields are rejected, not silently passed through.
+4. **Crew shape is bounded.** A crew has at most 8 roles. The forge truncates oversized generated
+   specs before validation, and the runtime checks the bound again before model spend. Each untrusted
+   intake or handoff is limited to 12,000 characters and 16 KiB; the runtime fails closed rather than
+   silently clipping business evidence.
+5. **The legal bright line is structural.** Any crew with `requires_account_access: true` fails
    validation unless `policy.own_accounts_only`, `policy.skip_personal`, and `policy.read_only`
    are all `true`. Never build a crew that reads third-party groups or scraped chats.
-5. **No prices in crew files.** Plans are named (`"pro"`), never priced — pricing lives in the
+6. **No prices in crew files.** Plans are named (`"pro"`), never priced — pricing lives in the
    workspace `pricing.json` only.
 
 ## Loader API

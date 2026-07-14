@@ -15,7 +15,10 @@ import { TIERS } from './gateway.mjs'
 
 const CREWS_DIR = join(dirname(fileURLToPath(import.meta.url)), 'crews')
 const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/
+const OUTPUT_FIELD_RE = /^[a-z][a-z0-9_]{0,63}$/
 const INTAKE_ROLE = 'intake' // every crew starts with the generic INTAKE role
+export const MAX_CREW_ROLES = 8
+export const MAX_CREW_OUTPUT_FIELDS = 24
 
 // The legal bright line (SUPERMEGA-MASTER-STRATEGY): any crew that reads a tenant's accounts
 // (inbox/chat exports) MUST carry all three flags, set true. Validation refuses the crew otherwise.
@@ -44,6 +47,7 @@ export function validateCrew(def, { slug } = {}) {
   // roles — explicit list, tier per role, generic INTAKE role first
   if (!Array.isArray(def.roles) || !def.roles.length) fail('roles: non-empty array required')
   else {
+    if (def.roles.length > MAX_CREW_ROLES) fail(`roles: at most ${MAX_CREW_ROLES} allowed`)
     const ids = new Set()
     def.roles.forEach((r, i) => {
       if (!r || typeof r !== 'object') { fail(`roles[${i}]: object required`); return }
@@ -62,6 +66,15 @@ export function validateCrew(def, { slug } = {}) {
   else {
     if (typeof def.output_contract.format !== 'string' || !def.output_contract.format.trim()) fail('output_contract.format: required')
     if (!Array.isArray(def.output_contract.fields) || !def.output_contract.fields.length) fail('output_contract.fields: non-empty array required')
+    else {
+      if (def.output_contract.fields.length > MAX_CREW_OUTPUT_FIELDS) fail(`output_contract.fields: at most ${MAX_CREW_OUTPUT_FIELDS} allowed`)
+      const fields = new Set()
+      def.output_contract.fields.forEach((field, index) => {
+        if (typeof field !== 'string' || !OUTPUT_FIELD_RE.test(field)) fail(`output_contract.fields[${index}]: lowercase snake_case required`)
+        else if (fields.has(field)) fail(`output_contract.fields[${index}]: duplicate '${field}'`)
+        else fields.add(field)
+      })
+    }
   }
 
   // legal bright line — enforced structurally, not by convention

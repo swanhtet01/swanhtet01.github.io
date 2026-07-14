@@ -280,6 +280,19 @@ export async function planCompanyCycle(input, options = {}) {
 function normalizeCrewResult(assignment, result) {
   const usageByRole = Array.isArray(result?.usageByRole) ? result.usageByRole : []
   const trace = Array.isArray(result?.trace) ? result.trace : []
+  const guardrails = isRecord(result?.guardrails) ? {
+    version: Number(result.guardrails.version) || 1,
+    intakeTreatedAsUntrustedData: result.guardrails.intakeTreatedAsUntrustedData === true,
+    handoffsResanitized: result.guardrails.handoffsResanitized === true,
+    outputFieldsAllowlisted: result.guardrails.outputFieldsAllowlisted === true,
+    externalToolAccess: result.guardrails.externalToolAccess === true,
+    externalWrites: result.guardrails.externalWrites === true,
+    persistentMemory: result.guardrails.persistentMemory === true,
+    maxUntrustedBytes: Number(result.guardrails.maxUntrustedBytes) || null,
+    maxUntrustedChars: Number(result.guardrails.maxUntrustedChars) || null,
+    maxRoles: Number(result.guardrails.maxRoles) || null,
+    maxOutputFields: Number(result.guardrails.maxOutputFields) || null,
+  } : null
   if (result?.ok && !result.gated) {
     return {
       ok: true,
@@ -291,6 +304,7 @@ function normalizeCrewResult(assignment, result) {
       usedRoleCalls: usageByRole.length,
       usageByRole,
       trace,
+      guardrails,
     }
   }
   if (result?.ok && result.gated) {
@@ -305,6 +319,7 @@ function normalizeCrewResult(assignment, result) {
       usedRoleCalls: usageByRole.length,
       usageByRole,
       trace,
+      guardrails,
     }
   }
   return {
@@ -318,6 +333,7 @@ function normalizeCrewResult(assignment, result) {
     usedRoleCalls: usageByRole.length,
     usageByRole,
     trace,
+    guardrails,
   }
 }
 
@@ -426,6 +442,7 @@ export async function runCompanyCycle(input, options = {}) {
       crew: result.crew,
       status: result.status,
       usedRoleCalls: result.usedRoleCalls,
+      guardrails: result.guardrails,
     })),
     retry: status === 'completed' ? null : { requiresNewCycleId: true },
   }
