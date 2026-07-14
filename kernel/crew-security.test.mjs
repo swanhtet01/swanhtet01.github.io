@@ -84,6 +84,43 @@ test('every shipped crew contains poisoned intake and handoffs inside the no-too
   }
 })
 
+test('crew usage records the gateway tier, provider, cache state, and bounded token counts', async () => {
+  let call = 0
+  const result = await runCrew('daily-operator-brief', 'approved operating facts', {
+    clientId: 'client-usage-eval',
+    complete: async (request) => {
+      call += 1
+      const response = {
+        tier: 'bulk',
+        provider: call === 2 ? 'openrouter' : 'anthropic',
+        model: `model-${call}`,
+        cached: call === 2,
+        usage: { input_tokens: call * 10, output_tokens: call * 5 },
+      }
+      return request.schema
+        ? { ...response, data: outputFor(request.schema) }
+        : { ...response, text: 'bounded handoff' }
+    },
+  })
+
+  assert.equal(result.ok, true)
+  assert.equal(result.usageByRole.length, 3)
+  assert.deepEqual(result.usageByRole[1], {
+    role: 'normalizer',
+    requestedTier: 'bulk',
+    tier: 'bulk',
+    provider: 'openrouter',
+    model: 'model-2',
+    cached: true,
+    usage: { input_tokens: 20, output_tokens: 10 },
+  })
+  assert.equal(result.usageByRole[2].requestedTier, 'reason')
+  assert.equal(result.usageByRole[2].tier, 'bulk')
+  assert.equal(result.trace[2].requestedTier, 'reason')
+  assert.equal(result.trace[2].tier, 'bulk')
+  assert.equal(result.trace[1].cached, true)
+})
+
 test('undeclared final fields are rejected without returning the smuggled payload', async () => {
   const result = await runCrew('daily-operator-brief', 'approved operating facts', {
     clientId: 'client-security-eval',

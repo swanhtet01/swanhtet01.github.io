@@ -27,7 +27,17 @@ const order = (patch = {}) => ({
     status: 'completed',
     actionMode: 'draft_only',
     approvalRequired: true,
-    results: [{ agentId: 'sales-qualifier', status: 'completed', usedRoleCalls: 3, output: { private: 'model output' } }],
+    results: [{
+      agentId: 'sales-qualifier',
+      status: 'completed',
+      usedRoleCalls: 3,
+      output: { private: 'model output' },
+      usageByRole: [
+        { role: 'intake', requestedTier: 'bulk', tier: 'bulk', provider: 'anthropic', model: 'private-model-1', cached: false, usage: { input_tokens: 100, output_tokens: 50 } },
+        { role: 'analyst', requestedTier: 'reason', tier: 'reason', provider: 'anthropic', model: 'private-model-2', cached: false, usage: { input_tokens: 20, output_tokens: 10 } },
+        { role: 'writer', requestedTier: 'reason', tier: 'reason', provider: 'anthropic', model: 'private-model-3', cached: true, usage: { input_tokens: 30, output_tokens: 15 } },
+      ],
+    }],
     budget: { usedRoleCalls: 3 },
     durableResultStored: true,
   },
@@ -166,6 +176,9 @@ test('operations report measures five durable accepted orders without exposing e
     listCompanyWorkOrders: async () => ({ ok: true, workOrders: orders.map(({ result, evidence, ...item }) => item) }),
     getCompanyWorkOrder: async ({ workOrderId }) => ({ ok: true, workOrder: structuredClone(orders.find((item) => item.workOrderId === workOrderId)) }),
     getEvaluation: async (key) => evaluations.get(key) || null,
+    resolvePlan: async () => 'pro',
+    policyFor: () => ({ plan: 'pro', tier: 'reason', cap: 100_000 }),
+    monthlyUsageFor: async () => ({ inTokens: 30_000, outTokens: 10_000, calls: 12, total: 40_000, window: '2026-07', source: 'spine+local-max' }),
     now: () => '2026-07-15T00:00:00.000Z',
   })
   assert.equal(report.ok, true)
@@ -180,6 +193,9 @@ test('operations report measures five durable accepted orders without exposing e
   assert.equal(report.workforce.utilizedAgents, 1)
   assert.equal(report.workforce.totalAssignments, 5)
   assert.equal(report.workforce.usedRoleCalls, 15)
+  assert.equal(report.workforce.modelCalls, 10)
+  assert.equal(report.workforce.cacheHits, 5)
+  assert.equal(report.workforce.weightedTotalUnits, 1200)
   assert.deepEqual(report.workforce.agents.map((agent) => ({
     id: agent.agentId,
     assignments: agent.assignedOrders,
@@ -188,10 +204,35 @@ test('operations report measures five durable accepted orders without exposing e
   assert.equal(report.exposure.rawEvidenceReturned, false)
   assert.equal(report.exposure.modelOutputReturned, false)
   assert.equal(report.exposure.specialistOutputReturned, false)
+  assert.equal(report.exposure.currencyCostClaimed, false)
+  assert.equal(report.usage.units, 'bulk_equivalent_tokens')
+  assert.equal(report.usage.plan, 'pro')
+  assert.deepEqual(report.usage.monthly, {
+    available: true,
+    window: '2026-07',
+    weightedPromptUnits: 30_000,
+    weightedCompletionUnits: 10_000,
+    weightedTotalUnits: 40_000,
+    modelCalls: 12,
+    capUnits: 100_000,
+    capEnforced: true,
+    remainingUnits: 60_000,
+    utilizationRate: 0.4,
+    source: 'spine+local-max',
+  })
+  assert.equal(report.usage.sampled.orders, 5)
+  assert.equal(report.usage.sampled.measuredOrders, 5)
+  assert.equal(report.usage.sampled.modelCalls, 10)
+  assert.equal(report.usage.sampled.cacheHits, 5)
+  assert.equal(report.usage.sampled.rawPromptTokens, 600)
+  assert.equal(report.usage.sampled.rawCompletionTokens, 300)
+  assert.equal(report.usage.sampled.weightedTotalUnits, 1200)
   const serialized = JSON.stringify(report)
   assert.equal(serialized.includes('model output'), false)
   assert.equal(serialized.includes('e'.repeat(64)), false)
   assert.equal(serialized.includes('output'), false)
+  assert.equal(serialized.includes('private-model'), false)
+  assert.equal(serialized.includes('anthropic'), false)
 })
 
 test('workforce utilization aggregates specialist metadata without carrying deliverables', async () => {
@@ -234,6 +275,56 @@ test('workforce utilization aggregates specialist metadata without carrying deli
   assert.equal(byId['project-controller'].completionRate, 0)
   assert.equal(JSON.stringify(report).includes('privateMetric'), false)
   assert.equal(JSON.stringify(report).includes('company_agent_failed'), false)
+})
+
+test('usage economics ignores malformed metadata and degrades without inventing cost', async () => {
+  const malformed = order({
+    workOrderId: `company-order:${'8'.repeat(40)}`,
+    cycleId: 'malformed-usage',
+    result: {
+      ok: true,
+      status: 'completed',
+      actionMode: 'draft_only',
+      approvalRequired: true,
+      results: [{
+        agentId: 'sales-qualifier',
+        status: 'completed',
+        usedRoleCalls: 3,
+        usageByRole: [
+          { role: 'intake', tier: 'reason', provider: 'anthropic', model: 'PRIVATE_MODEL', usage: { input_tokens: 10, output_tokens: 5 } },
+          { role: 'analyst', tier: 'unknown-tier', provider: 'PRIVATE_PROVIDER', usage: { input_tokens: 20, output_tokens: 10 } },
+          { role: 'writer', tier: 'bulk', cached: true, usage: { input_tokens: Number.MAX_SAFE_INTEGER, output_tokens: -1 } },
+        ],
+      }],
+      budget: { usedRoleCalls: 3 },
+      durableResultStored: true,
+    },
+  })
+  const report = await buildCompanyOperationsReport({ clientId: 'client-acme', windowDays: 30 }, {
+    listCompanyWorkOrders: async () => ({ ok: true, workOrders: [malformed] }),
+    getCompanyWorkOrder: async () => ({ ok: true, workOrder: structuredClone(malformed) }),
+    getEvaluation: async () => null,
+    resolvePlan: async () => { throw new Error('private plan failure') },
+    policyFor: () => { throw new Error('private policy failure') },
+    monthlyUsageFor: async () => ({ inTokens: -1, outTokens: Infinity, calls: 'secret', window: 'bad', source: 'private-store' }),
+    now: () => '2026-07-15T00:00:00.000Z',
+  })
+
+  assert.equal(report.ok, true)
+  assert.equal(report.usage.plan, 'free')
+  assert.equal(report.usage.planSource, 'fallback')
+  assert.equal(report.usage.monthly.available, false)
+  assert.equal(report.usage.monthly.capUnits, null)
+  assert.equal(report.usage.monthly.weightedTotalUnits, null)
+  assert.equal(report.usage.monthly.source, 'unavailable')
+  assert.equal(report.usage.sampled.roleCalls, 3)
+  assert.equal(report.usage.sampled.modelCalls, 2)
+  assert.equal(report.usage.sampled.cacheHits, 1)
+  assert.equal(report.usage.sampled.measuredCalls, 1)
+  assert.equal(report.usage.sampled.unmeasuredCalls, 1)
+  assert.equal(report.usage.sampled.weightedTotalUnits, 45)
+  assert.equal(JSON.stringify(report).includes('PRIVATE_'), false)
+  assert.equal(JSON.stringify(report).includes('private plan failure'), false)
 })
 
 test('operations report distinguishes no evidence, collecting evidence, and bounded coverage', async () => {
