@@ -23,14 +23,22 @@ const cycle = (patch = {}) => ({
 
 test('agent roster is fixed, bounded, and backed by validated crews', async () => {
   const roster = listCompanyAgents()
-  assert.equal(roster.length, 12)
+  assert.equal(roster.length, 15)
   assert.equal(MAX_CYCLE_AGENTS, 2)
   assert.equal(MAX_CYCLE_ROLE_BUDGET, 8)
   assert.equal(new Set(roster.map((agent) => agent.id)).size, roster.length)
   assert.equal(roster.every((agent) => typeof agent.evidenceHint === 'string' && agent.evidenceHint.length > 20), true)
   assert.deepEqual(
-    roster.slice(-4).map((agent) => agent.id),
-    ['data-insights-analyst', 'customer-support-operator', 'knowledge-manager', 'project-controller'],
+    roster.slice(-7).map((agent) => agent.id),
+    [
+      'data-insights-analyst',
+      'customer-support-operator',
+      'knowledge-manager',
+      'project-controller',
+      'document-processor',
+      'meeting-actions-coordinator',
+      'procurement-analyst',
+    ],
   )
   const plan = await planCompanyCycle(cycle())
   assert.equal(plan.ok, true)
@@ -70,6 +78,29 @@ test('new general-use specialists plan through fixed validated crews under the s
   assert.equal(plan.controls.execution, 'sequential')
   assert.equal(plan.controls.dynamicDelegation, false)
   assert.equal(plan.controls.externalWrites, false)
+})
+
+test('document, meeting, and procurement workers remain isolated fixed crews', async () => {
+  const cases = [
+    ['document-processor', 'document-processing-desk'],
+    ['meeting-actions-coordinator', 'meeting-actions-desk'],
+    ['procurement-analyst', 'procurement-review-desk'],
+  ]
+  for (const [agentId, crew] of cases) {
+    const plan = await planCompanyCycle({
+      clientId: 'client-acme',
+      cycleId: `general-${agentId}`,
+      agents: [agentId],
+      evidence: { [agentId]: `Approved evidence fixture for ${agentId}.` },
+      roleBudget: 3,
+    })
+    assert.equal(plan.ok, true)
+    assert.equal(plan.assignments[0].crew, crew)
+    assert.equal(plan.assignments[0].roleCount, 3)
+    assert.equal(plan.controls.dynamicDelegation, false)
+    assert.equal(plan.controls.crossAgentContext, false)
+    assert.equal(plan.controls.externalWrites, false)
+  }
 })
 
 test('planner rejects dynamic agents, excess roles, unassigned evidence, and action fields', async () => {

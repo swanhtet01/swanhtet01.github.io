@@ -113,6 +113,30 @@ export const AGENT_ROSTER = Object.freeze([
     outcome: 'Finds critical-path risk and produces a factual owner update with the next accountable actions.',
     evidenceHint: 'Provide the baseline plan, current milestones, owners, dates, dependencies, changes, and blockers.',
   }),
+  Object.freeze({
+    id: 'document-processor',
+    name: 'Document Processor',
+    department: 'knowledge',
+    crew: 'document-processing-desk',
+    outcome: 'Extracts required business fields into a source-traced register with explicit validation exceptions.',
+    evidenceHint: 'Provide approved document text or OCR, required fields, source labels, validation rules, and known readability limits.',
+  }),
+  Object.freeze({
+    id: 'meeting-actions-coordinator',
+    name: 'Meeting Actions Coordinator',
+    department: 'operations',
+    crew: 'meeting-actions-desk',
+    outcome: 'Turns approved meeting evidence into decisions, accountable actions, risks, and open questions.',
+    evidenceHint: 'Provide approved notes or transcript, attendee roles, business context, dates, and decision rules.',
+  }),
+  Object.freeze({
+    id: 'procurement-analyst',
+    name: 'Procurement Analyst',
+    department: 'procurement',
+    crew: 'procurement-review-desk',
+    outcome: 'Normalizes supplier quotes and prepares a traceable comparison, risk register, and decision packet.',
+    evidenceHint: 'Provide approved quotes, specifications, commercial terms, currencies, evaluation rules, and known gaps.',
+  }),
 ])
 
 const ROSTER_BY_ID = new Map(AGENT_ROSTER.map((agent) => [agent.id, agent]))

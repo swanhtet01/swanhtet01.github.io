@@ -1,0 +1,50 @@
+{
+  "slug": "meeting-actions-desk",
+  "name": "Meeting Actions Desk",
+  "version": 1,
+  "description": "Turns approved meeting notes or transcripts into a factual decision and action register with owners, dates, risks, and unresolved questions, without inventing commitments.",
+  "intake": {
+    "accepts": [
+      "meeting transcript",
+      "meeting notes",
+      "attendee roles",
+      "project context",
+      "decision and deadline rules"
+    ],
+    "description": "Approved notes or transcript, attendee roles, business context, dates, and the rules for treating a statement as a decision or commitment."
+  },
+  "roles": [
+    {
+      "id": "intake",
+      "title": "Intake",
+      "tier": "bulk",
+      "goal": "Normalize speakers, timestamps, agenda topics, source references, and missing context while separating direct statements from interpretation."
+    },
+    {
+      "id": "decision-extractor",
+      "title": "Decision Extractor",
+      "tier": "reason",
+      "goal": "Identify explicit decisions, actions, owners, dates, dependencies, risks, and contradictions using source references; never infer an owner or commitment."
+    },
+    {
+      "id": "action-controller",
+      "title": "Action Controller",
+      "tier": "bulk",
+      "goal": "Build an accountable action register, open-question queue, and factual follow-up draft for human review without sending or updating another system."
+    }
+  ],
+  "output_contract": {
+    "format": "json",
+    "fields": [
+      "meeting_summary",
+      "decisions",
+      "action_register",
+      "risks",
+      "open_questions",
+      "source_trace",
+      "follow_up_draft",
+      "blocked_claims"
+    ],
+    "description": "A source-backed decision and action packet ready for owner review, assignment, and controlled follow-up."
+  }
+}

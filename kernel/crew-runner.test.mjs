@@ -7,11 +7,19 @@ import { TIERS } from './gateway.mjs'
 
 test('listCrews enumerates every shipped crew', async () => {
   const slugs = (await listCrews()).map((c) => c.slug)
-  assert.equal(slugs.length, 12)
+  assert.equal(slugs.length, 15)
   assert.ok(slugs.includes('reconcile-premium'), 'reconcile-premium is registered')
   assert.ok(slugs.includes('read-my-chaos'), 'read-my-chaos is registered')
   assert.ok(slugs.includes('source-to-screen-pilot'), 'source-to-screen-pilot is registered')
-  for (const slug of ['data-insights-desk', 'customer-support-desk', 'knowledge-base-desk', 'project-control-desk']) {
+  for (const slug of [
+    'data-insights-desk',
+    'customer-support-desk',
+    'knowledge-base-desk',
+    'project-control-desk',
+    'document-processing-desk',
+    'meeting-actions-desk',
+    'procurement-review-desk',
+  ]) {
     assert.ok(slugs.includes(slug), `${slug} is registered`)
   }
 })
@@ -22,6 +30,9 @@ test('general-use workforce crews are bounded, sellable, and contract-complete',
     'customer-support-desk': ['resolution_path', 'reply_draft', 'escalations', 'blocked_actions'],
     'knowledge-base-desk': ['canonical_answers', 'procedures', 'update_queue', 'publication_boundary'],
     'project-control-desk': ['critical_path', 'risks', 'owner_actions', 'update_draft'],
+    'document-processing-desk': ['document_register', 'extracted_fields', 'source_trace', 'review_queue'],
+    'meeting-actions-desk': ['decisions', 'action_register', 'source_trace', 'follow_up_draft'],
+    'procurement-review-desk': ['normalized_comparison', 'risks', 'source_trace', 'approval_queue'],
   }
   for (const [slug, fields] of Object.entries(expected)) {
     const crew = await loadCrew(slug)

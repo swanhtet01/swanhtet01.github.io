@@ -1,0 +1,49 @@
+{
+  "slug": "document-processing-desk",
+  "name": "Document Processing Desk",
+  "version": 1,
+  "description": "Turns approved business documents into a source-traced field register, validation exceptions, and a controlled review queue without inventing unreadable or missing values.",
+  "intake": {
+    "accepts": [
+      "business document text or approved OCR",
+      "required field list",
+      "document type rules",
+      "source labels and effective dates",
+      "known exceptions"
+    ],
+    "description": "Approved document text or OCR, the exact fields to capture, source labels, validation rules, and known limits. Unreadable or absent values remain explicit exceptions."
+  },
+  "roles": [
+    {
+      "id": "intake",
+      "title": "Intake",
+      "tier": "bulk",
+      "goal": "Inventory each source, document type, page or section reference, requested field, effective date, and known readability issue without guessing missing content."
+    },
+    {
+      "id": "field-extractor",
+      "title": "Field Extractor",
+      "tier": "reason",
+      "goal": "Extract only requested business fields, preserve units and exact source references, normalize explicitly permitted formats, and mark ambiguous values for review."
+    },
+    {
+      "id": "document-validator",
+      "title": "Document Validator",
+      "tier": "bulk",
+      "goal": "Check required-field coverage, duplicates, conflicting values, date validity, and source traceability, then prepare the smallest human review queue."
+    }
+  ],
+  "output_contract": {
+    "format": "json",
+    "fields": [
+      "document_register",
+      "extracted_fields",
+      "source_trace",
+      "validation_results",
+      "exceptions",
+      "review_queue",
+      "blocked_claims"
+    ],
+    "description": "A source-traced document register with explicit validation results and exceptions for human review."
+  }
+}

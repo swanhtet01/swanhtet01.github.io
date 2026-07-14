@@ -25,6 +25,10 @@ import {
   COMPANY_OPERATIONS_WINDOWS,
   evaluateCompanyWorkOrder,
 } from '../agent-company-operations.mjs'
+import {
+  listCompanyPlaybooks,
+  planCompanyPlaybook,
+} from '../agent-company-playbooks.mjs'
 
 function constantTimeEqual(a, b) {
   const left = crypto.createHash('sha256').update(String(a)).digest()
@@ -64,7 +68,12 @@ function statusFor(result) {
     'company_evaluation_store_unavailable',
     'company_operations_store_unavailable',
   ].includes(result.reason)) return 503
-  if (['company_role_budget_exceeded', 'company_work_order_not_reviewable', 'company_work_order_proof_unavailable'].includes(result.reason)) return 422
+  if ([
+    'company_role_budget_exceeded',
+    'company_playbook_role_budget_exceeded',
+    'company_work_order_not_reviewable',
+    'company_work_order_proof_unavailable',
+  ].includes(result.reason)) return 422
   if (result.status === 'failed') return 502
   return 400
 }
@@ -86,6 +95,16 @@ export async function handleAgentCompany(request = {}, options = {}) {
         actionMode: 'draft_only',
         agents: listCompanyAgents(),
         limits: { maxAgents: MAX_CYCLE_AGENTS, maxRoleBudget: MAX_CYCLE_ROLE_BUDGET },
+        playbooks: {
+          enabled: true,
+          catalog: listCompanyPlaybooks(),
+          staged: true,
+          automaticQueue: false,
+          automaticDispatch: false,
+          dynamicDelegation: false,
+          crossStageContext: false,
+          handoff: 'owner_reviewed_redacted_output_only',
+        },
         workOrders: {
           enabled: true,
           maxList: MAX_COMPANY_WORK_ORDERS,
@@ -119,6 +138,7 @@ export async function handleAgentCompany(request = {}, options = {}) {
   delete body.action
   if (![
     'plan',
+    'playbook-plan',
     'run',
     'work-order-create',
     'work-order-list',
@@ -138,6 +158,7 @@ export async function handleAgentCompany(request = {}, options = {}) {
   }
 
   const plan = options.planCompanyCycle || planCompanyCycle
+  const planPlaybook = options.planCompanyPlaybook || planCompanyPlaybook
   const run = options.runCompanyCycle || runCompanyCycle
   const createOrder = options.createCompanyWorkOrder || createCompanyWorkOrder
   const listOrders = options.listCompanyWorkOrders || listCompanyWorkOrders
@@ -149,7 +170,8 @@ export async function handleAgentCompany(request = {}, options = {}) {
   const evaluateOrder = options.evaluateCompanyWorkOrder || evaluateCompanyWorkOrder
   const operationsReport = options.buildCompanyOperationsReport || buildCompanyOperationsReport
   const result = action === 'plan' ? await plan(body)
-    : action === 'run' ? await run(body)
+    : action === 'playbook-plan' ? await planPlaybook(body)
+      : action === 'run' ? await run(body)
       : action === 'work-order-create' ? await createOrder(body)
         : action === 'work-order-list' ? await listOrders(body)
           : action === 'work-order-get' ? await getOrder(body)
