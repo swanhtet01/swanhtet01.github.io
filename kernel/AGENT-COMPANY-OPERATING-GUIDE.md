@@ -16,7 +16,8 @@ spend, internal evaluation, delivery proof, and a separately recorded customer d
 - Durable client-bound missions with revision-bound state transitions and server-verified stage gates.
 - Explicit queue, dispatch, cancel-and-scrub, internal evaluation, proof, and review controls.
 - Metadata-only health and workforce utilization for 7, 30, or 90 days.
-- Owner-issued, one-use sign-in codes and tenant-bound operator, reviewer, and viewer sessions.
+- Owner-issued, one-use sign-in codes; tenant-bound operator, reviewer, and viewer sessions; and an
+  owner-only active-access inventory with targeted code/session revocation.
 
 ## Sellable Outcomes
 
@@ -44,6 +45,8 @@ channel; it expires after 15 minutes and stops working immediately after its fir
 The operator opens the same URL, enters the code, and selects **Sign in**. The browser receives an
 HttpOnly, Secure, SameSite session cookie. The code and session token are not stored in page storage,
 and the client ID is locked to the signed-in tenant. Use **Sign out** when the shift or task is done.
+The owner can return to **Active access** to refresh the tenant's active sessions and pending codes
+and revoke one entry. The list exposes identity, role, and expiry metadata only.
 
 Roles are deliberately narrow:
 
@@ -99,15 +102,17 @@ Roles are deliberately narrow:
   work order, terminal result hash, accepted four-check evaluation, and reviewed handoff digest.
 - Failed, partial, or revision-required work starts a new cycle; there is no hidden retry loop.
 - Secrets never belong in evidence, manifests, chat, source, or command arguments.
+- Only owner bootstrap access can list or revoke tenant access. Operator sessions cannot administer
+  sessions or pending codes, and revocation uses an atomic stored-record transition.
 - Pricing is not inferred from the roster or playbook catalog.
 
 ## What Is Still Needed To Scale
 
 1. **Legitimate retained proof:** run one owner-approved redacted mission through delivery and retain
    the exact evaluation, proof packet, and customer decision. This remains the evidence gate.
-2. **Identity administration:** tenant-bound operator, reviewer, and viewer sessions now replace the
-   shared passcode for Agent Company work. Add owner-visible active-session listing and revocation,
-   recovery, SSO/MFA where required, and customer-authenticated acceptance.
+2. **Identity administration:** tenant-bound operator, reviewer, and viewer sessions plus owner-only
+   active-access listing and revocation are live. Add recovery, SSO/MFA where required, and
+   customer-authenticated acceptance.
 3. **Async execution:** after proof, add an opt-in durable dispatcher, leases, bounded retries,
    evidence-retention expiry, and dead-letter recovery. Keep recursive delegation disabled.
 4. **Tracing and evals:** the deterministic all-crew security suite now covers poisoned input,

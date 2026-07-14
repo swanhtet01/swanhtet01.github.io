@@ -12,6 +12,8 @@ import {
   exchangeCompanyOperatorCode,
   getCompanyOperatorSession,
   issueCompanyOperatorCode,
+  listCompanyAccess,
+  revokeCompanyAccess,
   revokeCompanyOperatorSession,
 } from './agent-company-operator-auth.mjs'
 
@@ -21,15 +23,11 @@ function harness() {
   const cache = new Map()
   const claims = new Map()
   const released = []
-  const random = [Buffer.alloc(12, 3), Buffer.alloc(32, 7), Buffer.alloc(12, 4), Buffer.alloc(32, 8)]
+  let randomSeed = 3
   let now = START
   const options = {
     now: () => now,
-    randomBytes: (size) => {
-      const bytes = random.shift()
-      assert.equal(bytes?.length, size)
-      return bytes
-    },
+    randomBytes: (size) => Buffer.alloc(size, randomSeed++),
     claimActivity: async (activity) => {
       if (claims.has(activity.id)) return { fresh: false, durable: true }
       claims.set(activity.id, structuredClone(activity))
@@ -44,6 +42,15 @@ function harness() {
       return true
     },
     getRecord: async (key) => structuredClone(cache.get(key) || null),
+    listRecords: async ({ prefix, clientId = '', status = '', expiresAfter = '', limit = 200 }) => {
+      let records = [...cache.entries()]
+        .map(([key, payload]) => ({ key, payload: structuredClone(payload) }))
+        .filter((record) => record.key.startsWith(prefix))
+      if (clientId) records = records.filter((record) => record.payload.clientId === clientId)
+      if (status) records = records.filter((record) => record.payload.status === status)
+      if (expiresAfter) records = records.filter((record) => record.payload.expiresAt > expiresAfter)
+      return { durable: true, records: records.slice(0, limit) }
+    },
     transitionRecord: async (key, expected, next) => {
       const current = cache.get(key)
       if (!current
@@ -147,6 +154,113 @@ test('tenant session authorization is cookie-bound, role-scoped, expiring, and r
   const secondSession = await exchangeCompanyOperatorCode({ code: second.code }, state.options)
   state.setNow('2026-07-14T10:00:01.000Z')
   assert.equal((await getCompanyOperatorSession({ token: secondSession.sessionToken }, state.options)).reason, 'company_session_expired')
+})
+
+test('owner access inventory is tenant-bound, complete, and redacts every credential and integrity field', async () => {
+  const state = harness()
+  const pending = await issueCompanyOperatorCode(issueInput({ operatorId: 'ops.pending', role: 'viewer' }), state.options)
+  const sessionCode = await issueCompanyOperatorCode(issueInput({ operatorId: 'ops.active', role: 'reviewer' }), state.options)
+  const exchanged = await exchangeCompanyOperatorCode({ code: sessionCode.code }, state.options)
+  const otherTenant = await issueCompanyOperatorCode(issueInput({ clientId: 'client-other', operatorId: 'ops.other' }), state.options)
+
+  const listed = await listCompanyAccess({ clientId: 'client-acme' }, state.options)
+  assert.equal(listed.ok, true)
+  assert.equal(listed.complete, true)
+  assert.deepEqual(listed.counts, { sessions: 1, codes: 1 })
+  assert.deepEqual(listed.sessions.map((entry) => [entry.operatorId, entry.role, entry.status]), [
+    ['ops.active', 'reviewer', 'active'],
+  ])
+  assert.deepEqual(listed.codes.map((entry) => [entry.operatorId, entry.role, entry.status]), [
+    ['ops.pending', 'viewer', 'pending'],
+  ])
+  assert.match(listed.sessions[0].accessId, /^company-session:[a-f0-9]{40}$/)
+  assert.match(listed.codes[0].accessId, /^company-code:[a-f0-9]{40}$/)
+  const serialized = JSON.stringify(listed)
+  for (const secret of [pending.code, sessionCode.code, otherTenant.code, exchanged.sessionToken]) {
+    assert.equal(serialized.includes(secret), false)
+  }
+  assert.doesNotMatch(serialized, /tokenDigest|codeDigest|planHash|sessionToken/)
+  assert.equal((await listCompanyAccess({ clientId: 'client-other' }, state.options)).counts.codes, 1)
+})
+
+test('owner can revoke one pending code or session without crossing tenants, including a concurrent replay', async () => {
+  const state = harness()
+  const pending = await issueCompanyOperatorCode(issueInput({ operatorId: 'ops.pending' }), state.options)
+  const sessionCode = await issueCompanyOperatorCode(issueInput({ operatorId: 'ops.active' }), state.options)
+  const exchanged = await exchangeCompanyOperatorCode({ code: sessionCode.code }, state.options)
+  const listed = await listCompanyAccess({ clientId: 'client-acme' }, state.options)
+  const codeAccess = listed.codes[0]
+  const sessionAccess = listed.sessions[0]
+
+  const wrongTenant = await revokeCompanyAccess({
+    clientId: 'client-other',
+    accessType: 'session',
+    accessId: sessionAccess.accessId,
+  }, state.options)
+  assert.equal(wrongTenant.ok, true)
+  assert.equal(wrongTenant.replayed, true)
+  assert.equal((await getCompanyOperatorSession({ token: exchanged.sessionToken }, state.options)).ok, true)
+
+  const revokedCode = await revokeCompanyAccess({
+    clientId: 'client-acme',
+    accessType: 'code',
+    accessId: codeAccess.accessId,
+  }, state.options)
+  assert.equal(revokedCode.ok, true)
+  assert.equal(revokedCode.replayed, false)
+  assert.equal((await exchangeCompanyOperatorCode({ code: pending.code }, state.options)).reason, 'company_sign_in_code_consumed')
+
+  const revokedSession = await revokeCompanyAccess({
+    clientId: 'client-acme',
+    accessType: 'session',
+    accessId: sessionAccess.accessId,
+  }, state.options)
+  assert.equal(revokedSession.ok, true)
+  assert.equal(revokedSession.replayed, false)
+  assert.equal((await getCompanyOperatorSession({ token: exchanged.sessionToken }, state.options)).reason, 'company_session_invalid')
+  assert.equal((await revokeCompanyAccess({
+    clientId: 'client-acme',
+    accessType: 'session',
+    accessId: sessionAccess.accessId,
+  }, state.options)).replayed, true)
+
+  const raceState = harness()
+  await issueCompanyOperatorCode(issueInput({ operatorId: 'ops.race' }), raceState.options)
+  const raceAccess = (await listCompanyAccess({ clientId: 'client-acme' }, raceState.options)).codes[0]
+  const raceOptions = {
+    ...raceState.options,
+    transitionRecord: async (key, expected, next) => {
+      const current = raceState.cache.get(key)
+      raceState.cache.set(key, { ...current, status: 'revoked', revision: current.revision + 1, revokedAt: next.revokedAt })
+      return { updated: false, durable: true, reason: 'transition_conflict' }
+    },
+  }
+  const race = await revokeCompanyAccess({
+    clientId: 'client-acme',
+    accessType: 'code',
+    accessId: raceAccess.accessId,
+  }, raceOptions)
+  assert.equal(race.ok, true)
+  assert.equal(race.replayed, true)
+})
+
+test('owner access inventory fails closed on non-durable or integrity-invalid records', async () => {
+  const state = harness()
+  await issueCompanyOperatorCode(issueInput(), state.options)
+  assert.equal((await listCompanyAccess({ clientId: 'client-acme' }, {
+    ...state.options,
+    listRecords: async () => ({ durable: false, records: [] }),
+  })).reason, 'company_access_store_unavailable')
+
+  const persisted = [...state.cache.values()][0]
+  persisted.role = 'viewer'
+  const corrupted = await listCompanyAccess({ clientId: 'client-acme' }, state.options)
+  assert.equal(corrupted.reason, 'company_access_record_invalid')
+  assert.equal((await revokeCompanyAccess({
+    clientId: 'client-acme',
+    accessType: 'session',
+    accessId: 'bad',
+  }, state.options)).reason, 'company_access_invalid_id')
 })
 
 test('owner key remains a separate bootstrap path and never falls through to a session', async () => {

@@ -8,6 +8,8 @@ import {
   companySessionTokenFromHeaders,
   exchangeCompanyOperatorCode,
   issueCompanyOperatorCode,
+  listCompanyAccess,
+  revokeCompanyAccess,
   revokeCompanyOperatorSession,
 } from '../agent-company-operator-auth.mjs'
 
@@ -25,6 +27,9 @@ function statusFor(result) {
   if ([
     'company_session_store_unavailable',
     'company_sign_in_code_store_unavailable',
+    'company_access_store_unavailable',
+    'company_access_limit_exceeded',
+    'company_access_record_invalid',
     'company_auth_random_unavailable',
     'company_auth_clock_invalid',
     'ops_key_not_configured',
@@ -89,7 +94,7 @@ export async function handleAgentCompanyAuth(request = {}, options = {}) {
   const action = String(body.action || '').trim()
   delete body.action
 
-  if (action === 'issue-code') {
+  if (['issue-code', 'list-access', 'revoke-access'].includes(action)) {
     const authorized = await authorize(request, options)
     if (!authorized.ok) {
       return { status: statusFor(authorized), json: { ok: false, reason: authorized.reason } }
@@ -102,8 +107,12 @@ export async function handleAgentCompanyAuth(request = {}, options = {}) {
     if (configuredClientId && String(body.clientId || '').trim() !== configuredClientId) {
       return { status: 403, json: { ok: false, reason: 'company_client_mismatch' } }
     }
-    const issue = options.issueCompanyOperatorCode || issueCompanyOperatorCode
-    const result = await issue(body, options)
+    const operation = action === 'issue-code'
+      ? (options.issueCompanyOperatorCode || issueCompanyOperatorCode)
+      : action === 'list-access'
+        ? (options.listCompanyAccess || listCompanyAccess)
+        : (options.revokeCompanyAccess || revokeCompanyAccess)
+    const result = await operation(body, options)
     return { status: statusFor(result), json: result }
   }
 
