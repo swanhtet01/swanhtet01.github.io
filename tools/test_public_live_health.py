@@ -36,16 +36,16 @@ def page(*tokens: str) -> str:
 
 def healthy_responses() -> dict[str, checker.HttpResult]:
     home = page(
-        "<title>supermega.dev | Shop and Plant</title>",
-        '<h1 id="portfolio-heading">Run the operation. See what matters.</h1>',
+        "<title>supermega.dev | Operational software built to fit</title>",
+        '<h1 id="portfolio-heading">Operational software, built to fit.</h1>',
         "https://app.supermega.dev/?demo=shop",
         "https://app.supermega.dev/?demo=plant",
         "/contact/",
-        "Try first. Add data later.",
-        "Private workspaces are verified before handover.",
-        "Request your workspace",
-        "SuperMega sets it up and verifies it before handover.",
-        "Need something different?",
+        "Start with working Shop or Plant software.",
+        "No account needed",
+        "Your private workspace is configured and verified before handover.",
+        "Tell us where the workflow breaks.",
+        "Describe your workflow",
         "data-public-status",
     )
     contact = page(
