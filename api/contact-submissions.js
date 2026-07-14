@@ -1020,6 +1020,30 @@ function deskposPipelinePayload(record) {
   }
 }
 
+const SHOP_PIPELINE_MAX_ATTEMPTS = 2
+const SHOP_PIPELINE_ATTEMPT_TIMEOUT_MS = 2400
+const SHOP_PIPELINE_RETRY_DELAY_MS = 100
+
+function isRetryableShopPipelineStatus(status) {
+  return status === 408 || status === 425 || status === 429 || status >= 500
+}
+
+function isValidShopPipelineResponse(body) {
+  return Boolean(
+    body
+    && body.ok === true
+    && body.accepted === true
+    && typeof body.duplicate === 'boolean'
+    && Number.isInteger(body.leadCount)
+    && body.leadCount >= 0
+    && text(body.lead?.id)
+  )
+}
+
+function shopPipelineRetryDelay() {
+  return new Promise((resolve) => setTimeout(resolve, SHOP_PIPELINE_RETRY_DELAY_MS))
+}
+
 async function forwardDeskposPipeline({ record }) {
   if (!isDeskposLead(record)) {
     return { status: 'skipped', reason: 'not_shop_lead' }
@@ -1032,30 +1056,47 @@ async function forwardDeskposPipeline({ record }) {
   if (!ingestToken) {
     return { status: 'skipped', reason: 'shop_pipeline_not_configured' }
   }
-  try {
-    const response = await fetch(target, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${ingestToken}`,
-        'content-type': 'application/json',
-      },
-      signal: AbortSignal.timeout(5000),
-      body: JSON.stringify(deskposPipelinePayload(record)),
-    })
-    const body = await response.json().catch(() => ({}))
-    if (!response.ok || body.accepted === false) {
-      return { status: 'error', reason: `shop_${response.status}`, target }
+  const requestBody = JSON.stringify(deskposPipelinePayload(record))
+  let lastError = null
+  for (let attempt = 1; attempt <= SHOP_PIPELINE_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetch(target, {
+        method: 'POST',
+        redirect: 'error',
+        headers: {
+          Authorization: `Bearer ${ingestToken}`,
+          'content-type': 'application/json',
+        },
+        signal: AbortSignal.timeout(SHOP_PIPELINE_ATTEMPT_TIMEOUT_MS),
+        body: requestBody,
+      })
+      const body = await response.json().catch(() => ({}))
+      if (response.ok && isValidShopPipelineResponse(body)) {
+        return {
+          status: 'ready',
+          target,
+          duplicate: body.duplicate,
+          lead_count: body.leadCount,
+          shop_lead_id: text(body.lead.id),
+        }
+      }
+      if (response.ok && (body.accepted === false || body.ok === false)) {
+        return { status: 'error', reason: 'shop_rejected', target }
+      }
+      lastError = response.ok ? 'shop_invalid_response' : `shop_${response.status}`
+      const retryable = response.ok || isRetryableShopPipelineStatus(response.status)
+      if (!retryable || attempt === SHOP_PIPELINE_MAX_ATTEMPTS) {
+        return { status: 'error', reason: lastError, target }
+      }
+    } catch (error) {
+      lastError = error?.name === 'TimeoutError' ? 'shop_timeout' : 'shop_forward_failed'
+      if (attempt === SHOP_PIPELINE_MAX_ATTEMPTS) {
+        return { status: 'error', reason: lastError, target }
+      }
     }
-    return {
-      status: 'ready',
-      target,
-      duplicate: Boolean(body.duplicate),
-      lead_count: body.leadCount ?? null,
-      shop_lead_id: body.lead?.id || null,
-    }
-  } catch (error) {
-    return { status: 'error', reason: text(error?.message) || 'shop_forward_failed', target }
+    await shopPipelineRetryDelay()
   }
+  return { status: 'error', reason: lastError || 'shop_forward_failed', target }
 }
 
 function fallbackQueueStatus() {

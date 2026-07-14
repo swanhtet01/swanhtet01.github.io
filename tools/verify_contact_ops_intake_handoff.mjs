@@ -43,6 +43,13 @@ const calls = []
 const secret = 'contract-test-secret'
 const opsKey = 'contract-test-ops-key'
 const shopIngestToken = 'contract-test-shop-ingest-token'
+const shopSuccessBody = {
+  ok: true,
+  accepted: true,
+  duplicate: false,
+  leadCount: 1,
+  lead: { id: 'SHOP-LEAD-1' },
+}
 const contactSource = readFileSync(new URL('../api/contact-submissions.js', import.meta.url), 'utf8')
 const handlerSource = contactSource.slice(
   contactSource.indexOf('async function handler'),
@@ -99,13 +106,13 @@ try {
   process.env.RESEND_API_KEY = 'contract-test-resend-key'
   delete process.env.SUPERMEGA_OPS_INTAKE_URL
   delete process.env.DESKPOS_PIPELINE_URL
-  globalThis.fetch = async (url, options) => {
+  const contractFetch = async (url, options) => {
     calls.push({ url, options })
     if (url === 'https://pos.supermega.dev/api/pipeline-leads') {
       return {
         ok: true,
         status: 200,
-        json: async () => ({ accepted: true, duplicate: false, leadCount: 1, lead: { id: 'SHOP-LEAD-1' } }),
+        json: async () => shopSuccessBody,
       }
     }
     return {
@@ -114,6 +121,7 @@ try {
       json: async () => ({ ok: true, lead_id: 'OPS-LEAD-1', fit_score: 84 }),
     }
   }
+  globalThis.fetch = contractFetch
 
   assert.deepEqual(opsIntakeStatus(), {
     status: 'ready',
@@ -278,6 +286,7 @@ try {
   assert.equal(calls.length, 1)
   assert.equal(calls[0].url, 'https://pos.supermega.dev/api/pipeline-leads')
   assert.equal(calls[0].options.method, 'POST')
+  assert.equal(calls[0].options.redirect, 'error')
   assert.equal(calls[0].options.headers.Authorization, `Bearer ${shopIngestToken}`)
   assert.deepEqual(JSON.parse(calls[0].options.body), shopPayload)
   assert.deepEqual(shopForward, {
@@ -293,6 +302,79 @@ try {
     reason: 'not_shop_lead',
   })
   assert.equal(calls.length, 1)
+
+  const retryCalls = []
+  globalThis.fetch = async (url, options) => {
+    retryCalls.push({ url, options })
+    if (retryCalls.length === 1) {
+      return { ok: false, status: 503, json: async () => ({ ok: false }) }
+    }
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ ...shopSuccessBody, duplicate: true }),
+    }
+  }
+  assert.deepEqual(await forwardDeskposPipeline({ record: shopRecord }), {
+    status: 'ready',
+    target: 'https://pos.supermega.dev/api/pipeline-leads',
+    duplicate: true,
+    lead_count: 1,
+    shop_lead_id: 'SHOP-LEAD-1',
+  })
+  assert.equal(retryCalls.length, 2)
+  for (const call of retryCalls) {
+    assert.equal(call.url, 'https://pos.supermega.dev/api/pipeline-leads')
+    assert.equal(call.options.redirect, 'error')
+    assert.equal(call.options.headers.Authorization, `Bearer ${shopIngestToken}`)
+    assert.deepEqual(JSON.parse(call.options.body), shopPayload)
+  }
+
+  const networkCalls = []
+  globalThis.fetch = async (url, options) => {
+    networkCalls.push({ url, options })
+    if (networkCalls.length === 1) throw new TypeError('temporary network failure')
+    return { ok: true, status: 200, json: async () => shopSuccessBody }
+  }
+  assert.equal((await forwardDeskposPipeline({ record: shopRecord })).status, 'ready')
+  assert.equal(networkCalls.length, 2)
+
+  const malformedCalls = []
+  globalThis.fetch = async (url, options) => {
+    malformedCalls.push({ url, options })
+    return { ok: true, status: 200, json: async () => ({ accepted: true }) }
+  }
+  assert.deepEqual(await forwardDeskposPipeline({ record: shopRecord }), {
+    status: 'error',
+    reason: 'shop_invalid_response',
+    target: 'https://pos.supermega.dev/api/pipeline-leads',
+  })
+  assert.equal(malformedCalls.length, 2)
+
+  const rejectedCalls = []
+  globalThis.fetch = async (url, options) => {
+    rejectedCalls.push({ url, options })
+    return { ok: true, status: 200, json: async () => ({ ok: true, accepted: false }) }
+  }
+  assert.deepEqual(await forwardDeskposPipeline({ record: shopRecord }), {
+    status: 'error',
+    reason: 'shop_rejected',
+    target: 'https://pos.supermega.dev/api/pipeline-leads',
+  })
+  assert.equal(rejectedCalls.length, 1)
+
+  const unauthorizedCalls = []
+  globalThis.fetch = async (url, options) => {
+    unauthorizedCalls.push({ url, options })
+    return { ok: false, status: 401, json: async () => ({ error: 'Unauthorized.' }) }
+  }
+  assert.deepEqual(await forwardDeskposPipeline({ record: shopRecord }), {
+    status: 'error',
+    reason: 'shop_401',
+    target: 'https://pos.supermega.dev/api/pipeline-leads',
+  })
+  assert.equal(unauthorizedCalls.length, 1)
+  globalThis.fetch = contractFetch
 
   const result = await forwardOpsIntake({
     record: {
