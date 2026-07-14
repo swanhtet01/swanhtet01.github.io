@@ -15,9 +15,17 @@ const {
   publicSubmissionReceipt,
   publicSubmissionFailure,
   receiptHtml,
+  buildLeadRecord,
+  isDeskposLead,
+  deskposPipelinePayload,
+  forwardDeskposPipeline,
 } = handler.__test
 
 assert.equal(typeof forwardOpsIntake, 'function')
+assert.equal(typeof buildLeadRecord, 'function')
+assert.equal(typeof isDeskposLead, 'function')
+assert.equal(typeof deskposPipelinePayload, 'function')
+assert.equal(typeof forwardDeskposPipeline, 'function')
 assert.equal(isSafeOpsIntakeUrl('https://supermega-machine.vercel.app/api/intake'), true)
 assert.equal(isSafeOpsIntakeUrl('https://supermega-machine.vercel.app.evil.example/api/intake'), false)
 assert.equal(isSafeOpsIntakeUrl('https://supermega-machine.vercel.app/api/intake?redirect=1'), false)
@@ -25,6 +33,7 @@ assert.equal(isSafeOpsIntakeUrl('https://supermega-machine.vercel.app/api/intake
 const originalFetch = globalThis.fetch
 const originalSecret = process.env.SUPERMEGA_INTAKE_SECRET
 const originalUrl = process.env.SUPERMEGA_OPS_INTAKE_URL
+const originalDeskposPipelineUrl = process.env.DESKPOS_PIPELINE_URL
 const originalOpsKey = process.env.SUPERMEGA_OPS_KEY
 const originalSupabaseUrl = process.env.SUPABASE_URL
 const originalSupabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -86,8 +95,16 @@ try {
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'contract-test-service-role-key'
   process.env.RESEND_API_KEY = 'contract-test-resend-key'
   delete process.env.SUPERMEGA_OPS_INTAKE_URL
+  delete process.env.DESKPOS_PIPELINE_URL
   globalThis.fetch = async (url, options) => {
     calls.push({ url, options })
+    if (url === 'https://pos.supermega.dev/api/pipeline-leads') {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ accepted: true, leadCount: 1, lead: { id: 'SHOP-LEAD-1' } }),
+      }
+    }
     return {
       ok: true,
       status: 200,
@@ -214,6 +231,62 @@ try {
   assert.equal(healthPost.headers.allow, 'GET, HEAD')
   assert.deepEqual(healthPost.body, { ok: false, status: 'method_not_allowed', service: 'supermega-public-site' })
 
+  const requestStub = { headers: {}, socket: { remoteAddress: '127.0.0.1' } }
+  const shopRecord = buildLeadRecord({
+    leadId: 'LEAD-SHOP-1',
+    taskId: 'TASK-SHOP-1',
+    payload: {
+      name: 'Shop Buyer',
+      email: 'shop@example.com',
+      company: 'Example Shop',
+      goal: 'Set up checkout and stock from our approved catalog.',
+      page_path: '/contact/?from=shop-workspace',
+    },
+    req: requestStub,
+  })
+  const plantRecord = buildLeadRecord({
+    leadId: 'LEAD-PLANT-1',
+    taskId: 'TASK-PLANT-1',
+    payload: {
+      name: 'Plant Buyer',
+      email: 'plant@example.com',
+      company: 'Example Plant',
+      goal: 'Set up a production and quality risk queue.',
+      page_path: '/contact/?from=plant-workspace',
+    },
+    req: requestStub,
+  })
+  assert.equal(isDeskposLead(shopRecord), true)
+  assert.equal(isDeskposLead({ template_id: 'deskpos-quickstart' }), true)
+  assert.equal(isDeskposLead({ page_path: '/contact/?from=shop-workspace' }), true)
+  assert.equal(isDeskposLead(plantRecord), false)
+  assert.equal(isDeskposLead({ goal: 'Help with a weekly management report.' }), false)
+
+  const shopPayload = deskposPipelinePayload(shopRecord)
+  assert.equal(shopPayload.businessName, 'Example Shop')
+  assert.equal(shopPayload.vertical, 'retail')
+  assert.match(shopPayload.notes, /Product: Shop/)
+  assert.match(shopPayload.notes, /Template: deskpos-quickstart/)
+  assert.match(shopPayload.notes, /Onboarding: workspace_request/)
+  assert.match(shopPayload.notes, /First proof: One private Shop workspace/)
+
+  const shopForward = await forwardDeskposPipeline({ record: shopRecord })
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].url, 'https://pos.supermega.dev/api/pipeline-leads')
+  assert.equal(calls[0].options.method, 'POST')
+  assert.deepEqual(JSON.parse(calls[0].options.body), shopPayload)
+  assert.deepEqual(shopForward, {
+    status: 'ready',
+    target: 'https://pos.supermega.dev/api/pipeline-leads',
+    lead_count: 1,
+    shop_lead_id: 'SHOP-LEAD-1',
+  })
+  assert.deepEqual(await forwardDeskposPipeline({ record: plantRecord }), {
+    status: 'skipped',
+    reason: 'not_shop_lead',
+  })
+  assert.equal(calls.length, 1)
+
   const result = await forwardOpsIntake({
     record: {
       lead_id: 'LEAD-PUBLIC-1',
@@ -227,11 +300,12 @@ try {
     },
   })
 
-  assert.equal(calls.length, 1)
-  assert.equal(calls[0].url, 'https://supermega-machine.vercel.app/api/intake')
-  assert.equal(calls[0].options.method, 'POST')
-  assert.equal(calls[0].options.headers.Authorization, `Bearer ${secret}`)
-  const payload = JSON.parse(calls[0].options.body)
+  assert.equal(calls.length, 2)
+  const opsCall = calls[1]
+  assert.equal(opsCall.url, 'https://supermega-machine.vercel.app/api/intake')
+  assert.equal(opsCall.options.method, 'POST')
+  assert.equal(opsCall.options.headers.Authorization, `Bearer ${secret}`)
+  const payload = JSON.parse(opsCall.options.body)
   assert.equal(payload.secret, secret)
   assert.equal(payload.external_id, 'LEAD-PUBLIC-1')
   assert.equal(payload.source, 'website')
@@ -248,7 +322,7 @@ try {
   process.env.SUPERMEGA_OPS_INTAKE_URL = 'https://supermega-machine.vercel.app.evil.example/api/intake'
   const unsafe = await forwardOpsIntake({ record: {} })
   assert.deepEqual(unsafe, { status: 'skipped', reason: 'unsafe_ops_intake_url' })
-  assert.equal(calls.length, 1)
+  assert.equal(calls.length, 2)
 
   delete process.env.SUPERMEGA_INTAKE_SECRET
   delete process.env.SUPERMEGA_OPS_INTAKE_URL
@@ -260,6 +334,8 @@ try {
   else process.env.SUPERMEGA_INTAKE_SECRET = originalSecret
   if (originalUrl === undefined) delete process.env.SUPERMEGA_OPS_INTAKE_URL
   else process.env.SUPERMEGA_OPS_INTAKE_URL = originalUrl
+  if (originalDeskposPipelineUrl === undefined) delete process.env.DESKPOS_PIPELINE_URL
+  else process.env.DESKPOS_PIPELINE_URL = originalDeskposPipelineUrl
   if (originalOpsKey === undefined) delete process.env.SUPERMEGA_OPS_KEY
   else process.env.SUPERMEGA_OPS_KEY = originalOpsKey
   if (originalSupabaseUrl === undefined) delete process.env.SUPABASE_URL

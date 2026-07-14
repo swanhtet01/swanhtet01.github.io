@@ -948,10 +948,17 @@ function isSafeDeskposPipelineUrl(value) {
 }
 
 function isDeskposLead(record) {
+  const templateId = text(record.template_id).toLowerCase()
+  const productArea = text(record.product_area).toLowerCase()
+  const entryIntent = contactEntryIntent(record)
+  if (templateId === 'deskpos-quickstart' || productArea === 'shop' || entryIntent === 'shop-workspace') {
+    return true
+  }
   const productText = [
     record.requested_package,
     record.public_package,
     record.product_area,
+    record.template_id,
     record.first_output,
     record.workflow,
     record.page_path,
@@ -993,8 +1000,12 @@ function deskposPipelinePayload(record) {
     contact: [record.email, record.phone].filter(Boolean).join(' / '),
     notes: truncate([
       record.lead_id ? `Lead ${record.lead_id}` : '',
-      record.requested_package,
-      record.goal,
+      record.product_area ? `Product: ${record.product_area}` : '',
+      record.requested_package ? `Package: ${record.requested_package}` : '',
+      record.template_id ? `Template: ${record.template_id}` : '',
+      record.onboarding_stage ? `Onboarding: ${record.onboarding_stage}` : '',
+      record.first_proof_target ? `First proof: ${record.first_proof_target}` : '',
+      record.goal ? `Goal: ${record.goal}` : '',
       record.source_links ? `Source: ${record.source_links}` : '',
     ].filter(Boolean).join(' | '), 500),
     source: 'supermega-public-site',
@@ -2438,6 +2449,9 @@ handler.__test = {
   pipelineActionPayload,
   telegramLeadMessage,
   operatorConsoleUrl,
+  isDeskposLead,
+  deskposPipelinePayload,
+  forwardDeskposPipeline,
   forwardOpsIntake,
   isSafeOpsIntakeUrl,
   opsIntakeStatus,
