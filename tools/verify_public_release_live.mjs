@@ -60,11 +60,14 @@ function verifyHome(html, label) {
 
 function verifyAgentIntake(html) {
   for (const required of [
-    "search.get('from')==='ai-agent-solution'",
+    "entryIntent==='ai-agent-solution'",
+    "entryIntent==='shop-workspace'?'Shop':entryIntent==='plant-workspace'?'Plant':''",
     'What do you want to improve?',
     'What should work better?',
     'one reviewed example',
     "idleSubmitLabel='Contact us'",
+    "text('[data-contact-heading]','Request a private '+workspaceProduct+' workspace.')",
+    "idleSubmitLabel='Request workspace'",
     'action="/api/contact-submissions"',
   ]) {
     assert(html.includes(required), `agent_intake_missing_${required.slice(0, 32)}`)
