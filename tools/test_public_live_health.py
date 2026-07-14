@@ -18,6 +18,7 @@ BASE = "https://public.example/"
 WWW = "https://www.example/"
 APP = "https://app.example/"
 DEMO = "https://demo.example/"
+POS = "https://pos.example/"
 CONSOLE = "https://console.example/"
 AGENT_INTAKE = f"{BASE}contact/?from=ai-agent-solution"
 
@@ -83,6 +84,13 @@ def healthy_responses() -> dict[str, checker.HttpResult]:
         'data-my="Shop POS ဖွင့်ရန်"',
         "assets/noto-sans-myanmar.woff2",
         "Shop POS Shop POS Shop POS Shop POS",
+    )
+    pos = page(
+        "<title>Shop - the simple POS for Myanmar businesses</title>",
+        '<link rel="canonical" href="https://pos.supermega.dev/" />',
+        '<meta property="og:site_name" content="Shop" />',
+        '"name": "Shop"',
+        '<div id="root"></div>',
     )
     console = page(
         "<title>SuperMega Console</title>",
@@ -162,6 +170,16 @@ def healthy_responses() -> dict[str, checker.HttpResult]:
             f"{APP}assets/index-current.js", "Shop" + ("x" * 1400)
         ),
         f"{APP}api/health": result(f"{APP}api/health", app_health),
+        POS: result(POS, pos),
+        f"{POS}api/health": result(
+            f"{POS}api/health",
+            {"ok": True, "service": "supermega-shop-pos", "status": "ready"},
+        ),
+        f"{POS}api/health?detail=1": result(
+            f"{POS}api/health?detail=1",
+            {"error": "operator_auth_required"},
+            status=401,
+        ),
         DEMO: result(
             DEMO,
             demo,
@@ -192,13 +210,49 @@ class PortfolioHealthTest(unittest.TestCase):
             return responses[url]
 
         with patch.object(checker, "fetch", side_effect=fake_fetch):
-            return checker.run(BASE, WWW, APP, DEMO, CONSOLE, timeout=1, attempts=1)
+            return checker.run(BASE, WWW, APP, DEMO, POS, CONSOLE, timeout=1, attempts=1)
 
-    def test_healthy_portfolio_passes_all_nineteen_checks(self):
+    def test_healthy_portfolio_passes_all_twenty_two_checks(self):
         report = self.run_report(healthy_responses())
         self.assertEqual(report["status"], "ready")
-        self.assertEqual(report["checks"], 19)
+        self.assertEqual(report["checks"], 22)
         self.assertEqual(report["failures"], [])
+
+    def test_shop_pos_health_rejects_internal_fields(self):
+        responses = healthy_responses()
+        health_url = f"{POS}api/health"
+        payload = json.loads(responses[health_url].body)
+        payload["project"] = "internal-project"
+        responses[health_url] = result(health_url, payload)
+        report = self.run_report(responses)
+        self.assertEqual(report["status"], "error")
+        failure = next(item for item in report["failures"] if item["kind"] == "shop_pos_health")
+        self.assertIn("payload_keys", failure["mismatches"])
+
+    def test_unprotected_shop_pos_diagnostics_fails_guard(self):
+        responses = healthy_responses()
+        diagnostics_url = f"{POS}api/health?detail=1"
+        responses[diagnostics_url] = result(
+            diagnostics_url,
+            {"ok": True, "project": "internal-project"},
+        )
+        report = self.run_report(responses)
+        self.assertEqual(report["status"], "error")
+        failure = next(
+            item for item in report["failures"] if item["kind"] == "shop_pos_diagnostics_guard"
+        )
+        self.assertEqual(failure["status"], 200)
+        self.assertIn("payload_keys", failure["mismatches"])
+
+    def test_retired_identity_or_legacy_host_fails_shop_pos_page(self):
+        for token in ("MegaOS", "<title>DeskPOS", "spa-desk-pilot.vercel.app"):
+            with self.subTest(token=token):
+                responses = healthy_responses()
+                responses[POS] = result(POS, responses[POS].body.decode() + token)
+                report = self.run_report(responses)
+                self.assertEqual(report["status"], "error")
+                failure = next(item for item in report["failures"] if item["kind"] == "shop_pos_page")
+                self.assertIn(token, failure["unexpected"])
 
     def test_public_contact_status_rejects_internal_fields(self):
         responses = healthy_responses()
