@@ -79,29 +79,28 @@ for (const [relativePath, html] of pages) {
 }
 
 for (const required of [
-  '<title>supermega.dev | Shop, Plant and AI Agent Solutions</title>',
-  '<h1 id="portfolio-heading">Shop. Plant. AI Agent Solutions.</h1>',
+  '<title>supermega.dev | Shop and Plant</title>',
+  '<h1 id="portfolio-heading">Run the operation. See what matters.</h1>',
   'https://app.supermega.dev/?demo=shop',
   'https://app.supermega.dev/?demo=plant',
-  'Two products. One agent layer.',
+  'Two working products',
+  'Try first. Add data later.',
   '<strong>Shop</strong>',
   '<strong>Plant</strong>',
-  '<strong>AI Agent Solutions</strong>',
-  'Build an agent solution',
-  'external actions approval-gated',
+  'AI Agent Solutions',
+  'Need a repeated task handled?',
+  '>Contact us</a>',
   'src="/live-shop-workspace.png"',
-  'src="/live-shop-mobile.png"',
   'data-public-status',
   "fetch('/api/health'",
-  'Shop</span><strong>Sales, customers, stock, receivables, and books',
-  'Plant</span><strong>Floor state, machine history, and shift events',
-  'Agents</span><strong>Evidence-linked drafts with approval-gated actions',
+  'Point of sale, customers, stock, receivables, and books.',
+  'Floor state, machine history, shift events, and imports.',
   'site.webmanifest',
 ]) {
   if (!home.includes(required)) fail('homepage_front_door_contract_missing', { required })
 }
 
-for (const forbidden of ['https://demo.supermega.dev/', 'The intelligent workspace for daily operations.', 'Explore live demos', 'Open workspace']) {
+for (const forbidden of ['https://demo.supermega.dev/', 'The intelligent workspace for daily operations.', 'Explore live demos', 'Open workspace', 'target="_blank"', 'rotate(', 'data-hero-media', 'Current build', 'Build an agent solution', '>Agent solution<']) {
   if (home.includes(forbidden)) fail('homepage_keeps_superseded_portfolio_copy', { forbidden })
 }
 

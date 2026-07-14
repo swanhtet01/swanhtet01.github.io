@@ -21,11 +21,11 @@ for (const required of [
   'data-contact-heading',
   'data-contact-goal-label',
   "search.get('from')==='ai-agent-solution'",
-  'What should your agent handle every week?',
-  'Request an agent proof',
-  'What does your team repeat?',
-  'Request first proof',
-  'one redacted sample and one reviewed output',
+  'What do you want to improve?',
+  'Start here',
+  'What should work better?',
+  "idleSubmitLabel='Contact us'",
+  'one reviewed example',
 ]) {
   assert.ok(contact.includes(required), `missing agent intake copy: ${required}`)
 }

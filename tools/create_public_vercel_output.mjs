@@ -274,11 +274,11 @@ const headerHtml = `${themeBootstrap}
       <span class="brand-text">supermega<span class="domain">.dev</span></span>
     </a>
     <nav class="nav" aria-label="Primary">
-      <a class="nav-link optional-nav" href="https://app.supermega.dev/?demo=shop" target="_blank" rel="noopener noreferrer">Shop</a>
-      <a class="nav-link optional-nav" href="https://app.supermega.dev/?demo=plant" target="_blank" rel="noopener noreferrer">Plant</a>
+      <a class="nav-link optional-nav" href="https://app.supermega.dev/?demo=shop">Shop</a>
+      <a class="nav-link optional-nav" href="https://app.supermega.dev/?demo=plant">Plant</a>
       <a class="nav-link optional-nav" href="/contact/">Contact</a>
       <button class="icon-button" type="button" data-theme-toggle aria-label="Use dark mode" title="Use dark mode"><svg class="theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path></svg><svg class="theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 15.2A8.5 8.5 0 0 1 8.8 3.5 8.5 8.5 0 1 0 20.5 15.2Z"></path></svg></button>
-      <a class="btn primary header-cta" href="/contact/?from=ai-agent-solution">Agent solution</a>
+      <a class="btn primary header-cta" href="/contact/">Start now</a>
     </nav>
   </header>
 </div>
@@ -286,7 +286,7 @@ ${themeToggleScript}`
 
 const footerHtml = `<div class="footer-frame"><footer>
   <span class="footer-brand"><span class="footer-command">&gt;_</span> supermega.dev</span>
-  <span class="footer-links"><a href="https://app.supermega.dev/?demo=shop" target="_blank" rel="noopener noreferrer">Shop</a><a href="https://app.supermega.dev/?demo=plant" target="_blank" rel="noopener noreferrer">Plant</a><a href="/contact/?from=ai-agent-solution">AI agents</a><a href="/privacy/">Privacy</a></span>
+  <span class="footer-links"><a href="https://app.supermega.dev/?demo=shop">Shop</a><a href="https://app.supermega.dev/?demo=plant">Plant</a><a href="/contact/">Contact</a><a href="/privacy/">Privacy</a></span>
 </footer></div>`
 
 function socialMeta(title, description, url) {
@@ -323,33 +323,24 @@ function documentHtml({ title, description, canonical, content, style = '' }) {
 
 const liveStatusScript = `<script>(function(){var node=document.querySelector('[data-public-status]');if(!node)return;if(location.hostname==='127.0.0.1'||location.hostname==='localhost'){node.textContent='Local preview';return;}fetch('/api/health',{cache:'no-store',headers:{accept:'application/json'}}).then(function(response){if(!response.ok)throw new Error('unavailable');return response.json();}).then(function(body){node.textContent=body&&body.ok?'Public system ready':'Workspace available';var parent=node.closest('[data-status-shell]');if(parent)parent.classList.add('is-ready');}).catch(function(){node.textContent='Workspace available';});})();</script>`
 
-const homeMotionScript = `<script>(function(){if(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches)return;var hero=document.querySelector('[data-hero]'),media=document.querySelector('[data-hero-media]');if(!hero||!media)return;hero.addEventListener('pointermove',function(event){if(event.pointerType==='touch')return;var box=hero.getBoundingClientRect(),x=(event.clientX-box.left)/box.width-.5,y=(event.clientY-box.top)/box.height-.5;media.style.setProperty('--tilt-x',String(y*-1.2)+'deg');media.style.setProperty('--tilt-y',String(x*1.6)+'deg');});hero.addEventListener('pointerleave',function(){media.style.setProperty('--tilt-x','0deg');media.style.setProperty('--tilt-y','0deg');});var queued=false;function update(){queued=false;media.style.setProperty('--scroll-lift',String(Math.max(-22,window.scrollY*-.035))+'px');}window.addEventListener('scroll',function(){if(!queued){queued=true;requestAnimationFrame(update);}},{passive:true});})();</script>`
+const homeMotionScript = `<script>(function(){var nodes=document.querySelectorAll('[data-reveal]');if(!nodes.length)return;if(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches){nodes.forEach(function(node){node.classList.add('is-visible');});return;}if(!('IntersectionObserver' in window)){nodes.forEach(function(node){node.classList.add('is-visible');});return;}var observer=new IntersectionObserver(function(entries){entries.forEach(function(entry){if(entry.isIntersecting){entry.target.classList.add('is-visible');observer.unobserve(entry.target);}});},{rootMargin:'0px 0px -8% 0px',threshold:.12});nodes.forEach(function(node){observer.observe(node);});})();</script>`
 
 const homeHtml = documentHtml({
-  title: 'supermega.dev | Shop, Plant and AI Agent Solutions',
-  description: 'Open working Shop and Plant products, or bring SuperMega one repeated knowledge-work process for a private, approval-gated AI agent solution.',
+  title: 'supermega.dev | Shop and Plant',
+  description: 'Open working Shop and Plant products, or contact SuperMega about one repeated workflow your team wants handled better.',
   canonical: 'https://supermega.dev/',
   style: `
     .home-main { width: 100%; overflow: clip; }
     .hero {
       position: relative;
-      height: min(800px, calc(100svh - 90px));
-      min-height: 660px;
-      overflow: hidden;
+      overflow: clip;
       border-bottom: 1px solid var(--line);
+      padding: 122px 0 14px;
       background: var(--surface);
       isolation: isolate;
     }
-    .hero::before {
-      position: absolute;
-      inset: 0;
-      z-index: -1;
-      border-right: 1px solid transparent;
-      background: var(--surface);
-      content: "";
-    }
-    .hero-inner { position: relative; z-index: 3; width: min(100% - 48px, 1240px); margin-inline: auto; padding-top: 132px; }
-    .hero-copy { max-width: 760px; }
+    .hero-inner { width: min(100% - 48px, 1240px); margin-inline: auto; }
+    .hero-head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(340px, .72fr); align-items: end; gap: 72px; }
     .hero-command {
       display: inline-flex;
       min-height: 32px;
@@ -364,72 +355,42 @@ const homeHtml = documentHtml({
       text-transform: uppercase;
     }
     .hero-command strong { color: var(--accent); }
-    .hero h1 { max-width: 15ch; margin: 18px 0 18px; font-size: 60px; line-height: 1.02; letter-spacing: 0; font-weight: 790; }
-    .hero-copy > p { max-width: 55ch; margin: 0; color: var(--muted); font-size: 19px; line-height: 1.52; }
+    .hero h1 { max-width: 12ch; margin: 18px 0 0; font-size: 56px; line-height: 1.02; letter-spacing: 0; font-weight: 790; }
+    .hero-side > p { max-width: 45ch; margin: 0; color: var(--muted); font-size: 17px; line-height: 1.58; }
     .hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 26px; }
     .hero-actions .btn { min-height: 50px; }
-    .hero-contact { display: inline-flex; min-height: 48px; align-items: center; padding: 0 8px; color: var(--ink); font-size: 14px; font-weight: 780; text-decoration: none; }
-    .hero-contact span { margin-left: 8px; color: var(--accent); transition: transform 160ms ease; }
-    .hero-contact:hover span { transform: translateX(3px); }
+    .hero-status { min-height: 36px; display: inline-flex; align-items: center; gap: 9px; margin-top: 18px; color: var(--muted); font-size: 12px; font-weight: 720; }
     .hero-media {
-      --tilt-x: 0deg;
-      --tilt-y: 0deg;
-      --scroll-lift: 0px;
-      position: absolute;
-      z-index: 2;
-      top: 526px;
-      right: max(24px, calc((100% - 1240px) / 2));
-      bottom: -150px;
-      left: max(24px, calc((100% - 1240px) / 2));
+      position: relative;
+      width: min(100%, 960px);
+      margin: 30px auto 0;
       border: 1px solid var(--line-strong);
-      border-radius: 8px 8px 0 0;
-      overflow: visible;
-      background: #07121f;
+      border-radius: 8px;
+      overflow: hidden;
+      padding: 7px;
+      background: var(--glass-strong);
       box-shadow: var(--shadow-deep);
-      transform: perspective(1600px) rotateX(var(--tilt-x)) rotateY(var(--tilt-y)) translateY(var(--scroll-lift));
-      transform-origin: center top;
-      transition: transform 180ms ease-out;
+      backdrop-filter: blur(24px) saturate(135%);
+      -webkit-backdrop-filter: blur(24px) saturate(135%);
       animation: media-in 820ms 260ms cubic-bezier(.2,.8,.2,1) both;
     }
-    .hero-media-clip { width: 100%; height: 100%; overflow: hidden; border-radius: inherit; }
-    .hero-media img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: top left; }
-    .workspace-status {
-      position: absolute;
-      right: 14px;
-      top: 14px;
-      min-height: 40px;
-      display: inline-flex;
-      align-items: center;
-      gap: 9px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 0 12px;
-      background: var(--glass-strong);
-      color: var(--muted);
-      box-shadow: var(--shadow);
-      backdrop-filter: blur(20px) saturate(135%);
-      -webkit-backdrop-filter: blur(20px) saturate(135%);
-      font-size: 12px;
-      font-weight: 760;
-    }
+    .hero-media img { display: block; width: 100%; height: auto; border-radius: 5px; }
     .live-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--quiet); box-shadow: 0 0 0 4px color-mix(in srgb, var(--quiet) 16%, transparent); }
-    .workspace-status.is-ready .live-dot { background: var(--signal); box-shadow: 0 0 0 4px color-mix(in srgb, var(--signal) 16%, transparent); }
-    .hero-copy > * { animation: copy-in 620ms cubic-bezier(.2,.8,.2,1) both; }
-    .hero-copy > h1 { animation-delay: 70ms; }
-    .hero-copy > p { animation-delay: 140ms; }
-    .hero-copy > .hero-actions { animation-delay: 210ms; }
+    .hero-status.is-ready .live-dot { background: var(--signal); box-shadow: 0 0 0 4px color-mix(in srgb, var(--signal) 16%, transparent); }
+    .hero-head > * { animation: copy-in 620ms cubic-bezier(.2,.8,.2,1) both; }
+    .hero-side { animation-delay: 110ms; }
     @keyframes copy-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
-    @keyframes media-in { from { opacity: 0; transform: perspective(1600px) translateY(40px) scale(.985); } to { opacity: 1; transform: perspective(1600px) translateY(0) scale(1); } }
+    @keyframes media-in { from { opacity: 0; transform: translateY(26px) scale(.99); } to { opacity: 1; transform: translateY(0) scale(1); } }
 
-    .entry-section { padding: 64px 0 106px; }
+    .entry-section { padding: 34px 0 104px; }
     .section-intro { display: grid; grid-template-columns: minmax(0, .9fr) minmax(280px, .55fr); gap: 48px; align-items: end; margin-bottom: 50px; }
-    .section-intro h2 { max-width: 12ch; margin: 10px 0 0; font-size: 46px; line-height: 1.08; letter-spacing: 0; }
+    .section-intro h2 { max-width: 13ch; margin: 10px 0 0; font-size: 44px; line-height: 1.08; letter-spacing: 0; }
     .section-intro p { max-width: 42ch; margin: 0; color: var(--muted); font-size: 17px; line-height: 1.55; }
     .destination-list { border-bottom: 1px solid var(--line); }
     .destination {
       min-height: 112px;
       display: grid;
-      grid-template-columns: 120px minmax(0, 1fr) 48px;
+      grid-template-columns: 100px minmax(0, 1fr) 48px;
       align-items: center;
       gap: 24px;
       border-top: 1px solid var(--line);
@@ -446,51 +407,53 @@ const homeHtml = documentHtml({
     .destination-arrow { display: grid; width: 44px; height: 44px; place-items: center; border: 1px solid var(--line); border-radius: 8px; color: var(--accent); font-size: 20px; transition: border-color 160ms ease, transform 160ms ease; }
     .destination:hover .destination-arrow { border-color: var(--accent); transform: translate(2px, -2px); }
 
-    .continuity-band { overflow: hidden; background: var(--inverse); color: var(--inverse-ink); }
-    .continuity-inner { min-height: 760px; display: grid; grid-template-columns: minmax(0, .84fr) minmax(360px, 1.16fr); align-items: center; gap: 72px; padding-block: 72px; }
-    .continuity-copy .eyebrow { color: #6b95ff; }
-    .continuity-copy h2 { max-width: 12ch; margin: 12px 0 20px; font-size: 48px; line-height: 1.06; letter-spacing: 0; }
-    .continuity-copy > p { max-width: 42ch; margin: 0; color: var(--inverse-muted); font-size: 17px; line-height: 1.6; }
-    .continuity-list { margin: 38px 0 30px; border-bottom: 1px solid rgba(255,255,255,.14); }
-    .continuity-line { min-height: 60px; display: grid; grid-template-columns: 90px 1fr; align-items: center; gap: 20px; border-top: 1px solid rgba(255,255,255,.14); }
-    .continuity-line span { color: #8faeff; font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 11px; font-weight: 760; text-transform: uppercase; }
-    .continuity-line strong { color: var(--inverse-ink); font-size: 14px; font-weight: 680; }
-    .continuity-copy .btn.secondary { border-color: rgba(255,255,255,.18); background: rgba(255,255,255,.08); color: var(--inverse-ink); }
-    .device-stage { position: relative; min-height: 616px; display: grid; place-items: center; }
-    .device-stage::before, .device-stage::after { position: absolute; content: ""; background: rgba(255,255,255,.12); }
-    .device-stage::before { top: 0; bottom: 0; left: 50%; width: 1px; }
-    .device-stage::after { right: 0; left: 0; top: 50%; height: 1px; }
-    .phone-shell { position: relative; z-index: 2; width: 334px; height: 610px; overflow: hidden; border: 1px solid rgba(255,255,255,.22); border-radius: 8px; background: #07121f; box-shadow: 0 40px 100px rgba(0,0,0,.52); transform: rotate(1.1deg); transition: transform 260ms ease; }
-    .device-stage:hover .phone-shell { transform: rotate(0deg) translateY(-5px); }
-    .phone-shell img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: top center; }
-    .device-note { position: absolute; z-index: 3; right: 0; bottom: 54px; width: 190px; border: 1px solid rgba(255,255,255,.18); border-radius: 8px; padding: 14px 15px; background: rgba(15,20,27,.76); color: var(--inverse-muted); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); font-size: 12px; line-height: 1.45; }
-    .device-note strong { display: block; margin-bottom: 4px; color: var(--inverse-ink); font-size: 14px; }
+    .start-band { background: var(--inverse); color: var(--inverse-ink); }
+    .start-inner { padding: 88px 0 92px; }
+    .start-intro { display: grid; grid-template-columns: minmax(0, .9fr) minmax(280px, .55fr); align-items: end; gap: 48px; }
+    .start-intro .eyebrow { color: #8faeff; }
+    .start-intro h2 { max-width: 13ch; margin: 10px 0 0; font-size: 44px; line-height: 1.08; letter-spacing: 0; }
+    .start-intro p { max-width: 42ch; margin: 0; color: var(--inverse-muted); font-size: 17px; line-height: 1.58; }
+    .start-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 52px; border-block: 1px solid rgba(255,255,255,.16); }
+    .start-step { min-height: 160px; padding: 28px 28px 28px 0; }
+    .start-step + .start-step { border-left: 1px solid rgba(255,255,255,.16); padding-left: 28px; }
+    .start-step span { color: #8faeff; font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 11px; font-weight: 760; }
+    .start-step strong { display: block; margin-top: 15px; color: var(--inverse-ink); font-size: 18px; }
+    .start-step p { max-width: 30ch; margin: 8px 0 0; color: var(--inverse-muted); font-size: 14px; line-height: 1.55; }
+    .start-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 30px; }
+    .start-actions .btn.secondary { border-color: rgba(255,255,255,.18); background: rgba(255,255,255,.08); color: var(--inverse-ink); }
 
-    .final-cta { border-bottom: 1px solid var(--line); padding: 104px 0 110px; }
-    .final-cta-inner { display: grid; grid-template-columns: 120px minmax(0, 1fr) auto; align-items: center; gap: 42px; }
-    .final-command { color: var(--accent); font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 52px; font-weight: 800; line-height: 1; }
-    .final-cta h2 { max-width: 18ch; margin: 0; font-size: 42px; line-height: 1.08; letter-spacing: 0; }
+    .workflow-section { border-bottom: 1px solid var(--line); padding: 98px 0 104px; }
+    .workflow-inner { display: grid; grid-template-columns: 140px minmax(0, 1fr) minmax(180px, auto); align-items: end; gap: 38px; }
+    .workflow-label { color: var(--accent); font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 12px; font-weight: 760; text-transform: uppercase; }
+    .workflow-copy h2 { max-width: 17ch; margin: 0; font-size: 42px; line-height: 1.08; letter-spacing: 0; }
+    .workflow-copy p { max-width: 52ch; margin: 16px 0 0; color: var(--muted); font-size: 16px; line-height: 1.58; }
+    [data-reveal] { opacity: 0; transform: translateY(18px); transition: opacity 520ms ease, transform 520ms cubic-bezier(.2,.8,.2,1); }
+    [data-reveal].is-visible { opacity: 1; transform: translateY(0); }
 
     @media (max-width: 980px) {
-      .hero h1 { font-size: 54px; }
+      .hero-head { grid-template-columns: 1fr; gap: 24px; }
+      .hero-side { max-width: 680px; }
+      .hero h1 { font-size: 50px; }
       .section-intro { grid-template-columns: 1fr; gap: 18px; }
       .destination-copy { grid-template-columns: minmax(160px, .5fr) 1fr; }
-      .continuity-inner { grid-template-columns: 1fr 1fr; gap: 36px; }
-      .device-note { right: -8px; }
-      .final-cta-inner { grid-template-columns: 82px minmax(0, 1fr); }
-      .final-cta-inner .btn { grid-column: 2; justify-self: start; }
+      .start-intro { grid-template-columns: 1fr; gap: 18px; }
+      .workflow-inner { grid-template-columns: 110px minmax(0, 1fr); }
+      .workflow-inner .btn { grid-column: 2; justify-self: start; }
+    }
+    @media (max-height: 800px) and (min-width: 721px) {
+      .hero { padding-top: 104px; }
+      .hero h1 { font-size: 48px; }
+      .hero-media { width: min(100%, 760px); margin-top: 22px; }
     }
     @media (max-width: 720px) {
-      .hero { height: min(700px, calc(100svh - 96px)); min-height: 570px; max-height: none; }
-      .hero-inner { width: min(100% - 32px, 1240px); padding-top: 104px; }
-      .hero h1 { max-width: 15ch; margin-top: 14px; font-size: 40px; line-height: 1.04; }
-      .hero-copy > p { max-width: 38ch; font-size: 16px; line-height: 1.48; }
+      .hero { padding: 104px 0 20px; }
+      .hero-inner { width: min(100% - 32px, 1240px); }
+      .hero h1 { max-width: 12ch; margin-top: 14px; font-size: 40px; line-height: 1.04; }
+      .hero-side > p { max-width: 38ch; font-size: 15px; line-height: 1.5; }
       .hero-actions { gap: 8px; margin-top: 20px; }
-      .hero-actions .btn { min-height: 46px; flex: 1 1 150px; }
-      .hero-contact { display: none; }
-      .hero-media { top: 450px; right: 16px; bottom: -78px; left: 16px; }
-      .workspace-status { top: 10px; right: 10px; min-height: 36px; }
-      .entry-section { padding: 50px 0 74px; }
+      .hero-actions .btn { min-height: 46px; flex: 1 1 140px; }
+      .hero-media { margin-top: 24px; padding: 4px; }
+      .entry-section { padding: 30px 0 74px; }
       .section-intro { margin-bottom: 34px; }
       .section-intro h2 { font-size: 36px; }
       .section-intro p { font-size: 16px; }
@@ -501,83 +464,81 @@ const homeHtml = documentHtml({
       .destination-copy strong { font-size: 21px; }
       .destination-copy span { font-size: 14px; }
       .destination-arrow { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
-      .continuity-inner { min-height: 0; grid-template-columns: 1fr; gap: 54px; padding-block: 68px; }
-      .continuity-copy h2 { font-size: 38px; }
-      .continuity-copy > p { font-size: 16px; }
-      .device-stage { min-height: 590px; }
-      .phone-shell { width: min(312px, calc(100vw - 62px)); height: 570px; }
-      .device-note { right: -2px; bottom: 34px; width: 166px; }
-      .final-cta { padding: 72px 0 78px; }
-      .final-cta-inner { grid-template-columns: 1fr; gap: 20px; }
-      .final-command { font-size: 42px; }
-      .final-cta h2 { font-size: 34px; }
-      .final-cta-inner .btn { grid-column: auto; }
+      .start-inner { padding: 68px 0 72px; }
+      .start-intro h2 { font-size: 36px; }
+      .start-intro p { font-size: 16px; }
+      .start-steps { grid-template-columns: 1fr; margin-top: 36px; }
+      .start-step { min-height: 0; padding: 24px 0; }
+      .start-step + .start-step { border-top: 1px solid rgba(255,255,255,.16); border-left: 0; padding-left: 0; }
+      .workflow-section { padding: 72px 0 78px; }
+      .workflow-inner { grid-template-columns: 1fr; gap: 18px; }
+      .workflow-copy h2 { font-size: 34px; }
+      .workflow-inner .btn { grid-column: auto; }
     }
     @media (max-width: 390px) {
       .hero-command { font-size: 11px; }
       .hero h1 { font-size: 36px; }
     }
-    @media (max-width: 360px) {
-      .hero-media { top: 472px; }
-    }
   `,
   content: `<main class="home-main">
   <section class="hero" data-hero aria-labelledby="portfolio-heading">
     <div class="hero-inner">
-      <div class="hero-copy">
-        <div class="hero-command"><strong>&gt;_</strong><span>products / live</span></div>
-        <h1 id="portfolio-heading">Shop. Plant. AI Agent Solutions.</h1>
-        <p>Run retail operations, see the factory floor, or put one repeated office workflow into a private agent with an explicit approval boundary.</p>
-        <div class="hero-actions">
-          <a class="btn primary" href="https://app.supermega.dev/?demo=shop" target="_blank" rel="noopener noreferrer">Open Shop</a>
-          <a class="btn secondary" href="https://app.supermega.dev/?demo=plant" target="_blank" rel="noopener noreferrer">Open Plant</a>
-          <a class="hero-contact" href="/contact/?from=ai-agent-solution">Build an agent solution <span aria-hidden="true">&#8594;</span></a>
+      <div class="hero-head">
+        <div>
+          <div class="hero-command"><strong>&gt;_</strong><span>workspaces / live</span></div>
+          <h1 id="portfolio-heading">Run the operation. See what matters.</h1>
+        </div>
+        <div class="hero-side">
+          <p>Shop keeps sales, stock, customers, and books together. Plant keeps floor activity and machine history in view.</p>
+          <div class="hero-actions">
+            <a class="btn primary" href="https://app.supermega.dev/?demo=shop">Open Shop</a>
+            <a class="btn secondary" href="https://app.supermega.dev/?demo=plant">Open Plant</a>
+            <a class="btn secondary" href="/contact/">Contact us</a>
+          </div>
+          <div class="hero-status" data-status-shell><span class="live-dot" aria-hidden="true"></span><span data-public-status aria-live="polite">Checking public system</span></div>
         </div>
       </div>
-    </div>
-    <div class="hero-media" data-hero-media>
-      <div class="workspace-status" data-status-shell><span class="live-dot" aria-hidden="true"></span><span data-public-status aria-live="polite">Checking public system</span></div>
-      <div class="hero-media-clip"><img src="/live-shop-workspace.png" alt="Current Shop workspace showing sales, cash, customers, and stock" /></div>
+      <div class="hero-media"><img src="/live-shop-workspace.png" alt="Current Shop workspace showing sales, cash, customers, and stock" width="1600" height="760" fetchpriority="high" /></div>
     </div>
   </section>
 
-  <section class="entry-section page-frame" id="start" aria-labelledby="start-heading">
+  <section class="entry-section page-frame" id="products" aria-labelledby="products-heading">
     <div class="section-intro">
-      <div><div class="eyebrow">Two products. One agent layer.</div><h2 id="start-heading">Start with a real operating outcome.</h2></div>
-      <p>Shop and Plant are working products. AI Agent Solutions are configured per client around one repeated workflow and approved data access.</p>
+      <div><div class="eyebrow">Two working products</div><h2 id="products-heading">Choose where you work.</h2></div>
+      <p>Both products use the same responsive account and open directly in this browser.</p>
     </div>
     <div class="destination-list">
-      <a class="destination" href="https://app.supermega.dev/?demo=shop" target="_blank" rel="noopener noreferrer"><span class="destination-index">01 / SHOP</span><span class="destination-copy"><strong>Shop</strong><span>Sales, customers, stock, receivables, and books in one account-free working demo.</span></span><span class="destination-arrow" aria-hidden="true">&#8599;</span></a>
-      <a class="destination" href="https://app.supermega.dev/?demo=plant" target="_blank" rel="noopener noreferrer"><span class="destination-index">02 / PLANT</span><span class="destination-copy"><strong>Plant</strong><span>Floor status, machine activity, and structured shift events in a working factory demo.</span></span><span class="destination-arrow" aria-hidden="true">&#8599;</span></a>
-      <a class="destination" href="/contact/?from=ai-agent-solution"><span class="destination-index">03 / AGENT</span><span class="destination-copy"><strong>AI Agent Solutions</strong><span>Private workcells that read approved sources, prepare evidence-linked outputs, and keep external actions approval-gated.</span></span><span class="destination-arrow" aria-hidden="true">&#8594;</span></a>
+      <a class="destination" href="https://app.supermega.dev/?demo=shop"><span class="destination-index">01 / SHOP</span><span class="destination-copy"><strong>Shop</strong><span>Point of sale, customers, stock, receivables, and books.</span></span><span class="destination-arrow" aria-hidden="true">&#8594;</span></a>
+      <a class="destination" href="https://app.supermega.dev/?demo=plant"><span class="destination-index">02 / PLANT</span><span class="destination-copy"><strong>Plant</strong><span>Floor state, machine history, shift events, and imports.</span></span><span class="destination-arrow" aria-hidden="true">&#8594;</span></a>
     </div>
   </section>
 
-  <section class="continuity-band" aria-labelledby="continuity-heading">
-    <div class="continuity-inner page-frame">
-      <div class="continuity-copy">
-        <div class="eyebrow">One product core</div>
-        <h2 id="continuity-heading">Run the operation. Add agents at the edge.</h2>
-        <p>Shop and Plant share the same account, tenant, recovery, audit, and approval foundation. Agent workcells stay isolated and connect only to approved sources.</p>
-        <div class="continuity-list" aria-label="SuperMega product lines">
-          <div class="continuity-line"><span>Shop</span><strong>Sales, customers, stock, receivables, and books</strong></div>
-          <div class="continuity-line"><span>Plant</span><strong>Floor state, machine history, and shift events</strong></div>
-          <div class="continuity-line"><span>Agents</span><strong>Evidence-linked drafts with approval-gated actions</strong></div>
-        </div>
-        <a class="btn secondary" href="https://app.supermega.dev/?demo=shop" target="_blank" rel="noopener noreferrer">Open Shop</a>
+  <section class="start-band" id="start" aria-labelledby="start-heading">
+    <div class="start-inner page-frame" data-reveal>
+      <div class="start-intro">
+        <div><div class="eyebrow">New here?</div><h2 id="start-heading">Try first. Add data later.</h2></div>
+        <p>The demo needs no account. Create a workspace only when you want to keep your work and use it across devices.</p>
       </div>
-      <div class="device-stage" aria-label="Current Shop workspace on a phone">
-        <div class="phone-shell"><img src="/live-shop-mobile.png" alt="Current mobile Shop workspace with sales and stock status" /></div>
-        <div class="device-note"><strong>Current build</strong>Same workspace. No separate mobile product.</div>
+      <div class="start-steps">
+        <div class="start-step"><span>01 / TRY</span><strong>Open a demo</strong><p>Choose Shop or Plant and use the working screens immediately.</p></div>
+        <div class="start-step"><span>02 / ACCOUNT</span><strong>Create your workspace</strong><p>Use email and password, or sign back in with an email code.</p></div>
+        <div class="start-step"><span>03 / DATA</span><strong>Bring your data</strong><p>Import your own rows when you are ready, or start fresh.</p></div>
+      </div>
+      <div class="start-actions">
+        <a class="btn primary" href="https://app.supermega.dev/?demo=shop">Try Shop</a>
+        <a class="btn secondary" href="https://app.supermega.dev/?demo=plant">Try Plant</a>
       </div>
     </div>
   </section>
 
-  <section class="final-cta">
-    <div class="final-cta-inner page-frame">
-      <div class="final-command" aria-hidden="true">&gt;_</div>
-      <h2>Start with one product or one repeated workflow.</h2>
-      <a class="btn primary" href="/contact/">Tell us the outcome</a>
+  <section class="workflow-section">
+    <div class="workflow-inner page-frame" data-reveal>
+      <div class="workflow-label">AI Agent Solutions</div>
+      <div class="workflow-copy">
+        <h2>Need a repeated task handled?</h2>
+        <p>Tell us what your team repeats and what a useful result looks like. We start with one reviewed proof before connecting data or taking action.</p>
+      </div>
+      <a class="btn primary" href="/contact/?from=ai-agent-solution">Contact us</a>
     </div>
   </section>
 </main>
@@ -665,15 +626,14 @@ const contactHtml = documentHtml({
     ['utm_source','utm_medium','utm_campaign','utm_content','utm_term'].forEach(function(key){set(key,search.get(key)||'');});
   }
   if(agentIntent){
-    document.title='AI Agent Solution | supermega.dev';
     form.dataset.intake='ai-agent-solution';
-    text('[data-contact-command]','>_ agent / first proof');
-    text('[data-contact-heading]','What should your agent handle every week?');
-    text('[data-contact-intro]','Describe one repeated task, the information it reads, and the useful result your team needs. We will reply with the smallest proof to test first.');
-    text('[data-contact-form-heading]','Request an agent proof');
-    text('[data-contact-goal-label]','What does your team repeat?');
-    text('[data-contact-policy]','We start with one redacted sample and one reviewed output. No account, data connection, or external action is made before you approve it.');
-    idleSubmitLabel='Request first proof';
+    text('[data-contact-command]','>_ contact / start');
+    text('[data-contact-heading]','What do you want to improve?');
+    text('[data-contact-intro]','Tell us what repeats today and what a useful result looks like. We will reply with the clearest place to start.');
+    text('[data-contact-form-heading]','Start here');
+    text('[data-contact-goal-label]','What should work better?');
+    text('[data-contact-policy]','We start with one reviewed example. No account, data connection, or external action is made before you approve it.');
+    idleSubmitLabel='Contact us';
     if(submit)submit.textContent=idleSubmitLabel;
   }
   hydrateTracking();
@@ -741,7 +701,7 @@ const notFoundHtml = documentHtml({
     .not-found .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; }
     @media (max-width: 720px) { .not-found { width: min(100% - 32px, 1240px); min-height: 72svh; } .not-found h1 { font-size: 40px; } }
   `,
-  content: `<main class="not-found"><div class="not-found-command">&gt;_ 404 / not-found</div><h1>That route is gone.</h1><p>Return to SuperMega, open Shop, or open Plant.</p><div class="actions"><a class="btn primary" href="/">Home</a><a class="btn secondary" href="https://app.supermega.dev/?demo=shop" target="_blank" rel="noopener noreferrer">Shop</a><a class="btn secondary" href="https://app.supermega.dev/?demo=plant" target="_blank" rel="noopener noreferrer">Plant</a></div></main>`,
+  content: `<main class="not-found"><div class="not-found-command">&gt;_ 404 / not-found</div><h1>That route is gone.</h1><p>Return to SuperMega, open Shop, or open Plant.</p><div class="actions"><a class="btn primary" href="/">Home</a><a class="btn secondary" href="https://app.supermega.dev/?demo=shop">Shop</a><a class="btn secondary" href="https://app.supermega.dev/?demo=plant">Plant</a></div></main>`,
 })
 
 const vercelConfig = {
