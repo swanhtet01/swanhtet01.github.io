@@ -2166,6 +2166,34 @@ function opsIntakeStatus() {
   }
 }
 
+const OPS_INTAKE_MAX_ATTEMPTS = 2
+const OPS_INTAKE_ATTEMPT_TIMEOUT_MS = 3800
+const OPS_INTAKE_RETRY_DELAY_MS = 100
+
+function isRetryableOpsIntakeStatus(status) {
+  return status === 408 || status === 425 || status === 429 || status >= 500
+}
+
+function isValidOpsIntakeResponse(body) {
+  return Boolean(
+    body
+    && body.ok === true
+    && body.accepted === true
+    && typeof body.duplicate === 'boolean'
+    && typeof body.lead_id === 'string'
+    && text(body.lead_id)
+    && text(body.lead_id).length <= 120
+    && typeof body.fit_score === 'number'
+    && Number.isFinite(body.fit_score)
+    && body.fit_score >= 0
+    && body.fit_score <= 100
+  )
+}
+
+function opsIntakeRetryDelay() {
+  return new Promise((resolve) => setTimeout(resolve, OPS_INTAKE_RETRY_DELAY_MS))
+}
+
 function publicContactStatus() {
   const ready = (
     leadLedgerStatus() === 'configured' &&
@@ -2227,43 +2255,60 @@ async function forwardOpsIntake({ record }) {
     record.data || '',
   ].filter(Boolean).join('\n'), 2400)
 
-  try {
-    const response = await fetch(target, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        Authorization: `Bearer ${intakeSecret}`,
-      },
-      signal: AbortSignal.timeout(8000),
-      body: JSON.stringify({
-        secret: intakeSecret,
-        source: 'website',
-        external_id: record.lead_id,
-        name: record.name,
-        email: record.email,
-        phone: record.phone,
-        company: record.company,
-        business_type: record.template_source_category || record.product_area || record.requested_package || 'inbound',
-        template_id: record.template_id,
-        starter_kit_url: record.starter_kit_url,
-        price_hint: record.price_hint,
-        workflow,
-      }),
-    })
-    const body = await response.json().catch(() => ({}))
-    if (!response.ok || body.ok === false) {
-      return { status: 'error', reason: `ops_intake_${response.status}`, target }
+  const requestBody = JSON.stringify({
+    secret: intakeSecret,
+    source: 'website',
+    external_id: record.lead_id,
+    name: record.name,
+    email: record.email,
+    phone: record.phone,
+    company: record.company,
+    business_type: record.template_source_category || record.product_area || record.requested_package || 'inbound',
+    template_id: record.template_id,
+    starter_kit_url: record.starter_kit_url,
+    price_hint: record.price_hint,
+    workflow,
+  })
+  let lastError = null
+  for (let attempt = 1; attempt <= OPS_INTAKE_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetch(target, {
+        method: 'POST',
+        redirect: 'error',
+        headers: {
+          'content-type': 'application/json',
+          Authorization: `Bearer ${intakeSecret}`,
+        },
+        signal: AbortSignal.timeout(OPS_INTAKE_ATTEMPT_TIMEOUT_MS),
+        body: requestBody,
+      })
+      const body = await response.json().catch(() => ({}))
+      if (response.ok && isValidOpsIntakeResponse(body)) {
+        return {
+          status: 'ready',
+          target,
+          lead_id: text(body.lead_id),
+          duplicate: body.duplicate,
+          fit_score: body.fit_score,
+        }
+      }
+      if (response.ok && (body.accepted === false || body.ok === false)) {
+        return { status: 'error', reason: 'ops_intake_rejected', target }
+      }
+      lastError = response.ok ? 'ops_intake_invalid_response' : `ops_intake_${response.status}`
+      const retryable = response.ok || isRetryableOpsIntakeStatus(response.status)
+      if (!retryable || attempt === OPS_INTAKE_MAX_ATTEMPTS) {
+        return { status: 'error', reason: lastError, target }
+      }
+    } catch (error) {
+      lastError = error?.name === 'TimeoutError' ? 'ops_intake_timeout' : 'ops_intake_failed'
+      if (attempt === OPS_INTAKE_MAX_ATTEMPTS) {
+        return { status: 'error', reason: lastError, target }
+      }
     }
-    return {
-      status: 'ready',
-      target,
-      lead_id: text(body.lead_id) || null,
-      duplicate: body.duplicate === true,
-      fit_score: Number.isFinite(Number(body.fit_score)) ? Number(body.fit_score) : null,
-    }
-  } catch (error) {
-    return { status: 'error', reason: text(error?.message) || 'ops_intake_failed', target }
+    await opsIntakeRetryDelay()
   }
+  return { status: 'error', reason: lastError || 'ops_intake_failed', target }
 }
 
 // Build the concise CEO lead-alert text, then push it via the shared Telegram helper.

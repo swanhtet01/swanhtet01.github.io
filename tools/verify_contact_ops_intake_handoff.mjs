@@ -50,6 +50,13 @@ const shopSuccessBody = {
   leadCount: 1,
   lead: { id: 'SHOP-LEAD-1' },
 }
+const opsSuccessBody = {
+  ok: true,
+  accepted: true,
+  duplicate: false,
+  lead_id: 'OPS-LEAD-1',
+  fit_score: 84,
+}
 const contactSource = readFileSync(new URL('../api/contact-submissions.js', import.meta.url), 'utf8')
 const handlerSource = contactSource.slice(
   contactSource.indexOf('async function handler'),
@@ -118,7 +125,7 @@ try {
     return {
       ok: true,
       status: 200,
-      json: async () => ({ ok: true, lead_id: 'OPS-LEAD-1', fit_score: 84 }),
+      json: async () => opsSuccessBody,
     }
   }
   globalThis.fetch = contractFetch
@@ -393,6 +400,7 @@ try {
   const opsCall = calls[1]
   assert.equal(opsCall.url, 'https://supermega-machine.vercel.app/api/intake')
   assert.equal(opsCall.options.method, 'POST')
+  assert.equal(opsCall.options.redirect, 'error')
   assert.equal(opsCall.options.headers.Authorization, `Bearer ${secret}`)
   const payload = JSON.parse(opsCall.options.body)
   assert.equal(payload.secret, secret)
@@ -407,6 +415,94 @@ try {
     fit_score: 84,
   })
   assert.equal(JSON.stringify(result).includes(secret), false)
+
+  const opsRetryCalls = []
+  globalThis.fetch = async (url, options) => {
+    opsRetryCalls.push({ url, options })
+    if (opsRetryCalls.length === 1) {
+      return { ok: false, status: 503, json: async () => ({ ok: false }) }
+    }
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ ...opsSuccessBody, duplicate: true }),
+    }
+  }
+  assert.deepEqual(await forwardOpsIntake({ record: {
+    lead_id: 'LEAD-PUBLIC-1',
+    name: 'Test Buyer',
+    email: 'buyer@example.com',
+    goal: 'Replace a manual daily reconciliation task.',
+  } }), {
+    status: 'ready',
+    target: 'https://supermega-machine.vercel.app/api/intake',
+    lead_id: 'OPS-LEAD-1',
+    duplicate: true,
+    fit_score: 84,
+  })
+  assert.equal(opsRetryCalls.length, 2)
+  assert.equal(opsRetryCalls[0].options.body, opsRetryCalls[1].options.body)
+  for (const call of opsRetryCalls) {
+    assert.equal(call.url, 'https://supermega-machine.vercel.app/api/intake')
+    assert.equal(call.options.redirect, 'error')
+    assert.equal(call.options.headers.Authorization, `Bearer ${secret}`)
+    assert.equal(JSON.parse(call.options.body).external_id, 'LEAD-PUBLIC-1')
+  }
+
+  const opsNetworkCalls = []
+  globalThis.fetch = async (url, options) => {
+    opsNetworkCalls.push({ url, options })
+    if (opsNetworkCalls.length === 1) throw new TypeError('temporary network failure')
+    return { ok: true, status: 200, json: async () => opsSuccessBody }
+  }
+  assert.equal((await forwardOpsIntake({ record: { lead_id: 'LEAD-NETWORK-1', name: 'Network Retry' } })).status, 'ready')
+  assert.equal(opsNetworkCalls.length, 2)
+
+  const opsTimeoutCalls = []
+  globalThis.fetch = async (url, options) => {
+    opsTimeoutCalls.push({ url, options })
+    if (opsTimeoutCalls.length === 1) throw Object.assign(new Error('request expired'), { name: 'TimeoutError' })
+    return { ok: true, status: 200, json: async () => opsSuccessBody }
+  }
+  assert.equal((await forwardOpsIntake({ record: { lead_id: 'LEAD-TIMEOUT-1', name: 'Timeout Retry' } })).status, 'ready')
+  assert.equal(opsTimeoutCalls.length, 2)
+
+  const opsMalformedCalls = []
+  globalThis.fetch = async (url, options) => {
+    opsMalformedCalls.push({ url, options })
+    return { ok: true, status: 200, json: async () => ({ ok: true, accepted: true }) }
+  }
+  assert.deepEqual(await forwardOpsIntake({ record: { lead_id: 'LEAD-MALFORMED-1', name: 'Malformed Response' } }), {
+    status: 'error',
+    reason: 'ops_intake_invalid_response',
+    target: 'https://supermega-machine.vercel.app/api/intake',
+  })
+  assert.equal(opsMalformedCalls.length, 2)
+
+  const opsRejectedCalls = []
+  globalThis.fetch = async (url, options) => {
+    opsRejectedCalls.push({ url, options })
+    return { ok: true, status: 200, json: async () => ({ ok: true, accepted: false }) }
+  }
+  assert.deepEqual(await forwardOpsIntake({ record: { lead_id: 'LEAD-REJECTED-1', name: 'Rejected Response' } }), {
+    status: 'error',
+    reason: 'ops_intake_rejected',
+    target: 'https://supermega-machine.vercel.app/api/intake',
+  })
+  assert.equal(opsRejectedCalls.length, 1)
+
+  const opsUnauthorizedCalls = []
+  globalThis.fetch = async (url, options) => {
+    opsUnauthorizedCalls.push({ url, options })
+    return { ok: false, status: 401, json: async () => ({ ok: false }) }
+  }
+  assert.deepEqual(await forwardOpsIntake({ record: { lead_id: 'LEAD-UNAUTHORIZED-1', name: 'Unauthorized Response' } }), {
+    status: 'error',
+    reason: 'ops_intake_401',
+    target: 'https://supermega-machine.vercel.app/api/intake',
+  })
+  assert.equal(opsUnauthorizedCalls.length, 1)
+  globalThis.fetch = contractFetch
 
   process.env.SUPERMEGA_OPS_INTAKE_URL = 'https://supermega-machine.vercel.app.evil.example/api/intake'
   const unsafe = await forwardOpsIntake({ record: {} })
