@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 
 const require = createRequire(import.meta.url)
@@ -11,6 +12,9 @@ const {
   publicContactStatus,
   contactDiagnostics,
   hasStatusDiagnosticsAccess,
+  publicSubmissionReceipt,
+  publicSubmissionFailure,
+  receiptHtml,
 } = handler.__test
 
 assert.equal(typeof forwardOpsIntake, 'function')
@@ -28,6 +32,11 @@ const originalResendApiKey = process.env.RESEND_API_KEY
 const calls = []
 const secret = 'contract-test-secret'
 const opsKey = 'contract-test-ops-key'
+const contactSource = readFileSync(new URL('../api/contact-submissions.js', import.meta.url), 'utf8')
+const handlerSource = contactSource.slice(
+  contactSource.indexOf('async function handler'),
+  contactSource.indexOf('handler.__test'),
+)
 
 async function invokeStatus(url, headers = {}) {
   let rawBody = ''
@@ -118,6 +127,78 @@ try {
   assert.deepEqual(authorizedStatus.body, contactDiagnostics())
   assert.equal(authorizedStatus.body.shop_pipeline.mode, 'public_contact_to_shop_queue')
   assert.equal(Object.hasOwn(authorizedStatus.body, 'deskpos_pipeline'), false)
+
+  const receipt = publicSubmissionReceipt({ lead_id: 'LEAD-RECEIPT-1' })
+  assert.deepEqual(receipt, {
+    status: 'ready',
+    message: 'Request received.',
+    next_step: 'We will review the request and reply to the submitted email.',
+    reference: 'LEAD-RECEIPT-1',
+  })
+  assert.deepEqual(Object.keys(receipt).sort(), ['message', 'next_step', 'reference', 'status'])
+  assert.deepEqual(publicSubmissionReceipt(), {
+    status: 'ready',
+    message: 'Request received.',
+    next_step: 'We will review the request and reply to the submitted email.',
+  })
+  assert.deepEqual(publicSubmissionFailure(), {
+    status: 'error',
+    reason: 'submission_unavailable',
+    message: 'Request could not be received. Please try again later.',
+  })
+
+  let receiptHtmlBody = ''
+  const receiptHeaders = {}
+  const receiptResponse = {
+    statusCode: 0,
+    setHeader(name, value) {
+      receiptHeaders[name.toLowerCase()] = value
+    },
+    end(body = '') {
+      receiptHtmlBody = body
+    },
+  }
+  receiptHtml(receiptResponse, {
+    lead_id: 'LEAD-RECEIPT-1',
+    task_id: 'TASK-INTERNAL-1',
+    company: 'Example Co',
+    email: 'buyer@example.com',
+    requested_package: 'Internal route',
+  })
+  assert.equal(receiptResponse.statusCode, 200)
+  assert.equal(receiptHeaders['cache-control'], 'no-store')
+  for (const required of [
+    'Request received.',
+    'LEAD-RECEIPT-1',
+    'Example Co',
+    'buyer@example.com',
+    'Nothing is connected, changed, or sent on your behalf until you approve it.',
+  ]) {
+    assert.equal(receiptHtmlBody.includes(required), true, `receipt_missing_${required}`)
+  }
+  for (const forbidden of [
+    'TASK-INTERNAL-1',
+    'Internal route',
+    'Source pack room',
+    'App access',
+    'swanhtet@supermega.dev',
+  ]) {
+    assert.equal(receiptHtmlBody.includes(forbidden), false, `receipt_exposes_${forbidden}`)
+  }
+
+  for (const retiredResponseFragment of [
+    'submission: publicSubmission',
+    'owner_onboarding_alert: firstProofTask.owner_onboarding_alert',
+    'pipeline_action: pipelineAction',
+    'shop_pipeline: deskposPipeline',
+    'ops_intake: opsIntake',
+    'fallback_email: notifyEmail',
+    "reason: 'rate_limited', rate",
+  ]) {
+    assert.equal(handlerSource.includes(retiredResponseFragment), false, `public_response_exposes_${retiredResponseFragment}`)
+  }
+  assert.equal(handlerSource.includes('json(res, 200, publicSubmissionReceipt(record))'), true)
+  assert.equal(handlerSource.match(/json\(res, 502, publicSubmissionFailure\(\)\)/g)?.length, 4)
 
   const healthGet = await invokeHealth('GET')
   assert.equal(healthGet.statusCode, 200)

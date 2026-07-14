@@ -48,10 +48,6 @@ function receiptHtml(res, record) {
   res.statusCode = 200
   res.setHeader('Content-Type', 'text/html; charset=utf-8')
   res.setHeader('Cache-Control', 'no-store')
-  const onboarding = onboardingPlan(record)
-  const subject = encodeURIComponent(`SuperMega source files for ${record.lead_id}`)
-  const body = encodeURIComponent(`Lead: ${record.lead_id}\nTask: ${record.task_id}\nCompany: ${record.company}\n\nSource links / notes:\n`)
-  const sourcePackUrl = sourcePackIntakeUrl(record)
   res.end(`<!doctype html>
 <html lang="en">
 <meta charset="utf-8">
@@ -63,7 +59,7 @@ function receiptHtml(res, record) {
   * { box-sizing: border-box; }
   body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: radial-gradient(circle at 78% 8%, rgba(114,243,255,.18), transparent 28rem), linear-gradient(135deg, #07111f, #02050b); color: var(--text); }
   main { width: min(760px, calc(100% - 32px)); border: 1px solid var(--line); border-radius: 18px; background: rgba(255,255,255,.07); padding: clamp(24px, 5vw, 42px); box-shadow: 0 34px 90px rgba(0,0,0,.34); }
-  h1 { margin: 0 0 14px; font-size: clamp(42px, 8vw, 82px); line-height: .86; letter-spacing: -.075em; }
+  h1 { margin: 0 0 14px; font-size: clamp(38px, 7vw, 56px); line-height: 1; letter-spacing: 0; }
   p { margin: 0; color: var(--muted); font-size: 18px; line-height: 1.55; }
   .meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 24px 0; }
   .box { border: 1px solid rgba(255,255,255,.14); border-radius: 10px; padding: 13px; background: rgba(3,8,16,.36); }
@@ -78,29 +74,43 @@ function receiptHtml(res, record) {
 </style>
 <main>
   <h1>Request received.</h1>
-  <p>SuperMega captured the request. We review the source, reply with the first useful output path, then create app access only after scope approval.</p>
+  <p>We will review what you sent and reply to the submitted email. Nothing is connected, changed, or sent on your behalf until you approve it.</p>
   <div class="meta">
-    <div class="box"><span>Lead</span><strong>${escapeHtml(record.lead_id)}</strong></div>
-    <div class="box"><span>Task</span><strong>${escapeHtml(record.task_id)}</strong></div>
-    <div class="box"><span>Package</span><strong>${escapeHtml(record.public_package || record.requested_package)}</strong></div>
-    <div class="box"><span>First output</span><strong>${escapeHtml(onboarding.first_output)}</strong></div>
-    <div class="box"><span>Reply target</span><strong>${escapeHtml(record.email)}</strong></div>
-    <div class="box"><span>Owner</span><strong>${escapeHtml(onboarding.owner)}</strong></div>
-    <div class="box"><span>App access</span><strong>${escapeHtml(onboarding.workspace_status)}</strong></div>
+    <div class="box"><span>Reference</span><strong>${escapeHtml(record.lead_id)}</strong></div>
+    <div class="box"><span>Status</span><strong>Received</strong></div>
+    <div class="box"><span>Company</span><strong>${escapeHtml(record.company)}</strong></div>
+    <div class="box"><span>Reply to</span><strong>${escapeHtml(record.email)}</strong></div>
   </div>
   <ol>
-    <li>${escapeHtml(onboarding.steps[0])}</li>
-    <li>${escapeHtml(onboarding.steps[1])}</li>
-    <li>${escapeHtml(onboarding.steps[2])}</li>
+    <li>We review the request and identify the smallest useful first proof.</li>
+    <li>We reply with the proof path, scope, price, and approval boundary.</li>
+    <li>Work starts only after you approve the next step.</li>
   </ol>
   <div class="actions">
-    <a class="primary" href="${escapeHtml(sourcePackUrl)}">Open source pack room</a>
-    <a class="primary" href="mailto:${escapeHtml(notifyEmail)}?subject=${subject}&body=${body}">Send source links</a>
+    <a class="primary" href="/">Back to SuperMega</a>
     <a href="/contact/">Send another request</a>
-    <a href="https://app.supermega.dev/?demo=shop">Open Shop</a>
   </div>
 </main>
 </html>`)
+}
+
+function publicSubmissionReceipt(record = {}) {
+  const receipt = {
+    status: 'ready',
+    message: 'Request received.',
+    next_step: 'We will review the request and reply to the submitted email.',
+  }
+  const reference = text(record.lead_id)
+  if (reference) receipt.reference = reference
+  return receipt
+}
+
+function publicSubmissionFailure() {
+  return {
+    status: 'error',
+    reason: 'submission_unavailable',
+    message: 'Request could not be received. Please try again later.',
+  }
 }
 
 function text(value) {
@@ -2297,7 +2307,7 @@ async function handler(req, res) {
 
   const rate = checkRateLimit(req)
   if (!rate.allowed) {
-    json(res, 429, { status: 'error', reason: 'rate_limited', rate })
+    json(res, 429, { status: 'error', reason: 'rate_limited' })
     return
   }
 
@@ -2309,7 +2319,7 @@ async function handler(req, res) {
       html(res, 400, 'Could not send.', `The form could not be read. Email ${notifyEmail} directly.`)
       return
     }
-    json(res, 400, { status: 'error', reason: error.message || 'invalid_request' })
+    json(res, 400, { status: 'error', reason: 'invalid_request' })
     return
   }
 
@@ -2318,7 +2328,7 @@ async function handler(req, res) {
       html(res, 200, 'Received.', 'Your message was routed.')
       return
     }
-    json(res, 200, { status: 'ready', message: 'Submission routed.' })
+    json(res, 200, publicSubmissionReceipt())
     return
   }
 
@@ -2339,8 +2349,6 @@ async function handler(req, res) {
   const leadId = `LEAD-${crypto.randomBytes(6).toString('hex').toUpperCase()}`
   const taskId = `TASK-${crypto.randomBytes(6).toString('hex').toUpperCase()}`
   const record = buildLeadRecord({ leadId, taskId, payload: { ...payload, name, email, company, goal }, req })
-  const solutionRoute = buildSolutionRoute(record)
-  const firstProofTask = buildFirstProofTaskPayload(record)
   const ledger = await saveLeadLedger({ record })
   const pipelineAction = await savePipelineAction({ record })
   const [webhook, deskposPipeline, opsIntake] = await Promise.all([
@@ -2362,7 +2370,7 @@ async function handler(req, res) {
       html(res, 502, 'Could not send.', `Email ${notifyEmail} directly and include your company, workflow, and contact details.`)
       return
     }
-    json(res, 502, { status: 'error', reason: 'email_delivery_failed', delivery, fallback_email: notifyEmail })
+    json(res, 502, publicSubmissionFailure())
     return
   }
 
@@ -2371,7 +2379,7 @@ async function handler(req, res) {
       html(res, 502, 'Could not route.', `Email ${notifyEmail} directly and include your company, workflow, and contact details.`)
       return
     }
-    json(res, 502, { status: 'error', reason: 'lead_webhook_failed', webhook, delivery })
+    json(res, 502, publicSubmissionFailure())
     return
   }
 
@@ -2380,7 +2388,7 @@ async function handler(req, res) {
       html(res, 502, 'Could not save.', `Email ${notifyEmail} directly and include your company, workflow, and contact details.`)
       return
     }
-    json(res, 502, { status: 'error', reason: 'lead_ledger_failed', ledger, delivery, webhook })
+    json(res, 502, publicSubmissionFailure())
     return
   }
 
@@ -2389,7 +2397,7 @@ async function handler(req, res) {
       html(res, 502, 'Could not create task.', `Email ${notifyEmail} directly and include your company, workflow, and contact details.`)
       return
     }
-    json(res, 502, { status: 'error', reason: 'pipeline_action_failed', ledger, pipeline_action: pipelineAction, delivery, webhook })
+    json(res, 502, publicSubmissionFailure())
     return
   }
 
@@ -2398,50 +2406,7 @@ async function handler(req, res) {
     return
   }
 
-  // Do not echo the submitter's own IP/User-Agent back in the response body.
-  const { ip_hint, user_agent, ...publicSubmission } = record
-  json(res, 200, {
-    status: 'ready',
-    message: 'Submission routed.',
-    submission: publicSubmission,
-    onboarding: onboardingPlan(record),
-    solution_route: solutionRoute,
-    source_pack_request: firstProofTask.source_pack_request,
-    owner_onboarding_alert: firstProofTask.owner_onboarding_alert,
-    delivery,
-    ledger,
-    pipeline_action: pipelineAction,
-    shop_pipeline: deskposPipeline,
-    ops_intake: opsIntake,
-    webhook,
-    confirmation,
-    telegram,
-    sheets,
-    pipeline: {
-      saved_count: ledger.status === 'ready' ? 1 : 0,
-      saved_task_count: pipelineAction.status === 'ready' ? 1 : 0,
-      email_routed_count: delivery.status === 'ready' ? 1 : 0,
-      management_mode: ledger.status === 'ready' && pipelineAction.status === 'ready'
-        ? 'database_queue'
-        : pipelineAction.status === 'ready' && pipelineAction.adapter === 'vercel_blob'
-          ? 'blob_action_queue'
-          : 'email_fallback',
-      datastore: pipelineAction.adapter || ledger.adapter || 'email_fallback',
-      shop: deskposPipeline,
-      ops_intake: opsIntake,
-      workspace_id: 'public-site',
-      lead_id: leadId,
-      task_id: taskId,
-      lead_score: record.lead_score,
-      lead_stage: record.lead_stage,
-      summary: {
-        status: 'routed',
-        next_step: record.next_step,
-      },
-      onboarding: onboardingPlan(record),
-      solution_route: solutionRoute,
-    },
-  })
+  json(res, 200, publicSubmissionReceipt(record))
 }
 
 handler.__test = {
@@ -2464,6 +2429,9 @@ handler.__test = {
   publicContactStatus,
   contactDiagnostics,
   hasStatusDiagnosticsAccess,
+  publicSubmissionReceipt,
+  publicSubmissionFailure,
+  receiptHtml,
 }
 
 module.exports = handler

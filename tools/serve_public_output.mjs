@@ -29,18 +29,6 @@ function redirect(location) {
   return { redirect: location }
 }
 
-function extractMultipartValue(body, field) {
-  const pattern = new RegExp(`name="${field}"\\r?\\n\\r?\\n([\\s\\S]*?)\\r?\\n(?:--|Content-Disposition:)`, 'i')
-  const match = body.match(pattern)
-  return match?.[1]?.trim() || ''
-}
-
-function extractMultipartFilename(body, field) {
-  const pattern = new RegExp(`name="${field}"; filename="([^"]+)"`, 'i')
-  const match = body.match(pattern)
-  return match?.[1]?.trim() || ''
-}
-
 const nodeFunctionHandlers = new Map()
 
 function nodeFunctionHandler(name) {
@@ -137,75 +125,16 @@ const server = createServer((request, response) => {
   if (target.api === 'health') return send(response, 200, JSON.stringify({ status: 'ready' }), 'application/json; charset=utf-8')
   if (target.api === 'contact-submissions') {
     if (request.method !== 'POST') return send(response, 401, 'login required')
-    let body = ''
-    request.setEncoding('utf8')
-    request.on('data', (chunk) => {
-      body += chunk
-    })
+    request.resume()
     request.on('end', () => {
-      let payload = {}
-      try {
-        payload = body ? JSON.parse(body) : {}
-      } catch {
-        payload = {}
-      }
-      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-        payload = {}
-      }
-      if (!payload.utm_source && body.includes('Content-Disposition: form-data;')) {
-        payload = {
-          ...payload,
-          utm_source: extractMultipartValue(body, 'utm_source'),
-          utm_medium: extractMultipartValue(body, 'utm_medium'),
-          utm_campaign: extractMultipartValue(body, 'utm_campaign'),
-          public_package: extractMultipartValue(body, 'public_package'),
-          first_proof_target: extractMultipartValue(body, 'first_proof_target'),
-          acceptance_tests: extractMultipartValue(body, 'acceptance_tests'),
-          launch_blockers: extractMultipartValue(body, 'launch_blockers'),
-          automation_boundary: extractMultipartValue(body, 'automation_boundary'),
-          source_file_count: extractMultipartValue(body, 'source_file_count') || '1',
-          source_file_names: extractMultipartValue(body, 'source_file_names') || extractMultipartFilename(body, 'source_files'),
-        }
-      }
       return send(
         response,
         200,
         JSON.stringify({
           status: 'ready',
-          message: 'Local contact submission accepted.',
-          received_bytes: body.length,
-          submission: {
-            id: 'LOCAL-CONTACT-SUBMISSION',
-            lead_id: 'LEAD-LOCAL-BLUEPRINT',
-            task_id: 'TASK-LOCAL-BLUEPRINT',
-            utm_source: payload.utm_source || '',
-            utm_medium: payload.utm_medium || '',
-            utm_campaign: payload.utm_campaign || '',
-            public_package: payload.public_package || '',
-            first_proof_target: payload.first_proof_target || '',
-            acceptance_tests: payload.acceptance_tests || '',
-            launch_blockers: payload.launch_blockers || '',
-            automation_boundary: payload.automation_boundary || '',
-            source_file_count: payload.source_file_count || '0',
-            source_file_names: payload.source_file_names || '',
-          },
-          pipeline: {
-            lead_id: 'LEAD-LOCAL-BLUEPRINT',
-            task_id: 'TASK-LOCAL-BLUEPRINT',
-            lead_score: 82,
-            lead_stage: 'local_smoke',
-            saved_count: 1,
-            saved_task_count: 1,
-            email_routed_count: 1,
-            management_mode: 'local_stub',
-          },
-          onboarding: {
-            status: 'source_review',
-            owner: 'swanhtet@supermega.dev',
-            first_output: 'First useful build',
-            access_policy: 'approval_required',
-            workspace_status: 'not_created_until_approved',
-          },
+          message: 'Request received.',
+          next_step: 'We will review the request and reply to the submitted email.',
+          reference: 'LEAD-LOCAL-RECEIPT',
         }),
         'application/json; charset=utf-8',
       )
