@@ -99,8 +99,8 @@ function hash(str) {
 export function stripInjectionFrames(text) {
   if (typeof text !== 'string') return ''
   return text
-    .replace(/<\/?(system|assistant|human|user)>/gi, ' ')
-    .replace(/\b(system|assistant)\s*:/gi, '$1 -')
+    .replace(/<\s*\/?\s*(system|developer|assistant|human|user|tool(?:_call)?|function(?:_call)?)\b[^>]*>/gi, ' ')
+    .replace(/\b(system|developer|assistant|tool(?:_call)?|function(?:_call)?)\s*:/gi, '$1 -')
     .replace(/\s{3,}/g, '  ')
     .trim()
 }

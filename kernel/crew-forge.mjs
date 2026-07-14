@@ -10,11 +10,18 @@
 //
 // Zero-dependency, pure. buildCrewFromSpec(spec) → { crew, validation }. See crew-runner.mjs.
 
-import { validateCrew } from './crew-runner.mjs'
+import {
+  MAX_CREW_OUTPUT_FIELDS,
+  MAX_CREW_ROLES,
+  validateCrew,
+} from './crew-runner.mjs'
 
 const TIER_SET = ['bulk', 'reason', 'deep'] // gateway TIERS keys — validateCrew requires role.tier ∈ this
 const slug = (s, fb = 'x') => String(s || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || fb
-const field = (s, fb) => String(s || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || fb
+const field = (s, fb = 'field') => {
+  const normalized = String(s || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || fb
+  return /^[a-z]/.test(normalized) ? normalized : `field_${normalized}`.slice(0, 40)
+}
 const cap = (s) => String(s || '').replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).trim()
 const arr = (v) => (Array.isArray(v) ? v : [])
 const nonEmpty = (v, fb) => (arr(v).length ? v : fb)
@@ -37,7 +44,7 @@ export function buildCrewFromSpec(spec = {}) {
   const accountAccess = s.requires_account_access === true
 
   // roles — map the spec, dedupe ids, then guarantee a generic INTAKE role is first.
-  let roles = arr(s.roles).map((r, i) => {
+  let roles = arr(s.roles).slice(0, MAX_CREW_ROLES).map((r, i) => {
     const isStr = typeof r === 'string'
     const title = cap(isStr ? r : (r && (r.title || r.id)) || `Role ${i + 1}`)
     const id = slug(isStr ? r : (r && (r.id || r.title)), `role-${i + 1}`)
@@ -51,11 +58,13 @@ export function buildCrewFromSpec(spec = {}) {
     roles = roles.filter((r) => r.id !== 'intake') // avoid a duplicate 'intake' further down
     roles.unshift({ id: 'intake', title: 'Intake', tier: 'bulk', goal: 'Normalize the incoming intake into clean units, drop anything out of scope (and, for account-reading crews, personal/non-business content), and never invent facts.' })
   }
+  roles = roles.slice(0, MAX_CREW_ROLES)
   if (roles.length < 2) {
     roles.push({ id: 'writer', title: 'Result Writer', tier: 'reason', goal: `Produce the crew's final result from the intake, grounded only in what was provided — never invented.` })
   }
 
-  const outputs = nonEmpty(arr(s.outputs).map((f) => field(f)).filter(Boolean), ['result', 'summary'])
+  const outputs = [...new Set(nonEmpty(arr(s.outputs).map((f) => field(f)).filter(Boolean), ['result', 'summary']))]
+    .slice(0, MAX_CREW_OUTPUT_FIELDS)
 
   const crew = {
     slug: crewSlug,

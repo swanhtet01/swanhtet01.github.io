@@ -10,6 +10,8 @@ spend, internal evaluation, delivery proof, and a separately recorded customer d
   service, knowledge, and procurement.
 - 8 fixed outcome playbooks.
 - 15 validated crew contracts with structured outputs and no send, pay, or external-write tool.
+- An all-crew adversarial security evaluation that poisons both owner intake and model-to-model
+  handoffs before every release.
 - Durable client-bound work orders with exact plan hashes and evidence fingerprints.
 - Explicit queue, dispatch, cancel-and-scrub, internal evaluation, proof, and review controls.
 - Metadata-only health and workforce utilization for 7, 30, or 90 days.
@@ -53,6 +55,16 @@ owner ratification.
   external system.
 - A later specialist never receives another specialist's raw output automatically.
 - One stage uses one allowlisted agent and its validated crew contract.
+- Inside a crew, every role receives untrusted data in the user message only. Each intermediate
+  handoff is sanitized again, and the runtime exposes no shell, browser, connector, memory, send,
+  payment, or write tool.
+- Final crew output is an exact allowlist: missing and undeclared top-level fields both fail closed.
+  A crew is capped at 8 roles and 24 output fields before any model call. Untrusted intake and each
+  handoff are capped at 12,000 characters and 16 KiB; oversized data fails instead of being silently
+  truncated.
+- Provider error text is never returned. Completed specialist results carry content-free runtime
+  guardrail metadata so the work-order proof can show which boundary was applied without exposing
+  evidence or model output.
 - Every stage has its own cycle ID, role budget, queue decision, dispatch decision, evaluation, and
   proof.
 - Failed, partial, or revision-required work starts a new cycle; there is no hidden retry loop.
@@ -69,8 +81,10 @@ owner ratification.
    evaluation and handoff eligibility before preparing the next stage.
 4. **Async execution:** after proof, add an opt-in durable dispatcher, leases, bounded retries,
    evidence-retention expiry, and dead-letter recovery. Keep recursive delegation disabled.
-5. **Tracing and evals:** retain structured stage, handoff, tool, guardrail, latency, cost, and verdict
-   events; build regression datasets for each playbook before broader autonomy.
+5. **Tracing and evals:** the deterministic all-crew security suite now covers poisoned input,
+   poisoned handoffs, tool absence, output smuggling, provider-error leakage, and shape limits. After
+   the first retained proof, add model-backed accuracy datasets and retain structured stage, handoff,
+   guardrail, latency, cost, and verdict events for every playbook.
 6. **Usage and commercial controls:** meter role calls and provider cost per client and playbook, then
    define plan entitlements and measured service targets from real samples.
 7. **Connector permissions:** add tenant-scoped OAuth and explicit action-specific approvals before
