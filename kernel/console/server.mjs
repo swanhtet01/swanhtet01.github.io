@@ -6,6 +6,7 @@ import { createServer } from 'node:http'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { dirname, extname, resolve, sep } from 'node:path'
+import { handleAgentCompanyAuth } from '../api/agent-company-auth.mjs'
 import { handleAgentCompany } from '../api/agent-company.mjs'
 import { handle } from './api.mjs'
 import store from '../store.mjs'
@@ -50,10 +51,14 @@ const server = createServer(async (req, res) => {
       let body = {}
       if (req.method !== 'GET' && req.method !== 'OPTIONS') body = await readJson(req)
       const request = { method: req.method, path: url.pathname, query: Object.fromEntries(url.searchParams), body, headers: req.headers }
-      const result = url.pathname === '/api/agent-company'
-        ? await handleAgentCompany(request)
-        : await handle(request)
-      res.writeHead(result.status, { 'content-type': 'application/json', 'cache-control': 'no-store' })
+      const result = url.pathname === '/api/agent-company-auth'
+        ? await handleAgentCompanyAuth(request)
+        : url.pathname === '/api/agent-company'
+          ? await handleAgentCompany(request)
+          : await handle(request)
+      const responseHeaders = { 'content-type': 'application/json', 'cache-control': 'no-store' }
+      if (result.cookie) responseHeaders['set-cookie'] = result.cookie
+      res.writeHead(result.status, responseHeaders)
       res.end(JSON.stringify(result.json))
       return
     }

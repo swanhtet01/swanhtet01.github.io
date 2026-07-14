@@ -1,6 +1,4 @@
-// Ops-gated planner and runner for bounded Agent Company cycles.
-
-import crypto from 'node:crypto'
+// Tenant-session or owner-key gated planner and runner for bounded Agent Company cycles.
 
 import {
   listCompanyAgents,
@@ -37,12 +35,10 @@ import {
   MAX_COMPANY_MISSIONS,
   queueCompanyMissionStage,
 } from '../agent-company-missions.mjs'
-
-function constantTimeEqual(a, b) {
-  const left = crypto.createHash('sha256').update(String(a)).digest()
-  const right = crypto.createHash('sha256').update(String(b)).digest()
-  return crypto.timingSafeEqual(left, right)
-}
+import {
+  authorizeCompanyRequest,
+  companyRoleAllows,
+} from '../agent-company-operator-auth.mjs'
 
 function statusFor(result) {
   if (result.ok) return 200
@@ -102,11 +98,13 @@ function statusFor(result) {
 
 export async function handleAgentCompany(request = {}, options = {}) {
   const env = options.env || process.env
-  const opsKey = String(options.opsKey ?? env.SUPERMEGA_OPS_KEY ?? '').trim()
-  if (!opsKey) return { status: 503, json: { ok: false, reason: 'ops_key_not_configured' } }
-  if (!constantTimeEqual(String(request.headers?.['x-ops-key'] || ''), opsKey)) {
-    return { status: 401, json: { ok: false, reason: 'unauthorized' } }
+  const authorize = options.authorizeCompanyRequest || authorizeCompanyRequest
+  const authorized = await authorize(request, options)
+  if (!authorized.ok) {
+    const unavailable = ['ops_key_not_configured', 'company_session_store_unavailable', 'company_auth_clock_invalid'].includes(authorized.reason)
+    return { status: unavailable ? 503 : 401, json: { ok: false, reason: authorized.reason } }
   }
+  const auth = authorized.auth
 
   const method = String(request.method || '').toUpperCase()
   if (method === 'GET') {
@@ -115,6 +113,7 @@ export async function handleAgentCompany(request = {}, options = {}) {
       json: {
         ok: true,
         actionMode: 'draft_only',
+        auth,
         agents: listCompanyAgents(),
         limits: { maxAgents: MAX_CYCLE_AGENTS, maxRoleBudget: MAX_CYCLE_ROLE_BUDGET },
         playbooks: {
@@ -190,10 +189,18 @@ export async function handleAgentCompany(request = {}, options = {}) {
   ].includes(action)) {
     return { status: 400, json: { ok: false, reason: 'company_invalid_action' } }
   }
+  if (!companyRoleAllows(auth.role, action)) {
+    return { status: 403, json: { ok: false, reason: 'company_action_forbidden' } }
+  }
   const configuredClientId = String(options.clientId ?? env.SUPERMEGA_CLIENT_ID ?? '').trim()
-  if (configuredClientId && String(body.clientId || '').trim() !== configuredClientId) {
+  if (configuredClientId && auth.clientId && auth.clientId !== configuredClientId) {
     return { status: 403, json: { ok: false, reason: 'company_client_mismatch' } }
   }
+  const authorizedClientId = auth.clientId || configuredClientId
+  if (authorizedClientId && String(body.clientId || '').trim() !== authorizedClientId) {
+    return { status: 403, json: { ok: false, reason: 'company_client_mismatch' } }
+  }
+  if (auth.mode === 'session' && action === 'work-order-review') body.recordedBy = auth.operatorId
 
   const plan = options.planCompanyCycle || planCompanyCycle
   const planPlaybook = options.planCompanyPlaybook || planCompanyPlaybook

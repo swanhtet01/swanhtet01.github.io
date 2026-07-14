@@ -58,7 +58,7 @@ test('console builds a canonical client activation plan without collecting crede
   assert.match(html, /id="activationTokenCap" type="number" min="10000" max="5000000"/)
   assert.match(html, /tokenCap:Number\(\$\('#activationTokenCap'\)\.value\)/)
   assert.match(html, /if\(location\.hash==='\#activation'\)/)
-  assert.match(html, /Enter the ops passcode to load live workcell status\./)
+  assert.match(html, /Enter the owner key to load live workcell status\./)
   assert.match(html, /if\(activeView==='workcells'\)/)
   assert.match(html, /activationPlan\.requiredSecretInputs/)
   assert.match(html, /id="activationGuidedCommand"/)

@@ -12,6 +12,7 @@
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
   :root{color-scheme:dark;--bg:#07111f;--deep:#06101d;--ink:#f6fbff;--muted:#a9b8c7;--accent:#3B82F6;--accent-2:#60A5FA;--accent-soft:rgba(59,130,246,.14);--line:rgba(255,255,255,.15);--surf:rgba(255,255,255,.075);--surf-2:rgba(255,255,255,.045);--field:#0c1929;--good:#34D399;--warn:#F59E0B;--bad:#F87171;--shadow:0 24px 60px rgba(0,0,0,.45)}
   *{box-sizing:border-box}
+  [hidden]{display:none!important}
   body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,"Noto Sans Myanmar","Segoe UI",system-ui,sans-serif;font-size:14px;line-height:1.5}
   h1,h2,h3{font-family:"Space Grotesk",Inter,system-ui,sans-serif;letter-spacing:0;margin:0}
   header{display:flex;align-items:center;gap:14px;padding:14px 22px;border-bottom:1px solid var(--line);background:#0b1726;position:sticky;top:0;z-index:5}
@@ -95,6 +96,8 @@
   .activation-inputs{display:grid;gap:7px}.activation-inputs code{display:block;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--deep);font-size:11px;overflow-wrap:anywhere}
   .activation-result .row{margin-top:12px}.activation-result .row button{min-height:44px}
   .company-toolbar{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:18px}.company-toolbar h2{font-size:20px}.company-toolbar .badge{align-self:flex-start;white-space:nowrap}
+  #view-company.company-locked>:not(.company-toolbar):not(.company-access){display:none!important}
+  .company-access{border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:16px 0;margin-bottom:18px}.company-access-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:12px}.company-access-head h3{font-size:16px}.company-access-head .badge{align-self:flex-start}.company-access-form{display:grid;grid-template-columns:minmax(220px,1fr) auto;gap:10px;align-items:end}.company-access-form .field{margin:0}.company-access-form input,.company-access-form select,.company-access-form button{min-height:44px}.company-access-session{display:flex;align-items:center;justify-content:space-between;gap:14px;min-height:48px}.company-access-session b{display:block}.company-access-session button{min-height:44px}.company-invite-fields{display:grid;grid-template-columns:minmax(180px,1fr) minmax(180px,1fr) minmax(130px,.55fr) minmax(130px,.45fr) auto;gap:10px;align-items:end}.company-invite-fields .field{margin:0}.company-invite-fields input,.company-invite-fields select,.company-invite-fields button{min-height:44px}.company-code-output{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px;padding:11px 13px;border-left:3px solid var(--good);background:rgba(52,211,153,.07)}.company-code-output code{font:700 15px/1.4 Consolas,"Courier New",monospace;letter-spacing:.06em;overflow-wrap:anywhere}.company-code-output button{min-height:44px}
   .company-playbook{border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:16px 0 18px;margin-bottom:18px}.company-playbook-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:14px}.company-playbook-head h3{font-size:17px}.company-playbook-fields{display:grid;grid-template-columns:minmax(220px,1.2fr) minmax(180px,.8fr) auto;gap:12px;align-items:end}.company-playbook-fields .field{margin:0}.company-playbook-fields select,.company-playbook-fields input,.company-playbook-fields button{min-height:44px}.company-playbook-plan{border-left:3px solid var(--accent);background:var(--accent-soft);padding:15px 17px;margin-top:15px;scroll-margin-top:120px}.company-playbook-summary{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0}.company-playbook-stages{display:grid;margin-top:12px}.company-playbook-stage{display:grid;grid-template-columns:42px minmax(180px,.7fr) minmax(220px,1.3fr) auto;gap:12px;align-items:center;padding:12px 0;border-top:1px solid var(--line)}.company-playbook-number{display:grid;place-items:center;width:34px;height:34px;border:1px solid rgba(59,130,246,.45);border-radius:50%;color:var(--accent-2);font-weight:700}.company-playbook-stage b{display:block}.company-playbook-stage-copy{color:var(--muted);font-size:12px}.company-playbook-stage-actions{display:grid;gap:7px;justify-items:end;min-width:190px}.company-playbook-stage-actions button{min-height:44px;white-space:nowrap}.company-playbook-create{display:flex;align-items:flex-start;gap:12px;border-top:1px solid var(--line);padding-top:14px;margin-top:12px}.company-playbook-create label{display:flex;align-items:flex-start;gap:9px;min-height:44px;margin:0;flex:1}.company-playbook-create input{width:20px;height:20px;margin:1px 0 0;flex:0 0 auto}.company-playbook-create button{min-height:44px}.company-prepared-stage{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:11px 13px;margin-bottom:14px;border-left:3px solid var(--accent);background:var(--accent-soft)}.company-prepared-stage b{display:block}.company-prepared-stage .muted{font-size:12px}
   .company-missions{border-top:1px solid var(--line);margin-top:18px;padding-top:16px}.company-missions-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:10px}.company-missions-head h3{font-size:16px}.company-missions-head button{min-height:44px}.company-mission-list{display:grid;gap:8px}.company-mission-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:center;width:100%;min-height:60px;padding:10px 12px;text-align:left;background:var(--surf-2)}.company-mission-row:hover{border-color:rgba(59,130,246,.5)}.company-mission-row b{display:block;overflow-wrap:anywhere}.company-mission-advance{border-top:1px solid var(--line);padding-top:14px;margin-top:12px}.company-mission-advance textarea{min-height:100px;resize:vertical}.company-mission-advance-actions{display:flex;align-items:flex-start;gap:12px;margin-top:10px}.company-mission-advance-actions label{display:flex;align-items:flex-start;gap:9px;min-height:44px;margin:0;flex:1}.company-mission-advance-actions input{width:20px;height:20px;margin:1px 0 0;flex:0 0 auto}.company-mission-advance-actions button{min-height:44px}
   .company-scope{display:grid;grid-template-columns:minmax(180px,1.2fr) minmax(180px,1fr) minmax(120px,.45fr);gap:12px;padding:0 0 18px;border-bottom:1px solid var(--line)}.company-scope .field{margin:0}.company-scope input{min-height:44px}
@@ -123,10 +126,10 @@
     header{display:grid;grid-template-columns:max-content max-content minmax(0,1fr);gap:8px 10px;padding:12px 16px}
     .brand{grid-column:1/-1;white-space:nowrap}.grow{display:none}.key{grid-column:1/-1;max-width:none}
     nav{padding:14px 16px 0}main{padding:18px 16px 70px}
-    .cols{grid-template-columns:1fr}.two{grid-template-columns:1fr}.activation-fields,.owner-evidence-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.activation-output{grid-template-columns:1fr}.owner-evidence-fields .evidence-text{grid-column:1/-1}.company-playbook-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.company-playbook-fields button{grid-column:1/-1}.company-playbook-stage{grid-template-columns:42px minmax(160px,.7fr) minmax(180px,1.3fr)}.company-playbook-stage-actions{grid-column:2/-1;justify-items:start}.company-agent{grid-template-columns:1fr}.company-scope{grid-template-columns:repeat(2,minmax(0,1fr))}.company-scope .field:last-child{grid-column:1/-1}.company-roster-tools{grid-template-columns:repeat(2,minmax(0,1fr))}.company-roster-count{grid-column:1/-1;justify-content:flex-start}.company-health-summary{grid-template-columns:repeat(3,minmax(0,1fr))}.company-health-stat:nth-child(3){border-right:0}.company-toolbar,.company-playbook-plan,.company-plan,.company-results,.company-operations,.company-order-detail{scroll-margin-top:160px}
+    .cols{grid-template-columns:1fr}.two{grid-template-columns:1fr}.activation-fields,.owner-evidence-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.activation-output{grid-template-columns:1fr}.owner-evidence-fields .evidence-text{grid-column:1/-1}.company-invite-fields,.company-playbook-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.company-invite-fields button,.company-playbook-fields button{grid-column:1/-1}.company-playbook-stage{grid-template-columns:42px minmax(160px,.7fr) minmax(180px,1.3fr)}.company-playbook-stage-actions{grid-column:2/-1;justify-items:start}.company-agent{grid-template-columns:1fr}.company-scope{grid-template-columns:repeat(2,minmax(0,1fr))}.company-scope .field:last-child{grid-column:1/-1}.company-roster-tools{grid-template-columns:repeat(2,minmax(0,1fr))}.company-roster-count{grid-column:1/-1;justify-content:flex-start}.company-health-summary{grid-template-columns:repeat(3,minmax(0,1fr))}.company-health-stat:nth-child(3){border-right:0}.company-toolbar,.company-playbook-plan,.company-plan,.company-results,.company-operations,.company-order-detail{scroll-margin-top:160px}
   }
   @media(max-width:520px){
-    .workcell-toolbar,.approval-toolbar,.owner-evidence-head,.company-toolbar,.company-playbook-head,.company-missions-head,.company-plan-head,.company-results-head,.company-work-orders-head,.company-order-detail-head{align-items:stretch;flex-direction:column}.workcell-toolbar button,.approval-toolbar button,.company-missions-head button,.company-work-orders-head button{width:100%}.activation{padding:15px}.activation-import{align-items:stretch;flex-direction:column}.activation-import button{width:100%}.activation-fields,.owner-evidence-fields,.company-playbook-fields,.company-scope{grid-template-columns:1fr}.company-playbook-fields button{grid-column:1}.company-playbook-stage{grid-template-columns:34px minmax(0,1fr);gap:7px}.company-playbook-stage-copy,.company-playbook-stage-actions{grid-column:1/-1}.company-playbook-stage-actions{justify-items:stretch;min-width:0}.company-playbook-stage-actions button{width:100%}.company-prepared-stage{align-items:stretch;flex-direction:column}.company-review-fields{grid-template-columns:1fr}.company-scope .field:last-child,.company-review-fields .statement{grid-column:1}.activation-actions,.owner-evidence-actions,.company-actions,.company-playbook-create,.company-mission-advance-actions,.company-plan-actions,.company-order-actions,.company-cancel-actions,.company-review-actions{align-items:stretch;flex-direction:column}.activation-actions button,.owner-evidence-actions button,.company-actions button,.company-playbook-create button,.company-mission-advance-actions button,.company-plan-actions button,.company-order-actions button,.company-cancel-actions button,.company-review-actions button,.company-new-cycle{width:100%}.owner-evidence-fields .evidence-text{grid-column:1}.owner-evidence-confirm{align-items:flex-start}.company-assignment,.company-mission-row,.company-order-row,.company-target{grid-template-columns:1fr;gap:5px}.company-agent.selected{padding:13px}.company-order-row .badge,.company-mission-row .badge{justify-self:start}
+    .workcell-toolbar,.approval-toolbar,.owner-evidence-head,.company-toolbar,.company-access-head,.company-playbook-head,.company-missions-head,.company-plan-head,.company-results-head,.company-work-orders-head,.company-order-detail-head{align-items:stretch;flex-direction:column}.workcell-toolbar button,.approval-toolbar button,.company-access-head button,.company-missions-head button,.company-work-orders-head button{width:100%}.activation{padding:15px}.activation-import{align-items:stretch;flex-direction:column}.activation-import button{width:100%}.activation-fields,.owner-evidence-fields,.company-access-form,.company-invite-fields,.company-playbook-fields,.company-scope{grid-template-columns:1fr}.company-playbook-fields button{grid-column:1}.company-access-session,.company-code-output{align-items:stretch;flex-direction:column}.company-access-session button,.company-code-output button{width:100%}.company-playbook-stage{grid-template-columns:34px minmax(0,1fr);gap:7px}.company-playbook-stage-copy,.company-playbook-stage-actions{grid-column:1/-1}.company-playbook-stage-actions{justify-items:stretch;min-width:0}.company-playbook-stage-actions button{width:100%}.company-prepared-stage{align-items:stretch;flex-direction:column}.company-review-fields{grid-template-columns:1fr}.company-scope .field:last-child,.company-review-fields .statement{grid-column:1}.activation-actions,.owner-evidence-actions,.company-actions,.company-playbook-create,.company-mission-advance-actions,.company-plan-actions,.company-order-actions,.company-cancel-actions,.company-review-actions{align-items:stretch;flex-direction:column}.activation-actions button,.owner-evidence-actions button,.company-actions button,.company-playbook-create button,.company-mission-advance-actions button,.company-plan-actions button,.company-order-actions button,.company-cancel-actions button,.company-review-actions button,.company-new-cycle{width:100%}.owner-evidence-fields .evidence-text{grid-column:1}.owner-evidence-confirm{align-items:flex-start}.company-assignment,.company-mission-row,.company-order-row,.company-target{grid-template-columns:1fr;gap:5px}.company-agent.selected{padding:13px}.company-order-row .badge,.company-mission-row .badge{justify-self:start}
     .company-operations-head,.company-workforce-head{align-items:stretch;flex-direction:column}.company-operations-controls,.company-evaluation-actions{align-items:stretch;flex-direction:column}.company-operations-controls button,.company-evaluation-actions button{width:100%}.company-operations-controls .field,.company-review-actions .field,.company-evaluation-actions .field{width:100%}.company-health-summary{grid-template-columns:1fr}.company-health-stat,.company-health-stat:nth-child(3){border-right:0;border-bottom:1px solid var(--line)}.company-health-stat:last-child{border-bottom:0}.company-review-grid{grid-template-columns:1fr}.company-evaluation-grid{grid-template-columns:1fr}.company-roster-tools{grid-template-columns:1fr}.company-roster-count{grid-column:1}.company-workforce-row{grid-template-columns:1fr;gap:4px}.company-target-value,.company-workforce-value{text-align:left}
     .workcell .wc-actions{align-items:stretch;flex-direction:column}.workcell .wc-actions button{width:100%}.approval-head{align-items:flex-start}.approval-details{grid-template-columns:1fr;gap:2px}.approval-details dd{margin-bottom:9px}.approval-actions{align-items:stretch;flex-direction:column}.approval-confirm{margin:0}.approval-actions button{width:100%}
   }
@@ -138,7 +141,7 @@
   <span class="badge" id="modeBadge">store: …</span>
   <span class="badge" id="aiBadge">ai: …</span>
   <span class="grow"></span>
-  <input class="key" id="opsKey" type="password" autocomplete="current-password" aria-label="ops passcode" placeholder="ops passcode" />
+  <input class="key" id="opsKey" type="password" autocomplete="current-password" aria-label="owner key" placeholder="owner key" />
 </header>
 <nav>
   <button data-view="overview" class="active">Overview</button>
@@ -172,6 +175,25 @@
       <div><h2>Agent company</h2><div class="muted">Plan, queue, dispatch, evaluate, and deliver one bounded specialist wave</div></div>
       <span class="badge">draft only</span>
     </div>
+    <section class="company-access" aria-labelledby="companyAccessTitle">
+      <div class="company-access-head"><div><h3 id="companyAccessTitle">Workspace access</h3><div class="muted" id="companyAccessSummary">Sign in with a one-time code</div></div><span class="badge" id="companyAccessBadge">signed out</span></div>
+      <form class="company-access-form" id="companySignInForm">
+        <div class="field"><label for="companySignInCode">Sign-in code</label><input id="companySignInCode" autocomplete="one-time-code" inputmode="text" maxlength="20" placeholder="SM-XXXX-XXXX-XXXX" required /></div>
+        <button class="primary" id="companySignInButton" type="submit">Sign in</button>
+      </form>
+      <div class="company-access-session" id="companySessionView" hidden></div>
+      <form id="companyInviteForm" hidden>
+        <div class="company-invite-fields">
+          <div class="field"><label for="companyInviteClientId">Client ID</label><input id="companyInviteClientId" autocomplete="off" pattern="[A-Za-z0-9][A-Za-z0-9._:\-]{0,79}" required /></div>
+          <div class="field"><label for="companyInviteOperatorId">Operator ID</label><input id="companyInviteOperatorId" autocomplete="off" pattern="[A-Za-z0-9][A-Za-z0-9._:@+\-]{0,79}" required /></div>
+          <div class="field"><label for="companyInviteRole">Role</label><select id="companyInviteRole"><option value="operator">Operator</option><option value="reviewer">Reviewer</option><option value="viewer">Viewer</option></select></div>
+          <div class="field"><label for="companyInviteHours">Session</label><select id="companyInviteHours"><option value="4">4 hours</option><option value="8" selected>8 hours</option><option value="12">12 hours</option></select></div>
+          <button class="primary" id="companyInviteButton" type="submit">Create code</button>
+        </div>
+      </form>
+      <div class="company-code-output" id="companyCodeOutput" hidden></div>
+      <div class="muted" id="companyAuthState" role="status" aria-live="polite"></div>
+    </section>
     <section class="company-playbook" aria-labelledby="companyPlaybookTitle">
       <div class="company-playbook-head"><div><h3 id="companyPlaybookTitle">Delegate a business outcome</h3><div class="muted">Fixed stages, reviewed handoffs, and one explicit work order at a time</div></div><span class="badge">plan only</span></div>
       <form id="companyPlaybookForm">
@@ -181,7 +203,7 @@
           <button class="primary" id="companyPlaybookButton" type="submit" disabled>Plan delegation</button>
         </div>
       </form>
-      <div class="muted" id="companyPlaybookState" role="status" aria-live="polite">Enter the ops passcode to load fixed playbooks.</div>
+      <div class="muted" id="companyPlaybookState" role="status" aria-live="polite">Sign in to load fixed playbooks.</div>
       <div class="company-playbook-plan" id="companyPlaybookPlan" hidden></div>
       <section class="company-missions" aria-labelledby="companyMissionsTitle">
         <div class="company-missions-head"><div><h3 id="companyMissionsTitle">Durable missions</h3><div class="muted">Server-verified stages for this client</div></div><button id="companyMissionRefresh" type="button">Refresh missions</button></div>
@@ -357,6 +379,9 @@ const hasOpsKey=()=>getOpsKey().length>0
 let dealLead=null, lastPacket=null
 let companyRoster=[], companyDraft=null, companyAgentLimit=2, companyWorkOrders=[], companyOperations=null, companyOpenWorkOrder=null
 let companyPlaybooks=[], companyPlaybookPlan=null, companyPreparedPlaybookStage=null, companyMissions=[], companyOpenMission=null
+let companyAuth=null
+const hasCompanyAccess=()=>Boolean(companyAuth)
+const companyCan=(action)=>Boolean(companyAuth&&(companyAuth.allowedActions||[]).some(value=>value==='*'||value===action))
 
 function nextCompanyCycleId(){
   const now=new Date(),iso=now.toISOString()
@@ -370,10 +395,12 @@ $('#companyClientId').value=localStorage.getItem('sm.company.client')||''
 $('#companyCycleId').value=nextCompanyCycleId()
 $('#companyMissionId').value=nextCompanyMissionId()
 
-$('#opsKey').value=localStorage.getItem('sm.ops')||''
-$('#opsKey').addEventListener('change',()=>{
+localStorage.removeItem('sm.ops')
+$('#opsKey').value=sessionStorage.getItem('sm.owner')||''
+$('#opsKey').addEventListener('change',async()=>{
   const key=getOpsKey()
-  if(key)localStorage.setItem('sm.ops',key);else localStorage.removeItem('sm.ops')
+  if(key)sessionStorage.setItem('sm.owner',key);else sessionStorage.removeItem('sm.owner')
+  companyAuth=null
   companyRoster=[]
   companyWorkOrders=[]
   companyOperations=null
@@ -391,31 +418,140 @@ $('#opsKey').addEventListener('change',()=>{
   const activeView=document.querySelector('nav button.active')?.dataset.view
   if(activeView==='workcells'){
     if(key)loadWorkcells()
-    else $('#workcellGrid').innerHTML='<div class="empty">Enter the ops passcode to load live workcell status.</div>'
+    else $('#workcellGrid').innerHTML='<div class="empty">Enter the owner key to load live workcell status.</div>'
   }
   if(activeView==='company'){
-    if(key){loadCompanyAgents();loadCompanyMissions();loadCompanyWorkOrders();loadCompanyOperations()}
-    else{
-      $('#companyPlaybookState').textContent='Enter the ops passcode to load fixed playbooks.'
-      $('#companyMissionList').innerHTML='<div class="empty">Enter the ops passcode to load durable missions.</div>'
-      $('#companyRoster').innerHTML='<div class="empty">Enter the ops passcode to load the specialist roster.</div>'
-      $('#companyOrderList').innerHTML='<div class="empty">Enter the ops passcode to load work orders.</div>'
-      $('#companyOperationsState').innerHTML='<div class="empty">Enter the ops passcode to load company health.</div>'
-      $('#companyState').textContent='Locked'
-    }
+    await openCompanyWorkspace()
   }
 })
 $('#opsKey').addEventListener('keydown',(event)=>{if(event.key==='Enter')event.currentTarget.blur()})
 
 async function api(method,path,body){
   const key=getOpsKey()
-  if(!key){toast('Enter the ops passcode');$('#opsKey').focus();return {ok:false,reason:'ops passcode required'}}
-  const res=await fetch(path,{method,headers:{'content-type':'application/json','x-ops-key':key},body:body?JSON.stringify(body):undefined})
+  const companyEndpoint=path==='/api/agent-company'||path==='/api/agent-company-auth'
+  if(!key&&!companyEndpoint){toast('Enter the owner key');$('#opsKey').focus();return {ok:false,reason:'owner key required'}}
+  const headers={'content-type':'application/json'}
+  if(companyEndpoint)headers['x-supermega-company-request']='1'
+  if(key)headers['x-ops-key']=key
+  const res=await fetch(path,{method,credentials:'same-origin',headers,body:body?JSON.stringify(body):undefined})
   const json=await res.json().catch(()=>({}))
-  if(res.status===401){toast('Enter the ops passcode');$('#opsKey').focus()}
+  if(res.status===401&&companyEndpoint){companyAuth=null;renderCompanyAccess();toast('Sign in again')}
+  else if(res.status===401){toast('Enter the owner key');$('#opsKey').focus()}
   if(!res.ok&&json.reason)toast(json.reason)
   return {ok:res.ok,...json}
 }
+
+async function companyAuthFetch(method,body){
+  const headers={'content-type':'application/json','x-supermega-company-request':'1'},key=getOpsKey()
+  if(key)headers['x-ops-key']=key
+  const response=await fetch('/api/agent-company-auth',{method,credentials:'same-origin',headers,body:body?JSON.stringify(body):undefined})
+  const json=await response.json().catch(()=>({}))
+  return {ok:response.ok,status:response.status,...json}
+}
+
+function lockCompanyWorkspace(message='Sign in to open this workspace.'){
+  resetCompanyPlaybooks()
+  $('#companyPlaybookState').textContent=message
+  $('#companyMissionList').innerHTML='<div class="empty">Sign in to load durable missions.</div>'
+  $('#companyRoster').innerHTML='<div class="empty">Sign in to load the specialist roster.</div>'
+  $('#companyOrderList').innerHTML='<div class="empty">Sign in to load work orders.</div>'
+  $('#companyOperationsState').innerHTML='<div class="empty">Sign in to load company health.</div>'
+  $('#companyState').textContent='Locked'
+}
+
+function renderCompanyAccess(){
+  const signedIn=Boolean(companyAuth),owner=companyAuth?.mode==='owner'
+  $('#view-company').classList.toggle('company-locked',!signedIn)
+  $('#companySignInForm').hidden=signedIn
+  $('#companySessionView').hidden=!signedIn
+  $('#companyInviteForm').hidden=!owner
+  $('#companyCodeOutput').hidden=true
+  $('#companyCodeOutput').innerHTML=''
+  $('#companyAccessBadge').textContent=signedIn?(owner?'owner':companyAuth.role):'signed out'
+  $('#companyAccessBadge').className='badge '+(signedIn?'on':'')
+  if(!signedIn){
+    $('#companyAccessSummary').textContent='Sign in with a one-time code'
+    $('#companyAuthState').textContent=''
+    $('#companyClientId').readOnly=false
+    return
+  }
+  if(owner){
+    $('#companyAccessSummary').textContent='Owner bootstrap access'
+    $('#companySessionView').innerHTML='<div><b>Owner access</b><span class="muted">Issue tenant-bound operator codes without sharing the owner key.</span></div><button id="companyOwnerClear" type="button">Clear owner key</button>'
+    $('#companyOwnerClear').addEventListener('click',async()=>{$('#opsKey').value='';sessionStorage.removeItem('sm.owner');companyAuth=null;await openCompanyWorkspace()})
+    $('#companyInviteClientId').value=$('#companyClientId').value.trim()||localStorage.getItem('sm.company.client')||''
+    $('#companyClientId').readOnly=false
+  }else{
+    const expires=companyAuth.expiresAt?new Date(companyAuth.expiresAt).toLocaleString():''
+    $('#companyAccessSummary').textContent=`${companyAuth.operatorId} / ${companyAuth.clientId}`
+    $('#companySessionView').innerHTML=`<div><b>${esc(companyAuth.operatorId)}</b><span class="muted">${esc(companyAuth.role)} / ${esc(companyAuth.clientId)}${expires?` / until ${esc(expires)}`:''}</span></div><button id="companySignOut" type="button">Sign out</button>`
+    $('#companySignOut').addEventListener('click',signOutCompany)
+    $('#companyClientId').value=companyAuth.clientId
+    $('#companyClientId').readOnly=true
+  }
+  $('#companyAuthState').textContent=owner?'Owner key stays in this browser tab only.':`${companyAuth.role} permissions are enforced by the server.`
+}
+
+async function loadCompanySession(){
+  let response
+  try{response=await companyAuthFetch('GET')}
+  catch{companyAuth=null;renderCompanyAccess();return false}
+  companyAuth=response.ok?response.auth:null
+  renderCompanyAccess()
+  return Boolean(companyAuth)
+}
+
+async function openCompanyWorkspace(){
+  const ready=await loadCompanySession()
+  if(!ready){lockCompanyWorkspace();return}
+  await loadCompanyAgents()
+  await loadCompanyMissions()
+  await loadCompanyWorkOrders()
+  await loadCompanyOperations()
+}
+
+async function signOutCompany(){
+  try{await companyAuthFetch('DELETE')}catch{/* cookie expiry still happens on a healthy retry */}
+  companyAuth=null
+  renderCompanyAccess()
+  lockCompanyWorkspace('Signed out.')
+}
+
+$('#companySignInForm').addEventListener('submit',async event=>{
+  event.preventDefault()
+  const button=$('#companySignInButton'),code=$('#companySignInCode').value.trim()
+  if(!event.currentTarget.reportValidity())return
+  button.disabled=true;button.textContent='Signing in...';$('#companyAuthState').textContent='Verifying one-time code...'
+  let response
+  try{response=await companyAuthFetch('POST',{action:'exchange-code',code})}
+  catch{response={ok:false,reason:'network error'}}
+  if(!response.ok){$('#companyAuthState').textContent='Sign-in failed. Ask the owner for a new code.';button.disabled=false;button.textContent='Sign in';return}
+  $('#opsKey').value='';sessionStorage.removeItem('sm.owner');$('#companySignInCode').value=''
+  await openCompanyWorkspace()
+  button.disabled=false;button.textContent='Sign in'
+})
+
+$('#companyInviteForm').addEventListener('submit',async event=>{
+  event.preventDefault()
+  if(!companyAuth||companyAuth.mode!=='owner'||!event.currentTarget.reportValidity())return
+  const button=$('#companyInviteButton')
+  button.disabled=true;button.textContent='Creating...';$('#companyAuthState').textContent='Creating one durable one-time code...'
+  const response=await api('POST','/api/agent-company-auth',{
+    action:'issue-code',
+    clientId:$('#companyInviteClientId').value.trim(),
+    operatorId:$('#companyInviteOperatorId').value.trim(),
+    role:$('#companyInviteRole').value,
+    expiresInMinutes:15,
+    sessionHours:Number($('#companyInviteHours').value),
+  })
+  button.disabled=false;button.textContent='Create code'
+  if(!response.ok){$('#companyAuthState').textContent=response.reason||'Code was not created';return}
+  const output=$('#companyCodeOutput')
+  output.innerHTML=`<div><code>${esc(response.code)}</code><div class="muted">${esc(response.role)} / expires ${esc(new Date(response.expiresAt).toLocaleString())}</div></div><button id="companyCopyCode" type="button">Copy code</button>`
+  output.hidden=false
+  $('#companyAuthState').textContent='Code shown once. It cannot be reused after sign-in.'
+  $('#companyCopyCode').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(response.code);toast('Code copied')}catch{toast('Copy unavailable')}})
+})
 
 async function runOperator(){
   const goal=$('#op-goal').value.trim(); if(!goal){toast('Type a question');return}
@@ -432,7 +568,7 @@ function invalidateCompanyPlan(message=''){
   companyDraft=null
   $('#companyPlan').hidden=true
   $('#companyConfirm').checked=false
-  $('#companyConfirm').disabled=false
+  $('#companyConfirm').disabled=!companyCan(companyPreparedPlaybookStage?'mission-stage-queue':'work-order-create')
   $('#companyQueueButton').disabled=true
   $('#companyQueueButton').textContent='Queue work order'
   if(message)$('#companyState').textContent=message
@@ -459,8 +595,8 @@ function renderCompanyPlaybooks(playbooks=[]){
   const select=$('#companyPlaybookSelect'),button=$('#companyPlaybookButton')
   select.innerHTML='<option value="">Choose a business outcome</option>'+playbooks.map(item=>`<option value="${esc(item.id)}">${esc(item.name)}</option>`).join('')
   select.disabled=!playbooks.length
-  button.disabled=!playbooks.length
-  $('#companyPlaybookState').textContent=playbooks.length?`${playbooks.length} fixed playbooks available. Planning makes no model call.`:'No playbooks are available.'
+  button.disabled=!playbooks.length||!companyCan('playbook-plan')
+  $('#companyPlaybookState').textContent=playbooks.length?(companyCan('playbook-plan')?`${playbooks.length} fixed playbooks available. Planning makes no model call.`:`${playbooks.length} fixed playbooks available in read-only mode.`):'No playbooks are available.'
 }
 function renderCompanyPlaybookPlan(plan){
   companyPlaybookPlan=plan
@@ -471,7 +607,8 @@ function renderCompanyPlaybookPlan(plan){
   box.innerHTML=`<div class="company-playbook-head"><div><h3>${esc(plan.playbook&&plan.playbook.name)}</h3><div class="muted">${esc(plan.playbook&&plan.playbook.buyerOutcome)}</div></div><span class="badge on">plan verified</span></div><div class="company-playbook-summary"><span class="badge">${esc(companyCount(budget.stageCount,'stage'))}</span><span class="badge">${esc(budget.totalPlannedRoleCalls||0)} planned role calls</span><span class="badge">one agent per stage</span><span class="badge">no auto dispatch</span><span class="badge">no writes</span></div><div class="company-run-id">Mission: ${esc(plan.missionRunId)}<br />Plan: ${esc(plan.planHash)}<br />Handoff: ${esc(String(controls.handoff||'').replaceAll('_',' '))}</div><div class="company-playbook-stages">${stageRows}</div><div class="company-playbook-create"><label><input id="companyMissionCreateConfirm" type="checkbox" /> I reviewed this exact mission, ordered stages, agents, role budgets, and handoff gates</label><button class="primary" id="companyMissionCreate" type="button" disabled>Create durable mission</button></div>`
   box.hidden=false
   const confirm=$('#companyMissionCreateConfirm'),create=$('#companyMissionCreate')
-  confirm.addEventListener('change',()=>{create.disabled=!confirm.checked})
+  confirm.disabled=!companyCan('mission-create')
+  confirm.addEventListener('change',()=>{create.disabled=!confirm.checked||!companyCan('mission-create')})
   create.addEventListener('click',createDurableCompanyMission)
   $('#companyPlaybookState').textContent='Delegation plan ready. Review it before creating the durable mission.'
   box.scrollIntoView({behavior:'smooth',block:'nearest'})
@@ -495,12 +632,12 @@ function renderCompanyMission(mission){
   clearPreparedCompanyStage()
   const box=$('#companyPlaybookPlan'),stages=mission.stages||[],budget=mission.budget||{},controls=mission.controls||{}
   const stageRows=stages.map(stage=>{
-    const action=stage.status==='ready'?`<button data-company-mission-prepare="${esc(stage.stageId)}" type="button">Prepare stage ${esc(stage.number)}</button>`:stage.status==='queued'?`<button data-company-mission-order="${esc(stage.workOrderId)}" type="button">Open work order</button>`:`<span class="badge${stage.status==='accepted'?' on':''}">${esc(stage.status)}</span>`
+    const action=stage.status==='ready'?(companyCan('mission-stage-queue')?`<button data-company-mission-prepare="${esc(stage.stageId)}" type="button">Prepare stage ${esc(stage.number)}</button>`:'<span class="badge">ready</span>'):stage.status==='queued'?`<button data-company-mission-order="${esc(stage.workOrderId)}" type="button">Open work order</button>`:`<span class="badge${stage.status==='accepted'?' on':''}">${esc(stage.status)}</span>`
     const fingerprint=stage.workOrderId?`<br />Order: ${esc(stage.workOrderId)}`:stage.approvedInputDigest?`<br />Approved input: ${esc(stage.approvedInputDigest)}`:''
     return `<article class="company-playbook-stage" data-company-mission-stage="${esc(stage.stageId)}"><span class="company-playbook-number">${esc(stage.number)}</span><div><b>${esc(stage.name)}</b><div class="muted">${esc(stage.agentName)} / ${esc(stage.crew)}</div></div><div class="company-playbook-stage-copy">${esc(stage.objective)}<br />Gate: ${esc(String(stage.gate||'').replaceAll('_',' '))}${fingerprint}</div><div class="company-playbook-stage-actions">${action}</div></article>`
   }).join('')
   const current=stages[mission.currentStageNumber-1],isFinal=current&&current.number===stages.length
-  const advance=current&&current.status==='queued'?`<div class="company-mission-advance"><h4>${isFinal?'Complete mission':'Approve the next handoff'}</h4><div class="muted">The server will verify the exact terminal result and accepted immutable evaluation before changing mission state.</div>${isFinal?'':`<div class="field"><label for="companyMissionAdvanceEvidence">Reviewed redacted evidence package for stage ${esc(current.number+1)}</label><textarea id="companyMissionAdvanceEvidence" maxlength="12000" required></textarea></div>`}<div class="company-mission-advance-actions"><label><input id="companyMissionAdvanceConfirm" type="checkbox" /> ${isFinal?'I reviewed the accepted final evaluation and want to complete this mission':'I reviewed this exact redacted package and want to unlock only the next stage'}</label><button class="primary" id="companyMissionAdvance" type="button" disabled>${isFinal?'Complete mission':'Verify & unlock next stage'}</button></div></div>`:''
+  const advance=current&&current.status==='queued'&&companyCan('mission-stage-advance')?`<div class="company-mission-advance"><h4>${isFinal?'Complete mission':'Approve the next handoff'}</h4><div class="muted">The server will verify the exact terminal result and accepted immutable evaluation before changing mission state.</div>${isFinal?'':`<div class="field"><label for="companyMissionAdvanceEvidence">Reviewed redacted evidence package for stage ${esc(current.number+1)}</label><textarea id="companyMissionAdvanceEvidence" maxlength="12000" required></textarea></div>`}<div class="company-mission-advance-actions"><label><input id="companyMissionAdvanceConfirm" type="checkbox" /> ${isFinal?'I reviewed the accepted final evaluation and want to complete this mission':'I reviewed this exact redacted package and want to unlock only the next stage'}</label><button class="primary" id="companyMissionAdvance" type="button" disabled>${isFinal?'Complete mission':'Verify & unlock next stage'}</button></div></div>`:''
   box.innerHTML=`<div class="company-playbook-head"><div><h3>${esc(mission.playbook&&mission.playbook.name)}</h3><div class="muted">${esc(mission.playbook&&mission.playbook.buyerOutcome)}</div></div>${companyStatusBadge(mission.status)}</div><div class="company-playbook-summary"><span class="badge on">durable</span><span class="badge">revision ${esc(mission.revision)}</span><span class="badge">stage ${esc(mission.currentStageNumber)} / ${esc(stages.length)}</span><span class="badge">server gates</span><span class="badge">no auto dispatch</span></div><div class="company-run-id">Mission: ${esc(mission.missionRunId)}<br />Plan: ${esc(mission.planHash)}<br />Handoffs stored: ${controls.rawHandoffsStored?'yes':'no, fingerprints only'}</div><div class="company-playbook-stages">${stageRows}</div>${advance}`
   box.hidden=false
   box.querySelectorAll('[data-company-mission-prepare]').forEach(button=>button.addEventListener('click',()=>prepareCompanyMissionStage(mission,stages.find(stage=>stage.stageId===button.dataset.companyMissionPrepare))))
@@ -513,7 +650,7 @@ function renderCompanyMission(mission){
 async function loadCompanyMissions(){
   const box=$('#companyMissionList'),clientId=$('#companyClientId').value.trim()
   companyMissions=[];companyOpenMission=null
-  if(!hasOpsKey()){box.innerHTML='<div class="empty">Enter the ops passcode to load durable missions.</div>';return}
+  if(!hasCompanyAccess()){box.innerHTML='<div class="empty">Sign in to load durable missions.</div>';return}
   if(!clientId){box.innerHTML='<div class="empty">Set a client ID to load durable missions.</div>';return}
   box.innerHTML='<div class="loading-pulse">Loading durable missions...</div>'
   let response
@@ -532,6 +669,7 @@ async function openCompanyMission(missionRunId){
   renderCompanyMission(response.mission)
 }
 async function createDurableCompanyMission(){
+  if(!companyCan('mission-create')){toast('Operator permission required');return}
   if(!companyPlaybookPlan||!$('#companyMissionCreateConfirm')?.checked)return
   const button=$('#companyMissionCreate'),clientId=companyPlaybookPlan.clientId,missionId=companyPlaybookPlan.missionId,playbookId=companyPlaybookPlan.playbook.id
   button.disabled=true;button.textContent='Creating...';$('#companyPlaybookState').textContent='Saving the exact mission plan without model spend...'
@@ -544,6 +682,7 @@ async function createDurableCompanyMission(){
   renderCompanyMission(response.mission)
 }
 function prepareCompanyMissionStage(mission,stage){
+  if(!companyCan('mission-stage-queue')){toast('Operator permission required');return}
   if(!stage||stage.status!=='ready'){toast('This stage is not ready');return}
   const rows=[...$('#companyRoster').querySelectorAll('[data-company-agent]')]
   const target=rows.find(row=>row.dataset.companyAgent===stage.agentId)
@@ -573,6 +712,7 @@ function prepareCompanyMissionStage(mission,stage){
   target.scrollIntoView({behavior:'smooth',block:'center'})
 }
 async function advanceCompanyMission(mission,stage){
+  if(!companyCan('mission-stage-advance')){toast('Reviewer permission required');return}
   const button=$('#companyMissionAdvance')
   if(!button||!$('#companyMissionAdvanceConfirm')?.checked||!stage?.workOrderId)return
   const isFinal=stage.number===mission.stages.length,evidence=isFinal?undefined:$('#companyMissionAdvanceEvidence')?.value.trim()
@@ -592,6 +732,7 @@ async function advanceCompanyMission(mission,stage){
 }
 async function planCompanyDelegation(event){
   event.preventDefault()
+  if(!companyCan('playbook-plan')){toast('Reviewer permission required');return}
   const clientId=$('#companyClientId').value.trim(),missionId=$('#companyMissionId').value.trim(),playbookId=$('#companyPlaybookSelect').value
   if(!clientId){toast('Enter the client ID');$('#companyClientId').focus();return}
   if(!event.currentTarget.reportValidity())return
@@ -602,7 +743,7 @@ async function planCompanyDelegation(event){
     if(!response.ok){companyPlaybookPlan=null;$('#companyPlaybookPlan').hidden=true;$('#companyPlaybookState').textContent=response.reason||'Delegation plan failed';return}
     renderCompanyPlaybookPlan(response)
   }catch(error){companyPlaybookPlan=null;$('#companyPlaybookPlan').hidden=true;$('#companyPlaybookState').textContent=String(error.message||'Delegation plan failed').slice(0,120)}
-  finally{button.disabled=!companyPlaybooks.length;button.textContent='Plan delegation'}
+  finally{button.disabled=!companyPlaybooks.length||!companyCan('playbook-plan');button.textContent='Plan delegation'}
 }
 function syncCompanyAgent(row,checkbox){
   const selected=checkbox.checked
@@ -647,6 +788,7 @@ function renderCompanyRoster(agents=[]){
   </div>`).join(''):'<div class="empty">No specialists are available.</div>'
   box.querySelectorAll('[data-company-agent]').forEach(row=>{
     const checkbox=row.querySelector('[data-company-check]')
+    checkbox.disabled=!companyCan('plan')
     syncCompanyAgent(row,checkbox)
     checkbox.addEventListener('change',()=>{
       clearPreparedCompanyStage()
@@ -658,16 +800,19 @@ function renderCompanyRoster(agents=[]){
     })
   })
   prepareCompanyRosterTools(agents)
+  $('#companyPlanButton').disabled=!companyCan('plan')
 }
 async function loadCompanyAgents(){
   const box=$('#companyRoster')
-  if(!hasOpsKey()){box.innerHTML='<div class="empty">Enter the ops passcode to load the specialist roster.</div>';return}
+  if(!hasCompanyAccess()){box.innerHTML='<div class="empty">Sign in to load the specialist roster.</div>';return}
   if(companyRoster.length&&companyPlaybooks.length)return
   box.innerHTML='<div class="loading-pulse">Loading specialists...</div>'
   let response
   try{response=await api('GET','/api/agent-company')}
   catch(error){box.innerHTML=`<div class="err-banner">Could not load specialists: ${esc(String(error.message||'network error'))}</div>`;return}
   if(!response.ok){box.innerHTML=`<div class="err-banner">${esc(response.reason||'Could not load specialists')}</div>`;return}
+  companyAuth=response.auth||companyAuth
+  renderCompanyAccess()
   companyAgentLimit=Number(response.limits&&response.limits.maxAgents)||2
   const maxBudget=Number(response.limits&&response.limits.maxRoleBudget)||8
   $('#companyRoleBudget').max=String(maxBudget)
@@ -699,6 +844,7 @@ function renderCompanyPlan(plan,input){
   $('#companyRunId').textContent=`Run ID: ${plan.runId}`
   $('#companyAssignments').innerHTML=(plan.assignments||[]).map(assignment=>`<div class="company-assignment"><div><b>${esc(assignment.name)}</b><span class="muted">${esc(assignment.department)} / ${esc(assignment.crew)}</span></div><div class="roles">${esc((assignment.roles||[]).map(role=>`${role.title} (${role.tier})`).join(' -> '))}<br />Returns: ${esc((assignment.returns||[]).join(', '))}</div></div>`).join('')
   $('#companyConfirm').checked=false
+  $('#companyConfirm').disabled=!companyCan(companyPreparedPlaybookStage?'mission-stage-queue':'work-order-create')
   $('#companyQueueButton').disabled=true
   $('#companyPlan').hidden=false
   $('#companyResults').innerHTML=''
@@ -752,7 +898,7 @@ function renderCompanyOperations(report){
 async function loadCompanyOperations(){
   const box=$('#companyOperationsState'),clientId=$('#companyClientId').value.trim(),windowDays=Number($('#companyOperationsWindow').value)
   companyOperations=null
-  if(!hasOpsKey()){box.className='empty';box.textContent='Enter the ops passcode to load company health.';return}
+  if(!hasCompanyAccess()){box.className='empty';box.textContent='Sign in to load company health.';return}
   if(!clientId){box.className='empty';box.textContent='Set a client ID to load operating evidence.';return}
   box.className='';box.innerHTML='<div class="loading-pulse">Measuring durable work orders...</div>'
   let response
@@ -781,7 +927,7 @@ async function loadCompanyWorkOrders(){
   const box=$('#companyOrderList'),clientId=$('#companyClientId').value.trim()
   $('#companyOrderDetail').hidden=true
   companyOpenWorkOrder=null
-  if(!hasOpsKey()){box.innerHTML='<div class="empty">Enter the ops passcode to load work orders.</div>';return}
+  if(!hasCompanyAccess()){box.innerHTML='<div class="empty">Sign in to load work orders.</div>';return}
   if(!clientId){box.innerHTML='<div class="empty">Set a client ID to load its queue.</div>';return}
   box.innerHTML='<div class="loading-pulse">Loading work orders...</div>'
   let response
@@ -796,22 +942,23 @@ function renderCompanyReviewSummary(review){
   return `<div class="company-review-summary"><div class="company-plan-summary"><span class="badge ${review.decision==='accepted'?'on':'off'}">${esc(decision)}</span><span class="badge">operator recorded</span><span class="badge">customer authentication: no</span></div><div class="statement">${esc(review.statement||'')}</div><div class="muted">${esc(review.reviewerName||'')} / ${esc(review.source||'')} / recorded by ${esc(review.recordedBy||'')} / ${esc(review.recordedAt?new Date(review.recordedAt).toLocaleString():'')}</div><div class="company-order-fingerprint">Review: ${esc(review.reviewHash||'')}</div></div>`
 }
 function renderCompanyReviewForm(order){
-  if(!['completed','partial'].includes(order.status)||!order.result||!order.resultHash||order.review)return ''
-  return `<form class="company-review-form" id="companyReviewForm"><h5>Record customer review</h5><div class="muted">Operator-recorded evidence only. This is not a customer login or digital signature.</div><div class="company-review-fields"><div class="field"><label for="companyReviewDecision">Decision</label><select id="companyReviewDecision" required><option value="accepted">Accepted</option><option value="changes_requested">Changes requested</option></select></div><div class="field"><label for="companyReviewSource">Source</label><select id="companyReviewSource" required><option value="chat">Chat</option><option value="email">Email</option><option value="call">Call</option><option value="in_person">In person</option></select></div><div class="field"><label for="companyReviewerName">Reviewer name</label><input id="companyReviewerName" maxlength="120" autocomplete="off" required /></div><div class="field"><label for="companyReviewRecordedBy">Recorded by</label><input id="companyReviewRecordedBy" maxlength="120" autocomplete="off" required /></div><div class="field statement"><label for="companyReviewStatement">Exact customer statement</label><textarea id="companyReviewStatement" maxlength="1200" required></textarea></div></div><div class="company-review-actions"><label class="company-order-confirm"><input id="companyReviewConfirm" type="checkbox" /> I copied the exact decision and statement from the selected source</label><button class="primary" id="companyReviewSave" type="submit" disabled>Record immutable review</button></div></form>`
+  if(!companyCan('work-order-review')||!['completed','partial'].includes(order.status)||!order.result||!order.resultHash||order.review)return ''
+  const sessionRecorder=companyAuth?.mode==='session'?companyAuth.operatorId:''
+  return `<form class="company-review-form" id="companyReviewForm"><h5>Record customer review</h5><div class="muted">Operator-recorded evidence only. This is not a customer login or digital signature.</div><div class="company-review-fields"><div class="field"><label for="companyReviewDecision">Decision</label><select id="companyReviewDecision" required><option value="accepted">Accepted</option><option value="changes_requested">Changes requested</option></select></div><div class="field"><label for="companyReviewSource">Source</label><select id="companyReviewSource" required><option value="chat">Chat</option><option value="email">Email</option><option value="call">Call</option><option value="in_person">In person</option></select></div><div class="field"><label for="companyReviewerName">Reviewer name</label><input id="companyReviewerName" maxlength="120" autocomplete="off" required /></div><div class="field"><label for="companyReviewRecordedBy">Recorded by</label><input id="companyReviewRecordedBy" maxlength="120" autocomplete="off" value="${esc(sessionRecorder)}" ${sessionRecorder?'readonly':''} required /></div><div class="field statement"><label for="companyReviewStatement">Exact customer statement</label><textarea id="companyReviewStatement" maxlength="1200" required></textarea></div></div><div class="company-review-actions"><label class="company-order-confirm"><input id="companyReviewConfirm" type="checkbox" /> I copied the exact decision and statement from the selected source</label><button class="primary" id="companyReviewSave" type="submit" disabled>Record immutable review</button></div></form>`
 }
 function renderCompanyWorkOrderDetail(order,{scroll=true}={}){
   companyOpenWorkOrder=order
   const box=$('#companyOrderDetail'),plan=order.plan||{},assignments=plan.assignments||[],budget=plan.budget||{}
   const assignmentHtml=assignments.map(assignment=>`<div class="company-assignment"><div><b>${esc(assignment.name)}</b><span class="muted">${esc(assignment.department)} / ${esc(assignment.crew)}</span></div><div class="roles">${esc((assignment.roles||[]).map(role=>`${role.title} (${role.tier})`).join(' -> '))}<br />Evidence: ${esc(assignment.evidenceBytes)} bytes</div></div>`).join('')
   const evidenceHtml=(order.evidence||[]).map(item=>`<div class="company-order-fingerprint">${esc(item.agentId)}: ${esc(item.digest)} (${esc(item.bytes)} bytes)</div>`).join('')
-  const canDispatch=order.status==='planned'||order.status==='running'
+  const canDispatch=(order.status==='planned'||order.status==='running')&&companyCan('work-order-run')
   const actions=canDispatch?`<div class="company-order-actions"><label class="company-order-confirm"><input id="companyOrderConfirm" type="checkbox" /> I reviewed this stored plan, evidence fingerprints, assignments, and budget</label><button class="primary" id="companyOrderRun" type="button" disabled>${order.status==='running'?'Check saved result':'Dispatch work order'}</button></div>`:order.result?'<div class="company-order-actions"><button id="companyOrderResult" type="button">Open cycle result</button><button id="companyOrderProof" type="button">Download proof packet</button></div>':''
-  const cancelActions=order.status==='planned'?`<div class="company-cancel-actions"><label class="company-order-confirm"><input id="companyOrderCancelConfirm" type="checkbox" /> Permanently cancel this order and scrub its queued source evidence</label><button class="reject" id="companyOrderCancel" type="button" disabled>Cancel &amp; scrub</button></div>`:''
+  const cancelActions=order.status==='planned'&&companyCan('work-order-cancel')?`<div class="company-cancel-actions"><label class="company-order-confirm"><input id="companyOrderCancelConfirm" type="checkbox" /> Permanently cancel this order and scrub its queued source evidence</label><button class="reject" id="companyOrderCancel" type="button" disabled>Cancel &amp; scrub</button></div>`:''
   const evidenceState=order.evidenceState==='scrubbed'?'evidence scrubbed':'evidence retained'
   const measured=(companyOperations&&companyOperations.orders||[]).find(item=>item.workOrderId===order.workOrderId),evaluation=measured&&measured.evaluation
   const terminal=['completed','partial','blocked','failed'].includes(order.status)&&order.result
   const checks=evaluation&&evaluation.checks||{}
-  const evaluationHtml=!terminal?'':evaluation?`<div class="company-evaluation"><h5>Internal outcome evaluation</h5><div class="company-evaluation-record"><span class="badge${evaluation.verdict==='accepted'?' on':' off'}">${esc(evaluation.verdict.replaceAll('_',' '))}</span>${Object.entries(checks).map(([key,value])=>`<span class="badge${value?' on':' off'}">${esc(key.replace(/([A-Z])/g,' $1').toLowerCase())}</span>`).join('')}</div><div class="company-order-fingerprint">${esc(evaluation.evaluationHash)} / ${esc(new Date(evaluation.evaluatedAt).toLocaleString())}</div></div>`:`<div class="company-evaluation"><h5>Internal outcome evaluation</h5><div class="muted">Record one immutable, checklist-only internal verdict. A revision requires a new cycle.</div><div class="company-evaluation-grid"><label class="company-evaluation-check"><input data-company-evaluation-check="accurate" type="checkbox" /> Accurate against supplied evidence</label><label class="company-evaluation-check"><input data-company-evaluation-check="complete" type="checkbox" /> Complete against the assignment</label><label class="company-evaluation-check"><input data-company-evaluation-check="usable" type="checkbox" /> Usable without hidden rework</label><label class="company-evaluation-check"><input data-company-evaluation-check="boundarySafe" type="checkbox" /> Stayed draft-only and within boundaries</label></div><div class="company-evaluation-actions"><div class="field"><label for="companyEvaluationVerdict">Verdict</label><select id="companyEvaluationVerdict"><option value="accepted">Accepted</option><option value="revision_required">Revision required</option></select></div><label class="company-evaluation-confirm"><input id="companyEvaluationConfirm" type="checkbox" /> I evaluated this terminal result and understand the verdict cannot be replaced</label><button class="primary" id="companyEvaluationSubmit" type="button" disabled>Record evaluation</button></div></div>`
+  const evaluationHtml=!terminal?'':evaluation?`<div class="company-evaluation"><h5>Internal outcome evaluation</h5><div class="company-evaluation-record"><span class="badge${evaluation.verdict==='accepted'?' on':' off'}">${esc(evaluation.verdict.replaceAll('_',' '))}</span>${Object.entries(checks).map(([key,value])=>`<span class="badge${value?' on':' off'}">${esc(key.replace(/([A-Z])/g,' $1').toLowerCase())}</span>`).join('')}</div><div class="company-order-fingerprint">${esc(evaluation.evaluationHash)} / ${esc(new Date(evaluation.evaluatedAt).toLocaleString())}</div></div>`:companyCan('work-order-evaluate')?`<div class="company-evaluation"><h5>Internal outcome evaluation</h5><div class="muted">Record one immutable, checklist-only internal verdict. A revision requires a new cycle.</div><div class="company-evaluation-grid"><label class="company-evaluation-check"><input data-company-evaluation-check="accurate" type="checkbox" /> Accurate against supplied evidence</label><label class="company-evaluation-check"><input data-company-evaluation-check="complete" type="checkbox" /> Complete against the assignment</label><label class="company-evaluation-check"><input data-company-evaluation-check="usable" type="checkbox" /> Usable without hidden rework</label><label class="company-evaluation-check"><input data-company-evaluation-check="boundarySafe" type="checkbox" /> Stayed draft-only and within boundaries</label></div><div class="company-evaluation-actions"><div class="field"><label for="companyEvaluationVerdict">Verdict</label><select id="companyEvaluationVerdict"><option value="accepted">Accepted</option><option value="revision_required">Revision required</option></select></div><label class="company-evaluation-confirm"><input id="companyEvaluationConfirm" type="checkbox" /> I evaluated this terminal result and understand the verdict cannot be replaced</label><button class="primary" id="companyEvaluationSubmit" type="button" disabled>Record evaluation</button></div></div>`:''
   box.innerHTML=`<div class="company-order-detail-head"><div><h4>${esc(order.cycleId)}</h4><div class="muted">${esc(order.workOrderId)}</div></div>${companyStatusBadge(order.status)}</div><div class="company-plan-summary"><span class="badge">${esc(companyCount(assignments.length,'specialist'))}</span><span class="badge">${esc(budget.plannedRoles||0)} / ${esc(budget.roleLimit||0)} role calls</span><span class="badge">${esc(companyCount(order.dispatchAttempts||0,'dispatch attempt'))}</span><span class="badge">no writes</span><span class="badge${order.evidenceState==='scrubbed'?' on':''}">${esc(evidenceState)}</span></div><div class="company-order-fingerprint">Plan: ${esc(order.planHash)}</div><div class="company-assignments">${assignmentHtml}</div>${evidenceHtml}${actions}${cancelActions}${evaluationHtml}${renderCompanyReviewSummary(order.review)}${renderCompanyReviewForm(order)}`
   box.hidden=false
   const confirm=$('#companyOrderConfirm'),run=$('#companyOrderRun')
@@ -833,6 +980,7 @@ function renderCompanyWorkOrderDetail(order,{scroll=true}={}){
   if(scroll)box.scrollIntoView({behavior:'smooth',block:'nearest'})
 }
 async function recordCompanyWorkOrderEvaluation(order){
+  if(!companyCan('work-order-evaluate')){toast('Reviewer permission required');return}
   const button=$('#companyEvaluationSubmit'),verdict=$('#companyEvaluationVerdict')?.value
   if(!button||!$('#companyEvaluationConfirm')?.checked)return
   const checks={}
@@ -870,6 +1018,7 @@ async function downloadCompanyWorkOrderProof(order){
   finally{if(button){button.disabled=false;button.textContent='Download proof packet'}}
 }
 async function cancelQueuedCompanyWorkOrder(order){
+  if(!companyCan('work-order-cancel')){toast('Operator permission required');return}
   if(!$('#companyOrderCancelConfirm')?.checked)return
   const button=$('#companyOrderCancel');button.disabled=true;button.textContent='Scrubbing...';$('#companyState').textContent='Cancelling the exact stored plan and scrubbing queued evidence...'
   let response
@@ -882,6 +1031,7 @@ async function cancelQueuedCompanyWorkOrder(order){
 }
 async function recordCompanyWorkOrderReview(event,order){
   event.preventDefault()
+  if(!companyCan('work-order-review')){toast('Reviewer permission required');return}
   if(!$('#companyReviewConfirm')?.checked)return
   const decision=$('#companyReviewDecision').value
   const confirmation=`${decision==='accepted'?'ACCEPT':'REQUEST CHANGES'} ${order.workOrderId} ${order.resultHash}`
@@ -894,6 +1044,8 @@ async function recordCompanyWorkOrderReview(event,order){
   await openCompanyWorkOrder(order.workOrderId)
 }
 async function queueReviewedCompanyWorkOrder(){
+  const requiredAction=companyPreparedPlaybookStage?'mission-stage-queue':'work-order-create'
+  if(!companyCan(requiredAction)){toast('Operator permission required');return}
   if(!companyDraft||!$('#companyConfirm').checked)return
   const button=$('#companyQueueButton');button.disabled=true;button.textContent='Queueing...';$('#companyState').textContent='Saving the exact plan without model spend...'
   try{
@@ -912,6 +1064,7 @@ async function queueReviewedCompanyWorkOrder(){
   finally{button.disabled=!$('#companyConfirm').checked||!companyDraft;button.textContent='Queue work order'}
 }
 async function runQueuedCompanyWorkOrder(order){
+  if(!companyCan('work-order-run')){toast('Operator permission required');return}
   const button=$('#companyOrderRun')
   if(!button||!$('#companyOrderConfirm')?.checked)return
   button.disabled=true;button.textContent='Dispatching...';$('#companyState').textContent='Dispatching the saved plan through the bounded runner...'
@@ -978,6 +1131,7 @@ $('#companyOperationsRefresh').addEventListener('click',loadCompanyOperations)
 $('#companyOperationsWindow').addEventListener('change',loadCompanyOperations)
 $('#companyForm').addEventListener('submit',async event=>{
   event.preventDefault()
+  if(!companyCan('plan')){toast('Reviewer permission required');return}
   const input=companyCycleInput()
   if(!input.agents.length){toast('Choose at least one specialist');return}
   if(!event.currentTarget.reportValidity())return
@@ -987,10 +1141,11 @@ $('#companyForm').addEventListener('submit',async event=>{
     if(!response.ok){invalidateCompanyPlan(response.reason||'Plan failed');return}
     renderCompanyPlan(response,input)
   }catch(error){invalidateCompanyPlan(String(error.message||'Plan failed').slice(0,120))}
-  finally{button.disabled=false;button.textContent='Plan cycle'}
+  finally{button.disabled=!companyCan('plan');button.textContent='Plan cycle'}
 })
 $('#companyConfirm').addEventListener('change',event=>{
-  const disabled=!event.currentTarget.checked||!companyDraft
+  const requiredAction=companyPreparedPlaybookStage?'mission-stage-queue':'work-order-create'
+  const disabled=!event.currentTarget.checked||!companyDraft||!companyCan(requiredAction)
   $('#companyQueueButton').disabled=disabled
 })
 $('#companyQueueButton').addEventListener('click',queueReviewedCompanyWorkOrder)
@@ -1002,7 +1157,7 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
   if(b.dataset.view==='pipeline')loadProjects()
   if(b.dataset.view==='leads')loadLeads()
   if(b.dataset.view==='outreach')loadOutreach()
-  if(b.dataset.view==='company'){loadCompanyAgents();loadCompanyMissions();loadCompanyWorkOrders();loadCompanyOperations()}
+  if(b.dataset.view==='company')openCompanyWorkspace()
   if(b.dataset.view==='workcells')loadWorkcells()
   if(b.dataset.view==='approvals')loadApprovals()
   if(b.dataset.view==='connectors')loadConnectors()
@@ -1027,7 +1182,7 @@ function renderLockedOverview(){
   $('#modeBadge').textContent='store: locked';$('#modeBadge').className='badge'
   $('#aiBadge').textContent='ai: locked';$('#aiBadge').className='badge'
   renderOverview()
-  $('#feed').innerHTML='<div class="muted">Enter the ops passcode to load live activity.</div>'
+  $('#feed').innerHTML='<div class="muted">Enter the owner key to load live activity.</div>'
 }
 
 function loadProtectedState(){
@@ -1040,7 +1195,7 @@ async function loadOverview(){
   $('#stats').innerHTML='<div class="loading-pulse">Loading overview…</div>'
   let r
   try{r=await api('GET','/api/dashboard')}catch(e){$('#stats').innerHTML=`<div class="err-banner">Could not load overview — ${esc(String(e.message||'network error'))}</div>`;return}
-  if(!r.ok){$('#stats').innerHTML='<div class="err-banner">Could not load overview. Check the ops passcode.</div>';return}
+  if(!r.ok){$('#stats').innerHTML='<div class="err-banner">Could not load overview. Check the owner key.</div>';return}
   renderOverview(r)
 }
 
@@ -1429,7 +1584,7 @@ async function runWorkcell(slug,button){
 async function loadWorkcells(){
   const box=$('#workcellGrid');box.innerHTML='<div class="loading-pulse">Checking workcell readiness...</div>'
   const r=await api('GET','/api/workcells').catch(()=>null)
-  if(!r||!r.workcells){box.innerHTML='<div class="err-banner">Could not load workcells. Check the ops passcode.</div>';return}
+  if(!r||!r.workcells){box.innerHTML='<div class="err-banner">Could not load workcells. Check the owner key.</div>';return}
   box.innerHTML=r.workcells.map(w=>{
     const missing=(w.missing||[]).map(x=>WORKCELL_MISSING[x]||x)
     return `<article class="workcell" data-slug="${esc(w.slug)}"><h3>${esc(w.name)}</h3><div class="outcome">${esc(w.outcome)}</div><div class="wc-meta"><span class="status ${w.configured?'ok':'off'}">${w.configured?'configured':'needs setup'}</span>${w.scheduled?'<span class="status warn">daily</span>':''}${w.actionDraftSupported&&!w.actionDraftReady?'<span class="status warn">action setup needed</span>':''}</div>${missing.length?`<div class="info" style="margin-bottom:12px">${missing.map(esc).join(' | ')}</div>`:''}<div class="wc-actions"><div class="wc-options"><label class="wc-option"><input data-deliver type="checkbox" ${w.configured?'':'disabled'} /> Send to owner</label>${w.actionDraftSupported?`<label class="wc-option"><input data-queue type="checkbox" ${w.actionDraftReady?'':'disabled'} /> Queue owner action</label>`:''}</div><button class="primary" ${w.configured?'':'disabled'}>Run now</button></div></article>`
@@ -1486,7 +1641,7 @@ async function loadConnectors(){
   const box=$('#connGrid')
   box.innerHTML='<div class="loading-pulse">Checking connector health…</div>'
   const r=await api('GET','/api/integrations').catch(()=>null)
-  if(!r||!r.connectors){box.innerHTML='<div class="err-banner">Could not load connectors. Check that the ops passcode is correct.</div>';return}
+  if(!r||!r.connectors){box.innerHTML='<div class="err-banner">Could not load connectors. Check that the owner key is correct.</div>';return}
   if(!r.connectors.length){box.innerHTML='<div class="empty">No connectors registered.</div>';return}
   box.innerHTML=r.connectors.map(c=>{
     const ok=c.configured&&c.health&&c.health.ok
@@ -1538,19 +1693,14 @@ if(location.hash==='#company'){
   const companyTab=document.querySelector('nav button[data-view="company"]')
   document.querySelectorAll('nav button').forEach(button=>button.classList.toggle('active',button===companyTab))
   for(const view of ['overview','leads','pipeline','outreach','deal','operator','company','workcells','approvals','connectors']) $('#view-'+view).hidden=view!=='company'
-  if(hasOpsKey()){loadCompanyAgents();loadCompanyMissions();loadCompanyWorkOrders();loadCompanyOperations()}
-  else{
-    $('#companyRoster').innerHTML='<div class="empty">Enter the ops passcode to load the specialist roster.</div>'
-    $('#companyOrderList').innerHTML='<div class="empty">Enter the ops passcode to load work orders.</div>'
-    $('#companyOperationsState').innerHTML='<div class="empty">Enter the ops passcode to load company health.</div>'
-  }
+  openCompanyWorkspace()
 }else if(location.hash==='#activation'){
   const workcellsTab=document.querySelector('nav button[data-view="workcells"]')
   document.querySelectorAll('nav button').forEach(button=>button.classList.toggle('active',button===workcellsTab))
   for(const view of ['overview','leads','pipeline','outreach','deal','operator','company','workcells','approvals','connectors']) $('#view-'+view).hidden=view!=='workcells'
   openActivationPanel('#activationManifestFile')
   if(hasOpsKey())loadWorkcells()
-  else $('#workcellGrid').innerHTML='<div class="empty">Enter the ops passcode to load live workcell status.</div>'
+  else $('#workcellGrid').innerHTML='<div class="empty">Enter the owner key to load live workcell status.</div>'
 }
 loadProtectedState()
 </script>
