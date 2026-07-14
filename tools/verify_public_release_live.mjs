@@ -8,6 +8,7 @@ const endpoints = {
   agentIntake: 'https://supermega.dev/contact/?from=ai-agent-solution',
   health: 'https://supermega.dev/api/health',
   contactStatus: 'https://supermega.dev/api/contact-submissions/status',
+  contactDiagnostics: 'https://supermega.dev/api/contact-submissions/status?detail=1',
 }
 
 function assert(condition, code) {
@@ -77,38 +78,53 @@ function verifyAgentIntake(html) {
 }
 
 function verifyHealth(body) {
+  assert(Object.keys(body || {}).sort().join(',') === 'ok,service,status', 'health_exposes_internal_fields')
   assert(body?.ok === true, 'health_not_ok')
   assert(body?.status === 'ready', 'health_not_ready')
   assert(body?.service === 'supermega-public-site', 'health_wrong_service')
-  assert(body?.integrations?.email === true, 'health_owner_email_missing')
 }
 
 function verifyContactStatus(body) {
+  assert(Object.keys(body || {}).sort().join(',') === 'service,status', 'contact_status_exposes_internal_fields')
   assert(body?.status === 'ready', 'contact_status_not_ready')
-  assert(body?.endpoint === 'contact-submissions', 'contact_status_wrong_endpoint')
-  assert(['configured', 'ready'].includes(body?.lead_ledger), 'contact_lead_ledger_missing')
-  assert(['configured', 'ready'].includes(body?.pipeline_actions), 'contact_action_queue_missing')
-  assert(body?.fallback_queue?.email_delivery === 'configured', 'contact_email_fallback_missing')
-  assert(body?.ops_intake?.status === 'ready', 'contact_ops_handoff_missing')
-  assert(body?.setup_checklist?.supabase === 'configured', 'contact_supabase_missing')
-  assert(body?.setup_checklist?.resend_api_key === 'configured', 'contact_resend_missing')
+  assert(body?.service === 'supermega-contact', 'contact_status_wrong_service')
+}
+
+function verifyProtectedDiagnostics(response, body) {
+  assert(response.status === 401, 'contact_diagnostics_not_protected')
+  assert(Object.keys(body || {}).sort().join(',') === 'reason,status', 'contact_diagnostics_auth_exposes_fields')
+  assert(body?.status === 'error', 'contact_diagnostics_auth_wrong_status')
+  assert(body?.reason === 'operator_auth_required', 'contact_diagnostics_auth_wrong_reason')
 }
 
 async function verifyOnce() {
-  const [homeResponse, wwwResponse, intakeResponse, healthResponse, statusResponse] = await Promise.all([
+  const [homeResponse, wwwResponse, intakeResponse, healthResponse, statusResponse, diagnosticsResponse] = await Promise.all([
     get(endpoints.home, 'text/html'),
     get(endpoints.www, 'text/html'),
     get(endpoints.agentIntake, 'text/html'),
     get(endpoints.health, 'application/json'),
     get(endpoints.contactStatus, 'application/json'),
+    fetch(endpoints.contactDiagnostics, {
+      method: 'GET',
+      redirect: 'follow',
+      cache: 'no-store',
+      headers: {
+        accept: 'application/json',
+        'cache-control': 'no-cache',
+        pragma: 'no-cache',
+        'user-agent': 'SuperMegaVerifiedRelease/1.0',
+      },
+      signal: AbortSignal.timeout(requestTimeoutMs),
+    }),
   ])
 
-  const [home, www, intake, health, contactStatus] = await Promise.all([
+  const [home, www, intake, health, contactStatus, protectedDiagnostics] = await Promise.all([
     homeResponse.text(),
     wwwResponse.text(),
     intakeResponse.text(),
     healthResponse.json(),
     statusResponse.json(),
+    diagnosticsResponse.json(),
   ])
 
   verifyHome(home, 'home')
@@ -116,6 +132,7 @@ async function verifyOnce() {
   verifyAgentIntake(intake)
   verifyHealth(health)
   verifyContactStatus(contactStatus)
+  verifyProtectedDiagnostics(diagnosticsResponse, protectedDiagnostics)
 }
 
 let lastError
