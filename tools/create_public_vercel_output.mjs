@@ -353,6 +353,7 @@ const homeHtml = documentHtml({
     }
     .hero-command strong { color: var(--accent); }
     .terminal-cursor { display: inline-block; color: var(--signal); animation: cursor-pulse 1.35s steps(2, end) infinite; }
+    .hero-lead { display: block; margin-bottom: 10px; color: var(--ink); font-size: 20px; font-weight: 820; letter-spacing: 0; }
     .hero h1 { max-width: 13ch; margin: 18px 0 0; font-size: 62px; line-height: 1.01; letter-spacing: 0; font-weight: 790; }
     .hero-side > p { max-width: 45ch; margin: 0; color: var(--muted); font-size: 17px; line-height: 1.58; }
     .hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 26px; }
@@ -452,6 +453,7 @@ const homeHtml = documentHtml({
       .hero { padding: 104px 0 20px; }
       .hero-inner { width: min(100% - 32px, 1240px); }
       .hero h1 { max-width: 13ch; margin-top: 14px; font-size: 42px; line-height: 1.03; }
+      .hero-lead { margin-bottom: 8px; font-size: 18px; }
       .hero-side > p { max-width: 38ch; font-size: 15px; line-height: 1.5; }
       .hero-actions { gap: 8px; margin-top: 20px; }
       .hero-actions .btn { min-height: 46px; flex: 1 1 140px; }
@@ -495,7 +497,7 @@ const homeHtml = documentHtml({
           <h1 id="portfolio-heading">Operational software, built to fit.</h1>
         </div>
         <div class="hero-side">
-          <p>Start with working Shop or Plant software. When the standard workflow does not fit, SuperMega shapes a private workspace around the real operation and verifies it before handover.</p>
+          <p><strong class="hero-lead">Less chasing. More running.</strong> Start with working Shop or Plant software. When the standard workflow does not fit, SuperMega shapes a private workspace around the real operation and verifies it before handover.</p>
           <div class="hero-actions">
             <a class="btn primary" data-preview-open href="https://app.supermega.dev/?demo=shop">Try Shop live</a>
             <a class="btn secondary" href="/contact/">Talk to us</a>
