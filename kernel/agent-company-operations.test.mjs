@@ -154,7 +154,7 @@ test('operations report measures five durable accepted orders without exposing e
   assert.equal(report.measures.executionP90Minutes, 10)
   assert.equal(report.measures.acceptedEvaluationRate, 1)
   assert.equal(report.targets.every((target) => target.state === 'met'), true)
-  assert.equal(report.workforce.availableAgents, 12)
+  assert.equal(report.workforce.availableAgents, 15)
   assert.equal(report.workforce.utilizedAgents, 1)
   assert.equal(report.workforce.totalAssignments, 5)
   assert.equal(report.workforce.usedRoleCalls, 15)
@@ -203,7 +203,7 @@ test('workforce utilization aggregates specialist metadata without carrying deli
     getEvaluation: async () => null,
     now: () => '2026-07-15T00:00:00.000Z',
   })
-  assert.equal(report.workforce.availableAgents, 12)
+  assert.equal(report.workforce.availableAgents, 15)
   assert.equal(report.workforce.utilizedAgents, 2)
   assert.equal(report.workforce.totalAssignments, 2)
   assert.equal(report.workforce.usedRoleCalls, 5)

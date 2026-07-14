@@ -14,8 +14,9 @@ broader system boundaries.
 | `workcells.mjs` + `workcell-run.mjs` | Cash Close, Pipeline Control, and Owner Command products | live |
 | `owner-evidence.mjs` + `api/owner-evidence.mjs` | Reviewed LINE/Viber evidence preview, immutable storage, and bounded read | live |
 | `approval-actions.mjs` + `api/approvals.mjs` | Immutable owner approval and idempotent ClickUp execution | live |
-| `crews/` + `crew-run.mjs` | Contract-enforced, draft-only multi-role tasks | 12 live |
+| `crews/` + `crew-run.mjs` | Contract-enforced, draft-only multi-role tasks | 15 live |
 | `agent-company.mjs` + `agent-company-work-orders.mjs` | Bounded supervisor cycles and durable reviewed delegation | live |
+| `agent-company-playbooks.mjs` | Fixed sellable outcomes with staged, owner-reviewed handoffs | plan-only |
 | `agent-company-operations.mjs` | Immutable outcome review and metadata-only operating targets | live |
 | `agent-company-operator.mjs` + `scripts/operate-agent-company.mjs` | Guided plan, queue, dispatch, evaluation, and proof client | operator-run |
 | `public/` + `api/` | Ops console, status, workcell activation, and scheduled delivery | live |
@@ -58,7 +59,7 @@ The agent receives only the bounded read tool and cannot write to the inbox.
 
 ## Agent Company Cycles
 
-`POST /api/agent-company` is the protected manager layer over twelve validated crews. Callers must
+`POST /api/agent-company` is the protected manager layer over fifteen validated crews. Callers must
 choose `action: "plan"` or `action: "run"`, a stable client and cycle id, one or two allowlisted
 specialists, and separate evidence for each specialist. A plan reports the exact role-call budget
 before any model call. A run atomically claims the cycle in durable storage, then executes the crews
@@ -70,6 +71,15 @@ traceable envelope and returns drafts only; every external side effect remains b
 approval path. Reusing a claimed cycle id is blocked to prevent duplicate spend.
 Completed specialist and final envelopes are also stored under the claimed run id, so an idempotent
 replay can return a finished result or expose the recoverable partial results without spending again.
+
+`playbook-plan` maps one client mission to one of eight fixed business outcomes. Each plan names the
+exact ordered specialists, crew contracts, stage cycle ids, role budgets, returned fields, and handoff
+gate before any model call or durable write. The console can prepare one stage in the existing cycle
+form, but later stages stay disabled until the operator confirms the prior stage has an accepted
+internal evaluation and the redacted handoff has been reviewed. Playbooks never queue, dispatch,
+forward raw output, or create a second runner; every stage remains a separate reviewed work order.
+See [AGENT-COMPANY-OPERATING-GUIDE.md](AGENT-COMPANY-OPERATING-GUIDE.md) for the sellable outcome
+catalog and operating sequence.
 
 For durable delegation, delivery proof, and operating evidence, the same endpoint accepts nine
 additional explicit actions:
@@ -181,6 +191,8 @@ in recovery instead of being retried blindly.
 - The default cron is one daily UTC schedule. Each isolated client deployment sets its own UTC time.
 - Agent Company cycles are synchronous waves capped at two specialists and eight planned role calls.
   Failed or partial waves require a new explicit cycle id; there is no automatic retry or hidden loop.
+- Playbook plans are deterministic but not durable mission records. They prepare one stage at a time;
+  the operator remains responsible for verifying the previous evaluation and redacted handoff.
 - Planned work orders retain their bounded evidence in the protected cache until dispatch or an
   explicit cancel-and-scrub decision. There is no unattended dispatcher or retention sweeper.
 - Customer review is operator-recorded provenance, not cryptographic proof of customer identity.
@@ -193,11 +205,13 @@ in recovery instead of being retried blindly.
 
 1. Dispatch one legitimate redacted work order, record its internal checklist evaluation, download
    the delivery proof, and record the customer's exact decision from an allowed source.
-2. After that proof, add an opt-in durable dispatcher, bounded evidence-retention sweeper, and alerts
-   over the measured target states. Do not introduce recursive delegation.
-3. Generate the isolated client plan, load its client-scoped inputs, and run the exact-confirmation
+2. After that proof, add authenticated tenant operators and durable mission/stage state so handoff
+   eligibility can be verified server-side rather than only confirmed in the console.
+3. Then add an opt-in durable dispatcher, bounded evidence-retention sweeper, and alerts over the
+   measured target states. Do not introduce recursive delegation.
+4. Generate the isolated client plan, load its client-scoped inputs, and run the exact-confirmation
    provisioner. A matching bootstrap-only Supabase database URL applies the schema automatically;
    pre-applying `supabase/workcell-client.sql` remains the fallback.
-4. Complete the client-owned test ClickUp draft, approval, execution, and recovery proof.
-5. Move from one cron per client deployment to a durable scheduler when real client volume justifies
+5. Complete the client-owned test ClickUp draft, approval, execution, and recovery proof.
+6. Move from one cron per client deployment to a durable scheduler when real client volume justifies
    a shared control plane.

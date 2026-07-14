@@ -1,0 +1,52 @@
+{
+  "slug": "procurement-review-desk",
+  "name": "Procurement Review Desk",
+  "version": 1,
+  "description": "Normalizes approved supplier quotes and prepares a traceable commercial comparison, risk register, and owner decision packet without contacting suppliers or placing orders.",
+  "intake": {
+    "accepts": [
+      "supplier quote",
+      "specification or bill of quantities",
+      "delivery and payment terms",
+      "currency and tax rules",
+      "evaluation criteria"
+    ],
+    "description": "Approved quote evidence, required specifications, commercial terms, comparison rules, currency assumptions, constraints, and known gaps."
+  },
+  "roles": [
+    {
+      "id": "intake",
+      "title": "Intake",
+      "tier": "bulk",
+      "goal": "Inventory suppliers, quote versions, line items, currencies, taxes, validity dates, specifications, delivery terms, and missing evidence without silent assumptions."
+    },
+    {
+      "id": "commercial-analyst",
+      "title": "Commercial Analyst",
+      "tier": "reason",
+      "goal": "Normalize comparable terms, calculate only supported totals and variances, check specification coverage, and explain material trade-offs with source references."
+    },
+    {
+      "id": "procurement-reviewer",
+      "title": "Procurement Reviewer",
+      "tier": "bulk",
+      "goal": "Build the exception and risk register, decision options, clarification questions, and owner approval packet without selecting or contacting a supplier."
+    }
+  ],
+  "output_contract": {
+    "format": "json",
+    "fields": [
+      "quote_register",
+      "normalized_comparison",
+      "specification_coverage",
+      "commercial_terms",
+      "risks",
+      "clarification_questions",
+      "decision_options",
+      "source_trace",
+      "approval_queue",
+      "blocked_actions"
+    ],
+    "description": "A source-traced quote comparison and owner decision packet with no supplier contact or purchasing action."
+  }
+}

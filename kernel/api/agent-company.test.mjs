@@ -30,10 +30,18 @@ test('GET returns the protected fixed roster and hard limits', async () => {
   const result = await handleAgentCompany(request({ method: 'GET', body: undefined }), { opsKey: KEY })
   assert.equal(result.status, 200)
   assert.equal(result.json.actionMode, 'draft_only')
-  assert.equal(result.json.agents.length, 12)
+  assert.equal(result.json.agents.length, 15)
   assert.equal(result.json.agents.every((agent) => agent.evidenceHint), true)
   assert.equal(result.json.limits.maxAgents, 2)
   assert.equal(result.json.limits.maxRoleBudget, 8)
+  assert.equal(result.json.playbooks.enabled, true)
+  assert.equal(result.json.playbooks.catalog.length, 8)
+  assert.equal(result.json.playbooks.staged, true)
+  assert.equal(result.json.playbooks.automaticQueue, false)
+  assert.equal(result.json.playbooks.automaticDispatch, false)
+  assert.equal(result.json.playbooks.dynamicDelegation, false)
+  assert.equal(result.json.playbooks.crossStageContext, false)
+  assert.equal(result.json.playbooks.handoff, 'owner_reviewed_redacted_output_only')
   assert.equal(result.json.workOrders.enabled, true)
   assert.equal(result.json.workOrders.explicitDispatch, true)
   assert.equal(result.json.workOrders.rawEvidenceReturned, false)
@@ -62,6 +70,26 @@ test('POST plans without claiming a run or accepting an implicit action', async 
   assert.equal(result.json.budget.plannedRoles, 3)
   assert.equal(runs, 0)
   assert.equal((await handleAgentCompany(request({ body: { ...validBody, action: '' } }), { opsKey: KEY })).status, 400)
+})
+
+test('POST playbook planning delegates only to the plan-only workforce contract', async () => {
+  const calls = []
+  const body = {
+    action: 'playbook-plan',
+    clientId: 'client-acme',
+    missionId: 'mission-1',
+    playbookId: 'source-to-decision',
+  }
+  const result = await handleAgentCompany(request({ body }), {
+    opsKey: KEY,
+    planCompanyPlaybook: async (input) => {
+      calls.push(input)
+      return { ok: true, mode: 'playbook_plan', actionMode: 'plan_only' }
+    },
+  })
+  assert.equal(result.status, 200)
+  assert.equal(result.json.mode, 'playbook_plan')
+  assert.deepEqual(calls, [{ clientId: 'client-acme', missionId: 'mission-1', playbookId: 'source-to-decision' }])
 })
 
 test('isolated deployments reject a different client id', async () => {
