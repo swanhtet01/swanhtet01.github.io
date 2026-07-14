@@ -1,5 +1,9 @@
 # SuperMega App Deploy
 
+> Historical combined-app runbook. Production `supermega.dev` is released from
+> `codex/public-enterprise-site` through the verified Vercel workflow. Shop,
+> Plant, Shop POS, and Agent Company have separate production lanes.
+
 This is the cleanest way to run SuperMega as one connected system:
 
 - public website
@@ -109,7 +113,7 @@ That means:
 - the default local runtime still works on SQLite
 - a customer deployment can move that store to Postgres by setting `SUPERMEGA_DATABASE_URL`
 
-## Cloud Run deploy
+## Legacy Cloud Run app deploy
 
 Workflow:
 
@@ -117,6 +121,8 @@ Workflow:
 - direct script:
   - `powershell -ExecutionPolicy Bypass -File .\tools\deploy_supermega_gcp.ps1`
 - repo/bootstrap sync:
+  - `-DeployApp` dispatches the legacy Cloud Run app workflow
+  - `-DeployWebsite` dispatches the verified Vercel public release
   - `powershell -ExecutionPolicy Bypass -File .\tools\bootstrap_supermega_ops.ps1 -UseLiveRunUrl -DeployApp -DeployWebsite`
 
 Required secret:

@@ -14,8 +14,8 @@ Core docs:
 
 - `personal-pilot-architecture.md` - v1 architecture and stack decision for the personal pilot
 - `mark1_pilot/README.md` - runnable pilot scaffold for Yangon Tyre plus Gmail
-- `showroom/` - React + TypeScript + Tailwind public showroom for `supermega.dev`
-- `showroom/DEPLOY_CLOUD_RUN.md` - fallback hosting path when GitHub Pages connectivity is blocked
+- `showroom/` - legacy React showroom prototype; it is not the production `supermega.dev` source
+- `.github/workflows/supermega-public-release.yml` - verified Vercel release for the canonical public branch
 - `command-center/ARCHITECTURE_v2.3.md` - broader Mark 1 machine vision and long-term architecture
 - `DOCUMENTATION-INDEX.md` - map of active vs legacy docs
 - `QUICKSTART.md` - fastest path to run pilot, fix Gmail, and test on phone/laptop
@@ -101,8 +101,11 @@ powershell -ExecutionPolicy Bypass -File .\tools\run_solution.ps1 -Config .\conf
 # Run the full app as one container with persistent saved data
 docker compose -f .\docker-compose.app.yml up --build
 
-# Deploy website via GitHub Actions (sync secret + dispatch Pages/Cloud Run)
-powershell -ExecutionPolicy Bypass -File .\tools\deploy_website_actions.ps1 -ProjectId supermega-468612 -Region asia-southeast1 -Service supermega-showroom
+# Inspect the Vercel-only production release plan without deploying
+powershell -ExecutionPolicy Bypass -File .\tools\deploy_website_actions.ps1 -DryRun
+
+# Dispatch the verified Vercel production release and wait for live checks
+powershell -ExecutionPolicy Bypass -File .\tools\deploy_website_actions.ps1
 
 # Showroom
 cd showroom
