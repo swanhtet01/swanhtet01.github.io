@@ -6,7 +6,7 @@ const outputDir = resolve(root, '.vercel', 'output')
 const staticDir = resolve(outputDir, 'static')
 const functionsDir = resolve(outputDir, 'functions', 'api')
 
-const faviconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="supermega.dev terminal mark"><rect x="4" y="4" width="56" height="56" rx="12" fill="#090c11"/><rect x="4.75" y="4.75" width="54.5" height="54.5" rx="11.25" fill="none" stroke="#ffffff" stroke-opacity="0.14"/><path d="M18 21.5 30 32 18 42.5" fill="none" stroke="#5f8cff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><path d="M35 42.5h13" fill="none" stroke="#3dd6a2" stroke-width="5" stroke-linecap="round"/></svg>\n`
+const faviconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="supermega.dev terminal mark" shape-rendering="geometricPrecision"><rect x="3" y="3" width="58" height="58" rx="13" fill="#090d13"/><rect x="3.75" y="3.75" width="56.5" height="56.5" rx="12.25" fill="none" stroke="#ffffff" stroke-opacity="0.16"/><path d="M16.5 19.5 30 31.5 16.5 43.5" fill="none" stroke="#6b95ff" stroke-width="4.75" stroke-linecap="round" stroke-linejoin="round"/><path d="M35 43.5h14" fill="none" stroke="#3dd6a2" stroke-width="4.75" stroke-linecap="round"/></svg>\n`
 
 // The public site accepts only contact requests. It uses the contact handler's Supabase REST
 // fallback when those variables are configured and never opens a direct Postgres connection.
@@ -156,22 +156,12 @@ const sharedStyle = `
     text-decoration: none;
   }
   .terminal-mark {
-    width: 34px;
-    height: 34px;
+    width: 36px;
+    height: 36px;
     flex: none;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid var(--line);
-    border-radius: 7px;
-    background: var(--inverse);
-    color: #6b95ff;
-    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-    font-size: 14px;
-    font-weight: 800;
-    line-height: 1;
+    display: block;
   }
-  .terminal-mark span:last-child { color: #3dd6a2; }
+  .terminal-mark img { display: block; width: 100%; height: 100%; }
   .brand-text { min-width: 0; white-space: nowrap; font-size: 17px; font-weight: 780; letter-spacing: 0; }
   .brand-text .domain { color: var(--quiet); font-weight: 580; }
   .nav { display: flex; min-width: 0; align-items: center; justify-content: flex-end; gap: 6px; }
@@ -230,7 +220,7 @@ const sharedStyle = `
     font-weight: 650;
   }
   .footer-brand { display: inline-flex; align-items: center; gap: 9px; color: var(--ink); font-weight: 780; }
-  .footer-command { color: var(--accent); font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
+  .footer-mark { width: 24px; height: 24px; display: block; }
   .footer-links { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 14px; }
   .footer-links a { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); text-decoration: none; }
   .footer-links a:hover { color: var(--ink); }
@@ -270,7 +260,7 @@ const headerHtml = `${themeBootstrap}
 <div class="header-wrap">
   <header class="front-header">
     <a class="brand" href="/" aria-label="SuperMega home">
-      <span class="terminal-mark" aria-hidden="true"><span>&gt;</span><span>_</span></span>
+      <span class="terminal-mark" aria-hidden="true"><img src="/favicon.svg" alt="" width="64" height="64" /></span>
       <span class="brand-text">supermega<span class="domain">.dev</span></span>
     </a>
     <nav class="nav" aria-label="Primary">
@@ -278,14 +268,14 @@ const headerHtml = `${themeBootstrap}
       <a class="nav-link optional-nav" href="https://app.supermega.dev/?demo=plant">Plant</a>
       <a class="nav-link optional-nav" href="/contact/">Contact</a>
       <button class="icon-button" type="button" data-theme-toggle aria-label="Use dark mode" title="Use dark mode"><svg class="theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path></svg><svg class="theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 15.2A8.5 8.5 0 0 1 8.8 3.5 8.5 8.5 0 1 0 20.5 15.2Z"></path></svg></button>
-      <a class="btn primary header-cta" href="/contact/">Start now</a>
+      <a class="btn primary header-cta" href="/contact/">Talk to us</a>
     </nav>
   </header>
 </div>
 ${themeToggleScript}`
 
 const footerHtml = `<div class="footer-frame"><footer>
-  <span class="footer-brand"><span class="footer-command">&gt;_</span> supermega.dev</span>
+  <span class="footer-brand"><img class="footer-mark" src="/favicon.svg" alt="" width="64" height="64" /> supermega.dev</span>
   <span class="footer-links"><a href="https://app.supermega.dev/?demo=shop">Shop</a><a href="https://app.supermega.dev/?demo=plant">Plant</a><a href="/contact/">Contact</a><a href="/privacy/">Privacy</a></span>
 </footer></div>`
 
@@ -321,15 +311,13 @@ function documentHtml({ title, description, canonical, content, style = '' }) {
 </html>`
 }
 
-const liveStatusScript = `<script>(function(){var node=document.querySelector('[data-public-status]');if(!node)return;if(location.hostname==='127.0.0.1'||location.hostname==='localhost'){node.textContent='Local preview';return;}fetch('/api/health',{cache:'no-store',headers:{accept:'application/json'}}).then(function(response){if(!response.ok)throw new Error('unavailable');return response.json();}).then(function(body){node.textContent=body&&body.ok?'Public system ready':'Workspace available';var parent=node.closest('[data-status-shell]');if(parent)parent.classList.add('is-ready');}).catch(function(){node.textContent='Workspace available';});})();</script>`
+const liveStatusScript = `<script>(function(){var node=document.querySelector('[data-public-status]');if(!node)return;if(location.hostname==='127.0.0.1'||location.hostname==='localhost'){node.textContent='Demo preview ready';var localParent=node.closest('[data-status-shell]');if(localParent)localParent.classList.add('is-ready');return;}fetch('/api/health',{cache:'no-store',headers:{accept:'application/json'}}).then(function(response){if(!response.ok)throw new Error('unavailable');return response.json();}).then(function(body){node.textContent=body&&body.ok?'Live demos ready':'Demos available';var parent=node.closest('[data-status-shell]');if(parent)parent.classList.add('is-ready');}).catch(function(){node.textContent='Demos available';});})();</script>`
 
-const homeMotionScript = `<script>(function(){var nodes=document.querySelectorAll('[data-reveal]');if(!nodes.length)return;if(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches){nodes.forEach(function(node){node.classList.add('is-visible');});return;}if(!('IntersectionObserver' in window)){nodes.forEach(function(node){node.classList.add('is-visible');});return;}var observer=new IntersectionObserver(function(entries){entries.forEach(function(entry){if(entry.isIntersecting){entry.target.classList.add('is-visible');observer.unobserve(entry.target);}});},{rootMargin:'0px 0px -8% 0px',threshold:.12});nodes.forEach(function(node){observer.observe(node);});})();</script>`
-
-const homeProductPreviewScript = `<script>(function(){var root=document.querySelector('[data-product-preview]');if(!root)return;var image=root.querySelector('[data-product-preview-image]'),label=root.querySelector('[data-product-preview-label]'),buttons=Array.from(root.querySelectorAll('[data-product-preview-button]'));if(!image||!label||!buttons.length)return;var views={shop:{src:'/live-shop-workspace.png',alt:'Current Shop workspace showing sales, cash, customers, and stock',label:'Shop workspace'},plant:{src:'/live-plant-workspace.png',alt:'Current Plant workspace showing machine state across two production lines',label:'Plant floor'}};function show(id){var view=views[id];if(!view||image.getAttribute('data-view')===id)return;buttons.forEach(function(button){button.setAttribute('aria-pressed',String(button.getAttribute('data-product-preview-button')===id));});image.classList.add('is-switching');label.textContent=view.label;image.alt=view.alt;image.setAttribute('data-view',id);image.src=view.src;window.setTimeout(function(){image.classList.remove('is-switching');},360);}image.addEventListener('load',function(){image.classList.remove('is-switching');});buttons.forEach(function(button){button.addEventListener('click',function(){show(button.getAttribute('data-product-preview-button'));});});var preload=new Image();preload.src=views.plant.src;})();</script>`
+const homeProductPreviewScript = `<script>(function(){var root=document.querySelector('[data-product-preview]');if(!root)return;var image=root.querySelector('[data-product-preview-image]'),label=root.querySelector('[data-product-preview-label]'),openLink=document.querySelector('[data-preview-open]'),buttons=Array.from(root.querySelectorAll('[data-product-preview-button]'));if(!image||!label||!buttons.length)return;var views={shop:{src:'/live-shop-workspace.png',alt:'Current Shop workspace showing sales, cash, customers, and stock',label:'Shop workspace',href:'https://app.supermega.dev/?demo=shop',cta:'Try Shop live'},plant:{src:'/live-plant-workspace.png',alt:'Current Plant workspace showing machine state across two production lines',label:'Plant workspace',href:'https://app.supermega.dev/?demo=plant',cta:'Try Plant live'}};function show(id){var view=views[id];if(!view)return;buttons.forEach(function(button){button.setAttribute('aria-pressed',String(button.getAttribute('data-product-preview-button')===id));});if(openLink){openLink.href=view.href;openLink.textContent=view.cta;}if(image.getAttribute('data-view')===id)return;image.classList.add('is-switching');label.textContent=view.label;image.alt=view.alt;image.setAttribute('data-view',id);image.src=view.src;window.setTimeout(function(){image.classList.remove('is-switching');},360);}image.addEventListener('load',function(){image.classList.remove('is-switching');});buttons.forEach(function(button){button.addEventListener('click',function(){show(button.getAttribute('data-product-preview-button'));});});var preload=new Image();preload.src=views.plant.src;})();</script>`
 
 const homeHtml = documentHtml({
-  title: 'supermega.dev | Shop and Plant',
-  description: 'Open Shop or Plant in this browser, try a demo without an account, or contact SuperMega for a different workflow.',
+  title: 'supermega.dev | Operational software built to fit',
+  description: 'Try Shop or Plant without an account. When the standard workflow does not fit, SuperMega builds and verifies a private workspace around the operation.',
   canonical: 'https://supermega.dev/',
   style: `
     .home-main { width: 100%; overflow: clip; }
@@ -337,12 +325,19 @@ const homeHtml = documentHtml({
       position: relative;
       overflow: clip;
       border-bottom: 1px solid var(--line);
-      padding: 122px 0 34px;
+      padding: 126px 0 42px;
       background: var(--surface);
       isolation: isolate;
     }
+    .hero::before {
+      position: absolute;
+      inset: 94px 0 auto;
+      z-index: -1;
+      border-top: 1px solid color-mix(in srgb, var(--line) 58%, transparent);
+      content: "";
+    }
     .hero-inner { width: min(100% - 48px, 1240px); margin-inline: auto; }
-    .hero-head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(340px, .72fr); align-items: end; gap: 72px; }
+    .hero-head { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(360px, .7fr); align-items: end; gap: 76px; }
     .hero-command {
       display: inline-flex;
       min-height: 32px;
@@ -357,11 +352,15 @@ const homeHtml = documentHtml({
       text-transform: uppercase;
     }
     .hero-command strong { color: var(--accent); }
-    .hero h1 { max-width: 12ch; margin: 18px 0 0; font-size: 56px; line-height: 1.02; letter-spacing: 0; font-weight: 790; }
+    .terminal-cursor { display: inline-block; color: var(--signal); animation: cursor-pulse 1.35s steps(2, end) infinite; }
+    .hero h1 { max-width: 13ch; margin: 18px 0 0; font-size: 62px; line-height: 1.01; letter-spacing: 0; font-weight: 790; }
     .hero-side > p { max-width: 45ch; margin: 0; color: var(--muted); font-size: 17px; line-height: 1.58; }
     .hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 26px; }
     .hero-actions .btn { min-height: 50px; }
-    .hero-status { min-height: 36px; display: inline-flex; align-items: center; gap: 9px; margin-top: 18px; color: var(--muted); font-size: 12px; font-weight: 720; }
+    .hero-meta { min-height: 36px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; margin-top: 18px; color: var(--muted); font-size: 12px; font-weight: 720; }
+    .hero-status { display: inline-flex; align-items: center; gap: 9px; }
+    .hero-note { display: inline-flex; align-items: center; gap: 8px; }
+    .hero-note::before { width: 20px; border-top: 1px solid var(--line-strong); content: ""; }
     .hero-preview {
       position: relative;
       width: 100%;
@@ -369,11 +368,11 @@ const homeHtml = documentHtml({
       border: 1px solid var(--line-strong);
       border-radius: 8px;
       overflow: hidden;
-      background: var(--glass-strong);
+      background: color-mix(in srgb, var(--glass-strong) 88%, transparent);
       box-shadow: 0 28px 76px rgba(3, 8, 18, 0.22);
       animation: media-in 820ms 260ms cubic-bezier(.2,.8,.2,1) both;
     }
-    .preview-toolbar { min-height: 58px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); padding: 7px 8px 7px 16px; }
+    .preview-toolbar { min-height: 58px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); padding: 7px 8px 7px 16px; background: var(--glass); backdrop-filter: blur(22px) saturate(135%); -webkit-backdrop-filter: blur(22px) saturate(135%); }
     .preview-label { min-width: 0; display: inline-flex; align-items: center; gap: 9px; color: var(--muted); font-size: 12px; font-weight: 760; }
     .preview-switch { display: inline-grid; grid-template-columns: repeat(2, minmax(74px, 1fr)); gap: 3px; border: 1px solid var(--line); border-radius: 7px; padding: 3px; background: color-mix(in srgb, var(--page) 76%, transparent); }
     .preview-switch button { min-height: 44px; border: 0; border-radius: 5px; padding: 0 14px; background: transparent; color: var(--muted); font: inherit; font-size: 13px; font-weight: 780; cursor: pointer; transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease; }
@@ -387,11 +386,18 @@ const homeHtml = documentHtml({
     .hero-side { animation-delay: 110ms; }
     @keyframes copy-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
     @keyframes media-in { from { opacity: 0; transform: translateY(26px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes cursor-pulse { 50% { opacity: .3; } }
 
-    .entry-section { padding: 34px 0 104px; }
+    .entry-section { padding: 62px 0 108px; }
     .section-intro { display: grid; grid-template-columns: minmax(0, .9fr) minmax(280px, .55fr); gap: 48px; align-items: end; margin-bottom: 50px; }
-    .section-intro h2 { max-width: 13ch; margin: 10px 0 0; font-size: 44px; line-height: 1.08; letter-spacing: 0; }
+    .section-intro h2 { max-width: 15ch; margin: 10px 0 0; font-size: 44px; line-height: 1.08; letter-spacing: 0; }
     .section-intro p { max-width: 42ch; margin: 0; color: var(--muted); font-size: 17px; line-height: 1.55; }
+    .proof-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-block: 1px solid var(--line); margin-bottom: 54px; background: var(--glass); backdrop-filter: blur(20px) saturate(125%); -webkit-backdrop-filter: blur(20px) saturate(125%); }
+    .proof-item { min-height: 160px; padding: 26px 28px 26px 0; }
+    .proof-item + .proof-item { border-left: 1px solid var(--line); padding-left: 28px; }
+    .proof-item span { color: var(--accent); font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 11px; font-weight: 780; }
+    .proof-item strong { display: block; margin-top: 14px; font-size: 18px; line-height: 1.3; }
+    .proof-item p { max-width: 31ch; margin: 8px 0 0; color: var(--muted); font-size: 14px; line-height: 1.55; }
     .destination-list { border-bottom: 1px solid var(--line); }
     .destination {
       min-height: 112px;
@@ -413,37 +419,29 @@ const homeHtml = documentHtml({
     .destination-arrow { display: grid; width: 44px; height: 44px; place-items: center; border: 1px solid var(--line); border-radius: 8px; color: var(--accent); font-size: 20px; transition: border-color 160ms ease, transform 160ms ease; }
     .destination:hover .destination-arrow { border-color: var(--accent); transform: translate(2px, -2px); }
 
-    .start-band { background: var(--inverse); color: var(--inverse-ink); }
-    .start-inner { padding: 88px 0 92px; }
-    .start-intro { display: grid; grid-template-columns: minmax(0, .9fr) minmax(280px, .55fr); align-items: end; gap: 48px; }
-    .start-intro .eyebrow { color: #8faeff; }
-    .start-intro h2 { max-width: 13ch; margin: 10px 0 0; font-size: 44px; line-height: 1.08; letter-spacing: 0; }
-    .start-intro p { max-width: 42ch; margin: 0; color: var(--inverse-muted); font-size: 17px; line-height: 1.58; }
-    .start-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 52px; border-block: 1px solid rgba(255,255,255,.16); }
-    .start-step { min-height: 160px; padding: 28px 28px 28px 0; }
-    .start-step + .start-step { border-left: 1px solid rgba(255,255,255,.16); padding-left: 28px; }
-    .start-step span { color: #8faeff; font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 11px; font-weight: 760; }
-    .start-step strong { display: block; margin-top: 15px; color: var(--inverse-ink); font-size: 18px; }
-    .start-step p { max-width: 30ch; margin: 8px 0 0; color: var(--inverse-muted); font-size: 14px; line-height: 1.55; }
-    .start-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 30px; }
-    .start-actions .btn.secondary { border-color: rgba(255,255,255,.18); background: rgba(255,255,255,.08); color: var(--inverse-ink); }
-
-    .contact-band { border-bottom: 1px solid var(--line); padding: 92px 0 98px; }
-    .contact-inner { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, .62fr); align-items: end; gap: 54px; }
-    .contact-copy h2 { max-width: 16ch; margin: 10px 0 0; font-size: 42px; line-height: 1.08; letter-spacing: 0; }
-    .contact-action p { max-width: 42ch; margin: 0 0 22px; color: var(--muted); font-size: 16px; line-height: 1.58; }
-    [data-reveal] { opacity: 0; transform: translateY(18px); transition: opacity 520ms ease, transform 520ms cubic-bezier(.2,.8,.2,1); }
-    [data-reveal].is-visible { opacity: 1; transform: translateY(0); }
+    .brief-band { border-bottom: 1px solid rgba(255,255,255,.14); background: var(--inverse); color: var(--inverse-ink); }
+    .brief-inner { padding: 96px 0 100px; }
+    .brief-intro { display: grid; grid-template-columns: minmax(0, .92fr) minmax(300px, .56fr); align-items: end; gap: 54px; }
+    .brief-intro .eyebrow { color: #8faeff; }
+    .brief-intro h2 { max-width: 14ch; margin: 10px 0 0; font-size: 46px; line-height: 1.06; letter-spacing: 0; }
+    .brief-intro p { max-width: 43ch; margin: 0; color: var(--inverse-muted); font-size: 17px; line-height: 1.58; }
+    .brief-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 54px; border-block: 1px solid rgba(255,255,255,.16); }
+    .brief-step { min-height: 172px; padding: 28px 30px 28px 0; }
+    .brief-step + .brief-step { border-left: 1px solid rgba(255,255,255,.16); padding-left: 30px; }
+    .brief-step span { color: #8faeff; font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 11px; font-weight: 780; }
+    .brief-step strong { display: block; margin-top: 15px; color: var(--inverse-ink); font-size: 18px; line-height: 1.3; }
+    .brief-step p { max-width: 31ch; margin: 8px 0 0; color: var(--inverse-muted); font-size: 14px; line-height: 1.55; }
+    .brief-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; margin-top: 30px; }
+    .brief-actions .btn.primary { box-shadow: 0 14px 34px rgba(38, 88, 217, 0.28); }
+    .brief-aside { color: var(--inverse-muted); font-size: 13px; font-weight: 650; }
 
     @media (max-width: 980px) {
       .hero-head { grid-template-columns: 1fr; gap: 24px; }
       .hero-side { max-width: 680px; }
-      .hero h1 { font-size: 50px; }
+      .hero h1 { font-size: 54px; }
       .section-intro { grid-template-columns: 1fr; gap: 18px; }
       .destination-copy { grid-template-columns: minmax(160px, .5fr) 1fr; }
-      .start-intro { grid-template-columns: 1fr; gap: 18px; }
-      .contact-inner { grid-template-columns: 1fr; gap: 24px; }
-      .contact-action { max-width: 680px; }
+      .brief-intro { grid-template-columns: 1fr; gap: 18px; }
     }
     @media (max-height: 800px) and (min-width: 721px) {
       .hero { padding-top: 104px; }
@@ -453,10 +451,11 @@ const homeHtml = documentHtml({
     @media (max-width: 720px) {
       .hero { padding: 104px 0 20px; }
       .hero-inner { width: min(100% - 32px, 1240px); }
-      .hero h1 { max-width: 12ch; margin-top: 14px; font-size: 40px; line-height: 1.04; }
+      .hero h1 { max-width: 13ch; margin-top: 14px; font-size: 42px; line-height: 1.03; }
       .hero-side > p { max-width: 38ch; font-size: 15px; line-height: 1.5; }
       .hero-actions { gap: 8px; margin-top: 20px; }
       .hero-actions .btn { min-height: 46px; flex: 1 1 140px; }
+      .hero-meta { gap: 8px 14px; }
       .hero-preview { margin-top: 24px; }
       .preview-toolbar { min-height: 56px; padding-left: 12px; }
       .preview-switch { grid-template-columns: repeat(2, minmax(68px, 1fr)); }
@@ -465,6 +464,9 @@ const homeHtml = documentHtml({
       .section-intro { margin-bottom: 34px; }
       .section-intro h2 { font-size: 36px; }
       .section-intro p { font-size: 16px; }
+      .proof-strip { grid-template-columns: 1fr; margin-bottom: 36px; }
+      .proof-item { min-height: 0; padding: 24px 0; }
+      .proof-item + .proof-item { border-top: 1px solid var(--line); border-left: 0; padding-left: 0; }
       .destination { min-height: 126px; grid-template-columns: 1fr 44px; gap: 14px; padding: 20px 0; }
       .destination:hover { padding-left: 0; }
       .destination-index { grid-column: 1; }
@@ -472,18 +474,16 @@ const homeHtml = documentHtml({
       .destination-copy strong { font-size: 21px; }
       .destination-copy span { font-size: 14px; }
       .destination-arrow { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
-      .start-inner { padding: 68px 0 72px; }
-      .start-intro h2 { font-size: 36px; }
-      .start-intro p { font-size: 16px; }
-      .start-steps { grid-template-columns: 1fr; margin-top: 36px; }
-      .start-step { min-height: 0; padding: 24px 0; }
-      .start-step + .start-step { border-top: 1px solid rgba(255,255,255,.16); border-left: 0; padding-left: 0; }
-      .contact-band { padding: 72px 0 78px; }
-      .contact-copy h2 { font-size: 34px; }
+      .brief-inner { padding: 72px 0 76px; }
+      .brief-intro h2 { font-size: 37px; }
+      .brief-intro p { font-size: 16px; }
+      .brief-steps { grid-template-columns: 1fr; margin-top: 38px; }
+      .brief-step { min-height: 0; padding: 24px 0; }
+      .brief-step + .brief-step { border-top: 1px solid rgba(255,255,255,.16); border-left: 0; padding-left: 0; }
     }
     @media (max-width: 390px) {
       .hero-command { font-size: 11px; }
-      .hero h1 { font-size: 36px; }
+      .hero h1 { font-size: 38px; }
     }
   `,
   content: `<main class="home-main">
@@ -491,17 +491,16 @@ const homeHtml = documentHtml({
     <div class="hero-inner">
       <div class="hero-head">
         <div>
-          <div class="hero-command"><strong>&gt;_</strong><span>workspaces / live</span></div>
-          <h1 id="portfolio-heading">Run the operation. See what matters.</h1>
+          <div class="hero-command"><strong>&gt;<span class="terminal-cursor">_</span></strong><span>operational software / live</span></div>
+          <h1 id="portfolio-heading">Operational software, built to fit.</h1>
         </div>
         <div class="hero-side">
-          <p>Shop handles sales, stock, customers, and books. Plant keeps machine and shift activity visible. Try either demo without an account.</p>
+          <p>Start with working Shop or Plant software. When the standard workflow does not fit, SuperMega shapes a private workspace around the real operation and verifies it before handover.</p>
           <div class="hero-actions">
-            <a class="btn primary" href="https://app.supermega.dev/?demo=shop">Open Shop</a>
-            <a class="btn secondary" href="https://app.supermega.dev/?demo=plant">Open Plant</a>
-            <a class="btn secondary" href="/contact/">Contact us</a>
+            <a class="btn primary" data-preview-open href="https://app.supermega.dev/?demo=shop">Try Shop live</a>
+            <a class="btn secondary" href="/contact/">Talk to us</a>
           </div>
-          <div class="hero-status" data-status-shell><span class="live-dot" aria-hidden="true"></span><span data-public-status aria-live="polite">Checking public system</span></div>
+          <div class="hero-meta"><span class="hero-status" data-status-shell><span class="live-dot" aria-hidden="true"></span><span data-public-status aria-live="polite">Checking live demos</span></span><span class="hero-note">No account needed</span></div>
         </div>
       </div>
       <div class="hero-preview" data-product-preview>
@@ -519,45 +518,39 @@ const homeHtml = documentHtml({
 
   <section class="entry-section page-frame" id="workspaces" aria-labelledby="workspaces-heading">
     <div class="section-intro">
-      <div><div class="eyebrow">Shop + Plant</div><h2 id="workspaces-heading">Open a workspace.</h2></div>
-      <p>Demos open immediately on this device. Private workspaces are verified before handover.</p>
+      <div><div class="eyebrow">Two working systems</div><h2 id="workspaces-heading">Start close to the real work.</h2></div>
+      <p>Use the public demo first. Request a private workspace when the workflow is clear and worth keeping.</p>
+    </div>
+    <div class="proof-strip" aria-label="How SuperMega starts">
+      <div class="proof-item"><span>01 / WORKING</span><strong>Use working screens</strong><p>Shop and Plant demos open without an account.</p></div>
+      <div class="proof-item"><span>02 / PRIVATE</span><strong>Set up with you</strong><p>Your private workspace is configured and verified before handover.</p></div>
+      <div class="proof-item"><span>03 / APPROVED</span><strong>Bring data deliberately</strong><p>Start fresh or add approved business records when ready.</p></div>
     </div>
     <div class="destination-list">
-      <a class="destination" href="https://app.supermega.dev/?demo=shop"><span class="destination-index">01 / SHOP</span><span class="destination-copy"><strong>Shop</strong><span>Point of sale, customers, stock, receivables, and books.</span></span><span class="destination-arrow" aria-hidden="true">&#8594;</span></a>
-      <a class="destination" href="https://app.supermega.dev/?demo=plant"><span class="destination-index">02 / PLANT</span><span class="destination-copy"><strong>Plant</strong><span>Floor state, machine history, shift events, and imports.</span></span><span class="destination-arrow" aria-hidden="true">&#8594;</span></a>
+      <a class="destination" href="https://app.supermega.dev/?demo=shop" aria-label="Try Shop live"><span class="destination-index">01 / SHOP</span><span class="destination-copy"><strong>Shop</strong><span>Sell, track stock, manage customers, follow receivables, and keep the books together.</span></span><span class="destination-arrow" aria-hidden="true">&#8594;</span></a>
+      <a class="destination" href="https://app.supermega.dev/?demo=plant" aria-label="Try Plant live"><span class="destination-index">02 / PLANT</span><span class="destination-copy"><strong>Plant</strong><span>See floor state, machine history, shift events, and imports in one workspace.</span></span><span class="destination-arrow" aria-hidden="true">&#8594;</span></a>
     </div>
   </section>
 
-  <section class="start-band" id="start" aria-labelledby="start-heading">
-    <div class="start-inner page-frame" data-reveal>
-      <div class="start-intro">
-        <div><div class="eyebrow">New here?</div><h2 id="start-heading">Try first. Add data later.</h2></div>
-        <p>The demo needs no account. Request a private workspace when you are ready to keep business data.</p>
+  <section class="brief-band" id="start" aria-labelledby="brief-heading">
+    <div class="brief-inner page-frame">
+      <div class="brief-intro">
+        <div><div class="eyebrow">Beyond the standard</div><h2 id="brief-heading">Tell us where the workflow breaks.</h2></div>
+        <p>If the work depends on scattered files, repeated decisions, or awkward handoffs, send one real example. We will reply with the smallest useful system to prove first.</p>
       </div>
-      <div class="start-steps">
-        <div class="start-step"><span>01 / TRY</span><strong>Open a demo</strong><p>Choose Shop or Plant and use the working screens immediately.</p></div>
-        <div class="start-step"><span>02 / PRIVATE</span><strong>Request your workspace</strong><p>SuperMega sets it up and verifies it before handover.</p></div>
-        <div class="start-step"><span>03 / DATA</span><strong>Bring your data</strong><p>Bring approved rows when your private workspace is ready, or start fresh.</p></div>
+      <div class="brief-steps">
+        <div class="brief-step"><span>01 / INPUT</span><strong>Show one real workflow</strong><p>Share one example, the people involved, and the current handoffs.</p></div>
+        <div class="brief-step"><span>02 / CONTROL</span><strong>Mark who approves what</strong><p>Name the inputs, exceptions, and decisions that must stay visible.</p></div>
+        <div class="brief-step"><span>03 / PROOF</span><strong>Test the smallest useful path</strong><p>See a working result before private setup or approved data is added.</p></div>
       </div>
-      <div class="start-actions">
-        <a class="btn primary" href="https://app.supermega.dev/?demo=shop">Try Shop</a>
-        <a class="btn secondary" href="https://app.supermega.dev/?demo=plant">Try Plant</a>
-      </div>
-    </div>
-  </section>
-
-  <section class="contact-band">
-    <div class="contact-inner page-frame" data-reveal>
-      <div class="contact-copy"><div class="eyebrow">Contact</div><h2>Need something different?</h2></div>
-      <div class="contact-action">
-        <p>Tell us what should work better. We will reply with the clearest next step.</p>
-        <a class="btn primary" href="/contact/">Contact us</a>
+      <div class="brief-actions">
+        <a class="btn primary" href="/contact/">Describe your workflow</a>
+        <span class="brief-aside">One useful example is enough to start.</span>
       </div>
     </div>
   </section>
 </main>
 ${liveStatusScript}
-${homeMotionScript}
 ${homeProductPreviewScript}`,
 })
 

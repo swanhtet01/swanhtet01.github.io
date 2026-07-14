@@ -38,22 +38,23 @@ async function get(url, accept) {
 
 function verifyHome(html, label) {
   for (const required of [
-    '<title>supermega.dev | Shop and Plant</title>',
-    '<h1 id="portfolio-heading">Run the operation. See what matters.</h1>',
-    '<h2 id="workspaces-heading">Open a workspace.</h2>',
+    '<title>supermega.dev | Operational software built to fit</title>',
+    '<h1 id="portfolio-heading">Operational software, built to fit.</h1>',
+    '<h2 id="workspaces-heading">Start close to the real work.</h2>',
     'data-product-preview',
+    'data-preview-open',
     'src="/live-shop-workspace.png"',
     "src:'/live-plant-workspace.png'",
-    'Try first. Add data later.',
-    'Private workspaces are verified before handover.',
-    'Request your workspace',
-    'SuperMega sets it up and verifies it before handover.',
-    'Need something different?',
-    '>Contact us</a>',
+    'Use working screens',
+    'Your private workspace is configured and verified before handover.',
+    'Start fresh or add approved business records when ready.',
+    '<h2 id="brief-heading">Tell us where the workflow breaks.</h2>',
+    '>Describe your workflow</a>',
+    '<img src="/favicon.svg" alt="" width="64" height="64" />',
   ]) {
     assert(html.includes(required), `${label}_missing_${required.slice(0, 32)}`)
   }
-  for (const forbidden of ['MegaOS', 'DeskPOS', 'General enquiry', 'target="_blank"', 'target=_blank', 'window.open(', 'rotate(', 'Build an agent solution', '>Agent solution<', 'AI Agent Solutions', 'Need a repeated task handled?', '>SM<', 'Use one account across desktop, tablet, and mobile.', 'Create a workspace only when you want to keep your work and use it across devices.', 'Create with email and password. Return with your password or an email code.']) {
+  for (const forbidden of ['MegaOS', 'DeskPOS', 'General enquiry', 'target="_blank"', 'target=_blank', 'window.open(', 'rotate(', 'Build an agent solution', '>Agent solution<', 'AI Agent Solutions', 'Need a repeated task handled?', '>SM<', 'Run the operation. See what matters.', 'Open a workspace.', 'Try first. Add data later.', 'Need something different?', '[data-reveal] { opacity: 0', 'Use one account across desktop, tablet, and mobile.', 'Create a workspace only when you want to keep your work and use it across devices.', 'Create with email and password. Return with your password or an email code.']) {
     assert(!html.includes(forbidden), `${label}_retired_${forbidden}`)
   }
 }

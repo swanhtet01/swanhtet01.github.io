@@ -76,7 +76,7 @@ for (const [relativePath, html] of pages) {
   for (const required of ['data-theme="light"', 'data-theme="dark"', 'prefers-color-scheme', 'prefers-reduced-motion', 'data-theme-toggle']) {
     if (!html.includes(required)) fail('public_page_missing_theme_contract', { relativePath, required })
   }
-  for (const required of ['&gt;_</span>', 'backdrop-filter: blur(24px)', 'supermega<span class="domain">.dev</span>']) {
+  for (const required of ['class="terminal-mark"', '<img src="/favicon.svg" alt="" width="64" height="64" />', 'backdrop-filter: blur(24px)', 'supermega<span class="domain">.dev</span>']) {
     if (!html.includes(required)) fail('public_page_missing_terminal_brand_contract', { relativePath, required })
   }
   for (const forbidden of ['>Products<', '>Pricing<', '>AI workers<', '/site/shots/', 'supermega-portal-card.png', 'WorkDesk', 'AgentOps', 'Source-to-Screen', 'AI Workcell', 'live-shop-dashboard.png', '<h1 id="supermega-heading">SuperMega</h1>', '/icon.svg', 'M-rune', '>SM<']) {
@@ -85,36 +85,38 @@ for (const [relativePath, html] of pages) {
 }
 
 for (const required of [
-  '<title>supermega.dev | Shop and Plant</title>',
-  '<h1 id="portfolio-heading">Run the operation. See what matters.</h1>',
+  '<title>supermega.dev | Operational software built to fit</title>',
+  '<h1 id="portfolio-heading">Operational software, built to fit.</h1>',
   'https://app.supermega.dev/?demo=shop',
   'https://app.supermega.dev/?demo=plant',
-  'Shop + Plant',
-  '<h2 id="workspaces-heading">Open a workspace.</h2>',
-  'Try first. Add data later.',
+  'operational software / live',
+  '<h2 id="workspaces-heading">Start close to the real work.</h2>',
+  'Use working screens',
+  'Set up with you',
+  'Bring data deliberately',
   '<strong>Shop</strong>',
   '<strong>Plant</strong>',
-  'Need something different?',
-  '>Contact us</a>',
+  '<h2 id="brief-heading">Tell us where the workflow breaks.</h2>',
+  '>Describe your workflow</a>',
   'data-product-preview',
+  'data-preview-open',
   'data-product-preview-button="shop"',
   'data-product-preview-button="plant"',
   'src="/live-shop-workspace.png"',
   "src:'/live-plant-workspace.png'",
-  'Demos open immediately on this device. Private workspaces are verified before handover.',
-  'Request your workspace',
-  'SuperMega sets it up and verifies it before handover.',
-  'Bring approved rows when your private workspace is ready, or start fresh.',
+  'Shop and Plant demos open without an account.',
+  'Your private workspace is configured and verified before handover.',
+  'Start fresh or add approved business records when ready.',
   'data-public-status',
   "fetch('/api/health'",
-  'Point of sale, customers, stock, receivables, and books.',
-  'Floor state, machine history, shift events, and imports.',
+  'Sell, track stock, manage customers, follow receivables, and keep the books together.',
+  'See floor state, machine history, shift events, and imports in one workspace.',
   'site.webmanifest',
 ]) {
   if (!home.includes(required)) fail('homepage_front_door_contract_missing', { required })
 }
 
-for (const forbidden of ['https://demo.supermega.dev/', 'The intelligent workspace for daily operations.', 'Explore live demos', 'Open workspace', 'target="_blank"', 'target=_blank', 'window.open(', 'rotate(', 'data-hero-media', 'Current build', 'Build an agent solution', '>Agent solution<', 'AI Agent Solutions', 'Need a repeated task handled?', 'id="products"', 'Use one account across desktop, tablet, and mobile.', 'Create a workspace only when you want to keep your work and use it across devices.', 'Create with email and password. Return with your password or an email code.']) {
+for (const forbidden of ['https://demo.supermega.dev/', 'The intelligent workspace for daily operations.', 'Explore live demos', 'Open workspace', 'target="_blank"', 'target=_blank', 'window.open(', 'rotate(', 'data-hero-media', 'Current build', 'Build an agent solution', '>Agent solution<', 'AI Agent Solutions', 'Need a repeated task handled?', 'id="products"', 'Run the operation. See what matters.', 'Open a workspace.', 'Try first. Add data later.', 'Need something different?', '[data-reveal] { opacity: 0', 'Use one account across desktop, tablet, and mobile.', 'Create a workspace only when you want to keep your work and use it across devices.', 'Create with email and password. Return with your password or an email code.']) {
   if (home.includes(forbidden)) fail('homepage_keeps_superseded_portfolio_copy', { forbidden })
 }
 
@@ -141,7 +143,7 @@ for (const required of ['Only the details needed to reply.', 'Sending a contact 
 }
 
 const favicon = readText('favicon.svg')
-for (const required of ['supermega.dev terminal mark', '#5f8cff', '#3dd6a2']) {
+for (const required of ['supermega.dev terminal mark', '#6b95ff', '#3dd6a2']) {
   if (!favicon.includes(required)) fail('terminal_favicon_contract_invalid', { required })
 }
 
