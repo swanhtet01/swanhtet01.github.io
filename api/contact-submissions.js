@@ -115,6 +115,18 @@ function envText(...names) {
   return ''
 }
 
+function secretMatches(value, expected) {
+  const configured = text(expected)
+  if (!configured) return false
+  const providedDigest = crypto.createHash('sha256').update(text(value)).digest()
+  const configuredDigest = crypto.createHash('sha256').update(configured).digest()
+  return crypto.timingSafeEqual(providedDigest, configuredDigest)
+}
+
+function hasStatusDiagnosticsAccess(req) {
+  return secretMatches(req?.headers?.['x-ops-key'], envText('SUPERMEGA_OPS_KEY'))
+}
+
 function truncate(value, maxLength) {
   const normalized = text(value)
   return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 3)}...` : normalized
@@ -193,7 +205,7 @@ function cors(req, res) {
     res.setHeader('Access-Control-Allow-Origin', 'https://supermega.dev')
   }
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Ops-Key')
 }
 
 function readBody(req) {
@@ -906,7 +918,7 @@ function deskposPipelineTarget() {
 function deskposPipelineStatus() {
   return {
     status: 'ready',
-    mode: 'public_contact_to_deskpos_queue',
+    mode: 'public_contact_to_shop_queue',
     target: deskposPipelineTarget(),
   }
 }
@@ -983,11 +995,11 @@ function deskposPipelinePayload(record) {
 
 async function forwardDeskposPipeline({ record }) {
   if (!isDeskposLead(record)) {
-    return { status: 'skipped', reason: 'not_deskpos_lead' }
+    return { status: 'skipped', reason: 'not_shop_lead' }
   }
   const target = deskposPipelineTarget()
   if (!isSafeDeskposPipelineUrl(target)) {
-    return { status: 'skipped', reason: 'unsafe_deskpos_pipeline_url' }
+    return { status: 'skipped', reason: 'unsafe_shop_pipeline_url' }
   }
   try {
     const response = await fetch(target, {
@@ -998,16 +1010,16 @@ async function forwardDeskposPipeline({ record }) {
     })
     const body = await response.json().catch(() => ({}))
     if (!response.ok || body.accepted === false) {
-      return { status: 'error', reason: `deskpos_${response.status}`, target }
+      return { status: 'error', reason: `shop_${response.status}`, target }
     }
     return {
       status: 'ready',
       target,
       lead_count: body.leadCount ?? null,
-      deskpos_lead_id: body.lead?.id || null,
+      shop_lead_id: body.lead?.id || null,
     }
   } catch (error) {
-    return { status: 'error', reason: text(error?.message) || 'deskpos_forward_failed', target }
+    return { status: 'error', reason: text(error?.message) || 'shop_forward_failed', target }
   }
 }
 
@@ -2064,6 +2076,43 @@ function opsIntakeStatus() {
   }
 }
 
+function publicContactStatus() {
+  const ready = (
+    leadLedgerStatus() === 'configured' &&
+    pipelineActionStatus() === 'configured' &&
+    fallbackQueueStatus().email_delivery === 'configured' &&
+    opsIntakeStatus().status === 'ready'
+  )
+  return {
+    status: ready ? 'ready' : 'degraded',
+    service: 'supermega-contact',
+  }
+}
+
+function contactDiagnostics() {
+  return {
+    status: publicContactStatus().status,
+    endpoint: 'contact-submissions',
+    lead_scoring: 'ready',
+    utm_tracking: 'ready',
+    lead_ledger: leadLedgerStatus(),
+    ledger_table: 'supermega_leads',
+    pipeline_actions: pipelineActionStatus(),
+    pipeline_actions_table: 'supermega_pipeline_actions',
+    shop_pipeline: deskposPipelineStatus(),
+    ops_intake: opsIntakeStatus(),
+    primary_datastore: datastore.datastoreStatus(),
+    fallback_queue: fallbackQueueStatus(),
+    management_mode: databaseConfigured() ? 'database_queue' : 'email_fallback',
+    setup_checklist: {
+      resend_api_key: Boolean(envText('RESEND_API_KEY')) ? 'configured' : 'missing - contact form email will not send',
+      supabase: (envText('SUPABASE_URL') && envText('SUPABASE_SERVICE_ROLE_KEY')) ? 'configured' : 'missing - leads will not be saved to DB',
+      telegram: envText('TELEGRAM_BOT_TOKEN') ? 'configured' : 'missing - no Telegram alerts on new leads',
+      ops_key: Boolean(envText('SUPERMEGA_OPS_KEY')) ? 'configured' : 'missing - commercial-control and action-runner are blocked',
+    },
+  }
+}
+
 async function forwardOpsIntake({ record }) {
   const intakeSecret = envText('SUPERMEGA_INTAKE_SECRET')
   if (!intakeSecret) return { status: 'skipped', reason: 'ops_intake_not_configured' }
@@ -2206,7 +2255,8 @@ async function appendToGoogleSheet({ record }) {
 
 async function handler(req, res) {
   cors(req, res)
-  const pathname = new URL(req.url || '/api/contact-submissions', 'https://supermega.dev').pathname
+  const requestUrl = new URL(req.url || '/api/contact-submissions', 'https://supermega.dev')
+  const pathname = requestUrl.pathname
 
   if (req.method === 'OPTIONS') {
     if (!isAllowedOrigin(req.headers.origin)) {
@@ -2220,27 +2270,15 @@ async function handler(req, res) {
 
   if (req.method === 'GET') {
     if (pathname === '/api/contact-submissions/status') {
-      json(res, 200, {
-        status: 'ready',
-        endpoint: 'contact-submissions',
-        lead_scoring: 'ready',
-        utm_tracking: 'ready',
-        lead_ledger: leadLedgerStatus(),
-        ledger_table: 'supermega_leads',
-        pipeline_actions: pipelineActionStatus(),
-        pipeline_actions_table: 'supermega_pipeline_actions',
-        deskpos_pipeline: deskposPipelineStatus(),
-        ops_intake: opsIntakeStatus(),
-        primary_datastore: datastore.datastoreStatus(),
-        fallback_queue: fallbackQueueStatus(),
-        management_mode: databaseConfigured() ? 'database_queue' : 'email_fallback',
-        setup_checklist: {
-          resend_api_key: Boolean(envText('RESEND_API_KEY')) ? 'configured' : 'missing — contact form email will not send',
-          supabase: (envText('SUPABASE_URL') && envText('SUPABASE_SERVICE_ROLE_KEY')) ? 'configured' : 'missing — leads will not be saved to DB',
-          telegram: envText('TELEGRAM_BOT_TOKEN') ? 'configured' : 'missing — no Telegram alerts on new leads',
-          ops_key: Boolean(envText('SUPERMEGA_OPS_KEY')) ? 'configured' : 'missing — commercial-control and action-runner are blocked',
-        },
-      })
+      if (requestUrl.searchParams.get('detail') === '1') {
+        if (!hasStatusDiagnosticsAccess(req)) {
+          json(res, 401, { status: 'error', reason: 'operator_auth_required' })
+          return
+        }
+        json(res, 200, contactDiagnostics())
+        return
+      }
+      json(res, 200, publicContactStatus())
       return
     }
     json(res, 401, { status: 'error', reason: 'login_required', detail: 'Contact submission list requires app login.' })
@@ -2373,7 +2411,7 @@ async function handler(req, res) {
     delivery,
     ledger,
     pipeline_action: pipelineAction,
-    deskpos_pipeline: deskposPipeline,
+    shop_pipeline: deskposPipeline,
     ops_intake: opsIntake,
     webhook,
     confirmation,
@@ -2389,7 +2427,7 @@ async function handler(req, res) {
           ? 'blob_action_queue'
           : 'email_fallback',
       datastore: pipelineAction.adapter || ledger.adapter || 'email_fallback',
-      deskpos: deskposPipeline,
+      shop: deskposPipeline,
       ops_intake: opsIntake,
       workspace_id: 'public-site',
       lead_id: leadId,
@@ -2423,6 +2461,9 @@ handler.__test = {
   forwardOpsIntake,
   isSafeOpsIntakeUrl,
   opsIntakeStatus,
+  publicContactStatus,
+  contactDiagnostics,
+  hasStatusDiagnosticsAccess,
 }
 
 module.exports = handler
