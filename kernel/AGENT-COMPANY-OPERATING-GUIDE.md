@@ -16,6 +16,7 @@ spend, internal evaluation, delivery proof, and a separately recorded customer d
 - Durable client-bound missions with revision-bound state transitions and server-verified stage gates.
 - Explicit queue, dispatch, cancel-and-scrub, internal evaluation, proof, and review controls.
 - Metadata-only health and workforce utilization for 7, 30, or 90 days.
+- Owner-issued, one-use sign-in codes and tenant-bound operator, reviewer, and viewer sessions.
 
 ## Sellable Outcomes
 
@@ -33,10 +34,30 @@ spend, internal evaluation, delivery proof, and a separately recorded customer d
 No playbook contains a price. Commercial terms remain governed by the workspace `pricing.json` after
 owner ratification.
 
+## First Sign-In
+
+The owner opens `https://console.supermega.dev/#company`, enters the owner key in the header, and
+uses **Workspace access** to create a code for one client, operator ID, role, and session duration.
+The owner key remains only in that browser tab. Send the displayed code through an approved private
+channel; it expires after 15 minutes and stops working immediately after its first successful use.
+
+The operator opens the same URL, enters the code, and selects **Sign in**. The browser receives an
+HttpOnly, Secure, SameSite session cookie. The code and session token are not stored in page storage,
+and the client ID is locked to the signed-in tenant. Use **Sign out** when the shift or task is done.
+
+Roles are deliberately narrow:
+
+| Role | Access |
+|---|---|
+| Operator | Plan, create, queue, dispatch, cancel, evaluate, review, and read |
+| Reviewer | Plan, evaluate, record review, advance approved handoffs, and read; no dispatch |
+| Viewer | Read missions, work orders, proof, and operating reports only |
+
 ## Operator Sequence
 
-1. Open `https://console.supermega.dev/#company` and enter the internal ops passcode.
-2. Enter the client ID, choose a playbook, keep or replace the generated mission ID, and select
+1. Sign in through **Workspace access**. The owner may use the owner key only for bootstrap and
+   issuing codes; operators never need it.
+2. Confirm the locked client ID, choose a playbook, keep or replace the generated mission ID, and select
    **Plan delegation**. This is plan-only and makes no model call.
 3. Review every stage, specialist, role budget, output contract, handoff gate, mission ID, and plan
    hash.
@@ -84,8 +105,9 @@ owner ratification.
 
 1. **Legitimate retained proof:** run one owner-approved redacted mission through delivery and retain
    the exact evaluation, proof packet, and customer decision. This remains the evidence gate.
-2. **Tenant identity:** replace the shared internal passcode experience with authenticated tenant
-   operators, role-based access, session expiry, and customer-authenticated acceptance.
+2. **Identity administration:** tenant-bound operator, reviewer, and viewer sessions now replace the
+   shared passcode for Agent Company work. Add owner-visible active-session listing and revocation,
+   recovery, SSO/MFA where required, and customer-authenticated acceptance.
 3. **Async execution:** after proof, add an opt-in durable dispatcher, leases, bounded retries,
    evidence-retention expiry, and dead-letter recovery. Keep recursive delegation disabled.
 4. **Tracing and evals:** the deterministic all-crew security suite now covers poisoned input,

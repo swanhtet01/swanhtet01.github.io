@@ -18,6 +18,7 @@ broader system boundaries.
 | `agent-company.mjs` + `agent-company-work-orders.mjs` | Bounded supervisor cycles and durable reviewed delegation | live |
 | `agent-company-playbooks.mjs` + `agent-company-missions.mjs` | Fixed sellable outcomes with durable server-verified stages | live |
 | `agent-company-operations.mjs` | Immutable outcome review and metadata-only operating targets | live |
+| `agent-company-operator-auth.mjs` + `api/agent-company-auth.mjs` | One-use tenant sign-in codes and role-scoped HttpOnly sessions | live |
 | `agent-company-operator.mjs` + `scripts/operate-agent-company.mjs` | Guided plan, queue, dispatch, evaluation, and proof client | operator-run |
 | `public/` + `api/` | Ops console, status, workcell activation, and scheduled delivery | live |
 
@@ -71,6 +72,13 @@ traceable envelope and returns drafts only; every external side effect remains b
 approval path. Reusing a claimed cycle id is blocked to prevent duplicate spend.
 Completed specialist and final envelopes are also stored under the claimed run id, so an idempotent
 replay can return a finished result or expose the recoverable partial results without spending again.
+
+Browser operators use `POST /api/agent-company-auth` to exchange one owner-issued, one-use code for a
+tenant-bound HttpOnly, Secure, SameSite session. The server stores only code and session-token
+fingerprints, revalidates immutable tenant, role, and expiry metadata on every request, and enforces
+operator, reviewer, or viewer permissions before Agent Company actions run. Cookie-authenticated
+writes also require the console's explicit same-origin request marker. The owner key remains a
+separate bootstrap and CLI path and is never copied into an operator session.
 
 `playbook-plan` maps one client mission to one of eight fixed business outcomes. Each plan names the
 exact ordered specialists, crew contracts, stage cycle ids, role budgets, returned fields, and handoff

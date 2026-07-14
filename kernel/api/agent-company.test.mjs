@@ -30,6 +30,9 @@ test('GET returns the protected fixed roster and hard limits', async () => {
   const result = await handleAgentCompany(request({ method: 'GET', body: undefined }), { opsKey: KEY })
   assert.equal(result.status, 200)
   assert.equal(result.json.actionMode, 'draft_only')
+  assert.equal(result.json.auth.mode, 'owner')
+  assert.equal(result.json.auth.role, 'owner')
+  assert.deepEqual(result.json.auth.allowedActions, ['*'])
   assert.equal(result.json.agents.length, 15)
   assert.equal(result.json.agents.every((agent) => agent.evidenceHint), true)
   assert.equal(result.json.limits.maxAgents, 2)
@@ -66,6 +69,83 @@ test('GET returns the protected fixed roster and hard limits', async () => {
   assert.equal(result.json.operations.modelOutputReturned, false)
   assert.equal(result.json.operations.workforceMetrics, true)
   assert.equal(result.json.operations.customerSlaClaimed, false)
+})
+
+test('tenant sessions bind one client and enforce viewer, reviewer, and operator roles', async () => {
+  const session = (role) => async () => ({
+    ok: true,
+    auth: {
+      mode: 'session',
+      clientId: 'client-acme',
+      operatorId: `ops.${role}`,
+      role,
+      issuedAt: '2026-07-14T09:00:00.000Z',
+      expiresAt: '2026-07-14T17:00:00.000Z',
+      allowedActions: role === 'operator' ? ['*'] : [],
+    },
+  })
+  const viewerGet = await handleAgentCompany(request({ method: 'GET', headers: {}, body: undefined }), {
+    authorizeCompanyRequest: session('viewer'),
+  })
+  assert.equal(viewerGet.status, 200)
+  assert.equal(viewerGet.json.auth.clientId, 'client-acme')
+  assert.equal(viewerGet.json.auth.role, 'viewer')
+
+  const listed = []
+  const viewerList = await handleAgentCompany(request({
+    headers: {},
+    body: { action: 'mission-list', clientId: 'client-acme', limit: 10 },
+  }), {
+    authorizeCompanyRequest: session('viewer'),
+    listCompanyMissions: async (body) => { listed.push(body); return { ok: true, missions: [] } },
+  })
+  assert.equal(viewerList.status, 200)
+  assert.deepEqual(listed, [{ clientId: 'client-acme', limit: 10 }])
+  assert.equal((await handleAgentCompany(request({ headers: {}, body: validBody }), {
+    authorizeCompanyRequest: session('viewer'),
+  })).status, 403)
+  assert.equal((await handleAgentCompany(request({
+    headers: {},
+    body: { action: 'mission-list', clientId: 'client-other', limit: 10 },
+  }), {
+    authorizeCompanyRequest: session('viewer'),
+    listCompanyMissions: async () => ({ ok: true }),
+  })).status, 403)
+
+  const reviews = []
+  const reviewer = await handleAgentCompany(request({
+    headers: {},
+    body: {
+      action: 'work-order-review',
+      clientId: 'client-acme',
+      workOrderId: 'company-order:one',
+      resultHash: 'a'.repeat(64),
+      decision: 'accepted',
+      reviewerName: 'Customer owner',
+      source: 'signed_note',
+      statement: 'Useful',
+      recordedBy: 'spoofed-owner',
+      confirmation: `ACCEPT company-order:one ${'a'.repeat(64)}`,
+    },
+  }), {
+    authorizeCompanyRequest: session('reviewer'),
+    reviewCompanyWorkOrder: async (body) => { reviews.push(body); return { ok: true } },
+  })
+  assert.equal(reviewer.status, 200)
+  assert.equal(reviews[0].recordedBy, 'ops.reviewer')
+  assert.equal((await handleAgentCompany(request({
+    headers: {},
+    body: { action: 'work-order-run', clientId: 'client-acme' },
+  }), { authorizeCompanyRequest: session('reviewer') })).status, 403)
+
+  const operatorRun = await handleAgentCompany(request({
+    headers: {},
+    body: { action: 'work-order-run', clientId: 'client-acme' },
+  }), {
+    authorizeCompanyRequest: session('operator'),
+    runCompanyWorkOrder: async () => ({ ok: true, mode: 'work_order_run' }),
+  })
+  assert.equal(operatorRun.status, 200)
 })
 
 test('POST plans without claiming a run or accepting an implicit action', async () => {
