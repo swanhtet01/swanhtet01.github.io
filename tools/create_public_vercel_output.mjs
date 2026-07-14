@@ -630,7 +630,9 @@ const contactHtml = documentHtml({
   var form=document.querySelector('[data-sm-contact-form]');
   if(!form)return;
   var search=new URLSearchParams(window.location.search);
-  var agentIntent=search.get('from')==='ai-agent-solution';
+  var entryIntent=search.get('from')||'';
+  var agentIntent=entryIntent==='ai-agent-solution';
+  var workspaceProduct=entryIntent==='shop-workspace'?'Shop':entryIntent==='plant-workspace'?'Plant':'';
   var submit=form.querySelector('[data-contact-submit]');
   var idleSubmitLabel='Send request';
   function text(selector,value){var element=document.querySelector(selector);if(element)element.textContent=value;}
@@ -650,6 +652,16 @@ const contactHtml = documentHtml({
     text('[data-contact-goal-label]','What should work better?');
     text('[data-contact-policy]','We start with one reviewed example. No account, data connection, or external action is made before you approve it.');
     idleSubmitLabel='Contact us';
+    if(submit)submit.textContent=idleSubmitLabel;
+  }else if(workspaceProduct){
+    form.dataset.intake=entryIntent;
+    text('[data-contact-command]','>_ contact / workspace');
+    text('[data-contact-heading]','Request a private '+workspaceProduct+' workspace.');
+    text('[data-contact-intro]','Tell us who will use it and what should be ready first. SuperMega will set it up and verify it before handover.');
+    text('[data-contact-form-heading]','Request '+workspaceProduct);
+    text('[data-contact-goal-label]','What should be ready first?');
+    text('[data-contact-policy]','Sending this request does not create an account or connect data. Setup begins only after scope approval.');
+    idleSubmitLabel='Request workspace';
     if(submit)submit.textContent=idleSubmitLabel;
   }
   hydrateTracking();

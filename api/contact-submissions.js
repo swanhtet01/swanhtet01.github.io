@@ -150,7 +150,8 @@ function contactEntryIntent(payload = {}) {
       const url = new URL(raw, 'https://supermega.dev')
       if (!['supermega.dev', 'www.supermega.dev'].includes(url.hostname)) continue
       if (url.pathname.replace(/\/+$/, '') !== '/contact') continue
-      if (url.searchParams.get('from') === 'ai-agent-solution') return 'ai-agent-solution'
+      const intent = url.searchParams.get('from')
+      if (['ai-agent-solution', 'shop-workspace', 'plant-workspace'].includes(intent)) return intent
     } catch {
       // Ignore malformed attribution and continue with the neutral intake route.
     }
@@ -336,7 +337,7 @@ function leadScore(payload) {
   if (goal.length > 80) score += 20
   if (goal.match(/\b(approval|operations|workflow|files|spreadsheet|crm|erp|portal|manager|team|data|ai|meter|sensor|machine|energy|digital twin)\b/i)) score += 15
   if (text(payload.source_file_names) || Number(payload.source_file_count || 0) > 0) score += 10
-  if (text(payload.requested_package) || text(payload.public_package) || text(payload.workflow)) score += 10
+  if (text(payload.requested_package) || text(payload.public_package) || text(payload.workflow) || contactEntryIntent(payload)) score += 10
   if (text(payload.template_id)) score += 5
   if (text(payload.first_proof_target) || text(payload.acceptance_tests)) score += 5
   if (text(payload.utm_campaign)) score += 5
@@ -1760,18 +1761,32 @@ function buildLeadRecord({ leadId, taskId, payload, req }) {
   const score = leadScore(payload)
   const entryIntent = contactEntryIntent(payload)
   const agentIntent = entryIntent === 'ai-agent-solution'
+  const workspaceProduct = entryIntent === 'shop-workspace'
+    ? 'Shop'
+    : entryIntent === 'plant-workspace'
+      ? 'Plant'
+      : ''
+  const workspacePackage = workspaceProduct ? `${workspaceProduct} private workspace` : ''
+  const workspaceTemplateId = entryIntent === 'shop-workspace'
+    ? 'deskpos-quickstart'
+    : entryIntent === 'plant-workspace'
+      ? 'factory-ops-ledger'
+      : ''
+  const workspaceFirstProofTarget = workspaceProduct
+    ? `One private ${workspaceProduct} workspace configured from buyer-approved starting data and verified before handover.`
+    : ''
   const sourceLinks = truncate(payload.source_links, 700)
   const firstStep = truncate(payload.first_step, 160)
-  const publicPackage = truncate(payload.public_package, 160) || (agentIntent ? 'AI Agent Solutions' : '')
+  const publicPackage = truncate(payload.public_package, 160) || (agentIntent ? 'AI Agent Solutions' : workspacePackage)
   const firstProofTarget = truncate(payload.first_proof_target, 300) || (agentIntent
     ? 'One source-traced draft output from one redacted approved sample, reviewed against the buyer\'s stated useful result.'
-    : '')
+    : workspaceFirstProofTarget)
   const acceptanceTests = truncate(payload.acceptance_tests, 900)
   const launchBlockers = truncate(payload.launch_blockers, 500)
   const automationBoundary = truncate(payload.automation_boundary, 700)
-  const firstOutput = truncate(payload.requested_package, 120) || truncate(payload.first_output, 120) || truncate(payload.workflow, 120) || (agentIntent ? 'AI Agent Solutions' : 'First useful output')
-  const productArea = truncate(payload.product_area, 160) || (agentIntent ? 'Custom Solutions & AI Agents' : '')
-  const templateId = truncate(payload.template_id, 100)
+  const firstOutput = truncate(payload.requested_package, 120) || truncate(payload.first_output, 120) || truncate(payload.workflow, 120) || (agentIntent ? 'AI Agent Solutions' : workspacePackage || 'First useful output')
+  const productArea = truncate(payload.product_area, 160) || (agentIntent ? 'Custom Solutions & AI Agents' : workspaceProduct)
+  const templateId = truncate(payload.template_id, 100) || workspaceTemplateId
   const templateStatus = truncate(payload.template_status, 80)
   const templateSourceCategory = truncate(payload.template_source_category, 120)
   const templateSourceArea = truncate(payload.template_source_area, 160)
@@ -1784,7 +1799,7 @@ function buildLeadRecord({ leadId, taskId, payload, req }) {
   const entitlementGate = truncate(payload.entitlement_gate, 700)
   const sourceFileNames = truncate(payload.source_file_names, 1200)
   const sourceFileCount = truncate(payload.source_file_count, 20)
-  const onboardingStage = truncate(payload.onboarding_stage, 80) || 'source_review'
+  const onboardingStage = truncate(payload.onboarding_stage, 80) || (workspaceProduct ? 'workspace_request' : 'source_review')
   const accessPolicy = truncate(payload.access_policy, 120) || 'approval_required'
   const workspaceStatus = truncate(payload.workspace_status, 120) || 'not_created_until_approved'
   const urgency = truncate(payload.urgency, 120)
@@ -1825,7 +1840,7 @@ function buildLeadRecord({ leadId, taskId, payload, req }) {
     email: truncate(payload.email, 180).toLowerCase(),
     phone: truncate(payload.phone, 80),
     company: truncate(payload.company, 180),
-    workflow: truncate(payload.workflow, 120) || (agentIntent ? 'AI Agent Solutions discovery' : 'Workflow system'),
+    workflow: truncate(payload.workflow, 120) || (agentIntent ? 'AI Agent Solutions discovery' : workspacePackage ? `${workspacePackage} request` : 'Workflow system'),
     requested_package: firstOutput,
     public_package: publicPackage,
     first_output: firstOutput,
