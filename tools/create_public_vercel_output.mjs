@@ -325,9 +325,11 @@ const liveStatusScript = `<script>(function(){var node=document.querySelector('[
 
 const homeMotionScript = `<script>(function(){var nodes=document.querySelectorAll('[data-reveal]');if(!nodes.length)return;if(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches){nodes.forEach(function(node){node.classList.add('is-visible');});return;}if(!('IntersectionObserver' in window)){nodes.forEach(function(node){node.classList.add('is-visible');});return;}var observer=new IntersectionObserver(function(entries){entries.forEach(function(entry){if(entry.isIntersecting){entry.target.classList.add('is-visible');observer.unobserve(entry.target);}});},{rootMargin:'0px 0px -8% 0px',threshold:.12});nodes.forEach(function(node){observer.observe(node);});})();</script>`
 
+const homeProductPreviewScript = `<script>(function(){var root=document.querySelector('[data-product-preview]');if(!root)return;var image=root.querySelector('[data-product-preview-image]'),label=root.querySelector('[data-product-preview-label]'),buttons=Array.from(root.querySelectorAll('[data-product-preview-button]'));if(!image||!label||!buttons.length)return;var views={shop:{src:'/live-shop-workspace.png',alt:'Current Shop workspace showing sales, cash, customers, and stock',label:'Shop workspace'},plant:{src:'/live-plant-workspace.png',alt:'Current Plant workspace showing machine state across two production lines',label:'Plant floor'}};function show(id){var view=views[id];if(!view||image.getAttribute('data-view')===id)return;buttons.forEach(function(button){button.setAttribute('aria-pressed',String(button.getAttribute('data-product-preview-button')===id));});image.classList.add('is-switching');label.textContent=view.label;image.alt=view.alt;image.setAttribute('data-view',id);image.src=view.src;window.setTimeout(function(){image.classList.remove('is-switching');},360);}image.addEventListener('load',function(){image.classList.remove('is-switching');});buttons.forEach(function(button){button.addEventListener('click',function(){show(button.getAttribute('data-product-preview-button'));});});var preload=new Image();preload.src=views.plant.src;})();</script>`
+
 const homeHtml = documentHtml({
   title: 'supermega.dev | Shop and Plant',
-  description: 'Open working Shop and Plant products, or contact SuperMega about one repeated workflow your team wants handled better.',
+  description: 'Open Shop or Plant in this browser, try a demo without an account, or contact SuperMega for a different workflow.',
   canonical: 'https://supermega.dev/',
   style: `
     .home-main { width: 100%; overflow: clip; }
@@ -335,7 +337,7 @@ const homeHtml = documentHtml({
       position: relative;
       overflow: clip;
       border-bottom: 1px solid var(--line);
-      padding: 122px 0 14px;
+      padding: 122px 0 34px;
       background: var(--surface);
       isolation: isolate;
     }
@@ -360,27 +362,31 @@ const homeHtml = documentHtml({
     .hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 26px; }
     .hero-actions .btn { min-height: 50px; }
     .hero-status { min-height: 36px; display: inline-flex; align-items: center; gap: 9px; margin-top: 18px; color: var(--muted); font-size: 12px; font-weight: 720; }
-    .hero-media {
+    .hero-preview {
       position: relative;
-      width: min(100%, 960px);
-      margin: 30px auto 0;
+      width: 100%;
+      margin: 32px auto 0;
       border: 1px solid var(--line-strong);
       border-radius: 8px;
       overflow: hidden;
-      padding: 7px;
       background: var(--glass-strong);
-      box-shadow: var(--shadow-deep);
-      backdrop-filter: blur(24px) saturate(135%);
-      -webkit-backdrop-filter: blur(24px) saturate(135%);
+      box-shadow: 0 28px 76px rgba(3, 8, 18, 0.22);
       animation: media-in 820ms 260ms cubic-bezier(.2,.8,.2,1) both;
     }
-    .hero-media img { display: block; width: 100%; height: auto; border-radius: 5px; }
+    .preview-toolbar { min-height: 58px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); padding: 7px 8px 7px 16px; }
+    .preview-label { min-width: 0; display: inline-flex; align-items: center; gap: 9px; color: var(--muted); font-size: 12px; font-weight: 760; }
+    .preview-switch { display: inline-grid; grid-template-columns: repeat(2, minmax(74px, 1fr)); gap: 3px; border: 1px solid var(--line); border-radius: 7px; padding: 3px; background: color-mix(in srgb, var(--page) 76%, transparent); }
+    .preview-switch button { min-height: 44px; border: 0; border-radius: 5px; padding: 0 14px; background: transparent; color: var(--muted); font: inherit; font-size: 13px; font-weight: 780; cursor: pointer; transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease; }
+    .preview-switch button[aria-pressed="true"] { background: var(--surface-strong); color: var(--ink); box-shadow: 0 4px 14px rgba(3, 8, 18, 0.1); }
+    .preview-media { overflow: hidden; background: #071524; }
+    .preview-media img { display: block; width: 100%; height: auto; aspect-ratio: 10 / 3; object-fit: contain; opacity: 1; transition: opacity 180ms ease; }
+    .preview-media img.is-switching { opacity: .28; }
     .live-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--quiet); box-shadow: 0 0 0 4px color-mix(in srgb, var(--quiet) 16%, transparent); }
     .hero-status.is-ready .live-dot { background: var(--signal); box-shadow: 0 0 0 4px color-mix(in srgb, var(--signal) 16%, transparent); }
     .hero-head > * { animation: copy-in 620ms cubic-bezier(.2,.8,.2,1) both; }
     .hero-side { animation-delay: 110ms; }
     @keyframes copy-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
-    @keyframes media-in { from { opacity: 0; transform: translateY(26px) scale(.99); } to { opacity: 1; transform: translateY(0) scale(1); } }
+    @keyframes media-in { from { opacity: 0; transform: translateY(26px); } to { opacity: 1; transform: translateY(0); } }
 
     .entry-section { padding: 34px 0 104px; }
     .section-intro { display: grid; grid-template-columns: minmax(0, .9fr) minmax(280px, .55fr); gap: 48px; align-items: end; margin-bottom: 50px; }
@@ -422,11 +428,10 @@ const homeHtml = documentHtml({
     .start-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 30px; }
     .start-actions .btn.secondary { border-color: rgba(255,255,255,.18); background: rgba(255,255,255,.08); color: var(--inverse-ink); }
 
-    .workflow-section { border-bottom: 1px solid var(--line); padding: 98px 0 104px; }
-    .workflow-inner { display: grid; grid-template-columns: 140px minmax(0, 1fr) minmax(180px, auto); align-items: end; gap: 38px; }
-    .workflow-label { color: var(--accent); font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 12px; font-weight: 760; text-transform: uppercase; }
-    .workflow-copy h2 { max-width: 17ch; margin: 0; font-size: 42px; line-height: 1.08; letter-spacing: 0; }
-    .workflow-copy p { max-width: 52ch; margin: 16px 0 0; color: var(--muted); font-size: 16px; line-height: 1.58; }
+    .contact-band { border-bottom: 1px solid var(--line); padding: 92px 0 98px; }
+    .contact-inner { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, .62fr); align-items: end; gap: 54px; }
+    .contact-copy h2 { max-width: 16ch; margin: 10px 0 0; font-size: 42px; line-height: 1.08; letter-spacing: 0; }
+    .contact-action p { max-width: 42ch; margin: 0 0 22px; color: var(--muted); font-size: 16px; line-height: 1.58; }
     [data-reveal] { opacity: 0; transform: translateY(18px); transition: opacity 520ms ease, transform 520ms cubic-bezier(.2,.8,.2,1); }
     [data-reveal].is-visible { opacity: 1; transform: translateY(0); }
 
@@ -437,13 +442,13 @@ const homeHtml = documentHtml({
       .section-intro { grid-template-columns: 1fr; gap: 18px; }
       .destination-copy { grid-template-columns: minmax(160px, .5fr) 1fr; }
       .start-intro { grid-template-columns: 1fr; gap: 18px; }
-      .workflow-inner { grid-template-columns: 110px minmax(0, 1fr); }
-      .workflow-inner .btn { grid-column: 2; justify-self: start; }
+      .contact-inner { grid-template-columns: 1fr; gap: 24px; }
+      .contact-action { max-width: 680px; }
     }
     @media (max-height: 800px) and (min-width: 721px) {
       .hero { padding-top: 104px; }
       .hero h1 { font-size: 48px; }
-      .hero-media { width: min(100%, 760px); margin-top: 22px; }
+      .hero-preview { margin-top: 22px; }
     }
     @media (max-width: 720px) {
       .hero { padding: 104px 0 20px; }
@@ -452,7 +457,10 @@ const homeHtml = documentHtml({
       .hero-side > p { max-width: 38ch; font-size: 15px; line-height: 1.5; }
       .hero-actions { gap: 8px; margin-top: 20px; }
       .hero-actions .btn { min-height: 46px; flex: 1 1 140px; }
-      .hero-media { margin-top: 24px; padding: 4px; }
+      .hero-preview { margin-top: 24px; }
+      .preview-toolbar { min-height: 56px; padding-left: 12px; }
+      .preview-switch { grid-template-columns: repeat(2, minmax(68px, 1fr)); }
+      .preview-switch button { min-height: 44px; padding-inline: 10px; }
       .entry-section { padding: 30px 0 74px; }
       .section-intro { margin-bottom: 34px; }
       .section-intro h2 { font-size: 36px; }
@@ -470,10 +478,8 @@ const homeHtml = documentHtml({
       .start-steps { grid-template-columns: 1fr; margin-top: 36px; }
       .start-step { min-height: 0; padding: 24px 0; }
       .start-step + .start-step { border-top: 1px solid rgba(255,255,255,.16); border-left: 0; padding-left: 0; }
-      .workflow-section { padding: 72px 0 78px; }
-      .workflow-inner { grid-template-columns: 1fr; gap: 18px; }
-      .workflow-copy h2 { font-size: 34px; }
-      .workflow-inner .btn { grid-column: auto; }
+      .contact-band { padding: 72px 0 78px; }
+      .contact-copy h2 { font-size: 34px; }
     }
     @media (max-width: 390px) {
       .hero-command { font-size: 11px; }
@@ -489,7 +495,7 @@ const homeHtml = documentHtml({
           <h1 id="portfolio-heading">Run the operation. See what matters.</h1>
         </div>
         <div class="hero-side">
-          <p>Shop keeps sales, stock, customers, and books together. Plant keeps floor activity and machine history in view.</p>
+          <p>Shop handles sales, stock, customers, and books. Plant keeps machine and shift activity visible. Try either demo without an account.</p>
           <div class="hero-actions">
             <a class="btn primary" href="https://app.supermega.dev/?demo=shop">Open Shop</a>
             <a class="btn secondary" href="https://app.supermega.dev/?demo=plant">Open Plant</a>
@@ -498,14 +504,23 @@ const homeHtml = documentHtml({
           <div class="hero-status" data-status-shell><span class="live-dot" aria-hidden="true"></span><span data-public-status aria-live="polite">Checking public system</span></div>
         </div>
       </div>
-      <div class="hero-media"><img src="/live-shop-workspace.png" alt="Current Shop workspace showing sales, cash, customers, and stock" width="1600" height="760" fetchpriority="high" /></div>
+      <div class="hero-preview" data-product-preview>
+        <div class="preview-toolbar">
+          <span class="preview-label"><span class="live-dot" aria-hidden="true"></span><span data-product-preview-label aria-live="polite">Shop workspace</span></span>
+          <div class="preview-switch" role="group" aria-label="Product preview">
+            <button type="button" data-product-preview-button="shop" aria-pressed="true">Shop</button>
+            <button type="button" data-product-preview-button="plant" aria-pressed="false">Plant</button>
+          </div>
+        </div>
+        <div class="preview-media"><img data-product-preview-image data-view="shop" src="/live-shop-workspace.png" alt="Current Shop workspace showing sales, cash, customers, and stock" width="1600" height="480" fetchpriority="high" /></div>
+      </div>
     </div>
   </section>
 
-  <section class="entry-section page-frame" id="products" aria-labelledby="products-heading">
+  <section class="entry-section page-frame" id="workspaces" aria-labelledby="workspaces-heading">
     <div class="section-intro">
-      <div><div class="eyebrow">Two working products</div><h2 id="products-heading">Choose where you work.</h2></div>
-      <p>Both products use the same responsive account and open directly in this browser.</p>
+      <div><div class="eyebrow">Shop + Plant</div><h2 id="workspaces-heading">Open a workspace.</h2></div>
+      <p>Use one account across desktop, tablet, and mobile. Demos open immediately in this browser.</p>
     </div>
     <div class="destination-list">
       <a class="destination" href="https://app.supermega.dev/?demo=shop"><span class="destination-index">01 / SHOP</span><span class="destination-copy"><strong>Shop</strong><span>Point of sale, customers, stock, receivables, and books.</span></span><span class="destination-arrow" aria-hidden="true">&#8594;</span></a>
@@ -521,7 +536,7 @@ const homeHtml = documentHtml({
       </div>
       <div class="start-steps">
         <div class="start-step"><span>01 / TRY</span><strong>Open a demo</strong><p>Choose Shop or Plant and use the working screens immediately.</p></div>
-        <div class="start-step"><span>02 / ACCOUNT</span><strong>Create your workspace</strong><p>Use email and password, or sign back in with an email code.</p></div>
+        <div class="start-step"><span>02 / ACCOUNT</span><strong>Create your workspace</strong><p>Create with email and password. Return with your password or an email code.</p></div>
         <div class="start-step"><span>03 / DATA</span><strong>Bring your data</strong><p>Import your own rows when you are ready, or start fresh.</p></div>
       </div>
       <div class="start-actions">
@@ -531,19 +546,19 @@ const homeHtml = documentHtml({
     </div>
   </section>
 
-  <section class="workflow-section">
-    <div class="workflow-inner page-frame" data-reveal>
-      <div class="workflow-label">AI Agent Solutions</div>
-      <div class="workflow-copy">
-        <h2>Need a repeated task handled?</h2>
-        <p>Tell us what your team repeats and what a useful result looks like. We start with one reviewed proof before connecting data or taking action.</p>
+  <section class="contact-band">
+    <div class="contact-inner page-frame" data-reveal>
+      <div class="contact-copy"><div class="eyebrow">Contact</div><h2>Need something different?</h2></div>
+      <div class="contact-action">
+        <p>Tell us what should work better. We will reply with the clearest next step.</p>
+        <a class="btn primary" href="/contact/">Contact us</a>
       </div>
-      <a class="btn primary" href="/contact/?from=ai-agent-solution">Contact us</a>
     </div>
   </section>
 </main>
 ${liveStatusScript}
-${homeMotionScript}`,
+${homeMotionScript}
+${homeProductPreviewScript}`,
 })
 
 const contactHtml = documentHtml({
@@ -551,6 +566,7 @@ const contactHtml = documentHtml({
   description: 'Tell SuperMega what needs to work better.',
   canonical: 'https://supermega.dev/contact/',
   style: `
+    .header-cta { display: none; }
     .contact-main { width: min(100% - 48px, 1240px); margin-inline: auto; display: grid; grid-template-columns: minmax(0, .78fr) minmax(420px, 1.22fr); gap: 84px; align-items: start; padding: 142px 0 94px; }
     .contact-copy { padding-top: 26px; }
     .contact-command { color: var(--accent); font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 14px; font-weight: 800; }
@@ -767,9 +783,9 @@ await mkdir(staticDir, { recursive: true })
 await mkdir(functionsDir, { recursive: true })
 
 await writeStatic('favicon.svg', faviconSvg)
-// These captures come from the current disposable Shop demo on desktop and mobile.
+// These straight, clean-boundary captures come from the current disposable Shop and Plant demos.
 await cp(resolve(root, 'tools', 'public-assets', 'live-shop-workspace.png'), resolve(staticDir, 'live-shop-workspace.png'), { force: true })
-await cp(resolve(root, 'tools', 'public-assets', 'live-shop-mobile.png'), resolve(staticDir, 'live-shop-mobile.png'), { force: true })
+await cp(resolve(root, 'tools', 'public-assets', 'live-plant-workspace.png'), resolve(staticDir, 'live-plant-workspace.png'), { force: true })
 await writeStatic('index.html', homeHtml)
 await writeStatic('404.html', notFoundHtml)
 await writeStatic('contact/index.html', contactHtml)
