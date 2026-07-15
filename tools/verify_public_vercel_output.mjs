@@ -33,7 +33,7 @@ if (!existsSync(configPath)) fail('missing_public_config')
 const config = JSON.parse(readFileSync(configPath, 'utf8'))
 const routes = Array.isArray(config.routes) ? config.routes : []
 
-const expectedStaticEntries = new Set(['404.html', 'contact', 'favicon.svg', 'index.html', 'live-plant-workspace.png', 'live-shop-workspace.png', 'privacy', 'robots.txt', 'site.webmanifest', 'sitemap.xml', 'sw.js', 'work'])
+const expectedStaticEntries = new Set(['404.html', 'contact', 'favicon.svg', 'index.html', 'live-plant-mobile.png', 'live-plant-workspace.png', 'live-shop-mobile.png', 'live-shop-workspace.png', 'privacy', 'robots.txt', 'site.webmanifest', 'sitemap.xml', 'sw.js', 'work'])
 const actualStaticEntries = readdirSync(staticDir)
 for (const entry of actualStaticEntries) {
   if (!expectedStaticEntries.has(entry)) fail('retired_public_static_entry_present', { entry })
@@ -46,6 +46,12 @@ for (const entry of ['live-shop-workspace.png', 'live-plant-workspace.png']) {
   const width = image.length >= 24 ? image.readUInt32BE(16) : 0
   const height = image.length >= 24 ? image.readUInt32BE(20) : 0
   if (width !== 1600 || height !== 480) fail('public_workspace_capture_has_wrong_geometry', { entry, width, height })
+}
+for (const entry of ['live-shop-mobile.png', 'live-plant-mobile.png']) {
+  const image = readFileSync(resolve(staticDir, entry))
+  const width = image.length >= 24 ? image.readUInt32BE(16) : 0
+  const height = image.length >= 24 ? image.readUInt32BE(20) : 0
+  if (width !== 360 || height !== 732) fail('public_mobile_capture_has_wrong_geometry', { entry, width, height })
 }
 
 const expectedFunctions = new Set(['contact-submissions.js.func', 'health.js.func', 'not-found.js.func'])
@@ -142,35 +148,32 @@ for (const [relativePath, html] of pages) {
 }
 
 for (const required of [
-  '<title>supermega.dev | Operational software built to fit</title>',
-  '<h1 id="portfolio-heading">Operational software, built to fit.</h1>',
+  '<title>supermega.dev | Run the shop. See the plant.</title>',
+  '<h1 id="portfolio-heading">Run the shop. See the plant. Fix the gaps.</h1>',
   'href="/work/"',
   'https://app.supermega.dev/?demo=shop',
   'https://app.supermega.dev/?demo=plant',
   'operational software / live',
-  'class="hero-lead">Less chasing. More running.</strong>',
-  '<h2 id="workspaces-heading">Start close to the real work.</h2>',
+  'class="hero-lead">One place to run the day.</strong>',
+  '<h2 id="workspaces-heading">No software maze.</h2>',
   'Two working systems',
-  'Shop and Plant open without an account.',
-  'Use working screens',
-  'Set up with you',
-  'Keep AI accountable',
+  'AI helps draft, check, and surface next steps while approvals stay tied to the work behind them.',
   '<strong>Shop</strong>',
   '<strong>Plant</strong>',
-  '<h2 id="brief-heading">Tell us where the workflow breaks.</h2>',
-  '>Describe your workflow</a>',
+  '<h2 id="brief-heading">Show us the broken handoff.</h2>',
+  '>Start with one workflow</a>',
   'data-product-preview',
   'data-preview-open',
   'data-product-preview-button="shop"',
   'data-product-preview-button="plant"',
   'src="/live-shop-workspace.png"',
   "src:'/live-plant-workspace.png'",
-  'Your private workspace is configured and verified before handover.',
-  'Drafts, checks, and next-step suggestions stay attached to the records and approvals behind them.',
+  'srcset="/live-shop-mobile.png"',
+  "mobileSrc:'/live-plant-mobile.png'",
   'data-public-status',
   "fetch('/api/health'",
-  'Sell, track stock, manage customers, follow receivables, and keep the books together.',
-  'See floor state, machine history, shift events, and imports in one workspace.',
+  'Sales, stock, customers, receivables, purchasing, and daily close in one operating flow.',
+  'Machine state, shift events, maintenance, quality, and handoff history in one floor view.',
   'site.webmanifest',
 ]) {
   if (!home.includes(required)) fail('homepage_front_door_contract_missing', { required })
@@ -191,17 +194,19 @@ for (const required of [
   'aria-label="Request a private Plant workspace"',
   'src="/live-shop-workspace.png"',
   'src="/live-plant-workspace.png"',
+  'srcset="/live-shop-mobile.png"',
+  'srcset="/live-plant-mobile.png"',
   '<h2 id="work-close-heading">One useful workflow is enough to start.</h2>',
   '>Describe the workflow</a>',
 ]) {
   if (!work.includes(required)) fail('work_page_contract_missing', { required })
 }
 
-for (const forbidden of ['https://demo.supermega.dev/', 'The intelligent workspace for daily operations.', 'Explore live demos', 'Open workspace', 'rotate(', 'data-hero-media', 'Current build', 'Build an agent solution', '>Agent solution<', 'Need a repeated task handled?', 'id="products"', 'Run the operation. See what matters.', 'Open a workspace.', 'Try first. Add data later.', 'Need something different?', '[data-reveal] { opacity: 0']) {
+for (const forbidden of ['https://demo.supermega.dev/', 'The intelligent workspace for daily operations.', 'Explore live demos', 'Open workspace', 'rotate(', 'data-hero-media', 'Current build', 'Build an agent solution', '>Agent solution<', 'Need a repeated task handled?', 'id="products"', 'Run the operation. See what matters.', 'Open a workspace.', 'Try first. Add data later.', 'Need something different?', 'Operational software, built to fit.', 'Less chasing. More running.', '[data-reveal] { opacity: 0']) {
   if (home.includes(forbidden)) fail('homepage_keeps_superseded_portfolio_copy', { forbidden })
 }
 
-for (const required of ['action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="goal"', 'No account or data connection is made before you approve it.']) {
+for (const required of ['<h1 data-contact-heading>What should run better?</h1>', 'action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="goal"', 'No account or data connection is made before you approve it.']) {
   if (!contact.includes(required)) fail('contact_surface_contract_missing', { required })
 }
 for (const forbidden of ['placeholder="Drive folder', 'placeholder="Example:', 'Upload files', 'Source link or system', 'custom AI worker', 'name="workflow"', 'name="first_output"', 'name="requested_package"', 'name="product_area"', 'General enquiry']) {

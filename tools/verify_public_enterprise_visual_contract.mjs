@@ -33,18 +33,18 @@ for (const required of [
   'href="/work/"',
   'https://app.supermega.dev/?demo=shop',
   'https://app.supermega.dev/?demo=plant',
-  '<h1 id="portfolio-heading">Operational software, built to fit.</h1>',
+  '<h1 id="portfolio-heading">Run the shop. See the plant. Fix the gaps.</h1>',
   'data-product-preview',
   'data-preview-open',
   'src="/live-shop-workspace.png"',
   "src:'/live-plant-workspace.png'",
-  '<h2 id="workspaces-heading">Start close to the real work.</h2>',
+  'srcset="/live-shop-mobile.png"',
+  "mobileSrc:'/live-plant-mobile.png'",
+  '<h2 id="workspaces-heading">No software maze.</h2>',
   'Two working systems',
-  'Use working screens',
-  'Your private workspace is configured and verified before handover.',
-  'Keep AI accountable',
-  '<h2 id="brief-heading">Tell us where the workflow breaks.</h2>',
-  '>Describe your workflow</a>',
+  'AI helps draft, check, and surface next steps while approvals stay tied to the work behind them.',
+  '<h2 id="brief-heading">Show us the broken handoff.</h2>',
+  '>Start with one workflow</a>',
   '<img src="/favicon.svg" alt="" width="64" height="64" />',
   'href="/favicon.svg"',
 ]) {
@@ -60,6 +60,8 @@ for (const required of [
   '<h2 id="plant-case-heading">Give the floor a memory.</h2>',
   'class="case-media"',
   'class="case-actions"',
+  'srcset="/live-shop-mobile.png"',
+  'srcset="/live-plant-mobile.png"',
   'href="/contact/?from=shop-workspace"',
   'href="/contact/?from=plant-workspace"',
   'backdrop-filter: blur(22px)',
@@ -73,6 +75,7 @@ for (const forbidden of ['<figure class="site-hero-screen"', '<img src="/site/sh
 }
 
 if (!contact.includes('.header-cta { display: none; }')) fail('contact_page_keeps_redundant_start_control')
+if (!contact.includes('<h1 data-contact-heading>What should run better?</h1>')) fail('contact_page_missing_direct_sales_prompt')
 for (const forbidden of ['placeholder="Drive folder', 'placeholder="Example:', 'Role-aware onboarding', 'Device-aware onboarding', 'Adaptive setup plan', 'First proof planner']) {
   if (contact.includes(forbidden)) fail('contact_surface_is_not_blank_or_honest', { forbidden })
 }
