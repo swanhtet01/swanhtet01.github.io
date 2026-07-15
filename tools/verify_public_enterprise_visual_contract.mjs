@@ -21,7 +21,7 @@ const work = pages.get('work/index.html')
 const contact = pages.get('contact/index.html')
 
 for (const [relativePath, html] of pages) {
-  for (const required of ['data-theme="light"', 'data-theme="dark"', 'prefers-color-scheme', 'prefers-reduced-motion', 'data-theme-toggle']) {
+  for (const required of ['data-theme="light"', 'data-theme="dark"', 'prefers-color-scheme', 'prefers-reduced-motion', 'data-theme-toggle', 'min-width: 44px;\n    min-height: 44px;']) {
     if (!html.includes(required)) fail('public_page_missing_theme_contract', { relativePath, required })
   }
   for (const forbidden of ['>Products<', '>Pricing<', '>AI workers<', 'target="_blank"', 'target=_blank', 'window.open(', '>SM<', 'File Analyst', 'Payment Reconciler', 'data-clean-report-agent', 'supermega-machine.vercel.app/workcell', 'href="/reconcile/"']) {

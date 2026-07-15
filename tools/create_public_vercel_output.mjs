@@ -149,7 +149,7 @@ const sharedStyle = `
   }
   .brand {
     display: inline-flex;
-    min-width: 0;
+    min-width: 44px;
     min-height: 44px;
     align-items: center;
     gap: 10px;
