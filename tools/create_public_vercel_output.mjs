@@ -6,6 +6,10 @@ const root = process.cwd()
 const outputDir = resolve(root, '.vercel', 'output')
 const staticDir = resolve(outputDir, 'static')
 const functionsDir = resolve(outputDir, 'functions', 'api')
+const shopStartUrl = 'https://app.supermega.dev/?demo=shop&returnTo=%2Fstart'
+const plantStartUrl = 'https://app.supermega.dev/?demo=plant&returnTo=%2Fstart'
+const shopStartHref = shopStartUrl.replaceAll('&', '&amp;')
+const plantStartHref = plantStartUrl.replaceAll('&', '&amp;')
 
 const faviconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="supermega.dev terminal mark" shape-rendering="geometricPrecision"><rect x="2.5" y="2.5" width="59" height="59" rx="12" fill="#090d13"/><rect x="3.25" y="3.25" width="57.5" height="57.5" rx="11.25" fill="none" stroke="#ffffff" stroke-opacity="0.18"/><path d="M15 19 29 32 15 45" fill="none" stroke="#6b95ff" stroke-width="4.25" stroke-linecap="round" stroke-linejoin="round"/><path d="M36 45h14" fill="none" stroke="#3dd6a2" stroke-width="4.25" stroke-linecap="round"/></svg>\n`
 
@@ -266,8 +270,8 @@ const headerHtml = `${themeBootstrap}
     </a>
     <nav class="nav" aria-label="Primary">
       <a class="nav-link optional-nav" href="/work/">Work</a>
-      <a class="nav-link optional-nav" href="https://app.supermega.dev/?demo=shop">Shop</a>
-      <a class="nav-link optional-nav" href="https://app.supermega.dev/?demo=plant">Plant</a>
+      <a class="nav-link optional-nav" href="${shopStartHref}">Shop</a>
+      <a class="nav-link optional-nav" href="${plantStartHref}">Plant</a>
       <button class="icon-button" type="button" data-theme-toggle aria-label="Use dark mode" title="Use dark mode"><svg class="theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path></svg><svg class="theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 15.2A8.5 8.5 0 0 1 8.8 3.5 8.5 8.5 0 1 0 20.5 15.2Z"></path></svg></button>
       <a class="btn primary header-cta" href="/contact/">Talk to us</a>
     </nav>
@@ -277,7 +281,7 @@ ${themeToggleScript}`
 
 const footerHtml = `<div class="footer-frame"><footer>
   <span class="footer-brand"><img class="footer-mark" src="/favicon.svg" alt="" width="64" height="64" /> supermega.dev</span>
-  <span class="footer-links"><a href="/work/">Work</a><a href="https://app.supermega.dev/?demo=shop">Shop</a><a href="https://app.supermega.dev/?demo=plant">Plant</a><a href="/contact/">Contact</a><a href="/privacy/">Privacy</a></span>
+  <span class="footer-links"><a href="/work/">Work</a><a href="${shopStartHref}">Shop</a><a href="${plantStartHref}">Plant</a><a href="/contact/">Contact</a><a href="/privacy/">Privacy</a></span>
 </footer></div>`
 
 function socialMeta(title, description, url) {
@@ -314,7 +318,7 @@ function documentHtml({ title, description, canonical, content, style = '' }) {
 
 const liveStatusScript = `<script>(function(){var node=document.querySelector('[data-public-status]');if(!node)return;if(location.hostname==='127.0.0.1'||location.hostname==='localhost'){node.textContent='Demo preview ready';var localParent=node.closest('[data-status-shell]');if(localParent)localParent.classList.add('is-ready');return;}fetch('/api/health',{cache:'no-store',headers:{accept:'application/json'}}).then(function(response){if(!response.ok)throw new Error('unavailable');return response.json();}).then(function(body){node.textContent=body&&body.ok?'Live demos ready':'Demos available';var parent=node.closest('[data-status-shell]');if(parent)parent.classList.add('is-ready');}).catch(function(){node.textContent='Demos available';});})();</script>`
 
-const homeProductPreviewScript = `<script>(function(){var root=document.querySelector('[data-product-preview]');if(!root)return;var image=root.querySelector('[data-product-preview-image]'),mobileSource=root.querySelector('[data-product-preview-source]'),label=root.querySelector('[data-product-preview-label]'),openLink=document.querySelector('[data-preview-open]'),buttons=Array.from(root.querySelectorAll('[data-product-preview-button]'));if(!image||!label||!buttons.length)return;var views={shop:{src:'/live-shop-workspace.png',mobileSrc:'/live-shop-mobile.png',alt:'Current Shop workspace showing priority checks, sales, cash, customers, and stock',label:'Shop workspace',href:'https://app.supermega.dev/?demo=shop',cta:'Try Shop live'},plant:{src:'/live-plant-workspace.png',mobileSrc:'/live-plant-mobile.png',alt:'Current Plant workspace showing production plan navigation and machine state across two lines',label:'Plant workspace',href:'https://app.supermega.dev/?demo=plant',cta:'Try Plant live'}};function show(id){var view=views[id];if(!view)return;buttons.forEach(function(button){button.setAttribute('aria-pressed',String(button.getAttribute('data-product-preview-button')===id));});if(openLink){openLink.href=view.href;openLink.textContent=view.cta;}if(image.getAttribute('data-view')===id)return;image.classList.add('is-switching');label.textContent=view.label;image.alt=view.alt;image.setAttribute('data-view',id);if(mobileSource)mobileSource.srcset=view.mobileSrc;image.src=view.src;window.setTimeout(function(){image.classList.remove('is-switching');},360);}image.addEventListener('load',function(){image.classList.remove('is-switching');});buttons.forEach(function(button){button.addEventListener('click',function(){show(button.getAttribute('data-product-preview-button'));});});var preloadDesktop=new Image();preloadDesktop.src=views.plant.src;var preloadMobile=new Image();preloadMobile.src=views.plant.mobileSrc;})();</script>`
+const homeProductPreviewScript = `<script>(function(){var root=document.querySelector('[data-product-preview]');if(!root)return;var image=root.querySelector('[data-product-preview-image]'),mobileSource=root.querySelector('[data-product-preview-source]'),label=root.querySelector('[data-product-preview-label]'),openLink=document.querySelector('[data-preview-open]'),buttons=Array.from(root.querySelectorAll('[data-product-preview-button]'));if(!image||!label||!buttons.length)return;var views={shop:{src:'/live-shop-workspace.png',mobileSrc:'/live-shop-mobile.png',alt:'Current Shop workspace showing priority checks, sales, cash, customers, and stock',label:'Shop workspace',href:'${shopStartUrl}',cta:'Try Shop live'},plant:{src:'/live-plant-workspace.png',mobileSrc:'/live-plant-mobile.png',alt:'Current Plant workspace showing production plan navigation and machine state across two lines',label:'Plant workspace',href:'${plantStartUrl}',cta:'Try Plant live'}};function show(id){var view=views[id];if(!view)return;buttons.forEach(function(button){button.setAttribute('aria-pressed',String(button.getAttribute('data-product-preview-button')===id));});if(openLink){openLink.href=view.href;openLink.textContent=view.cta;}if(image.getAttribute('data-view')===id)return;image.classList.add('is-switching');label.textContent=view.label;image.alt=view.alt;image.setAttribute('data-view',id);if(mobileSource)mobileSource.srcset=view.mobileSrc;image.src=view.src;window.setTimeout(function(){image.classList.remove('is-switching');},360);}image.addEventListener('load',function(){image.classList.remove('is-switching');});buttons.forEach(function(button){button.addEventListener('click',function(){show(button.getAttribute('data-product-preview-button'));});});var preloadDesktop=new Image();preloadDesktop.src=views.plant.src;var preloadMobile=new Image();preloadMobile.src=views.plant.mobileSrc;})();</script>`
 
 const homeHtml = documentHtml({
   title: 'supermega.dev | Run the shop. See the plant.',
@@ -494,7 +498,7 @@ const homeHtml = documentHtml({
         <div class="hero-side">
           <p><strong class="hero-lead">One place to run the day.</strong> Shop keeps sales, stock, customers, and books together. Plant keeps machines, shifts, maintenance, and handoffs in view. Try either workspace live. When the standard path misses, we build the missing workflow around your team.</p>
           <div class="hero-actions">
-            <a class="btn primary" data-preview-open href="https://app.supermega.dev/?demo=shop">Try Shop live</a>
+            <a class="btn primary" data-preview-open href="${shopStartHref}">Try Shop live</a>
             <a class="btn secondary" href="/work/">See the work</a>
           </div>
           <div class="hero-meta"><span class="hero-status" data-status-shell><span class="live-dot" aria-hidden="true"></span><span data-public-status aria-live="polite">Checking live demos</span></span><span class="hero-note">No signup to try</span></div>
@@ -519,8 +523,8 @@ const homeHtml = documentHtml({
       <p>Start with the part of the operation your team actually uses. AI helps draft, check, and surface next steps while approvals stay tied to the work behind them.</p>
     </div>
     <div class="destination-list">
-      <a class="destination" href="https://app.supermega.dev/?demo=shop" aria-label="Try Shop live"><span class="destination-index">01 / SHOP</span><span class="destination-copy"><strong>Shop</strong><span>Sales, stock, customers, receivables, purchasing, and daily close in one operating flow.</span></span><span class="destination-arrow" aria-hidden="true">&#8594;</span></a>
-      <a class="destination" href="https://app.supermega.dev/?demo=plant" aria-label="Try Plant live"><span class="destination-index">02 / PLANT</span><span class="destination-copy"><strong>Plant</strong><span>Production plans, machine state, maintenance, quality, and handoff history in one floor view.</span></span><span class="destination-arrow" aria-hidden="true">&#8594;</span></a>
+      <a class="destination" href="${shopStartHref}" aria-label="Try Shop live"><span class="destination-index">01 / SHOP</span><span class="destination-copy"><strong>Shop</strong><span>Sales, stock, customers, receivables, purchasing, and daily close in one operating flow.</span></span><span class="destination-arrow" aria-hidden="true">&#8594;</span></a>
+      <a class="destination" href="${plantStartHref}" aria-label="Try Plant live"><span class="destination-index">02 / PLANT</span><span class="destination-copy"><strong>Plant</strong><span>Production plans, machine state, maintenance, quality, and handoff history in one floor view.</span></span><span class="destination-arrow" aria-hidden="true">&#8594;</span></a>
     </div>
   </section>
 
@@ -638,7 +642,7 @@ const workHtml = documentHtml({
         <h1 id="work-heading">See the work before the pitch.</h1>
         <p>Shop and Plant are working systems, not concept screens. Open them in the same tab, follow a real operating path, and decide whether the workflow earns a place in your business.</p>
       </div>
-      <div class="work-actions"><a class="btn primary" href="https://app.supermega.dev/?demo=shop">Try Shop live</a><a class="btn secondary" href="https://app.supermega.dev/?demo=plant">Try Plant live</a></div>
+      <div class="work-actions"><a class="btn primary" href="${shopStartHref}">Try Shop live</a><a class="btn secondary" href="${plantStartHref}">Try Plant live</a></div>
       <div class="work-signal" aria-label="Product availability"><div><strong>Working now</strong><span>Current Shop and Plant screens</span></div><div><strong>No account to try</strong><span>Explore before private setup</span></div><div><strong>Fits every screen</strong><span>Desktop, tablet, and mobile</span></div></div>
     </div>
   </section>
@@ -649,7 +653,7 @@ const workHtml = documentHtml({
         <div class="case-label"><span class="case-index">01 / SHOP</span><h2 id="shop-case-heading">Keep the day together.</h2></div>
         <div class="case-copy"><p>Sales, customers, stock, receivables, and books stay in one operating flow. The useful next action is visible without turning the owner into the integration layer.</p><div class="case-points" aria-label="Try a Shop workflow"><a class="case-point" href="https://app.supermega.dev/?demo=shop&amp;returnTo=%2Fsales" aria-label="Try a new sale in the live Shop demo"><span class="case-point-label">Sell</span><strong>Fast sale and customer flow</strong><span class="case-point-arrow" aria-hidden="true">&rarr;</span></a><a class="case-point" href="https://app.supermega.dev/?demo=shop&amp;returnTo=%2Fbooks%3Ftab%3Dreorder" aria-label="Try stock reorder in the live Shop demo"><span class="case-point-label">Control</span><strong>Stock, cash, and money owed</strong><span class="case-point-arrow" aria-hidden="true">&rarr;</span></a><a class="case-point" href="https://app.supermega.dev/?demo=shop&amp;returnTo=%2Fsales%3Fview%3Dclose" aria-label="Try Daily Close in the live Shop demo"><span class="case-point-label">Close</span><strong>Daily handoff with variance</strong><span class="case-point-arrow" aria-hidden="true">&rarr;</span></a></div></div>
       </div>
-      <div class="case-media"><div class="case-toolbar"><span>Shop workspace / live</span><div class="case-actions"><a class="btn secondary" href="https://app.supermega.dev/?demo=shop" aria-label="Try the live Shop workspace">Try live</a><a class="btn primary" href="/contact/?from=shop-workspace" aria-label="Request a private Shop workspace">Request</a></div></div><picture><source media="(max-width: 720px)" srcset="/live-shop-mobile.png" /><img src="/live-shop-workspace.png" alt="Current Shop workspace showing priority checks, sales, cash, customers, and stock" width="1600" height="480" loading="lazy" /></picture></div>
+      <div class="case-media"><div class="case-toolbar"><span>Shop workspace / live</span><div class="case-actions"><a class="btn secondary" href="${shopStartHref}" aria-label="Try the live Shop workspace">Try live</a><a class="btn primary" href="/contact/?from=shop-workspace" aria-label="Request a private Shop workspace">Request</a></div></div><picture><source media="(max-width: 720px)" srcset="/live-shop-mobile.png" /><img src="/live-shop-workspace.png" alt="Current Shop workspace showing priority checks, sales, cash, customers, and stock" width="1600" height="480" loading="lazy" /></picture></div>
     </div>
   </section>
 
@@ -659,7 +663,7 @@ const workHtml = documentHtml({
         <div class="case-label"><span class="case-index">02 / PLANT</span><h2 id="plant-case-heading">Give the floor a memory.</h2></div>
         <div class="case-copy"><p>Production targets, material readiness, machine state, breakdowns, and handoffs stay connected. The next shift sees the plan, what happened, and what still needs attention.</p><div class="case-points" aria-label="Try a Plant workflow"><a class="case-point" href="https://app.supermega.dev/?demo=plant&amp;returnTo=%2Fplan" aria-label="Try production planning in the live Plant demo"><span class="case-point-label">Plan</span><strong>Targets, material readiness, and owner</strong><span class="case-point-arrow" aria-hidden="true">&rarr;</span></a><a class="case-point" href="https://app.supermega.dev/?demo=plant&amp;returnTo=%2Ffactory" aria-label="Try the live Plant floor"><span class="case-point-label">See</span><strong>Floor state and line readiness</strong><span class="case-point-arrow" aria-hidden="true">&rarr;</span></a><a class="case-point" href="https://app.supermega.dev/?demo=plant&amp;returnTo=%2Fhandoff" aria-label="Try shift handoff in the live Plant demo"><span class="case-point-label">Handoff</span><strong>Accountable next-shift brief</strong><span class="case-point-arrow" aria-hidden="true">&rarr;</span></a></div></div>
       </div>
-      <div class="case-media"><div class="case-toolbar"><span>Plant workspace / live</span><div class="case-actions"><a class="btn secondary" href="https://app.supermega.dev/?demo=plant" aria-label="Try the live Plant workspace">Try live</a><a class="btn primary" href="/contact/?from=plant-workspace" aria-label="Request a private Plant workspace">Request</a></div></div><picture><source media="(max-width: 720px)" srcset="/live-plant-mobile.png" /><img src="/live-plant-workspace.png" alt="Current Plant workspace showing production plan navigation and machine state across two lines" width="1600" height="480" loading="lazy" /></picture></div>
+      <div class="case-media"><div class="case-toolbar"><span>Plant workspace / live</span><div class="case-actions"><a class="btn secondary" href="${plantStartHref}" aria-label="Try the live Plant workspace">Try live</a><a class="btn primary" href="/contact/?from=plant-workspace" aria-label="Request a private Plant workspace">Request</a></div></div><picture><source media="(max-width: 720px)" srcset="/live-plant-mobile.png" /><img src="/live-plant-workspace.png" alt="Current Plant workspace showing production plan navigation and machine state across two lines" width="1600" height="480" loading="lazy" /></picture></div>
     </div>
   </section>
 
@@ -837,7 +841,7 @@ const notFoundHtml = documentHtml({
     .not-found .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; }
     @media (max-width: 720px) { .not-found { width: min(100% - 32px, 1240px); min-height: 72svh; } .not-found h1 { font-size: 40px; } }
   `,
-  content: `<main class="not-found"><div class="not-found-command">&gt;_ 404 / not-found</div><h1>That route is gone.</h1><p>Return to SuperMega, open Shop, or open Plant.</p><div class="actions"><a class="btn primary" href="/">Home</a><a class="btn secondary" href="https://app.supermega.dev/?demo=shop">Shop</a><a class="btn secondary" href="https://app.supermega.dev/?demo=plant">Plant</a></div></main>`,
+  content: `<main class="not-found"><div class="not-found-command">&gt;_ 404 / not-found</div><h1>That route is gone.</h1><p>Return to SuperMega, open Shop, or open Plant.</p><div class="actions"><a class="btn primary" href="/">Home</a><a class="btn secondary" href="${shopStartHref}">Shop</a><a class="btn secondary" href="${plantStartHref}">Plant</a></div></main>`,
 })
 
 const vercelConfig = {

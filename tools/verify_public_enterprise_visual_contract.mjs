@@ -19,10 +19,18 @@ const pages = new Map(publicPages.map((relativePath) => [relativePath, readPage(
 const home = pages.get('index.html')
 const work = pages.get('work/index.html')
 const contact = pages.get('contact/index.html')
+const shopStartHref = 'https://app.supermega.dev/?demo=shop&amp;returnTo=%2Fstart'
+const plantStartHref = 'https://app.supermega.dev/?demo=plant&amp;returnTo=%2Fstart'
 
 for (const [relativePath, html] of pages) {
   for (const required of ['data-theme="light"', 'data-theme="dark"', 'prefers-color-scheme', 'prefers-reduced-motion', 'data-theme-toggle', 'min-width: 44px;\n    min-height: 44px;']) {
     if (!html.includes(required)) fail('public_page_missing_theme_contract', { relativePath, required })
+  }
+  for (const required of [shopStartHref, plantStartHref]) {
+    if (!html.includes(required)) fail('public_page_missing_guided_start', { relativePath, required })
+  }
+  for (const forbidden of ['href="https://app.supermega.dev/?demo=shop"', 'href="https://app.supermega.dev/?demo=plant"']) {
+    if (html.includes(forbidden)) fail('public_page_contains_unguided_workspace_entry', { relativePath, forbidden })
   }
   for (const forbidden of ['>Products<', '>Pricing<', '>AI workers<', 'target="_blank"', 'target=_blank', 'window.open(', '>SM<', 'File Analyst', 'Payment Reconciler', 'data-clean-report-agent', 'supermega-machine.vercel.app/workcell', 'href="/reconcile/"']) {
     if (html.includes(forbidden)) fail('public_page_keeps_retired_catalog_content', { relativePath, forbidden })
@@ -31,8 +39,10 @@ for (const [relativePath, html] of pages) {
 
 for (const required of [
   'href="/work/"',
-  'https://app.supermega.dev/?demo=shop',
-  'https://app.supermega.dev/?demo=plant',
+  shopStartHref,
+  plantStartHref,
+  "href:'https://app.supermega.dev/?demo=shop&returnTo=%2Fstart'",
+  "href:'https://app.supermega.dev/?demo=plant&returnTo=%2Fstart'",
   '<h1 id="portfolio-heading">Run the shop. See the plant. Fix the gaps.</h1>',
   'data-product-preview',
   'data-preview-open',
