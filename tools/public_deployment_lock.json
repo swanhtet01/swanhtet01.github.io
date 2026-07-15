@@ -1,11 +1,11 @@
 {
-    "public_host":  "supermega-public-5rw7m0qtb-swanhtet01s-projects.vercel.app",
-    "deployment_id":  "dpl_Repw9xWnHembMwv5ohbbAWtVSvHv",
-    "locked_at":  "2026-07-15T10:27:20.6094105Z",
+    "public_host":  "supermega-public-e2ykrfzx8-swanhtet01s-projects.vercel.app",
+    "deployment_id":  "dpl_Ctbr1AhY8PRJNsVLuDafyJTtLiAn",
+    "locked_at":  "2026-07-15T10:44:38.7304418Z",
     "domains":  [
                     "supermega.dev",
                     "www.supermega.dev"
                 ],
     "project":  "supermega-public",
-    "reason":  "Combined current Shop and Plant proof with File Analyst and Payment Reconciler; verified and attached to all public aliases."
+    "reason":  "Combined the latest conversion story, current Shop and Plant proof, File Analyst, and Payment Reconciler; verified and attached to all public aliases."
 }
