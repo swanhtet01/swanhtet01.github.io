@@ -20,59 +20,94 @@ function requireTokens(label, text, tokens) {
   }
 }
 
+function rejectTokens(label, text, tokens) {
+  for (const token of tokens) {
+    if (text.includes(token)) fail(`${label}_retired_token_found`, { token })
+  }
+}
+
 const source = read(sourcePath)
 const home = read(resolve(staticDir, 'index.html'))
+const products = read(resolve(staticDir, 'products', 'index.html'))
 const offers = read(resolve(staticDir, 'offers', 'index.html'))
 const agents = read(resolve(staticDir, 'ai-agents', 'index.html'))
+const contact = read(resolve(staticDir, 'contact', 'index.html'))
 
 if (!source) fail('missing_public_generator')
 if (!home) fail('missing_public_home_output')
+if (!products) fail('missing_public_products_output')
 if (!offers) fail('missing_public_offers_output')
 if (!agents) fail('missing_public_ai_agents_output')
+if (!contact) fail('missing_public_contact_output')
 
-const workcellTokens = [
+requireTokens('generator_two_suite_redesign', source, [
+  'The work behind the business, finally in one place.',
+  "'Shop'",
+  "'Plant'",
+  'AI workflow solutions',
+  'Open Shop',
+  'Open Plant',
+])
+
+requireTokens('home_two_suite_redesign', home, [
+  'The work behind the business, finally in one place.',
+  'Open Shop',
+  'Open Plant',
+  'Talk to us',
+])
+
+requireTokens('products_two_suite_redesign', products, [
+  'Continue to SuperMega',
+  'https://app.supermega.dev/?demo=shop',
+])
+
+requireTokens('offers_two_suite_redesign', offers, [
+  'Continue to SuperMega',
+  '/contact/?from=offers',
+  'Talk to us',
+])
+
+requireTokens('agents_redirect_to_contact', agents, [
+  'Continue to SuperMega',
+  'url=/contact/?from=workflow',
+  'window.location.replace("/contact/?from=workflow")',
+  'Start with one workflow',
+])
+
+requireTokens('contact_two_suite_intake', contact, [
+  'Tell us about your business.',
+  'Shop for your shop, Plant for your factory floor.',
+  'AI workflow solutions - from 11,000,000 MMK',
+])
+
+const retiredPublicOfferTokens = [
   'AI Workcell Pilot',
-  'Source pack',
-  'First proof',
-  'First production run',
-  'Owner acceptance',
-  'Maintenance',
-  'approval-only',
-  'payment proof',
-  'proof-to-maintenance',
+  'Source-to-Screen',
+  'source_to_screen',
+  'data-source-to-screen',
+  'package=ai-workcell-pilot',
+  'Agents that do the tasks SaaS leaves for humans',
+  'AI Agent Army',
+  'Free core tools',
 ]
 
-requireTokens('generator_workcell_offer', source, [
-  ...workcellTokens,
-  '/app/source-pack',
-  '/app/proof-review',
-  'Myanmar',
-])
-
-requireTokens('home_workcell_offer', home, [
-  'Your whole business, in one simple app.',
-  'Start free',
-])
-
-requireTokens('offers_workcell_offer', offers, [
-  ...workcellTokens,
-  'Premium setup',
-  'easy setup',
-  'private workspace',
-  'customer success desk',
-])
-
-requireTokens('agents_workcell_offer', agents, [
-  ...workcellTokens,
-  'AI Agent Army',
-  'Agents that do the tasks SaaS leaves for humans',
-  'Every send, write, payment, browser/mobile action, or connector write waits for approval',
-])
+for (const [label, text] of [
+  ['generator', source],
+  ['home', home],
+  ['products', products],
+  ['offers', offers],
+  ['agents', agents],
+  ['contact', contact],
+]) {
+  rejectTokens(label, text, retiredPublicOfferTokens)
+}
 
 for (const [label, text] of [
   ['home', home],
+  ['products', products],
   ['offers', offers],
   ['agents', agents],
+  ['contact', contact],
 ]) {
   const hit = text.match(/\bUSD\b|\$\s?\d/)
   if (hit) fail(`${label}_contains_public_usd_price`, { match: hit[0] })
@@ -83,4 +118,4 @@ if (failures.length) {
   process.exit(1)
 }
 
-console.log('public_ai_workcell_pilot_offer_contract=verified')
+console.log('public_two_suite_redesign_contract=verified')

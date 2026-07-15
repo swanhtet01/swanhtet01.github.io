@@ -84,7 +84,7 @@ const requiredPublicSiteJsonFiles = [
   'value-intake-router.json',
 ]
 const legacyInitialsMarkHtml = ['<span class="mark">', String.fromCharCode(83, 77), '</span>'].join('')
-const signalMarkHtml = '<span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round"/></svg></span>'
+const signalMarkHtml = '<span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#62F5B0" stroke-width="2.6" stroke-linecap="round"/></svg></span>'
 
 async function writeTextFileEnsuringDir(destination, content) {
   const targetDir = dirname(destination)
@@ -146,11 +146,11 @@ function normalizePublicProductNames(content) {
     // 2026-07-09): the site sells exactly two apps — Retail OS (the shop app) and Factory OS (the
     // factory/operations app). Collapse every legacy/variant name into those two. Runs last so
     // nothing slips through, on every normalized page.
-    .replace(/Restaurant POS \+ Inventory|Restaurant POS and Inventory/g, 'Retail OS')
-    .replace(/DeskPOS\s*[—–-]\s*Point of Sale/g, 'Retail OS')
-    .replace(/\bDeskPOS\b/g, 'Retail OS')
-    .replace(/Factory & Operations App|Factory Operations App/g, 'Factory OS')
-    .replace(/Document Extraction Ledger|Back Office AI Desk|Back Office Workflow Desk/g, 'Custom Solutions & AI Agents')
+    .replace(/Restaurant POS \+ Inventory|Restaurant POS and Inventory|Retail OS/g, 'Shop')
+    .replace(/DeskPOS\s*[—–-]\s*Point of Sale/g, 'Shop')
+    .replace(/\bDeskPOS\b/g, 'Shop')
+    .replace(/Factory & Operations App|Factory Operations App|Factory OS/g, 'Plant')
+    .replace(/Document Extraction Ledger|Back Office AI Desk|Back Office Workflow Desk|Custom Solutions & AI Agents/g, 'AI workflow solutions')
     // Retire the old tagline. Header sub-mark → clean wordmark; every other use → the one line.
     .replace(/<small>Cast real work into software<\/small>/g, '')
     .replace(/Cast real work into software\.?/g, 'Stop running your business on Viber & Excel.')
@@ -1339,6 +1339,7 @@ function renderPublicPricingHtml() {
       .wrap { width: min(1180px, calc(100% - 36px)); margin: 0 auto; position: relative; overflow: clip; }
       header { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 22px 0; }
       .brand { display: inline-flex; align-items: center; gap: 12px; font-weight: 950; letter-spacing: -0.045em; }
+      .terminal-mark { display: grid; place-items: center; flex: none; width: 43px; height: 43px; border: 1px solid rgba(255,255,255,0.14); border-radius: 14px; background: rgba(8,18,31,0.72); box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 12px 28px rgba(0,0,0,0.16); }
       .mark { position: relative; display: grid; place-items: center; width: 43px; height: 43px; border-radius: 14px; overflow: hidden; background: var(--navy); box-shadow: 0 14px 34px rgba(7,17,31,0.22), inset 0 1px 0 rgba(255,255,255,0.18); }
       .mark img { display: block; width: 100%; height: 100%; }
       .brand-text { display: grid; gap: 2px; }
@@ -1373,11 +1374,11 @@ function renderPublicPricingHtml() {
     <div class="wrap">
       <header>
         <a class="brand" href="/" aria-label="SUPERMEGA.dev home">
-          <span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round"/></svg></span>
+          <span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#62F5B0" stroke-width="2.6" stroke-linecap="round"/></svg></span>
           <span class="brand-text"><span class="wm" style="font-size:18px;letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></span>
         </a>
         <nav class="nav" aria-label="Primary">
-          <a class="btn secondary" href="/products/">Products</a>
+<a class="btn secondary" href="https://app.supermega.dev/?demo=shop">Open app</a>
           <a class="btn primary" href="/contact/">Contact</a>
         </nav>
       </header>
@@ -1631,6 +1632,7 @@ const unicornShellStyle = `
       .wrap { width: min(1180px, calc(100% - 36px)); margin: 0 auto; position: relative; overflow: clip; }
       header { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 22px 0; }
       .brand { display: inline-flex; align-items: center; gap: 12px; font-weight: 950; letter-spacing: -0.045em; }
+      .terminal-mark { display: grid; place-items: center; flex: none; width: 43px; height: 43px; border: 1px solid rgba(255,255,255,0.14); border-radius: 14px; background: rgba(8,18,31,0.72); box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 12px 28px rgba(0,0,0,0.16); }
       .mark { position: relative; display: grid; place-items: center; width: 43px; height: 43px; border-radius: 14px; overflow: hidden; background: transparent; }
       .mark img { display: block; width: 100%; height: 100%; }
       .brand-text { display: grid; gap: 2px; }
@@ -2036,20 +2038,45 @@ const unicornShellStyle = `
       .carousel-dots button { background: color-mix(in srgb, var(--ink) 28%, transparent); }
       .carousel-dots button.active { background: var(--blue); }
       .output > img { border-radius: 0; }
+      :root[data-theme="light"] {
+        color-scheme: light;
+        --void: #f3f7f5;
+        --void-deep: #eaf1ee;
+        --cream: #f3f7f5;
+        --paper: rgba(255,255,255,0.72);
+        --panel: rgba(255,255,255,0.72);
+        --ink: #142322;
+        --text: #142322;
+        --muted: #5e716d;
+        --line: rgba(20,35,34,0.14);
+        --blue: #1d74e8;
+        --blue-soft: rgba(29,116,232,0.12);
+        --aqua: #0f9f9a;
+        --navy: #142322;
+        --shadow: 0 24px 60px rgba(24,51,47,0.14);
+      }
+      :root[data-theme="light"] body {
+        background: linear-gradient(180deg, #f7fbf9 0%, #edf4f1 56%, #e7efec 100%);
+      }
+      :root[data-theme="light"] body::before {
+        opacity: 0.045;
+        background-image: linear-gradient(rgba(20,35,34,0.2) 1px, transparent 1px), linear-gradient(90deg, rgba(20,35,34,0.2) 1px, transparent 1px);
+      }
+      :root[data-theme="light"] .btn, :root[data-theme="light"] button { color: var(--ink); background: rgba(255,255,255,0.68); }
+      :root[data-theme="light"] .btn.primary, :root[data-theme="light"] button { color: #fff; background: linear-gradient(135deg, #1d74e8, #0f9f9a); }
+      :root[data-theme="light"] .final, :root[data-theme="light"] .home-hero, :root[data-theme="light"] .home-lane, :root[data-theme="light"] .home-ai, :root[data-theme="light"] .home-cta { background: rgba(255,255,255,0.68); border-color: rgba(20,35,34,0.14); }
 `
 
 const unicornHeader = `
       <script>(function(){try{var t=localStorage.getItem('sm-theme');if(!t){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
       <header>
         <a class="brand" href="/" aria-label="SUPERMEGA.dev home">
-          <span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round"/></svg></span>
+          <span class="terminal-mark" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#62F5B0" stroke-width="2.6" stroke-linecap="round"/></svg></span>
           <span class="brand-text"><span class="wm" style="font-size:18px;letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></span>
         </a>
         <nav class="nav" aria-label="Primary">
           <button class="btn secondary theme-toggle" type="button" aria-label="Toggle dark mode" onclick="var r=document.documentElement,n=r.getAttribute('data-theme')==='dark'?'light':'dark';r.setAttribute('data-theme',n);try{localStorage.setItem('sm-theme',n)}catch(e){}"></button>
-          <a class="btn secondary optional-nav" href="/products/">Products</a>
-          <a class="btn secondary" href="/demo/">Demos</a>
-          <a class="btn secondary" href="/offers/">Pricing</a>
+          <a class="btn secondary" href="https://app.supermega.dev/?demo=shop">Open app</a>
           <a class="btn primary" href="/contact/">Contact</a>
         </nav>
       </header>
@@ -4650,6 +4677,172 @@ ${productCarouselScript}
   </body>
 </html>`
 
+const unicornPublicHomeHtml = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="index,follow" />
+    <title>supermega.dev | Operating software for shops and plants</title>
+    <meta name="description" content="SuperMega helps shops and plants sell, close, hand off work, and act on the details that usually get lost in chat and spreadsheets." />
+    <meta name="theme-color" content="#07111f" />
+    <link rel="canonical" href="https://supermega.dev/" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-terminal-20260715" />
+    <link rel="manifest" href="/site.webmanifest?v=supermega-terminal-20260715" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="SUPERMEGA.dev" />
+    <meta property="og:title" content="Operating software for shops and plants | SUPERMEGA.dev" />
+    <meta property="og:description" content="Sell, close, hand off, and act on the work that normally gets lost in chat and spreadsheets." />
+    <meta property="og:url" content="https://supermega.dev/" />
+    <meta property="og:image" content="https://supermega.dev/site/shots/actual-restaurant-overview.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Operating software for shops and plants | SUPERMEGA.dev" />
+    <meta name="twitter:description" content="Simple operating software with useful AI when the work is ready for it." />
+    <meta name="twitter:image" content="https://supermega.dev/site/shots/actual-restaurant-overview.png" />
+    <style>${unicornShellStyle}
+      .home-hero { display:grid; grid-template-columns:minmax(0,0.84fr) minmax(360px,1.16fr); gap:clamp(24px,5vw,72px); align-items:center; min-height:min(720px,calc(100svh - 76px)); margin:10px 0 0; padding:clamp(26px,5vw,66px); border:1px solid rgba(255,255,255,0.16); border-radius:34px; background:rgba(8,18,31,0.68); box-shadow:0 34px 100px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.12); backdrop-filter:blur(24px); overflow:hidden; }
+      .home-copy { max-width:590px; }
+      .home-hero h1 { max-width:14ch; margin:16px 0 20px; color:var(--text); font-family:var(--font-serif); font-size:clamp(42px,5.4vw,68px); line-height:1.03; letter-spacing:0; }
+      .home-hero p { max-width:40rem; font-size:clamp(17px,1.8vw,21px); line-height:1.52; letter-spacing:0; }
+      .home-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:28px; }
+      .home-actions .btn { min-height:50px; }
+      .home-hero-visual { display:grid; gap:10px; min-width:0; margin:0; padding:14px; border:1px solid rgba(255,255,255,0.15); border-radius:28px; background:rgba(255,255,255,0.06); box-shadow:0 24px 70px rgba(0,0,0,0.24); }
+      .home-hero-visual img { display:block; width:100%; height:auto; border-radius:18px; background:#eef5f1; }
+      .home-figure-meta { display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap; padding:2px 4px 0; color:var(--muted); font-size:12px; font-weight:800; line-height:1.35; }
+      .home-figure-meta strong { color:var(--text); font-size:13px; }
+      .home-proof { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:0; margin-top:32px; border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
+      .home-proof div { padding:15px 16px 14px 0; border-right:1px solid var(--line); }
+      .home-proof div:not(:first-child) { padding-left:16px; }
+      .home-proof div:last-child { border-right:0; }
+      .home-proof strong { display:block; color:var(--text); font-size:13px; }
+      .home-proof span { display:block; margin-top:4px; color:var(--muted); font-size:12px; line-height:1.35; }
+      .home-section { border-top:1px solid var(--line); padding:clamp(56px,8vw,108px) 0; }
+      .home-section-head { display:grid; grid-template-columns:minmax(0,0.8fr) minmax(0,1.2fr); gap:28px; align-items:end; margin-bottom:36px; }
+      .home-section-head h2 { max-width:13ch; font-size:clamp(34px,4.8vw,60px); line-height:1.04; letter-spacing:0; }
+      .home-section-head p { max-width:39rem; font-size:18px; line-height:1.52; letter-spacing:0; }
+      .home-lanes { display:grid; gap:18px; }
+      .home-lane { display:grid; grid-template-columns:minmax(0,0.78fr) minmax(0,1.22fr); gap:clamp(24px,5vw,64px); align-items:center; padding:24px; border:1px solid rgba(255,255,255,0.15); border-radius:28px; background:rgba(255,255,255,0.06); box-shadow:inset 0 1px 0 rgba(255,255,255,0.08); }
+      .home-lane:nth-child(2) { grid-template-columns:minmax(0,1.22fr) minmax(0,0.78fr); }
+      .home-lane:nth-child(2) .home-lane-copy { order:2; }
+      .home-lane:nth-child(2) figure { order:1; }
+      .home-lane-copy h3 { margin:10px 0 14px; color:var(--text); font-size:clamp(27px,3.2vw,42px); line-height:1.08; letter-spacing:0; }
+      .home-lane-copy p { max-width:34rem; font-size:16px; line-height:1.52; letter-spacing:0; }
+      .home-lane-copy ul { display:grid; gap:10px; margin:20px 0 0; padding:0; list-style:none; }
+      .home-lane-copy li { display:flex; gap:10px; align-items:flex-start; color:var(--muted); font-size:14px; line-height:1.45; }
+      .home-lane-copy li::before { content:'>'; flex:none; color:#62F5B0; font-family:ui-monospace,monospace; font-weight:900; }
+      .home-lane-copy .btn { margin-top:24px; }
+      .home-lane figure { min-width:0; margin:0; padding:10px; border:1px solid rgba(255,255,255,0.12); border-radius:22px; background:rgba(255,255,255,0.05); }
+      .home-lane figure img { display:block; width:100%; height:auto; border-radius:14px; background:#eef5f1; }
+      .home-ai { display:grid; grid-template-columns:minmax(0,0.82fr) minmax(0,1.18fr); gap:clamp(24px,5vw,72px); align-items:center; padding:clamp(26px,5vw,52px); border:1px solid rgba(98,245,176,0.22); border-radius:30px; background:rgba(20,54,50,0.32); }
+      .home-ai h2 { max-width:12ch; font-size:clamp(32px,4.4vw,54px); line-height:1.05; letter-spacing:0; }
+      .home-ai p { max-width:38rem; font-size:17px; line-height:1.52; letter-spacing:0; }
+      .home-ai-list { display:grid; gap:0; border-top:1px solid rgba(98,245,176,0.2); }
+      .home-ai-list div { display:grid; grid-template-columns:minmax(130px,0.5fr) minmax(0,1fr); gap:20px; padding:16px 0; border-bottom:1px solid rgba(98,245,176,0.2); }
+      .home-ai-list strong { color:#62F5B0; font-size:13px; }
+      .home-ai-list span { color:var(--muted); font-size:14px; line-height:1.45; }
+      .home-cta { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:24px; align-items:center; padding:clamp(26px,5vw,48px); border:1px solid rgba(255,255,255,0.15); border-radius:30px; background:rgba(255,255,255,0.06); }
+      .home-cta h2 { max-width:16ch; font-size:clamp(31px,4vw,50px); line-height:1.05; letter-spacing:0; }
+      .home-cta p { margin-top:12px; font-size:16px; line-height:1.5; letter-spacing:0; }
+      .home-cta .cta { justify-content:flex-end; margin-top:0; }
+      :root[data-theme="light"] .home-hero, :root[data-theme="light"] .home-lane, :root[data-theme="light"] .home-ai, :root[data-theme="light"] .home-cta { border-color:rgba(20,35,34,0.14); background:rgba(255,255,255,0.68); box-shadow:0 24px 70px rgba(24,51,47,0.1), inset 0 1px 0 rgba(255,255,255,0.84); }
+      :root[data-theme="light"] .home-hero-visual, :root[data-theme="light"] .home-lane figure { border-color:rgba(20,35,34,0.12); background:rgba(255,255,255,0.58); }
+      :root[data-theme="light"] .home-ai { border-color:rgba(15,159,154,0.24); background:rgba(229,247,241,0.74); }
+      :root[data-theme="light"] .home-ai-list, :root[data-theme="light"] .home-ai-list div { border-color:rgba(15,159,154,0.22); }
+      @media (max-width:880px) {
+        .home-hero, .home-lane, .home-lane:nth-child(2), .home-ai, .home-cta { grid-template-columns:1fr; }
+        .home-hero { min-height:auto; padding:24px; }
+        .terminal-mark { width:38px; height:38px; border-radius:12px; }
+        .brand-text, .brand-text .wm { display:none !important; }
+        .home-lane:nth-child(2) .home-lane-copy, .home-lane:nth-child(2) figure { order:initial; }
+        .home-section-head { grid-template-columns:1fr; gap:14px; margin-bottom:24px; }
+        .home-cta .cta { justify-content:flex-start; margin-top:8px; }
+      }
+      @media (max-width:560px) {
+        .home-proof { grid-template-columns:1fr; }
+        .home-proof div, .home-proof div:not(:first-child) { padding:12px 0; border-right:0; border-bottom:1px solid var(--line); }
+        .home-proof div:last-child { border-bottom:0; }
+        .home-lane { padding:14px; border-radius:22px; }
+        .home-hero-visual { padding:8px; border-radius:22px; }
+        .home-ai-list div { grid-template-columns:1fr; gap:5px; }
+        .home-actions .btn { flex:1 1 100%; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+${unicornHeader}
+      <main>
+        <section class="home-hero">
+          <div class="home-copy">
+            <div class="eyebrow">&gt;_ operating software for real work</div>
+            <h1>The work behind the business, finally in one place.</h1>
+            <p>SuperMega gives shops and plants one calm place to sell, close, hand off work, and act on the details that usually get lost in chat and spreadsheets.</p>
+            <div class="home-actions">
+              <a class="btn primary" href="https://app.supermega.dev/?demo=shop">Open Shop</a>
+              <a class="btn secondary" href="https://app.supermega.dev/?demo=plant">Open Plant</a>
+              <a class="btn secondary" href="/contact/?from=homepage">Talk to us</a>
+            </div>
+            <div class="home-proof" aria-label="SuperMega operating model">
+              <div><strong>Phone to desktop</strong><span>Same workspace across devices.</span></div>
+              <div><strong>Clear handoffs</strong><span>Owners, evidence, next actions.</span></div>
+              <div><strong>AI when useful</strong><span>Review first. Automate with control.</span></div>
+            </div>
+          </div>
+          <figure class="home-hero-visual">
+            <img src="/site/shots/actual-restaurant-overview.png" alt="Shop workspace showing payments, stock risks, closeout review, and owner actions" width="1200" height="910" fetchpriority="high" />
+            <figcaption class="home-figure-meta"><strong>Shop workspace</strong><span>Payments, stock, closeout, approvals</span></figcaption>
+          </figure>
+        </section>
+
+        <section class="home-section">
+          <div class="home-section-head">
+            <div><div class="eyebrow">Two operating lanes</div><h2>Start with today's bottleneck.</h2></div>
+            <p>Shop keeps the counter and the owner in sync. Plant keeps the floor, shift, quality, and maintenance work visible. Both are designed for the people doing the work, not another reporting layer.</p>
+          </div>
+          <div class="home-lanes">
+            <article class="home-lane">
+              <div class="home-lane-copy">
+                <div class="eyebrow">Shop</div>
+                <h3>Sell cleanly. Close confidently.</h3>
+                <p>Orders, payments, stock, customers, and the owner closeout live together so the team can move fast without leaving the proof behind.</p>
+                <ul><li>Payment evidence and unresolved review in one queue.</li><li>Low-stock attention and supplier order planning.</li><li>Daily close with counted cash and a visible variance.</li></ul>
+                <a class="btn secondary" href="https://app.supermega.dev/?demo=shop">See Shop live</a>
+              </div>
+              <figure><img src="/site/shots/actual-restaurant-overview.png" alt="Shop overview with sales, payment review, stock risks, and AI readiness" loading="eager" width="1200" height="910" /></figure>
+            </article>
+            <article class="home-lane">
+              <div class="home-lane-copy">
+                <div class="eyebrow">Plant</div>
+                <h3>Make the next shift obvious.</h3>
+                <p>Production, quality, assets, and maintenance stay connected to the machine and the person who owns the next move.</p>
+                <ul><li>Shift handoff packets with actions, owners, and due shifts.</li><li>Machine evidence, issues, and follow-up in one thread.</li><li>Floor signals that stay honest when the cloud is not ready.</li></ul>
+                <a class="btn secondary" href="https://app.supermega.dev/?demo=plant">See Plant live</a>
+              </div>
+              <figure><img src="/site/shots/actual-factory-overview.png" alt="Plant workspace showing assets, current state, anomalies, and manager actions" loading="eager" width="1200" height="910" /></figure>
+            </article>
+          </div>
+        </section>
+
+        <section class="home-section">
+          <div class="home-ai">
+            <div><div class="eyebrow">The useful AI layer</div><h2>Less chasing. More running.</h2><p>When a workflow is stable, SuperMega can help read the source, prepare the brief, surface the exception, or draft the next action. People still control approvals, writes, and external messages.</p><div class="cta"><a class="btn primary" href="/contact/?from=ai-workflow">Start with one workflow</a></div></div>
+            <div class="home-ai-list"><div><strong>Read</strong><span>Turn approved messages, files, photos, and spreadsheets into structured records.</span></div><div><strong>Prioritize</strong><span>Put the unresolved work, owner, evidence, and next decision where the team can see it.</span></div><div><strong>Act with control</strong><span>Draft first, approve next, and keep an audit trail before anything is sent or written back.</span></div></div>
+          </div>
+        </section>
+
+        <section class="home-section">
+          <div class="home-cta">
+            <div><div class="eyebrow">Start simply</div><h2>Show us the work that keeps getting chased.</h2><p>We will help you choose the smallest useful first lane, set up the demo, and define the proof that makes it worth keeping.</p></div>
+            <div class="cta"><a class="btn primary" href="/contact/?from=homepage-cta">Contact SuperMega</a><a class="btn secondary" href="https://app.supermega.dev/?demo=shop">Open app</a></div>
+          </div>
+        </section>
+      </main>
+      <footer><span>SUPERMEGA.dev | Operating software for real work.</span><span class="footer-links"><a href="/contact/">Contact</a><a href="https://app.supermega.dev/?demo=shop">Open app</a><a href="/privacy/">Privacy</a></span></footer>
+    </div>
+${publicRuntimeScripts}
+  </body>
+</html>`
+
 const unicornProductsHtml = `<!doctype html>
 <html lang="en">
   <head>
@@ -4762,7 +4955,7 @@ ${unicornHeader}
             <p>Two simple apps, built for the way your business really runs. Retail OS for your shop. Factory OS for your factory floor. Start free; add AI and data features when you need them.</p>
             <div class="cta">
               <a class="btn primary" href="/contact/">Start free</a>
-              <a class="btn secondary" href="/offers/">Pricing</a>
+              <a class="btn secondary" href="/contact/?from=work">Talk to us</a>
             </div>
           </div>
           <aside class="product-stage">
@@ -5796,7 +5989,7 @@ await rm(outputDir, { recursive: true, force: true, maxRetries: 8, retryDelay: 2
 await mkdir(outputDir, { recursive: true })
 await copyPublicStatic(resolve(root, 'api-static'), staticDir)
 // Brand favicon is owned here (revert-proof against OneDrive restoring the old file): Capsule Forge mark.
-await writeFile(resolve(staticDir, 'favicon.svg'), `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="supermega"><rect x="4" y="4" width="56" height="56" rx="15" fill="#111731"/><rect x="4.75" y="4.75" width="54.5" height="54.5" rx="14.25" fill="none" stroke="#ffffff" stroke-opacity="0.10"/><path d="M21 23 L31.5 32 L21 41" fill="none" stroke="#3B82F6" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><path d="M35 41 L47 41" fill="none" stroke="#3B82F6" stroke-width="5" stroke-linecap="round"/></svg>\n`, 'utf8')
+await writeFile(resolve(staticDir, 'favicon.svg'), `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="supermega"><rect x="4" y="4" width="56" height="56" rx="15" fill="#111731"/><rect x="4.75" y="4.75" width="54.5" height="54.5" rx="14.25" fill="none" stroke="#ffffff" stroke-opacity="0.10"/><path d="M21 23 L31.5 32 L21 41" fill="none" stroke="#3B82F6" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><path d="M35 41 L47 41" fill="none" stroke="#62F5B0" stroke-width="5" stroke-linecap="round"/></svg>\n`, 'utf8')
 for (const entry of await readdir(resolve(staticDir, 'site')).catch(() => [])) {
   if (/\.json$/i.test(entry)) {
     await rm(resolve(staticDir, 'site', entry), { force: true })
@@ -5874,10 +6067,10 @@ for (const entry of await readdir(staticDir, { withFileTypes: true })) {
     await rm(resolve(staticDir, entry.name), { recursive: true, force: true, maxRetries: 8, retryDelay: 250 })
   }
 }
-await writeFile(resolve(staticDir, 'index.html'), normalizePublicProductNames(unicornPublicShellHtml), 'utf8')
+await writeFile(resolve(staticDir, 'index.html'), normalizePublicProductNames(unicornPublicHomeHtml), 'utf8')
 await writeFile(resolve(staticDir, '404.html'), `<!doctype html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="robots" content="noindex,nofollow" /><title>Page not found | SUPERMEGA.dev</title><meta name="theme-color" content="#07111f" /><link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" /><style>${unicornShellStyle}</style></head><body><div class="wrap">${unicornHeader}<main><section class="poster" style="min-height:58vh;align-items:center"><div class="copy"><div class="eyebrow">404</div><h1>Page not found.</h1><p>That page doesn’t exist. Head back home, or see what we build.</p><div class="cta"><a class="btn primary" href="/">Home</a><a class="btn secondary" href="/products/">Products</a></div></div></section></main></div></body></html>`, 'utf8')
 await mkdir(resolve(staticDir, 'products'), { recursive: true })
-await writeFile(resolve(staticDir, 'products', 'index.html'), normalizePublicProductNames(unicornProductsHtml), 'utf8')
+await writeFile(resolve(staticDir, 'products', 'index.html'), publicRedirectHtml('https://app.supermega.dev/?demo=shop', 'Open Shop'), 'utf8')
 // Premium product detail pages (one per product, data-driven, shares the brand shell)
 const productDetailDocs = [
   {
@@ -6643,17 +6836,18 @@ ${publicRuntimeScripts}
 
 for (const detailDoc of productDetailDocs) {
   await mkdir(resolve(staticDir, 'products', detailDoc.slug), { recursive: true })
-  await writeFile(resolve(staticDir, 'products', detailDoc.slug, 'index.html'), normalizePublicProductNames(buildProductDetailHtml(detailDoc)), 'utf8')
+  const target = detailDoc.slug === 'factory' ? 'https://app.supermega.dev/?demo=plant' : detailDoc.slug === 'pos' ? 'https://app.supermega.dev/?demo=shop' : '/contact/?from=workflow'
+  await writeFile(resolve(staticDir, 'products', detailDoc.slug, 'index.html'), publicRedirectHtml(target, detailDoc.slug === 'factory' ? 'Open Plant' : detailDoc.slug === 'pos' ? 'Open Shop' : 'Start a workflow'), 'utf8')
 }
 await mkdir(resolve(staticDir, 'agent-templates'), { recursive: true })
-await writeFile(resolve(staticDir, 'agent-templates', 'index.html'), normalizePublicProductNames(buildAgentTemplateIndexHtml()), 'utf8')
+await writeFile(resolve(staticDir, 'agent-templates', 'index.html'), publicRedirectHtml('/contact/?from=workflow', 'Start with one workflow'), 'utf8')
 await mkdir(resolve(staticDir, 'ai-agents', 'guide'), { recursive: true })
-await writeFile(resolve(staticDir, 'ai-agents', 'guide', 'index.html'), normalizePublicProductNames(buildAiWorkerUserGuideHtml()), 'utf8')
+await writeFile(resolve(staticDir, 'ai-agents', 'guide', 'index.html'), publicRedirectHtml('/contact/?from=workflow', 'Start with one workflow'), 'utf8')
 for (const kit of publicAgentTemplateStarterKits) {
   await mkdir(resolve(staticDir, 'agent-templates', kit.id), { recursive: true })
-  await writeFile(resolve(staticDir, 'agent-templates', kit.id, 'index.html'), normalizePublicProductNames(buildAgentTemplatePageHtml(kit)), 'utf8')
+  await writeFile(resolve(staticDir, 'agent-templates', kit.id, 'index.html'), publicRedirectHtml('/contact/?from=workflow', 'Start with one workflow'), 'utf8')
   await mkdir(resolve(staticDir, 'agent-templates', kit.id, 'setup'), { recursive: true })
-  await writeFile(resolve(staticDir, 'agent-templates', kit.id, 'setup', 'index.html'), normalizePublicProductNames(buildAgentTemplateSetupHtml(kit)), 'utf8')
+  await writeFile(resolve(staticDir, 'agent-templates', kit.id, 'setup', 'index.html'), publicRedirectHtml('/contact/?from=workflow', 'Start with one workflow'), 'utf8')
 }
 
 // Offers / pricing — the revenue surface. Public "from" prices in MMK only, read from pricing.json. Rate: 4,300 MMK/USD (canonical). No USD on public pages.
@@ -6800,12 +6994,12 @@ ${publicRuntimeScripts}
 await mkdir(resolve(staticDir, 'contact'), { recursive: true })
 await writeFile(resolve(staticDir, 'contact', 'index.html'), normalizePublicProductNames(collapsedContactHtml), 'utf8')
 await mkdir(resolve(staticDir, 'free'), { recursive: true })
-await writeFile(resolve(staticDir, 'free', 'index.html'), publicRedirectHtml('/products/', 'See the two apps'), 'utf8')
+await writeFile(resolve(staticDir, 'free', 'index.html'), publicRedirectHtml('https://app.supermega.dev/?demo=shop', 'Open Shop'), 'utf8')
 await mkdir(resolve(staticDir, 'offers'), { recursive: true })
-await writeFile(resolve(staticDir, 'offers', 'index.html'), normalizePublicProductNames(publicOffersHtml), 'utf8')
+await writeFile(resolve(staticDir, 'offers', 'index.html'), publicRedirectHtml('/contact/?from=offers', 'Talk to us'), 'utf8')
 await mkdir(resolve(staticDir, 'ai-agents'), { recursive: true })
-// AI agents index is not a standalone product page. Redirect to the two-suite products page.
-await writeFile(resolve(staticDir, 'ai-agents', 'index.html'), publicRedirectHtml('/products/', 'See our two apps'), 'utf8')
+// Keep the legacy path useful without presenting a separate agent product.
+await writeFile(resolve(staticDir, 'ai-agents', 'index.html'), publicRedirectHtml('/contact/?from=workflow', 'Start with one workflow'), 'utf8')
 
 // Work / case studies — public proof. Honest, de-identified real builds (live products + client systems).
 const publicWorkCases = [
@@ -6815,7 +7009,7 @@ const publicWorkCases = [
     story: 'Counter staff were juggling cash, KBZPay, AYA Pay, and MMQR with no clean way to reconcile at the end of the day. We built DeskPOS: ring up orders, take any payment with the slip attached, track stock, and close the day with the drawer counted against expected sales — even when the internet drops.',
     built: ['Fast counter checkout, priced in MMK', 'Every payment method, with proof attached', 'Offline-first — syncs when the line returns', 'One-tap daily cash-up and owner digest'],
     proof: 'Live and open — try the full point-of-sale and daily-close flow with realistic Myanmar shop data, no signup.',
-    cta: { label: 'Try it live ↗', href: 'https://pos.supermega.dev/', ext: true },
+    cta: { label: 'Open Shop', href: 'https://app.supermega.dev/?demo=shop', ext: false },
   },
   {
     eyebrow: 'Manufacturing · Client build',
@@ -6823,7 +7017,7 @@ const publicWorkCases = [
     story: 'A Myanmar manufacturer ran production, quality, and maintenance on shop-floor log books and scattered Excel files. We built one system: capture on the floor (bilingual, works offline), grade inspections with a live reject rate, turn defects into owned corrective actions, and give the plant manager one daily brief.',
     built: ['Line and shift production vs. target', 'Inspections and defects with a live reject rate', '5W1H incidents → owned CAPA with due dates', 'Maintenance work orders + a daily plant-manager brief'],
     proof: 'Built around real factory operating data — line targets, defect taxonomy, grading rules, and CAPA owners.',
-    cta: { label: 'See how it works', href: '/products/factory/', ext: false },
+    cta: { label: 'Open Plant', href: 'https://app.supermega.dev/?demo=plant', ext: false },
   },
 ]
 const publicWorkHtml = `<!doctype html>
@@ -6887,7 +7081,7 @@ ${unicornHeader}
                 <h2>${c.headline}</h2>
                 <p class="wk-story">${c.story}</p>
                 <div class="wk-proof">${c.proof}</div>
-                <a class="btn primary" href="${c.cta.href}"${c.cta.ext ? ' target="_blank" rel="noopener noreferrer"' : ''}>${c.cta.label}</a>
+                <a class="btn primary" href="${c.cta.href}">${c.cta.label}</a>
               </div>
               <div>
                 <p class="wk-built-label">What we built</p>
@@ -10109,15 +10303,6 @@ await writeFile(resolve(staticDir, 'robots.txt'), 'User-agent: *\nAllow: /\nDisa
 await writeFile(resolve(staticDir, 'sitemap.xml'), '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>https://supermega.dev/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>\n  <url><loc>https://supermega.dev/products/</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/products/pos/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/products/factory/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/products/documents/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/ai-agents/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/</loc><changefreq>weekly</changefreq><priority>0.85</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/deskpos-quickstart/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/chat-ledger/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/inbox-calendar-operator/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/daily-intelligence-brief/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/factory-ops-ledger/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/data-clean-report-agent/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/offers/</loc><changefreq>weekly</changefreq><priority>0.95</priority></url>\n  <url><loc>https://supermega.dev/work/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/contact/</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/card/</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>\n  <url><loc>https://supermega.dev/privacy/</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>\n</urlset>\n', 'utf8')
 const publicSitemapUrls = [
   ['/', 'weekly', '1.0'],
-  ['/products/', 'weekly', '0.9'],
-  ['/products/pos/', 'weekly', '0.8'],
-  ['/products/factory/', 'weekly', '0.8'],
-  ['/products/documents/', 'weekly', '0.8'],
-  ['/ai-agents/', 'weekly', '0.8'],
-  ['/ai-agents/guide/', 'weekly', '0.82'],
-  ['/agent-templates/', 'weekly', '0.85'],
-  ...publicAgentTemplateStarterKits.map((kit) => [kit.contact_url.replace('/contact/?template=', '/agent-templates/') + '/', 'weekly', '0.72']),
-  ['/offers/', 'weekly', '0.95'],
   ['/work/', 'weekly', '0.8'],
   ['/contact/', 'monthly', '0.9'],
   ['/card/', 'monthly', '0.6'],

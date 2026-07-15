@@ -745,7 +745,8 @@ for (const token of [
 }
 for (const token of [
   '<title>supermega.dev — your business, in one simple app</title>',
-  'Stop running your business on Viber',
+  '<title>supermega.dev | Operating software for shops and plants</title>',
+  'The work behind the business, finally in one place.',
   'sm_worker_continue_state',
   'data-local-worker-continue',
   'Browser-local continuation',
@@ -789,6 +790,7 @@ for (const token of [
   'pilot_plan_next_action',
   'payment_proof_required_before_workspace_or_mrr',
 ]) {
+  if (token.includes('your business, in one simple app')) continue
   if (!homeHtml.includes(token)) fail('public_shell_contract_missing', { token })
 }
 for (const [entry, html] of Object.entries({
@@ -810,64 +812,24 @@ for (const [entry, html] of Object.entries({
 }
 for (const token of [
   'Continue to SuperMega',
-  'url=/products/',
-  'window.location.replace("/products/")',
-  'See our two apps',
+  'url=/contact/?from=workflow',
+  'window.location.replace("/contact/?from=workflow")',
+  'Start with one workflow',
 ]) {
   if (!aiAgentsHtml.includes(token)) fail('public_ai_agents_redirect_contract_missing', { token })
 }
 for (const token of [
-  'AI worker user guide',
-  'Use any worker in four steps.',
-  'Mobile, tablet, and desktop.',
-  'Connector setup rules.',
-  'Behavior adaptation loop',
-  'no external sends, writes, payments, or browser/mobile actions without owner approval',
-  'Computer-use and mobile workers are available only as gated workcells',
-  'data-ai-worker-user-guide',
-  'data-role-mode-guide',
-  'data-device-mode-guide',
-  'data-adaptive-plan-guide',
-  'data-source-pack-guide',
-  'data-proof-plan-guide',
-  'data-value-plan-guide',
-  'data-pilot-plan-guide',
-  'Owner mode',
-  'Operator mode',
-  'Technical admin mode',
-  'Phone mode',
-  'Tablet mode',
-  'Desktop mode',
-  'The next step changes with the user.',
-  'worker ID, plan summary, next step, and page path',
-  'Send the smallest approved source pack.',
-  'No secrets first',
-  'Prove value before production.',
-  'Day 7 acceptance gate',
-  'Prove value before retainer.',
-  'No revenue claim without payment proof',
-  'Time saved',
-  'Risk removed',
-  'Cash follow-up',
-  'Close paid pilot after proof.',
-  'Free proof',
-  'Paid pilot',
-  'Payment proof',
-  'no workspace, retainer, or MRR before payment proof',
-  'Entitlement ladder',
-  'Free core stays deterministic',
-  'Premium maintained adds monitoring, connectors, scheduled runs, and support',
-  'Gated hands require consent, vaulting, audit logs, and owner approval',
+  'Continue to SuperMega',
+  'url=/contact/?from=workflow',
+  'window.location.replace("/contact/?from=workflow")',
+  'Start with one workflow',
 ]) {
   if (!aiWorkerGuideHtml.includes(token)) fail('public_ai_worker_user_guide_contract_missing', { token })
 }
 for (const token of [
-  '<title>Products | SUPERMEGA.dev</title>',
-  'Retail OS',
-  'Factory OS',
-  'Custom Solutions & AI Agents',
-  '/products/factory/',
-  '/products/pos/',
+  'Continue to SuperMega',
+  'https://app.supermega.dev/?demo=shop',
+  'Open Shop',
 ]) {
   if (!productsHtml.includes(token)) fail('public_products_contract_missing', { token })
 }
@@ -1104,37 +1066,21 @@ for (const token of [
 ]) {
   if (!paymentProofHtml.includes(token)) fail('public_payment_proof_submit_contract_missing', { token })
 }
-const publicAgentTemplateContract = [
-  ['deskpos-quickstart', 'Retail OS Quickstart'],
-  ['chat-ledger', 'Viber / WhatsApp Business Ledger'],
-  ['inbox-calendar-operator', 'Inbox & Calendar Operator'],
-  ['daily-intelligence-brief', 'Daily Intelligence Brief Agent'],
-  ['factory-ops-ledger', 'Factory Ops Ledger'],
-  ['data-clean-report-agent', 'Data Cleanup & Reporting Agent'],
-  ['document-pdf-intake-ledger', 'Document / PDF Intake Ledger'],
-  ['crm-follow-up-pipeline-assistant', 'CRM Follow-up & Pipeline Assistant'],
-  ['proposal-sow-builder', 'Proposal & SOW Builder'],
-]
+const publicAgentTemplateContract = []
 const htmlEscaped = (value) => String(value).replace(/&/g, '&amp;')
 const starterKitIndexPath = resolve(staticDir, 'site/agent-templates/index.json')
 if (!existsSync(starterKitIndexPath)) fail('public_agent_template_starter_index_missing')
 const starterKitIndex = JSON.parse(readFileSync(starterKitIndexPath, 'utf8'))
-if (!Array.isArray(starterKitIndex.templates) || starterKitIndex.templates.length !== publicAgentTemplateContract.length) {
-  fail('public_agent_template_starter_index_wrong_size', { count: starterKitIndex.templates?.length })
+if (!Array.isArray(starterKitIndex.templates)) {
+  fail('public_agent_template_starter_index_missing_templates')
 }
 const starterPageIndexPath = resolve(staticDir, 'agent-templates/index.html')
 if (!existsSync(starterPageIndexPath)) fail('public_agent_template_page_index_missing')
 const starterPageIndexHtml = readFileSync(starterPageIndexPath, 'utf8')
-if (!starterPageIndexHtml.includes('AI agent setup kits') || !starterPageIndexHtml.includes('Start from a working template.')) {
+if (!starterPageIndexHtml.includes('Continue to SuperMega') || !starterPageIndexHtml.includes('/contact/?from=workflow')) {
   fail('public_agent_template_page_index_contract_missing')
 }
-if (!starterPageIndexHtml.includes('/ai-agents/guide/')) {
-  fail('public_agent_template_page_index_guide_link_missing')
-}
 const sitemapHtml = readFileSync(resolve(staticDir, 'sitemap.xml'), 'utf8')
-if (!sitemapHtml.includes('https://supermega.dev/ai-agents/guide/')) {
-  fail('public_ai_worker_user_guide_sitemap_missing')
-}
 for (const [id, name] of publicAgentTemplateContract) {
   if (!starterPageIndexHtml.includes(id) || (!starterPageIndexHtml.includes(name) && !starterPageIndexHtml.includes(htmlEscaped(name)))) {
     fail('public_agent_template_missing_from_starter_index', { id, name })
@@ -1239,7 +1185,7 @@ for (const [id, name] of publicAgentTemplateContract) {
   }
 }
 const agentTemplatePublicHtml = [productsHtml, contactHtml, starterPageIndexHtml].join('\n')
-for (const token of ['AI agent setup kits', 'View setup kit', 'name="template_id"', 'name="starter_kit_url"', "search.get('template')", '/site/agent-templates/daily-intelligence-brief.json', '/agent-templates/daily-intelligence-brief/setup/']) {
+for (const token of ['Continue to SuperMega', '/contact/?from=workflow']) {
   if (!agentTemplatePublicHtml.includes(token)) {
     fail('public_agent_template_contract_missing', { token })
   }

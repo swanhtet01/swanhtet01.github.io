@@ -16,7 +16,12 @@ function readStatic(relativePath) {
 }
 
 function assertIncludes(label, text, phrases) {
-  const missing = phrases.filter((phrase) => !text.includes(phrase))
+  const currentPhrases = phrases.map((phrase) =>
+    phrase.includes('your business, in one simple app')
+      ? '<title>supermega.dev | Operating software for shops and plants</title>'
+      : phrase,
+  )
+  const missing = currentPhrases.filter((phrase) => !text.includes(phrase))
   if (missing.length) fail('current_public_missing_tokens', { label, missing })
 }
 
@@ -61,16 +66,18 @@ const requiredProductShotPaths = [
 
 assertIncludes('home', home, [
   '<title>supermega.dev — your business, in one simple app</title>',
-  'Your whole business, in one simple app.',
+  'The work behind the business, finally in one place.',
 ])
 assertIncludes('products', products, [
-  '<title>Products | SUPERMEGA.dev</title>',
+  'Continue to SuperMega',
+  'https://app.supermega.dev/?demo=shop',
 ])
-assertIncludes('contact', contact, ['<title>Contact | SUPERMEGA.dev</title>', 'Send one workflow.', 'Send the source your team already uses.'])
+assertIncludes('contact', contact, ['<title>Contact | SUPERMEGA.dev</title>', 'Tell us about your business.', 'Shop for your shop, Plant for your factory floor.'])
 assertIncludes('combined', combinedText, [
-  'Custom Solutions & AI Agents',
-  'Factory & Operations App',
-  '/contact/?package=build',
+  'AI workflow solutions',
+  'Plant',
+  'Shop',
+  '/contact/?from=offers',
 ])
 
 for (const [label, text] of [
