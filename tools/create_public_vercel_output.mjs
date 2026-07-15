@@ -497,7 +497,7 @@ const homeHtml = documentHtml({
           <h1 id="portfolio-heading">Operational software, built to fit.</h1>
         </div>
         <div class="hero-side">
-          <p><strong class="hero-lead">Less chasing. More running.</strong> Start with working Shop or Plant software. If your work still lives in spreadsheets, messages, and handoffs, SuperMega shapes one useful path around the real operation and verifies it before handover.</p>
+          <p><strong class="hero-lead">Less chasing. More running.</strong> Open a working Shop or Plant workspace in one click. Run one real workflow, then keep the private workspace when your team is ready. If the standard path still does not fit, SuperMega shapes one useful route around the real operation and verifies it before handover.</p>
           <div class="hero-actions">
             <a class="btn primary" data-preview-open href="https://app.supermega.dev/?demo=shop">Try Shop live</a>
             <a class="btn secondary" href="/contact/">Talk to us</a>
@@ -521,7 +521,7 @@ const homeHtml = documentHtml({
   <section class="entry-section page-frame" id="workspaces" aria-labelledby="workspaces-heading">
     <div class="section-intro">
       <div><div class="eyebrow">Two working systems</div><h2 id="workspaces-heading">Start close to the real work.</h2></div>
-      <p>Open a live path first. Keep the private workspace when it proves useful to the people doing the work.</p>
+      <p>See the workflow before you commit. Keep the private workspace when it proves useful to the people doing the work.</p>
     </div>
     <div class="proof-strip" aria-label="How SuperMega starts">
       <div class="proof-item"><span>01 / WORKING</span><strong>Use working screens</strong><p>Shop and Plant demos open without an account. Explore one current workflow before you choose a path.</p></div>
@@ -538,7 +538,7 @@ const homeHtml = documentHtml({
     <div class="brief-inner page-frame">
       <div class="brief-intro">
         <div><div class="eyebrow">Beyond the standard</div><h2 id="brief-heading">Tell us where the workflow breaks.</h2></div>
-        <p>If one repeatable task depends on scattered files, repeated decisions, or awkward handoffs, send the real example. We will reply with the smallest useful system to prove first.</p>
+        <p>If one repeatable task depends on scattered files, repeated decisions, or awkward handoffs, send the real example. We will show the smallest useful system to prove first.</p>
       </div>
       <div class="brief-steps">
         <div class="brief-step"><span>01 / INPUT</span><strong>Show one real workflow</strong><p>Share the example, the people involved, and the current handoffs.</p></div>
