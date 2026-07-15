@@ -142,6 +142,63 @@ function truncate(value, maxLength) {
   return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 3)}...` : normalized
 }
 
+function routingOutcome(result = {}) {
+  const outcome = {
+    status: truncate(result.status || 'unknown', 80),
+  }
+  for (const key of ['reason', 'adapter']) {
+    const value = truncate(result[key], 120)
+    if (value) outcome[key] = value
+  }
+  for (const key of ['code', 'lead_count']) {
+    if (Number.isFinite(result[key])) outcome[key] = result[key]
+  }
+  if (typeof result.duplicate === 'boolean') outcome.duplicate = result.duplicate
+  return outcome
+}
+
+function buildContactRoutingEvent({
+  record = {},
+  ledger = {},
+  pipelineAction = {},
+  webhook = {},
+  shopPipeline = {},
+  opsIntake = {},
+  delivery = {},
+  confirmation = {},
+  telegram = {},
+  sheets = {},
+} = {}) {
+  return {
+    event: 'supermega.contact.routed',
+    version: 1,
+    reference: truncate(record.lead_id, 120),
+    task_reference: truncate(record.task_id, 120),
+    product_area: truncate(record.product_area || 'Custom workflow', 80),
+    template_id: truncate(record.template_id || 'custom', 120),
+    submitted_at: truncate(record.submitted_at, 40),
+    durable: ledger.status === 'ready' || pipelineAction.status === 'ready',
+    notified: delivery.status === 'ready',
+    sinks: {
+      lead_ledger: routingOutcome(ledger),
+      pipeline_action: routingOutcome(pipelineAction),
+      webhook: routingOutcome(webhook),
+      shop_pipeline: routingOutcome(shopPipeline),
+      ops_intake: routingOutcome(opsIntake),
+      owner_notification: routingOutcome(delivery),
+      requester_confirmation: routingOutcome(confirmation),
+      telegram: routingOutcome(telegram),
+      sheets: routingOutcome(sheets),
+    },
+  }
+}
+
+function emitContactRoutingEvent(input) {
+  const event = buildContactRoutingEvent(input)
+  console.info(JSON.stringify(event))
+  return event
+}
+
 function contactEntryIntent(payload = {}) {
   for (const value of [payload.page_path, payload.source_url]) {
     const raw = text(value)
@@ -2483,6 +2540,19 @@ async function handler(req, res) {
     appendToGoogleSheet({ record }),
   ])
 
+  emitContactRoutingEvent({
+    record,
+    ledger,
+    pipelineAction,
+    webhook,
+    shopPipeline,
+    opsIntake,
+    delivery,
+    confirmation,
+    telegram,
+    sheets,
+  })
+
   // Email is a notification layer — only fail hard if the lead was not saved anywhere
   const leadSaved = ledger.status === 'ready' || pipelineAction.status === 'ready'
   if (delivery.status !== 'ready' && !leadSaved) {
@@ -2553,6 +2623,7 @@ handler.__test = {
   publicContactStatus,
   contactDiagnostics,
   hasStatusDiagnosticsAccess,
+  buildContactRoutingEvent,
   publicSubmissionReceipt,
   publicSubmissionFailure,
   receiptHtml,
