@@ -1,5 +1,6 @@
 import { cp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
+import { build } from 'esbuild'
 
 const root = process.cwd()
 const outputDir = resolve(root, '.vercel', 'output')
@@ -886,6 +887,25 @@ async function writeNodeFunction(name) {
   await cp(resolve(root, 'api', name), resolve(functionDir, 'api', name), { force: true })
   await cp(resolve(root, 'api', 'lib'), resolve(functionDir, 'api', 'lib'), { recursive: true, force: true })
   await writeFile(resolve(functionDir, 'api', 'lib', 'supermega-datastore.js'), publicDatastoreShim, 'utf8')
+  if (name === 'contact-submissions.js') {
+    const blobEntry = resolve(functionDir, 'api', 'lib', 'vercel-blob-entry.mjs')
+    await writeFile(blobEntry, "export { get, list, put } from '@vercel/blob'\n", 'utf8')
+    await build({
+      entryPoints: [blobEntry],
+      outfile: resolve(functionDir, 'api', 'lib', 'vercel-blob-runtime.js'),
+      bundle: true,
+      platform: 'node',
+      target: 'node24',
+      format: 'cjs',
+      minify: true,
+      legalComments: 'none',
+      logLevel: 'silent',
+      alias: {
+        undici: resolve(root, 'node_modules', '@vercel', 'blob', 'dist', 'undici-browser.js'),
+      },
+    })
+    await rm(blobEntry, { force: true })
+  }
 
   await writeFile(resolve(functionDir, 'package.json'), `${JSON.stringify({ type: 'commonjs' }, null, 2)}\n`, 'utf8')
   await writeFile(

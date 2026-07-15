@@ -58,6 +58,9 @@ jobs:
           node-version: 24
           package-manager-cache: false
 
+      - name: Install locked public build dependencies
+        run: npm ci
+
       - name: Require production deploy credential
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}

@@ -11,6 +11,7 @@ pilot-data/*
 *.token.json
 *.service-account.json
 showroom/node_modules/
+node_modules/
 showroom/dist/
 showroom/.env*
 __pycache__/

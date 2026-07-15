@@ -104,6 +104,8 @@ for (const required of [
   'actions/setup-node@v6',
   'node-version: 24',
   'package-manager-cache: false',
+  'Install locked public build dependencies',
+  'npm ci',
   'VERCEL_ORG_ID: team_wI4l7ZgSxcEztQPSlCCYVeJ5',
   'VERCEL_PROJECT_ID: prj_Yaf0cZYbiFXcLkMcKaAm4alPWMhR',
   'vercel@56.1.0 pull --yes --environment=production',
@@ -117,8 +119,8 @@ for (const required of [
   if (!releaseWorkflow.includes(required)) fail(`public_release_workflow_missing_${required}`)
 }
 
-if (releaseWorkflow.includes('npm ci')) {
-  fail('public_release_must_not_require_missing_root_lockfile')
+if (!packageJson.devDependencies?.['@vercel/blob'] || !packageJson.devDependencies?.esbuild) {
+  fail('public_release_blob_bundle_dependencies_missing')
 }
 
 if (releaseWorkflow.includes('actions/checkout@')) {
@@ -135,6 +137,7 @@ if (/vercel(?:@\S+)? deploy --prod/.test(releaseWorkflow)) {
 
 const workflowOrder = [
   'Fetch exact canonical public source',
+  'npm ci',
   'vercel@56.1.0 pull --yes --environment=production',
   'npm run vercel:guard',
   'npm run public:prebuilt',
@@ -153,7 +156,9 @@ for (const required of [
   "method: 'GET'",
   'https://supermega.dev/',
   'https://www.supermega.dev/',
-  'contact/?from=ai-agent-solution',
+  'https://supermega.dev/contact/',
+  'href="/contact/?from=shop-workspace"',
+  'href="/contact/?from=plant-workspace"',
   '/api/health',
   '/api/contact-submissions/status',
   'writes_performed: false',
