@@ -41,19 +41,19 @@ if (!agents) fail('missing_public_ai_agents_output')
 if (!contact) fail('missing_public_contact_output')
 
 requireTokens('generator_two_suite_redesign', source, [
-  'Less chasing. More running.',
+  'Run the work.<br />Keep the proof.',
   "'Shop'",
   "'Plant'",
   'AI workflow solutions',
-  'Try Shop live',
-  'Try Plant live',
+  'Open Shop',
+  'Open Plant',
 ])
 
 requireTokens('home_two_suite_redesign', home, [
-  'Less chasing. More running.',
-  'Try Shop live',
-  'Try Plant live',
-  'Start a conversation',
+  'Run the work.<br />Keep the proof.',
+  'Open Shop',
+  'Open Plant',
+  'Talk to us',
 ])
 
 requireTokens('products_two_suite_redesign', products, [
@@ -75,9 +75,9 @@ requireTokens('agents_redirect_to_contact', agents, [
 ])
 
 requireTokens('contact_two_suite_intake', contact, [
-  'Tell us about your business.',
-  'Shop for your shop, Plant for your factory floor.',
-  'AI workflow solutions - from 11,000,000 MMK',
+  'Tell us what is stuck.',
+  'One short note is enough.',
+  'AI workflow solutions',
 ])
 
 const retiredPublicOfferTokens = [

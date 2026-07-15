@@ -372,16 +372,6 @@ const solutionRouteCatalog = [
     source_requests: ['daily production sheet', 'quality claim log', 'maintenance notes', 'machine or line list'],
     sales_motion: 'Sell a plant ledger pilot after the buyer accepts one read-only risk queue.',
   },
-  {
-    template_id: 'data-clean-report-agent',
-    package_name: 'Data Cleanup & Reporting Agent',
-    product_area: 'Custom Solutions & AI Agents',
-    delivery_lane: 'data_cleanup_workcell',
-    keywords: ['excel', 'spreadsheet', 'sheet', 'pdf', 'file', 'files', 'data', 'clean', 'cleanup', 'report', 'reconcile', 'extract', 'ocr', 'dashboard'],
-    first_proof_target: 'One messy file cleaned into the target table with exceptions highlighted and a short summary report.',
-    source_requests: ['one messy source file', 'target report format', 'validation rules', 'known exception examples'],
-    sales_motion: 'Sell a repeatable cleanup/reporting agent after one messy source becomes a clean, reviewed output.',
-  },
 ]
 
 function buildSolutionRoute(record = {}) {

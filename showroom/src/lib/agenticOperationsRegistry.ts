@@ -128,7 +128,7 @@ export const AGENTIC_OPERATIONS_REGISTRY: AgenticOperationUnit[] = [
     firstWorkflow: 'Menu/items, orders, payment proof, stock notes, shift handover, and daily close stay on one screen.',
     sourceContracts: ['menu-item', 'order-event', 'payment-proof', 'stock-note', 'daily-close'],
     modules: ['Menu Items', 'Orders and Payments', 'Payment Proof', 'Stock Notes', 'Daily Close'],
-    agentCrew: ['Menu Clerk', 'Payment Reconciler', 'Shift Reviewer', 'Owner Brief Writer'],
+    agentCrew: ['Menu Clerk', 'Shift Reviewer', 'Owner Brief Writer'],
     approvalGate: 'Payment claims, QR ordering, loyalty, and accounting export wait for review and reconciliation checks.',
     proofRoute: '/products/restaurant-pos-menu-inventory',
     appRoute: '/app/restaurant-pos',

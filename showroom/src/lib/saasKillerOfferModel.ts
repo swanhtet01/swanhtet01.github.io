@@ -181,7 +181,7 @@ export const SAAS_KILLER_SHOWCASE_LANES: SaasKillerShowcaseLane[] = [
     buyer: 'Owner, board operator, analyst, executive assistant',
     sellableProduct: 'A company memory that turns folders, notes, and sheets into cited reports and decisions.',
     firstWorkflow: 'Upload sources -> extract facts -> create brief -> assign owner actions.',
-    proof: 'File Cleanroom and Report Builder product outputs.',
+    proof: 'Source Review and Report Builder product outputs.',
     nextAction: 'Send one folder or weekly update package.',
     contactParam: 'data-room-to-board-pack',
   },

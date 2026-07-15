@@ -66,13 +66,13 @@ const requiredProductShotPaths = [
 
 assertIncludes('home', home, [
   '<title>supermega.dev — your business, in one simple app</title>',
-  'Less chasing. More running.',
+  'Run the work.<br />Keep the proof.',
 ])
 assertIncludes('products', products, [
   'Continue to SuperMega',
   'https://app.supermega.dev/?demo=shop',
 ])
-assertIncludes('contact', contact, ['<title>Contact | SUPERMEGA.dev</title>', 'Tell us about your business.', 'Shop for your shop, Plant for your factory floor.'])
+assertIncludes('contact', contact, ['<title>Contact | SUPERMEGA.dev</title>', 'Tell us what is stuck.', 'One short note is enough.'])
 assertIncludes('combined', combinedText, [
   'AI workflow solutions',
   'Plant',

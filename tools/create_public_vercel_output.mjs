@@ -270,12 +270,6 @@ const publicToolCopy = {
     input: 'company, sector, competitor, or question',
     output: 'brief, sources, risks, and next move',
   },
-  'document-intake-data-cleanroom': {
-    name: 'File Cleanroom',
-    tagline: 'Turn messy files into reviewable records and tasks.',
-    input: 'Drive folder, PDFs, CSV, screenshots, or email batch',
-    output: 'clean table, missing fields, and action list',
-  },
   'board-pack-report-builder': {
     name: 'Report Builder',
     tagline: 'Make a useful report from raw notes, sheets, and updates.',
@@ -284,7 +278,7 @@ const publicToolCopy = {
   },
 }
 
-const publicProductIds = ['market-intel-agent-room', 'document-intake-data-cleanroom', 'board-pack-report-builder']
+const publicProductIds = ['market-intel-agent-room', 'board-pack-report-builder']
 const publicProductIdSet = new Set(publicProductIds)
 
 function publicProductName(id, fallback) {
@@ -301,7 +295,6 @@ function crewForPublicAgentTemplate(template) {
     'inbox-calendar-operator': 'owner-brief',
     'daily-intelligence-brief': 'owner-brief',
     'factory-ops-ledger': 'owner-brief',
-    'data-clean-report-agent': 'read-my-chaos',
     'document-pdf-intake-ledger': 'read-my-chaos',
     'crm-follow-up-pipeline-assistant': 'outreach-draft',
     'proposal-sow-builder': 'outreach-draft',
@@ -393,7 +386,6 @@ function workerMatcherCatalogJson() {
     'inbox-calendar-operator': ['daily-ops', 'email-calendar', 'admin-ops', 'owner-founder', 'brief', 'follow-up'],
     'daily-intelligence-brief': ['daily-ops', 'email-calendar', 'owner-founder', 'brief', 'dashboard', 'reports'],
     'factory-ops-ledger': ['factory', 'factory-records', 'factory-team', 'dashboard', 'ledger', 'daily-ops'],
-    'data-clean-report-agent': ['documents', 'spreadsheet-files', 'admin-ops', 'reports', 'ledger', 'dashboard', 'professional-services'],
     'document-pdf-intake-ledger': ['documents', 'pdfs-docs', 'professional-services', 'admin-ops', 'ledger', 'reports'],
     'crm-follow-up-pipeline-assistant': ['sales-follow-up', 'email-calendar', 'chat-orders', 'sales-team', 'follow-up', 'ledger'],
     'proposal-sow-builder': ['sales-follow-up', 'scope-notes', 'professional-services', 'owner-founder', 'proposal'],
@@ -731,7 +723,7 @@ function publicToolsHtmlFromCatalog(catalog, agentRadar = {}, socialOAuth = {}) 
             <p>Start small. Send one source and get a brief, clean table, or report your team can use.</p>
             <div class="proof">
               <span>Market Intel</span>
-              <span>File Cleanroom</span>
+              <span>Source Review</span>
               <span>Report Builder</span>
             </div>
             <div class="actions" style="margin-top:24px">
@@ -924,13 +916,6 @@ function publicIntakeHtmlFromRouter(router) {
       pain: 'Research, competitors, or a decision need to become a short answer.',
       tool: 'market-intel-agent-room',
       prompt: 'I need a concise brief with sources, risks, and next moves.',
-    },
-    {
-      id: 'messy-files',
-      name: 'I have messy files.',
-      pain: 'PDFs, spreadsheets, screenshots, folders, or notes need to become reviewable records.',
-      tool: 'document-intake-data-cleanroom',
-      prompt: 'I have messy files, PDFs, spreadsheets, screenshots, or notes that need to become reviewable records and a review queue.',
     },
     {
       id: 'report',
@@ -2065,6 +2050,65 @@ const unicornShellStyle = `
       :root[data-theme="light"] .btn, :root[data-theme="light"] button { color: var(--ink); background: rgba(255,255,255,0.68); }
       :root[data-theme="light"] .btn.primary, :root[data-theme="light"] button { color: #fff; background: linear-gradient(135deg, #1d74e8, #0f9f9a); }
       :root[data-theme="light"] .final, :root[data-theme="light"] .home-hero, :root[data-theme="light"] .home-lane, :root[data-theme="light"] .home-ai, :root[data-theme="light"] .home-cta { background: rgba(255,255,255,0.68); border-color: rgba(20,35,34,0.14); }
+
+      /* 2026 public shell: quiet glass, strong type, and no decorative SaaS clutter. */
+      body { background: #070b12; color: #f6fbff; }
+      body::before {
+        opacity: 0.055;
+        background-image: linear-gradient(rgba(255,255,255,0.075) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.075) 1px, transparent 1px);
+        background-size: 72px 72px;
+        mask-image: linear-gradient(180deg, #000 0%, transparent 78%);
+      }
+      .wrap { width: min(1240px, calc(100% - 40px)); overflow: visible; }
+      header {
+        position: sticky;
+        top: 14px;
+        z-index: 20;
+        margin-top: 14px;
+        padding: 10px 12px;
+        border: 1px solid rgba(255,255,255,0.15);
+        border-radius: 16px;
+        background: rgba(10,16,26,0.74);
+        box-shadow: 0 18px 46px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.09);
+        backdrop-filter: blur(22px) saturate(125%);
+      }
+      .terminal-mark { width: 40px; height: 40px; border-radius: 11px; background: rgba(6,12,21,0.86); }
+      .brand-text strong { font-size: 17px; }
+      .btn, button {
+        min-height: 44px;
+        border-radius: 11px;
+        padding: 0 15px;
+        border-color: rgba(255,255,255,0.16);
+        background: rgba(255,255,255,0.055);
+        box-shadow: none;
+      }
+      .btn:hover, button:hover { transform: translateY(-2px); border-color: rgba(109,168,255,0.62); }
+      .btn.primary, button { background: #6da8ff; color: #07111f; box-shadow: 0 14px 30px rgba(109,168,255,0.20); }
+      .btn.primary:hover, button:hover { background: #83b6ff; }
+      .poster { min-height: min(660px, calc(100svh - 88px)); padding: 84px 0 82px; border-bottom: 1px solid var(--line); }
+      .section { padding: 86px 0; border-top: 1px solid var(--line); }
+      .section > h2 { margin-bottom: 28px; }
+      .final { border: 1px solid rgba(255,255,255,0.16); border-radius: 14px; background: rgba(255,255,255,0.055); box-shadow: 0 24px 64px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.08); backdrop-filter: blur(18px); }
+      footer { display: flex; justify-content: space-between; gap: 20px; align-items: center; padding: 26px 0 42px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+      footer .footer-links { display: flex; flex-wrap: wrap; gap: 16px; }
+      footer a:hover { color: var(--text); }
+      .feature, .wk-case, .of-card, .proof-card, .case, .output, .setup-card, .market-card { border-radius: 12px; box-shadow: 0 24px 64px rgba(0,0,0,0.16); }
+      .feature, .wk-case, .of-card { background: rgba(255,255,255,0.045); }
+      .reveal { transform: translateY(12px); }
+      :root[data-theme="light"] body { background: #f2f6f8; color: #142322; }
+      :root[data-theme="light"] body::before { background-image: linear-gradient(rgba(20,35,34,0.14) 1px, transparent 1px), linear-gradient(90deg, rgba(20,35,34,0.14) 1px, transparent 1px); }
+      :root[data-theme="light"] header { background: rgba(250,253,254,0.78); border-color: rgba(20,35,34,0.14); box-shadow: 0 18px 44px rgba(26,54,59,0.10), inset 0 1px 0 rgba(255,255,255,0.90); }
+      :root[data-theme="light"] .terminal-mark { background: rgba(235,242,247,0.88); border-color: rgba(20,35,34,0.13); }
+      :root[data-theme="light"] .btn, :root[data-theme="light"] button { color: #142322; border-color: rgba(20,35,34,0.16); background: rgba(255,255,255,0.64); }
+      :root[data-theme="light"] .btn.primary, :root[data-theme="light"] button { color: #fff; background: #1d74e8; border-color: transparent; }
+      :root[data-theme="light"] .final, :root[data-theme="light"] .feature, :root[data-theme="light"] .wk-case, :root[data-theme="light"] .of-card { background: rgba(255,255,255,0.72); border-color: rgba(20,35,34,0.14); box-shadow: 0 24px 64px rgba(26,54,59,0.09), inset 0 1px 0 rgba(255,255,255,0.88); }
+      @media (max-width: 760px) {
+        .wrap { width: min(100% - 28px, 1240px); }
+        header { top: 8px; margin-top: 8px; }
+        .poster { min-height: auto; padding: 64px 0 56px; }
+        .section { padding: 62px 0; }
+        footer { align-items: flex-start; flex-direction: column; }
+      }
 `
 
 const unicornHeader = `
@@ -4691,66 +4735,71 @@ const unicornPublicHomeHtml = `<!doctype html>
     <link rel="manifest" href="/site.webmanifest?v=supermega-terminal-20260715" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="SUPERMEGA.dev" />
-    <meta property="og:title" content="Operating software for shops and plants | SUPERMEGA.dev" />
+    <meta property="og:title" content="Run the work. Keep the proof. | SUPERMEGA.dev" />
     <meta property="og:description" content="Sell, close, hand off, and act on the work that normally gets lost in chat and spreadsheets." />
     <meta property="og:url" content="https://supermega.dev/" />
     <meta property="og:image" content="https://supermega.dev/site/shots/actual-shop-overview.png" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Operating software for shops and plants | SUPERMEGA.dev" />
+    <meta name="twitter:title" content="Run the work. Keep the proof. | SUPERMEGA.dev" />
     <meta name="twitter:description" content="Simple operating software with useful AI when the work is ready for it." />
     <meta name="twitter:image" content="https://supermega.dev/site/shots/actual-shop-overview.png" />
     <style>${unicornShellStyle}
-      .home-hero { display:grid; grid-template-columns:minmax(0,0.84fr) minmax(360px,1.16fr); gap:clamp(24px,5vw,72px); align-items:center; min-height:min(720px,calc(100svh - 76px)); margin:10px 0 0; padding:clamp(26px,4vw,52px); border:1px solid rgba(255,255,255,0.16); border-radius:34px; background:rgba(8,18,31,0.68); box-shadow:0 34px 100px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.12); backdrop-filter:blur(24px); overflow:hidden; }
-      .home-copy { max-width:590px; }
-      .home-hero h1 { max-width:16ch; margin:16px 0 20px; color:var(--text); font-family:var(--font-serif); font-size:clamp(40px,4.8vw,60px); line-height:1.04; letter-spacing:0; }
-      .home-hero p { max-width:40rem; font-size:clamp(17px,1.8vw,21px); line-height:1.52; letter-spacing:0; }
-      .home-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:28px; }
-      .home-actions .btn { min-height:50px; }
-      .home-hero-visual { display:grid; gap:10px; min-width:0; align-self:start; margin:0; padding:14px; border:1px solid rgba(255,255,255,0.15); border-radius:28px; background:rgba(255,255,255,0.06); box-shadow:0 24px 70px rgba(0,0,0,0.24); }
-      .home-hero-visual img { display:block; width:100%; height:auto; border-radius:18px; background:#eef5f1; }
-      .home-figure-meta { display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap; padding:2px 4px 0; color:var(--muted); font-size:12px; font-weight:800; line-height:1.35; }
-      .home-figure-meta strong { color:var(--text); font-size:13px; }
+      .home-hero { position:relative; display:grid; grid-template-columns:minmax(0,0.88fr) minmax(420px,1.12fr); align-items:stretch; min-height:690px; margin:0; padding:0; border-top:1px solid rgba(255,255,255,0.16); border-bottom:1px solid rgba(255,255,255,0.16); background:#09111d; overflow:hidden; }
+      .home-copy { position:relative; z-index:2; align-self:center; max-width:650px; padding:84px 10% 84px 0; }
+      .home-hero h1 { max-width:8ch; margin:16px 0 22px; color:var(--text); font-family:var(--font-serif); font-size:76px; line-height:0.96; letter-spacing:-0.025em; }
+      .home-hero p { max-width:39rem; font-size:20px; line-height:1.5; letter-spacing:0; }
+      .home-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:30px; }
+      .home-actions .btn { min-height:48px; }
+      .home-hero-visual { position:relative; display:flex; flex-direction:column; justify-content:center; gap:14px; min-width:0; align-self:stretch; margin:0; padding:30px 0 30px 28px; border-left:1px solid rgba(255,255,255,0.14); background:rgba(255,255,255,0.035); }
+      .home-hero-visual img { display:block; width:100%; height:auto; max-height:560px; object-fit:contain; border:1px solid rgba(255,255,255,0.18); border-radius:10px; background:#f7faf8; box-shadow:0 30px 78px rgba(0,0,0,0.34); }
+      .home-figure-meta { display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap; padding:12px 2px 0; border-top:1px solid rgba(255,255,255,0.14); color:var(--muted); font-size:11px; font-weight:800; line-height:1.35; letter-spacing:0.08em; text-transform:uppercase; }
+      .home-figure-meta strong { color:var(--text); font-size:12px; }
       .home-proof { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:0; margin-top:32px; border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
       .home-proof div { padding:15px 16px 14px 0; border-right:1px solid var(--line); }
       .home-proof div:not(:first-child) { padding-left:16px; }
       .home-proof div:last-child { border-right:0; }
       .home-proof strong { display:block; color:var(--text); font-size:13px; }
       .home-proof span { display:block; margin-top:4px; color:var(--muted); font-size:12px; line-height:1.35; }
-      .home-section { border-top:1px solid var(--line); padding:clamp(56px,8vw,108px) 0; }
+      .home-section { border-top:1px solid var(--line); padding:92px 0; }
       .home-section-head { display:grid; grid-template-columns:minmax(0,0.8fr) minmax(0,1.2fr); gap:28px; align-items:end; margin-bottom:36px; }
-      .home-section-head h2 { max-width:13ch; font-size:clamp(34px,4.8vw,60px); line-height:1.04; letter-spacing:0; }
+      .home-section-head h2 { max-width:13ch; font-size:52px; line-height:1.02; letter-spacing:-0.02em; }
       .home-section-head p { max-width:39rem; font-size:18px; line-height:1.52; letter-spacing:0; }
-      .home-lanes { display:grid; gap:18px; }
-      .home-lane { display:grid; grid-template-columns:minmax(0,0.78fr) minmax(0,1.22fr); gap:clamp(24px,5vw,64px); align-items:center; padding:24px; border:1px solid rgba(255,255,255,0.15); border-radius:28px; background:rgba(255,255,255,0.06); box-shadow:inset 0 1px 0 rgba(255,255,255,0.08); }
+      .home-lanes { display:grid; gap:0; }
+      .home-lane { display:grid; grid-template-columns:minmax(0,0.78fr) minmax(0,1.22fr); gap:clamp(24px,5vw,64px); align-items:center; padding:34px 0 42px; border-top:1px solid var(--line); }
       .home-lane:nth-child(2) { grid-template-columns:minmax(0,1.22fr) minmax(0,0.78fr); }
       .home-lane:nth-child(2) .home-lane-copy { order:2; }
       .home-lane:nth-child(2) figure { order:1; }
-      .home-lane-copy h3 { margin:10px 0 14px; color:var(--text); font-size:clamp(27px,3.2vw,42px); line-height:1.08; letter-spacing:0; }
+      .home-lane-copy h3 { margin:10px 0 14px; color:var(--text); font-size:40px; line-height:1.08; letter-spacing:-0.02em; }
       .home-lane-copy p { max-width:34rem; font-size:16px; line-height:1.52; letter-spacing:0; }
       .home-lane-copy ul { display:grid; gap:10px; margin:20px 0 0; padding:0; list-style:none; }
       .home-lane-copy li { display:flex; gap:10px; align-items:flex-start; color:var(--muted); font-size:14px; line-height:1.45; }
       .home-lane-copy li::before { content:'>'; flex:none; color:#62F5B0; font-family:ui-monospace,monospace; font-weight:900; }
       .home-lane-copy .btn { margin-top:24px; }
-      .home-lane figure { min-width:0; margin:0; padding:10px; border:1px solid rgba(255,255,255,0.12); border-radius:22px; background:rgba(255,255,255,0.05); }
-      .home-lane figure img { display:block; width:100%; height:auto; border-radius:14px; background:#eef5f1; }
-      .home-ai { display:grid; grid-template-columns:minmax(0,0.82fr) minmax(0,1.18fr); gap:clamp(24px,5vw,72px); align-items:center; padding:clamp(26px,5vw,52px); border:1px solid rgba(98,245,176,0.22); border-radius:30px; background:rgba(20,54,50,0.32); }
+      .home-lane figure { min-width:0; margin:0; padding:0; border:0; background:transparent; }
+      .home-lane figure img { display:block; width:100%; height:auto; border:1px solid rgba(255,255,255,0.16); border-radius:10px; background:#eef5f1; box-shadow:0 26px 62px rgba(0,0,0,0.22); }
+      .home-ai { display:grid; grid-template-columns:minmax(0,0.82fr) minmax(0,1.18fr); gap:clamp(24px,5vw,72px); align-items:center; padding:0; border:0; border-top:1px solid rgba(98,245,176,0.22); border-bottom:1px solid rgba(98,245,176,0.22); border-radius:0; background:transparent; }
       .home-ai h2 { max-width:12ch; font-size:clamp(32px,4.4vw,54px); line-height:1.05; letter-spacing:0; }
       .home-ai p { max-width:38rem; font-size:17px; line-height:1.52; letter-spacing:0; }
       .home-ai-list { display:grid; gap:0; border-top:1px solid rgba(98,245,176,0.2); }
       .home-ai-list div { display:grid; grid-template-columns:minmax(130px,0.5fr) minmax(0,1fr); gap:20px; padding:16px 0; border-bottom:1px solid rgba(98,245,176,0.2); }
       .home-ai-list strong { color:#62F5B0; font-size:13px; }
       .home-ai-list span { color:var(--muted); font-size:14px; line-height:1.45; }
-      .home-cta { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:24px; align-items:center; padding:clamp(26px,5vw,48px); border:1px solid rgba(255,255,255,0.15); border-radius:30px; background:rgba(255,255,255,0.06); }
-      .home-cta h2 { max-width:16ch; font-size:clamp(31px,4vw,50px); line-height:1.05; letter-spacing:0; }
+      .home-cta { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:24px; align-items:center; padding:34px 0; border-top:1px solid rgba(255,255,255,0.16); border-bottom:1px solid rgba(255,255,255,0.16); }
+      .home-cta h2 { max-width:16ch; font-size:48px; line-height:1.05; letter-spacing:-0.02em; }
       .home-cta p { margin-top:12px; font-size:16px; line-height:1.5; letter-spacing:0; }
       .home-cta .cta { justify-content:flex-end; margin-top:0; }
-      :root[data-theme="light"] .home-hero, :root[data-theme="light"] .home-lane, :root[data-theme="light"] .home-ai, :root[data-theme="light"] .home-cta { border-color:rgba(20,35,34,0.14); background:rgba(255,255,255,0.68); box-shadow:0 24px 70px rgba(24,51,47,0.1), inset 0 1px 0 rgba(255,255,255,0.84); }
-      :root[data-theme="light"] .home-hero-visual, :root[data-theme="light"] .home-lane figure { border-color:rgba(20,35,34,0.12); background:rgba(255,255,255,0.58); }
+      :root[data-theme="light"] .home-hero { border-color:rgba(20,35,34,0.14); background:#e6eef3; }
+      :root[data-theme="light"] .home-lane, :root[data-theme="light"] .home-ai, :root[data-theme="light"] .home-cta { border-color:rgba(20,35,34,0.14); background:transparent; box-shadow:none; }
+      :root[data-theme="light"] .home-hero-visual { border-color:rgba(20,35,34,0.12); background:rgba(255,255,255,0.38); }
+      :root[data-theme="light"] .home-hero-visual img, :root[data-theme="light"] .home-lane figure img { border-color:rgba(20,35,34,0.13); box-shadow:0 26px 62px rgba(26,54,59,0.14); }
       :root[data-theme="light"] .home-ai { border-color:rgba(15,159,154,0.24); background:rgba(229,247,241,0.74); }
       :root[data-theme="light"] .home-ai-list, :root[data-theme="light"] .home-ai-list div { border-color:rgba(15,159,154,0.22); }
       @media (max-width:880px) {
         .home-hero, .home-lane, .home-lane:nth-child(2), .home-ai, .home-cta { grid-template-columns:1fr; }
-        .home-hero { min-height:auto; padding:24px; }
+        .home-hero { min-height:auto; }
+        .home-copy { padding:64px 0 52px; }
+        .home-hero-visual { padding:24px 0 28px; border-top:1px solid rgba(255,255,255,0.14); border-left:0; }
+        .home-hero h1 { font-size:64px; }
         .terminal-mark { width:38px; height:38px; border-radius:12px; }
         .brand-text, .brand-text .wm { display:none !important; }
         .home-lane:nth-child(2) .home-lane-copy, .home-lane:nth-child(2) figure { order:initial; }
@@ -4761,8 +4810,12 @@ const unicornPublicHomeHtml = `<!doctype html>
         .home-proof { grid-template-columns:1fr; }
         .home-proof div, .home-proof div:not(:first-child) { padding:12px 0; border-right:0; border-bottom:1px solid var(--line); }
         .home-proof div:last-child { border-bottom:0; }
-        .home-lane { padding:14px; border-radius:22px; }
-        .home-hero-visual { padding:8px; border-radius:22px; }
+        .home-lane { padding:28px 0 34px; }
+        .home-section-head h2 { font-size:42px; }
+        .home-lane-copy h3 { font-size:34px; }
+        .home-hero h1 { font-size:52px; }
+        .home-hero-visual { padding:18px 0 22px; }
+        .home-cta h2 { font-size:40px; }
         .home-ai-list div { grid-template-columns:1fr; gap:5px; }
         .home-actions .btn { flex:1 1 100%; }
       }
@@ -4774,18 +4827,18 @@ ${unicornHeader}
       <main>
         <section class="home-hero">
           <div class="home-copy">
-            <div class="eyebrow">&gt;_ operating software that fits the way work actually moves</div>
-            <h1>Less chasing. More running.</h1>
-            <p>SuperMega gives shops and plants one calm place to sell, run shifts, and close the loop — without asking your team to become software experts.</p>
+            <div class="eyebrow">&gt;_ operating software for work that moves</div>
+            <h1>Run the work.<br />Keep the proof.</h1>
+            <p>SuperMega gives shops and plants one calm system for selling, handoffs, and decisions - with useful AI that drafts, checks, and waits for approval.</p>
             <div class="home-actions">
-              <a class="btn primary" href="https://app.supermega.dev/?demo=shop">Try Shop live</a>
-              <a class="btn secondary" href="https://app.supermega.dev/?demo=plant">Try Plant live</a>
-              <a class="btn secondary" href="/contact/?from=homepage">Start a conversation</a>
+              <a class="btn primary" href="https://app.supermega.dev/?demo=shop">Open Shop</a>
+              <a class="btn secondary" href="https://app.supermega.dev/?demo=plant">Open Plant</a>
+              <a class="btn secondary" href="/contact/?from=homepage">Talk to us</a>
             </div>
             <div class="home-proof" aria-label="SuperMega operating model">
-              <div><strong>Built around your work</strong><span>Start with the Viber, files, and floor reality you already have.</span></div>
-              <div><strong>Proof that travels</strong><span>Owners see what happened and what comes next.</span></div>
-              <div><strong>AI with a brake pedal</strong><span>Draft, review, then automate the safe parts.</span></div>
+              <div><strong>Shop</strong><span>Sell, reconcile, restock, and close the day.</span></div>
+              <div><strong>Plant</strong><span>See the floor, hand off shifts, and resolve issues.</span></div>
+              <div><strong>AI, on your terms</strong><span>Draft first. Approve the action. Keep the audit trail.</span></div>
             </div>
           </div>
           <figure class="home-hero-visual">
@@ -4796,7 +4849,7 @@ ${unicornHeader}
 
         <section class="home-section">
           <div class="home-section-head">
-            <div><div class="eyebrow">Two places to start</div><h2>Fix the part of the day that keeps slipping.</h2></div>
+            <div><div class="eyebrow">Two places to start</div><h2>Start where the friction is.</h2></div>
             <p>Shop keeps the counter and the owner in sync. Plant keeps the floor, shift, quality, and maintenance work visible. Start with one bottleneck, prove the loop, and expand when the team is ready.</p>
           </div>
           <div class="home-lanes">
@@ -4804,7 +4857,7 @@ ${unicornHeader}
               <div class="home-lane-copy">
                 <div class="eyebrow">Shop</div>
                 <h3>Sell cleanly. Close confidently.</h3>
-                <p>Orders, payments, stock, customers, and the owner closeout live together so the team can move fast without leaving the proof behind.</p>
+                <p>Orders, payments, stock, customers, and owner closeout live together so the team can move fast without leaving the proof behind.</p>
                 <ul><li>Payment evidence and unresolved review in one queue.</li><li>Low-stock attention and supplier order planning.</li><li>Daily close with counted cash and a visible variance.</li></ul>
                 <a class="btn secondary" href="https://app.supermega.dev/?demo=shop">See Shop live</a>
               </div>
@@ -4813,7 +4866,7 @@ ${unicornHeader}
             <article class="home-lane">
               <div class="home-lane-copy">
                 <div class="eyebrow">Plant</div>
-                <h3>Hand off the next shift without the guessing.</h3>
+                <h3>Hand off the next shift without guessing.</h3>
                 <p>Production, quality, assets, and maintenance stay connected to the machine and the person who owns the next move.</p>
                 <ul><li>Shift handoff packets with actions, owners, and due shifts.</li><li>Machine evidence, issues, and follow-up in one thread.</li><li>Floor signals that stay honest when the cloud is not ready.</li></ul>
                 <a class="btn secondary" href="https://app.supermega.dev/?demo=plant">See Plant live</a>
@@ -4825,8 +4878,8 @@ ${unicornHeader}
 
         <section class="home-section">
           <div class="home-cta">
-            <div><div class="eyebrow">Start simply</div><h2>Bring us one messy workflow.</h2><p>We will map the first useful screen, the proof it needs, and the next decision. Then you can try it with your own team.</p></div>
-            <div class="cta"><a class="btn primary" href="/contact/?from=homepage-cta">Start with SuperMega</a><a class="btn secondary" href="https://app.supermega.dev/?demo=shop">Try the app</a></div>
+            <div><div class="eyebrow">Start simply</div><h2>Bring us the work that still lives in chat.</h2><p>We will map the first useful screen, the proof it needs, and the next decision. Then you can try it with your own team.</p></div>
+            <div class="cta"><a class="btn primary" href="/contact/?from=homepage-cta">Start with SuperMega</a><a class="btn secondary" href="https://app.supermega.dev/?demo=shop">Open the app</a></div>
           </div>
         </section>
       </main>
@@ -5400,7 +5453,142 @@ ${publicRuntimeScripts}
   </body>
 </html>`
 
-const collapsedContactHtml = unicornContactHtml
+const collapsedContactHtml = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="index,follow" />
+    <title>Contact | SUPERMEGA.dev</title>
+    <meta name="description" content="Tell SuperMega what is stuck. We will map the first useful Shop, Plant, or AI workflow step." />
+    <link rel="canonical" href="https://supermega.dev/contact/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="SUPERMEGA.dev" />
+    <meta property="og:title" content="Tell SuperMega what is stuck." />
+    <meta property="og:description" content="One short note is enough to start a useful Shop, Plant, or AI workflow conversation." />
+    <meta property="og:url" content="https://supermega.dev/contact/" />
+    <meta property="og:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
+    <meta name="theme-color" content="#07111f" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-terminal-20260715" />
+    <style>${unicornShellStyle}
+      .contact-shell { display:grid; grid-template-columns:minmax(0,0.86fr) minmax(360px,1.14fr); gap:clamp(34px,7vw,104px); align-items:center; min-height:calc(100svh - 102px); padding:86px 0 92px; }
+      .contact-copy { max-width:560px; }
+      .contact-copy h1 { max-width:8ch; margin:16px 0 22px; font-size:78px; line-height:.96; letter-spacing:-.025em; }
+      .contact-copy > p { max-width:39rem; font-size:20px; line-height:1.5; }
+      .contact-lines { display:grid; gap:0; margin-top:34px; border-top:1px solid var(--line); }
+      .contact-line { display:grid; grid-template-columns:110px minmax(0,1fr); gap:18px; padding:15px 0; border-bottom:1px solid var(--line); }
+      .contact-line strong { color:var(--blue); font-size:11px; font-weight:950; letter-spacing:.16em; text-transform:uppercase; }
+      .contact-line span { color:var(--muted); font-size:14px; line-height:1.42; }
+      .contact-direct { display:flex; flex-wrap:wrap; gap:9px; margin-top:24px; }
+      .contact-direct a { display:inline-flex; align-items:center; min-height:40px; padding:0 12px; border:1px solid var(--line); border-radius:10px; color:var(--text); font-size:12px; font-weight:800; }
+      .contact-direct a:hover { border-color:var(--blue); color:var(--blue); }
+      .contact-form { display:grid; gap:14px; padding:26px; border:1px solid rgba(255,255,255,.16); border-radius:14px; background:rgba(255,255,255,.055); box-shadow:0 26px 70px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.08); backdrop-filter:blur(20px) saturate(120%); }
+      .contact-form h2 { margin:0; font-size:28px; letter-spacing:-.02em; }
+      .contact-form > p { font-size:14px; line-height:1.45; }
+      .contact-form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+      .contact-form .wide { grid-column:1 / -1; }
+      .contact-form label { display:grid; gap:7px; color:var(--muted); font-size:11px; font-weight:900; letter-spacing:.14em; text-transform:uppercase; }
+      .contact-form input, .contact-form textarea, .contact-form select { width:100%; border:1px solid var(--line); border-radius:10px; background:rgba(4,10,18,.62); color:var(--text); padding:12px 13px; font:inherit; outline:none; }
+      .contact-form textarea { min-height:126px; resize:vertical; }
+      .contact-form input:focus, .contact-form textarea:focus, .contact-form select:focus { border-color:rgba(109,168,255,.72); box-shadow:0 0 0 4px rgba(109,168,255,.10); }
+      .contact-form button { width:100%; cursor:pointer; }
+      .contact-form button[disabled] { cursor:wait; opacity:.64; transform:none; }
+      .contact-status { min-height:20px; color:var(--muted); font-size:13px; line-height:1.35; }
+      .contact-boundary { color:var(--muted); font-size:12px; line-height:1.45; }
+      :root[data-theme="light"] .contact-form { background:rgba(255,255,255,.76); border-color:rgba(20,35,34,.14); box-shadow:0 26px 70px rgba(26,54,59,.11), inset 0 1px 0 rgba(255,255,255,.9); }
+      :root[data-theme="light"] .contact-form input, :root[data-theme="light"] .contact-form textarea, :root[data-theme="light"] .contact-form select { background:rgba(247,251,252,.92); color:#142322; border-color:rgba(20,35,34,.16); }
+      @media (max-width:900px) {
+        .contact-shell { grid-template-columns:1fr; min-height:auto; padding:64px 0 62px; }
+        .contact-copy h1 { font-size:64px; }
+      }
+      @media (max-width:560px) {
+        .contact-copy h1 { font-size:52px; }
+        .contact-copy > p { font-size:17px; }
+        .contact-form { padding:18px; }
+        .contact-form-grid { grid-template-columns:1fr; }
+        .contact-form .wide { grid-column:auto; }
+        .contact-line { grid-template-columns:86px minmax(0,1fr); gap:12px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+${unicornHeader}
+      <main class="contact-shell">
+        <section class="contact-copy" aria-label="Start a conversation">
+          <div class="eyebrow">Start a conversation</div>
+          <h1>Tell us what is stuck.</h1>
+          <p>One short note is enough. We will help you choose the first useful Shop, Plant, or AI workflow step and show what proof it should produce.</p>
+          <div class="contact-lines" aria-label="What SuperMega can help with">
+            <div class="contact-line"><strong>Shop</strong><span>Sell, reconcile, restock, and close the day.</span></div>
+            <div class="contact-line"><strong>Plant</strong><span>See the floor, hand off shifts, and resolve issues.</span></div>
+            <div class="contact-line"><strong>AI</strong><span>Turn one repeated task into a reviewable worker with an approval boundary.</span></div>
+          </div>
+          <div class="contact-direct" aria-label="Direct contact options">
+            <a href="viber://chat?number=%2B9595000721">Chat on Viber</a>
+            <a href="mailto:swanhtet@supermega.dev">Email us</a>
+            <a href="tel:+9595000721">Call</a>
+          </div>
+        </section>
+        <form class="contact-form" action="/api/contact-submissions" data-sm-lead-form enctype="multipart/form-data" method="post" aria-label="SuperMega contact form">
+          <input type="hidden" name="workflow" value="General enquiry" />
+          <input type="hidden" name="requested_package" value="General enquiry" />
+          <input type="hidden" name="first_output" value="First useful operating step" />
+          <input type="hidden" name="data" value="Public contact page" />
+          <input type="hidden" name="source_url" value="https://supermega.dev/contact/" />
+          <input type="hidden" name="page_path" value="/contact/" />
+          <input type="hidden" name="source_file_names" value="" />
+          <input type="hidden" name="source_file_count" value="0" />
+          <input type="hidden" name="first_step" value="Review the business context and reply with the first useful next step." />
+          <input type="hidden" name="access_policy" value="approval_required" />
+          <input type="hidden" name="workspace_status" value="not_created_until_approved" />
+          <input type="hidden" name="website" value="" />
+          <h2>Start with the bottleneck.</h2>
+          <p>Tell us what is happening now. You do not need a polished brief or a data connection.</p>
+          <div class="contact-form-grid">
+            <label>What should become easier?<select name="product_area"><option>Shop</option><option>Plant</option><option>AI workflow solutions</option></select></label>
+            <label>Company<input autocomplete="organization" name="company" required /></label>
+            <label>Name<input autocomplete="name" name="name" required /></label>
+            <label>Work email<input autocomplete="email" name="email" type="email" required /></label>
+            <label class="wide">Current system or source<input name="source_links" placeholder="Viber, spreadsheet, POS, machine log, email, or other source" /></label>
+            <label class="wide">What is stuck?<textarea name="goal" placeholder="Example: the owner cannot close the day, or the next shift cannot see what still needs attention." required></textarea></label>
+          </div>
+          <button type="submit">Send request</button>
+          <p class="contact-boundary">We reply with the first useful next step. No account, data connection, or automation starts before approval.</p>
+          <p class="contact-status" data-lead-status aria-live="polite"></p>
+        </form>
+      </main>
+      <footer><span>SUPERMEGA.dev | Operating software for real work.</span><span class="footer-links"><a href="https://app.supermega.dev/?demo=shop">Open app</a><a href="/privacy/">Privacy</a></span></footer>
+    </div>
+    <script>
+      const form = document.querySelector('[data-sm-lead-form]');
+      const status = document.querySelector('[data-lead-status]');
+      const query = new URLSearchParams(window.location.search);
+      const product = query.get('product') || query.get('package');
+      if (product && /plant|factory/i.test(product)) form.querySelector('[name="product_area"]').value = 'Plant';
+      if (product && /agent|workflow/i.test(product)) form.querySelector('[name="product_area"]').value = 'AI workflow solutions';
+      form.querySelector('[name="source_url"]').value = window.location.href;
+      form.querySelector('[name="page_path"]').value = window.location.pathname + window.location.search;
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const button = form.querySelector('button');
+        button.disabled = true;
+        status.textContent = 'Sending...';
+        try {
+          const response = await fetch(form.action, { method:'POST', body:new FormData(form), headers:{ accept:'application/json' } });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(payload.error || 'Request could not be sent.');
+          form.reset();
+          status.textContent = 'Received. We will reply with the first useful next step.';
+        } catch (error) {
+          status.textContent = error.message || 'Request could not be sent.';
+        } finally {
+          button.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>`
 
 const publicSourceToScreenHtml = `<!doctype html>
 <html lang="en">
@@ -5722,17 +5910,19 @@ const config = {
       },
     },
     {
-      src: '^/products/(?:factory-issues-maintenance-quality|factorydesk|industrial-plant-os|operations-digital-twin)/?$',
+      // Keep old product links useful without bringing the retired product
+      // catalogue back into the public experience.
+      src: '^/products/(?:factory|factory-issues-maintenance-quality|factorydesk|industrial-plant-os|operations-digital-twin)/?$',
       status: 308,
       headers: {
-        Location: '/contact/?package=factory-issues-maintenance-quality',
+        Location: 'https://app.supermega.dev/?demo=plant',
       },
     },
     {
-      src: '^/products/(?:restaurant-pos-desk|restaurant-pos-menu-inventory|service-desk-pos|storedesk)/?$',
+      src: '^/products/(?:pos|restaurant-pos-desk|restaurant-pos-menu-inventory|service-desk-pos|storedesk)/?$',
       status: 308,
       headers: {
-        Location: '/contact/?package=restaurant-pos-menu-inventory',
+        Location: 'https://app.supermega.dev/?demo=shop',
       },
     },
     {
@@ -5765,14 +5955,11 @@ const config = {
       dest: '/machine/index.html',
     },
     {
-      // /ai-agents/ serves its real page (kernel story + connector catalogue + Myanmar-rails moat).
-      // Un-retired 2026-06-26: the page is generated, nav-linked sitewide, in the sitemap, and
-      // self-canonical, so the prior 308->/products/ left all those signals pointing at a redirect
-      // (flagged high-severity by live QA). Serving the page resolves it in the value-preserving
-      // direction. NOTE for Technical: if full retirement was intended instead, revert this and also
-      // drop the /ai-agents/ nav link + sitemap entry + self-canonical so the signals agree.
+      // Keep the legacy AI route as a useful contact handoff, not a separate
+      // product surface. The public offer is the Shop/Plant app experience.
       src: '^/ai-agents/?$',
-      dest: '/ai-agents/index.html',
+      status: 308,
+      headers: { Location: '/contact/?from=workflow' },
     },
     {
       src: '^/pricing/?$',
@@ -7002,6 +7189,8 @@ const publicWorkCases = [
     story: 'Counter staff were juggling cash, KBZPay, AYA Pay, and MMQR with no clean way to reconcile at the end of the day. We built DeskPOS: ring up orders, take any payment with the slip attached, track stock, and close the day with the drawer counted against expected sales — even when the internet drops.',
     built: ['Fast counter checkout, priced in MMK', 'Every payment method, with proof attached', 'Offline-first — syncs when the line returns', 'One-tap daily cash-up and owner digest'],
     proof: 'Live and open — try the full point-of-sale and daily-close flow with realistic Myanmar shop data, no signup.',
+    image: '/site/shots/actual-shop-overview.png',
+    imageAlt: 'Current Shop workspace showing sales, payments, stock risks, and owner actions',
     cta: { label: 'Open Shop', href: 'https://app.supermega.dev/?demo=shop', ext: false },
   },
   {
@@ -7010,6 +7199,8 @@ const publicWorkCases = [
     story: 'A Myanmar manufacturer ran production, quality, and maintenance on shop-floor log books and scattered Excel files. We built one system: capture on the floor (bilingual, works offline), grade inspections with a live reject rate, turn defects into owned corrective actions, and give the plant manager one daily brief.',
     built: ['Line and shift production vs. target', 'Inspections and defects with a live reject rate', '5W1H incidents → owned CAPA with due dates', 'Maintenance work orders + a daily plant-manager brief'],
     proof: 'Built around real factory operating data — line targets, defect taxonomy, grading rules, and CAPA owners.',
+    image: '/site/shots/actual-plant-overview.png',
+    imageAlt: 'Current Plant workspace showing floor status, issues, and follow-up actions',
     cta: { label: 'Open Plant', href: 'https://app.supermega.dev/?demo=plant', ext: false },
   },
 ]
@@ -7034,7 +7225,7 @@ const publicWorkHtml = `<!doctype html>
     <meta name="twitter:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
     <style>${unicornShellStyle}
       .wk-list { display: grid; gap: 18px; margin-top: 28px; }
-      .wk-case { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: clamp(18px,4vw,40px); align-items: start; border: 1px solid var(--line); border-radius: 22px; padding: clamp(20px,3vw,32px); background: rgba(255,255,255,0.5); }
+      .wk-case { display: grid; grid-template-columns: minmax(0,1.08fr) minmax(280px,0.92fr); gap: clamp(18px,4vw,44px); align-items: center; border: 1px solid var(--line); border-radius: 14px; padding: clamp(20px,3vw,32px); background: rgba(255,255,255,0.5); }
       :root[data-theme="dark"] .wk-case { background: rgba(255,255,255,0.05); }
       .wk-case .eyebrow { margin-bottom: 10px; }
       .wk-case h2 { font-size: clamp(24px,3vw,32px); letter-spacing: -0.03em; line-height: 1.08; margin: 0; }
@@ -7045,6 +7236,9 @@ const publicWorkHtml = `<!doctype html>
       .wk-built li::before { content: ""; margin-top: 7px; width: 6px; height: 6px; border-radius: 999px; background: var(--blue); }
       .wk-proof { margin-top: 18px; border-left: 2px solid var(--blue); padding: 4px 0 4px 14px; color: var(--ink); font-size: 14px; line-height: 1.5; }
       .wk-case .btn { margin-top: 18px; }
+      .wk-case-visual { margin: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: #081523; box-shadow: 0 24px 50px rgba(0,0,0,0.24); }
+      .wk-case-visual img { display: block; width: 100%; height: auto; aspect-ratio: 1.6; object-fit: cover; object-position: top left; }
+      :root[data-theme="light"] .wk-case-visual { background: #e8f0f4; box-shadow: 0 24px 50px rgba(26,54,59,0.12); }
       @media (max-width: 820px) { .wk-case { grid-template-columns: 1fr; gap: 18px; } }
     </style>
   </head>
@@ -7080,6 +7274,7 @@ ${unicornHeader}
                 <p class="wk-built-label">What we built</p>
                 <ul class="wk-built">${c.built.map((b) => `<li>${b}</li>`).join('')}</ul>
               </div>
+              <figure class="wk-case-visual"><img src="${c.image}" alt="${c.imageAlt}" loading="eager" decoding="async" width="1280" height="800" /></figure>
             </article>`).join('')}
           </div>
         </section>
@@ -10223,9 +10418,7 @@ const unicornPrivacyHtml = `<!doctype html>
     </a>
     <nav class="nav" aria-label="Primary">
       <button class="btn secondary theme-toggle" type="button" aria-label="Toggle dark mode" onclick="var r=document.documentElement,n=r.getAttribute('data-theme')==='dark'?'light':'dark';r.setAttribute('data-theme',n);try{localStorage.setItem('sm-theme',n)}catch(e){}"></button>
-      <a class="btn secondary optional-nav" href="/products/">Products</a>
-      <a class="btn secondary" href="/demo/">Demos</a>
-      <a class="btn secondary" href="/offers/">Pricing</a>
+      <a class="btn secondary" href="https://app.supermega.dev/?demo=shop">Open app</a>
       <a class="btn primary" href="/contact/">Contact</a>
     </nav>
   </header>
@@ -10259,9 +10452,7 @@ const unicornPrivacyHtml = `<!doctype html>
     <span class="footer-links">
       <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a>
       <a href="tel:+9595000721">+95 9 500 0721</a>
-      <a href="/products/">Products</a>
-      <a href="/demo/">Demos</a>
-      <a href="/offers/">Pricing</a>
+      <a href="https://app.supermega.dev/?demo=shop">Open app</a>
       <a href="/contact/">Contact</a>
     </span>
   </footer>
@@ -10293,7 +10484,7 @@ await mkdir(resolve(staticDir, 'demo'), { recursive: true })
 await cp('C:/sm-site/supermega-demo/index.html', resolve(staticDir, 'demo', 'index.html'), { force: true }).catch(() => undefined)
 await cp('C:/sm-site/supermega-demo/favicon.svg', resolve(staticDir, 'demo', 'favicon.svg'), { force: true }).catch(() => undefined)
 await writeFile(resolve(staticDir, 'robots.txt'), 'User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /app/\nDisallow: /clients/\nDisallow: /machine/\nDisallow: /operator/\nSitemap: https://supermega.dev/sitemap.xml\n', 'utf8')
-await writeFile(resolve(staticDir, 'sitemap.xml'), '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>https://supermega.dev/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>\n  <url><loc>https://supermega.dev/products/</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/products/pos/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/products/factory/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/products/documents/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/ai-agents/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/</loc><changefreq>weekly</changefreq><priority>0.85</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/deskpos-quickstart/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/chat-ledger/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/inbox-calendar-operator/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/daily-intelligence-brief/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/factory-ops-ledger/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/data-clean-report-agent/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/offers/</loc><changefreq>weekly</changefreq><priority>0.95</priority></url>\n  <url><loc>https://supermega.dev/work/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/contact/</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/card/</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>\n  <url><loc>https://supermega.dev/privacy/</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>\n</urlset>\n', 'utf8')
+// The final canonical sitemap is written below after legacy pages are pruned.
 const publicSitemapUrls = [
   ['/', 'weekly', '1.0'],
   ['/work/', 'weekly', '0.8'],

@@ -746,7 +746,7 @@ for (const token of [
 for (const token of [
   '<title>supermega.dev — your business, in one simple app</title>',
   '<title>supermega.dev | Operating software for shops and plants</title>',
-  'Less chasing. More running.',
+  'Run the work.<br />Keep the proof.',
   'sm_worker_continue_state',
   'data-local-worker-continue',
   'Browser-local continuation',
