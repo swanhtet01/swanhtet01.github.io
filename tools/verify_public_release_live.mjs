@@ -56,18 +56,19 @@ function verifySharedPage(html, label) {
 function verifyHome(html, label) {
   verifySharedPage(html, label)
   for (const required of [
-    '<title>supermega.dev | Operational software built to fit</title>',
-    '<h1 id="portfolio-heading">Operational software, built to fit.</h1>',
+    '<title>supermega.dev | Run the shop. See the plant.</title>',
+    '<h1 id="portfolio-heading">Run the shop. See the plant. Fix the gaps.</h1>',
     'href="/work/"',
-    '<h2 id="workspaces-heading">Start close to the real work.</h2>',
+    '<h2 id="workspaces-heading">No software maze.</h2>',
     'Two working systems',
-    'Shop and Plant open without an account.',
-    'Keep AI accountable',
+    'AI helps draft, check, and surface next steps while approvals stay tied to the work behind them.',
     'data-product-preview',
     'src="/live-shop-workspace.png"',
     "src:'/live-plant-workspace.png'",
-    '<h2 id="brief-heading">Tell us where the workflow breaks.</h2>',
-    '>Describe your workflow</a>',
+    'srcset="/live-shop-mobile.png"',
+    "mobileSrc:'/live-plant-mobile.png'",
+    '<h2 id="brief-heading">Show us the broken handoff.</h2>',
+    '>Start with one workflow</a>',
   ]) {
     assert(html.includes(required), `${label}_missing_${required.slice(0, 32)}`)
   }
@@ -87,6 +88,8 @@ function verifyWork(html) {
     'href="/contact/?from=plant-workspace"',
     'src="/live-shop-workspace.png"',
     'src="/live-plant-workspace.png"',
+    'srcset="/live-shop-mobile.png"',
+    'srcset="/live-plant-mobile.png"',
     '<h2 id="work-close-heading">One useful workflow is enough to start.</h2>',
   ]) {
     assert(html.includes(required), `work_missing_${required.slice(0, 32)}`)
@@ -95,7 +98,7 @@ function verifyWork(html) {
 
 function verifyContact(html) {
   verifySharedPage(html, 'contact')
-  for (const required of ['What needs to work better?', 'action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="goal"']) {
+  for (const required of ['What should run better?', 'action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="goal"']) {
     assert(html.includes(required), `contact_missing_${required.slice(0, 32)}`)
   }
 }
