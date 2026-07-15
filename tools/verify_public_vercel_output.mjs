@@ -94,6 +94,8 @@ for (const entry of [
   'index.html',
   'products/index.html',
   'contact/index.html',
+  'reconcile/index.html',
+  'reconcile/payment-reconciler.mjs',
   'app/start/index.html',
   'site/shots/actual-custom-workflow-queue.png',
   'site/shots/actual-custom-workflow-modules.png',
@@ -572,6 +574,8 @@ for (const [label, text] of [
 const homeHtml = readFileSync(resolve(staticDir, 'index.html'), 'utf8')
 const productsHtml = readFileSync(resolve(staticDir, 'products/index.html'), 'utf8')
 const contactHtml = readFileSync(resolve(staticDir, 'contact/index.html'), 'utf8')
+const reconcilerHtml = readFileSync(resolve(staticDir, 'reconcile/index.html'), 'utf8')
+const reconcilerModule = readFileSync(resolve(staticDir, 'reconcile/payment-reconciler.mjs'), 'utf8')
 const offersHtml = readFileSync(resolve(staticDir, 'offers/index.html'), 'utf8')
 const aiAgentsHtml = readFileSync(resolve(staticDir, 'ai-agents/index.html'), 'utf8')
 const aiWorkerGuidePath = resolve(staticDir, 'ai-agents/guide/index.html')
@@ -792,6 +796,26 @@ for (const token of [
 ]) {
   if (token.includes('your business, in one simple app')) continue
   if (!homeHtml.includes(token)) fail('public_shell_contract_missing', { token })
+}
+if (!homeHtml.includes('href="/reconcile/"') || !homeHtml.includes('Run Payment Reconciler')) {
+  fail('public_payment_reconciler_home_entry_missing')
+}
+for (const token of [
+  '<title>Payment Reconciler | SuperMega AI Agent Solutions</title>',
+  'Zero source upload or money movement',
+  'id="invoiceFile"',
+  'id="paymentFile"',
+  'id="approveButton"',
+  'id="downloadReconciliation"',
+  'src="/reconcile/payment-reconciler.mjs"',
+]) {
+  if (!reconcilerHtml.includes(token)) fail('public_payment_reconciler_contract_missing', { token })
+}
+for (const retired of ['target="_blank"', 'window.open(', 'MegaOS', 'DeskPOS', 'connect your bank']) {
+  if (reconcilerHtml.includes(retired)) fail('public_payment_reconciler_forbidden_html', { retired })
+}
+for (const forbidden of ['fetch(', 'XMLHttpRequest', 'WebSocket(', 'sendBeacon(', 'localStorage.setItem']) {
+  if (reconcilerModule.includes(forbidden)) fail('public_payment_reconciler_network_or_storage_write', { forbidden })
 }
 for (const [entry, html] of Object.entries({
   'index.html': homeHtml,
@@ -1081,6 +1105,9 @@ if (!starterPageIndexHtml.includes('Continue to SuperMega') || !starterPageIndex
   fail('public_agent_template_page_index_contract_missing')
 }
 const sitemapHtml = readFileSync(resolve(staticDir, 'sitemap.xml'), 'utf8')
+if (!sitemapHtml.includes('https://supermega.dev/reconcile/')) {
+  fail('public_payment_reconciler_sitemap_missing')
+}
 for (const [id, name] of publicAgentTemplateContract) {
   if (!starterPageIndexHtml.includes(id) || (!starterPageIndexHtml.includes(name) && !starterPageIndexHtml.includes(htmlEscaped(name)))) {
     fail('public_agent_template_missing_from_starter_index', { id, name })

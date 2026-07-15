@@ -14,6 +14,7 @@ const contentTypes = new Map([
   ['.html', 'text/html; charset=utf-8'],
   ['.css', 'text/css; charset=utf-8'],
   ['.js', 'text/javascript; charset=utf-8'],
+  ['.mjs', 'text/javascript; charset=utf-8'],
   ['.json', 'application/json; charset=utf-8'],
   ['.png', 'image/png'],
   ['.svg', 'image/svg+xml'],
@@ -81,6 +82,7 @@ function runNodeFunction(name, request, response) {
 function publicPathFor(requestUrl) {
   const url = new URL(requestUrl, `http://${host}:${port}`)
   if (url.pathname === '/api/health') return { api: 'health' }
+  if (url.pathname === '/api/behavior-events' || url.pathname === '/api/behavior-events/status') return { api: 'behavior-events' }
   if (url.pathname === '/api/contact-submissions') return { api: 'contact-submissions' }
   if (url.pathname === '/api/contact-submissions/status') return { api: 'contact-status' }
   if (url.pathname === '/api/checkout-start' || url.pathname === '/api/checkout-start/status') return { api: 'checkout-start' }
@@ -135,6 +137,14 @@ const server = createServer((request, response) => {
   const target = publicPathFor(request.url || '/')
   if (!target) return send(response, 403, 'forbidden')
   if (target.api === 'health') return send(response, 200, JSON.stringify({ status: 'ready' }), 'application/json; charset=utf-8')
+  if (target.api === 'behavior-events') {
+    return send(
+      response,
+      request.method === 'POST' ? 202 : 200,
+      JSON.stringify({ status: 'ready', endpoint: 'behavior-events', storage: 'local_stub' }),
+      'application/json; charset=utf-8',
+    )
+  }
   if (target.api === 'contact-submissions') {
     if (request.method !== 'POST') return send(response, 401, 'login required')
     let body = ''

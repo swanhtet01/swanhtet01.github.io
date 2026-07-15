@@ -4825,7 +4825,7 @@ ${unicornHeader}
 
         <section class="home-section">
           <div class="home-ai">
-            <div><div class="eyebrow">The useful AI layer</div><h2>Less chasing. More running.</h2><p>When a workflow is stable, SuperMega can help read the source, prepare the brief, surface the exception, or draft the next action. People still control approvals, writes, and external messages.</p><div class="cta"><a class="btn primary" href="/contact/?from=ai-workflow">Start with one workflow</a></div></div>
+            <div><div class="eyebrow">The useful AI layer</div><h2>Less chasing. More running.</h2><p>When a workflow is stable, SuperMega can help read the source, prepare the brief, surface the exception, or draft the next action. People still control approvals, writes, and external messages.</p><div class="cta"><a class="btn primary" href="/contact/?from=ai-workflow">Start with one workflow</a><a class="btn secondary" href="/reconcile/">Run Payment Reconciler</a></div></div>
             <div class="home-ai-list"><div><strong>Read</strong><span>Turn approved messages, files, photos, and spreadsheets into structured records.</span></div><div><strong>Prioritize</strong><span>Put the unresolved work, owner, evidence, and next decision where the team can see it.</span></div><div><strong>Act with control</strong><span>Draft first, approve next, and keep an audit trail before anything is sent or written back.</span></div></div>
           </div>
         </section>
@@ -5966,7 +5966,7 @@ async function copyPublicStatic(source, destination, rootSource = source) {
 }
 
 async function prunePublicStaticRoot() {
-  const allowedRootDirs = new Set(['assets', 'site', 'social', 'products', 'agent-templates', 'app', 'start', 'contact', 'offers', 'work', 'operator', 'machine', 'card', 'c', 'demo', 'ai-agents', 'privacy', 'megaos-preview'])
+  const allowedRootDirs = new Set(['assets', 'site', 'social', 'products', 'agent-templates', 'app', 'start', 'contact', 'offers', 'work', 'operator', 'machine', 'card', 'c', 'demo', 'ai-agents', 'privacy', 'megaos-preview', 'reconcile'])
   for (const entry of await readdir(staticDir, { withFileTypes: true }).catch(() => [])) {
     if (!entry.isDirectory() || allowedRootDirs.has(entry.name)) continue
     await rm(resolve(staticDir, entry.name), { recursive: true, force: true, maxRetries: 8, retryDelay: 250 })
@@ -5987,6 +5987,7 @@ async function prunePublicSiteDir() {
 
 await rm(outputDir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 })
 await mkdir(outputDir, { recursive: true })
+await mkdir(staticDir, { recursive: true })
 await copyPublicStatic(resolve(root, 'api-static'), staticDir)
 // Brand favicon is owned here (revert-proof against OneDrive restoring the old file): Capsule Forge mark.
 await writeFile(resolve(staticDir, 'favicon.svg'), `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="supermega"><rect x="4" y="4" width="56" height="56" rx="15" fill="#111731"/><rect x="4.75" y="4.75" width="54.5" height="54.5" rx="14.25" fill="none" stroke="#ffffff" stroke-opacity="0.10"/><path d="M21 23 L31.5 32 L21 41" fill="none" stroke="#3B82F6" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><path d="M35 41 L47 41" fill="none" stroke="#62F5B0" stroke-width="5" stroke-linecap="round"/></svg>\n`, 'utf8')
@@ -6068,6 +6069,9 @@ for (const entry of await readdir(staticDir, { withFileTypes: true })) {
   }
 }
 await writeFile(resolve(staticDir, 'index.html'), normalizePublicProductNames(unicornPublicHomeHtml), 'utf8')
+await mkdir(resolve(staticDir, 'reconcile'), { recursive: true })
+await cp(resolve(root, 'tools', 'public-workcells', 'payment-reconciler.html'), resolve(staticDir, 'reconcile', 'index.html'), { force: true })
+await cp(resolve(root, 'tools', 'public-workcells', 'payment-reconciler.mjs'), resolve(staticDir, 'reconcile', 'payment-reconciler.mjs'), { force: true })
 await writeFile(resolve(staticDir, '404.html'), `<!doctype html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="robots" content="noindex,nofollow" /><title>Page not found | SUPERMEGA.dev</title><meta name="theme-color" content="#07111f" /><link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" /><style>${unicornShellStyle}</style></head><body><div class="wrap">${unicornHeader}<main><section class="poster" style="min-height:58vh;align-items:center"><div class="copy"><div class="eyebrow">404</div><h1>Page not found.</h1><p>That page doesn’t exist. Head back home, or see what we build.</p><div class="cta"><a class="btn primary" href="/">Home</a><a class="btn secondary" href="/products/">Products</a></div></div></section></main></div></body></html>`, 'utf8')
 await mkdir(resolve(staticDir, 'products'), { recursive: true })
 await writeFile(resolve(staticDir, 'products', 'index.html'), publicRedirectHtml('https://app.supermega.dev/?demo=shop', 'Open Shop'), 'utf8')
@@ -10303,6 +10307,7 @@ await writeFile(resolve(staticDir, 'robots.txt'), 'User-agent: *\nAllow: /\nDisa
 await writeFile(resolve(staticDir, 'sitemap.xml'), '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>https://supermega.dev/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>\n  <url><loc>https://supermega.dev/products/</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/products/pos/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/products/factory/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/products/documents/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/ai-agents/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/</loc><changefreq>weekly</changefreq><priority>0.85</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/deskpos-quickstart/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/chat-ledger/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/inbox-calendar-operator/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/daily-intelligence-brief/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/factory-ops-ledger/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/data-clean-report-agent/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/offers/</loc><changefreq>weekly</changefreq><priority>0.95</priority></url>\n  <url><loc>https://supermega.dev/work/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/contact/</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/card/</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>\n  <url><loc>https://supermega.dev/privacy/</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>\n</urlset>\n', 'utf8')
 const publicSitemapUrls = [
   ['/', 'weekly', '1.0'],
+  ['/reconcile/', 'monthly', '0.8'],
   ['/work/', 'weekly', '0.8'],
   ['/contact/', 'monthly', '0.9'],
   ['/card/', 'monthly', '0.6'],
