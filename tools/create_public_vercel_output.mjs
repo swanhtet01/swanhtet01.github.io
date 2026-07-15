@@ -1339,7 +1339,7 @@ function renderPublicPricingHtml() {
       .wrap { width: min(1180px, calc(100% - 36px)); margin: 0 auto; position: relative; overflow: clip; }
       header { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 22px 0; }
       .brand { display: inline-flex; align-items: center; gap: 12px; font-weight: 950; letter-spacing: -0.045em; }
-      .terminal-mark { display: grid; place-items: center; flex: none; width: 43px; height: 43px; border: 1px solid rgba(255,255,255,0.14); border-radius: 14px; background: rgba(8,18,31,0.72); box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 12px 28px rgba(0,0,0,0.16); }
+      .terminal-mark { display: grid; place-items: center; flex: none; width: 43px; height: 43px; border: 1px solid rgba(98,245,176,0.24); border-radius: 12px; background: rgba(4,11,20,0.86); box-shadow: inset 0 1px 0 rgba(255,255,255,0.13), 0 12px 28px rgba(0,0,0,0.16); }
       .mark { position: relative; display: grid; place-items: center; width: 43px; height: 43px; border-radius: 14px; overflow: hidden; background: var(--navy); box-shadow: 0 14px 34px rgba(7,17,31,0.22), inset 0 1px 0 rgba(255,255,255,0.18); }
       .mark img { display: block; width: 100%; height: 100%; }
       .brand-text { display: grid; gap: 2px; }
@@ -2071,7 +2071,7 @@ const unicornHeader = `
       <script>(function(){try{var t=localStorage.getItem('sm-theme');if(!t){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
       <header>
         <a class="brand" href="/" aria-label="SUPERMEGA.dev home">
-          <span class="terminal-mark" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#62F5B0" stroke-width="2.6" stroke-linecap="round"/></svg></span>
+          <span class="terminal-mark" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M5.75 7.75 L10.5 12 L5.75 16.25" stroke="#3B82F6" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.2 17.25 H19.1" stroke="#62F5B0" stroke-width="2.8" stroke-linecap="round"/></svg></span>
           <span class="brand-text"><span class="wm" style="font-size:18px;letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></span>
         </a>
         <nav class="nav" aria-label="Primary">
@@ -4774,18 +4774,18 @@ ${unicornHeader}
       <main>
         <section class="home-hero">
           <div class="home-copy">
-            <div class="eyebrow">&gt;_ operating software for the messy middle</div>
-            <h1>The work behind the business, finally in one place.</h1>
-            <p>Sell cleanly. Run the floor. Stay in control — with one calm operating layer for the work between the sale, the shift, and the owner&apos;s next decision.</p>
+            <div class="eyebrow">&gt;_ operating software that fits the way work actually moves</div>
+            <h1>Less chasing. More running.</h1>
+            <p>SuperMega gives shops and plants one calm place to sell, run shifts, and close the loop — without asking your team to become software experts.</p>
             <div class="home-actions">
-              <a class="btn primary" href="https://app.supermega.dev/?demo=shop">Open Shop</a>
-              <a class="btn secondary" href="https://app.supermega.dev/?demo=plant">Open Plant</a>
-              <a class="btn secondary" href="/contact/?from=homepage">Talk to us</a>
+              <a class="btn primary" href="https://app.supermega.dev/?demo=shop">Try Shop live</a>
+              <a class="btn secondary" href="https://app.supermega.dev/?demo=plant">Try Plant live</a>
+              <a class="btn secondary" href="/contact/?from=homepage">Start a conversation</a>
             </div>
             <div class="home-proof" aria-label="SuperMega operating model">
-              <div><strong>Phone to desktop</strong><span>Same workspace across devices.</span></div>
-              <div><strong>Clear handoffs</strong><span>Owners, evidence, next actions.</span></div>
-              <div><strong>AI when useful</strong><span>Review first. Automate with control.</span></div>
+              <div><strong>Built around your work</strong><span>Start with the Viber, files, and floor reality you already have.</span></div>
+              <div><strong>Proof that travels</strong><span>Owners see what happened and what comes next.</span></div>
+              <div><strong>AI with a brake pedal</strong><span>Draft, review, then automate the safe parts.</span></div>
             </div>
           </div>
           <figure class="home-hero-visual">
@@ -4796,8 +4796,8 @@ ${unicornHeader}
 
         <section class="home-section">
           <div class="home-section-head">
-            <div><div class="eyebrow">Two operating lanes</div><h2>Start with today's bottleneck.</h2></div>
-            <p>Shop keeps the counter and the owner in sync. Plant keeps the floor, shift, quality, and maintenance work visible. Both are designed for the people doing the work, not another reporting layer.</p>
+            <div><div class="eyebrow">Two places to start</div><h2>Fix the part of the day that keeps slipping.</h2></div>
+            <p>Shop keeps the counter and the owner in sync. Plant keeps the floor, shift, quality, and maintenance work visible. Start with one bottleneck, prove the loop, and expand when the team is ready.</p>
           </div>
           <div class="home-lanes">
             <article class="home-lane">
@@ -4813,7 +4813,7 @@ ${unicornHeader}
             <article class="home-lane">
               <div class="home-lane-copy">
                 <div class="eyebrow">Plant</div>
-                <h3>Make the next shift obvious.</h3>
+                <h3>Hand off the next shift without the guessing.</h3>
                 <p>Production, quality, assets, and maintenance stay connected to the machine and the person who owns the next move.</p>
                 <ul><li>Shift handoff packets with actions, owners, and due shifts.</li><li>Machine evidence, issues, and follow-up in one thread.</li><li>Floor signals that stay honest when the cloud is not ready.</li></ul>
                 <a class="btn secondary" href="https://app.supermega.dev/?demo=plant">See Plant live</a>
@@ -4825,8 +4825,8 @@ ${unicornHeader}
 
         <section class="home-section">
           <div class="home-cta">
-            <div><div class="eyebrow">Start simply</div><h2>Show us the work that keeps getting chased.</h2><p>Start with Shop or Plant. When the workflow is clear, we can add the useful AI layer without turning the product into a science project.</p></div>
-            <div class="cta"><a class="btn primary" href="/contact/?from=homepage-cta">Contact SuperMega</a><a class="btn secondary" href="https://app.supermega.dev/?demo=shop">Open app</a></div>
+            <div><div class="eyebrow">Start simply</div><h2>Bring us one messy workflow.</h2><p>We will map the first useful screen, the proof it needs, and the next decision. Then you can try it with your own team.</p></div>
+            <div class="cta"><a class="btn primary" href="/contact/?from=homepage-cta">Start with SuperMega</a><a class="btn secondary" href="https://app.supermega.dev/?demo=shop">Try the app</a></div>
           </div>
         </section>
       </main>
