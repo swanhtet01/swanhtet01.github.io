@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { resolve } from 'node:path'
@@ -52,6 +53,16 @@ for (const entry of ['live-shop-mobile.png', 'live-plant-mobile.png']) {
   const width = image.length >= 24 ? image.readUInt32BE(16) : 0
   const height = image.length >= 24 ? image.readUInt32BE(20) : 0
   if (width !== 360 || height !== 732) fail('public_mobile_capture_has_wrong_geometry', { entry, width, height })
+}
+const approvedCaptureHashes = new Map([
+  ['live-shop-workspace.png', '4a2870c9a73790f5a80c813ccba106122b002438597d9d9b0192c5bf6002212a'],
+  ['live-shop-mobile.png', 'eb4bd32150810edb0a4dd047209b663aac9c0abec7a91b308fbb368b5f479ead'],
+  ['live-plant-workspace.png', '5ee966de4dc64aecbfff886684d8d6fb1b1fbb5243c70dc8152028043caa674c'],
+  ['live-plant-mobile.png', 'b7a49578f3b275892081311e85bca22b97a01fef5a8e9f2bc2e2cede6c42ed15'],
+])
+for (const [entry, approvedHash] of approvedCaptureHashes) {
+  const actualHash = createHash('sha256').update(readFileSync(resolve(staticDir, entry))).digest('hex')
+  if (actualHash !== approvedHash) fail('public_capture_not_reviewed', { entry, approvedHash, actualHash })
 }
 
 const expectedFunctions = new Set(['contact-submissions.js.func', 'health.js.func', 'not-found.js.func'])
@@ -167,6 +178,7 @@ for (const required of [
   'data-product-preview-button="shop"',
   'data-product-preview-button="plant"',
   'src="/live-shop-workspace.png"',
+  'Current Shop workspace showing priority checks, sales, cash, customers, and stock',
   "src:'/live-plant-workspace.png'",
   'srcset="/live-shop-mobile.png"',
   "mobileSrc:'/live-plant-mobile.png'",
@@ -193,6 +205,7 @@ for (const required of [
   'aria-label="Request a private Shop workspace"',
   'aria-label="Request a private Plant workspace"',
   'src="/live-shop-workspace.png"',
+  'Current Shop workspace showing priority checks, sales, cash, customers, and stock',
   'src="/live-plant-workspace.png"',
   'srcset="/live-shop-mobile.png"',
   'srcset="/live-plant-mobile.png"',
