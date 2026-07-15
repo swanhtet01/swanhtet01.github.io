@@ -4694,11 +4694,11 @@ const unicornPublicHomeHtml = `<!doctype html>
     <meta property="og:title" content="Operating software for shops and plants | SUPERMEGA.dev" />
     <meta property="og:description" content="Sell, close, hand off, and act on the work that normally gets lost in chat and spreadsheets." />
     <meta property="og:url" content="https://supermega.dev/" />
-    <meta property="og:image" content="https://supermega.dev/site/shots/actual-restaurant-overview.png" />
+    <meta property="og:image" content="https://supermega.dev/site/shots/actual-shop-overview.png" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Operating software for shops and plants | SUPERMEGA.dev" />
     <meta name="twitter:description" content="Simple operating software with useful AI when the work is ready for it." />
-    <meta name="twitter:image" content="https://supermega.dev/site/shots/actual-restaurant-overview.png" />
+    <meta name="twitter:image" content="https://supermega.dev/site/shots/actual-shop-overview.png" />
     <style>${unicornShellStyle}
       .home-hero { display:grid; grid-template-columns:minmax(0,0.84fr) minmax(360px,1.16fr); gap:clamp(24px,5vw,72px); align-items:center; min-height:min(720px,calc(100svh - 76px)); margin:10px 0 0; padding:clamp(26px,4vw,52px); border:1px solid rgba(255,255,255,0.16); border-radius:34px; background:rgba(8,18,31,0.68); box-shadow:0 34px 100px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.12); backdrop-filter:blur(24px); overflow:hidden; }
       .home-copy { max-width:590px; }
@@ -4776,7 +4776,7 @@ ${unicornHeader}
           <div class="home-copy">
             <div class="eyebrow">&gt;_ operating software for the messy middle</div>
             <h1>The work behind the business, finally in one place.</h1>
-            <p>SuperMega gives shops and plants one calm operating layer for the work between the sale, the shift, and the owner&apos;s next decision.</p>
+            <p>Sell cleanly. Run the floor. Stay in control — with one calm operating layer for the work between the sale, the shift, and the owner&apos;s next decision.</p>
             <div class="home-actions">
               <a class="btn primary" href="https://app.supermega.dev/?demo=shop">Open Shop</a>
               <a class="btn secondary" href="https://app.supermega.dev/?demo=plant">Open Plant</a>
@@ -4789,7 +4789,7 @@ ${unicornHeader}
             </div>
           </div>
           <figure class="home-hero-visual">
-            <img src="/site/shots/actual-restaurant-overview.png" alt="Shop workspace showing payments, stock risks, closeout review, and owner actions" width="1200" height="910" fetchpriority="high" />
+            <img src="/site/shots/actual-shop-overview.png" alt="Current Shop workspace showing sales, payments, stock risks, and owner actions" width="1280" height="800" fetchpriority="high" />
             <figcaption class="home-figure-meta"><strong>Shop workspace</strong><span>Payments, stock, closeout, approvals</span></figcaption>
           </figure>
         </section>
@@ -4808,7 +4808,7 @@ ${unicornHeader}
                 <ul><li>Payment evidence and unresolved review in one queue.</li><li>Low-stock attention and supplier order planning.</li><li>Daily close with counted cash and a visible variance.</li></ul>
                 <a class="btn secondary" href="https://app.supermega.dev/?demo=shop">See Shop live</a>
               </div>
-              <figure><img src="/site/shots/actual-restaurant-overview.png" alt="Shop overview with sales, payment review, stock risks, and AI readiness" loading="eager" width="1200" height="910" /></figure>
+              <figure><img src="/site/shots/actual-shop-overview.png" alt="Current Shop workspace with sales, payment review, stock risks, and owner actions" loading="eager" width="1280" height="800" /></figure>
             </article>
             <article class="home-lane">
               <div class="home-lane-copy">
@@ -4818,7 +4818,7 @@ ${unicornHeader}
                 <ul><li>Shift handoff packets with actions, owners, and due shifts.</li><li>Machine evidence, issues, and follow-up in one thread.</li><li>Floor signals that stay honest when the cloud is not ready.</li></ul>
                 <a class="btn secondary" href="https://app.supermega.dev/?demo=plant">See Plant live</a>
               </div>
-              <figure><img src="/site/shots/actual-factory-overview.png" alt="Plant workspace showing assets, current state, anomalies, and manager actions" loading="eager" width="1200" height="910" /></figure>
+              <figure><img src="/site/shots/actual-plant-overview.png" alt="Current Plant workspace showing machine states, floor signals, and shift actions" loading="eager" width="1280" height="800" /></figure>
             </article>
           </div>
         </section>
@@ -6015,10 +6015,10 @@ const publicShotCopies = [
   ['actual-custom-workflow-overview.png'],
   ['actual-factory-assets.png'],
   ['actual-factory-actions.png'],
-  ['actual-factory-overview.png'],
+  ['actual-plant-overview.png'],
   ['actual-restaurant-shift-stock.png'],
   ['actual-restaurant-menu.png'],
-  ['actual-restaurant-overview.png'],
+  ['actual-shop-overview.png'],
   ['product-build-app-from-workflow-intake.svg'],
   ['product-build-app-from-workflow-brief.svg'],
   ['product-factory-issues-maintenance-quality.svg'],
