@@ -41,9 +41,9 @@ export const PUBLIC_PRODUCT_ALIASES: PublicProductAlias[] = [
     portalId: 'operations-digital-twin',
     route: '/app/factory-operations',
     requestPackage: 'operations-digital-twin',
-    mainShot: '/site/shots/actual-factory-overview.png',
+    mainShot: '/site/shots/actual-plant-overview.png',
     gallery: [
-      { src: '/site/shots/actual-factory-overview.png', alt: 'Factory Operations App overview with factory checklist and KPIs', caption: 'Overview' },
+      { src: '/site/shots/actual-plant-overview.png', alt: 'Plant workspace overview with machine states and floor signals', caption: 'Overview' },
       { src: '/site/shots/actual-factory-assets.png', alt: 'Factory Operations App asset map and current state modules', caption: 'Assets' },
       { src: '/site/shots/actual-factory-actions.png', alt: 'Factory Operations App anomaly review and manager actions', caption: 'Actions' },
     ],
@@ -54,9 +54,9 @@ export const PUBLIC_PRODUCT_ALIASES: PublicProductAlias[] = [
     portalId: 'restaurant-group-os',
     route: '/app/restaurant-pos',
     requestPackage: 'restaurant-group-os',
-    mainShot: '/site/shots/actual-restaurant-overview.png',
+    mainShot: '/site/shots/actual-shop-overview.png',
     gallery: [
-      { src: '/site/shots/actual-restaurant-overview.png', alt: 'Restaurant POS + Inventory overview with sales payment review and stock risk', caption: 'Overview' },
+      { src: '/site/shots/actual-shop-overview.png', alt: 'Shop workspace overview with sales, payments, and stock risks', caption: 'Overview' },
       { src: '/site/shots/actual-restaurant-shift-stock.png', alt: 'Restaurant POS + Inventory shift and stock module', caption: 'Shift + Stock' },
       { src: '/site/shots/actual-restaurant-menu.png', alt: 'Restaurant POS + Inventory menu module', caption: 'Menu' },
     ],
