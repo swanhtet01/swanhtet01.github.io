@@ -266,7 +266,7 @@ const headerHtml = `${themeBootstrap}
     <nav class="nav" aria-label="Primary">
       <a class="nav-link optional-nav" href="https://app.supermega.dev/?demo=shop">Shop</a>
       <a class="nav-link optional-nav" href="https://app.supermega.dev/?demo=plant">Plant</a>
-      <a class="nav-link optional-nav" href="/contact/">Contact</a>
+      <a class="nav-link optional-nav" href="https://supermega-machine.vercel.app/workcell">File Analyst</a>
       <button class="icon-button" type="button" data-theme-toggle aria-label="Use dark mode" title="Use dark mode"><svg class="theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path></svg><svg class="theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 15.2A8.5 8.5 0 0 1 8.8 3.5 8.5 8.5 0 1 0 20.5 15.2Z"></path></svg></button>
       <a class="btn primary header-cta" href="/contact/">Talk to us</a>
     </nav>
@@ -276,7 +276,7 @@ ${themeToggleScript}`
 
 const footerHtml = `<div class="footer-frame"><footer>
   <span class="footer-brand"><img class="footer-mark" src="/favicon.svg" alt="" width="64" height="64" /> supermega.dev</span>
-  <span class="footer-links"><a href="https://app.supermega.dev/?demo=shop">Shop</a><a href="https://app.supermega.dev/?demo=plant">Plant</a><a href="/contact/">Contact</a><a href="/privacy/">Privacy</a></span>
+  <span class="footer-links"><a href="https://app.supermega.dev/?demo=shop">Shop</a><a href="https://app.supermega.dev/?demo=plant">Plant</a><a href="https://supermega-machine.vercel.app/workcell">File Analyst</a><a href="/contact/">Contact</a><a href="/privacy/">Privacy</a></span>
 </footer></div>`
 
 function socialMeta(title, description, url) {
@@ -317,7 +317,7 @@ const homeProductPreviewScript = `<script>(function(){var root=document.querySel
 
 const homeHtml = documentHtml({
   title: 'supermega.dev | Operational software built to fit',
-  description: 'Try Shop or Plant without an account. When the standard workflow does not fit, SuperMega builds and verifies a private workspace around the operation.',
+  description: 'Try Shop, Plant, or the browser-local File Analyst without an account. When the standard workflow does not fit, SuperMega builds and verifies a private workspace around the operation.',
   canonical: 'https://supermega.dev/',
   style: `
     .home-main { width: 100%; overflow: clip; }
@@ -521,17 +521,18 @@ const homeHtml = documentHtml({
 
   <section class="entry-section page-frame" id="workspaces" aria-labelledby="workspaces-heading">
     <div class="section-intro">
-      <div><div class="eyebrow">Two working systems</div><h2 id="workspaces-heading">Start close to the real work.</h2></div>
+      <div><div class="eyebrow">Three working paths</div><h2 id="workspaces-heading">Start close to the real work.</h2></div>
       <p>See the workflow before you commit. Keep the private workspace when it proves useful to the people doing the work.</p>
     </div>
     <div class="proof-strip" aria-label="How SuperMega starts">
-      <div class="proof-item"><span>01 / WORKING</span><strong>Use working screens</strong><p>Shop and Plant demos open without an account. Explore one current workflow before you choose a path.</p></div>
+      <div class="proof-item"><span>01 / WORKING</span><strong>Use working screens</strong><p>Shop, Plant, and File Analyst open without an account. Explore a workflow or run one file before you choose a path.</p></div>
       <div class="proof-item"><span>02 / PRIVATE</span><strong>Set up with you</strong><p>Your private workspace is configured and verified before handover. We map the people, sources, and approval points that matter.</p></div>
       <div class="proof-item"><span>03 / APPROVED</span><strong>Bring data deliberately</strong><p>Start fresh or add approved business records when ready. See a useful screen before private setup is complete.</p></div>
     </div>
     <div class="destination-list">
       <a class="destination" href="https://app.supermega.dev/?demo=shop" aria-label="Try Shop live"><span class="destination-index">01 / SHOP</span><span class="destination-copy"><strong>Shop</strong><span>Sell, track stock, manage customers, follow receivables, and keep the books together. Ring sales, keep stock honest, and close the day with less chasing.</span></span><span class="destination-arrow" aria-hidden="true">&#8594;</span></a>
       <a class="destination" href="https://app.supermega.dev/?demo=plant" aria-label="Try Plant live"><span class="destination-index">02 / PLANT</span><span class="destination-copy"><strong>Plant</strong><span>See floor state, machine history, shift events, and imports in one workspace. See what is running, capture floor history, and hand the next shift a cleaner brief.</span></span><span class="destination-arrow" aria-hidden="true">&#8594;</span></a>
+      <a class="destination" href="https://supermega-machine.vercel.app/workcell" aria-label="Run File Analyst"><span class="destination-index">03 / AI AGENT SOLUTIONS</span><span class="destination-copy"><strong>AI Agent Solutions</strong><span>Run File Analyst now: drop one CSV or JSON export, get a cleaned draft, ranked exceptions, a decision brief, and approval evidence. Source stays in this browser and is never uploaded.</span></span><span class="destination-arrow" aria-hidden="true">&#8594;</span></a>
     </div>
   </section>
 

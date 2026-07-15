@@ -38,6 +38,7 @@ for (const [relativePath, html] of pages) {
 for (const required of [
   'https://app.supermega.dev/?demo=shop',
   'https://app.supermega.dev/?demo=plant',
+  'https://supermega-machine.vercel.app/workcell',
   '<h1 id="portfolio-heading">Operational software, built to fit.</h1>',
   'data-product-preview',
   'data-preview-open',
@@ -47,6 +48,9 @@ for (const required of [
   'Use working screens',
   'Your private workspace is configured and verified before handover.',
   'Start fresh or add approved business records when ready.',
+  '<strong>AI Agent Solutions</strong>',
+  'Run File Analyst now:',
+  'Source stays in this browser and is never uploaded.',
   '<h2 id="brief-heading">Tell us where the workflow breaks.</h2>',
   '>Describe your workflow</a>',
   '<img src="/favicon.svg" alt="" width="64" height="64" />',
@@ -55,7 +59,7 @@ for (const required of [
   if (!home.includes(required)) fail('homepage_front_door_contract_missing', { required })
 }
 
-for (const forbidden of ['<figure class="site-hero-screen"', '<img src="/site/shots/live-product-', 'Explore products', 'Custom Solutions &amp; AI Agents', 'supermega-portal-card.png', 'https://demo.supermega.dev/', 'AI Agent Solutions', 'Need a repeated task handled?', 'rotate(', 'id="products"', 'Run the operation. See what matters.', 'Open a workspace.', 'Try first. Add data later.', 'Need something different?', '[data-reveal] { opacity: 0', 'Use one account across desktop, tablet, and mobile.', 'Create a workspace only when you want to keep your work and use it across devices.', 'Create with email and password. Return with your password or an email code.']) {
+for (const forbidden of ['<figure class="site-hero-screen"', '<img src="/site/shots/live-product-', 'Explore products', 'Custom Solutions &amp; AI Agents', 'supermega-portal-card.png', 'https://demo.supermega.dev/', 'Need a repeated task handled?', 'rotate(', 'id="products"', 'Run the operation. See what matters.', 'Open a workspace.', 'Try first. Add data later.', 'Need something different?', '[data-reveal] { opacity: 0', 'Use one account across desktop, tablet, and mobile.', 'Create a workspace only when you want to keep your work and use it across devices.', 'Create with email and password. Return with your password or an email code.']) {
   if (home.includes(forbidden)) fail('homepage_stale_catalog_visual_or_copy', { forbidden })
 }
 
