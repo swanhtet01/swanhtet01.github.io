@@ -2692,6 +2692,7 @@ const publicLocalWorkerAdaptationScript = `
       var worker = findWorker(state.template_id);
       var wrap = document.querySelector('.wrap');
       var main = document.querySelector('main');
+      if (/^\\/contact(\\/|$)/.test(window.location.pathname)) return;
       if (!worker || !wrap || !main) return;
       var panel = document.querySelector('[data-local-worker-continue]');
       if (!panel) {
@@ -2807,7 +2808,7 @@ const publicRoleModeScript = `
       });
     }
     function shouldShowPanel() {
-      return /^\\/(ai-agents|agent-templates|contact)(\\/|$)/.test(window.location.pathname);
+      return /^\\/(ai-agents|agent-templates)(\\/|$)/.test(window.location.pathname);
     }
     function renderPanel() {
       applyRoleToForms();
@@ -2931,7 +2932,7 @@ const publicDeviceModeScript = `
       return mode;
     }
     function shouldShowPanel() {
-      return /^\\/(ai-agents|agent-templates|contact)(\\/|$)/.test(window.location.pathname);
+      return /^\\/(ai-agents|agent-templates)(\\/|$)/.test(window.location.pathname);
     }
     function renderPanel(track) {
       var mode = applyDeviceToForms();
@@ -3116,7 +3117,7 @@ const publicAdaptiveSetupPlanScript = `
       });
     }
     function shouldShowPanel() {
-      return /^\\/(ai-agents|agent-templates|contact)(\\/|$)/.test(window.location.pathname);
+      return /^\\/(ai-agents|agent-templates)(\\/|$)/.test(window.location.pathname);
     }
     function renderPlan(track) {
       var plan = buildPlan();
@@ -3282,7 +3283,7 @@ const publicAdaptiveSourcePackScript = `
       });
     }
     function shouldShowPanel() {
-      return /^\\/(ai-agents|agent-templates|contact)(\\/|$)/.test(window.location.pathname);
+      return /^\\/(ai-agents|agent-templates)(\\/|$)/.test(window.location.pathname);
     }
     function renderPack(track) {
       var pack = buildPack();
@@ -3481,7 +3482,7 @@ const publicAdaptiveProofPlanScript = `
       });
     }
     function shouldShowPanel() {
-      return /^\\/(ai-agents|agent-templates|contact)(\\/|$)/.test(window.location.pathname);
+      return /^\\/(ai-agents|agent-templates)(\\/|$)/.test(window.location.pathname);
     }
     function renderPlan(track) {
       var plan = buildPlan();
@@ -3692,7 +3693,7 @@ const publicAdaptiveValuePlanScript = `
       });
     }
     function shouldShowPanel() {
-      return /^\\/(ai-agents|agent-templates|contact)(\\/|$)/.test(window.location.pathname);
+      return /^\\/(ai-agents|agent-templates)(\\/|$)/.test(window.location.pathname);
     }
     function renderPlan(track) {
       var plan = buildPlan();
@@ -3891,7 +3892,7 @@ const publicAdaptivePilotPlanScript = `
       });
     }
     function shouldShowPanel() {
-      return /^\\/(ai-agents|agent-templates|contact)(\\/|$)/.test(window.location.pathname);
+      return /^\\/(ai-agents|agent-templates)(\\/|$)/.test(window.location.pathname);
     }
     function renderPlan(track) {
       var plan = buildPlan();
@@ -5045,12 +5046,12 @@ const unicornContactHtml = `<!doctype html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="index,follow" />
     <title>Contact | SUPERMEGA.dev</title>
-    <meta name="description" content="Tell SUPERMEGA what you run. Start free with Retail OS or Factory OS, then add custom automation when it proves useful." />
+    <meta name="description" content="Tell SuperMega what needs to work in your shop, plant, or operating team." />
     <link rel="canonical" href="https://supermega.dev/contact/" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="SUPERMEGA.dev" />
-    <meta property="og:title" content="Contact SUPERMEGA.dev - start free" />
-    <meta property="og:description" content="Tell SUPERMEGA what you run. Start free with Retail OS or Factory OS, then add custom automation when it proves useful." />
+    <meta property="og:title" content="Contact SuperMega" />
+    <meta property="og:description" content="Choose Shop, Plant, or AI Agent Solutions and tell us the problem to solve first." />
     <meta property="og:url" content="https://supermega.dev/contact/" />
     <meta property="og:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
     <meta name="twitter:card" content="summary_large_image" />
@@ -5080,12 +5081,14 @@ const unicornContactHtml = `<!doctype html>
       .next-card strong { font-size: 16px; letter-spacing: -0.02em; }
       .next-card span { color: var(--muted); line-height: 1.4; font-weight: 760; }
       .selected-path { display: grid; gap: 5px; border: 1px solid rgba(59,130,246,0.16); border-radius: 16px; background: rgba(59,130,246,0.055); padding: 11px 12px; }
+      .selected-path[hidden] { display: none; }
       .selected-path small { color: var(--blue); font-size: 11px; font-weight: 950; letter-spacing: 0.14em; text-transform: uppercase; }
       .selected-path strong { font-size: 19px; letter-spacing: -0.035em; }
       .selected-path span { color: var(--muted); font-weight: 780; line-height: 1.35; }
       .selected-price { color: var(--blue); font-weight: 950; font-size: 14px; letter-spacing: 0.02em; }
       .selected-next { color: var(--muted); font-weight: 800; font-size: 13px; line-height: 1.35; }
       .policy { margin: 0; color: var(--muted); font-size: 13px; font-weight: 820; line-height: 1.4; }
+      .direct-contact { grid-column: 1 / -1; margin-top: 0; padding-top: 24px; border-top: 1px solid var(--line); }
       @media (max-width: 880px) {
         .contact-main { grid-template-columns: 1fr; min-height: auto; padding: 10px 0 24px; }
         .contact-main > section[aria-label="Contact SUPERMEGA"] { order: 1; }
@@ -5103,6 +5106,9 @@ const unicornContactHtml = `<!doctype html>
         .policy { font-size: 12px; line-height: 1.25; }
         .form-status { min-height: 16px; font-size: 12px; }
       }
+      @media (max-width: 640px) {
+        .form-row { grid-template-columns: 1fr; }
+      }
     </style>
   </head>
   <body>
@@ -5110,9 +5116,9 @@ const unicornContactHtml = `<!doctype html>
 ${unicornHeader}
       <main class="contact-main">
         <section aria-label="Contact SUPERMEGA">
-          <div class="eyebrow">Start free</div>
-          <h1 data-contact-heading>Tell us about your business.</h1>
-          <p data-contact-lead>Retail OS for your shop, Factory OS for your factory floor. Tell us what you run and we'll help you start free.</p>
+          <div class="eyebrow">Start here</div>
+          <h1 data-contact-heading>Tell us what needs to work.</h1>
+          <p data-contact-lead>Choose Shop, Plant, or AI Agent Solutions. Tell us the problem to solve first, and we will reply with the next concrete step.</p>
         </section>
         <section aria-label="Workflow contact form">
           <form action="/api/contact-submissions" data-sm-lead-form enctype="multipart/form-data" method="post">
@@ -5137,6 +5143,7 @@ ${unicornHeader}
             <input type="hidden" name="management_owner" value="swanhtet@supermega.dev" />
             <input type="hidden" name="source_file_names" value="" />
             <input type="hidden" name="source_file_count" value="0" />
+            <input type="hidden" name="source_links" value="" />
             <input type="hidden" name="product_area" value="General enquiry" />
             <input type="hidden" name="public_package" value="" />
             <input type="hidden" name="template_id" value="" />
@@ -5169,22 +5176,28 @@ ${unicornHeader}
             <div class="form-row">
               <label>Name<input autocomplete="name" name="name" required /></label>
               <label>Work email<input autocomplete="email" name="email" required type="email" /></label>
-              <label class="optional-mobile">Phone / WhatsApp<input autocomplete="tel" name="phone" type="tel" /></label>
+              <label>Phone / Viber<input autocomplete="tel" name="phone" type="tel" /></label>
               <label>Company<input autocomplete="organization" name="company" required /></label>
+              <label class="wide">What do you need?
+                <select data-business-need name="business_need" required>
+                  <option value="">Choose one</option>
+                  <option value="shop">Shop</option>
+                  <option value="plant">Plant</option>
+                  <option value="ai-agent">AI Agent Solutions</option>
+                  <option value="other">Something else</option>
+                </select>
+              </label>
               <div class="wide selected-path" data-selected-path hidden><small>Selected</small><strong>General enquiry</strong><span class="selected-price" data-selected-price hidden></span><span class="selected-next" data-selected-next hidden></span></div>
-              <label class="wide file-label">Upload files<input data-file-picker multiple name="source_files" type="file" /><span class="upload-list" data-upload-list></span></label>
-              <label class="wide">Source link or system<input name="source_links" placeholder="Drive folder, sheet, email thread, POS export, meter reading, device, or note" /></label>
-              <label class="wide">What should become clear?<textarea name="goal" placeholder="Example: what changed, who owns it, what is missing, and what should happen next." required></textarea></label>
+              <label class="wide">What is not working today?<textarea name="goal" placeholder="Describe the repeated problem, who handles it, and what a good result would look like." required></textarea></label>
             </div>
             <input autocomplete="off" name="website" style="display:none" tabindex="-1" />
             <button type="submit">Send request</button>
-            <p class="policy">No account or data connection before you approve the first step.</p>
-            <p class="policy" style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px"><strong style="color:#3B82F6">14-day money-back guarantee.</strong> KBZPay · AYA Pay · Wave Money · bank transfer. 50% deposit, fully refundable.</p>
+            <p class="policy">We review the request first. No account, data connection, or system change happens from this form.</p>
             <p class="form-status" data-lead-status aria-live="polite"></p>
             <div class="next-card" data-next-card hidden><strong>Saved</strong><span>We review the task and reply with the first useful output to build. Nothing changes without approval.</span></div>
           </form>
         </section>
-        <section aria-label="Direct contact options" style="margin-top:32px;padding-top:24px;border-top:1px solid var(--line)">
+        <section class="direct-contact" aria-label="Direct contact options">
           <p style="font-size:13px;color:var(--muted);margin:0 0 14px;font-weight:850;letter-spacing:0.08em;text-transform:uppercase">Or reach us directly</p>
           <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
             <a href="viber://chat?number=%2B9595000721" style="display:inline-flex;align-items:center;gap:8px;background:transparent;border:1px solid var(--line);color:var(--ink);padding:11px 18px;border-radius:12px;font-size:15px;font-weight:850;text-decoration:none;letter-spacing:-0.01em" aria-label="Chat on Viber">
@@ -5260,7 +5273,7 @@ ${publicRuntimeScripts}
             heading: 'Tell us what to build.',
             lead: 'Tell us the one thing to build first.',
             placeholder: 'Describe what you want built — what it should do, who uses it, and what it replaces today.',
-            next: 'Next: a short scope call, then 50% deposit to start.'
+            next: 'Next: we review the request and confirm the first deliverable.'
           },
           'tool-week': {
             name: 'Tool in a week',
@@ -5268,7 +5281,7 @@ ${publicRuntimeScripts}
             price: 'From 2,500,000 MMK',
             lead: 'Tool in a week — from 2,500,000 MMK. Tell us the one job to build.',
             placeholder: 'Describe the single sharp tool you need and the job it does.',
-            next: 'Next: a short scope call, then 50% deposit to start.'
+            next: 'Next: we review the request and confirm the first deliverable.'
           },
           'dashboard': {
             name: 'Custom dashboard',
@@ -5276,7 +5289,7 @@ ${publicRuntimeScripts}
             price: 'From 8,000,000 MMK',
             lead: 'Custom dashboard — from 8,000,000 MMK. What should it show?',
             placeholder: 'Describe the numbers and sources it should pull together, and who reads it.',
-            next: 'Next: a short scope call, then 50% deposit to start.'
+            next: 'Next: we review the request and confirm the first deliverable.'
           },
           'custom-ai-agent-build': {
             name: 'Custom Solutions & AI Agents',
@@ -5292,7 +5305,7 @@ ${publicRuntimeScripts}
             price: 'From 25,000,000 MMK',
             lead: 'Design + ship system — from 25,000,000 MMK. What do you want built?',
             placeholder: 'Describe the system you want — what it does, who uses it, and what it replaces.',
-            next: 'Next: a short scope call, then 50% deposit to start.'
+            next: 'Next: we review the request and confirm the first deliverable.'
           },
           'care-plan': {
             name: 'Care plan',
@@ -5327,6 +5340,41 @@ ${publicRuntimeScripts}
         const selectedTemplate = templatePackages[requestedTemplate] || templatePackages[search.get('tool') || ''] || null;
         const requestedPackage = selectedTemplate ? '' : (search.get('tool') || search.get('package') || '');
         const selectedPackage = selectedTemplate || packages[packageAliases[requestedPackage] || requestedPackage || ''];
+        const businessNeed = form.querySelector('[data-business-need]');
+        const businessNeedDefaults = {
+          'shop': { label: 'Shop', area: 'Shop' },
+          'plant': { label: 'Plant', area: 'Plant' },
+          'ai-agent': { label: 'AI Agent Solutions', area: 'AI Agent Solutions' },
+          'other': { label: 'General enquiry', area: 'General enquiry' }
+        };
+        const requestSource = search.get('from') || '';
+        const inferredNeed = selectedTemplate
+          ? 'ai-agent'
+          : /factory|plant/i.test(selectedPackage?.name || requestedPackage)
+            ? 'plant'
+            : /restaurant|shop/i.test(selectedPackage?.name || requestedPackage)
+              ? 'shop'
+              : /agent|document|workflow|dashboard|build|design/i.test(selectedPackage?.name || requestedPackage)
+                ? 'ai-agent'
+                : requestSource === 'shop-workspace'
+                  ? 'shop'
+                  : requestSource === 'plant-workspace'
+                    ? 'plant'
+                    : '';
+        if (businessNeed && inferredNeed) businessNeed.value = inferredNeed;
+        const applyBusinessNeed = () => {
+          if (selectedPackage || !businessNeed) return;
+          const choice = businessNeedDefaults[businessNeed.value];
+          if (!choice) return;
+          set('workflow', choice.label);
+          set('requested_package', choice.label);
+          set('first_output', choice.label);
+          set('product_area', choice.area);
+          set('public_package', choice.label);
+          set('first_step', 'Review the request and reply with the first concrete deliverable.');
+        };
+        if (businessNeed) businessNeed.addEventListener('change', applyBusinessNeed);
+        applyBusinessNeed();
         if (selectedPackage) {
           set('workflow', selectedPackage.name);
           set('requested_package', selectedPackage.name);
@@ -5373,7 +5421,7 @@ ${publicRuntimeScripts}
           const priceEl = document.querySelector('[data-selected-price]');
           if (priceEl && selectedPackage.price) { priceEl.textContent = selectedPackage.price; priceEl.hidden = false; }
           const nextEl = document.querySelector('[data-selected-next]');
-          if (nextEl) { nextEl.textContent = selectedPackage.next || 'Next: a short scope call, then 50% deposit to start.'; nextEl.hidden = false; }
+          if (nextEl) { nextEl.textContent = selectedPackage.next || 'Next: we review the request and confirm the first deliverable.'; nextEl.hidden = false; }
           const heading = document.querySelector('[data-contact-heading]');
           if (heading && selectedPackage.heading) heading.textContent = selectedPackage.heading;
         }
@@ -5383,7 +5431,8 @@ ${publicRuntimeScripts}
         form.addEventListener('submit', async (event) => {
           event.preventDefault();
           if (form.querySelector('[name="website"]')?.value) return;
-          set('first_output', form.querySelector('[name="requested_package"]')?.value || 'Custom Workflow App');
+          applyBusinessNeed();
+          set('first_output', form.querySelector('[name="requested_package"]')?.value || 'Requested solution');
           const payload = new FormData(form);
           if (status) status.textContent = 'Sending...';
           if (nextCard) nextCard.hidden = true;
@@ -6899,19 +6948,19 @@ const publicOffersHtml = `<!doctype html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="index,follow" />
     <title>Pricing | SUPERMEGA.dev</title>
-    <meta name="description" content="MMK starting prices for free-core upgrades, custom builds, AI agent crews, and full systems for Myanmar businesses." />
+    <meta name="description" content="MMK starting prices for Shop, Plant, and AI Agent Solutions." />
     <meta name="theme-color" content="#07111f" />
     <link rel="canonical" href="https://supermega.dev/offers/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="SUPERMEGA.dev" />
-    <meta property="og:title" content="Pricing - free-core upgrades and AI agent crews" />
-    <meta property="og:description" content="Clear MMK starting prices for tools, dashboards, AI agent crews, and full systems. Built for Myanmar, yours to keep." />
+    <meta property="og:title" content="SuperMega pricing" />
+    <meta property="og:description" content="MMK starting prices for Shop, Plant, and AI Agent Solutions." />
     <meta property="og:url" content="https://supermega.dev/offers/" />
     <meta property="og:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Pricing - free-core upgrades and AI agent crews" />
-    <meta name="twitter:description" content="Clear MMK starting prices for tools, dashboards, AI agent crews, and full systems." />
+    <meta name="twitter:title" content="SuperMega pricing" />
+    <meta name="twitter:description" content="MMK starting prices for Shop, Plant, and AI Agent Solutions." />
     <meta name="twitter:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
     <style>${unicornShellStyle}
       .of-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px,1fr)); gap: 16px; margin-top: 24px; align-items: stretch; }
@@ -6931,7 +6980,7 @@ const publicOffersHtml = `<!doctype html>
       .of-card .of-spacer { flex: 1; }
       .of-gets li strong { color: var(--ink); font-weight: 750; }
       .of-note { margin-top: 16px; color: var(--muted); font-size: 13px; max-width: 60rem; }
-      .pd-steps { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 16px; margin-top: 24px; }
+      .pd-steps { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 16px; margin-top: 24px; }
       .pd-step n { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 999px; background: var(--blue); color: #fff; font-weight: 600; font-size: 15px; }
       .pd-step strong { display: block; margin-top: 13px; font-size: 17px; letter-spacing: -0.02em; }
       .pd-step span { display: block; margin-top: 7px; color: var(--muted); font-size: 14px; line-height: 1.5; }
@@ -6945,14 +6994,13 @@ ${unicornHeader}
         <section class="poster" style="min-height:auto;align-items:center">
           <div class="copy">
             <div class="eyebrow">Pricing</div>
-            <h1>Start free. Pay when the worker proves value.</h1>
-            <p>Start with the app or setup kit that fits the business. Paid builds add private data, connectors, source trace, approval queues, scheduled runs, and maintenance. Starting prices in MMK; final quote after one short call.</p>
+            <h1>Choose the first result.</h1>
+            <p>Start with Shop, Plant, or one AI Agent Solution. Starting prices are shown in MMK; final scope and price are confirmed after we review the actual workflow.</p>
             <div class="cta">
               <a class="btn primary" href="/contact/?package=build">Get a quote</a>
-              <a class="btn secondary" href="viber://chat?number=%2B9595000721" aria-label="Chat with us on Viber">Chat on Viber</a>
-              <a class="btn secondary" href="/demo/">See live demos</a>
+              <a class="btn secondary" href="https://app.supermega.dev/?demo=shop">Try Shop</a>
+              <a class="btn secondary" href="https://app.supermega.dev/?demo=plant">Try Plant</a>
             </div>
-            <p class="hero-tagline">Stop running your business on Viber &amp; Excel.</p>
           </div>
         </section>
 
@@ -6968,7 +7016,7 @@ ${unicornHeader}
               <a class="btn ${o.flagship ? 'primary' : 'secondary'}" href="/contact/?package=${o.slug}">${o.cta}</a>
             </div>`).join('')}
           </div>
-          <p class="of-note">Starting "from" prices in MMK. Final scope and price confirmed on a short call. Fixed-scope with clear revision caps; 50% deposit to start, payment method confirmed on first call.</p>
+          <p class="of-note">Starting "from" prices in MMK. Final scope, deliverables, timeline, and price are confirmed before work starts.</p>
         </section>
 
         <section class="section">
@@ -6976,23 +7024,15 @@ ${unicornHeader}
           <h2>From one workflow to a running system</h2>
           <div class="pd-steps">
             <div class="pd-step"><strong>1. Tell us what you run</strong><span>Start with your shop, factory floor, or operating team. One file, screenshot, or note is enough for the first screen.</span></div>
-            <div class="pd-step"><strong>2. Scope call (free)</strong><span>We review your source, show you the first screen, and confirm the price. No payment, no access required.</span></div>
-            <div class="pd-step"><strong>3. 50% deposit to start</strong><span>Fixed-scope, fixed price. The second 50% is due when the system is live and you're satisfied.</span></div>
-            <div class="pd-step"><strong>4. Delivered in weeks</strong><span>A running system at a real URL. You own it outright — no monthly fees, no vendor lock-in.</span></div>
-          </div>
-        </section>
-
-        <section class="section">
-          <div class="trust-note" style="margin-top:24px;padding:20px 24px;border:1px solid var(--line);border-radius:16px;background:rgba(255,255,255,0.055);max-width:640px;">
-            <strong style="display:block;font-size:15px;letter-spacing:-0.02em;margin-bottom:8px;">Our guarantee</strong>
-            <p style="font-size:14px;color:var(--muted);margin:0;line-height:1.55;">If we haven't delivered a working first screen within 14 days of your deposit, we refund in full. We accept KBZPay, AYA Pay, Wave Money, and bank transfer.</p>
+            <div class="pd-step"><strong>2. Review the workflow</strong><span>We confirm the first useful screen, required inputs, acceptance checks, scope, and price.</span></div>
+            <div class="pd-step"><strong>3. Build and verify</strong><span>We deliver the agreed result, test it with the real workflow, and document what is ready.</span></div>
           </div>
         </section>
 
         <section class="section">
           <div class="final">
-            <div><h2>Start free with the two apps.</h2></div>
-            <a class="btn primary" href="/contact/">Start free</a>
+            <div><h2>Start with the workflow that matters.</h2></div>
+            <a class="btn primary" href="/contact/">Tell us the problem</a>
           </div>
         </section>
       </main>

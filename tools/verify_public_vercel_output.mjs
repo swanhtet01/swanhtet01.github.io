@@ -599,6 +599,28 @@ const pilotWorkspaceHtmlPath = resolve(staticDir, 'app/start/index.html')
 if (!existsSync(pilotWorkspaceHtmlPath)) fail('pilot_workspace_page_missing')
 const pilotWorkspaceHtml = readFileSync(pilotWorkspaceHtmlPath, 'utf8')
 
+for (const token of [
+  'Tell us what needs to work.',
+  'data-business-need',
+  '<option value="shop">Shop</option>',
+  '<option value="plant">Plant</option>',
+  '<option value="ai-agent">AI Agent Solutions</option>',
+  'What is not working today?',
+  'No account, data connection, or system change happens from this form.',
+  '.selected-path[hidden] { display: none; }',
+]) {
+  if (!contactHtml.includes(token)) fail('public_contact_focus_contract_missing', { token })
+}
+for (const retired of [
+  'Upload files',
+  'Source link or system',
+  '14-day money-back guarantee',
+  '50% deposit',
+  'fully refundable',
+]) {
+  if (contactHtml.includes(retired)) fail('public_contact_clutter_returned', { retired })
+}
+
 for (const [entry, html] of Object.entries({
   'contact/index.html': contactHtml,
   'offers/index.html': offersHtml,
@@ -1289,7 +1311,7 @@ function walkHtmlFiles(directory, prefix = '') {
 
 for (const entry of walkHtmlFiles(staticDir)) {
   const html = readFileSync(resolve(staticDir, entry), 'utf8')
-  const staleMatch = html.match(/Product Activation|Three products\. One setup contract|Quote-ready setup|View pricing|USD\s|Demo hub|Demo center|open demos|login demos|Request quote|AI Workcell Pilot|Source-to-Screen|Agents that do the tasks SaaS leaves for humans|AI Agent Army/i)
+  const staleMatch = html.match(/Product Activation|Three products\. One setup contract|Quote-ready setup|View pricing|USD\s|Demo hub|Demo center|open demos|login demos|Request quote|AI Workcell Pilot|Source-to-Screen|Agents that do the tasks SaaS leaves for humans|AI Agent Army|14-day money-back guarantee|50% deposit|fully refundable|refund in full/i)
   if (staleMatch) fail('retired_public_copy_found_anywhere', { entry, match: staleMatch[0] })
   const privateMatch = html.match(privateLeakPattern)
   if (privateMatch) fail('private_client_copy_leak_anywhere', { entry, match: privateMatch[0] })
