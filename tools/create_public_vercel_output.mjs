@@ -276,7 +276,7 @@ ${themeToggleScript}`
 
 const footerHtml = `<div class="footer-frame"><footer>
   <span class="footer-brand"><img class="footer-mark" src="/favicon.svg" alt="" width="64" height="64" /> supermega.dev</span>
-  <span class="footer-links"><a href="https://app.supermega.dev/?demo=shop">Shop</a><a href="https://app.supermega.dev/?demo=plant">Plant</a><a href="https://supermega-machine.vercel.app/workcell">File Analyst</a><a href="/contact/">Contact</a><a href="/privacy/">Privacy</a></span>
+  <span class="footer-links"><a href="https://app.supermega.dev/?demo=shop">Shop</a><a href="https://app.supermega.dev/?demo=plant">Plant</a><a href="https://supermega-machine.vercel.app/workcell">File Analyst</a><a href="/reconcile/">Reconcile</a><a href="/contact/">Contact</a><a href="/privacy/">Privacy</a></span>
 </footer></div>`
 
 function socialMeta(title, description, url) {
@@ -317,7 +317,7 @@ const homeProductPreviewScript = `<script>(function(){var root=document.querySel
 
 const homeHtml = documentHtml({
   title: 'supermega.dev | Operational software built to fit',
-  description: 'Try Shop, Plant, or the browser-local File Analyst without an account. When the standard workflow does not fit, SuperMega builds and verifies a private workspace around the operation.',
+  description: 'Try Shop, Plant, File Analyst, or the browser-local Payment Reconciler without an account. When the standard workflow does not fit, SuperMega builds and verifies a private workspace around the operation.',
   canonical: 'https://supermega.dev/',
   style: `
     .home-main { width: 100%; overflow: clip; }
@@ -525,14 +525,14 @@ const homeHtml = documentHtml({
       <p>See the workflow before you commit. Keep the private workspace when it proves useful to the people doing the work.</p>
     </div>
     <div class="proof-strip" aria-label="How SuperMega starts">
-      <div class="proof-item"><span>01 / WORKING</span><strong>Use working screens</strong><p>Shop, Plant, and File Analyst open without an account. Explore a workflow or run one file before you choose a path.</p></div>
+      <div class="proof-item"><span>01 / WORKING</span><strong>Use working screens</strong><p>Shop, Plant, File Analyst, and Payment Reconciler open without an account. Explore a workflow or run a bounded file task before you choose a path.</p></div>
       <div class="proof-item"><span>02 / PRIVATE</span><strong>Set up with you</strong><p>Your private workspace is configured and verified before handover. We map the people, sources, and approval points that matter.</p></div>
       <div class="proof-item"><span>03 / APPROVED</span><strong>Bring data deliberately</strong><p>Start fresh or add approved business records when ready. See a useful screen before private setup is complete.</p></div>
     </div>
     <div class="destination-list">
       <a class="destination" href="https://app.supermega.dev/?demo=shop" aria-label="Try Shop live"><span class="destination-index">01 / SHOP</span><span class="destination-copy"><strong>Shop</strong><span>Sell, track stock, manage customers, follow receivables, and keep the books together. Ring sales, keep stock honest, and close the day with less chasing.</span></span><span class="destination-arrow" aria-hidden="true">&#8594;</span></a>
       <a class="destination" href="https://app.supermega.dev/?demo=plant" aria-label="Try Plant live"><span class="destination-index">02 / PLANT</span><span class="destination-copy"><strong>Plant</strong><span>See floor state, machine history, shift events, and imports in one workspace. See what is running, capture floor history, and hand the next shift a cleaner brief.</span></span><span class="destination-arrow" aria-hidden="true">&#8594;</span></a>
-      <a class="destination" href="https://supermega-machine.vercel.app/workcell" aria-label="Run File Analyst"><span class="destination-index">03 / AI AGENT SOLUTIONS</span><span class="destination-copy"><strong>AI Agent Solutions</strong><span>Run File Analyst now: drop one CSV or JSON export, get a cleaned draft, ranked exceptions, a decision brief, and approval evidence. Source stays in this browser and is never uploaded.</span></span><span class="destination-arrow" aria-hidden="true">&#8594;</span></a>
+      <a class="destination" href="/reconcile/" aria-label="Run Payment Reconciler"><span class="destination-index">03 / AI AGENT SOLUTIONS</span><span class="destination-copy"><strong>AI Agent Solutions</strong><span>Use File Analyst to clean one export, or run Payment Reconciler now to match sales and money files, isolate uncertain pairs, and produce approval evidence. Sources stay in this browser and are never uploaded.</span></span><span class="destination-arrow" aria-hidden="true">&#8594;</span></a>
     </div>
   </section>
 
@@ -799,8 +799,11 @@ await writeStatic('index.html', homeHtml)
 await writeStatic('404.html', notFoundHtml)
 await writeStatic('contact/index.html', contactHtml)
 await writeStatic('privacy/index.html', privacyHtml)
+await mkdir(resolve(staticDir, 'reconcile'), { recursive: true })
+await cp(resolve(root, 'tools', 'public-workcells', 'payment-reconciler.html'), resolve(staticDir, 'reconcile', 'index.html'), { force: true })
+await cp(resolve(root, 'tools', 'public-workcells', 'payment-reconciler.mjs'), resolve(staticDir, 'reconcile', 'payment-reconciler.mjs'), { force: true })
 await writeStatic('robots.txt', 'User-agent: *\nAllow: /\nDisallow: /api/\nSitemap: https://supermega.dev/sitemap.xml\n')
-await writeStatic('sitemap.xml', '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>https://supermega.dev/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>\n  <url><loc>https://supermega.dev/contact/</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/privacy/</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>\n</urlset>\n')
+await writeStatic('sitemap.xml', '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>https://supermega.dev/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>\n  <url><loc>https://supermega.dev/reconcile/</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/contact/</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/privacy/</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>\n</urlset>\n')
 await writeStatic('sw.js', "const CACHE_VERSION = 'supermega-front-door-20260713-terminal'\nself.addEventListener('install', function(){ self.skipWaiting() })\nself.addEventListener('activate', function(event){ event.waitUntil(caches.keys().then(function(keys){ return Promise.all(keys.map(function(key){ return caches.delete(key) })) }).then(function(){ return self.clients.claim() })) })\n")
 await writeStatic('site.webmanifest', `${JSON.stringify({
   name: 'supermega.dev',

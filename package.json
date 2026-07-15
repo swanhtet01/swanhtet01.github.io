@@ -14,7 +14,7 @@
     "vercel:deploy": "npm run public:prebuilt && npx vercel deploy --prebuilt -y",
     "vercel:deploy:prod": "npm run public:prebuilt && npx vercel deploy --prebuilt --prod -y",
     "public:build": "node tools/create_public_vercel_output.mjs",
-    "public:verify": "node tools/verify_public_vercel_artifact_budget.mjs && node tools/verify_public_vercel_output.mjs && node tools/verify_public_enterprise_visual_contract.mjs && node tools/verify_public_agent_intake_contract.mjs && node tools/verify_contact_ops_intake_handoff.mjs && node tools/test_connector_resilience.mjs",
+    "public:verify": "node tools/verify_public_vercel_artifact_budget.mjs && node tools/verify_payment_reconciler.mjs && node tools/verify_public_vercel_output.mjs && node tools/verify_public_enterprise_visual_contract.mjs && node tools/verify_public_agent_intake_contract.mjs && node tools/verify_contact_ops_intake_handoff.mjs && node tools/test_connector_resilience.mjs",
     "public:prebuilt": "npm run public:build && npm run public:verify",
     "public:verify:live": "node tools/verify_public_release_live.mjs",
     "_public:verify:RETIRED": "source-to-screen/workcell/intake/contact-order + operator-retainer contracts retired 2026-07-09 — they enforced the discontinued 'source-to-screen / AI Workcell' model the founder removed. Kept only artifact-budget + vercel-output structural checks.",
