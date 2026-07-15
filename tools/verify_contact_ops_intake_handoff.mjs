@@ -12,6 +12,7 @@ const {
   publicContactStatus,
   contactDiagnostics,
   hasStatusDiagnosticsAccess,
+  buildContactRoutingEvent,
   publicSubmissionReceipt,
   publicSubmissionFailure,
   receiptHtml,
@@ -28,6 +29,7 @@ assert.equal(typeof isShopLead, 'function')
 assert.equal(typeof isSafeShopPipelineUrl, 'function')
 assert.equal(typeof shopPipelinePayload, 'function')
 assert.equal(typeof forwardShopPipeline, 'function')
+assert.equal(typeof buildContactRoutingEvent, 'function')
 assert.equal(isSafeOpsIntakeUrl('https://supermega-machine.vercel.app/api/intake'), true)
 assert.equal(isSafeOpsIntakeUrl('https://supermega-machine.vercel.app.evil.example/api/intake'), false)
 assert.equal(isSafeOpsIntakeUrl('https://supermega-machine.vercel.app/api/intake?redirect=1'), false)
@@ -244,7 +246,67 @@ try {
     assert.equal(handlerSource.includes(retiredResponseFragment), false, `public_response_exposes_${retiredResponseFragment}`)
   }
   assert.equal(handlerSource.includes('json(res, 200, publicSubmissionReceipt(record))'), true)
+  assert.equal(handlerSource.includes('emitContactRoutingEvent({'), true)
   assert.equal(handlerSource.match(/json\(res, 502, publicSubmissionFailure\(\)\)/g)?.length, 4)
+
+  const routingEvent = buildContactRoutingEvent({
+    record: {
+      lead_id: 'LEAD-ROUTING-1',
+      task_id: 'TASK-ROUTING-1',
+      product_area: 'Shop',
+      template_id: 'shop-private-workspace',
+      submitted_at: '2026-07-15T12:00:00.000Z',
+      name: 'Private Person',
+      email: 'private@example.com',
+      phone: '+959000000000',
+      company: 'Private Company',
+      goal: 'Private workflow detail',
+    },
+    ledger: { status: 'ready', adapter: 'vercel_postgres_neon' },
+    pipelineAction: { status: 'ready', adapter: 'vercel_blob_private' },
+    webhook: { status: 'skipped', reason: 'webhook_not_configured' },
+    shopPipeline: { status: 'ready', duplicate: false, lead_count: 2, shop_lead_id: 'PRIVATE-SHOP-ID' },
+    opsIntake: { status: 'ready', duplicate: false, fit_score: 84, lead_id: 'PRIVATE-OPS-ID' },
+    delivery: { status: 'ready', email_id: 'PRIVATE-EMAIL-ID', to: 'private@example.com' },
+    confirmation: { status: 'skipped', reason: 'confirmation_disabled' },
+    telegram: { status: 'skipped', reason: 'telegram_not_configured' },
+    sheets: { status: 'skipped', reason: 'sheets_not_configured' },
+  })
+  assert.deepEqual(routingEvent, {
+    event: 'supermega.contact.routed',
+    version: 1,
+    reference: 'LEAD-ROUTING-1',
+    task_reference: 'TASK-ROUTING-1',
+    product_area: 'Shop',
+    template_id: 'shop-private-workspace',
+    submitted_at: '2026-07-15T12:00:00.000Z',
+    durable: true,
+    notified: true,
+    sinks: {
+      lead_ledger: { status: 'ready', adapter: 'vercel_postgres_neon' },
+      pipeline_action: { status: 'ready', adapter: 'vercel_blob_private' },
+      webhook: { status: 'skipped', reason: 'webhook_not_configured' },
+      shop_pipeline: { status: 'ready', lead_count: 2, duplicate: false },
+      ops_intake: { status: 'ready', duplicate: false },
+      owner_notification: { status: 'ready' },
+      requester_confirmation: { status: 'skipped', reason: 'confirmation_disabled' },
+      telegram: { status: 'skipped', reason: 'telegram_not_configured' },
+      sheets: { status: 'skipped', reason: 'sheets_not_configured' },
+    },
+  })
+  const serializedRoutingEvent = JSON.stringify(routingEvent)
+  for (const privateValue of [
+    'Private Person',
+    'private@example.com',
+    '+959000000000',
+    'Private Company',
+    'Private workflow detail',
+    'PRIVATE-SHOP-ID',
+    'PRIVATE-OPS-ID',
+    'PRIVATE-EMAIL-ID',
+  ]) {
+    assert.equal(serializedRoutingEvent.includes(privateValue), false, `routing_event_exposes_${privateValue}`)
+  }
 
   const healthGet = await invokeHealth('GET')
   assert.equal(healthGet.statusCode, 200)
