@@ -325,7 +325,7 @@ const homeHtml = documentHtml({
       position: relative;
       overflow: clip;
       border-bottom: 1px solid var(--line);
-      padding: 126px 0 42px;
+      padding: 100px 0 28px;
       background: var(--surface);
       isolation: isolate;
     }
@@ -365,7 +365,7 @@ const homeHtml = documentHtml({
     .hero-preview {
       position: relative;
       width: 100%;
-      margin: 32px auto 0;
+      margin: 24px auto 0;
       border: 1px solid var(--line-strong);
       border-radius: 8px;
       overflow: hidden;
@@ -379,7 +379,7 @@ const homeHtml = documentHtml({
     .preview-switch button { min-height: 44px; border: 0; border-radius: 5px; padding: 0 14px; background: transparent; color: var(--muted); font: inherit; font-size: 13px; font-weight: 780; cursor: pointer; transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease; }
     .preview-switch button[aria-pressed="true"] { background: var(--surface-strong); color: var(--ink); box-shadow: 0 4px 14px rgba(3, 8, 18, 0.1); }
     .preview-media { overflow: hidden; background: #071524; }
-    .preview-media img { display: block; width: 100%; height: auto; aspect-ratio: 10 / 3; object-fit: contain; opacity: 1; transition: opacity 180ms ease; }
+    .preview-media img { display: block; width: 100%; height: auto; aspect-ratio: 10 / 2.55; object-fit: cover; object-position: top; opacity: 1; transition: opacity 180ms ease; }
     .preview-media img.is-switching { opacity: .28; }
     .live-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--quiet); box-shadow: 0 0 0 4px color-mix(in srgb, var(--quiet) 16%, transparent); }
     .hero-status.is-ready .live-dot { background: var(--signal); box-shadow: 0 0 0 4px color-mix(in srgb, var(--signal) 16%, transparent); }
@@ -462,6 +462,7 @@ const homeHtml = documentHtml({
       .preview-toolbar { min-height: 56px; padding-left: 12px; }
       .preview-switch { grid-template-columns: repeat(2, minmax(68px, 1fr)); }
       .preview-switch button { min-height: 44px; padding-inline: 10px; }
+      .preview-media img { aspect-ratio: 10 / 3; object-fit: contain; }
       .entry-section { padding: 30px 0 74px; }
       .section-intro { margin-bottom: 34px; }
       .section-intro h2 { font-size: 36px; }
