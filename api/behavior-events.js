@@ -58,14 +58,6 @@ const sellableToolProfiles = {
     proof_metric: 'production, quality claims, open issues, and top risks visible in one review board',
     source_pack_ask: 'daily production file, quality records, line or machine list, maintenance log, roles',
   },
-  'data-clean-report-agent': {
-    tool_name: 'Data Cleanup & Reporting Agent',
-    buyer: 'Accountant, operations manager, or owner receiving messy weekly files',
-    free_core_tool: 'Free cleanup proof on one messy file',
-    premium_upgrade: 'Repeatable file cleanroom with validation rules, exception report, and export workflow',
-    proof_metric: 'rows cleaned, exceptions explained, and target report produced from approved source file',
-    source_pack_ask: 'sample files, target report, validation rules, exception examples, export destination',
-  },
   'document-pdf-intake-ledger': {
     tool_name: 'Document / PDF Intake Ledger',
     buyer: 'Law office, accountant, importer, school admin, clinic, or operations team processing repeated PDFs',

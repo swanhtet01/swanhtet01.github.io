@@ -30,7 +30,7 @@ if (!existsSync(configPath)) fail('missing_public_config')
 const config = JSON.parse(readFileSync(configPath, 'utf8'))
 const routes = Array.isArray(config.routes) ? config.routes : []
 
-const expectedStaticEntries = new Set(['404.html', 'contact', 'favicon.svg', 'index.html', 'live-plant-workspace.png', 'live-shop-workspace.png', 'privacy', 'reconcile', 'robots.txt', 'site.webmanifest', 'sitemap.xml', 'sw.js'])
+const expectedStaticEntries = new Set(['404.html', 'contact', 'favicon.svg', 'index.html', 'live-plant-workspace.png', 'live-shop-workspace.png', 'privacy', 'robots.txt', 'site.webmanifest', 'sitemap.xml', 'sw.js', 'work'])
 const actualStaticEntries = readdirSync(staticDir)
 for (const entry of actualStaticEntries) {
   if (!expectedStaticEntries.has(entry)) fail('retired_public_static_entry_present', { entry })
@@ -62,18 +62,40 @@ if (!existsSync(publicDatastoreShim) || !readFileSync(publicDatastoreShim, 'utf8
 }
 
 const home = readText('index.html')
+const work = readText('work/index.html')
 const contact = readText('contact/index.html')
 const privacy = readText('privacy/index.html')
-const reconciler = readText('reconcile/index.html')
-const reconcilerModule = readText('reconcile/payment-reconciler.mjs')
 const notFound = readText('404.html')
 const pages = new Map([
   ['index.html', home],
+  ['work/index.html', work],
   ['contact/index.html', contact],
   ['privacy/index.html', privacy],
-  ['reconcile/index.html', reconciler],
   ['404.html', notFound],
 ])
+
+const retiredCatalogContent = [
+  '>Products<',
+  '>Pricing<',
+  '>AI workers<',
+  'File Analyst',
+  'Payment Reconciler',
+  'Data Cleanup &amp; Reporting Agent',
+  'data-clean-report-agent',
+  'supermega-machine.vercel.app/workcell',
+  'href="/reconcile/"',
+  '/site/shots/',
+  'supermega-portal-card.png',
+  'WorkDesk',
+  'AgentOps',
+  'Source-to-Screen',
+  'AI Workcell',
+  'live-shop-dashboard.png',
+  '<h1 id="supermega-heading">SuperMega</h1>',
+  '/icon.svg',
+  'M-rune',
+  '>SM<',
+]
 
 for (const [relativePath, html] of pages) {
   for (const required of ['data-theme="light"', 'data-theme="dark"', 'prefers-color-scheme', 'prefers-reduced-motion', 'data-theme-toggle']) {
@@ -82,7 +104,7 @@ for (const [relativePath, html] of pages) {
   for (const required of ['class="terminal-mark"', '<img src="/favicon.svg" alt="" width="64" height="64" />', 'backdrop-filter: blur(24px)', 'supermega<span class="domain">.dev</span>']) {
     if (!html.includes(required)) fail('public_page_missing_terminal_brand_contract', { relativePath, required })
   }
-  for (const forbidden of ['>Products<', '>Pricing<', '>AI workers<', '/site/shots/', 'supermega-portal-card.png', 'WorkDesk', 'AgentOps', 'Source-to-Screen', 'AI Workcell', 'live-shop-dashboard.png', '<h1 id="supermega-heading">SuperMega</h1>', '/icon.svg', 'M-rune', '>SM<']) {
+  for (const forbidden of [...retiredCatalogContent, 'target="_blank"', 'target=_blank', 'window.open(']) {
     if (html.includes(forbidden)) fail('public_page_contains_retired_catalog_content', { relativePath, forbidden })
   }
 }
@@ -90,19 +112,19 @@ for (const [relativePath, html] of pages) {
 for (const required of [
   '<title>supermega.dev | Operational software built to fit</title>',
   '<h1 id="portfolio-heading">Operational software, built to fit.</h1>',
+  'href="/work/"',
   'https://app.supermega.dev/?demo=shop',
   'https://app.supermega.dev/?demo=plant',
-  'https://supermega-machine.vercel.app/workcell',
-  'href="/reconcile/"',
   'operational software / live',
   'class="hero-lead">Less chasing. More running.</strong>',
   '<h2 id="workspaces-heading">Start close to the real work.</h2>',
+  'Two working systems',
+  'Shop and Plant open without an account.',
   'Use working screens',
   'Set up with you',
-  'Bring data deliberately',
+  'Keep AI accountable',
   '<strong>Shop</strong>',
   '<strong>Plant</strong>',
-  '<strong>AI Agent Solutions</strong>',
   '<h2 id="brief-heading">Tell us where the workflow breaks.</h2>',
   '>Describe your workflow</a>',
   'data-product-preview',
@@ -111,11 +133,8 @@ for (const required of [
   'data-product-preview-button="plant"',
   'src="/live-shop-workspace.png"',
   "src:'/live-plant-workspace.png'",
-  'Shop, Plant, File Analyst, and Payment Reconciler open without an account.',
-  'Use File Analyst to clean one export, or run Payment Reconciler now',
-  'Sources stay in this browser and are never uploaded.',
   'Your private workspace is configured and verified before handover.',
-  'Start fresh or add approved business records when ready.',
+  'Drafts, checks, and next-step suggestions stay attached to the records and approvals behind them.',
   'data-public-status',
   "fetch('/api/health'",
   'Sell, track stock, manage customers, follow receivables, and keep the books together.',
@@ -125,35 +144,30 @@ for (const required of [
   if (!home.includes(required)) fail('homepage_front_door_contract_missing', { required })
 }
 
-for (const forbidden of ['https://demo.supermega.dev/', 'The intelligent workspace for daily operations.', 'Explore live demos', 'Open workspace', 'target="_blank"', 'target=_blank', 'window.open(', 'rotate(', 'data-hero-media', 'Current build', 'Build an agent solution', '>Agent solution<', 'Need a repeated task handled?', 'id="products"', 'Run the operation. See what matters.', 'Open a workspace.', 'Try first. Add data later.', 'Need something different?', '[data-reveal] { opacity: 0', 'Use one account across desktop, tablet, and mobile.', 'Create a workspace only when you want to keep your work and use it across devices.', 'Create with email and password. Return with your password or an email code.']) {
-  if (home.includes(forbidden)) fail('homepage_keeps_superseded_portfolio_copy', { forbidden })
+for (const required of [
+  '<title>Work | supermega.dev</title>',
+  '<h1 id="work-heading">See the work before the pitch.</h1>',
+  'Current Shop and Plant screens',
+  'No account to try',
+  'Desktop, tablet, and mobile',
+  '<h2 id="shop-case-heading">Keep the day together.</h2>',
+  '<h2 id="plant-case-heading">Give the floor a memory.</h2>',
+  'src="/live-shop-workspace.png"',
+  'src="/live-plant-workspace.png"',
+  '<h2 id="work-close-heading">One useful workflow is enough to start.</h2>',
+  '>Describe the workflow</a>',
+]) {
+  if (!work.includes(required)) fail('work_page_contract_missing', { required })
 }
 
-for (const required of ['<title>Payment Reconciler | SuperMega AI Agent Solutions</title>', 'Zero source upload or money movement', 'id="invoiceFile"', 'id="paymentFile"', 'id="approveButton"', 'id="downloadReconciliation"', 'src="/reconcile/payment-reconciler.mjs"']) {
-  if (!reconciler.includes(required)) fail('payment_reconciler_contract_missing', { required })
-}
-for (const forbidden of ['target="_blank"', 'window.open(', 'MegaOS', 'DeskPOS', 'connect your bank']) {
-  if (reconciler.includes(forbidden)) fail('payment_reconciler_contains_forbidden_content', { forbidden })
-}
-for (const forbidden of ['fetch(', 'XMLHttpRequest', 'WebSocket(', 'sendBeacon(', 'localStorage.setItem']) {
-  if (reconcilerModule.includes(forbidden)) fail('payment_reconciler_module_breaks_local_only_boundary', { forbidden })
+for (const forbidden of ['https://demo.supermega.dev/', 'The intelligent workspace for daily operations.', 'Explore live demos', 'Open workspace', 'rotate(', 'data-hero-media', 'Current build', 'Build an agent solution', '>Agent solution<', 'Need a repeated task handled?', 'id="products"', 'Run the operation. See what matters.', 'Open a workspace.', 'Try first. Add data later.', 'Need something different?', '[data-reveal] { opacity: 0']) {
+  if (home.includes(forbidden)) fail('homepage_keeps_superseded_portfolio_copy', { forbidden })
 }
 
 for (const required of ['action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="goal"', 'No account or data connection is made before you approve it.']) {
   if (!contact.includes(required)) fail('contact_surface_contract_missing', { required })
 }
-for (const forbidden of [
-  'placeholder="Drive folder',
-  'placeholder="Example:',
-  'Upload files',
-  'Source link or system',
-  'custom AI worker',
-  'name="workflow"',
-  'name="first_output"',
-  'name="requested_package"',
-  'name="product_area"',
-  'General enquiry',
-]) {
+for (const forbidden of ['placeholder="Drive folder', 'placeholder="Example:', 'Upload files', 'Source link or system', 'custom AI worker', 'name="workflow"', 'name="first_output"', 'name="requested_package"', 'name="product_area"', 'General enquiry']) {
   if (contact.includes(forbidden)) fail('contact_surface_keeps_retired_intake', { forbidden })
 }
 
@@ -172,10 +186,10 @@ if (manifest.name !== 'supermega.dev' || manifest.short_name !== 'supermega' || 
 }
 
 const sitemap = readText('sitemap.xml')
-for (const required of ['https://supermega.dev/', 'https://supermega.dev/reconcile/', 'https://supermega.dev/contact/', 'https://supermega.dev/privacy/']) {
+for (const required of ['https://supermega.dev/', 'https://supermega.dev/work/', 'https://supermega.dev/contact/', 'https://supermega.dev/privacy/']) {
   if (!sitemap.includes(required)) fail('sitemap_missing_current_page', { required })
 }
-for (const forbidden of ['/products/', '/pricing/', '/ai-agents/', '/agent-templates/', '/offers/']) {
+for (const forbidden of ['/products/', '/pricing/', '/reconcile/', '/ai-agents/', '/agent-templates/', '/offers/']) {
   if (sitemap.includes(forbidden)) fail('sitemap_keeps_retired_catalog_route', { forbidden })
 }
 
@@ -197,7 +211,11 @@ const demoRoute = findRoute(routes, '^/demo/?$')
 if (demoRoute?.status !== 308 || demoRoute?.headers?.Location !== 'https://demo.supermega.dev/') {
   fail('demo_handoff_route_invalid', { actual: demoRoute })
 }
-const catalogRoute = findRoute(routes, '^/(?:products|product|offers|pricing|plans|packages|agent-templates|ai-agents|work|operator|machine|card|megaos-preview|free)(?:/.*)?$')
+const reconcileRoute = findRoute(routes, '^/reconcile(?:/.*)?$')
+if (reconcileRoute?.status !== 308 || reconcileRoute?.headers?.Location !== '/contact/?from=workflow') {
+  fail('retired_reconcile_route_invalid', { actual: reconcileRoute })
+}
+const catalogRoute = findRoute(routes, '^/(?:products|product|offers|pricing|plans|packages|agent-templates|ai-agents|workcell|operator|machine|card|megaos-preview|free)(?:/.*)?$')
 if (catalogRoute?.status !== 308 || catalogRoute?.headers?.Location !== '/') {
   fail('retired_catalog_route_invalid', { actual: catalogRoute })
 }
