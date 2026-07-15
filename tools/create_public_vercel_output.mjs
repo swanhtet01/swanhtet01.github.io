@@ -4700,13 +4700,13 @@ const unicornPublicHomeHtml = `<!doctype html>
     <meta name="twitter:description" content="Simple operating software with useful AI when the work is ready for it." />
     <meta name="twitter:image" content="https://supermega.dev/site/shots/actual-restaurant-overview.png" />
     <style>${unicornShellStyle}
-      .home-hero { display:grid; grid-template-columns:minmax(0,0.84fr) minmax(360px,1.16fr); gap:clamp(24px,5vw,72px); align-items:center; min-height:min(720px,calc(100svh - 76px)); margin:10px 0 0; padding:clamp(26px,5vw,66px); border:1px solid rgba(255,255,255,0.16); border-radius:34px; background:rgba(8,18,31,0.68); box-shadow:0 34px 100px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.12); backdrop-filter:blur(24px); overflow:hidden; }
+      .home-hero { display:grid; grid-template-columns:minmax(0,0.84fr) minmax(360px,1.16fr); gap:clamp(24px,5vw,72px); align-items:center; min-height:min(720px,calc(100svh - 76px)); margin:10px 0 0; padding:clamp(26px,4vw,52px); border:1px solid rgba(255,255,255,0.16); border-radius:34px; background:rgba(8,18,31,0.68); box-shadow:0 34px 100px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.12); backdrop-filter:blur(24px); overflow:hidden; }
       .home-copy { max-width:590px; }
-      .home-hero h1 { max-width:14ch; margin:16px 0 20px; color:var(--text); font-family:var(--font-serif); font-size:clamp(42px,5.4vw,68px); line-height:1.03; letter-spacing:0; }
+      .home-hero h1 { max-width:16ch; margin:16px 0 20px; color:var(--text); font-family:var(--font-serif); font-size:clamp(40px,4.8vw,60px); line-height:1.04; letter-spacing:0; }
       .home-hero p { max-width:40rem; font-size:clamp(17px,1.8vw,21px); line-height:1.52; letter-spacing:0; }
       .home-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:28px; }
       .home-actions .btn { min-height:50px; }
-      .home-hero-visual { display:grid; gap:10px; min-width:0; margin:0; padding:14px; border:1px solid rgba(255,255,255,0.15); border-radius:28px; background:rgba(255,255,255,0.06); box-shadow:0 24px 70px rgba(0,0,0,0.24); }
+      .home-hero-visual { display:grid; gap:10px; min-width:0; align-self:start; margin:0; padding:14px; border:1px solid rgba(255,255,255,0.15); border-radius:28px; background:rgba(255,255,255,0.06); box-shadow:0 24px 70px rgba(0,0,0,0.24); }
       .home-hero-visual img { display:block; width:100%; height:auto; border-radius:18px; background:#eef5f1; }
       .home-figure-meta { display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap; padding:2px 4px 0; color:var(--muted); font-size:12px; font-weight:800; line-height:1.35; }
       .home-figure-meta strong { color:var(--text); font-size:13px; }
@@ -4774,9 +4774,9 @@ ${unicornHeader}
       <main>
         <section class="home-hero">
           <div class="home-copy">
-            <div class="eyebrow">&gt;_ operating software for real work</div>
+            <div class="eyebrow">&gt;_ operating software for the messy middle</div>
             <h1>The work behind the business, finally in one place.</h1>
-            <p>SuperMega gives shops and plants one calm place to sell, close, hand off work, and act on the details that usually get lost in chat and spreadsheets.</p>
+            <p>SuperMega gives shops and plants one calm operating layer for the work between the sale, the shift, and the owner&apos;s next decision.</p>
             <div class="home-actions">
               <a class="btn primary" href="https://app.supermega.dev/?demo=shop">Open Shop</a>
               <a class="btn secondary" href="https://app.supermega.dev/?demo=plant">Open Plant</a>
@@ -4824,15 +4824,8 @@ ${unicornHeader}
         </section>
 
         <section class="home-section">
-          <div class="home-ai">
-            <div><div class="eyebrow">The useful AI layer</div><h2>Less chasing. More running.</h2><p>When a workflow is stable, SuperMega can help read the source, prepare the brief, surface the exception, or draft the next action. People still control approvals, writes, and external messages.</p><div class="cta"><a class="btn primary" href="/contact/?from=ai-workflow">Start with one workflow</a></div></div>
-            <div class="home-ai-list"><div><strong>Read</strong><span>Turn approved messages, files, photos, and spreadsheets into structured records.</span></div><div><strong>Prioritize</strong><span>Put the unresolved work, owner, evidence, and next decision where the team can see it.</span></div><div><strong>Act with control</strong><span>Draft first, approve next, and keep an audit trail before anything is sent or written back.</span></div></div>
-          </div>
-        </section>
-
-        <section class="home-section">
           <div class="home-cta">
-            <div><div class="eyebrow">Start simply</div><h2>Show us the work that keeps getting chased.</h2><p>We will help you choose the smallest useful first lane, set up the demo, and define the proof that makes it worth keeping.</p></div>
+            <div><div class="eyebrow">Start simply</div><h2>Show us the work that keeps getting chased.</h2><p>Start with Shop or Plant. When the workflow is clear, we can add the useful AI layer without turning the product into a science project.</p></div>
             <div class="cta"><a class="btn primary" href="/contact/?from=homepage-cta">Contact SuperMega</a><a class="btn secondary" href="https://app.supermega.dev/?demo=shop">Open app</a></div>
           </div>
         </section>
@@ -6068,7 +6061,7 @@ for (const entry of await readdir(staticDir, { withFileTypes: true })) {
   }
 }
 await writeFile(resolve(staticDir, 'index.html'), normalizePublicProductNames(unicornPublicHomeHtml), 'utf8')
-await writeFile(resolve(staticDir, '404.html'), `<!doctype html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="robots" content="noindex,nofollow" /><title>Page not found | SUPERMEGA.dev</title><meta name="theme-color" content="#07111f" /><link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" /><style>${unicornShellStyle}</style></head><body><div class="wrap">${unicornHeader}<main><section class="poster" style="min-height:58vh;align-items:center"><div class="copy"><div class="eyebrow">404</div><h1>Page not found.</h1><p>That page doesn’t exist. Head back home, or see what we build.</p><div class="cta"><a class="btn primary" href="/">Home</a><a class="btn secondary" href="/products/">Products</a></div></div></section></main></div></body></html>`, 'utf8')
+await writeFile(resolve(staticDir, '404.html'), `<!doctype html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="robots" content="noindex,nofollow" /><title>Page not found | SUPERMEGA.dev</title><meta name="theme-color" content="#07111f" /><link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" /><style>${unicornShellStyle}</style></head><body><div class="wrap">${unicornHeader}<main><section class="poster" style="min-height:58vh;align-items:center"><div class="copy"><div class="eyebrow">404</div><h1>Page not found.</h1><p>That page doesn’t exist. Head back home, or open a live workspace.</p><div class="cta"><a class="btn primary" href="/">Home</a><a class="btn secondary" href="https://app.supermega.dev/?demo=shop">Open app</a></div></div></section></main></div></body></html>`, 'utf8')
 await mkdir(resolve(staticDir, 'products'), { recursive: true })
 await writeFile(resolve(staticDir, 'products', 'index.html'), publicRedirectHtml('https://app.supermega.dev/?demo=shop', 'Open Shop'), 'utf8')
 // Premium product detail pages (one per product, data-driven, shares the brand shell)
@@ -7065,9 +7058,9 @@ ${unicornHeader}
             <h1>Real software, running in real businesses.</h1>
             <p>A few of the things we've built — live products you can try right now, and custom systems we've shipped for businesses in Myanmar. Every one started from someone's real, messy work.</p>
             <div class="cta">
-              <a class="btn primary" href="/contact/">Tell us what to fix</a>
-              <a class="btn secondary" href="/demo/">See live demos</a>
-              <a class="btn secondary" href="/offers/">Pricing</a>
+              <a class="btn primary" href="https://app.supermega.dev/?demo=shop">Open Shop</a>
+              <a class="btn secondary" href="https://app.supermega.dev/?demo=plant">Open Plant</a>
+              <a class="btn secondary" href="/contact/">Tell us what to fix</a>
             </div>
             <p class="hero-tagline">Cast real work into software.</p>
           </div>
@@ -7096,7 +7089,7 @@ ${unicornHeader}
             <div><h2>Want one built for your business?</h2></div>
             <div style="display:flex;gap:12px;flex-wrap:wrap">
               <a class="btn primary" href="/contact/">Talk to us</a>
-              <a class="btn secondary" href="/offers/">See pricing</a>
+              <a class="btn secondary" href="https://app.supermega.dev/?demo=shop">Open app</a>
             </div>
           </div>
         </section>
@@ -10357,7 +10350,7 @@ await prunePublicSiteDir()
 await prunePublicStaticRoot()
 await mkdir(staticDir, { recursive: true })
 await mkdir(resolve(staticDir, 'free'), { recursive: true })
-await writeFile(resolve(staticDir, 'free', 'index.html'), publicRedirectHtml('/products/', 'See the two apps'), 'utf8')
+await writeFile(resolve(staticDir, 'free', 'index.html'), publicRedirectHtml('https://app.supermega.dev/?demo=shop', 'Open Shop'), 'utf8')
 await writeFile(
   resolve(staticDir, 'private-not-found.html'),
   '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="robots" content="noindex,nofollow"><title>Not found</title><body>Not found.</body></html>\n',
