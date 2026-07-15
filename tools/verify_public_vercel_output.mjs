@@ -1,5 +1,8 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { resolve } from 'node:path'
+
+const require = createRequire(import.meta.url)
 
 const root = process.cwd()
 const outputDir = resolve(root, '.vercel', 'output')
@@ -59,6 +62,35 @@ for (const entry of expectedFunctions) {
 const publicDatastoreShim = resolve(functionsDir, 'contact-submissions.js.func', 'api', 'lib', 'supermega-datastore.js')
 if (!existsSync(publicDatastoreShim) || !readFileSync(publicDatastoreShim, 'utf8').includes('public_direct_postgres_disabled')) {
   fail('public_contact_runtime_shim_missing')
+}
+
+const publicBlobQueueBundle = resolve(functionsDir, 'contact-submissions.js.func', 'api', 'lib', 'supermega-blob-queue.js')
+if (!existsSync(publicBlobQueueBundle)) fail('public_contact_blob_queue_bundle_missing')
+const blobQueue = require(publicBlobQueueBundle)
+if (blobQueue.queueStatus().sdk !== 'available') fail('public_contact_blob_sdk_not_bundled')
+const previousBlobToken = process.env.BLOB_READ_WRITE_TOKEN
+const blobWrites = []
+try {
+  process.env.BLOB_READ_WRITE_TOKEN = 'public-artifact-contract-token'
+  const blobSave = await blobQueue.savePipelineAction({
+    action_id: 'TASK-PUBLIC-ARTIFACT-CONTRACT',
+    lead_id: 'LEAD-PUBLIC-ARTIFACT-CONTRACT',
+    title: 'Public artifact contract',
+  }, {
+    blobSdk: {
+      put: async (pathname, body, options) => {
+        blobWrites.push({ pathname, body: JSON.parse(body), options })
+        return { pathname }
+      },
+    },
+  })
+  if (blobSave.status !== 'ready' || blobSave.adapter !== 'vercel_blob') fail('public_contact_blob_fallback_not_runnable')
+  if (blobWrites.length !== 1 || blobWrites[0].options.access !== 'private' || blobWrites[0].options.allowOverwrite !== true) {
+    fail('public_contact_blob_fallback_not_private')
+  }
+} finally {
+  if (previousBlobToken === undefined) delete process.env.BLOB_READ_WRITE_TOKEN
+  else process.env.BLOB_READ_WRITE_TOKEN = previousBlobToken
 }
 
 const home = readText('index.html')

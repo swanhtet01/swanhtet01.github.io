@@ -34,6 +34,11 @@ function slugPart(value, fallback = 'item') {
 
 function loadBlobSdk() {
   try {
+    return require('./vercel-blob-runtime')
+  } catch {
+    // Source-tree tests and non-public deployments load the package directly.
+  }
+  try {
     return require('@vercel/blob')
   } catch {
     return null
