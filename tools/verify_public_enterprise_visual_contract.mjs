@@ -59,6 +59,9 @@ for (const required of [
   '<h2 id="shop-case-heading">Keep the day together.</h2>',
   '<h2 id="plant-case-heading">Give the floor a memory.</h2>',
   'class="case-media"',
+  'class="case-actions"',
+  'href="/contact/?from=shop-workspace"',
+  'href="/contact/?from=plant-workspace"',
   'backdrop-filter: blur(22px)',
   '<h2 id="work-close-heading">One useful workflow is enough to start.</h2>',
 ]) {
