@@ -41,19 +41,19 @@ if (!agents) fail('missing_public_ai_agents_output')
 if (!contact) fail('missing_public_contact_output')
 
 requireTokens('generator_two_suite_redesign', source, [
-  'The work behind the business, finally in one place.',
+  'Less chasing. More running.',
   "'Shop'",
   "'Plant'",
   'AI workflow solutions',
-  'Open Shop',
-  'Open Plant',
+  'Try Shop live',
+  'Try Plant live',
 ])
 
 requireTokens('home_two_suite_redesign', home, [
-  'The work behind the business, finally in one place.',
-  'Open Shop',
-  'Open Plant',
-  'Talk to us',
+  'Less chasing. More running.',
+  'Try Shop live',
+  'Try Plant live',
+  'Start a conversation',
 ])
 
 requireTokens('products_two_suite_redesign', products, [

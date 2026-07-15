@@ -66,7 +66,7 @@ const requiredProductShotPaths = [
 
 assertIncludes('home', home, [
   '<title>supermega.dev — your business, in one simple app</title>',
-  'The work behind the business, finally in one place.',
+  'Less chasing. More running.',
 ])
 assertIncludes('products', products, [
   'Continue to SuperMega',
