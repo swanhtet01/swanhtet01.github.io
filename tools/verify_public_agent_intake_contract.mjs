@@ -134,16 +134,6 @@ assert.match(plantWorkspaceTask.operator_brief, /Plant private workspace first p
 assert.ok(plantWorkspaceTask.implementation_blueprint_pack.modules.includes('risk_queue'))
 assert.equal(plantWorkspaceTask.approval_required, true)
 
-const reportingLead = lead({
-  page_path: '/contact/?from=ai-agent-solution',
-  goal: 'Every Monday we combine three Excel spreadsheets into one clean report and exception list.',
-})
-const reportingRoute = buildSolutionRoute(reportingLead)
-assert.equal(reportingRoute.template_id, 'data-clean-report-agent')
-assert.equal(reportingRoute.delivery_lane, 'data_cleanup_workcell')
-assert.equal(reportingRoute.starter_kit_url, '')
-assert.ok(reportingRoute.matched_keywords.includes('excel'))
-
 const neutralRoute = buildSolutionRoute(lead({ goal: 'We need help.' }))
 assert.equal(neutralRoute.template_id, 'outcome-discovery')
 assert.equal(neutralRoute.delivery_lane, 'operator_discovery')
@@ -167,7 +157,6 @@ console.log(JSON.stringify({
   contextual_copy: true,
   visible_fields: 4,
   fallback_route: vagueAgentRoute.template_id,
-  specific_route: reportingRoute.template_id,
   workspace_routes: [shopWorkspaceRoute.template_id, plantWorkspaceRoute.template_id],
   phantom_starter_kit_paths: 0,
 }))

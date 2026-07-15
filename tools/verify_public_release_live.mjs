@@ -5,9 +5,9 @@ const retryDelayMs = 5_000
 const endpoints = {
   home: 'https://supermega.dev/',
   www: 'https://www.supermega.dev/',
-  fileAnalyst: 'https://supermega-machine.vercel.app/workcell',
-  paymentReconciler: 'https://supermega.dev/reconcile/',
-  agentIntake: 'https://supermega.dev/contact/?from=ai-agent-solution',
+  work: 'https://supermega.dev/work/',
+  contact: 'https://supermega.dev/contact/',
+  retiredReconcile: 'https://supermega.dev/reconcile/',
   health: 'https://supermega.dev/api/health',
   contactStatus: 'https://supermega.dev/api/contact-submissions/status',
   contactDiagnostics: 'https://supermega.dev/api/contact-submissions/status?detail=1',
@@ -21,109 +21,79 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-async function get(url, accept) {
-  const response = await fetch(url, {
+function request(url, options = {}) {
+  return fetch(url, {
     method: 'GET',
-    redirect: 'follow',
+    redirect: options.redirect || 'follow',
     cache: 'no-store',
     headers: {
-      accept,
+      accept: options.accept || 'text/html',
       'cache-control': 'no-cache',
       pragma: 'no-cache',
       'user-agent': 'SuperMegaVerifiedRelease/1.0',
     },
     signal: AbortSignal.timeout(requestTimeoutMs),
   })
+}
+
+async function get(url, accept) {
+  const response = await request(url, { accept })
   assert(response.ok, `http_${response.status}_${new URL(url).pathname}`)
   return response
 }
 
-function verifyHome(html, label) {
-  for (const required of [
-    '<title>supermega.dev | Operational software built to fit</title>',
-    '<h1 id="portfolio-heading">Operational software, built to fit.</h1>',
-    '<h2 id="workspaces-heading">Start close to the real work.</h2>',
-    'data-product-preview',
-    'data-preview-open',
-    'src="/live-shop-workspace.png"',
-    "src:'/live-plant-workspace.png'",
-    'https://supermega-machine.vercel.app/workcell',
-    'href="/reconcile/"',
-    '<strong>AI Agent Solutions</strong>',
-    'Use File Analyst to clean one export, or run Payment Reconciler now',
-    'Sources stay in this browser and are never uploaded.',
-    'Use working screens',
-    'Your private workspace is configured and verified before handover.',
-    'Start fresh or add approved business records when ready.',
-    '<h2 id="brief-heading">Tell us where the workflow breaks.</h2>',
-    '>Describe your workflow</a>',
-    '<img src="/favicon.svg" alt="" width="64" height="64" />',
-  ]) {
+const retiredPublicContent = ['MegaOS', 'DeskPOS', 'File Analyst', 'Payment Reconciler', 'data-clean-report-agent', 'supermega-machine.vercel.app/workcell', 'href="/reconcile/"', 'target="_blank"', 'target=_blank', 'window.open(', '>SM<']
+
+function verifySharedPage(html, label) {
+  for (const required of ['data-theme="light"', 'data-theme="dark"', 'data-theme-toggle', 'class="terminal-mark"', 'supermega<span class="domain">.dev</span>']) {
     assert(html.includes(required), `${label}_missing_${required.slice(0, 32)}`)
   }
-  for (const forbidden of ['MegaOS', 'DeskPOS', 'General enquiry', 'target="_blank"', 'target=_blank', 'window.open(', 'rotate(', 'Build an agent solution', '>Agent solution<', 'Need a repeated task handled?', '>SM<', 'Run the operation. See what matters.', 'Open a workspace.', 'Try first. Add data later.', 'Need something different?', '[data-reveal] { opacity: 0', 'Use one account across desktop, tablet, and mobile.', 'Create a workspace only when you want to keep your work and use it across devices.', 'Create with email and password. Return with your password or an email code.']) {
+  for (const forbidden of retiredPublicContent) {
     assert(!html.includes(forbidden), `${label}_retired_${forbidden}`)
   }
 }
 
-function verifyFileAnalyst(html) {
+function verifyHome(html, label) {
+  verifySharedPage(html, label)
   for (const required of [
-    '<title>File Analyst | SuperMega AI Agent Solutions</title>',
-    'zero source upload',
-    'id="approveButton"',
-    'id="downloadClean"',
+    '<title>supermega.dev | Operational software built to fit</title>',
+    '<h1 id="portfolio-heading">Operational software, built to fit.</h1>',
+    'href="/work/"',
+    '<h2 id="workspaces-heading">Start close to the real work.</h2>',
+    'Two working systems',
+    'Shop and Plant open without an account.',
+    'Keep AI accountable',
+    'data-product-preview',
+    'src="/live-shop-workspace.png"',
+    "src:'/live-plant-workspace.png'",
+    '<h2 id="brief-heading">Tell us where the workflow breaks.</h2>',
+    '>Describe your workflow</a>',
   ]) {
-    assert(html.includes(required), `file_analyst_missing_${required.slice(0, 32)}`)
-  }
-  for (const forbidden of ['MegaOS', 'DeskPOS']) {
-    assert(!html.includes(forbidden), `file_analyst_retired_${forbidden}`)
+    assert(html.includes(required), `${label}_missing_${required.slice(0, 32)}`)
   }
 }
 
-function verifyPaymentReconciler(html) {
+function verifyWork(html) {
+  verifySharedPage(html, 'work')
   for (const required of [
-    '<title>Payment Reconciler | SuperMega AI Agent Solutions</title>',
-    'Zero source upload or money movement',
-    'id="invoiceFile"',
-    'id="paymentFile"',
-    'id="approveButton"',
-    'id="downloadReconciliation"',
-    'src="/reconcile/payment-reconciler.mjs"',
+    '<title>Work | supermega.dev</title>',
+    '<h1 id="work-heading">See the work before the pitch.</h1>',
+    'Current Shop and Plant screens',
+    'No account to try',
+    '<h2 id="shop-case-heading">Keep the day together.</h2>',
+    '<h2 id="plant-case-heading">Give the floor a memory.</h2>',
+    'src="/live-shop-workspace.png"',
+    'src="/live-plant-workspace.png"',
+    '<h2 id="work-close-heading">One useful workflow is enough to start.</h2>',
   ]) {
-    assert(html.includes(required), `payment_reconciler_missing_${required.slice(0, 32)}`)
-  }
-  for (const forbidden of ['MegaOS', 'DeskPOS', 'target="_blank"', 'window.open(', 'connect your bank']) {
-    assert(!html.includes(forbidden), `payment_reconciler_retired_${forbidden}`)
+    assert(html.includes(required), `work_missing_${required.slice(0, 32)}`)
   }
 }
 
-function verifyAgentIntake(html) {
-  for (const required of [
-    "entryIntent==='ai-agent-solution'",
-    "entryIntent==='shop-workspace'?'Shop':entryIntent==='plant-workspace'?'Plant':''",
-    'What do you want to improve?',
-    'What should work better?',
-    'one reviewed example',
-    "idleSubmitLabel='Contact us'",
-    "text('[data-contact-heading]','Request a private '+workspaceProduct+' workspace.')",
-    "idleSubmitLabel='Request workspace'",
-    'action="/api/contact-submissions"',
-  ]) {
-    assert(html.includes(required), `agent_intake_missing_${required.slice(0, 32)}`)
-  }
-  for (const field of ['name', 'email', 'company', 'goal']) {
-    assert(new RegExp(`<(?:input|textarea)[^>]*\\bname="${field}"`).test(html), `agent_intake_missing_field_${field}`)
-  }
-  for (const forbidden of [
-    'name="workflow"',
-    'name="requested_package"',
-    'name="product_area"',
-    '/site/agent-templates/',
-    'General enquiry',
-    'MegaOS',
-    'DeskPOS',
-  ]) {
-    assert(!html.includes(forbidden), `agent_intake_retired_${forbidden}`)
+function verifyContact(html) {
+  verifySharedPage(html, 'contact')
+  for (const required of ['What needs to work better?', 'action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="goal"']) {
+    assert(html.includes(required), `contact_missing_${required.slice(0, 32)}`)
   }
 }
 
@@ -148,34 +118,25 @@ function verifyProtectedDiagnostics(response, body) {
 }
 
 async function verifyOnce() {
-  const [homeResponse, wwwResponse, fileAnalystResponse, paymentReconcilerResponse, intakeResponse, healthResponse, statusResponse, diagnosticsResponse] = await Promise.all([
+  const [homeResponse, wwwResponse, workResponse, contactResponse, reconcileResponse, healthResponse, statusResponse, diagnosticsResponse] = await Promise.all([
     get(endpoints.home, 'text/html'),
     get(endpoints.www, 'text/html'),
-    get(endpoints.fileAnalyst, 'text/html'),
-    get(endpoints.paymentReconciler, 'text/html'),
-    get(endpoints.agentIntake, 'text/html'),
+    get(endpoints.work, 'text/html'),
+    get(endpoints.contact, 'text/html'),
+    request(endpoints.retiredReconcile, { redirect: 'manual' }),
     get(endpoints.health, 'application/json'),
     get(endpoints.contactStatus, 'application/json'),
-    fetch(endpoints.contactDiagnostics, {
-      method: 'GET',
-      redirect: 'follow',
-      cache: 'no-store',
-      headers: {
-        accept: 'application/json',
-        'cache-control': 'no-cache',
-        pragma: 'no-cache',
-        'user-agent': 'SuperMegaVerifiedRelease/1.0',
-      },
-      signal: AbortSignal.timeout(requestTimeoutMs),
-    }),
+    request(endpoints.contactDiagnostics, { accept: 'application/json' }),
   ])
 
-  const [home, www, fileAnalyst, paymentReconciler, intake, health, contactStatus, protectedDiagnostics] = await Promise.all([
+  assert(reconcileResponse.status === 308, 'retired_reconcile_not_redirected')
+  assert(reconcileResponse.headers.get('location') === '/contact/?from=workflow', 'retired_reconcile_wrong_destination')
+
+  const [home, www, work, contact, health, contactStatus, protectedDiagnostics] = await Promise.all([
     homeResponse.text(),
     wwwResponse.text(),
-    fileAnalystResponse.text(),
-    paymentReconcilerResponse.text(),
-    intakeResponse.text(),
+    workResponse.text(),
+    contactResponse.text(),
     healthResponse.json(),
     statusResponse.json(),
     diagnosticsResponse.json(),
@@ -183,9 +144,8 @@ async function verifyOnce() {
 
   verifyHome(home, 'home')
   verifyHome(www, 'www')
-  verifyFileAnalyst(fileAnalyst)
-  verifyPaymentReconciler(paymentReconciler)
-  verifyAgentIntake(intake)
+  verifyWork(work)
+  verifyContact(contact)
   verifyHealth(health)
   verifyContactStatus(contactStatus)
   verifyProtectedDiagnostics(diagnosticsResponse, protectedDiagnostics)

@@ -264,9 +264,9 @@ const headerHtml = `${themeBootstrap}
       <span class="brand-text">supermega<span class="domain">.dev</span></span>
     </a>
     <nav class="nav" aria-label="Primary">
+      <a class="nav-link optional-nav" href="/work/">Work</a>
       <a class="nav-link optional-nav" href="https://app.supermega.dev/?demo=shop">Shop</a>
       <a class="nav-link optional-nav" href="https://app.supermega.dev/?demo=plant">Plant</a>
-      <a class="nav-link optional-nav" href="https://supermega-machine.vercel.app/workcell">File Analyst</a>
       <button class="icon-button" type="button" data-theme-toggle aria-label="Use dark mode" title="Use dark mode"><svg class="theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path></svg><svg class="theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 15.2A8.5 8.5 0 0 1 8.8 3.5 8.5 8.5 0 1 0 20.5 15.2Z"></path></svg></button>
       <a class="btn primary header-cta" href="/contact/">Talk to us</a>
     </nav>
@@ -276,7 +276,7 @@ ${themeToggleScript}`
 
 const footerHtml = `<div class="footer-frame"><footer>
   <span class="footer-brand"><img class="footer-mark" src="/favicon.svg" alt="" width="64" height="64" /> supermega.dev</span>
-  <span class="footer-links"><a href="https://app.supermega.dev/?demo=shop">Shop</a><a href="https://app.supermega.dev/?demo=plant">Plant</a><a href="https://supermega-machine.vercel.app/workcell">File Analyst</a><a href="/reconcile/">Reconcile</a><a href="/contact/">Contact</a><a href="/privacy/">Privacy</a></span>
+  <span class="footer-links"><a href="/work/">Work</a><a href="https://app.supermega.dev/?demo=shop">Shop</a><a href="https://app.supermega.dev/?demo=plant">Plant</a><a href="/contact/">Contact</a><a href="/privacy/">Privacy</a></span>
 </footer></div>`
 
 function socialMeta(title, description, url) {
@@ -317,7 +317,7 @@ const homeProductPreviewScript = `<script>(function(){var root=document.querySel
 
 const homeHtml = documentHtml({
   title: 'supermega.dev | Operational software built to fit',
-  description: 'Try Shop, Plant, File Analyst, or the browser-local Payment Reconciler without an account. When the standard workflow does not fit, SuperMega builds and verifies a private workspace around the operation.',
+  description: 'Try a working Shop or Plant workspace without an account. When the standard workflow does not fit, SuperMega builds and verifies a private route around the operation.',
   canonical: 'https://supermega.dev/',
   style: `
     .home-main { width: 100%; overflow: clip; }
@@ -379,7 +379,7 @@ const homeHtml = documentHtml({
     .preview-switch button { min-height: 44px; border: 0; border-radius: 5px; padding: 0 14px; background: transparent; color: var(--muted); font: inherit; font-size: 13px; font-weight: 780; cursor: pointer; transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease; }
     .preview-switch button[aria-pressed="true"] { background: var(--surface-strong); color: var(--ink); box-shadow: 0 4px 14px rgba(3, 8, 18, 0.1); }
     .preview-media { overflow: hidden; background: #071524; }
-    .preview-media img { display: block; width: 100%; height: auto; aspect-ratio: 10 / 2.55; object-fit: cover; object-position: top; opacity: 1; transition: opacity 180ms ease; }
+    .preview-media img { display: block; width: 100%; height: auto; aspect-ratio: 10 / 3; object-fit: contain; object-position: top; opacity: 1; transition: opacity 180ms ease; }
     .preview-media img.is-switching { opacity: .28; }
     .live-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--quiet); box-shadow: 0 0 0 4px color-mix(in srgb, var(--quiet) 16%, transparent); }
     .hero-status.is-ready .live-dot { background: var(--signal); box-shadow: 0 0 0 4px color-mix(in srgb, var(--signal) 16%, transparent); }
@@ -501,7 +501,7 @@ const homeHtml = documentHtml({
           <p><strong class="hero-lead">Less chasing. More running.</strong> Open a working Shop or Plant workspace in one click. Run one real workflow, then keep the private workspace when your team is ready. If the standard path still does not fit, SuperMega shapes one useful route around the real operation and verifies it before handover.</p>
           <div class="hero-actions">
             <a class="btn primary" data-preview-open href="https://app.supermega.dev/?demo=shop">Try Shop live</a>
-            <a class="btn secondary" href="/contact/">Talk to us</a>
+            <a class="btn secondary" href="/work/">See the work</a>
           </div>
           <div class="hero-meta"><span class="hero-status" data-status-shell><span class="live-dot" aria-hidden="true"></span><span data-public-status aria-live="polite">Checking live demos</span></span><span class="hero-note">No account needed</span></div>
         </div>
@@ -521,18 +521,17 @@ const homeHtml = documentHtml({
 
   <section class="entry-section page-frame" id="workspaces" aria-labelledby="workspaces-heading">
     <div class="section-intro">
-      <div><div class="eyebrow">Three working paths</div><h2 id="workspaces-heading">Start close to the real work.</h2></div>
+      <div><div class="eyebrow">Two working systems</div><h2 id="workspaces-heading">Start close to the real work.</h2></div>
       <p>See the workflow before you commit. Keep the private workspace when it proves useful to the people doing the work.</p>
     </div>
     <div class="proof-strip" aria-label="How SuperMega starts">
-      <div class="proof-item"><span>01 / WORKING</span><strong>Use working screens</strong><p>Shop, Plant, File Analyst, and Payment Reconciler open without an account. Explore a workflow or run a bounded file task before you choose a path.</p></div>
+      <div class="proof-item"><span>01 / WORKING</span><strong>Use working screens</strong><p>Shop and Plant open without an account. Explore the actual workflow before you choose a path.</p></div>
       <div class="proof-item"><span>02 / PRIVATE</span><strong>Set up with you</strong><p>Your private workspace is configured and verified before handover. We map the people, sources, and approval points that matter.</p></div>
-      <div class="proof-item"><span>03 / APPROVED</span><strong>Bring data deliberately</strong><p>Start fresh or add approved business records when ready. See a useful screen before private setup is complete.</p></div>
+      <div class="proof-item"><span>03 / CONTROLLED</span><strong>Keep AI accountable</strong><p>Drafts, checks, and next-step suggestions stay attached to the records and approvals behind them.</p></div>
     </div>
     <div class="destination-list">
       <a class="destination" href="https://app.supermega.dev/?demo=shop" aria-label="Try Shop live"><span class="destination-index">01 / SHOP</span><span class="destination-copy"><strong>Shop</strong><span>Sell, track stock, manage customers, follow receivables, and keep the books together. Ring sales, keep stock honest, and close the day with less chasing.</span></span><span class="destination-arrow" aria-hidden="true">&#8594;</span></a>
       <a class="destination" href="https://app.supermega.dev/?demo=plant" aria-label="Try Plant live"><span class="destination-index">02 / PLANT</span><span class="destination-copy"><strong>Plant</strong><span>See floor state, machine history, shift events, and imports in one workspace. See what is running, capture floor history, and hand the next shift a cleaner brief.</span></span><span class="destination-arrow" aria-hidden="true">&#8594;</span></a>
-      <a class="destination" href="/reconcile/" aria-label="Run Payment Reconciler"><span class="destination-index">03 / AI AGENT SOLUTIONS</span><span class="destination-copy"><strong>AI Agent Solutions</strong><span>Use File Analyst to clean one export, or run Payment Reconciler now to match sales and money files, isolate uncertain pairs, and produce approval evidence. Sources stay in this browser and are never uploaded.</span></span><span class="destination-arrow" aria-hidden="true">&#8594;</span></a>
     </div>
   </section>
 
@@ -556,6 +555,123 @@ const homeHtml = documentHtml({
 </main>
 ${liveStatusScript}
 ${homeProductPreviewScript}`,
+})
+
+const workHtml = documentHtml({
+  title: 'Work | supermega.dev',
+  description: 'See how SuperMega Shop and Plant turn daily operating work into clear, connected workflows.',
+  canonical: 'https://supermega.dev/work/',
+  style: `
+    .work-main { width: 100%; overflow: clip; }
+    .work-hero { border-bottom: 1px solid var(--line); background: var(--surface); }
+    .work-hero-inner { width: min(100% - 48px, 1240px); margin-inline: auto; padding: 144px 0 76px; }
+    .work-command { color: var(--accent); font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 12px; font-weight: 800; text-transform: uppercase; }
+    .work-heading { display: grid; grid-template-columns: minmax(0, 1fr) minmax(340px, .62fr); align-items: end; gap: 72px; margin-top: 18px; }
+    .work-heading h1 { max-width: 12ch; margin: 0; font-size: 58px; line-height: 1.02; letter-spacing: 0; }
+    .work-heading p { max-width: 42ch; margin: 0; color: var(--muted); font-size: 18px; line-height: 1.6; }
+    .work-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 30px; }
+    .work-actions .btn { min-height: 50px; }
+    .work-signal { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 58px; border-block: 1px solid var(--line); }
+    .work-signal div { min-height: 86px; display: grid; align-content: center; gap: 4px; padding: 18px 24px 18px 0; }
+    .work-signal div + div { border-left: 1px solid var(--line); padding-left: 24px; }
+    .work-signal strong { font-size: 15px; }
+    .work-signal span { color: var(--muted); font-size: 13px; }
+    .work-heading > *, .work-signal { animation: work-in 640ms cubic-bezier(.2,.8,.2,1) both; }
+    .work-heading > :last-child { animation-delay: 100ms; }
+    .work-signal { animation-delay: 180ms; }
+    @keyframes work-in { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+
+    .case-band { border-bottom: 1px solid var(--line); padding: 84px 0 92px; }
+    .case-band.alt { background: var(--surface); }
+    .case-inner { width: min(100% - 48px, 1240px); margin-inline: auto; }
+    .case-head { display: grid; grid-template-columns: minmax(220px, .45fr) minmax(0, 1fr); gap: 64px; align-items: start; }
+    .case-label { display: grid; gap: 10px; }
+    .case-index { color: var(--accent); font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 12px; font-weight: 800; }
+    .case-label h2 { margin: 0; font-size: 42px; line-height: 1.08; letter-spacing: 0; }
+    .case-copy { display: grid; grid-template-columns: minmax(0, .95fr) minmax(260px, .72fr); gap: 48px; }
+    .case-copy > p { max-width: 43ch; margin: 0; color: var(--muted); font-size: 18px; line-height: 1.62; }
+    .case-points { margin: 0; border-bottom: 1px solid var(--line); }
+    .case-points div { min-height: 48px; display: grid; grid-template-columns: 94px 1fr; align-items: center; gap: 16px; border-top: 1px solid var(--line); }
+    .case-points dt { color: var(--quiet); font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 11px; font-weight: 760; text-transform: uppercase; }
+    .case-points dd { margin: 0; color: var(--ink); font-size: 14px; font-weight: 720; }
+    .case-media { margin-top: 44px; overflow: hidden; border: 1px solid var(--line-strong); border-radius: 8px; background: #071524; box-shadow: var(--shadow-deep); }
+    .case-toolbar { min-height: 54px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); padding: 6px 8px 6px 16px; background: var(--glass); backdrop-filter: blur(22px) saturate(135%); -webkit-backdrop-filter: blur(22px) saturate(135%); }
+    .case-toolbar span { display: inline-flex; align-items: center; gap: 9px; color: var(--muted); font-size: 12px; font-weight: 760; }
+    .case-toolbar span::before { width: 8px; height: 8px; border-radius: 50%; background: var(--signal); box-shadow: 0 0 0 4px color-mix(in srgb, var(--signal) 16%, transparent); content: ""; }
+    .case-toolbar .btn { min-height: 42px; }
+    .case-media img { display: block; width: 100%; height: auto; aspect-ratio: 10 / 3; object-fit: contain; object-position: top; }
+
+    .work-close { background: var(--inverse); color: var(--inverse-ink); }
+    .work-close-inner { width: min(100% - 48px, 1240px); margin-inline: auto; display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, .62fr); align-items: end; gap: 72px; padding: 86px 0 92px; }
+    .work-close .eyebrow { color: #8faeff; }
+    .work-close h2 { max-width: 14ch; margin: 10px 0 0; font-size: 46px; line-height: 1.06; letter-spacing: 0; }
+    .work-close-copy p { max-width: 43ch; margin: 0; color: var(--inverse-muted); font-size: 17px; line-height: 1.6; }
+    .work-close-copy .btn { margin-top: 26px; min-height: 50px; }
+
+    @media (max-width: 900px) {
+      .work-heading, .work-close-inner { grid-template-columns: 1fr; gap: 24px; }
+      .work-heading h1 { font-size: 50px; }
+      .case-head { grid-template-columns: 1fr; gap: 26px; }
+      .case-copy { grid-template-columns: minmax(0, 1fr) minmax(260px, .72fr); }
+    }
+    @media (max-width: 720px) {
+      .work-hero-inner, .case-inner, .work-close-inner { width: min(100% - 32px, 1240px); }
+      .work-hero-inner { padding: 114px 0 58px; }
+      .work-heading h1 { font-size: 40px; }
+      .work-heading p, .case-copy > p { font-size: 16px; }
+      .work-actions .btn { flex: 1 1 140px; min-height: 46px; }
+      .work-signal { grid-template-columns: 1fr; margin-top: 40px; }
+      .work-signal div { min-height: 74px; padding: 16px 0; }
+      .work-signal div + div { border-top: 1px solid var(--line); border-left: 0; padding-left: 0; }
+      .case-band { padding: 60px 0 66px; }
+      .case-label h2 { font-size: 34px; }
+      .case-copy { grid-template-columns: 1fr; gap: 28px; }
+      .case-media { margin-top: 32px; }
+      .case-toolbar { min-height: 52px; padding-left: 12px; }
+      .case-toolbar .btn { min-height: 40px; }
+      .case-media img { aspect-ratio: 10 / 3; }
+      .work-close-inner { padding: 68px 0 74px; }
+      .work-close h2 { font-size: 37px; }
+      .work-close-copy p { font-size: 16px; }
+    }
+  `,
+  content: `<main class="work-main">
+  <section class="work-hero" aria-labelledby="work-heading">
+    <div class="work-hero-inner">
+      <div class="work-command">&gt;_ work / live systems</div>
+      <div class="work-heading">
+        <h1 id="work-heading">See the work before the pitch.</h1>
+        <p>Shop and Plant are working systems, not concept screens. Open them in the same tab, follow a real operating path, and decide whether the workflow earns a place in your business.</p>
+      </div>
+      <div class="work-actions"><a class="btn primary" href="https://app.supermega.dev/?demo=shop">Try Shop live</a><a class="btn secondary" href="https://app.supermega.dev/?demo=plant">Try Plant live</a></div>
+      <div class="work-signal" aria-label="Product availability"><div><strong>Working now</strong><span>Current Shop and Plant screens</span></div><div><strong>No account to try</strong><span>Explore before private setup</span></div><div><strong>Fits every screen</strong><span>Desktop, tablet, and mobile</span></div></div>
+    </div>
+  </section>
+
+  <section class="case-band" aria-labelledby="shop-case-heading">
+    <div class="case-inner">
+      <div class="case-head">
+        <div class="case-label"><span class="case-index">01 / SHOP</span><h2 id="shop-case-heading">Keep the day together.</h2></div>
+        <div class="case-copy"><p>Sales, customers, stock, receivables, and books stay in one operating flow. The useful next action is visible without turning the owner into the integration layer.</p><dl class="case-points"><div><dt>Sell</dt><dd>Fast sale and customer flow</dd></div><div><dt>Control</dt><dd>Stock, cash, and money owed</dd></div><div><dt>Close</dt><dd>Daily handoff with variance</dd></div></dl></div>
+      </div>
+      <div class="case-media"><div class="case-toolbar"><span>Shop workspace / live</span><a class="btn secondary" href="https://app.supermega.dev/?demo=shop">Open Shop</a></div><img src="/live-shop-workspace.png" alt="Current Shop workspace showing sales, cash, customers, and stock" width="1600" height="480" loading="lazy" /></div>
+    </div>
+  </section>
+
+  <section class="case-band alt" aria-labelledby="plant-case-heading">
+    <div class="case-inner">
+      <div class="case-head">
+        <div class="case-label"><span class="case-index">02 / PLANT</span><h2 id="plant-case-heading">Give the floor a memory.</h2></div>
+        <div class="case-copy"><p>Machine state, shift evidence, breakdowns, changeovers, and handoffs stay connected. The next shift sees what happened and what still needs attention.</p><dl class="case-points"><div><dt>See</dt><dd>Floor state and line readiness</dd></div><div><dt>Record</dt><dd>Events tied to machine history</dd></div><div><dt>Handoff</dt><dd>Accountable next-shift brief</dd></div></dl></div>
+      </div>
+      <div class="case-media"><div class="case-toolbar"><span>Plant workspace / live</span><a class="btn secondary" href="https://app.supermega.dev/?demo=plant">Open Plant</a></div><img src="/live-plant-workspace.png" alt="Current Plant workspace showing machine state across two production lines" width="1600" height="480" loading="lazy" /></div>
+    </div>
+  </section>
+
+  <section class="work-close" aria-labelledby="work-close-heading">
+    <div class="work-close-inner"><div><div class="eyebrow">Your operation, not another catalog</div><h2 id="work-close-heading">One useful workflow is enough to start.</h2></div><div class="work-close-copy"><p>When Shop or Plant is close but not exact, show us the real handoff, file, or repeated decision. We will shape the smallest route worth proving and keep consequential actions reviewable.</p><a class="btn primary" href="/contact/">Describe the workflow</a></div></div>
+  </section>
+</main>`,
 })
 
 const contactHtml = documentHtml({
@@ -739,8 +855,9 @@ const vercelConfig = {
     { src: '^/(?:login|app|clients)(?:/.*)?$', status: 308, headers: { Location: 'https://app.supermega.dev/' } },
     { src: '^/demo/?$', status: 308, headers: { Location: 'https://demo.supermega.dev/' } },
     { src: '^/start/?$', status: 308, headers: { Location: '/contact/' } },
+    { src: '^/reconcile(?:/.*)?$', status: 308, headers: { Location: '/contact/?from=workflow' } },
     {
-      src: '^/(?:products|product|offers|pricing|plans|packages|agent-templates|ai-agents|work|operator|machine|card|megaos-preview|free)(?:/.*)?$',
+      src: '^/(?:products|product|offers|pricing|plans|packages|agent-templates|ai-agents|workcell|operator|machine|card|megaos-preview|free)(?:/.*)?$',
       status: 308,
       headers: { Location: '/' },
     },
@@ -797,13 +914,11 @@ await cp(resolve(root, 'tools', 'public-assets', 'live-shop-workspace.png'), res
 await cp(resolve(root, 'tools', 'public-assets', 'live-plant-workspace.png'), resolve(staticDir, 'live-plant-workspace.png'), { force: true })
 await writeStatic('index.html', homeHtml)
 await writeStatic('404.html', notFoundHtml)
+await writeStatic('work/index.html', workHtml)
 await writeStatic('contact/index.html', contactHtml)
 await writeStatic('privacy/index.html', privacyHtml)
-await mkdir(resolve(staticDir, 'reconcile'), { recursive: true })
-await cp(resolve(root, 'tools', 'public-workcells', 'payment-reconciler.html'), resolve(staticDir, 'reconcile', 'index.html'), { force: true })
-await cp(resolve(root, 'tools', 'public-workcells', 'payment-reconciler.mjs'), resolve(staticDir, 'reconcile', 'payment-reconciler.mjs'), { force: true })
 await writeStatic('robots.txt', 'User-agent: *\nAllow: /\nDisallow: /api/\nSitemap: https://supermega.dev/sitemap.xml\n')
-await writeStatic('sitemap.xml', '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>https://supermega.dev/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>\n  <url><loc>https://supermega.dev/reconcile/</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/contact/</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/privacy/</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>\n</urlset>\n')
+await writeStatic('sitemap.xml', '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>https://supermega.dev/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>\n  <url><loc>https://supermega.dev/work/</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/contact/</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/privacy/</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>\n</urlset>\n')
 await writeStatic('sw.js', "const CACHE_VERSION = 'supermega-front-door-20260713-terminal'\nself.addEventListener('install', function(){ self.skipWaiting() })\nself.addEventListener('activate', function(event){ event.waitUntil(caches.keys().then(function(keys){ return Promise.all(keys.map(function(key){ return caches.delete(key) })) }).then(function(){ return self.clients.claim() })) })\n")
 await writeStatic('site.webmanifest', `${JSON.stringify({
   name: 'supermega.dev',
