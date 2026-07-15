@@ -598,6 +598,7 @@ const workHtml = documentHtml({
     .case-toolbar { min-height: 54px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); padding: 6px 8px 6px 16px; background: var(--glass); backdrop-filter: blur(22px) saturate(135%); -webkit-backdrop-filter: blur(22px) saturate(135%); }
     .case-toolbar span { display: inline-flex; align-items: center; gap: 9px; color: var(--muted); font-size: 12px; font-weight: 760; }
     .case-toolbar span::before { width: 8px; height: 8px; border-radius: 50%; background: var(--signal); box-shadow: 0 0 0 4px color-mix(in srgb, var(--signal) 16%, transparent); content: ""; }
+    .case-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 6px; }
     .case-toolbar .btn { min-height: 42px; }
     .case-media img { display: block; width: 100%; height: auto; aspect-ratio: 10 / 3; object-fit: contain; object-position: top; }
 
@@ -628,7 +629,7 @@ const workHtml = documentHtml({
       .case-copy { grid-template-columns: 1fr; gap: 28px; }
       .case-media { margin-top: 32px; }
       .case-toolbar { min-height: 52px; padding-left: 12px; }
-      .case-toolbar .btn { min-height: 40px; }
+      .case-toolbar .btn { min-height: 44px; }
       .case-media img { aspect-ratio: 10 / 3; }
       .work-close-inner { padding: 68px 0 74px; }
       .work-close h2 { font-size: 37px; }
@@ -654,7 +655,7 @@ const workHtml = documentHtml({
         <div class="case-label"><span class="case-index">01 / SHOP</span><h2 id="shop-case-heading">Keep the day together.</h2></div>
         <div class="case-copy"><p>Sales, customers, stock, receivables, and books stay in one operating flow. The useful next action is visible without turning the owner into the integration layer.</p><dl class="case-points"><div><dt>Sell</dt><dd>Fast sale and customer flow</dd></div><div><dt>Control</dt><dd>Stock, cash, and money owed</dd></div><div><dt>Close</dt><dd>Daily handoff with variance</dd></div></dl></div>
       </div>
-      <div class="case-media"><div class="case-toolbar"><span>Shop workspace / live</span><a class="btn secondary" href="https://app.supermega.dev/?demo=shop">Open Shop</a></div><img src="/live-shop-workspace.png" alt="Current Shop workspace showing sales, cash, customers, and stock" width="1600" height="480" loading="lazy" /></div>
+      <div class="case-media"><div class="case-toolbar"><span>Shop workspace / live</span><div class="case-actions"><a class="btn secondary" href="https://app.supermega.dev/?demo=shop" aria-label="Try the live Shop workspace">Try live</a><a class="btn primary" href="/contact/?from=shop-workspace" aria-label="Request a private Shop workspace">Request</a></div></div><img src="/live-shop-workspace.png" alt="Current Shop workspace showing sales, cash, customers, and stock" width="1600" height="480" loading="lazy" /></div>
     </div>
   </section>
 
@@ -664,7 +665,7 @@ const workHtml = documentHtml({
         <div class="case-label"><span class="case-index">02 / PLANT</span><h2 id="plant-case-heading">Give the floor a memory.</h2></div>
         <div class="case-copy"><p>Machine state, shift evidence, breakdowns, changeovers, and handoffs stay connected. The next shift sees what happened and what still needs attention.</p><dl class="case-points"><div><dt>See</dt><dd>Floor state and line readiness</dd></div><div><dt>Record</dt><dd>Events tied to machine history</dd></div><div><dt>Handoff</dt><dd>Accountable next-shift brief</dd></div></dl></div>
       </div>
-      <div class="case-media"><div class="case-toolbar"><span>Plant workspace / live</span><a class="btn secondary" href="https://app.supermega.dev/?demo=plant">Open Plant</a></div><img src="/live-plant-workspace.png" alt="Current Plant workspace showing machine state across two production lines" width="1600" height="480" loading="lazy" /></div>
+      <div class="case-media"><div class="case-toolbar"><span>Plant workspace / live</span><div class="case-actions"><a class="btn secondary" href="https://app.supermega.dev/?demo=plant" aria-label="Try the live Plant workspace">Try live</a><a class="btn primary" href="/contact/?from=plant-workspace" aria-label="Request a private Plant workspace">Request</a></div></div><img src="/live-plant-workspace.png" alt="Current Plant workspace showing machine state across two production lines" width="1600" height="480" loading="lazy" /></div>
     </div>
   </section>
 
