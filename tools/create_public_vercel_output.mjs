@@ -5849,6 +5849,15 @@ const config = {
       dest: '/work/index.html',
     },
     {
+      src: '^/reconcile/?$',
+      dest: '/reconcile.html',
+    },
+    {
+      src: '^/reconcile/payment-reconciler\\.mjs$',
+      dest: '/payment-reconciler.mjs',
+      headers: { 'cache-control': 'public, max-age=3600, must-revalidate' },
+    },
+    {
       src: '^/(?:site/.*|favicon\\.svg|favicon-[0-9]+\\.png|apple-touch-icon\\.png|vite\\.svg|site\\.webmanifest)$',
       headers: { 'cache-control': 'public, max-age=31536000, immutable' },
       continue: true,
@@ -6130,6 +6139,8 @@ await writeFile(resolve(staticDir, 'index.html'), normalizePublicProductNames(un
 await mkdir(resolve(staticDir, 'reconcile'), { recursive: true })
 await cp(resolve(root, 'tools', 'public-workcells', 'payment-reconciler.html'), resolve(staticDir, 'reconcile', 'index.html'), { force: true })
 await cp(resolve(root, 'tools', 'public-workcells', 'payment-reconciler.mjs'), resolve(staticDir, 'reconcile', 'payment-reconciler.mjs'), { force: true })
+await cp(resolve(root, 'tools', 'public-workcells', 'payment-reconciler.html'), resolve(staticDir, 'reconcile.html'), { force: true })
+await cp(resolve(root, 'tools', 'public-workcells', 'payment-reconciler.mjs'), resolve(staticDir, 'payment-reconciler.mjs'), { force: true })
 await writeFile(resolve(staticDir, '404.html'), `<!doctype html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="robots" content="noindex,nofollow" /><title>Page not found | SUPERMEGA.dev</title><meta name="theme-color" content="#07111f" /><link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" /><style>${unicornShellStyle}</style></head><body><div class="wrap">${unicornHeader}<main><section class="poster" style="min-height:58vh;align-items:center"><div class="copy"><div class="eyebrow">404</div><h1>Page not found.</h1><p>That page doesn’t exist. Head back home, or open a live workspace.</p><div class="cta"><a class="btn primary" href="/">Home</a><a class="btn secondary" href="https://app.supermega.dev/?demo=shop">Open app</a></div></div></section></main></div></body></html>`, 'utf8')
 await mkdir(resolve(staticDir, 'products'), { recursive: true })
 await writeFile(resolve(staticDir, 'products', 'index.html'), publicRedirectHtml('https://app.supermega.dev/?demo=shop', 'Open Shop'), 'utf8')

@@ -48,6 +48,8 @@ for (const [src, dest] of [
   ['^/api/checkout-start/status$', '/api/checkout-start.js'],
   ['^/api/pipeline-control$', '/api/pipeline-control.js'],
   ['^/api/pipeline-control/status$', '/api/pipeline-control.js'],
+  ['^/reconcile/?$', '/reconcile.html'],
+  ['^/reconcile/payment-reconciler\\.mjs$', '/payment-reconciler.mjs'],
 ]) {
   if (routes.get(src) !== dest) fail('route_contract_missing', { src, expected: dest, actual: routes.get(src) })
 }
@@ -97,6 +99,8 @@ for (const entry of [
   'work/index.html',
   'reconcile/index.html',
   'reconcile/payment-reconciler.mjs',
+  'reconcile.html',
+  'payment-reconciler.mjs',
   'app/start/index.html',
   'site/shots/actual-custom-workflow-queue.png',
   'site/shots/actual-custom-workflow-modules.png',
