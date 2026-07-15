@@ -69,7 +69,7 @@ function verifyFileAnalyst(html) {
     '<title>File Analyst | SuperMega AI Agent Solutions</title>',
     'zero source upload',
     'id="approveButton"',
-    'id="downloadCleanButton"',
+    'id="downloadClean"',
   ]) {
     assert(html.includes(required), `file_analyst_missing_${required.slice(0, 32)}`)
   }
