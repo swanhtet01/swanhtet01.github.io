@@ -1914,7 +1914,7 @@ const unicornShellStyle = `
         .brand-text strong { display: block; max-width: 142px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; }
         .brand-text, .brand-text .wm, .brand-text strong, .brand-text small, .nav .optional-nav { display: none; }
         .nav { flex: 0 0 auto; gap: 6px; }
-        .btn, button { min-height: 42px; padding: 0 12px; }
+        .btn, button { min-height: 44px; padding: 0 12px; }
         .poster, .split, .product-library-head, .output, .proof-system, .proof-board, .workcell-grid, .local-worker-continue, .role-mode-panel, .device-mode-panel, .adaptive-plan-panel, .source-pack-panel, .proof-plan-panel, .value-plan-panel, .pilot-plan-panel, .final { grid-template-columns: 1fr; }
         .poster { min-height: auto; gap: 18px; padding: 20px 0 38px; }
         .eyebrow { font-size: 11px; letter-spacing: 0.18em; }
@@ -4824,8 +4824,24 @@ ${unicornHeader}
         </section>
 
         <section class="home-section">
+          <div class="home-ai">
+            <div>
+              <div class="eyebrow">AI Agent Solutions</div>
+              <h2>Start with a working proof, then customize.</h2>
+              <p>Run two useful tools now. Your files stay in this browser, and neither tool sends messages, moves money, or writes into another system. Custom delivery adds approved connectors and actions only after the proof works.</p>
+              <div class="cta"><a class="btn primary" href="https://supermega-machine.vercel.app/workcell">Run File Analyst</a><a class="btn secondary" href="/reconcile/">Run Payment Reconciler</a></div>
+            </div>
+            <div class="home-ai-list">
+              <div><strong>File Analyst</strong><span>Clean a CSV or JSON file, isolate exceptions, and produce a decision brief.</span></div>
+              <div><strong>Payment Reconciler</strong><span>Compare invoice and payment exports, then separate exact matches, suggested matches, and exceptions.</span></div>
+              <div><strong>Custom delivery</strong><span>Turn a proven workflow into a client-specific agent with approved connectors, controls, and audit evidence.</span></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="home-section">
           <div class="home-cta">
-            <div><div class="eyebrow">Start simply</div><h2>Show us the work that keeps getting chased.</h2><p>Start with Shop or Plant. When the workflow is clear, we can add the useful AI layer without turning the product into a science project.</p></div>
+            <div><div class="eyebrow">Start simply</div><h2>Show us the work that keeps getting chased.</h2><p>Start with Shop, Plant, or one working AI tool. When the workflow is clear, we can customize the useful AI layer without turning the product into a science project.</p></div>
             <div class="cta"><a class="btn primary" href="/contact/?from=homepage-cta">Contact SuperMega</a><a class="btn secondary" href="https://app.supermega.dev/?demo=shop">Open app</a></div>
           </div>
         </section>
@@ -5959,7 +5975,7 @@ async function copyPublicStatic(source, destination, rootSource = source) {
 }
 
 async function prunePublicStaticRoot() {
-  const allowedRootDirs = new Set(['assets', 'site', 'social', 'products', 'agent-templates', 'app', 'start', 'contact', 'offers', 'work', 'operator', 'machine', 'card', 'c', 'demo', 'ai-agents', 'privacy', 'megaos-preview'])
+  const allowedRootDirs = new Set(['assets', 'site', 'social', 'products', 'agent-templates', 'app', 'start', 'contact', 'offers', 'work', 'operator', 'machine', 'card', 'c', 'demo', 'ai-agents', 'privacy', 'megaos-preview', 'reconcile'])
   for (const entry of await readdir(staticDir, { withFileTypes: true }).catch(() => [])) {
     if (!entry.isDirectory() || allowedRootDirs.has(entry.name)) continue
     await rm(resolve(staticDir, entry.name), { recursive: true, force: true, maxRetries: 8, retryDelay: 250 })
@@ -5980,6 +5996,7 @@ async function prunePublicSiteDir() {
 
 await rm(outputDir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 })
 await mkdir(outputDir, { recursive: true })
+await mkdir(staticDir, { recursive: true })
 await copyPublicStatic(resolve(root, 'api-static'), staticDir)
 // Brand favicon is owned here (revert-proof against OneDrive restoring the old file): Capsule Forge mark.
 await writeFile(resolve(staticDir, 'favicon.svg'), `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="supermega"><rect x="4" y="4" width="56" height="56" rx="15" fill="#111731"/><rect x="4.75" y="4.75" width="54.5" height="54.5" rx="14.25" fill="none" stroke="#ffffff" stroke-opacity="0.10"/><path d="M21 23 L31.5 32 L21 41" fill="none" stroke="#3B82F6" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><path d="M35 41 L47 41" fill="none" stroke="#62F5B0" stroke-width="5" stroke-linecap="round"/></svg>\n`, 'utf8')
@@ -6061,6 +6078,9 @@ for (const entry of await readdir(staticDir, { withFileTypes: true })) {
   }
 }
 await writeFile(resolve(staticDir, 'index.html'), normalizePublicProductNames(unicornPublicHomeHtml), 'utf8')
+await mkdir(resolve(staticDir, 'reconcile'), { recursive: true })
+await cp(resolve(root, 'tools', 'public-workcells', 'payment-reconciler.html'), resolve(staticDir, 'reconcile', 'index.html'), { force: true })
+await cp(resolve(root, 'tools', 'public-workcells', 'payment-reconciler.mjs'), resolve(staticDir, 'reconcile', 'payment-reconciler.mjs'), { force: true })
 await writeFile(resolve(staticDir, '404.html'), `<!doctype html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="robots" content="noindex,nofollow" /><title>Page not found | SUPERMEGA.dev</title><meta name="theme-color" content="#07111f" /><link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" /><style>${unicornShellStyle}</style></head><body><div class="wrap">${unicornHeader}<main><section class="poster" style="min-height:58vh;align-items:center"><div class="copy"><div class="eyebrow">404</div><h1>Page not found.</h1><p>That page doesn’t exist. Head back home, or open a live workspace.</p><div class="cta"><a class="btn primary" href="/">Home</a><a class="btn secondary" href="https://app.supermega.dev/?demo=shop">Open app</a></div></div></section></main></div></body></html>`, 'utf8')
 await mkdir(resolve(staticDir, 'products'), { recursive: true })
 await writeFile(resolve(staticDir, 'products', 'index.html'), publicRedirectHtml('https://app.supermega.dev/?demo=shop', 'Open Shop'), 'utf8')
@@ -6999,7 +7019,7 @@ const publicWorkCases = [
   {
     eyebrow: 'Retail & F&B · Live now',
     headline: 'A daily close the owner can actually trust',
-    story: 'Counter staff were juggling cash, KBZPay, AYA Pay, and MMQR with no clean way to reconcile at the end of the day. We built DeskPOS: ring up orders, take any payment with the slip attached, track stock, and close the day with the drawer counted against expected sales — even when the internet drops.',
+    story: 'Counter staff were juggling cash, KBZPay, AYA Pay, and MMQR with no clean way to reconcile at the end of the day. We built Shop: ring up orders, take any payment with the slip attached, track stock, and close the day with the drawer counted against expected sales — even when the internet drops.',
     built: ['Fast counter checkout, priced in MMK', 'Every payment method, with proof attached', 'Offline-first — syncs when the line returns', 'One-tap daily cash-up and owner digest'],
     proof: 'Live and open — try the full point-of-sale and daily-close flow with realistic Myanmar shop data, no signup.',
     cta: { label: 'Open Shop', href: 'https://app.supermega.dev/?demo=shop', ext: false },
@@ -7011,6 +7031,22 @@ const publicWorkCases = [
     built: ['Line and shift production vs. target', 'Inspections and defects with a live reject rate', '5W1H incidents → owned CAPA with due dates', 'Maintenance work orders + a daily plant-manager brief'],
     proof: 'Built around real factory operating data — line targets, defect taxonomy, grading rules, and CAPA owners.',
     cta: { label: 'Open Plant', href: 'https://app.supermega.dev/?demo=plant', ext: false },
+  },
+  {
+    eyebrow: 'AI Agent Solutions | Live tool',
+    headline: 'A messy file turned into an owner-ready decision brief',
+    story: 'File Analyst gives a team a useful first result before any integration project begins. Drop in a CSV or JSON file, inspect what is incomplete or unusual, and export a clean brief for the next decision.',
+    built: ['Browser-local file parsing with no source upload', 'Field coverage, duplicates, outliers, and exceptions', 'Decision brief and exportable evidence', 'A concrete proof that can be customized around the client workflow'],
+    proof: 'Live now with sample data or your own file. Analysis stays in the browser and does not write into another system.',
+    cta: { label: 'Run File Analyst', href: 'https://supermega-machine.vercel.app/workcell', ext: false },
+  },
+  {
+    eyebrow: 'AI Agent Solutions | Live tool',
+    headline: 'Two exports reconciled without hiding the exceptions',
+    story: 'Payment Reconciler compares invoice and payment exports and separates exact matches, suggested matches, and unresolved exceptions. It produces reviewable outputs without connecting to a bank or moving money.',
+    built: ['Guided column mapping for two source files', 'Exact and suggested matching with visible reasons', 'Exception queue and evidence exports', 'Named reviewer approval before exports unlock'],
+    proof: 'Live now with built-in sample files. Source data stays in the browser, and every output remains a review artifact rather than a financial action.',
+    cta: { label: 'Run Payment Reconciler', href: '/reconcile/', ext: false },
   },
 ]
 const publicWorkHtml = `<!doctype html>
@@ -10296,6 +10332,7 @@ await writeFile(resolve(staticDir, 'robots.txt'), 'User-agent: *\nAllow: /\nDisa
 await writeFile(resolve(staticDir, 'sitemap.xml'), '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>https://supermega.dev/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>\n  <url><loc>https://supermega.dev/products/</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/products/pos/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/products/factory/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/products/documents/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/ai-agents/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/</loc><changefreq>weekly</changefreq><priority>0.85</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/deskpos-quickstart/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/chat-ledger/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/inbox-calendar-operator/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/daily-intelligence-brief/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/factory-ops-ledger/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/data-clean-report-agent/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/offers/</loc><changefreq>weekly</changefreq><priority>0.95</priority></url>\n  <url><loc>https://supermega.dev/work/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/contact/</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/card/</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>\n  <url><loc>https://supermega.dev/privacy/</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>\n</urlset>\n', 'utf8')
 const publicSitemapUrls = [
   ['/', 'weekly', '1.0'],
+  ['/reconcile/', 'monthly', '0.8'],
   ['/work/', 'weekly', '0.8'],
   ['/contact/', 'monthly', '0.9'],
   ['/card/', 'monthly', '0.6'],
