@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <title>Payment Reconciler | SuperMega AI Agent Solutions</title>
+    <meta name="description" content="Match invoice and payment CSV or JSON exports in this browser, review exceptions, and export approval evidence." />
+    <link rel="icon" href="/favicon.svg" />
+    <link rel="canonical" href="https://supermega.dev/reconcile/" />
+    <script>
+      (function () {
+        var stored = ''
+        try { stored = localStorage.getItem('supermega-theme') || '' } catch (_) {}
+        var theme = stored === 'dark' || stored === 'light' ? stored : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+        document.documentElement.dataset.theme = theme
+      })()
+    </script>
+    <style>
+      :root {
+        color-scheme: light;
+        --page: #f4f6f5;
+        --surface: #ffffff;
+        --surface-2: #eef2f0;
+        --ink: #101412;
+        --muted: #5d6963;
+        --quiet: #7a8680;
+        --line: #ccd4d0;
+        --line-strong: #aeb9b3;
+        --accent: #0d7f55;
+        --accent-ink: #ffffff;
+        --blue: #245bea;
+        --warn: #9a5600;
+        --danger: #a52a2a;
+        --shadow: 0 16px 42px rgba(16, 20, 18, 0.08);
+      }
+      :root[data-theme="dark"] {
+        color-scheme: dark;
+        --page: #0b0f0d;
+        --surface: #111714;
+        --surface-2: #171f1b;
+        --ink: #edf3ef;
+        --muted: #a9b7af;
+        --quiet: #829087;
+        --line: #2c3932;
+        --line-strong: #435249;
+        --accent: #45c58e;
+        --accent-ink: #07110c;
+        --blue: #7ca0ff;
+        --warn: #e5a34f;
+        --danger: #f18484;
+        --shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+      }
+      * { box-sizing: border-box; }
+      html { background: var(--page); scroll-behavior: smooth; }
+      body {
+        margin: 0;
+        min-width: 320px;
+        background: var(--page);
+        color: var(--ink);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        letter-spacing: 0;
+      }
+      button, input, select, textarea { font: inherit; letter-spacing: 0; }
+      button, a, label[for] { -webkit-tap-highlight-color: transparent; }
+      button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+        outline: 3px solid color-mix(in srgb, var(--blue) 46%, transparent);
+        outline-offset: 2px;
+      }
+      [hidden] { display: none !important; }
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        min-height: 70px;
+        border-bottom: 1px solid var(--line);
+        background: color-mix(in srgb, var(--surface) 88%, transparent);
+        backdrop-filter: blur(24px);
+      }
+      .topbar-inner {
+        width: min(1180px, calc(100% - 40px));
+        min-height: 70px;
+        margin: 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+      }
+      .brand {
+        min-width: 0;
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        color: var(--ink);
+        text-decoration: none;
+      }
+      .brand img { width: 34px; height: 34px; }
+      .brand-copy { min-width: 0; display: grid; gap: 1px; }
+      .brand-copy strong { font-size: 14px; line-height: 1.2; }
+      .brand-copy span { color: var(--muted); font-size: 12px; line-height: 1.2; }
+      .terminal-mark { display: none; }
+      .domain { color: var(--muted); }
+      .top-actions { display: flex; align-items: center; gap: 8px; }
+      .icon-button, .button {
+        min-height: 44px;
+        border: 1px solid var(--line-strong);
+        border-radius: 5px;
+        background: var(--surface);
+        color: var(--ink);
+        font-weight: 750;
+        cursor: pointer;
+        transition: transform 150ms ease, border-color 150ms ease, background 150ms ease;
+      }
+      .icon-button:hover, .button:hover:not(:disabled) { transform: translateY(-1px); border-color: var(--accent); }
+      .icon-button { width: 44px; padding: 0; font-size: 18px; }
+      .button { min-width: 44px; padding: 0 16px; }
+      .button.primary { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); }
+      .button.strong { border-color: var(--ink); background: var(--ink); color: var(--surface); }
+      .button:disabled { cursor: not-allowed; opacity: 0.42; transform: none; }
+      .back-link { min-height: 44px; display: inline-flex; align-items: center; padding: 0 4px; color: var(--muted); font-size: 13px; font-weight: 750; text-decoration: none; }
+      .back-link:hover { color: var(--ink); }
+      main { width: min(1180px, calc(100% - 40px)); margin: 0 auto; padding: 54px 0 80px; }
+      .intro {
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(300px, 0.8fr);
+        gap: 64px;
+        align-items: end;
+        padding-bottom: 34px;
+        border-bottom: 1px solid var(--line-strong);
+      }
+      .eyebrow {
+        margin-bottom: 12px;
+        color: var(--accent);
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        font-size: 12px;
+        font-weight: 800;
+        text-transform: uppercase;
+      }
+      h1, h2, h3, p { margin-top: 0; }
+      h1 { max-width: 720px; margin-bottom: 14px; font-family: Georgia, "Times New Roman", serif; font-size: clamp(42px, 6vw, 78px); line-height: 0.98; font-weight: 700; }
+      .intro-copy { max-width: 650px; margin-bottom: 0; color: var(--muted); font-size: 18px; line-height: 1.55; }
+      .scope-list { margin: 0; display: grid; gap: 0; }
+      .scope-list div { min-height: 48px; display: grid; grid-template-columns: 110px 1fr; align-items: center; gap: 16px; border-top: 1px solid var(--line); }
+      .scope-list div:last-child { border-bottom: 1px solid var(--line); }
+      .scope-list dt { color: var(--quiet); font-size: 12px; }
+      .scope-list dd { margin: 0; font-size: 13px; font-weight: 800; }
+      .workspace { padding-top: 42px; }
+      .section-head { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 18px; }
+      .section-head h2 { margin-bottom: 4px; font-size: 26px; line-height: 1.1; }
+      .section-head p { margin-bottom: 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
+      .source-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+      .source-picker {
+        min-height: 180px;
+        display: grid;
+        align-content: center;
+        justify-items: center;
+        gap: 8px;
+        padding: 24px;
+        border: 1px dashed var(--line-strong);
+        border-radius: 6px;
+        background: var(--surface);
+        box-shadow: var(--shadow);
+        cursor: pointer;
+        text-align: center;
+        transition: border-color 150ms ease, background 150ms ease, transform 150ms ease;
+      }
+      .source-picker:hover, .source-picker.is-dragging { border-color: var(--accent); background: color-mix(in srgb, var(--surface) 92%, var(--accent)); transform: translateY(-1px); }
+      .source-picker input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+      .source-number { color: var(--accent); font-family: "SFMono-Regular", Consolas, monospace; font-size: 12px; font-weight: 800; }
+      .source-picker strong { font-size: 18px; }
+      .source-name { max-width: 100%; color: var(--blue); font-size: 14px; font-weight: 800; overflow-wrap: anywhere; }
+      .source-meta { color: var(--muted); font-size: 12px; line-height: 1.4; }
+      .mapping-section { margin-top: 42px; scroll-margin-top: 90px; }
+      .mapping-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+      .mapping-group { border-top: 2px solid var(--ink); padding-top: 14px; }
+      .mapping-group h3 { margin-bottom: 14px; font-size: 17px; }
+      .field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+      .field { min-width: 0; display: grid; gap: 6px; }
+      .field label { color: var(--muted); font-size: 12px; font-weight: 800; }
+      select, input[type="number"], input[type="text"], textarea {
+        width: 100%;
+        min-height: 44px;
+        border: 1px solid var(--line-strong);
+        border-radius: 4px;
+        background: var(--surface);
+        color: var(--ink);
+        padding: 9px 11px;
+      }
+      textarea { min-height: 88px; resize: vertical; line-height: 1.45; }
+      .settings-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; align-items: end; gap: 14px; margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--line); }
+      .run-strip { margin-top: 14px; min-height: 46px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+      #runStatus[data-tone="ready"] { color: var(--accent); }
+      #runStatus[data-tone="review"] { color: var(--warn); }
+      #runStatus[data-tone="error"] { color: var(--danger); }
+      .results { margin-top: 64px; scroll-margin-top: 88px; }
+      .result-title { display: flex; align-items: end; justify-content: space-between; gap: 20px; margin-bottom: 18px; }
+      .result-title h2 { margin-bottom: 4px; font-size: 30px; }
+      .result-title p { margin-bottom: 0; color: var(--muted); }
+      .result-chip { min-height: 32px; display: inline-flex; align-items: center; border: 1px solid var(--line-strong); border-radius: 999px; padding: 0 11px; color: var(--muted); font-size: 12px; font-weight: 800; }
+      .metric-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); border-top: 1px solid var(--line-strong); border-bottom: 1px solid var(--line-strong); }
+      .metric { min-width: 0; min-height: 90px; display: grid; align-content: center; gap: 7px; padding: 14px; border-left: 1px solid var(--line); }
+      .metric:first-child { border-left: 0; }
+      .metric span { color: var(--quiet); font-size: 11px; font-weight: 800; text-transform: uppercase; }
+      .metric strong { font-size: 20px; overflow-wrap: anywhere; }
+      .result-layout { display: grid; grid-template-columns: minmax(240px, 0.32fr) minmax(0, 0.68fr); gap: 32px; margin-top: 38px; }
+      .table-panel { min-width: 0; }
+      .action-panel h3, .table-panel h3, .approval h3 { margin-bottom: 14px; font-size: 17px; }
+      .action-list { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+      .action-list li { display: grid; grid-template-columns: 92px 1fr; gap: 12px; padding: 15px 0; border-bottom: 1px solid var(--line); }
+      .action-list strong { font-size: 14px; }
+      .action-list p { margin: 4px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+      .priority { align-self: start; font-family: "SFMono-Regular", Consolas, monospace; font-size: 10px; font-weight: 800; text-transform: uppercase; }
+      .priority.high { color: var(--danger); }
+      .priority.medium { color: var(--warn); }
+      .priority.low { color: var(--accent); }
+      .table-wrap { width: 100%; overflow: auto; border-top: 1px solid var(--line-strong); border-bottom: 1px solid var(--line-strong); background: var(--surface); }
+      table { width: 100%; min-width: 820px; border-collapse: collapse; font-size: 12px; }
+      th, td { padding: 11px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+      th { position: sticky; top: 0; z-index: 1; background: var(--surface-2); color: var(--quiet); font-size: 10px; text-transform: uppercase; }
+      tbody tr:hover { background: color-mix(in srgb, var(--surface) 92%, var(--blue)); }
+      td.number { text-align: right; font-variant-numeric: tabular-nums; }
+      .status { font-weight: 800; text-transform: uppercase; font-size: 10px; }
+      .status.matched { color: var(--accent); }
+      .status.suggested { color: var(--blue); }
+      .status.amount_mismatch, .status.invalid_invoice, .status.invalid_payment { color: var(--danger); }
+      .status.unmatched_invoice, .status.unmatched_payment { color: var(--warn); }
+      .row-limit { margin: 8px 0 0; color: var(--muted); font-size: 11px; }
+      .approval { margin-top: 42px; padding-top: 30px; border-top: 2px solid var(--ink); }
+      .approval-grid { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 30px; }
+      .review-fields { display: grid; gap: 13px; }
+      .check-row { min-height: 44px; display: grid; grid-template-columns: 22px 1fr; gap: 10px; align-items: start; color: var(--muted); font-size: 12px; line-height: 1.4; cursor: pointer; }
+      .check-row input { width: 18px; height: 18px; margin: 1px 0 0; accent-color: var(--accent); }
+      .approval-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+      .approval-state { margin-left: 4px; color: var(--muted); font-size: 12px; font-weight: 750; }
+      .brief-shell { min-width: 0; }
+      .brief-shell pre { min-height: 264px; max-height: 420px; margin: 0; overflow: auto; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-2); padding: 16px; color: var(--ink); font: 12px/1.55 "SFMono-Regular", Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+      .downloads { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+      footer { margin-top: 70px; padding-top: 22px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 20px; color: var(--muted); font-size: 12px; }
+      footer a { color: inherit; font-weight: 750; }
+      @media (max-width: 900px) {
+        .intro { grid-template-columns: 1fr; gap: 28px; }
+        .scope-list { max-width: 560px; }
+        .metric-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .metric:nth-child(4) { border-left: 0; }
+        .metric:nth-child(-n+3) { border-bottom: 1px solid var(--line); }
+        .result-layout { grid-template-columns: 1fr; }
+      }
+      @media (max-width: 680px) {
+        .topbar-inner, main { width: min(100% - 24px, 1180px); }
+        .topbar-inner { min-height: 62px; }
+        .topbar { min-height: 62px; }
+        .brand-copy span, .back-link { display: none; }
+        main { padding-top: 30px; }
+        h1 { font-size: 44px; }
+        .intro-copy { font-size: 16px; }
+        .source-grid, .mapping-columns, .field-grid, .approval-grid { grid-template-columns: 1fr; }
+        .section-head { align-items: flex-start; flex-direction: column; }
+        .section-head > .button { width: 100%; }
+        .source-picker { min-height: 154px; }
+        .settings-row { grid-template-columns: 1fr 1fr; }
+        .settings-row .field:nth-child(3) { grid-column: 1 / -1; }
+        .settings-row .button { grid-column: 1 / -1; width: 100%; }
+        .run-strip { align-items: flex-start; flex-direction: column; padding: 10px 0; }
+        .result-title { align-items: flex-start; flex-direction: column; }
+        .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .metric:nth-child(odd) { border-left: 0; }
+        .metric:nth-child(even) { border-left: 1px solid var(--line); }
+        .metric:nth-child(-n+4) { border-bottom: 1px solid var(--line); }
+        .action-list li { grid-template-columns: 82px 1fr; }
+        .approval-actions .button { flex: 1 1 150px; }
+        .downloads .button { flex: 1 1 150px; }
+        footer { align-items: flex-start; flex-direction: column; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="/" aria-label="SuperMega home">
+          <img src="/favicon.svg" alt="" width="64" height="64" />
+          <span class="brand-copy"><strong>SuperMega Payment Reconciler</strong><span>AI Agent Solutions</span></span>
+          <span class="terminal-mark">&gt;_ supermega<span class="domain">.dev</span></span>
+        </a>
+        <div class="top-actions">
+          <a class="back-link" href="/">Back to SuperMega</a>
+          <button class="icon-button" type="button" data-theme-toggle aria-label="Use dark mode" title="Use dark mode">◐</button>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="intro" aria-labelledby="reconcile-heading">
+        <div>
+          <div class="eyebrow">AI Agent Solutions / payment reconciliation</div>
+          <h1 id="reconcile-heading">Match sales to money.</h1>
+          <p class="intro-copy">Compare one sales export with one bank, wallet, or settlement export. Keep exact matches, isolate uncertain pairs, and close with a named review record.</p>
+        </div>
+        <dl class="scope-list">
+          <div><dt>Sources</dt><dd>Two CSV / JSON files</dd></div>
+          <div><dt>Limit</dt><dd>10 MB / 50,000 rows each</dd></div>
+          <div><dt>Processing</dt><dd>This browser</dd></div>
+          <div><dt>Boundary</dt><dd>Zero source upload or money movement</dd></div>
+        </dl>
+      </section>
+
+      <section class="workspace" aria-labelledby="source-heading">
+        <div class="section-head">
+          <div><div class="eyebrow">01 / source exports</div><h2 id="source-heading">Load both sides.</h2><p>Choose matching-period exports. The original files remain unchanged.</p></div>
+          <button class="button" type="button" id="loadSample">Load safe sample</button>
+        </div>
+        <div class="source-grid">
+          <label class="source-picker" for="invoiceFile" data-drop-side="invoice">
+            <input id="invoiceFile" type="file" accept=".csv,.json,text/csv,application/json" />
+            <span class="source-number">A / SALES</span>
+            <strong>Drop or choose the sales export</strong>
+            <span class="source-name" id="invoiceFileName">No file selected</span>
+            <span class="source-meta" id="invoiceFileMeta">Sales or invoice export</span>
+          </label>
+          <label class="source-picker" for="paymentFile" data-drop-side="payment">
+            <input id="paymentFile" type="file" accept=".csv,.json,text/csv,application/json" />
+            <span class="source-number">B / MONEY</span>
+            <strong>Drop or choose the payment export</strong>
+            <span class="source-name" id="paymentFileName">No file selected</span>
+            <span class="source-meta" id="paymentFileMeta">Bank, wallet, or settlement export</span>
+          </label>
+        </div>
+      </section>
+
+      <section class="mapping-section" id="mappingSection" aria-labelledby="mapping-heading" hidden>
+        <div class="section-head">
+          <div><div class="eyebrow">02 / mapping</div><h2 id="mapping-heading">Confirm the columns.</h2><p>Amount is required. Reference, party, and date strengthen the match.</p></div>
+        </div>
+        <div class="mapping-columns">
+          <div class="mapping-group">
+            <h3>Sales or invoice columns</h3>
+            <div class="field-grid">
+              <div class="field"><label for="invoiceReference">Reference</label><select id="invoiceReference"></select></div>
+              <div class="field"><label for="invoiceAmount">Amount *</label><select id="invoiceAmount"></select></div>
+              <div class="field"><label for="invoiceDate">Date</label><select id="invoiceDate"></select></div>
+              <div class="field"><label for="invoiceParty">Customer</label><select id="invoiceParty"></select></div>
+            </div>
+          </div>
+          <div class="mapping-group">
+            <h3>Payment or settlement columns</h3>
+            <div class="field-grid">
+              <div class="field"><label for="paymentReference">Reference</label><select id="paymentReference"></select></div>
+              <div class="field"><label for="paymentAmount">Amount *</label><select id="paymentAmount"></select></div>
+              <div class="field"><label for="paymentDate">Date</label><select id="paymentDate"></select></div>
+              <div class="field"><label for="paymentParty">Payer</label><select id="paymentParty"></select></div>
+            </div>
+          </div>
+        </div>
+        <div class="settings-row">
+          <div class="field"><label for="amountTolerance">Amount tolerance</label><input id="amountTolerance" type="number" min="0" step="0.01" value="0" /></div>
+          <div class="field"><label for="dateWindow">Suggestion window (days)</label><input id="dateWindow" type="number" min="0" max="30" step="1" value="3" /></div>
+          <div class="field"><label for="dateOrder">Short date order</label><select id="dateOrder"><option value="day-first">Day first</option><option value="month-first">Month first</option></select></div>
+          <button class="button primary" type="button" id="analyzeButton" disabled>Reconcile exports</button>
+        </div>
+      </section>
+
+      <div class="run-strip" aria-live="polite"><span id="runStatus">Load two exports or use the safe sample.</span><span>Exact reference first / mutual-unique suggestions only</span></div>
+
+      <section class="results" id="results" aria-labelledby="resultHeadline" hidden>
+        <div class="result-title">
+          <div><div class="eyebrow">03 / review</div><h2 id="resultHeadline">Review before close</h2><p id="resultState"></p></div>
+          <span class="result-chip">No automatic finalization</span>
+        </div>
+        <div class="metric-grid" id="metricGrid"></div>
+        <div class="result-layout">
+          <aside class="action-panel" aria-labelledby="action-heading">
+            <h3 id="action-heading">Ranked review</h3>
+            <ol class="action-list" id="actionList"></ol>
+          </aside>
+          <div class="table-panel">
+            <h3>Reconciliation rows</h3>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Status</th><th>Invoice ref</th><th>Invoice</th><th>Payment ref</th><th>Payment</th><th>Difference</th><th>Method</th></tr></thead>
+                <tbody id="reconciliationBody"></tbody>
+              </table>
+            </div>
+            <p class="row-limit" id="rowLimitNote"></p>
+          </div>
+        </div>
+
+        <div class="approval">
+          <div class="eyebrow">04 / approval evidence</div>
+          <div class="approval-grid">
+            <div class="review-fields">
+              <h3>Record the review.</h3>
+              <div class="field"><label for="reviewName">Reviewer name</label><input id="reviewName" type="text" autocomplete="name" maxlength="100" /></div>
+              <div class="field"><label for="reviewNote">Exception note</label><textarea id="reviewNote" maxlength="1000"></textarea></div>
+              <label class="check-row"><input id="reviewCheck" type="checkbox" /><span>I reviewed the matched and exception rows. This approval does not send money, update invoices, or post to the books.</span></label>
+              <div class="approval-actions">
+                <button class="button strong" type="button" id="approveButton" disabled>Record approval</button>
+                <button class="button" type="button" id="copyBrief">Copy brief</button>
+                <span class="approval-state" id="approvalState">Not approved</span>
+              </div>
+            </div>
+            <div class="brief-shell">
+              <h3>Decision brief</h3>
+              <pre id="briefPreview"></pre>
+              <div class="downloads">
+                <button class="button" type="button" id="downloadReconciliation" disabled>Reconciliation CSV</button>
+                <button class="button" type="button" id="downloadExceptions" disabled>Exceptions CSV</button>
+                <button class="button" type="button" id="downloadBrief" disabled>Decision brief</button>
+                <button class="button" type="button" id="downloadEvidence" disabled>Evidence JSON</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <footer><span>SuperMega AI Agent Solutions / source-preserving / approval-gated</span><a href="/privacy/">Privacy boundary</a></footer>
+    </main>
+
+    <script>
+      (function () {
+        var button = document.querySelector('[data-theme-toggle]')
+        if (!button) return
+        function sync() {
+          var dark = document.documentElement.dataset.theme === 'dark'
+          button.setAttribute('aria-label', dark ? 'Use light mode' : 'Use dark mode')
+          button.setAttribute('title', dark ? 'Use light mode' : 'Use dark mode')
+          button.setAttribute('aria-pressed', String(dark))
+        }
+        button.addEventListener('click', function () {
+          var next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'
+          document.documentElement.dataset.theme = next
+          try { localStorage.setItem('supermega-theme', next) } catch (_) {}
+          sync()
+        })
+        sync()
+      })()
+    </script>
+    <script type="module" src="/reconcile/payment-reconciler.mjs"></script>
+  </body>
+</html>

@@ -19,12 +19,14 @@ const publicPages = [
   'index.html',
   'contact/index.html',
   'privacy/index.html',
+  'reconcile/index.html',
   '404.html',
 ]
 
 const pages = new Map(publicPages.map((relativePath) => [relativePath, readPage(relativePath)]))
 const home = pages.get('index.html')
 const contact = pages.get('contact/index.html')
+const reconciler = pages.get('reconcile/index.html')
 
 for (const [relativePath, html] of pages) {
   for (const required of ['data-theme="light"', 'data-theme="dark"', 'prefers-color-scheme', 'prefers-reduced-motion', 'data-theme-toggle']) {
@@ -39,6 +41,7 @@ for (const required of [
   'https://app.supermega.dev/?demo=shop',
   'https://app.supermega.dev/?demo=plant',
   'https://supermega-machine.vercel.app/workcell',
+  'href="/reconcile/"',
   '<h1 id="portfolio-heading">Operational software, built to fit.</h1>',
   'data-product-preview',
   'data-preview-open',
@@ -49,8 +52,8 @@ for (const required of [
   'Your private workspace is configured and verified before handover.',
   'Start fresh or add approved business records when ready.',
   '<strong>AI Agent Solutions</strong>',
-  'Run File Analyst now:',
-  'Source stays in this browser and is never uploaded.',
+  'Use File Analyst to clean one export, or run Payment Reconciler now',
+  'Sources stay in this browser and are never uploaded.',
   '<h2 id="brief-heading">Tell us where the workflow breaks.</h2>',
   '>Describe your workflow</a>',
   '<img src="/favicon.svg" alt="" width="64" height="64" />',
@@ -64,6 +67,10 @@ for (const forbidden of ['<figure class="site-hero-screen"', '<img src="/site/sh
 }
 
 if (!contact.includes('.header-cta { display: none; }')) fail('contact_page_keeps_redundant_start_control')
+
+for (const required of ['<h1 id="reconcile-heading">Match sales to money.</h1>', 'class="source-grid"', 'class="mapping-columns"', 'class="result-layout"', 'class="approval-grid"']) {
+  if (!reconciler.includes(required)) fail('payment_reconciler_visual_contract_missing', { required })
+}
 
 for (const forbidden of ['placeholder="Drive folder', 'placeholder="Example:', 'Role-aware onboarding', 'Device-aware onboarding', 'Adaptive setup plan', 'First proof planner']) {
   if (contact.includes(forbidden)) fail('contact_surface_is_not_blank_or_honest', { forbidden })

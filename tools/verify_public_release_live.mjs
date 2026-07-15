@@ -6,6 +6,7 @@ const endpoints = {
   home: 'https://supermega.dev/',
   www: 'https://www.supermega.dev/',
   fileAnalyst: 'https://supermega-machine.vercel.app/workcell',
+  paymentReconciler: 'https://supermega.dev/reconcile/',
   agentIntake: 'https://supermega.dev/contact/?from=ai-agent-solution',
   health: 'https://supermega.dev/api/health',
   contactStatus: 'https://supermega.dev/api/contact-submissions/status',
@@ -47,9 +48,10 @@ function verifyHome(html, label) {
     'src="/live-shop-workspace.png"',
     "src:'/live-plant-workspace.png'",
     'https://supermega-machine.vercel.app/workcell',
+    'href="/reconcile/"',
     '<strong>AI Agent Solutions</strong>',
-    'Run File Analyst now:',
-    'Source stays in this browser and is never uploaded.',
+    'Use File Analyst to clean one export, or run Payment Reconciler now',
+    'Sources stay in this browser and are never uploaded.',
     'Use working screens',
     'Your private workspace is configured and verified before handover.',
     'Start fresh or add approved business records when ready.',
@@ -75,6 +77,23 @@ function verifyFileAnalyst(html) {
   }
   for (const forbidden of ['MegaOS', 'DeskPOS']) {
     assert(!html.includes(forbidden), `file_analyst_retired_${forbidden}`)
+  }
+}
+
+function verifyPaymentReconciler(html) {
+  for (const required of [
+    '<title>Payment Reconciler | SuperMega AI Agent Solutions</title>',
+    'Zero source upload or money movement',
+    'id="invoiceFile"',
+    'id="paymentFile"',
+    'id="approveButton"',
+    'id="downloadReconciliation"',
+    'src="/reconcile/payment-reconciler.mjs"',
+  ]) {
+    assert(html.includes(required), `payment_reconciler_missing_${required.slice(0, 32)}`)
+  }
+  for (const forbidden of ['MegaOS', 'DeskPOS', 'target="_blank"', 'window.open(', 'connect your bank']) {
+    assert(!html.includes(forbidden), `payment_reconciler_retired_${forbidden}`)
   }
 }
 
@@ -129,10 +148,11 @@ function verifyProtectedDiagnostics(response, body) {
 }
 
 async function verifyOnce() {
-  const [homeResponse, wwwResponse, fileAnalystResponse, intakeResponse, healthResponse, statusResponse, diagnosticsResponse] = await Promise.all([
+  const [homeResponse, wwwResponse, fileAnalystResponse, paymentReconcilerResponse, intakeResponse, healthResponse, statusResponse, diagnosticsResponse] = await Promise.all([
     get(endpoints.home, 'text/html'),
     get(endpoints.www, 'text/html'),
     get(endpoints.fileAnalyst, 'text/html'),
+    get(endpoints.paymentReconciler, 'text/html'),
     get(endpoints.agentIntake, 'text/html'),
     get(endpoints.health, 'application/json'),
     get(endpoints.contactStatus, 'application/json'),
@@ -150,10 +170,11 @@ async function verifyOnce() {
     }),
   ])
 
-  const [home, www, fileAnalyst, intake, health, contactStatus, protectedDiagnostics] = await Promise.all([
+  const [home, www, fileAnalyst, paymentReconciler, intake, health, contactStatus, protectedDiagnostics] = await Promise.all([
     homeResponse.text(),
     wwwResponse.text(),
     fileAnalystResponse.text(),
+    paymentReconcilerResponse.text(),
     intakeResponse.text(),
     healthResponse.json(),
     statusResponse.json(),
@@ -163,6 +184,7 @@ async function verifyOnce() {
   verifyHome(home, 'home')
   verifyHome(www, 'www')
   verifyFileAnalyst(fileAnalyst)
+  verifyPaymentReconciler(paymentReconciler)
   verifyAgentIntake(intake)
   verifyHealth(health)
   verifyContactStatus(contactStatus)

@@ -30,7 +30,7 @@ if (!existsSync(configPath)) fail('missing_public_config')
 const config = JSON.parse(readFileSync(configPath, 'utf8'))
 const routes = Array.isArray(config.routes) ? config.routes : []
 
-const expectedStaticEntries = new Set(['404.html', 'contact', 'favicon.svg', 'index.html', 'live-plant-workspace.png', 'live-shop-workspace.png', 'privacy', 'robots.txt', 'site.webmanifest', 'sitemap.xml', 'sw.js'])
+const expectedStaticEntries = new Set(['404.html', 'contact', 'favicon.svg', 'index.html', 'live-plant-workspace.png', 'live-shop-workspace.png', 'privacy', 'reconcile', 'robots.txt', 'site.webmanifest', 'sitemap.xml', 'sw.js'])
 const actualStaticEntries = readdirSync(staticDir)
 for (const entry of actualStaticEntries) {
   if (!expectedStaticEntries.has(entry)) fail('retired_public_static_entry_present', { entry })
@@ -64,11 +64,14 @@ if (!existsSync(publicDatastoreShim) || !readFileSync(publicDatastoreShim, 'utf8
 const home = readText('index.html')
 const contact = readText('contact/index.html')
 const privacy = readText('privacy/index.html')
+const reconciler = readText('reconcile/index.html')
+const reconcilerModule = readText('reconcile/payment-reconciler.mjs')
 const notFound = readText('404.html')
 const pages = new Map([
   ['index.html', home],
   ['contact/index.html', contact],
   ['privacy/index.html', privacy],
+  ['reconcile/index.html', reconciler],
   ['404.html', notFound],
 ])
 
@@ -90,6 +93,7 @@ for (const required of [
   'https://app.supermega.dev/?demo=shop',
   'https://app.supermega.dev/?demo=plant',
   'https://supermega-machine.vercel.app/workcell',
+  'href="/reconcile/"',
   'operational software / live',
   'class="hero-lead">Less chasing. More running.</strong>',
   '<h2 id="workspaces-heading">Start close to the real work.</h2>',
@@ -107,9 +111,9 @@ for (const required of [
   'data-product-preview-button="plant"',
   'src="/live-shop-workspace.png"',
   "src:'/live-plant-workspace.png'",
-  'Shop, Plant, and File Analyst open without an account.',
-  'Run File Analyst now:',
-  'Source stays in this browser and is never uploaded.',
+  'Shop, Plant, File Analyst, and Payment Reconciler open without an account.',
+  'Use File Analyst to clean one export, or run Payment Reconciler now',
+  'Sources stay in this browser and are never uploaded.',
   'Your private workspace is configured and verified before handover.',
   'Start fresh or add approved business records when ready.',
   'data-public-status',
@@ -123,6 +127,16 @@ for (const required of [
 
 for (const forbidden of ['https://demo.supermega.dev/', 'The intelligent workspace for daily operations.', 'Explore live demos', 'Open workspace', 'target="_blank"', 'target=_blank', 'window.open(', 'rotate(', 'data-hero-media', 'Current build', 'Build an agent solution', '>Agent solution<', 'Need a repeated task handled?', 'id="products"', 'Run the operation. See what matters.', 'Open a workspace.', 'Try first. Add data later.', 'Need something different?', '[data-reveal] { opacity: 0', 'Use one account across desktop, tablet, and mobile.', 'Create a workspace only when you want to keep your work and use it across devices.', 'Create with email and password. Return with your password or an email code.']) {
   if (home.includes(forbidden)) fail('homepage_keeps_superseded_portfolio_copy', { forbidden })
+}
+
+for (const required of ['<title>Payment Reconciler | SuperMega AI Agent Solutions</title>', 'Zero source upload or money movement', 'id="invoiceFile"', 'id="paymentFile"', 'id="approveButton"', 'id="downloadReconciliation"', 'src="/reconcile/payment-reconciler.mjs"']) {
+  if (!reconciler.includes(required)) fail('payment_reconciler_contract_missing', { required })
+}
+for (const forbidden of ['target="_blank"', 'window.open(', 'MegaOS', 'DeskPOS', 'connect your bank']) {
+  if (reconciler.includes(forbidden)) fail('payment_reconciler_contains_forbidden_content', { forbidden })
+}
+for (const forbidden of ['fetch(', 'XMLHttpRequest', 'WebSocket(', 'sendBeacon(', 'localStorage.setItem']) {
+  if (reconcilerModule.includes(forbidden)) fail('payment_reconciler_module_breaks_local_only_boundary', { forbidden })
 }
 
 for (const required of ['action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="goal"', 'No account or data connection is made before you approve it.']) {
@@ -158,7 +172,7 @@ if (manifest.name !== 'supermega.dev' || manifest.short_name !== 'supermega' || 
 }
 
 const sitemap = readText('sitemap.xml')
-for (const required of ['https://supermega.dev/', 'https://supermega.dev/contact/', 'https://supermega.dev/privacy/']) {
+for (const required of ['https://supermega.dev/', 'https://supermega.dev/reconcile/', 'https://supermega.dev/contact/', 'https://supermega.dev/privacy/']) {
   if (!sitemap.includes(required)) fail('sitemap_missing_current_page', { required })
 }
 for (const forbidden of ['/products/', '/pricing/', '/ai-agents/', '/agent-templates/', '/offers/']) {
