@@ -314,11 +314,11 @@ function documentHtml({ title, description, canonical, content, style = '' }) {
 
 const liveStatusScript = `<script>(function(){var node=document.querySelector('[data-public-status]');if(!node)return;if(location.hostname==='127.0.0.1'||location.hostname==='localhost'){node.textContent='Demo preview ready';var localParent=node.closest('[data-status-shell]');if(localParent)localParent.classList.add('is-ready');return;}fetch('/api/health',{cache:'no-store',headers:{accept:'application/json'}}).then(function(response){if(!response.ok)throw new Error('unavailable');return response.json();}).then(function(body){node.textContent=body&&body.ok?'Live demos ready':'Demos available';var parent=node.closest('[data-status-shell]');if(parent)parent.classList.add('is-ready');}).catch(function(){node.textContent='Demos available';});})();</script>`
 
-const homeProductPreviewScript = `<script>(function(){var root=document.querySelector('[data-product-preview]');if(!root)return;var image=root.querySelector('[data-product-preview-image]'),label=root.querySelector('[data-product-preview-label]'),openLink=document.querySelector('[data-preview-open]'),buttons=Array.from(root.querySelectorAll('[data-product-preview-button]'));if(!image||!label||!buttons.length)return;var views={shop:{src:'/live-shop-workspace.png',alt:'Current Shop workspace showing sales, cash, customers, and stock',label:'Shop workspace',href:'https://app.supermega.dev/?demo=shop',cta:'Try Shop live'},plant:{src:'/live-plant-workspace.png',alt:'Current Plant workspace showing machine state across two production lines',label:'Plant workspace',href:'https://app.supermega.dev/?demo=plant',cta:'Try Plant live'}};function show(id){var view=views[id];if(!view)return;buttons.forEach(function(button){button.setAttribute('aria-pressed',String(button.getAttribute('data-product-preview-button')===id));});if(openLink){openLink.href=view.href;openLink.textContent=view.cta;}if(image.getAttribute('data-view')===id)return;image.classList.add('is-switching');label.textContent=view.label;image.alt=view.alt;image.setAttribute('data-view',id);image.src=view.src;window.setTimeout(function(){image.classList.remove('is-switching');},360);}image.addEventListener('load',function(){image.classList.remove('is-switching');});buttons.forEach(function(button){button.addEventListener('click',function(){show(button.getAttribute('data-product-preview-button'));});});var preload=new Image();preload.src=views.plant.src;})();</script>`
+const homeProductPreviewScript = `<script>(function(){var root=document.querySelector('[data-product-preview]');if(!root)return;var image=root.querySelector('[data-product-preview-image]'),mobileSource=root.querySelector('[data-product-preview-source]'),label=root.querySelector('[data-product-preview-label]'),openLink=document.querySelector('[data-preview-open]'),buttons=Array.from(root.querySelectorAll('[data-product-preview-button]'));if(!image||!label||!buttons.length)return;var views={shop:{src:'/live-shop-workspace.png',mobileSrc:'/live-shop-mobile.png',alt:'Current Shop workspace showing sales, cash, customers, and stock',label:'Shop workspace',href:'https://app.supermega.dev/?demo=shop',cta:'Try Shop live'},plant:{src:'/live-plant-workspace.png',mobileSrc:'/live-plant-mobile.png',alt:'Current Plant workspace showing machine state across two production lines',label:'Plant workspace',href:'https://app.supermega.dev/?demo=plant',cta:'Try Plant live'}};function show(id){var view=views[id];if(!view)return;buttons.forEach(function(button){button.setAttribute('aria-pressed',String(button.getAttribute('data-product-preview-button')===id));});if(openLink){openLink.href=view.href;openLink.textContent=view.cta;}if(image.getAttribute('data-view')===id)return;image.classList.add('is-switching');label.textContent=view.label;image.alt=view.alt;image.setAttribute('data-view',id);if(mobileSource)mobileSource.srcset=view.mobileSrc;image.src=view.src;window.setTimeout(function(){image.classList.remove('is-switching');},360);}image.addEventListener('load',function(){image.classList.remove('is-switching');});buttons.forEach(function(button){button.addEventListener('click',function(){show(button.getAttribute('data-product-preview-button'));});});var preloadDesktop=new Image();preloadDesktop.src=views.plant.src;var preloadMobile=new Image();preloadMobile.src=views.plant.mobileSrc;})();</script>`
 
 const homeHtml = documentHtml({
-  title: 'supermega.dev | Operational software built to fit',
-  description: 'Try a working Shop or Plant workspace without an account. When the standard workflow does not fit, SuperMega builds and verifies a private route around the operation.',
+  title: 'supermega.dev | Run the shop. See the plant.',
+  description: 'Try a working Shop or Plant workspace without an account. Keep the day together, see the floor clearly, and build only the workflow still missing.',
   canonical: 'https://supermega.dev/',
   style: `
     .home-main { width: 100%; overflow: clip; }
@@ -355,7 +355,7 @@ const homeHtml = documentHtml({
     .hero-command strong { color: var(--accent); }
     .terminal-cursor { display: inline-block; color: var(--signal); animation: cursor-pulse 1.35s steps(2, end) infinite; }
     .hero-lead { display: block; margin-bottom: 10px; color: var(--ink); font-size: 20px; font-weight: 820; letter-spacing: 0; }
-    .hero h1 { max-width: 13ch; margin: 18px 0 0; font-size: 62px; line-height: 1.01; letter-spacing: 0; font-weight: 790; }
+    .hero h1 { max-width: 15ch; margin: 18px 0 0; font-size: 60px; line-height: 1.01; letter-spacing: 0; font-weight: 790; }
     .hero-side > p { max-width: 45ch; margin: 0; color: var(--muted); font-size: 17px; line-height: 1.58; }
     .hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 26px; }
     .hero-actions .btn { min-height: 50px; }
@@ -380,6 +380,7 @@ const homeHtml = documentHtml({
     .preview-switch button { min-height: 44px; border: 0; border-radius: 5px; padding: 0 14px; background: transparent; color: var(--muted); font: inherit; font-size: 13px; font-weight: 780; cursor: pointer; transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease; }
     .preview-switch button[aria-pressed="true"] { background: var(--surface-strong); color: var(--ink); box-shadow: 0 4px 14px rgba(3, 8, 18, 0.1); }
     .preview-media { overflow: hidden; background: #071524; }
+    .preview-media picture { display: block; }
     .preview-media img { display: block; width: 100%; height: auto; aspect-ratio: 10 / 3; object-fit: contain; object-position: top; opacity: 1; transition: opacity 180ms ease; }
     .preview-media img.is-switching { opacity: .28; }
     .live-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--quiet); box-shadow: 0 0 0 4px color-mix(in srgb, var(--quiet) 16%, transparent); }
@@ -390,16 +391,10 @@ const homeHtml = documentHtml({
     @keyframes media-in { from { opacity: 0; transform: translateY(26px); } to { opacity: 1; transform: translateY(0); } }
     @keyframes cursor-pulse { 50% { opacity: .3; } }
 
-    .entry-section { padding: 62px 0 108px; }
-    .section-intro { display: grid; grid-template-columns: minmax(0, .9fr) minmax(280px, .55fr); gap: 48px; align-items: end; margin-bottom: 50px; }
+    .entry-section { padding: 70px 0 104px; }
+    .section-intro { display: grid; grid-template-columns: minmax(0, .9fr) minmax(280px, .55fr); gap: 48px; align-items: end; margin-bottom: 38px; }
     .section-intro h2 { max-width: 15ch; margin: 10px 0 0; font-size: 44px; line-height: 1.08; letter-spacing: 0; }
     .section-intro p { max-width: 42ch; margin: 0; color: var(--muted); font-size: 17px; line-height: 1.55; }
-    .proof-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-block: 1px solid var(--line); margin-bottom: 54px; background: var(--glass); backdrop-filter: blur(20px) saturate(125%); -webkit-backdrop-filter: blur(20px) saturate(125%); }
-    .proof-item { min-height: 160px; padding: 26px 28px 26px 0; }
-    .proof-item + .proof-item { border-left: 1px solid var(--line); padding-left: 28px; }
-    .proof-item span { color: var(--accent); font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 11px; font-weight: 780; }
-    .proof-item strong { display: block; margin-top: 14px; font-size: 18px; line-height: 1.3; }
-    .proof-item p { max-width: 31ch; margin: 8px 0 0; color: var(--muted); font-size: 14px; line-height: 1.55; }
     .destination-list { border-bottom: 1px solid var(--line); }
     .destination {
       min-height: 112px;
@@ -453,7 +448,7 @@ const homeHtml = documentHtml({
     @media (max-width: 720px) {
       .hero { padding: 104px 0 20px; }
       .hero-inner { width: min(100% - 32px, 1240px); }
-      .hero h1 { max-width: 13ch; margin-top: 14px; font-size: 42px; line-height: 1.03; }
+      .hero h1 { max-width: 15ch; margin-top: 14px; font-size: 42px; line-height: 1.03; }
       .hero-lead { margin-bottom: 8px; font-size: 18px; }
       .hero-side > p { max-width: 38ch; font-size: 15px; line-height: 1.5; }
       .hero-actions { gap: 8px; margin-top: 20px; }
@@ -463,14 +458,12 @@ const homeHtml = documentHtml({
       .preview-toolbar { min-height: 56px; padding-left: 12px; }
       .preview-switch { grid-template-columns: repeat(2, minmax(68px, 1fr)); }
       .preview-switch button { min-height: 44px; padding-inline: 10px; }
-      .preview-media img { aspect-ratio: 10 / 3; object-fit: contain; }
-      .entry-section { padding: 30px 0 74px; }
+      .preview-media { padding-top: 14px; }
+      .preview-media img { width: min(100% - 28px, 320px); max-width: 320px; margin-inline: auto; aspect-ratio: 360 / 732; object-fit: contain; }
+      .entry-section { padding: 40px 0 74px; }
       .section-intro { margin-bottom: 34px; }
       .section-intro h2 { font-size: 36px; }
       .section-intro p { font-size: 16px; }
-      .proof-strip { grid-template-columns: 1fr; margin-bottom: 36px; }
-      .proof-item { min-height: 0; padding: 24px 0; }
-      .proof-item + .proof-item { border-top: 1px solid var(--line); border-left: 0; padding-left: 0; }
       .destination { min-height: 126px; grid-template-columns: 1fr 44px; gap: 14px; padding: 20px 0; }
       .destination:hover { padding-left: 0; }
       .destination-index { grid-column: 1; }
@@ -496,15 +489,15 @@ const homeHtml = documentHtml({
       <div class="hero-head">
         <div>
           <div class="hero-command"><strong>&gt;<span class="terminal-cursor">_</span></strong><span>operational software / live</span></div>
-          <h1 id="portfolio-heading">Operational software, built to fit.</h1>
+          <h1 id="portfolio-heading">Run the shop. See the plant. Fix the gaps.</h1>
         </div>
         <div class="hero-side">
-          <p><strong class="hero-lead">Less chasing. More running.</strong> Open a working Shop or Plant workspace in one click. Run one real workflow, then keep the private workspace when your team is ready. If the standard path still does not fit, SuperMega shapes one useful route around the real operation and verifies it before handover.</p>
+          <p><strong class="hero-lead">One place to run the day.</strong> Shop keeps sales, stock, customers, and books together. Plant keeps machines, shifts, maintenance, and handoffs in view. Try either workspace live. When the standard path misses, we build the missing workflow around your team.</p>
           <div class="hero-actions">
             <a class="btn primary" data-preview-open href="https://app.supermega.dev/?demo=shop">Try Shop live</a>
             <a class="btn secondary" href="/work/">See the work</a>
           </div>
-          <div class="hero-meta"><span class="hero-status" data-status-shell><span class="live-dot" aria-hidden="true"></span><span data-public-status aria-live="polite">Checking live demos</span></span><span class="hero-note">No account needed</span></div>
+          <div class="hero-meta"><span class="hero-status" data-status-shell><span class="live-dot" aria-hidden="true"></span><span data-public-status aria-live="polite">Checking live demos</span></span><span class="hero-note">No signup to try</span></div>
         </div>
       </div>
       <div class="hero-preview" data-product-preview>
@@ -515,40 +508,35 @@ const homeHtml = documentHtml({
             <button type="button" data-product-preview-button="plant" aria-pressed="false">Plant</button>
           </div>
         </div>
-        <div class="preview-media"><img data-product-preview-image data-view="shop" src="/live-shop-workspace.png" alt="Current Shop workspace showing sales, cash, customers, and stock" width="1600" height="480" fetchpriority="high" /></div>
+        <div class="preview-media"><picture><source data-product-preview-source media="(max-width: 720px)" srcset="/live-shop-mobile.png" /><img data-product-preview-image data-view="shop" src="/live-shop-workspace.png" alt="Current Shop workspace showing sales, cash, customers, and stock" width="1600" height="480" fetchpriority="high" /></picture></div>
       </div>
     </div>
   </section>
 
   <section class="entry-section page-frame" id="workspaces" aria-labelledby="workspaces-heading">
     <div class="section-intro">
-      <div><div class="eyebrow">Two working systems</div><h2 id="workspaces-heading">Start close to the real work.</h2></div>
-      <p>See the workflow before you commit. Keep the private workspace when it proves useful to the people doing the work.</p>
-    </div>
-    <div class="proof-strip" aria-label="How SuperMega starts">
-      <div class="proof-item"><span>01 / WORKING</span><strong>Use working screens</strong><p>Shop and Plant open without an account. Explore the actual workflow before you choose a path.</p></div>
-      <div class="proof-item"><span>02 / PRIVATE</span><strong>Set up with you</strong><p>Your private workspace is configured and verified before handover. We map the people, sources, and approval points that matter.</p></div>
-      <div class="proof-item"><span>03 / CONTROLLED</span><strong>Keep AI accountable</strong><p>Drafts, checks, and next-step suggestions stay attached to the records and approvals behind them.</p></div>
+      <div><div class="eyebrow">Two working systems</div><h2 id="workspaces-heading">No software maze.</h2></div>
+      <p>Start with the part of the operation your team actually uses. AI helps draft, check, and surface next steps while approvals stay tied to the work behind them.</p>
     </div>
     <div class="destination-list">
-      <a class="destination" href="https://app.supermega.dev/?demo=shop" aria-label="Try Shop live"><span class="destination-index">01 / SHOP</span><span class="destination-copy"><strong>Shop</strong><span>Sell, track stock, manage customers, follow receivables, and keep the books together. Ring sales, keep stock honest, and close the day with less chasing.</span></span><span class="destination-arrow" aria-hidden="true">&#8594;</span></a>
-      <a class="destination" href="https://app.supermega.dev/?demo=plant" aria-label="Try Plant live"><span class="destination-index">02 / PLANT</span><span class="destination-copy"><strong>Plant</strong><span>See floor state, machine history, shift events, and imports in one workspace. See what is running, capture floor history, and hand the next shift a cleaner brief.</span></span><span class="destination-arrow" aria-hidden="true">&#8594;</span></a>
+      <a class="destination" href="https://app.supermega.dev/?demo=shop" aria-label="Try Shop live"><span class="destination-index">01 / SHOP</span><span class="destination-copy"><strong>Shop</strong><span>Sales, stock, customers, receivables, purchasing, and daily close in one operating flow.</span></span><span class="destination-arrow" aria-hidden="true">&#8594;</span></a>
+      <a class="destination" href="https://app.supermega.dev/?demo=plant" aria-label="Try Plant live"><span class="destination-index">02 / PLANT</span><span class="destination-copy"><strong>Plant</strong><span>Machine state, shift events, maintenance, quality, and handoff history in one floor view.</span></span><span class="destination-arrow" aria-hidden="true">&#8594;</span></a>
     </div>
   </section>
 
   <section class="brief-band" id="start" aria-labelledby="brief-heading">
     <div class="brief-inner page-frame">
       <div class="brief-intro">
-        <div><div class="eyebrow">Beyond the standard</div><h2 id="brief-heading">Tell us where the workflow breaks.</h2></div>
-        <p>If one repeatable task depends on scattered files, repeated decisions, or awkward handoffs, send the real example. We will show the smallest useful system to prove first.</p>
+        <div><div class="eyebrow">Need a different route?</div><h2 id="brief-heading">Show us the broken handoff.</h2></div>
+        <p>Send one real example: a file, approval, repeated decision, or browser task. We build the smallest useful path, connect only approved sources, and keep consequential actions reviewable.</p>
       </div>
       <div class="brief-steps">
-        <div class="brief-step"><span>01 / INPUT</span><strong>Show one real workflow</strong><p>Share the example, the people involved, and the current handoffs.</p></div>
-        <div class="brief-step"><span>02 / SHAPE</span><strong>Keep the decisions visible</strong><p>Name the inputs, exceptions, and approvals that cannot disappear.</p></div>
-        <div class="brief-step"><span>03 / PROOF</span><strong>Test the smallest useful path</strong><p>See the result before private setup or approved data is added.</p></div>
+        <div class="brief-step"><span>01 / INPUT</span><strong>Bring the real example</strong><p>Share the file, screen, people, and handoff that create the work.</p></div>
+        <div class="brief-step"><span>02 / BOUNDARY</span><strong>Set the limits</strong><p>Name the sources, exceptions, and approvals that cannot disappear.</p></div>
+        <div class="brief-step"><span>03 / PROOF</span><strong>Run it on your workflow</strong><p>See the result before private setup or approved data is added.</p></div>
       </div>
       <div class="brief-actions">
-        <a class="btn primary" href="/contact/">Describe your workflow</a>
+        <a class="btn primary" href="/contact/">Start with one workflow</a>
         <span class="brief-aside">One useful example is enough to start.</span>
       </div>
     </div>
@@ -601,6 +589,7 @@ const workHtml = documentHtml({
     .case-toolbar span::before { width: 8px; height: 8px; border-radius: 50%; background: var(--signal); box-shadow: 0 0 0 4px color-mix(in srgb, var(--signal) 16%, transparent); content: ""; }
     .case-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 6px; }
     .case-toolbar .btn { min-height: 42px; }
+    .case-media picture { display: block; }
     .case-media img { display: block; width: 100%; height: auto; aspect-ratio: 10 / 3; object-fit: contain; object-position: top; }
 
     .work-close { background: var(--inverse); color: var(--inverse-ink); }
@@ -631,7 +620,8 @@ const workHtml = documentHtml({
       .case-media { margin-top: 32px; }
       .case-toolbar { min-height: 52px; padding-left: 12px; }
       .case-toolbar .btn { min-height: 44px; }
-      .case-media img { aspect-ratio: 10 / 3; }
+      .case-media { background: #071524; }
+      .case-media img { width: min(100% - 28px, 320px); max-width: 320px; margin-inline: auto; aspect-ratio: 360 / 732; object-fit: contain; }
       .work-close-inner { padding: 68px 0 74px; }
       .work-close h2 { font-size: 37px; }
       .work-close-copy p { font-size: 16px; }
@@ -656,7 +646,7 @@ const workHtml = documentHtml({
         <div class="case-label"><span class="case-index">01 / SHOP</span><h2 id="shop-case-heading">Keep the day together.</h2></div>
         <div class="case-copy"><p>Sales, customers, stock, receivables, and books stay in one operating flow. The useful next action is visible without turning the owner into the integration layer.</p><dl class="case-points"><div><dt>Sell</dt><dd>Fast sale and customer flow</dd></div><div><dt>Control</dt><dd>Stock, cash, and money owed</dd></div><div><dt>Close</dt><dd>Daily handoff with variance</dd></div></dl></div>
       </div>
-      <div class="case-media"><div class="case-toolbar"><span>Shop workspace / live</span><div class="case-actions"><a class="btn secondary" href="https://app.supermega.dev/?demo=shop" aria-label="Try the live Shop workspace">Try live</a><a class="btn primary" href="/contact/?from=shop-workspace" aria-label="Request a private Shop workspace">Request</a></div></div><img src="/live-shop-workspace.png" alt="Current Shop workspace showing sales, cash, customers, and stock" width="1600" height="480" loading="lazy" /></div>
+      <div class="case-media"><div class="case-toolbar"><span>Shop workspace / live</span><div class="case-actions"><a class="btn secondary" href="https://app.supermega.dev/?demo=shop" aria-label="Try the live Shop workspace">Try live</a><a class="btn primary" href="/contact/?from=shop-workspace" aria-label="Request a private Shop workspace">Request</a></div></div><picture><source media="(max-width: 720px)" srcset="/live-shop-mobile.png" /><img src="/live-shop-workspace.png" alt="Current Shop workspace showing sales, cash, customers, and stock" width="1600" height="480" loading="lazy" /></picture></div>
     </div>
   </section>
 
@@ -666,7 +656,7 @@ const workHtml = documentHtml({
         <div class="case-label"><span class="case-index">02 / PLANT</span><h2 id="plant-case-heading">Give the floor a memory.</h2></div>
         <div class="case-copy"><p>Machine state, shift evidence, breakdowns, changeovers, and handoffs stay connected. The next shift sees what happened and what still needs attention.</p><dl class="case-points"><div><dt>See</dt><dd>Floor state and line readiness</dd></div><div><dt>Record</dt><dd>Events tied to machine history</dd></div><div><dt>Handoff</dt><dd>Accountable next-shift brief</dd></div></dl></div>
       </div>
-      <div class="case-media"><div class="case-toolbar"><span>Plant workspace / live</span><div class="case-actions"><a class="btn secondary" href="https://app.supermega.dev/?demo=plant" aria-label="Try the live Plant workspace">Try live</a><a class="btn primary" href="/contact/?from=plant-workspace" aria-label="Request a private Plant workspace">Request</a></div></div><img src="/live-plant-workspace.png" alt="Current Plant workspace showing machine state across two production lines" width="1600" height="480" loading="lazy" /></div>
+      <div class="case-media"><div class="case-toolbar"><span>Plant workspace / live</span><div class="case-actions"><a class="btn secondary" href="https://app.supermega.dev/?demo=plant" aria-label="Try the live Plant workspace">Try live</a><a class="btn primary" href="/contact/?from=plant-workspace" aria-label="Request a private Plant workspace">Request</a></div></div><picture><source media="(max-width: 720px)" srcset="/live-plant-mobile.png" /><img src="/live-plant-workspace.png" alt="Current Plant workspace showing machine state across two production lines" width="1600" height="480" loading="lazy" /></picture></div>
     </div>
   </section>
 
@@ -711,8 +701,8 @@ const contactHtml = documentHtml({
   content: `<main class="contact-main">
   <section class="contact-copy" aria-label="Contact SuperMega">
     <div class="contact-command" data-contact-command>&gt;_ direct / contact</div>
-    <h1 data-contact-heading>What needs to work better?</h1>
-    <p data-contact-intro>Send the shortest useful version of the problem. We will reply with the clearest next step.</p>
+    <h1 data-contact-heading>What should run better?</h1>
+    <p data-contact-intro>Send one real example. We will reply with the clearest next step, not a generic demo.</p>
     <div class="contact-direct" aria-label="Direct contact options">
       <a href="viber://chat?number=%2B9595000721"><span>Viber</span><strong>Chat directly</strong><span aria-hidden="true">&#8599;</span></a>
       <a href="mailto:swanhtet@supermega.dev"><span>Email</span><strong>swanhtet@supermega.dev</strong><span aria-hidden="true">&#8594;</span></a>
@@ -933,6 +923,8 @@ await writeStatic('favicon.svg', faviconSvg)
 // These straight, clean-boundary captures come from the current disposable Shop and Plant demos.
 await cp(resolve(root, 'tools', 'public-assets', 'live-shop-workspace.png'), resolve(staticDir, 'live-shop-workspace.png'), { force: true })
 await cp(resolve(root, 'tools', 'public-assets', 'live-plant-workspace.png'), resolve(staticDir, 'live-plant-workspace.png'), { force: true })
+await cp(resolve(root, 'tools', 'public-assets', 'live-shop-mobile.png'), resolve(staticDir, 'live-shop-mobile.png'), { force: true })
+await cp(resolve(root, 'tools', 'public-assets', 'live-plant-mobile.png'), resolve(staticDir, 'live-plant-mobile.png'), { force: true })
 await writeStatic('index.html', homeHtml)
 await writeStatic('404.html', notFoundHtml)
 await writeStatic('work/index.html', workHtml)
