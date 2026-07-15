@@ -57,8 +57,8 @@ for (const entry of ['live-shop-mobile.png', 'live-plant-mobile.png']) {
 const approvedCaptureHashes = new Map([
   ['live-shop-workspace.png', '4a2870c9a73790f5a80c813ccba106122b002438597d9d9b0192c5bf6002212a'],
   ['live-shop-mobile.png', 'eb4bd32150810edb0a4dd047209b663aac9c0abec7a91b308fbb368b5f479ead'],
-  ['live-plant-workspace.png', '5ee966de4dc64aecbfff886684d8d6fb1b1fbb5243c70dc8152028043caa674c'],
-  ['live-plant-mobile.png', 'b7a49578f3b275892081311e85bca22b97a01fef5a8e9f2bc2e2cede6c42ed15'],
+  ['live-plant-workspace.png', '9ab75ecf4956ce2b5a2cee21e9e6cf90c78911f5ef25d4860c7ec3181e45e335'],
+  ['live-plant-mobile.png', '744d9dbe3e581a14032ea92f7c68e1d6582370f9792ac6ebd4182cd37357508a'],
 ])
 for (const [entry, approvedHash] of approvedCaptureHashes) {
   const actualHash = createHash('sha256').update(readFileSync(resolve(staticDir, entry))).digest('hex')
@@ -185,7 +185,7 @@ for (const required of [
   'data-public-status',
   "fetch('/api/health'",
   'Sales, stock, customers, receivables, purchasing, and daily close in one operating flow.',
-  'Machine state, shift events, maintenance, quality, and handoff history in one floor view.',
+  'Production plans, machine state, maintenance, quality, and handoff history in one floor view.',
   'site.webmanifest',
 ]) {
   if (!home.includes(required)) fail('homepage_front_door_contract_missing', { required })
@@ -210,12 +210,13 @@ for (const required of [
   'https://app.supermega.dev/?demo=shop&amp;returnTo=%2Fbooks%3Ftab%3Dreorder',
   'https://app.supermega.dev/?demo=shop&amp;returnTo=%2Fsales%3Fview%3Dclose',
   'https://app.supermega.dev/?demo=plant&amp;returnTo=%2Ffactory',
-  'https://app.supermega.dev/?demo=plant&amp;returnTo=%2Fquality',
+  'https://app.supermega.dev/?demo=plant&amp;returnTo=%2Fplan',
   'https://app.supermega.dev/?demo=plant&amp;returnTo=%2Fhandoff',
   '.case-toolbar .btn { min-height: 44px; }',
   'src="/live-shop-workspace.png"',
   'Current Shop workspace showing priority checks, sales, cash, customers, and stock',
   'src="/live-plant-workspace.png"',
+  'Current Plant workspace showing production plan navigation and machine state across two lines',
   'srcset="/live-shop-mobile.png"',
   'srcset="/live-plant-mobile.png"',
   '<h2 id="work-close-heading">One useful workflow is enough to start.</h2>',
