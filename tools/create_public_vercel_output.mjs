@@ -6,7 +6,7 @@ const outputDir = resolve(root, '.vercel', 'output')
 const staticDir = resolve(outputDir, 'static')
 const functionsDir = resolve(outputDir, 'functions', 'api')
 
-const faviconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="supermega.dev terminal mark" shape-rendering="geometricPrecision"><rect x="3" y="3" width="58" height="58" rx="13" fill="#090d13"/><rect x="3.75" y="3.75" width="56.5" height="56.5" rx="12.25" fill="none" stroke="#ffffff" stroke-opacity="0.16"/><path d="M16.5 19.5 30 31.5 16.5 43.5" fill="none" stroke="#6b95ff" stroke-width="4.75" stroke-linecap="round" stroke-linejoin="round"/><path d="M35 43.5h14" fill="none" stroke="#3dd6a2" stroke-width="4.75" stroke-linecap="round"/></svg>\n`
+const faviconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="supermega.dev terminal mark" shape-rendering="geometricPrecision"><rect x="2.5" y="2.5" width="59" height="59" rx="12" fill="#090d13"/><rect x="3.25" y="3.25" width="57.5" height="57.5" rx="11.25" fill="none" stroke="#ffffff" stroke-opacity="0.18"/><path d="M15 19 29 32 15 45" fill="none" stroke="#6b95ff" stroke-width="4.25" stroke-linecap="round" stroke-linejoin="round"/><path d="M36 45h14" fill="none" stroke="#3dd6a2" stroke-width="4.25" stroke-linecap="round"/></svg>\n`
 
 // The public site accepts only contact requests. It uses the contact handler's Supabase REST
 // fallback when those variables are configured and never opens a direct Postgres connection.
@@ -337,7 +337,7 @@ const homeHtml = documentHtml({
       content: "";
     }
     .hero-inner { width: min(100% - 48px, 1240px); margin-inline: auto; }
-    .hero-head { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(360px, .7fr); align-items: end; gap: 76px; }
+    .hero-head { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(360px, .7fr); align-items: start; gap: 76px; }
     .hero-command {
       display: inline-flex;
       min-height: 32px;
@@ -497,7 +497,7 @@ const homeHtml = documentHtml({
           <h1 id="portfolio-heading">Operational software, built to fit.</h1>
         </div>
         <div class="hero-side">
-          <p><strong class="hero-lead">Less chasing. More running.</strong> Start with working Shop or Plant software. When the standard workflow does not fit, SuperMega shapes a private workspace around the real operation and verifies it before handover.</p>
+          <p><strong class="hero-lead">Less chasing. More running.</strong> Start with working Shop or Plant software. If your work still lives in spreadsheets, messages, and handoffs, SuperMega shapes one useful path around the real operation and verifies it before handover.</p>
           <div class="hero-actions">
             <a class="btn primary" data-preview-open href="https://app.supermega.dev/?demo=shop">Try Shop live</a>
             <a class="btn secondary" href="/contact/">Talk to us</a>
@@ -521,16 +521,16 @@ const homeHtml = documentHtml({
   <section class="entry-section page-frame" id="workspaces" aria-labelledby="workspaces-heading">
     <div class="section-intro">
       <div><div class="eyebrow">Two working systems</div><h2 id="workspaces-heading">Start close to the real work.</h2></div>
-      <p>Use the public demo first. Request a private workspace when the workflow is clear and worth keeping.</p>
+      <p>Open a live path first. Keep the private workspace when it proves useful to the people doing the work.</p>
     </div>
     <div class="proof-strip" aria-label="How SuperMega starts">
-      <div class="proof-item"><span>01 / WORKING</span><strong>Use working screens</strong><p>Shop and Plant demos open without an account.</p></div>
-      <div class="proof-item"><span>02 / PRIVATE</span><strong>Set up with you</strong><p>Your private workspace is configured and verified before handover.</p></div>
-      <div class="proof-item"><span>03 / APPROVED</span><strong>Bring data deliberately</strong><p>Start fresh or add approved business records when ready.</p></div>
+      <div class="proof-item"><span>01 / WORKING</span><strong>Use working screens</strong><p>Shop and Plant demos open without an account. Explore one current workflow before you choose a path.</p></div>
+      <div class="proof-item"><span>02 / PRIVATE</span><strong>Set up with you</strong><p>Your private workspace is configured and verified before handover. We map the people, sources, and approval points that matter.</p></div>
+      <div class="proof-item"><span>03 / APPROVED</span><strong>Bring data deliberately</strong><p>Start fresh or add approved business records when ready. See a useful screen before private setup is complete.</p></div>
     </div>
     <div class="destination-list">
-      <a class="destination" href="https://app.supermega.dev/?demo=shop" aria-label="Try Shop live"><span class="destination-index">01 / SHOP</span><span class="destination-copy"><strong>Shop</strong><span>Sell, track stock, manage customers, follow receivables, and keep the books together.</span></span><span class="destination-arrow" aria-hidden="true">&#8594;</span></a>
-      <a class="destination" href="https://app.supermega.dev/?demo=plant" aria-label="Try Plant live"><span class="destination-index">02 / PLANT</span><span class="destination-copy"><strong>Plant</strong><span>See floor state, machine history, shift events, and imports in one workspace.</span></span><span class="destination-arrow" aria-hidden="true">&#8594;</span></a>
+      <a class="destination" href="https://app.supermega.dev/?demo=shop" aria-label="Try Shop live"><span class="destination-index">01 / SHOP</span><span class="destination-copy"><strong>Shop</strong><span>Sell, track stock, manage customers, follow receivables, and keep the books together. Ring sales, keep stock honest, and close the day with less chasing.</span></span><span class="destination-arrow" aria-hidden="true">&#8594;</span></a>
+      <a class="destination" href="https://app.supermega.dev/?demo=plant" aria-label="Try Plant live"><span class="destination-index">02 / PLANT</span><span class="destination-copy"><strong>Plant</strong><span>See floor state, machine history, shift events, and imports in one workspace. See what is running, capture floor history, and hand the next shift a cleaner brief.</span></span><span class="destination-arrow" aria-hidden="true">&#8594;</span></a>
     </div>
   </section>
 
@@ -538,12 +538,12 @@ const homeHtml = documentHtml({
     <div class="brief-inner page-frame">
       <div class="brief-intro">
         <div><div class="eyebrow">Beyond the standard</div><h2 id="brief-heading">Tell us where the workflow breaks.</h2></div>
-        <p>If the work depends on scattered files, repeated decisions, or awkward handoffs, send one real example. We will reply with the smallest useful system to prove first.</p>
+        <p>If one repeatable task depends on scattered files, repeated decisions, or awkward handoffs, send the real example. We will reply with the smallest useful system to prove first.</p>
       </div>
       <div class="brief-steps">
-        <div class="brief-step"><span>01 / INPUT</span><strong>Show one real workflow</strong><p>Share one example, the people involved, and the current handoffs.</p></div>
-        <div class="brief-step"><span>02 / CONTROL</span><strong>Mark who approves what</strong><p>Name the inputs, exceptions, and decisions that must stay visible.</p></div>
-        <div class="brief-step"><span>03 / PROOF</span><strong>Test the smallest useful path</strong><p>See a working result before private setup or approved data is added.</p></div>
+        <div class="brief-step"><span>01 / INPUT</span><strong>Show one real workflow</strong><p>Share the example, the people involved, and the current handoffs.</p></div>
+        <div class="brief-step"><span>02 / SHAPE</span><strong>Keep the decisions visible</strong><p>Name the inputs, exceptions, and approvals that cannot disappear.</p></div>
+        <div class="brief-step"><span>03 / PROOF</span><strong>Test the smallest useful path</strong><p>See the result before private setup or approved data is added.</p></div>
       </div>
       <div class="brief-actions">
         <a class="btn primary" href="/contact/">Describe your workflow</a>
