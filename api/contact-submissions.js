@@ -420,14 +420,14 @@ const runtimeWorkcellCatalog = {
 const solutionRouteCatalog = [
   ...Object.values(runtimeWorkcellCatalog),
   {
-    template_id: 'deskpos-quickstart',
-    package_name: 'Shop Quickstart',
+    template_id: 'shop-private-workspace',
+    package_name: 'Shop private workspace',
     product_area: 'Shop',
-    delivery_lane: 'pos_launch_workcell',
+    delivery_lane: 'shop_workspace_setup',
     keywords: ['pos', 'point of sale', 'restaurant', 'cafe', 'shop', 'store', 'retail', 'spa', 'salon', 'clinic', 'booking', 'checkout', 'receipt', 'inventory', 'stock'],
-    first_proof_target: 'Working checkout, booking flow, receipt proof, and daily close insight on their starting catalog.',
-    source_requests: ['service or product list', 'staff list', 'payment wallet name', 'opening hours'],
-    sales_motion: 'Sell a fixed-scope Shop setup after one checkout or booking proof is accepted.',
+    first_proof_target: 'One private Shop workspace configured from buyer-approved starting data, with sale, stock, receivable, and daily-close paths verified before handover.',
+    source_requests: ['approved product or service list', 'opening stock and customer starting point', 'cash and receivable close rules', 'named owner for handover'],
+    sales_motion: 'Configure and prove one private Shop workspace before managed account handover.',
   },
   {
     template_id: 'chat-ledger',
@@ -460,14 +460,14 @@ const solutionRouteCatalog = [
     sales_motion: 'Sell a recurring owner brief after one source-traced decision packet is accepted.',
   },
   {
-    template_id: 'factory-ops-ledger',
-    package_name: 'Factory Ops Ledger',
+    template_id: 'plant-private-workspace',
+    package_name: 'Plant private workspace',
     product_area: 'Plant',
-    delivery_lane: 'factory_ops_workcell',
+    delivery_lane: 'plant_workspace_setup',
     keywords: ['factory', 'production', 'quality', 'maintenance', 'machine', 'line', 'plant', 'warehouse', 'receiving', 'capa', 'issue', 'defect'],
-    first_proof_target: 'Dashboard showing production, quality claims, open issues, and the top risks to review today.',
-    source_requests: ['daily production sheet', 'quality claim log', 'maintenance notes', 'machine or line list'],
-    sales_motion: 'Sell a plant ledger pilot after the buyer accepts one read-only risk queue.',
+    first_proof_target: 'One private Plant workspace configured from buyer-approved starting data, with machine state, shift handoff, and maintenance paths verified before handover.',
+    source_requests: ['machine and line list', 'one approved shift or production record', 'maintenance and quality starting point', 'named owner for handover'],
+    sales_motion: 'Configure and prove one private Plant workspace before managed account handover.',
   },
 ]
 
@@ -753,11 +753,11 @@ function implementationModulesForRoute(solutionRoute = {}) {
   const runtime = runtimeWorkcellCatalog[text(solutionRoute.runtime_workcell_slug || solutionRoute.template_id)]
   if (runtime) return [...new Set([...defaults, ...runtime.modules])]
   const byLane = {
-    pos_launch_workcell: ['business_profile', 'catalog', 'staff_roles', 'checkout_or_booking', 'payment_proof', 'receipt', 'daily_close'],
+    shop_workspace_setup: ['business_profile', 'catalog', 'customers', 'stock', 'sales', 'receivables', 'register_shift', 'daily_close', 'roles', 'approved_data_import'],
     chat_to_ledger_workcell: ['chat_sources', 'customer_match', 'order_ledger', 'open_balance_queue', 'delivery_queue', 'approval_only_followups'],
     inbox_calendar_workcell: ['allowed_inbox_scope', 'calendar_scope', 'priority_rules', 'meeting_prep', 'reply_drafts', 'approval_queue'],
     decision_brief_workcell: ['watchlist', 'source_change_log', 'decision_brief', 'risk_flags', 'followup_queue'],
-    factory_ops_workcell: ['production_sources', 'quality_claims', 'maintenance_notes', 'asset_or_line_map', 'risk_queue', 'read_only_dashboard'],
+    plant_workspace_setup: ['machine_and_line_map', 'floor_state', 'shift_events', 'production_report', 'shift_handoff', 'maintenance_schedule', 'work_orders', 'parts_and_quality_history', 'approved_data_import'],
     data_cleanup_workcell: ['source_file_parser', 'column_mapping', 'validation_rules', 'exception_report', 'clean_export'],
   }
   return [...defaults, ...(byLane[lane] || ['custom_source_map', 'custom_work_queue', 'custom_output_screen'])]
@@ -912,40 +912,44 @@ function databaseConfigured() {
   return datastore.postgresConfigured()
 }
 
-function deskposPipelineTarget() {
-  return envText('DESKPOS_PIPELINE_URL') || 'https://pos.supermega.dev/api/pipeline-leads'
+function shopPipelineTarget() {
+  return envText('SHOP_PIPELINE_URL', 'DESKPOS_PIPELINE_URL') || 'https://pos.supermega.dev/api/pipeline-leads'
 }
 
 function shopPipelineIngestToken() {
   return envText('SHOP_PIPELINE_INGEST_TOKEN')
 }
 
-function deskposPipelineStatus() {
+function shopPipelineStatus() {
+  const target = shopPipelineTarget()
+  const configured = Boolean(shopPipelineIngestToken())
   return {
-    status: shopPipelineIngestToken() ? 'ready' : 'not_configured',
+    status: !configured ? 'not_configured' : isSafeShopPipelineUrl(target) ? 'ready' : 'invalid_target',
     mode: 'public_contact_to_shop_queue',
-    target: deskposPipelineTarget(),
+    target,
   }
 }
 
-function isSafeDeskposPipelineUrl(value) {
+function isSafeShopPipelineUrl(value) {
   try {
     const url = new URL(value)
     return (
       url.protocol === 'https:' &&
       url.pathname === '/api/pipeline-leads' &&
-      ['pos.supermega.dev', 'spa-desk-pilot.vercel.app'].includes(url.hostname)
+      ['pos.supermega.dev', 'spa-desk-pilot.vercel.app'].includes(url.hostname) &&
+      !url.search &&
+      !url.hash
     )
   } catch {
     return false
   }
 }
 
-function isDeskposLead(record) {
+function isShopLead(record) {
   const templateId = text(record.template_id).toLowerCase()
   const productArea = text(record.product_area).toLowerCase()
   const entryIntent = contactEntryIntent(record)
-  if (templateId === 'deskpos-quickstart' || productArea === 'shop' || entryIntent === 'shop-workspace') {
+  if (['shop-private-workspace', 'deskpos-quickstart'].includes(templateId) || productArea === 'shop' || entryIntent === 'shop-workspace') {
     return true
   }
   const productText = [
@@ -961,7 +965,7 @@ function isDeskposLead(record) {
   return /deskpos|point of sale|pos \+ inventory|restaurant pos|restaurant-pos|storedesk|counterline|counter app|service-desk-pos|easypos/.test(productText)
 }
 
-function deskposVertical(record) {
+function shopPipelineVertical(record) {
   const blob = [
     record.company,
     record.requested_package,
@@ -988,7 +992,7 @@ function deskposVertical(record) {
   return 'other'
 }
 
-function deskposPipelinePayload(record) {
+function shopPipelinePayload(record) {
   return {
     businessName: record.company || record.name,
     contact: [record.email, record.phone].filter(Boolean).join(' / '),
@@ -1006,7 +1010,7 @@ function deskposPipelinePayload(record) {
     source: 'supermega-public-site',
     stage: 'lead',
     submittedAt: record.submitted_at,
-    vertical: deskposVertical(record),
+    vertical: shopPipelineVertical(record),
   }
 }
 
@@ -1034,19 +1038,19 @@ function shopPipelineRetryDelay() {
   return new Promise((resolve) => setTimeout(resolve, SHOP_PIPELINE_RETRY_DELAY_MS))
 }
 
-async function forwardDeskposPipeline({ record }) {
-  if (!isDeskposLead(record)) {
+async function forwardShopPipeline({ record }) {
+  if (!isShopLead(record)) {
     return { status: 'skipped', reason: 'not_shop_lead' }
   }
-  const target = deskposPipelineTarget()
-  if (!isSafeDeskposPipelineUrl(target)) {
+  const target = shopPipelineTarget()
+  if (!isSafeShopPipelineUrl(target)) {
     return { status: 'skipped', reason: 'unsafe_shop_pipeline_url' }
   }
   const ingestToken = shopPipelineIngestToken()
   if (!ingestToken) {
     return { status: 'skipped', reason: 'shop_pipeline_not_configured' }
   }
-  const requestBody = JSON.stringify(deskposPipelinePayload(record))
+  const requestBody = JSON.stringify(shopPipelinePayload(record))
   let lastError = null
   for (let attempt = 1; attempt <= SHOP_PIPELINE_MAX_ATTEMPTS; attempt += 1) {
     try {
@@ -1823,9 +1827,9 @@ function buildLeadRecord({ leadId, taskId, payload, req }) {
       : ''
   const workspacePackage = workspaceProduct ? `${workspaceProduct} private workspace` : ''
   const workspaceTemplateId = entryIntent === 'shop-workspace'
-    ? 'deskpos-quickstart'
+    ? 'shop-private-workspace'
     : entryIntent === 'plant-workspace'
-      ? 'factory-ops-ledger'
+      ? 'plant-private-workspace'
       : ''
   const workspaceFirstProofTarget = workspaceProduct
     ? `One private ${workspaceProduct} workspace configured from buyer-approved starting data and verified before handover.`
@@ -2189,6 +2193,7 @@ function publicContactStatus() {
     leadLedgerStatus() === 'configured' &&
     pipelineActionStatus() === 'configured' &&
     fallbackQueueStatus().email_delivery === 'configured' &&
+    shopPipelineStatus().status === 'ready' &&
     opsIntakeStatus().status === 'ready'
   )
   return {
@@ -2207,7 +2212,7 @@ function contactDiagnostics() {
     ledger_table: 'supermega_leads',
     pipeline_actions: pipelineActionStatus(),
     pipeline_actions_table: 'supermega_pipeline_actions',
-    shop_pipeline: deskposPipelineStatus(),
+    shop_pipeline: shopPipelineStatus(),
     ops_intake: opsIntakeStatus(),
     primary_datastore: datastore.datastoreStatus(),
     fallback_queue: fallbackQueueStatus(),
@@ -2466,9 +2471,9 @@ async function handler(req, res) {
   const record = buildLeadRecord({ leadId, taskId, payload: { ...payload, name, email, company, goal }, req })
   const ledger = await saveLeadLedger({ record })
   const pipelineAction = await savePipelineAction({ record })
-  const [webhook, deskposPipeline, opsIntake] = await Promise.all([
+  const [webhook, shopPipeline, opsIntake] = await Promise.all([
     postLeadWebhook({ record }),
-    forwardDeskposPipeline({ record }),
+    forwardShopPipeline({ record }),
     forwardOpsIntake({ record }),
   ])
   const [delivery, confirmation, telegram, sheets] = await Promise.all([
@@ -2538,9 +2543,10 @@ handler.__test = {
   pipelineActionPayload,
   telegramLeadMessage,
   operatorConsoleUrl,
-  isDeskposLead,
-  deskposPipelinePayload,
-  forwardDeskposPipeline,
+  isShopLead,
+  isSafeShopPipelineUrl,
+  shopPipelinePayload,
+  forwardShopPipeline,
   forwardOpsIntake,
   isSafeOpsIntakeUrl,
   opsIntakeStatus,

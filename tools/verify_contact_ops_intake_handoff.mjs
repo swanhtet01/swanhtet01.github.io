@@ -16,24 +16,30 @@ const {
   publicSubmissionFailure,
   receiptHtml,
   buildLeadRecord,
-  isDeskposLead,
-  deskposPipelinePayload,
-  forwardDeskposPipeline,
+  isShopLead,
+  isSafeShopPipelineUrl,
+  shopPipelinePayload,
+  forwardShopPipeline,
 } = handler.__test
 
 assert.equal(typeof forwardOpsIntake, 'function')
 assert.equal(typeof buildLeadRecord, 'function')
-assert.equal(typeof isDeskposLead, 'function')
-assert.equal(typeof deskposPipelinePayload, 'function')
-assert.equal(typeof forwardDeskposPipeline, 'function')
+assert.equal(typeof isShopLead, 'function')
+assert.equal(typeof isSafeShopPipelineUrl, 'function')
+assert.equal(typeof shopPipelinePayload, 'function')
+assert.equal(typeof forwardShopPipeline, 'function')
 assert.equal(isSafeOpsIntakeUrl('https://supermega-machine.vercel.app/api/intake'), true)
 assert.equal(isSafeOpsIntakeUrl('https://supermega-machine.vercel.app.evil.example/api/intake'), false)
 assert.equal(isSafeOpsIntakeUrl('https://supermega-machine.vercel.app/api/intake?redirect=1'), false)
+assert.equal(isSafeShopPipelineUrl('https://pos.supermega.dev/api/pipeline-leads'), true)
+assert.equal(isSafeShopPipelineUrl('https://pos.supermega.dev.evil.example/api/pipeline-leads'), false)
+assert.equal(isSafeShopPipelineUrl('https://pos.supermega.dev/api/pipeline-leads?redirect=1'), false)
 
 const originalFetch = globalThis.fetch
 const originalSecret = process.env.SUPERMEGA_INTAKE_SECRET
 const originalUrl = process.env.SUPERMEGA_OPS_INTAKE_URL
-const originalDeskposPipelineUrl = process.env.DESKPOS_PIPELINE_URL
+const originalShopPipelineUrl = process.env.SHOP_PIPELINE_URL
+const originalLegacyDeskposPipelineUrl = process.env.DESKPOS_PIPELINE_URL
 const originalShopPipelineIngestToken = process.env.SHOP_PIPELINE_INGEST_TOKEN
 const originalOpsKey = process.env.SUPERMEGA_OPS_KEY
 const originalSupabaseUrl = process.env.SUPABASE_URL
@@ -112,6 +118,7 @@ try {
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'contract-test-service-role-key'
   process.env.RESEND_API_KEY = 'contract-test-resend-key'
   delete process.env.SUPERMEGA_OPS_INTAKE_URL
+  delete process.env.SHOP_PIPELINE_URL
   delete process.env.DESKPOS_PIPELINE_URL
   const contractFetch = async (url, options) => {
     calls.push({ url, options })
@@ -140,6 +147,10 @@ try {
     status: 'ready',
     service: 'supermega-contact',
   })
+  process.env.SHOP_PIPELINE_URL = 'https://pos.supermega.dev.evil.example/api/pipeline-leads'
+  assert.equal(contactDiagnostics().shop_pipeline.status, 'invalid_target')
+  assert.deepEqual(publicContactStatus(), { status: 'degraded', service: 'supermega-contact' })
+  delete process.env.SHOP_PIPELINE_URL
   assert.equal(hasStatusDiagnosticsAccess({ headers: { 'x-ops-key': opsKey } }), true)
   assert.equal(hasStatusDiagnosticsAccess({ headers: { 'x-ops-key': `${opsKey}-wrong` } }), false)
 
@@ -225,7 +236,7 @@ try {
     'submission: publicSubmission',
     'owner_onboarding_alert: firstProofTask.owner_onboarding_alert',
     'pipeline_action: pipelineAction',
-    'shop_pipeline: deskposPipeline',
+    'shop_pipeline: shopPipeline',
     'ops_intake: opsIntake',
     'fallback_email: notifyEmail',
     "reason: 'rate_limited', rate",
@@ -274,22 +285,23 @@ try {
     },
     req: requestStub,
   })
-  assert.equal(isDeskposLead(shopRecord), true)
-  assert.equal(isDeskposLead({ template_id: 'deskpos-quickstart' }), true)
-  assert.equal(isDeskposLead({ page_path: '/contact/?from=shop-workspace' }), true)
-  assert.equal(isDeskposLead(plantRecord), false)
-  assert.equal(isDeskposLead({ goal: 'Help with a weekly management report.' }), false)
+  assert.equal(isShopLead(shopRecord), true)
+  assert.equal(isShopLead({ template_id: 'shop-private-workspace' }), true)
+  assert.equal(isShopLead({ template_id: 'deskpos-quickstart' }), true)
+  assert.equal(isShopLead({ page_path: '/contact/?from=shop-workspace' }), true)
+  assert.equal(isShopLead(plantRecord), false)
+  assert.equal(isShopLead({ goal: 'Help with a weekly management report.' }), false)
 
-  const shopPayload = deskposPipelinePayload(shopRecord)
+  const shopPayload = shopPipelinePayload(shopRecord)
   assert.equal(shopPayload.businessName, 'Example Shop')
   assert.equal(shopPayload.externalId, 'LEAD-SHOP-1')
   assert.equal(shopPayload.vertical, 'retail')
   assert.match(shopPayload.notes, /Product: Shop/)
-  assert.match(shopPayload.notes, /Template: deskpos-quickstart/)
+  assert.match(shopPayload.notes, /Template: shop-private-workspace/)
   assert.match(shopPayload.notes, /Onboarding: workspace_request/)
   assert.match(shopPayload.notes, /First proof: One private Shop workspace/)
 
-  const shopForward = await forwardDeskposPipeline({ record: shopRecord })
+  const shopForward = await forwardShopPipeline({ record: shopRecord })
   assert.equal(calls.length, 1)
   assert.equal(calls[0].url, 'https://pos.supermega.dev/api/pipeline-leads')
   assert.equal(calls[0].options.method, 'POST')
@@ -304,7 +316,7 @@ try {
     shop_lead_id: 'SHOP-LEAD-1',
   })
   assert.equal(JSON.stringify(shopForward).includes(shopIngestToken), false)
-  assert.deepEqual(await forwardDeskposPipeline({ record: plantRecord }), {
+  assert.deepEqual(await forwardShopPipeline({ record: plantRecord }), {
     status: 'skipped',
     reason: 'not_shop_lead',
   })
@@ -322,7 +334,7 @@ try {
       json: async () => ({ ...shopSuccessBody, duplicate: true }),
     }
   }
-  assert.deepEqual(await forwardDeskposPipeline({ record: shopRecord }), {
+  assert.deepEqual(await forwardShopPipeline({ record: shopRecord }), {
     status: 'ready',
     target: 'https://pos.supermega.dev/api/pipeline-leads',
     duplicate: true,
@@ -343,7 +355,7 @@ try {
     if (networkCalls.length === 1) throw new TypeError('temporary network failure')
     return { ok: true, status: 200, json: async () => shopSuccessBody }
   }
-  assert.equal((await forwardDeskposPipeline({ record: shopRecord })).status, 'ready')
+  assert.equal((await forwardShopPipeline({ record: shopRecord })).status, 'ready')
   assert.equal(networkCalls.length, 2)
 
   const malformedCalls = []
@@ -351,7 +363,7 @@ try {
     malformedCalls.push({ url, options })
     return { ok: true, status: 200, json: async () => ({ accepted: true }) }
   }
-  assert.deepEqual(await forwardDeskposPipeline({ record: shopRecord }), {
+  assert.deepEqual(await forwardShopPipeline({ record: shopRecord }), {
     status: 'error',
     reason: 'shop_invalid_response',
     target: 'https://pos.supermega.dev/api/pipeline-leads',
@@ -363,7 +375,7 @@ try {
     rejectedCalls.push({ url, options })
     return { ok: true, status: 200, json: async () => ({ ok: true, accepted: false }) }
   }
-  assert.deepEqual(await forwardDeskposPipeline({ record: shopRecord }), {
+  assert.deepEqual(await forwardShopPipeline({ record: shopRecord }), {
     status: 'error',
     reason: 'shop_rejected',
     target: 'https://pos.supermega.dev/api/pipeline-leads',
@@ -375,7 +387,7 @@ try {
     unauthorizedCalls.push({ url, options })
     return { ok: false, status: 401, json: async () => ({ error: 'Unauthorized.' }) }
   }
-  assert.deepEqual(await forwardDeskposPipeline({ record: shopRecord }), {
+  assert.deepEqual(await forwardShopPipeline({ record: shopRecord }), {
     status: 'error',
     reason: 'shop_401',
     target: 'https://pos.supermega.dev/api/pipeline-leads',
@@ -511,7 +523,8 @@ try {
 
   delete process.env.SHOP_PIPELINE_INGEST_TOKEN
   assert.equal(contactDiagnostics().shop_pipeline.status, 'not_configured')
-  assert.deepEqual(await forwardDeskposPipeline({ record: shopRecord }), {
+  assert.deepEqual(publicContactStatus(), { status: 'degraded', service: 'supermega-contact' })
+  assert.deepEqual(await forwardShopPipeline({ record: shopRecord }), {
     status: 'skipped',
     reason: 'shop_pipeline_not_configured',
   })
@@ -527,8 +540,10 @@ try {
   else process.env.SUPERMEGA_INTAKE_SECRET = originalSecret
   if (originalUrl === undefined) delete process.env.SUPERMEGA_OPS_INTAKE_URL
   else process.env.SUPERMEGA_OPS_INTAKE_URL = originalUrl
-  if (originalDeskposPipelineUrl === undefined) delete process.env.DESKPOS_PIPELINE_URL
-  else process.env.DESKPOS_PIPELINE_URL = originalDeskposPipelineUrl
+  if (originalShopPipelineUrl === undefined) delete process.env.SHOP_PIPELINE_URL
+  else process.env.SHOP_PIPELINE_URL = originalShopPipelineUrl
+  if (originalLegacyDeskposPipelineUrl === undefined) delete process.env.DESKPOS_PIPELINE_URL
+  else process.env.DESKPOS_PIPELINE_URL = originalLegacyDeskposPipelineUrl
   if (originalShopPipelineIngestToken === undefined) delete process.env.SHOP_PIPELINE_INGEST_TOKEN
   else process.env.SHOP_PIPELINE_INGEST_TOKEN = originalShopPipelineIngestToken
   if (originalOpsKey === undefined) delete process.env.SUPERMEGA_OPS_KEY
