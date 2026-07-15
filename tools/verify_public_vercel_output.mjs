@@ -752,7 +752,7 @@ for (const token of [
 for (const token of [
   '<title>supermega.dev — your business, in one simple app</title>',
   '<title>supermega.dev | Operating software for shops and plants</title>',
-  'The work behind the business, finally in one place.',
+  'Less chasing. More running.',
   'sm_worker_continue_state',
   'data-local-worker-continue',
   'Browser-local continuation',
@@ -813,8 +813,8 @@ for (const [entry, html] of Object.entries({ 'index.html': homeHtml, 'work/index
     fail('public_ai_agent_solution_must_open_same_tab', { entry })
   }
 }
-if (!homeHtml.includes('Shop, Plant, or one working AI tool')) {
-  fail('public_three_line_offer_closing_copy_missing')
+if (!homeHtml.includes('Bring us one messy workflow.') || !homeHtml.includes('map the first useful screen, the proof it needs, and the next decision')) {
+  fail('public_workflow_closing_copy_missing')
 }
 for (const token of [
   '<title>Payment Reconciler | SuperMega AI Agent Solutions</title>',
