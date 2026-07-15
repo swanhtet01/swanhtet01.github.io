@@ -580,15 +580,18 @@ const workHtml = documentHtml({
     .case-copy { display: grid; grid-template-columns: minmax(0, .95fr) minmax(260px, .72fr); gap: 48px; }
     .case-copy > p { max-width: 43ch; margin: 0; color: var(--muted); font-size: 18px; line-height: 1.62; }
     .case-points { margin: 0; border-bottom: 1px solid var(--line); }
-    .case-points div { min-height: 48px; display: grid; grid-template-columns: 94px 1fr; align-items: center; gap: 16px; border-top: 1px solid var(--line); }
-    .case-points dt { color: var(--quiet); font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 11px; font-weight: 760; text-transform: uppercase; }
-    .case-points dd { margin: 0; color: var(--ink); font-size: 14px; font-weight: 720; }
+    .case-point { min-height: 52px; display: grid; grid-template-columns: 94px minmax(0, 1fr) 24px; align-items: center; gap: 16px; border-top: 1px solid var(--line); color: var(--ink); text-decoration: none; transition: background 160ms ease; }
+    .case-point-label { color: var(--quiet); font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 11px; font-weight: 760; text-transform: uppercase; }
+    .case-point strong { min-width: 0; font-size: 14px; font-weight: 720; }
+    .case-point-arrow { color: var(--accent); font-size: 17px; text-align: center; transition: transform 160ms ease; }
+    .case-point:hover { background: var(--glass); }
+    .case-point:hover .case-point-arrow { transform: translateX(3px); }
     .case-media { margin-top: 44px; overflow: hidden; border: 1px solid var(--line-strong); border-radius: 8px; background: #071524; box-shadow: var(--shadow-deep); }
     .case-toolbar { min-height: 54px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); padding: 6px 8px 6px 16px; background: var(--glass); backdrop-filter: blur(22px) saturate(135%); -webkit-backdrop-filter: blur(22px) saturate(135%); }
     .case-toolbar span { display: inline-flex; align-items: center; gap: 9px; color: var(--muted); font-size: 12px; font-weight: 760; }
     .case-toolbar span::before { width: 8px; height: 8px; border-radius: 50%; background: var(--signal); box-shadow: 0 0 0 4px color-mix(in srgb, var(--signal) 16%, transparent); content: ""; }
     .case-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 6px; }
-    .case-toolbar .btn { min-height: 42px; }
+    .case-toolbar .btn { min-height: 44px; }
     .case-media picture { display: block; }
     .case-media img { display: block; width: 100%; height: auto; aspect-ratio: 10 / 3; object-fit: contain; object-position: top; }
 
@@ -644,7 +647,7 @@ const workHtml = documentHtml({
     <div class="case-inner">
       <div class="case-head">
         <div class="case-label"><span class="case-index">01 / SHOP</span><h2 id="shop-case-heading">Keep the day together.</h2></div>
-        <div class="case-copy"><p>Sales, customers, stock, receivables, and books stay in one operating flow. The useful next action is visible without turning the owner into the integration layer.</p><dl class="case-points"><div><dt>Sell</dt><dd>Fast sale and customer flow</dd></div><div><dt>Control</dt><dd>Stock, cash, and money owed</dd></div><div><dt>Close</dt><dd>Daily handoff with variance</dd></div></dl></div>
+        <div class="case-copy"><p>Sales, customers, stock, receivables, and books stay in one operating flow. The useful next action is visible without turning the owner into the integration layer.</p><div class="case-points" aria-label="Try a Shop workflow"><a class="case-point" href="https://app.supermega.dev/?demo=shop&amp;returnTo=%2Fsales" aria-label="Try a new sale in the live Shop demo"><span class="case-point-label">Sell</span><strong>Fast sale and customer flow</strong><span class="case-point-arrow" aria-hidden="true">&rarr;</span></a><a class="case-point" href="https://app.supermega.dev/?demo=shop&amp;returnTo=%2Fbooks%3Ftab%3Dreorder" aria-label="Try stock reorder in the live Shop demo"><span class="case-point-label">Control</span><strong>Stock, cash, and money owed</strong><span class="case-point-arrow" aria-hidden="true">&rarr;</span></a><a class="case-point" href="https://app.supermega.dev/?demo=shop&amp;returnTo=%2Fsales%3Fview%3Dclose" aria-label="Try Daily Close in the live Shop demo"><span class="case-point-label">Close</span><strong>Daily handoff with variance</strong><span class="case-point-arrow" aria-hidden="true">&rarr;</span></a></div></div>
       </div>
       <div class="case-media"><div class="case-toolbar"><span>Shop workspace / live</span><div class="case-actions"><a class="btn secondary" href="https://app.supermega.dev/?demo=shop" aria-label="Try the live Shop workspace">Try live</a><a class="btn primary" href="/contact/?from=shop-workspace" aria-label="Request a private Shop workspace">Request</a></div></div><picture><source media="(max-width: 720px)" srcset="/live-shop-mobile.png" /><img src="/live-shop-workspace.png" alt="Current Shop workspace showing priority checks, sales, cash, customers, and stock" width="1600" height="480" loading="lazy" /></picture></div>
     </div>
@@ -654,7 +657,7 @@ const workHtml = documentHtml({
     <div class="case-inner">
       <div class="case-head">
         <div class="case-label"><span class="case-index">02 / PLANT</span><h2 id="plant-case-heading">Give the floor a memory.</h2></div>
-        <div class="case-copy"><p>Machine state, shift evidence, breakdowns, changeovers, and handoffs stay connected. The next shift sees what happened and what still needs attention.</p><dl class="case-points"><div><dt>See</dt><dd>Floor state and line readiness</dd></div><div><dt>Record</dt><dd>Events tied to machine history</dd></div><div><dt>Handoff</dt><dd>Accountable next-shift brief</dd></div></dl></div>
+        <div class="case-copy"><p>Machine state, shift evidence, breakdowns, changeovers, and handoffs stay connected. The next shift sees what happened and what still needs attention.</p><div class="case-points" aria-label="Try a Plant workflow"><a class="case-point" href="https://app.supermega.dev/?demo=plant&amp;returnTo=%2Ffactory" aria-label="Try the live Plant floor"><span class="case-point-label">See</span><strong>Floor state and line readiness</strong><span class="case-point-arrow" aria-hidden="true">&rarr;</span></a><a class="case-point" href="https://app.supermega.dev/?demo=plant&amp;returnTo=%2Fquality" aria-label="Try quality review in the live Plant demo"><span class="case-point-label">Review</span><strong>Quality evidence tied to machines</strong><span class="case-point-arrow" aria-hidden="true">&rarr;</span></a><a class="case-point" href="https://app.supermega.dev/?demo=plant&amp;returnTo=%2Fhandoff" aria-label="Try shift handoff in the live Plant demo"><span class="case-point-label">Handoff</span><strong>Accountable next-shift brief</strong><span class="case-point-arrow" aria-hidden="true">&rarr;</span></a></div></div>
       </div>
       <div class="case-media"><div class="case-toolbar"><span>Plant workspace / live</span><div class="case-actions"><a class="btn secondary" href="https://app.supermega.dev/?demo=plant" aria-label="Try the live Plant workspace">Try live</a><a class="btn primary" href="/contact/?from=plant-workspace" aria-label="Request a private Plant workspace">Request</a></div></div><picture><source media="(max-width: 720px)" srcset="/live-plant-mobile.png" /><img src="/live-plant-workspace.png" alt="Current Plant workspace showing machine state across two production lines" width="1600" height="480" loading="lazy" /></picture></div>
     </div>
