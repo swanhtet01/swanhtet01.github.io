@@ -5,6 +5,7 @@ const retryDelayMs = 5_000
 const endpoints = {
   home: 'https://supermega.dev/',
   www: 'https://www.supermega.dev/',
+  fileAnalyst: 'https://supermega-machine.vercel.app/workcell',
   agentIntake: 'https://supermega.dev/contact/?from=ai-agent-solution',
   health: 'https://supermega.dev/api/health',
   contactStatus: 'https://supermega.dev/api/contact-submissions/status',
@@ -45,6 +46,10 @@ function verifyHome(html, label) {
     'data-preview-open',
     'src="/live-shop-workspace.png"',
     "src:'/live-plant-workspace.png'",
+    'https://supermega-machine.vercel.app/workcell',
+    '<strong>AI Agent Solutions</strong>',
+    'Run File Analyst now:',
+    'Source stays in this browser and is never uploaded.',
     'Use working screens',
     'Your private workspace is configured and verified before handover.',
     'Start fresh or add approved business records when ready.',
@@ -54,8 +59,22 @@ function verifyHome(html, label) {
   ]) {
     assert(html.includes(required), `${label}_missing_${required.slice(0, 32)}`)
   }
-  for (const forbidden of ['MegaOS', 'DeskPOS', 'General enquiry', 'target="_blank"', 'target=_blank', 'window.open(', 'rotate(', 'Build an agent solution', '>Agent solution<', 'AI Agent Solutions', 'Need a repeated task handled?', '>SM<', 'Run the operation. See what matters.', 'Open a workspace.', 'Try first. Add data later.', 'Need something different?', '[data-reveal] { opacity: 0', 'Use one account across desktop, tablet, and mobile.', 'Create a workspace only when you want to keep your work and use it across devices.', 'Create with email and password. Return with your password or an email code.']) {
+  for (const forbidden of ['MegaOS', 'DeskPOS', 'General enquiry', 'target="_blank"', 'target=_blank', 'window.open(', 'rotate(', 'Build an agent solution', '>Agent solution<', 'Need a repeated task handled?', '>SM<', 'Run the operation. See what matters.', 'Open a workspace.', 'Try first. Add data later.', 'Need something different?', '[data-reveal] { opacity: 0', 'Use one account across desktop, tablet, and mobile.', 'Create a workspace only when you want to keep your work and use it across devices.', 'Create with email and password. Return with your password or an email code.']) {
     assert(!html.includes(forbidden), `${label}_retired_${forbidden}`)
+  }
+}
+
+function verifyFileAnalyst(html) {
+  for (const required of [
+    '<title>File Analyst | SuperMega AI Agent Solutions</title>',
+    'zero source upload',
+    'id="approveButton"',
+    'id="downloadCleanButton"',
+  ]) {
+    assert(html.includes(required), `file_analyst_missing_${required.slice(0, 32)}`)
+  }
+  for (const forbidden of ['MegaOS', 'DeskPOS']) {
+    assert(!html.includes(forbidden), `file_analyst_retired_${forbidden}`)
   }
 }
 
@@ -110,9 +129,10 @@ function verifyProtectedDiagnostics(response, body) {
 }
 
 async function verifyOnce() {
-  const [homeResponse, wwwResponse, intakeResponse, healthResponse, statusResponse, diagnosticsResponse] = await Promise.all([
+  const [homeResponse, wwwResponse, fileAnalystResponse, intakeResponse, healthResponse, statusResponse, diagnosticsResponse] = await Promise.all([
     get(endpoints.home, 'text/html'),
     get(endpoints.www, 'text/html'),
+    get(endpoints.fileAnalyst, 'text/html'),
     get(endpoints.agentIntake, 'text/html'),
     get(endpoints.health, 'application/json'),
     get(endpoints.contactStatus, 'application/json'),
@@ -130,9 +150,10 @@ async function verifyOnce() {
     }),
   ])
 
-  const [home, www, intake, health, contactStatus, protectedDiagnostics] = await Promise.all([
+  const [home, www, fileAnalyst, intake, health, contactStatus, protectedDiagnostics] = await Promise.all([
     homeResponse.text(),
     wwwResponse.text(),
+    fileAnalystResponse.text(),
     intakeResponse.text(),
     healthResponse.json(),
     statusResponse.json(),
@@ -141,6 +162,7 @@ async function verifyOnce() {
 
   verifyHome(home, 'home')
   verifyHome(www, 'www')
+  verifyFileAnalyst(fileAnalyst)
   verifyAgentIntake(intake)
   verifyHealth(health)
   verifyContactStatus(contactStatus)

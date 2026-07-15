@@ -89,6 +89,7 @@ for (const required of [
   '<h1 id="portfolio-heading">Operational software, built to fit.</h1>',
   'https://app.supermega.dev/?demo=shop',
   'https://app.supermega.dev/?demo=plant',
+  'https://supermega-machine.vercel.app/workcell',
   'operational software / live',
   'class="hero-lead">Less chasing. More running.</strong>',
   '<h2 id="workspaces-heading">Start close to the real work.</h2>',
@@ -97,6 +98,7 @@ for (const required of [
   'Bring data deliberately',
   '<strong>Shop</strong>',
   '<strong>Plant</strong>',
+  '<strong>AI Agent Solutions</strong>',
   '<h2 id="brief-heading">Tell us where the workflow breaks.</h2>',
   '>Describe your workflow</a>',
   'data-product-preview',
@@ -105,7 +107,9 @@ for (const required of [
   'data-product-preview-button="plant"',
   'src="/live-shop-workspace.png"',
   "src:'/live-plant-workspace.png'",
-  'Shop and Plant demos open without an account.',
+  'Shop, Plant, and File Analyst open without an account.',
+  'Run File Analyst now:',
+  'Source stays in this browser and is never uploaded.',
   'Your private workspace is configured and verified before handover.',
   'Start fresh or add approved business records when ready.',
   'data-public-status',
@@ -117,7 +121,7 @@ for (const required of [
   if (!home.includes(required)) fail('homepage_front_door_contract_missing', { required })
 }
 
-for (const forbidden of ['https://demo.supermega.dev/', 'The intelligent workspace for daily operations.', 'Explore live demos', 'Open workspace', 'target="_blank"', 'target=_blank', 'window.open(', 'rotate(', 'data-hero-media', 'Current build', 'Build an agent solution', '>Agent solution<', 'AI Agent Solutions', 'Need a repeated task handled?', 'id="products"', 'Run the operation. See what matters.', 'Open a workspace.', 'Try first. Add data later.', 'Need something different?', '[data-reveal] { opacity: 0', 'Use one account across desktop, tablet, and mobile.', 'Create a workspace only when you want to keep your work and use it across devices.', 'Create with email and password. Return with your password or an email code.']) {
+for (const forbidden of ['https://demo.supermega.dev/', 'The intelligent workspace for daily operations.', 'Explore live demos', 'Open workspace', 'target="_blank"', 'target=_blank', 'window.open(', 'rotate(', 'data-hero-media', 'Current build', 'Build an agent solution', '>Agent solution<', 'Need a repeated task handled?', 'id="products"', 'Run the operation. See what matters.', 'Open a workspace.', 'Try first. Add data later.', 'Need something different?', '[data-reveal] { opacity: 0', 'Use one account across desktop, tablet, and mobile.', 'Create a workspace only when you want to keep your work and use it across devices.', 'Create with email and password. Return with your password or an email code.']) {
   if (home.includes(forbidden)) fail('homepage_keeps_superseded_portfolio_copy', { forbidden })
 }
 
