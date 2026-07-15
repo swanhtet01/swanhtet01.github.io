@@ -75,8 +75,8 @@ requireTokens('agents_redirect_to_contact', agents, [
 ])
 
 requireTokens('contact_two_suite_intake', contact, [
-  'Tell us about your business.',
-  'Shop for your shop, Plant for your factory floor.',
+  'Tell us what needs to work.',
+  'Choose Shop, Plant, or AI Agent Solutions.',
   'AI workflow solutions - from 11,000,000 MMK',
 ])
 

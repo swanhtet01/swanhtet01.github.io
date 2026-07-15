@@ -72,7 +72,7 @@ assertIncludes('products', products, [
   'Continue to SuperMega',
   'https://app.supermega.dev/?demo=shop',
 ])
-assertIncludes('contact', contact, ['<title>Contact | SUPERMEGA.dev</title>', 'Tell us about your business.', 'Shop for your shop, Plant for your factory floor.'])
+assertIncludes('contact', contact, ['<title>Contact | SUPERMEGA.dev</title>', 'Tell us what needs to work.', 'Choose Shop, Plant, or AI Agent Solutions.'])
 assertIncludes('combined', combinedText, [
   'AI workflow solutions',
   'Plant',
@@ -85,7 +85,7 @@ for (const [label, text] of [
   ['products', products],
   ['contact', contact],
 ]) {
-  const match = text.match(/Product Activation|Three products\. One setup contract|Quote-ready setup|View pricing|USD\s|Demo hub|Demo center|open demos|login demos|Request quote/i)
+  const match = text.match(/Product Activation|Three products\. One setup contract|Quote-ready setup|View pricing|USD\s|Demo hub|Demo center|open demos|login demos|Request quote|14-day money-back guarantee|50% deposit|fully refundable/i)
   if (match) fail('retired_public_copy_found', { label, match: match[0] })
 }
 
