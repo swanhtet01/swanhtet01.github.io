@@ -11,6 +11,11 @@ test('console presents one clear operator control room with secondary business t
   assert.ok(nav)
   assert.match(html, /<title>SuperMega Operations<\/title>/)
   assert.match(html, /SuperMega <span>operations<\/span>/)
+  assert.match(html, /id="ownerGate"/)
+  assert.match(html, /id="ownerGateForm"/)
+  assert.match(html, /Private control plane/)
+  assert.match(html, /Shop and Plant users do not need this console\./)
+  assert.match(html, /id="consoleShell" hidden/)
   assert.match(html, /<button data-view="overview" class="active">Command<\/button>/)
   assert.match(html, /<button data-view="company">Agent work<\/button>/)
   assert.match(html, /<button data-view="approvals">Review queue<\/button>/)
@@ -36,16 +41,25 @@ test('command center connects the operating flow to real modules', async () => {
   assert.doesNotMatch(html, /Roadmap, in progress/)
 })
 
-test('command metrics stay count based and locked data is not shown as zero', async () => {
+test('owner access hides the command center until the protected state accepts the key', async () => {
   const html = await readConsole()
-  const overview = html.match(/function renderOverview\(s=\{\},locked=false\)\{[\s\S]*?\n\}/)?.[0] || ''
+  const overview = html.match(/function renderOverview\(s=\{\}\)\{[\s\S]*?\n\}/)?.[0] || ''
 
   assert.ok(overview)
-  assert.match(overview, /const number=\(value\)=>locked\?'--'/)
+  assert.match(overview, /const number=\(value\)=>Number\(value\|\|0\)\.toLocaleString\(\)/)
   assert.match(overview, /\['Active projects',number\(active\)/)
   assert.match(overview, /\['Deposits',number\(s\.deposits&&s\.deposits\.count\)/)
-  assert.match(html, /renderOverview\(\{\},true\)/)
-  assert.match(html, /id="overviewStatus">owner key required<\/span>/)
+  assert.doesNotMatch(overview, /\blocked\b/)
+  assert.match(html, /function setConsoleAccess\(unlocked,message=''\)/)
+  assert.match(html, /\$\('#consoleShell'\)\.hidden=!unlocked/)
+  assert.match(html, /async function validateOwnerAccess\(\)/)
+  assert.match(html, /await fetch\('\/api\/state',\{credentials:'same-origin',headers:\{'x-ops-key':getOpsKey\(\)\}\}\)/)
+  assert.match(html, /return \{ok:response\.ok,\.\.\.data,status:response\.status\}/)
+  assert.match(html, /if\(state\.status===401\|\|state\.status===403\)/)
+  assert.match(html, /The owner key was not accepted\./)
+  assert.match(html, /Could not verify owner access\. Try again\./)
+  assert.match(html, /if\(!consoleAccessGranted\|\|!CONSOLE_VIEWS\.includes\(view\)\)return/)
+  assert.doesNotMatch(html, /function renderLockedOverview/)
   assert.doesNotMatch(overview, /pipelineUsd|mrrUsd|deposits\.usd|usd\(/)
 })
 

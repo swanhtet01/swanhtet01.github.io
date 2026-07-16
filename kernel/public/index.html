@@ -25,6 +25,13 @@
   input:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}.key{max-width:180px;min-height:44px}
   button{cursor:pointer;border:1px solid var(--line);border-radius:8px;background:var(--surf);padding:8px 14px;font-weight:600}
   button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}button.primary:hover{background:var(--accent-2)}button.sm{padding:5px 10px;font-size:12px}button:disabled{opacity:.5;cursor:wait}
+  .lock-console{min-height:44px}
+  .owner-gate{min-height:calc(100svh - 73px);display:grid;place-items:center;padding:28px 22px 56px}
+  .owner-gate-card{width:min(480px,100%);padding:clamp(26px,5vw,44px);border:1px solid var(--line);border-radius:8px;background:var(--surf);box-shadow:var(--shadow)}
+  .owner-gate-card h1{font-size:clamp(28px,5vw,38px);line-height:1.08}
+  .owner-gate-card p{margin:10px 0 0;color:var(--muted);font-size:15px}
+  .owner-gate-form{display:grid;gap:12px;margin-top:28px}.owner-gate-form input,.owner-gate-form button{min-height:48px}
+  .owner-gate-status{min-height:21px;margin:0;font-size:13px;color:var(--muted)}
   nav{display:flex;align-items:flex-end;gap:18px;padding:10px max(22px,calc((100vw - 1240px)/2)) 0;border-bottom:1px solid var(--line);background:rgba(6,16,29,.88);position:sticky;top:73px;z-index:5}
   .nav-primary{display:flex;gap:3px;min-width:max-content}.nav-primary button,.nav-more summary{min-height:44px}
   nav button{min-height:44px;border-radius:6px 6px 0 0;border-bottom:0;background:transparent;border-color:transparent;color:var(--muted);white-space:nowrap}
@@ -149,11 +156,24 @@
 <body>
 <header>
   <span class="brand"><b>&gt;_</b>SuperMega <span>operations</span></span>
-  <span class="badge" id="modeBadge">store: …</span>
-  <span class="badge" id="aiBadge">ai: …</span>
+  <span class="badge" id="modeBadge" hidden>store: …</span>
+  <span class="badge" id="aiBadge" hidden>ai: …</span>
   <span class="grow"></span>
-  <input class="key" id="opsKey" type="password" autocomplete="current-password" aria-label="Owner key for protected operations" placeholder="Owner key" />
+  <button class="lock-console" id="lockConsole" type="button" hidden>Lock</button>
 </header>
+<main class="owner-gate" id="ownerGate">
+  <section class="owner-gate-card" aria-labelledby="ownerGateTitle">
+    <span class="command-kicker">Private control plane</span>
+    <h1 id="ownerGateTitle">Owner access</h1>
+    <p>Manage SuperMega operations, reviewed actions, and client delivery. Shop and Plant users do not need this console.</p>
+    <form class="owner-gate-form" id="ownerGateForm">
+      <div class="field"><label for="opsKey">Owner key</label><input class="key" id="opsKey" type="password" autocomplete="current-password" aria-describedby="ownerGateStatus" placeholder="Enter owner key" required /></div>
+      <button class="primary" id="ownerGateSubmit" type="submit">Open operations</button>
+      <p class="owner-gate-status" id="ownerGateStatus" role="status" aria-live="polite">Enter your owner key to continue.</p>
+    </form>
+  </section>
+</main>
+<div id="consoleShell" hidden>
 <nav aria-label="Operations navigation">
   <div class="nav-primary">
     <button data-view="overview" class="active">Command</button>
@@ -406,6 +426,7 @@
     </div>
   </section>
 </main>
+</div>
 <div class="toast" id="toast"></div>
 <script src="/workcell-manifest-import.js"></script>
 <script>
@@ -414,6 +435,8 @@ const esc=(s)=>String(s==null?'':s).replace(/[&<>"']/g,(c)=>({'&':'&amp;','<':'&
 const toast=(m)=>{const t=$('#toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1800)}
 const getOpsKey=()=>$('#opsKey').value.trim()
 const hasOpsKey=()=>getOpsKey().length>0
+let consoleAccessGranted=false
+let requestedConsoleView=location.hash==='#company'?'company':location.hash==='#activation'?'workcells':'overview'
 let dealLead=null, lastPacket=null
 let companyRoster=[], companyDraft=null, companyAgentLimit=2, companyWorkOrders=[], companyOperations=null, companyOpenWorkOrder=null
 let companyPlaybooks=[], companyPlaybookPlan=null, companyPreparedPlaybookStage=null, companyMissions=[], companyOpenMission=null
@@ -435,7 +458,7 @@ $('#companyMissionId').value=nextCompanyMissionId()
 
 localStorage.removeItem('sm.ops')
 $('#opsKey').value=sessionStorage.getItem('sm.owner')||''
-$('#opsKey').addEventListener('change',async()=>{
+function resetOwnerWorkspace(){
   const key=getOpsKey()
   if(key)sessionStorage.setItem('sm.owner',key);else sessionStorage.removeItem('sm.owner')
   companyAuth=null
@@ -453,17 +476,18 @@ $('#opsKey').addEventListener('change',async()=>{
   $('#companyOrderDetail').innerHTML=''
   $('#companyResults').innerHTML=''
   $('#companyOperationsState').innerHTML='<div class="empty">Operating evidence cleared.</div>'
-  loadProtectedState()
-  const activeView=document.querySelector('nav button.active')?.dataset.view
-  if(activeView==='workcells'){
-    if(key)loadWorkcells()
-    else $('#workcellGrid').innerHTML='<div class="empty">Enter the owner key to load live workcell status.</div>'
-  }
-  if(activeView==='company'){
-    await openCompanyWorkspace()
-  }
+  document.body.classList.remove('customer-proof-session')
+}
+async function openOwnerConsole(){
+  resetOwnerWorkspace()
+  await loadProtectedState()
+}
+$('#ownerGateForm').addEventListener('submit',async(event)=>{
+  event.preventDefault()
+  await openOwnerConsole()
 })
-$('#opsKey').addEventListener('keydown',(event)=>{if(event.key==='Enter')event.currentTarget.blur()})
+$('#opsKey').addEventListener('change',openOwnerConsole)
+$('#lockConsole').addEventListener('click',()=>lockConsole())
 
 async function api(method,path,body){
   const key=getOpsKey()
@@ -475,7 +499,7 @@ async function api(method,path,body){
   const res=await fetch(path,{method,credentials:'same-origin',headers,body:body?JSON.stringify(body):undefined})
   const json=await res.json().catch(()=>({}))
   if(res.status===401&&companyEndpoint){companyAuth=null;companyAccessInventory=null;renderCompanyAccess();toast('Sign in again')}
-  else if(res.status===401){toast('Enter the owner key');$('#opsKey').focus()}
+  else if(res.status===401){lockConsole('Owner access expired. Enter the key again.')}
   if(!res.ok&&json.reason)toast(json.reason)
   return {ok:res.ok,...json}
 }
@@ -521,7 +545,7 @@ function renderCompanyAccess(){
   if(owner){
     $('#companyAccessSummary').textContent='Owner bootstrap access'
     $('#companySessionView').innerHTML='<div><b>Owner access</b><span class="muted">Issue tenant-bound operator codes without sharing the owner key.</span></div><button id="companyOwnerClear" type="button">Clear owner key</button>'
-    $('#companyOwnerClear').addEventListener('click',async()=>{$('#opsKey').value='';sessionStorage.removeItem('sm.owner');companyAuth=null;companyAccessInventory=null;await openCompanyWorkspace()})
+    $('#companyOwnerClear').addEventListener('click',()=>lockConsole())
     $('#companyInviteClientId').value=$('#companyClientId').value.trim()||localStorage.getItem('sm.company.client')||''
     $('#companyClientId').readOnly=false
   }else if(customer){
@@ -1326,7 +1350,7 @@ $('#companyQueueButton').addEventListener('click',queueReviewedCompanyWorkOrder)
 
 const CONSOLE_VIEWS=['overview','leads','pipeline','outreach','deal','operator','company','workcells','approvals','connectors']
 function openConsoleView(view){
-  if(!CONSOLE_VIEWS.includes(view))return
+  if(!consoleAccessGranted||!CONSOLE_VIEWS.includes(view))return
   const button=document.querySelector(`nav button[data-view="${view}"]`)
   document.querySelectorAll('nav button').forEach(item=>item.classList.toggle('active',item===button))
   for(const name of CONSOLE_VIEWS) $('#view-'+name).hidden=name!==view
@@ -1343,9 +1367,9 @@ function openConsoleView(view){
 document.querySelectorAll('nav button').forEach(button=>button.addEventListener('click',()=>openConsoleView(button.dataset.view)))
 document.querySelectorAll('[data-open-view]').forEach(button=>button.addEventListener('click',()=>openConsoleView(button.dataset.openView)))
 
-function renderOverview(s={},locked=false){
+function renderOverview(s={}){
   const bs=(s.projects&&s.projects.byStatus)||{}
-  const number=(value)=>locked?'--':Number(value||0).toLocaleString()
+  const number=(value)=>Number(value||0).toLocaleString()
   const active=(bs.scoping||0)+(bs.deposit||0)+(bs.building||0)
   $('#stats').innerHTML=[
     ['Requests',number(s.leads&&s.leads.total),'captured'],
@@ -1355,27 +1379,80 @@ function renderOverview(s={},locked=false){
     ['Deal briefs',number(s.deals),'saved']
   ].map(([t,v,sub])=>`<div class="stat"><small>${t}</small><b>${v}</b><span>${sub}</span></div>`).join('')
   const stages=[['scoping','Scoping'],['deposit','Deposit'],['building','Building'],['live','Live'],['care','Support']],max=Math.max(1,...stages.map(([key])=>bs[key]||0))
-  $('#bars').innerHTML=stages.map(([key,label])=>`<div class="bar"><span class="muted">${label}</span><i style="width:${locked?0:Math.round((bs[key]||0)/max*100)}%"></i><span>${number(bs[key])}</span></div>`).join('')
+  $('#bars').innerHTML=stages.map(([key,label])=>`<div class="bar"><span class="muted">${label}</span><i style="width:${Math.round((bs[key]||0)/max*100)}%"></i><span>${number(bs[key])}</span></div>`).join('')
   const act=(s.activity||[])
   $('#feed').innerHTML=act.length?act.map(a=>`<div><span class="k">${esc(a.kind)}</span>${esc(a.summary)}</div>`).join(''):'<div class="muted">No activity yet.</div>'
-  $('#overviewStatus').textContent=locked?'owner key required':'live data'
-  $('#overviewStatus').className='badge '+(locked?'':'on')
+  $('#overviewStatus').textContent='live data'
+  $('#overviewStatus').className='badge on'
 }
 
-function renderLockedOverview(){
-  $('#modeBadge').textContent='store: locked';$('#modeBadge').className='badge'
-  $('#aiBadge').textContent='ai: locked';$('#aiBadge').className='badge'
-  renderOverview({},true)
-  $('#feed').innerHTML='<div class="muted">Enter the owner key to load live activity.</div>'
+function setConsoleAccess(unlocked,message=''){
+  consoleAccessGranted=unlocked
+  $('#ownerGate').hidden=unlocked
+  $('#consoleShell').hidden=!unlocked
+  $('#modeBadge').hidden=!unlocked
+  $('#aiBadge').hidden=!unlocked
+  $('#lockConsole').hidden=!unlocked
+  $('#ownerGateStatus').textContent=message
+  $('#opsKey').setAttribute('aria-invalid',String(!unlocked&&message.startsWith('The owner key')))
 }
 
-function loadProtectedState(){
-  if(!hasOpsKey()){renderLockedOverview();return}
-  refresh();loadOverview()
+function applyRuntimeState(r){
+  const dbBad=r.dbStatus==='error'
+  $('#modeBadge').textContent=dbBad?'db: '+String(r.dbError||'error').slice(0,30):'store: '+(r.mode||'?')
+  $('#modeBadge').className='badge '+(dbBad?'off':(r.mode==='supabase'||r.mode==='postgres'?'on':''))
+  $('#modeBadge').title=r.dbError||''
+  $('#aiBadge').textContent='ai: '+(r.aiConfigured?'on':'off')
+  $('#aiBadge').className='badge '+(r.aiConfigured?'on':'off')
+}
+
+async function validateOwnerAccess(){
+  const response=await fetch('/api/state',{credentials:'same-origin',headers:{'x-ops-key':getOpsKey()}})
+  const data=await response.json().catch(()=>({}))
+  return {ok:response.ok,...data,status:response.status}
+}
+
+function lockConsole(message='Enter your owner key to continue.'){
+  $('#opsKey').value=''
+  sessionStorage.removeItem('sm.owner')
+  setConsoleAccess(false,message)
+  window.setTimeout(()=>$('#opsKey').focus(),0)
+}
+
+async function loadProtectedState(){
+  if(!hasOpsKey()){
+    setConsoleAccess(false,'Enter your owner key to continue.')
+    return false
+  }
+  setConsoleAccess(false,'Checking owner access…')
+  $('#ownerGateSubmit').disabled=true
+  try{
+    const state=await validateOwnerAccess()
+    if(!state.ok){
+      if(state.status===401||state.status===403){
+        sessionStorage.removeItem('sm.owner')
+        setConsoleAccess(false,'The owner key was not accepted.')
+      }else{
+        setConsoleAccess(false,'Could not verify owner access. Try again.')
+      }
+      return false
+    }
+    setConsoleAccess(true)
+    applyRuntimeState(state)
+    const view=requestedConsoleView||document.querySelector('nav button.active')?.dataset.view||'overview'
+    requestedConsoleView=null
+    openConsoleView(view)
+    return true
+  }catch{
+    setConsoleAccess(false,'Could not verify owner access. Try again.')
+    return false
+  }finally{
+    $('#ownerGateSubmit').disabled=false
+  }
 }
 
 async function loadOverview(){
-  if(!hasOpsKey()){renderLockedOverview();return}
+  if(!consoleAccessGranted)return
   $('#overviewStatus').textContent='loading';$('#overviewStatus').className='badge'
   $('#stats').innerHTML='<div class="loading-pulse">Loading overview…</div>'
   let r
@@ -1847,22 +1924,13 @@ async function loadConnectors(){
 }
 
 async function refresh(){
-  if(!hasOpsKey()){renderLockedOverview();return}
+  if(!consoleAccessGranted)return
   const r=await api('GET','/api/state')
-  const dbBad=r.dbStatus==='error'
-  $('#modeBadge').textContent=dbBad?'db: '+String(r.dbError||'error').slice(0,30):'store: '+(r.mode||'?')
-  $('#modeBadge').className='badge '+(dbBad?'off':(r.mode==='supabase'||r.mode==='postgres'?'on':''))
-  $('#modeBadge').title=r.dbError||''
-  $('#aiBadge').textContent='ai: '+(r.aiConfigured?'on':'off')
-  $('#aiBadge').className='badge '+(r.aiConfigured?'on':'off')
+  if(r.ok)applyRuntimeState(r)
 }
-if(location.hash==='#company'){
-  openConsoleView('company')
-}else if(location.hash==='#activation'){
-  openConsoleView('workcells')
-  openActivationPanel('#activationManifestFile')
-}
-loadProtectedState()
+loadProtectedState().then((opened)=>{
+  if(opened&&location.hash==='#activation')openActivationPanel('#activationManifestFile')
+})
 </script>
 </body>
 </html>
