@@ -2,6 +2,8 @@
 const datastore = require('./lib/supermega-datastore')
 const blobQueue = require('./lib/supermega-blob-queue')
 
+const { getOutboundEmailPolicy } = require('./lib/outbound-email-policy')
+
 function safeEqual(a, b) {
   const aHash = crypto.createHash('sha256').update(String(a)).digest()
   const bHash = crypto.createHash('sha256').update(String(b)).digest()
@@ -2718,6 +2720,8 @@ async function readAutopilotApprovalLedger(limit = 5, opts = {}) {
 }
 
 async function sendAutopilotDraftApprovalEmail({ approval, draft, blocker }) {
+  const policy = getOutboundEmailPolicy()
+  if (!policy.allowed) return { status: 'skipped', reason: policy.reason }
   const apiKey = envText('RESEND_API_KEY')
   if (!apiKey) return { status: 'error', reason: 'resend_not_configured' }
   const notifyEmail = envText('SUPERMEGA_CONTACT_NOTIFY_EMAIL') || 'swanhtet@supermega.dev'

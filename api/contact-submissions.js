@@ -2,6 +2,7 @@ const crypto = require('crypto')
 const datastore = require('./lib/supermega-datastore')
 const blobQueue = require('./lib/supermega-blob-queue')
 const { notifyTelegram: sendTelegram } = require('./lib/notify-telegram')
+const { getOutboundEmailPolicy } = require('./lib/outbound-email-policy')
 
 const notifyEmail = process.env.SUPERMEGA_CONTACT_NOTIFY_EMAIL || 'swanhtet@supermega.dev'
 const fallbackFrom = 'SUPERMEGA <onboarding@resend.dev>'
@@ -1659,6 +1660,8 @@ function emailRows(record) {
 }
 
 async function sendEmail({ record }) {
+  const policy = getOutboundEmailPolicy()
+  if (!policy.allowed) return { status: 'skipped', reason: policy.reason }
   const apiKey = text(process.env.RESEND_API_KEY)
   if (!apiKey) {
     return { status: 'error', reason: 'resend_not_configured' }
@@ -1713,6 +1716,8 @@ async function sendEmail({ record }) {
 }
 
 async function sendConfirmationEmail({ record }) {
+  const policy = getOutboundEmailPolicy()
+  if (!policy.allowed) return { status: 'skipped', reason: policy.reason }
   if (text(process.env.SUPERMEGA_SEND_CONTACT_CONFIRMATION) !== '1') {
     return { status: 'skipped', reason: 'confirmation_disabled' }
   }

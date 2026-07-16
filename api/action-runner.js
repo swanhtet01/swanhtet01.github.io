@@ -19,6 +19,7 @@
 const crypto = require('crypto')
 const datastore = require('./lib/supermega-datastore')
 const blobQueue = require('./lib/supermega-blob-queue')
+const { getOutboundEmailPolicy } = require('./lib/outbound-email-policy')
 
 const BATCH_LIMIT = 10
 const SUPABASE_TIMEOUT_MS = 8000
@@ -611,6 +612,8 @@ async function dispatchSendReply(store, row) {
   // is skipped, never sent. This closes the "Telegram message → autonomous email" vector.
   const approved = row.approval_state === 'approved' || row.approved === true || Boolean(row.approved_at)
   if (!approved) return { status: 'skipped', reason: 'awaiting_approval' }
+  const policy = getOutboundEmailPolicy()
+  if (!policy.allowed) return { status: 'skipped', reason: policy.reason }
 
   const apiKey = text(process.env.RESEND_API_KEY)
   if (!apiKey) return { status: 'skipped', reason: 'resend_not_configured' }
