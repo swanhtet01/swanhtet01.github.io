@@ -81,8 +81,10 @@ function verifyWork(html) {
   for (const required of [
     '<title>Work | supermega.dev</title>',
     '<h1 id="work-heading">See the work before the pitch.</h1>',
-    'Current Shop and Plant screens',
-    'No account to try',
+    'class="work-proof"',
+    'class="work-proof-toolbar"',
+    'aria-label="Open the live Shop workspace"',
+    'fetchpriority="high"',
     '<h2 id="shop-case-heading">Keep the day together.</h2>',
     '<h2 id="plant-case-heading">Give the floor a memory.</h2>',
     'class="case-actions"',
