@@ -318,13 +318,13 @@ function documentHtml({ title, description, canonical, content, style = '' }) {
 </html>`
 }
 
-const liveStatusScript = `<script>(function(){var node=document.querySelector('[data-public-status]');if(!node)return;if(location.hostname==='127.0.0.1'||location.hostname==='localhost'){node.textContent='Demo preview ready';var localParent=node.closest('[data-status-shell]');if(localParent)localParent.classList.add('is-ready');return;}fetch('/api/health',{cache:'no-store',headers:{accept:'application/json'}}).then(function(response){if(!response.ok)throw new Error('unavailable');return response.json();}).then(function(body){node.textContent=body&&body.ok?'Live demos ready':'Demos available';var parent=node.closest('[data-status-shell]');if(parent)parent.classList.add('is-ready');}).catch(function(){node.textContent='Demos available';});})();</script>`
+const liveStatusScript = `<script>(function(){var node=document.querySelector('[data-public-status]');if(!node)return;if(location.hostname==='127.0.0.1'||location.hostname==='localhost'){node.textContent='Demo ready';var localParent=node.closest('[data-status-shell]');if(localParent)localParent.classList.add('is-ready');return;}fetch('/api/health',{cache:'no-store',headers:{accept:'application/json'}}).then(function(response){if(!response.ok)throw new Error('unavailable');return response.json();}).then(function(body){node.textContent=body&&body.ok?'Live demos ready':'Demos available';var parent=node.closest('[data-status-shell]');if(parent)parent.classList.add('is-ready');}).catch(function(){node.textContent='Demos available';});})();</script>`
 
-const homeProductPreviewScript = `<script>(function(){var root=document.querySelector('[data-product-preview]');if(!root)return;var image=root.querySelector('[data-product-preview-image]'),mobileSource=root.querySelector('[data-product-preview-source]'),label=root.querySelector('[data-product-preview-label]'),openLink=document.querySelector('[data-preview-open]'),buttons=Array.from(root.querySelectorAll('[data-product-preview-button]'));if(!image||!label||!buttons.length)return;var views={shop:{src:'/live-shop-workspace.png',mobileSrc:'/live-shop-mobile.png',alt:'Current Shop workspace showing priority checks, sales, cash, customers, and stock',label:'Shop workspace',href:'${shopStartUrl}',cta:'Try Shop live'},plant:{src:'/live-plant-workspace.png',mobileSrc:'/live-plant-mobile.png',alt:'Current Plant workspace showing production plan navigation and machine state across two lines',label:'Plant workspace',href:'${plantStartUrl}',cta:'Try Plant live'}};function show(id){var view=views[id];if(!view)return;buttons.forEach(function(button){button.setAttribute('aria-pressed',String(button.getAttribute('data-product-preview-button')===id));});if(openLink){openLink.href=view.href;openLink.textContent=view.cta;}if(image.getAttribute('data-view')===id)return;image.classList.add('is-switching');label.textContent=view.label;image.alt=view.alt;image.setAttribute('data-view',id);if(mobileSource)mobileSource.srcset=view.mobileSrc;image.src=view.src;window.setTimeout(function(){image.classList.remove('is-switching');},360);}image.addEventListener('load',function(){image.classList.remove('is-switching');});buttons.forEach(function(button){button.addEventListener('click',function(){show(button.getAttribute('data-product-preview-button'));});});var preloadDesktop=new Image();preloadDesktop.src=views.plant.src;var preloadMobile=new Image();preloadMobile.src=views.plant.mobileSrc;})();</script>`
+const homeProductPreviewScript = `<script>(function(){var root=document.querySelector('[data-product-preview]');if(!root)return;var image=root.querySelector('[data-product-preview-image]'),label=root.querySelector('[data-product-preview-label]'),description=root.querySelector('[data-product-preview-description]'),openLink=root.querySelector('[data-preview-open]'),buttons=Array.from(root.querySelectorAll('[data-product-preview-button]'));if(!image||!label||!description||!openLink||!buttons.length)return;var views={shop:{src:'/live-shop-workspace.png',alt:'Current Shop workspace showing priority checks, sales, cash, customers, and stock',label:'Shop / live workspace',description:'Sales, stock, customers, and daily close in one operating flow.',href:'${shopStartUrl}',cta:'Open Shop demo'},plant:{src:'/live-plant-workspace.png',alt:'Current Plant workspace showing production plan navigation and machine state across two lines',label:'Plant / live workspace',description:'Production plans, machine state, and handoffs in one floor view.',href:'${plantStartUrl}',cta:'Open Plant demo'}};function show(id){var view=views[id];if(!view)return;buttons.forEach(function(button){button.setAttribute('aria-pressed',String(button.getAttribute('data-product-preview-button')===id));});label.textContent=view.label;description.textContent=view.description;openLink.href=view.href;openLink.textContent=view.cta;openLink.setAttribute('aria-label',view.cta);if(image.getAttribute('data-view')===id)return;image.classList.add('is-switching');image.alt=view.alt;image.setAttribute('data-view',id);image.src=view.src;window.setTimeout(function(){image.classList.remove('is-switching');},360);}image.addEventListener('load',function(){image.classList.remove('is-switching');});buttons.forEach(function(button){button.addEventListener('click',function(){show(button.getAttribute('data-product-preview-button'));});});var preloadDesktop=new Image();preloadDesktop.src=views.plant.src;})();</script>`
 
 const homeHtml = documentHtml({
-  title: 'supermega.dev | Run the shop. See the plant.',
-  description: 'Try a working Shop or Plant workspace without an account. Keep the day together, see the floor clearly, and build only the workflow still missing.',
+  title: 'supermega.dev | Shop and Plant, ready for real work.',
+  description: 'Open a live Shop or Plant workspace, then set up only the operating path your team actually needs.',
   canonical: 'https://supermega.dev/',
   style: `
     .home-main { width: 100%; overflow: clip; }
@@ -332,19 +332,22 @@ const homeHtml = documentHtml({
       position: relative;
       overflow: clip;
       border-bottom: 1px solid var(--line);
-      padding: 100px 0 28px;
+      padding: 112px 0 72px;
       background: var(--surface);
       isolation: isolate;
     }
     .hero::before {
       position: absolute;
-      inset: 94px 0 auto;
+      inset: 0;
       z-index: -1;
-      border-top: 1px solid color-mix(in srgb, var(--line) 58%, transparent);
+      background-image: linear-gradient(to right, color-mix(in srgb, var(--line) 55%, transparent) 1px, transparent 1px), linear-gradient(to bottom, color-mix(in srgb, var(--line) 42%, transparent) 1px, transparent 1px);
+      background-size: 96px 96px;
+      opacity: .38;
       content: "";
     }
-    .hero-inner { width: min(100% - 48px, 1240px); margin-inline: auto; }
-    .hero-head { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(360px, .7fr); align-items: start; gap: 76px; }
+    .hero-inner { position: relative; width: min(100% - 48px, 1240px); margin-inline: auto; }
+    .hero-stage { display: grid; grid-template-columns: minmax(0, .76fr) minmax(480px, 1.02fr); align-items: center; gap: 76px; }
+    .hero-copy { max-width: 540px; padding: 20px 0; animation: copy-in 620ms cubic-bezier(.2,.8,.2,1) both; }
     .hero-command {
       display: inline-flex;
       min-height: 32px;
@@ -360,10 +363,17 @@ const homeHtml = documentHtml({
     }
     .hero-command strong { color: var(--accent); }
     .terminal-cursor { display: inline-block; color: var(--signal); animation: cursor-pulse 1.35s steps(2, end) infinite; }
-    .hero-lead { display: block; margin-bottom: 10px; color: var(--ink); font-size: 20px; font-weight: 820; letter-spacing: 0; }
-    .hero h1 { max-width: 15ch; margin: 18px 0 0; font-size: 60px; line-height: 1.01; letter-spacing: 0; font-weight: 790; }
-    .hero-side > p { max-width: 45ch; margin: 0; color: var(--muted); font-size: 17px; line-height: 1.58; }
-    .hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 26px; }
+    .hero-lead { display: block; margin-bottom: 9px; color: var(--ink); font-size: 19px; font-weight: 820; letter-spacing: 0; }
+    .hero h1 { max-width: 11ch; margin: 17px 0 0; font-size: 56px; line-height: 1.02; letter-spacing: 0; font-weight: 790; }
+    .hero-copy > p { max-width: 42ch; margin: 24px 0 0; color: var(--muted); font-size: 17px; line-height: 1.58; }
+    .hero-product-picker { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 26px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--glass); box-shadow: inset 0 1px 0 var(--glass-highlight); backdrop-filter: blur(20px) saturate(132%); -webkit-backdrop-filter: blur(20px) saturate(132%); }
+    .hero-product-picker button { min-height: 76px; display: flex; flex-direction: column; justify-content: center; gap: 4px; border: 0; padding: 12px 15px; background: transparent; color: var(--muted); font: inherit; text-align: left; cursor: pointer; transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease; }
+    .hero-product-picker button + button { border-left: 1px solid var(--line); }
+    .hero-product-picker button[aria-pressed="true"] { background: var(--surface-strong); color: var(--ink); box-shadow: inset 0 1px 0 var(--glass-highlight), 0 8px 24px rgba(3, 8, 18, 0.08); }
+    .picker-label { font-size: 16px; font-weight: 800; line-height: 1.2; }
+    .picker-detail { color: var(--quiet); font-size: 12px; font-weight: 650; line-height: 1.3; }
+    .hero-product-picker button[aria-pressed="true"] .picker-detail { color: var(--muted); }
+    .hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 16px; }
     .hero-actions .btn { min-height: 50px; }
     .hero-meta { min-height: 36px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; margin-top: 18px; color: var(--muted); font-size: 12px; font-weight: 720; }
     .hero-status { display: inline-flex; align-items: center; gap: 9px; }
@@ -375,27 +385,26 @@ const homeHtml = documentHtml({
     .hero-preview {
       position: relative;
       width: 100%;
-      margin: 24px auto 0;
+      margin: 0;
       border: 1px solid var(--line-strong);
       border-radius: 8px;
       overflow: hidden;
       background: color-mix(in srgb, var(--glass-strong) 88%, transparent);
-      box-shadow: inset 0 1px 0 var(--glass-highlight), 0 28px 76px rgba(3, 8, 18, 0.22);
+      box-shadow: inset 0 1px 0 var(--glass-highlight), 0 30px 82px rgba(3, 8, 18, 0.22);
       animation: media-in 820ms 260ms cubic-bezier(.2,.8,.2,1) both;
     }
-    .preview-toolbar { min-height: 58px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); padding: 7px 8px 7px 16px; background: var(--glass); box-shadow: inset 0 1px 0 var(--glass-highlight); backdrop-filter: blur(22px) saturate(135%); -webkit-backdrop-filter: blur(22px) saturate(135%); }
+    .preview-toolbar { min-height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); padding: 7px 16px; background: var(--glass); box-shadow: inset 0 1px 0 var(--glass-highlight); backdrop-filter: blur(22px) saturate(135%); -webkit-backdrop-filter: blur(22px) saturate(135%); }
     .preview-label { min-width: 0; display: inline-flex; align-items: center; gap: 9px; color: var(--muted); font-size: 12px; font-weight: 760; }
-    .preview-switch { display: inline-grid; grid-template-columns: repeat(2, minmax(74px, 1fr)); gap: 3px; border: 1px solid var(--line); border-radius: 7px; padding: 3px; background: color-mix(in srgb, var(--page) 76%, transparent); }
-    .preview-switch button { min-height: 44px; border: 0; border-radius: 5px; padding: 0 14px; background: transparent; color: var(--muted); font: inherit; font-size: 13px; font-weight: 780; cursor: pointer; transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease; }
-    .preview-switch button[aria-pressed="true"] { background: var(--surface-strong); color: var(--ink); box-shadow: 0 4px 14px rgba(3, 8, 18, 0.1); }
+    .preview-badge { display: inline-flex; min-height: 28px; align-items: center; border: 1px solid var(--line); border-radius: 6px; padding: 0 9px; color: var(--quiet); font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 10px; font-weight: 780; letter-spacing: 0; text-transform: uppercase; }
     .preview-media { overflow: hidden; background: #071524; }
     .preview-media picture { display: block; }
     .preview-media img { display: block; width: 100%; height: auto; aspect-ratio: 10 / 3; object-fit: contain; object-position: top; opacity: 1; transition: opacity 180ms ease; }
     .preview-media img.is-switching { opacity: .28; }
+    .preview-foot { min-height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-top: 1px solid var(--line); padding: 10px 16px; background: color-mix(in srgb, var(--glass-strong) 86%, transparent); }
+    .preview-description { margin: 0; color: var(--muted); font-size: 13px; font-weight: 650; line-height: 1.4; }
+    .preview-live { display: inline-flex; flex: none; align-items: center; gap: 7px; color: var(--signal); font-size: 11px; font-weight: 800; white-space: nowrap; }
     .live-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--quiet); box-shadow: 0 0 0 4px color-mix(in srgb, var(--quiet) 16%, transparent); }
     .hero-status.is-ready .live-dot { background: var(--signal); box-shadow: 0 0 0 4px color-mix(in srgb, var(--signal) 16%, transparent); }
-    .hero-head > * { animation: copy-in 620ms cubic-bezier(.2,.8,.2,1) both; }
-    .hero-side { animation-delay: 110ms; }
     @keyframes copy-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
     @keyframes media-in { from { opacity: 0; transform: translateY(26px); } to { opacity: 1; transform: translateY(0); } }
     @keyframes cursor-pulse { 50% { opacity: .3; } }
@@ -442,33 +451,38 @@ const homeHtml = documentHtml({
     .brief-aside { color: var(--inverse-muted); font-size: 13px; font-weight: 650; }
 
     @media (max-width: 980px) {
-      .hero-head { grid-template-columns: 1fr; gap: 24px; }
-      .hero-side { max-width: 680px; }
-      .hero h1 { font-size: 54px; }
+      .hero { padding: 106px 0 58px; }
+      .hero-stage { grid-template-columns: 1fr; gap: 32px; }
+      .hero-copy { max-width: 700px; padding: 0; }
+      .hero h1 { font-size: 50px; }
+      .hero-preview { max-width: 820px; }
       .section-intro { grid-template-columns: 1fr; gap: 18px; }
       .destination-copy { grid-template-columns: minmax(160px, .5fr) 1fr; }
       .brief-intro { grid-template-columns: 1fr; gap: 18px; }
     }
     @media (max-height: 800px) and (min-width: 721px) {
-      .hero { padding-top: 104px; }
-      .hero h1 { font-size: 48px; }
-      .hero-preview { margin-top: 22px; }
+      .hero { padding-top: 98px; padding-bottom: 48px; }
+      .hero h1 { font-size: 50px; }
     }
     @media (max-width: 720px) {
-      .hero { padding: 104px 0 20px; }
+      .hero { padding: 96px 0 42px; }
       .hero-inner { width: min(100% - 32px, 1240px); }
-      .hero h1 { max-width: 15ch; margin-top: 14px; font-size: 42px; line-height: 1.03; }
-      .hero-lead { margin-bottom: 8px; font-size: 18px; }
-      .hero-side > p { max-width: 38ch; font-size: 15px; line-height: 1.5; }
-      .hero-actions { gap: 8px; margin-top: 20px; }
+      .hero-stage { gap: 26px; }
+      .hero h1 { max-width: 12ch; margin-top: 14px; font-size: 40px; line-height: 1.04; }
+      .hero-lead { margin-bottom: 7px; font-size: 17px; }
+      .hero-copy > p { max-width: 38ch; margin-top: 20px; font-size: 15px; line-height: 1.5; }
+      .hero-product-picker { margin-top: 22px; }
+      .hero-product-picker button { min-height: 70px; padding-inline: 12px; }
+      .picker-label { font-size: 15px; }
+      .picker-detail { font-size: 11px; }
+      .hero-actions { gap: 8px; margin-top: 14px; }
       .hero-actions .btn { min-height: 46px; flex: 1 1 140px; }
       .hero-meta { gap: 8px 14px; }
-      .hero-preview { margin-top: 24px; }
-      .preview-toolbar { min-height: 56px; padding-left: 12px; }
-      .preview-switch { grid-template-columns: repeat(2, minmax(68px, 1fr)); }
-      .preview-switch button { min-height: 44px; padding-inline: 10px; }
-      .preview-media { padding-top: 14px; }
-      .preview-media img { width: min(100% - 28px, 320px); max-width: 320px; margin-inline: auto; aspect-ratio: 360 / 732; object-fit: contain; }
+      .preview-toolbar { min-height: 52px; padding-inline: 12px; }
+      .preview-badge { min-height: 26px; padding-inline: 8px; font-size: 9px; }
+      .preview-foot { min-height: 0; align-items: flex-start; padding: 10px 12px; }
+      .preview-description { font-size: 12px; }
+      .preview-live { padding-top: 2px; font-size: 10px; }
       .entry-section { padding: 40px 0 74px; }
       .section-intro { margin-bottom: 34px; }
       .section-intro h2 { font-size: 36px; }
@@ -489,43 +503,43 @@ const homeHtml = documentHtml({
     }
     @media (max-width: 390px) {
       .hero-command { font-size: 11px; }
-      .hero h1 { font-size: 38px; }
+      .hero h1 { font-size: 37px; }
     }
   `,
   content: `<main class="home-main">
   <section class="hero" data-hero aria-labelledby="portfolio-heading">
-    <div class="hero-inner">
-      <div class="hero-head">
-        <div>
+    <div class="hero-inner" data-product-preview>
+      <div class="hero-stage">
+        <div class="hero-copy">
           <div class="hero-command"><strong>&gt;<span class="terminal-cursor">_</span></strong><span>operational software / live</span></div>
-          <h1 id="portfolio-heading">Run the shop. See the plant. Fix the gaps.</h1>
-        </div>
-        <div class="hero-side">
-          <p><strong class="hero-lead">One place to run the day.</strong> Shop keeps sales, stock, customers, and books together. Plant keeps machines, shifts, maintenance, and handoffs in view. Try either workspace live. When the standard path misses, we build the missing workflow around your team.</p>
+          <h1 id="portfolio-heading">Run the day. Keep the handoffs.</h1>
+          <p><strong class="hero-lead">Shop and Plant, ready for real work.</strong> Choose the workspace that starts with your team today. See the live flow before you ask us to set up a private one.</p>
+          <div class="hero-product-picker" role="group" aria-label="Choose a live workspace">
+            <button type="button" data-product-preview-button="shop" aria-pressed="true"><span class="picker-label">Shop</span><span class="picker-detail">Sales, stock, and daily close</span></button>
+            <button type="button" data-product-preview-button="plant" aria-pressed="false"><span class="picker-label">Plant</span><span class="picker-detail">Floor, maintenance, and handoffs</span></button>
+          </div>
           <div class="hero-actions">
-            <a class="btn primary" data-preview-open href="${shopStartHref}">Try Shop live</a>
-            <a class="btn secondary" href="/work/">See the work</a>
+            <a class="btn primary" data-preview-open aria-label="Open Shop demo" href="${shopStartHref}">Open Shop demo</a>
+            <a class="btn secondary" href="/work/">See it in use</a>
           </div>
-          <div class="hero-meta"><span class="hero-status" data-status-shell><span class="live-dot" aria-hidden="true"></span><span data-public-status aria-live="polite">Checking live demos</span></span><span class="hero-note">No signup to try</span><a class="hero-setup" href="/contact/?from=homepage-private-setup">Private setup</a></div>
+          <div class="hero-meta"><span class="hero-status" data-status-shell><span class="live-dot" aria-hidden="true"></span><span data-public-status aria-live="polite">Checking live demos</span></span><span class="hero-note">No signup</span><a class="hero-setup" href="/contact/?from=homepage-private-setup">Private setup</a></div>
         </div>
-      </div>
-      <div class="hero-preview" data-product-preview>
-        <div class="preview-toolbar">
-          <span class="preview-label"><span class="live-dot" aria-hidden="true"></span><span data-product-preview-label aria-live="polite">Shop workspace</span></span>
-          <div class="preview-switch" role="group" aria-label="Product preview">
-            <button type="button" data-product-preview-button="shop" aria-pressed="true">Shop</button>
-            <button type="button" data-product-preview-button="plant" aria-pressed="false">Plant</button>
+        <div class="hero-preview">
+          <div class="preview-toolbar">
+            <span class="preview-label"><span class="live-dot" aria-hidden="true"></span><span data-product-preview-label aria-live="polite">Shop / live workspace</span></span>
+            <span class="preview-badge">Current demo</span>
           </div>
+          <div class="preview-media"><img data-product-preview-image data-view="shop" src="/live-shop-workspace.png" alt="Current Shop workspace showing priority checks, sales, cash, customers, and stock" width="1600" height="480" fetchpriority="high" /></div>
+          <div class="preview-foot"><p class="preview-description" data-product-preview-description>Sales, stock, customers, and daily close in one operating flow.</p><span class="preview-live"><span class="live-dot" aria-hidden="true"></span>LIVE</span></div>
         </div>
-        <div class="preview-media"><picture><source data-product-preview-source media="(max-width: 720px)" srcset="/live-shop-mobile.png" /><img data-product-preview-image data-view="shop" src="/live-shop-workspace.png" alt="Current Shop workspace showing priority checks, sales, cash, customers, and stock" width="1600" height="480" fetchpriority="high" /></picture></div>
       </div>
     </div>
   </section>
 
   <section class="entry-section page-frame" id="workspaces" aria-labelledby="workspaces-heading">
     <div class="section-intro">
-      <div><div class="eyebrow">Two working systems</div><h2 id="workspaces-heading">No software maze.</h2></div>
-      <p>Start with the part of the operation your team actually uses. AI helps draft, check, and surface next steps while approvals stay tied to the work behind them.</p>
+      <div><div class="eyebrow">Two working systems</div><h2 id="workspaces-heading">Start with the work that matters.</h2></div>
+      <p>Shop takes the commercial loop. Plant gives the floor one shared record. Built-in AI drafts, checks, and brings the next decision forward while approval stays with your team.</p>
     </div>
     <div class="destination-list">
       <a class="destination" href="${shopStartHref}" aria-label="Try Shop live"><span class="destination-index">01 / SHOP</span><span class="destination-copy"><strong>Shop</strong><span>Sales, stock, customers, receivables, purchasing, and daily close in one operating flow.</span></span><span class="destination-arrow" aria-hidden="true">&#8594;</span></a>
@@ -536,7 +550,7 @@ const homeHtml = documentHtml({
   <section class="brief-band" id="start" aria-labelledby="brief-heading">
     <div class="brief-inner page-frame">
       <div class="brief-intro">
-        <div><div class="eyebrow">Need a different route?</div><h2 id="brief-heading">Show us the broken handoff.</h2></div>
+        <div><div class="eyebrow">Need a different route?</div><h2 id="brief-heading">Bring us the handoff that still breaks.</h2></div>
         <p>Send one real example: a file, approval, repeated decision, or browser task. We build the smallest useful path, connect only approved sources, and keep consequential actions reviewable.</p>
       </div>
       <div class="brief-steps">
