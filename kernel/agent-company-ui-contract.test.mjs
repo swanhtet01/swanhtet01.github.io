@@ -222,8 +222,10 @@ test('Agent Company API route is a dedicated function before the catch-all', asy
   const config = JSON.parse(await readFile(new URL('./vercel.json', import.meta.url), 'utf8'))
   assert.equal(config.functions['api/agent-company-auth.mjs'].maxDuration, 15)
   assert.equal(config.functions['api/agent-company.mjs'].maxDuration, 60)
-  const securityHeaderRule = config.headers.find((rule) => rule.source === '/(.*)')
-  assert.deepEqual(Object.fromEntries(securityHeaderRule.headers.map((header) => [header.key, header.value])), {
+  assert.equal(Object.hasOwn(config, 'headers'), false)
+  const securityHeaderRule = config.routes.find((route) => route.src === '/(.*)' && route.continue === true)
+  assert.ok(securityHeaderRule)
+  assert.deepEqual(securityHeaderRule.headers, {
     'Content-Security-Policy': "base-uri 'self'; frame-ancestors 'none'; object-src 'none'",
     'Permissions-Policy': 'camera=(), geolocation=(), microphone=(), payment=(), usb=()',
     'Referrer-Policy': 'no-referrer',
