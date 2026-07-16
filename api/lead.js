@@ -4,6 +4,7 @@
 // CJS module — matches .vercel/output/functions/api/lead.js.func/package.json "type":"commonjs"
 const crypto = require('crypto')
 const { notifyTelegram } = require('./lib/notify-telegram')
+const { getOutboundEmailPolicy } = require('./lib/outbound-email-policy')
 
 const ALLOWED_ORIGINS = [
   'https://supermega.dev',
@@ -84,6 +85,7 @@ async function aiScope(workflow, name, company) {
 }
 
 async function notifySwann(lead) {
+  if (!getOutboundEmailPolicy().allowed) return
   const key = process.env.RESEND_API_KEY
   const to = process.env.SUPERMEGA_CONTACT_NOTIFY_EMAIL || 'swanhtet@supermega.dev'
   const from = process.env.SUPERMEGA_RESEND_FROM || 'leads@supermega.dev'
