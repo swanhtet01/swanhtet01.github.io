@@ -45,7 +45,7 @@ async function get(url, accept) {
 const retiredPublicContent = ['MegaOS', 'DeskPOS', 'File Analyst', 'Payment Reconciler', 'data-clean-report-agent', 'supermega-machine.vercel.app/workcell', 'href="/reconcile/"', 'target="_blank"', 'target=_blank', 'window.open(', '>SM<']
 
 function verifySharedPage(html, label) {
-  for (const required of ['data-theme="light"', 'data-theme="dark"', 'data-theme-toggle', 'class="terminal-mark"', 'supermega<span class="domain">.dev</span>']) {
+  for (const required of ['data-theme="light"', 'data-theme="dark"', 'data-theme-toggle', 'class="terminal-mark"', 'supermega<span class="domain">.dev</span>', '>Start a workflow</a>']) {
     assert(html.includes(required), `${label}_missing_${required.slice(0, 32)}`)
   }
   for (const forbidden of retiredPublicContent) {
@@ -63,6 +63,8 @@ function verifyHome(html, label) {
     'Two working systems',
     'AI helps draft, check, and surface next steps while approvals stay tied to the work behind them.',
     'data-product-preview',
+    'href="/contact/?from=homepage-private-setup"',
+    '>Private setup</a>',
     'src="/live-shop-workspace.png"',
     "src:'/live-plant-workspace.png'",
     'srcset="/live-shop-mobile.png"',

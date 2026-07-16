@@ -68,6 +68,7 @@ const sharedStyle = `
     --surface-strong: #ffffff;
     --glass: rgba(255, 255, 255, 0.68);
     --glass-strong: rgba(255, 255, 255, 0.84);
+    --glass-highlight: rgba(255, 255, 255, 0.88);
     --ink: #0b0e13;
     --muted: #586271;
     --quiet: #798391;
@@ -90,6 +91,7 @@ const sharedStyle = `
     --surface-strong: #151b23;
     --glass: rgba(15, 20, 27, 0.68);
     --glass-strong: rgba(18, 24, 32, 0.86);
+    --glass-highlight: rgba(255, 255, 255, 0.09);
     --ink: #f3f5f7;
     --muted: #a4aeba;
     --quiet: #7e8997;
@@ -146,7 +148,7 @@ const sharedStyle = `
     border: 1px solid var(--line);
     border-radius: 8px;
     background: var(--glass);
-    box-shadow: 0 12px 34px rgba(6, 10, 18, 0.1);
+    box-shadow: inset 0 1px 0 var(--glass-highlight), 0 16px 42px rgba(6, 10, 18, 0.16);
     backdrop-filter: blur(24px) saturate(135%);
     -webkit-backdrop-filter: blur(24px) saturate(135%);
     pointer-events: auto;
@@ -250,7 +252,7 @@ const sharedStyle = `
   }
   @media (max-width: 520px) {
     .optional-nav { display: none; }
-    .header-cta { min-width: 112px; }
+    .header-cta { min-width: 136px; }
   }
   @media (max-width: 360px) {
     .brand-text { display: none; }
@@ -273,7 +275,7 @@ const headerHtml = `${themeBootstrap}
       <a class="nav-link optional-nav" href="${shopStartHref}">Shop</a>
       <a class="nav-link optional-nav" href="${plantStartHref}">Plant</a>
       <button class="icon-button" type="button" data-theme-toggle aria-label="Use dark mode" title="Use dark mode"><svg class="theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path></svg><svg class="theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 15.2A8.5 8.5 0 0 1 8.8 3.5 8.5 8.5 0 1 0 20.5 15.2Z"></path></svg></button>
-      <a class="btn primary header-cta" href="/contact/">Talk to us</a>
+      <a class="btn primary header-cta" href="/contact/">Start a workflow</a>
     </nav>
   </header>
 </div>
@@ -367,6 +369,9 @@ const homeHtml = documentHtml({
     .hero-status { display: inline-flex; align-items: center; gap: 9px; }
     .hero-note { display: inline-flex; align-items: center; gap: 8px; }
     .hero-note::before { width: 20px; border-top: 1px solid var(--line-strong); content: ""; }
+    .hero-setup { display: inline-flex; min-height: 28px; align-items: center; color: var(--accent); font-weight: 780; text-decoration: none; }
+    .hero-setup::after { margin-left: 6px; content: "->"; }
+    .hero-setup:hover { color: var(--accent-strong); }
     .hero-preview {
       position: relative;
       width: 100%;
@@ -375,10 +380,10 @@ const homeHtml = documentHtml({
       border-radius: 8px;
       overflow: hidden;
       background: color-mix(in srgb, var(--glass-strong) 88%, transparent);
-      box-shadow: 0 28px 76px rgba(3, 8, 18, 0.22);
+      box-shadow: inset 0 1px 0 var(--glass-highlight), 0 28px 76px rgba(3, 8, 18, 0.22);
       animation: media-in 820ms 260ms cubic-bezier(.2,.8,.2,1) both;
     }
-    .preview-toolbar { min-height: 58px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); padding: 7px 8px 7px 16px; background: var(--glass); backdrop-filter: blur(22px) saturate(135%); -webkit-backdrop-filter: blur(22px) saturate(135%); }
+    .preview-toolbar { min-height: 58px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); padding: 7px 8px 7px 16px; background: var(--glass); box-shadow: inset 0 1px 0 var(--glass-highlight); backdrop-filter: blur(22px) saturate(135%); -webkit-backdrop-filter: blur(22px) saturate(135%); }
     .preview-label { min-width: 0; display: inline-flex; align-items: center; gap: 9px; color: var(--muted); font-size: 12px; font-weight: 760; }
     .preview-switch { display: inline-grid; grid-template-columns: repeat(2, minmax(74px, 1fr)); gap: 3px; border: 1px solid var(--line); border-radius: 7px; padding: 3px; background: color-mix(in srgb, var(--page) 76%, transparent); }
     .preview-switch button { min-height: 44px; border: 0; border-radius: 5px; padding: 0 14px; background: transparent; color: var(--muted); font: inherit; font-size: 13px; font-weight: 780; cursor: pointer; transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease; }
@@ -501,7 +506,7 @@ const homeHtml = documentHtml({
             <a class="btn primary" data-preview-open href="${shopStartHref}">Try Shop live</a>
             <a class="btn secondary" href="/work/">See the work</a>
           </div>
-          <div class="hero-meta"><span class="hero-status" data-status-shell><span class="live-dot" aria-hidden="true"></span><span data-public-status aria-live="polite">Checking live demos</span></span><span class="hero-note">No signup to try</span></div>
+          <div class="hero-meta"><span class="hero-status" data-status-shell><span class="live-dot" aria-hidden="true"></span><span data-public-status aria-live="polite">Checking live demos</span></span><span class="hero-note">No signup to try</span><a class="hero-setup" href="/contact/?from=homepage-private-setup">Private setup</a></div>
         </div>
       </div>
       <div class="hero-preview" data-product-preview>

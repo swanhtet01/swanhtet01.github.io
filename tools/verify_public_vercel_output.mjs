@@ -149,7 +149,7 @@ const retiredCatalogContent = [
 ]
 
 for (const [relativePath, html] of pages) {
-  for (const required of ['data-theme="light"', 'data-theme="dark"', 'prefers-color-scheme', 'prefers-reduced-motion', 'data-theme-toggle']) {
+  for (const required of ['data-theme="light"', 'data-theme="dark"', 'prefers-color-scheme', 'prefers-reduced-motion', 'data-theme-toggle', '>Start a workflow</a>']) {
     if (!html.includes(required)) fail('public_page_missing_theme_contract', { relativePath, required })
   }
   for (const required of ['class="terminal-mark"', '<img src="/favicon.svg" alt="" width="64" height="64" />', 'backdrop-filter: blur(24px)', 'supermega<span class="domain">.dev</span>']) {
@@ -185,6 +185,8 @@ for (const required of [
   '>Start with one workflow</a>',
   'data-product-preview',
   'data-preview-open',
+  'href="/contact/?from=homepage-private-setup"',
+  '>Private setup</a>',
   'data-product-preview-button="shop"',
   'data-product-preview-button="plant"',
   'src="/live-shop-workspace.png"',
