@@ -320,7 +320,7 @@ function documentHtml({ title, description, canonical, content, style = '' }) {
 
 const liveStatusScript = `<script>(function(){var node=document.querySelector('[data-public-status]');if(!node)return;if(location.hostname==='127.0.0.1'||location.hostname==='localhost'){node.textContent='Demo ready';var localParent=node.closest('[data-status-shell]');if(localParent)localParent.classList.add('is-ready');return;}fetch('/api/health',{cache:'no-store',headers:{accept:'application/json'}}).then(function(response){if(!response.ok)throw new Error('unavailable');return response.json();}).then(function(body){node.textContent=body&&body.ok?'Live demos ready':'Demos available';var parent=node.closest('[data-status-shell]');if(parent)parent.classList.add('is-ready');}).catch(function(){node.textContent='Demos available';});})();</script>`
 
-const homeProductPreviewScript = `<script>(function(){var root=document.querySelector('[data-product-preview]');if(!root)return;var image=root.querySelector('[data-product-preview-image]'),label=root.querySelector('[data-product-preview-label]'),description=root.querySelector('[data-product-preview-description]'),openLink=root.querySelector('[data-preview-open]'),buttons=Array.from(root.querySelectorAll('[data-product-preview-button]'));if(!image||!label||!description||!openLink||!buttons.length)return;var views={shop:{src:'/live-shop-workspace.png',alt:'Current Shop workspace showing priority checks, sales, cash, customers, and stock',label:'Shop / live workspace',description:'Sales, stock, customers, and daily close in one operating flow.',href:'${shopStartUrl}',cta:'Open Shop demo'},plant:{src:'/live-plant-workspace.png',alt:'Current Plant workspace showing production plan navigation and machine state across two lines',label:'Plant / live workspace',description:'Production plans, machine state, and handoffs in one floor view.',href:'${plantStartUrl}',cta:'Open Plant demo'}};function show(id){var view=views[id];if(!view)return;buttons.forEach(function(button){button.setAttribute('aria-pressed',String(button.getAttribute('data-product-preview-button')===id));});label.textContent=view.label;description.textContent=view.description;openLink.href=view.href;openLink.textContent=view.cta;openLink.setAttribute('aria-label',view.cta);if(image.getAttribute('data-view')===id)return;image.classList.add('is-switching');image.alt=view.alt;image.setAttribute('data-view',id);image.src=view.src;window.setTimeout(function(){image.classList.remove('is-switching');},360);}image.addEventListener('load',function(){image.classList.remove('is-switching');});buttons.forEach(function(button){button.addEventListener('click',function(){show(button.getAttribute('data-product-preview-button'));});});var preloadDesktop=new Image();preloadDesktop.src=views.plant.src;})();</script>`
+const homeProductPreviewScript = `<script>(function(){var root=document.querySelector('[data-product-preview]');if(!root)return;var image=root.querySelector('[data-product-preview-image]'),label=root.querySelector('[data-product-preview-label]'),description=root.querySelector('[data-product-preview-description]'),openLink=root.querySelector('[data-preview-open]'),proofLink=root.querySelector('[data-preview-proof-link]'),buttons=Array.from(root.querySelectorAll('[data-product-preview-button]'));if(!image||!label||!description||!openLink||!buttons.length)return;var views={shop:{src:'/live-shop-workspace.png',alt:'Current Shop workspace showing priority checks, sales, cash, customers, and stock',label:'Shop / live workspace',description:'Sales, stock, customers, and daily close in one operating flow.',href:'${shopStartUrl}',cta:'Open Shop demo',proofLabel:'Open the live Shop workspace'},plant:{src:'/live-plant-workspace.png',alt:'Current Plant workspace showing production plan navigation and machine state across two lines',label:'Plant / live workspace',description:'Production plans, machine state, and handoffs in one floor view.',href:'${plantStartUrl}',cta:'Open Plant demo',proofLabel:'Open the live Plant workspace'}};function show(id){var view=views[id];if(!view)return;buttons.forEach(function(button){button.setAttribute('aria-pressed',String(button.getAttribute('data-product-preview-button')===id));});label.textContent=view.label;description.textContent=view.description;openLink.href=view.href;openLink.textContent=view.cta;openLink.setAttribute('aria-label',view.cta);if(proofLink){proofLink.href=view.href;proofLink.setAttribute('aria-label',view.proofLabel);}if(image.getAttribute('data-view')===id)return;image.classList.add('is-switching');image.alt=view.alt;image.setAttribute('data-view',id);image.src=view.src;window.setTimeout(function(){image.classList.remove('is-switching');},360);}image.addEventListener('load',function(){image.classList.remove('is-switching');});buttons.forEach(function(button){button.addEventListener('click',function(){show(button.getAttribute('data-product-preview-button'));});});var preloadDesktop=new Image();preloadDesktop.src=views.plant.src;})();</script>`
 
 const homeHtml = documentHtml({
   title: 'supermega.dev | Shop and Plant, ready for real work.',
@@ -575,27 +575,34 @@ const workHtml = documentHtml({
   canonical: 'https://supermega.dev/work/',
   style: `
     .work-main { width: 100%; overflow: clip; }
-    .work-hero { border-bottom: 1px solid var(--line); background: var(--surface); }
-    .work-hero-inner { width: min(100% - 48px, 1240px); margin-inline: auto; padding: 128px 0 70px; }
+    .work-hero { position: relative; overflow: clip; border-bottom: 1px solid var(--line); background: var(--surface); isolation: isolate; }
+    .work-hero::before { position: absolute; inset: 0; z-index: -1; background-image: linear-gradient(to right, color-mix(in srgb, var(--line) 55%, transparent) 1px, transparent 1px), linear-gradient(to bottom, color-mix(in srgb, var(--line) 42%, transparent) 1px, transparent 1px); background-size: 96px 96px; opacity: .38; content: ""; }
+    .work-hero-inner { position: relative; width: min(100% - 48px, 1240px); margin-inline: auto; padding: 112px 0 72px; }
+    .work-stage { display: grid; grid-template-columns: minmax(0, .76fr) minmax(480px, 1.02fr); align-items: center; gap: 76px; }
+    .work-copy { max-width: 540px; padding: 20px 0; animation: work-in 640ms cubic-bezier(.2,.8,.2,1) both; }
     .work-command { color: var(--accent); font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 12px; font-weight: 800; text-transform: uppercase; }
-    .work-heading { display: grid; grid-template-columns: minmax(0, 1fr) minmax(340px, .62fr); align-items: end; gap: 72px; margin-top: 18px; }
-    .work-heading h1 { max-width: 12ch; margin: 0; font-size: 58px; line-height: 1.02; letter-spacing: 0; }
-    .work-heading p { max-width: 42ch; margin: 0; color: var(--muted); font-size: 18px; line-height: 1.6; }
-    .work-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 30px; }
+    .work-copy h1 { max-width: 11ch; margin: 16px 0 0; font-size: 56px; line-height: 1.02; letter-spacing: 0; }
+    .work-copy > p { max-width: 40ch; margin: 24px 0 0; color: var(--muted); font-size: 17px; line-height: 1.58; }
+    .work-product-picker { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 26px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--glass); box-shadow: inset 0 1px 0 var(--glass-highlight); backdrop-filter: blur(20px) saturate(132%); -webkit-backdrop-filter: blur(20px) saturate(132%); }
+    .work-product-picker button { min-height: 76px; display: flex; flex-direction: column; justify-content: center; gap: 4px; border: 0; padding: 12px 15px; background: transparent; color: var(--muted); font: inherit; text-align: left; cursor: pointer; transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease; }
+    .work-product-picker button + button { border-left: 1px solid var(--line); }
+    .work-product-picker button[aria-pressed="true"] { background: var(--surface-strong); color: var(--ink); box-shadow: inset 0 1px 0 var(--glass-highlight), 0 8px 24px rgba(3, 8, 18, 0.08); }
+    .work-picker-label { font-size: 16px; font-weight: 800; line-height: 1.2; }
+    .work-picker-detail { color: var(--quiet); font-size: 12px; font-weight: 650; line-height: 1.3; }
+    .work-product-picker button[aria-pressed="true"] .work-picker-detail { color: var(--muted); }
+    .work-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
     .work-actions .btn { min-height: 50px; }
-    .work-proof { width: min(100%, 980px); margin: 38px auto 0; overflow: hidden; border: 1px solid var(--line-strong); border-radius: 8px; background: #071524; box-shadow: inset 0 1px 0 var(--glass-highlight), var(--shadow-deep); }
-    .work-proof-toolbar { min-height: 54px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); padding: 6px 16px; background: var(--glass); box-shadow: inset 0 1px 0 var(--glass-highlight); backdrop-filter: blur(22px) saturate(135%); -webkit-backdrop-filter: blur(22px) saturate(135%); }
+    .work-proof { width: 100%; margin: 0; overflow: hidden; border: 1px solid var(--line-strong); border-radius: 8px; background: color-mix(in srgb, var(--glass-strong) 88%, transparent); box-shadow: inset 0 1px 0 var(--glass-highlight), 0 30px 82px rgba(3, 8, 18, 0.22); animation: work-in 820ms 180ms cubic-bezier(.2,.8,.2,1) both; }
+    .work-proof-toolbar { min-height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); padding: 7px 16px; background: var(--glass); box-shadow: inset 0 1px 0 var(--glass-highlight); backdrop-filter: blur(22px) saturate(135%); -webkit-backdrop-filter: blur(22px) saturate(135%); }
     .work-proof-label { display: inline-flex; min-width: 0; align-items: center; gap: 9px; color: var(--muted); font-size: 12px; font-weight: 760; }
     .work-proof-label::before { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--signal); box-shadow: 0 0 0 4px color-mix(in srgb, var(--signal) 16%, transparent); content: ""; }
-    .work-proof-toolbar a { display: inline-flex; min-height: 40px; align-items: center; color: var(--accent); font-size: 13px; font-weight: 780; text-decoration: none; }
-    .work-proof-toolbar a::after { margin-left: 6px; content: "->"; }
-    .work-proof-toolbar a:hover { color: var(--accent-strong); }
+    .work-proof-badge { display: inline-flex; min-height: 28px; align-items: center; border: 1px solid var(--line); border-radius: 6px; padding: 0 9px; color: var(--quiet); font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 10px; font-weight: 780; letter-spacing: 0; text-transform: uppercase; }
     .work-proof-link { display: block; }
-    .work-proof picture { display: block; }
     .work-proof img { display: block; width: 100%; height: auto; aspect-ratio: 10 / 3; object-fit: contain; object-position: top; }
-    .work-heading > *, .work-proof { animation: work-in 640ms cubic-bezier(.2,.8,.2,1) both; }
-    .work-heading > :last-child { animation-delay: 100ms; }
-    .work-proof { animation-delay: 180ms; }
+    .work-proof-foot { min-height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-top: 1px solid var(--line); padding: 10px 16px; background: color-mix(in srgb, var(--glass-strong) 86%, transparent); }
+    .work-proof-description { margin: 0; color: var(--muted); font-size: 13px; font-weight: 650; line-height: 1.4; }
+    .work-proof-state { display: inline-flex; flex: none; align-items: center; gap: 7px; color: var(--signal); font-size: 11px; font-weight: 800; white-space: nowrap; }
+    .work-proof-state::before { width: 8px; height: 8px; border-radius: 50%; background: var(--signal); box-shadow: 0 0 0 4px color-mix(in srgb, var(--signal) 16%, transparent); content: ""; }
     @keyframes work-in { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
 
     .case-band { border-bottom: 1px solid var(--line); padding: 84px 0 92px; }
@@ -631,20 +638,30 @@ const workHtml = documentHtml({
     .work-close-copy .btn { margin-top: 26px; min-height: 50px; }
 
     @media (max-width: 900px) {
-      .work-heading, .work-close-inner { grid-template-columns: 1fr; gap: 24px; }
-      .work-heading h1 { font-size: 50px; }
+      .work-stage, .work-close-inner { grid-template-columns: 1fr; gap: 32px; }
+      .work-copy { max-width: 700px; padding: 0; }
+      .work-copy h1 { font-size: 50px; }
+      .work-proof { max-width: 820px; }
       .case-head { grid-template-columns: 1fr; gap: 26px; }
       .case-copy { grid-template-columns: minmax(0, 1fr) minmax(260px, .72fr); }
     }
     @media (max-width: 720px) {
       .work-hero-inner, .case-inner, .work-close-inner { width: min(100% - 32px, 1240px); }
-      .work-hero-inner { padding: 104px 0 54px; }
-      .work-heading h1 { font-size: 40px; }
-      .work-heading p, .case-copy > p { font-size: 16px; }
+      .work-hero-inner { padding: 96px 0 42px; }
+      .work-stage { gap: 26px; }
+      .work-copy h1 { font-size: 40px; }
+      .work-copy > p, .case-copy > p { font-size: 16px; }
+      .work-product-picker { margin-top: 22px; }
+      .work-product-picker button { min-height: 70px; padding-inline: 12px; }
+      .work-picker-label { font-size: 15px; }
+      .work-picker-detail { font-size: 11px; }
       .work-actions .btn { flex: 1 1 140px; min-height: 46px; }
-      .work-proof { width: 100%; margin-top: 30px; }
+      .work-proof { width: 100%; }
       .work-proof-toolbar { min-height: 52px; padding-inline: 12px; }
-      .work-proof img { width: min(100% - 28px, 320px); max-width: 320px; margin-inline: auto; aspect-ratio: 360 / 732; object-fit: contain; }
+      .work-proof-badge { min-height: 26px; padding-inline: 8px; font-size: 9px; }
+      .work-proof-foot { min-height: 0; align-items: flex-start; padding: 10px 12px; }
+      .work-proof-description { font-size: 12px; }
+      .work-proof-state { padding-top: 2px; font-size: 10px; }
       .case-band { padding: 60px 0 66px; }
       .case-label h2 { font-size: 34px; }
       .case-copy { grid-template-columns: 1fr; gap: 28px; }
@@ -661,15 +678,22 @@ const workHtml = documentHtml({
   content: `<main class="work-main">
   <section class="work-hero" aria-labelledby="work-heading">
     <div class="work-hero-inner">
-      <div class="work-command">&gt;_ work / live systems</div>
-      <div class="work-heading">
-        <h1 id="work-heading">See the work before the pitch.</h1>
-        <p>Shop and Plant are working systems, not concept screens. Open them in the same tab, follow a real operating path, and decide whether the workflow earns a place in your business.</p>
-      </div>
-      <div class="work-actions"><a class="btn primary" href="${shopStartHref}">Try Shop live</a><a class="btn secondary" href="${plantStartHref}">Try Plant live</a></div>
-      <div class="work-proof">
-        <div class="work-proof-toolbar"><span class="work-proof-label">Shop workspace / live</span><a href="${shopStartHref}" aria-label="Open the live Shop workspace">Open Shop</a></div>
-        <a class="work-proof-link" href="${shopStartHref}" aria-label="Open the live Shop workspace"><picture><source media="(max-width: 720px)" srcset="/live-shop-mobile.png" /><img src="/live-shop-workspace.png" alt="Current Shop workspace showing priority checks, sales, cash, customers, and stock" width="1600" height="480" fetchpriority="high" /></picture></a>
+      <div class="work-stage" data-product-preview>
+        <div class="work-copy">
+          <div class="work-command">&gt;_ work / live systems</div>
+          <h1 id="work-heading">See the work before the pitch.</h1>
+          <p>Open Shop or Plant in the same tab and follow a real operating path. The demo is there to use, not just look at.</p>
+          <div class="work-product-picker" role="group" aria-label="Choose a live workspace">
+            <button type="button" data-product-preview-button="shop" aria-pressed="true"><span class="work-picker-label">Shop</span><span class="work-picker-detail">Sales, stock, and daily close</span></button>
+            <button type="button" data-product-preview-button="plant" aria-pressed="false"><span class="work-picker-label">Plant</span><span class="work-picker-detail">Floor, maintenance, and handoffs</span></button>
+          </div>
+          <div class="work-actions"><a class="btn primary" data-preview-open aria-label="Open Shop demo" href="${shopStartHref}">Open Shop demo</a><a class="btn secondary" href="/contact/?from=homepage-private-setup">Private setup</a></div>
+        </div>
+        <div class="work-proof">
+          <div class="work-proof-toolbar"><span class="work-proof-label" data-product-preview-label aria-live="polite">Shop / live workspace</span><span class="work-proof-badge">Current demo</span></div>
+          <a class="work-proof-link" data-preview-proof-link href="${shopStartHref}" aria-label="Open the live Shop workspace"><img data-product-preview-image data-view="shop" src="/live-shop-workspace.png" alt="Current Shop workspace showing priority checks, sales, cash, customers, and stock" width="1600" height="480" fetchpriority="high" /></a>
+          <div class="work-proof-foot"><p class="work-proof-description" data-product-preview-description>Sales, stock, customers, and daily close in one operating flow.</p><span class="work-proof-state">LIVE</span></div>
+        </div>
       </div>
     </div>
   </section>
@@ -697,7 +721,8 @@ const workHtml = documentHtml({
   <section class="work-close" aria-labelledby="work-close-heading">
     <div class="work-close-inner"><div><div class="eyebrow">Your operation, not another catalog</div><h2 id="work-close-heading">One useful workflow is enough to start.</h2></div><div class="work-close-copy"><p>When Shop or Plant is close but not exact, show us the real handoff, file, or repeated decision. We will shape the smallest route worth proving and keep consequential actions reviewable.</p><a class="btn primary" href="/contact/">Describe the workflow</a></div></div>
   </section>
-</main>`,
+</main>
+${homeProductPreviewScript}`,
 })
 
 const contactHtml = documentHtml({
