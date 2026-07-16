@@ -45,7 +45,7 @@ async function get(url, accept) {
 const retiredPublicContent = ['MegaOS', 'DeskPOS', 'File Analyst', 'Payment Reconciler', 'data-clean-report-agent', 'supermega-machine.vercel.app/workcell', 'href="/reconcile/"', 'target="_blank"', 'target=_blank', 'window.open(', '>SM<']
 
 function verifySharedPage(html, label) {
-  for (const required of ['data-theme="light"', 'data-theme="dark"', 'data-theme-toggle', 'class="terminal-mark"', 'supermega<span class="domain">.dev</span>', '>Start a workflow</a>']) {
+  for (const required of ['data-theme="light"', 'data-theme="dark"', 'data-theme-toggle', 'class="terminal-mark"', 'supermega<span class="domain">.dev</span>', '>Talk to us</a>']) {
     assert(html.includes(required), `${label}_missing_${required.slice(0, 32)}`)
   }
   for (const forbidden of retiredPublicContent) {

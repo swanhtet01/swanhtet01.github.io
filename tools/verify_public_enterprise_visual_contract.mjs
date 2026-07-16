@@ -23,7 +23,7 @@ const shopStartHref = 'https://app.supermega.dev/?demo=shop&amp;returnTo=%2Fstar
 const plantStartHref = 'https://app.supermega.dev/?demo=plant&amp;returnTo=%2Fstart'
 
 for (const [relativePath, html] of pages) {
-  for (const required of ['data-theme="light"', 'data-theme="dark"', 'prefers-color-scheme', 'prefers-reduced-motion', 'data-theme-toggle', 'min-width: 44px;\n    min-height: 44px;', '>Start a workflow</a>']) {
+  for (const required of ['data-theme="light"', 'data-theme="dark"', 'prefers-color-scheme', 'prefers-reduced-motion', 'data-theme-toggle', 'min-width: 44px;\n    min-height: 44px;', '>Talk to us</a>']) {
     if (!html.includes(required)) fail('public_page_missing_theme_contract', { relativePath, required })
   }
   for (const required of [shopStartHref, plantStartHref]) {

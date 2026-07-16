@@ -275,7 +275,7 @@ const headerHtml = `${themeBootstrap}
       <a class="nav-link optional-nav" href="${shopStartHref}">Shop</a>
       <a class="nav-link optional-nav" href="${plantStartHref}">Plant</a>
       <button class="icon-button" type="button" data-theme-toggle aria-label="Use dark mode" title="Use dark mode"><svg class="theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path></svg><svg class="theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 15.2A8.5 8.5 0 0 1 8.8 3.5 8.5 8.5 0 1 0 20.5 15.2Z"></path></svg></button>
-      <a class="btn primary header-cta" href="/contact/">Start a workflow</a>
+      <a class="btn primary header-cta" href="/contact/">Talk to us</a>
     </nav>
   </header>
 </div>
