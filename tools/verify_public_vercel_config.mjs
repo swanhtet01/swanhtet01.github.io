@@ -8,6 +8,7 @@ const projectPath = resolve(root, '.vercel', 'project.json')
 const lockPath = resolve(root, 'tools', 'public_deployment_lock.json')
 const packagePath = resolve(root, 'package.json')
 const sourceDeployGuardPath = resolve(root, 'tools', 'skip_public_source_deploy.mjs')
+const directDeployGuardPath = resolve(root, 'tools', 'deny_direct_public_deploy.mjs')
 const releaseWorkflowPath = resolve(root, '.github', 'workflows', 'supermega-public-release.yml')
 const liveReleaseProbePath = resolve(root, 'tools', 'verify_public_release_live.mjs')
 const retiredWorkflowPaths = [
@@ -17,6 +18,7 @@ const retiredWorkflowPaths = [
 const config = JSON.parse(await readFile(configPath, 'utf8'))
 const packageJson = JSON.parse(await readFile(packagePath, 'utf8'))
 const sourceDeployGuard = await readFile(sourceDeployGuardPath, 'utf8')
+const directDeployGuard = await readFile(directDeployGuardPath, 'utf8')
 const releaseWorkflow = await readFile(releaseWorkflowPath, 'utf8')
 const liveReleaseProbe = await readFile(liveReleaseProbePath, 'utf8')
 const ignore = await readFile(ignorePath, 'utf8')
@@ -75,6 +77,10 @@ if (!sourceDeployGuard.includes('public_source_deploy=skipped_use_verified_prebu
   fail('source_deploy_guard_contract_missing')
 }
 
+if (!directDeployGuard.includes('public_direct_deploy=blocked_use_verified_release')) {
+  fail('direct_deploy_guard_contract_missing')
+}
+
 if (packageJson.scripts?.['public:prebuilt'] !== 'npm run public:build && npm run public:verify') {
   fail('public_prebuilt_must_generate_then_verify')
 }
@@ -89,8 +95,8 @@ if (packageJson.scripts?.['vercel:build'] !== 'npm run public:prebuilt') {
 
 for (const scriptName of ['vercel:deploy', 'vercel:deploy:prod', 'deploy:public:prod']) {
   const script = String(packageJson.scripts?.[scriptName] || '')
-  if (!script.startsWith('npm run public:prebuilt && ') || !script.includes('vercel deploy --prebuilt')) {
-    fail(`${scriptName}_must_deploy_verified_prebuilt_output`)
+  if (script !== 'node tools/deny_direct_public_deploy.mjs') {
+    fail(`${scriptName}_must_use_verified_release`)
   }
 }
 
