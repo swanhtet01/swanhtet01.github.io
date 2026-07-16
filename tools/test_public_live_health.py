@@ -20,7 +20,7 @@ APP = "https://app.example/"
 DEMO = "https://demo.example/"
 POS = "https://pos.example/"
 CONSOLE = "https://console.example/"
-AGENT_INTAKE = f"{BASE}contact/?from=ai-agent-solution"
+RETIRED_AGENT_INTAKE = f"{BASE}contact/?from=ai-agent-solution"
 SHOP_WORKSPACE_INTAKE = f"{BASE}contact/?from=shop-workspace"
 PLANT_WORKSPACE_INTAKE = f"{BASE}contact/?from=plant-workspace"
 
@@ -59,16 +59,13 @@ def healthy_responses() -> dict[str, checker.HttpResult]:
         'name="goal"',
         "No account or data connection is made before you approve it.",
     )
-    agent_contact = page(
-        "entryIntent==='ai-agent-solution'",
+    legacy_agent_contact = page(
         "entryIntent==='shop-workspace'?'Shop':entryIntent==='plant-workspace'?'Plant':''",
-        "What do you want to improve?",
-        "Start here",
-        "What should work better?",
-        "idleSubmitLabel='Contact us'",
+        "<title>Contact | supermega.dev</title>",
+        "What should run better?",
         "text('[data-contact-heading]','Request a private '+workspaceProduct+' workspace.')",
         "idleSubmitLabel='Request workspace'",
-        "one reviewed example",
+        "No account or data connection is made before you approve it.",
         'action="/api/contact-submissions"',
         'name="name"',
         'name="email"',
@@ -137,10 +134,6 @@ def healthy_responses() -> dict[str, checker.HttpResult]:
                 "shop": {"entry": "/?demo=shop", "route": "/home"},
                 "plant": {"entry": "/?demo=plant", "route": "/factory"},
             },
-            "agentSolutions": {
-                "intake": "https://supermega.dev/contact/?from=ai-agent-solution",
-                "externalActions": "approval-gated",
-            },
         },
         "proof": {
             "workingDemos": True,
@@ -170,9 +163,9 @@ def healthy_responses() -> dict[str, checker.HttpResult]:
         BASE: result(BASE, home),
         WWW: result(WWW, home),
         f"{BASE}contact/": result(f"{BASE}contact/", contact),
-        AGENT_INTAKE: result(AGENT_INTAKE, agent_contact),
-        SHOP_WORKSPACE_INTAKE: result(SHOP_WORKSPACE_INTAKE, agent_contact),
-        PLANT_WORKSPACE_INTAKE: result(PLANT_WORKSPACE_INTAKE, agent_contact),
+        RETIRED_AGENT_INTAKE: result(RETIRED_AGENT_INTAKE, legacy_agent_contact),
+        SHOP_WORKSPACE_INTAKE: result(SHOP_WORKSPACE_INTAKE, legacy_agent_contact),
+        PLANT_WORKSPACE_INTAKE: result(PLANT_WORKSPACE_INTAKE, legacy_agent_contact),
         f"{BASE}privacy/": result(f"{BASE}privacy/", privacy),
         f"{BASE}api/contact-submissions/status": result(
             f"{BASE}api/contact-submissions/status", contact_status
@@ -417,28 +410,39 @@ class PortfolioHealthTest(unittest.TestCase):
                 self.assertEqual(report["status"], "error")
                 self.assertTrue(any(item["kind"] == "demo_shop_pos" for item in report["failures"]))
 
-    def test_missing_agent_context_fails_first_proof_route(self):
+    def test_retired_agent_query_stays_neutral(self):
         responses = healthy_responses()
-        responses[AGENT_INTAKE] = result(
-            AGENT_INTAKE,
-            responses[AGENT_INTAKE].body.decode().replace("idleSubmitLabel='Contact us'", ""),
+        responses[RETIRED_AGENT_INTAKE] = result(
+            RETIRED_AGENT_INTAKE,
+            responses[RETIRED_AGENT_INTAKE].body.decode().replace("What should run better?", ""),
         )
         report = self.run_report(responses)
         self.assertEqual(report["status"], "error")
-        failure = next(item for item in report["failures"] if item["kind"] == "agent_intake_page")
-        self.assertEqual(failure["url"], AGENT_INTAKE)
-        self.assertIn("idleSubmitLabel='Contact us'", failure["missing"])
+        failure = next(item for item in report["failures"] if item["kind"] == "retired_agent_intake_page")
+        self.assertEqual(failure["url"], RETIRED_AGENT_INTAKE)
+        self.assertIn("What should run better?", failure["missing"])
 
     def test_technical_intake_field_fails_first_proof_route(self):
         responses = healthy_responses()
-        responses[AGENT_INTAKE] = result(
-            AGENT_INTAKE,
-            responses[AGENT_INTAKE].body.decode() + 'name="workflow"',
+        responses[RETIRED_AGENT_INTAKE] = result(
+            RETIRED_AGENT_INTAKE,
+            responses[RETIRED_AGENT_INTAKE].body.decode() + 'name="workflow"',
         )
         report = self.run_report(responses)
         self.assertEqual(report["status"], "error")
-        failure = next(item for item in report["failures"] if item["kind"] == "agent_intake_page")
+        failure = next(item for item in report["failures"] if item["kind"] == "retired_agent_intake_page")
         self.assertIn('name="workflow"', failure["unexpected"])
+
+    def test_retired_agent_health_claim_fails(self):
+        responses = healthy_responses()
+        health_url = f"{APP}api/health"
+        payload = json.loads(responses[health_url].body)
+        payload["portfolio"]["agentSolutions"] = {"intake": "retired"}
+        responses[health_url] = result(health_url, payload)
+        report = self.run_report(responses)
+        self.assertEqual(report["status"], "error")
+        failure = next(item for item in report["failures"] if item["kind"] == "app_health")
+        self.assertIn("portfolio.agentSolutions", failure["mismatches"])
 
     def test_missing_workspace_context_fails_product_intake(self):
         responses = healthy_responses()
