@@ -777,6 +777,7 @@ const contactHtml = documentHtml({
   var entryIntent=search.get('from')||'';
   var agentIntent=entryIntent==='ai-agent-solution';
   var workspaceProduct=entryIntent==='shop-workspace'?'Shop':entryIntent==='plant-workspace'?'Plant':'';
+  var privateSetupIntent=entryIntent==='homepage-private-setup';
   var submit=form.querySelector('[data-contact-submit]');
   var idleSubmitLabel='Send request';
   function text(selector,value){var element=document.querySelector(selector);if(element)element.textContent=value;}
@@ -797,12 +798,18 @@ const contactHtml = documentHtml({
     text('[data-contact-policy]','We start with one reviewed example. No account, data connection, or external action is made before you approve it.');
     idleSubmitLabel='Contact us';
     if(submit)submit.textContent=idleSubmitLabel;
-  }else if(workspaceProduct){
-    form.dataset.intake=entryIntent;
+  }else if(workspaceProduct||privateSetupIntent){
+    form.dataset.intake=workspaceProduct?entryIntent:'private-workspace';
     text('[data-contact-command]','>_ contact / workspace');
-    text('[data-contact-heading]','Request a private '+workspaceProduct+' workspace.');
-    text('[data-contact-intro]','Tell us who will use it and what should be ready first. SuperMega will set it up and verify it before handover.');
-    text('[data-contact-form-heading]','Request '+workspaceProduct);
+    if(workspaceProduct){
+      text('[data-contact-heading]','Request a private '+workspaceProduct+' workspace.');
+      text('[data-contact-intro]','Tell us who will use it and what should be ready first. SuperMega will set it up and verify it before handover.');
+      text('[data-contact-form-heading]','Request '+workspaceProduct);
+    }else{
+      text('[data-contact-heading]','Set up a private workspace.');
+      text('[data-contact-intro]','Tell us whether Shop or Plant should be ready first and who will use it. SuperMega will define the setup path and verify it before handover.');
+      text('[data-contact-form-heading]','Private setup');
+    }
     text('[data-contact-goal-label]','What should be ready first?');
     text('[data-contact-policy]','Sending this request does not create an account or connect data. Setup begins only after scope approval.');
     idleSubmitLabel='Request workspace';
