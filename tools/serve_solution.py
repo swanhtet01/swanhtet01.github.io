@@ -7804,26 +7804,10 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         if vercel_config.exists():
             commands.append(
                 {
-                    "id": "vercel-build",
-                    "label": "Build for Vercel",
-                    "command": "npx vercel build --yes",
-                    "detail": "Build the repo in Vercel-compatible mode before deploying a prebuilt artifact.",
-                }
-            )
-            commands.append(
-                {
-                    "id": "vercel-prebuilt-preview",
-                    "label": "Deploy prebuilt preview",
-                    "command": "npx vercel deploy --prebuilt -y",
-                    "detail": "Ship a linked-project preview deployment using the repo-root Vercel configuration.",
-                }
-            )
-            commands.append(
-                {
-                    "id": "vercel-prebuilt-prod",
-                    "label": "Deploy production",
-                    "command": "npx vercel deploy --prebuilt --prod -y",
-                    "detail": "Promote a prebuilt artifact to the production domain once the linked project is configured.",
+                    "id": "public-release",
+                    "label": "Release public site",
+                    "command": "gh workflow run supermega-public-release.yml --repo swanhtet01/swanhtet01.github.io --ref main",
+                    "detail": "Dispatch the verified release from the canonical public branch to the locked supermega-public project.",
                 }
             )
         if str(gmail_client.get("recommended_command", "")).strip() and gmail_status != "ready":

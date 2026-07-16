@@ -101,8 +101,9 @@ powershell -ExecutionPolicy Bypass -File .\tools\run_solution.ps1 -Config .\conf
 # Run the full app as one container with persistent saved data
 docker compose -f .\docker-compose.app.yml up --build
 
-# Deploy website via GitHub Actions (sync secret + dispatch Pages/Cloud Run)
-powershell -ExecutionPolicy Bypass -File .\tools\deploy_website_actions.ps1 -ProjectId supermega-468612 -Region asia-southeast1 -Service supermega-showroom
+# Release the public site through the verified production workflow
+# It fetches the canonical public branch, generates the prebuilt artifact, and deploys it to supermega-public.
+gh workflow run supermega-public-release.yml --repo swanhtet01/swanhtet01.github.io --ref main
 
 # Showroom
 cd showroom
