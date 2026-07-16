@@ -19,6 +19,13 @@ const CONTENT_TYPES = Object.freeze({
   '.js': 'text/javascript; charset=utf-8',
   '.svg': 'image/svg+xml; charset=utf-8',
 })
+const SECURITY_HEADERS = Object.freeze({
+  'content-security-policy': "base-uri 'self'; frame-ancestors 'none'; object-src 'none'",
+  'permissions-policy': 'camera=(), geolocation=(), microphone=(), payment=(), usb=()',
+  'referrer-policy': 'no-referrer',
+  'x-content-type-options': 'nosniff',
+  'x-frame-options': 'DENY',
+})
 
 function resolvePublicFile(pathname) {
   let requested
@@ -56,7 +63,7 @@ const server = createServer(async (req, res) => {
         : url.pathname === '/api/agent-company'
           ? await handleAgentCompany(request)
           : await handle(request)
-      const responseHeaders = { 'content-type': 'application/json', 'cache-control': 'no-store' }
+      const responseHeaders = { ...SECURITY_HEADERS, 'content-type': 'application/json', 'cache-control': 'no-store' }
       if (result.cookie) responseHeaders['set-cookie'] = result.cookie
       res.writeHead(result.status, responseHeaders)
       res.end(JSON.stringify(result.json))
@@ -64,21 +71,21 @@ const server = createServer(async (req, res) => {
     }
     const target = resolvePublicFile(url.pathname)
     if (!target) {
-      res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' })
+      res.writeHead(404, { ...SECURITY_HEADERS, 'content-type': 'text/plain; charset=utf-8' })
       res.end('Not found')
       return
     }
     let content
     try { content = await readFile(target) }
     catch {
-      res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' })
+      res.writeHead(404, { ...SECURITY_HEADERS, 'content-type': 'text/plain; charset=utf-8' })
       res.end('Not found')
       return
     }
-    res.writeHead(200, { 'content-type': CONTENT_TYPES[extname(target)] || 'application/octet-stream' })
+    res.writeHead(200, { ...SECURITY_HEADERS, 'content-type': CONTENT_TYPES[extname(target)] || 'application/octet-stream' })
     res.end(content)
   } catch (err) {
-    res.writeHead(400, { 'content-type': 'application/json' })
+    res.writeHead(400, { ...SECURITY_HEADERS, 'content-type': 'application/json' })
     res.end(JSON.stringify({ ok: false, reason: String(err.message || 'error').slice(0, 120) }))
   }
 })

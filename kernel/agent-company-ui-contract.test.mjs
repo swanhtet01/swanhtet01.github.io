@@ -222,6 +222,14 @@ test('Agent Company API route is a dedicated function before the catch-all', asy
   const config = JSON.parse(await readFile(new URL('./vercel.json', import.meta.url), 'utf8'))
   assert.equal(config.functions['api/agent-company-auth.mjs'].maxDuration, 15)
   assert.equal(config.functions['api/agent-company.mjs'].maxDuration, 60)
+  const securityHeaderRule = config.headers.find((rule) => rule.source === '/(.*)')
+  assert.deepEqual(Object.fromEntries(securityHeaderRule.headers.map((header) => [header.key, header.value])), {
+    'Content-Security-Policy': "base-uri 'self'; frame-ancestors 'none'; object-src 'none'",
+    'Permissions-Policy': 'camera=(), geolocation=(), microphone=(), payment=(), usb=()',
+    'Referrer-Policy': 'no-referrer',
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+  })
   const authRoute = config.routes.findIndex((route) => route.src === '/api/agent-company-auth')
   const companyRoute = config.routes.findIndex((route) => route.src === '/api/agent-company')
   const catchAll = config.routes.findIndex((route) => route.src === '/api/(.*)')
@@ -232,6 +240,10 @@ test('Agent Company API route is a dedicated function before the catch-all', asy
   assert.match(localServer, /url\.pathname === '\/api\/agent-company-auth'\s*\? await handleAgentCompanyAuth\(request\)/)
   assert.match(localServer, /url\.pathname === '\/api\/agent-company'\s*\? await handleAgentCompany\(request\)/)
   assert.match(localServer, /if \(result\.cookie\) responseHeaders\['set-cookie'\] = result\.cookie/)
+  assert.match(localServer, /const SECURITY_HEADERS = Object\.freeze\(/)
+  assert.match(localServer, /'content-security-policy': "base-uri 'self'; frame-ancestors 'none'; object-src 'none'"/)
+  assert.match(localServer, /'x-content-type-options': 'nosniff'/)
+  assert.match(localServer, /'x-frame-options': 'DENY'/)
   assert.match(localServer, /requested === '\/status'/)
   assert.match(localServer, /target\.startsWith\(`\$\{publicRoot\}\$\{sep\}`\)/)
   assert.match(localServer, /CONTENT_TYPES\[extname\(target\)\]/)
