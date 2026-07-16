@@ -75,8 +75,9 @@ replay can return a finished result or expose the recoverable partial results wi
 
 Browser operators use `POST /api/agent-company-auth` to exchange one owner-issued, one-use code for a
 tenant-bound HttpOnly, Secure, SameSite session. The server stores only code and session-token
-fingerprints, revalidates immutable tenant, role, and expiry metadata on every request, and enforces
-operator, reviewer, or viewer permissions before Agent Company actions run. Cookie-authenticated
+fingerprints, revalidates immutable tenant, role, expiry, and any customer-proof scope metadata on
+every request, and enforces operator, reviewer, viewer, or customer permissions before Agent Company
+actions run. Cookie-authenticated
 writes also require the console's explicit same-origin request marker. The owner key remains a
 separate bootstrap and CLI path and is never copied into an operator session. Owner bootstrap access
 can list active sessions and unredeemed codes for one tenant and revoke either entry atomically. That
@@ -119,8 +120,10 @@ mission and work-order actions:
   bounded specialist outputs, role-call usage, evidence fingerprints, and execution controls. It never
   returns queued raw evidence.
 - `work-order-review` stores one immutable accepted or changes-requested decision against the exact
-  result hash. It requires the exact customer statement, source, reviewer name, recorder name, and an
-  `ACCEPT ...` or `REQUEST CHANGES ...` confirmation bound to that result.
+  result hash. Operator-recorded reviews require the exact statement, source, reviewer name, recorder
+  name, and an `ACCEPT ...` or `REQUEST CHANGES ...` confirmation. A customer-review session can act
+  only on its one tenant/work-order/result scope; the server sets its reviewer, recorder, source, and
+  tenant-bound session provenance.
 - `work-order-evaluate` accepts one immutable internal checklist verdict for a terminal result. It
   requires the saved plan hash, exact `EVALUATE <workOrderId>` confirmation, and either four passing checks for
   `accepted` or at least one failed check for `revision_required`. It accepts no notes or raw text.
@@ -139,18 +142,23 @@ the cycle runner's durable claim and either returns the saved result or reports 
 Queued evidence remains inside the service-role-only cache record until an explicit dispatch or
 cancel decision. Terminal dispatch and cancellation both scrub the raw input while preserving its
 fingerprints.
-Customer review records are explicitly `operator_recorded_customer_review` with
+Operator-recorded customer reviews are explicitly `operator_recorded_customer_review` with
 `customerAuthenticated: false`; they are evidence copied by the operator from email, chat, call, or
-an in-person conversation, not a customer login or digital signature. A different review cannot
+an in-person conversation, not a customer login or digital signature. An owner can instead issue a
+one-use `tenant_bound_customer_session` code scoped to one tenant, work order, and exact result hash.
+That customer session receives only the delivered result, result hash, and decision record; it does
+not receive the workspace plan, source-evidence fingerprints, or internal delivery metadata. It records
+`customerAuthenticated: true` for owner-issued-code possession only, not SSO, MFA, or a legal signature. A different review cannot
 overwrite the first immutable record. Revised work requires a new cycle and work order.
 
 The console's normal operating path is `plan -> queue -> explicit dispatch -> internal evaluation`;
-delivery proof and operator-recorded customer review are separate follow-up controls. The old direct
-`run` API remains for compatibility but is not exposed in the Company UI and is explicitly excluded
-from the operations report. Internal targets cover queue p90, execution p90, completed terminal
-orders, durable result storage, role-budget compliance, draft-only boundary compliance, evaluation
-coverage, and accepted evaluations. Readiness stays `collecting` until each target has at least five
-relevant samples. These are operator targets, not a contractual customer SLA or customer acceptance.
+delivery proof and either operator-recorded or tenant-bound customer-session review are separate
+follow-up controls. The old direct `run` API remains for compatibility but is not exposed in the
+Company UI and is explicitly excluded from the operations report. Internal targets cover queue p90,
+execution p90, completed terminal orders, durable result storage, role-budget compliance, draft-only
+boundary compliance, evaluation coverage, and accepted evaluations. Readiness stays `collecting`
+until each target has at least five relevant samples. These are operator targets, not a contractual
+customer SLA or retained customer proof.
 
 ### Guided Operator
 
@@ -217,18 +225,21 @@ in recovery instead of being retried blindly.
   automatically queues or dispatches work and no stage receives raw prior output automatically.
 - Planned work orders retain their bounded evidence in the protected cache until dispatch or an
   explicit cancel-and-scrub decision. There is no unattended dispatcher or retention sweeper.
-- Customer review is operator-recorded provenance, not cryptographic proof of customer identity.
+- A tenant-bound customer review proves possession of an owner-issued one-use code for one exact
+  result, not cryptographic identity, SSO/MFA, or a legal signature. Operator-recorded review remains
+  separate copied provenance.
 - Company health covers the latest 40 durable work orders in the selected window. It excludes direct
   compatibility cycles and cancelled orders from delivery metrics, returns no evidence or model
   output, and cannot prove customer acceptance from an internal evaluation. Customer acceptance
-  remains the separate operator-recorded review.
+  remains the separate operator-recorded or tenant-bound customer-session review.
 
 ## Next
 
 1. Dispatch one legitimate redacted work order, record its internal checklist evaluation, download
-   the delivery proof, and record the customer's exact decision from an allowed source.
-2. After that proof, add operator recovery and customer-authenticated acceptance, then SSO/MFA where
-   a tenant requires it. Owner-issued tenant sessions and targeted revocation are already live.
+   the delivery proof, and retain the customer's decision from an allowed source or tenant-bound
+   customer session.
+2. After that proof, add operator recovery, then SSO/MFA where a tenant requires it. Owner-issued
+   tenant sessions, targeted revocation, and customer-code acceptance are already live.
 3. Then add an opt-in durable dispatcher, bounded evidence-retention sweeper, and alerts over the
    measured target states. Do not introduce recursive delegation.
 4. Generate the isolated client plan, load its client-scoped inputs, and run the exact-confirmation

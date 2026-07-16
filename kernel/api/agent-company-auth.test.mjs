@@ -48,6 +48,40 @@ test('only the owner key can issue a bounded operator code', async () => {
   assert.deepEqual(calls, [{ clientId: 'client-acme', operatorId: 'ops.alice', role: 'operator' }])
 })
 
+test('owner-only code issuance preserves an exact customer proof-review scope', async () => {
+  const scope = {
+    kind: 'work_order_review',
+    workOrderId: `company-order:${'a'.repeat(40)}`,
+    resultHash: 'b'.repeat(64),
+  }
+  const calls = []
+  const result = await handleAgentCompanyAuth(ownerRequest({
+    action: 'issue-code',
+    clientId: 'client-acme',
+    operatorId: 'customer.aye',
+    role: 'customer',
+    expiresInMinutes: 15,
+    sessionHours: 4,
+    scope,
+  }), {
+    opsKey: KEY,
+    issueCompanyOperatorCode: async (body) => {
+      calls.push(body)
+      return { ok: true, role: body.role, scope: body.scope }
+    },
+  })
+  assert.equal(result.status, 200)
+  assert.deepEqual(result.json.scope, scope)
+  assert.deepEqual(calls, [{
+    clientId: 'client-acme',
+    operatorId: 'customer.aye',
+    role: 'customer',
+    expiresInMinutes: 15,
+    sessionHours: 4,
+    scope,
+  }])
+})
+
 test('only owner bootstrap access can list and revoke redacted tenant access', async () => {
   const calls = []
   const listCompanyAccess = async (body) => {

@@ -96,6 +96,60 @@ function statusFor(result) {
   return 400
 }
 
+function customerReviewScope(auth) {
+  const scope = auth?.scope
+  return auth?.role === 'customer'
+    && scope?.kind === 'work_order_review'
+    && /^company-order:[a-f0-9]{40}$/.test(String(scope.workOrderId || ''))
+    && /^[a-f0-9]{64}$/.test(String(scope.resultHash || ''))
+    ? scope
+    : null
+}
+
+function customerReviewView(review) {
+  if (!review || typeof review !== 'object' || Array.isArray(review)) return null
+  return {
+    binding: String(review.binding || ''),
+    customerAuthenticated: review.customerAuthenticated === true,
+    decision: String(review.decision || ''),
+    statement: String(review.statement || ''),
+    recordedAt: String(review.recordedAt || ''),
+    resultHash: String(review.resultHash || ''),
+    reviewHash: String(review.reviewHash || ''),
+  }
+}
+
+function customerDeliveryView(workOrder) {
+  const result = workOrder?.result && typeof workOrder.result === 'object' && !Array.isArray(workOrder.result)
+    ? workOrder.result
+    : {}
+  const rawResults = Array.isArray(result.results)
+    ? result.results
+    : Array.isArray(result.recoveredResults) ? result.recoveredResults : []
+  const results = rawResults.map((item) => {
+    const safe = item && typeof item === 'object' && !Array.isArray(item) ? item : {}
+    return {
+      status: String(safe.status || 'unknown').slice(0, 40),
+      ...(Object.hasOwn(safe, 'output') ? { output: safe.output } : {}),
+      ...(safe.reason ? { reason: String(safe.reason).slice(0, 120) } : {}),
+    }
+  })
+  return {
+    workOrderId: String(workOrder?.workOrderId || ''),
+    clientId: String(workOrder?.clientId || ''),
+    cycleId: String(workOrder?.cycleId || ''),
+    status: String(workOrder?.status || ''),
+    completedAt: workOrder?.completedAt || null,
+    resultHash: String(workOrder?.resultHash || ''),
+    result: {
+      status: String(result.status || workOrder?.status || 'unknown').slice(0, 40),
+      actionMode: String(result.actionMode || 'draft_only').slice(0, 40),
+      results,
+    },
+    review: customerReviewView(workOrder?.review),
+  }
+}
+
 export async function handleAgentCompany(request = {}, options = {}) {
   const env = options.env || process.env
   const authorize = options.authorizeCompanyRequest || authorizeCompanyRequest
@@ -108,6 +162,29 @@ export async function handleAgentCompany(request = {}, options = {}) {
 
   const method = String(request.method || '').toUpperCase()
   if (method === 'GET') {
+    const customerScope = customerReviewScope(auth)
+    if (auth.role === 'customer') {
+      if (!customerScope) return { status: 403, json: { ok: false, reason: 'company_customer_scope_invalid' } }
+      return {
+        status: 200,
+        json: {
+          ok: true,
+          actionMode: 'proof_review_only',
+          auth,
+          customerReview: {
+            scoped: true,
+            workOrderId: customerScope.workOrderId,
+            resultHash: customerScope.resultHash,
+            proofAccess: true,
+            immutableDecision: true,
+            workspaceAccess: false,
+            identity: 'tenant_bound_one_time_code_only',
+            ssoOrMfa: false,
+            legalSignature: false,
+          },
+        },
+      }
+    }
     return {
       status: 200,
       json: {
@@ -144,7 +221,10 @@ export async function handleAgentCompany(request = {}, options = {}) {
           rawEvidenceReturned: false,
           deliveryProof: true,
           operatorRecordedReview: true,
-          customerAuthenticated: false,
+          tenantBoundCustomerSessionReview: true,
+          customerAuthentication: 'tenant_bound_one_time_code_only',
+          customerSsoOrMfa: false,
+          customerLegalSignature: false,
           explicitCancellation: true,
           cancelledEvidenceScrubbed: true,
         },
@@ -200,7 +280,26 @@ export async function handleAgentCompany(request = {}, options = {}) {
   if (authorizedClientId && String(body.clientId || '').trim() !== authorizedClientId) {
     return { status: 403, json: { ok: false, reason: 'company_client_mismatch' } }
   }
-  if (auth.mode === 'session' && action === 'work-order-review') body.recordedBy = auth.operatorId
+  const customerScope = customerReviewScope(auth)
+  if (auth.role === 'customer') {
+    if (!customerScope) return { status: 403, json: { ok: false, reason: 'company_customer_scope_invalid' } }
+    if (String(body.workOrderId || '').trim() !== customerScope.workOrderId) {
+      return { status: 403, json: { ok: false, reason: 'company_customer_scope_mismatch' } }
+    }
+    if (action === 'work-order-review') {
+      if (String(body.resultHash || '').trim() !== customerScope.resultHash) {
+        return { status: 403, json: { ok: false, reason: 'company_customer_scope_mismatch' } }
+      }
+      const suppliedIdentityFields = ['reviewerName', 'source', 'recordedBy']
+        .filter((field) => Object.hasOwn(body, field))
+      if (suppliedIdentityFields.length) {
+        return { status: 400, json: { ok: false, reason: 'company_customer_review_identity_server_set' } }
+      }
+      body.reviewerName = auth.operatorId
+      body.source = 'customer_session'
+      body.recordedBy = auth.operatorId
+    }
+  } else if (auth.mode === 'session' && action === 'work-order-review') body.recordedBy = auth.operatorId
 
   const plan = options.planCompanyCycle || planCompanyCycle
   const planPlaybook = options.planCompanyPlaybook || planCompanyPlaybook
@@ -219,6 +318,28 @@ export async function handleAgentCompany(request = {}, options = {}) {
   const reviewOrder = options.reviewCompanyWorkOrder || reviewCompanyWorkOrder
   const evaluateOrder = options.evaluateCompanyWorkOrder || evaluateCompanyWorkOrder
   const operationsReport = options.buildCompanyOperationsReport || buildCompanyOperationsReport
+  let customerScopedOrder = null
+  if (auth.role === 'customer') {
+    const scopedOrder = await getOrder({
+      clientId: authorizedClientId,
+      workOrderId: customerScope.workOrderId,
+    })
+    if (!scopedOrder.ok) return { status: statusFor(scopedOrder), json: scopedOrder }
+    if (String(scopedOrder.workOrder?.resultHash || '') !== customerScope.resultHash) {
+      return { status: 403, json: { ok: false, reason: 'company_customer_scope_mismatch' } }
+    }
+    customerScopedOrder = scopedOrder
+    if (action === 'work-order-get') {
+      return {
+        status: 200,
+        json: {
+          ok: true,
+          mode: 'work_order_get',
+          workOrder: customerDeliveryView(scopedOrder.workOrder),
+        },
+      }
+    }
+  }
   const result = action === 'plan' ? await plan(body)
     : action === 'playbook-plan' ? await planPlaybook(body)
       : action === 'mission-create' ? await createMission(body)
@@ -233,9 +354,29 @@ export async function handleAgentCompany(request = {}, options = {}) {
                         : action === 'work-order-run' ? await runOrder(body)
                           : action === 'work-order-cancel' ? await cancelOrder(body)
                             : action === 'work-order-proof' ? await getProof(body)
-                              : action === 'work-order-review' ? await reviewOrder(body)
+                              : action === 'work-order-review' ? await reviewOrder(body, auth.role === 'customer'
+                                ? {
+                                    reviewProvenance: {
+                                      binding: 'tenant_bound_customer_session',
+                                      customerAuthenticated: true,
+                                      authenticatedReviewerId: auth.operatorId,
+                                    },
+                                  }
+                                : {})
                                 : action === 'work-order-evaluate' ? await evaluateOrder(body)
                                   : await operationsReport(body)
+  if (auth.role === 'customer' && action === 'work-order-review' && result.ok) {
+    return {
+      status: 200,
+      json: {
+        ok: true,
+        mode: result.mode,
+        replayed: result.replayed === true,
+        review: customerReviewView(result.review),
+        workOrder: customerDeliveryView({ ...customerScopedOrder.workOrder, review: result.review }),
+      },
+    }
+  }
   return { status: statusFor(result), json: result }
 }
 
