@@ -25,9 +25,12 @@ assert.match(pages.status, /href="\/favicon\.svg"/)
 assert.match(favicon, /#07111f/i)
 assert.match(favicon, /#3B82F6/i)
 assert.doesNotMatch(favicon, banned)
-assert.match(pages.console, /function loadProtectedState\(\)/)
-assert.match(pages.console, /if\(!hasOpsKey\(\)\)\{renderLockedOverview\(\);return\}/)
-assert.doesNotMatch(pages.console, /refresh\(\);loadOverview\(\)\s*\n<\/script>/)
+assert.match(pages.console, /id="ownerGate"/)
+assert.match(pages.console, /id="consoleShell" hidden/)
+assert.match(pages.console, /async function loadProtectedState\(\)/)
+assert.match(pages.console, /async function validateOwnerAccess\(\)/)
+assert.match(pages.console, /\$\('#consoleShell'\)\.hidden=!unlocked/)
+assert.doesNotMatch(pages.console, /function renderLockedOverview/)
 
 console.log(
   JSON.stringify({
