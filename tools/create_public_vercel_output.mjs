@@ -835,7 +835,6 @@ const contactHtml = documentHtml({
   if(!form)return;
   var search=new URLSearchParams(window.location.search);
   var entryIntent=search.get('from')||'';
-  var agentIntent=entryIntent==='ai-agent-solution';
   var workspaceProduct=entryIntent==='shop-workspace'?'Shop':entryIntent==='plant-workspace'?'Plant':'';
   var privateSetupIntent=entryIntent==='homepage-private-setup';
   var submit=form.querySelector('[data-contact-submit]');
@@ -874,17 +873,7 @@ const contactHtml = documentHtml({
     set('referrer',document.referrer||'');
     ['utm_source','utm_medium','utm_campaign','utm_content','utm_term'].forEach(function(key){set(key,search.get(key)||'');});
   }
-  if(agentIntent){
-    form.dataset.intake='ai-agent-solution';
-    text('[data-contact-command]','>_ contact / start');
-    text('[data-contact-heading]','What do you want to improve?');
-    text('[data-contact-intro]','Tell us what repeats today and what a useful result looks like. We will reply with the clearest place to start.');
-    text('[data-contact-form-heading]','Start here');
-    text('[data-contact-goal-label]','What should work better?');
-    text('[data-contact-policy]','We start with one reviewed example. No account, data connection, or external action is made before you approve it.');
-    idleSubmitLabel='Contact us';
-    if(submit)submit.textContent=idleSubmitLabel;
-  }else if(workspaceProduct||privateSetupIntent){
+  if(workspaceProduct||privateSetupIntent){
     form.dataset.intake=workspaceProduct?entryIntent:'private-workspace';
     text('[data-contact-command]','>_ contact / workspace');
     if(workspaceProduct){

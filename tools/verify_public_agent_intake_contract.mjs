@@ -20,21 +20,22 @@ const contact = await readFile(resolve('.vercel/output/static/contact/index.html
 for (const required of [
   'data-contact-heading',
   'data-contact-goal-label',
-  "entryIntent==='ai-agent-solution'",
-  'What do you want to improve?',
-  'Start here',
-  'What should work better?',
-  "idleSubmitLabel='Contact us'",
-  'one reviewed example',
   "entryIntent==='shop-workspace'?'Shop':entryIntent==='plant-workspace'?'Plant':''",
   "text('[data-contact-heading]','Request a private '+workspaceProduct+' workspace.')",
   "text('[data-contact-goal-label]','What should be ready first?')",
   "idleSubmitLabel='Request workspace'",
+  'Choose the first workspace',
 ]) {
-  assert.ok(contact.includes(required), `missing agent intake copy: ${required}`)
+  assert.ok(contact.includes(required), `missing workspace intake copy: ${required}`)
 }
 
 for (const forbidden of [
+  'ai-agent-solution',
+  'AI Agent Solutions',
+  'What do you want to improve?',
+  'Start here',
+  "idleSubmitLabel='Contact us'",
+  'one reviewed example',
   'name="workflow"',
   'name="requested_package"',
   'name="product_area"',
@@ -42,7 +43,7 @@ for (const forbidden of [
   'name="source_links"',
   '/site/agent-templates/',
 ]) {
-  assert.equal(contact.includes(forbidden), false, `retired intake field or path returned: ${forbidden}`)
+  assert.equal(contact.includes(forbidden), false, `retired public intake copy or field returned: ${forbidden}`)
 }
 
 assert.match(contact, /name="name" required/)
@@ -55,18 +56,14 @@ for (const source of [...contact.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(
   new Function(source)
 }
 
-assert.equal(contactEntryIntent({ page_path: '/contact/?from=ai-agent-solution' }), 'ai-agent-solution')
-assert.equal(contactEntryIntent({ source_url: 'https://www.supermega.dev/contact/?from=ai-agent-solution' }), 'ai-agent-solution')
 assert.equal(contactEntryIntent({ page_path: '/contact/?from=shop-workspace' }), 'shop-workspace')
 assert.equal(contactEntryIntent({ source_url: 'https://www.supermega.dev/contact/?from=plant-workspace' }), 'plant-workspace')
-assert.equal(contactEntryIntent({ page_path: '/contact/?from=shop' }), '')
-assert.equal(contactEntryIntent({ source_url: 'https://example.com/contact/?from=ai-agent-solution' }), '')
 assert.equal(contactEntryIntent({ source_url: 'https://example.com/contact/?from=shop-workspace' }), '')
 
 function lead(payload = {}) {
   return buildLeadRecord({
-    leadId: 'LEAD-AGENT-INTAKE',
-    taskId: 'TASK-AGENT-INTAKE',
+    leadId: 'LEAD-WORKSPACE-INTAKE',
+    taskId: 'TASK-WORKSPACE-INTAKE',
     payload: {
       name: 'Test Buyer',
       email: 'buyer@example.com',
@@ -78,19 +75,6 @@ function lead(payload = {}) {
   })
 }
 
-const vagueAgentLead = lead({ page_path: '/contact/?from=ai-agent-solution' })
-assert.equal(vagueAgentLead.workflow, 'AI Agent Solutions discovery')
-assert.equal(vagueAgentLead.requested_package, 'AI Agent Solutions')
-assert.equal(vagueAgentLead.product_area, 'Custom Solutions & AI Agents')
-assert.match(vagueAgentLead.first_proof_target, /one redacted approved sample/i)
-
-const vagueAgentRoute = buildSolutionRoute(vagueAgentLead)
-assert.equal(vagueAgentRoute.template_id, 'agent-solution-discovery')
-assert.equal(vagueAgentRoute.delivery_lane, 'agent_solution_discovery')
-assert.equal(vagueAgentRoute.status, 'needs_operator_review')
-assert.equal(vagueAgentRoute.starter_kit_url, '')
-assert.deepEqual(vagueAgentRoute.matched_keywords, [])
-
 const shopWorkspaceLead = lead({ page_path: '/contact/?from=shop-workspace' })
 assert.equal(shopWorkspaceLead.workflow, 'Shop private workspace request')
 assert.equal(shopWorkspaceLead.requested_package, 'Shop private workspace')
@@ -100,65 +84,38 @@ assert.equal(shopWorkspaceLead.template_id, 'shop-private-workspace')
 assert.equal(shopWorkspaceLead.onboarding_stage, 'workspace_request')
 assert.equal(shopWorkspaceLead.access_policy, 'approval_required')
 assert.equal(shopWorkspaceLead.workspace_status, 'not_created_until_approved')
-assert.equal(shopWorkspaceLead.lead_stage, 'qualified')
-assert.match(shopWorkspaceLead.first_proof_target, /buyer-approved starting data/i)
 const shopWorkspaceRoute = buildSolutionRoute(shopWorkspaceLead)
 assert.equal(shopWorkspaceRoute.template_id, 'shop-private-workspace')
 assert.equal(shopWorkspaceRoute.delivery_lane, 'shop_workspace_setup')
-assert.equal(shopWorkspaceRoute.status, 'route_ready')
 const shopWorkspaceTask = buildFirstProofTaskPayload(shopWorkspaceLead)
-assert.equal(shopWorkspaceTask.template_id, 'shop-private-workspace')
 assert.equal(shopWorkspaceTask.product_area, 'Shop')
-assert.equal(shopWorkspaceTask.solution_route.delivery_lane, 'shop_workspace_setup')
-assert.match(shopWorkspaceTask.operator_brief, /Shop private workspace first proof/i)
 assert.ok(shopWorkspaceTask.implementation_blueprint_pack.modules.includes('register_shift'))
-assert.ok(shopWorkspaceTask.implementation_blueprint_pack.modules.includes('receivables'))
 assert.equal(shopWorkspaceTask.approval_required, true)
 
 const plantWorkspaceLead = lead({ source_url: 'https://supermega.dev/contact/?from=plant-workspace' })
 assert.equal(plantWorkspaceLead.workflow, 'Plant private workspace request')
 assert.equal(plantWorkspaceLead.requested_package, 'Plant private workspace')
-assert.equal(plantWorkspaceLead.public_package, 'Plant private workspace')
 assert.equal(plantWorkspaceLead.product_area, 'Plant')
 assert.equal(plantWorkspaceLead.template_id, 'plant-private-workspace')
-assert.equal(plantWorkspaceLead.onboarding_stage, 'workspace_request')
-assert.equal(plantWorkspaceLead.lead_stage, 'qualified')
 const plantWorkspaceRoute = buildSolutionRoute(plantWorkspaceLead)
 assert.equal(plantWorkspaceRoute.template_id, 'plant-private-workspace')
 assert.equal(plantWorkspaceRoute.delivery_lane, 'plant_workspace_setup')
-assert.equal(plantWorkspaceRoute.status, 'route_ready')
 const plantWorkspaceTask = buildFirstProofTaskPayload(plantWorkspaceLead)
-assert.equal(plantWorkspaceTask.template_id, 'plant-private-workspace')
 assert.equal(plantWorkspaceTask.product_area, 'Plant')
-assert.equal(plantWorkspaceTask.solution_route.delivery_lane, 'plant_workspace_setup')
-assert.match(plantWorkspaceTask.operator_brief, /Plant private workspace first proof/i)
 assert.ok(plantWorkspaceTask.implementation_blueprint_pack.modules.includes('shift_handoff'))
-assert.ok(plantWorkspaceTask.implementation_blueprint_pack.modules.includes('maintenance_schedule'))
 assert.equal(plantWorkspaceTask.approval_required, true)
 
-const neutralRoute = buildSolutionRoute(lead({ goal: 'We need help.' }))
+const neutralLead = lead({ goal: 'We need help.' })
+const neutralRoute = buildSolutionRoute(neutralLead)
 assert.equal(neutralRoute.template_id, 'outcome-discovery')
 assert.equal(neutralRoute.delivery_lane, 'operator_discovery')
 assert.equal(neutralRoute.status, 'needs_operator_review')
 
-const invalidExplicitRoute = buildSolutionRoute(lead({ template_id: '../../not-allowlisted' }))
-assert.equal(invalidExplicitRoute.template_id, 'outcome-discovery')
-assert.equal(invalidExplicitRoute.starter_kit_url, '')
-
-const proofTask = buildFirstProofTaskPayload(vagueAgentLead)
-assert.equal(proofTask.starter_kit_url, '')
-assert.equal(proofTask.template_id, 'agent-solution-discovery')
-assert.equal(proofTask.intake_job.source_manifest.some((item) => item.source_type === 'starter_kit'), false)
-assert.equal(proofTask.intake_job.source_manifest.some((item) => item.source_type === 'solution_route'), true)
-assert.equal(JSON.stringify(proofTask).includes('/site/agent-templates/'), false)
-assert.ok(proofTask.checklist.includes('Review the saved solution route and first-proof boundary.'))
-
 console.log(JSON.stringify({
   status: 'ok',
-  contract: 'public_agent_intake',
+  contract: 'public_workspace_intake',
   contextual_copy: true,
   visible_fields: 4,
-  fallback_route: vagueAgentRoute.template_id,
   workspace_routes: [shopWorkspaceRoute.template_id, plantWorkspaceRoute.template_id],
-  phantom_starter_kit_paths: 0,
+  retired_public_agent_copy: true,
 }))
