@@ -56,20 +56,21 @@ function verifySharedPage(html, label) {
 function verifyHome(html, label) {
   verifySharedPage(html, label)
   for (const required of [
-    '<title>supermega.dev | Run the shop. See the plant.</title>',
-    '<h1 id="portfolio-heading">Run the shop. See the plant. Fix the gaps.</h1>',
+    '<title>supermega.dev | Shop and Plant, ready for real work.</title>',
+    '<h1 id="portfolio-heading">Run the day. Keep the handoffs.</h1>',
     'href="/work/"',
-    '<h2 id="workspaces-heading">No software maze.</h2>',
+    '<h2 id="workspaces-heading">Start with the work that matters.</h2>',
     'Two working systems',
-    'AI helps draft, check, and surface next steps while approvals stay tied to the work behind them.',
+    'Built-in AI drafts, checks, and brings the next decision forward while approval stays with your team.',
     'data-product-preview',
     'href="/contact/?from=homepage-private-setup"',
     '>Private setup</a>',
     'src="/live-shop-workspace.png"',
     "src:'/live-plant-workspace.png'",
-    'srcset="/live-shop-mobile.png"',
-    "mobileSrc:'/live-plant-mobile.png'",
-    '<h2 id="brief-heading">Show us the broken handoff.</h2>',
+    'class="hero-product-picker"',
+    'data-product-preview-description',
+    '>Open Shop demo</a>',
+    '<h2 id="brief-heading">Bring us the handoff that still breaks.</h2>',
     '>Start with one workflow</a>',
   ]) {
     assert(html.includes(required), `${label}_missing_${required.slice(0, 32)}`)
