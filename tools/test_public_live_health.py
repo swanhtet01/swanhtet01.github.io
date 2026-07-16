@@ -36,21 +36,21 @@ def page(*tokens: str) -> str:
 
 def healthy_responses() -> dict[str, checker.HttpResult]:
     home = page(
-        "<title>supermega.dev | Operational software built to fit</title>",
-        '<h1 id="portfolio-heading">Operational software, built to fit.</h1>',
+        "<title>supermega.dev | Shop and Plant, ready for real work.</title>",
+        '<h1 id="portfolio-heading">Run the day. Keep the handoffs.</h1>',
         "https://app.supermega.dev/?demo=shop",
         "https://app.supermega.dev/?demo=plant",
         "/contact/",
-        "Start with working Shop or Plant software.",
-        "No account needed",
-        "Your private workspace is configured and verified before handover.",
-        "Tell us where the workflow breaks.",
-        "Describe your workflow",
+        "Shop and Plant, ready for real work.",
+        "Open Shop demo",
+        "No signup",
+        "Private setup",
+        "Bring us the handoff that still breaks.",
         "data-public-status",
     )
     contact = page(
         "<title>Contact | supermega.dev</title>",
-        "What needs to work better?",
+        "What should run better?",
         'action="/api/contact-submissions"',
         'name="name"',
         'name="email"',
@@ -102,9 +102,13 @@ def healthy_responses() -> dict[str, checker.HttpResult]:
     )
     console = page(
         "<title>SuperMega Operations</title>",
-        "Operations control room",
-        "<h1>Command center</h1>",
-        "Move client work from request to delegated agents, reviewed action, and proven delivery.",
+        "Private control plane",
+        '<h1 id="ownerGateTitle">Owner access</h1>',
+        "Shop and Plant users do not need this console.",
+        'id="consoleShell" hidden',
+        "async function validateOwnerAccess()",
+        "function setConsoleAccess(unlocked,message='')",
+        "if(!consoleAccessGranted||!CONSOLE_VIEWS.includes(view))return",
         'data-view="company"',
         'id="view-company"',
         "I reviewed this exact client, evidence, assignments, and budget",
@@ -114,7 +118,8 @@ def healthy_responses() -> dict[str, checker.HttpResult]:
         "api('POST','/api/agent-company',{action:'work-order-cancel'",
         "api('POST','/api/agent-company',{action:'work-order-evaluate'",
         "api('POST','/api/agent-company',{action:'work-order-proof'",
-        "api('POST','/api/agent-company',{action:'work-order-review'",
+        "async function recordCompanyWorkOrderReview(event,order)",
+        "action:'work-order-review'",
         "action:'operations-report'",
         "CANCEL AND SCRUB ${order.workOrderId} ${order.planHash}",
         "cancelled excluded from delivery metrics",
@@ -451,6 +456,17 @@ class PortfolioHealthTest(unittest.TestCase):
         report = self.run_report(responses)
         self.assertEqual(report["status"], "error")
         self.assertTrue(any(item["kind"] == "page" and item["url"] == BASE for item in report["failures"]))
+
+    def test_console_owner_gate_is_required(self):
+        responses = healthy_responses()
+        responses[CONSOLE] = result(
+            CONSOLE,
+            responses[CONSOLE].body.decode().replace('id="consoleShell" hidden', ""),
+        )
+        report = self.run_report(responses)
+        self.assertEqual(report["status"], "error")
+        failure = next(item for item in report["failures"] if item["kind"] == "agent_company_page")
+        self.assertIn('id="consoleShell" hidden', failure["missing"])
 
     def test_retired_product_name_fails_public_page(self):
         responses = healthy_responses()
