@@ -96,6 +96,9 @@ for (const forbidden of ['<figure class="site-hero-screen"', '<img src="/site/sh
 
 if (!contact.includes('.header-cta { display: none; }')) fail('contact_page_keeps_redundant_start_control')
 if (!contact.includes('<h1 data-contact-heading>What should run better?</h1>')) fail('contact_page_missing_direct_sales_prompt')
+for (const required of ['class="contact-next"', '<h2 id="contact-next-heading">What happens next</h2>', 'We read the handoff', 'We name the smallest next step', 'You approve before setup', 'No account, data connection, or external action starts without approval.']) {
+  if (!contact.includes(required)) fail('contact_page_missing_first_step_guidance', { required })
+}
 for (const forbidden of ['placeholder="Drive folder', 'placeholder="Example:', 'Role-aware onboarding', 'Device-aware onboarding', 'Adaptive setup plan', 'First proof planner']) {
   if (contact.includes(forbidden)) fail('contact_surface_is_not_blank_or_honest', { forbidden })
 }
