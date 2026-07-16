@@ -19,19 +19,18 @@
   "crons": [
     { "path": "/api/brief", "schedule": "30 1 * * *" }
   ],
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        { "key": "Content-Security-Policy", "value": "base-uri 'self'; frame-ancestors 'none'; object-src 'none'" },
-        { "key": "Permissions-Policy", "value": "camera=(), geolocation=(), microphone=(), payment=(), usb=()" },
-        { "key": "Referrer-Policy", "value": "no-referrer" },
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "X-Frame-Options", "value": "DENY" }
-      ]
-    }
-  ],
   "routes": [
+    {
+      "src": "/(.*)",
+      "headers": {
+        "Content-Security-Policy": "base-uri 'self'; frame-ancestors 'none'; object-src 'none'",
+        "Permissions-Policy": "camera=(), geolocation=(), microphone=(), payment=(), usb=()",
+        "Referrer-Policy": "no-referrer",
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY"
+      },
+      "continue": true
+    },
     { "src": "/api/stripe-webhook", "dest": "/api/stripe-webhook" },
     { "src": "/api/kbzpay-notify", "dest": "/api/kbzpay-notify" },
     { "src": "/api/wavepay-notify", "dest": "/api/wavepay-notify" },
