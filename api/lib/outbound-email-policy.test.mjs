@@ -42,3 +42,15 @@ test('every direct Resend sender checks the shared owner gate first', () => {
     assert.match(source, /getOutboundEmailPolicy\(\)/)
   }
 })
+
+test('public contact readiness does not depend on outbound email delivery', () => {
+  const source = readFileSync(new URL('../contact-submissions.js', import.meta.url), 'utf8')
+  const start = source.indexOf('function publicContactStatus()')
+  const end = source.indexOf('function contactDiagnostics()', start)
+  assert.ok(start >= 0 && end > start, 'public contact status function was not found')
+
+  const functionBody = source.slice(start, end)
+  assert.doesNotMatch(functionBody, /fallbackQueueStatus\(\)\.email_delivery/)
+  assert.match(functionBody, /leadLedgerStatus\(\) === 'configured'/)
+  assert.match(functionBody, /opsIntakeStatus\(\)\.status === 'ready'/)
+})

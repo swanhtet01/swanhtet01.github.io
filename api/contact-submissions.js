@@ -2251,10 +2251,12 @@ function opsIntakeRetryDelay() {
 }
 
 function publicContactStatus() {
+  // Intake remains available when its durable/operator handoffs are ready.
+  // Outbound email is an optional, owner-controlled notification effect and
+  // must never make the public capture route look unavailable.
   const ready = (
     leadLedgerStatus() === 'configured' &&
     pipelineActionStatus() === 'configured' &&
-    fallbackQueueStatus().email_delivery === 'configured' &&
     shopPipelineStatus().status === 'ready' &&
     opsIntakeStatus().status === 'ready'
   )
