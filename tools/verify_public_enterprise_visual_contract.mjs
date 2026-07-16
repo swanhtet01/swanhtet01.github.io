@@ -115,6 +115,17 @@ for (const required of [
   "text('[data-contact-heading]','Set up a private workspace.');",
   "text('[data-contact-form-heading]','Private setup');",
   "text('[data-contact-goal-label]','What should be ready first?');",
+  'class="contact-intro"',
+  'class="contact-support"',
+  'grid-template-areas: "intro form" "support form"',
+  'grid-template-areas: "intro" "form" "support"',
+  'data-workspace-choice',
+  'data-workspace-choice-button="shop"',
+  'data-workspace-choice-button="plant"',
+  'data-workspace-choice-button="guide"',
+  'Choose the first workspace',
+  'revealWorkspaceChoice(initialWorkspaceChoice);',
+  'normalizeWorkspaceGoal();',
 ]) {
   if (!contact.includes(required)) fail('contact_page_missing_private_setup_handoff', { required })
 }
