@@ -122,6 +122,8 @@ const pages = new Map([
   ['privacy/index.html', privacy],
   ['404.html', notFound],
 ])
+const shopStartHref = 'https://app.supermega.dev/?demo=shop&amp;returnTo=%2Fstart'
+const plantStartHref = 'https://app.supermega.dev/?demo=plant&amp;returnTo=%2Fstart'
 
 const retiredCatalogContent = [
   '>Products<',
@@ -153,6 +155,12 @@ for (const [relativePath, html] of pages) {
   for (const required of ['class="terminal-mark"', '<img src="/favicon.svg" alt="" width="64" height="64" />', 'backdrop-filter: blur(24px)', 'supermega<span class="domain">.dev</span>']) {
     if (!html.includes(required)) fail('public_page_missing_terminal_brand_contract', { relativePath, required })
   }
+  for (const required of [shopStartHref, plantStartHref]) {
+    if (!html.includes(required)) fail('public_page_missing_guided_start', { relativePath, required })
+  }
+  for (const forbidden of ['href="https://app.supermega.dev/?demo=shop"', 'href="https://app.supermega.dev/?demo=plant"']) {
+    if (html.includes(forbidden)) fail('public_page_contains_unguided_workspace_entry', { relativePath, forbidden })
+  }
   for (const forbidden of [...retiredCatalogContent, 'target="_blank"', 'target=_blank', 'window.open(']) {
     if (html.includes(forbidden)) fail('public_page_contains_retired_catalog_content', { relativePath, forbidden })
   }
@@ -162,8 +170,10 @@ for (const required of [
   '<title>supermega.dev | Run the shop. See the plant.</title>',
   '<h1 id="portfolio-heading">Run the shop. See the plant. Fix the gaps.</h1>',
   'href="/work/"',
-  'https://app.supermega.dev/?demo=shop',
-  'https://app.supermega.dev/?demo=plant',
+  shopStartHref,
+  plantStartHref,
+  "href:'https://app.supermega.dev/?demo=shop&returnTo=%2Fstart'",
+  "href:'https://app.supermega.dev/?demo=plant&returnTo=%2Fstart'",
   'operational software / live',
   'class="hero-lead">One place to run the day.</strong>',
   '<h2 id="workspaces-heading">No software maze.</h2>',
