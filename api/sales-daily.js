@@ -1,6 +1,7 @@
 const crypto = require('crypto')
 const datastore = require('./lib/supermega-datastore')
 const blobQueue = require('./lib/supermega-blob-queue')
+const { getOutboundEmailPolicy } = require('./lib/outbound-email-policy')
 
 const defaultNotifyEmail = 'swanhtet@supermega.dev'
 const defaultFrom = 'SuperMega Owner Brief <onboarding@supermega.dev>'
@@ -633,6 +634,8 @@ function emailHtml(run) {
 }
 
 async function sendBrief(run) {
+  const policy = getOutboundEmailPolicy()
+  if (!policy.allowed) return { status: 'skipped', reason: policy.reason }
   if (!envFlag('SUPERMEGA_SALES_DAILY_EMAIL_ENABLED', false)) {
     return { status: 'skipped', reason: 'sales_daily_email_disabled_by_default' }
   }
