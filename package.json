@@ -9,8 +9,9 @@
     "deploy:preview": "bash tools/deploy_preview.sh",
     "vercel:pull": "npx vercel pull --yes",
     "vercel:build": "npx vercel build --yes",
-    "vercel:deploy": "npx vercel deploy --prebuilt -y",
-    "vercel:deploy:prod": "npx vercel deploy --prebuilt --prod -y",
+    "vercel:deploy": "node tools/deny_stale_public_deploy.mjs",
+    "vercel:deploy:prod": "node tools/deny_stale_public_deploy.mjs",
+    "public:release:guard": "node tools/verify_public_deploy_guard.mjs",
     "smoke:local": "bash tools/run_local_smoke.sh",
     "smoke:public": "python3 tools/smoke_test_public_site.py"
   }

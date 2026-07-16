@@ -8,15 +8,25 @@ on:
       - main
     paths:
       - .github/workflows/supermega-public-live-health.yml
+      - .github/workflows/supermega-public-release.yml
+      - package.json
       - tools/check_public_live_health.py
+      - tools/deny_stale_public_deploy.mjs
+      - tools/deploy_website_actions.ps1
       - tools/test_public_live_health.py
+      - tools/verify_public_deploy_guard.mjs
   pull_request:
     branches:
       - main
     paths:
       - .github/workflows/supermega-public-live-health.yml
+      - .github/workflows/supermega-public-release.yml
+      - package.json
       - tools/check_public_live_health.py
+      - tools/deny_stale_public_deploy.mjs
+      - tools/deploy_website_actions.ps1
       - tools/test_public_live_health.py
+      - tools/verify_public_deploy_guard.mjs
   workflow_dispatch:
   schedule:
     # 08:15 Asia/Rangoon daily.
@@ -39,6 +49,12 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+
       - name: Fetch checker from the triggering commit
         env:
           SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -54,6 +70,37 @@ jobs:
             --retry 3 --retry-all-errors \
             "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${SOURCE_SHA}/tools/test_public_live_health.py" \
             --output "${RUNNER_TEMP}/test_public_live_health.py"
+
+          mkdir -p "${RUNNER_TEMP}/release-guard/.github/workflows" "${RUNNER_TEMP}/release-guard/tools"
+          curl --fail --silent --show-error --location \
+            --proto '=https' --proto-redir '=https' \
+            --retry 3 --retry-all-errors \
+            "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${SOURCE_SHA}/package.json" \
+            --output "${RUNNER_TEMP}/release-guard/package.json"
+          curl --fail --silent --show-error --location \
+            --proto '=https' --proto-redir '=https' \
+            --retry 3 --retry-all-errors \
+            "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${SOURCE_SHA}/.github/workflows/supermega-public-release.yml" \
+            --output "${RUNNER_TEMP}/release-guard/.github/workflows/supermega-public-release.yml"
+          curl --fail --silent --show-error --location \
+            --proto '=https' --proto-redir '=https' \
+            --retry 3 --retry-all-errors \
+            "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${SOURCE_SHA}/.github/workflows/supermega-public-live-health.yml" \
+            --output "${RUNNER_TEMP}/release-guard/.github/workflows/supermega-public-live-health.yml"
+          curl --fail --silent --show-error --location \
+            --proto '=https' --proto-redir '=https' \
+            --retry 3 --retry-all-errors \
+            "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${SOURCE_SHA}/tools/deploy_website_actions.ps1" \
+            --output "${RUNNER_TEMP}/release-guard/tools/deploy_website_actions.ps1"
+          curl --fail --silent --show-error --location \
+            --proto '=https' --proto-redir '=https' \
+            --retry 3 --retry-all-errors \
+            "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${SOURCE_SHA}/tools/verify_public_deploy_guard.mjs" \
+            --output "${RUNNER_TEMP}/release-guard/tools/verify_public_deploy_guard.mjs"
+
+      - name: Verify public release guard
+        working-directory: ${{ runner.temp }}/release-guard
+        run: node tools/verify_public_deploy_guard.mjs
 
       - name: Test portfolio health checker
         working-directory: ${{ runner.temp }}
