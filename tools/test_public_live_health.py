@@ -41,6 +41,7 @@ def healthy_responses() -> dict[str, checker.HttpResult]:
         "https://app.supermega.dev/?demo=shop",
         "https://app.supermega.dev/?demo=plant",
         "/contact/",
+        ">Talk to us</a>",
         "Shop and Plant, ready for real work.",
         "Open Shop demo",
         "No signup",
@@ -456,6 +457,14 @@ class PortfolioHealthTest(unittest.TestCase):
         report = self.run_report(responses)
         self.assertEqual(report["status"], "error")
         self.assertTrue(any(item["kind"] == "page" and item["url"] == BASE for item in report["failures"]))
+
+    def test_missing_public_contact_entry_fails_public_page(self):
+        responses = healthy_responses()
+        responses[BASE] = result(BASE, responses[BASE].body.decode().replace(">Talk to us</a>", ""))
+        report = self.run_report(responses)
+        self.assertEqual(report["status"], "error")
+        failure = next(item for item in report["failures"] if item["kind"] == "page" and item["url"] == BASE)
+        self.assertIn(">Talk to us</a>", failure["missing"])
 
     def test_console_owner_gate_is_required(self):
         responses = healthy_responses()
