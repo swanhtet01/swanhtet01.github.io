@@ -562,21 +562,26 @@ const workHtml = documentHtml({
   style: `
     .work-main { width: 100%; overflow: clip; }
     .work-hero { border-bottom: 1px solid var(--line); background: var(--surface); }
-    .work-hero-inner { width: min(100% - 48px, 1240px); margin-inline: auto; padding: 144px 0 76px; }
+    .work-hero-inner { width: min(100% - 48px, 1240px); margin-inline: auto; padding: 128px 0 70px; }
     .work-command { color: var(--accent); font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 12px; font-weight: 800; text-transform: uppercase; }
     .work-heading { display: grid; grid-template-columns: minmax(0, 1fr) minmax(340px, .62fr); align-items: end; gap: 72px; margin-top: 18px; }
     .work-heading h1 { max-width: 12ch; margin: 0; font-size: 58px; line-height: 1.02; letter-spacing: 0; }
     .work-heading p { max-width: 42ch; margin: 0; color: var(--muted); font-size: 18px; line-height: 1.6; }
     .work-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 30px; }
     .work-actions .btn { min-height: 50px; }
-    .work-signal { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 58px; border-block: 1px solid var(--line); }
-    .work-signal div { min-height: 86px; display: grid; align-content: center; gap: 4px; padding: 18px 24px 18px 0; }
-    .work-signal div + div { border-left: 1px solid var(--line); padding-left: 24px; }
-    .work-signal strong { font-size: 15px; }
-    .work-signal span { color: var(--muted); font-size: 13px; }
-    .work-heading > *, .work-signal { animation: work-in 640ms cubic-bezier(.2,.8,.2,1) both; }
+    .work-proof { width: min(100%, 980px); margin: 38px auto 0; overflow: hidden; border: 1px solid var(--line-strong); border-radius: 8px; background: #071524; box-shadow: inset 0 1px 0 var(--glass-highlight), var(--shadow-deep); }
+    .work-proof-toolbar { min-height: 54px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); padding: 6px 16px; background: var(--glass); box-shadow: inset 0 1px 0 var(--glass-highlight); backdrop-filter: blur(22px) saturate(135%); -webkit-backdrop-filter: blur(22px) saturate(135%); }
+    .work-proof-label { display: inline-flex; min-width: 0; align-items: center; gap: 9px; color: var(--muted); font-size: 12px; font-weight: 760; }
+    .work-proof-label::before { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--signal); box-shadow: 0 0 0 4px color-mix(in srgb, var(--signal) 16%, transparent); content: ""; }
+    .work-proof-toolbar a { display: inline-flex; min-height: 40px; align-items: center; color: var(--accent); font-size: 13px; font-weight: 780; text-decoration: none; }
+    .work-proof-toolbar a::after { margin-left: 6px; content: "->"; }
+    .work-proof-toolbar a:hover { color: var(--accent-strong); }
+    .work-proof-link { display: block; }
+    .work-proof picture { display: block; }
+    .work-proof img { display: block; width: 100%; height: auto; aspect-ratio: 10 / 3; object-fit: contain; object-position: top; }
+    .work-heading > *, .work-proof { animation: work-in 640ms cubic-bezier(.2,.8,.2,1) both; }
     .work-heading > :last-child { animation-delay: 100ms; }
-    .work-signal { animation-delay: 180ms; }
+    .work-proof { animation-delay: 180ms; }
     @keyframes work-in { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
 
     .case-band { border-bottom: 1px solid var(--line); padding: 84px 0 92px; }
@@ -619,13 +624,13 @@ const workHtml = documentHtml({
     }
     @media (max-width: 720px) {
       .work-hero-inner, .case-inner, .work-close-inner { width: min(100% - 32px, 1240px); }
-      .work-hero-inner { padding: 114px 0 58px; }
+      .work-hero-inner { padding: 104px 0 54px; }
       .work-heading h1 { font-size: 40px; }
       .work-heading p, .case-copy > p { font-size: 16px; }
       .work-actions .btn { flex: 1 1 140px; min-height: 46px; }
-      .work-signal { grid-template-columns: 1fr; margin-top: 40px; }
-      .work-signal div { min-height: 74px; padding: 16px 0; }
-      .work-signal div + div { border-top: 1px solid var(--line); border-left: 0; padding-left: 0; }
+      .work-proof { width: 100%; margin-top: 30px; }
+      .work-proof-toolbar { min-height: 52px; padding-inline: 12px; }
+      .work-proof img { width: min(100% - 28px, 320px); max-width: 320px; margin-inline: auto; aspect-ratio: 360 / 732; object-fit: contain; }
       .case-band { padding: 60px 0 66px; }
       .case-label h2 { font-size: 34px; }
       .case-copy { grid-template-columns: 1fr; gap: 28px; }
@@ -648,7 +653,10 @@ const workHtml = documentHtml({
         <p>Shop and Plant are working systems, not concept screens. Open them in the same tab, follow a real operating path, and decide whether the workflow earns a place in your business.</p>
       </div>
       <div class="work-actions"><a class="btn primary" href="${shopStartHref}">Try Shop live</a><a class="btn secondary" href="${plantStartHref}">Try Plant live</a></div>
-      <div class="work-signal" aria-label="Product availability"><div><strong>Working now</strong><span>Current Shop and Plant screens</span></div><div><strong>No account to try</strong><span>Explore before private setup</span></div><div><strong>Fits every screen</strong><span>Desktop, tablet, and mobile</span></div></div>
+      <div class="work-proof">
+        <div class="work-proof-toolbar"><span class="work-proof-label">Shop workspace / live</span><a href="${shopStartHref}" aria-label="Open the live Shop workspace">Open Shop</a></div>
+        <a class="work-proof-link" href="${shopStartHref}" aria-label="Open the live Shop workspace"><picture><source media="(max-width: 720px)" srcset="/live-shop-mobile.png" /><img src="/live-shop-workspace.png" alt="Current Shop workspace showing priority checks, sales, cash, customers, and stock" width="1600" height="480" fetchpriority="high" /></picture></a>
+      </div>
     </div>
   </section>
 

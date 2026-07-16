@@ -66,7 +66,10 @@ for (const required of [
 
 for (const required of [
   '<h1 id="work-heading">See the work before the pitch.</h1>',
-  'class="work-signal"',
+  'class="work-proof"',
+  'class="work-proof-toolbar"',
+  'aria-label="Open the live Shop workspace"',
+  'fetchpriority="high"',
   'class="case-band"',
   'class="case-band alt"',
   '<h2 id="shop-case-heading">Keep the day together.</h2>',
