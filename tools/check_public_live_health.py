@@ -140,7 +140,7 @@ def run(
     console_url = console_url.rstrip("/") + "/"
     failures: list[dict[str, Any]] = []
     results: list[dict[str, Any]] = []
-    agent_intake_url = urljoin(base_url, "contact/?from=ai-agent-solution")
+    retired_agent_intake_url = urljoin(base_url, "contact/?from=ai-agent-solution")
     workspace_intake_kinds = {
         urljoin(base_url, "contact/?from=shop-workspace"): "shop_workspace_intake_page",
         urljoin(base_url, "contact/?from=plant-workspace"): "plant_workspace_intake_page",
@@ -195,19 +195,16 @@ def run(
             ],
         ),
         (
-            agent_intake_url,
+            retired_agent_intake_url,
             [
-                "entryIntent==='ai-agent-solution'",
-                "What do you want to improve?",
-                "Start here",
-                "What should work better?",
-                "idleSubmitLabel='Contact us'",
-                "one reviewed example",
+                "<title>Contact | supermega.dev</title>",
+                "What should run better?",
                 'action="/api/contact-submissions"',
                 'name="name"',
                 'name="email"',
                 'name="company"',
                 'name="goal"',
+                "No account or data connection is made before you approve it.",
             ],
         ),
         *[
@@ -250,10 +247,16 @@ def run(
                 "Create a workspace only when you want to keep your work and use it across devices.",
                 "Create with email and password. Return with your password or an email code.",
             ]
-        elif url == agent_intake_url or url in workspace_intake_kinds:
+        elif url == retired_agent_intake_url or url in workspace_intake_kinds:
             forbidden = [
                 "MegaOS",
                 "DeskPOS",
+                "AI Agent Solutions",
+                "Build an agent solution",
+                "What do you want to improve?",
+                "Start here",
+                "one reviewed example",
+                "idleSubmitLabel='Contact us'",
                 'name="workflow"',
                 'name="requested_package"',
                 'name="product_area"',
@@ -265,7 +268,7 @@ def run(
         else:
             forbidden = []
         unexpected = [token for token in forbidden if token in body]
-        kind = "agent_intake_page" if url == agent_intake_url else workspace_intake_kinds.get(url, "page")
+        kind = "retired_agent_intake_page" if url == retired_agent_intake_url else workspace_intake_kinds.get(url, "page")
         result = {
             "kind": kind,
             "url": url,
@@ -689,8 +692,6 @@ def run(
         "portfolio.demos.shop.route": "/home",
         "portfolio.demos.plant.entry": "/?demo=plant",
         "portfolio.demos.plant.route": "/factory",
-        "portfolio.agentSolutions.intake": "https://supermega.dev/contact/?from=ai-agent-solution",
-        "portfolio.agentSolutions.externalActions": "approval-gated",
         "proof.workingDemos": True,
         "proof.productionCloudDurability": "not-asserted",
         "proof.realCustomerAcceptance": "not-asserted",
@@ -700,6 +701,9 @@ def run(
         for path, expected in expected_app_health.items()
         if nested_value(app_health_payload, path) != expected
     }
+    for path in ["portfolio.agentSolutions"]:
+        if nested_value(app_health_payload, path) is not None:
+            app_health_mismatches[path] = {"expected": "absent", "actual": nested_value(app_health_payload, path)}
     app_health_result = {
         "kind": "app_health",
         "url": app_health_url,
