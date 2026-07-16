@@ -681,6 +681,9 @@ const contactHtml = documentHtml({
     .header-cta { display: none; }
     .contact-main { width: min(100% - 48px, 1240px); margin-inline: auto; display: grid; grid-template-columns: minmax(0, .78fr) minmax(420px, 1.22fr); gap: 84px; align-items: start; padding: 142px 0 94px; }
     .contact-copy { padding-top: 26px; }
+    .contact-copy, .contact-form { animation: contact-in 620ms cubic-bezier(.2,.8,.2,1) both; }
+    .contact-form { animation-delay: 110ms; }
+    @keyframes contact-in { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
     .contact-command { color: var(--accent); font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 14px; font-weight: 800; }
     .contact-copy h1 { max-width: 11ch; margin: 16px 0 20px; font-size: 54px; line-height: 1.04; letter-spacing: 0; }
     .contact-copy > p { max-width: 37ch; margin: 0; color: var(--muted); font-size: 18px; line-height: 1.58; }
@@ -688,6 +691,14 @@ const contactHtml = documentHtml({
     .contact-direct a { min-height: 56px; display: grid; grid-template-columns: 76px 1fr auto; align-items: center; gap: 14px; border-top: 1px solid var(--line); color: var(--ink); font-size: 14px; text-decoration: none; }
     .contact-direct a span:first-child { color: var(--quiet); font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 11px; text-transform: uppercase; }
     .contact-direct a span:last-child { color: var(--accent); }
+    .contact-next { margin-top: 32px; border-top: 1px solid var(--line); }
+    .contact-next h2 { margin: 0; padding: 20px 0 12px; color: var(--ink); font-size: 14px; line-height: 1.25; }
+    .contact-next-list { list-style: none; margin: 0; padding: 0; border-bottom: 1px solid var(--line); }
+    .contact-next-item { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 12px; padding: 15px 0; }
+    .contact-next-item + .contact-next-item { border-top: 1px solid var(--line); }
+    .contact-next-index { color: var(--accent); font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 11px; font-weight: 800; }
+    .contact-next-item strong { display: block; color: var(--ink); font-size: 14px; line-height: 1.35; }
+    .contact-next-item p { max-width: 35ch; margin: 4px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
     .contact-form { display: grid; gap: 20px; border: 1px solid var(--line); border-radius: 8px; padding: 32px; background: var(--glass); box-shadow: var(--shadow); backdrop-filter: blur(24px) saturate(130%); -webkit-backdrop-filter: blur(24px) saturate(130%); }
     .contact-form-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
     .contact-form h2 { margin: 0; font-size: 20px; line-height: 1.2; }
@@ -703,7 +714,7 @@ const contactHtml = documentHtml({
     .contact-policy, .form-status { margin: 0; color: var(--muted); font-size: 13px; font-weight: 650; line-height: 1.5; }
     .form-status { min-height: 1.5em; }
     @media (max-width: 900px) { .contact-main { grid-template-columns: 1fr; gap: 40px; } .contact-copy { max-width: 720px; padding-top: 0; } }
-    @media (max-width: 720px) { .contact-main { width: min(100% - 32px, 1240px); padding: 112px 0 64px; } .contact-copy h1 { max-width: 10ch; font-size: 40px; } .contact-copy > p { font-size: 16px; } .contact-form { padding: 20px; } .field-grid { grid-template-columns: 1fr; } .field-grid label.wide { grid-column: auto; } }
+    @media (max-width: 720px) { .contact-main { width: min(100% - 32px, 1240px); padding: 112px 0 64px; } .contact-copy h1 { max-width: 10ch; font-size: 40px; } .contact-copy > p { font-size: 16px; } .contact-next { margin-top: 28px; } .contact-form { padding: 20px; } .field-grid { grid-template-columns: 1fr; } .field-grid label.wide { grid-column: auto; } }
   `,
   content: `<main class="contact-main">
   <section class="contact-copy" aria-label="Contact SuperMega">
@@ -715,6 +726,14 @@ const contactHtml = documentHtml({
       <a href="mailto:swanhtet@supermega.dev"><span>Email</span><strong>swanhtet@supermega.dev</strong><span aria-hidden="true">&#8594;</span></a>
       <a href="tel:+9595000721"><span>Phone</span><strong>+95 9 500 0721</strong><span aria-hidden="true">&#8594;</span></a>
     </div>
+    <section class="contact-next" aria-labelledby="contact-next-heading">
+      <h2 id="contact-next-heading">What happens next</h2>
+      <ol class="contact-next-list">
+        <li class="contact-next-item"><span class="contact-next-index">01</span><div><strong>We read the handoff</strong><p>A short note, screen, or repeat task is enough to understand the constraint.</p></div></li>
+        <li class="contact-next-item"><span class="contact-next-index">02</span><div><strong>We name the smallest next step</strong><p>That can be a live Shop or Plant path, or a scoped workflow worth proving.</p></div></li>
+        <li class="contact-next-item"><span class="contact-next-index">03</span><div><strong>You approve before setup</strong><p>No account, data connection, or external action starts without approval.</p></div></li>
+      </ol>
+    </section>
   </section>
   <form class="contact-form" action="/api/contact-submissions" data-sm-contact-form method="post">
     <input type="hidden" name="source_url" value="https://supermega.dev/contact/" />

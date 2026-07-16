@@ -242,6 +242,9 @@ for (const forbidden of ['https://demo.supermega.dev/', 'The intelligent workspa
 for (const required of ['<h1 data-contact-heading>What should run better?</h1>', 'action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="goal"', 'No account or data connection is made before you approve it.']) {
   if (!contact.includes(required)) fail('contact_surface_contract_missing', { required })
 }
+for (const required of ['class="contact-next"', '<h2 id="contact-next-heading">What happens next</h2>', 'We read the handoff', 'We name the smallest next step', 'You approve before setup', 'No account, data connection, or external action starts without approval.']) {
+  if (!contact.includes(required)) fail('contact_surface_missing_first_step_guidance', { required })
+}
 for (const forbidden of ['placeholder="Drive folder', 'placeholder="Example:', 'Upload files', 'Source link or system', 'custom AI worker', 'name="workflow"', 'name="first_output"', 'name="requested_package"', 'name="product_area"', 'General enquiry']) {
   if (contact.includes(forbidden)) fail('contact_surface_keeps_retired_intake', { forbidden })
 }
