@@ -731,15 +731,16 @@ const contactHtml = documentHtml({
   canonical: 'https://supermega.dev/contact/',
   style: `
     .header-cta { display: none; }
-    .contact-main { width: min(100% - 48px, 1240px); margin-inline: auto; display: grid; grid-template-columns: minmax(0, .78fr) minmax(420px, 1.22fr); gap: 84px; align-items: start; padding: 142px 0 94px; }
-    .contact-copy { padding-top: 26px; }
-    .contact-copy, .contact-form { animation: contact-in 620ms cubic-bezier(.2,.8,.2,1) both; }
+    .contact-main { width: min(100% - 48px, 1240px); margin-inline: auto; display: grid; grid-template-areas: "intro form" "support form"; grid-template-columns: minmax(0, .78fr) minmax(420px, 1.22fr); grid-template-rows: auto 1fr; column-gap: 84px; row-gap: 40px; align-items: start; padding: 142px 0 94px; }
+    .contact-intro { grid-area: intro; padding-top: 26px; }
+    .contact-support { grid-area: support; }
+    .contact-intro, .contact-support, .contact-form { animation: contact-in 620ms cubic-bezier(.2,.8,.2,1) both; }
     .contact-form { animation-delay: 110ms; }
     @keyframes contact-in { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
     .contact-command { color: var(--accent); font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 14px; font-weight: 800; }
-    .contact-copy h1 { max-width: 11ch; margin: 16px 0 20px; font-size: 54px; line-height: 1.04; letter-spacing: 0; }
-    .contact-copy > p { max-width: 37ch; margin: 0; color: var(--muted); font-size: 18px; line-height: 1.58; }
-    .contact-direct { margin-top: 40px; border-bottom: 1px solid var(--line); }
+    .contact-intro h1 { max-width: 11ch; margin: 16px 0 20px; font-size: 54px; line-height: 1.04; letter-spacing: 0; }
+    .contact-intro > p { max-width: 37ch; margin: 0; color: var(--muted); font-size: 18px; line-height: 1.58; }
+    .contact-direct { border-bottom: 1px solid var(--line); }
     .contact-direct a { min-height: 56px; display: grid; grid-template-columns: 76px 1fr auto; align-items: center; gap: 14px; border-top: 1px solid var(--line); color: var(--ink); font-size: 14px; text-decoration: none; }
     .contact-direct a span:first-child { color: var(--quiet); font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 11px; text-transform: uppercase; }
     .contact-direct a span:last-child { color: var(--accent); }
@@ -751,11 +752,21 @@ const contactHtml = documentHtml({
     .contact-next-index { color: var(--accent); font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 11px; font-weight: 800; }
     .contact-next-item strong { display: block; color: var(--ink); font-size: 14px; line-height: 1.35; }
     .contact-next-item p { max-width: 35ch; margin: 4px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
-    .contact-form { display: grid; gap: 20px; border: 1px solid var(--line); border-radius: 8px; padding: 32px; background: var(--glass); box-shadow: var(--shadow); backdrop-filter: blur(24px) saturate(130%); -webkit-backdrop-filter: blur(24px) saturate(130%); }
+    .contact-form { grid-area: form; display: grid; gap: 20px; border: 1px solid var(--line); border-radius: 8px; padding: 32px; background: var(--glass); box-shadow: var(--shadow); backdrop-filter: blur(24px) saturate(130%); -webkit-backdrop-filter: blur(24px) saturate(130%); }
     .contact-form-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
     .contact-form h2 { margin: 0; font-size: 20px; line-height: 1.2; }
     .form-ready { display: inline-flex; align-items: center; gap: 7px; color: var(--signal); font-size: 12px; font-weight: 760; }
     .form-ready::before { width: 8px; height: 8px; border-radius: 50%; background: var(--signal); content: ""; }
+    .contact-product-choice { min-inline-size: 0; margin: 0; border: 0; padding: 0; }
+    .contact-product-choice[hidden] { display: none; }
+    .contact-product-choice legend { margin: 0 0 10px; padding: 0; color: var(--muted); font-size: 12px; font-weight: 780; letter-spacing: 0; text-transform: uppercase; }
+    .workspace-choice { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: inset 0 1px 0 var(--glass-highlight); }
+    .workspace-choice button { min-height: 68px; display: flex; flex-direction: column; justify-content: center; gap: 4px; border: 0; padding: 10px 12px; background: transparent; color: var(--muted); font: inherit; text-align: left; cursor: pointer; transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease; }
+    .workspace-choice button + button { border-left: 1px solid var(--line); }
+    .workspace-choice button[aria-pressed="true"] { background: var(--surface-strong); color: var(--ink); box-shadow: inset 0 1px 0 var(--glass-highlight), 0 8px 22px rgba(3, 8, 18, 0.08); }
+    .workspace-choice strong { font-size: 14px; line-height: 1.2; }
+    .workspace-choice span { color: var(--quiet); font-size: 11px; font-weight: 650; line-height: 1.3; }
+    .workspace-choice button[aria-pressed="true"] span { color: var(--muted); }
     .field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
     .field-grid label { display: grid; gap: 8px; color: var(--muted); font-size: 12px; font-weight: 780; letter-spacing: 0; text-transform: uppercase; }
     .field-grid label.wide { grid-column: 1 / -1; }
@@ -765,14 +776,45 @@ const contactHtml = documentHtml({
     .contact-form button { min-height: 50px; justify-content: center; }
     .contact-policy, .form-status { margin: 0; color: var(--muted); font-size: 13px; font-weight: 650; line-height: 1.5; }
     .form-status { min-height: 1.5em; }
-    @media (max-width: 900px) { .contact-main { grid-template-columns: 1fr; gap: 40px; } .contact-copy { max-width: 720px; padding-top: 0; } }
-    @media (max-width: 720px) { .contact-main { width: min(100% - 32px, 1240px); padding: 112px 0 64px; } .contact-copy h1 { max-width: 10ch; font-size: 40px; } .contact-copy > p { font-size: 16px; } .contact-next { margin-top: 28px; } .contact-form { padding: 20px; } .field-grid { grid-template-columns: 1fr; } .field-grid label.wide { grid-column: auto; } }
+    @media (max-width: 900px) { .contact-main { grid-template-areas: "intro" "form" "support"; grid-template-columns: 1fr; grid-template-rows: auto; row-gap: 36px; } .contact-intro { max-width: 720px; padding-top: 0; } .contact-form { width: 100%; } .contact-support { width: 100%; max-width: 720px; } }
+    @media (max-width: 720px) { .contact-main { width: min(100% - 32px, 1240px); row-gap: 30px; padding: 112px 0 64px; } .contact-intro h1 { max-width: 10ch; font-size: 40px; } .contact-intro > p { font-size: 16px; } .contact-next { margin-top: 28px; } .contact-form { padding: 20px; } .workspace-choice button { min-height: 64px; padding-inline: 10px; } .workspace-choice strong { font-size: 13px; } .workspace-choice span { font-size: 10px; } .field-grid { grid-template-columns: 1fr; } .field-grid label.wide { grid-column: auto; } }
   `,
   content: `<main class="contact-main">
-  <section class="contact-copy" aria-label="Contact SuperMega">
+  <section class="contact-intro" aria-label="Contact SuperMega">
     <div class="contact-command" data-contact-command>&gt;_ direct / contact</div>
     <h1 data-contact-heading>What should run better?</h1>
     <p data-contact-intro>Send one real example. We will reply with the clearest next step, not a generic demo.</p>
+  </section>
+  <form class="contact-form" action="/api/contact-submissions" data-sm-contact-form method="post">
+    <input type="hidden" name="source_url" value="https://supermega.dev/contact/" />
+    <input type="hidden" name="page_path" value="/contact/" />
+    <input type="hidden" name="referrer" value="" />
+    <input type="hidden" name="utm_source" value="" />
+    <input type="hidden" name="utm_medium" value="" />
+    <input type="hidden" name="utm_campaign" value="" />
+    <input type="hidden" name="utm_content" value="" />
+    <input type="hidden" name="utm_term" value="" />
+    <div class="contact-form-header"><h2 data-contact-form-heading>Send a request</h2><span class="form-ready">Ready</span></div>
+    <fieldset class="contact-product-choice" data-workspace-choice hidden>
+      <legend>Choose the first workspace</legend>
+      <div class="workspace-choice" role="group" aria-label="Choose the first workspace">
+        <button type="button" data-workspace-choice-button="shop" aria-pressed="false"><strong>Shop</strong><span>Sales and close</span></button>
+        <button type="button" data-workspace-choice-button="plant" aria-pressed="false"><strong>Plant</strong><span>Floor and handoff</span></button>
+        <button type="button" data-workspace-choice-button="guide" aria-pressed="false"><strong>Guide me</strong><span>We will help choose</span></button>
+      </div>
+    </fieldset>
+    <div class="field-grid">
+      <label>Name<input autocomplete="name" name="name" required /></label>
+      <label>Work email<input autocomplete="email" name="email" required type="email" /></label>
+      <label class="wide">Company<input autocomplete="organization" name="company" required /></label>
+      <label class="wide"><span data-contact-goal-label>What do you need?</span><textarea name="goal" required></textarea></label>
+    </div>
+    <input autocomplete="off" name="website" style="display:none" tabindex="-1" />
+    <button class="btn primary" type="submit" data-contact-submit>Send request</button>
+    <p class="contact-policy" data-contact-policy>We use this note to recommend the clearest next step. No account or data connection is made before you approve it.</p>
+    <p class="form-status" data-contact-status aria-live="polite"></p>
+  </form>
+  <section class="contact-support" aria-labelledby="contact-next-heading">
     <div class="contact-direct" aria-label="Direct contact options">
       <a href="viber://chat?number=%2B9595000721"><span>Viber</span><strong>Chat directly</strong><span aria-hidden="true">&#8599;</span></a>
       <a href="mailto:swanhtet@supermega.dev"><span>Email</span><strong>swanhtet@supermega.dev</strong><span aria-hidden="true">&#8594;</span></a>
@@ -787,27 +829,6 @@ const contactHtml = documentHtml({
       </ol>
     </section>
   </section>
-  <form class="contact-form" action="/api/contact-submissions" data-sm-contact-form method="post">
-    <input type="hidden" name="source_url" value="https://supermega.dev/contact/" />
-    <input type="hidden" name="page_path" value="/contact/" />
-    <input type="hidden" name="referrer" value="" />
-    <input type="hidden" name="utm_source" value="" />
-    <input type="hidden" name="utm_medium" value="" />
-    <input type="hidden" name="utm_campaign" value="" />
-    <input type="hidden" name="utm_content" value="" />
-    <input type="hidden" name="utm_term" value="" />
-    <div class="contact-form-header"><h2 data-contact-form-heading>Send a request</h2><span class="form-ready">Ready</span></div>
-    <div class="field-grid">
-      <label>Name<input autocomplete="name" name="name" required /></label>
-      <label>Work email<input autocomplete="email" name="email" required type="email" /></label>
-      <label class="wide">Company<input autocomplete="organization" name="company" required /></label>
-      <label class="wide"><span data-contact-goal-label>What do you need?</span><textarea name="goal" required></textarea></label>
-    </div>
-    <input autocomplete="off" name="website" style="display:none" tabindex="-1" />
-    <button class="btn primary" type="submit" data-contact-submit>Send request</button>
-    <p class="contact-policy" data-contact-policy>We use this note to recommend the clearest next step. No account or data connection is made before you approve it.</p>
-    <p class="form-status" data-contact-status aria-live="polite"></p>
-  </form>
 </main>
 <script>(function(){
   var form=document.querySelector('[data-sm-contact-form]');
@@ -818,9 +839,35 @@ const contactHtml = documentHtml({
   var workspaceProduct=entryIntent==='shop-workspace'?'Shop':entryIntent==='plant-workspace'?'Plant':'';
   var privateSetupIntent=entryIntent==='homepage-private-setup';
   var submit=form.querySelector('[data-contact-submit]');
+  var goal=form.querySelector('[name="goal"]');
+  var workspaceChoice=form.querySelector('[data-workspace-choice]');
+  var workspaceChoiceButtons=Array.prototype.slice.call(form.querySelectorAll('[data-workspace-choice-button]'));
+  var workspaceFocus='';
+  var initialWorkspaceChoice=workspaceProduct?workspaceProduct.toLowerCase():'';
   var idleSubmitLabel='Send request';
   function text(selector,value){var element=document.querySelector(selector);if(element)element.textContent=value;}
   function set(name,value){var input=form.querySelector('[name="'+name+'"]');if(input)input.value=value||'';}
+  function chooseWorkspace(value,focusGoal){
+    workspaceFocus=value||'';
+    workspaceChoiceButtons.forEach(function(button){button.setAttribute('aria-pressed',String(button.getAttribute('data-workspace-choice-button')===workspaceFocus));});
+    if(workspaceFocus==='shop')text('[data-contact-goal-label]','What should Shop be ready for?');
+    else if(workspaceFocus==='plant')text('[data-contact-goal-label]','What should Plant be ready for?');
+    else if(workspaceFocus==='guide')text('[data-contact-goal-label]','What repeats or breaks today?');
+    else text('[data-contact-goal-label]','What should be ready first?');
+    if(focusGoal&&goal)goal.focus();
+  }
+  function revealWorkspaceChoice(defaultValue){
+    if(!workspaceChoice)return;
+    workspaceChoice.hidden=false;
+    chooseWorkspace(defaultValue||'',false);
+  }
+  function normalizeWorkspaceGoal(){
+    if(!goal||!goal.value.trim()||(workspaceFocus!=='shop'&&workspaceFocus!=='plant'))return;
+    var product=workspaceFocus==='shop'?'Shop':'Plant';
+    var value=goal.value.trim();
+    if(value.slice(0,product.length+2)!==product+': ')goal.value=product+': '+value;
+  }
+  workspaceChoiceButtons.forEach(function(button){button.addEventListener('click',function(){chooseWorkspace(button.getAttribute('data-workspace-choice-button'),true);});});
   function hydrateTracking(){
     set('source_url',window.location.href);
     set('page_path',window.location.pathname+window.location.search);
@@ -853,6 +900,7 @@ const contactHtml = documentHtml({
     text('[data-contact-policy]','Sending this request does not create an account or connect data. Setup begins only after scope approval.');
     idleSubmitLabel='Request workspace';
     if(submit)submit.textContent=idleSubmitLabel;
+    revealWorkspaceChoice(initialWorkspaceChoice);
   }
   hydrateTracking();
   var status=form.querySelector('[data-contact-status]');
@@ -860,6 +908,7 @@ const contactHtml = documentHtml({
     event.preventDefault();
     var honeypot=form.querySelector('[name="website"]');
     if(honeypot&&honeypot.value)return;
+    normalizeWorkspaceGoal();
     if(status)status.textContent='Sending...';
     if(submit){submit.disabled=true;submit.textContent='Sending...';}
     try{
@@ -869,6 +918,7 @@ const contactHtml = documentHtml({
       if(status)status.textContent='Request sent.';
       form.reset();
       hydrateTracking();
+      if(workspaceChoice&&!workspaceChoice.hidden)chooseWorkspace(initialWorkspaceChoice,false);
     }catch(error){
       if(status)status.textContent='Could not send here. Email swanhtet@supermega.dev.';
     }finally{

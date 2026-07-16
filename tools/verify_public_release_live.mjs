@@ -110,7 +110,7 @@ function verifyWork(html) {
 
 function verifyContact(html) {
   verifySharedPage(html, 'contact')
-  for (const required of ['What should run better?', 'action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="goal"']) {
+  for (const required of ['What should run better?', 'action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="goal"', 'class="contact-intro"', 'class="contact-support"', 'grid-template-areas: "intro form" "support form"', 'grid-template-areas: "intro" "form" "support"', 'data-workspace-choice', 'data-workspace-choice-button="shop"', 'data-workspace-choice-button="plant"', 'data-workspace-choice-button="guide"', 'Choose the first workspace', 'revealWorkspaceChoice(initialWorkspaceChoice);', 'normalizeWorkspaceGoal();']) {
     assert(html.includes(required), `contact_missing_${required.slice(0, 32)}`)
   }
 }

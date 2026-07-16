@@ -250,7 +250,7 @@ for (const forbidden of ['https://demo.supermega.dev/', 'The intelligent workspa
   if (home.includes(forbidden)) fail('homepage_keeps_superseded_portfolio_copy', { forbidden })
 }
 
-for (const required of ['<h1 data-contact-heading>What should run better?</h1>', 'action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="goal"', 'No account or data connection is made before you approve it.']) {
+for (const required of ['<h1 data-contact-heading>What should run better?</h1>', 'action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="goal"', 'No account or data connection is made before you approve it.', 'class="contact-intro"', 'class="contact-support"', 'grid-template-areas: "intro form" "support form"', 'grid-template-areas: "intro" "form" "support"', 'data-workspace-choice', 'data-workspace-choice-button="shop"', 'data-workspace-choice-button="plant"', 'data-workspace-choice-button="guide"', 'Choose the first workspace', 'revealWorkspaceChoice(initialWorkspaceChoice);', 'normalizeWorkspaceGoal();']) {
   if (!contact.includes(required)) fail('contact_surface_contract_missing', { required })
 }
 for (const required of ['class="contact-next"', '<h2 id="contact-next-heading">What happens next</h2>', 'We read the handoff', 'We name the smallest next step', 'You approve before setup', 'No account, data connection, or external action starts without approval.']) {
