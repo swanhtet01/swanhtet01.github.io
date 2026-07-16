@@ -18,7 +18,7 @@ import {
 
 export const COMPANY_SESSION_COOKIE = '__Host-supermega_company_session'
 export const COMPANY_REQUEST_HEADER = 'x-supermega-company-request'
-export const COMPANY_OPERATOR_ROLES = Object.freeze(['operator', 'reviewer', 'viewer'])
+export const COMPANY_OPERATOR_ROLES = Object.freeze(['operator', 'reviewer', 'viewer', 'customer'])
 export const DEFAULT_SIGN_IN_CODE_MINUTES = 15
 export const MAX_SIGN_IN_CODE_MINUTES = 60
 export const DEFAULT_OPERATOR_SESSION_HOURS = 8
@@ -29,7 +29,7 @@ const CLIENT_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/
 const OPERATOR_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:@+-]{0,79}$/
 const SESSION_TOKEN_RE = /^[A-Za-z0-9_-]{43}$/
 const SHA256_RE = /^[a-f0-9]{64}$/
-const ISSUE_FIELDS = new Set(['clientId', 'operatorId', 'role', 'expiresInMinutes', 'sessionHours'])
+const ISSUE_FIELDS = new Set(['clientId', 'operatorId', 'role', 'expiresInMinutes', 'sessionHours', 'scope'])
 const EXCHANGE_FIELDS = new Set(['code'])
 const SESSION_FIELDS = new Set(['token'])
 const ACCESS_LIST_FIELDS = new Set(['clientId'])
@@ -40,6 +40,8 @@ const INVITE_KEY_PREFIX = 'agent-company-sign-in-code:'
 const SESSION_KEY_PREFIX = 'agent-company-operator-session:'
 const CODE_ACCESS_ID_RE = /^company-code:[a-f0-9]{40}$/
 const SESSION_ACCESS_ID_RE = /^company-session:[a-f0-9]{40}$/
+const CUSTOMER_REVIEW_SCOPE_KIND = 'work_order_review'
+const WORK_ORDER_ID_RE = /^company-order:[a-f0-9]{40}$/
 
 const VIEWER_ACTIONS = Object.freeze([
   'mission-get',
@@ -57,7 +59,12 @@ const REVIEWER_ACTIONS = Object.freeze([
   'work-order-evaluate',
   'work-order-review',
 ])
+const CUSTOMER_ACTIONS = Object.freeze([
+  'work-order-get',
+  'work-order-review',
+])
 const ROLE_ACTIONS = Object.freeze({
+  customer: new Set(CUSTOMER_ACTIONS),
   reviewer: new Set(REVIEWER_ACTIONS),
   viewer: new Set(VIEWER_ACTIONS),
 })
@@ -122,6 +129,34 @@ function safeEqual(left, right) {
   return timingSafeEqual(leftHash, rightHash)
 }
 
+function normalizeCustomerScope(value) {
+  if (!isRecord(value)) return failure('company_customer_scope_required')
+  const fields = Object.keys(value).sort()
+  if (fields.length !== 3 || fields.join(',') !== 'kind,resultHash,workOrderId') {
+    return failure('company_customer_scope_invalid')
+  }
+  const kind = String(value.kind || '').trim()
+  const workOrderId = String(value.workOrderId || '').trim()
+  const resultHash = String(value.resultHash || '').trim()
+  if (kind !== CUSTOMER_REVIEW_SCOPE_KIND
+    || !WORK_ORDER_ID_RE.test(workOrderId)
+    || !SHA256_RE.test(resultHash)) {
+    return failure('company_customer_scope_invalid')
+  }
+  return { ok: true, scope: { kind, workOrderId, resultHash } }
+}
+
+function normalizeRoleScope(role, value) {
+  if (role === 'customer') return normalizeCustomerScope(value)
+  return value === undefined
+    ? { ok: true, scope: null }
+    : failure('company_customer_scope_forbidden')
+}
+
+function scopePlanFields(scope) {
+  return scope ? ['scope', scope.kind, scope.workOrderId, scope.resultHash] : []
+}
+
 function canonicalIsoTime(value) {
   if (typeof value !== 'string') return Number.NaN
   const date = new Date(value)
@@ -138,6 +173,7 @@ function signInCodePlanHash(record) {
     record.issuedAt,
     record.expiresAt,
     record.sessionHours,
+    ...scopePlanFields(record.scope),
   ].join('\n'))
 }
 
@@ -149,6 +185,7 @@ function operatorSessionPlanHash(record) {
     record.role,
     record.issuedAt,
     record.expiresAt,
+    ...scopePlanFields(record.scope),
   ].join('\n'))
 }
 
@@ -165,7 +202,8 @@ function validSignInCodeRecord(record) {
     || !Number.isInteger(record.sessionHours)
     || record.sessionHours < 1
     || record.sessionHours > MAX_OPERATOR_SESSION_HOURS
-    || !SHA256_RE.test(String(record.planHash || ''))) return false
+    || !SHA256_RE.test(String(record.planHash || ''))
+    || !normalizeRoleScope(record.role, record.scope).ok) return false
   const issuedAt = canonicalIsoTime(record.issuedAt)
   const expiresAt = canonicalIsoTime(record.expiresAt)
   return Number.isFinite(issuedAt)
@@ -187,7 +225,8 @@ function validOperatorSessionRecord(record, tokenDigest) {
     || !CLIENT_ID_RE.test(String(record.clientId || ''))
     || !OPERATOR_ID_RE.test(String(record.operatorId || ''))
     || !COMPANY_OPERATOR_ROLES.includes(record.role)
-    || !SHA256_RE.test(String(record.planHash || ''))) return false
+    || !SHA256_RE.test(String(record.planHash || ''))
+    || !normalizeRoleScope(record.role, record.scope).ok) return false
   const issuedAt = canonicalIsoTime(record.issuedAt)
   const expiresAt = canonicalIsoTime(record.expiresAt)
   return Number.isFinite(issuedAt)
@@ -215,6 +254,7 @@ function publicSession(record) {
     issuedAt: record.issuedAt,
     expiresAt: record.expiresAt,
     allowedActions: companyRoleActions(record.role),
+    ...(record.scope ? { scope: { ...record.scope } } : {}),
   }
 }
 
@@ -237,6 +277,7 @@ function publicPendingCode(record, digest) {
     issuedAt: record.issuedAt,
     expiresAt: record.expiresAt,
     sessionHours: record.sessionHours,
+    ...(record.scope ? { scope: { ...record.scope } } : {}),
   }
 }
 
@@ -250,6 +291,7 @@ function publicActiveSession(record) {
     role: record.role,
     issuedAt: record.issuedAt,
     expiresAt: record.expiresAt,
+    ...(record.scope ? { scope: { ...record.scope } } : {}),
   }
 }
 
@@ -372,6 +414,9 @@ export async function issueCompanyOperatorCode(input, options = {}) {
   if (isRecord(operatorId)) return operatorId
   const role = String(input.role || '').trim().toLowerCase()
   if (!COMPANY_OPERATOR_ROLES.includes(role)) return failure('company_operator_invalid_role')
+  const scoped = normalizeRoleScope(role, input.scope)
+  if (!scoped.ok) return scoped
+  const scope = scoped.scope
   const expiresInMinutes = boundedInteger(
     input.expiresInMinutes,
     DEFAULT_SIGN_IN_CODE_MINUTES,
@@ -396,7 +441,7 @@ export async function issueCompanyOperatorCode(input, options = {}) {
   const codeDigest = sha256(compactCode)
   const issuedAt = now.toISOString()
   const expiresAt = new Date(now.getTime() + expiresInMinutes * 60_000).toISOString()
-  const planHash = signInCodePlanHash({ clientId, operatorId, role, issuedAt, expiresAt, sessionHours })
+  const planHash = signInCodePlanHash({ clientId, operatorId, role, issuedAt, expiresAt, sessionHours, scope })
   const claimId = `company-sign-in-code:${codeDigest.slice(0, 40)}`
   const record = {
     version: 1,
@@ -410,6 +455,7 @@ export async function issueCompanyOperatorCode(input, options = {}) {
     issuedAt,
     expiresAt,
     sessionHours,
+    ...(scope ? { scope } : {}),
   }
   const claim = await reserveDurableActivity({
     id: claimId,
@@ -437,6 +483,7 @@ export async function issueCompanyOperatorCode(input, options = {}) {
     issuedAt,
     expiresAt,
     sessionHours,
+    ...(scope ? { scope: { ...scope } } : {}),
   }
 }
 
@@ -568,6 +615,7 @@ export async function exchangeCompanyOperatorCode(input, options = {}) {
     role: invite.role,
     issuedAt,
     expiresAt,
+    scope: invite.scope,
   })
   const session = {
     version: 1,
@@ -582,6 +630,7 @@ export async function exchangeCompanyOperatorCode(input, options = {}) {
     role: invite.role,
     issuedAt,
     expiresAt,
+    ...(invite.scope ? { scope: { ...invite.scope } } : {}),
   }
   const claim = await reserveDurableActivity({
     id: sessionId,

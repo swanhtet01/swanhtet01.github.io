@@ -16,8 +16,9 @@ spend, internal evaluation, delivery proof, and a separately recorded customer d
 - Durable client-bound missions with revision-bound state transitions and server-verified stage gates.
 - Explicit queue, dispatch, cancel-and-scrub, internal evaluation, proof, and review controls.
 - Metadata-only health and workforce utilization for 7, 30, or 90 days.
-- Owner-issued, one-use sign-in codes; tenant-bound operator, reviewer, and viewer sessions; and an
-  owner-only active-access inventory with targeted code/session revocation.
+- Owner-issued, one-use sign-in codes; tenant-bound operator, reviewer, viewer, and exact-result
+  customer-review sessions; and an owner-only active-access inventory with targeted code/session
+  revocation.
 
 ## Sellable Outcomes
 
@@ -48,6 +49,13 @@ and the client ID is locked to the signed-in tenant. Use **Sign out** when the s
 The owner can return to **Active access** to refresh the tenant's active sessions and pending codes
 and revoke one entry. The list exposes identity, role, and expiry metadata only.
 
+For a completed, unreviewed work order, the owner can instead create a **customer review code** from
+that order. That one-use code is bound to the tenant, work-order ID, and exact result hash. The
+customer session exposes only the delivered result, result hash, and decision record, and can record one
+immutable acceptance or changes-requested decision. It cannot inspect the workspace plan, source-evidence
+fingerprints, or internal delivery metadata. It grants no workspace access and proves possession of the owner-issued code only; it is not
+SSO, MFA, or a legal signature.
+
 Roles are deliberately narrow:
 
 | Role | Access |
@@ -55,6 +63,7 @@ Roles are deliberately narrow:
 | Operator | Plan, create, queue, dispatch, cancel, evaluate, review, and read |
 | Reviewer | Plan, evaluate, record review, advance approved handoffs, and read; no dispatch |
 | Viewer | Read missions, work orders, proof, and operating reports only |
+| Customer | View one exact delivered proof and record one immutable decision; no workspace access |
 
 ## Operator Sequence
 
@@ -75,8 +84,9 @@ Roles are deliberately narrow:
    select **Verify & unlock next stage**. The server verifies the exact terminal result, work-order
    plan hash, accepted evaluation, mission revision, and handoff fingerprint before unlocking one
    stage. The mission record stores the fingerprint and byte count, never the raw handoff.
-10. Record customer acceptance or changes requested only from an allowed source. The record is
-   operator-copied evidence, not a customer login or digital signature.
+10. Record customer acceptance or changes requested either from an allowed external source as
+    operator-copied evidence, or by issuing a customer review code from the exact completed order. The
+    customer-code record proves tenant-bound code possession only, not SSO, MFA, or a legal signature.
 
 ## Non-Negotiable Boundaries
 
@@ -110,9 +120,9 @@ Roles are deliberately narrow:
 
 1. **Legitimate retained proof:** run one owner-approved redacted mission through delivery and retain
    the exact evaluation, proof packet, and customer decision. This remains the evidence gate.
-2. **Identity administration:** tenant-bound operator, reviewer, and viewer sessions plus owner-only
-   active-access listing and revocation are live. Add recovery, SSO/MFA where required, and
-   customer-authenticated acceptance.
+2. **Identity administration:** tenant-bound operator, reviewer, viewer, and exact-result customer
+   review sessions plus owner-only active-access listing and revocation are live. Add recovery and
+   SSO/MFA where required; customer-code possession remains narrower than a tenant identity provider.
 3. **Async execution:** after proof, add an opt-in durable dispatcher, leases, bounded retries,
    evidence-retention expiry, and dead-letter recovery. Keep recursive delegation disabled.
 4. **Tracing and evals:** the deterministic all-crew security suite now covers poisoned input,

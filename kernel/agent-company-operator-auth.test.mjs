@@ -18,6 +18,11 @@ import {
 } from './agent-company-operator-auth.mjs'
 
 const START = '2026-07-14T09:00:00.000Z'
+const CUSTOMER_SCOPE = {
+  kind: 'work_order_review',
+  workOrderId: `company-order:${'a'.repeat(40)}`,
+  resultHash: 'b'.repeat(64),
+}
 
 function harness() {
   const cache = new Map()
@@ -123,6 +128,45 @@ test('code exchange creates one durable HttpOnly session and rejects replay', as
   assert.match(cookie, /SameSite=Strict/)
   assert.match(cookie, /Path=\//)
   assert.doesNotMatch(clearCompanySessionCookie(), /[A-Za-z0-9_-]{43}/)
+})
+
+test('customer proof-review codes are one-use, exact-result scoped, and integrity-bound', async () => {
+  const state = harness()
+  assert.equal((await issueCompanyOperatorCode(issueInput({ role: 'customer' }), state.options)).reason, 'company_customer_scope_required')
+  assert.equal((await issueCompanyOperatorCode(issueInput({ role: 'customer', scope: { ...CUSTOMER_SCOPE, resultHash: 'bad' } }), state.options)).reason, 'company_customer_scope_invalid')
+  assert.equal((await issueCompanyOperatorCode(issueInput({ role: 'viewer', scope: CUSTOMER_SCOPE }), state.options)).reason, 'company_customer_scope_forbidden')
+
+  const issued = await issueCompanyOperatorCode(issueInput({
+    operatorId: 'customer.aye',
+    role: 'customer',
+    scope: CUSTOMER_SCOPE,
+  }), state.options)
+  assert.equal(issued.ok, true)
+  assert.deepEqual(issued.scope, CUSTOMER_SCOPE)
+  const exchanged = await exchangeCompanyOperatorCode({ code: issued.code }, state.options)
+  assert.equal(exchanged.ok, true)
+  assert.equal(exchanged.session.role, 'customer')
+  assert.deepEqual(exchanged.session.scope, CUSTOMER_SCOPE)
+  assert.deepEqual(exchanged.session.allowedActions, [
+    'work-order-get',
+    'work-order-review',
+  ])
+  assert.equal(companyRoleAllows('customer', 'work-order-get'), true)
+  assert.equal(companyRoleAllows('customer', 'work-order-list'), false)
+  assert.equal(companyRoleAllows('customer', 'work-order-run'), false)
+  const persisted = JSON.stringify([...state.cache.entries(), ...state.claims.entries()])
+  assert.equal(persisted.includes(issued.code), false)
+  assert.equal(persisted.includes(exchanged.sessionToken), false)
+
+  const session = [...state.cache.values()].find((record) => record.kind === 'agent_company_operator_session')
+  session.scope.resultHash = 'c'.repeat(64)
+  assert.equal((await getCompanyOperatorSession({ token: exchanged.sessionToken }, state.options)).reason, 'company_session_invalid')
+
+  const inviteState = harness()
+  const invite = await issueCompanyOperatorCode(issueInput({ role: 'customer', scope: CUSTOMER_SCOPE }), inviteState.options)
+  const inviteRecord = [...inviteState.cache.values()].find((record) => record.kind === 'agent_company_sign_in_code')
+  inviteRecord.scope.workOrderId = `company-order:${'d'.repeat(40)}`
+  assert.equal((await exchangeCompanyOperatorCode({ code: invite.code }, inviteState.options)).reason, 'company_sign_in_code_invalid')
 })
 
 test('tenant session authorization is cookie-bound, role-scoped, expiring, and revocable', async () => {

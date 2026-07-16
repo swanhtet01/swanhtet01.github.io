@@ -59,7 +59,10 @@ test('GET returns the protected fixed roster and hard limits', async () => {
   assert.equal(result.json.workOrders.rawEvidenceReturned, false)
   assert.equal(result.json.workOrders.deliveryProof, true)
   assert.equal(result.json.workOrders.operatorRecordedReview, true)
-  assert.equal(result.json.workOrders.customerAuthenticated, false)
+  assert.equal(result.json.workOrders.tenantBoundCustomerSessionReview, true)
+  assert.equal(result.json.workOrders.customerAuthentication, 'tenant_bound_one_time_code_only')
+  assert.equal(result.json.workOrders.customerSsoOrMfa, false)
+  assert.equal(result.json.workOrders.customerLegalSignature, false)
   assert.equal(result.json.workOrders.explicitCancellation, true)
   assert.equal(result.json.workOrders.cancelledEvidenceScrubbed, true)
   assert.equal(result.json.operations.enabled, true)
@@ -146,6 +149,168 @@ test('tenant sessions bind one client and enforce viewer, reviewer, and operator
     runCompanyWorkOrder: async () => ({ ok: true, mode: 'work_order_run' }),
   })
   assert.equal(operatorRun.status, 200)
+})
+
+test('customer sessions expose and decide on one exact proof without workspace access', async () => {
+  const scope = {
+    kind: 'work_order_review',
+    workOrderId: `company-order:${'a'.repeat(40)}`,
+    resultHash: 'b'.repeat(64),
+  }
+  const customerAuth = async () => ({
+    ok: true,
+    auth: {
+      mode: 'session',
+      clientId: 'client-acme',
+      operatorId: 'customer.aye',
+      role: 'customer',
+      scope,
+      issuedAt: '2026-07-14T09:00:00.000Z',
+      expiresAt: '2026-07-14T17:00:00.000Z',
+      allowedActions: ['work-order-get', 'work-order-review'],
+    },
+  })
+  const customerGet = await handleAgentCompany(request({ method: 'GET', headers: {}, body: undefined }), {
+    authorizeCompanyRequest: customerAuth,
+  })
+  assert.equal(customerGet.status, 200)
+  assert.equal(customerGet.json.actionMode, 'proof_review_only')
+  assert.deepEqual(customerGet.json.customerReview, {
+    scoped: true,
+    workOrderId: scope.workOrderId,
+    resultHash: scope.resultHash,
+    proofAccess: true,
+    immutableDecision: true,
+    workspaceAccess: false,
+    identity: 'tenant_bound_one_time_code_only',
+    ssoOrMfa: false,
+    legalSignature: false,
+  })
+  assert.equal('agents' in customerGet.json, false)
+  assert.equal('playbooks' in customerGet.json, false)
+  assert.equal('missions' in customerGet.json, false)
+
+  const reads = []
+  const reviews = []
+  const getCompanyWorkOrder = async (body) => {
+    reads.push(body)
+    return {
+      ok: true,
+      workOrder: {
+        clientId: 'client-acme',
+        workOrderId: scope.workOrderId,
+        resultHash: scope.resultHash,
+        status: 'completed',
+        completedAt: '2026-07-14T12:00:00.000Z',
+        planHash: 'a'.repeat(64),
+        plan: { assignments: [{ agentId: 'internal-agent', evidenceBytes: 88 }] },
+        evidence: [{ agentId: 'internal-agent', digest: 'private-digest', bytes: 88 }],
+        dispatchAttempts: 2,
+        result: {
+          status: 'completed',
+          actionMode: 'draft_only',
+          results: [{ agentId: 'internal-agent', department: 'Operations', output: { recommendation: 'Review the delivery.' } }],
+        },
+      },
+    }
+  }
+  const getOrder = await handleAgentCompany(request({
+    headers: {},
+    body: { action: 'work-order-get', clientId: 'client-acme', workOrderId: scope.workOrderId },
+  }), { authorizeCompanyRequest: customerAuth, getCompanyWorkOrder })
+  assert.equal(getOrder.status, 200)
+  assert.equal(getOrder.json.workOrder.workOrderId, scope.workOrderId)
+  assert.equal(getOrder.json.workOrder.result.results[0].output.recommendation, 'Review the delivery.')
+  assert.equal('plan' in getOrder.json.workOrder, false)
+  assert.equal('planHash' in getOrder.json.workOrder, false)
+  assert.equal('evidence' in getOrder.json.workOrder, false)
+  assert.equal('dispatchAttempts' in getOrder.json.workOrder, false)
+  assert.equal('agentId' in getOrder.json.workOrder.result.results[0], false)
+  assert.equal('department' in getOrder.json.workOrder.result.results[0], false)
+  assert.deepEqual(reads, [{ clientId: 'client-acme', workOrderId: scope.workOrderId }])
+
+  const reviewed = await handleAgentCompany(request({
+    headers: {},
+    body: {
+      action: 'work-order-review',
+      clientId: 'client-acme',
+      workOrderId: scope.workOrderId,
+      resultHash: scope.resultHash,
+      decision: 'accepted',
+      statement: 'Accepted after reviewing the delivered result.',
+      confirmation: `ACCEPT ${scope.workOrderId} ${scope.resultHash}`,
+    },
+  }), {
+    authorizeCompanyRequest: customerAuth,
+    getCompanyWorkOrder,
+    reviewCompanyWorkOrder: async (body, options) => {
+      reviews.push([body, options])
+      return {
+        ok: true,
+        mode: 'work_order_review',
+        review: {
+          binding: 'tenant_bound_customer_session',
+          customerAuthenticated: true,
+          decision: 'accepted',
+          statement: body.statement,
+          reviewerName: 'customer.aye',
+          recordedBy: 'customer.aye',
+          recordedAt: '2026-07-14T12:05:00.000Z',
+          resultHash: scope.resultHash,
+          reviewHash: 'd'.repeat(64),
+        },
+        proofPacket: { evidenceFingerprints: [{ digest: 'private-digest' }] },
+      }
+    },
+  })
+  assert.equal(reviewed.status, 200)
+  assert.equal(reviews[0][0].reviewerName, 'customer.aye')
+  assert.equal(reviews[0][0].recordedBy, 'customer.aye')
+  assert.equal(reviews[0][0].source, 'customer_session')
+  assert.equal('proofPacket' in reviewed.json, false)
+  assert.equal('plan' in reviewed.json.workOrder, false)
+  assert.equal('reviewerName' in reviewed.json.review, false)
+  assert.deepEqual(reviews[0][1], {
+    reviewProvenance: {
+      binding: 'tenant_bound_customer_session',
+      customerAuthenticated: true,
+      authenticatedReviewerId: 'customer.aye',
+    },
+  })
+
+  const wrongOrder = await handleAgentCompany(request({
+    headers: {},
+    body: { action: 'work-order-get', clientId: 'client-acme', workOrderId: `company-order:${'c'.repeat(40)}` },
+  }), { authorizeCompanyRequest: customerAuth })
+  assert.equal(wrongOrder.status, 403)
+  assert.equal(wrongOrder.json.reason, 'company_customer_scope_mismatch')
+  const wrongResult = await handleAgentCompany(request({
+    headers: {},
+    body: {
+      action: 'work-order-review',
+      clientId: 'client-acme',
+      workOrderId: scope.workOrderId,
+      resultHash: 'c'.repeat(64),
+      decision: 'accepted',
+      statement: 'Accepted.',
+      confirmation: `ACCEPT ${scope.workOrderId} ${'c'.repeat(64)}`,
+    },
+  }), { authorizeCompanyRequest: customerAuth })
+  assert.equal(wrongResult.status, 403)
+  assert.equal(wrongResult.json.reason, 'company_customer_scope_mismatch')
+  const listed = await handleAgentCompany(request({
+    headers: {},
+    body: { action: 'work-order-list', clientId: 'client-acme', limit: 10 },
+  }), { authorizeCompanyRequest: customerAuth })
+  assert.equal(listed.status, 403)
+
+  const proofDenied = await handleAgentCompany(request({
+    headers: {},
+    body: { action: 'work-order-proof', clientId: 'client-acme', workOrderId: scope.workOrderId },
+  }), {
+    authorizeCompanyRequest: customerAuth,
+  })
+  assert.equal(proofDenied.status, 403)
 })
 
 test('POST plans without claiming a run or accepting an implicit action', async () => {

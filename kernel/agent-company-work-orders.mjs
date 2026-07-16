@@ -36,7 +36,9 @@ const REVIEW_FIELDS = new Set([
   'confirmation',
 ])
 const REVIEW_DECISIONS = new Set(['accepted', 'changes_requested'])
-const REVIEW_SOURCES = new Set(['email', 'chat', 'call', 'in_person'])
+const REVIEW_SOURCES = new Set(['email', 'chat', 'call', 'in_person', 'customer_session'])
+const OPERATOR_RECORDED_REVIEW_BINDING = 'operator_recorded_customer_review'
+const CUSTOMER_SESSION_REVIEW_BINDING = 'tenant_bound_customer_session'
 
 const failure = (reason, extra = {}) => ({ ok: false, reason, ...extra })
 const isRecord = (value) => value && typeof value === 'object' && !Array.isArray(value)
@@ -66,6 +68,35 @@ function normalizeStatement(value) {
     return failure('company_work_order_review_invalid_statement')
   }
   return normalized
+}
+
+function normalizeReviewProvenance(value) {
+  if (value === undefined) {
+    return {
+      ok: true,
+      binding: OPERATOR_RECORDED_REVIEW_BINDING,
+      customerAuthenticated: false,
+      authenticatedReviewerId: null,
+    }
+  }
+  if (!isRecord(value)
+    || Object.keys(value).sort().join(',') !== 'authenticatedReviewerId,binding,customerAuthenticated'
+    || value.binding !== CUSTOMER_SESSION_REVIEW_BINDING
+    || value.customerAuthenticated !== true) {
+    return failure('company_work_order_review_provenance_invalid')
+  }
+  const authenticatedReviewerId = normalizeLine(
+    value.authenticatedReviewerId,
+    120,
+    'company_work_order_review_provenance_invalid',
+  )
+  if (isRecord(authenticatedReviewerId)) return authenticatedReviewerId
+  return {
+    ok: true,
+    binding: CUSTOMER_SESSION_REVIEW_BINDING,
+    customerAuthenticated: true,
+    authenticatedReviewerId,
+  }
 }
 
 function stableStringify(value) {
@@ -161,10 +192,15 @@ async function readWorkOrderReview(workOrderId, options = {}) {
 
 function publicWorkOrderReview(record) {
   if (!isRecord(record)) return null
+  const customerAuthenticated = record.binding === CUSTOMER_SESSION_REVIEW_BINDING
+    && record.customerAuthenticated === true
   return {
     reviewId: record.reviewId,
-    binding: 'operator_recorded_customer_review',
-    customerAuthenticated: false,
+    binding: customerAuthenticated ? CUSTOMER_SESSION_REVIEW_BINDING : OPERATOR_RECORDED_REVIEW_BINDING,
+    customerAuthenticated,
+    ...(customerAuthenticated && record.authenticatedReviewerId
+      ? { authenticatedReviewerId: record.authenticatedReviewerId }
+      : {}),
     decision: record.decision,
     reviewerName: record.reviewerName,
     source: record.source,
@@ -634,6 +670,17 @@ export async function reviewCompanyWorkOrder(input, options = {}) {
   if (isRecord(recordedBy)) return recordedBy
   const statement = normalizeStatement(input.statement)
   if (isRecord(statement)) return statement
+  const provenance = normalizeReviewProvenance(options.reviewProvenance)
+  if (!provenance.ok) return provenance
+  if (source === 'customer_session' && !provenance.customerAuthenticated) {
+    return failure('company_work_order_review_provenance_required')
+  }
+  if (provenance.customerAuthenticated
+    && (source !== 'customer_session'
+      || reviewerName !== provenance.authenticatedReviewerId
+      || recordedBy !== provenance.authenticatedReviewerId)) {
+    return failure('company_work_order_review_provenance_mismatch')
+  }
   const requiredConfirmation = reviewConfirmation(decision, workOrderId, exactResultHash)
   if (String(input.confirmation || '') !== requiredConfirmation) {
     return failure('company_work_order_review_confirmation_required', {
@@ -651,6 +698,13 @@ export async function reviewCompanyWorkOrder(input, options = {}) {
     source,
     statement,
     recordedBy,
+    ...(provenance.customerAuthenticated
+      ? {
+          binding: provenance.binding,
+          customerAuthenticated: true,
+          authenticatedReviewerId: provenance.authenticatedReviewerId,
+        }
+      : {}),
   }
   const reviewHash = sha256(stableStringify(reviewInput))
   const reviewId = reviewClaimId(workOrderId)
@@ -694,8 +748,11 @@ export async function reviewCompanyWorkOrder(input, options = {}) {
     reviewId,
     ...reviewInput,
     reviewHash,
-    binding: 'operator_recorded_customer_review',
-    customerAuthenticated: false,
+    binding: provenance.binding,
+    customerAuthenticated: provenance.customerAuthenticated,
+    ...(provenance.authenticatedReviewerId
+      ? { authenticatedReviewerId: provenance.authenticatedReviewerId }
+      : {}),
     recordedAt: String(options.now?.() || new Date().toISOString()),
   }
   let stored = false

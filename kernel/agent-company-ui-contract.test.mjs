@@ -134,6 +134,31 @@ test('Agent Company console uses one-time tenant sessions without persisting the
   assert.doesNotMatch(html, /Enter the ops passcode|Agent solution/)
 })
 
+test('Agent Company creates a focused tenant-bound customer proof-review session', async () => {
+  const html = await readConsole()
+  assert.match(html, /company-customer-review/)
+  assert.match(html, /customer-proof-session/)
+  assert.match(html, /if\(companyAuth\.role==='customer'\)/)
+  assert.match(html, /This session is limited to one exact result and immutable decision/)
+  assert.match(html, /function renderCustomerDelivery\(order\)/)
+  assert.match(html, /This result is the only proof available to this session\. Source evidence remains private\./)
+  assert.match(html, /This proof session cannot access the workspace, plan, source evidence, or internal delivery metadata\./)
+  assert.match(html, /Delivered output \$\{index\+1\}/)
+  assert.match(html, /if\(companyAuth\.role==='customer'\)\{[\s\S]*window\.scrollTo\(0,0\)[\s\S]*await openCompanyWorkOrder\(workOrderId\)/)
+  assert.match(html, /function renderCompanyCustomerCodeForm\(order\)/)
+  assert.match(html, /id="companyCustomerReviewerId"/)
+  assert.match(html, /action:'issue-code',clientId:order\.clientId,operatorId:customerId,role:'customer'/)
+  assert.match(html, /scope:\{kind:'work_order_review',workOrderId:order\.workOrderId,resultHash:order\.resultHash\}/)
+  assert.match(html, /id="companyCustomerCodeOutput" hidden/)
+  assert.match(html, /Your decision is bound to this tenant code and exact result\./)
+  assert.match(html, /customerSession\?\{action:'work-order-review',clientId:order\.clientId,workOrderId:order\.workOrderId,resultHash:order\.resultHash,decision,statement/)
+  assert.match(html, /Customer decision recorded with tenant-bound session provenance/)
+  assert.match(html, /tenant-bound customer session/)
+  assert.match(html, /customer authentication: tenant-bound code/)
+  assert.match(html, /This is not SSO, MFA, or a legal signature\./)
+  assert.match(html, /<option value="operator">Operator<\/option><option value="reviewer">Reviewer<\/option><option value="viewer">Viewer<\/option>/)
+})
+
 test('Agent Company UI accepts bounded evidence but no credential or action fields', async () => {
   const html = await readConsole()
   const panel = html.match(/<section id="view-company"[\s\S]*?<section id="view-workcells"/)?.[0] || ''

@@ -485,6 +485,50 @@ test('operator-recorded customer review is durably bound to one exact result', a
   assert.equal(JSON.stringify(fetched).includes('Manual close takes two days'), false)
 })
 
+test('tenant-bound customer-session review is immutable and hashes authenticated provenance', async () => {
+  const state = harness()
+  const completed = await completeOrder(state)
+  const proof = await getCompanyWorkOrderProof({
+    clientId: 'client-acme',
+    workOrderId: completed.workOrder.workOrderId,
+  }, state.options)
+  const resultHash = proof.proofPacket.delivery.resultHash
+  const review = {
+    clientId: 'client-acme',
+    workOrderId: completed.workOrder.workOrderId,
+    resultHash,
+    decision: 'accepted',
+    reviewerName: 'customer.aye',
+    source: 'customer_session',
+    statement: 'Accepted after reviewing this delivered result.',
+    recordedBy: 'customer.aye',
+    confirmation: `ACCEPT ${completed.workOrder.workOrderId} ${resultHash}`,
+  }
+  assert.equal((await reviewCompanyWorkOrder(review, state.options)).reason, 'company_work_order_review_provenance_required')
+  const saved = await reviewCompanyWorkOrder(review, {
+    ...state.options,
+    reviewProvenance: {
+      binding: 'tenant_bound_customer_session',
+      customerAuthenticated: true,
+      authenticatedReviewerId: 'customer.aye',
+    },
+  })
+  assert.equal(saved.ok, true)
+  assert.equal(saved.review.binding, 'tenant_bound_customer_session')
+  assert.equal(saved.review.customerAuthenticated, true)
+  assert.equal(saved.review.authenticatedReviewerId, 'customer.aye')
+  assert.equal(saved.proofPacket.review.binding, 'tenant_bound_customer_session')
+  assert.equal(saved.proofPacket.review.customerAuthenticated, true)
+  assert.equal((await reviewCompanyWorkOrder({ ...review, statement: 'Different decision.' }, {
+    ...state.options,
+    reviewProvenance: {
+      binding: 'tenant_bound_customer_session',
+      customerAuthenticated: true,
+      authenticatedReviewerId: 'customer.aye',
+    },
+  })).reason, 'company_work_order_review_conflict')
+})
+
 test('customer review is replay-safe, immutable, and fails closed without durable storage', async () => {
   const state = harness()
   const completed = await completeOrder(state)
