@@ -17,6 +17,17 @@ test('a single stale email flag cannot enable delivery', () => {
   )
 })
 
+test('an explicit disablement overrides a legacy inherited enable flag', () => {
+  assert.deepEqual(
+    getOutboundEmailPolicy({
+      SUPERMEGA_OUTBOUND_EMAILS_ENABLED: '0',
+      SUPERMEGA_EMAIL_SENDS_ENABLED: '1',
+      SUPERMEGA_OUTBOUND_EMAIL_APPROVAL: 'UNLOCK_SUPERMEGA_OUTBOUND_EMAIL_001',
+    }),
+    { allowed: false, reason: 'outbound_email_disabled' },
+  )
+})
+
 test('delivery requires both explicit owner gates', () => {
   assert.deepEqual(
     getOutboundEmailPolicy({
