@@ -209,7 +209,7 @@ function contactEntryIntent(payload = {}) {
       if (!['supermega.dev', 'www.supermega.dev'].includes(url.hostname)) continue
       if (url.pathname.replace(/\/+$/, '') !== '/contact') continue
       const intent = url.searchParams.get('from')
-      if (['ai-agent-solution', 'shop-workspace', 'plant-workspace'].includes(intent)) return intent
+      if (['shop-workspace', 'plant-workspace'].includes(intent)) return intent
     } catch {
       // Ignore malformed attribution and continue with the neutral intake route.
     }
@@ -532,23 +532,12 @@ const solutionRouteCatalog = [
 const generalDiscoveryRoute = {
   template_id: 'outcome-discovery',
   package_name: 'Outcome Discovery',
-  product_area: 'Custom Solutions & AI Agents',
+  product_area: 'Workflow discovery',
   delivery_lane: 'operator_discovery',
   keywords: [],
   first_proof_target: 'Define one repeated workflow, one approved sample source, and one useful output to test before any build or connection.',
   source_requests: ['one example of the repeated task', 'one redacted sample source', 'the result the buyer would accept as useful'],
-  sales_motion: 'Clarify one measurable outcome and the smallest safe proof before recommending a product or agent route.',
-}
-
-const agentSolutionDiscoveryRoute = {
-  template_id: 'agent-solution-discovery',
-  package_name: 'AI Agent Solutions',
-  product_area: 'Custom Solutions & AI Agents',
-  delivery_lane: 'agent_solution_discovery',
-  keywords: [],
-  first_proof_target: 'One source-traced draft output from one redacted approved sample, reviewed against the buyer\'s stated useful result.',
-  source_requests: ['one redacted example of the repeated task', 'the information used to complete it', 'one example of the output the buyer considers useful'],
-  sales_motion: 'Prove one useful output first, then scope only the approved sources, schedule, and actions the buyer actually needs.',
+  sales_motion: 'Clarify one measurable outcome and the smallest safe proof before recommending a working route.',
 }
 
 function buildSolutionRoute(record = {}) {
@@ -585,10 +574,7 @@ function buildSolutionRoute(record = {}) {
     || candidate.requested_package_match
     || candidate.matched_keywords.length > 0
   ))
-  const fallbackRoute = contactEntryIntent(record) === 'ai-agent-solution'
-    ? agentSolutionDiscoveryRoute
-    : generalDiscoveryRoute
-  const winner = specificWinner || { route: fallbackRoute, score: 0, matched_keywords: [] }
+  const winner = specificWinner || { route: generalDiscoveryRoute, score: 0, matched_keywords: [] }
   const route = winner.route
   const matchedKeywords = winner?.matched_keywords || []
   const fitScore = Math.max(20, Math.min(100, winner?.score || 20))
@@ -1877,7 +1863,6 @@ async function savePipelineAction({ record }) {
 function buildLeadRecord({ leadId, taskId, payload, req }) {
   const score = leadScore(payload)
   const entryIntent = contactEntryIntent(payload)
-  const agentIntent = entryIntent === 'ai-agent-solution'
   const workspaceProduct = entryIntent === 'shop-workspace'
     ? 'Shop'
     : entryIntent === 'plant-workspace'
@@ -1894,15 +1879,13 @@ function buildLeadRecord({ leadId, taskId, payload, req }) {
     : ''
   const sourceLinks = truncate(payload.source_links, 700)
   const firstStep = truncate(payload.first_step, 160)
-  const publicPackage = truncate(payload.public_package, 160) || (agentIntent ? 'AI Agent Solutions' : workspacePackage)
-  const firstProofTarget = truncate(payload.first_proof_target, 300) || (agentIntent
-    ? 'One source-traced draft output from one redacted approved sample, reviewed against the buyer\'s stated useful result.'
-    : workspaceFirstProofTarget)
+  const publicPackage = truncate(payload.public_package, 160) || workspacePackage
+  const firstProofTarget = truncate(payload.first_proof_target, 300) || workspaceFirstProofTarget
   const acceptanceTests = truncate(payload.acceptance_tests, 900)
   const launchBlockers = truncate(payload.launch_blockers, 500)
   const automationBoundary = truncate(payload.automation_boundary, 700)
-  const firstOutput = truncate(payload.requested_package, 120) || truncate(payload.first_output, 120) || truncate(payload.workflow, 120) || (agentIntent ? 'AI Agent Solutions' : workspacePackage || 'First useful output')
-  const productArea = truncate(payload.product_area, 160) || (agentIntent ? 'Custom Solutions & AI Agents' : workspaceProduct)
+  const firstOutput = truncate(payload.requested_package, 120) || truncate(payload.first_output, 120) || truncate(payload.workflow, 120) || workspacePackage || 'First useful output'
+  const productArea = truncate(payload.product_area, 160) || workspaceProduct
   const templateId = truncate(payload.template_id, 100) || workspaceTemplateId
   const templateStatus = truncate(payload.template_status, 80)
   const templateSourceCategory = truncate(payload.template_source_category, 120)
@@ -1957,7 +1940,7 @@ function buildLeadRecord({ leadId, taskId, payload, req }) {
     email: truncate(payload.email, 180).toLowerCase(),
     phone: truncate(payload.phone, 80),
     company: truncate(payload.company, 180),
-    workflow: truncate(payload.workflow, 120) || (agentIntent ? 'AI Agent Solutions discovery' : workspacePackage ? `${workspacePackage} request` : 'Workflow system'),
+    workflow: truncate(payload.workflow, 120) || (workspacePackage ? `${workspacePackage} request` : 'Workflow system'),
     requested_package: firstOutput,
     public_package: publicPackage,
     first_output: firstOutput,

@@ -58,6 +58,7 @@ for (const source of [...contact.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(
 
 assert.equal(contactEntryIntent({ page_path: '/contact/?from=shop-workspace' }), 'shop-workspace')
 assert.equal(contactEntryIntent({ source_url: 'https://www.supermega.dev/contact/?from=plant-workspace' }), 'plant-workspace')
+assert.equal(contactEntryIntent({ source_url: 'https://supermega.dev/contact/?from=ai-agent-solution' }), '')
 assert.equal(contactEntryIntent({ source_url: 'https://example.com/contact/?from=shop-workspace' }), '')
 
 function lead(payload = {}) {
@@ -109,7 +110,13 @@ const neutralLead = lead({ goal: 'We need help.' })
 const neutralRoute = buildSolutionRoute(neutralLead)
 assert.equal(neutralRoute.template_id, 'outcome-discovery')
 assert.equal(neutralRoute.delivery_lane, 'operator_discovery')
+assert.equal(neutralRoute.product_area, 'Workflow discovery')
 assert.equal(neutralRoute.status, 'needs_operator_review')
+
+const retiredAgentIntentLead = lead({ source_url: 'https://supermega.dev/contact/?from=ai-agent-solution' })
+assert.equal(retiredAgentIntentLead.public_package, '')
+assert.equal(retiredAgentIntentLead.product_area, '')
+assert.equal(retiredAgentIntentLead.workflow, 'Workflow system')
 
 console.log(JSON.stringify({
   status: 'ok',
@@ -117,5 +124,5 @@ console.log(JSON.stringify({
   contextual_copy: true,
   visible_fields: 4,
   workspace_routes: [shopWorkspaceRoute.template_id, plantWorkspaceRoute.template_id],
-  retired_public_agent_copy: true,
+  retired_public_agent_intent_blocked: true,
 }))
