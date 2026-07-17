@@ -15,6 +15,7 @@ const {
   buildContactRoutingEvent,
   publicSubmissionReceipt,
   publicSubmissionFailure,
+  html,
   receiptHtml,
   buildLeadRecord,
   isShopLead,
@@ -30,6 +31,7 @@ assert.equal(typeof isSafeShopPipelineUrl, 'function')
 assert.equal(typeof shopPipelinePayload, 'function')
 assert.equal(typeof forwardShopPipeline, 'function')
 assert.equal(typeof buildContactRoutingEvent, 'function')
+assert.equal(typeof html, 'function')
 assert.equal(isSafeOpsIntakeUrl('https://supermega-machine.vercel.app/api/intake'), true)
 assert.equal(isSafeOpsIntakeUrl('https://supermega-machine.vercel.app.evil.example/api/intake'), false)
 assert.equal(isSafeOpsIntakeUrl('https://supermega-machine.vercel.app/api/intake?redirect=1'), false)
@@ -221,6 +223,10 @@ try {
     'Example Co',
     'buyer@example.com',
     'Nothing is connected, changed, or sent on your behalf until you approve it.',
+    'class="terminal-mark"',
+    'supermega<span class="domain">.dev</span>',
+    'class="response-shell"',
+    'Back to supermega.dev',
   ]) {
     assert.equal(receiptHtmlBody.includes(required), true, `receipt_missing_${required}`)
   }
@@ -230,8 +236,40 @@ try {
     'Source pack room',
     'App access',
     'swanhtet@supermega.dev',
+    'SUPERMEGA.dev',
+    'radial-gradient',
+    'border-radius: 28px',
+    'border-radius: 999px',
+    'letter-spacing: -.07em',
   ]) {
     assert.equal(receiptHtmlBody.includes(forbidden), false, `receipt_exposes_${forbidden}`)
+  }
+
+  let errorHtmlBody = ''
+  const errorHeaders = {}
+  const errorResponse = {
+    statusCode: 0,
+    setHeader(name, value) {
+      errorHeaders[name.toLowerCase()] = value
+    },
+    end(body = '') {
+      errorHtmlBody = body
+    },
+  }
+  html(errorResponse, 400, 'Missing details.', 'Please include your name, work email, company, and the workflow to fix first.')
+  assert.equal(errorResponse.statusCode, 400)
+  assert.equal(errorHeaders['cache-control'], 'no-store')
+  for (const required of [
+    'Missing details.',
+    'Back to contact',
+    'class="terminal-mark"',
+    'supermega<span class="domain">.dev</span>',
+    'class="response-shell"',
+  ]) {
+    assert.equal(errorHtmlBody.includes(required), true, `error_response_missing_${required}`)
+  }
+  for (const forbidden of ['SUPERMEGA.dev', 'radial-gradient', 'border-radius: 28px', 'border-radius: 999px', 'letter-spacing: -.07em']) {
+    assert.equal(errorHtmlBody.includes(forbidden), false, `error_response_retired_${forbidden}`)
   }
 
   for (const retiredResponseFragment of [

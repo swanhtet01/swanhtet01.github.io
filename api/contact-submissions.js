@@ -23,59 +23,62 @@ function html(res, statusCode, title, message) {
   res.statusCode = statusCode
   res.setHeader('Content-Type', 'text/html; charset=utf-8')
   res.setHeader('Cache-Control', 'no-store')
-  res.end(`<!doctype html>
+  res.end(responseShell(title, `
+  <p class="eyebrow">contact / update</p>
+  <h1>${escapeHtml(title)}</h1>
+  <p class="lede">${escapeHtml(message)}</p>
+  <div class="actions">
+    <a class="button primary" href="/contact/">Back to contact</a>
+  </div>`))
+}
+
+function responseShell(title, content) {
+  return `<!doctype html>
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
-<title>${escapeHtml(title)} | SUPERMEGA.dev</title>
+<title>${escapeHtml(title)} | supermega.dev</title>
 <style>
-  :root { color-scheme: dark; font-family: Aptos, "Segoe UI", system-ui, sans-serif; }
-  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: radial-gradient(circle at 80% 12%, rgba(114,243,255,.18), transparent 28rem), linear-gradient(135deg, #07111f, #02050b); color: #f6fbff; }
-  main { width: min(560px, calc(100% - 32px)); border: 1px solid rgba(255,255,255,.16); border-radius: 28px; background: rgba(255,255,255,.07); padding: clamp(24px, 5vw, 42px); box-shadow: 0 34px 90px rgba(0,0,0,.34); }
-  h1 { margin: 0 0 14px; font-size: clamp(38px, 7vw, 70px); line-height: .86; letter-spacing: -.07em; }
-  p { margin: 0; color: #a9b8c7; font-size: 18px; line-height: 1.55; }
-  a { display: inline-flex; margin-top: 24px; border-radius: 999px; background: linear-gradient(135deg, #72f3ff, #4f8cff); color: #06101d; padding: 13px 18px; font-weight: 900; text-decoration: none; }
+  :root { color-scheme: light dark; font-family: Aptos, "Segoe UI", system-ui, sans-serif; --canvas:#f5f7fb; --surface:rgba(255,255,255,.78); --panel:rgba(255,255,255,.72); --text:#101721; --muted:#5d6a7c; --line:rgba(24,39,58,.16); --accent:#285bd7; --good:#078264; --shadow:rgba(18,32,54,.14); }
+  @media (prefers-color-scheme: dark) { :root { --canvas:#0d1219; --surface:rgba(17,24,34,.78); --panel:rgba(26,36,50,.82); --text:#f4f7fb; --muted:#a8b6c9; --line:rgba(206,220,238,.16); --accent:#6a94ff; --good:#39c9a0; --shadow:rgba(0,0,0,.32); } }
+  * { box-sizing: border-box; }
+  body { margin:0; min-height:100vh; display:grid; place-items:center; padding:24px; background-color:var(--canvas); background-image:linear-gradient(rgba(96,117,148,.08) 1px, transparent 1px), linear-gradient(90deg, rgba(96,117,148,.08) 1px, transparent 1px); background-size:48px 48px; color:var(--text); }
+  .response-shell { width:min(760px, 100%); border:1px solid var(--line); border-radius:8px; background:var(--surface); box-shadow:0 24px 72px var(--shadow); backdrop-filter:blur(16px); padding:clamp(24px, 5vw, 44px); }
+  .brand { display:inline-flex; align-items:center; gap:10px; color:var(--text); font-size:17px; font-weight:800; text-decoration:none; }
+  .terminal-mark { display:inline-flex; align-items:center; justify-content:center; width:34px; height:34px; border:1px solid var(--line); border-radius:8px; background:var(--panel); color:var(--accent); font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:15px; font-weight:800; }
+  .domain { color:var(--muted); }
+  .eyebrow { margin:32px 0 10px; color:var(--accent); font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+  h1 { margin:0; font-size:clamp(32px, 6vw, 52px); line-height:1.04; letter-spacing:0; }
+  .lede { max-width:620px; margin:16px 0 0; color:var(--muted); font-size:17px; line-height:1.55; }
+  .meta { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:10px; margin:28px 0; }
+  .box { min-width:0; border:1px solid var(--line); border-radius:8px; padding:14px; background:var(--panel); }
+  .box span { display:block; color:var(--good); font-size:11px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+  .box strong { display:block; margin-top:6px; overflow-wrap:anywhere; }
+  .steps { margin:0; padding-left:22px; color:var(--text); font-size:16px; line-height:1.55; }
+  .steps li + li { margin-top:8px; }
+  .actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:28px; }
+  .button { display:inline-flex; align-items:center; justify-content:center; min-height:44px; border:1px solid var(--line); border-radius:8px; color:var(--text); padding:10px 15px; font-weight:800; text-decoration:none; }
+  .button.primary { border-color:transparent; background:var(--accent); color:#fff; }
+  @media (max-width:640px) { body { padding:16px; background-size:40px 40px; } .response-shell { padding:24px; } .meta { grid-template-columns:1fr; } .eyebrow { margin-top:26px; } }
 </style>
-<main>
-  <h1>${escapeHtml(title)}</h1>
-  <p>${escapeHtml(message)}</p>
-  <a href="/#contact">Back to SUPERMEGA.dev</a>
+<body>
+<main class="response-shell">
+  <a class="brand" href="/" aria-label="supermega.dev home"><span class="terminal-mark" aria-hidden="true">&gt;_</span><span>supermega<span class="domain">.dev</span></span></a>
+  ${content}
 </main>
-</html>`)
+</body>
+</html>`
 }
 
 function receiptHtml(res, record) {
   res.statusCode = 200
   res.setHeader('Content-Type', 'text/html; charset=utf-8')
   res.setHeader('Cache-Control', 'no-store')
-  res.end(`<!doctype html>
-<html lang="en">
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex,nofollow">
-<title>Request Received | SUPERMEGA.dev</title>
-<style>
-  :root { color-scheme: dark; font-family: Aptos, "Segoe UI", system-ui, sans-serif; --bg:#07111f; --line:rgba(255,255,255,.16); --text:#f6fbff; --muted:#a9b8c7; --cyan:#72f3ff; --green:#8cf0b8; --ink:#06101d; }
-  * { box-sizing: border-box; }
-  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: radial-gradient(circle at 78% 8%, rgba(114,243,255,.18), transparent 28rem), linear-gradient(135deg, #07111f, #02050b); color: var(--text); }
-  main { width: min(760px, calc(100% - 32px)); border: 1px solid var(--line); border-radius: 18px; background: rgba(255,255,255,.07); padding: clamp(24px, 5vw, 42px); box-shadow: 0 34px 90px rgba(0,0,0,.34); }
-  h1 { margin: 0 0 14px; font-size: clamp(38px, 7vw, 56px); line-height: 1; letter-spacing: 0; }
-  p { margin: 0; color: var(--muted); font-size: 18px; line-height: 1.55; }
-  .meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 24px 0; }
-  .box { border: 1px solid rgba(255,255,255,.14); border-radius: 10px; padding: 13px; background: rgba(3,8,16,.36); }
-  .box span { display:block; color: var(--green); font-size: 11px; font-weight: 950; letter-spacing: .14em; text-transform: uppercase; }
-  .box strong { display:block; margin-top: 5px; overflow-wrap: anywhere; }
-  ol { margin: 0 0 24px; padding-left: 22px; color: var(--text); font-size: 17px; line-height: 1.55; }
-  li + li { margin-top: 8px; }
-  .actions { display:flex; flex-wrap:wrap; gap:10px; }
-  a { display: inline-flex; border: 1px solid rgba(255,255,255,.16); border-radius: 999px; color: var(--text); padding: 13px 18px; font-weight: 900; text-decoration: none; }
-  a.primary { background: linear-gradient(135deg, var(--cyan), #4f8cff); color: var(--ink); border-color: transparent; }
-  @media (max-width: 640px) { .meta { grid-template-columns: 1fr; } }
-</style>
-<main>
+  res.end(responseShell('Request received', `
+  <p class="eyebrow">contact / received</p>
   <h1>Request received.</h1>
-  <p>We will review what you sent and reply to the submitted email. Nothing is connected, changed, or sent on your behalf until you approve it.</p>
+  <p class="lede">We will review what you sent and reply to the submitted email. Nothing is connected, changed, or sent on your behalf until you approve it.</p>
   <div class="meta">
     <div class="box"><span>Reference</span><strong>${escapeHtml(record.lead_id)}</strong></div>
     <div class="box"><span>Status</span><strong>Received</strong></div>
@@ -88,11 +91,9 @@ function receiptHtml(res, record) {
     <li>Work starts only after you approve the next step.</li>
   </ol>
   <div class="actions">
-    <a class="primary" href="/">Back to SuperMega</a>
-    <a href="/contact/">Send another request</a>
-  </div>
-</main>
-</html>`)
+    <a class="button primary" href="/">Back to supermega.dev</a>
+    <a class="button" href="/contact/">Send another request</a>
+  </div>`))
 }
 
 function publicSubmissionReceipt(record = {}) {
@@ -2616,6 +2617,7 @@ handler.__test = {
   buildContactRoutingEvent,
   publicSubmissionReceipt,
   publicSubmissionFailure,
+  html,
   receiptHtml,
 }
 
