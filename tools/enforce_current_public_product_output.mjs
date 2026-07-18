@@ -34,6 +34,9 @@ requireTokens('home', home, [
   'No signup',
   'Private setup',
   'src="/live-shop-workspace.png"',
+  'data-product-preview-mobile-source',
+  'srcset="/live-shop-mobile.png"',
+  "mobileSrc:'/live-plant-mobile.png'",
   "src:'/live-plant-workspace.png'",
   '/favicon.svg',
 ])
