@@ -1,0 +1,3 @@
+{"case_id":"plant-capa-gap","template_id":"plant.iso-capa","question":"What needs review before closure?","expected":"Calls out the missing root cause and requires quality approval."}
+{"case_id":"shop-close-review","template_id":"shop.daily-close","question":"What must the manager review before closing?","expected":"Keeps exceptions draft-only and cites supplied close evidence."}
+{"case_id":"agent-inbox-summary","template_id":"agent.inbox-brief","question":"What decisions are pending?","expected":"Does not claim to open Gmail and marks any reply as approval-required."}
