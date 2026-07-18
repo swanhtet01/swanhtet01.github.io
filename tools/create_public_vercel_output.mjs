@@ -607,7 +607,7 @@ const workHtml = documentHtml({
     .work-proof-label { display: inline-flex; min-width: 0; align-items: center; gap: 9px; color: var(--muted); font-size: 12px; font-weight: 760; }
     .work-proof-label::before { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--signal); box-shadow: 0 0 0 4px color-mix(in srgb, var(--signal) 16%, transparent); content: ""; }
     .work-proof-badge { display: inline-flex; min-height: 28px; align-items: center; border: 1px solid var(--line); border-radius: 6px; padding: 0 9px; color: var(--quiet); font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 10px; font-weight: 780; letter-spacing: 0; text-transform: uppercase; }
-    .work-proof-link { display: block; }
+    .work-proof-link, .work-proof-link picture { display: block; }
     .work-proof img { display: block; width: 100%; height: auto; aspect-ratio: 10 / 3; object-fit: contain; object-position: top; }
     .work-proof-foot { min-height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-top: 1px solid var(--line); padding: 10px 16px; background: color-mix(in srgb, var(--glass-strong) 86%, transparent); }
     .work-proof-description { margin: 0; color: var(--muted); font-size: 13px; font-weight: 650; line-height: 1.4; }
@@ -669,6 +669,7 @@ const workHtml = documentHtml({
       .work-proof { width: 100%; }
       .work-proof-toolbar { min-height: 52px; padding-inline: 12px; }
       .work-proof-badge { min-height: 26px; padding-inline: 8px; font-size: 9px; }
+      .work-proof img { aspect-ratio: 360 / 732; background: #071524; }
       .work-proof-foot { min-height: 0; align-items: flex-start; padding: 10px 12px; }
       .work-proof-description { font-size: 12px; }
       .work-proof-state { padding-top: 2px; font-size: 10px; }
@@ -701,7 +702,7 @@ const workHtml = documentHtml({
         </div>
         <div class="work-proof">
           <div class="work-proof-toolbar"><span class="work-proof-label" data-product-preview-label aria-live="polite">Shop / live workspace</span><span class="work-proof-badge">Current demo</span></div>
-          <a class="work-proof-link" data-preview-proof-link href="${shopStartHref}" aria-label="Open the live Shop workspace"><img data-product-preview-image data-view="shop" src="/live-shop-workspace.png" alt="Current Shop workspace showing priority checks, sales, cash, customers, and stock" width="1600" height="480" fetchpriority="high" /></a>
+          <a class="work-proof-link" data-preview-proof-link href="${shopStartHref}" aria-label="Open the live Shop workspace"><picture><source media="(max-width: 720px)" data-product-preview-mobile-source data-work-product-preview srcset="/live-shop-mobile.png" /><img data-product-preview-image data-view="shop" src="/live-shop-workspace.png" alt="Current Shop workspace showing priority checks, sales, cash, customers, and stock" width="1600" height="480" fetchpriority="high" /></picture></a>
           <div class="work-proof-foot"><p class="work-proof-description" data-product-preview-description>Sales, stock, customers, and daily close in one operating flow.</p><span class="work-proof-state">LIVE</span></div>
         </div>
       </div>

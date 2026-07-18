@@ -95,6 +95,8 @@ function verifyWork(html) {
     'class="work-proof"',
     'class="work-proof-toolbar"',
     'aria-label="Open the live Shop workspace"',
+    'data-work-product-preview',
+    'srcset="/live-shop-mobile.png"',
     'fetchpriority="high"',
     '<h2 id="shop-case-heading">Keep the day together.</h2>',
     '<h2 id="plant-case-heading">Give the floor a memory.</h2>',
