@@ -61,7 +61,7 @@ function verifyHome(html, label) {
     'href="/work/"',
     '<h2 id="workspaces-heading">Start with the work that matters.</h2>',
     'Two working systems',
-    'Built-in AI drafts, checks, and brings the next decision forward while approval stays with your team.',
+    'Private workspaces add supervised, data-grounded decision support after approved sources are connected.',
     'data-product-preview',
     'href="/contact/?from=homepage-private-setup"',
     '>Private setup</a>',

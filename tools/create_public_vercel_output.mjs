@@ -539,7 +539,7 @@ const homeHtml = documentHtml({
   <section class="entry-section page-frame" id="workspaces" aria-labelledby="workspaces-heading">
     <div class="section-intro">
       <div><div class="eyebrow">Two working systems</div><h2 id="workspaces-heading">Start with the work that matters.</h2></div>
-      <p>Shop takes the commercial loop. Plant gives the floor one shared record. Built-in AI drafts, checks, and brings the next decision forward while approval stays with your team.</p>
+      <p>Shop takes the commercial loop. Plant gives the floor one shared record. Private workspaces add supervised, data-grounded decision support after approved sources are connected.</p>
     </div>
     <div class="destination-list">
       <a class="destination" href="${shopStartHref}" aria-label="Try Shop live"><span class="destination-index">01 / SHOP</span><span class="destination-copy"><strong>Shop</strong><span>Sales, stock, customers, receivables, purchasing, and daily close in one operating flow.</span></span><span class="destination-arrow" aria-hidden="true">&#8594;</span></a>

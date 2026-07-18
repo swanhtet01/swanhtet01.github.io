@@ -181,7 +181,7 @@ for (const required of [
   '>Open Shop demo</a>',
   '<h2 id="workspaces-heading">Start with the work that matters.</h2>',
   'Two working systems',
-  'Built-in AI drafts, checks, and brings the next decision forward while approval stays with your team.',
+  'Private workspaces add supervised, data-grounded decision support after approved sources are connected.',
   '<strong>Shop</strong>',
   '<strong>Plant</strong>',
   '<h2 id="brief-heading">Bring us the handoff that still breaks.</h2>',

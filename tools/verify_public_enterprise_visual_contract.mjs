@@ -56,7 +56,7 @@ for (const required of [
   "src:'/live-plant-workspace.png'",
   '<h2 id="workspaces-heading">Start with the work that matters.</h2>',
   'Two working systems',
-  'Built-in AI drafts, checks, and brings the next decision forward while approval stays with your team.',
+  'Private workspaces add supervised, data-grounded decision support after approved sources are connected.',
   '<h2 id="brief-heading">Bring us the handoff that still breaks.</h2>',
   '>Start with one workflow</a>',
   '<img src="/favicon.svg" alt="" width="64" height="64" />',
