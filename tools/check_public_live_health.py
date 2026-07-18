@@ -76,27 +76,45 @@ def nested_value(payload: dict[str, Any], path: str) -> Any:
     return value
 
 
-def run(base_url: str, www_url: str, *, timeout: float, attempts: int) -> dict[str, Any]:
+def run(base_url: str, www_url: str, app_url: str, *, timeout: float, attempts: int) -> dict[str, Any]:
     base_url = base_url.rstrip("/") + "/"
     www_url = www_url.rstrip("/") + "/"
+    app_url = app_url.rstrip("/") + "/"
     failures: list[dict[str, Any]] = []
     results: list[dict[str, Any]] = []
 
     page_checks = [
-        (base_url, ["<title>SuperMega | Open Shop or try a demo</title>", "Open Shop", "Try demo", "Contact"]),
-        (www_url, ["<title>SuperMega | Open Shop or try a demo</title>", "Open Shop", "Try demo", "Contact"]),
+        (
+            base_url,
+            [
+                "Run the day. Keep the handoffs.",
+                "Open Shop demo",
+                "Private setup",
+                "Start with the work that matters.",
+            ],
+        ),
+        (
+            www_url,
+            [
+                "Run the day. Keep the handoffs.",
+                "Open Shop demo",
+                "Private setup",
+                "Start with the work that matters.",
+            ],
+        ),
         (
             urljoin(base_url, "contact/"),
             [
-                "Tell us what needs to work better.",
+                "What should run better?",
                 'action="/api/contact-submissions"',
                 'name="name"',
                 'name="email"',
                 'name="company"',
                 'name="goal"',
+                "No account, data connection, or external action starts without approval.",
             ],
         ),
-        (urljoin(base_url, "privacy/"), ["<title>Privacy | SuperMega</title>", "Only the details needed to reply."]),
+        (urljoin(base_url, "privacy/"), ["Only the details needed to reply."]),
     ]
 
     for url, tokens in page_checks:
@@ -124,33 +142,55 @@ def run(base_url: str, www_url: str, *, timeout: float, attempts: int) -> dict[s
     except (UnicodeDecodeError, json.JSONDecodeError):
         status_payload = {}
 
-    expected_status = {
+    expected_contact_status = {
         "status": "ready",
-        "lead_ledger": "configured",
-        "pipeline_actions": "configured",
-        "primary_datastore.status": "configured",
-        "fallback_queue.status": "ready",
-        "fallback_queue.email_delivery": "configured",
-        "ops_intake.status": "ready",
-        "ops_intake.target": "https://supermega-machine.vercel.app/api/intake",
-        "ops_intake.contract": "body_secret",
-        "deskpos_pipeline.status": "ready",
-        "deskpos_pipeline.target": "https://pos.supermega.dev/api/pipeline-leads",
+        "service": "supermega-contact",
     }
-    mismatches = {
+    contact_mismatches = {
         path: {"expected": expected, "actual": nested_value(status_payload, path)}
-        for path, expected in expected_status.items()
+        for path, expected in expected_contact_status.items()
         if nested_value(status_payload, path) != expected
     }
-    api_result = {
-        "kind": "conversion_api",
+    contact_result = {
+        "kind": "contact_status",
         "url": status_url,
         "status": status_response.status,
-        "mismatches": mismatches,
+        "mismatches": contact_mismatches,
     }
-    results.append(api_result)
-    if status_response.status != 200 or mismatches:
-        failures.append(api_result)
+    results.append(contact_result)
+    if status_response.status != 200 or contact_mismatches:
+        failures.append(contact_result)
+
+    app_status_url = urljoin(app_url, "api/health")
+    app_status_response = fetch(app_status_url, timeout=timeout, attempts=attempts)
+    try:
+        app_status_payload = json.loads(app_status_response.body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        app_status_payload = {}
+
+    expected_app_status = {
+        "ok": True,
+        "status": "ready",
+        "service": "supermega-product-app",
+        "portfolio.products": ["shop", "plant"],
+        "proof.workingDemos": True,
+        "proof.productionCloudDurability": "not-asserted",
+        "proof.realCustomerAcceptance": "not-asserted",
+    }
+    app_mismatches = {
+        path: {"expected": expected, "actual": nested_value(app_status_payload, path)}
+        for path, expected in expected_app_status.items()
+        if nested_value(app_status_payload, path) != expected
+    }
+    app_result = {
+        "kind": "product_app",
+        "url": app_status_url,
+        "status": app_status_response.status,
+        "mismatches": app_mismatches,
+    }
+    results.append(app_result)
+    if app_status_response.status != 200 or app_mismatches:
+        failures.append(app_result)
 
     return {
         "status": "ready" if not failures else "error",
@@ -164,6 +204,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-url", default="https://supermega.dev")
     parser.add_argument("--www-url", default="https://www.supermega.dev")
+    parser.add_argument("--app-url", default="https://app.supermega.dev")
     parser.add_argument("--timeout", type=float, default=30.0)
     parser.add_argument("--attempts", type=int, default=3)
     args = parser.parse_args()
@@ -171,7 +212,7 @@ def main() -> int:
         parser.error("timeout and attempts must be positive")
 
     try:
-        report = run(args.base_url, args.www_url, timeout=args.timeout, attempts=args.attempts)
+        report = run(args.base_url, args.www_url, args.app_url, timeout=args.timeout, attempts=args.attempts)
     except Exception as error:  # Keep Actions output concise and secret-free.
         report = {"status": "error", "reason": str(error)}
 
