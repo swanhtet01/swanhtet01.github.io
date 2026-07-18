@@ -61,6 +61,12 @@ for (const required of [
   '>Start with one workflow</a>',
   '<img src="/favicon.svg" alt="" width="64" height="64" />',
   'href="/favicon.svg"',
+  '<h2 id="trade-heading">Open a demo of your business.</h2>',
+  'class="trade-grid"',
+  '>Free trial</span>',
+  ...['spa', 'salon', 'retail', 'cafe', 'restaurant', 'pharmacy', 'clinic', 'gym', 'service', 'school', 'laundry'].map(
+    (trade) => `href="https://pos.supermega.dev/?demo=${trade}"`,
+  ),
 ]) {
   if (!home.includes(required)) fail('homepage_front_door_contract_missing', { required })
 }

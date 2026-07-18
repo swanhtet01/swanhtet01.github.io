@@ -235,6 +235,9 @@ const sharedStyle = `
   @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
     .front-header { background: var(--surface-strong); }
   }
+  @media (prefers-reduced-transparency: reduce) {
+    .front-header, .hero-product-picker, .preview-toolbar { background: var(--surface-strong); backdrop-filter: none; -webkit-backdrop-filter: none; }
+  }
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
     *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
@@ -324,7 +327,7 @@ const homeProductPreviewScript = `<script>(function(){var root=document.querySel
 
 const homeHtml = documentHtml({
   title: 'supermega.dev | Shop and Plant, ready for real work.',
-  description: 'Open a live Shop or Plant workspace, then set up only the operating path your team actually needs.',
+  description: 'Try Shop or Plant free — live demos already set up for your trade, nothing to install. When it fits, we set up a private workspace for your team.',
   canonical: 'https://supermega.dev/',
   style: `
     .home-main { width: 100%; overflow: clip; }
@@ -450,6 +453,32 @@ const homeHtml = documentHtml({
     .brief-actions .btn.primary { box-shadow: 0 14px 34px rgba(38, 88, 217, 0.28); }
     .brief-aside { color: var(--inverse-muted); font-size: 13px; font-weight: 650; }
 
+    .trade-section { padding: 0 0 104px; }
+    .trade-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(172px, 1fr)); gap: 10px; }
+    .trade-chip {
+      min-height: 58px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 0 16px;
+      background: var(--glass-strong);
+      box-shadow: inset 0 1px 0 var(--glass-highlight);
+      color: var(--ink);
+      font-size: 14.5px;
+      font-weight: 760;
+      text-decoration: none;
+      transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+    }
+    .trade-chip::after { color: var(--accent); font-weight: 800; content: "->"; transition: transform 160ms ease; }
+    .trade-chip:hover { border-color: var(--accent); transform: translateY(-1px); box-shadow: 0 10px 26px rgba(38, 88, 217, 0.14); }
+    .trade-chip:hover::after { transform: translateX(2px); }
+    .trade-note { max-width: 62ch; margin: 18px 0 0; color: var(--muted); font-size: 14px; line-height: 1.55; }
+    .trade-note a { color: var(--accent); font-weight: 760; text-decoration: none; }
+    .trade-note a:hover { color: var(--accent-strong); }
+
     @media (max-width: 980px) {
       .hero { padding: 106px 0 58px; }
       .hero-stage { grid-template-columns: 1fr; gap: 32px; }
@@ -484,6 +513,9 @@ const homeHtml = documentHtml({
       .preview-description { font-size: 12px; }
       .preview-live { padding-top: 2px; font-size: 10px; }
       .entry-section { padding: 40px 0 74px; }
+      .trade-section { padding-bottom: 74px; }
+      .trade-grid { grid-template-columns: repeat(auto-fill, minmax(142px, 1fr)); gap: 8px; }
+      .trade-chip { min-height: 54px; padding: 0 13px; font-size: 13.5px; }
       .section-intro { margin-bottom: 34px; }
       .section-intro h2 { font-size: 36px; }
       .section-intro p { font-size: 16px; }
@@ -513,7 +545,7 @@ const homeHtml = documentHtml({
         <div class="hero-copy">
           <div class="hero-command"><strong>&gt;<span class="terminal-cursor">_</span></strong><span>operational software / live</span></div>
           <h1 id="portfolio-heading">Run the day. Keep the handoffs.</h1>
-          <p><strong class="hero-lead">Shop and Plant, ready for real work.</strong> Choose the workspace that starts with your team today. See the live flow before you ask us to set up a private one.</p>
+          <p><strong class="hero-lead">Shop and Plant, ready for real work.</strong> Try a live workspace free and see the real flow first. When it fits, we set up a private one for your team.</p>
           <div class="hero-product-picker" role="group" aria-label="Choose a live workspace">
             <button type="button" data-product-preview-button="shop" aria-pressed="true"><span class="picker-label">Shop</span><span class="picker-detail">Sales, stock, and daily close</span></button>
             <button type="button" data-product-preview-button="plant" aria-pressed="false"><span class="picker-label">Plant</span><span class="picker-detail">Floor, maintenance, and handoffs</span></button>
@@ -522,7 +554,7 @@ const homeHtml = documentHtml({
             <a class="btn primary" data-preview-open aria-label="Open Shop demo" href="${shopStartHref}">Open Shop demo</a>
             <a class="btn secondary" href="/work/">See it in use</a>
           </div>
-          <div class="hero-meta"><span class="hero-status" data-status-shell><span class="live-dot" aria-hidden="true"></span><span data-public-status aria-live="polite">Checking live demos</span></span><span class="hero-note">No signup</span><a class="hero-setup" href="/contact/?from=homepage-private-setup">Private setup</a></div>
+          <div class="hero-meta"><span class="hero-status" data-status-shell><span class="live-dot" aria-hidden="true"></span><span data-public-status aria-live="polite">Checking live demos</span></span><span class="hero-note">Free trial</span><span class="hero-note">No signup</span><a class="hero-setup" href="/contact/?from=homepage-private-setup">Private setup</a></div>
         </div>
         <div class="hero-preview">
           <div class="preview-toolbar">
@@ -545,6 +577,27 @@ const homeHtml = documentHtml({
       <a class="destination" href="${shopStartHref}" aria-label="Try Shop live"><span class="destination-index">01 / SHOP</span><span class="destination-copy"><strong>Shop</strong><span>Sales, stock, customers, receivables, purchasing, and daily close in one operating flow.</span></span><span class="destination-arrow" aria-hidden="true">&#8594;</span></a>
       <a class="destination" href="${plantStartHref}" aria-label="Try Plant live"><span class="destination-index">02 / PLANT</span><span class="destination-copy"><strong>Plant</strong><span>Production plans, machine state, maintenance, quality, and handoff history in one floor view.</span></span><span class="destination-arrow" aria-hidden="true">&#8594;</span></a>
     </div>
+  </section>
+
+  <section class="trade-section page-frame" id="your-trade" aria-labelledby="trade-heading">
+    <div class="section-intro">
+      <div><div class="eyebrow">Free trial / your trade</div><h2 id="trade-heading">Open a demo of your business.</h2></div>
+      <p>Pick your trade. The demo opens already set up — services, prices, and a daily close — free to try on your phone. Nothing to install.</p>
+    </div>
+    <nav class="trade-grid" aria-label="Open a live Shop demo for your trade">
+      <a class="trade-chip" href="https://pos.supermega.dev/?demo=spa">Massage &amp; spa</a>
+      <a class="trade-chip" href="https://pos.supermega.dev/?demo=salon">Hair &amp; beauty salon</a>
+      <a class="trade-chip" href="https://pos.supermega.dev/?demo=retail">Shop &amp; minimart</a>
+      <a class="trade-chip" href="https://pos.supermega.dev/?demo=cafe">Cafe &amp; tea shop</a>
+      <a class="trade-chip" href="https://pos.supermega.dev/?demo=restaurant">Restaurant</a>
+      <a class="trade-chip" href="https://pos.supermega.dev/?demo=pharmacy">Pharmacy</a>
+      <a class="trade-chip" href="https://pos.supermega.dev/?demo=clinic">Clinic &amp; dental</a>
+      <a class="trade-chip" href="https://pos.supermega.dev/?demo=gym">Gym &amp; fitness</a>
+      <a class="trade-chip" href="https://pos.supermega.dev/?demo=service">Service &amp; repair</a>
+      <a class="trade-chip" href="https://pos.supermega.dev/?demo=school">Tuition &amp; school</a>
+      <a class="trade-chip" href="https://pos.supermega.dev/?demo=laundry">Laundry</a>
+    </nav>
+    <p class="trade-note">Run a factory, workshop, or distribution route? <a href="${plantStartHref}">Open Plant instead</a> — or <a href="/contact/?from=homepage-your-trade">tell us your trade</a> and we set one up.</p>
   </section>
 
   <section class="brief-band" id="start" aria-labelledby="brief-heading">
