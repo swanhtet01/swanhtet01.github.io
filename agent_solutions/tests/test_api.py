@@ -15,6 +15,15 @@ def _post(path: str, payload: dict[str, object]) -> httpx.Response:
     return asyncio.run(send())
 
 
+def _get(path: str) -> httpx.Response:
+    async def send() -> httpx.Response:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.get(path)
+
+    return asyncio.run(send())
+
+
 def _post_file(path: str, name: str, content: str) -> httpx.Response:
     async def send() -> httpx.Response:
         transport = httpx.ASGITransport(app=app)
@@ -125,3 +134,22 @@ def test_quota_is_a_truthful_service_state(monkeypatch: object) -> None:
     )
     assert response.status_code == 503
     assert response.json()["detail"]["code"] == "model_quota_unavailable"
+
+
+def test_vercel_release_is_disabled_until_explicitly_approved(monkeypatch: object) -> None:
+    monkeypatch.setenv("VERCEL", "1")
+    monkeypatch.delenv("SUPERMEGA_AGENT_SOLUTIONS_RELEASE", raising=False)
+    response = _post("/v1/trial-blueprints", {"template_id": "shop.daily-close"})
+    assert response.status_code == 503
+    assert response.json()["code"] == "private_release_not_enabled"
+
+    health = _get("/health")
+    assert health.status_code == 200
+    assert health.json()["status"] == "release_disabled"
+
+
+def test_vercel_release_can_be_explicitly_enabled(monkeypatch: object) -> None:
+    monkeypatch.setenv("VERCEL", "1")
+    monkeypatch.setenv("SUPERMEGA_AGENT_SOLUTIONS_RELEASE", "approved")
+    response = _post("/v1/trial-blueprints", {"template_id": "shop.daily-close"})
+    assert response.status_code == 200

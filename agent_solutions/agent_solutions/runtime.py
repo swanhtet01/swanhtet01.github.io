@@ -30,6 +30,13 @@ def is_configured() -> bool:
     return bool(os.getenv("OPENAI_API_KEY", "").strip())
 
 
+def is_release_enabled() -> bool:
+    """Keep a Vercel function inert until its private release is approved."""
+    if os.getenv("VERCEL") != "1":
+        return True
+    return os.getenv("SUPERMEGA_AGENT_SOLUTIONS_RELEASE") == "approved"
+
+
 def _instructions() -> str:
     return """You are SuperMega Insight Reader. Turn only the supplied excerpts into a concise decision brief.
 

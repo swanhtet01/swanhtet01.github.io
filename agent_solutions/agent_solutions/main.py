@@ -6,7 +6,8 @@ import json
 import os
 
 import uvicorn
-from fastapi import File, FastAPI, HTTPException, UploadFile
+from fastapi import File, FastAPI, HTTPException, Request, UploadFile
+from fastapi.responses import JSONResponse
 
 from .contracts import (
     ActionProposal,
@@ -29,6 +30,7 @@ from .runtime import (
     AgentNotConfigured,
     AgentQuotaUnavailable,
     is_configured,
+    is_release_enabled,
     run_insight_brief,
     smoke_brief_request,
 )
@@ -42,11 +44,26 @@ app = FastAPI(
 )
 
 
+@app.middleware("http")
+async def require_private_release(request: Request, call_next: object) -> object:
+    if request.url.path == "/health" or is_release_enabled():
+        return await call_next(request)
+    return JSONResponse(
+        status_code=503,
+        content={
+            "code": "private_release_not_enabled",
+            "message": "Agent Solutions is not enabled for this deployment.",
+        },
+    )
+
+
 @app.get("/health")
 async def health() -> dict[str, object]:
+    release_enabled = is_release_enabled()
     return {
-        "status": "ready",
+        "status": "ready" if release_enabled else "release_disabled",
         "service": "supermega-agent-solutions",
+        "release_enabled": release_enabled,
         "model_configured": is_configured(),
         "persistence": "disabled",
         "connectors": "disabled",

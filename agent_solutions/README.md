@@ -34,6 +34,21 @@ uv run python -m agent_solutions.main
 
 The service starts at `http://127.0.0.1:8080` by default. Set `PORT` to override it.
 
+## Separate Vercel deployment
+
+Deploy this `agent_solutions` directory as the root of a distinct, private Vercel project. It must not be deployed through the public `supermega.dev` project.
+
+Before a private preview can serve requests, configure all of the following in that separate project:
+
+- Enable Vercel Deployment Protection.
+- Set `SUPERMEGA_AGENT_SOLUTIONS_RELEASE=approved` only for the intended preview or production environment.
+- Set `OPENAI_API_KEY` through Vercel's encrypted environment-variable UI, never in a source file.
+- Set `SUPERMEGA_OPENAI_MODEL` only after an owner verifies the project has API billing/quota.
+
+When Vercel runs without the explicit release flag, every endpoint except `/health` returns `503 private_release_not_enabled`. `/health` reports `release_disabled`; it does not make the service usable. Local development remains enabled so deterministic tests and demos work without a deployment flag.
+
+The package supplies `api/index.py`, `requirements.txt`, and `vercel.json` for this separate deployment. It deliberately has no public connector, scraper, browser executor, email sender, persistence layer, or automated outreach capability.
+
 ## API surface
 
 | Endpoint | Purpose | Side effects |
