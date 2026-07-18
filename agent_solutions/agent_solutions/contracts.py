@@ -70,6 +70,18 @@ class TrialBlueprint(BaseModel):
     approval_boundary: str = APPROVAL_BOUNDARY
 
 
+class TrialBlueprintBatchRequest(BaseModel):
+    trials: list[TrialBlueprintRequest] = Field(min_length=1, max_length=1000)
+
+
+class TrialBlueprintBatchResponse(BaseModel):
+    status: Literal["ready"] = "ready"
+    trial_state: Literal["not_created"] = "not_created"
+    blueprint_count: int = Field(ge=1, le=1000)
+    blueprints: list[TrialBlueprint]
+    approval_boundary: str = APPROVAL_BOUNDARY
+
+
 class LeadImportRow(BaseModel):
     lead_id: str = Field(min_length=1, max_length=80)
     business_name: str = Field(min_length=1, max_length=180)

@@ -6,7 +6,7 @@ import json
 import os
 
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import File, FastAPI, HTTPException, UploadFile
 
 from .contracts import (
     ActionProposal,
@@ -17,8 +17,11 @@ from .contracts import (
     LeadFitResponse,
     TemplateDefinition,
     TrialBlueprint,
+    TrialBlueprintBatchRequest,
+    TrialBlueprintBatchResponse,
     TrialBlueprintRequest,
 )
+from .lead_csv import LeadCsvError, parse_lead_csv
 from .lead_fit import score_leads
 from .policy import PolicyViolation
 from .proposals import build_action_proposal
@@ -29,7 +32,7 @@ from .runtime import (
     run_insight_brief,
     smoke_brief_request,
 )
-from .templates import build_trial_blueprint, list_templates
+from .templates import build_trial_blueprint, build_trial_blueprints, list_templates
 
 
 app = FastAPI(
@@ -64,9 +67,31 @@ async def trial_blueprints(request: TrialBlueprintRequest) -> TrialBlueprint:
         raise HTTPException(status_code=404, detail=str(error)) from error
 
 
+@app.post("/v1/trial-blueprints/batch", response_model=TrialBlueprintBatchResponse)
+async def trial_blueprints_batch(
+    request: TrialBlueprintBatchRequest,
+) -> TrialBlueprintBatchResponse:
+    try:
+        return build_trial_blueprints(request)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
 @app.post("/v1/lead-fit", response_model=LeadFitResponse)
 async def lead_fit(request: LeadFitRequest) -> LeadFitResponse:
     return score_leads(request)
+
+
+@app.post("/v1/lead-fit/csv", response_model=LeadFitResponse)
+async def lead_fit_csv(file: UploadFile = File(...)) -> LeadFitResponse:
+    if file.content_type not in {None, "", "text/csv", "application/csv", "application/vnd.ms-excel"}:
+        raise HTTPException(status_code=415, detail="Lead import must be a CSV file.")
+    payload = await file.read(5 * 1024 * 1024 + 1)
+    await file.close()
+    try:
+        return score_leads(parse_lead_csv(payload))
+    except LeadCsvError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 @app.post("/v1/action-proposals", response_model=ActionProposal)
@@ -106,6 +131,14 @@ async def briefs(request: InsightBriefRequest) -> InsightBriefResponse:
 
 def _deterministic_smoke() -> dict[str, object]:
     trial = build_trial_blueprint(TrialBlueprintRequest(template_id="shop.daily-close"))
+    trial_batch = build_trial_blueprints(
+        TrialBlueprintBatchRequest(
+            trials=[
+                {"template_id": "shop.daily-close"},
+                {"template_id": "plant.shift-handoff"},
+            ]
+        )
+    )
     lead_fits = score_leads(
         LeadFitRequest(
             leads=[
@@ -130,12 +163,14 @@ def _deterministic_smoke() -> dict[str, object]:
         )
     )
     assert trial.trial_state == "not_created"
+    assert trial_batch.blueprint_count == 2
     assert lead_fits.fits[0].outreach_state == "not_started"
     assert proposal.execution_state == "not_started"
     return {
         "status": "ready",
         "templates": len(list_templates()),
         "trial_state": trial.trial_state,
+        "batch_blueprints": trial_batch.blueprint_count,
         "lead_disposition": lead_fits.fits[0].disposition,
         "action_execution_state": proposal.execution_state,
     }

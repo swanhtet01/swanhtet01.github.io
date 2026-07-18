@@ -1,6 +1,13 @@
 from __future__ import annotations
 
-from .contracts import ClientProfile, TemplateDefinition, TrialBlueprint, TrialBlueprintRequest
+from .contracts import (
+    ClientProfile,
+    TemplateDefinition,
+    TrialBlueprint,
+    TrialBlueprintBatchRequest,
+    TrialBlueprintBatchResponse,
+    TrialBlueprintRequest,
+)
 
 
 def _template(
@@ -194,4 +201,12 @@ def build_trial_blueprint(request: TrialBlueprintRequest) -> TrialBlueprint:
         first_run=template.first_run,
         data_request=template.data_request,
         acceptance_checks=template.acceptance_checks,
+    )
+
+
+def build_trial_blueprints(request: TrialBlueprintBatchRequest) -> TrialBlueprintBatchResponse:
+    blueprints = [build_trial_blueprint(trial) for trial in request.trials]
+    return TrialBlueprintBatchResponse(
+        blueprint_count=len(blueprints),
+        blueprints=blueprints,
     )

@@ -6,7 +6,8 @@ This service turns approved business material into review-ready working drafts. 
 
 - Lists ready-to-configure Shop, Plant, and Agent templates.
 - Produces non-persistent trial blueprints with first-run steps, data requests, acceptance checks, and an approval boundary.
-- Scores client-imported leads only when their source and permitted-use status are supplied.
+- Scores customer-imported JSON or CSV lead lists only when their source and permitted-use status are supplied.
+- Produces up to 1,000 non-persistent trial blueprints in a batch for approved prospect lists.
 - Summarizes customer-provided excerpts into an evidence-linked brief with approvals required for every proposed action.
 - Produces computer-use proposals for mobile, desktop, or browser work without executing them.
 
@@ -40,7 +41,9 @@ The service starts at `http://127.0.0.1:8080` by default. Set `PORT` to override
 | `GET /health` | Runtime and key configuration status | None |
 | `GET /v1/templates` | Template catalog | None |
 | `POST /v1/trial-blueprints` | Configures an in-memory trial plan | None |
+| `POST /v1/trial-blueprints/batch` | Produces up to 1,000 non-persistent trial plans | None |
 | `POST /v1/lead-fit` | Scores imported, permitted leads | None |
+| `POST /v1/lead-fit/csv` | Scores a customer-supplied CSV lead list | None |
 | `POST /v1/briefs` | Runs the Insight Reader on supplied excerpts | Model call only |
 | `POST /v1/action-proposals` | Creates an approval-required computer-use plan | None |
 
@@ -66,3 +69,9 @@ The service starts at `http://127.0.0.1:8080` by default. Set `PORT` to override
 Every response remains draft-only. `docs/prompt.md` contains the exact operating prompt and its safety constraints.
 
 `POST /v1/briefs` reports `503 model_quota_unavailable` if the configured OpenAI project has no API quota. That is a deployment prerequisite, not a reason to fall back to an unbounded local or connector-based action.
+
+## Lead CSV contract
+
+`POST /v1/lead-fit/csv` accepts UTF-8 CSV files up to 5 MB and 1,000 usable rows. Required columns are `lead_id`, `business_name`, and `permission_status`. Optional columns are `industry`, `city`, `public_summary`, `website`, `source_url`, `source_owner`, and `do_not_contact`.
+
+`permission_status` must be `customer_provided` or `customer_approved` before a row can be recommended for human review. `not_confirmed` and `prohibited` are blocked. `do_not_contact` remains suppressed. The endpoint does not find, enrich, scrape, contact, or store leads.

@@ -15,10 +15,51 @@ def _post(path: str, payload: dict[str, object]) -> httpx.Response:
     return asyncio.run(send())
 
 
+def _post_file(path: str, name: str, content: str) -> httpx.Response:
+    async def send() -> httpx.Response:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.post(
+                path,
+                files={"file": (name, content, "text/csv")},
+            )
+
+    return asyncio.run(send())
+
+
 def test_trial_blueprint_endpoint_is_non_persistent() -> None:
     response = _post("/v1/trial-blueprints", {"template_id": "shop.receiving-evidence"})
     assert response.status_code == 200
     assert response.json()["trial_state"] == "not_created"
+
+
+def test_trial_blueprint_batch_is_non_persistent() -> None:
+    response = _post(
+        "/v1/trial-blueprints/batch",
+        {
+            "trials": [
+                {"template_id": "shop.daily-close"},
+                {"template_id": "plant.shift-handoff"},
+            ]
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["blueprint_count"] == 2
+    assert response.json()["trial_state"] == "not_created"
+
+
+def test_csv_lead_import_is_review_only() -> None:
+    response = _post_file(
+        "/v1/lead-fit/csv",
+        "approved-leads.csv",
+        (
+            "lead_id,business_name,industry,permission_status,source_owner\n"
+            "lead-1,Example Factory,Manufacturing,customer_approved,Customer import\n"
+        ),
+    )
+    assert response.status_code == 200
+    assert response.json()["fits"][0]["disposition"] == "review"
+    assert response.json()["fits"][0]["outreach_state"] == "not_started"
 
 
 def test_unconfirmed_source_is_rejected_before_model_execution() -> None:
