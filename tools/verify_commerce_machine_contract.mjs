@@ -31,7 +31,7 @@ const requirements = [
   ['conversation parser matches catalog', /function parseConversation\(\)[\s\S]*matchedProduct/],
   ['conversation parser extracts quantity', /function parseRequestedQuantity\(message: string\)/],
   ['public agents page is reachable', /Route element=\{routeElement\(<AgentsPage \/>\)\} path="agents"/],
-  ['agents page offers free machine', /to="\/commerce-machine"[\s\S]*Try free machine/],
+  ['agents page offers attributed free machine', /to="\/commerce-machine\?source=agent-product"[\s\S]*Try free machine/],
   ['shop demo query opens the runnable machine', /demo === 'shop'[\s\S]*\/commerce-machine\?source=demo&demo=shop/],
   ['plant demo query opens the public plant product', /demo === 'plant'[\s\S]*\/products\/industrial-dqms\?source=demo&demo=plant/],
   ['conversation parser has no fixed confidence claim', [machine, analytics].join('\\n').indexOf('94%') === -1 ? /.*/ : /$a/],

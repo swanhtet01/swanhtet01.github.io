@@ -149,7 +149,7 @@ export function AgentsPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <Link className="sm-button-primary" to="/commerce-machine">
+            <Link className="sm-button-primary" to="/commerce-machine?source=agent-product">
               Try free machine
             </Link>
             <Link className="sm-button-primary" to="/contact">
