@@ -5724,6 +5724,7 @@ async function prunePublicSiteDir() {
 await rm(outputDir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 })
 await mkdir(outputDir, { recursive: true })
 await copyPublicStatic(resolve(root, 'api-static'), staticDir)
+await mkdir(staticDir, { recursive: true })
 // Brand favicon is owned here (revert-proof against OneDrive restoring the old file): Arcane Atelier mark.
 await writeFile(resolve(staticDir, 'favicon.svg'), `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="SuperMega"><rect width="64" height="64" rx="16" fill="#1B1815"/><g fill="none" stroke="#D97757" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M35.8 10.3 A22 22 0 1 1 28.2 10.3"/><path d="M22 45 L22 26 L32 38 L42 26 L42 45" stroke-width="4"/></g><path d="M32 34.5 L33.2 37 L35.5 38 L33.2 39 L32 41.5 L30.8 39 L28.5 38 L30.8 37 Z" fill="#C9A24B"/><path d="M32 7.6 L32.9 9.7 L35 10.3 L32.9 10.9 L32 13 L31.1 10.9 L29 10.3 L31.1 9.7 Z" fill="#C9A24B"/><rect x=".75" y=".75" width="62.5" height="62.5" rx="15.25" fill="none" stroke="#F3EFE6" stroke-opacity=".14" stroke-width="1.5"/></svg>\n`, 'utf8')
 for (const entry of await readdir(resolve(staticDir, 'site')).catch(() => [])) {
