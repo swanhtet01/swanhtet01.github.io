@@ -31,4 +31,8 @@ def _prepare_runtime_pilot_data() -> Path:
 
 
 app = create_app(REPO_ROOT / "api-static", _prepare_runtime_pilot_data())
+existing_route_ids = {id(route) for route in app.router.routes}
 app.include_router(cloud_runtime_router)
+new_routes = [route for route in app.router.routes if id(route) not in existing_route_ids]
+existing_routes = [route for route in app.router.routes if id(route) in existing_route_ids]
+app.router.routes = [*new_routes, *existing_routes]
