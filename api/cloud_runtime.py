@@ -38,8 +38,9 @@ def _authorized(authorization: str | None, x_cron_secret: str | None) -> bool:
 
 def _runtime_status() -> dict[str, object]:
     token_configured = bool(_cron_token())
+    cron_secret_configured = bool(_text(os.getenv("CRON_SECRET")))
     queue_url = _text(os.getenv("SUPERMEGA_CLOUD_TASKS_WORKER_URL"))
-    scheduler_ready = token_configured and bool(queue_url)
+    scheduler_ready = token_configured and cron_secret_configured and bool(queue_url)
     return {
         "status": "ready" if scheduler_ready else "degraded",
         "runtime_target": "hosted_vercel_api",
@@ -47,6 +48,7 @@ def _runtime_status() -> dict[str, object]:
         "scheduler": {
             "configured": scheduler_ready,
             "token_configured": token_configured,
+            "cron_secret_configured": cron_secret_configured,
             "worker_url_configured": bool(queue_url),
             "queue_path": "/api/cron/supermega/agent-queue",
             "daily_path": "/api/cron/supermega/daily",
