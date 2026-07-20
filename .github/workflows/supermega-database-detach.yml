@@ -1,0 +1,24 @@
+name: Remove Incompatible Vercel Database Secret
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  detach-database-secret:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Install Vercel CLI
+        run: npm install --global vercel@56.4.0
+
+      - name: Remove Cloud Run-only database secret from Vercel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          vercel env rm SUPERMEGA_DATABASE_URL production --yes --project prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG --token "$VERCEL_TOKEN"
+
+      - name: Confirm removal without printing values
+        run: echo "The incompatible Vercel database variable was removed."
