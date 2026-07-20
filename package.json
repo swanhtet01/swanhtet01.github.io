@@ -64,6 +64,7 @@
     "audit:lead-ledger": "node tools/audit_lead_ledger.mjs",
     "verify:commerce-machine": "node tools/verify_commerce_machine_contract.mjs",
     "verify:app-deploy-workflow": "node tools/verify_app_deploy_workflow.mjs"
+    ,"smoke:free-mode": "node tools/smoke_free_mode_health.mjs"
   },
   "devDependencies": {
     "pg": "^8.20.0",

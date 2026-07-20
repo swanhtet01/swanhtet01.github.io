@@ -75,6 +75,9 @@ jobs:
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
 
+      - name: Smoke free mode
+        run: node tools/smoke_free_mode_health.mjs
+
       - name: Smoke production app
         run: |
           curl --fail --retry 8 --retry-delay 5 --retry-all-errors https://app.supermega.dev/api/health | tee /tmp/supermega-health.json

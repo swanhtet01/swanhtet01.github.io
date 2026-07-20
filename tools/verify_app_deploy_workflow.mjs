@@ -11,6 +11,7 @@ const requirements = [
   ['megaos project check', /project inspect megaos/],
   ['prebuilt production deploy', /vercel deploy --prebuilt --prod/],
   ['live health smoke', /https:\/\/app\.supermega\.dev\/api\/health/],
+  ['free mode health smoke', /smoke_free_mode_health\.mjs/],
 ]
 const failures = requirements.filter(([, pattern]) => !pattern.test(workflow)).map(([name]) => name)
 if (failures.length) {
