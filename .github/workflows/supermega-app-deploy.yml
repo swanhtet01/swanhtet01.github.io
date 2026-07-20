@@ -1,0 +1,70 @@
+name: SuperMega App Build and Deploy
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'api/**'
+      - 'api_app.py'
+      - 'showroom/**'
+      - 'tools/write_app_vercel_config.mjs'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - 'requirements.txt'
+      - 'vercel.json'
+      - '.github/workflows/supermega-app-deploy.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: showroom/package-lock.json
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install frontend dependencies
+        working-directory: showroom
+        run: npm ci
+
+      - name: Generate app deployment configuration
+        run: node tools/write_app_vercel_config.mjs
+
+      - name: Verify app project link
+        run: npx vercel project inspect megaos --token="${VERCEL_TOKEN}"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build app
+        run: npm run build
+
+      - name: Build Vercel output
+        run: npx vercel build --yes --token="${VERCEL_TOKEN}"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy app production
+        run: npx vercel deploy --prebuilt --prod --yes --token="${VERCEL_TOKEN}"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+      - name: Smoke production app
+        run: curl --fail --retry 8 --retry-delay 5 --retry-all-errors https://app.supermega.dev/api/health
