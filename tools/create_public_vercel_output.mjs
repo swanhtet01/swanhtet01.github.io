@@ -5566,6 +5566,10 @@ const config = {
       dest: '/machine/index.html',
     },
     {
+      src: '^/ai-agent-solutions/?$',
+      dest: '/ai-agent-solutions/index.html',
+    },
+    {
       src: '^/(?:site/.*|favicon\\.svg|favicon-[0-9]+\\.png|apple-touch-icon\\.png|vite\\.svg|site\\.webmanifest)$',
       headers: { 'cache-control': 'public, max-age=31536000, immutable' },
       continue: true,
