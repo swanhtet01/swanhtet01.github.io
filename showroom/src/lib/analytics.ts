@@ -25,6 +25,33 @@ let posthogClient: {
 const queuedEvents: Array<{ event: string; properties?: EventPayload }> = []
 const queuedIdentities: Array<{ userId: string; properties?: EventPayload }> = []
 
+const FIRST_PARTY_EVENT_TYPES: Record<string, string> = {
+  commerce_conversation_parsed: 'setup_started',
+  commerce_catalog_imported: 'setup_started',
+  commerce_blueprint_imported: 'setup_started',
+  commerce_stage_advanced: 'cta_clicked',
+  commerce_handoff_exported: 'lead_form_submitted',
+  commerce_blueprint_exported: 'template_clicked',
+}
+
+function recordFirstPartyEvent(event: string) {
+  const eventType = FIRST_PARTY_EVENT_TYPES[event]
+  if (!eventType || typeof window === 'undefined') return
+  const payload = {
+    event_type: eventType,
+    page_path: window.location.pathname,
+    template_id: event.startsWith('commerce_') ? 'commerce-machine' : undefined,
+    component: event,
+    user_device_mode: window.innerWidth < 640 ? 'phone' : window.innerWidth < 1024 ? 'tablet' : 'desktop',
+  }
+  void fetch('/api/behavior-events', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(payload),
+    keepalive: true,
+  }).catch(() => undefined)
+}
+
 export function analyticsEnabled() {
   return Boolean(posthogKey)
 }
@@ -69,6 +96,7 @@ export function initAnalytics() {
 }
 
 export function trackEvent(event: string, properties?: EventPayload) {
+  recordFirstPartyEvent(event)
   if (!posthogKey) {
     return
   }
