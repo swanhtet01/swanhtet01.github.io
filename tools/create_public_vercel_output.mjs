@@ -6414,6 +6414,23 @@ const publicAiAgentSolutionsHtml = `<!doctype html>
       <div class="actions"><a class="btn primary" href="/contact/?package=ai-agent">Describe the job</a><a class="btn secondary" href="/">Back to Shop and Plant</a></div>
       <footer><span>Supervised automation. No unapproved external sends or money actions.</span><span><a href="/contact/">Contact</a> · <a href="/offers/">Offers</a></span></footer>
     </main>
+    <script>
+      (function () {
+        function emit(eventType, ctaText) {
+          var body = JSON.stringify({ event_type: eventType, page_path: location.pathname, component: 'ai-agent-solutions', cta_text: ctaText || '' });
+          try {
+            var blob = new Blob([body], { type: 'application/json' });
+            if (navigator.sendBeacon) navigator.sendBeacon('/api/behavior-events', blob);
+            else fetch('/api/behavior-events', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body, keepalive: true });
+          } catch (_) {}
+        }
+        emit('page_viewed');
+        document.addEventListener('click', function (event) {
+          var link = event.target.closest && event.target.closest('a');
+          if (link && link.textContent) emit('cta_clicked', link.textContent.trim().slice(0, 160));
+        });
+      }());
+    </script>
   </body>
 </html>`
 // Demo hub (source lives in C:/sm-site, outside OneDrive) served at /demo/
