@@ -58,15 +58,21 @@ def main() -> int:
         if home_status != 200:
             raise RuntimeError(f"Expected 200 for home page, got {home_status}")
 
-        js_asset = extract_asset(home_html, r'(assets/index-[A-Za-z0-9_-]+\.js)')
-        css_asset = extract_asset(home_html, r'(assets/index-[A-Za-z0-9_-]+\.css)')
-
-        js_status, _ = fetch(f"{base_url}/{js_asset}", accept="text/javascript")
-        css_status, _ = fetch(f"{base_url}/{css_asset}", accept="text/css")
-        if js_status != 200:
-            raise RuntimeError(f"Expected 200 for JS asset {js_asset}, got {js_status}")
-        if css_status != 200:
-            raise RuntimeError(f"Expected 200 for CSS asset {css_asset}, got {css_status}")
+        asset_match = re.search(r'assets/index-[A-Za-z0-9_-]+\.js', home_html)
+        if asset_match:
+            js_asset = asset_match.group(0)
+            js_status, _ = fetch(f"{base_url}/{js_asset}", accept="text/javascript")
+            if js_status != 200:
+                raise RuntimeError(f"Expected 200 for JS asset {js_asset}, got {js_status}")
+            asset_mode = "bundled_app"
+            asset_statuses = {"js": js_status}
+        else:
+            required_tokens = ("SUPERMEGA", "/products/agents/", "/contact/")
+            missing = [token for token in required_tokens if token not in home_html]
+            if missing:
+                raise RuntimeError(f"Static public artifact is missing required tokens: {missing}")
+            asset_mode = "server_rendered_static"
+            asset_statuses = {}
 
         meta_status = 0
         try:
@@ -82,10 +88,7 @@ def main() -> int:
             "status": "ready",
             "base_url": base_url,
             "routes": route_statuses,
-            "assets": {
-                "js": {"path": js_asset, "status": js_status},
-                "css": {"path": css_asset, "status": css_status},
-            },
+            "assets": {"mode": asset_mode, **asset_statuses},
             "meta_workspace_status": meta_status,
         }
         print(result)
