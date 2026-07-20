@@ -5545,6 +5545,13 @@ const config = {
       dest: '/api/public-app-handoff.js',
     },
     {
+      src: '^/demo/?$',
+      status: 308,
+      headers: {
+        Location: 'https://demo.supermega.dev/',
+      },
+    },
+    {
       src: '^/(?:agentops|agentops-toolbox|ai-back-office|back-office-operator|back-office-workflow-desk|openclaw|office-operator)/?$',
       status: 308,
       headers: {

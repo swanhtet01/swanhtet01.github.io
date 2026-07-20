@@ -30,6 +30,14 @@ if (productsRoute?.dest !== '/products/index.html') {
   fail('products_route_not_static_page', { expected: { dest: '/products/index.html' }, actual: productsRoute })
 }
 
+const demoRoute = (config.routes || []).find((route) => route.src === '^/demo/?$')
+if (demoRoute?.status !== 308 || demoRoute?.headers?.Location !== 'https://demo.supermega.dev/') {
+  fail('demo_route_contract_missing', {
+    expected: { status: 308, Location: 'https://demo.supermega.dev/' },
+    actual: demoRoute,
+  })
+}
+
 for (const src of [
   '^/(?:agentops|agentops-toolbox|ai-back-office|back-office-operator|back-office-workflow-desk|openclaw|office-operator)/?$',
   '^/products/(?:agentops|agentops-toolbox|ai-agent-operator|ai-back-office|back-office-operator|back-office-workflow-desk|openclaw)/?$',
