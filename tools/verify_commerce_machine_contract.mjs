@@ -21,6 +21,7 @@ const requirements = [
   ['metadata-only autocapture', /autocapture:\s*false/],
   ['session recording disabled', /disable_session_recording:\s*true/],
   ['analytics payload sanitizer', /sanitizeEventPayload[\s\S]*BLOCKED_PROPERTY/],
+  ['free handoff attribution is allowlisted', /allowedEntrySource[\s\S]*agent-product[\s\S]*utm_source/],
   ['identity payload sanitizer', /const safeProperties = sanitizeEventPayload\(properties\)[\s\S]*identify\(userId, safeProperties\)[\s\S]*queuedIdentities\.push\(\{ userId, properties: safeProperties \}\)/],
   ['setup learning events mapped', /commerce_template_edited:[\s\S]*commerce_channel_selected:[\s\S]*commerce_worker_toggled:[\s\S]*commerce_catalog_template_downloaded/],
   ['starter demo reset', /function resetDemo\(\)[\s\S]*setCatalogSource\('demo'\)[\s\S]*commerce_demo_reset/],

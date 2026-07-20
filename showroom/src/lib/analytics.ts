@@ -43,11 +43,14 @@ const FIRST_PARTY_EVENT_TYPES: Record<string, string> = {
 function recordFirstPartyEvent(event: string) {
   const eventType = FIRST_PARTY_EVENT_TYPES[event]
   if (!eventType || typeof window === 'undefined') return
+  const entrySource = new URLSearchParams(window.location.search).get('source')
+  const allowedEntrySource = entrySource && ['agent-product', 'demo', 'public-site'].includes(entrySource) ? entrySource : undefined
   const payload = {
     event_type: eventType,
     page_path: window.location.pathname,
     template_id: event.startsWith('commerce_') ? 'commerce-machine' : undefined,
     component: event,
+    utm_source: allowedEntrySource,
     user_device_mode: window.innerWidth < 640 ? 'phone' : window.innerWidth < 1024 ? 'tablet' : 'desktop',
   }
   void fetch('https://supermega.dev/api/behavior-events', {
