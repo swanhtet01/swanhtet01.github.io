@@ -174,6 +174,23 @@ export function CommerceMachinePage() {
     trackEvent('commerce_catalog_template_downloaded', { source: 'machine_setup' })
   }
 
+  function resetDemo() {
+    setBusinessName('Demo shop')
+    setChannel('Messenger')
+    setProducts(DEFAULT_PRODUCTS)
+    setSelectedProductId(DEFAULT_PRODUCTS[0].id)
+    setCatalogSource('demo')
+    setQuantity(2)
+    setCustomerName('New customer')
+    setCustomerMessage('Hello, do you have milk tea? I want two cups for delivery.')
+    setConversationReady(false)
+    setParseNote('Waiting for a message to be classified.')
+    setStage('intake')
+    setPolicy(DEFAULT_POLICY)
+    setEnabledWorkers(WORKERS.map(([name]) => name))
+    trackEvent('commerce_demo_reset', { source: 'machine_setup' })
+  }
+
   return <div className="space-y-8 pb-12">
     <section className="sm-site-panel">
       <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
@@ -193,6 +210,7 @@ export function CommerceMachinePage() {
         <label className="mt-6 block cursor-pointer border border-dashed border-white/20 p-4 text-sm text-[var(--sm-muted)] hover:border-[var(--sm-accent)]"><span className="block font-semibold text-white">Import client catalog or blueprint</span><span className="mt-1 block">Catalog JSON or a saved SuperMega machine blueprint.</span><input className="sr-only" accept="application/json,.json" type="file" onChange={(event) => { const file = event.target.files?.[0]; if (file) importCatalog(file); event.currentTarget.value = '' }} /></label>
         <button className="sm-button-secondary mt-3 w-full" type="button" onClick={downloadCatalogTemplate}>Download starter catalog</button>
         <button className="sm-button-secondary mt-3 w-full" type="button" onClick={exportBlueprint}>Export reusable machine blueprint</button>
+        <button className="sm-button-secondary mt-3 w-full" type="button" onClick={resetDemo}>Reset to starter demo</button>
       </article>
 
       <article className="sm-surface-deep p-6"><div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/10 pb-5"><div><p className="sm-kicker text-[var(--sm-accent)]">2. Run the worker</p><h2 className="mt-2 text-2xl font-bold text-white">One order, four accountable states</h2></div><span className="sm-status-pill">{businessName} / {channel}</span></div>

@@ -37,6 +37,7 @@ const FIRST_PARTY_EVENT_TYPES: Record<string, string> = {
   commerce_blueprint_exported: 'template_clicked',
   commerce_catalog_template_downloaded: 'template_clicked',
   commerce_catalog_exported: 'template_clicked',
+  commerce_demo_reset: 'setup_started',
 }
 
 function recordFirstPartyEvent(event: string) {
