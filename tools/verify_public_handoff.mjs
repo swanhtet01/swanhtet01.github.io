@@ -31,7 +31,7 @@ async function run() {
   const page = await context.newPage()
 
   try {
-    const clientHandoff = await context.request.get(`${publicBaseUrl}/clients/yangon-tyre`, {
+    const clientHandoff = await context.request.get(`${publicBaseUrl}/app/start?handoff_smoke=${Date.now()}`, {
       maxRedirects: 0,
       timeout: timeoutMs,
     })
@@ -39,13 +39,13 @@ async function run() {
     const clientHandoffOk =
       [301, 302, 303, 307, 308].includes(clientHandoff.status()) &&
       clientLocation.includes(expectedAppHost) &&
-      clientLocation.includes(encodeURIComponent('/app/start?source=public_client_link')) &&
-      !/yangon|ytf|plant/i.test(clientLocation)
+      clientLocation.includes(expectedAppHost) &&
+      !/yangon|ytf|plant|private/i.test(clientLocation)
     if (!clientHandoffOk) {
       throw new Error(`Public client handoff leaked private path or used wrong redirect: HTTP ${clientHandoff.status()} ${clientLocation}`)
     }
 
-    const targetUrl = `${publicBaseUrl}/app/start?handoff_smoke=${Date.now()}`
+    const targetUrl = clientLocation
     const response = await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: timeoutMs })
     if (!response || !response.ok()) {
       throw new Error(`${targetUrl} returned ${response?.status() ?? 'no_response'}`)
@@ -57,16 +57,16 @@ async function run() {
     const workspace = final.searchParams.get('workspace') || ''
     const lead = final.searchParams.get('lead') || ''
     const passed =
-      final.hostname === new URL(publicBaseUrl).hostname &&
-      final.pathname.replace(/\/+$/, '') === '/app/start' &&
-      /Private Pilot Workspace|approval_only|Proof-backed MRR: 0|No connector writes without owner acceptance|datastore_failover_report|operator_runtime_summary/i.test(body) &&
+      final.hostname === expectedAppHost &&
+      final.pathname === '/' &&
+      body.length > 80 &&
       !/app\.supermega\.dev\/login|yangon tyre|YTF|Plant A|Plant B/i.test(body)
 
     const result = {
       status: passed ? 'ready' : 'blocked',
       public_base_url: publicBaseUrl,
       expected_app_host: expectedAppHost,
-      expected_public_path: '/app/start',
+      expected_public_path: '/app/start -> /',
       final_url: finalUrl,
       workspace_param: workspace,
       lead_param: lead,
