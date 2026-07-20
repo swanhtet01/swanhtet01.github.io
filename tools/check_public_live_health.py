@@ -50,11 +50,11 @@ def check_json(url: str, expected: dict[str, Any], getter: Callable[[str], HttpR
 
 def run(getter: Callable[[str], HttpResult] = fetch) -> dict[str, Any]:
     checks = [
-        check_page("https://supermega.dev/", ["Operating software for shops and plants", "Shop", "Plant"], getter),
-        check_page("https://www.supermega.dev/", ["Operating software for shops and plants", "Shop", "Plant"], getter),
-        check_page("https://supermega.dev/products/", ["Open Shop"], getter),
-        check_page("https://supermega.dev/offers/", ["Talk to us"], getter),
-        check_page("https://supermega.dev/contact/", ["Start a conversation", "What should become easier?"], getter),
+        check_page("https://supermega.dev/", ["Custom software at SaaS prices", "Shop", "Plant"], getter),
+        check_page("https://www.supermega.dev/", ["Custom software at SaaS prices", "Shop", "Plant"], getter),
+        check_page("https://supermega.dev/products/", ["Systems we build", "Shop"], getter),
+        check_page("https://supermega.dev/offers/", ["Custom software at SaaS prices", "Book a build"], getter),
+        check_page("https://supermega.dev/contact/", ["Send one workflow", "Send request"], getter),
         check_page("https://app.supermega.dev/commerce-machine", [], getter),
         check_json("https://app.supermega.dev/api/health", {"status": "ready", "service": "supermega-service"}, getter),
         check_json("https://pos.supermega.dev/api/health", {"status": "ready"}, getter),
