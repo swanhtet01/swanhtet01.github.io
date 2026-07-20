@@ -33,6 +33,7 @@
     "vercel:deploy:pos:prod": "powershell -ExecutionPolicy Bypass -File tools/deploy_pos_to_project.ps1",
     "db:pos:diagnose": "powershell -ExecutionPolicy Bypass -File tools/diagnose_pos_database.ps1",
     "db:pos:activate": "powershell -ExecutionPolicy Bypass -File tools/activate_pos_database.ps1",
+    "db:supermega:activate": "powershell -ExecutionPolicy Bypass -File tools/activate_supermega_database.ps1",
     "pos:alias:check": "powershell -ExecutionPolicy Bypass -File tools/guard_pos_alias.ps1",
     "pos:alias:repair": "powershell -ExecutionPolicy Bypass -File tools/guard_pos_alias.ps1 -Repair",
     "pos:alias:repair:smoke": "powershell -ExecutionPolicy Bypass -File tools/guard_pos_alias.ps1 -Repair -RunSmoke",
