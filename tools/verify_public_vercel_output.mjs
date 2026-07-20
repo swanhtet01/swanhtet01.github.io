@@ -542,7 +542,7 @@ for (const token of ['app.supermega.dev/?demo=shop', 'app.supermega.dev/?demo=pl
 for (const [src, location] of [
   ['^/products/manager-operating-system/?$', '/products/agents/'],
   ['^/products/find-clients/?$', '/products/agents/'],
-  ['^/signup/?$', 'https://app.supermega.dev/signup/'],
+  ['^/signup/?$', 'https://app.supermega.dev/signup/?source=public-site'],
 ]) {
   const route = (config.routes || []).find((entry) => entry.src === src)
   if (route?.status !== 308 || route?.headers?.Location !== location) {

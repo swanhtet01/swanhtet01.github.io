@@ -5596,7 +5596,7 @@ const config = {
       src: '^/signup/?$',
       status: 308,
       headers: {
-        Location: 'https://app.supermega.dev/signup/',
+        Location: 'https://app.supermega.dev/signup/?source=public-site',
       },
     },
     {
