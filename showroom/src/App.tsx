@@ -19,6 +19,7 @@ const BuildStudioPage = lazy(() => import('./pages/BuildStudioPage').then((modul
 const CloudOpsPage = lazy(() => import('./pages/CloudOpsPage').then((module) => ({ default: module.CloudOpsPage })))
 const ConnectorOpsPage = lazy(() => import('./pages/ConnectorOpsPage').then((module) => ({ default: module.ConnectorOpsPage })))
 const ContactPage = lazy(() => import('./pages/ContactPage').then((module) => ({ default: module.ContactPage })))
+const CommerceMachinePage = lazy(() => import('./pages/CommerceMachinePage').then((module) => ({ default: module.CommerceMachinePage })))
 const DataFabricPage = lazy(() => import('./pages/DataFabricPage').then((module) => ({ default: module.DataFabricPage })))
 const DecisionJournalPage = lazy(() => import('./pages/DecisionJournalPage').then((module) => ({ default: module.DecisionJournalPage })))
 const DemoCenterPage = lazy(() => import('./pages/DemoCenterPage').then((module) => ({ default: module.DemoCenterPage })))
@@ -117,6 +118,7 @@ function App() {
           <Route element={liveAppAvailable ? routeElement(<LoginPage />) : <Navigate replace to={publicWorkspaceFallback} />} path="login" />
           <Route element={liveAppAvailable ? routeElement(<SignupPage />) : <Navigate replace to={publicWorkspaceFallback} />} path="signup" />
           <Route element={routeElement(<ContactPage />)} path="contact" />
+          <Route element={routeElement(<CommerceMachinePage />)} path="commerce-machine" />
           <Route element={<Navigate replace to="/contact" />} path="book" />
           <Route element={routeElement(<NotFoundPage />)} path="*" />
         </Route>
