@@ -538,6 +538,17 @@ const agentsHtml = readFileSync(resolve(staticDir, 'products/agents/index.html')
 for (const token of ['app.supermega.dev/?demo=shop', 'app.supermega.dev/?demo=plant', 'app.supermega.dev/commerce-machine']) {
   if (!demoHtml.includes(token)) fail('demo_stable_link_missing', { token })
 }
+
+for (const [src, location] of [
+  ['^/products/manager-operating-system/?$', '/products/agents/'],
+  ['^/products/find-clients/?$', '/products/agents/'],
+  ['^/signup/?$', 'https://app.supermega.dev/signup/'],
+]) {
+  const route = (config.routes || []).find((entry) => entry.src === src)
+  if (route?.status !== 308 || route?.headers?.Location !== location) {
+    fail('legacy_public_route_contract_missing', { src, expected: { status: 308, Location: location }, actual: route })
+  }
+}
 const offerCards = (offersHtml.match(/class="of-card/g) || []).length
 if (offerCards !== 4) fail('offers_scope_card_count_invalid', { expected: 4, actual: offerCards })
 if (/\bUSD\b|\$\s*[0-9]/.test(offersHtml)) fail('offers_public_currency_not_mmk_only')
