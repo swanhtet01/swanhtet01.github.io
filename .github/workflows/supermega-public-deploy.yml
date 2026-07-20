@@ -38,7 +38,7 @@ jobs:
           checks = {
               'https://supermega.dev/': 'Shop',
               'https://supermega.dev/products/': 'Open Shop',
-              'https://supermega.dev/offers/': 'Start free',
+              'https://supermega.dev/offers/': 'Talk to us',
           }
           for url, token in checks.items():
               request = urllib.request.Request(url, headers={'User-Agent': 'supermega-public-deploy/1.0'})
