@@ -385,6 +385,17 @@ function behaviorSummaryDegraded(reason, detail = {}) {
   }
 }
 
+function storageReadiness() {
+  const postgres = datastore.postgresConfigured()
+  const supabase = supabaseConfig()
+  const supabaseConfigured = Boolean(supabase.url && supabase.serviceRoleKey)
+  return {
+    status: postgres || supabaseConfigured ? 'configured' : 'not_configured',
+    primary: postgres ? 'vercel_postgres_neon' : 'unconfigured',
+    fallback: supabaseConfigured ? 'supabase' : 'unconfigured',
+  }
+}
+
 function buildAdaptationQueue(topTemplates, eventCounts) {
   if (!topTemplates.length) {
     return [{
@@ -722,6 +733,7 @@ module.exports = async function handler(req, res) {
       endpoint: 'behavior-events',
       allowed_events: Array.from(allowedEventTypes),
       privacy: 'coarse_first_party_events_only',
+      storage: storageReadiness(),
       summary_endpoint: '/api/behavior-events?summary=1',
       summary_auth: 'SUPERMEGA_OPS_KEY bearer token required',
     })
@@ -755,9 +767,10 @@ module.exports = async function handler(req, res) {
   const record = buildBehaviorRecord({ payload: { ...payload, event_type: eventType }, req })
   const ledger = await saveBehaviorEvent(record)
 
-  json(res, 200, {
-    status: 'ready',
-    message: 'Behavior event captured.',
+  const persisted = ledger.status === 'ready'
+  json(res, persisted ? 200 : 503, {
+    status: persisted ? 'ready' : 'degraded',
+    message: persisted ? 'Behavior event captured.' : 'Behavior event was not durably stored.',
     event: {
       event_id: record.event_id,
       event_type: record.event_type,
@@ -766,5 +779,6 @@ module.exports = async function handler(req, res) {
       recorded_at: record.recorded_at,
     },
     ledger,
+    storage: storageReadiness(),
   })
 }
