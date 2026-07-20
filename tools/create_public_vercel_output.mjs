@@ -4661,6 +4661,9 @@ ${publicLanguageToggleScript}
         };
         if (filePicker) filePicker.addEventListener('change', syncFiles);
         const packageAliases = {
+        'commerce-inbox': 'commerce-inbox',
+        'knowledge-desk': 'knowledge-desk',
+        'research-monitor': 'research-monitor',
         'ai-workflow-desk': 'document-extraction-ledger',
         'workdesk': 'back-office-workflow-desk',
         'workflow-desk': 'back-office-workflow-desk',
@@ -4679,6 +4682,21 @@ ${publicLanguageToggleScript}
           'service-desk-pos': 'restaurant-pos-menu-inventory'
         };
         const packages = {
+          'commerce-inbox': {
+            name: 'Commerce Inbox Machine',
+            lead: 'Send your product list, stock, delivery rules, and approved order examples.',
+            placeholder: 'Paste the product list, stock note, delivery rules, or sample Messenger/Viber order messages.'
+          },
+          'knowledge-desk': {
+            name: 'Knowledge Desk Machine',
+            lead: 'Send one approved Drive folder, Gmail label, PDF set, or spreadsheet.',
+            placeholder: 'Paste an approved folder, export, PDF set, spreadsheet, or example decision brief.'
+          },
+          'research-monitor': {
+            name: 'Research Monitor Machine',
+            lead: 'Send the sites, terms, and review rules the machine should monitor.',
+            placeholder: 'Paste the sites or feeds to watch, terms to track, and the owner who reviews changes.'
+          },
           'build': {
             name: 'Custom build',
             heading: 'Tell us what to build.',
