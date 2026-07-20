@@ -8,6 +8,8 @@ on:
     paths:
       - 'api/**'
       - 'api_app.py'
+      - 'tools/serve_solution.py'
+      - 'api/cloud_runtime.py'
       - 'showroom/**'
       - 'tools/write_app_vercel_config.mjs'
       - 'package.json'
