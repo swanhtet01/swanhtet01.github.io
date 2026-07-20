@@ -6,6 +6,7 @@ const machine = await readFile(resolve(root, 'showroom/src/pages/CommerceMachine
 const analytics = await readFile(resolve(root, 'showroom/src/lib/analytics.ts'), 'utf8')
 const adapter = await readFile(resolve(root, 'showroom/src/lib/commerceMachineAdapter.ts'), 'utf8')
 const appRoutes = await readFile(resolve(root, 'showroom/src/App.tsx'), 'utf8')
+const agentsPage = await readFile(resolve(root, 'showroom/src/pages/AgentsPage.tsx'), 'utf8')
 const template = JSON.parse(await readFile(resolve(root, 'templates/commerce-machine.blueprint.example.json'), 'utf8'))
 
 const requirements = [
@@ -25,10 +26,11 @@ const requirements = [
   ['conversation parser matches catalog', /function parseConversation\(\)[\s\S]*matchedProduct/],
   ['conversation parser extracts quantity', /function parseRequestedQuantity\(message: string\)/],
   ['public agents page is reachable', /Route element=\{routeElement\(<AgentsPage \/>\)\} path="agents"/],
+  ['agents page offers free machine', /AgentsPage\.tsx[\s\S]*to="\/commerce-machine"[\s\S]*Try free machine/],
   ['conversation parser has no fixed confidence claim', [machine, analytics].join('\\n').indexOf('94%') === -1 ? /.*/ : /$a/],
 ]
 
-const failures = requirements.filter(([, pattern]) => !pattern.test(`${machine}\n${analytics}\n${adapter}\n${appRoutes}\n${JSON.stringify(template)}`)).map(([name]) => name)
+const failures = requirements.filter(([, pattern]) => !pattern.test(`${machine}\n${analytics}\n${adapter}\n${appRoutes}\n${agentsPage}\n${JSON.stringify(template)}`)).map(([name]) => name)
 if (failures.length) {
   console.error(JSON.stringify({ status: 'failed', failures }, null, 2))
   process.exit(1)

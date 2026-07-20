@@ -149,6 +149,9 @@ export function AgentsPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
+            <Link className="sm-button-primary" to="/commerce-machine">
+              Try free machine
+            </Link>
             <Link className="sm-button-primary" to="/contact">
               Start rollout
             </Link>
