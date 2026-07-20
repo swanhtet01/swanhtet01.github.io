@@ -65,8 +65,7 @@ assertIncludes('products', products, [
 ])
 assertIncludes('contact', contact, ['<title>Contact | SUPERMEGA.dev</title>', 'Send one workflow.', 'Send the source your team already uses.'])
 assertIncludes('combined', combinedText, [
-  'Back Office',
-  'Document Extraction Ledger',
+  'AI Agent Solutions',
   '/contact/?package=back-office-workflow-desk',
 ])
 
@@ -82,6 +81,11 @@ for (const [label, text] of [
 const retiredCombinedMatch = combinedText.match(/AI Back Office Operator|WorkDesk Sprint|Managed WorkDesk|Managed AgentOps|AgentOps Toolbox Deployment Sprint/i)
 if (retiredCombinedMatch) {
   fail('retired_product_label_found', { match: retiredCombinedMatch[0] })
+}
+
+for (const [label, text] of [['home', home], ['products', products], ['contact', contact]]) {
+  const retiredProduct = text.match(/Document Extraction Ledger|Back Office Workflow Desk/i)
+  if (retiredProduct) fail('retired_product_label_found', { label, match: retiredProduct[0] })
 }
 
 const privateHtmlMatch = [home, products, contact]

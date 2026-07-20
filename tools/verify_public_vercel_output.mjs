@@ -554,7 +554,7 @@ for (const token of [
 for (const token of [
   '<title>Products | SUPERMEGA.dev</title>',
   'Plant',
-  'Back Office AI Desk',
+  'AI Agent Solutions',
   '/products/factory/',
   '/products/pos/',
 ]) {

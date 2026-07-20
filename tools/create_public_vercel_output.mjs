@@ -134,6 +134,7 @@ function normalizePublicProductNames(content) {
 // it is safe to apply to raw-copied pages (e.g. the demo hub) without breaking their routing.
 function canonFounderLockedProductNames(content) {
   return String(content)
+    .replace(/Document Extraction Ledger|Back Office Workflow Desk/g, 'AI Agent Solutions')
     .replace(/Restaurant POS \+ Inventory|Restaurant POS and Inventory/g, 'Shop')
     .replace(/\bRetail OS\b/g, 'Shop')
     .replace(/Factory Operations App|Factory & Operations App/g, 'Plant')
