@@ -1,0 +1,45 @@
+<svg width="1200" height="860" viewBox="0 0 1200 860" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="sbg" x1="140" y1="30" x2="1030" y2="820" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0F1B30"/>
+      <stop offset="1" stop-color="#07111D"/>
+    </linearGradient>
+    <linearGradient id="saccent" x1="0" y1="0" x2="420" y2="0" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#23D3FF"/>
+      <stop offset="1" stop-color="#4BF1C6"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="860" rx="28" fill="url(#sbg)"/>
+  <rect x="48" y="48" width="1104" height="764" rx="24" fill="rgba(255,255,255,0.02)" stroke="rgba(163,191,225,0.14)"/>
+  <rect x="96" y="96" width="400" height="668" rx="22" fill="rgba(255,255,255,0.03)"/>
+  <rect x="536" y="96" width="568" height="294" rx="22" fill="rgba(255,255,255,0.03)"/>
+  <rect x="536" y="430" width="568" height="334" rx="22" fill="rgba(255,255,255,0.03)"/>
+  <rect x="132" y="134" width="146" height="14" rx="7" fill="rgba(255,255,255,0.18)"/>
+  <rect x="132" y="182" width="328" height="54" rx="16" fill="rgba(255,255,255,0.04)"/>
+  <rect x="132" y="256" width="328" height="54" rx="16" fill="rgba(255,255,255,0.04)"/>
+  <rect x="132" y="330" width="328" height="54" rx="16" fill="rgba(35,211,255,0.10)" stroke="rgba(35,211,255,0.25)"/>
+  <rect x="132" y="404" width="328" height="54" rx="16" fill="rgba(255,255,255,0.04)"/>
+  <rect x="132" y="478" width="328" height="54" rx="16" fill="rgba(255,255,255,0.04)"/>
+  <rect x="132" y="552" width="328" height="54" rx="16" fill="rgba(255,255,255,0.04)"/>
+  <rect x="156" y="202" width="116" height="10" rx="5" fill="rgba(255,255,255,0.18)"/>
+  <rect x="156" y="276" width="98" height="10" rx="5" fill="rgba(255,255,255,0.18)"/>
+  <rect x="156" y="350" width="112" height="10" rx="5" fill="#96ECFF"/>
+  <rect x="156" y="424" width="104" height="10" rx="5" fill="rgba(255,255,255,0.18)"/>
+  <rect x="156" y="498" width="88" height="10" rx="5" fill="rgba(255,255,255,0.18)"/>
+  <rect x="156" y="572" width="96" height="10" rx="5" fill="rgba(255,255,255,0.18)"/>
+  <rect x="860" y="138" width="208" height="26" rx="13" fill="rgba(35,211,255,0.10)" stroke="rgba(35,211,255,0.25)"/>
+  <rect x="568" y="138" width="142" height="16" rx="8" fill="rgba(255,255,255,0.18)"/>
+  <rect x="568" y="196" width="500" height="132" rx="22" fill="rgba(255,255,255,0.03)"/>
+  <path d="M610 286C680 268 716 216 786 214C856 212 898 274 972 256C1008 247 1038 230 1064 212" stroke="url(#saccent)" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="610" cy="286" r="8" fill="#23D3FF"/>
+  <circle cx="786" cy="214" r="8" fill="#4BF1C6"/>
+  <circle cx="972" cy="256" r="8" fill="#23D3FF"/>
+  <rect x="568" y="466" width="174" height="14" rx="7" fill="rgba(255,255,255,0.18)"/>
+  <rect x="568" y="518" width="500" height="72" rx="18" fill="rgba(255,255,255,0.03)"/>
+  <rect x="568" y="612" width="500" height="72" rx="18" fill="rgba(255,255,255,0.03)"/>
+  <rect x="568" y="706" width="500" height="26" rx="13" fill="rgba(255,255,255,0.04)"/>
+  <rect x="596" y="544" width="144" height="12" rx="6" fill="rgba(255,255,255,0.18)"/>
+  <rect x="596" y="640" width="132" height="12" rx="6" fill="rgba(255,255,255,0.18)"/>
+  <rect x="916" y="538" width="120" height="18" rx="9" fill="url(#saccent)"/>
+  <rect x="906" y="634" width="130" height="18" rx="9" fill="rgba(255,255,255,0.12)"/>
+</svg>

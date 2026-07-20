@@ -1,0 +1,40 @@
+<svg width="1200" height="860" viewBox="0 0 1200 860" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="obg" x1="150" y1="10" x2="1020" y2="820" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#101E31"/>
+      <stop offset="1" stop-color="#08111B"/>
+    </linearGradient>
+    <linearGradient id="owarm" x1="0" y1="0" x2="260" y2="0" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FF8B3A"/>
+      <stop offset="1" stop-color="#FFC063"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="860" rx="28" fill="url(#obg)"/>
+  <rect x="50" y="50" width="1100" height="760" rx="24" fill="rgba(255,255,255,0.02)" stroke="rgba(163,191,225,0.14)"/>
+  <rect x="96" y="96" width="310" height="668" rx="22" fill="rgba(255,255,255,0.03)"/>
+  <rect x="446" y="96" width="658" height="254" rx="22" fill="rgba(255,255,255,0.03)"/>
+  <rect x="446" y="390" width="658" height="374" rx="22" fill="rgba(255,255,255,0.03)"/>
+  <rect x="130" y="132" width="122" height="14" rx="7" fill="rgba(255,255,255,0.18)"/>
+  <rect x="130" y="182" width="242" height="118" rx="20" fill="rgba(255,255,255,0.04)"/>
+  <rect x="130" y="328" width="242" height="118" rx="20" fill="rgba(255,139,58,0.10)" stroke="rgba(255,139,58,0.24)"/>
+  <rect x="130" y="474" width="242" height="118" rx="20" fill="rgba(255,255,255,0.04)"/>
+  <rect x="162" y="214" width="108" height="12" rx="6" fill="rgba(255,255,255,0.18)"/>
+  <rect x="162" y="360" width="132" height="12" rx="6" fill="#FFE0BE"/>
+  <rect x="162" y="506" width="120" height="12" rx="6" fill="rgba(255,255,255,0.18)"/>
+  <rect x="478" y="132" width="136" height="14" rx="7" fill="rgba(255,255,255,0.18)"/>
+  <rect x="954" y="128" width="116" height="24" rx="12" fill="rgba(255,255,255,0.05)"/>
+  <rect x="478" y="184" width="594" height="130" rx="22" fill="rgba(255,255,255,0.03)"/>
+  <rect x="512" y="218" width="150" height="14" rx="7" fill="rgba(255,255,255,0.18)"/>
+  <rect x="512" y="252" width="284" height="10" rx="5" fill="rgba(255,255,255,0.08)"/>
+  <rect x="916" y="220" width="120" height="28" rx="14" fill="url(#owarm)"/>
+  <rect x="478" y="426" width="182" height="14" rx="7" fill="rgba(255,255,255,0.18)"/>
+  <rect x="478" y="478" width="594" height="72" rx="18" fill="rgba(255,255,255,0.03)"/>
+  <rect x="478" y="574" width="594" height="72" rx="18" fill="rgba(255,255,255,0.03)"/>
+  <rect x="478" y="670" width="594" height="58" rx="18" fill="rgba(255,255,255,0.03)"/>
+  <rect x="506" y="506" width="122" height="12" rx="6" fill="rgba(255,255,255,0.18)"/>
+  <rect x="506" y="602" width="138" height="12" rx="6" fill="rgba(255,255,255,0.18)"/>
+  <rect x="506" y="692" width="116" height="12" rx="6" fill="rgba(255,255,255,0.18)"/>
+  <rect x="884" y="500" width="144" height="18" rx="9" fill="url(#owarm)"/>
+  <rect x="902" y="596" width="126" height="18" rx="9" fill="rgba(255,255,255,0.12)"/>
+  <rect x="924" y="688" width="104" height="18" rx="9" fill="rgba(92,243,199,0.18)"/>
+</svg>
