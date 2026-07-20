@@ -5102,6 +5102,39 @@ const activationContactHtml = `<!doctype html>
     </div>
     <script>
       const packageContracts = {
+        'commerce-inbox': {
+          name: 'Commerce Inbox Machine',
+          lead: 'Commerce Inbox Machine: send your product list, stock, delivery rules, and approved message examples.',
+          placeholder: 'Paste the product list, stock note, delivery rules, or sample Messenger/Viber order messages.',
+          firstStep: 'Review the sources and scope the first reviewed order-draft run.',
+          firstProof: 'A real customer message becomes a reviewed order draft with stock and delivery checks.',
+          setupQuestions: 'Which products are available? Who approves orders? What confirms payment or delivery?',
+          acceptanceTests: 'One real message produces a traceable order draft, stock check, and owner decision.',
+          launchBlockers: 'No product list | No stock source | No order approval rule',
+          automationBoundary: 'No customer reply, payment confirmation, order change, or refund before owner approval.'
+        },
+        'knowledge-desk': {
+          name: 'Knowledge Desk Machine',
+          lead: 'Knowledge Desk Machine: send one approved Drive folder, Gmail label, PDF set, or spreadsheet.',
+          placeholder: 'Paste an approved folder, export, PDF set, spreadsheet, team rule, or example decision brief.',
+          firstStep: 'Review the approved sources and scope the first source-linked brief.',
+          firstProof: 'One source batch becomes a daily brief with citations, decisions, and assigned follow-ups.',
+          setupQuestions: 'Which sources are approved? Who owns each decision? What format should the brief use?',
+          acceptanceTests: 'One real source batch becomes a source-linked brief with owners and open tasks.',
+          launchBlockers: 'No approved source | No decision owner | No brief example',
+          automationBoundary: 'No external send, task assignment, or source writeback before owner approval.'
+        },
+        'research-monitor': {
+          name: 'Research Monitor Machine',
+          lead: 'Research Monitor Machine: send watchlist URLs, terms, impact categories, and escalation rules.',
+          placeholder: 'Paste the sites or feeds to watch, terms to track, and the owner who reviews changes.',
+          firstStep: 'Review the watchlist and scope the first evidence-linked change report.',
+          firstProof: 'Selected sites produce a ranked change report with evidence links and assigned next actions.',
+          setupQuestions: 'What counts as a meaningful change? Who reviews it? How often should the report arrive?',
+          acceptanceTests: 'One monitored change produces evidence, impact, owner, and approved follow-up.',
+          launchBlockers: 'No watchlist | No impact rule | No review owner',
+          automationBoundary: 'No external alert, supplier message, or decision execution before owner approval.'
+        },
         'document-extraction-ledger': {
           name: 'Document Extraction Ledger',
           lead: 'Document Extraction Ledger: send files, screenshots, exports, or forms that should become reviewed records.',
@@ -5220,6 +5253,9 @@ const activationContactHtml = `<!doctype html>
         }
       };
       const aliases = {
+        'commerce-inbox': 'commerce-inbox',
+        'knowledge-desk': 'knowledge-desk',
+        'research-monitor': 'research-monitor',
         'ai-workflow-desk': 'document-extraction-ledger',
         'build-app-from-workflow': 'document-extraction-ledger',
         'document-extraction-ledger': 'document-extraction-ledger',
