@@ -89,6 +89,7 @@ function normalizePublicProductNames(content) {
     .replace(/\.mark \{([^}]*)\}/g, '.mark {$1}.mark img { width: 100%; height: 100%; display: block; border-radius: inherit; }')
     .replace(/Back Office Back Office Workflow Desk/g, 'Back Office Workflow Desk')
     .replace(/\/products\/documents\//g, '/products/agents/')
+    .replace(/\/products\/back-office\//g, '/products/agents/')
     .replace(/AI Back Office Operator/g, 'Back Office Workflow Desk')
     .replace(/Custom Workflow App/g, 'Document Extraction Ledger')
     .replace(/product-workdesk|product-flowline|product-custom-workflow-app|product-custom-business-app-builder|product-workflow-to-app-builder|product-build-app-from-workflow|product-workflow(?!-to-app-builder)/g, 'product-back-office-workflow-desk')
@@ -5569,6 +5570,13 @@ const config = {
     {
       src: '^/products/?$',
       dest: '/products/index.html',
+    },
+    {
+      src: '^/products/(?:back-office|documents)/?$',
+      status: 308,
+      headers: {
+        Location: '/products/agents/',
+      },
     },
     {
       src: '^/products/(?:ai-workflow-desk|build-app-from-workflow|workflow-desk|workdesk)/?$',
