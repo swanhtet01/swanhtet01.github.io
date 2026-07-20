@@ -41,6 +41,10 @@ concurrency:
 
 jobs:
   live-health:
+    # Production health is authoritative on main, scheduled, and manual runs.
+    # A pull request must not be blocked by drift that exists in the already
+    # deployed public estate and is unrelated to the proposed change.
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

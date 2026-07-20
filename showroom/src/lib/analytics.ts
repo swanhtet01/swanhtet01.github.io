@@ -1,5 +1,17 @@
 type EventPayload = Record<string, unknown> | undefined
 
+const BLOCKED_PROPERTY = /(text|body|content|message|name|email|phone|address|credential|password|token|secret|source|file|url|payload|note)/i
+
+function sanitizeEventPayload(properties: EventPayload): EventPayload {
+  if (!properties) return undefined
+  const safe: Record<string, string | number | boolean> = {}
+  for (const [key, value] of Object.entries(properties)) {
+    if (BLOCKED_PROPERTY.test(key)) continue
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') safe[key] = value
+  }
+  return Object.keys(safe).length ? safe : undefined
+}
+
 const posthogKey = (import.meta.env.VITE_POSTHOG_KEY ?? '').trim()
 const posthogHost = (import.meta.env.VITE_POSTHOG_HOST ?? 'https://us.i.posthog.com').trim()
 
@@ -28,8 +40,11 @@ async function loadPosthog() {
     api_host: posthogHost,
     person_profiles: 'identified_only',
     capture_pageview: true,
-    capture_pageleave: true,
-    autocapture: true,
+    capture_pageleave: false,
+    // Workflow events are explicitly named in product code; never collect form text or DOM content.
+    autocapture: false,
+    disable_session_recording: true,
+    respect_dnt: true,
     persistence: 'localStorage+cookie',
   })
 
@@ -58,12 +73,13 @@ export function trackEvent(event: string, properties?: EventPayload) {
     return
   }
 
+  const safeProperties = sanitizeEventPayload(properties)
   if (posthogClient) {
-    posthogClient.capture(event, properties)
+    posthogClient.capture(event, safeProperties)
     return
   }
 
-  queuedEvents.push({ event, properties })
+  queuedEvents.push({ event, properties: safeProperties })
   if (!loadingPromise && initialized) {
     loadingPromise = loadPosthog().catch(() => {
       loadingPromise = null

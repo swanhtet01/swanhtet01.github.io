@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "kind": "supermega-commerce-machine",
+  "businessName": "Replace with client business name",
+  "channel": "Messenger",
+  "catalogSource": "client-import",
+  "policy": {
+    "language": "Myanmar + English",
+    "fulfillment": "Delivery or pickup",
+    "approvalThreshold": 100000,
+    "autoReply": true
+  },
+  "enabledWorkers": [
+    "Commerce Closer",
+    "Ops Watch",
+    "Owner Brief"
+  ],
+  "approvalRules": [
+    "Never send final payment or delivery confirmation without an operator gate.",
+    "Block drafts when requested quantity exceeds available stock.",
+    "Escalate orders at or above the configured approval threshold."
+  ],
+  "catalog": [
+    {
+      "id": "item-001",
+      "name": "Replace with product name",
+      "price": 0,
+      "stock": 0,
+      "unit": "item"
+    }
+  ]
+}
