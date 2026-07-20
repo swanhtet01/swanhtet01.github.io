@@ -19,6 +19,7 @@ const requirements = [
   ['demo blueprint provenance preserved', /catalogSource === 'shop-api' \|\| value\.catalogSource === 'client-import' \|\| value\.catalogSource === 'demo'/],
   ['repository blueprint template', /supermega-commerce-machine[\s\S]*catalog/],
   ['metadata-only autocapture', /autocapture:\s*false/],
+  ['route page views are first-party events', /page_viewed: 'page_viewed'/],
   ['session recording disabled', /disable_session_recording:\s*true/],
   ['analytics payload sanitizer', /sanitizeEventPayload[\s\S]*BLOCKED_PROPERTY/],
   ['free handoff attribution is allowlisted', /allowedEntrySource[\s\S]*agent-product[\s\S]*utm_source/],

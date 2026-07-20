@@ -26,6 +26,7 @@ const queuedEvents: Array<{ event: string; properties?: EventPayload }> = []
 const queuedIdentities: Array<{ userId: string; properties?: EventPayload }> = []
 
 const FIRST_PARTY_EVENT_TYPES: Record<string, string> = {
+  page_viewed: 'page_viewed',
   commerce_template_edited: 'setup_started',
   commerce_channel_selected: 'setup_started',
   commerce_worker_toggled: 'setup_started',

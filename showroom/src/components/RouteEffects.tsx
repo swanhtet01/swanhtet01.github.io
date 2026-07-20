@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
 import { formatTenantPageTitle, getTenantConfig } from '../lib/tenantConfig'
+import { trackEvent } from '../lib/analytics'
 
 export function RouteEffects() {
   const location = useLocation()
@@ -52,6 +53,7 @@ export function RouteEffects() {
       '/app/manager-system': formatTenantPageTitle('Manager operating system', tenant),
     }
     window.scrollTo({ top: 0, behavior: 'auto' })
+    trackEvent('page_viewed', { component: 'route', user_device_mode: window.innerWidth < 640 ? 'phone' : window.innerWidth < 1024 ? 'tablet' : 'desktop' })
     document.title =
       titleMap[normalizedPath] ??
       (normalizedPath.startsWith('/products/') ? formatTenantPageTitle('Product detail', tenant) : homeTitle)
