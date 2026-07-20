@@ -1020,6 +1020,8 @@ const vercelConfig = {
     { src: '^/api/contact-submissions$', dest: '/api/contact-submissions.js' },
     { src: '^/api/contact-submissions/status$', dest: '/api/contact-submissions.js' },
     { src: '^/api/health$', dest: '/api/health.js' },
+    { src: '^/api/behavior-events/?$', dest: '/api/behavior-events.js' },
+    { src: '^/api/behavior-events/status/?$', dest: '/api/behavior-events.js' },
     { src: '^/api/(.*)$', dest: '/api/not-found.js' },
     { src: '^/(?:login|app|clients)(?:/.*)?$', status: 308, headers: { Location: 'https://app.supermega.dev/' } },
     { src: '^/demo/?$', status: 308, headers: { Location: 'https://demo.supermega.dev/' } },
