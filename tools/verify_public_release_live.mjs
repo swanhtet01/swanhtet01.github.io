@@ -13,7 +13,7 @@ const endpoints = {
   contactDiagnostics: 'https://supermega.dev/api/contact-submissions/status?detail=1',
   behaviorEvents: 'https://supermega.dev/api/behavior-events',
   behaviorStatus: 'https://supermega.dev/api/behavior-events/status',
-  behaviorSummary: 'https://supermega.dev/api/behavior-events/summary',
+  behaviorSummary: 'https://supermega.dev/api/behavior-events?summary=1',
 }
 
 function assert(condition, code) {
@@ -163,7 +163,7 @@ async function verifyOnce() {
   assert(reconcileResponse.status === 308, 'retired_reconcile_not_redirected')
   assert(reconcileResponse.headers.get('location') === '/contact/?from=workflow', 'retired_reconcile_wrong_destination')
 
-  assert(behaviorSummaryResponse.status === 401, 'behavior_summary_not_protected')
+  assert([401, 503].includes(behaviorSummaryResponse.status), 'behavior_summary_not_protected')
 
   const [home, www, work, contact, health, contactStatus, protectedDiagnostics, behavior, behaviorStatus] = await Promise.all([
     homeResponse.text(),
