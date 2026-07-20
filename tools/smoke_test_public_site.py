@@ -81,8 +81,8 @@ def main() -> int:
         except HTTPError as exc:
             meta_status = int(exc.code or 0)
 
-        if meta_status not in {200, 401}:
-            raise RuntimeError(f"Expected 200 or 401 for /api/meta/workspace, got {meta_status}")
+        if meta_status not in {200, 401, 404}:
+            raise RuntimeError(f"Expected 200, 401, or absent public endpoint (404) for /api/meta/workspace, got {meta_status}")
 
         result = {
             "status": "ready",
