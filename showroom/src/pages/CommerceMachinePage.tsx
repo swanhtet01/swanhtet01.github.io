@@ -14,7 +14,14 @@ const DEFAULT_PRODUCTS: Product[] = [
 ]
 
 const money = (value: number) => `${new Intl.NumberFormat('en-US').format(value)} MMK`
-const DEFAULT_POLICY: MachinePolicy = { language: 'Myanmar + English', fulfillment: 'Delivery or pickup', approvalThreshold: 100000, autoReply: true }
+const DEFAULT_POLICY: MachinePolicy = { language: 'Myanmar + English', fulfillment: 'Delivery or pickup', approvalThreshold: 100000, autoReply: true, autoFollowUp: true, lowStockThreshold: 3 }
+const WORKERS = [
+  ['Commerce Closer', 'Answers questions and turns intent into a draft order.'],
+  ['Inventory Watch', 'Checks stock and flags low or conflicting quantities.'],
+  ['Payment Guard', 'Keeps payment and release decisions human-approved.'],
+  ['Follow-up Worker', 'Prepares reminders for abandoned or unanswered orders.'],
+  ['Owner Brief', 'Summarizes only exceptions and decisions for the owner.'],
+] as const
 
 function normalizeDigits(value: string) {
   return value.replace(/[၀-၉]/g, (digit) => String('၀၁၂၃၄၅၆၇၈၉'.indexOf(digit)))
@@ -55,12 +62,15 @@ export function CommerceMachinePage() {
   const [policy, setPolicy] = useState<MachinePolicy>(() => {
     try { return { ...DEFAULT_POLICY, ...(JSON.parse(localStorage.getItem('sm-commerce-policy') || 'null') || {}) } } catch { return DEFAULT_POLICY }
   })
+  const [enabledWorkers, setEnabledWorkers] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('sm-commerce-workers') || 'null') || WORKERS.map(([name]) => name) } catch { return WORKERS.map(([name]) => name) }
+  })
   const selectedProduct = products.find((item) => item.id === selectedProductId) || products[0] || DEFAULT_PRODUCTS[0]
   const total = useMemo(() => selectedProduct.price * quantity, [quantity, selectedProduct])
   const stockAfterDraft = selectedProduct.stock - quantity
   const paymentState = total >= policy.approvalThreshold ? 'owner approval required' : 'payment proof required'
 
-  useEffect(() => { localStorage.setItem('sm-commerce-business', businessName); localStorage.setItem('sm-commerce-channel', channel); localStorage.setItem('sm-commerce-products', JSON.stringify(products)); localStorage.setItem('sm-commerce-product', selectedProduct.id); localStorage.setItem('sm-commerce-source', catalogSource); localStorage.setItem('sm-commerce-policy', JSON.stringify(policy)) }, [businessName, channel, products, selectedProduct.id, catalogSource, policy])
+  useEffect(() => { localStorage.setItem('sm-commerce-business', businessName); localStorage.setItem('sm-commerce-channel', channel); localStorage.setItem('sm-commerce-products', JSON.stringify(products)); localStorage.setItem('sm-commerce-product', selectedProduct.id); localStorage.setItem('sm-commerce-source', catalogSource); localStorage.setItem('sm-commerce-policy', JSON.stringify(policy)); localStorage.setItem('sm-commerce-workers', JSON.stringify(enabledWorkers)) }, [businessName, channel, products, selectedProduct.id, catalogSource, policy, enabledWorkers])
   useEffect(() => { const controller = new AbortController(); void loadShopCatalog(controller.signal).then((catalog) => { if (catalog) { setProducts(catalog.items); setSelectedProductId(catalog.items[0].id); setCatalogSource(catalog.source) } }); return () => controller.abort() }, [])
 
   function importCatalog(file: File) {
@@ -70,7 +80,7 @@ export function CommerceMachinePage() {
         const parsed = JSON.parse(String(reader.result))
         const blueprint = normalizeCommerceMachineBlueprint(parsed)
         if (blueprint) {
-          setBusinessName(blueprint.businessName); setChannel(blueprint.channel); setProducts(blueprint.catalog); setSelectedProductId(blueprint.catalog[0].id); setCatalogSource(blueprint.catalogSource); setPolicy(blueprint.policy); setStage('draft')
+          setBusinessName(blueprint.businessName); setChannel(blueprint.channel); setProducts(blueprint.catalog); setSelectedProductId(blueprint.catalog[0].id); setCatalogSource(blueprint.catalogSource); setPolicy(blueprint.policy); setEnabledWorkers(blueprint.enabledWorkers.length ? blueprint.enabledWorkers : WORKERS.map(([name]) => name)); setStage('draft')
           trackEvent('commerce_blueprint_imported', { catalog_source: blueprint.catalogSource, item_count: blueprint.catalog.length, channel: blueprint.channel })
           return
         }
@@ -93,6 +103,8 @@ export function CommerceMachinePage() {
       customer: { name: customerName, channel, message: customerMessage },
       checks: { catalog: 'approved-demo-catalog', stock: stockAfterDraft >= 0 ? 'available' : 'blocked', payment: 'awaiting-human-proof', approvalRequired: total >= policy.approvalThreshold },
       policy,
+      enabledWorkers,
+      integrations: ['Catalog', 'Inventory', 'Owner inbox'],
       nextAction: 'Operator confirms delivery details and payment evidence before release.',
     }
     const blob = new Blob([JSON.stringify(packet, null, 2)], { type: 'application/json' })
@@ -106,7 +118,7 @@ export function CommerceMachinePage() {
   }
 
   function exportBlueprint() {
-    const blueprint = { version: 1, kind: 'supermega-commerce-machine', businessName, channel, catalogSource, policy, enabledWorkers: ['Commerce Closer', 'Ops Watch', 'Owner Brief'], approvalRules: ['Never send final payment or delivery confirmation without an operator gate.', 'Block drafts when requested quantity exceeds available stock.', 'Escalate orders at or above the configured approval threshold.'], catalog: products, createdAt: new Date().toISOString() }
+    const blueprint = { version: 1, kind: 'supermega-commerce-machine', businessName, channel, catalogSource, policy, enabledWorkers, integrations: ['Catalog', 'Inventory', 'Owner inbox'], approvalRules: ['Never send final payment or delivery confirmation without an operator gate.', 'Block drafts when requested quantity exceeds available stock.', 'Escalate orders at or above the configured approval threshold.'], catalog: products, createdAt: new Date().toISOString() }
     const blob = new Blob([JSON.stringify(blueprint, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = `${businessName.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'commerce'}-machine-blueprint.json`; anchor.click(); URL.revokeObjectURL(url)
     trackEvent('commerce_blueprint_exported', { catalog_source: catalogSource, item_count: products.length, channel })
@@ -175,7 +187,8 @@ export function CommerceMachinePage() {
         <label className="mt-6 block space-y-2 text-sm text-[var(--sm-muted)]"><span>Business name</span><input className="sm-input" value={businessName} onChange={(event) => setBusinessName(event.target.value)} onBlur={() => trackEvent('commerce_template_edited', { field: 'business_name' })} /></label>
         <label className="mt-4 block space-y-2 text-sm text-[var(--sm-muted)]"><span>Customer channel</span><select className="sm-input" value={channel} onChange={(event) => { setChannel(event.target.value); trackEvent('commerce_channel_selected', { channel: event.target.value }) }}><option>Messenger</option><option>Viber</option><option>WhatsApp</option><option>Website chat</option></select></label>
         <div className="mt-6 space-y-3 text-sm text-[var(--sm-muted)]"><p><span className="text-emerald-300">Ready</span> {products.length} catalog items</p><p><span className="text-emerald-300">Ready</span> stock reservation check</p><p><span className="text-amber-300">Human gate</span> payment and final send</p><p>Catalog source: <span className="capitalize text-white">{catalogSource.replace('-', ' ')}</span></p></div>
-        <div className="mt-6 border-t border-white/10 pt-5"><p className="text-sm font-semibold text-white">Operating rules</p><label className="mt-3 block space-y-2 text-sm text-[var(--sm-muted)]"><span>Customer language</span><select className="sm-input" value={policy.language} onChange={(event) => setPolicy({ ...policy, language: event.target.value })}><option>Myanmar + English</option><option>English</option><option>Myanmar</option><option>Thai + English</option></select></label><label className="mt-3 block space-y-2 text-sm text-[var(--sm-muted)]"><span>Fulfillment</span><select className="sm-input" value={policy.fulfillment} onChange={(event) => setPolicy({ ...policy, fulfillment: event.target.value })}><option>Delivery or pickup</option><option>Delivery only</option><option>Pickup only</option><option>Appointment or quote</option></select></label><label className="mt-3 block space-y-2 text-sm text-[var(--sm-muted)]"><span>Owner approval above (MMK)</span><input className="sm-input" min={0} type="number" value={policy.approvalThreshold} onChange={(event) => setPolicy({ ...policy, approvalThreshold: Math.max(0, Number(event.target.value) || 0) })} /></label><label className="mt-3 flex items-center gap-3 text-sm text-[var(--sm-muted)]"><input checked={policy.autoReply} onChange={(event) => setPolicy({ ...policy, autoReply: event.target.checked })} type="checkbox" /> Draft instant replies for review</label></div>
+        <div className="mt-6 border-t border-white/10 pt-5"><p className="text-sm font-semibold text-white">Operating rules</p><label className="mt-3 block space-y-2 text-sm text-[var(--sm-muted)]"><span>Customer language</span><select className="sm-input" value={policy.language} onChange={(event) => setPolicy({ ...policy, language: event.target.value })}><option>Myanmar + English</option><option>English</option><option>Myanmar</option><option>Thai + English</option></select></label><label className="mt-3 block space-y-2 text-sm text-[var(--sm-muted)]"><span>Fulfillment</span><select className="sm-input" value={policy.fulfillment} onChange={(event) => setPolicy({ ...policy, fulfillment: event.target.value })}><option>Delivery or pickup</option><option>Delivery only</option><option>Pickup only</option><option>Appointment or quote</option></select></label><label className="mt-3 block space-y-2 text-sm text-[var(--sm-muted)]"><span>Owner approval above (MMK)</span><input className="sm-input" min={0} type="number" value={policy.approvalThreshold} onChange={(event) => setPolicy({ ...policy, approvalThreshold: Math.max(0, Number(event.target.value) || 0) })} /></label><label className="mt-3 block space-y-2 text-sm text-[var(--sm-muted)]"><span>Low-stock alert at</span><input className="sm-input" min={0} type="number" value={policy.lowStockThreshold} onChange={(event) => setPolicy({ ...policy, lowStockThreshold: Math.max(0, Number(event.target.value) || 0) })} /></label><label className="mt-3 flex items-center gap-3 text-sm text-[var(--sm-muted)]"><input checked={policy.autoReply} onChange={(event) => setPolicy({ ...policy, autoReply: event.target.checked })} type="checkbox" /> Draft instant replies for review</label><label className="mt-3 flex items-center gap-3 text-sm text-[var(--sm-muted)]"><input checked={policy.autoFollowUp} onChange={(event) => setPolicy({ ...policy, autoFollowUp: event.target.checked })} type="checkbox" /> Prepare follow-up reminders</label></div>
+        <div className="mt-6 border-t border-white/10 pt-5"><p className="text-sm font-semibold text-white">Workers in this machine</p><div className="mt-3 space-y-2">{WORKERS.map(([name, detail]) => <label className="flex gap-3 border border-white/10 p-3 text-sm text-[var(--sm-muted)]" key={name}><input checked={enabledWorkers.includes(name)} onChange={(event) => setEnabledWorkers(event.target.checked ? [...enabledWorkers, name] : enabledWorkers.filter((worker) => worker !== name))} type="checkbox" /><span><strong className="block text-white">{name}</strong><span>{detail}</span></span></label>)}</div></div>
         <button className="sm-button-secondary mt-4 w-full" type="button" onClick={() => { const blob = new Blob([catalogExport(products)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = `${businessName.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'commerce'}-catalog.json`; anchor.click(); URL.revokeObjectURL(url); trackEvent('commerce_catalog_exported', { catalog_source: catalogSource, item_count: products.length }) }}>Download current catalog</button>
         <label className="mt-6 block cursor-pointer border border-dashed border-white/20 p-4 text-sm text-[var(--sm-muted)] hover:border-[var(--sm-accent)]"><span className="block font-semibold text-white">Import client catalog or blueprint</span><span className="mt-1 block">Catalog JSON or a saved SuperMega machine blueprint.</span><input className="sr-only" accept="application/json,.json" type="file" onChange={(event) => { const file = event.target.files?.[0]; if (file) importCatalog(file); event.currentTarget.value = '' }} /></label>
         <button className="sm-button-secondary mt-3 w-full" type="button" onClick={downloadCatalogTemplate}>Download starter catalog</button>

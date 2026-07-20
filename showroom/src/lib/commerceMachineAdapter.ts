@@ -19,6 +19,8 @@ export type CommerceMachinePolicy = {
   fulfillment: string
   approvalThreshold: number
   autoReply: boolean
+  autoFollowUp: boolean
+  lowStockThreshold: number
 }
 
 export type CommerceMachineBlueprint = {
@@ -31,6 +33,7 @@ export type CommerceMachineBlueprint = {
   catalog: CommerceCatalogItem[]
   enabledWorkers: string[]
   approvalRules: string[]
+  integrations: string[]
 }
 
 export const COMMERCE_CATALOG_ENDPOINT = '/api/shop/catalog'
@@ -83,9 +86,12 @@ export function normalizeCommerceMachineBlueprint(input: unknown): CommerceMachi
       fulfillment: String(policy.fulfillment || 'Delivery or pickup'),
       approvalThreshold: Math.max(0, Number(policy.approvalThreshold) || 0),
       autoReply: policy.autoReply !== false,
+      autoFollowUp: policy.autoFollowUp !== false,
+      lowStockThreshold: Math.max(0, Number(policy.lowStockThreshold) || 3),
     },
     catalog,
     enabledWorkers: Array.isArray(value.enabledWorkers) ? value.enabledWorkers.map(String).filter(Boolean) : ['Commerce Closer', 'Ops Watch', 'Owner Brief'],
     approvalRules: Array.isArray(value.approvalRules) ? value.approvalRules.map(String).filter(Boolean) : [],
+    integrations: Array.isArray(value.integrations) ? value.integrations.map(String).filter(Boolean) : ['Catalog', 'Inventory', 'Owner inbox'],
   }
 }
