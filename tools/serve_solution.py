@@ -7457,7 +7457,8 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         vercel_url = str(os.getenv("VERCEL_URL", "")).strip()
         runtime_target = "Cloud Run" if cloud_run_service else "Vercel" if vercel_url else "Local or preview"
         state_db_ready = Path(state_db).exists()
-        enterprise_db_ready = bool(str(enterprise_db_url or "").strip())
+        enterprise_db_scheme = str(enterprise_db_url or "").split(":", 1)[0].strip()
+        enterprise_db_ready = bool(str(enterprise_db_url or "").strip()) and enterprise_db_scheme not in {"", "sqlite"}
         queue_ready = bool(cloud_tasks_enabled and cloud_tasks_client is not None)
         queue_partial = bool(internal_cron_token or cloud_tasks_queue_default or cloud_tasks_worker_url or cloud_tasks_queue_browser or cloud_tasks_queue_brief)
         preferred_workforce_mode = "queue_worker" if queue_ready else "direct_batch"
@@ -9853,13 +9854,15 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         autopilot = _load_json(pilot_data / "autopilot_status.json")
         coverage = _load_json(pilot_data / "data_coverage_report.json")
         enterprise_db_scheme = str(enterprise_db_url or "").split(":", 1)[0].strip()
+        enterprise_db_configured = bool(enterprise_db_url) and enterprise_db_scheme not in {"", "sqlite"}
+        readiness_status = "ready" if enterprise_db_configured and int(coverage.get("readiness_score", 0) or 0) > 0 else "attention"
         return {
-            "status": "ready",
+            "status": readiness_status,
             "service": "supermega-service",
             "site_root_ready": bool(site_root.exists()),
             "pilot_data_ready": bool(pilot_data.exists()),
             "state_db_ready": bool(Path(state_db).exists()),
-            "enterprise_db_ready": bool(enterprise_db_url),
+            "enterprise_db_ready": enterprise_db_configured,
             "enterprise_db_scheme": enterprise_db_scheme or "unknown",
             "review_status": review.get("status", "unknown"),
             "autopilot_status": autopilot.get("status", "unknown"),
