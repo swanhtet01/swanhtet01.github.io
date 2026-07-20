@@ -3,12 +3,13 @@
   "private": true,
   "version": "0.0.0",
   "scripts": {
-    "build": "npm --prefix showroom ci && npm --prefix showroom run build",
+    "build": "npm --prefix showroom install --no-audit --no-fund --prefer-offline && npm --prefix showroom run build",
     "dev": "npm --prefix showroom run dev",
     "bundle:preview": "python3 tools/package_preview_bundle.py",
     "deploy:preview": "bash tools/deploy_preview.sh",
     "vercel:pull": "npx vercel pull --yes",
     "vercel:build": "npx vercel build --yes",
+    "vercel:build:app": "npx vercel build --yes",
     "vercel:guard": "node tools/verify_public_vercel_config.mjs",
     "vercel:deploy": "npx vercel deploy --prebuilt -y",
     "vercel:deploy:prod": "npx vercel deploy --prebuilt --prod -y",
@@ -54,10 +55,12 @@
     "smoke:ytf-privacy:live": "node tools/verify_ytf_privacy.mjs --live",
     "smoke:ytf-role-api-privacy": "node tools/qa_ytf_role_api_privacy_smoke.cjs --base-url https://ytf.supermega.dev",
     "smoke:local": "bash tools/run_local_smoke.sh",
-    "smoke:public": "python3 tools/smoke_test_public_site.py",
+    "smoke:public": "uv run --no-sync python tools/smoke_test_public_site.py",
     "smoke:public-alias": "powershell -ExecutionPolicy Bypass -File tools/check_public_aliases.ps1",
     "smoke:public-handoff": "node tools/verify_public_handoff.mjs",
-    "audit:lead-ledger": "node tools/audit_lead_ledger.mjs"
+    "audit:lead-ledger": "node tools/audit_lead_ledger.mjs",
+    "verify:commerce-machine": "node tools/verify_commerce_machine_contract.mjs",
+    "verify:app-deploy-workflow": "node tools/verify_app_deploy_workflow.mjs"
   },
   "devDependencies": {
     "pg": "^8.20.0",
