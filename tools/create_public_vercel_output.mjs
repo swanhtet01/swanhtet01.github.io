@@ -6378,6 +6378,44 @@ await mkdir(resolve(staticDir, 'work'), { recursive: true })
 await writeFile(resolve(staticDir, 'work', 'index.html'), normalizePublicProductNames(publicWorkHtml), 'utf8')
 await mkdir(resolve(staticDir, 'machine'), { recursive: true })
 await writeFile(resolve(staticDir, 'machine', 'index.html'), normalizePublicProductNames(publicMachineHtml), 'utf8')
+const publicAiAgentSolutionsHtml = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <title>AI Agent Solutions | SUPERMEGA.dev</title>
+    <meta name="description" content="Practical AI workers that turn inbox, files, chat, and browser tasks into reviewed work for your team." />
+    <link rel="canonical" href="https://supermega.dev/ai-agent-solutions/" />
+    <style>
+      :root { color-scheme: light; --ink:#18221f; --muted:#5d6b65; --line:#d8e0da; --paper:#f7faf7; --accent:#0b6b55; }
+      * { box-sizing:border-box; } body { margin:0; background:var(--paper); color:var(--ink); font:16px/1.55 system-ui,-apple-system,Segoe UI,sans-serif; }
+      .page { max-width:1080px; margin:auto; padding:28px 22px 72px; } nav { display:flex; justify-content:space-between; gap:18px; align-items:center; padding-bottom:64px; } nav a { color:inherit; text-decoration:none; font-weight:700; }
+      .eyebrow { color:var(--accent); font-size:12px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; } h1 { max-width:760px; margin:14px 0 20px; font-size:clamp(38px,6vw,72px); line-height:1.02; letter-spacing:-.03em; } h2 { font-size:28px; line-height:1.1; margin:0 0 12px; } p { max-width:700px; color:var(--muted); }
+      .lede { font-size:20px; max-width:680px; } .actions { display:flex; flex-wrap:wrap; gap:12px; margin-top:28px; } .btn { display:inline-block; border:1px solid var(--ink); border-radius:6px; padding:12px 17px; text-decoration:none; font-weight:750; } .primary { background:var(--ink); color:white; } .secondary { color:var(--ink); background:white; }
+      .grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; margin:72px 0; } .item { border-top:2px solid var(--ink); padding-top:16px; } .item p { font-size:15px; }
+      .proof { border-top:1px solid var(--line); border-bottom:1px solid var(--line); padding:34px 0; } .proof strong { display:block; font-size:20px; margin-bottom:8px; } footer { display:flex; justify-content:space-between; gap:18px; margin-top:52px; color:var(--muted); font-size:14px; } footer a { color:inherit; }
+      @media (max-width:720px) { nav { padding-bottom:42px; } .grid { grid-template-columns:1fr; margin:48px 0; } footer { display:block; } footer span { display:block; margin-top:8px; } }
+    </style>
+  </head>
+  <body>
+    <main class="page" data-social-destination="ai-agent-solutions">
+      <nav><a href="/">SUPERMEGA.dev</a><a href="/products/">Products</a></nav>
+      <div class="eyebrow">AI Agent Solutions</div>
+      <h1>Put the repeatable work on a worker your team can review.</h1>
+      <p class="lede">We connect the tools you already use, turn messy information into a useful brief or next action, and keep every consequential step behind an approval boundary.</p>
+      <div class="actions"><a class="btn primary" href="/contact/" rel="noreferrer">Start with one workflow</a><a class="btn secondary" href="/offers/">See how we work</a></div>
+      <section class="grid" aria-label="AI worker capabilities">
+        <article class="item"><h2>Inbox and files</h2><p>Summarize Gmail, Drive, PDFs, spreadsheets, and shared folders into decisions, risks, and assigned follow-ups.</p></article>
+        <article class="item"><h2>Chat and browser</h2><p>Prepare answers, compare sources, monitor selected sites, and assemble a work packet without pretending the agent is a human.</p></article>
+        <article class="item"><h2>Context that compounds</h2><p>Use approved company data, operating rules, and prior outcomes so each run gets more relevant without exposing private sources publicly.</p></article>
+      </section>
+      <section class="proof"><strong>What you receive</strong><p>A configured worker, source map, operating prompt, review queue, failure log, and handoff instructions your team can actually own. We start with one measurable task, prove it, then add the next.</p></section>
+      <div class="actions"><a class="btn primary" href="/contact/?package=ai-agent">Describe the job</a><a class="btn secondary" href="/">Back to Shop and Plant</a></div>
+      <footer><span>Supervised automation. No unapproved external sends or money actions.</span><span><a href="/contact/">Contact</a> · <a href="/offers/">Offers</a></span></footer>
+    </main>
+  </body>
+</html>`
 // Demo hub (source lives in C:/sm-site, outside OneDrive) served at /demo/
 await mkdir(resolve(staticDir, 'demo'), { recursive: true })
 // The demo hub is a separate lane's artifact (supermega-demo); copy it verbatim EXCEPT run it
@@ -6424,6 +6462,8 @@ await removePrivateRootFunctions()
 await prunePublicSiteDir()
 await prunePublicStaticRoot()
 await mkdir(staticDir, { recursive: true })
+await mkdir(resolve(staticDir, 'ai-agent-solutions'), { recursive: true })
+await writeFile(resolve(staticDir, 'ai-agent-solutions', 'index.html'), publicAiAgentSolutionsHtml, 'utf8')
 await writeFile(
   resolve(staticDir, 'private-not-found.html'),
   '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="robots" content="noindex,nofollow"><title>Not found</title><body>Not found.</body></html>\n',
