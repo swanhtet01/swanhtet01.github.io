@@ -12,6 +12,8 @@ ROUTES = (
     "/platform/",
     "/demo-center/",
     "/products/",
+    "/products/agents/",
+    "/offers/",
     "/products/manager-operating-system/",
     "/products/agent-runtime/",
     "/products/tenant-control-plane/",
