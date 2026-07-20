@@ -532,7 +532,7 @@ for (const token of [
 }
 for (const token of [
   '<title>Products | SUPERMEGA.dev</title>',
-  'Factory Operations App',
+  'Plant',
   'Back Office AI Desk',
   '/products/factory/',
   '/products/pos/',
