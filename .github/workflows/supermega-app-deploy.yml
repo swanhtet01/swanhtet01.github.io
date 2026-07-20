@@ -74,4 +74,6 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
 
       - name: Smoke production app
-        run: curl --fail --retry 8 --retry-delay 5 --retry-all-errors https://app.supermega.dev/api/health
+        run: |
+          curl --fail --retry 8 --retry-delay 5 --retry-all-errors https://app.supermega.dev/api/health | tee /tmp/supermega-health.json
+          jq -e '(.status == "ready") and (.enterprise_db_ready == true) and (.enterprise_db_scheme != "sqlite")' /tmp/supermega-health.json
