@@ -555,6 +555,7 @@ for (const token of [
   '<title>Products | SUPERMEGA.dev</title>',
   'Plant',
   'AI Agent Solutions',
+  '/products/agents/',
   '/products/factory/',
   '/products/pos/',
 ]) {
@@ -595,6 +596,7 @@ const allowedProductSubpages = new Set([
   'pos/index.html',
   'factory/index.html',
   'documents/index.html',
+  'agents/index.html',
   'back-office/index.html',
 ])
 const productHtmlFiles = walkHtmlFiles(resolve(staticDir, 'products'))

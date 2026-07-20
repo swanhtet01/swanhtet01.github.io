@@ -88,6 +88,7 @@ function normalizePublicProductNames(content) {
     .replaceAll(legacyInitialsMarkHtml, signalMarkHtml)
     .replace(/\.mark \{([^}]*)\}/g, '.mark {$1}.mark img { width: 100%; height: 100%; display: block; border-radius: inherit; }')
     .replace(/Back Office Back Office Workflow Desk/g, 'Back Office Workflow Desk')
+    .replace(/\/products\/documents\//g, '/products/agents/')
     .replace(/AI Back Office Operator/g, 'Back Office Workflow Desk')
     .replace(/Custom Workflow App/g, 'Document Extraction Ledger')
     .replace(/product-workdesk|product-flowline|product-custom-workflow-app|product-custom-business-app-builder|product-workflow-to-app-builder|product-build-app-from-workflow|product-workflow(?!-to-app-builder)/g, 'product-back-office-workflow-desk')
@@ -5545,7 +5546,14 @@ const config = {
       },
     },
     {
-      src: '^/(?:try|book|setup|get-started|intake|free-tools|free-tool|free|builder|tool-builder|scan|calculator|workflow-scan|daily-close|payment-close|close-checker|mmqr|store-tool|agent-builder|agent-scope|ai-agent|agent-tool|agents)/?$',
+      src: '^/agents/?$',
+      status: 308,
+      headers: {
+        Location: '/products/agents/',
+      },
+    },
+    {
+      src: '^/(?:try|book|setup|get-started|intake|free-tools|free-tool|free|builder|tool-builder|scan|calculator|workflow-scan|daily-close|payment-close|close-checker|mmqr|store-tool|agent-builder|agent-scope|ai-agent|agent-tool)/?$',
       status: 308,
       headers: {
         Location: '/contact/',
@@ -6110,6 +6118,9 @@ for (const detailDoc of productDetailDocs) {
   await mkdir(resolve(staticDir, 'products', detailDoc.slug), { recursive: true })
   await writeFile(resolve(staticDir, 'products', detailDoc.slug, 'index.html'), normalizePublicProductNames(buildProductDetailHtml(detailDoc)), 'utf8')
 }
+const agentProductHtml = await readFile(resolve(staticDir, 'products', 'documents', 'index.html'), 'utf8')
+await mkdir(resolve(staticDir, 'products', 'agents'), { recursive: true })
+await writeFile(resolve(staticDir, 'products', 'agents', 'index.html'), agentProductHtml, 'utf8')
 
 // Offers / pricing — the revenue surface. Public "from" anchors (USD primary, MMK derived at the ~4,800 market rate).
 const publicOffers = [
