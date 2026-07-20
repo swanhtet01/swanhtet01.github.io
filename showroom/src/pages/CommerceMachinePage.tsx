@@ -16,6 +16,19 @@ const DEFAULT_PRODUCTS: Product[] = [
 const money = (value: number) => `${new Intl.NumberFormat('en-US').format(value)} MMK`
 const DEFAULT_POLICY: MachinePolicy = { language: 'Myanmar + English', fulfillment: 'Delivery or pickup', approvalThreshold: 100000, autoReply: true }
 
+function normalizeDigits(value: string) {
+  return value.replace(/[၀-၉]/g, (digit) => String('၀၁၂၃၄၅၆၇၈၉'.indexOf(digit)))
+}
+
+function parseRequestedQuantity(message: string) {
+  const normalized = normalizeDigits(message).toLowerCase()
+  const numeric = normalized.match(/\b(\d{1,3})\b/)
+  if (numeric) return Math.max(1, Number(numeric[1]))
+  const words: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5 }
+  const word = Object.keys(words).find((item) => new RegExp(`\\b${item}\\b`).test(normalized))
+  return word ? words[word] : 1
+}
+
 function readStoredProducts(): Product[] {
   try {
     const stored = JSON.parse(localStorage.getItem('sm-commerce-products') || 'null')
@@ -37,6 +50,7 @@ export function CommerceMachinePage() {
   const [customerName, setCustomerName] = useState('New customer')
   const [customerMessage, setCustomerMessage] = useState('Hello, do you have milk tea? I want two cups for delivery.')
   const [conversationReady, setConversationReady] = useState(false)
+  const [parseNote, setParseNote] = useState('Waiting for a message to be classified.')
   const [stage, setStage] = useState<Stage>('intake')
   const [policy, setPolicy] = useState<MachinePolicy>(() => {
     try { return { ...DEFAULT_POLICY, ...(JSON.parse(localStorage.getItem('sm-commerce-policy') || 'null') || {}) } } catch { return DEFAULT_POLICY }
@@ -98,6 +112,30 @@ export function CommerceMachinePage() {
     trackEvent('commerce_blueprint_exported', { catalog_source: catalogSource, item_count: products.length, channel })
   }
 
+  function parseConversation() {
+    const normalizedMessage = normalizeDigits(customerMessage).toLowerCase()
+    const matchedProduct = products.find((product) => normalizedMessage.includes(product.name.toLowerCase()))
+    const quantityRequested = parseRequestedQuantity(customerMessage)
+    const hasPurchaseIntent = /(want|need|order|buy|available|have|ယူ|လို|မှာ|ရှိ)/i.test(normalizedMessage)
+    if (!matchedProduct) {
+      setConversationReady(false)
+      setParseNote('No catalog item matched. Choose an item or add its exact name to the message before drafting.')
+      return
+    }
+    if (!hasPurchaseIntent) {
+      setConversationReady(false)
+      setParseNote(`Found ${matchedProduct.name}, but the message does not contain a clear order request.`)
+      return
+    }
+    const safeQuantity = Math.min(quantityRequested, Math.max(1, matchedProduct.stock))
+    setSelectedProductId(matchedProduct.id)
+    setQuantity(safeQuantity)
+    setConversationReady(true)
+    setStage('draft')
+    setParseNote(quantityRequested > matchedProduct.stock ? `Requested ${quantityRequested}; capped at ${matchedProduct.stock} available in the approved catalog.` : `Matched ${matchedProduct.name}, quantity ${safeQuantity}, with ${matchedProduct.stock - safeQuantity} remaining after draft.`)
+    trackEvent('commerce_conversation_parsed', { channel, item_count: products.length })
+  }
+
   function downloadCatalogTemplate() {
     const blob = new Blob([catalogExport([{ id: 'item-001', name: 'Replace with your product name', price: 0, stock: 0, unit: 'item' }])], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
@@ -132,7 +170,7 @@ export function CommerceMachinePage() {
       <article className="sm-surface-deep p-6"><div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/10 pb-5"><div><p className="sm-kicker text-[var(--sm-accent)]">2. Run the worker</p><h2 className="mt-2 text-2xl font-bold text-white">One order, four accountable states</h2></div><span className="sm-status-pill">{businessName} / {channel}</span></div>
         <div className="mt-5 grid gap-2 sm:grid-cols-4">{(['intake', 'draft', 'review', 'handoff'] as Stage[]).map((item, index) => <button key={item} type="button" className={`border p-3 text-left text-sm ${stage === item ? 'border-[var(--sm-accent)] bg-[var(--sm-accent)]/10 text-white' : 'border-white/10 text-[var(--sm-muted)]'}`} onClick={() => setStage(item)}><span className="block text-xs uppercase tracking-widest">0{index + 1}</span><strong className="mt-2 block capitalize">{item}</strong></button>)}</div>
         <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_0.9fr]">
-          <div><p className="text-sm text-[var(--sm-muted)]">Customer conversation</p><label className="mt-3 block space-y-2 text-sm text-[var(--sm-muted)]"><span>Customer name</span><input className="sm-input" value={customerName} onChange={(event) => setCustomerName(event.target.value)} /></label><label className="mt-3 block space-y-2 text-sm text-[var(--sm-muted)]"><span>Incoming message</span><textarea className="sm-input min-h-28" value={customerMessage} onChange={(event) => { setCustomerMessage(event.target.value); setConversationReady(false) }} /></label><div className="mt-3 flex flex-wrap gap-2"><span className="sm-chip text-white">Channel / {channel}</span><span className="sm-chip text-white">Intent / {conversationReady ? 'ready to buy' : 'unclassified'}</span><span className="sm-chip text-white">Confidence / {conversationReady ? '94%' : '--'}</span></div><button className="sm-button-secondary mt-4" type="button" onClick={() => { setConversationReady(true); setStage('draft'); trackEvent('commerce_conversation_parsed', { channel, message_length: customerMessage.length, item_count: products.length }) }}>Parse conversation</button><div className="mt-4 space-y-3 text-sm leading-relaxed"><div className="ml-auto max-w-[85%] bg-white/10 p-4 text-white">{customerMessage || 'Waiting for a customer message.'}</div><div className="max-w-[85%] border border-[var(--sm-accent)]/30 bg-[var(--sm-accent)]/10 p-4 text-white">{conversationReady ? `Thanks ${customerName}. I found ${selectedProduct.name} and can prepare an order for review.` : 'The worker will draft a reply after the operator parses the message.'}</div></div></div>
+          <div><p className="text-sm text-[var(--sm-muted)]">Customer conversation</p><label className="mt-3 block space-y-2 text-sm text-[var(--sm-muted)]"><span>Customer name</span><input className="sm-input" value={customerName} onChange={(event) => setCustomerName(event.target.value)} /></label><label className="mt-3 block space-y-2 text-sm text-[var(--sm-muted)]"><span>Incoming message</span><textarea className="sm-input min-h-28" value={customerMessage} onChange={(event) => { setCustomerMessage(event.target.value); setConversationReady(false); setParseNote('Message changed. Parse again to update the draft.') }} /></label><div className="mt-3 flex flex-wrap gap-2"><span className="sm-chip text-white">Channel / {channel}</span><span className="sm-chip text-white">Intent / {conversationReady ? 'ready to buy' : 'unclassified'}</span><span className="sm-chip text-white">Match / {conversationReady ? 'catalog item found' : 'needs review'}</span></div><button className="sm-button-secondary mt-4" type="button" onClick={parseConversation}>Parse conversation</button><p className="mt-3 text-xs leading-relaxed text-[var(--sm-muted)]">{parseNote}</p><div className="mt-4 space-y-3 text-sm leading-relaxed"><div className="ml-auto max-w-[85%] bg-white/10 p-4 text-white">{customerMessage || 'Waiting for a customer message.'}</div><div className="max-w-[85%] border border-[var(--sm-accent)]/30 bg-[var(--sm-accent)]/10 p-4 text-white">{conversationReady ? `Thanks ${customerName}. I found ${selectedProduct.name} and can prepare an order for review.` : 'The worker will draft a reply after the operator parses the message.'}</div></div></div>
             <div><label className="block space-y-2 text-sm text-[var(--sm-muted)]"><span>Recommended item</span><select className="sm-input" value={selectedProduct.id} onChange={(event) => setSelectedProductId(event.target.value)}>{products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</select></label><label className="mt-4 block space-y-2 text-sm text-[var(--sm-muted)]"><span>Quantity</span><input className="sm-input" min={1} max={selectedProduct.stock} type="number" value={quantity} onChange={(event) => setQuantity(Math.max(1, Number(event.target.value) || 1))} /></label><div className="mt-5 grid gap-3 sm:grid-cols-2"><div className="sm-chip text-white"><span className="text-[var(--sm-muted)]">Order total</span><strong className="mt-1 block text-xl">{money(total)}</strong></div><div className="sm-chip text-white"><span className="text-[var(--sm-muted)]">Stock after draft</span><strong className={`mt-1 block text-xl ${stockAfterDraft < 3 ? 'text-amber-300' : 'text-emerald-300'}`}>{stockAfterDraft} {selectedProduct.unit}s</strong></div></div></div>
         </div>
         <div className="mt-6 border-t border-white/10 pt-5 text-sm text-[var(--sm-muted)]"><p>Current state: <strong className="capitalize text-white">{stage}</strong></p><p className="mt-2">Decision gate: <span className="text-white">{paymentState}; no payment or delivery message is sent automatically.</span></p><p className="mt-2">Next action: <span className="text-white">{stage === 'handoff' ? 'Operator confirms delivery details and payment evidence.' : 'Advance the order when the preceding evidence is present.'}</span></p></div>

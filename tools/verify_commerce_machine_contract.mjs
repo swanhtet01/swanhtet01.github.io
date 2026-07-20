@@ -17,6 +17,9 @@ const requirements = [
   ['metadata-only autocapture', /autocapture:\s*false/],
   ['session recording disabled', /disable_session_recording:\s*true/],
   ['analytics payload sanitizer', /sanitizeEventPayload[\s\S]*BLOCKED_PROPERTY/],
+  ['conversation parser matches catalog', /function parseConversation\(\)[\s\S]*matchedProduct/],
+  ['conversation parser extracts quantity', /function parseRequestedQuantity\(message: string\)/],
+  ['conversation parser has no fixed confidence claim', [machine, analytics].join('\\n').indexOf('94%') === -1 ? /.*/ : /$a/],
 ]
 
 const failures = requirements.filter(([, pattern]) => !pattern.test(`${machine}\n${analytics}\n${JSON.stringify(template)}`)).map(([name]) => name)
