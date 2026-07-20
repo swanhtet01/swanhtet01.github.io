@@ -5471,6 +5471,14 @@ const config = {
       dest: '/api/health.js',
     },
     {
+      src: '^/api/behavior-events/?$',
+      dest: '/api/behavior-events.js',
+    },
+    {
+      src: '^/api/behavior-events/status/?$',
+      dest: '/api/behavior-events.js',
+    },
+    {
       src: '^/api/(.*)$',
       dest: '/api/not-found.js',
     },
@@ -5552,14 +5560,6 @@ const config = {
     {
       src: '^/c/([^/]+)/?$',
       dest: '/c/index.html',
-    },
-    {
-      src: '^/api/behavior-events/?$',
-      dest: '/api/behavior-events.js',
-    },
-    {
-      src: '^/api/behavior-events/status/?$',
-      dest: '/api/behavior-events.js',
     },
     {
       src: '^/machine/?$',
