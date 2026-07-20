@@ -5,6 +5,7 @@ import './enforce_current_public_product_output.mjs'
 const root = process.cwd()
 const outputRoot = resolve(root, '.vercel', 'output')
 const staticDir = resolve(outputRoot, 'static')
+const behaviorSource = readFileSync(resolve(root, 'api', 'behavior-events.js'), 'utf8')
 
 function fail(message, extra = {}) {
   console.error(JSON.stringify({ status: 'error', message, ...extra }, null, 2))
@@ -13,6 +14,9 @@ function fail(message, extra = {}) {
 
 const configPath = resolve(outputRoot, 'config.json')
 if (!existsSync(configPath)) fail('missing_vercel_output_config')
+if (!/function privacyIpHint\(req\)/.test(behaviorSource) || !/ip_hint: privacyIpHint\(req\)/.test(behaviorSource) || /ip_hint: clientIp\(req\)/.test(behaviorSource)) {
+  fail('behavior_ip_privacy_contract_missing')
+}
 const config = JSON.parse(readFileSync(configPath, 'utf8'))
 const routes = new Map((config.routes || []).filter((route) => route.src).map((route) => [route.src, route.dest || route.status || route.headers?.Location]))
 

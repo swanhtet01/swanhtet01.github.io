@@ -180,6 +180,10 @@ function clientIp(req) {
   return text(req.headers['x-forwarded-for']).split(',')[0].trim() || text(req.socket?.remoteAddress) || 'unknown'
 }
 
+function privacyIpHint(req) {
+  return `ip:${crypto.createHash('sha256').update(clientIp(req)).digest('hex').slice(0, 16)}`
+}
+
 function checkRateLimit(req) {
   const now = Date.now()
   const key = clientIp(req)
@@ -238,7 +242,7 @@ function buildBehaviorRecord({ payload, req }) {
     utm_term: truncate(payload.utm_term, 180),
     session_hint: truncate(payload.session_hint, 160),
     user_agent: truncate(req.headers['user-agent'], 500),
-    ip_hint: clientIp(req),
+    ip_hint: privacyIpHint(req),
     recorded_at: new Date().toISOString(),
     raw: {
       privacy: 'coarse_first_party_event_no_keystrokes_no_source_files_no_credentials',
