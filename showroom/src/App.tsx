@@ -9,6 +9,7 @@ import { getTenantConfig } from './lib/tenantConfig'
 
 const ActionBoardPage = lazy(() => import('./pages/ActionBoardPage').then((module) => ({ default: module.ActionBoardPage })))
 const AppLaunchpadPage = lazy(() => import('./pages/AppLaunchpadPage').then((module) => ({ default: module.AppLaunchpadPage })))
+const AgentsPage = lazy(() => import('./pages/AgentsPage').then((module) => ({ default: module.AgentsPage })))
 const AgentWorkspacePage = lazy(() => import('./pages/AgentWorkspacePage').then((module) => ({ default: module.AgentWorkspacePage })))
 const AdoptionCommandPage = lazy(() => import('./pages/AdoptionCommandPage').then((module) => ({ default: module.AdoptionCommandPage })))
 const AdoptionPlaybookPage = lazy(() => import('./pages/AdoptionPlaybookPage').then((module) => ({ default: module.AdoptionPlaybookPage })))
@@ -90,7 +91,7 @@ function App() {
           <Route element={routeElement(<DemoCenterPage />)} path="demo-center" />
           <Route element={<Navigate replace to="/clients/yangon-tyre" />} path="portfolio" />
           <Route element={<Navigate replace to="/products" />} path="solutions" />
-          <Route element={<Navigate replace to="/products" />} path="agents" />
+          <Route element={routeElement(<AgentsPage />)} path="agents" />
           <Route element={<Navigate replace to="/products" />} path="factory" />
           <Route element={routeElement(<YangonTyrePage />)} path="clients/yangon-tyre" />
           <Route element={<Navigate replace to="/clients/yangon-tyre" />} path="ytf" />
