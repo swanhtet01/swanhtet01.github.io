@@ -1036,6 +1036,8 @@ const vercelConfig = {
       headers: { Location: '/' },
     },
     { src: '^/c/([^/]+)/?$', status: 308, headers: { Location: '/' } },
+    { src: '^/api/behavior-events/?$', dest: '/api/behavior-events.js' },
+    { src: '^/api/behavior-events/status/?$', dest: '/api/behavior-events.js' },
     { src: '^/(?:favicon\\.svg|site\\.webmanifest|robots\\.txt|sitemap\\.xml|sw\\.js)$', headers: { 'cache-control': 'public, max-age=31536000, immutable' }, continue: true },
     { handle: 'filesystem' },
     { src: '^/(.*)$', status: 404, dest: '/404.html' },
@@ -1121,6 +1123,7 @@ await writeStatic('site.webmanifest', `${JSON.stringify({
 }, null, 2)}\n`)
 
 await writeNodeFunction('health.js')
+await writeNodeFunction('behavior-events.js')
 await writeNodeFunction('contact-submissions.js')
 await writeNodeFunction('not-found.js')
 await writeFile(resolve(outputDir, 'config.json'), `${JSON.stringify(vercelConfig, null, 2)}\n`, 'utf8')
