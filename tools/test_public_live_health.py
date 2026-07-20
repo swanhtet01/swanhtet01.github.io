@@ -25,11 +25,11 @@ class PublicHealthTests(unittest.TestCase):
 
     def test_run_is_ready_for_current_contract(self):
         pages = {
-            "https://supermega.dev/": "Operating software for shops and plants Shop Plant",
-            "https://www.supermega.dev/": "Operating software for shops and plants Shop Plant",
-            "https://supermega.dev/products/": "Open Shop Open Plant",
-            "https://supermega.dev/offers/": "Talk to us",
-            "https://supermega.dev/contact/": "Start a conversation What should become easier?",
+            "https://supermega.dev/": "Custom software at SaaS prices Shop Plant",
+            "https://www.supermega.dev/": "Custom software at SaaS prices Shop Plant",
+            "https://supermega.dev/products/": "Systems we build Shop",
+            "https://supermega.dev/offers/": "Custom software at SaaS prices Book a build",
+            "https://supermega.dev/contact/": "Send one workflow Send request",
             "https://app.supermega.dev/commerce-machine": "",
         }
         payloads = {
