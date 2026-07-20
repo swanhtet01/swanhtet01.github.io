@@ -534,6 +534,7 @@ const productsHtml = readFileSync(resolve(staticDir, 'products/index.html'), 'ut
 const contactHtml = readFileSync(resolve(staticDir, 'contact/index.html'), 'utf8')
 const offersHtml = readFileSync(resolve(staticDir, 'offers/index.html'), 'utf8')
 const demoHtml = readFileSync(resolve(staticDir, 'demo/index.html'), 'utf8')
+const agentsHtml = readFileSync(resolve(staticDir, 'products/agents/index.html'), 'utf8')
 for (const token of ['app.supermega.dev/?demo=shop', 'app.supermega.dev/?demo=plant', 'app.supermega.dev/commerce-machine']) {
   if (!demoHtml.includes(token)) fail('demo_stable_link_missing', { token })
 }
@@ -560,6 +561,9 @@ for (const token of [
   '/products/pos/',
 ]) {
   if (!productsHtml.includes(token)) fail('public_products_contract_missing', { token })
+}
+for (const token of ['AI Agent Solutions', 'Try a free agent starter', 'app.supermega.dev/commerce-machine?source=agent-product']) {
+  if (!agentsHtml.includes(token)) fail('public_agents_contract_missing', { token })
 }
 // Guard against re-introducing speculative/non-sellable product names on the public products page.
 for (const banned of ['AI-worker paid pilots', 'Agency Client Operator', 'Agent App Control Room', 'Custom Agent Workcell', 'Social Commerce Inbox Operator']) {

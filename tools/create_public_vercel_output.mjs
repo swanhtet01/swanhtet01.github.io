@@ -6062,6 +6062,7 @@ ${unicornHeader}
             <p>${p.subhead}</p>
             <div class="cta">
               <a class="btn primary" href="${p.primaryCta.href}"${ext}>${p.primaryCta.label}</a>
+              ${p.slug === 'documents' ? '<a class="btn secondary" href="https://app.supermega.dev/commerce-machine?source=agent-product">Try a free agent starter</a>' : ''}
               <a class="btn secondary" href="/offers/">See pricing</a>
               <a class="btn secondary optional-nav" href="/products/">All products</a>
             </div>
