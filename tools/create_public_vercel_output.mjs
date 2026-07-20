@@ -3865,7 +3865,7 @@ const unicornPublicShellHtml = `<!doctype html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="index,follow" />
     <title>Custom business software, built for Myanmar | SUPERMEGA.dev</title>
-    <meta name="description" content="Custom software at SaaS prices — AI-native builds from $600 for Myanmar shops, factories, and distributors. You own it. No per-seat fees. KBZPay, MMQR, offline-ready." />
+    <meta name="description" content="Custom software at SaaS prices — AI-native builds for Myanmar shops, factories, and distributors. You own it. No per-seat fees. MMK-native and offline-ready." />
     <meta name="theme-color" content="#f4efe6" />
     <link rel="canonical" href="https://supermega.dev/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
@@ -3873,14 +3873,14 @@ const unicornPublicShellHtml = `<!doctype html>
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="SUPERMEGA.dev" />
     <meta property="og:title" content="Custom business software, built for Myanmar | SUPERMEGA.dev" />
-    <meta property="og:description" content="Custom software at SaaS prices — AI-native, made for how you work, yours to keep. Builds from $600. KBZPay · MMQR · MY/EN · offline." />
+    <meta property="og:description" content="Custom software at SaaS prices — AI-native, made for how you work, yours to keep. MMK-native and offline-ready." />
     <meta property="og:url" content="https://supermega.dev/" />
     <meta property="og:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Custom business software, built for Myanmar | SUPERMEGA.dev" />
-    <meta name="twitter:description" content="Custom software at SaaS prices. AI-native builds from $600. KBZPay · MMQR · MY/EN · offline." />
+    <meta name="twitter:description" content="Custom software at SaaS prices. AI-native, made for how you work, yours to keep. MMK-native and offline-ready." />
     <meta name="twitter:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"SUPERMEGA.dev","url":"https://supermega.dev/","logo":"https://supermega.dev/favicon.svg","description":"Custom business software at SaaS prices, AI-native, built for Myanmar SMBs and factories. POS, factory operations, dashboards, AI agents, and more.","email":"swanhtet@supermega.dev","telephone":"+95-9-500-0721","sameAs":["https://www.linkedin.com/in/theswanhtet"]}</script>
     <style>${unicornShellStyle}
@@ -3939,7 +3939,7 @@ ${unicornHeader}
 
         <div class="proof-strip section">
           <a href="https://pos.supermega.dev/" target="_blank" rel="noopener noreferrer"><div><strong>Live now</strong><span>Try DeskPOS free — no signup</span></div></a>
-          <div><strong>From $600</strong><span>Paid once — not a subscription</span></div>
+          <div><strong>From 2,500,000 MMK</strong><span>Paid once — not a subscription</span></div>
           <div><strong>You own it</strong><span>No per-seat fees, ever</span></div>
           <div><strong>Offline-ready</strong><span>Keeps working when the internet drops</span></div>
         </div>
@@ -4003,9 +4003,9 @@ ${unicornHeader}
           <h2>How it works</h2>
           <div class="how-steps">
             <div class="how-step"><n>1</n><strong>Scope</strong><span>One short call. We agree exactly what ships and what is out of scope — fixed, no open-ended hours.</span></div>
-            <div class="how-step"><n>2</n><strong>Deposit</strong><span>50% to start — KBZPay, MMQR, cash, or card. Keeps both sides honest.</span></div>
+            <div class="how-step"><n>2</n><strong>Shape</strong><span>We confirm the source data, first user, acceptance proof, and smallest useful release.</span></div>
             <div class="how-step"><n>3</n><strong>Ship</strong><span>We build it and hand you a running thing at a live URL. Not a folder of files.</span></div>
-            <div class="how-step"><n>4</n><strong>Care</strong><span>Optional monthly plan keeps it running and improving. Or take it and go.</span></div>
+            <div class="how-step"><n>4</n><strong>Improve</strong><span>After handoff, improvements are scoped from observed usage and approved operating needs.</span></div>
           </div>
         </section>
 
@@ -4214,7 +4214,7 @@ ${unicornHeader}
             <div>
               <div class="eyebrow">Start small</div>
               <h2>Tell us the one thing to fix first.</h2>
-              <p>We reply with what we'd build first, the price, and the timeline. Fixed scope, 50% deposit by KBZPay or MMQR to start.</p>
+              <p>We reply with what we'd build first, the MMK scope anchor, and the timeline. Fixed scope with clear revision boundaries.</p>
             </div>
             <div style="display:flex;gap:12px;flex-wrap:wrap"><a class="btn primary" href="/contact/?package=build">Book a build</a><a class="btn secondary" href="/offers/">See pricing</a></div>
           </div>
@@ -4702,47 +4702,39 @@ ${publicLanguageToggleScript}
             heading: 'Tell us what to build.',
             lead: 'Tell us the one thing to build first.',
             placeholder: 'Describe what you want built — what it should do, who uses it, and what it replaces today.',
-            next: 'Next: a short scope call, then 50% deposit to start.'
+             next: 'Next: a short scope call, then we confirm the first release.'
           },
           'tool-week': {
             name: 'Tool in a week',
             heading: 'Tell us what to build.',
-            price: 'From $600',
-            lead: 'Tool in a week — from $600. Tell us the one job to build.',
+             price: 'From 2,500,000 MMK',
+             lead: 'Tool in a week — from 2,500,000 MMK. Tell us the one job to build.',
             placeholder: 'Describe the single sharp tool you need and the job it does.',
-            next: 'Next: a short scope call, then 50% deposit to start.'
+             next: 'Next: a short scope call, then we confirm the first release.'
           },
           'dashboard': {
             name: 'Custom dashboard',
             heading: 'Tell us what to build.',
-            price: 'From $1,500',
-            lead: 'Custom dashboard — from $1,500. What should it show?',
+             price: 'From 8,000,000 MMK',
+             lead: 'Custom dashboard — from 8,000,000 MMK. What should it show?',
             placeholder: 'Describe the numbers and sources it should pull together, and who reads it.',
-            next: 'Next: a short scope call, then 50% deposit to start.'
+             next: 'Next: a short scope call, then we confirm the first release.'
           },
           'ai-agent': {
             name: 'AI agent / automation',
             heading: 'Tell us what to build.',
-            price: 'From $2,500',
-            lead: 'AI agent — from $2,500. What recurring job should it do?',
+             price: 'From 11,000,000 MMK',
+             lead: 'AI agent — from 11,000,000 MMK. What recurring job should it do?',
             placeholder: 'Describe the recurring task, the inputs it reads, and what must stay approval-only.',
-            next: 'Next: a short scope call, then 50% deposit to start.'
+             next: 'Next: a short scope call, then we confirm the first release.'
           },
           'design-ship': {
             name: 'Design + ship system',
             heading: 'Tell us what to build.',
-            price: 'From $6,000',
-            lead: 'Design + ship system — from $6,000. What do you want built?',
+             price: 'From 25,000,000 MMK',
+             lead: 'Design + ship system — from 25,000,000 MMK. What do you want built?',
             placeholder: 'Describe the system you want — what it does, who uses it, and what it replaces.',
-            next: 'Next: a short scope call, then 50% deposit to start.'
-          },
-          'care-plan': {
-            name: 'Care plan',
-            heading: 'Keep it running.',
-            price: 'From $300/mo',
-            lead: 'Care plan — from $300/mo. What should we keep running?',
-            placeholder: 'Tell us what needs hosting, changes, and improvements each month.',
-            next: 'Next: we confirm scope and start the monthly plan.'
+             next: 'Next: a short scope call, then we confirm the first release.'
           },
           'document-extraction-ledger': {
             name: 'Document Extraction Ledger',
@@ -4784,7 +4776,7 @@ ${publicLanguageToggleScript}
           const priceEl = document.querySelector('[data-selected-price]');
           if (priceEl && selectedPackage.price) { priceEl.textContent = selectedPackage.price; priceEl.hidden = false; }
           const nextEl = document.querySelector('[data-selected-next]');
-          if (nextEl) { nextEl.textContent = selectedPackage.next || 'Next: a short scope call, then 50% deposit to start.'; nextEl.hidden = false; }
+          if (nextEl) { nextEl.textContent = selectedPackage.next || 'Next: a short scope call, then we confirm the first release.'; nextEl.hidden = false; }
           const heading = document.querySelector('[data-contact-heading]');
           if (heading && selectedPackage.heading) heading.textContent = selectedPackage.heading;
         }

@@ -530,12 +530,16 @@ for (const [label, text] of [
 
 const homeHtml = readFileSync(resolve(staticDir, 'index.html'), 'utf8')
 const productsHtml = readFileSync(resolve(staticDir, 'products/index.html'), 'utf8')
+const contactHtml = readFileSync(resolve(staticDir, 'contact/index.html'), 'utf8')
 const offersHtml = readFileSync(resolve(staticDir, 'offers/index.html'), 'utf8')
 const offerCards = (offersHtml.match(/class="of-card/g) || []).length
 if (offerCards !== 4) fail('offers_scope_card_count_invalid', { expected: 4, actual: offerCards })
 if (/\bUSD\b|\$\s*[0-9]/.test(offersHtml)) fail('offers_public_currency_not_mmk_only')
 if (/care[- ]plan/i.test(offersHtml)) fail('offers_care_plan_regression')
 if (!offersHtml.includes('8,000,000 MMK')) fail('offers_dashboard_anchor_missing')
+for (const [entry, html] of [['home', homeHtml], ['products', productsHtml], ['contact', contactHtml]]) {
+  if (/\$\s*[0-9]|\bUSD\b|50%\s+deposit|50%\s+to\s+start|care[- ]plan/i.test(html)) fail('public_funnel_legacy_pricing_copy', { entry })
+}
 for (const token of [
   '<title>Custom business software, built for Myanmar | SUPERMEGA.dev</title>',
   '<h2>What we build</h2>',
