@@ -136,6 +136,21 @@ export function CommerceMachinePage() {
     trackEvent('commerce_conversation_parsed', { channel, item_count: products.length })
   }
 
+  function advanceMachine() {
+    if (stage === 'handoff') return
+    if (!conversationReady) {
+      setParseNote('Parse a clear order message before advancing beyond intake.')
+      return
+    }
+    if (stockAfterDraft < 0) {
+      setParseNote(`Blocked: ${selectedProduct.name} has only ${selectedProduct.stock} available, but this draft requires ${quantity}.`)
+      return
+    }
+    const nextStage = stage === 'intake' ? 'draft' : stage === 'draft' ? 'review' : 'handoff'
+    setStage(nextStage)
+    trackEvent('commerce_stage_advanced', { from_stage: stage, to_stage: nextStage, catalog_source: catalogSource })
+  }
+
   function downloadCatalogTemplate() {
     const blob = new Blob([catalogExport([{ id: 'item-001', name: 'Replace with your product name', price: 0, stock: 0, unit: 'item' }])], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
@@ -168,13 +183,13 @@ export function CommerceMachinePage() {
       </article>
 
       <article className="sm-surface-deep p-6"><div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/10 pb-5"><div><p className="sm-kicker text-[var(--sm-accent)]">2. Run the worker</p><h2 className="mt-2 text-2xl font-bold text-white">One order, four accountable states</h2></div><span className="sm-status-pill">{businessName} / {channel}</span></div>
-        <div className="mt-5 grid gap-2 sm:grid-cols-4">{(['intake', 'draft', 'review', 'handoff'] as Stage[]).map((item, index) => <button key={item} type="button" className={`border p-3 text-left text-sm ${stage === item ? 'border-[var(--sm-accent)] bg-[var(--sm-accent)]/10 text-white' : 'border-white/10 text-[var(--sm-muted)]'}`} onClick={() => setStage(item)}><span className="block text-xs uppercase tracking-widest">0{index + 1}</span><strong className="mt-2 block capitalize">{item}</strong></button>)}</div>
+        <div className="mt-5 grid gap-2 sm:grid-cols-4">{(['intake', 'draft', 'review', 'handoff'] as Stage[]).map((item, index) => <button key={item} type="button" className={`border p-3 text-left text-sm ${stage === item ? 'border-[var(--sm-accent)] bg-[var(--sm-accent)]/10 text-white' : 'border-white/10 text-[var(--sm-muted)]'}`} onClick={() => { const targetIndex = index; const currentIndex = ['intake', 'draft', 'review', 'handoff'].indexOf(stage); if (targetIndex <= currentIndex || (conversationReady && stockAfterDraft >= 0 && targetIndex === currentIndex + 1)) setStage(item); else setParseNote('Complete the current evidence gate before moving to this stage.') }}><span className="block text-xs uppercase tracking-widest">0{index + 1}</span><strong className="mt-2 block capitalize">{item}</strong></button>)}</div>
         <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_0.9fr]">
           <div><p className="text-sm text-[var(--sm-muted)]">Customer conversation</p><label className="mt-3 block space-y-2 text-sm text-[var(--sm-muted)]"><span>Customer name</span><input className="sm-input" value={customerName} onChange={(event) => setCustomerName(event.target.value)} /></label><label className="mt-3 block space-y-2 text-sm text-[var(--sm-muted)]"><span>Incoming message</span><textarea className="sm-input min-h-28" value={customerMessage} onChange={(event) => { setCustomerMessage(event.target.value); setConversationReady(false); setParseNote('Message changed. Parse again to update the draft.') }} /></label><div className="mt-3 flex flex-wrap gap-2"><span className="sm-chip text-white">Channel / {channel}</span><span className="sm-chip text-white">Intent / {conversationReady ? 'ready to buy' : 'unclassified'}</span><span className="sm-chip text-white">Match / {conversationReady ? 'catalog item found' : 'needs review'}</span></div><button className="sm-button-secondary mt-4" type="button" onClick={parseConversation}>Parse conversation</button><p className="mt-3 text-xs leading-relaxed text-[var(--sm-muted)]">{parseNote}</p><div className="mt-4 space-y-3 text-sm leading-relaxed"><div className="ml-auto max-w-[85%] bg-white/10 p-4 text-white">{customerMessage || 'Waiting for a customer message.'}</div><div className="max-w-[85%] border border-[var(--sm-accent)]/30 bg-[var(--sm-accent)]/10 p-4 text-white">{conversationReady ? `Thanks ${customerName}. I found ${selectedProduct.name} and can prepare an order for review.` : 'The worker will draft a reply after the operator parses the message.'}</div></div></div>
             <div><label className="block space-y-2 text-sm text-[var(--sm-muted)]"><span>Recommended item</span><select className="sm-input" value={selectedProduct.id} onChange={(event) => setSelectedProductId(event.target.value)}>{products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</select></label><label className="mt-4 block space-y-2 text-sm text-[var(--sm-muted)]"><span>Quantity</span><input className="sm-input" min={1} max={selectedProduct.stock} type="number" value={quantity} onChange={(event) => setQuantity(Math.max(1, Number(event.target.value) || 1))} /></label><div className="mt-5 grid gap-3 sm:grid-cols-2"><div className="sm-chip text-white"><span className="text-[var(--sm-muted)]">Order total</span><strong className="mt-1 block text-xl">{money(total)}</strong></div><div className="sm-chip text-white"><span className="text-[var(--sm-muted)]">Stock after draft</span><strong className={`mt-1 block text-xl ${stockAfterDraft < 3 ? 'text-amber-300' : 'text-emerald-300'}`}>{stockAfterDraft} {selectedProduct.unit}s</strong></div></div></div>
         </div>
         <div className="mt-6 border-t border-white/10 pt-5 text-sm text-[var(--sm-muted)]"><p>Current state: <strong className="capitalize text-white">{stage}</strong></p><p className="mt-2">Decision gate: <span className="text-white">{paymentState}; no payment or delivery message is sent automatically.</span></p><p className="mt-2">Next action: <span className="text-white">{stage === 'handoff' ? 'Operator confirms delivery details and payment evidence.' : 'Advance the order when the preceding evidence is present.'}</span></p></div>
-        <div className="mt-5 flex flex-wrap gap-3"><button className="sm-button-primary" onClick={() => { const nextStage = stage === 'intake' ? 'draft' : stage === 'draft' ? 'review' : 'handoff'; setStage(nextStage); trackEvent('commerce_stage_advanced', { from_stage: stage, to_stage: nextStage, catalog_source: catalogSource }) }} type="button">Advance machine</button><button className="sm-button-secondary" onClick={exportHandoff} type="button">Export handoff packet</button></div>
+        <div className="mt-5 flex flex-wrap gap-3"><button className="sm-button-primary" onClick={advanceMachine} type="button">Advance machine</button><button className="sm-button-secondary" disabled={!conversationReady || stockAfterDraft < 0} onClick={exportHandoff} type="button">Export handoff packet</button></div>
       </article>
     </section>
 
