@@ -6121,34 +6121,28 @@ for (const detailDoc of productDetailDocs) {
 // Offers / pricing — the revenue surface. Public "from" anchors (USD primary, MMK derived at the ~4,800 market rate).
 const publicOffers = [
   {
-    slug: 'tool-week', name: 'Tool in a week', usd: '600', mmk: '~2,900,000 MMK',
+    slug: 'tool-week', name: 'Tool in a week', mmk: '2,500,000 MMK',
     who: 'You have one sharp, specific job to fix.',
     gets: ['One focused tool, fixed scope', 'Live at a real URL in days, not months', 'Yours to keep — no per-seat fee', 'One round of revisions included'],
     cta: 'Start this',
   },
   {
-    slug: 'dashboard', name: 'Custom dashboard / internal tool', usd: '1,500', mmk: '~7,200,000 MMK',
+    slug: 'dashboard', name: 'Custom build - dashboard / internal tool', mmk: '8,000,000 MMK', flagship: true,
     who: 'Your numbers live across five spreadsheets and nobody trusts them.',
     gets: ['One screen that updates itself from your real data', 'Built around how you actually work', 'Bilingual MY/EN, MMK-native', 'Export to clean CSV anytime'],
     cta: 'Scope my dashboard',
   },
   {
-    slug: 'ai-agent', name: 'AI agent / automation', usd: '2,500', mmk: '~12,000,000 MMK',
+    slug: 'ai-agent', name: 'AI agent / automation', mmk: '11,000,000 MMK',
     who: 'The same back-office task eats hours every single day.',
     gets: ['An agent that reads your real inputs and drafts the work', 'Approval gate on anything that sends, pays, or changes the books', 'A run ledger — nothing happens silently', 'Weekly report on time and money saved'],
     cta: 'Describe the job',
   },
   {
-    slug: 'design-ship', name: 'Design + ship system', usd: '6,000', mmk: '~29,000,000 MMK', flagship: true,
+    slug: 'design-ship', name: 'Design + ship system', mmk: '25,000,000 MMK',
     who: 'You want it to look premium and actually run — one build, end to end.',
     gets: ['Brand and UI designed on our system', 'A full working system, live and in use', 'Local payments, offline-ready, bilingual', 'Hands over as a running thing, not a pile of files'],
     cta: 'Book a build',
-  },
-  {
-    slug: 'care-plan', name: 'Care plan', usd: '300', per: '/mo', mmk: '~1,440,000 MMK / mo',
-    who: 'Keep what we built running, fresh, and improving.',
-    gets: ['Hosting, monitoring, and small changes', 'One shipped improvement every quarter', 'Priority on fixes', 'Sold after a build — never "hours per month"'],
-    cta: 'Add a care plan',
   },
 ]
 const publicOffersHtml = `<!doctype html>
@@ -6158,14 +6152,14 @@ const publicOffersHtml = `<!doctype html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="index,follow" />
     <title>Pricing | SUPERMEGA.dev</title>
-    <meta name="description" content="Custom software at SaaS prices. Clear from-anchor pricing for tools, dashboards, AI agents, full systems, and care plans — built for Myanmar, yours to keep." />
+    <meta name="description" content="Custom software at SaaS prices. Clear MMK scope anchors for tools, dashboards, AI agents, and full systems — built for Myanmar, yours to keep." />
     <meta name="theme-color" content="#f4efe6" />
     <link rel="canonical" href="https://supermega.dev/offers/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="SUPERMEGA.dev" />
     <meta property="og:title" content="Pricing — custom software at SaaS prices" />
-    <meta property="og:description" content="Clear from-anchor pricing for tools, dashboards, AI agents, full systems, and care plans. Built for Myanmar, yours to keep." />
+    <meta property="og:description" content="Clear MMK scope anchors for tools, dashboards, AI agents, and full systems. Built for Myanmar, yours to keep." />
     <meta property="og:url" content="https://supermega.dev/offers/" />
     <meta property="og:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
     <meta name="twitter:card" content="summary_large_image" />
@@ -6241,31 +6235,30 @@ ${unicornHeader}
             ${publicOffers.map((o) => `<div class="of-card${o.flagship ? ' flagship' : ''}">${o.flagship ? '<span class="of-tag">Most complete</span>' : ''}
               <h3>${o.name}</h3>
               <p class="of-who">${o.who}</p>
-              <div class="of-price"><span class="from">from</span><b>$${o.usd}</b>${o.per ? `<span class="per">${o.per}</span>` : ''}</div>
-              <div class="of-mmk">${o.mmk}</div>
+              <div class="of-price"><span class="from">from</span><b>${o.mmk}</b></div>
               <ul class="of-gets">${o.gets.map((g) => `<li>${g}</li>`).join('')}</ul>
               <div class="of-spacer"></div>
               <a class="btn ${o.flagship ? 'primary' : 'secondary'}" href="/contact/?package=${o.slug}">${o.cta}</a>
             </div>`).join('')}
           </div>
-          <p class="of-note">All prices are starting "from" anchors in USD, with the MMK equivalent at the market rate. Final scope and price are agreed on a short call. Fixed-scope projects with clear revision caps; 50% deposit to start (KBZPay / MMQR / cash, or card for international).</p>
+          <p class="of-note">These are starting scope anchors in MMK. Final scope is agreed after a short review of the workflow and sample data. Fixed-scope projects with clear revision boundaries.</p>
         </section>
 
         <section class="section">
           <h2>How we work</h2>
           <div class="pd-steps">
             <div class="pd-step"><n>1</n><strong>Scope</strong><span>One short call. We agree exactly what ships and what's out of scope — no open-ended hours.</span></div>
-            <div class="pd-step"><n>2</n><strong>Deposit</strong><span>50% to start — KBZPay, MMQR, cash, or card. The local norm, and it keeps us both honest.</span></div>
+            <div class="pd-step"><n>2</n><strong>Shape</strong><span>We confirm the source data, first user, acceptance proof, and the smallest useful release.</span></div>
             <div class="pd-step"><n>3</n><strong>Ship</strong><span>We build it AI-native and hand you a running thing at a live URL — not a folder of files.</span></div>
-            <div class="pd-step"><n>4</n><strong>Care</strong><span>Optional care plan keeps it running and improving. You can also just take it and go.</span></div>
+            <div class="pd-step"><n>4</n><strong>Improve</strong><span>After handoff, improvements are scoped from observed usage and approved operating needs.</span></div>
           </div>
         </section>
 
         <section class="section">
           <h2>Why this beats another subscription</h2>
           <div class="compare">
-            <div><h3>The SaaS path</h3><p>A 15-person shop on separate POS, accounting, and HR tools easily pays $200–400 a month — over $7,000 in two to three years — and it grows with every hire. Most SMBs run 25+ apps, add about seven a month, and leave over half the seats underused. The tools rarely talk to each other.</p></div>
-            <div class="win"><h3>The SuperMega path</h3><p>One custom build, paid once, plus a light care plan if you want it. It's shaped to your work, it speaks to itself, and the price doesn't climb when you hire. You own it. Over two to three years it wins on total cost — and you stop paying the integration tax forever.</p></div>
+            <div><h3>The SaaS path</h3><p>A 15-person shop on separate POS, accounting, and HR tools pays recurring subscription costs that grow with every hire. Most SMBs run too many disconnected tools and leave many seats underused. The tools rarely talk to each other.</p></div>
+            <div class="win"><h3>The SuperMega path</h3><p>One custom build, paid once, with scoped improvements when you need them. It is shaped to your work, it speaks to itself, and you own the result. Over time it reduces the integration tax and keeps the operating workflow clear.</p></div>
           </div>
           <p class="of-note">Sources: Zylo 2025 SaaS Management Index; JumpCloud; Spendesk. Figures are industry averages used to frame total cost — your numbers are confirmed on the scoping call.</p>
         </section>
