@@ -1,5 +1,5 @@
 [project]
 name = "app"
 version = "0.1.0"
-dependencies = [ "beautifulsoup4", "fastapi", "httpx", "psycopg[binary]", "pydantic", "python-dotenv", "sqlmodel", "uvicorn" ]
+dependencies = [ "beautifulsoup4", "fastapi", "google-cloud-tasks", "httpx", "psycopg[binary]", "pydantic", "python-dotenv", "sqlmodel", "uvicorn" ]
 requires-python = ">=3.12,<3.15"
