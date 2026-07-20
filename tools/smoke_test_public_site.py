@@ -4,7 +4,7 @@ import argparse
 import re
 import sys
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
 
 ROUTES = (
@@ -39,6 +39,21 @@ def extract_asset(html: str, pattern: str) -> str:
     return match.group(1)
 
 
+class NoRedirectHandler(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def fetch_without_redirect(url: str, timeout: int = 20) -> tuple[int, str]:
+    opener = build_opener(NoRedirectHandler)
+    request = Request(url, headers={"Accept": "text/html"}, method="GET")
+    try:
+        with opener.open(request, timeout=timeout) as response:
+            return int(getattr(response, "status", 200) or 200), response.headers.get("Location", "")
+    except HTTPError as exc:
+        return int(exc.code or 0), exc.headers.get("Location", "")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Smoke test the public SUPERMEGA site.")
     parser.add_argument("--base-url", default="https://supermega.dev")
@@ -53,6 +68,15 @@ def main() -> int:
             route_statuses[route] = status
             if status != 200:
                 raise RuntimeError(f"Expected 200 for {route}, got {status}")
+
+        for route, expected_location in {
+            "/products/manager-operating-system/": "/products/agents/",
+            "/products/find-clients/": "/products/agents/",
+            "/signup/": "https://app.supermega.dev/signup/?source=public-site",
+        }.items():
+            status, location = fetch_without_redirect(f"{base_url}{route}")
+            if status != 308 or location != expected_location:
+                raise RuntimeError(f"Expected 308 redirect for {route} to {expected_location}, got {status} -> {location}")
 
         home_status, home_html = fetch(f"{base_url}/")
         if home_status != 200:
