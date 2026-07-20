@@ -33,6 +33,10 @@ const configPath = resolve(outputDir, 'config.json')
 if (!existsSync(configPath)) fail('missing_public_config')
 const config = JSON.parse(readFileSync(configPath, 'utf8'))
 const routes = Array.isArray(config.routes) ? config.routes : []
+for (const src of ['^/api/behavior-events/?$', '^/api/behavior-events/status/?$']) {
+  const route = findRoute(routes, src)
+  if (route?.dest !== '/api/behavior-events.js') fail('behavior_events_route_missing', { src, route })
+}
 
 const expectedStaticEntries = new Set(['404.html', 'contact', 'favicon.svg', 'index.html', 'live-plant-mobile.png', 'live-plant-workspace.png', 'live-shop-mobile.png', 'live-shop-workspace.png', 'privacy', 'robots.txt', 'site.webmanifest', 'sitemap.xml', 'sw.js', 'work'])
 const actualStaticEntries = readdirSync(staticDir)
@@ -65,7 +69,7 @@ for (const [entry, approvedHash] of approvedCaptureHashes) {
   if (actualHash !== approvedHash) fail('public_capture_not_reviewed', { entry, approvedHash, actualHash })
 }
 
-const expectedFunctions = new Set(['contact-submissions.js.func', 'health.js.func', 'not-found.js.func'])
+const expectedFunctions = new Set(['behavior-events.js.func', 'contact-submissions.js.func', 'health.js.func', 'not-found.js.func'])
 const actualFunctions = readdirSync(functionsDir, { withFileTypes: true })
   .filter((entry) => entry.isDirectory())
   .map((entry) => entry.name)
