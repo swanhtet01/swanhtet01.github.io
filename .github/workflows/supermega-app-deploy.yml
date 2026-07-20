@@ -10,6 +10,7 @@ on:
       - 'api_app.py'
       - 'tools/serve_solution.py'
       - 'api/cloud_runtime.py'
+      - 'mark1_pilot/**'
       - 'showroom/**'
       - 'tools/write_app_vercel_config.mjs'
       - 'package.json'
