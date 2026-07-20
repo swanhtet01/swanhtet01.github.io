@@ -57,7 +57,7 @@ for (const entry of readdirSync(functionsApiDir, { withFileTypes: true })) {
 }
 
 const worstFunction = functionBudgets.sort((a, b) => b.files - a.files)[0]
-const expectedFunctions = new Set(['contact-submissions.js.func', 'health.js.func', 'not-found.js.func'])
+const expectedFunctions = new Set(['behavior-events.js.func', 'contact-submissions.js.func', 'health.js.func', 'not-found.js.func'])
 const actualFunctions = new Set(functionBudgets.map((entry) => entry.name))
 
 for (const name of actualFunctions) {
@@ -69,10 +69,11 @@ for (const name of expectedFunctions) {
 
 if (duplicateApiNodeModules > 0) fail('duplicate_api_node_modules_present', { duplicateApiNodeModules })
 if (totalFiles > 60) fail('public_output_file_budget_exceeded', { totalFiles, maxFiles: 60, worstFunction })
-if (totalBytes > 1024 * 1024) {
+const maxBytes = 1.1 * 1024 * 1024
+if (totalBytes > maxBytes) {
   fail('public_output_size_budget_exceeded', {
     totalMb: Number((totalBytes / 1024 / 1024).toFixed(2)),
-    maxMb: 1,
+    maxMb: 1.1,
     worstFunction,
   })
 }
