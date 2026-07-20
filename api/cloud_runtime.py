@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import os
+import urllib.error
+import urllib.request
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Header, HTTPException, Request
@@ -81,14 +84,44 @@ def _require_cron_auth(authorization: str | None, x_cron_secret: str | None) -> 
 
 def _cron_result(path: str) -> dict[str, object]:
     runtime = _runtime_status()
-    return {
+    result: dict[str, object] = {
         "status": "accepted" if runtime["status"] == "ready" else "degraded",
         "path": path,
-        "execution": "hosted_runtime_ready" if runtime["status"] == "ready" else "hosted_runtime_not_configured",
+        "execution": "hosted_runtime_forwarded" if runtime["status"] == "ready" else "hosted_runtime_not_configured",
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "writes_performed": False,
         "external_messages_sent": False,
     }
+    if runtime["status"] != "ready":
+        return result
+
+    worker_url = _text(os.getenv("SUPERMEGA_CLOUD_TASKS_WORKER_URL"))
+    token = _cron_token()
+    job_types = ["founder_brief"] if path.endswith("/daily") else []
+    payload = json.dumps({
+        "job_types": job_types,
+        "source": "vercel_cron",
+        "limit": 8,
+    }).encode("utf-8")
+    request = urllib.request.Request(
+        worker_url,
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            body = response.read().decode("utf-8")
+            result["worker_status"] = int(response.status)
+            result["worker_result"] = json.loads(body) if body else {}
+    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, ValueError) as exc:
+        result["status"] = "degraded"
+        result["execution"] = "worker_error"
+        result["worker_error"] = type(exc).__name__
+    return result
 
 
 @router.get("/api/cron/supermega/agent-queue")
