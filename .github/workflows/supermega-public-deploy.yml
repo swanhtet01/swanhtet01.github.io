@@ -45,7 +45,7 @@ jobs:
           import urllib.request
           checks = {
               'https://supermega.dev/': 'Shop',
-              'https://supermega.dev/products/': 'Open Shop',
+              'https://supermega.dev/products/': 'Shop',
               'https://supermega.dev/offers/': 'Talk to us',
               'https://supermega.dev/ai-agent-solutions/': 'AI Agent Solutions',
           }
