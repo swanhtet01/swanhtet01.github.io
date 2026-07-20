@@ -323,6 +323,36 @@ function recommendedNextStep(record) {
 
 const solutionRouteCatalog = [
   {
+    template_id: 'commerce-inbox',
+    package_name: 'Commerce Inbox Machine',
+    product_area: 'AI Agent Solutions',
+    delivery_lane: 'commerce_inbox_workcell',
+    keywords: ['commerce inbox', 'commerce machine', 'messenger', 'viber', 'orders', 'catalog', 'stock', 'delivery', 'product list'],
+    first_proof_target: 'A reviewed order draft from real customer messages, with stock and delivery checks attached.',
+    source_requests: ['product list with prices', 'current stock or availability', 'delivery and pickup rules', 'two approved order examples'],
+    sales_motion: 'Sell a fixed-scope commerce machine after one real order is converted into a reviewed draft.',
+  },
+  {
+    template_id: 'knowledge-desk',
+    package_name: 'Knowledge Desk Machine',
+    product_area: 'AI Agent Solutions',
+    delivery_lane: 'knowledge_desk_workcell',
+    keywords: ['knowledge desk', 'gmail', 'drive', 'pdf', 'spreadsheet', 'decision', 'team brief', 'follow-up'],
+    first_proof_target: 'A source-linked daily brief that turns approved files and inbox items into assigned decisions.',
+    source_requests: ['one approved Drive folder or export', 'team operating rules', 'desired brief format', 'two examples of good decisions'],
+    sales_motion: 'Start read-only, prove one daily brief, then add approval-gated task creation or replies.',
+  },
+  {
+    template_id: 'research-monitor',
+    package_name: 'Research Monitor Machine',
+    product_area: 'AI Agent Solutions',
+    delivery_lane: 'research_monitor_workcell',
+    keywords: ['research monitor', 'watchlist', 'website', 'competitor', 'supplier', 'market', 'change report', 'monitor'],
+    first_proof_target: 'A source-backed change report from selected sites, ranked by business impact and owner.',
+    source_requests: ['watchlist URLs or feeds', 'watch terms and exclusions', 'impact categories', 'escalation owner and cadence'],
+    sales_motion: 'Sell a recurring monitored brief after the buyer accepts one evidence-linked change report.',
+  },
+  {
     template_id: 'deskpos-quickstart',
     package_name: 'DeskPOS Quickstart',
     product_area: 'DeskPOS',

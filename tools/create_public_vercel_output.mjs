@@ -6533,6 +6533,20 @@ await mkdir(staticDir, { recursive: true })
 await mkdir(resolve(staticDir, 'ai-agent-solutions'), { recursive: true })
 await writeFile(resolve(staticDir, 'ai-agent-solutions', 'index.html'), publicAiAgentSolutionsHtml, 'utf8')
 await writeFile(resolve(staticDir, 'site', 'agent-machine-templates.json'), JSON.stringify(publicAgentMachineManifest, null, 2), 'utf8')
+await mkdir(resolve(staticDir, 'site', 'agent-templates'), { recursive: true })
+for (const template of agentMachineTemplates) {
+  await writeFile(
+    resolve(staticDir, 'site', 'agent-templates', `${template.id}.json`),
+    JSON.stringify({
+      version: 1,
+      kind: 'supermega-agent-machine-template',
+      template,
+      setup: ['Confirm owner and success metric', 'Connect approved sources', 'Run a review-only test', 'Accept the first proof', 'Enable only approved actions'],
+      approval_boundary: publicAgentMachineManifest.handoff.approval_boundary,
+    }, null, 2),
+    'utf8',
+  )
+}
 await writeFile(
   resolve(staticDir, 'private-not-found.html'),
   '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="robots" content="noindex,nofollow"><title>Not found</title><body>Not found.</body></html>\n',
