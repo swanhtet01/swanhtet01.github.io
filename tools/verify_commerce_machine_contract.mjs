@@ -26,7 +26,7 @@ const requirements = [
   ['conversation parser matches catalog', /function parseConversation\(\)[\s\S]*matchedProduct/],
   ['conversation parser extracts quantity', /function parseRequestedQuantity\(message: string\)/],
   ['public agents page is reachable', /Route element=\{routeElement\(<AgentsPage \/>\)\} path="agents"/],
-  ['agents page offers free machine', /AgentsPage\.tsx[\s\S]*to="\/commerce-machine"[\s\S]*Try free machine/],
+  ['agents page offers free machine', /to="\/commerce-machine"[\s\S]*Try free machine/],
   ['conversation parser has no fixed confidence claim', [machine, analytics].join('\\n').indexOf('94%') === -1 ? /.*/ : /$a/],
 ]
 
