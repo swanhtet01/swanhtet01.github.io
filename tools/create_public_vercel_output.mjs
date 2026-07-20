@@ -5611,19 +5611,12 @@ async function writeNodeFunction(name) {
     })
   }
   await mkdir(resolve(functionDir, 'node_modules'), { recursive: true })
-  await mkdir(resolve(functionDir, 'api', 'node_modules'), { recursive: true })
   for (const dependency of nodeFunctionDependencies) {
     const sourceDependency = resolve(root, 'node_modules', dependency)
-    await Promise.all([
-      cp(sourceDependency, resolve(functionDir, 'node_modules', dependency), {
-        recursive: true,
-        force: true,
-      }),
-      cp(sourceDependency, resolve(functionDir, 'api', 'node_modules', dependency), {
-        recursive: true,
-        force: true,
-      }),
-    ]).catch((error) => {
+    await cp(sourceDependency, resolve(functionDir, 'node_modules', dependency), {
+      recursive: true,
+      force: true,
+    }).catch((error) => {
       if (error?.code === 'ENOENT') return
       throw error
     })
