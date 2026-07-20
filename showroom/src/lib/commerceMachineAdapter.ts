@@ -80,7 +80,7 @@ export function normalizeCommerceMachineBlueprint(input: unknown): CommerceMachi
     kind: 'supermega-commerce-machine',
     businessName: String(value.businessName || 'Client shop'),
     channel: String(value.channel || 'Messenger'),
-    catalogSource: value.catalogSource === 'shop-api' || value.catalogSource === 'client-import' ? value.catalogSource : 'client-import',
+    catalogSource: value.catalogSource === 'shop-api' || value.catalogSource === 'client-import' || value.catalogSource === 'demo' ? value.catalogSource : 'client-import',
     policy: {
       language: String(policy.language || 'Myanmar + English'),
       fulfillment: String(policy.fulfillment || 'Delivery or pickup'),
