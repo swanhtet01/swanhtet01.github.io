@@ -1,0 +1,23 @@
+name: SuperMega Enterprise Readiness Gate
+
+on:
+  workflow_run:
+    workflows: ["SuperMega App Build and Deploy"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  enterprise-readiness:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check strict enterprise health
+        run: |
+          curl --fail --retry 8 --retry-delay 5 --retry-all-errors https://app.supermega.dev/api/health | tee /tmp/supermega-health.json
+          if ! jq -e '(.status == "ready") and (.enterprise_db_ready == true) and (.enterprise_db_scheme != "sqlite") and ((.coverage_score // 0) > 0)' /tmp/supermega-health.json >/dev/null; then
+            echo '::error title=Enterprise activation required::Free mode is deployed, but enterprise activation requires managed Postgres and non-empty source coverage.'
+            jq '{status, free_mode_ready, enterprise_db_ready, enterprise_db_scheme, coverage_score, enterprise_activation}' /tmp/supermega-health.json
+            exit 1
+          fi

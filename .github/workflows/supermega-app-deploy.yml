@@ -77,12 +77,3 @@ jobs:
 
       - name: Smoke free mode
         run: node tools/smoke_free_mode_health.mjs
-
-      - name: Smoke production app
-        run: |
-          curl --fail --retry 8 --retry-delay 5 --retry-all-errors https://app.supermega.dev/api/health | tee /tmp/supermega-health.json
-          if ! jq -e '(.status == "ready") and (.enterprise_db_ready == true) and (.enterprise_db_scheme != "sqlite")' /tmp/supermega-health.json >/dev/null; then
-            echo '::error title=Enterprise activation required::The app deployed, but its live health gate is not ready. Provision managed Postgres on the Vercel megaos project, then publish a non-empty data coverage report after the first real workspace source sync.'
-            jq '{status, enterprise_db_ready, enterprise_db_scheme, coverage_score, enterprise_activation}' /tmp/supermega-health.json
-            exit 1
-          fi
