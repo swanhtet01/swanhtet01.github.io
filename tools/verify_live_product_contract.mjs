@@ -5,6 +5,7 @@ const checks = [
   { url: `${base}/`, text: 'Custom software at SaaS prices' },
   { url: `${base}/products/`, text: 'Shop' },
   { url: `${base}/ai-agent-solutions/`, text: 'One machine, many tracks' },
+  { url: `${base}/demo/`, text: 'app.supermega.dev/commerce-machine' },
   { url: `${appBase}/?demo=shop`, text: null },
   { url: `${appBase}/?demo=plant`, text: null },
 ]

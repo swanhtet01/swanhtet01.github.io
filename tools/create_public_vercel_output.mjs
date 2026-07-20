@@ -6534,9 +6534,16 @@ await mkdir(resolve(staticDir, 'demo'), { recursive: true })
 // through the founder-locked display-name canon so the bundled /demo/ page can't regress to
 // retired product names (DeskPOS etc.). Only display strings are touched, never the demo app's
 // own lowercase slugs / query params, so its routing stays intact.
+const demoFallbackHtml = `<!doctype html>
+<html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Live product previews | SUPERMEGA.dev</title><meta name="description" content="Try SuperMega Shop, Plant, and Commerce Machine previews." />
+<style>body{font-family:system-ui,sans-serif;max-width:980px;margin:0 auto;padding:48px 24px;background:#07111f;color:#f7fbff}a{display:inline-block;margin:8px 8px 0 0;padding:14px 18px;border:1px solid #2e4661;color:#f7fbff;text-decoration:none;border-radius:8px}a.primary{background:#d97757;border-color:#d97757;color:#07111f}p{color:#a9b9ca;line-height:1.6}</style></head>
+<body><p>SUPERMEGA.dev / live previews</p><h1>Try the working products</h1><p>Start with a focused preview. No account or connector is required for the free Commerce Machine.</p>
+<p><a class="primary" href="https://app.supermega.dev/?demo=shop">Open Shop preview</a><a href="https://app.supermega.dev/?demo=plant">Open Plant preview</a><a href="https://app.supermega.dev/commerce-machine">Try free Commerce Machine</a><a href="/contact/">Request a rollout</a></p>
+</body></html>`
 await readFile('C:/sm-site/supermega-demo/index.html', 'utf8')
-  .then((demoHtml) => writeFile(resolve(staticDir, 'demo', 'index.html'), canonFounderLockedProductNames(demoHtml), 'utf8'))
-  .catch(() => undefined)
+  .then((demoHtml) => writeFile(resolve(staticDir, 'demo', 'index.html'), `${canonFounderLockedProductNames(demoHtml)}\n<p><a href="https://app.supermega.dev/?demo=shop">Open Shop preview</a> <a href="https://app.supermega.dev/?demo=plant">Open Plant preview</a> <a href="https://app.supermega.dev/commerce-machine">Try free Commerce Machine</a></p>`, 'utf8'))
+  .catch(() => writeFile(resolve(staticDir, 'demo', 'index.html'), demoFallbackHtml, 'utf8'))
 await cp('C:/sm-site/supermega-demo/favicon.svg', resolve(staticDir, 'demo', 'favicon.svg'), { force: true }).catch(() => undefined)
 await writeFile(resolve(staticDir, 'robots.txt'), 'User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /app/\nDisallow: /clients/\nDisallow: /machine/\nSitemap: https://supermega.dev/sitemap.xml\n', 'utf8')
 await writeFile(resolve(staticDir, 'sitemap.xml'), '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>https://supermega.dev/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>\n  <url><loc>https://supermega.dev/products/</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/offers/</loc><changefreq>weekly</changefreq><priority>0.95</priority></url>\n  <url><loc>https://supermega.dev/work/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/contact/</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/card/</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>\n</urlset>\n', 'utf8')

@@ -54,6 +54,7 @@ for (const entry of [
   'index.html',
   'products/index.html',
   'contact/index.html',
+  'demo/index.html',
   'site/shots/actual-custom-workflow-queue.png',
   'site/shots/actual-custom-workflow-modules.png',
   'site/shots/actual-custom-workflow-overview.png',
@@ -532,6 +533,10 @@ const homeHtml = readFileSync(resolve(staticDir, 'index.html'), 'utf8')
 const productsHtml = readFileSync(resolve(staticDir, 'products/index.html'), 'utf8')
 const contactHtml = readFileSync(resolve(staticDir, 'contact/index.html'), 'utf8')
 const offersHtml = readFileSync(resolve(staticDir, 'offers/index.html'), 'utf8')
+const demoHtml = readFileSync(resolve(staticDir, 'demo/index.html'), 'utf8')
+for (const token of ['app.supermega.dev/?demo=shop', 'app.supermega.dev/?demo=plant', 'app.supermega.dev/commerce-machine']) {
+  if (!demoHtml.includes(token)) fail('demo_stable_link_missing', { token })
+}
 const offerCards = (offersHtml.match(/class="of-card/g) || []).length
 if (offerCards !== 4) fail('offers_scope_card_count_invalid', { expected: 4, actual: offerCards })
 if (/\bUSD\b|\$\s*[0-9]/.test(offersHtml)) fail('offers_public_currency_not_mmk_only')
