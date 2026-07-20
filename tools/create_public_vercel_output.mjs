@@ -5745,6 +5745,15 @@ for (const filename of ['supermega-portal-card.png', 'supermega-contact-qr.png']
   await cp(resolve(root, 'showroom', 'public', 'social', filename), resolve(staticDir, 'site', 'social', filename), { force: true })
 }
 const publicShotCopies = [
+  ['actual-custom-workflow-queue.png'],
+  ['actual-custom-workflow-modules.png'],
+  ['actual-custom-workflow-overview.png'],
+  ['actual-factory-assets.png'],
+  ['actual-factory-actions.png'],
+  ['actual-factory-overview.png'],
+  ['actual-restaurant-shift-stock.png'],
+  ['actual-restaurant-menu.png'],
+  ['actual-restaurant-overview.png'],
   ['live-demo-agent-builder.png'],
   ['live-demo-service-desk.png'],
   ['live-demo-industrial-os.png'],
