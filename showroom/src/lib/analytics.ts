@@ -28,6 +28,7 @@ const queuedIdentities: Array<{ userId: string; properties?: EventPayload }> = [
 const FIRST_PARTY_EVENT_TYPES: Record<string, string> = {
   commerce_template_edited: 'setup_started',
   commerce_channel_selected: 'setup_started',
+  commerce_worker_toggled: 'setup_started',
   commerce_conversation_parsed: 'setup_started',
   commerce_catalog_imported: 'setup_started',
   commerce_blueprint_imported: 'setup_started',
