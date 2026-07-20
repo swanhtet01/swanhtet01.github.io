@@ -11,6 +11,9 @@ const endpoints = {
   health: 'https://supermega.dev/api/health',
   contactStatus: 'https://supermega.dev/api/contact-submissions/status',
   contactDiagnostics: 'https://supermega.dev/api/contact-submissions/status?detail=1',
+  behaviorEvents: 'https://supermega.dev/api/behavior-events',
+  behaviorStatus: 'https://supermega.dev/api/behavior-events/status',
+  behaviorSummary: 'https://supermega.dev/api/behavior-events/summary',
 }
 
 function assert(condition, code) {
@@ -128,6 +131,13 @@ function verifyContactStatus(body) {
   assert(body?.service === 'supermega-contact', 'contact_status_wrong_service')
 }
 
+function verifyBehaviorStatus(body, label) {
+  assert(body?.status === 'ready', `${label}_not_ready`)
+  assert(Array.isArray(body?.allowed_events), `${label}_missing_allowed_events`)
+  assert(body?.storage && typeof body.storage.status === 'string', `${label}_missing_storage_readiness`)
+  assert(body?.privacy === 'coarse_first_party_events_only', `${label}_privacy_contract_changed`)
+}
+
 function verifyProtectedDiagnostics(response, body) {
   assert(response.status === 401, 'contact_diagnostics_not_protected')
   assert(Object.keys(body || {}).sort().join(',') === 'reason,status', 'contact_diagnostics_auth_exposes_fields')
@@ -136,7 +146,7 @@ function verifyProtectedDiagnostics(response, body) {
 }
 
 async function verifyOnce() {
-  const [homeResponse, wwwResponse, workResponse, contactResponse, reconcileResponse, healthResponse, statusResponse, diagnosticsResponse] = await Promise.all([
+  const [homeResponse, wwwResponse, workResponse, contactResponse, reconcileResponse, healthResponse, statusResponse, diagnosticsResponse, behaviorResponse, behaviorStatusResponse, behaviorSummaryResponse] = await Promise.all([
     get(endpoints.home, 'text/html'),
     get(endpoints.www, 'text/html'),
     get(endpoints.work, 'text/html'),
@@ -145,12 +155,17 @@ async function verifyOnce() {
     get(endpoints.health, 'application/json'),
     get(endpoints.contactStatus, 'application/json'),
     request(endpoints.contactDiagnostics, { accept: 'application/json' }),
+    get(endpoints.behaviorEvents, 'application/json'),
+    get(endpoints.behaviorStatus, 'application/json'),
+    request(endpoints.behaviorSummary, { accept: 'application/json' }),
   ])
 
   assert(reconcileResponse.status === 308, 'retired_reconcile_not_redirected')
   assert(reconcileResponse.headers.get('location') === '/contact/?from=workflow', 'retired_reconcile_wrong_destination')
 
-  const [home, www, work, contact, health, contactStatus, protectedDiagnostics] = await Promise.all([
+  assert(behaviorSummaryResponse.status === 401, 'behavior_summary_not_protected')
+
+  const [home, www, work, contact, health, contactStatus, protectedDiagnostics, behavior, behaviorStatus] = await Promise.all([
     homeResponse.text(),
     wwwResponse.text(),
     workResponse.text(),
@@ -158,6 +173,8 @@ async function verifyOnce() {
     healthResponse.json(),
     statusResponse.json(),
     diagnosticsResponse.json(),
+    behaviorResponse.json(),
+    behaviorStatusResponse.json(),
   ])
 
   verifyHome(home, 'home')
@@ -166,6 +183,8 @@ async function verifyOnce() {
   verifyContact(contact)
   verifyHealth(health)
   verifyContactStatus(contactStatus)
+  verifyBehaviorStatus(behavior, 'behavior_events')
+  verifyBehaviorStatus(behaviorStatus, 'behavior_status')
   verifyProtectedDiagnostics(diagnosticsResponse, protectedDiagnostics)
 }
 
