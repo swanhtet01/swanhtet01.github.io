@@ -9856,6 +9856,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         enterprise_db_scheme = str(enterprise_db_url or "").split(":", 1)[0].strip()
         enterprise_db_configured = bool(enterprise_db_url) and enterprise_db_scheme not in {"", "sqlite"}
         coverage_score = int(coverage.get("readiness_score", 0) or 0)
+        free_mode_ready = bool(site_root.exists()) and bool(pilot_data.exists()) and bool(Path(state_db).exists())
         readiness_status = "ready" if enterprise_db_configured and coverage_score > 0 else "attention"
         activation_requirements = []
         if not enterprise_db_configured:
@@ -9868,6 +9869,13 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "site_root_ready": bool(site_root.exists()),
             "pilot_data_ready": bool(pilot_data.exists()),
             "state_db_ready": bool(Path(state_db).exists()),
+            "free_mode_ready": free_mode_ready,
+            "free_mode": {
+                "status": "ready" if free_mode_ready else "attention",
+                "persistence": "sqlite_fallback",
+                "capabilities": ["public product routes", "free machine demos", "coarse first-party events"],
+                "enterprise_boundary": "Managed Postgres and source coverage are required for system-of-record activation.",
+            },
             "enterprise_db_ready": enterprise_db_configured,
             "enterprise_db_scheme": enterprise_db_scheme or "unknown",
             "review_status": review.get("status", "unknown"),
