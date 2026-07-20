@@ -125,12 +125,14 @@ export function identifyUser(userId: string, properties?: EventPayload) {
     return
   }
 
+  const safeProperties = sanitizeEventPayload(properties)
+
   if (posthogClient) {
-    posthogClient.identify(userId, properties)
+    posthogClient.identify(userId, safeProperties)
     return
   }
 
-  queuedIdentities.push({ userId, properties })
+  queuedIdentities.push({ userId, properties: safeProperties })
   if (!loadingPromise && initialized) {
     loadingPromise = loadPosthog().catch(() => {
       loadingPromise = null

@@ -20,6 +20,7 @@ const requirements = [
   ['metadata-only autocapture', /autocapture:\s*false/],
   ['session recording disabled', /disable_session_recording:\s*true/],
   ['analytics payload sanitizer', /sanitizeEventPayload[\s\S]*BLOCKED_PROPERTY/],
+  ['identity payload sanitizer', /const safeProperties = sanitizeEventPayload\(properties\)[\s\S]*identify\(userId, safeProperties\)[\s\S]*queuedIdentities\.push\(\{ userId, properties: safeProperties \}\)/],
   ['setup learning events mapped', /commerce_template_edited:[\s\S]*commerce_channel_selected:[\s\S]*commerce_worker_toggled:[\s\S]*commerce_catalog_template_downloaded/],
   ['conversation parser matches catalog', /function parseConversation\(\)[\s\S]*matchedProduct/],
   ['conversation parser extracts quantity', /function parseRequestedQuantity\(message: string\)/],
