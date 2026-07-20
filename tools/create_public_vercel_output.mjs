@@ -5554,6 +5554,14 @@ const config = {
       dest: '/c/index.html',
     },
     {
+      src: '^/api/behavior-events/?$',
+      dest: '/api/behavior-events.js',
+    },
+    {
+      src: '^/api/behavior-events/status/?$',
+      dest: '/api/behavior-events.js',
+    },
+    {
       src: '^/machine/?$',
       dest: '/machine/index.html',
     },
@@ -6394,6 +6402,7 @@ self.addEventListener('activate', (event) => {
   'utf8',
 )
 await writeNodeFunction('health.js')
+await writeNodeFunction('behavior-events.js')
 await writeNodeFunction('contact-submissions.js')
 await writeNodeFunction('campaign-clicks.js')
 await writeNodeFunction('commercial-control.js')
