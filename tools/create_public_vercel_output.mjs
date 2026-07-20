@@ -6503,7 +6503,7 @@ const publicAiAgentSolutionsHtml = `<!doctype html>
         <p>Every track uses the same controlled runtime. You provide the sources and rules; the machine produces reviewable work and a portable handoff pack.</p>
         <div class="tracks" id="agent-tracks"></div>
         <div class="machine-output" id="agent-machine-output"></div>
-        <div class="actions"><a class="btn primary" id="machine-cta" href="/contact/?package=ai-agent&track=commerce-inbox">Configure this track</a><a class="btn secondary" href="/site/agent-machine-templates.json">Download machine catalog</a></div>
+        <div class="actions"><a class="btn primary" id="machine-cta" href="/contact/?package=ai-agent&track=commerce-inbox">Configure this track</a><a class="btn secondary" href="https://app.supermega.dev/commerce-machine">Try free machine</a><a class="btn secondary" href="/site/agent-machine-templates.json">Download machine catalog</a></div>
       </section>
       <section class="plans" aria-label="AI machine plans">
         <article class="plan"><div class="eyebrow">Free core</div><h3>Use the machine without replacing your stack.</h3><p>Start with the enterprise-grade operating surface: approved sources, read-only analysis, reviewable outputs, and a clear handoff.</p><ul><li>One configured track</li><li>Source-linked briefs or drafts</li><li>Review queue and approval boundary</li><li>Exportable handoff packet</li></ul></article>
