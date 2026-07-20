@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 820" role="img" aria-label="Factory Maintenance &amp; Quality App PLANT STATE product screen">
+  <defs>
+    <linearGradient id="chrome" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#fffaf0"/><stop offset=".58" stop-color="#f8f4ea"/><stop offset="1" stop-color="#dcfce7"/></linearGradient>
+    <linearGradient id="mark" x1="0" x2="1"><stop stop-color="#67e8f9"/><stop offset="1" stop-color="#2563eb"/></linearGradient>
+    <filter id="shadow" x="-12%" y="-12%" width="124%" height="124%"><feDropShadow dx="0" dy="28" stdDeviation="26" flood-color="#0f172a" flood-opacity=".16"/></filter>
+  </defs>
+  <rect width="1200" height="820" rx="46" fill="url(#chrome)"/>
+  <rect x="0" y="0" width="1200" height="82" rx="46" fill="#eef6ff"/>
+  <circle cx="42" cy="42" r="9" fill="#d5d0c8"/><circle cx="70" cy="42" r="9" fill="#d5d0c8"/><circle cx="98" cy="42" r="9" fill="#d5d0c8"/>
+  <text x="1000" y="49" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="18" font-weight="950" fill="#706a61" letter-spacing="6">FACTORY MAINTENANCE &amp; QUALITY APP</text>
+  <g filter="url(#shadow)">
+    <rect x="54" y="132" width="1092" height="620" rx="36" fill="#fffaf0" stroke="#dad4c9"/>
+    <rect x="82" y="160" width="792" height="76" rx="24" fill="#ffffff" stroke="#e0dbd1"/>
+    <rect x="108" y="184" width="30" height="30" rx="9" fill="#07111f"/>
+    <path d="M114 207c8-14 18-18 31-13" fill="none" stroke="url(#mark)" stroke-width="4.5" stroke-linecap="round"/>
+    <path d="M118 191c8 2 14 7 18 16" fill="none" stroke="#fff" stroke-width="4.5" stroke-linecap="round"/>
+    <text x="154" y="193" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="18" font-weight="950" fill="#0f172a">SUPERMEGA.dev</text>
+    <text x="154" y="215" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="10" font-weight="900" letter-spacing="4" fill="#756f66">FACTORY MAINTENANCE &amp; QUALITY APP</text>
+    <text x="82" y="286" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="18" font-weight="950" letter-spacing="4" fill="#087f5b">PLANT STATE</text>
+    <text x="82" y="342" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="50" font-weight="950" fill="#0f172a">Factory work without the chase.</text>
+    <text x="82" y="382" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="18" font-weight="760" fill="#756f66">Quality, maintenance, receiving, assets, and manager actions stay connected.</text>
+    
+      <rect x="82" y="318" width="168" height="82" rx="22" fill="#ffffff" stroke="#ded8cd"/>
+      <text x="102" y="352" font-size="13" font-weight="950" fill="#087f5b" letter-spacing="3">ISSUES</text>
+      <text x="102" y="383" font-size="31" font-weight="950" fill="#0f172a">7</text>
+      <rect x="278" y="318" width="168" height="82" rx="22" fill="#ffffff" stroke="#ded8cd"/>
+      <text x="298" y="352" font-size="13" font-weight="950" fill="#087f5b" letter-spacing="3">HOLDS</text>
+      <text x="298" y="383" font-size="31" font-weight="950" fill="#0f172a">3</text>
+      <rect x="474" y="318" width="168" height="82" rx="22" fill="#ffffff" stroke="#ded8cd"/>
+      <text x="494" y="352" font-size="13" font-weight="950" fill="#087f5b" letter-spacing="3">MAINT.</text>
+      <text x="494" y="383" font-size="31" font-weight="950" fill="#0f172a">2</text>
+      <rect x="670" y="318" width="168" height="82" rx="22" fill="#052e23" stroke="#052e23"/>
+      <text x="690" y="352" font-size="13" font-weight="950" fill="#7dd3fc" letter-spacing="3">BRIEF</text>
+      <text x="690" y="383" font-size="31" font-weight="950" fill="#ffffff">Ready</text>
+    
+      <rect x="82" y="448" width="792" height="43" rx="14" fill="#ffffff" stroke="#e2ded5"/>
+      <text x="104" y="475" font-size="16" font-weight="850" fill="#0f172a">Repeated downtime before shift handover</text>
+      <text x="560" y="475" font-size="14" font-weight="850" fill="#756f66">Maintenance</text>
+      <text x="690" y="475" font-size="14" font-weight="850" fill="#756f66">High</text>
+      <rect x="812" y="458" width="44" height="23" rx="11" fill="#dcfce7"/>
+      <text x="824" y="474" font-size="9" font-weight="950" fill="#087f5b">Review</text>
+      <rect x="82" y="506" width="792" height="43" rx="14" fill="#ffffff" stroke="#e2ded5"/>
+      <text x="104" y="533" font-size="16" font-weight="850" fill="#0f172a">Inbound batch needs QC disposition</text>
+      <text x="560" y="533" font-size="14" font-weight="850" fill="#756f66">Quality</text>
+      <text x="690" y="533" font-size="14" font-weight="850" fill="#756f66">Hold</text>
+      <rect x="812" y="516" width="44" height="23" rx="11" fill="#eef2ff"/>
+      <text x="824" y="532" font-size="9" font-weight="950" fill="#087f5b">Decide</text>
+      <rect x="82" y="564" width="792" height="43" rx="14" fill="#ffffff" stroke="#e2ded5"/>
+      <text x="104" y="591" font-size="16" font-weight="850" fill="#0f172a">Supplier COA mismatch</text>
+      <text x="560" y="591" font-size="14" font-weight="850" fill="#756f66">Warehouse</text>
+      <text x="690" y="591" font-size="14" font-weight="850" fill="#756f66">Evidence</text>
+      <rect x="812" y="574" width="44" height="23" rx="11" fill="#eef2ff"/>
+      <text x="824" y="590" font-size="9" font-weight="950" fill="#087f5b">Claim</text>
+    
+      <rect x="920" y="190" width="172" height="64" rx="20" fill="#dcfce7" stroke="#ded8cd"/>
+      <circle cx="948" cy="222" r="10" fill="#087f5b" opacity=".9"/>
+      <text x="970" y="227" font-size="16" font-weight="950" fill="#0f172a">Quality</text>
+      <rect x="920" y="282" width="172" height="64" rx="20" fill="#ffffff" stroke="#ded8cd"/>
+      <circle cx="948" cy="314" r="10" fill="#087f5b" opacity=".9"/>
+      <text x="970" y="319" font-size="16" font-weight="950" fill="#0f172a">Assets</text>
+      <rect x="920" y="374" width="172" height="64" rx="20" fill="#ffffff" stroke="#ded8cd"/>
+      <circle cx="948" cy="406" r="10" fill="#087f5b" opacity=".9"/>
+      <text x="970" y="411" font-size="16" font-weight="950" fill="#0f172a">Daily</text>
+    <rect x="920" y="504" width="172" height="86" rx="22" fill="#052e23" />
+    <text x="946" y="540" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12" font-weight="950" letter-spacing="3" fill="#7dd3fc">NEXT</text>
+    <text x="946" y="574" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="26" font-weight="950" fill="#fff">Approve</text>
+  </g>
+</svg>
