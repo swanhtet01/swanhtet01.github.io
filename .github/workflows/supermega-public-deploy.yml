@@ -60,3 +60,6 @@ jobs:
                   assert token in body, (url, token)
           print('public_canonical_routes=ready')
           PY
+
+      - name: Verify live product contract
+        run: node tools/verify_live_product_contract.mjs
