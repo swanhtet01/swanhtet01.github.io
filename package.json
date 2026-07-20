@@ -57,6 +57,7 @@
     "smoke:ytf-role-api-privacy": "node tools/qa_ytf_role_api_privacy_smoke.cjs --base-url https://ytf.supermega.dev",
     "smoke:local": "bash tools/run_local_smoke.sh",
     "smoke:public": "uv run --no-sync python tools/smoke_test_public_site.py",
+    "verify:live-product-contract": "node tools/verify_live_product_contract.mjs",
     "smoke:public-alias": "powershell -ExecutionPolicy Bypass -File tools/check_public_aliases.ps1",
     "smoke:public-handoff": "node tools/verify_public_handoff.mjs",
     "audit:lead-ledger": "node tools/audit_lead_ledger.mjs",
