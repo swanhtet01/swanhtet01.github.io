@@ -5579,6 +5579,27 @@ const config = {
       },
     },
     {
+      src: '^/products/manager-operating-system/?$',
+      status: 308,
+      headers: {
+        Location: '/products/agents/',
+      },
+    },
+    {
+      src: '^/products/find-clients/?$',
+      status: 308,
+      headers: {
+        Location: '/products/agents/',
+      },
+    },
+    {
+      src: '^/signup/?$',
+      status: 308,
+      headers: {
+        Location: 'https://app.supermega.dev/signup/',
+      },
+    },
+    {
       src: '^/products/(?:ai-workflow-desk|build-app-from-workflow|workflow-desk|workdesk)/?$',
       status: 308,
       headers: {
