@@ -144,12 +144,12 @@ const ROLE_PRIMARY_NAV: Record<string, string[]> = {
 }
 
 const PUBLIC_CLIENT_PREVIEW_NAV = [
-  { label: 'Portal', to: '/app/portal' },
-  { label: 'Plant Manager', to: '/app/plant-manager' },
+  { label: 'Today', to: '/app/portal' },
+  { label: 'Plant', to: '/app/plant-manager' },
+  { label: 'Entry', to: '/app/daily-entry' },
+  { label: 'ERP', to: '/app/erp' },
+  { label: 'Data', to: '/app/live-data' },
   { label: 'Operations', to: '/app/operations' },
-  { label: 'DQMS', to: '/app/dqms' },
-  { label: 'Maintenance', to: '/app/maintenance' },
-  { label: 'Data Fabric', to: '/app/data-fabric' },
 ] as const
 
 function isCurrentPath(pathname: string, target: string) {
@@ -207,6 +207,18 @@ export function AppFrame() {
 
   useEffect(() => {
     let cancelled = false
+    const clientPreviewPath =
+      tenant.siteMode === 'client' &&
+      [...PUBLIC_CLIENT_PREVIEW_NAV.map((item) => item.to), '/app/manager-system'].some((route) => isCurrentPath(location.pathname, route))
+
+    if (clientPreviewPath) {
+      setAuthenticated(false)
+      setSession(null)
+      setLoading(false)
+      return () => {
+        cancelled = true
+      }
+    }
 
     async function load() {
       try {
@@ -232,7 +244,7 @@ export function AppFrame() {
     return () => {
       cancelled = true
     }
-  }, [location.pathname])
+  }, [location.pathname, location.search, tenant.siteMode])
 
   async function handleLogout() {
     try {
@@ -255,6 +267,21 @@ export function AppFrame() {
   }
 
   if (!authenticated) {
+    const ytfClientPreview = tenant.key === 'ytf-plant-a'
+    const tenantMarkSrc = ytfClientPreview ? '/brand/yangon-tyre-mark.svg' : undefined
+    const tenantWordmark = ytfClientPreview ? 'Yangon Tyre ERP' : undefined
+    const clientPreviewRoute = (to: string) => {
+      if (!ytfClientPreview) {
+        return to
+      }
+
+      const params = new URLSearchParams(location.search)
+      params.set('tenant', 'ytf')
+      if (!params.get('from')) {
+        params.set('from', 'ytf')
+      }
+      return `${to}?${params.toString()}`
+    }
     const clientPreviewEnabled =
       tenant.siteMode === 'client' &&
       [...PUBLIC_CLIENT_PREVIEW_NAV.map((item) => item.to), '/app/manager-system'].some((route) => isCurrentPath(location.pathname, route))
@@ -268,24 +295,32 @@ export function AppFrame() {
           <div className="border-b border-white/8 bg-[rgba(17,24,34,0.9)] backdrop-blur-xl">
             <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 lg:flex-row lg:items-center lg:justify-between lg:px-8">
               <div className="flex items-center gap-4">
-                <NavLink className="flex items-center gap-3" to="/app/portal">
+                <NavLink className="flex items-center gap-3" to={clientPreviewRoute('/app/portal')}>
                   <BrandLockup
+                    label={tenantWordmark}
                     markClassName="h-11 w-11"
-                    meta={tenant.tenantName || 'Tenant preview'}
+                    markSrc={tenantMarkSrc}
+                    meta={tenant.tenantShortName || tenant.tenantName || 'Operations'}
                     wordmarkClassName="text-lg text-white"
                   />
                 </NavLink>
-                <span className="sm-status-pill hidden lg:inline-flex">Guest preview</span>
-                <span className="sm-status-pill hidden xl:inline-flex">Seed mode with login required for live writeback</span>
+                <span className="sm-status-pill hidden lg:inline-flex">{tenant.brandTagline}</span>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
                 {PUBLIC_CLIENT_PREVIEW_NAV.map((item) => (
-                  <NavLink className={navClassName} key={item.to} to={item.to}>
+                  <NavLink className={navClassName} key={item.to} to={clientPreviewRoute(item.to)}>
                     {item.label}
                   </NavLink>
                 ))}
-                <NavLink className="sm-button-primary" to={`/login?next=${encodeURIComponent(location.pathname + location.search)}`}>
+                <NavLink
+                  className="sm-button-primary"
+                  to={
+                    ytfClientPreview
+                      ? `/login?tenant=ytf&next=${encodeURIComponent(location.pathname + location.search)}`
+                      : `/login?next=${encodeURIComponent(location.pathname + location.search)}`
+                  }
+                >
                   Login
                 </NavLink>
                 <NavLink className="sm-button-secondary" to="/">
@@ -299,15 +334,15 @@ export function AppFrame() {
             <section className="mb-6 rounded-3xl border border-white/10 bg-[rgba(17,24,34,0.72)] px-5 py-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div>
-                  <p className="text-sm font-semibold text-white">Preview mode is open for the Yangon Tyre tenant surfaces.</p>
+                  <p className="text-sm font-semibold text-white">{tenant.tenantName || 'Client'} operations are open for review.</p>
                   <p className="mt-1 text-sm text-[var(--sm-muted)]">
-                    Use this host to review the portal, plant-manager flow, and seeded desks. Login unlocks live workspace data, permissions, and writeback.
+                    Use Today for the current view, Entry for manager updates, and Data for drill-through.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <span className="sm-status-pill">{tenant.brandName}</span>
                   <span className="sm-status-pill">{tenant.tenantName || 'Tenant'}</span>
-                  <span className="sm-status-pill">Preview</span>
+                  <span className="sm-status-pill">Plant workspace</span>
                 </div>
               </div>
             </section>

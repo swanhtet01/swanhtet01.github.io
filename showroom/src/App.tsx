@@ -1,5 +1,5 @@
 import { Suspense, lazy, type ReactNode } from 'react'
-import { BrowserRouter, Navigate, Route, Routes, useSearchParams } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 
 import { AppFrame } from './components/AppFrame'
 import { RouteEffects } from './components/RouteEffects'
@@ -9,7 +9,6 @@ import { getTenantConfig } from './lib/tenantConfig'
 
 const ActionBoardPage = lazy(() => import('./pages/ActionBoardPage').then((module) => ({ default: module.ActionBoardPage })))
 const AppLaunchpadPage = lazy(() => import('./pages/AppLaunchpadPage').then((module) => ({ default: module.AppLaunchpadPage })))
-const AgentsPage = lazy(() => import('./pages/AgentsPage').then((module) => ({ default: module.AgentsPage })))
 const AgentWorkspacePage = lazy(() => import('./pages/AgentWorkspacePage').then((module) => ({ default: module.AgentWorkspacePage })))
 const AdoptionCommandPage = lazy(() => import('./pages/AdoptionCommandPage').then((module) => ({ default: module.AdoptionCommandPage })))
 const AdoptionPlaybookPage = lazy(() => import('./pages/AdoptionPlaybookPage').then((module) => ({ default: module.AdoptionPlaybookPage })))
@@ -18,9 +17,9 @@ const AgentTeamsPage = lazy(() => import('./pages/AgentTeamsPage').then((module)
 const ApprovalQueuePage = lazy(() => import('./pages/ApprovalQueuePage').then((module) => ({ default: module.ApprovalQueuePage })))
 const BuildStudioPage = lazy(() => import('./pages/BuildStudioPage').then((module) => ({ default: module.BuildStudioPage })))
 const CloudOpsPage = lazy(() => import('./pages/CloudOpsPage').then((module) => ({ default: module.CloudOpsPage })))
+const CommerceMachinePage = lazy(() => import('./pages/CommerceMachinePage').then((module) => ({ default: module.CommerceMachinePage })))
 const ConnectorOpsPage = lazy(() => import('./pages/ConnectorOpsPage').then((module) => ({ default: module.ConnectorOpsPage })))
 const ContactPage = lazy(() => import('./pages/ContactPage').then((module) => ({ default: module.ContactPage })))
-const CommerceMachinePage = lazy(() => import('./pages/CommerceMachinePage').then((module) => ({ default: module.CommerceMachinePage })))
 const DataFabricPage = lazy(() => import('./pages/DataFabricPage').then((module) => ({ default: module.DataFabricPage })))
 const DecisionJournalPage = lazy(() => import('./pages/DecisionJournalPage').then((module) => ({ default: module.DecisionJournalPage })))
 const DemoCenterPage = lazy(() => import('./pages/DemoCenterPage').then((module) => ({ default: module.DemoCenterPage })))
@@ -66,6 +65,9 @@ const WorkspacePage = lazy(() => import('./pages/WorkspacePage').then((module) =
 const WorkbenchPage = lazy(() => import('./pages/WorkbenchPage').then((module) => ({ default: module.WorkbenchPage })))
 const WorkforceCommandPage = lazy(() => import('./pages/WorkforceCommandPage').then((module) => ({ default: module.WorkforceCommandPage })))
 const YangonTyrePage = lazy(() => import('./pages/YangonTyrePage').then((module) => ({ default: module.YangonTyrePage })))
+const YtfLiteEntryPage = lazy(() => import('./pages/YtfLitePages').then((module) => ({ default: module.YtfLiteEntryPage })))
+const YtfLiteErpPage = lazy(() => import('./pages/YtfLitePages').then((module) => ({ default: module.YtfLiteErpPage })))
+const YtfLiteDataPage = lazy(() => import('./pages/YtfLitePages').then((module) => ({ default: module.YtfLiteDataPage })))
 const SecurityControlPage = lazy(() => import('./pages/SecurityControlPage').then((module) => ({ default: module.SecurityControlPage })))
 const ServiceDeskPage = lazy(() => import('./pages/ServiceDeskPage').then((module) => ({ default: module.ServiceDeskPage })))
 const SupermegaDevPage = lazy(() => import('./pages/SupermegaDevPage').then((module) => ({ default: module.SupermegaDevPage })))
@@ -74,26 +76,11 @@ function routeElement(element: ReactNode) {
   return <Suspense fallback={<div className="sm-chip text-white">Loading page...</div>}>{element}</Suspense>
 }
 
-function PublicEntryPage() {
-  const [searchParams] = useSearchParams()
-  const demo = searchParams.get('demo')?.toLowerCase()
-
-  if (demo === 'shop') {
-    return <Navigate replace to="/commerce-machine?source=demo&demo=shop" />
-  }
-
-  if (demo === 'plant') {
-    return <Navigate replace to="/products/industrial-dqms?source=demo&demo=plant" />
-  }
-
-  return <HomePage />
-}
-
 function App() {
   const liveAppAvailable = hasLiveWorkspaceApp()
   const tenant = getTenantConfig()
   const publicWorkspaceFallback = tenant.key === 'ytf-plant-a' ? '/receiving-log' : '/company-list'
-  const homeElement = tenant.key === 'ytf-plant-a' ? <Navigate replace to="/app/portal" /> : routeElement(<PublicEntryPage />)
+  const homeElement = tenant.key === 'ytf-plant-a' ? <Navigate replace to="/app/portal" /> : routeElement(<HomePage />)
 
   return (
     <BrowserRouter>
@@ -106,7 +93,7 @@ function App() {
           <Route element={routeElement(<DemoCenterPage />)} path="demo-center" />
           <Route element={<Navigate replace to="/clients/yangon-tyre" />} path="portfolio" />
           <Route element={<Navigate replace to="/products" />} path="solutions" />
-          <Route element={routeElement(<AgentsPage />)} path="agents" />
+          <Route element={<Navigate replace to="/products" />} path="agents" />
           <Route element={<Navigate replace to="/products" />} path="factory" />
           <Route element={routeElement(<YangonTyrePage />)} path="clients/yangon-tyre" />
           <Route element={<Navigate replace to="/clients/yangon-tyre" />} path="ytf" />
@@ -118,6 +105,7 @@ function App() {
           <Route element={<Navigate replace to="/platform" />} path="implementation" />
           <Route element={<Navigate replace to="/platform" />} path="how-it-works" />
           <Route element={routeElement(<ProductDetailPage />)} path="products/:productId" />
+          <Route element={routeElement(<CommerceMachinePage />)} path="commerce-machine" />
           <Route element={<Navigate replace to="/products" />} path="work" />
           <Route element={<Navigate replace to="/platform" />} path="systems" />
           <Route element={<Navigate replace to="/products" />} path="templates" />
@@ -134,7 +122,6 @@ function App() {
           <Route element={liveAppAvailable ? routeElement(<LoginPage />) : <Navigate replace to={publicWorkspaceFallback} />} path="login" />
           <Route element={liveAppAvailable ? routeElement(<SignupPage />) : <Navigate replace to={publicWorkspaceFallback} />} path="signup" />
           <Route element={routeElement(<ContactPage />)} path="contact" />
-          <Route element={routeElement(<CommerceMachinePage />)} path="commerce-machine" />
           <Route element={<Navigate replace to="/contact" />} path="book" />
           <Route element={routeElement(<NotFoundPage />)} path="*" />
         </Route>
@@ -142,6 +129,9 @@ function App() {
           <Route element={routeElement(<AppHomeRedirectPage />)} index />
           <Route element={routeElement(<AppLaunchpadPage />)} path="start" />
           <Route element={routeElement(<TenantPortalHomePage />)} path="portal" />
+          <Route element={routeElement(<YtfLiteEntryPage />)} path="daily-entry" />
+          <Route element={routeElement(<YtfLiteErpPage />)} path="erp" />
+          <Route element={routeElement(<YtfLiteDataPage />)} path="live-data" />
           <Route element={routeElement(<AdoptionCommandPage />)} path="adoption-command" />
           <Route element={routeElement(<AdoptionPlaybookPage />)} path="adoption" />
           <Route element={routeElement(<PilotCommandPage />)} path="pilot" />

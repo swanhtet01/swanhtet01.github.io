@@ -113,7 +113,7 @@ function buildSeedPlantManagerDataset(tenantKey: string): ManagerHomeDataset {
       { id: 'ops', title: 'Operations control', route: '/app/operations', detail: 'Shift flow, receiving, and escalation control.', status: 'Seeded', reason: 'Usable now while live data expands.' },
       { id: 'dqms', title: 'DQMS and quality', route: '/app/dqms', detail: 'Incidents, CAPA, containment, and KPI review.', status: 'Seeded', reason: 'Usable now while live writeback expands.' },
       { id: 'maint', title: 'Maintenance', route: '/app/maintenance', detail: 'Reliability follow-up and asset review.', status: 'Available', reason: 'Supports the same plant control loop.' },
-      { id: 'fabric', title: 'Data Fabric', route: '/app/data-fabric', detail: 'Plant analytics, source behavior, and feature engineering.', status: 'Available', reason: 'Feeds the macro plant review.' },
+      { id: 'fabric', title: 'Data Fabric', route: '/app/data-fabric', detail: 'Floor Analytics, source behavior, and feature engineering.', status: 'Available', reason: 'Feeds the macro plant review.' },
     ],
     supportTools: [
       { id: 'ops', label: 'Operations', route: '/app/operations', detail: 'Run today queue and plant flow.' },
@@ -133,8 +133,271 @@ function buildSeedPlantManagerDataset(tenantKey: string): ManagerHomeDataset {
   }
 }
 
+type YtfFeedPayload = Record<string, any>
+type YtfPlantScope = 'plant-a' | 'plant-b'
+
+const YTF_FEED_URL = 'https://ytf.supermega.dev/api/feed'
+
+function ytfPlantFromUrl(): YtfPlantScope {
+  if (typeof window === 'undefined') {
+    return 'plant-a'
+  }
+
+  const params = new URLSearchParams(window.location.search)
+  return params.get('plant')?.toLowerCase() === 'plant-b' ? 'plant-b' : 'plant-a'
+}
+
+function ytfCompactNumber(value: unknown) {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) {
+    return '0'
+  }
+  return numeric.toLocaleString()
+}
+
+function ytfCompactDate(value: unknown) {
+  const raw = String(value || '').trim()
+  if (!raw) {
+    return ''
+  }
+  const parsed = new Date(raw)
+  if (Number.isNaN(parsed.getTime())) {
+    return raw
+  }
+  return parsed.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+}
+
+function ytfEntryRoute(plant: YtfPlantScope, mode: string, extra: Record<string, string> = {}) {
+  const params = new URLSearchParams({ tenant: 'ytf', plant, from: 'ytf', mode, ...extra })
+  return `/app/daily-entry?${params.toString()}`
+}
+
+function ytfClientRoute(path: string, plant: YtfPlantScope) {
+  const params = new URLSearchParams({ tenant: 'ytf', plant, from: 'ytf' })
+  return `${path}?${params.toString()}`
+}
+
+function ytfExternalRoute(plant: YtfPlantScope) {
+  const params = new URLSearchParams({ plant })
+  return `https://ytf.supermega.dev/?${params.toString()}`
+}
+
+function ytfPlantLabel(plant: YtfPlantScope) {
+  return plant === 'plant-b' ? 'Plant B' : 'Plant A'
+}
+
+function YtfPlantManagerConsole() {
+  const [plant, setPlant] = useState<YtfPlantScope>(() => ytfPlantFromUrl())
+  const [feed, setFeed] = useState<YtfFeedPayload | null>(null)
+  const [feedState, setFeedState] = useState<'loading' | 'ready' | 'offline'>('loading')
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadFeed() {
+      try {
+        const response = await fetch(YTF_FEED_URL, { cache: 'no-store' })
+        if (!response.ok) {
+          throw new Error(`Feed failed: ${response.status}`)
+        }
+        const payload = (await response.json()) as YtfFeedPayload
+        if (!cancelled) {
+          setFeed(payload)
+          setFeedState('ready')
+        }
+      } catch {
+        if (!cancelled) {
+          setFeedState('offline')
+        }
+      }
+    }
+
+    void loadFeed()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const signals = feed?.manager_signals?.by_plant?.[plant] || {}
+  const coverage = Array.isArray(signals.coverage) ? signals.coverage : []
+  const dueSections = coverage.filter((row: any) => row?.due || Number(row?.open_count || 0) > 0)
+  const dailyProduction = feed?.daily_production || {}
+  const dailyMtd = dailyProduction.mtd || {}
+  const materialPosition = feed?.material_position || {}
+  const materialSummary = materialPosition.summary || {}
+  const salesCurrent = feed?.sales_current || {}
+  const plantBHasDailyOutput = plant === 'plant-b' && Number(dailyMtd.produced || 0) > 0
+  const productionValue = plantBHasDailyOutput ? `${ytfCompactNumber(dailyMtd.produced)} pcs` : 'Update due'
+  const productionNote = plantBHasDailyOutput
+    ? `${dailyProduction.status?.label || 'July MTD'} / as of ${ytfCompactDate(dailyProduction.as_of)}`
+    : `${ytfPlantLabel(plant)} needs a daily summary or board photo for current output.`
+  const feedUpdated = ytfCompactDate(feed?.generated_at)
+
+  const cards = [
+    {
+      label: 'Production',
+      value: productionValue,
+      note: productionNote,
+      route: ytfEntryRoute(plant, 'daily_routine', { section: 'Production' }),
+    },
+    {
+      label: 'Daily close',
+      value: dueSections.length ? `${ytfCompactNumber(dueSections.length)} due` : 'Done',
+      note: dueSections.length ? dueSections.slice(0, 2).map((row: any) => String(row.department || '')).filter(Boolean).join(' / ') : 'All sections reported',
+      route: ytfEntryRoute(plant, 'daily_routine'),
+    },
+    {
+      label: 'Open issues',
+      value: Number(signals.open_count || 0) ? `${ytfCompactNumber(signals.open_count)} open` : 'Clear',
+      note: Number(signals.abnormal_open || 0) ? `${ytfCompactNumber(signals.abnormal_open)} abnormal follow-up` : 'No open abnormality in this plant view',
+      route: ytfEntryRoute(plant, 'normal_abnormal', { condition: 'abnormal' }),
+    },
+    {
+      label: 'Materials',
+      value: `${ytfCompactNumber(materialSummary.at_risk || 0)} at risk`,
+      note: `Company-wide material balance / ${materialPosition.period_label || 'latest loaded period'}`,
+      route: ytfClientRoute('/app/live-data', plant),
+    },
+  ]
+
+  const actions = [
+    {
+      label: 'Daily summary',
+      detail: 'End-of-shift output, issues, downtime, owner, and handover.',
+      route: ytfEntryRoute(plant, 'daily_routine'),
+    },
+    {
+      label: 'Board photo',
+      detail: 'Upload the board once. Confirm the extracted values before using them.',
+      route: ytfEntryRoute(plant, 'whiteboard_snapshot'),
+    },
+    {
+      label: 'Abnormality 5W1H',
+      detail: 'What happened, where, why, containment, owner, and next action.',
+      route: ytfEntryRoute(plant, 'normal_abnormal', { condition: 'abnormal' }),
+    },
+    {
+      label: 'Stock count',
+      detail: 'Save one counted material, WIP, or finished-good number.',
+      route: ytfEntryRoute(plant, 'kpi_snapshot', { section: 'Stock' }),
+    },
+  ]
+
+  return (
+    <div className="space-y-5">
+      <section className="sm-surface-deep p-5 lg:p-6">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-4">
+            <img alt="" className="h-12 w-12 rounded-2xl bg-white p-1" src="/brand/yangon-tyre-mark.svg" />
+            <div>
+              <p className="sm-kicker text-[var(--sm-accent)]">Yangon Tyre ERP</p>
+              <h1 className="mt-2 text-3xl font-black text-white lg:text-5xl">{ytfPlantLabel(plant)} workspace</h1>
+              <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[var(--sm-muted)]">
+                Use this page to close the shift, upload board evidence, and jump into the current YTF ERP.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {(['plant-a', 'plant-b'] as const).map((item) => (
+              <button
+                className={item === plant ? 'sm-button-primary' : 'sm-button-secondary'}
+                key={item}
+                onClick={() => setPlant(item)}
+                type="button"
+              >
+                {ytfPlantLabel(item)}
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {cards.map((card) => (
+          <Link className="sm-metric-card" key={card.label} to={card.route}>
+            <p className="sm-kicker text-[var(--sm-accent)]">{card.label}</p>
+            <p className="mt-3 text-3xl font-black text-white">{card.value}</p>
+            <p className="mt-2 text-sm leading-relaxed text-[var(--sm-muted)]">{card.note}</p>
+          </Link>
+        ))}
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-[0.94fr_1.06fr]">
+        <article className="sm-surface p-5 lg:p-6">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="sm-kicker text-[var(--sm-accent)]">Close shift</p>
+              <h2 className="mt-2 text-2xl font-black text-white">Four things only.</h2>
+            </div>
+            <a className="sm-button-primary" href={ytfExternalRoute(plant)}>
+              Open YTF ERP
+            </a>
+          </div>
+          <div className="mt-5 grid gap-3">
+            {actions.map((action) => (
+              <Link className="sm-manager-row" key={action.label} to={action.route}>
+                <div>
+                  <p className="font-semibold text-white">{action.label}</p>
+                  <p className="mt-1 text-sm leading-relaxed text-[var(--sm-muted)]">{action.detail}</p>
+                </div>
+                <span className="sm-link">Open</span>
+              </Link>
+            ))}
+          </div>
+        </article>
+
+        <article className="sm-surface-deep p-5 lg:p-6">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="sm-kicker text-[var(--sm-accent-alt)]">Current context</p>
+              <h2 className="mt-2 text-2xl font-black text-white">What the manager should know now.</h2>
+            </div>
+            <span className="sm-status-pill">
+              {feedState === 'ready' ? `Updated ${feedUpdated || 'recently'}` : feedState === 'loading' ? 'Loading' : 'Open ERP for latest'}
+            </span>
+          </div>
+          <div className="mt-5 grid gap-3">
+            <div className="sm-proof-card">
+              <p className="font-semibold text-white">Latest sales batch</p>
+              <p className="mt-2 text-sm text-[var(--sm-muted)]">
+                {Number(salesCurrent.total_qty || 0)
+                  ? `${ytfCompactNumber(salesCurrent.total_qty)} pcs / ${salesCurrent.as_of || 'latest batch'} / company-wide`
+                  : 'No current sales batch loaded here yet.'}
+              </p>
+            </div>
+            <div className="sm-proof-card">
+              <p className="font-semibold text-white">Material follow-up</p>
+              <p className="mt-2 text-sm text-[var(--sm-muted)]">
+                {Number(materialSummary.out || 0)
+                  ? `${ytfCompactNumber(materialSummary.out)} out of stock, ${ytfCompactNumber(materialSummary.at_risk)} at risk.`
+                  : 'No material shortage summary loaded here yet.'}
+              </p>
+            </div>
+            <div className="sm-proof-card">
+              <p className="font-semibold text-white">Plant reporting</p>
+              <p className="mt-2 text-sm text-[var(--sm-muted)]">
+                {dueSections.length
+                  ? `${ytfCompactNumber(dueSections.length)} section updates need a manager entry.`
+                  : 'Section updates are clear for this plant.'}
+              </p>
+            </div>
+          </div>
+        </article>
+      </section>
+    </div>
+  )
+}
+
 export function PlantManagerPage() {
   const tenant = getTenantConfig()
+  if (tenant.key === 'ytf-plant-a') {
+    return <YtfPlantManagerConsole />
+  }
+
+  return <GenericPlantManagerPage tenant={tenant} />
+}
+
+function GenericPlantManagerPage({ tenant }: { tenant: ReturnType<typeof getTenantConfig> }) {
   const [loading, setLoading] = useState(true)
   const [statusNote, setStatusNote] = useState('Loading plant manager command surface...')
   const [source, setSource] = useState<'live' | 'seed'>('seed')
@@ -208,7 +471,7 @@ export function PlantManagerPage() {
       <PageIntro
         eyebrow="Plant manager"
         title="Run shift control, quality drift, and handoff from one command surface."
-        description="This is the combined plant manager interface for Yangon Tyre: operations, DQMS, maintenance, receiving, and data-fabric review on one working page."
+        description="This is the combined plant manager interface for Factory Client: operations, DQMS, maintenance, receiving, and data-fabric review on one working page."
       />
 
       <section className="sm-surface-deep relative overflow-hidden p-6 lg:p-8">

@@ -7,8 +7,8 @@ import { appHref, getWorkspaceSession, loginWorkspace, needsLiveAppHandoff, publ
 import { getTenantBrandLabel, getTenantConfig, getTenantLabel } from '../lib/tenantConfig'
 import { YANGON_TYRE_CONNECTOR_CHANNELS, YANGON_TYRE_IDENTITY_LANES } from '../lib/yangonTyrePortalModel'
 
-const defaultUseCases = ['Saved workspace and queues', 'Approvals and exceptions', 'Director and agent views'] as const
-const clientUseCases = ['Role-based enterprise login', 'Sales, plant, DQMS, maintenance, and CEO homes', 'Connector-scoped data and AI review'] as const
+const defaultUseCases = ['Team workspace', 'Approvals and exceptions', 'Daily operating queues'] as const
+const clientUseCases = ['Role-based login', 'Plant, sales, quality, and maintenance homes', 'Daily entries and review queues'] as const
 
 export function LoginPage() {
   const navigate = useNavigate()
@@ -17,6 +17,7 @@ export function LoginPage() {
   const isClientTenant = tenant.key !== 'default'
   const next = new URLSearchParams(location.search).get('next') || (isClientTenant ? '/app/portal' : '/app/actions')
   const tenantLabel = getTenantLabel(tenant) || tenant.defaultCompany || 'workspace'
+  const appLogin = next.startsWith('/app/')
 
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -25,7 +26,6 @@ export function LoginPage() {
   const [workspaceSlug, setWorkspaceSlug] = useState(tenant.defaultWorkspaceSlug ?? '')
   const [error, setError] = useState('')
   const [authRequired, setAuthRequired] = useState(true)
-  const [usesDefaultCredentials, setUsesDefaultCredentials] = useState(false)
   const [workspaceOptions, setWorkspaceOptions] = useState<Array<{ slug?: string; name?: string; role?: string }>>([])
   const handoffToApp = needsLiveAppHandoff()
   const shellOnly = publicShellOnly()
@@ -33,6 +33,14 @@ export function LoginPage() {
 
   useEffect(() => {
     let cancelled = false
+    if (handoffToApp || shellOnly) {
+      setLoading(false)
+      setError('')
+      return () => {
+        cancelled = true
+      }
+    }
+
     async function load() {
       try {
         const session = await getWorkspaceSession()
@@ -40,7 +48,6 @@ export function LoginPage() {
           return
         }
         setAuthRequired(session.auth_required !== false)
-        setUsesDefaultCredentials(Boolean(session.uses_default_credentials))
         setWorkspaceOptions(session.workspaces ?? [])
         if (!workspaceSlug && session.workspaces?.length === 1) {
           setWorkspaceSlug(session.workspaces[0].slug ?? '')
@@ -64,7 +71,7 @@ export function LoginPage() {
     return () => {
       cancelled = true
     }
-  }, [navigate, next, workspaceSlug])
+  }, [handoffToApp, navigate, next, shellOnly, workspaceSlug])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -88,11 +95,11 @@ export function LoginPage() {
     <div className="space-y-8">
       <PageIntro
         eyebrow={isClientTenant ? getTenantBrandLabel(tenant) : tenant.brandName}
-        title={isClientTenant ? `Open the ${tenantLabel} enterprise portal.` : 'Open the workspace.'}
+        title={isClientTenant ? `Open the ${tenantLabel} portal.` : appLogin ? 'Open the operations workspace.' : 'Open the workspace.'}
         description={
           isClientTenant
             ? `Use this for role-based access to sales, operations, manufacturing, DQMS, maintenance, approvals, and director review inside ${tenantLabel}.`
-            : 'Use this only for the saved team workspace, approvals, and live operations.'
+            : 'Use this for saved team work, approvals, and daily operations.'
         }
       />
 
@@ -111,12 +118,12 @@ export function LoginPage() {
           <section className="sm-surface p-6">
             <p className="text-sm leading-relaxed text-[var(--sm-muted)]">
               {isClientTenant
-                ? 'This host shows the Yangon Tyre portal shell, but the saved enterprise workspace app is not deployed on this domain yet.'
+                ? 'This host shows the Factory Client portal shell, but the saved enterprise workspace app is not deployed on this domain yet.'
                 : 'This host is the public site only. The saved workspace app is not deployed on this domain yet.'}
             </p>
             <div className="mt-5 flex flex-wrap gap-3">
               <Link className="sm-button-primary" to={isClientTenant ? '/receiving-log' : '/find-companies'}>
-                {isClientTenant ? 'Open receiving queue' : 'Open Find Clients'}
+                {isClientTenant ? 'Open receiving queue' : 'Back to workspace tools'}
               </Link>
               <Link className="sm-button-secondary" to="/contact">
                 Start rollout
@@ -139,18 +146,15 @@ export function LoginPage() {
           <section className="sm-surface p-6">
             <p className="text-sm leading-relaxed text-[var(--sm-muted)]">
               {isClientTenant
-                ? 'The Yangon Tyre enterprise workspace is on the live app host. Use that login to enter the tenant with role-based homes and connector-scoped data.'
+                ? 'The Factory Client enterprise workspace is on the live app host. Use that login to enter the tenant with role-based homes and connector-scoped data.'
                 : 'The saved workspace app is on the live app host, not this static site.'}
             </p>
             <div className="mt-5 flex flex-wrap gap-3">
               <a className="sm-button-primary" href={appHref('/login/')}>
                 {isClientTenant ? 'Open enterprise portal' : 'Open workspace'}
               </a>
-              <a className="sm-button-accent" href={appHref('/signup/')}>
-                Create workspace
-              </a>
               <Link className="sm-button-secondary" to={isClientTenant ? '/receiving-log' : '/find-companies'}>
-                {isClientTenant ? 'Open receiving queue' : 'Open Find Clients'}
+                {isClientTenant ? 'Open receiving queue' : 'Back to workspace tools'}
               </Link>
             </div>
             <div className="mt-4 sm-chip text-[var(--sm-muted)]">Live app host: {workspaceAppBase}</div>
@@ -206,29 +210,15 @@ export function LoginPage() {
               <button className="sm-button-primary" disabled={loading || submitting} type="submit">
                 {submitting ? 'Opening...' : isClientTenant ? 'Open enterprise portal' : 'Open workspace'}
               </button>
-              <Link className="sm-button-accent" to="/signup">
-                Create workspace
-              </Link>
-              <Link className="sm-button-secondary" to={isClientTenant ? '/receiving-log' : '/find-companies'}>
-                {isClientTenant ? 'Open receiving queue' : 'Open Find Clients'}
+              <Link className="sm-button-secondary" to={isClientTenant ? '/receiving-log' : '/'}>
+                {isClientTenant ? 'Open receiving queue' : 'Back to site'}
               </Link>
             </div>
 
             {!authRequired ? <div className="mt-4 sm-chip text-[var(--sm-muted)]">Local sign-in bypass is enabled on this host, so the app should open directly.</div> : null}
-            {usesDefaultCredentials ? (
-              <div className="mt-4 sm-chip text-[var(--sm-muted)]">
-                This host is still using temporary credentials. Replace them before sharing the workspace more widely.
-              </div>
-            ) : null}
-            {workspaceOptions.length ? (
-              <div className="mt-4 sm-chip text-[var(--sm-muted)]">
-                Available workspaces: {workspaceOptions.map((item) => `${item.name || item.slug} (${item.role || 'member'})`).join(' / ')}
-              </div>
-            ) : null}
             {isClientTenant ? (
               <div className="mt-4 sm-chip text-[var(--sm-muted)]">
-                Default tenant: {tenant.defaultWorkspaceSlug || 'ytf-plant-a'}. Use the workspace field only if you need to switch to another Yangon Tyre
-                workspace slug.
+                Default tenant: {tenant.defaultWorkspaceSlug || 'ytf-plant-a'}. Use the workspace field only if your rollout owner gave you a different workspace.
               </div>
             ) : null}
             {error ? <div className="mt-4 sm-chip text-white">{error}</div> : null}
@@ -244,7 +234,7 @@ export function LoginPage() {
                 <p className="sm-kicker text-[var(--sm-accent)]">Portal map</p>
                 <h2 className="mt-3 text-2xl font-bold text-white lg:text-3xl">The login opens a real operating portal, not a blank shell.</h2>
               </div>
-              <span className="sm-status-pill">Yangon Tyre tenant</span>
+              <span className="sm-status-pill">{tenantLabel}</span>
             </div>
             <div className="mt-6">
               <LiveProductPreview compact variant="ytf-portal" />
