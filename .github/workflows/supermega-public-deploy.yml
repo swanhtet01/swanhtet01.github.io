@@ -1,0 +1,50 @@
+name: SuperMega Public Production Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Build public artifact
+        run: node tools/create_public_vercel_output.mjs
+
+      - name: Verify public artifact
+        run: node tools/verify_public_vercel_artifact_budget.mjs && node tools/verify_public_vercel_output.mjs
+
+      - name: Deploy public production
+        run: npx vercel deploy --prebuilt --prod --yes --token="${VERCEL_TOKEN}"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+      - name: Verify canonical public routes
+        run: |
+          python - <<'PY'
+          import urllib.request
+          checks = {
+              'https://supermega.dev/': 'Shop',
+              'https://supermega.dev/products/': 'Open Shop',
+              'https://supermega.dev/offers/': 'Start free',
+          }
+          for url, token in checks.items():
+              request = urllib.request.Request(url, headers={'User-Agent': 'supermega-public-deploy/1.0'})
+              with urllib.request.urlopen(request, timeout=45) as response:
+                  body = response.read().decode('utf-8', errors='replace')
+                  assert response.status == 200, (url, response.status)
+                  assert token in body, (url, token)
+          print('public_canonical_routes=ready')
+          PY
