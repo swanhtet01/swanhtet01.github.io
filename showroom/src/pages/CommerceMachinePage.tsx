@@ -24,7 +24,7 @@ const WORKERS = [
 ] as const
 
 function normalizeDigits(value: string) {
-  return value.replace(/[၀-၉]/g, (digit) => String('၀၁၂၃၄၅၆၇၈၉'.indexOf(digit)))
+  return value.replace(/[\u1040-\u1049]/g, (digit) => String(digit.charCodeAt(0) - 0x1040))
 }
 
 function parseRequestedQuantity(message: string) {
