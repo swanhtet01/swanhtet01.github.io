@@ -1,5 +1,5 @@
 import { Suspense, lazy, type ReactNode } from 'react'
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes, useSearchParams } from 'react-router-dom'
 
 import { AppFrame } from './components/AppFrame'
 import { RouteEffects } from './components/RouteEffects'
@@ -74,11 +74,26 @@ function routeElement(element: ReactNode) {
   return <Suspense fallback={<div className="sm-chip text-white">Loading page...</div>}>{element}</Suspense>
 }
 
+function PublicEntryPage() {
+  const [searchParams] = useSearchParams()
+  const demo = searchParams.get('demo')?.toLowerCase()
+
+  if (demo === 'shop') {
+    return <Navigate replace to="/commerce-machine?source=demo&demo=shop" />
+  }
+
+  if (demo === 'plant') {
+    return <Navigate replace to="/products/industrial-dqms?source=demo&demo=plant" />
+  }
+
+  return <HomePage />
+}
+
 function App() {
   const liveAppAvailable = hasLiveWorkspaceApp()
   const tenant = getTenantConfig()
   const publicWorkspaceFallback = tenant.key === 'ytf-plant-a' ? '/receiving-log' : '/company-list'
-  const homeElement = tenant.key === 'ytf-plant-a' ? <Navigate replace to="/app/portal" /> : routeElement(<HomePage />)
+  const homeElement = tenant.key === 'ytf-plant-a' ? <Navigate replace to="/app/portal" /> : routeElement(<PublicEntryPage />)
 
   return (
     <BrowserRouter>
