@@ -62,7 +62,7 @@ jobs:
         run: npm run build
 
       - name: Build Vercel output
-        run: npx vercel build --yes --token="${VERCEL_TOKEN}"
+        run: npx vercel build --prod --yes --token="${VERCEL_TOKEN}"
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
 
