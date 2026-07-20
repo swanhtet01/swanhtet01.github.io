@@ -11,6 +11,7 @@ os.environ.setdefault("SUPERMEGA_PILOT_DATA", str(RUNTIME_PILOT_ROOT))
 
 from tools.serve_solution import REPO_ROOT
 from tools.serve_solution import create_app
+from api.cloud_runtime import router as cloud_runtime_router
 
 
 def _prepare_runtime_pilot_data() -> Path:
@@ -30,3 +31,4 @@ def _prepare_runtime_pilot_data() -> Path:
 
 
 app = create_app(REPO_ROOT / "api-static", _prepare_runtime_pilot_data())
+app.include_router(cloud_runtime_router)
