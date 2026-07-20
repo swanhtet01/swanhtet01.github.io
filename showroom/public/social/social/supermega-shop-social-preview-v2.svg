@@ -1,0 +1,34 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="SuperMega Shop preview showing a proof-led closeout workflow.">
+  <defs>
+    <radialGradient id="blue-glow" cx="0" cy="0" r="1" gradientTransform="translate(1030 92) rotate(144) scale(790 620)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#3B82F6" stop-opacity="0.29"/>
+      <stop offset="1" stop-color="#3B82F6" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="rail" x1="0" y1="0" x2="0" y2="630" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#3B82F6" stop-opacity="0.25"/>
+      <stop offset="1" stop-color="#3B82F6" stop-opacity="0.03"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="#07111f"/>
+  <rect width="1200" height="630" fill="url(#blue-glow)"/>
+  <path d="M0 516 C260 424 490 672 746 554 S1040 386 1200 440 V630 H0 Z" fill="#06101d" fill-opacity="0.72"/>
+  <line x1="76" y1="72" x2="1124" y2="72" stroke="#f6fbff" stroke-opacity="0.15"/>
+  <g transform="translate(82 98)" fill="none" stroke="#3B82F6" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M9 12 L22 24 L9 36"/>
+  <path d="M27 36 H42"/>
+</g>
+  <text x="146" y="130" fill="#f6fbff" font-family="Space Grotesk, Inter, system-ui, sans-serif" font-size="28" font-weight="700" letter-spacing="-1.1">supermega<tspan fill="#5E6B87" font-weight="600">.dev</tspan></text>
+  <text x="82" y="211" fill="#60A5FA" font-family="Inter, Noto Sans Myanmar, Segoe UI, system-ui, sans-serif" font-size="17" font-weight="700" letter-spacing="4">SHOP</text>
+  <text x="78" y="304" fill="#f6fbff" font-family="Space Grotesk, Inter, system-ui, sans-serif" font-size="72" font-weight="700" letter-spacing="-3.4">Close the day.</text>
+  <text x="78" y="385" fill="#f6fbff" font-family="Space Grotesk, Inter, system-ui, sans-serif" font-size="72" font-weight="700" letter-spacing="-3.2">Keep the proof.</text>
+  <text x="82" y="464" fill="#a9b8c7" font-family="Inter, Noto Sans Myanmar, Segoe UI, system-ui, sans-serif" font-size="23" font-weight="500">Sales · payments · stock · owner closeout</text>
+  <line x1="82" y1="514" x2="620" y2="514" stroke="#f6fbff" stroke-opacity="0.16"/>
+  <text x="82" y="558" fill="#60A5FA" font-family="Inter, Noto Sans Myanmar, Segoe UI, system-ui, sans-serif" font-size="17" font-weight="700" letter-spacing="2.6">WORKING SHOP DEMO · REVIEW BEFORE ACTION</text>
+  <g transform="translate(806 182)">
+    <rect x="0" y="0" width="318" height="300" rx="12" fill="#06101d" fill-opacity="0.88" stroke="#f6fbff" stroke-opacity="0.18"/>
+    <rect x="0" y="0" width="12" height="300" rx="6" fill="url(#rail)"/>
+    <text x="40" y="60" fill="#a9b8c7" font-family="Inter, Noto Sans Myanmar, Segoe UI, system-ui, sans-serif" font-size="14" font-weight="700" letter-spacing="2.4">WORKFLOW</text>
+    <text x="40" y="124" fill="#a9b8c7" font-family="Space Grotesk, Inter, system-ui, sans-serif" font-size="26" font-weight="700" letter-spacing="-0.8">01  SELL</text><line x1="40" y1="142" x2="258" y2="142" stroke="#f6fbff" stroke-opacity="0.13"/><text x="40" y="178" fill="#f6fbff" font-family="Space Grotesk, Inter, system-ui, sans-serif" font-size="26" font-weight="700" letter-spacing="-0.8">02  CHECK</text><line x1="40" y1="196" x2="258" y2="196" stroke="#f6fbff" stroke-opacity="0.13"/><text x="40" y="232" fill="#a9b8c7" font-family="Space Grotesk, Inter, system-ui, sans-serif" font-size="26" font-weight="700" letter-spacing="-0.8">03  CLOSE</text>
+    <circle cx="274" cy="54" r="8" fill="#3B82F6"/>
+  </g>
+</svg>

@@ -1,0 +1,65 @@
+{
+  "schema_version": "supermega-social-preview-v2",
+  "generated_at": "2026-07-20T16:44:30.861Z",
+  "brand_tokens": {
+    "path": "../../BRAND-TOKENS.css",
+    "sha256": "2e78dfe1657b37635f133017ba1bdb60388f30f5cd41f702b53b33b69e3de91e",
+    "system": "Void + Electric Blue + >_ terminal mark",
+    "fonts": [
+      "Space Grotesk",
+      "Inter"
+    ]
+  },
+  "render_contract": {
+    "format": "image/png",
+    "width": 1200,
+    "height": 630,
+    "prohibited": [
+      "Aptos",
+      "Fraunces",
+      "#FF3B3B",
+      "#FF5C4D",
+      "#F7F3EA",
+      "#f7f4ed",
+      "#c2603f"
+    ]
+  },
+  "assets": {
+    "platform": {
+      "filename": "supermega-portal-card.png",
+      "svg_filename": "supermega-portal-card.svg",
+      "sha256": "e926fd1b21bc7fe83e4be3d55a5c8853d39efe5c22bd01df1413bff284e27385",
+      "bytes": 231259,
+      "width": 1200,
+      "height": 630,
+      "alt": "SuperMega operating software for shops, plants, and reviewable AI workflows."
+    },
+    "shop": {
+      "filename": "supermega-shop-social-preview-v2.png",
+      "svg_filename": "supermega-shop-social-preview-v2.svg",
+      "sha256": "7dd87f9a6c000f3a25e908f304e375eb26a3811e0aff8561d385441a9c8d4204",
+      "bytes": 233272,
+      "width": 1200,
+      "height": 630,
+      "alt": "SuperMega Shop preview showing a proof-led closeout workflow."
+    },
+    "plant": {
+      "filename": "supermega-plant-social-preview-v2.png",
+      "svg_filename": "supermega-plant-social-preview-v2.svg",
+      "sha256": "3837a7c1940a559db8c43022e0becc9e3fe4b077a7899f72b60bd7a23ddbe9aa",
+      "bytes": 232361,
+      "width": 1200,
+      "height": 630,
+      "alt": "SuperMega Plant preview showing an accountable shift handoff workflow."
+    },
+    "ai-agent-solutions": {
+      "filename": "supermega-ai-agent-solutions-social-preview-v2.png",
+      "svg_filename": "supermega-ai-agent-solutions-social-preview-v2.svg",
+      "sha256": "c582832b04668aad6f344dd31267c6dcc425e53d29bccb8ebfb9a1f6f89949bb",
+      "bytes": 239404,
+      "width": 1200,
+      "height": 630,
+      "alt": "SuperMega AI Agent Solutions preview showing a human-approved workflow boundary."
+    }
+  }
+}
