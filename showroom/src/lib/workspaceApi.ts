@@ -253,14 +253,21 @@ export async function workspaceFetch<T>(path: string, init?: RequestInit): Promi
 
 export async function checkWorkspaceHealth() {
   if (typeof window === 'undefined') {
-    return { ready: false as const }
+    return { ready: false as const, freeModeReady: false, enterpriseReady: false }
   }
 
   try {
-    const payload = await workspaceFetch<{ status?: string }>('/api/health')
-    return { ready: payload.status === 'ready' }
+    const payload = await workspaceFetch<{
+      status?: string
+      free_mode_ready?: boolean
+      enterprise_db_ready?: boolean
+      enterprise_db_scheme?: string
+    }>('/api/health')
+    const enterpriseReady = payload.enterprise_db_ready === true && payload.enterprise_db_scheme !== 'sqlite'
+    const freeModeReady = payload.free_mode_ready === true
+    return { ready: payload.status === 'ready' || freeModeReady, freeModeReady, enterpriseReady }
   } catch {
-    return { ready: false as const }
+    return { ready: false as const, freeModeReady: false, enterpriseReady: false }
   }
 }
 

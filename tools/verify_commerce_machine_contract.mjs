@@ -7,6 +7,7 @@ const analytics = await readFile(resolve(root, 'showroom/src/lib/analytics.ts'),
 const adapter = await readFile(resolve(root, 'showroom/src/lib/commerceMachineAdapter.ts'), 'utf8')
 const appRoutes = await readFile(resolve(root, 'showroom/src/App.tsx'), 'utf8')
 const agentsPage = await readFile(resolve(root, 'showroom/src/pages/AgentsPage.tsx'), 'utf8')
+const workspaceApi = await readFile(resolve(root, 'showroom/src/lib/workspaceApi.ts'), 'utf8')
 const template = JSON.parse(await readFile(resolve(root, 'templates/commerce-machine.blueprint.example.json'), 'utf8'))
 
 const requirements = [
@@ -20,6 +21,7 @@ const requirements = [
   ['repository blueprint template', /supermega-commerce-machine[\s\S]*catalog/],
   ['metadata-only autocapture', /autocapture:\s*false/],
   ['route page views are first-party events', /page_viewed: 'page_viewed'/],
+  ['frontend accepts ready free mode separately', /const enterpriseReady = [\s\S]*const freeModeReady = [\s\S]*ready: payload\.status === 'ready' \|\| freeModeReady/],
   ['session recording disabled', /disable_session_recording:\s*true/],
   ['analytics payload sanitizer', /sanitizeEventPayload[\s\S]*BLOCKED_PROPERTY/],
   ['free handoff attribution is allowlisted', /allowedEntrySource[\s\S]*agent-product[\s\S]*utm_source/],
@@ -35,7 +37,8 @@ const requirements = [
   ['conversation parser has no fixed confidence claim', [machine, analytics].join('\\n').indexOf('94%') === -1 ? /.*/ : /$a/],
 ]
 
-const failures = requirements.filter(([, pattern]) => !pattern.test(`${machine}\n${analytics}\n${adapter}\n${appRoutes}\n${agentsPage}\n${JSON.stringify(template)}`)).map(([name]) => name)
+const source = `${machine}\n${analytics}\n${adapter}\n${appRoutes}\n${agentsPage}\n${workspaceApi}\n${JSON.stringify(template)}`
+const failures = requirements.filter(([, pattern]) => !pattern.test(source)).map(([name]) => name)
 if (failures.length) {
   console.error(JSON.stringify({ status: 'failed', failures }, null, 2))
   process.exit(1)
