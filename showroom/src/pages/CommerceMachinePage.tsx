@@ -195,7 +195,7 @@ export function CommerceMachinePage() {
     <section className="sm-site-panel">
       <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
         <div><p className="sm-kicker text-[var(--sm-accent)]">Commerce Machine / configurable template</p><h1 className="mt-3 max-w-4xl text-4xl font-extrabold tracking-tight text-white lg:text-6xl">Sell from the channels customers already use.</h1><p className="mt-4 max-w-3xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">A reusable sales worker that reads an approved catalog, drafts an order, checks stock, and prepares a human-safe handoff. Configure it once per business.</p></div>
-        <span className="sm-status-pill">Demo mode / no connector required</span>
+        <span className="sm-status-pill">{catalogSource === 'demo' ? 'Free starter / no connector required' : catalogSource === 'shop-api' ? 'Free mode / connected catalog' : 'Free mode / imported catalog'}</span>
       </div>
     </section>
 
