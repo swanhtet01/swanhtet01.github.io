@@ -9855,7 +9855,13 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         coverage = _load_json(pilot_data / "data_coverage_report.json")
         enterprise_db_scheme = str(enterprise_db_url or "").split(":", 1)[0].strip()
         enterprise_db_configured = bool(enterprise_db_url) and enterprise_db_scheme not in {"", "sqlite"}
-        readiness_status = "ready" if enterprise_db_configured and int(coverage.get("readiness_score", 0) or 0) > 0 else "attention"
+        coverage_score = int(coverage.get("readiness_score", 0) or 0)
+        readiness_status = "ready" if enterprise_db_configured and coverage_score > 0 else "attention"
+        activation_requirements = []
+        if not enterprise_db_configured:
+            activation_requirements.append("Set SUPERMEGA_DATABASE_URL to an approved managed Postgres connection.")
+        if coverage_score <= 0:
+            activation_requirements.append("Publish a non-empty data coverage report after the first real workspace source sync.")
         return {
             "status": readiness_status,
             "service": "supermega-service",
@@ -9866,7 +9872,12 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "enterprise_db_scheme": enterprise_db_scheme or "unknown",
             "review_status": review.get("status", "unknown"),
             "autopilot_status": autopilot.get("status", "unknown"),
-            "coverage_score": int(coverage.get("readiness_score", 0) or 0),
+            "coverage_score": coverage_score,
+            "enterprise_activation": {
+                "status": "ready" if not activation_requirements else "attention",
+                "requirements": activation_requirements,
+                "secret_values_exposed": False,
+            },
         }
 
     @app.get("/api/auth/session")
