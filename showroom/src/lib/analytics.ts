@@ -26,12 +26,16 @@ const queuedEvents: Array<{ event: string; properties?: EventPayload }> = []
 const queuedIdentities: Array<{ userId: string; properties?: EventPayload }> = []
 
 const FIRST_PARTY_EVENT_TYPES: Record<string, string> = {
+  commerce_template_edited: 'setup_started',
+  commerce_channel_selected: 'setup_started',
   commerce_conversation_parsed: 'setup_started',
   commerce_catalog_imported: 'setup_started',
   commerce_blueprint_imported: 'setup_started',
   commerce_stage_advanced: 'cta_clicked',
   commerce_handoff_exported: 'lead_form_submitted',
   commerce_blueprint_exported: 'template_clicked',
+  commerce_catalog_template_downloaded: 'template_clicked',
+  commerce_catalog_exported: 'template_clicked',
 }
 
 function recordFirstPartyEvent(event: string) {
