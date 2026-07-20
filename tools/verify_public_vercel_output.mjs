@@ -19,6 +19,8 @@ const routes = new Map((config.routes || []).filter((route) => route.src).map((r
 for (const [src, dest] of [
   ['^/api/contact-submissions$', '/api/contact-submissions.js'],
   ['^/api/contact-submissions/status$', '/api/contact-submissions.js'],
+  ['^/api/behavior-events/?$', '/api/behavior-events.js'],
+  ['^/api/behavior-events/status/?$', '/api/behavior-events.js'],
 ]) {
   if (routes.get(src) !== dest) fail('route_contract_missing', { src, expected: dest, actual: routes.get(src) })
 }
@@ -38,7 +40,7 @@ for (const src of [
   }
 }
 
-for (const entry of ['contact-submissions.js.func', 'health.js.func', 'not-found.js.func', 'public-app-handoff.js.func']) {
+for (const entry of ['behavior-events.js.func', 'contact-submissions.js.func', 'health.js.func', 'not-found.js.func', 'public-app-handoff.js.func']) {
   const rootPath = resolve(outputRoot, 'functions', entry)
   const apiPath = resolve(outputRoot, 'functions', 'api', entry)
   if (!existsSync(rootPath) && !existsSync(apiPath)) fail('missing_function_output', { entry })
