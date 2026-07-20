@@ -5574,6 +5574,10 @@ const config = {
       handle: 'filesystem',
     },
     {
+      src: '^/ai-agent-solutions/?$',
+      dest: '/ai-agent-solutions/index.html',
+    },
+    {
       src: '^/(.*)$',
       status: 404,
       dest: '/404.html',
