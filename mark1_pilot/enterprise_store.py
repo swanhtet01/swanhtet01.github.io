@@ -804,9 +804,14 @@ def _connector_event_to_dict(row: EnterpriseConnectorEvent) -> dict[str, Any]:
 
 
 def resolve_database_url(output_dir: Path) -> str:
-    env_value = str(os.getenv("SUPERMEGA_DATABASE_URL", "")).strip()
-    if env_value:
-        return env_value
+    running_on_vercel = bool(str(os.getenv("VERCEL", "")).strip())
+    for env_name in ("SUPERMEGA_DATABASE_URL", "POSTGRES_URL", "POSTGRES_URL_NON_POOLING", "DATABASE_URL"):
+        env_value = str(os.getenv(env_name, "")).strip()
+        # The existing Cloud Run secret uses a Unix socket and cannot be reached by Vercel.
+        if running_on_vercel and "/cloudsql/" in env_value:
+            continue
+        if env_value:
+            return env_value
     db_path = output_dir.expanduser().resolve() / ENTERPRISE_DB_FILE
     return f"sqlite:///{db_path.as_posix()}"
 
