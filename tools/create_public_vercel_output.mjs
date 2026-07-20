@@ -1054,7 +1054,11 @@ async function writeNodeFunction(name) {
   const functionDir = resolve(functionsDir, `${name}.func`)
   await mkdir(resolve(functionDir, 'api'), { recursive: true })
   await cp(resolve(root, 'api', name), resolve(functionDir, 'api', name), { force: true })
-  await cp(resolve(root, 'api', 'lib'), resolve(functionDir, 'api', 'lib'), { recursive: true, force: true })
+  if (name !== 'behavior-events.js') {
+    await cp(resolve(root, 'api', 'lib'), resolve(functionDir, 'api', 'lib'), { recursive: true, force: true })
+  } else {
+    await mkdir(resolve(functionDir, 'api', 'lib'), { recursive: true })
+  }
   await writeFile(resolve(functionDir, 'api', 'lib', 'supermega-datastore.js'), publicDatastoreShim, 'utf8')
   if (name === 'contact-submissions.js') {
     const blobEntry = resolve(functionDir, 'api', 'lib', 'vercel-blob-entry.mjs')
