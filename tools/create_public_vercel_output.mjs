@@ -6371,6 +6371,43 @@ await mkdir(resolve(staticDir, 'work'), { recursive: true })
 await writeFile(resolve(staticDir, 'work', 'index.html'), normalizePublicProductNames(publicWorkHtml), 'utf8')
 await mkdir(resolve(staticDir, 'machine'), { recursive: true })
 await writeFile(resolve(staticDir, 'machine', 'index.html'), normalizePublicProductNames(publicMachineHtml), 'utf8')
+const agentMachineTemplates = [
+  {
+    id: 'commerce-inbox',
+    name: 'Commerce inbox',
+    promise: 'Turn Messenger, Viber, or email inquiries into reviewed orders.',
+    inputs: ['Product list', 'Prices and stock', 'Delivery rules'],
+    outputs: ['Order draft', 'Stock warning', 'Owner daily brief'],
+    workers: ['Inbox reader', 'Order builder', 'Owner brief'],
+  },
+  {
+    id: 'knowledge-desk',
+    name: 'Knowledge desk',
+    promise: 'Turn Gmail, Drive, PDFs, and spreadsheets into assigned decisions.',
+    inputs: ['Approved folders', 'Team rules', 'Decision format'],
+    outputs: ['Daily brief', 'Open tasks', 'Source-linked answer'],
+    workers: ['Source reader', 'Analyst', 'Review queue'],
+  },
+  {
+    id: 'research-monitor',
+    name: 'Research monitor',
+    promise: 'Watch selected sites and send a source-backed change report.',
+    inputs: ['Websites or feeds', 'Watch terms', 'Escalation rules'],
+    outputs: ['Change digest', 'Evidence links', 'Escalated exceptions'],
+    workers: ['Site watcher', 'Change analyst', 'Handoff writer'],
+  },
+]
+
+const publicAgentMachineManifest = {
+  version: 1,
+  kind: 'supermega-agent-machine-catalog',
+  handoff: {
+    includes: ['configured worker', 'source map', 'operating prompt', 'review queue', 'failure log', 'handoff guide'],
+    approval_boundary: 'No external send, money movement, or irreversible system write without approval.',
+  },
+  templates: agentMachineTemplates,
+}
+
 const publicAiAgentSolutionsHtml = `<!doctype html>
 <html lang="en">
   <head>
@@ -6387,6 +6424,7 @@ const publicAiAgentSolutionsHtml = `<!doctype html>
       .eyebrow { color:var(--accent); font-size:12px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; } h1 { max-width:760px; margin:14px 0 20px; font-size:clamp(38px,6vw,72px); line-height:1.02; letter-spacing:-.03em; } h2 { font-size:28px; line-height:1.1; margin:0 0 12px; } p { max-width:700px; color:var(--muted); }
       .lede { font-size:20px; max-width:680px; } .actions { display:flex; flex-wrap:wrap; gap:12px; margin-top:28px; } .btn { display:inline-block; border:1px solid var(--ink); border-radius:6px; padding:12px 17px; text-decoration:none; font-weight:750; } .primary { background:var(--ink); color:white; } .secondary { color:var(--ink); background:white; }
       .grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; margin:72px 0; } .item { border-top:2px solid var(--ink); padding-top:16px; } .item p { font-size:15px; }
+      .machine { border:1px solid var(--line); padding:22px; margin-top:38px; background:white; } .machine h2 { margin-bottom:8px; } .tracks { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin-top:18px; } .track { border:1px solid var(--line); padding:14px; cursor:pointer; background:var(--paper); text-align:left; } .track[aria-pressed="true"] { border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent); } .track strong { display:block; margin-bottom:6px; } .track span { display:block; color:var(--muted); font-size:14px; } .machine-output { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin-top:18px; } .machine-output div { border-top:1px solid var(--line); padding-top:12px; } .machine-output b { display:block; margin-bottom:6px; } .machine-output ul { margin:0; padding-left:18px; color:var(--muted); }
       .proof { border-top:1px solid var(--line); border-bottom:1px solid var(--line); padding:34px 0; } .proof strong { display:block; font-size:20px; margin-bottom:8px; } footer { display:flex; justify-content:space-between; gap:18px; margin-top:52px; color:var(--muted); font-size:14px; } footer a { color:inherit; }
       @media (max-width:720px) { nav { padding-bottom:42px; } .grid { grid-template-columns:1fr; margin:48px 0; } footer { display:block; } footer span { display:block; margin-top:8px; } }
     </style>
@@ -6404,6 +6442,14 @@ const publicAiAgentSolutionsHtml = `<!doctype html>
         <article class="item"><h2>Context that compounds</h2><p>Use approved company data, operating rules, and prior outcomes so each run gets more relevant without exposing private sources publicly.</p></article>
       </section>
       <section class="proof"><strong>What you receive</strong><p>A configured worker, source map, operating prompt, review queue, failure log, and handoff instructions your team can actually own. We start with one measurable task, prove it, then add the next.</p></section>
+      <section class="machine" aria-labelledby="machine-title">
+        <div class="eyebrow">One machine, many tracks</div>
+        <h2 id="machine-title">Choose the work. We configure the worker.</h2>
+        <p>Every track uses the same controlled runtime. You provide the sources and rules; the machine produces reviewable work and a portable handoff pack.</p>
+        <div class="tracks" id="agent-tracks"></div>
+        <div class="machine-output" id="agent-machine-output"></div>
+        <div class="actions"><a class="btn primary" id="machine-cta" href="/contact/?package=ai-agent&track=commerce-inbox">Configure this track</a><a class="btn secondary" href="/site/agent-machine-templates.json">Download machine catalog</a></div>
+      </section>
       <div class="actions"><a class="btn primary" href="/contact/?package=ai-agent">Describe the job</a><a class="btn secondary" href="/">Back to Shop and Plant</a></div>
       <footer><span>Supervised automation. No unapproved external sends or money actions.</span><span><a href="/contact/">Contact</a> · <a href="/offers/">Offers</a></span></footer>
     </main>
@@ -6418,6 +6464,18 @@ const publicAiAgentSolutionsHtml = `<!doctype html>
           } catch (_) {}
         }
         emit('page_viewed');
+        var templates = ${JSON.stringify(agentMachineTemplates)};
+        var trackRoot = document.getElementById('agent-tracks');
+        var outputRoot = document.getElementById('agent-machine-output');
+        var cta = document.getElementById('machine-cta');
+        function renderTrack(id) {
+          var selected = templates.find(function (item) { return item.id === id; }) || templates[0];
+          trackRoot.innerHTML = templates.map(function (item) { return '<button class="track" type="button" aria-pressed="' + (item.id === selected.id) + '" data-track="' + item.id + '"><strong>' + item.name + '</strong><span>' + item.promise + '</span></button>'; }).join('');
+          outputRoot.innerHTML = '<div><b>Give it</b><ul>' + selected.inputs.map(function (item) { return '<li>' + item + '</li>'; }).join('') + '</ul></div><div><b>Get back</b><ul>' + selected.outputs.map(function (item) { return '<li>' + item + '</li>'; }).join('') + '</ul></div>';
+          cta.href = '/contact/?package=ai-agent&track=' + encodeURIComponent(selected.id);
+          trackRoot.querySelectorAll('[data-track]').forEach(function (button) { button.addEventListener('click', function () { renderTrack(button.dataset.track); emit('template_clicked', selected.id); }); });
+        }
+        renderTrack('commerce-inbox');
         document.addEventListener('click', function (event) {
           var link = event.target.closest && event.target.closest('a');
           if (link && link.textContent) emit('cta_clicked', link.textContent.trim().slice(0, 160));
@@ -6474,6 +6532,7 @@ await prunePublicStaticRoot()
 await mkdir(staticDir, { recursive: true })
 await mkdir(resolve(staticDir, 'ai-agent-solutions'), { recursive: true })
 await writeFile(resolve(staticDir, 'ai-agent-solutions', 'index.html'), publicAiAgentSolutionsHtml, 'utf8')
+await writeFile(resolve(staticDir, 'site', 'agent-machine-templates.json'), JSON.stringify(publicAgentMachineManifest, null, 2), 'utf8')
 await writeFile(
   resolve(staticDir, 'private-not-found.html'),
   '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="robots" content="noindex,nofollow"><title>Not found</title><body>Not found.</body></html>\n',
