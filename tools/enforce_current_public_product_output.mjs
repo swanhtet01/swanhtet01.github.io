@@ -84,7 +84,7 @@ if (retiredCombinedMatch) {
 }
 
 for (const [label, text] of [['home', home], ['products', products], ['contact', contact]]) {
-  const retiredProduct = text.match(/Document Extraction Ledger|Back Office Workflow Desk/i)
+  const retiredProduct = text.match(/Document Extraction Ledger|Back Office Workflow Desk|Back Office AI Desk/i)
   if (retiredProduct) fail('retired_product_label_found', { label, match: retiredProduct[0] })
 }
 
