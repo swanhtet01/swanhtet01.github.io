@@ -6,6 +6,7 @@ const root = resolve(import.meta.dirname, '..')
 const workflow = await readFile(resolve(root, '.github/workflows/supermega-app-deploy.yml'), 'utf8')
 const generator = await readFile(resolve(root, 'tools/write_app_vercel_config.mjs'), 'utf8')
 const verifier = await readFile(resolve(root, 'tools/verify_app_release_live.mjs'), 'utf8')
+const rollbackResolver = await readFile(resolve(root, 'tools/resolve_vercel_rollback_target.mjs'), 'utf8')
 const config = JSON.parse(await readFile(resolve(root, 'vercel.json'), 'utf8'))
 const failures = []
 
@@ -27,8 +28,10 @@ requireContract('all API tests trigger and execute', workflow.includes("- 'tests
 requireContract('runtime package changes trigger release', workflow.includes("- 'supermega_runtime/**'"))
 requireContract('database activation controls trigger release', workflow.includes("- 'tools/validate_supermega_database_url.py'") && workflow.includes("- 'tools/activate_supermega_database.ps1'"))
 requireContract('protected preview verification', workflow.includes("VERCEL_PROTECTED_PREVIEW: '1'") && verifier.includes("'curl', path, '--deployment'") && verifier.includes("deploymentFunctions") && verifier.includes("JSON.stringify(['api/app'])") && verifier.includes('hosted_agent_runtime_contract_wrong'))
+requireContract('isolated production candidate deployment', workflow.includes('deploy --prebuilt --prod --skip-domain --yes'))
+requireContract('cross-platform protected deployment requests', !verifier.includes("'--silent'") && !verifier.includes("'--show-error'") && !verifier.includes("'--location'") && !verifier.includes("'--token'") && verifier.includes('describeCliFailure'))
 requireContract('live project state verified', workflow.includes('verify_vercel_project_state.mjs app'))
-requireContract('production rollback target captured', workflow.includes('Capture current production rollback target') && workflow.includes('ls megaos --environment production'))
+requireContract('production rollback target captured from live alias', workflow.includes("- 'tools/resolve_vercel_rollback_target.mjs'") && workflow.includes('inspect https://app.supermega.dev --format=json') && workflow.includes('resolve_vercel_rollback_target.mjs app.supermega.dev') && !workflow.includes('ls megaos --environment production') && rollbackResolver.includes("deployment.target !== 'production'") && rollbackResolver.includes('aliases.includes(expectedAlias)'))
 requireContract('failed production verification rolls back', workflow.includes('Roll back a failed production verification') && workflow.includes('vercel@56.1.0 rollback'))
 requireContract('production environment gate', /environment:\s*production/.test(workflow))
 requireContract('production is main-only in the canonical repository', workflow.includes("if: ${{ github.ref == 'refs/heads/main' && github.repository == 'swanhtet01/swanhtet01.github.io' }}"))
@@ -46,9 +49,9 @@ requireContract('no POS route', !/\/pos\/login/i.test(combined))
 requireContract('no YTF schedule', !/\/api\/cron\/ytf/i.test(combined))
 
 const orderedSteps = [
-  'Deploy isolated preview',
-  'Inspect and verify preview',
   'Capture current production rollback target',
+  'Deploy isolated production candidate',
+  'Inspect and verify candidate',
   'Promote the verified artifact',
   'Verify app.supermega.dev exact release',
   'Verify production project controls',
@@ -62,4 +65,4 @@ if (failures.length) {
   process.exit(1)
 }
 
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_release_workflow', checks: 27 }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_release_workflow', checks: 29 }, null, 2))

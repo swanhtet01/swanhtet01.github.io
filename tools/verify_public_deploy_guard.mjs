@@ -9,6 +9,7 @@ const vercelConfig = JSON.parse(read('vercel.json'))
 const releaseWorkflow = read('.github/workflows/supermega-public-release.yml')
 const healthWorkflow = read('.github/workflows/supermega-public-live-health.yml')
 const previewVerifier = read('tools/verify_public_preview_live.mjs')
+const rollbackResolver = read('tools/resolve_vercel_rollback_target.mjs')
 const firewallVerifier = read('tools/verify_public_firewall_state.mjs')
 const publicGenerator = read('tools/create_public_vercel_output.mjs')
 const releaseWrapper = read('tools/deploy_website_actions.ps1')
@@ -27,6 +28,9 @@ if (vercelConfig.git?.deploymentEnabled !== false) failures.push('native_git_dep
 if (!previewVerifier.includes('preview_contact_not_accepting')) failures.push('preview_contact_readiness_not_verified')
 if (!previewVerifier.includes('deployment_function_surface_wrong')) failures.push('preview_function_inventory_not_verified')
 if (!previewVerifier.includes('const maxAttempts = 6') || !previewVerifier.includes('protected_preview_retry:')) failures.push('preview_propagation_retry_missing')
+if (previewVerifier.includes("'--silent'") || previewVerifier.includes("'--show-error'") || previewVerifier.includes("'--location'")) failures.push('preview_verifier_uses_platform_specific_curl_flags')
+if (previewVerifier.includes("'--token'") || !previewVerifier.includes('protected_preview_inspect_failed:') || !previewVerifier.includes('process.env.VERCEL_TOKEN')) failures.push('preview_verifier_credential_handling_unsafe')
+if (!rollbackResolver.includes("deployment.target !== 'production'") || !rollbackResolver.includes('aliases.includes(expectedAlias)') || !rollbackResolver.includes("deployment.readyState !== 'READY'")) failures.push('rollback_alias_resolver_incomplete')
 for (const token of ['SUPERMEGA_CONTACT_IDEMPOTENCY_SECRET', 'idempotency_key_required', 'rate_limited', 'resolution=ignore-duplicates,return=representation', "'idempotency-key'"]) {
   if (!publicGenerator.includes(token)) failures.push(`contact_abuse_control_missing:${token}`)
 }
@@ -56,7 +60,11 @@ for (const token of [
   'npx --yes vercel@56.1.0 pull',
   'npm run public:prebuilt',
   'tools/test_public_contact_function.mjs',
+  'tools/resolve_vercel_rollback_target.mjs',
+  'inspect https://supermega.dev --format=json',
+  'resolve_vercel_rollback_target.mjs supermega.dev',
   'npx --yes vercel@56.1.0 deploy --prebuilt',
+  'deploy --prebuilt --prod --skip-domain --yes',
   'npx --yes vercel@56.1.0 inspect',
   'node tools/verify_public_preview_live.mjs',
   'node tools/verify_vercel_project_state.mjs public',
@@ -72,10 +80,10 @@ for (const token of [
 ]) requireToken(releaseWorkflow, token, 'release_workflow_missing')
 
 const orderedReleaseSteps = [
-  'Deploy immutable preview artifact',
-  'Inspect preview deployment',
-  'Verify protected preview content',
   'Capture current production rollback target',
+  'Deploy isolated production candidate',
+  'Inspect candidate deployment',
+  'Verify protected candidate content',
   'Promote the verified artifact',
   'Verify production aliases and exact release',
   'Verify production project controls',
@@ -83,6 +91,7 @@ const orderedReleaseSteps = [
 ]
 const releasePositions = orderedReleaseSteps.map((step) => releaseWorkflow.indexOf(step))
 if (!releasePositions.every((position) => position >= 0) || !releasePositions.every((position, index) => index === 0 || position > releasePositions[index - 1])) failures.push('public_release_steps_out_of_order')
+if (releaseWorkflow.includes('ls supermega-public --environment production')) failures.push('rollback_target_can_select_unaliased_candidate')
 
 for (const token of ['workflow_dispatch:', 'schedule:', 'npm run public:verify:live']) requireToken(healthWorkflow, token, 'health_workflow_missing')
 if (/vercel@\S+\s+(?:deploy|promote)/.test(healthWorkflow)) failures.push('health_workflow_can_deploy')

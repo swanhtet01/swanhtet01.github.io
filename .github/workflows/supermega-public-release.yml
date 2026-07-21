@@ -17,6 +17,7 @@ on:
       - tools/verify_public_preview_live.mjs
       - tools/verify_vercel_project_state.mjs
       - tools/verify_public_firewall_state.mjs
+      - tools/resolve_vercel_rollback_target.mjs
       - tools/deny_stale_public_deploy.mjs
       - tools/deploy_website_actions.ps1
       - vercel.json
@@ -80,38 +81,37 @@ jobs:
       - name: Generate and verify the prebuilt artifact
         run: npm run public:prebuilt
 
-      - name: Deploy immutable preview artifact
+      - name: Capture current production rollback target
+        id: rollback-target
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          PREVIOUS_URL="$(npx --yes vercel@56.1.0 inspect https://supermega.dev --format=json --token="$VERCEL_TOKEN" | node tools/resolve_vercel_rollback_target.mjs supermega.dev)"
+          printf 'url=%s\n' "$PREVIOUS_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy isolated production candidate
         id: deploy
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
-          DEPLOYMENT_URL="$(npx --yes vercel@56.1.0 deploy --prebuilt --yes --token="$VERCEL_TOKEN" --meta "githubCommitSha=${{ github.sha }}" --meta "githubCommitRef=${{ github.ref_name }}")"
+          DEPLOYMENT_URL="$(npx --yes vercel@56.1.0 deploy --prebuilt --prod --skip-domain --yes --token="$VERCEL_TOKEN" --meta "githubCommitSha=${{ github.sha }}" --meta "githubCommitRef=${{ github.ref_name }}")"
           if ! [[ "$DEPLOYMENT_URL" =~ ^https:// ]]; then
             echo "::error::Vercel did not return a deployment URL."
             exit 1
           fi
           printf 'url=%s\n' "$DEPLOYMENT_URL" >> "$GITHUB_OUTPUT"
 
-      - name: Inspect preview deployment
+      - name: Inspect candidate deployment
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: npx --yes vercel@56.1.0 inspect "${{ steps.deploy.outputs.url }}" --token="$VERCEL_TOKEN"
 
-      - name: Verify protected preview content
+      - name: Verify protected candidate content
         env:
-          VERCEL_CLI_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           PUBLIC_BASE_URL: ${{ steps.deploy.outputs.url }}
           EXPECTED_RELEASE_COMMIT: ${{ github.sha }}
         run: node tools/verify_public_preview_live.mjs
-
-      - name: Capture current production rollback target
-        id: rollback-target
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: |
-          DEPLOYMENTS="$(npx --yes vercel@56.1.0 ls supermega-public --environment production --status READY --limit 1 --format json --token="$VERCEL_TOKEN")"
-          PREVIOUS_URL="$(printf '%s' "$DEPLOYMENTS" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const d=JSON.parse(s).deployments?.[0];if(!d?.url)process.exit(1);process.stdout.write('https://'+d.url)})")"
-          printf 'url=%s\n' "$PREVIOUS_URL" >> "$GITHUB_OUTPUT"
 
       - name: Promote the verified artifact
         id: promote

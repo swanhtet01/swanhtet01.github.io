@@ -19,6 +19,7 @@ on:
       - 'tools/verify_app_release_live.mjs'
       - 'tools/verify_app_security_contract.mjs'
       - 'tools/verify_vercel_project_state.mjs'
+      - 'tools/resolve_vercel_rollback_target.mjs'
       - 'tools/validate_supermega_database_url.py'
       - 'tools/activate_supermega_database.ps1'
       - 'site-manifest.json'
@@ -112,37 +113,35 @@ jobs:
           SUPERMEGA_RELEASE_COMMIT: ${{ github.sha }}
         run: npx --yes vercel@56.1.0 build --prod --yes --token="$VERCEL_TOKEN"
 
-      - name: Deploy isolated preview
+      - name: Capture current production rollback target
+        id: rollback-target
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          PREVIOUS_URL="$(npx --yes vercel@56.1.0 inspect https://app.supermega.dev --format=json --token="$VERCEL_TOKEN" | node tools/resolve_vercel_rollback_target.mjs app.supermega.dev)"
+          printf 'url=%s\n' "$PREVIOUS_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy isolated production candidate
         id: deploy
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
-          DEPLOYMENT_URL="$(npx --yes vercel@56.1.0 deploy --prebuilt --yes --token="$VERCEL_TOKEN" --meta "githubCommitSha=${{ github.sha }}" --meta "githubCommitRef=${{ github.ref_name }}")"
+          DEPLOYMENT_URL="$(npx --yes vercel@56.1.0 deploy --prebuilt --prod --skip-domain --yes --token="$VERCEL_TOKEN" --meta "githubCommitSha=${{ github.sha }}" --meta "githubCommitRef=${{ github.ref_name }}")"
           if ! [[ "$DEPLOYMENT_URL" =~ ^https:// ]]; then
             echo "::error::Vercel did not return a deployment URL."
             exit 1
           fi
           printf 'url=%s\n' "$DEPLOYMENT_URL" >> "$GITHUB_OUTPUT"
 
-      - name: Inspect and verify preview
+      - name: Inspect and verify candidate
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_CLI_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_PROTECTED_PREVIEW: '1'
           APP_BASE_URL: ${{ steps.deploy.outputs.url }}
           EXPECTED_RELEASE_COMMIT: ${{ github.sha }}
         run: |
           npx --yes vercel@56.1.0 inspect "$APP_BASE_URL" --token="$VERCEL_TOKEN"
           node tools/verify_app_release_live.mjs
-
-      - name: Capture current production rollback target
-        id: rollback-target
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: |
-          DEPLOYMENTS="$(npx --yes vercel@56.1.0 ls megaos --environment production --status READY --limit 1 --format json --token="$VERCEL_TOKEN")"
-          PREVIOUS_URL="$(printf '%s' "$DEPLOYMENTS" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const d=JSON.parse(s).deployments?.[0];if(!d?.url)process.exit(1);process.stdout.write('https://'+d.url)})")"
-          printf 'url=%s\n' "$PREVIOUS_URL" >> "$GITHUB_OUTPUT"
 
       - name: Promote the verified artifact
         id: promote
