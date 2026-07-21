@@ -34,6 +34,7 @@ requireContract('production environment gate', /environment:\s*production/.test(
 requireContract('production is main-only in the canonical repository', workflow.includes("if: ${{ github.ref == 'refs/heads/main' && github.repository == 'swanhtet01/swanhtet01.github.io' }}"))
 requireContract('deployment metadata uses the guarded runtime ref', workflow.includes('githubCommitRef=${{ github.ref_name }}') && !workflow.includes('githubCommitRef=main'))
 requireContract('release actions are commit-pinned', !/uses:\s+[^\s#]+@v\d+/m.test(workflow) && /uses:\s+actions\/checkout@[0-9a-f]{40}/.test(workflow))
+requireContract('uv build tool is immutable', workflow.includes('astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9') && workflow.includes("version: '0.11.30'"))
 requireContract('stale Cloud Run release authority is retired', !existsSync(resolve(root, '.github/workflows/supermega-app-cloud-run.yml')))
 
 const expectedCrons = ['/api/cron/supermega/agent-queue', '/api/cron/supermega/daily'].sort()
@@ -61,4 +62,4 @@ if (failures.length) {
   process.exit(1)
 }
 
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_release_workflow', checks: 26 }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_release_workflow', checks: 27 }, null, 2))

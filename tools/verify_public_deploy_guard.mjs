@@ -26,6 +26,7 @@ if (existsSync(resolve(root, '.github/workflows/supermega-public-deploy.yml'))) 
 if (vercelConfig.git?.deploymentEnabled !== false) failures.push('native_git_deployments_not_disabled')
 if (!previewVerifier.includes('preview_contact_not_accepting')) failures.push('preview_contact_readiness_not_verified')
 if (!previewVerifier.includes('deployment_function_surface_wrong')) failures.push('preview_function_inventory_not_verified')
+if (!previewVerifier.includes('const maxAttempts = 6') || !previewVerifier.includes('protected_preview_retry:')) failures.push('preview_propagation_retry_missing')
 for (const token of ['SUPERMEGA_CONTACT_IDEMPOTENCY_SECRET', 'idempotency_key_required', 'rate_limited', 'resolution=ignore-duplicates,return=representation', "'idempotency-key'"]) {
   if (!publicGenerator.includes(token)) failures.push(`contact_abuse_control_missing:${token}`)
 }

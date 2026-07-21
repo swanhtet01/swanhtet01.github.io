@@ -6,8 +6,19 @@ const manifest = JSON.parse(await readFile(new URL('../site-manifest.json', impo
 const baseUrl = String(process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '')
 const expectedCommit = String(process.env.EXPECTED_RELEASE_COMMIT || '').toLowerCase()
 const vercelToken = String(process.env.VERCEL_CLI_TOKEN || '').trim()
+const maxAttempts = 6
+const retryWaitBuffer = new Int32Array(new SharedArrayBuffer(4))
 
 if (!baseUrl.startsWith('https://')) throw new Error('public_preview_url_required')
+
+function describeFailure(error) {
+  const status = Number.isInteger(error?.status) ? error.status : 'unknown'
+  let stderr = String(error?.stderr || '').trim()
+  if (vercelToken) stderr = stderr.replaceAll(vercelToken, '[redacted]')
+  stderr = stderr.replace(/([?&](?:token|secret|key)=)[^&\s]+/gi, '$1[redacted]')
+  const lastLine = stderr.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).at(-1)
+  return `exit=${status}${lastLine ? ` message=${lastLine.slice(0, 240)}` : ''}`
+}
 
 function get(path) {
   const tokenArgs = vercelToken ? ['--token', vercelToken] : []
@@ -16,16 +27,24 @@ function get(path) {
   const executableArgs = process.platform === 'win32'
     ? [resolve(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npx-cli.js'), ...npxArgs]
     : npxArgs
-  try {
-    return execFileSync(executable, executableArgs, {
-      encoding: 'utf8',
-      env: process.env,
-      maxBuffer: 8 * 1024 * 1024,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    })
-  } catch {
-    throw new Error(`protected_preview_request_failed:${path}`)
+  let lastFailure = 'unknown'
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return execFileSync(executable, executableArgs, {
+        encoding: 'utf8',
+        env: process.env,
+        maxBuffer: 8 * 1024 * 1024,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+    } catch (error) {
+      lastFailure = describeFailure(error)
+      if (attempt < maxAttempts) {
+        console.error(`protected_preview_retry:${path}:attempt=${attempt}:${lastFailure}`)
+        Atomics.wait(retryWaitBuffer, 0, 0, attempt * 2000)
+      }
+    }
   }
+  throw new Error(`protected_preview_request_failed:${path}:attempts=${maxAttempts}:${lastFailure}`)
 }
 
 for (const page of manifest.pages) {
