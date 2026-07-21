@@ -1,106 +1,46 @@
-# SuperMega Showroom
+# >_ SuperMega product app
 
-Public conversion-oriented showroom for `supermega.dev`.
+This package is the canonical application for `app.supermega.dev`. It is a focused operating workspace for SuperMega Shop and Plant, not the public marketing site and not a client-specific deployment.
 
-## Stack
+## Routes
 
-- React 19
-- TypeScript
-- Tailwind CSS v4
-- Vite
-- React Router
+- `/` — Command: priorities, work, evidence, and the five-role company agent desk.
+- `/shop/` — sales, catalogue, stock, orders, close, and exceptions.
+- `/plant/` — jobs, machines, materials, quality, maintenance, and handoffs.
+- `/assist/` — evidence-grounded briefs, drafts, and approval-ready recommendations.
+- `/setup/` — Shop/Plant template selection and bounded workspace configuration.
+- `/trust/` — demo boundaries, managed-trial gates, human authority, and controls.
 
-## Information Architecture
+All routes share the `>_` terminal design system and responsive application shell.
 
-- `/`
-- `/find-companies`
-- `/company-list`
-- `/task-list`
-- `/book`
-- `/login`
-- `/app/*`
+## Core files
 
-Minimal redirects still supported:
+- `src/core/CoreApp.tsx` — product model, navigation, state, workflows, and agent desk.
+- `src/core/core-app.css` — shared responsive visual system.
+- `src/App.tsx` — canonical app mount.
+- `src/main.tsx` and `src/index.css` — runtime and global foundation.
+- `scripts/prepare-static-routes.mjs` — six-route static shell preparation.
 
-- `/lead-finder` -> `/find-companies`
-- `/workspace` -> `/company-list`
-- `/action-os` -> `/task-list`
-
-## Local run
+## Run and verify
 
 ```powershell
-cd showroom
-npm ci
-npm run dev
+npm.cmd ci
+npm.cmd run dev
+npm.cmd run lint
+npm.cmd run build
 ```
 
-## Production build
+From the repository root, `npm.cmd run app:build` also generates release metadata and runs the application, workflow, and security contracts.
 
-```powershell
-cd showroom
-npm run build
-```
+## Data and action boundary
 
-Build script also creates:
-
-- `dist/404.html`
-- route-level `index.html` files for static hosting route checks
-
-## Public tool behavior
-
-- `Find Companies` searches public business sources and can save kept rows into `Company List`.
-- `Company List` stores saved companies and lead notes.
-- `Task List` turns messy updates into a short daily queue.
-- `Spa Service Desk` is the current single-site service-retail wedge for checkout, appointments, expenses, and daily close.
-
-## Service Desk pilot
-
-Key route:
-
-- `/app/service-desk`
-
-What is already self-serve:
-
-- Configure business name, sector, currency, and opening cash float in the UI
-- Add services, staff members, and same-day appointments in the UI
-- Export and import JSON snapshots so the single-site pilot can be moved or versioned
-
-Core files:
-
-- `showroom/src/pages/ServiceDeskPage.tsx`
-- `showroom/src/lib/serviceRetailDesk.ts`
-- `showroom/SERVICE_DESK_RUNBOOK.md`
-
-If you are running from Bash on Windows or inside Codex and `npm.cmd` behaves badly, use:
-
-```powershell
-cmd.exe /c npm run build
-```
+The default experience uses reversible browser-local sample state. It makes no claim of durable customer persistence or autonomous consequential action. Managed state is available only through the server-mediated `/api/trial/v1` contract after every activation gate passes; browser code never receives the database URL, service role, or identity-signing secret.
 
 ## Deployment
 
-- Workflow: `.github/workflows/showroom-pages.yml`
-- Artifact: `showroom/dist`
-- Custom domain: `supermega.dev`
-- Fallback host: Google Cloud Run via `showroom/Dockerfile` and `tools/deploy_showroom_cloud_run.ps1`
-- Cloud Run guide: `showroom/DEPLOY_CLOUD_RUN.md`
-- Optional CI deploy workflow: `.github/workflows/showroom-cloud-run.yml` (requires `GCP_SA_KEY` secret)
+- Vercel project: `megaos`
+- Production domain: `app.supermega.dev`
+- Release workflow: `.github/workflows/supermega-app-deploy.yml`
+- Required release proof: `/__release.json` identifies `supermega-app` and the exact reviewed commit.
 
-### Vercel production path
-
-```powershell
-cd "C:\Users\swann\OneDrive - BDA\Super Mega Inc\supermega-platform"
-cmd.exe /c "set npm_config_cache=%TEMP%\vercel-npm-cache-codex&& npx vercel deploy --prod -y --scope swanhtet01s-projects"
-```
-
-Current live production deployment URL:
-
-- `https://supermega-platform-e8m5xhiho-swanhtet01s-projects.vercel.app`
-
-If `supermega.dev` is still serving the old GitHub Pages site, the apex DNS is not cut over yet. The minimum fix Vercel requested is:
-
-- `A supermega.dev 76.76.21.21`
-
-Alternative:
-
-- move the domain nameservers to `ns1.vercel-dns.com` and `ns2.vercel-dns.com`
+Do not deploy this package directly to production. The verified GitHub workflow is the release authority.

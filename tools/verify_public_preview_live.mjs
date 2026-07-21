@@ -1,0 +1,74 @@
+import { execFileSync } from 'node:child_process'
+import { readFile } from 'node:fs/promises'
+import { dirname, resolve } from 'node:path'
+
+const manifest = JSON.parse(await readFile(new URL('../site-manifest.json', import.meta.url), 'utf8'))
+const baseUrl = String(process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '')
+const expectedCommit = String(process.env.EXPECTED_RELEASE_COMMIT || '').toLowerCase()
+const vercelToken = String(process.env.VERCEL_CLI_TOKEN || '').trim()
+
+if (!baseUrl.startsWith('https://')) throw new Error('public_preview_url_required')
+
+function get(path) {
+  const tokenArgs = vercelToken ? ['--token', vercelToken] : []
+  const npxArgs = ['--yes', 'vercel@56.1.0', 'curl', path, '--deployment', baseUrl, ...tokenArgs, '--', '--silent', '--show-error', '--fail', '--location']
+  const executable = process.platform === 'win32' ? process.execPath : 'npx'
+  const executableArgs = process.platform === 'win32'
+    ? [resolve(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npx-cli.js'), ...npxArgs]
+    : npxArgs
+  try {
+    return execFileSync(executable, executableArgs, {
+      encoding: 'utf8',
+      env: process.env,
+      maxBuffer: 8 * 1024 * 1024,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+  } catch {
+    throw new Error(`protected_preview_request_failed:${path}`)
+  }
+}
+
+for (const page of manifest.pages) {
+  const html = get(page.route)
+  for (const token of [
+    `meta name="supermega-brand-version" content="${manifest.brand.version}"`,
+    `meta name="supermega-context-version" content="${manifest.contextVersion}"`,
+    'aria-label="SuperMega home"',
+  ]) {
+    if (!html.includes(token)) throw new Error(`preview_shared_contract_missing:${page.route}:${token}`)
+  }
+  for (const retired of manifest.retiredPublicNames) {
+    if (html.toLowerCase().includes(retired.toLowerCase())) throw new Error(`retired_context_preview:${page.route}:${retired}`)
+  }
+}
+
+const release = JSON.parse(get(manifest.release.releaseEndpoint))
+if (release.brandVersion !== manifest.brand.version) throw new Error('preview_brand_version_wrong')
+if (release.contextVersion !== manifest.contextVersion) throw new Error('preview_context_version_wrong')
+if (expectedCommit && release.commit !== expectedCommit) throw new Error(`preview_commit_wrong:${release.commit}`)
+
+const contact = JSON.parse(get('/api/contact-submissions/status'))
+if (contact.status !== 'ready' || contact.service !== 'supermega-contact' || contact.accepting !== true) throw new Error('preview_contact_not_accepting')
+if (contact.controls?.idempotency !== 'required' || contact.controls?.edge_rate_limit !== 'required') throw new Error('preview_contact_controls_wrong')
+
+const tokenArgs = vercelToken ? ['--token', vercelToken] : []
+const inspectArgs = ['--yes', 'vercel@56.1.0', 'inspect', baseUrl, '--format=json', ...tokenArgs]
+const inspectExecutable = process.platform === 'win32' ? process.execPath : 'npx'
+const inspectExecutableArgs = process.platform === 'win32'
+  ? [resolve(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npx-cli.js'), ...inspectArgs]
+  : inspectArgs
+const deployment = JSON.parse(execFileSync(inspectExecutable, inspectExecutableArgs, {
+  encoding: 'utf8',
+  env: process.env,
+  maxBuffer: 8 * 1024 * 1024,
+  stdio: ['ignore', 'pipe', 'pipe'],
+}))
+const deploymentFunctions = (deployment.builds || [])
+  .flatMap((build) => build.output || [])
+  .filter((output) => output.type === 'lambda')
+  .map((output) => output.path)
+  .sort()
+const expectedFunctions = ['api/contact-submissions.js', 'api/health.js', 'api/not-found.js']
+if (JSON.stringify(deploymentFunctions) !== JSON.stringify(expectedFunctions)) throw new Error(`deployment_function_surface_wrong:${deploymentFunctions.join(',')}`)
+
+console.log(JSON.stringify({ ok: true, contract: 'supermega_public_preview', baseUrl, pages: manifest.pages.map((page) => page.route), release, contact: 'ready', deploymentFunctions }, null, 2))

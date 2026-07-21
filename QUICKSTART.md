@@ -1,124 +1,48 @@
-# SuperMega Quickstart
+# SuperMega quickstart
 
-This is the shortest path to get value from the repo today.
+Requirements: Node.js 24 and Python 3.12.
 
-## 1) Run the Yangon Tyre pilot solution (ERP + DQMS)
-
-From repo root:
+## Install
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\run_solution.ps1 -Config .\config.example.json -Profile ytf_personal
+npm.cmd install
+npm.cmd --prefix showroom ci
+python -m pip install -r requirements-test.txt
 ```
 
-Main outputs:
-- `swan-intelligence-hub/index.html` (dashboard)
-- `pilot-data/pilot_solution.md` (director brief)
-- `pilot-data/dqms_weekly_summary.md` (quality/CAPA summary)
-- `pilot-data/TODAY.md` (daily execution recap)
-
-## 2) Fix Gmail if email coverage is degraded
-
-Run:
+## Run the product app
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\pilot.ps1 gmail-auth --config .\config.example.json --host 127.0.0.1 --port 8765
+npm.cmd run dev
 ```
 
-If localhost callback fails, use manual flow:
+The Vite app proxies `/api` to `http://127.0.0.1:8788` by default. Start the canonical API separately when testing server routes:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\pilot.ps1 gmail-auth-start --config .\config.example.json
-powershell -ExecutionPolicy Bypass -File .\tools\pilot.ps1 gmail-auth-finish --config .\config.example.json --callback-url "<paste-full-callback-url>"
+python -m uvicorn api_app:app --host 127.0.0.1 --port 8788
 ```
 
-Then run the main solution command again.
-
-## 3) Serve locally for phone/laptop testing
+## Verify everything in scope
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\run_solution.ps1 -Config .\config.example.json -Profile ytf_personal -SkipRun -Serve -BindHost 0.0.0.0 -Port 8787
+python -m unittest discover -s tests -p 'test_*.py' -v
+npm.cmd run app:build
+npm.cmd run public:prebuilt
+npm.cmd audit --omit=dev
+npm.cmd --prefix showroom audit --omit=dev
+git diff --check
 ```
 
-Open on this machine:
-- `http://127.0.0.1:8787`
+## Managed database proof
 
-Open from other devices on same network:
-- `http://<this-computer-ip>:8787`
-
-## 4) Build the legacy showroom prototype locally
+Do not place credentials on the command line. Follow `docs/supermega-enterprise-activation.md` and validate from an ignored file:
 
 ```powershell
-cd .\showroom
-npm ci
-npm run build
-npm run lint
+powershell -ExecutionPolicy Bypass -File tools/activate_supermega_database.ps1 -DatabaseUrlFile .tmp\supermega-production-database-url.txt -ValidateOnly
 ```
 
-Production target:
-- Canonical source: `codex/public-enterprise-site`
-- Verified release: `.github/workflows/supermega-public-release.yml`
-- Hosting: Vercel only
-- Domain: `https://supermega.dev`
+This command is read-only and fails closed. It does not apply the migration or enable writes.
 
-```powershell
-# Read-only release plan
-powershell -ExecutionPolicy Bypass -File .\tools\deploy_website_actions.ps1 -DryRun
+## Production
 
-# Verified production release
-powershell -ExecutionPolicy Bypass -File .\tools\deploy_website_actions.ps1
-```
-
-## 4b) Run the full app in one container
-
-```powershell
-docker compose -f .\docker-compose.app.yml up --build
-```
-
-Open:
-- `http://localhost:8787`
-
-This serves the website and API together and keeps saved state in the Docker volume.
-
-## 5) One command to check whole machine health
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\supermega_machine.ps1 -Action status -Config .\config.example.json
-```
-
-Includes:
-- website DNS + HTTPS diagnosis
-- internal output freshness (dashboard/brief/DQMS)
-- Gmail token presence check
-- next command suggestions
-
-## 6) Legacy Cloud Run prototype preflight (not the public domain owner)
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\supermega_machine.ps1 -Action cloudrun-preflight -ProjectId supermega-468612 -Region asia-southeast1 -Service supermega-showroom
-```
-
-If preflight returns ready:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\supermega_machine.ps1 -Action cloudrun-deploy -ProjectId supermega-468612 -Region asia-southeast1 -Service supermega-showroom
-```
-
-## 7) Create another setup profile (for new company/client)
-
-List current profiles:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\pilot.ps1 config-profiles --config .\config.example.json
-```
-
-Create a new profile from template:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\pilot.ps1 config-profile-create --config .\config.example.json --profile my_new_client --from-profile smb_template
-```
-
-Run with that profile:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\run_solution.ps1 -Config .\config.example.json -Profile my_new_client
-```
+Do not deploy production from the local machine. Commit reviewed work, open a pull request, pass checks, and release from `main` through the verified public and app workflows. Both workflows verify an immutable preview before promoting that exact artifact.

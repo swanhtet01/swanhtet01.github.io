@@ -1,8 +1,4 @@
-beautifulsoup4
-fastapi
-google-cloud-tasks
-pydantic
-python-dotenv
-sentry-sdk[fastapi]
-sqlmodel
-uvicorn
+fastapi==0.139.2
+pydantic==2.13.4
+psycopg[binary]==3.3.4
+uvicorn==0.51.0

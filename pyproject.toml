@@ -1,5 +1,11 @@
 [project]
-name = "app"
-version = "0.1.0"
-dependencies = [ "beautifulsoup4", "fastapi", "google-cloud-tasks", "httpx", "psycopg[binary]", "pydantic", "python-dotenv", "sentry-sdk[fastapi]", "sqlmodel", "uvicorn" ]
-requires-python = ">=3.12,<3.15"
+name = "supermega-runtime"
+version = "1.0.0"
+description = "Canonical SuperMega API runtime"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "fastapi==0.139.2",
+  "psycopg[binary]==3.3.4",
+  "pydantic==2.13.4",
+  "uvicorn==0.51.0",
+]

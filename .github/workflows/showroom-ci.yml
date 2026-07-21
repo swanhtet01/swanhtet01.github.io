@@ -1,64 +1,71 @@
-name: Showroom CI
+name: SuperMega App CI
 
-# GitHub Actions billing is currently unavailable for this repo.
-# CI now runs through Vercel/Codex release gates:
-# powershell -ExecutionPolicy Bypass -File tools/run_vercel_release_gate.ps1 -Target all
 on:
+  pull_request:
+    paths:
+      - 'showroom/**'
+      - 'api/**'
+      - 'api_app.py'
+      - 'supermega_runtime/**'
+      - 'tests/**'
+      - 'supabase/migrations/**'
+      - 'tools/write_app_vercel_config.mjs'
+      - 'tools/write_app_release_metadata.mjs'
+      - 'tools/verify_app_build.mjs'
+      - 'tools/verify_app_deploy_workflow.mjs'
+      - 'tools/verify_app_security_contract.mjs'
+      - 'tools/validate_supermega_database_url.py'
+      - 'tools/activate_supermega_database.ps1'
+      - 'site-manifest.json'
+      - 'package.json'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - 'requirements.txt'
+      - 'requirements-test.txt'
+      - '.github/workflows/supermega-app-deploy.yml'
+      - '.github/workflows/showroom-ci.yml'
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
           cache-dependency-path: showroom/package-lock.json
+
+      - name: Setup Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+
+      - name: Verify canonical API contracts
+        run: |
+          python -m pip install --disable-pip-version-check -r requirements-test.txt
+          python -m unittest discover -s tests -p 'test_*.py' -v
 
       - name: Install dependencies
         working-directory: showroom
         run: npm ci
 
-      - name: Guard public Vercel config
-        run: npm run vercel:guard
-
-      - name: Preflight public env
-        env:
-          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
-        run: |
-          if [ -z "$VITE_GOOGLE_MAPS_API_KEY" ]; then
-            echo "::warning title=Missing public search key::VITE_GOOGLE_MAPS_API_KEY is not set. Lead Finder will fall back to public map search during validation."
-          fi
-
-      - name: Lint
+      - name: Lint app
         working-directory: showroom
         run: npm run lint
 
-      - name: Build
+      - name: Generate app deployment contract
+        run: node tools/write_app_vercel_config.mjs
+
+      - name: Build and verify canonical app
         env:
-          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
-          VITE_BOOKING_URL: ${{ vars.VITE_BOOKING_URL }}
-          VITE_WORKSPACE_APP_BASE: ${{ vars.VITE_WORKSPACE_APP_BASE }}
-          VITE_WORKSPACE_API_BASE: ${{ vars.VITE_WORKSPACE_API_BASE }}
-          VITE_POSTHOG_KEY: ${{ secrets.VITE_POSTHOG_KEY }}
-          VITE_POSTHOG_HOST: ${{ vars.VITE_POSTHOG_HOST }}
-          VITE_SENTRY_DSN: ${{ vars.VITE_SENTRY_DSN }}
-        run: npm run build
-
-      - name: Verify public routes
-        run: |
-          for route in contact about products app/start app/portal; do
-            test -f "api-static/$route/index.html"
-          done
-          test -f "api-static/index.html"
-          test -f "api-static/social/supermega-contact-qr.png"
-
-      - name: Verify public Vercel output
-        run: |
-          node tools/create_public_vercel_output.mjs
-          node tools/verify_public_vercel_output.mjs
+          SUPERMEGA_RELEASE_COMMIT: ${{ github.sha }}
+        run: npm run app:build

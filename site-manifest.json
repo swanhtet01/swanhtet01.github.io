@@ -1,0 +1,161 @@
+{
+  "schemaVersion": "supermega.site-context.v1",
+  "contextVersion": "2026-07-22",
+  "catalogVersion": "2026-07-22.1",
+  "brand": {
+    "name": "SuperMega",
+    "domain": "supermega.dev",
+    "version": "terminal-2026-07",
+    "mark": "terminal",
+    "colors": {
+      "background": "#090d13",
+      "blue": "#6b95ff",
+      "green": "#3dd6a2"
+    }
+  },
+  "company": {
+    "positioning": "Operating software for Myanmar businesses.",
+    "statement": "SuperMega builds Shop and Plant—operating software for Myanmar businesses, with governed AI assistance inside the workflows.",
+    "headline": "Run your shop or plant from one clear system.",
+    "supporting": "Connect daily work, local payments, inventory, production, and approvals—with AI helping inside the workflow.",
+    "publicPricing": false
+  },
+  "products": [
+    {
+      "id": "shop",
+      "name": "Shop",
+      "route": "/shop/",
+      "status": "live-demo",
+      "eyebrow": "Commerce operating system",
+      "headline": "One operating system for the counter and the back office.",
+      "description": "Run sales, stock, customers, bookings, purchasing, payments, reports, and daily close without stitching together separate tools.",
+      "primaryCta": {
+        "label": "Open the Shop demo",
+        "url": "https://app.supermega.dev/shop/"
+      },
+      "secondaryCta": {
+        "label": "Configure Shop",
+        "url": "/contact/?product=shop"
+      },
+      "modules": [
+        "Register and local payments",
+        "Stock and purchasing",
+        "Customers and bookings",
+        "Reports and daily close",
+        "Roles, audit, backup and recovery",
+        "Governed summaries and draft actions"
+      ],
+      "templates": [
+        {
+          "id": "retail-counter",
+          "name": "Retail counter",
+          "outcome": "Fast selling, stock control, customer history, and a reliable close."
+        },
+        {
+          "id": "restaurant-inventory",
+          "name": "Restaurant and inventory",
+          "outcome": "Menu sales, ingredients, purchasing, waste, cash, and shift close."
+        },
+        {
+          "id": "service-bookings",
+          "name": "Service and bookings",
+          "outcome": "Appointments, work status, customer follow-up, parts, and payments."
+        },
+        {
+          "id": "multi-branch",
+          "name": "Multi-branch control",
+          "outcome": "Shared catalogue, branch roles, transfers, exceptions, and owner reporting."
+        }
+      ]
+    },
+    {
+      "id": "plant",
+      "name": "Plant",
+      "route": "/plant/",
+      "status": "live-demo",
+      "eyebrow": "Production operating system",
+      "headline": "Give the factory floor one operational memory.",
+      "description": "Connect production plans, machine state, materials, quality, maintenance, issues, and management handoffs in one controlled system.",
+      "primaryCta": {
+        "label": "Open the Plant demo",
+        "url": "https://app.supermega.dev/plant/"
+      },
+      "secondaryCta": {
+        "label": "Configure Plant",
+        "url": "/contact/?product=plant"
+      },
+      "modules": [
+        "Planning and production records",
+        "Machine state and downtime",
+        "Materials and receiving",
+        "Quality and traceability",
+        "Issues, approvals and shift handoff",
+        "Governed summaries and anomaly review"
+      ],
+      "templates": [
+        {
+          "id": "production-control",
+          "name": "Production control",
+          "outcome": "Plan, run, confirm, and review output by line, shift, and product."
+        },
+        {
+          "id": "maintenance-downtime",
+          "name": "Maintenance and downtime",
+          "outcome": "Record machine state, stoppages, ownership, repair, and return to service."
+        },
+        {
+          "id": "quality-traceability",
+          "name": "Quality and traceability",
+          "outcome": "Capture checks, exceptions, evidence, approval, and lot history."
+        },
+        {
+          "id": "material-receiving",
+          "name": "Material receiving",
+          "outcome": "Control arrivals, inspection, accepted quantity, variance, and stock handoff."
+        }
+      ]
+    }
+  ],
+  "pages": [
+    { "route": "/", "file": "index.html", "title": "SuperMega | Shop and Plant operating software" },
+    { "route": "/shop/", "file": "shop/index.html", "title": "Shop | SuperMega" },
+    { "route": "/plant/", "file": "plant/index.html", "title": "Plant | SuperMega" },
+    { "route": "/templates/", "file": "templates/index.html", "title": "Templates | SuperMega" },
+    { "route": "/trust/", "file": "trust/index.html", "title": "Trust | SuperMega" },
+    { "route": "/contact/", "file": "contact/index.html", "title": "Contact | SuperMega" },
+    { "route": "/privacy/", "file": "privacy/index.html", "title": "Privacy | SuperMega" }
+  ],
+  "redirects": [
+    { "source": "^/work(?:/.*)?$", "destination": "/plant/" },
+    { "source": "^/(?:products?|offers|pricing|plans|packages)/?$", "destination": "/" },
+    { "source": "^/products/(?:retail|restaurant|store|shop)/?.*$", "destination": "/shop/" },
+    { "source": "^/products/(?:factory|operations|erp|plant)/?.*$", "destination": "/plant/" },
+    { "source": "^/(?:ai-agent-solutions|ai-agents|agents|agent-templates|workcell|machine|agentops)/?.*$", "destination": "/trust/#governed-ai" },
+    { "source": "^/(?:find-clients|company-list|receiving-control|receiving-log|founder-brief|reconcile)/?.*$", "destination": "/templates/" },
+    { "source": "^/(?:start|book|setup|get-started|intake)/?.*$", "destination": "/contact/" },
+    { "source": "^/(?:app|login|clients)/?.*$", "destination": "https://app.supermega.dev/" },
+    { "source": "^/demo/?$", "destination": "https://demo.supermega.dev/" }
+  ],
+  "retiredPublicNames": [
+    "MegaOS",
+    "Arcane",
+    "Capsule",
+    "M-rune",
+    "AI Agent Solutions",
+    "Find Clients",
+    "Company List",
+    "Receiving Control",
+    "Founder Brief",
+    "WorkDesk",
+    "AgentOps",
+    "AI Workcell",
+    "Source-to-Screen"
+  ],
+  "release": {
+    "sourceBranch": "main",
+    "workflow": ".github/workflows/supermega-public-release.yml",
+    "vercelProject": "supermega-public",
+    "productionDomain": "https://supermega.dev",
+    "releaseEndpoint": "/__release.json"
+  }
+}

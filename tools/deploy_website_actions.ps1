@@ -115,7 +115,7 @@ try {
         domain = $Domain
         workflow = $workflowFile
         dispatch_ref = "main"
-        source_ref = "codex/public-enterprise-site"
+        source_ref = "main"
         pages_service = if ($pagesServicePresent) { "present" } else { "absent" }
         pages_build_type = $pagesBuildType
         pages_cname = $pagesCname
