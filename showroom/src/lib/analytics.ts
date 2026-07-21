@@ -54,7 +54,7 @@ function recordFirstPartyEvent(event: string) {
     utm_source: allowedEntrySource,
     user_device_mode: window.innerWidth < 640 ? 'phone' : window.innerWidth < 1024 ? 'tablet' : 'desktop',
   }
-  void fetch('https://supermega.dev/api/behavior-events', {
+  void fetch('/api/behavior-events', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(payload),
