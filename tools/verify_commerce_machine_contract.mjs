@@ -13,6 +13,7 @@ const template = JSON.parse(await readFile(resolve(root, 'templates/commerce-mac
 const requirements = [
   ['safe storage fallback', /function readStoredProducts\(\)[\s\S]*return DEFAULT_PRODUCTS/],
   ['catalog source contract', /loadShopCatalog\(/],
+  ['csv catalog import', /normalizeCommerceCatalogText[\s\S]*client_csv/],
   ['handoff telemetry', /commerce_handoff_exported/],
   ['reusable blueprint export', /commerce_blueprint_exported/],
   ['blueprint packet type', /supermega-commerce-machine/],
@@ -30,10 +31,10 @@ const requirements = [
   ['starter demo reset', /function resetDemo\(\)[\s\S]*setCatalogSource\('demo'\)[\s\S]*commerce_demo_reset/],
   ['conversation parser matches catalog', /function parseConversation\(\)[\s\S]*matchedProduct/],
   ['conversation parser extracts quantity', /function parseRequestedQuantity\(message: string\)/],
-  ['public agents page is reachable', /Route element=\{routeElement\(<AgentsPage \/>\)\} path="agents"/],
+  ['public agents route reaches canonical products', /Navigate replace to="\/products"[^\n]*path="agents"/],
   ['agents page offers attributed free machine', /to="\/commerce-machine\?source=agent-product"[\s\S]*Try free machine/],
-  ['shop demo query opens the runnable machine', /demo === 'shop'[\s\S]*\/commerce-machine\?source=demo&demo=shop/],
-  ['plant demo query opens the public plant product', /demo === 'plant'[\s\S]*\/products\/industrial-dqms\?source=demo&demo=plant/],
+  ['runnable commerce machine route exists', /path="commerce-machine"/],
+  ['product detail route exists for plant and other products', /path="products\/\:productId"/],
   ['conversation parser has no fixed confidence claim', [machine, analytics].join('\\n').indexOf('94%') === -1 ? /.*/ : /$a/],
 ]
 

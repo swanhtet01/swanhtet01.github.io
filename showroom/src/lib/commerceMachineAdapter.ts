@@ -68,6 +68,52 @@ export function catalogExport(items: CommerceCatalogItem[]) {
   return JSON.stringify(items, null, 2)
 }
 
+function parseCsvRows(input: string) {
+  const rows: string[][] = []
+  let row: string[] = []
+  let cell = ''
+  let quoted = false
+  for (let index = 0; index < input.length; index += 1) {
+    const char = input[index]
+    if (char === '"') {
+      if (quoted && input[index + 1] === '"') { cell += '"'; index += 1 } else quoted = !quoted
+    } else if (char === ',' && !quoted) { row.push(cell.trim()); cell = ''
+    } else if ((char === '\n' || char === '\r') && !quoted) {
+      if (char === '\r' && input[index + 1] === '\n') index += 1
+      row.push(cell.trim()); cell = ''
+      if (row.some(Boolean)) rows.push(row)
+      row = []
+    } else cell += char
+  }
+  row.push(cell.trim())
+  if (row.some(Boolean)) rows.push(row)
+  return rows
+}
+
+export function normalizeCommerceCatalogText(input: string) {
+  const rows = parseCsvRows(input)
+  if (rows.length < 2) return []
+  const header = rows[0].map((value) => value.toLowerCase().replace(/[^a-z0-9]/g, ''))
+  const indexOf = (aliases: string[], fallback: number) => {
+    const index = header.findIndex((value) => aliases.includes(value))
+    return index >= 0 ? index : fallback
+  }
+  const indexes = {
+    id: indexOf(['id', 'sku', 'code', 'productid'], 0),
+    name: indexOf(['name', 'product', 'item', 'productname'], 1),
+    price: indexOf(['price', 'amount', 'sellingprice'], 2),
+    stock: indexOf(['stock', 'quantity', 'qty', 'onhand'], 3),
+    unit: indexOf(['unit', 'uom'], 4),
+  }
+  return normalizeCommerceCatalog(rows.slice(1).map((values, rowIndex) => ({
+    id: values[indexes.id] || `item-${rowIndex + 1}`,
+    name: values[indexes.name],
+    price: values[indexes.price],
+    stock: values[indexes.stock],
+    unit: values[indexes.unit] || 'item',
+  })))
+}
+
 export function normalizeCommerceMachineBlueprint(input: unknown): CommerceMachineBlueprint | null {
   if (!input || typeof input !== 'object') return null
   const value = input as Record<string, unknown>
