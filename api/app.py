@@ -1,5 +1,5 @@
-"""Vercel function entrypoint for the SuperMega FastAPI runtime."""
+"""Vercel function entrypoint for the canonical SuperMega runtime."""
 
-from api_app import app
+from supermega_runtime.runtime import app
 
 __all__ = ["app"]

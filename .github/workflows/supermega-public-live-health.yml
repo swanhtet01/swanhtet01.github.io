@@ -1,114 +1,42 @@
-name: SuperMega Portfolio Live Health
+name: SuperMega Public Live Health
 
-# Default-branch, read-only production monitor for the public front door,
-# Shop and Plant app, and protected AI Agent Solutions control plane.
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - .github/workflows/supermega-public-live-health.yml
-      - .github/workflows/supermega-public-release.yml
-      - package.json
-      - tools/check_public_live_health.py
-      - tools/deny_stale_public_deploy.mjs
-      - tools/deploy_website_actions.ps1
-      - tools/test_public_live_health.py
-      - tools/verify_public_deploy_guard.mjs
-  pull_request:
-    branches:
-      - main
-    paths:
-      - .github/workflows/supermega-public-live-health.yml
-      - .github/workflows/supermega-public-release.yml
-      - package.json
-      - tools/check_public_live_health.py
-      - tools/deny_stale_public_deploy.mjs
-      - tools/deploy_website_actions.ps1
-      - tools/test_public_live_health.py
-      - tools/verify_public_deploy_guard.mjs
+  workflow_run:
+    workflows:
+      - SuperMega Public - Verified Prebuilt Release
+    types:
+      - completed
   workflow_dispatch:
   schedule:
-    # 08:15 Asia/Rangoon daily.
     - cron: '45 1 * * *'
 
 permissions:
   contents: read
 
 concurrency:
-  group: supermega-portfolio-live-health
+  group: supermega-public-live-health
   cancel-in-progress: true
 
 jobs:
-  live-health:
-    # Production health is authoritative on main, scheduled, and manual runs.
-    # A pull request must not be blocked by drift that exists in the already
-    # deployed public estate and is unrelated to the proposed change.
-    if: github.event_name != 'pull_request'
+  verify-live:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
-      - name: Setup Python
-        uses: actions/setup-python@v6
+      - name: Checkout current release contract
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          python-version: '3.12'
+          ref: main
+          fetch-depth: 1
 
       - name: Setup Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
           package-manager-cache: false
 
-      - name: Fetch checker from the triggering commit
+      - name: Verify current public release
         env:
-          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: |
-          curl --fail --silent --show-error --location \
-            --proto '=https' --proto-redir '=https' \
-            --retry 3 --retry-all-errors \
-            "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${SOURCE_SHA}/tools/check_public_live_health.py" \
-            --output "${RUNNER_TEMP}/check_public_live_health.py"
-
-          curl --fail --silent --show-error --location \
-            --proto '=https' --proto-redir '=https' \
-            --retry 3 --retry-all-errors \
-            "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${SOURCE_SHA}/tools/test_public_live_health.py" \
-            --output "${RUNNER_TEMP}/test_public_live_health.py"
-
-          mkdir -p "${RUNNER_TEMP}/release-guard/.github/workflows" "${RUNNER_TEMP}/release-guard/tools"
-          curl --fail --silent --show-error --location \
-            --proto '=https' --proto-redir '=https' \
-            --retry 3 --retry-all-errors \
-            "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${SOURCE_SHA}/package.json" \
-            --output "${RUNNER_TEMP}/release-guard/package.json"
-          curl --fail --silent --show-error --location \
-            --proto '=https' --proto-redir '=https' \
-            --retry 3 --retry-all-errors \
-            "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${SOURCE_SHA}/.github/workflows/supermega-public-release.yml" \
-            --output "${RUNNER_TEMP}/release-guard/.github/workflows/supermega-public-release.yml"
-          curl --fail --silent --show-error --location \
-            --proto '=https' --proto-redir '=https' \
-            --retry 3 --retry-all-errors \
-            "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${SOURCE_SHA}/.github/workflows/supermega-public-live-health.yml" \
-            --output "${RUNNER_TEMP}/release-guard/.github/workflows/supermega-public-live-health.yml"
-          curl --fail --silent --show-error --location \
-            --proto '=https' --proto-redir '=https' \
-            --retry 3 --retry-all-errors \
-            "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${SOURCE_SHA}/tools/deploy_website_actions.ps1" \
-            --output "${RUNNER_TEMP}/release-guard/tools/deploy_website_actions.ps1"
-          curl --fail --silent --show-error --location \
-            --proto '=https' --proto-redir '=https' \
-            --retry 3 --retry-all-errors \
-            "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${SOURCE_SHA}/tools/verify_public_deploy_guard.mjs" \
-            --output "${RUNNER_TEMP}/release-guard/tools/verify_public_deploy_guard.mjs"
-
-      - name: Verify public release guard
-        working-directory: ${{ runner.temp }}/release-guard
-        run: node tools/verify_public_deploy_guard.mjs
-
-      - name: Test portfolio health checker
-        working-directory: ${{ runner.temp }}
-        run: python -m unittest -v test_public_live_health.py
-
-      - name: Check current public portfolio
-        run: python "${RUNNER_TEMP}/check_public_live_health.py"
+          PUBLIC_BASE_URL: https://supermega.dev
+          EXPECTED_RELEASE_COMMIT: ${{ github.event.workflow_run.head_sha || '' }}
+        run: npm run public:verify:live

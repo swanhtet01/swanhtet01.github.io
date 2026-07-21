@@ -2631,9 +2631,16 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
     state_db = resolve_state_db(pilot_data)
     enterprise_db_url = resolve_enterprise_database_url(pilot_data)
     sync_state_from_output_dir(pilot_data)
-    auth_required = _env_truthy("SUPERMEGA_AUTH_REQUIRED", True)
-    auth_username = str(os.getenv("SUPERMEGA_APP_USERNAME", "owner")).strip().lower() or "owner"
-    auth_password = str(os.getenv("SUPERMEGA_APP_PASSWORD", "supermega-demo")).strip() or "supermega-demo"
+    runtime_environment = str(os.getenv("SUPERMEGA_ENV", "production")).strip().lower() or "production"
+    production_mode = runtime_environment in {"production", "prod"}
+    configured_auth_username = str(os.getenv("SUPERMEGA_APP_USERNAME", "")).strip().lower()
+    configured_auth_password = str(os.getenv("SUPERMEGA_APP_PASSWORD", "")).strip()
+    credentials_configured = bool(configured_auth_username and configured_auth_password)
+    uses_retired_default_credentials = configured_auth_username == "owner" and configured_auth_password == "supermega-demo"
+    credential_security_ready = credentials_configured and not uses_retired_default_credentials
+    auth_required = True if production_mode else _env_truthy("SUPERMEGA_AUTH_REQUIRED", True)
+    auth_username = configured_auth_username or ("owner" if not production_mode else "")
+    auth_password = configured_auth_password or ("supermega-demo" if not production_mode else "")
     auth_display_name = str(os.getenv("SUPERMEGA_APP_DISPLAY_NAME", "Owner")).strip() or "Owner"
     auth_role = str(os.getenv("SUPERMEGA_APP_ROLE", "owner")).strip() or "owner"
     auth_workspace_slug = str(os.getenv("SUPERMEGA_WORKSPACE_SLUG", "supermega-lab")).strip().lower() or "supermega-lab"
@@ -2656,45 +2663,36 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         and cloud_tasks_worker_url
     )
     cloud_tasks_client = tasks_v2.CloudTasksClient() if cloud_tasks_enabled else None
-    default_user_payload = enterprise_ensure_user(
-        enterprise_db_url,
-        username=auth_username,
-        password=auth_password,
-        display_name=auth_display_name,
-        role=auth_role,
-        workspace_slug=auth_workspace_slug,
-        workspace_name=auth_workspace_name,
-        workspace_plan=auth_workspace_plan,
-    )
+    default_user_payload = {}
+    if credential_security_ready or not production_mode:
+        default_user_payload = enterprise_ensure_user(
+            enterprise_db_url,
+            username=auth_username,
+            password=auth_password,
+            display_name=auth_display_name,
+            role=auth_role,
+            workspace_slug=auth_workspace_slug,
+            workspace_name=auth_workspace_name,
+            workspace_plan=auth_workspace_plan,
+        )
     default_workspace = default_user_payload.get("workspace", {}) if isinstance(default_user_payload, dict) else {}
     default_workspace_id = str(default_workspace.get("workspace_id", "")).strip()
-    enterprise_ensure_workspace_domains(
-        enterprise_db_url,
-        workspace_id=default_workspace_id,
-        workspace_slug=str(default_workspace.get("slug", auth_workspace_slug)).strip(),
-        workspace_name=str(default_workspace.get("name", auth_workspace_name)).strip(),
-    )
-    ytf_workspace = enterprise_ensure_workspace(
-        enterprise_db_url,
-        slug="ytf-plant-a",
-        name="Yangon Tyre Plant A",
-        plan="pilot",
-    )
-    enterprise_ensure_workspace_domains(
-        enterprise_db_url,
-        workspace_id=str(ytf_workspace.get("workspace_id", "")).strip(),
-        workspace_slug=str(ytf_workspace.get("slug", "ytf-plant-a")).strip(),
-        workspace_name=str(ytf_workspace.get("name", "Yangon Tyre Plant A")).strip(),
-    )
-    bootstrap_workspace_leads(
-        enterprise_db_url,
-        workspace_id=default_workspace_id,
-        rows=state_list_lead_pipeline(state_db, limit=500),
-    )
-    uses_default_credentials = auth_username == "owner" and auth_password == "supermega-demo"
+    if default_workspace_id:
+        enterprise_ensure_workspace_domains(
+            enterprise_db_url,
+            workspace_id=default_workspace_id,
+            workspace_slug=str(default_workspace.get("slug", auth_workspace_slug)).strip(),
+            workspace_name=str(default_workspace.get("name", auth_workspace_name)).strip(),
+        )
+        bootstrap_workspace_leads(
+            enterprise_db_url,
+            workspace_id=default_workspace_id,
+            rows=state_list_lead_pipeline(state_db, limit=500),
+        )
 
     app = FastAPI(title="SuperMega Service", version="0.2.0")
-    cors_origins = [origin.strip() for origin in os.getenv("SUPERMEGA_CORS_ORIGINS", "*").split(",") if origin.strip()]
+    default_cors = "https://app.supermega.dev,https://supermega.dev,https://www.supermega.dev" if production_mode else "*"
+    cors_origins = [origin.strip() for origin in os.getenv("SUPERMEGA_CORS_ORIGINS", default_cors).split(",") if origin.strip()]
     if not cors_origins:
         cors_origins = ["*"]
     app.add_middleware(
@@ -2706,6 +2704,8 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
     )
 
     def _session_from_request(request: Request) -> dict[str, Any] | None:
+        if production_mode and not credential_security_ready:
+            return None
         session_id = str(request.cookies.get(SESSION_COOKIE_NAME, "")).strip()
         if not session_id:
             return None
@@ -9857,12 +9857,15 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         enterprise_db_configured = bool(enterprise_db_url) and enterprise_db_scheme not in {"", "sqlite"}
         coverage_score = int(coverage.get("readiness_score", 0) or 0)
         free_mode_ready = bool(site_root.exists()) and bool(pilot_data.exists()) and bool(Path(state_db).exists())
-        readiness_status = "ready" if enterprise_db_configured and coverage_score > 0 else "attention"
+        security_ready = auth_required and credential_security_ready
+        readiness_status = "ready" if enterprise_db_configured and coverage_score > 0 and security_ready else "attention"
         activation_requirements = []
         if not enterprise_db_configured:
             activation_requirements.append("Set SUPERMEGA_DATABASE_URL to an approved managed Postgres connection.")
         if coverage_score <= 0:
             activation_requirements.append("Publish a non-empty data coverage report after the first real workspace source sync.")
+        if not security_ready:
+            activation_requirements.append("Configure unique production owner credentials and keep authentication required.")
         return {
             "status": readiness_status,
             "service": "supermega-service",
@@ -9878,6 +9881,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             },
             "enterprise_db_ready": enterprise_db_configured,
             "enterprise_db_scheme": enterprise_db_scheme or "unknown",
+            "security_ready": security_ready,
             "review_status": review.get("status", "unknown"),
             "autopilot_status": autopilot.get("status", "unknown"),
             "coverage_score": coverage_score,
@@ -9911,12 +9915,14 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                 if not auth_required
                 else None
             ),
-            "uses_default_credentials": uses_default_credentials,
-            "workspaces": enterprise_list_user_workspaces(enterprise_db_url, username=str(session.get("username", auth_username) if session else auth_username)),
+            "security_ready": credential_security_ready,
+            "workspaces": enterprise_list_user_workspaces(enterprise_db_url, username=str(session.get("username", ""))) if session else [],
         }
 
     @app.post("/api/auth/login")
     def auth_login(request: Request, response: Response, payload: LoginRequest) -> dict[str, Any]:
+        if production_mode and not credential_security_ready:
+            raise HTTPException(status_code=503, detail="Production authentication is not configured.")
         tenant_defaults = _public_tenant_defaults(request)
         user = enterprise_authenticate_user(enterprise_db_url, username=payload.username, password=payload.password)
         if not user:
@@ -9957,12 +9963,13 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                     "workspace_plan": session.get("workspace_plan", ""),
                 }
             ),
-            "uses_default_credentials": uses_default_credentials,
+            "security_ready": credential_security_ready,
             "workspaces": enterprise_list_user_workspaces(enterprise_db_url, username=str(user.get("username", ""))),
         }
 
     @app.post("/api/auth/signup")
     def auth_signup(request: Request, response: Response, payload: SignupRequest) -> dict[str, Any]:
+        raise HTTPException(status_code=410, detail="Public account provisioning is disabled. Request a controlled workspace setup.")
         tenant_defaults = _public_tenant_defaults(request)
         email = str(payload.email or "").strip().lower()
         company = str(payload.company or tenant_defaults.get("company", "")).strip()
@@ -10055,8 +10062,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
 
     @app.post("/api/public/workspace/bootstrap")
     def public_workspace_bootstrap(request: Request, response: Response, payload: PublicWorkspaceBootstrapRequest) -> dict[str, Any]:
-        session_payload = _ensure_public_workspace_session(request, response, payload)
-        return {"status": "ready", **session_payload}
+        raise HTTPException(status_code=410, detail="Public workspace provisioning is disabled. Request a controlled workspace setup.")
 
     @app.post("/api/public/workspace/save-leads")
     def public_workspace_save_leads(
@@ -10064,6 +10070,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         response: Response,
         payload: PublicWorkspaceLeadSaveRequest,
     ) -> dict[str, Any]:
+        raise HTTPException(status_code=410, detail="Public workspace provisioning is disabled. Request a controlled workspace setup.")
         session_payload = _ensure_public_workspace_session(
             request,
             response,

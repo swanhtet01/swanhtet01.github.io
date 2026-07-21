@@ -1,40 +1,41 @@
-# Mark 1 Strategic TODO
+# SuperMega execution queue
 
-> Mandate: build Swan's personal AI operating system first. The primary environment is Swan's own data and workflows. Future client or industry solutions must be derived from the pilot only after the pilot is stable.
+## P0 — release the verified consolidation
 
-| Priority | Workstream | Owner Pod | Status | Outcome |
-| --- | --- | --- | --- | --- |
-| P0 | **Personal Pilot Reframe** | Architecture Pod | COMPLETE | Core repo docs now define the system as a single-tenant personal pilot instead of a generic DQMS/manufacturing product. |
-| P0 | **Data Estate Inventory** | Knowledge Pod | COMPLETE | Local Yangon Tyre corpus confirmed, shared Drive root validated via service account, and Gmail is now connected for Yangon Tyre-focused query profiles. |
-| P0 | **Manus Asset Assimilation** | Knowledge Pod | COMPLETE | Manus and keystore archives are cataloged into `Super Mega Inc/manus_catalog/` with classification, relevance score, and action (`import/reference/quarantine`). |
-| P0 | **SuperMega Showroom Rebuild** | Product Pod | IN_PROGRESS | React + TypeScript + Tailwind showroom is implemented in `showroom/` with decision-locked IA and conversion CTAs. |
-| P0 | **Domain Cutover + Monitoring** | Platform Pod | IN_PROGRESS | GitHub Pages deploy workflow and domain health workflow/scripts are in place; DNS/TLS cutover still required in provider settings. |
-| P0 | **Ingestion Pipeline V1** | Data Systems Pod | TODO | Build reliable ingestion for local files, synced drives, spreadsheets, PDFs, docs, and exported email/web content. |
-| P0 | **Grounded Search and Memory** | Retrieval Pod | IN_PROGRESS | Local SQLite full-text indexing is being added over the Yangon Tyre mirror to enable grounded retrieval before heavier memory layers. |
-| P0 | **Multi-scale Briefing** | Executive Pod | IN_PROGRESS | Every important query should generate director view, operational readout, granular evidence, and next-action planning from the same sources. |
-| P0 | **Daily Briefing Agent** | Executive Pod | IN_PROGRESS | Gmail and local file evidence can now feed grounded daily and weekly briefs once the recurring summary flow is wired. |
-| P0 | **Autopilot Execution Cadence** | Executive Pod | IN_PROGRESS | `autopilot-run` command and scheduler runbook are added; next is production scheduling and reliability tuning of Drive publish. |
-| P0 | **Personal Dashboard Surface** | Executive Pod | IN_PROGRESS | The latest Swan Intelligence Hub now renders as a stable local site folder and combines internal email, local evidence packs, and curated external watch sources. |
-| P1 | **DQMS Foundation Layer** | Quality Pod | COMPLETE | DQMS starter registers and weekly summary outputs are generated through `dqms-sync` and surfaced in platform dashboard snapshots. |
-| P1 | **Writer and Research Agents** | Knowledge Work Pod | TODO | Add drafting, synthesis, comparison, and deep-research flows over Swan's own data and selected web sources. |
-| P1 | **Browser Automation Layer** | Operator Pod | TODO | Add browser workers only for workflows that cannot be done through APIs or direct file/database access. |
-| P1 | **Coding Workspace Integration** | Dev Pod | TODO | Connect the pilot memory and task system to Mark 1 coding workflows so the machine can improve its own repo. |
-| P1 | **Model Router Hardening** | Model Ops Pod | TODO | Keep a simple provider router for Gemini, Claude, and optional OpenAI workloads with cost and latency telemetry. |
-| P1 | **Workspace Publishing** | Platform Pod | IN_PROGRESS | Local publish works, Shared Drive publish works, and the next step is scheduled recurring execution and role-specific artifact delivery. |
-| P2 | **Template Extraction** | Platform Pod | TODO | After the pilot is stable, extract reusable patterns into optional client or industry templates. |
-| P0 | **Secret Hygiene** | Security Pod | IN_PROGRESS | Quarantine policy and rotation checklist are documented; API/OAuth key rotation execution remains pending. |
+- [x] Consolidate public authority to Shop and Plant.
+- [x] Consolidate the product app to Command, Shop, Plant, Assist, Setup, and Trust.
+- [x] Apply the `>_` terminal brand across canonical pages and generated metadata.
+- [x] Remove active legacy product/client context and unreachable legacy app assets.
+- [x] Add bounded hosted agent roles and scheduler contracts.
+- [x] Add the private Supabase schema, managed-trial API, signed identity, capabilities, events, approvals, and fail-closed write gate.
+- [x] Add read-only database activation evidence and per-connection privileged-role/TLS rejection.
+- [x] Build and verify protected Vercel previews for public and app artifacts.
+- [ ] Install/authenticate GitHub CLI on this machine, publish the consolidation branch, and open a draft pull request.
+- [ ] Pass GitHub checks, merge the reviewed commit, and let the verified workflows promote exact artifacts.
+- [ ] Verify both production release endpoints, routes, contact intake, scheduler state, domains, and rollback targets.
+- [ ] After successful promotion, remove old Vercel variables and deployments proven unused by the new artifacts.
 
-## Immediate Directives
+## P1 — first qualified trials
 
-1. Build the data inventory before adding more agents.
-2. Prefer API and file-native integrations before browser or desktop automation.
-3. Keep the system single-tenant until the memory and retrieval layer is reliable.
-4. Treat manufacturing assets as legacy demos, not roadmap drivers.
-5. Rotate any credentials that were exposed in screenshots or notes.
+- [ ] Select one Shop and one Plant design partner with a bounded workflow and named owner.
+- [ ] Establish baseline, KPI definitions, users, data inventory, exclusions, support, and decision date.
+- [ ] Apply the Supabase migration on non-production infrastructure and provision a dedicated runtime login.
+- [ ] Pass read-only schema/role/RLS/grant/policy/trigger/index audit.
+- [ ] Pass isolation, revocation, immutable-event, concurrency, approval, backup, restore, rollback, and golden-journey tests.
+- [ ] Record Founder and customer trial-owner go/no-go approval before enabling managed writes.
+- [ ] Run the 30-day lifecycle and publish a sourced decision report.
 
-## Notes
+## P1 — growth and customer success
 
-- Swan is the pilot company and the first client.
-- The product is a personal operating layer over Swan's own data estate.
-- Track 2 explicitly includes ERP + DQMS + plant-manager workflows for Yangon Tyre leadership.
-- Client-facing templates can come later, but only after the personal pilot proves the architecture.
+- [ ] Route every qualified contact into one lead record with product, template, owner, stage, next action, and consent state.
+- [ ] Prepare template-specific demo environments and reset/evidence checks.
+- [ ] Run the human-approved follow-up sequences in `SUPERMEGA_LAUNCH_AND_TRIAL_PLAYBOOK.md`.
+- [ ] Review funnel, activation, product usage, support, reliability, and value KPIs weekly.
+
+## P2 — product scale
+
+- [ ] Promote only repeated trial needs into shared Shop or Plant features.
+- [ ] Add governed connectors behind typed interfaces, least privilege, idempotency, observability, and rollback.
+- [ ] Add privacy-aware product analytics and feature flags.
+- [ ] Expand Assist only where evidence quality and approval controls are measurable.
+- [ ] Graduate R&D experiments only after demand, safety, support, and lifecycle gates pass.

@@ -1,123 +1,66 @@
-# SuperMega Mark 1
+# >_ SuperMega
 
-This repo is the control surface for **Swan's personal AI operating system**.
+SuperMega builds operating software for Myanmar businesses. The product portfolio is deliberately focused:
 
-The primary deployment is not a generic DQMS, plant manager, or multi-tenant manufacturing product. The primary deployment is **one user, one data estate, one pilot client: Swan**.
+- **Shop** — sales, catalogue, stock, orders, close, and operating exceptions.
+- **Plant** — production jobs, machines, materials, quality, maintenance, and shift handoffs.
 
-Current focus:
+`>_` is the operating signature: direct, evidence-led, and ready for action. AI agents prepare work, surface exceptions, and draft decisions; a named person remains accountable for consequential actions.
 
-- ingest and reason over Swan's own files, notes, spreadsheets, documents, and workspace data
-- run a persistent agent stack that can research, summarize, plan, draft, code, and automate repeatable workflows
-- keep manufacturing and client-specific assets as legacy demos or future templates, not the core product story
+## Canonical surfaces
 
-Core docs:
+| Surface | Domain | Routes | Purpose |
+| --- | --- | --- | --- |
+| Public site | `supermega.dev` | `/`, `/shop/`, `/plant/`, `/templates/`, `/trust/`, `/contact/`, `/privacy/` | Positioning, product proof, templates, trust, and qualified contact intake |
+| Product app | `app.supermega.dev` | `/`, `/shop/`, `/plant/`, `/assist/`, `/setup/`, `/trust/` | Command workspace, Shop, Plant, governed assistance, setup, and controls |
 
-- `personal-pilot-architecture.md` - v1 architecture and stack decision for the personal pilot
-- `mark1_pilot/README.md` - runnable pilot scaffold for Yangon Tyre plus Gmail
-- `showroom/` - legacy React showroom prototype; it is not the production `supermega.dev` source
-- `.github/workflows/supermega-public-release.yml` - verified Vercel release for the canonical public branch
-- `command-center/ARCHITECTURE_v2.3.md` - broader Mark 1 machine vision and long-term architecture
-- `DOCUMENTATION-INDEX.md` - map of active vs legacy docs
-- `QUICKSTART.md` - fastest path to run pilot, fix Gmail, and test on phone/laptop
-- `DEPLOY_APP.md` - single-app deploy path for the website + API together
-- `TODO.md` - current delegated workstreams
-- `Super Mega Inc/runbooks/` - domain cutover and showroom operations runbooks
-- `Super Mega Inc/runbooks/ai_native_erp_architecture_v1.md` - production blueprint for AI-native ERP rollout from single-tenant to multi-tenant
-- `Super Mega Inc/runbooks/supermega_machine_architecture.md` - unified architecture for internal platform + website + product modules
-- `Super Mega Inc/sales/` - package one-pagers and proposal/discovery collateral
+Client-specific deployments, legacy demos, and old product names are not part of the current public or application authority.
 
-Quick commands:
+## Source authority
+
+- `CURRENT.md` — company, product, domain, context, and release authority.
+- `site-manifest.json` — public information architecture, Shop/Plant catalogue, versioning, and redirects.
+- `showroom/src/core/CoreApp.tsx` — canonical application experience.
+- `api/app.py` — the only Vercel function entrypoint.
+- `supermega_runtime/runtime.py` — canonical FastAPI application runtime.
+- `supermega_runtime/trial_runtime.py` and `supermega_runtime/trial_store.py` — managed-trial identity, workspace, capability, state, event, and approval boundaries.
+- `supermega_runtime/cloud_runtime.py` — bounded hosted agent scheduler.
+- `SUPERMEGA_TRIAL_AND_AGENT_OPERATING_MODEL.md` — agent roles and managed-trial controls.
+- `SUPERMEGA_LAUNCH_AND_TRIAL_PLAYBOOK.md` — qualification, demo, onboarding, trial, KPI, and communications lifecycle.
+
+## Local verification
+
+Requirements: Node.js 24 and Python 3.12.
 
 ```powershell
-# Personal pilot
-powershell -ExecutionPolicy Bypass -File .\tools\pilot.ps1 platform-publish --config .\config.example.json --email-max-results 12
-
-# Manus inventory
-powershell -ExecutionPolicy Bypass -File .\tools\pilot.ps1 manus-catalog --config .\config.example.json
-
-# DQMS starter registers
-powershell -ExecutionPolicy Bypass -File .\tools\pilot.ps1 dqms-sync --config .\config.example.json
-
-# ERP sync + critical file focus tracking
-powershell -ExecutionPolicy Bypass -File .\tools\pilot.ps1 erp-sync --config .\config.example.json
-powershell -ExecutionPolicy Bypass -File .\tools\pilot.ps1 erp-focus --config .\config.example.json
-
-# Team input center sheets (one-time template setup)
-powershell -ExecutionPolicy Bypass -File .\tools\pilot.ps1 input-center-setup --config .\config.example.json
-
-# Team input center sync (daily)
-powershell -ExecutionPolicy Bypass -File .\tools\pilot.ps1 input-center-sync --config .\config.example.json
-
-# Daily autopilot run
-powershell -ExecutionPolicy Bypass -File .\tools\pilot.ps1 autopilot-run --config .\config.example.json --skip-drive --run-domain-check
-
-# Continuous autonomous loop (hourly, 0 = unlimited runs)
-.\tools\autopilot_loop.ps1 -Config .\config.example.json -IntervalMinutes 60 -MaxRuns 0 -SkipDrive
-
-# Data coverage scorecard (what data is missing and what teams should update)
-powershell -ExecutionPolicy Bypass -File .\tools\pilot.ps1 coverage-report --config .\config.example.json
-
-# List reusable client/setup profiles
-powershell -ExecutionPolicy Bypass -File .\tools\pilot.ps1 config-profiles --config .\config.example.json
-
-# Create a new setup profile from template (multi-client bootstrap)
-powershell -ExecutionPolicy Bypass -File .\tools\pilot.ps1 config-profile-create --config .\config.example.json --profile my_new_client --from-profile smb_template
-
-# One-page execution recap across website + YTF pilot + SuperMega R&D
-powershell -ExecutionPolicy Bypass -File .\tools\pilot.ps1 execution-review --config .\config.example.json
-
-# Re-auth Gmail if token expired/revoked
-powershell -ExecutionPolicy Bypass -File .\tools\pilot.ps1 gmail-auth --config .\config.example.json --host 127.0.0.1 --port 8765
-
-# Manual fallback if localhost callback fails
-powershell -ExecutionPolicy Bypass -File .\tools\pilot.ps1 gmail-auth-start --config .\config.example.json
-powershell -ExecutionPolicy Bypass -File .\tools\pilot.ps1 gmail-auth-finish --config .\config.example.json --callback-url "<paste-full-callback-url>"
-
-# Full one-command run + open outputs
-powershell -ExecutionPolicy Bypass -File .\tools\run_solution.ps1 -Config .\config.example.json -SkipDrive
-
-# Unified machine status (website + internal platform health)
-powershell -ExecutionPolicy Bypass -File .\tools\supermega_machine.ps1 -Action status -Config .\config.example.json
-
-# Unified daily run
-powershell -ExecutionPolicy Bypass -File .\tools\supermega_machine.ps1 -Action daily -Config .\config.example.json
-
-# Unified website DNS/HTTPS diagnose
-powershell -ExecutionPolicy Bypass -File .\tools\supermega_machine.ps1 -Action website-check
-
-# Cloud Run fallback preflight + deploy
-powershell -ExecutionPolicy Bypass -File .\tools\supermega_machine.ps1 -Action cloudrun-preflight -ProjectId supermega-468612 -Region asia-southeast1 -Service supermega-showroom
-powershell -ExecutionPolicy Bypass -File .\tools\supermega_machine.ps1 -Action cloudrun-deploy -ProjectId supermega-468612 -Region asia-southeast1 -Service supermega-showroom
-
-# Run against a profile overlay (multi-client setup)
-powershell -ExecutionPolicy Bypass -File .\tools\run_solution.ps1 -Config .\config.example.json -Profile smb_template -SkipDrive
-
-# Skip website domain check if you only want local pipeline speed
-powershell -ExecutionPolicy Bypass -File .\tools\run_solution.ps1 -Config .\config.example.json -SkipDrive -SkipDomainCheck
-
-# Serve dashboard/API for phone/laptop access on LAN
-powershell -ExecutionPolicy Bypass -File .\tools\run_solution.ps1 -Config .\config.example.json -SkipRun -Serve -BindHost 0.0.0.0 -Port 8787
-
-# Run the full app as one container with persistent saved data
-docker compose -f .\docker-compose.app.yml up --build
-
-# Inspect the Vercel-only production release plan without deploying
-powershell -ExecutionPolicy Bypass -File .\tools\deploy_website_actions.ps1 -DryRun
-
-# Dispatch the verified Vercel production release and wait for live checks
-powershell -ExecutionPolicy Bypass -File .\tools\deploy_website_actions.ps1
-
-# Showroom
-cd showroom
-npm ci
-npm run build
+npm.cmd --prefix showroom ci
+python -m pip install -r requirements-test.txt
+python -m unittest discover -s tests -p 'test_*.py' -v
+npm.cmd run app:build
+npm.cmd run public:prebuilt
+npm.cmd audit --omit=dev
+npm.cmd --prefix showroom audit --omit=dev
 ```
 
-Legacy/template materials still live here for reference:
+Run the product app locally:
 
-- `aws-deployment-architecture.md`
-- `yangon-tyre-deployment.md`
-- `manufacturing-template.md`
-- `ytf-dqms/`
+```powershell
+npm.cmd run dev
+```
 
-These are no longer the main product definition for v1.
+## Release policy
+
+Production releases come only from reviewed `main` commits through:
+
+- `.github/workflows/supermega-app-deploy.yml` for `app.supermega.dev` / Vercel project `megaos`.
+- `.github/workflows/supermega-public-release.yml` for `supermega.dev` / Vercel project `supermega-public`.
+
+Each workflow builds an immutable preview, verifies its exact release metadata and live routes, promotes that same artifact, verifies production, and rolls back a failed promotion. Direct local production deployment is blocked.
+
+The public contact endpoint also fails closed unless its dedicated idempotency secret and at least one delivery channel are configured. The public release workflow verifies the active Vercel Firewall rule that limits contact POSTs to five requests per IP per ten minutes. The former Cloud Run deployment workflow is retired; Vercel is the sole production owner of both canonical domains.
+
+## Managed-trial boundary
+
+The deployed app is safe to use as an isolated browser-local demo. It is not a customer system of record until the private Supabase schema, dedicated non-`BYPASSRLS` login, signed identity, named memberships, least-privilege capabilities, immutable audit, backup, restore, acceptance, and human approval gates pass.
+
+Follow `docs/supermega-enterprise-activation.md`. Managed writes default to disabled and fail closed.
