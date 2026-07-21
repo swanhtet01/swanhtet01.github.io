@@ -14,6 +14,7 @@ function sanitizeEventPayload(properties: EventPayload): EventPayload {
 
 const posthogKey = (import.meta.env.VITE_POSTHOG_KEY ?? '').trim()
 const posthogHost = (import.meta.env.VITE_POSTHOG_HOST ?? 'https://us.i.posthog.com').trim()
+const firstPartyEventsEndpoint = (import.meta.env.VITE_FIRST_PARTY_EVENTS_ENDPOINT ?? '').trim()
 
 let initialized = false
 let loadingPromise: Promise<void> | null = null
@@ -43,7 +44,7 @@ const FIRST_PARTY_EVENT_TYPES: Record<string, string> = {
 
 function recordFirstPartyEvent(event: string) {
   const eventType = FIRST_PARTY_EVENT_TYPES[event]
-  if (!eventType || typeof window === 'undefined') return
+  if (!eventType || typeof window === 'undefined' || !firstPartyEventsEndpoint) return
   const entrySource = new URLSearchParams(window.location.search).get('source')
   const allowedEntrySource = entrySource && ['agent-product', 'demo', 'public-site'].includes(entrySource) ? entrySource : undefined
   const payload = {
@@ -54,7 +55,7 @@ function recordFirstPartyEvent(event: string) {
     utm_source: allowedEntrySource,
     user_device_mode: window.innerWidth < 640 ? 'phone' : window.innerWidth < 1024 ? 'tablet' : 'desktop',
   }
-  void fetch('/api/behavior-events', {
+  void fetch(firstPartyEventsEndpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(payload),
