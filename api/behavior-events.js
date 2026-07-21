@@ -1,7 +1,7 @@
 const crypto = require('crypto')
 const datastore = require('./lib/supermega-datastore')
 
-const defaultAllowedOrigins = 'https://supermega.dev,https://www.supermega.dev'
+const defaultAllowedOrigins = 'https://supermega.dev,https://www.supermega.dev,https://app.supermega.dev,https://ytf.supermega.dev'
 const rateLimitWindowMs = Number(process.env.SUPERMEGA_BEHAVIOR_RATE_WINDOW_MS || 15 * 60 * 1000)
 const rateLimitMax = Number(process.env.SUPERMEGA_BEHAVIOR_RATE_MAX || 120)
 const rateStore = globalThis.__supermegaBehaviorEventRateStore || new Map()
