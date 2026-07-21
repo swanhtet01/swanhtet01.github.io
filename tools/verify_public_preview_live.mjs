@@ -5,7 +5,8 @@ import { dirname, resolve } from 'node:path'
 const manifest = JSON.parse(await readFile(new URL('../site-manifest.json', import.meta.url), 'utf8'))
 const baseUrl = String(process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '')
 const expectedCommit = String(process.env.EXPECTED_RELEASE_COMMIT || '').toLowerCase()
-const vercelToken = String(process.env.VERCEL_CLI_TOKEN || '').trim()
+const vercelToken = String(process.env.VERCEL_TOKEN || '').trim()
+const cliEnv = vercelToken ? { ...process.env, VERCEL_TOKEN: vercelToken } : process.env
 const maxAttempts = 6
 const retryWaitBuffer = new Int32Array(new SharedArrayBuffer(4))
 
@@ -21,8 +22,7 @@ function describeFailure(error) {
 }
 
 function get(path) {
-  const tokenArgs = vercelToken ? ['--token', vercelToken] : []
-  const npxArgs = ['--yes', 'vercel@56.1.0', 'curl', path, '--deployment', baseUrl, ...tokenArgs, '--', '--silent', '--show-error', '--fail', '--location']
+  const npxArgs = ['--yes', 'vercel@56.1.0', 'curl', path, '--deployment', baseUrl]
   const executable = process.platform === 'win32' ? process.execPath : 'npx'
   const executableArgs = process.platform === 'win32'
     ? [resolve(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npx-cli.js'), ...npxArgs]
@@ -32,7 +32,7 @@ function get(path) {
     try {
       return execFileSync(executable, executableArgs, {
         encoding: 'utf8',
-        env: process.env,
+        env: cliEnv,
         maxBuffer: 8 * 1024 * 1024,
         stdio: ['ignore', 'pipe', 'pipe'],
       })
@@ -70,18 +70,23 @@ const contact = JSON.parse(get('/api/contact-submissions/status'))
 if (contact.status !== 'ready' || contact.service !== 'supermega-contact' || contact.accepting !== true) throw new Error('preview_contact_not_accepting')
 if (contact.controls?.idempotency !== 'required' || contact.controls?.edge_rate_limit !== 'required') throw new Error('preview_contact_controls_wrong')
 
-const tokenArgs = vercelToken ? ['--token', vercelToken] : []
-const inspectArgs = ['--yes', 'vercel@56.1.0', 'inspect', baseUrl, '--format=json', ...tokenArgs]
+const inspectArgs = ['--yes', 'vercel@56.1.0', 'inspect', baseUrl, '--format=json']
 const inspectExecutable = process.platform === 'win32' ? process.execPath : 'npx'
 const inspectExecutableArgs = process.platform === 'win32'
   ? [resolve(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npx-cli.js'), ...inspectArgs]
   : inspectArgs
-const deployment = JSON.parse(execFileSync(inspectExecutable, inspectExecutableArgs, {
-  encoding: 'utf8',
-  env: process.env,
-  maxBuffer: 8 * 1024 * 1024,
-  stdio: ['ignore', 'pipe', 'pipe'],
-}))
+let deploymentOutput
+try {
+  deploymentOutput = execFileSync(inspectExecutable, inspectExecutableArgs, {
+    encoding: 'utf8',
+    env: cliEnv,
+    maxBuffer: 8 * 1024 * 1024,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+} catch (error) {
+  throw new Error(`protected_preview_inspect_failed:${describeFailure(error)}`)
+}
+const deployment = JSON.parse(deploymentOutput)
 const deploymentFunctions = (deployment.builds || [])
   .flatMap((build) => build.output || [])
   .filter((output) => output.type === 'lambda')

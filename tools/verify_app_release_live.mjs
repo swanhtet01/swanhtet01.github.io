@@ -4,25 +4,34 @@ import { dirname, resolve } from 'node:path'
 const baseUrl = String(process.env.APP_BASE_URL || 'https://app.supermega.dev').replace(/\/$/, '')
 const expectedCommit = String(process.env.EXPECTED_RELEASE_COMMIT || '').trim()
 const protectedPreview = process.env.VERCEL_PROTECTED_PREVIEW === '1'
-const vercelToken = String(process.env.VERCEL_CLI_TOKEN || '').trim()
+const vercelToken = String(process.env.VERCEL_TOKEN || '').trim()
+const cliEnv = vercelToken ? { ...process.env, VERCEL_TOKEN: vercelToken } : process.env
 const routes = ['/', '/shop/', '/plant/', '/assist/', '/setup/', '/trust/']
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+function describeCliFailure(error) {
+  const status = Number.isInteger(error?.status) ? error.status : 'unknown'
+  let stderr = String(error?.stderr || '').trim()
+  if (vercelToken) stderr = stderr.replaceAll(vercelToken, '[redacted]')
+  stderr = stderr.replace(/([?&](?:token|secret|key)=)[^&\s]+/gi, '$1[redacted]')
+  const lines = stderr.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).slice(-3)
+  return `exit=${status}${lines.length ? ` message=${lines.join(' | ').slice(0, 480)}` : ''}`
+}
 
 async function get(path, attempts = 7) {
   let lastError
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
       if (protectedPreview) {
-        const tokenArgs = vercelToken ? ['--token', vercelToken] : []
-        const npxArgs = ['--yes', 'vercel@56.1.0', 'curl', path, '--deployment', baseUrl, ...tokenArgs, '--', '--silent', '--show-error', '--fail', '--location']
+        const npxArgs = ['--yes', 'vercel@56.1.0', 'curl', path, '--deployment', baseUrl]
         const executable = process.platform === 'win32' ? process.execPath : 'npx'
         const executableArgs = process.platform === 'win32'
           ? [resolve(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npx-cli.js'), ...npxArgs]
           : npxArgs
         const body = execFileSync(executable, executableArgs, {
           encoding: 'utf8',
-          env: process.env,
+          env: cliEnv,
           maxBuffer: 8 * 1024 * 1024,
           stdio: ['ignore', 'pipe', 'pipe'],
         })
@@ -33,12 +42,7 @@ async function get(path, attempts = 7) {
       return { response, body: await response.text() }
     } catch (error) {
       if (protectedPreview) {
-        const detail = String(error?.stderr || error?.message || error)
-          .trim()
-          .split(/\r?\n/)
-          .slice(-3)
-          .join(' | ')
-        lastError = new Error(`protected_preview_request_failed:${path}:${detail || 'unknown_error'}`)
+        lastError = new Error(`protected_preview_request_failed:${path}:${describeCliFailure(error)}`)
       } else {
         lastError = error
       }
@@ -87,18 +91,23 @@ for (const forbidden of ['pos.supermega.dev', 'ytf.supermega.dev', 'Yangon Tyre'
 
 let deploymentFunctions = null
 if (protectedPreview) {
-  const tokenArgs = vercelToken ? ['--token', vercelToken] : []
-  const npxArgs = ['--yes', 'vercel@56.1.0', 'inspect', baseUrl, '--format=json', ...tokenArgs]
+  const npxArgs = ['--yes', 'vercel@56.1.0', 'inspect', baseUrl, '--format=json']
   const executable = process.platform === 'win32' ? process.execPath : 'npx'
   const executableArgs = process.platform === 'win32'
     ? [resolve(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npx-cli.js'), ...npxArgs]
     : npxArgs
-  const deployment = JSON.parse(execFileSync(executable, executableArgs, {
-    encoding: 'utf8',
-    env: process.env,
-    maxBuffer: 8 * 1024 * 1024,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  }))
+  let deploymentOutput
+  try {
+    deploymentOutput = execFileSync(executable, executableArgs, {
+      encoding: 'utf8',
+      env: cliEnv,
+      maxBuffer: 8 * 1024 * 1024,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+  } catch (error) {
+    throw new Error(`protected_preview_inspect_failed:${describeCliFailure(error)}`)
+  }
+  const deployment = JSON.parse(deploymentOutput)
   deploymentFunctions = (deployment.builds || [])
     .flatMap((build) => build.output || [])
     .filter((output) => output.type === 'lambda')
