@@ -30,7 +30,7 @@ if (!previewVerifier.includes('deployment_function_surface_wrong')) failures.pus
 if (!previewVerifier.includes('const maxAttempts = 6') || !previewVerifier.includes('protected_preview_retry:')) failures.push('preview_propagation_retry_missing')
 if (previewVerifier.includes("'--silent'") || previewVerifier.includes("'--show-error'") || previewVerifier.includes("'--location'")) failures.push('preview_verifier_uses_platform_specific_curl_flags')
 if (previewVerifier.includes("'--token'") || !previewVerifier.includes('protected_preview_inspect_failed:') || !previewVerifier.includes('process.env.VERCEL_TOKEN')) failures.push('preview_verifier_credential_handling_unsafe')
-if (!rollbackResolver.includes("deployment.target !== 'production'") || !rollbackResolver.includes('aliases.includes(expectedAlias)') || !rollbackResolver.includes("deployment.readyState !== 'READY'")) failures.push('rollback_alias_resolver_incomplete')
+if (!rollbackResolver.includes("mode === 'alias'") || !rollbackResolver.includes("mode === 'deployment'") || !rollbackResolver.includes("state.projectId !== expectedProjectId") || !rollbackResolver.includes("nestedDeploymentId !== deploymentId") || !rollbackResolver.includes("state.id !== expectedDeploymentId") || !rollbackResolver.includes("state.target !== 'production'") || !rollbackResolver.includes("state.readyState !== 'READY'")) failures.push('rollback_alias_resolver_incomplete')
 for (const token of ['SUPERMEGA_CONTACT_IDEMPOTENCY_SECRET', 'idempotency_key_required', 'rate_limited', 'resolution=ignore-duplicates,return=representation', "'idempotency-key'"]) {
   if (!publicGenerator.includes(token)) failures.push(`contact_abuse_control_missing:${token}`)
 }
@@ -61,8 +61,10 @@ for (const token of [
   'npm run public:prebuilt',
   'tools/test_public_contact_function.mjs',
   'tools/resolve_vercel_rollback_target.mjs',
-  'inspect https://supermega.dev --format=json',
-  'resolve_vercel_rollback_target.mjs supermega.dev',
+  'api "/now/aliases/supermega.dev" --raw',
+  'resolve_vercel_rollback_target.mjs alias supermega.dev prj_Yaf0cZYbiFXcLkMcKaAm4alPWMhR',
+  'read -r PREVIOUS_URL PREVIOUS_ID',
+  'resolve_vercel_rollback_target.mjs deployment "$PREVIOUS_URL" "$PREVIOUS_ID"',
   'npx --yes vercel@56.1.0 deploy --prebuilt',
   'deploy --prebuilt --prod --skip-domain --yes',
   'npx --yes vercel@56.1.0 inspect',

@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
+import { spawnSync } from 'node:child_process'
 
 const root = resolve(import.meta.dirname, '..')
 const workflow = await readFile(resolve(root, '.github/workflows/supermega-app-deploy.yml'), 'utf8')
@@ -13,6 +14,39 @@ const failures = []
 function requireContract(name, condition) {
   if (!condition) failures.push(name)
 }
+
+function runRollbackResolver(args, payload) {
+  return spawnSync(
+    process.execPath,
+    [resolve(root, 'tools/resolve_vercel_rollback_target.mjs'), ...args],
+    { input: JSON.stringify(payload), encoding: 'utf8' },
+  )
+}
+
+const fixtureUrl = 'https://megaos-release-fixture.vercel.app'
+const aliasFixture = {
+  alias: 'app.supermega.dev',
+  deploymentId: 'dpl_fixture123',
+  deployment: { id: 'dpl_fixture123', url: 'megaos-release-fixture.vercel.app' },
+  projectId: 'prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG',
+  redirect: null,
+}
+const validAliasResolution = runRollbackResolver(
+  ['alias', 'app.supermega.dev', 'prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG'],
+  aliasFixture,
+)
+const invalidAliasResolution = runRollbackResolver(
+  ['alias', 'app.supermega.dev', 'prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG'],
+  { ...aliasFixture, deploymentId: 'dpl_wrong' },
+)
+const validDeploymentResolution = runRollbackResolver(
+  ['deployment', fixtureUrl, 'dpl_fixture123'],
+  { id: 'dpl_fixture123', url: 'megaos-release-fixture.vercel.app', target: 'production', readyState: 'READY' },
+)
+const invalidDeploymentResolution = runRollbackResolver(
+  ['deployment', fixtureUrl, 'dpl_fixture123'],
+  { id: 'dpl_different', url: 'megaos-release-fixture.vercel.app', target: 'production', readyState: 'READY' },
+)
 
 requireContract('canonical project id', workflow.includes('prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG'))
 requireContract('canonical project name', workflow.includes('megaos'))
@@ -31,7 +65,9 @@ requireContract('protected preview verification', workflow.includes("VERCEL_PROT
 requireContract('isolated production candidate deployment', workflow.includes('deploy --prebuilt --prod --skip-domain --yes'))
 requireContract('cross-platform protected deployment requests', !verifier.includes("'--silent'") && !verifier.includes("'--show-error'") && !verifier.includes("'--location'") && !verifier.includes("'--token'") && verifier.includes('describeCliFailure'))
 requireContract('live project state verified', workflow.includes('verify_vercel_project_state.mjs app'))
-requireContract('production rollback target captured from live alias', workflow.includes("- 'tools/resolve_vercel_rollback_target.mjs'") && workflow.includes('inspect https://app.supermega.dev --format=json') && workflow.includes('resolve_vercel_rollback_target.mjs app.supermega.dev') && !workflow.includes('ls megaos --environment production') && rollbackResolver.includes("deployment.target !== 'production'") && rollbackResolver.includes('aliases.includes(expectedAlias)'))
+requireContract('production rollback target captured from exact live alias', workflow.includes("- 'tools/resolve_vercel_rollback_target.mjs'") && workflow.includes('api "/now/aliases/app.supermega.dev" --raw') && workflow.includes('resolve_vercel_rollback_target.mjs alias app.supermega.dev prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG') && workflow.includes('read -r PREVIOUS_URL PREVIOUS_ID') && workflow.includes('resolve_vercel_rollback_target.mjs deployment "$PREVIOUS_URL" "$PREVIOUS_ID"') && !workflow.includes('ls megaos --environment production') && rollbackResolver.includes("mode === 'alias'") && rollbackResolver.includes("mode === 'deployment'") && rollbackResolver.includes("state.projectId !== expectedProjectId") && rollbackResolver.includes("nestedDeploymentId !== deploymentId") && rollbackResolver.includes("state.id !== expectedDeploymentId") && rollbackResolver.includes("state.target !== 'production'") && rollbackResolver.includes("state.readyState !== 'READY'"))
+requireContract('rollback alias resolver fixtures', validAliasResolution.status === 0 && validAliasResolution.stdout === `${fixtureUrl} dpl_fixture123` && invalidAliasResolution.status !== 0 && invalidAliasResolution.stderr.includes('deployment_identity'))
+requireContract('rollback deployment resolver fixtures', validDeploymentResolution.status === 0 && validDeploymentResolution.stdout === fixtureUrl && invalidDeploymentResolution.status !== 0 && invalidDeploymentResolution.stderr.includes('deployment_identity'))
 requireContract('failed production verification rolls back', workflow.includes('Roll back a failed production verification') && workflow.includes('vercel@56.1.0 rollback'))
 requireContract('production environment gate', /environment:\s*production/.test(workflow))
 requireContract('production is main-only in the canonical repository', workflow.includes("if: ${{ github.ref == 'refs/heads/main' && github.repository == 'swanhtet01/swanhtet01.github.io' }}"))
@@ -65,4 +101,4 @@ if (failures.length) {
   process.exit(1)
 }
 
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_release_workflow', checks: 29 }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_release_workflow', checks: 31 }, null, 2))

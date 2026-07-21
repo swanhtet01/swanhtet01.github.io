@@ -86,7 +86,9 @@ jobs:
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
-          PREVIOUS_URL="$(npx --yes vercel@56.1.0 inspect https://supermega.dev --format=json --token="$VERCEL_TOKEN" | node tools/resolve_vercel_rollback_target.mjs supermega.dev)"
+          ROLLBACK_TARGET="$(npx --yes vercel@56.1.0 api "/now/aliases/supermega.dev" --raw --token="$VERCEL_TOKEN" | node tools/resolve_vercel_rollback_target.mjs alias supermega.dev prj_Yaf0cZYbiFXcLkMcKaAm4alPWMhR)"
+          read -r PREVIOUS_URL PREVIOUS_ID <<< "$ROLLBACK_TARGET"
+          PREVIOUS_URL="$(npx --yes vercel@56.1.0 inspect "$PREVIOUS_URL" --format=json --token="$VERCEL_TOKEN" | node tools/resolve_vercel_rollback_target.mjs deployment "$PREVIOUS_URL" "$PREVIOUS_ID")"
           printf 'url=%s\n' "$PREVIOUS_URL" >> "$GITHUB_OUTPUT"
 
       - name: Deploy isolated production candidate
