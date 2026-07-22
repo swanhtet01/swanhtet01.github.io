@@ -17,6 +17,8 @@ import {
 
 type AgentTeamsPanelProps = {
   activeTeam: TeamId
+  selectedAgentId: string
+  onSelectAgent: (agentId: string) => void
   workspace: TeamWorkspaceState
   setWorkspace: Dispatch<SetStateAction<TeamWorkspaceState>>
 }
@@ -25,17 +27,16 @@ function agentStateLabel(state: AgentState) {
   return agentStates.find((entry) => entry.id === state)?.label ?? state
 }
 
-export function AgentTeamsPanel({ activeTeam, workspace, setWorkspace }: AgentTeamsPanelProps) {
+export function AgentTeamsPanel({ activeTeam, selectedAgentId, onSelectAgent, workspace, setWorkspace }: AgentTeamsPanelProps) {
   const teamAgents = workspace.agents.filter((agent) => agent.team === activeTeam)
   const teamItems = workspace.items.filter((item) => item.team === activeTeam && item.status !== 'done')
-  const [selectedAgentId, setSelectedAgentId] = useState('')
   const [name, setName] = useState('')
   const [role, setRole] = useState('')
   const [humanOwner, setHumanOwner] = useState('')
   const [evidenceSummary, setEvidenceSummary] = useState('')
   const [evidenceReference, setEvidenceReference] = useState('')
   const [notice, setNotice] = useState('')
-  const selectedAgent = teamAgents.find((agent) => agent.id === selectedAgentId) ?? teamAgents[0]
+  const selectedAgent = selectedAgentId ? teamAgents.find((agent) => agent.id === selectedAgentId) : teamAgents[0]
 
   function updateAgent(agentId: string, patch: Partial<DelegatedAgent>) {
     const updatedAt = new Date().toISOString()
@@ -62,7 +63,7 @@ export function AgentTeamsPanel({ activeTeam, workspace, setWorkspace }: AgentTe
       approvalBoundary: activeTeam === 'engineering' ? 'local_change_review' : 'prepare_only',
     }
     setWorkspace((current) => ({ ...current, agents: [agent, ...current.agents] }))
-    setSelectedAgentId(agent.id)
+    onSelectAgent(agent.id)
     setName('')
     setRole('')
     setHumanOwner('')
@@ -153,7 +154,7 @@ export function AgentTeamsPanel({ activeTeam, workspace, setWorkspace }: AgentTe
           </div>
           <div className="agent-roster" role="list">
             {teamAgents.map((agent) => (
-              <button aria-current={selectedAgent?.id === agent.id ? 'true' : undefined} key={agent.id} onClick={() => setSelectedAgentId(agent.id)} type="button">
+              <button aria-current={selectedAgent?.id === agent.id ? 'true' : undefined} key={agent.id} onClick={() => onSelectAgent(agent.id)} type="button">
                 <span className={`record-status ${agent.state === 'waiting_review' ? 'review' : agent.state === 'assigned' ? 'in_progress' : agent.state}`} />
                 <span><strong>{agent.name}</strong><small>{agent.role}</small></span>
                 <span><b>{agentStateLabel(agent.state)}</b><small>{agent.assignedWorkItemId ?? 'Unassigned'}</small></span>
@@ -192,7 +193,7 @@ export function AgentTeamsPanel({ activeTeam, workspace, setWorkspace }: AgentTe
               </details>
             </section>
             <p className="form-notice" aria-live="polite">{notice || `Updated ${formatTime(selectedAgent.updatedAt)} · local record only.`}</p>
-          </> : <p className="panel-copy">Add a bounded role to begin delegating work for this team.</p>}
+          </> : <p className="panel-copy">{teamAgents.length ? 'Select a delegated role.' : 'Add a bounded role to begin delegating work for this team.'}</p>}
         </section>
       </div>
     </div>
