@@ -5,12 +5,12 @@
   "brand": {
     "name": "SuperMega",
     "domain": "supermega.dev",
-    "version": "terminal-v4-2026-07",
+    "version": "jade-v1-2026-07",
     "mark": "terminal",
     "colors": {
-      "background": "#080a09",
-      "accent": "#7cf5b4",
-      "ink": "#f2f5f1"
+      "background": "#f6f4ee",
+      "accent": "#0b745e",
+      "ink": "#17231d"
     }
   },
   "company": {

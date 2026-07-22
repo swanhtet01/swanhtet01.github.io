@@ -36,8 +36,8 @@ const workspaceViews: Array<{ id: WorkspaceView; index: string; label: string }>
 const viewCopy: Record<WorkspaceView, { eyebrow: string; title: string; copy: string }> = {
   content: {
     eyebrow: 'Page workspace',
-    title: 'Write with the preview in view.',
-    copy: 'Edit a small, finite page set. Content changes return the page to draft.',
+    title: 'Edit one page at a time.',
+    copy: 'Change the content, then review the result before publishing.',
   },
   navigation: {
     eyebrow: 'Site structure',
