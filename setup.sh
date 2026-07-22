@@ -72,13 +72,14 @@ npm link 2>/dev/null || sudo npm link 2>/dev/null
 cd ..
 echo -e "  ${GREEN}✓${NC} mark1 CLI installed globally"
 
-# ── Install Mark 1 MCP Server ──
+# ── Install SuperMega ChatGPT app ──
 echo ""
-echo -e "  ${CYAN}── Installing Mark 1 MCP Server ──${NC}"
-cd mark1-mcp
-npm install --silent 2>/dev/null
+echo -e "  ${CYAN}── Installing SuperMega ChatGPT app ──${NC}"
+cd chatgpt-app
+npm ci --ignore-scripts --silent 2>/dev/null
+npm run check
 cd ..
-echo -e "  ${GREEN}✓${NC} MCP server ready"
+echo -e "  ${GREEN}✓${NC} ChatGPT app ready"
 
 # ── Install AI coding tools ──
 echo ""
@@ -114,45 +115,11 @@ else
   echo -e "  ${GREEN}✓${NC} Config exists at ~/.mark1/config.json"
 fi
 
-# ── Configure MCP for Claude Code ──
+# ── ChatGPT Developer Mode setup ──
 echo ""
-echo -e "  ${CYAN}── Configuring MCP for AI Editors ──${NC}"
-MARK1_MCP_PATH="$MARK1_DIR/mark1-mcp/server.mjs"
-
-# Claude Desktop / Claude Code
-CLAUDE_CONFIG_DIR="$HOME/.config"
-mkdir -p "$CLAUDE_CONFIG_DIR"
-cat > "$CLAUDE_CONFIG_DIR/claude_desktop_config.json" << EOF
-{
-  "mcpServers": {
-    "mark1": {
-      "command": "node",
-      "args": ["$MARK1_MCP_PATH"],
-      "env": {
-        "GEMINI_API_KEY": "${GEMINI_API_KEY:-}"
-      }
-    }
-  }
-}
-EOF
-echo -e "  ${GREEN}✓${NC} Claude Code MCP configured"
-
-# VS Code MCP (for Cline / Continue)
-mkdir -p "$MARK1_DIR/.vscode"
-cat > "$MARK1_DIR/.vscode/mcp.json" << EOF
-{
-  "servers": {
-    "mark1": {
-      "command": "node",
-      "args": ["$MARK1_MCP_PATH"],
-      "env": {
-        "GEMINI_API_KEY": "${GEMINI_API_KEY:-}"
-      }
-    }
-  }
-}
-EOF
-echo -e "  ${GREEN}✓${NC} VS Code MCP configured (Cline/Continue)"
+echo -e "  ${CYAN}── ChatGPT Developer Mode ──${NC}"
+echo -e "  Start locally: ${CYAN}cd $MARK1_DIR/chatgpt-app && npm start${NC}"
+echo -e "  Then expose port 2091 through an HTTPS tunnel and connect the resulting /mcp URL in ChatGPT Developer Mode."
 
 # ── Install VS Code extensions ──
 if command -v code &>/dev/null; then

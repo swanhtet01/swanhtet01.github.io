@@ -25,6 +25,8 @@ Client-specific deployments, legacy demos, and old product names are not part of
 - `supermega_runtime/runtime.py` — canonical FastAPI application runtime.
 - `supermega_runtime/trial_runtime.py` and `supermega_runtime/trial_store.py` — managed-trial identity, workspace, capability, state, event, and approval boundaries.
 - `supermega_runtime/cloud_runtime.py` — bounded hosted agent scheduler.
+- `chatgpt-app/` — public, read-only workflow discovery and draft pilot planning over MCP; it has no customer-data or write access.
+- `chatgpt-app-submission.json` — review import draft whose tests must match the exposed MCP descriptors.
 - `SUPERMEGA_TRIAL_AND_AGENT_OPERATING_MODEL.md` — agent roles and managed-trial controls.
 - `SUPERMEGA_LAUNCH_AND_TRIAL_PLAYBOOK.md` — qualification, demo, onboarding, trial, KPI, and communications lifecycle.
 
@@ -38,6 +40,8 @@ python -m pip install -r requirements-test.txt
 python -m unittest discover -s tests -p 'test_*.py' -v
 npm.cmd run app:build
 npm.cmd run public:prebuilt
+npm.cmd --prefix chatgpt-app ci --ignore-scripts
+npm.cmd --prefix chatgpt-app run check
 npm.cmd audit --omit=dev
 npm.cmd --prefix showroom audit --omit=dev
 ```

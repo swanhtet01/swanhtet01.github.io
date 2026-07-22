@@ -1,0 +1,64 @@
+name: SuperMega ChatGPT App - Contract Guard
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'chatgpt-app/**'
+      - 'chatgpt-app-submission.json'
+      - 'site-manifest.json'
+      - 'setup.sh'
+      - 'mark1.code-workspace'
+      - '.github/workflows/supermega-chatgpt-app.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'chatgpt-app/**'
+      - 'chatgpt-app-submission.json'
+      - 'site-manifest.json'
+      - 'setup.sh'
+      - 'mark1.code-workspace'
+      - '.github/workflows/supermega-chatgpt-app.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supermega-chatgpt-app-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    if: ${{ github.repository == 'swanhtet01/swanhtet01.github.io' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: chatgpt-app/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm --prefix chatgpt-app ci --ignore-scripts
+
+      - name: Verify dependency security
+        run: npm --prefix chatgpt-app audit --omit=dev
+
+      - name: Verify MCP, widget, and submission contracts
+        run: npm --prefix chatgpt-app run check
+
+      - name: Verify launcher references
+        run: |
+          bash -n setup.sh
+          node -e "JSON.parse(require('node:fs').readFileSync('mark1.code-workspace', 'utf8'))"
+          test ! -e mark1-mcp
+          ! grep -R "mark1-mcp" setup.sh mark1.code-workspace
+
+      - name: Confirm this workflow cannot deploy or submit
+        run: echo "This guard performs read-only validation only."

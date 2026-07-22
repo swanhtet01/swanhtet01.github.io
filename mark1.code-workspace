@@ -2,7 +2,7 @@
   "folders": [
     { "path": ".", "name": "Mark 1 — Root" },
     { "path": "mark1-cli", "name": "Mark 1 CLI" },
-    { "path": "mark1-mcp", "name": "Mark 1 MCP Server" },
+    { "path": "chatgpt-app", "name": "SuperMega ChatGPT App" },
     { "path": "hyper_unicorn", "name": "HYPER UNICORN" },
     { "path": "agent_os", "name": "Agent OS" },
     { "path": "Jarvis", "name": "Jarvis Agents" },
@@ -34,13 +34,7 @@
       "**/dist": true,
       "**/.git": true
     },
-    "typescript.preferences.importModuleSpecifier": "non-relative",
-    "cline.mcpServers": {
-      "mark1": {
-        "command": "node",
-        "args": ["${workspaceFolder}/mark1-mcp/server.mjs"]
-      }
-    }
+    "typescript.preferences.importModuleSpecifier": "non-relative"
   },
   "tasks": {
     "version": "2.0.0",
@@ -106,9 +100,9 @@
         "isBackground": true
       },
       {
-        "label": "Start MCP Server",
+        "label": "Start SuperMega ChatGPT App",
         "type": "shell",
-        "command": "cd mark1-mcp && node server.mjs",
+        "command": "cd chatgpt-app && npm start",
         "group": "none",
         "presentation": { "reveal": "always", "panel": "dedicated" },
         "isBackground": true
@@ -127,10 +121,10 @@
         "console": "integratedTerminal"
       },
       {
-        "name": "Mark 1 MCP Server Debug",
+        "name": "SuperMega ChatGPT App Debug",
         "type": "node",
         "request": "launch",
-        "program": "${workspaceFolder}/mark1-mcp/server.mjs",
+        "program": "${workspaceFolder}/chatgpt-app/server.mjs",
         "console": "integratedTerminal"
       }
     ]

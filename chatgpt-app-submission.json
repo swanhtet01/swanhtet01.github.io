@@ -1,0 +1,116 @@
+{
+  "$schema": "https://developers.openai.com/apps-sdk/schemas/chatgpt-app-submission.v1.json",
+  "schema_version": 1,
+  "app_info": {
+    "display_name": "SuperMega Pilot",
+    "subtitle": "Plan an operations pilot",
+    "description": "SuperMega Pilot helps businesses explore current SuperMega operating workflows and turn one selected workflow into a bounded draft pilot brief with measurements, evidence requirements, and human approval boundaries.",
+    "category": "BUSINESS"
+  },
+  "tools": {
+    "search": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Searches a bundled public workflow catalogue and does not create or update records.",
+        "open_world_justification": "Returns public SuperMega links without writing to external systems or public internet state.",
+        "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+      }
+    },
+    "fetch": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Retrieves one bundled public workflow record and does not modify any source or account.",
+        "open_world_justification": "Returns a canonical public link without sending data to third parties or changing external state.",
+        "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+      }
+    },
+    "prepare_pilot_brief": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Computes an in-memory draft from bounded inputs and does not persist or modify data.",
+        "open_world_justification": "Does not send, publish, take payment, or call an external service.",
+        "destructive_justification": "Does not delete or overwrite data; the result is draft-only and keeps consequential actions human-approved."
+      }
+    }
+  },
+  "test_cases": [
+    {
+      "description": "Find Commerce workflows for orders and stock.",
+      "user_prompt": "Find the SuperMega workflows for turning chat orders into controlled stock and fulfilment records.",
+      "file_attachment_urls": null,
+      "tools_triggered": "search",
+      "expected_output": "Returns relevant public Commerce catalogue items with canonical SuperMega links.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Inspect the current Production workflow.",
+      "user_prompt": "Show me the current SuperMega Production workflow, modules, templates, measurement, and readiness gate.",
+      "file_attachment_urls": null,
+      "tools_triggered": "search, fetch",
+      "expected_output": "Returns the current public Production workflow and clearly states its present readiness gate.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Prepare a Social commerce pilot.",
+      "user_prompt": "Prepare a 14-day Social commerce pilot to reduce order handling time. We currently coordinate through chat.",
+      "file_attachment_urls": null,
+      "tools_triggered": "search, fetch, prepare_pilot_brief",
+      "expected_output": "Renders a draft-only pilot brief with workflow stages, baseline measurement, acceptance evidence, and human approval boundaries.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Prepare a retail and wholesale pilot.",
+      "user_prompt": "Prepare a 7-day Retail and wholesale pilot to reduce pick-to-close time and stock variance. Our current process is mixed.",
+      "file_attachment_urls": null,
+      "tools_triggered": "search, fetch, prepare_pilot_brief",
+      "expected_output": "Renders a bounded Commerce pilot with the selected workflow, measurement, evidence requirements, and human approval boundary.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Prepare a maintenance evidence pilot.",
+      "user_prompt": "Create a 30-day Maintenance and downtime pilot from our spreadsheet process, focused on reducing downtime and proving return-to-service evidence.",
+      "file_attachment_urls": null,
+      "tools_triggered": "search, fetch, prepare_pilot_brief",
+      "expected_output": "Renders a maintenance pilot with the correct workflow, measurement, evidence requirements, and owner decisions.",
+      "expected_output_url": null
+    }
+  ],
+  "negative_test_cases": [
+    {
+      "description": "Do not trigger for private live order lookup.",
+      "user_prompt": "Look up the live payment and delivery status for customer order 1042.",
+      "file_attachment_urls": null,
+      "tools_triggered": null,
+      "expected_output": "The app should not be invoked because it cannot access customer workspaces or live order records.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Do not trigger for external marketing sends.",
+      "user_prompt": "Send this promotion to every lead in my pipeline now.",
+      "file_attachment_urls": null,
+      "tools_triggered": null,
+      "expected_output": "The app should not be invoked because it cannot access leads or send external messages.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Do not trigger for local filesystem actions.",
+      "user_prompt": "Delete old build folders from my laptop and run the deployment command.",
+      "file_attachment_urls": null,
+      "tools_triggered": null,
+      "expected_output": "The app should not be invoked because it has no filesystem, shell, or deployment capability.",
+      "expected_output_url": null
+    }
+  ]
+}
