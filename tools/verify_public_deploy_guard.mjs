@@ -13,6 +13,7 @@ const rollbackResolver = read('tools/resolve_vercel_rollback_target.mjs')
 const firewallVerifier = read('tools/verify_public_firewall_state.mjs')
 const publicGenerator = read('tools/create_public_vercel_output.mjs')
 const releaseWrapper = read('tools/deploy_website_actions.ps1')
+const localMachine = read('tools/supermega_machine.ps1')
 const denyScript = read('tools/deny_stale_public_deploy.mjs')
 const failures = []
 
@@ -24,6 +25,14 @@ if (manifest.release?.sourceBranch !== 'main') failures.push('manifest_release_s
 if (manifest.release?.workflow !== '.github/workflows/supermega-public-release.yml') failures.push('manifest_release_workflow_drift')
 if (manifest.release?.productionDomain !== 'https://supermega.dev') failures.push('manifest_release_domain_drift')
 if (existsSync(resolve(root, '.github/workflows/supermega-public-deploy.yml'))) failures.push('competing_public_deploy_workflow_present')
+for (const path of [
+  'tools/run_vercel_release_gate.ps1',
+  'tools/deploy_supermega_gcp.ps1',
+  'tools/deploy_showroom_cloud_run.ps1',
+  'tools/cloudrun_preflight.ps1',
+]) {
+  if (existsSync(resolve(root, path))) failures.push(`legacy_release_bypass_present:${path}`)
+}
 if (vercelConfig.git?.deploymentEnabled !== false) failures.push('native_git_deployments_not_disabled')
 if (!previewVerifier.includes('preview_contact_not_accepting')) failures.push('preview_contact_readiness_not_verified')
 if (!previewVerifier.includes('deployment_function_surface_wrong')) failures.push('preview_function_inventory_not_verified')
@@ -103,6 +112,8 @@ for (const token of ['workflow_dispatch:', 'schedule:', 'npm run public:verify:l
 if (/vercel@\S+\s+(?:deploy|promote)/.test(healthWorkflow)) failures.push('health_workflow_can_deploy')
 
 for (const token of ['dispatch_ref = "main"', 'source_ref = "main"', 'workflow = $workflowFile']) requireToken(releaseWrapper, token, 'release_wrapper_missing')
+if (!releaseWrapper.includes('gh run list --repo $Repo --workflow $workflowFile') || releaseWrapper.includes('$workflowName')) failures.push('release_wrapper_run_lookup_drift')
+if (/cloudrun|gcloud/i.test(`${releaseWrapper}\n${localMachine}`)) failures.push('legacy_cloud_release_surface_present')
 for (const token of ['canonicalBranch = \'main\'', 'supermega-public-release.yml']) requireToken(denyScript, token, 'direct_deploy_guard_missing')
 
 const workflowsDir = resolve(root, '.github', 'workflows')

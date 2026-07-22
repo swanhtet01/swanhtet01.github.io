@@ -316,9 +316,9 @@ jobs:
           VERCEL_PROJECT_ID="$APP_VERCEL_PROJECT_ID" npx --yes vercel@56.1.0 api "/v9/projects/$APP_VERCEL_PROJECT_ID/domains?teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_domain_state.mjs app
           VERCEL_PROJECT_ID="$APP_VERCEL_PROJECT_ID" npx --yes vercel@56.1.0 api "/v10/projects/$APP_VERCEL_PROJECT_ID/env?teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_environment_state.mjs app
           VERCEL_PROJECT_ID="$PUBLIC_VERCEL_PROJECT_ID" npx --yes vercel@56.1.0 api /v9/projects/supermega-public --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_project_state.mjs public
-          VERCEL_PROJECT_ID="$PUBLIC_VERCEL_PROJECT_ID" npx --yes vercel@56.1.0 api "/v9/projects/$VERCEL_PROJECT_ID/domains?teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_domain_state.mjs public
-          VERCEL_PROJECT_ID="$PUBLIC_VERCEL_PROJECT_ID" npx --yes vercel@56.1.0 api "/v10/projects/$VERCEL_PROJECT_ID/env?teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_environment_state.mjs public
-          VERCEL_PROJECT_ID="$PUBLIC_VERCEL_PROJECT_ID" npx --yes vercel@56.1.0 api "/v1/security/firewall/config/active?projectId=$VERCEL_PROJECT_ID&teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_public_firewall_state.mjs
+          VERCEL_PROJECT_ID="$PUBLIC_VERCEL_PROJECT_ID" npx --yes vercel@56.1.0 api "/v9/projects/$PUBLIC_VERCEL_PROJECT_ID/domains?teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_domain_state.mjs public
+          VERCEL_PROJECT_ID="$PUBLIC_VERCEL_PROJECT_ID" npx --yes vercel@56.1.0 api "/v10/projects/$PUBLIC_VERCEL_PROJECT_ID/env?teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_environment_state.mjs public
+          VERCEL_PROJECT_ID="$PUBLIC_VERCEL_PROJECT_ID" npx --yes vercel@56.1.0 api "/v1/security/firewall/config/active?projectId=$PUBLIC_VERCEL_PROJECT_ID&teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_public_firewall_state.mjs
 
       - name: Roll back a failed production verification
         if: ${{ failure() && (steps.promote-app.outputs.attempted == 'true' || steps.promote.outputs.attempted == 'true') }}

@@ -2,7 +2,7 @@
 
 Updated: 2026-07-22
 Owner: founder / CEO
-Mode: local release candidate; production unchanged
+Mode: guarded release; canonical `__release.json` metadata is the live authority
 
 ## North-star outcome
 
@@ -33,17 +33,15 @@ Prove one complete company workflow in which a real customer or operator starts 
 ## Latest verification
 
 - Candidate identity is brand `terminal-v4-2026-07`, context `2026-07-22.7`, and catalogue `2026-07-22.6`.
-- Six workflow profiles, 45 coordinated-release checks, 35 security checks, eleven Vercel contract checks, 73 contact checks, six RLS checks, six paired-identity checks, HQ, lint, YAML, and 46 Python tests pass locally.
+- Six workflow profiles, 46 coordinated-release checks, 35 security checks, eleven Vercel contract checks, 73 contact checks, six RLS checks, six paired-identity checks, HQ, lint, YAML, and 46 Python tests pass locally.
 - Desktop and 390 px mobile have no overflow or browser errors. Operations, Product decisions, and `decision_packet.v1` owner reviews require attributable human evidence; stale or legacy authority reopens safely.
 - Historical schema v1 is unchanged; additive v2 preserves old actors and decisions as `legacy`, requires reclassification, and enforces nonblank human decisions before readiness.
 - Contact intake stores a SHA-256 payload fingerprint; changed cold-start replays conflict and ambiguous persistence fails closed.
 - Read-only Vercel project, environment, domain, firewall, and cron contracts pass. One coordinated workflow verifies and rolls back both canonical domains as a pair.
-- The hosted scheduler reports ready and PC-independent; the product app remains `isolated_demo` until managed data, identity, and writes pass.
+- The product app remains `isolated_demo` until managed data, identity, and writes pass; no local or preview result can imply managed readiness.
 
 ## Blockers and unknowns
 
-- GitHub CLI authentication is not available on this Ally, so the verified release workflow cannot yet be dispatched.
-- Both live deployments report commit `c22d7fc459a56f5f12cc80d438c5dec27e5fc2a3`, but still serve brand `terminal-v2-2026-07` and context `2026-07-22.2`; the local candidate is brand `terminal-v4-2026-07` and context `2026-07-22.7`.
 - Vercel environment audit identifies three obsolete app variables and 54 unused public-project variables. They are reported, not deleted, until a recoverable cleanup is approved.
 - Separate noncanonical legacy hostnames still serve from older projects; they are outside this release and need an explicit redirect or retirement decision.
 - Managed trial activation still requires a separately validated database runtime URL, the additive schema v2 migration proven on non-production data, a high-entropy signing secret of at least 32 bytes, and the explicit writes flag.
@@ -54,6 +52,7 @@ Prove one complete company workflow in which a real customer or operator starts 
 ## Decisions in force
 
 - One company system; no public agent catalogue, internal-console product, or collection of demo domains.
+- A pushed branch or local pass is not a release; review, explicit owner authorization, and the coordinated `main` workflow are mandatory.
 - Company system, Commerce, and Production are the only portfolio entries.
 - AI prepares bounded work from approved records; responsible owners retain consequential authority.
 - Social and open-source discovery must become a tested workflow, implementation recipe, or explicit rejection before entering the product.
@@ -62,7 +61,7 @@ Prove one complete company workflow in which a real customer or operator starts 
 
 ## Next evidence
 
-- Authenticate GitHub, review the coherent diff, and release only through the coordinated guarded workflow.
+- Review the release PR, preserve separate owner authorization for the `main` merge, and release only through the coordinated guarded workflow.
 - Capture matching live `__release.json` metadata and canonical route checks after promotion.
 - Approve a narrow Vercel environment cleanup from the audited name-only inventory; do not copy or expose values.
 - Activate managed trial persistence only after v1 then v2 migration rehearsal, the read-only database role/RLS validator, backup, and restore evidence pass on non-production data.

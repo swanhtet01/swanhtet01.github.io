@@ -93,10 +93,10 @@ Research does not automatically become a dependency.
 ## Release authority
 
 - Source branch: `main`
-- App workflow: `.github/workflows/supermega-app-deploy.yml`
+- App guard workflow: `.github/workflows/supermega-app-deploy.yml` (validation only; it cannot deploy)
 - App Vercel project: `megaos`
-- Public workflow: `.github/workflows/supermega-public-release.yml`
+- Coordinated production workflow: `.github/workflows/supermega-public-release.yml`
 - Public Vercel project: `supermega-public`
 - Both live domains must expose matching `__release.json` metadata for the released commit and context versions.
-- Both workflows verify the Vercel project, production environment-name contract, and post-promotion controls without exposing secret values.
-- Direct local production deployment is blocked. Verified GitHub workflows are the only production release paths.
+- The app guard validates contracts without mutation. The coordinated workflow verifies both Vercel projects, production environment-name contracts, candidates, promotion, post-promotion controls, and paired rollback without exposing secret values.
+- Direct local production deployment is blocked. The coordinated GitHub workflow is the only production release path for both canonical domains.

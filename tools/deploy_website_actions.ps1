@@ -4,21 +4,12 @@ param(
     [string]$Token = "",
     [string]$Branch = "main",
     [string]$Domain = "supermega.dev",
-    [string]$ProjectId = "supermega-468612",
-    [string]$Region = "asia-southeast1",
-    [string]$Service = "supermega-showroom",
-    [string]$ServiceAccountJson = ".\.secrets\gcp\service_account.json",
     [int]$WaitMinutes = 20,
-    [int]$DomainWaitMinutes = 20,
-    [switch]$SkipPages,
-    [switch]$SkipPagesDomainEnsure,
-    [switch]$SkipCloudRun,
     [switch]$DryRun
 )
 
 $ErrorActionPreference = "Stop"
 $workflowFile = "supermega-public-release.yml"
-$workflowName = "SuperMega Public - Verified Prebuilt Release"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 
 function Require-Command {
@@ -52,21 +43,6 @@ if ($Domain -ne "supermega.dev") {
 }
 if ($WaitMinutes -lt 1 -or $WaitMinutes -gt 60) {
     throw "WaitMinutes must be between 1 and 60."
-}
-
-foreach ($legacyParameter in @(
-    "ProjectId",
-    "Region",
-    "Service",
-    "ServiceAccountJson",
-    "DomainWaitMinutes",
-    "SkipPages",
-    "SkipPagesDomainEnsure",
-    "SkipCloudRun"
-)) {
-    if ($PSBoundParameters.ContainsKey($legacyParameter)) {
-        Write-Warning "$legacyParameter is retained for command compatibility but is ignored. Public hosting is Vercel-only."
-    }
 }
 
 Require-Command -Name "gh"
@@ -143,7 +119,7 @@ try {
     $lookupDeadline = (Get-Date).AddSeconds(30)
     while ($runId -eq 0 -and (Get-Date) -lt $lookupDeadline) {
         Start-Sleep -Seconds 2
-        $runsJson = & gh run list --repo $Repo --workflow $workflowName --event workflow_dispatch --limit 5 --json databaseId,createdAt 2>&1
+        $runsJson = & gh run list --repo $Repo --workflow $workflowFile --event workflow_dispatch --limit 5 --json databaseId,createdAt 2>&1
         if ($LASTEXITCODE -ne 0) {
             throw "Could not find the dispatched public release. $($runsJson | Out-String)"
         }
