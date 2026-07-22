@@ -57,7 +57,7 @@ const manifestPath = resolve(dist, 'site.webmanifest')
 if (!await exists(faviconPath)) fail('missing_terminal_favicon')
 else {
   const favicon = await readFile(faviconPath, 'utf8')
-  if (!favicon.includes('SuperMega terminal mark') || !favicon.includes('#7cf5b4') || !favicon.includes('#f2f5f1')) fail('wrong_terminal_favicon')
+  if (!favicon.includes('SuperMega terminal mark') || !favicon.includes(manifest.brand.colors.accent) || !favicon.includes(manifest.brand.colors.ink)) fail('wrong_terminal_favicon')
 }
 if (!await exists(manifestPath)) fail('missing_app_webmanifest')
 else {
@@ -68,7 +68,7 @@ else {
 const files = await walk(dist)
 const textFiles = files.filter((path) => /\.(?:html|js|css|json|svg)$/.test(path))
 const corpus = (await Promise.all(textFiles.map((path) => readFile(path, 'utf8')))).join('\n')
-for (const required of ['SUPERMEGA', 'Teams', 'Product', 'Acceptance outcome', 'Prepare brief', 'Evidence register', 'Record evidence', 'Verified evidence', 'verifiedAt', 'Operations', 'Human confirmation', 'Confirm and record', 'Action history', 'actorKind', 'evidenceReference', 'accountableActions', 'decision_packet.v1', 'Claims and provenance', 'claimType', 'claim_type', 'source_reference', 'artifact_reference', 'managedApprovalRequests', 'packetFingerprint', 'uncertainty', 'visibility', 'artifactReference', 'Human reviewer', 'Decision note', 'Approve and record', 'Local trial', 'Delegation control', 'Pilot definition', 'Template profile', 'Workflow', 'workflowProfile', 'Current record', 'Baseline', 'Target outcome', 'Human authority boundary', 'Acceptance evidence', 'Operating mode', 'Write path', '#7cf5b4', '#f2f5f1']) {
+for (const required of ['SUPERMEGA', 'Teams', 'Product', 'Acceptance outcome', 'Prepare brief', 'Evidence register', 'Record evidence', 'Verified evidence', 'verifiedAt', 'Operations', 'Human confirmation', 'Confirm and record', 'Action history', 'actorKind', 'evidenceReference', 'accountableActions', 'decision_packet.v1', 'Claims and provenance', 'claimType', 'claim_type', 'source_reference', 'artifact_reference', 'managedApprovalRequests', 'packetFingerprint', 'uncertainty', 'visibility', 'artifactReference', 'Human reviewer', 'Decision note', 'Approve and record', 'Local trial', 'Delegation control', 'Pilot definition', 'Template profile', 'Workflow', 'workflowProfile', 'Current record', 'Baseline', 'Target outcome', 'Human authority boundary', 'Acceptance evidence', 'Operating mode', 'Write path', manifest.brand.colors.accent, manifest.brand.colors.ink]) {
   if (!corpus.includes(required)) fail(`missing_context:${required}`)
 }
 if (!coreSource.includes("import siteManifest from '../../../site-manifest.json'")) fail('workflow_contract_not_shared')

@@ -1,17 +1,17 @@
 .eco-product {
-  --eco-bg: #080a09;
-  --eco-panel: #101411;
-  --eco-panel-raised: #151a16;
-  --eco-ink: #f2f5f1;
-  --eco-muted: #a3ada6;
-  --eco-quiet: #707b73;
-  --eco-line: rgba(225, 238, 229, 0.12);
-  --eco-line-strong: rgba(225, 238, 229, 0.22);
-  --eco-green: #7cf5b4;
-  --eco-green-soft: rgba(124, 245, 180, 0.1);
-  --eco-warn: #ffb86b;
-  --eco-danger: #ff7b8d;
-  --eco-radius: 8px;
+  --eco-bg: #f6f4ee;
+  --eco-panel: #ffffff;
+  --eco-panel-raised: #eef4ef;
+  --eco-ink: #17231d;
+  --eco-muted: #56665d;
+  --eco-quiet: #7b8980;
+  --eco-line: rgba(31, 68, 51, 0.12);
+  --eco-line-strong: rgba(31, 68, 51, 0.2);
+  --eco-green: #0b745e;
+  --eco-green-soft: rgba(11, 116, 94, 0.1);
+  --eco-warn: #946200;
+  --eco-danger: #b42336;
+  --eco-radius: 14px;
   --eco-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   width: 100%;
   height: 100svh;
@@ -21,9 +21,9 @@
   overflow: hidden;
   color: var(--eco-ink);
   background:
-    radial-gradient(circle at 82% -10%, rgba(124, 245, 180, 0.08), transparent 31%),
-    linear-gradient(180deg, #090c0a, var(--eco-bg) 65%);
-  color-scheme: dark;
+    radial-gradient(circle at 82% -10%, rgba(11, 116, 94, 0.1), transparent 31%),
+    linear-gradient(180deg, #fbfaf6, var(--eco-bg) 65%);
+  color-scheme: light;
   font-family: Geist, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   text-rendering: optimizeLegibility;
 }
@@ -85,7 +85,7 @@
   flex-direction: column;
   border-right: 1px solid var(--eco-line);
   padding: 19px 14px 15px;
-  background: rgba(8, 10, 9, 0.94);
+  background: rgba(238, 244, 239, 0.96);
   backdrop-filter: blur(20px);
 }
 
@@ -161,11 +161,11 @@
 
 .eco-primary-nav button:hover {
   color: var(--eco-ink);
-  background: rgba(255, 255, 255, 0.035);
+  background: rgba(11, 116, 94, 0.07);
 }
 
 .eco-primary-nav button[aria-current="page"] {
-  border-color: rgba(124, 245, 180, 0.2);
+  border-color: rgba(11, 116, 94, 0.2);
   color: var(--eco-ink);
   background: var(--eco-green-soft);
 }
@@ -195,7 +195,7 @@
   align-items: center;
   gap: 6px;
   width: max-content;
-  border: 1px solid rgba(124, 245, 180, 0.22);
+  border: 1px solid rgba(11, 116, 94, 0.2);
   border-radius: 4px;
   padding: 0 8px;
   color: var(--eco-green);
@@ -230,7 +230,7 @@
   gap: 14px;
   border-bottom: 1px solid var(--eco-line);
   padding: 0 20px;
-  background: rgba(8, 10, 9, 0.84);
+  background: rgba(246, 244, 238, 0.92);
   backdrop-filter: blur(18px);
 }
 
@@ -269,7 +269,7 @@
 }
 
 .eco-button {
-  min-height: 32px;
+  min-height: 40px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -278,25 +278,25 @@
   border-radius: 5px;
   padding: 0 11px;
   color: var(--eco-ink);
-  background: rgba(255, 255, 255, 0.025);
+  background: #ffffff;
   font-size: 9px;
   font-weight: 760;
 }
 
 .eco-button:hover:not(:disabled) {
-  border-color: rgba(255, 255, 255, 0.34);
-  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--eco-green);
+  background: var(--eco-green-soft);
 }
 
 .eco-button-primary {
   border-color: var(--eco-green);
-  color: #07100a;
+  color: #ffffff;
   background: var(--eco-green);
 }
 
 .eco-button-primary:hover:not(:disabled) {
-  border-color: #a6f8cb;
-  background: #a6f8cb;
+  border-color: #075c4b;
+  background: #075c4b;
 }
 
 .eco-button-quiet {
@@ -339,7 +339,7 @@
 
 .eco-icon-button:hover {
   color: var(--eco-ink);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--eco-green-soft);
 }
 
 .eco-main {
@@ -511,10 +511,10 @@
   grid-template-columns: auto minmax(0, 1.2fr) minmax(190px, .8fr) auto;
   align-items: center;
   gap: 12px;
-  border: 1px solid rgba(124, 245, 180, .24);
+  border: 1px solid rgba(11, 116, 94, .2);
   border-radius: var(--eco-radius);
   padding: 7px 9px;
-  background: linear-gradient(90deg, rgba(124, 245, 180, .07), rgba(16, 20, 17, .94) 44%);
+  background: linear-gradient(90deg, rgba(11, 116, 94, .09), #ffffff 44%);
 }
 
 .eco-website-intake > div {
@@ -547,8 +547,8 @@
   border: 1px solid var(--eco-line);
   border-radius: var(--eco-radius);
   padding: 14px;
-  background: rgba(16, 20, 17, 0.9);
-  box-shadow: inset 0 1px rgba(255, 255, 255, 0.025);
+  background: var(--eco-panel);
+  box-shadow: 0 10px 28px rgba(25, 54, 42, .055);
 }
 
 .eco-panel-head {
@@ -611,7 +611,7 @@
 }
 
 .eco-mini-tabs button[aria-pressed="true"] {
-  border-color: rgba(124, 245, 180, 0.22);
+  border-color: rgba(11, 116, 94, 0.2);
   color: var(--eco-green);
   background: var(--eco-green-soft);
 }
@@ -623,7 +623,7 @@
 .eco-audit-list {
   min-height: 0;
   overflow: auto;
-  scrollbar-color: rgba(124, 245, 180, 0.25) transparent;
+  scrollbar-color: rgba(11, 116, 94, 0.26) transparent;
   scrollbar-width: thin;
 }
 
@@ -650,7 +650,7 @@
 
 .eco-order-row:hover,
 .eco-order-row[aria-current="true"] {
-  background: rgba(124, 245, 180, 0.045);
+  background: rgba(11, 116, 94, 0.07);
 }
 
 .eco-record-dot {
@@ -747,7 +747,7 @@
 }
 
 .eco-status-pill[data-tone="success"] {
-  border-color: rgba(124, 245, 180, 0.22);
+  border-color: rgba(11, 116, 94, 0.2);
   color: var(--eco-green);
   background: var(--eco-green-soft);
 }
@@ -817,7 +817,7 @@
 .eco-timeline .is-complete i,
 .eco-timeline .is-current i {
   background: var(--eco-green);
-  box-shadow: 0 0 8px rgba(124, 245, 180, 0.4);
+  box-shadow: none;
 }
 
 .eco-hold-banner {
@@ -1040,7 +1040,7 @@
   gap: 7px;
   overflow: auto;
   padding-bottom: 3px;
-  scrollbar-color: rgba(124, 245, 180, 0.25) transparent;
+  scrollbar-color: rgba(11, 116, 94, 0.26) transparent;
 }
 
 .eco-lane {
@@ -1092,7 +1092,7 @@
 
 .eco-lane > div > button:hover,
 .eco-lane > div > button[aria-current="true"] {
-  border-color: rgba(124, 245, 180, 0.3);
+  border-color: rgba(11, 116, 94, 0.24);
   background: var(--eco-green-soft);
 }
 
@@ -1171,7 +1171,7 @@
 
 .eco-payment-list > button:hover,
 .eco-payment-list > button[aria-current="true"] {
-  background: rgba(124, 245, 180, 0.045);
+  background: rgba(11, 116, 94, 0.07);
 }
 
 .eco-payment-list > button > span {
@@ -1305,12 +1305,12 @@
   width: min(720px, 100%);
   max-height: calc(100svh - 36px);
   overflow: auto;
-  border: 1px solid rgba(124, 245, 180, 0.34);
+  border: 1px solid rgba(11, 116, 94, 0.24);
   border-radius: var(--eco-radius);
   padding: 17px;
   color: var(--eco-ink);
-  background: #0d120f;
-  box-shadow: 0 26px 80px rgba(0, 0, 0, 0.55);
+  background: #ffffff;
+  box-shadow: 0 26px 80px rgba(25, 54, 42, 0.2);
 }
 
 .eco-dialog-head,
@@ -1406,7 +1406,7 @@
   border-radius: 4px;
   padding: 8px 9px;
   color: var(--eco-ink);
-  background: #090c0a;
+  background: #ffffff;
   outline: none;
 }
 
@@ -1414,7 +1414,7 @@
 .eco-approval-form select:focus,
 .eco-approval-form textarea:focus {
   border-color: var(--eco-green);
-  box-shadow: 0 0 0 2px rgba(124, 245, 180, 0.08);
+  box-shadow: 0 0 0 3px rgba(11, 116, 94, 0.1);
 }
 
 .eco-approval-form textarea {
@@ -1458,7 +1458,7 @@
   border-radius: 4px;
   padding: 9px;
   color: var(--eco-muted);
-  background: rgba(124, 245, 180, .035);
+  background: rgba(11, 116, 94, .06);
 }
 
 .eco-approval-form .eco-handoff-confirmation input {
@@ -1500,11 +1500,11 @@
   bottom: 18px;
   width: min(350px, calc(100% - 36px));
   overflow: hidden;
-  border: 1px solid rgba(124, 245, 180, 0.34);
+  border: 1px solid rgba(11, 116, 94, 0.24);
   border-radius: var(--eco-radius);
   color: var(--eco-ink);
-  background: #0d120f;
-  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.52);
+  background: #ffffff;
+  box-shadow: 0 22px 70px rgba(25, 54, 42, 0.18);
 }
 
 .eco-guide > header {
@@ -1585,11 +1585,11 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  border-left: 1px solid rgba(124, 245, 180, 0.28);
+  border-left: 1px solid rgba(11, 116, 94, 0.22);
   padding: 17px;
   color: var(--eco-ink);
-  background: #0b0f0c;
-  box-shadow: -24px 0 70px rgba(0, 0, 0, 0.45);
+  background: #ffffff;
+  box-shadow: -24px 0 70px rgba(25, 54, 42, 0.16);
 }
 
 .eco-drawer-head {
@@ -1747,7 +1747,7 @@
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     border-bottom: 1px solid var(--eco-line);
-    background: rgba(8, 10, 9, 0.92);
+    background: rgba(255, 255, 255, 0.96);
   }
 
   .eco-mobile-nav button {
@@ -1817,6 +1817,10 @@
 }
 
 @media (max-width: 560px) {
+  .eco-mobile-brand .eco-brand > strong {
+    display: block;
+  }
+
   .eco-completion-grid {
     grid-template-columns: 1fr;
   }
@@ -1834,9 +1838,19 @@
   }
 
   .eco-topbar-actions .eco-button {
-    min-height: 30px;
+    min-height: 44px;
     padding-inline: 8px;
     font-size: 7px;
+  }
+
+  .eco-topbar-actions .eco-button:first-of-type {
+    border-color: var(--eco-green);
+    background: var(--eco-green);
+    color: #fff;
+  }
+
+  .eco-topbar-actions .eco-button:nth-of-type(2) {
+    display: none;
   }
 
   .eco-main {
