@@ -10,14 +10,15 @@ Prove one complete company workflow in which a real customer or operator starts 
 
 ## Current outcomes
 
-1. **Product** — release the compact Today, Teams, Commerce, and Production workspace after full local and live-candidate verification.
-2. **Pilot** — select one Commerce or Production workflow with a named owner, baseline, acceptance test, and evidence plan.
+1. **Product** — validate the Website and Ecommerce & Orders prototypes without expanding the primary Today, Teams, and Operations navigation.
+2. **Pilot** — select one Website-to-order, Commerce, or Production workflow with a named owner, baseline, acceptance test, and evidence plan.
 3. **Managed mode** — keep activation locked until tenant persistence, signed identity, membership, audit, recovery, runtime role, and source coverage pass.
 
 ## Confirmed facts
 
 - The canonical implementation repository is this checkout, not the OneDrive HQ archive.
-- The application has four routes: Today, Teams, Operations, and Settings. Capability lives inside internal views rather than more routes.
+- Today, Teams, and Operations remain the primary application navigation; Settings remains a utility.
+- Website and Ecommerce & Orders are slash-addressable, lazy-loaded local prototypes at `/products/website/` and `/products/ecommerce/`, linked from Operations rather than added to the primary navigation.
 - Commerce and Production use the canonical module paths `/operations/commerce/` and `/operations/production/`; legacy Shop and Plant URLs redirect into them.
 - Product uses Discover, Define, Build, Release, and Learn.
 - Settings captures the pilot entry point, current record, baseline, target, owner, authority boundary, and acceptance evidence without adding another route.
@@ -33,8 +34,9 @@ Prove one complete company workflow in which a real customer or operator starts 
 ## Latest verification
 
 - Candidate identity is brand `terminal-v4-2026-07`, context `2026-07-22.7`, and catalogue `2026-07-22.6`.
-- Six workflow profiles, 46 coordinated-release checks, 35 security checks, eleven Vercel contract checks, 73 contact checks, six RLS checks, six paired-identity checks, HQ, lint, YAML, and 46 Python tests pass locally.
-- Desktop and 390 px mobile have no overflow or browser errors. Operations, Product decisions, and `decision_packet.v1` owner reviews require attributable human evidence; stale or legacy authority reopens safely.
+- Six workflow profiles, 47 coordinated-release checks, 36 security checks, eleven Vercel contract checks, 73 contact checks, six RLS checks, six paired-identity checks, HQ, product-inclusive lint, strict TypeScript, YAML, and 46 Python tests pass locally.
+- Website passes the desktop workflow, browser-local reload, four-page cap, and embedded 390 px preview checks. Ecommerce passes all four module views plus the guided payment-review, human-approval, and audit-increment path. Neither result proves a managed integration or production release.
+- Core desktop and 390 px layouts remain verified. Operations, Product decisions, and `decision_packet.v1` reviews require attributable human evidence; stale authority reopens safely.
 - Historical schema v1 is unchanged; additive v2 preserves old actors and decisions as `legacy`, requires reclassification, and enforces nonblank human decisions before readiness.
 - Contact intake stores a SHA-256 payload fingerprint; changed cold-start replays conflict and ambiguous persistence fails closed.
 - Read-only Vercel project, environment, domain, firewall, and cron contracts pass. One coordinated workflow verifies and rolls back both canonical domains as a pair.
@@ -53,7 +55,7 @@ Prove one complete company workflow in which a real customer or operator starts 
 
 - One company system; no public agent catalogue, internal-console product, or collection of demo domains.
 - A pushed branch or local pass is not a release; review, explicit owner authorization, and the coordinated `main` workflow are mandatory.
-- Company system, Commerce, and Production are the only portfolio entries.
+- Company system, Commerce, and Production are operating entries; Website and Ecommerce & Orders are explicitly labelled local prototypes until their next evidence gates pass.
 - AI prepares bounded work from approved records; responsible owners retain consequential authority.
 - Social and open-source discovery must become a tested workflow, implementation recipe, or explicit rejection before entering the product.
 - The long-term decision and implementation layer remains an HQ/R&D direction; a public resource catalogue is deferred behind proof from the core operational products.
@@ -61,8 +63,8 @@ Prove one complete company workflow in which a real customer or operator starts 
 
 ## Next evidence
 
-- Review the release PR, preserve separate owner authorization for the `main` merge, and release only through the coordinated guarded workflow.
-- Capture matching live `__release.json` metadata and canonical route checks after promotion.
+- Complete a full-route 390 px viewport audit for both prototypes; desktop interaction, Website's embedded 390 px preview, reload behavior, guided approval, audit, and truthful local-only labels already pass.
+- Convert one approved Website brief into one Ecommerce order-intake fixture and record acceptance evidence before any customer-domain or connector work.
 - Approve a narrow Vercel environment cleanup from the audited name-only inventory; do not copy or expose values.
 - Activate managed trial persistence only after v1 then v2 migration rehearsal, the read-only database role/RLS validator, backup, and restore evidence pass on non-production data.
 - Complete one pilot intake containing channel, current record, owner, baseline, target outcome, authority boundary, and acceptance evidence.

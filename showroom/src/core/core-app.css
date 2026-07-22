@@ -89,8 +89,8 @@ a { color: inherit; }
 
 .workspace-toolbar { min-height: 38px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--core-line); }
 .segmented-control, .view-tabs { display: flex; min-width: 0; align-items: center; gap: 3px; }
-.segmented-control button, .view-tabs button { min-height: 31px; border: 1px solid transparent; border-radius: 4px; padding: 0 10px; background: transparent; color: var(--core-quiet); font-size: 9px; font-weight: 720; cursor: pointer; white-space: nowrap; }
-.segmented-control button:hover, .view-tabs button:hover { color: var(--core-ink); }
+.segmented-control button, .segmented-control a, .view-tabs button { min-height: 31px; border: 1px solid transparent; border-radius: 4px; padding: 0 10px; display: inline-flex; align-items: center; background: transparent; color: var(--core-quiet); font-size: 9px; font-weight: 720; text-decoration: none; cursor: pointer; white-space: nowrap; }
+.segmented-control button:hover, .segmented-control a:hover, .view-tabs button:hover { color: var(--core-ink); }
 .segmented-control button[aria-pressed="true"] { border-color: rgba(124,245,180,.22); background: var(--core-green-soft); color: var(--core-green); }
 .view-tabs button[aria-selected="true"] { border-bottom-color: var(--core-green); border-radius: 0; color: var(--core-ink); }
 .segmented-control.wide { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }
