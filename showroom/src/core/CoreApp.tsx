@@ -3,6 +3,18 @@ import { Link, NavLink, Outlet, useLocation, useNavigate, useOutletContext, useS
 
 import siteManifest from '../../../site-manifest.json'
 import './core-app.css'
+import {
+  createManagedApproval,
+  currentManagedIdentity,
+  currentManagedWorkspace,
+  decideManagedApproval,
+  loadManagedBootstrap,
+  managedTrialAuthConfigured,
+  signInManagedTrial,
+  signOutManagedTrial,
+  type ManagedApprovalRecord,
+  type ManagedIdentity,
+} from './managed-trial'
 import { LEGACY_TEAM_WORK_KEYS, TEAM_WORK_KEY, formatTime, teamDefinitions, useTeamWorkspace } from './team-work'
 
 type CommerceItem = {
@@ -116,6 +128,7 @@ type Approval = {
   decidedBy?: string
   decidedActorKind?: 'human' | 'service' | 'agent' | 'unknown'
   decisionNote?: string
+  managed?: boolean
 }
 
 type ActionDomain = 'commerce' | 'production'
@@ -378,7 +391,12 @@ function uid(prefix: string) {
 }
 
 function commandUuid() {
-  return globalThis.crypto?.randomUUID?.()
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID()
+  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16))
+  bytes[6] = (bytes[6] & 0x0f) | 0x40
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
+  const value = [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+  return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`
 }
 
 function stableFingerprint(value: unknown) {
@@ -437,6 +455,60 @@ function toManagedApprovalRequest(approval: Approval) {
     proposal: toManagedDecisionPacket(approval.packet),
     evidence_refs: [...new Set(approval.packet.claims.map((claim) => claim.sourceReference))],
   }
+}
+
+function fromManagedApproval(record: ManagedApprovalRecord): Approval {
+  const managedPacket = record.proposal as unknown as ManagedDecisionPacket
+  if (
+    managedPacket.contract !== 'decision_packet.v1'
+    || !managedPacket.subject
+    || !Array.isArray(managedPacket.claims)
+  ) {
+    throw new Error('managed_approval_contract_invalid')
+  }
+  const packet: DecisionPacket = {
+    contract: 'decision_packet.v1',
+    subject: managedPacket.subject,
+    decision: managedPacket.decision,
+    claims: managedPacket.claims.map((claim) => ({
+      id: claim.id,
+      claimType: claim.claim_type,
+      statement: claim.statement,
+      sourceReference: claim.source_reference,
+      capturedAt: claim.captured_at,
+      status: claim.status,
+      uncertainty: claim.uncertainty,
+      visibility: claim.visibility,
+      digest: claim.digest,
+    })),
+    baseline: managedPacket.baseline,
+    target: managedPacket.target,
+    result: managedPacket.result,
+    acceptance: managedPacket.acceptance,
+    artifactReference: managedPacket.artifact_reference,
+  }
+  return {
+    id: record.approval_id,
+    commandId: record.command_id,
+    createdAt: record.requested_at,
+    title: record.title,
+    requestedBy: record.requested_by,
+    requestedActorKind: record.requested_actor_kind,
+    packet,
+    packetFingerprint: decisionPacketFingerprint(packet),
+    status: record.status,
+    decidedAt: record.decided_at || undefined,
+    decidedBy: record.decided_by || undefined,
+    decidedActorKind: record.decided_actor_kind === 'human' || record.decided_actor_kind === 'service' || record.decided_actor_kind === 'agent' ? record.decided_actor_kind : undefined,
+    decisionNote: record.decision_note || undefined,
+    managed: true,
+  }
+}
+
+function mergeManagedApprovals(current: Approval[], records: ManagedApprovalRecord[]) {
+  const managed = records.map(fromManagedApproval)
+  const managedIds = new Set(managed.map((approval) => approval.id))
+  return [...managed, ...current.filter((approval) => !approval.managed && !managedIds.has(approval.id))]
 }
 
 function normalizeApprovals(value: Approval[]) {
@@ -512,10 +584,15 @@ function normalizeApprovals(value: Approval[]) {
       decidedBy: decidedBy || undefined,
       decidedActorKind,
       decisionNote: decisionNote || undefined,
+      managed: candidate.managed === true,
     }
   })
 
   return JSON.stringify(approvals) === JSON.stringify(value) ? value : approvals
+}
+
+function localApprovalsOnly(approvals: Approval[]) {
+  return approvals.some((approval) => approval.managed) ? approvals.filter((approval) => !approval.managed) : approvals
 }
 
 function normalizeActions(value: AccountableAction[]) {
@@ -540,7 +617,7 @@ function confirmAccountableAction(action: PendingAccountableAction, details: Act
   }
 }
 
-function useStoredState<T>(key: string, seed: T, normalize?: (value: T) => T, legacyKeys: string[] = []) {
+function useStoredState<T>(key: string, seed: T, normalize?: (value: T) => T, legacyKeys: string[] = [], persist?: (value: T) => T) {
   const [state, setState] = useState<T>(() => {
     for (const storageKey of [key, ...legacyKeys]) {
       try {
@@ -558,11 +635,11 @@ function useStoredState<T>(key: string, seed: T, normalize?: (value: T) => T, le
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(key, JSON.stringify(normalizedState))
+      window.localStorage.setItem(key, JSON.stringify(persist ? persist(normalizedState) : normalizedState))
     } catch {
       // The workspace remains usable in memory when browser storage is unavailable.
     }
-  }, [key, normalizedState])
+  }, [key, normalizedState, persist])
 
   return [normalizedState, setState] as const
 }
@@ -576,11 +653,30 @@ function useProductionWorkspace() {
 }
 
 function useApprovalWorkspace() {
-  return useStoredState<Approval[]>(APPROVAL_KEY, [], normalizeApprovals, LEGACY_APPROVAL_KEYS)
+  return useStoredState<Approval[]>(APPROVAL_KEY, [], normalizeApprovals, LEGACY_APPROVAL_KEYS, localApprovalsOnly)
 }
 
 function useSetupWorkspace() {
   return useStoredState<SetupState>(SETUP_KEY, seedSetup, normalizeSetup, LEGACY_SETUP_KEYS)
+}
+
+function useManagedIdentity(enabled: boolean) {
+  const [identity, setIdentity] = useState<ManagedIdentity | null>(null)
+
+  useEffect(() => {
+    if (!enabled) return undefined
+    let active = true
+    currentManagedIdentity()
+      .then((current) => {
+        if (active) setIdentity(current)
+      })
+      .catch(() => {
+        if (active) setIdentity(null)
+      })
+    return () => { active = false }
+  }, [enabled])
+
+  return [enabled ? identity : null, setIdentity] as const
 }
 
 function formatMoney(value: number) {
@@ -721,12 +817,13 @@ export function Empty({ children }: { children: ReactNode }) {
   return <div className="empty-state"><span>&gt;_</span><p>{children}</p></div>
 }
 
-function ApprovalReviewDialog({ approval, onClose, onDecision }: { approval: Approval; onClose: () => void; onDecision: (status: 'approved' | 'declined', reviewer: string, note: string) => void }) {
+function ApprovalReviewDialog({ approval, onClose, onDecision }: { approval: Approval; onClose: () => void; onDecision: (status: 'approved' | 'declined', reviewer: string, note: string) => Promise<void> | void }) {
   const dialogRef = useRef<HTMLDialogElement>(null)
   const reviewerInputRef = useRef<HTMLInputElement>(null)
   const [reviewer, setReviewer] = useState('')
   const [note, setNote] = useState('')
   const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     const dialog = dialogRef.current
@@ -739,12 +836,19 @@ function ApprovalReviewDialog({ approval, onClose, onDecision }: { approval: App
     }
   }, [])
 
-  function decide(status: 'approved' | 'declined') {
+  async function decide(status: 'approved' | 'declined') {
     if (!reviewer.trim() || !note.trim()) {
       setError('Name the human reviewer and record the reason for this decision.')
       return
     }
-    onDecision(status, reviewer.trim(), note.trim())
+    setBusy(true)
+    setError('')
+    try {
+      await onDecision(status, reviewer.trim(), note.trim())
+    } catch (decisionError) {
+      setError(decisionError instanceof Error ? decisionError.message : 'The decision was not recorded. Try again.')
+      setBusy(false)
+    }
   }
 
   return (
@@ -756,12 +860,13 @@ function ApprovalReviewDialog({ approval, onClose, onDecision }: { approval: App
       <div className="decision-evidence"><span>Claims and provenance</span>{approval.packet.claims.map((claim) => <article key={claim.id}><div><strong>{claim.statement}</strong><small>{claim.claimType} · {claim.sourceReference} · {claim.uncertainty} uncertainty · {claim.visibility} · {formatTime(claim.capturedAt)}{claim.digest ? ` · ${claim.digest}` : ''}</small></div><span className={`status-pill ${claim.status === 'verified' ? 'approved' : 'pending'}`}>{claim.status}</span></article>)}</div>
       <div className="decision-fields"><label>Human reviewer<input autoFocus maxLength={80} onChange={(event) => setReviewer(event.target.value)} placeholder="Name or accountable role" ref={reviewerInputRef} required value={reviewer} /></label><label>Decision note<textarea maxLength={240} onChange={(event) => setNote(event.target.value)} placeholder="Why this is approved or declined, and any boundary." required value={note} /></label></div>
       <p className="form-notice" role="status">{error || 'Agents and services may prepare this packet; only a named human can make the terminal decision.'}</p>
-      <div className="form-actions"><button className="core-button danger" onClick={() => decide('declined')} type="button">Decline and record</button><button className="core-button primary" onClick={() => decide('approved')} type="button">Approve and record</button></div>
+      <div className="form-actions"><button className="core-button danger" disabled={busy} onClick={() => void decide('declined')} type="button">Decline and record</button><button className="core-button primary" disabled={busy} onClick={() => void decide('approved')} type="button">{busy ? 'Recording…' : 'Approve and record'}</button></div>
     </dialog>
   )
 }
 
 export function OverviewPage() {
+  const runtime = useOutletContext<RuntimeHealth>()
   const [commerce] = useCommerceWorkspace()
   const [production] = useProductionWorkspace()
   const [approvals, setApprovals] = useApprovalWorkspace()
@@ -769,6 +874,9 @@ export function OverviewPage() {
   const [workspace] = useTeamWorkspace()
   const [brief, setBrief] = useState<string[]>([])
   const [selectedApprovalId, setSelectedApprovalId] = useState('')
+  const [managedIdentity] = useManagedIdentity(runtime.status === 'enterprise')
+  const [briefNotice, setBriefNotice] = useState('')
+  const [briefBusy, setBriefBusy] = useState(false)
   const openWork = workspace.items.filter((item) => item.status !== 'done')
   const activeWork = workspace.items.filter((item) => ['in_progress', 'review'].includes(item.status))
   const blockedWork = workspace.items.filter((item) => item.status === 'blocked')
@@ -785,6 +893,21 @@ export function OverviewPage() {
   const ownerAttention = blockedWork.length + pendingApprovals.length + agentHandoffs.length + operatingExceptions + (isPilotReady ? 0 : 1)
   const selectedApproval = pendingApprovals.find((approval) => approval.id === selectedApprovalId)
 
+  useEffect(() => {
+    if (!managedIdentity) return undefined
+    let active = true
+    loadManagedBootstrap()
+      .then((bootstrap) => {
+        if (!active) return
+        setApprovals((current) => mergeManagedApprovals(current, bootstrap.approvals))
+        setBriefNotice(`Connected to ${managedIdentity.workspaceId}; approval records are managed.`)
+      })
+      .catch((error) => {
+        if (active) setBriefNotice(error instanceof Error ? error.message : 'Managed approvals could not be loaded.')
+      })
+    return () => { active = false }
+  }, [managedIdentity, setApprovals])
+
   function prepareCompanyBrief() {
     setBrief([
       `${openWork.length} company work items remain open; ${activeWork.length} are in delivery or review across ${workspace.agents.length} delegated role records.`,
@@ -794,7 +917,7 @@ export function OverviewPage() {
     ])
   }
 
-  function requestBriefApproval() {
+  async function requestBriefApproval() {
     const createdAt = new Date().toISOString()
     const approvalId = uid('APR')
     const claimSources = ['local://teams/work-register', 'local://operations', 'local://teams/product/release-checks', 'local://settings/pilot-definition']
@@ -836,12 +959,46 @@ export function OverviewPage() {
       packetFingerprint,
       status: 'pending',
     }
-    setApprovals((current) => [approval, ...current.map((candidate) => candidate.status === 'pending' && candidate.title === approval.title ? { ...candidate, status: 'superseded' as const } : candidate)])
-    setSelectedApprovalId(approval.id)
+    if (!managedIdentity) {
+      setApprovals((current) => [approval, ...current.map((candidate) => candidate.status === 'pending' && candidate.title === approval.title ? { ...candidate, status: 'superseded' as const } : candidate)])
+      setSelectedApprovalId(approval.id)
+      setBriefNotice('Saved in this browser. Sign in from Settings to create a managed approval record.')
+      return
+    }
+
+    const request = toManagedApprovalRequest(approval)
+    if (!request) {
+      setBriefNotice('The approval packet is incomplete and was not sent.')
+      return
+    }
+    setBriefBusy(true)
+    setBriefNotice('Recording the approval request…')
+    try {
+      const managedApproval = fromManagedApproval(await createManagedApproval(request))
+      setApprovals((current) => [managedApproval, ...current.filter((candidate) => candidate.id !== managedApproval.id).map((candidate) => candidate.status === 'pending' && candidate.title === managedApproval.title ? { ...candidate, status: 'superseded' as const } : candidate)])
+      setSelectedApprovalId(managedApproval.id)
+      setBriefNotice(`Approval recorded in ${managedIdentity.workspaceId}.`)
+    } catch (error) {
+      setBriefNotice(error instanceof Error ? error.message : 'The approval was not recorded. No local fallback was claimed.')
+    } finally {
+      setBriefBusy(false)
+    }
   }
 
-  function setApprovalStatus(id: string, status: 'approved' | 'declined', reviewer: string, note: string) {
-    setApprovals((current) => current.map((approval) => approval.id === id ? { ...approval, status, decidedAt: new Date().toISOString(), decidedBy: reviewer, decidedActorKind: 'human', decisionNote: note } : approval))
+  async function setApprovalStatus(id: string, status: 'approved' | 'declined', reviewer: string, note: string) {
+    const approval = approvals.find((candidate) => candidate.id === id)
+    if (!approval) throw new Error('The approval record is no longer available.')
+    if (approval.managed) {
+      const updated = fromManagedApproval(await decideManagedApproval(id, {
+        command_id: commandUuid(),
+        decision: status,
+        note,
+      }))
+      setApprovals((current) => current.map((candidate) => candidate.id === id ? updated : candidate))
+      setBriefNotice(`Decision recorded in ${managedIdentity?.workspaceId ?? 'the managed workspace'}.`)
+    } else {
+      setApprovals((current) => current.map((candidate) => candidate.id === id ? { ...candidate, status, decidedAt: new Date().toISOString(), decidedBy: reviewer, decidedActorKind: 'human', decisionNote: note } : candidate))
+    }
     setSelectedApprovalId('')
   }
 
@@ -860,7 +1017,7 @@ export function OverviewPage() {
             {!isPilotReady ? <Link to="/settings/"><span>Pilot</span><strong>Define the measurable workflow</strong><small>{pilotProgress(setup)}% complete · baseline and acceptance required</small></Link> : null}
             {blockedWork.map((item) => <Link key={item.id} to={`/work/?team=${item.team}&view=work&item=${item.id}`}><span>Work</span><strong>{item.title}</strong><small>{item.owner}</small></Link>)}
             {agentHandoffs.map((agent) => <Link key={agent.id} to={`/work/?team=${agent.team}&view=agents&agent=${agent.id}`}><span>Agent</span><strong>{agent.name} {agent.state === 'waiting_review' ? 'needs review' : 'is blocked'}</strong><small>{agent.humanOwner} / {agent.assignedWorkItemId ?? 'unassigned'}</small></Link>)}
-            {pendingApprovals.map((approval) => <button className="attention-action" key={approval.id} onClick={() => setSelectedApprovalId(approval.id)} type="button"><span>Approval</span><strong>{approval.title}</strong><small>{approval.packet.claims.length} claims · {formatTime(approval.createdAt)}</small><b>Review</b></button>)}
+            {pendingApprovals.map((approval) => <button className="attention-action" key={approval.id} onClick={() => setSelectedApprovalId(approval.id)} type="button"><span>{approval.managed ? 'Managed approval' : 'Approval'}</span><strong>{approval.title}</strong><small>{approval.packet.claims.length} claims · {formatTime(approval.createdAt)}</small><b>Review</b></button>)}
             {lowStock.map((item) => <Link key={item.sku} to="/operations/commerce/?tab=inventory"><span>Stock</span><strong>{item.name}</strong><small>{item.onHand} on hand · reorder at {item.reorderAt}</small></Link>)}
             {openProductionIssues.map((issue) => <Link key={issue.id} to="/operations/production/?tab=control"><span>{issue.kind}</span><strong>{issue.summary}</strong><small>{issue.area}</small></Link>)}
             {!ownerAttention ? <Empty>No owner decision needs attention.</Empty> : null}
@@ -870,7 +1027,7 @@ export function OverviewPage() {
           <div className="release-line"><div><span className="core-eyebrow">Product release</span><h2>{workspace.release.name}</h2></div><strong>{releasePercent}%</strong></div>
           <div className="progress-track"><i style={{ width: `${releasePercent}%` }} /></div>
           <Link className="release-review-link" to="/work/?team=product&view=review">Review release checks</Link>
-          <details className="company-brief-disclosure"><summary>Company brief</summary><button className="text-link" onClick={prepareCompanyBrief} type="button">Prepare brief</button>{brief.length ? <div className="brief-output compact">{brief.map((line) => <p key={line}>{line}</p>)}<button className="core-button compact" onClick={requestBriefApproval} type="button">Request owner review</button></div> : <p className="panel-copy">Prepared locally from visible work and operating records.</p>}</details>
+          <details className="company-brief-disclosure"><summary>Company brief</summary><button className="text-link" onClick={prepareCompanyBrief} type="button">Prepare brief</button>{brief.length ? <div className="brief-output compact">{brief.map((line) => <p key={line}>{line}</p>)}<button className="core-button compact" disabled={briefBusy} onClick={() => void requestBriefApproval()} type="button">{briefBusy ? 'Recording…' : 'Request owner review'}</button></div> : <p className="panel-copy">Prepared locally from visible work and operating records.</p>}{briefNotice ? <p className="form-notice" role="status">{briefNotice}</p> : null}</details>
         </section>
       </div>
       {selectedApproval ? <ApprovalReviewDialog approval={selectedApproval} onClose={() => setSelectedApprovalId('')} onDecision={(status, reviewer, note) => setApprovalStatus(selectedApproval.id, status, reviewer, note)} /> : null}
@@ -1094,11 +1251,17 @@ export function SettingsPage() {
   const [setup, setSetup] = useSetupWorkspace()
   const [commerce] = useCommerceWorkspace()
   const [production] = useProductionWorkspace()
-  const [approvals] = useApprovalWorkspace()
+  const [approvals, setApprovals] = useApprovalWorkspace()
   const [actions] = useStoredState<AccountableAction[]>(ACTION_KEY, [], normalizeActions)
   const [teamWorkspace] = useTeamWorkspace()
   const [notice, setNotice] = useState('')
   const [resetArmed, setResetArmed] = useState(false)
+  const [managedIdentity, setManagedIdentity] = useManagedIdentity(runtime.status === 'enterprise')
+  const [managedEmail, setManagedEmail] = useState('')
+  const [managedPassword, setManagedPassword] = useState('')
+  const [managedWorkspace, setManagedWorkspace] = useState(currentManagedWorkspace())
+  const [managedNotice, setManagedNotice] = useState('')
+  const [managedBusy, setManagedBusy] = useState(false)
   const completion = pilotProgress(setup)
   const isPilotReady = pilotReady(setup)
   const selectedTemplate = templateFor(setup.product, setup.template)
@@ -1133,6 +1296,37 @@ export function SettingsPage() {
     window.location.assign('/')
   }
 
+  async function connectManagedWorkspace(event: FormEvent) {
+    event.preventDefault()
+    setManagedBusy(true)
+    setManagedNotice('Signing in and checking workspace membership…')
+    try {
+      const identity = await signInManagedTrial(managedEmail, managedPassword, managedWorkspace)
+      setManagedIdentity(identity)
+      setManagedPassword('')
+      try {
+        const bootstrap = await loadManagedBootstrap()
+        setApprovals((current) => mergeManagedApprovals(current, bootstrap.approvals))
+        setManagedNotice(`Connected to ${identity.workspaceId}. Managed approvals are ready.`)
+      } catch (workspaceError) {
+        setManagedNotice(workspaceError instanceof Error ? workspaceError.message : 'Signed in, but this workspace is not ready.')
+      }
+    } catch (error) {
+      setManagedNotice(error instanceof Error ? error.message : 'Managed sign-in failed.')
+    } finally {
+      setManagedBusy(false)
+    }
+  }
+
+  async function disconnectManagedWorkspace() {
+    setManagedBusy(true)
+    await signOutManagedTrial()
+    setManagedIdentity(null)
+    setApprovals((current) => current.filter((approval) => !approval.managed))
+    setManagedNotice('Managed account disconnected from this browser.')
+    setManagedBusy(false)
+  }
+
   return (
     <div className="workspace-screen settings-screen">
       <PageHeading eyebrow="Settings" title="Pilot and system boundary" copy="Define one measurable workflow, export its evidence, and see exactly what still blocks managed activation." />
@@ -1152,6 +1346,8 @@ export function SettingsPage() {
         </form>
         <section className="core-panel system-boundary-panel" id="controls">
           <div className="panel-head"><div><span className="core-eyebrow">System boundary</span><h2>{runtime.status === 'enterprise' ? 'Managed mode ready' : 'Managed mode locked'}</h2></div><RuntimeBadge status={runtime.status} /></div>
+          {runtime.status === 'enterprise' && managedTrialAuthConfigured() ? managedIdentity ? <div className="template-contract"><span>Managed account</span><strong>{managedIdentity.email}</strong><small>{managedIdentity.workspaceId} · membership and capabilities are checked by the API</small><button className="text-link" disabled={managedBusy} onClick={() => void disconnectManagedWorkspace()} type="button">Disconnect</button></div> : <form className="core-form compact-form" onSubmit={(event) => void connectManagedWorkspace(event)}><span className="core-eyebrow">Managed workspace</span><div className="form-row"><label>Email<input autoComplete="username" maxLength={160} onChange={(event) => setManagedEmail(event.target.value)} required type="email" value={managedEmail} /></label><label>Password<input autoComplete="current-password" minLength={8} onChange={(event) => setManagedPassword(event.target.value)} required type="password" value={managedPassword} /></label></div><label>Workspace ID<input maxLength={128} onChange={(event) => setManagedWorkspace(event.target.value)} placeholder="Your provisioned workspace" required value={managedWorkspace} /></label><button className="core-button primary" disabled={managedBusy} type="submit">{managedBusy ? 'Checking…' : 'Connect workspace'}</button></form> : null}
+          {managedNotice ? <p className="form-notice" role="status">{managedNotice}</p> : null}
           <div className="readiness-list"><span><small>Pilot definition</small><strong>{isPilotReady ? 'Ready' : `${completion}% complete`}</strong></span><span><small>Runtime</small><strong>{runtime.serviceStatus}</strong></span><span><small>Operating mode</small><strong>{runtime.operatingMode.replace('_', ' ')}</strong></span><span><small>Managed data</small><strong>{runtime.enterpriseDbReady ? 'Ready' : 'Not connected'}</strong></span><span><small>Security</small><strong>{runtime.securityReady ? 'Ready' : 'Not ready'}</strong></span><span><small>Write path</small><strong>{runtime.writesReady ? 'Enabled' : 'Locked'}</strong></span><span><small>Source coverage</small><strong>{runtime.coverageScore}%</strong></span><span><small>External action</small><strong>Owner controlled</strong></span></div>
           {runtime.status !== 'enterprise' ? <ul className="requirement-list">{(runtime.requirements.length ? runtime.requirements : ['Configure managed tenant persistence.', 'Verify production identity and source coverage.']).map((requirement) => <li key={requirement}>{requirement}</li>)}</ul> : null}
           <p className="authority-note">External sends, payments, publishing, access changes, and production writes remain owner-approved and auditable.</p>
