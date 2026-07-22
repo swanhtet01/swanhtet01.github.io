@@ -64,12 +64,13 @@ export function TeamsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedTeam = searchParams.get('team')
   const requestedView = searchParams.get('view')
+  const requestedItemId = searchParams.get('item')
+  const requestedAgentId = searchParams.get('agent')
   const activeTeam = teamDefinitions.some((team) => team.id === requestedTeam) ? requestedTeam as TeamId : 'product'
   const activeDefinition = teamDefinitions.find((team) => team.id === activeTeam) ?? teamDefinitions[0]
   const activeView = normalizeView(requestedView)
   const [workspace, setWorkspace] = useTeamWorkspace()
   const teamItems = workspace.items.filter((item) => item.team === activeTeam)
-  const [selectedItemId, setSelectedItemId] = useState(teamItems[0]?.id ?? '')
   const [showIntake, setShowIntake] = useState(requestedView === 'intake')
   const [title, setTitle] = useState('')
   const [owner, setOwner] = useState(`${activeDefinition.label} owner`)
@@ -91,7 +92,7 @@ export function TeamsPage() {
   const [notice, setNotice] = useState('')
 
   const intakeOpen = showIntake || requestedView === 'intake'
-  const selectedItem = teamItems.find((item) => item.id === selectedItemId) ?? teamItems[0]
+  const selectedItem = requestedItemId ? teamItems.find((item) => item.id === requestedItemId) : teamItems[0]
   const openItems = teamItems.filter((item) => item.status !== 'done')
   const activeItems = teamItems.filter((item) => ['in_progress', 'review'].includes(item.status))
   const blockedItems = teamItems.filter((item) => item.status === 'blocked')
@@ -101,14 +102,16 @@ export function TeamsPage() {
   const releasePercent = Math.round((releaseComplete / workspace.release.checks.length) * 100)
   const reviewDecision = workspace.decisions.find((decision) => decision.id === reviewDecisionId && decision.status === 'proposed')
 
-  function navigate(team: TeamId, view: WorkspaceView) {
-    setSearchParams({ team, view }, { replace: true })
+  function navigate(team: TeamId, view: WorkspaceView, selectedId?: string) {
+    const next = { team, view } as Record<string, string>
+    if (view === 'work' && selectedId) next.item = selectedId
+    if (view === 'agents' && selectedId) next.agent = selectedId
+    setSearchParams(next, { replace: true })
   }
 
   function selectTeam(team: TeamId) {
     const definition = teamDefinitions.find((item) => item.id === team) ?? teamDefinitions[0]
     setOwner(`${definition.label} owner`)
-    setSelectedItemId(workspace.items.find((item) => item.team === team)?.id ?? '')
     setShowIntake(false)
     setBrief([])
     setNotice('')
@@ -143,10 +146,9 @@ export function TeamsPage() {
     setWorkspace((current) => ({ ...current, items: [item, ...current.items] }))
     setTitle('')
     setOutcome('')
-    setSelectedItemId(item.id)
     setShowIntake(false)
     setNotice(`${item.id} added to ${activeDefinition.label}.`)
-    navigate(activeTeam, 'work')
+    navigate(activeTeam, 'work', item.id)
   }
 
   function updateWork(itemId: string, patch: Partial<Pick<TeamWorkItem, 'status' | 'owner' | 'priority' | 'productStage'>>) {
@@ -311,7 +313,7 @@ export function TeamsPage() {
           <section className="core-panel queue-panel">
             <div className="panel-head"><div><span className="core-eyebrow">Owned work</span><h2>{openItems.length} open</h2></div></div>
             {teamItems.length ? <div className="record-list" role="list">{teamItems.map((item) => (
-              <button aria-current={selectedItem?.id === item.id ? 'true' : undefined} className="record-row" key={item.id} onClick={() => setSelectedItemId(item.id)} type="button">
+              <button aria-current={selectedItem?.id === item.id ? 'true' : undefined} className="record-row" key={item.id} onClick={() => navigate(activeTeam, 'work', item.id)} type="button">
                 <span className={`record-status ${item.status}`} />
                 <span><strong>{item.title}</strong><small>{item.id} / {item.owner}</small></span>
                 <span><b>{item.priority}</b><small>{statusLabel(item.status)}</small></span>
@@ -337,7 +339,7 @@ export function TeamsPage() {
           </section>
         </div> : null}
 
-        {activeView === 'agents' ? <AgentTeamsPanel activeTeam={activeTeam} setWorkspace={setWorkspace} workspace={workspace} /> : null}
+        {activeView === 'agents' ? <AgentTeamsPanel activeTeam={activeTeam} onSelectAgent={(agentId) => navigate(activeTeam, 'agents', agentId)} selectedAgentId={requestedAgentId ?? ''} setWorkspace={setWorkspace} workspace={workspace} /> : null}
 
         {activeView === 'review' ? <div className="review-workspace simplified-review">
           <div className="split-workspace review-grid">
