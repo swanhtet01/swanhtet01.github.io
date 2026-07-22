@@ -86,6 +86,7 @@ export type CommerceWorkspace = {
 }
 
 export type ProposedActionKind =
+  | 'accept_website_handoff'
   | 'confirm_order'
   | 'complete_pick'
   | 'approve_dispatch'
@@ -472,8 +473,22 @@ function applyProposal(state: CommerceWorkspace, proposal: ProposedAction, evide
   }
 }
 
+function isValidApprovalDetails(approval: ApprovalDetails) {
+  return approval.actor === approval.actor.trim()
+    && approval.actor.length > 0
+    && approval.actor.length <= 80
+    && approval.reason === approval.reason.trim()
+    && approval.reason.length > 0
+    && approval.reason.length <= 220
+    && approval.evidenceReference === approval.evidenceReference.trim()
+    && approval.evidenceReference.length > 0
+    && approval.evidenceReference.length <= 180
+}
+
 export function commerceReducer(state: CommerceWorkspace, action: CommerceReducerAction): CommerceWorkspace {
   if (action.type === 'reset_demo') return action.workspace
+
+  if (!isValidApprovalDetails(action.approval) || Number.isNaN(Date.parse(action.appliedAt))) return state
 
   const applied = applyProposal(state, action.proposal, action.approval.evidenceReference)
   if (!applied) return state

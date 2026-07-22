@@ -1,7 +1,12 @@
-import { useEffect, useReducer, useRef, useState } from 'react'
+import { type FormEvent, useEffect, useReducer, useRef, useState } from 'react'
 
 import { ApprovalGate } from './ApprovalGate'
 import { CommerceWorkspaces } from './CommerceWorkspaces'
+import {
+  acceptWebsiteEcommerceHandoff,
+  readWebsiteEcommerceHandoff,
+  type WebsiteEcommerceHandoffContext,
+} from '../product-handoff'
 import {
   type ApprovalDetails,
   type AuditEvent,
@@ -152,6 +157,81 @@ function AuditDrawer({ events, onClose }: { events: AuditEvent[]; onClose: () =>
   )
 }
 
+function WebsiteIntakeApproval({
+  context,
+  onApprove,
+  onCancel,
+}: {
+  context: WebsiteEcommerceHandoffContext
+  onApprove: (operatorId: string) => void
+  onCancel: () => void
+}) {
+  const [operatorId, setOperatorId] = useState('')
+  const [confirmed, setConfirmed] = useState(false)
+  const operatorRef = useRef<HTMLInputElement>(null)
+  const canApprove = /^OP-[A-Z0-9][A-Z0-9_-]{2,31}$/.test(operatorId) && confirmed
+
+  useEffect(() => {
+    operatorRef.current?.focus()
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') onCancel()
+    }
+    document.addEventListener('keydown', closeOnEscape)
+    return () => document.removeEventListener('keydown', closeOnEscape)
+  }, [onCancel])
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (canApprove) onApprove(operatorId)
+  }
+
+  return (
+    <div className="eco-modal-backdrop">
+      <section aria-labelledby="eco-handoff-approval-title" aria-modal="true" className="eco-approval-dialog" role="dialog">
+        <header className="eco-dialog-head">
+          <div><span className="eco-eyebrow">Human approval required</span><h2 id="eco-handoff-approval-title">Accept Website intake · {context.handoff.id}</h2></div>
+          <button aria-label="Cancel Website intake approval" className="eco-icon-button" onClick={onCancel} type="button">×</button>
+        </header>
+        <div className="eco-change-preview" aria-label="Proposed handoff change">
+          <span><small>Before</small><strong>Pending acceptance</strong></span>
+          <i aria-hidden="true">→</i>
+          <span><small>After approval</small><strong>Accepted local intake</strong></span>
+        </div>
+        <p className="eco-boundary-note">Acceptance stores a non-PII intake record and one audit event in this browser. It does not create an order, contact a customer, reserve stock, collect payment, or write to Commerce.</p>
+        <form className="eco-approval-form" onSubmit={submit}>
+          <label>
+            Responsible operator ID
+            <input
+              autoComplete="off"
+              maxLength={35}
+              onChange={(event) => setOperatorId(event.target.value.toUpperCase())}
+              pattern="OP-[A-Z0-9][A-Z0-9_-]{2,31}"
+              placeholder="OP-OWNER"
+              ref={operatorRef}
+              required
+              value={operatorId}
+            />
+          </label>
+          <div className="eco-handoff-evidence">
+            <span>Evidence reference</span>
+            <code>{context.handoff.source.localPublishId}</code>
+            <small>The Website revision marker identifies local state; it is not a cryptographic signature.</small>
+          </div>
+          <label className="eco-handoff-confirmation">
+            <input checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} type="checkbox" />
+            <span>I reviewed this exact local Website intake and accept the recorded SKU and quantity.</span>
+          </label>
+          <div className="eco-dialog-actions">
+            <span />
+            <button className="eco-button eco-button-quiet" onClick={onCancel} type="button">Cancel</button>
+            <button className="eco-button eco-button-primary" disabled={!canApprove} type="submit">Accept local intake</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  )
+}
+
 export function EcommerceOrdersProduct() {
   const [workspace, dispatch] = useReducer(commerceReducer, 0, () => createDemoWorkspace())
   const [activeView, setActiveView] = useState<CommerceView>('orders')
@@ -160,8 +240,21 @@ export function EcommerceOrdersProduct() {
   const [auditOpen, setAuditOpen] = useState(false)
   const [guideOpen, setGuideOpen] = useState(false)
   const [guideStep, setGuideStep] = useState(0)
-  const [announcement, setAnnouncement] = useState('Scenario records loaded locally. No integrations are connected.')
+  const [websiteHandoff, setWebsiteHandoff] = useState(() => readWebsiteEcommerceHandoff())
+  const [handoffApprovalOpen, setHandoffApprovalOpen] = useState(false)
+  const [announcement, setAnnouncement] = useState(() => {
+    if (!websiteHandoff) return 'Scenario records loaded locally. No integrations are connected.'
+    return websiteHandoff.handoff.state === 'accepted'
+      ? `${websiteHandoff.handoff.id} is an accepted local intake with one attributable audit event. No order was created.`
+      : 'Approved Website fixture is ready for human intake review. No order has been created.'
+  })
   const activeCopy = viewCopy[activeView]
+  const handoffAudit: AuditEvent[] = (websiteHandoff?.audit ?? []).map((event) => ({
+    ...event,
+    summary: 'Accepted Website-to-Ecommerce handoff',
+  }))
+  const combinedAudit = [...handoffAudit, ...workspace.audit]
+    .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
 
   useEffect(() => {
     document.title = 'Ecommerce & Orders | SuperMega'
@@ -213,6 +306,45 @@ export function EcommerceOrdersProduct() {
     const proposal = createStockReceiptProposal(item)
     setPendingAction(proposal)
     setAnnouncement(`${proposal.id} is waiting for human approval.`)
+  }
+
+  function requestWebsiteIntake() {
+    const current = readWebsiteEcommerceHandoff()
+    if (!current) {
+      setAnnouncement('No valid Website handoff is available in this browser.')
+      return
+    }
+    const item = workspace.catalog.find((candidate) => candidate.sku === current.handoff.intake.sku && candidate.active)
+    if (!item) {
+      setAnnouncement('The Website fixture does not match an active local catalog item, so intake failed closed.')
+      return
+    }
+    setWebsiteHandoff(current)
+    if (current.handoff.state === 'accepted') {
+      setAnnouncement(`${current.handoff.id} was already accepted by ${current.handoff.acceptance.operatorId}.`)
+      return
+    }
+    setHandoffApprovalOpen(true)
+    setAnnouncement(`${current.handoff.id} is waiting for attributable human approval.`)
+  }
+
+  function approveWebsiteIntake(operatorId: string) {
+    if (!websiteHandoff || websiteHandoff.handoff.state !== 'pending_acceptance') return
+    const item = workspace.catalog.find((candidate) => candidate.sku === websiteHandoff.handoff.intake.sku && candidate.active)
+    if (!item) {
+      setHandoffApprovalOpen(false)
+      setAnnouncement('Website intake acceptance failed closed because the catalog item is no longer active.')
+      return
+    }
+    const accepted = acceptWebsiteEcommerceHandoff(websiteHandoff.handoff.id, operatorId)
+    if (!accepted || accepted.handoff.state !== 'accepted') {
+      setHandoffApprovalOpen(false)
+      setAnnouncement('Website intake acceptance failed closed; no intake or audit record was created.')
+      return
+    }
+    setWebsiteHandoff(accepted)
+    setHandoffApprovalOpen(false)
+    setAnnouncement(`${accepted.handoff.id} accepted locally by ${accepted.handoff.acceptance.operatorId}; one audit event was recorded.`)
   }
 
   function approveAction(details: ApprovalDetails) {
@@ -280,7 +412,7 @@ export function EcommerceOrdersProduct() {
           <div className="eco-topbar-actions">
             <span className="eco-topbar-meta">MMK · MMT UTC+06:30</span>
             <button className="eco-button eco-button-quiet" onClick={() => setGuideOpen(true)} type="button">Guided demo</button>
-            <button className="eco-button eco-button-quiet" onClick={() => setAuditOpen(true)} type="button">Audit · {workspace.audit.length}</button>
+            <button className="eco-button eco-button-quiet" onClick={() => setAuditOpen(true)} type="button">Audit · {combinedAudit.length}</button>
             <span className="eco-mode-badge"><i />Local only</span>
           </div>
         </header>
@@ -311,18 +443,22 @@ export function EcommerceOrdersProduct() {
               onReceiveStock={requestStockReceipt}
               onRequestFulfillment={requestFulfillment}
               onRequestPayment={requestPayment}
+              onRequestWebsiteIntake={requestWebsiteIntake}
               onSelectOrder={setSelectedOrderId}
               orders={workspace.orders}
               selectedOrderId={selectedOrderId}
               view={activeView}
+              websiteHandoff={websiteHandoff}
+              websiteHandoffAccepted={websiteHandoff?.handoff.state === 'accepted'}
             />
           </div>
         </main>
       </div>
 
       {guideOpen ? <GuidedDemo hasPendingApproval={Boolean(pendingAction)} onAdvance={advanceGuide} onClose={() => setGuideOpen(false)} onRestart={restartDemo} step={guideStep} /> : null}
-      {auditOpen ? <AuditDrawer events={workspace.audit} onClose={() => setAuditOpen(false)} /> : null}
+      {auditOpen ? <AuditDrawer events={combinedAudit} onClose={() => setAuditOpen(false)} /> : null}
       {pendingAction ? <ApprovalGate action={pendingAction} guidedDemo={guideOpen} onApprove={approveAction} onCancel={() => setPendingAction(null)} /> : null}
+      {handoffApprovalOpen && websiteHandoff ? <WebsiteIntakeApproval context={websiteHandoff} onApprove={approveWebsiteIntake} onCancel={() => setHandoffApprovalOpen(false)} /> : null}
     </div>
   )
 }

@@ -5,7 +5,7 @@ const root = resolve(import.meta.dirname, '..')
 const dist = resolve(root, 'showroom', 'dist')
 const failures = []
 const fail = (reason) => failures.push(reason)
-const [manifestText, appPackageText, appSource, coreSource, teamSource, teamModel, websiteSource, ecommerceSource] = await Promise.all([
+const [manifestText, appPackageText, appSource, coreSource, teamSource, teamModel, websiteSource, publishSource, ecommerceSource, ecommerceModel, handoffSource] = await Promise.all([
   readFile(resolve(root, 'site-manifest.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'package.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'App.tsx'), 'utf8'),
@@ -13,7 +13,10 @@ const [manifestText, appPackageText, appSource, coreSource, teamSource, teamMode
   readFile(resolve(root, 'showroom', 'src', 'core', 'TeamWorkspace.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'team-work.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'WebsiteProduct.tsx'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'PublishWorkspace.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'EcommerceOrdersProduct.tsx'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'ecommerce-model.ts'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'products', 'product-handoff.ts'), 'utf8'),
 ])
 const manifest = JSON.parse(manifestText)
 const appPackage = JSON.parse(appPackageText)
@@ -79,6 +82,11 @@ if (!appSource.includes("lazy(() => import('./products/website/WebsiteProduct')"
 if (!appPackage.scripts?.lint?.includes('src/products')) fail('prototype_sources_not_linted')
 if (!websiteSource.includes('No website has been deployed.') || !websiteSource.includes('No deployment or external write occurred.')) fail('website_prototype_boundary_missing')
 if (!ecommerceSource.includes('No integrations are connected.') || !ecommerceSource.includes('Customer sends, checkout, payments, delivery, and production writes are not connected.')) fail('ecommerce_prototype_boundary_missing')
+if (!handoffSource.includes("schema: 'website_ecommerce_handoff.v1'") || !handoffSource.includes("state: 'pending_acceptance'") || !handoffSource.includes('hasExactKeys') || !handoffSource.includes('validateAgainstWorkspace') || !handoffSource.includes('readinessChecks(workspace, fingerprint).every') || !handoffSource.includes('acceptWebsiteEcommerceHandoff')) fail('website_ecommerce_handoff_contract_missing')
+if (['customerLabel', 'phoneSuffix', 'township', 'paymentMethod', 'deliveryMethod'].some((field) => handoffSource.includes(field))) fail('website_handoff_contains_pii_shaped_fields')
+if (!handoffSource.includes("actorKind: 'human'") || !handoffSource.includes("action: 'accept_website_handoff'") || !handoffSource.includes('audit: [audit]') || !handoffSource.includes("existing.handoff.state === 'accepted'") || !handoffSource.includes('setItem(WEBSITE_ECOMMERCE_HANDOFF_KEY, JSON.stringify(store))')) fail('website_handoff_atomic_audit_missing')
+if (!websiteSource.includes('approvalIsCurrent || !publishIsCurrent') || !websiteSource.includes('checks.every((check) => check.passed)') || !websiteSource.includes('writeWebsiteEcommerceHandoff(handoff, workspace)') || !publishSource.includes('fingerprint is a revision marker, not a signature')) fail('website_handoff_gate_missing')
+if (!ecommerceModel.includes("'accept_website_handoff'") || !ecommerceModel.includes('isValidApprovalDetails(action.approval)') || !ecommerceSource.includes('waiting for attributable human approval') || !ecommerceSource.includes('Responsible operator ID') || !ecommerceSource.includes('candidate.sku === websiteHandoff.handoff.intake.sku && candidate.active') || !ecommerceSource.includes('It does not create an order, contact a customer, reserve stock, collect payment, or write to Commerce.')) fail('ecommerce_intake_approval_contract_missing')
 let workflowProfiles = 0
 for (const product of manifest.products || []) {
   if (product.templates?.length !== 3) fail(`wrong_template_count:${product.id}`)
