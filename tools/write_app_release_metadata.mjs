@@ -15,20 +15,20 @@ const release = {
 }
 
 const favicon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="SuperMega terminal mark" shape-rendering="geometricPrecision">
-  <rect x="2.5" y="2.5" width="59" height="59" rx="12" fill="#090d13" />
-  <rect x="3.25" y="3.25" width="57.5" height="57.5" rx="11.25" fill="none" stroke="#fff" stroke-opacity=".18" />
-  <path d="M15 19 29 32 15 45" fill="none" stroke="#6b95ff" stroke-width="4.25" stroke-linecap="round" stroke-linejoin="round" />
-  <path d="M36 45h14" fill="none" stroke="#3dd6a2" stroke-width="4.25" stroke-linecap="round" />
+  <rect width="64" height="64" rx="8" fill="${manifest.brand.colors.background}" />
+  <rect x="1" y="1" width="62" height="62" rx="7" fill="none" stroke="${manifest.brand.colors.ink}" stroke-opacity=".16" />
+  <path d="M13 18 27 32 13 46" fill="none" stroke="${manifest.brand.colors.accent}" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter" />
+  <path d="M34 46h17" fill="none" stroke="${manifest.brand.colors.ink}" stroke-width="4.5" stroke-linecap="square" />
 </svg>
 `
 const webmanifest = {
-  name: 'SuperMega Operating Workspace',
+  name: 'SuperMega Company OS',
   short_name: 'SuperMega',
-  description: 'Shop and Plant operating software with governed assistance.',
+  description: 'Company operations and governed agents in one accountable system.',
   start_url: '/',
   display: 'standalone',
-  background_color: '#090d13',
-  theme_color: '#090d13',
+  background_color: manifest.brand.colors.background,
+  theme_color: manifest.brand.colors.background,
   icons: [{ src: '/favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }],
 }
 
