@@ -44,7 +44,7 @@ for (const [name, expected] of Object.entries({
   'vercel:deploy': 'node tools/deny_stale_public_deploy.mjs',
   'vercel:deploy:prod': 'node tools/deny_stale_public_deploy.mjs',
   'public:build': 'node tools/create_public_vercel_output.mjs',
-  'public:verify': 'node tools/verify_public_vercel_artifact_budget.mjs && node tools/verify_public_vercel_output.mjs && node tools/test_public_contact_function.mjs',
+  'public:verify': 'node tools/verify_public_vercel_artifact_budget.mjs && node tools/verify_public_vercel_output.mjs && node tools/test_public_contact_function.mjs && npm run vercel:contracts:test && npm run hq:verify',
   'public:prebuilt': 'npm run public:build && npm run public:verify',
   'public:verify:live': 'node tools/verify_public_release_live.mjs',
   'deploy:public:prod': 'node tools/deny_stale_public_deploy.mjs',
@@ -54,7 +54,7 @@ for (const [name, expected] of Object.entries({
 
 for (const token of [
   'branches:\n      - main',
-  'group: supermega-public-production',
+  'group: supermega-coordinated-production',
   "if: ${{ github.ref == 'refs/heads/main' && github.repository == 'swanhtet01/swanhtet01.github.io' }}",
   'VERCEL_PROJECT_ID: prj_Yaf0cZYbiFXcLkMcKaAm4alPWMhR',
   'npx --yes vercel@56.1.0 pull',
@@ -70,6 +70,10 @@ for (const token of [
   'npx --yes vercel@56.1.0 inspect',
   'node tools/verify_public_preview_live.mjs',
   'node tools/verify_vercel_project_state.mjs public',
+  '/v9/projects/$VERCEL_PROJECT_ID/domains?teamId=$VERCEL_ORG_ID',
+  'node tools/verify_vercel_domain_state.mjs public',
+  '/v10/projects/$VERCEL_PROJECT_ID/env?teamId=$VERCEL_ORG_ID',
+  'node tools/verify_vercel_environment_state.mjs public',
   'node tools/verify_public_firewall_state.mjs',
   '/v1/security/firewall/config/active?',
   'npx --yes vercel@56.1.0 promote',

@@ -1,12 +1,14 @@
 import { execFileSync } from 'node:child_process'
+import { readFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 
+const manifest = JSON.parse(await readFile(new URL('../site-manifest.json', import.meta.url), 'utf8'))
 const baseUrl = String(process.env.APP_BASE_URL || 'https://app.supermega.dev').replace(/\/$/, '')
-const expectedCommit = String(process.env.EXPECTED_RELEASE_COMMIT || '').trim()
+const expectedCommit = String(process.env.EXPECTED_RELEASE_COMMIT || '').trim().toLowerCase()
 const protectedPreview = process.env.VERCEL_PROTECTED_PREVIEW === '1'
 const vercelToken = String(process.env.VERCEL_TOKEN || '').trim()
 const cliEnv = vercelToken ? { ...process.env, VERCEL_TOKEN: vercelToken } : process.env
-const routes = ['/', '/operations/', '/agents/', '/settings/']
+const routes = ['/', '/work/', '/operations/', '/operations/commerce/', '/operations/production/', '/settings/']
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -55,13 +57,16 @@ async function get(path, attempts = 7) {
 const pages = new Map()
 for (const route of routes) pages.set(route, (await get(route)).body)
 for (const [route, html] of pages) {
-  if (!html.includes('SuperMega operating workspace') && !html.includes('<title>Command | SuperMega</title>')) throw new Error(`wrong_shell:${route}`)
+  if (!html.includes('SuperMega operating workspace') && !html.includes('<title>Today | SuperMega</title>')) throw new Error(`wrong_shell:${route}`)
 }
 
 const release = JSON.parse((await get('/__release.json')).body)
 if (release.service !== 'supermega-app') throw new Error('wrong_release_service')
 if (release.canonicalDomain !== 'https://app.supermega.dev') throw new Error('wrong_release_domain')
-if (expectedCommit && release.commit !== expectedCommit) throw new Error(`release_commit_mismatch:${release.commit}`)
+if (release.brandVersion !== manifest.brand.version) throw new Error(`release_brand_version_mismatch:${release.brandVersion}`)
+if (release.contextVersion !== manifest.contextVersion) throw new Error(`release_context_version_mismatch:${release.contextVersion}`)
+if (release.catalogVersion !== manifest.catalogVersion) throw new Error(`release_catalog_version_mismatch:${release.catalogVersion}`)
+if (expectedCommit && String(release.commit || '').toLowerCase() !== expectedCommit) throw new Error(`release_commit_mismatch:${release.commit}`)
 
 const health = JSON.parse((await get('/api/health')).body)
 if (health.status !== 'ready' || health.service !== 'supermega-service') throw new Error('canonical_api_unavailable')
@@ -82,7 +87,7 @@ const rootHtml = pages.get('/')
 const scriptPaths = [...rootHtml.matchAll(/<script[^>]+src="([^"]+)"/g)].map((match) => match[1])
 const cssPaths = [...rootHtml.matchAll(/<link[^>]+href="([^"]+\.css)"/g)].map((match) => match[1])
 const assetCorpus = (await Promise.all([...scriptPaths, ...cssPaths].map(async (path) => (await get(path)).body))).join('\n')
-for (const required of ['Operations', 'Agents', 'Local trial', '#7cf5b4', '#f2f5f1']) {
+for (const required of ['Teams', 'Product', 'Acceptance outcome', 'Prepare brief', 'Operations', 'Local trial', '#7cf5b4', '#f2f5f1']) {
   if (!assetCorpus.includes(required)) throw new Error(`missing_live_context:${required}`)
 }
 for (const forbidden of ['pos.supermega.dev', 'ytf.supermega.dev', 'Yangon Tyre', 'ytf-plant-a']) {

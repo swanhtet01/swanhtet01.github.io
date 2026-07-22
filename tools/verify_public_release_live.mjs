@@ -42,8 +42,9 @@ async function readPage(route) {
     `meta name="supermega-context-version" content="${manifest.contextVersion}"`,
     'aria-label="SuperMega home"',
     '<span class="brand-mark" aria-hidden="true">&gt;_</span>',
-    'href="/solutions/"',
-    'href="https://app.supermega.dev/">Open app</a>',
+    'href="https://app.supermega.dev/">Open workspace</a>',
+    'href="/contact/">Contact</a>',
+    'href="/privacy/">Privacy</a>',
   ]) assert(html.includes(token), 'page_shared_contract_missing', { route, token })
   for (const token of manifest.retiredPublicNames) assert(!html.toLowerCase().includes(token.toLowerCase()), 'retired_context_live', { route, token })
   return html
@@ -68,32 +69,37 @@ async function verifyOnce() {
   const pageResults = await Promise.all(manifest.pages.map(async (page) => [page.route, await readPage(page.route)]))
   const pages = new Map(pageResults)
   assert(pages.get('/')?.includes(manifest.company.headline), 'homepage_headline_wrong')
-  assert(pages.get('/solutions/')?.includes('https://app.supermega.dev/operations/?view=shop'), 'shop_workspace_wrong')
-  assert(pages.get('/solutions/')?.includes('https://app.supermega.dev/operations/?view=plant'), 'plant_workspace_wrong')
-  assert(pages.get('/solutions/')?.includes('Configure the difference. Keep the foundation.'), 'template_catalog_missing')
-  assert(pages.get('/solutions/')?.includes('https://app.supermega.dev/agents/'), 'agents_workspace_wrong')
-  assert(pages.get('/trust/')?.includes('id="governed-ai"'), 'governed_ai_boundary_missing')
+  assert(pages.get('/')?.includes('Product is a working lifecycle, not another showcase page.'), 'product_team_workspace_missing')
+  assert(pages.get('/')?.includes('https://app.supermega.dev/operations/commerce/?tab=today'), 'commerce_workspace_wrong')
+  assert(pages.get('/')?.includes('https://app.supermega.dev/operations/production/?tab=today'), 'production_workspace_wrong')
+  for (const product of manifest.products) for (const template of product.templates) assert(pages.get('/')?.includes(template.name), 'template_catalog_missing', { template: template.id })
+  assert(pages.get('/')?.includes('id="trust"'), 'control_boundary_missing')
 
   const [{ body: release, headers: releaseHeaders }, { body: health }, { body: contact }] = await Promise.all([
     readJson(manifest.release.releaseEndpoint),
     readJson('/api/health'),
     readJson('/api/contact-submissions/status'),
   ])
+  assert(release.service === 'supermega-public-site', 'release_service_wrong', release)
+  assert(/^[0-9a-f]{40}$/.test(String(release.commit || '')), 'release_commit_not_immutable', release)
   assert(release.brandVersion === manifest.brand.version, 'release_brand_version_wrong', release)
   assert(release.contextVersion === manifest.contextVersion, 'release_context_version_wrong', release)
   assert(release.catalogVersion === manifest.catalogVersion, 'release_catalog_version_wrong', release)
   if (expectedCommit) assert(release.commit === expectedCommit, 'release_commit_wrong', { expectedCommit, actual: release.commit })
   assert(/no-store/i.test(releaseHeaders.get('cache-control') || ''), 'release_metadata_cacheable')
   assert(health.ok === true && health.status === 'ready' && health.service === 'supermega-public-site', 'health_contract_wrong', health)
-  assert(health.brand_version === manifest.brand.version && health.context_version === manifest.contextVersion, 'health_version_wrong', health)
+  assert(health.brand_version === manifest.brand.version && health.context_version === manifest.contextVersion && health.catalog_version === manifest.catalogVersion, 'health_version_wrong', health)
   assert(contact.status === 'ready' && contact.accepting === true, 'contact_not_accepting', contact)
   assert(contact.controls?.idempotency === 'required' && contact.controls?.edge_rate_limit === 'required', 'contact_controls_wrong', contact)
 
   await Promise.all([
-    verifyRedirect('/products/shop/', '/solutions/#shop'),
-    verifyRedirect('/products/factory/', '/solutions/#plant'),
-    verifyRedirect('/ai-agent-solutions/', '/solutions/#agents'),
-    verifyRedirect('/offers/', '/solutions/'),
+    verifyRedirect('/products/shop/', '/#commerce'),
+    verifyRedirect('/products/factory/', '/#production'),
+    verifyRedirect('/ai-agent-solutions/', '/#product'),
+    verifyRedirect('/offers/', '/#product'),
+    verifyRedirect('/solutions/', '/#product'),
+    verifyRedirect('/trust/', '/#trust'),
+    verifyRedirect('/demo/', 'https://app.supermega.dev/'),
   ])
 
   const www = await fetch('https://www.supermega.dev/', { redirect: 'follow', cache: 'no-store', headers: { 'user-agent': 'SuperMegaVerifiedRelease/2.0' }, signal: AbortSignal.timeout(timeoutMs) })

@@ -5,7 +5,7 @@ from typing import Any, Literal, TypeVar
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from supermega_runtime.trial_store import (
     APPROVAL_DECIDE_CAPABILITY,
@@ -14,6 +14,7 @@ from supermega_runtime.trial_store import (
     ApprovalRecord,
     CommandResult,
     TrialIdempotencyConflict,
+    TrialHumanApprovalRequired,
     TrialInvalidTransition,
     TrialNotFound,
     TrialNotReadyError,
@@ -28,7 +29,7 @@ from supermega_runtime.trial_store import (
 
 
 TRIAL_API_PREFIX = "/api/trial/v1"
-TRIAL_SURFACE_ORDER = ("command", "shop", "plant", "setup")
+TRIAL_SURFACE_ORDER = ("company", "commerce", "production", "setup")
 
 PrincipalResolver = Callable[[Request], TrialPrincipal | None]
 ResultT = TypeVar("ResultT")
@@ -36,8 +37,11 @@ ResultT = TypeVar("ResultT")
 _CLIENT_IDENTITY_FIELDS = frozenset(
     {
         "actor_id",
+        "actor_kind",
         "decided_by",
+        "decided_actor_kind",
         "requested_by",
+        "requested_actor_kind",
         "updated_by",
         "workspace_id",
     }
@@ -50,23 +54,63 @@ class _StrictRequest(BaseModel):
 
 class TrialCommandRequest(_StrictRequest):
     command_id: UUID
-    surface: Literal["command", "shop", "plant", "setup"]
+    surface: Literal["company", "commerce", "production", "setup"]
     event_type: str = Field(min_length=1, max_length=80)
     expected_version: int = Field(ge=0)
     payload: dict[str, Any] = Field(default_factory=dict)
 
 
+class TrialDecisionSubject(_StrictRequest):
+    kind: str = Field(min_length=1, max_length=80, pattern=r"^[a-z0-9._-]+$")
+    id: str = Field(min_length=1, max_length=160)
+    version: Literal[1]
+
+
+class TrialDecisionClaim(_StrictRequest):
+    id: str = Field(min_length=1, max_length=160)
+    claim_type: Literal["fact", "analysis"]
+    statement: str = Field(min_length=1, max_length=500)
+    source_reference: str = Field(min_length=1, max_length=200)
+    captured_at: str = Field(min_length=20, max_length=40)
+    status: Literal["observed", "verified"]
+    uncertainty: Literal["low", "medium", "high"]
+    visibility: Literal["private", "public"]
+    digest: str | None = Field(default=None, max_length=71, pattern=r"^sha256:[0-9a-f]{64}$")
+
+
+class TrialDecisionPacket(_StrictRequest):
+    contract: Literal["decision_packet.v1"]
+    subject: TrialDecisionSubject
+    decision: str = Field(min_length=1, max_length=500)
+    claims: list[TrialDecisionClaim] = Field(min_length=1, max_length=20)
+    baseline: str = Field(min_length=1, max_length=500)
+    target: str = Field(min_length=1, max_length=500)
+    result: str = Field(min_length=1, max_length=500)
+    acceptance: str = Field(min_length=1, max_length=500)
+    artifact_reference: str = Field(min_length=1, max_length=200)
+
+
 class TrialApprovalRequest(_StrictRequest):
     command_id: UUID
     title: str = Field(min_length=1, max_length=160)
-    proposal: dict[str, Any]
+    proposal: TrialDecisionPacket
     evidence_refs: list[str] = Field(min_length=1, max_length=20)
 
 
 class TrialApprovalDecisionRequest(_StrictRequest):
     command_id: UUID
     decision: Literal["approved", "declined"]
-    note: str = Field(default="", max_length=500)
+    note: str = Field(min_length=1, max_length=500)
+
+    @field_validator("note", mode="before")
+    @classmethod
+    def normalize_decision_note(cls, value: object) -> object:
+        if not isinstance(value, str):
+            raise ValueError("decision note must be a string")
+        note = value.strip()
+        if not note:
+            raise ValueError("decision note must not be blank")
+        return note
 
 
 def _error(status_code: int, code: str, **details: Any) -> HTTPException:
@@ -87,7 +131,12 @@ def _resolve_principal(request: Request, resolver: PrincipalResolver) -> TrialPr
     if not isinstance(principal, TrialPrincipal):
         raise _error(503, "trial_auth_unavailable")
     normalized = principal.normalized()
-    if not normalized.authenticated or not normalized.workspace_id or not normalized.actor_id:
+    if (
+        not normalized.authenticated
+        or not normalized.workspace_id
+        or not normalized.actor_id
+        or normalized.actor_kind not in {"human", "service", "agent"}
+    ):
         raise _error(401, "trial_auth_required")
     return normalized
 
@@ -170,6 +219,8 @@ def _invoke(operation: Callable[[], ResultT]) -> ResultT:
             "trial_capability_required",
             required_capability=exc.required_capability,
         ) from exc
+    except TrialHumanApprovalRequired as exc:
+        raise _error(403, "trial_human_approval_required") from exc
     except TrialVersionConflict as exc:
         raise _error(
             409,
@@ -228,6 +279,7 @@ def create_trial_router(*, store: TrialStore, resolve_principal: PrincipalResolv
             "identity": {
                 "workspace_id": principal.workspace_id,
                 "actor_id": principal.actor_id,
+                "actor_kind": principal.actor_kind,
             },
             "readiness": readiness.to_dict(),
             "states": states,
@@ -255,7 +307,8 @@ def create_trial_router(*, store: TrialStore, resolve_principal: PrincipalResolv
     @router.post("/approvals")
     def trial_approval_request(request: Request, body: TrialApprovalRequest) -> dict[str, Any]:
         principal = _resolve_principal(request, resolve_principal)
-        _reject_client_identity(body.proposal, path="proposal")
+        proposal = body.proposal.model_dump()
+        _reject_client_identity(proposal, path="proposal")
         readiness = _readiness(store, principal)
         _require_write_ready(readiness, APPROVAL_REQUEST_CAPABILITY)
         approval = _invoke(
@@ -263,7 +316,7 @@ def create_trial_router(*, store: TrialStore, resolve_principal: PrincipalResolv
                 principal,
                 command_id=body.command_id,
                 title=body.title,
-                proposal=body.proposal,
+                proposal=proposal,
                 evidence_refs=body.evidence_refs,
             )
         )

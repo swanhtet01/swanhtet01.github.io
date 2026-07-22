@@ -1,0 +1,83 @@
+{
+  "schemaVersion": "supermega.hq.portfolio.v1",
+  "updatedAt": "2026-07-22",
+  "northStar": "One real workflow reaches a measurable outcome through an accountable operating record.",
+  "portfolio": [
+    {
+      "id": "company-system",
+      "name": "Company system",
+      "status": "core",
+      "path": "/",
+      "job": "Turn company priorities, product delivery, evidence, exceptions, and owner decisions into one shared operating record.",
+      "surfaces": ["Today", "Product", "Engineering", "Growth", "Finance / Risk"],
+      "lifecycle": ["discover", "define", "build", "release", "learn"],
+      "nextGate": "Prove one end-to-end Product workflow with acceptance and usage evidence."
+    },
+    {
+      "id": "commerce",
+      "name": "Commerce",
+      "status": "pilot-ready-local",
+      "path": "/operations/commerce/",
+      "job": "Convert orders from trusted customer channels into controlled stock, fulfilment, payment, follow-up, and close.",
+      "surfaces": ["Today", "Orders", "Inventory"],
+      "templateContract": { "file": "../site-manifest.json", "productId": "commerce" },
+      "nextGate": "Connect one approved channel and measure order-handling time, exceptions, and completion."
+    },
+    {
+      "id": "production",
+      "name": "Production",
+      "status": "pilot-ready-local",
+      "path": "/operations/production/",
+      "job": "Connect plan, output, quality, materials, equipment, maintenance, and shift exceptions in one production record.",
+      "surfaces": ["Today", "Production", "Issues & equipment"],
+      "templateContract": { "file": "../site-manifest.json", "productId": "production" },
+      "nextGate": "Validate one line, maintenance, or quality workflow with operator evidence and owner review."
+    }
+  ],
+  "researchGates": [
+    {
+      "candidate": "durable-workflows",
+      "decision": "evaluate",
+      "gate": "Compare Vercel Workflows with the existing Cloud Tasks runtime using one approval-wait use case.",
+      "source": "https://vercel.com/docs/workflows"
+    },
+    {
+      "candidate": "ai-workflow-agent",
+      "decision": "defer",
+      "gate": "Adopt only after durable execution and centralized approval policy are proven.",
+      "source": "https://vercel.com/changelog/ai-sdk-7"
+    },
+    {
+      "candidate": "opentelemetry",
+      "decision": "adopt-with-managed-mode",
+      "gate": "Redact customer content and correlate request, workflow, model, tool, and database operations.",
+      "source": "https://vercel.com/docs/tracing/instrumentation"
+    },
+    {
+      "candidate": "dense-data-grid",
+      "decision": "defer",
+      "gate": "Adopt TanStack Table or virtualization only after measured row volume exceeds the native interface.",
+      "source": "https://tanstack.com/table/latest/docs/guide/virtualization"
+    },
+    {
+      "candidate": "realtime-broadcast",
+      "decision": "defer",
+      "gate": "Add only when simultaneous operators create a measured refresh problem.",
+      "source": "https://supabase.com/docs/guides/realtime/authorization"
+    },
+    {
+      "candidate": "second-queue-or-crm",
+      "decision": "reject",
+      "gate": "Reconsider only if the existing relational system of record and worker runtime cannot meet a documented requirement.",
+      "source": "https://supabase.com/docs/guides/queues"
+    }
+  ],
+  "nonGoals": [
+    "AI tool directory",
+    "Separate public agent employees",
+    "Unverified autonomous external actions",
+    "Duplicate CRM or workflow suite",
+    "One page or domain per capability",
+    "Customer-branded code forks"
+  ]
+}

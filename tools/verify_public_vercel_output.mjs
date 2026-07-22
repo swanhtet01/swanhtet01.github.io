@@ -33,7 +33,14 @@ requireFile(configPath, 'config.json')
 if (manifest.schemaVersion !== 'supermega.site-context.v1') fail('manifest_schema_changed')
 if (manifest.company?.publicPricing !== false) fail('public_pricing_enabled')
 if (manifest.release?.sourceBranch !== 'main') fail('release_source_not_main')
-if (manifest.products?.map((product) => product.id).join(',') !== 'shop,plant') fail('public_catalog_not_shop_and_plant')
+if (manifest.products?.map((product) => product.id).join(',') !== 'commerce,production') fail('public_catalog_not_commerce_and_production')
+for (const product of manifest.products || []) {
+  if (product.templates?.length !== 3) fail('public_template_count_wrong', { product: product.id })
+  for (const template of product.templates || []) {
+    if (!template.outcome?.trim() || !template.metric?.trim() || template.workflow?.length < 5 || template.entryPoints?.length < 3) fail('public_template_contract_incomplete', { product: product.id, template: template.id })
+  }
+}
+if (manifest.pages?.map((page) => page.route).join(',') !== '/,/contact/,/privacy/') fail('public_page_surface_not_minimal')
 
 const expectedStaticFiles = new Set([
   ...manifest.pages.map((page) => page.file),
@@ -60,10 +67,10 @@ const sharedRequired = [
   'aria-label="SuperMega home"',
   '<span class="brand-mark" aria-hidden="true">&gt;_</span>',
   '<span class="brand-name">SUPERMEGA</span>',
-  'href="/solutions/"',
-  'href="https://app.supermega.dev/">Open app</a>',
-  'href="/trust/">Trust</a>',
-  'Company systems with accountable automation.',
+  'href="https://app.supermega.dev/">Open workspace</a>',
+  'href="/contact/">Contact</a>',
+  'href="/privacy/">Privacy</a>',
+  'Accountable company software.',
 ]
 
 const forbiddenCopy = [
@@ -78,6 +85,10 @@ const forbiddenCopy = [
   'ops.supermega.dev',
   'ytf.supermega.dev',
   'Yangon Tyre Factory',
+  'Counter to close',
+  'Register and local payments',
+  'Service bookings',
+  'Material receiving',
 ]
 const encodingCorruption = ['\uFFFD', '\u00e2\u20ac\u201d', '\u00e2\u20ac\u201c', '\u00c2', '\u00f0\u0178']
 
@@ -95,49 +106,43 @@ for (const [route, page] of pages) {
   }
   if (/\b(?:USD|MMK)\b|\$\s*\d|\d[\d,]*\s*(?:MMK|kyat)/i.test(page.html)) fail('public_price_present', { route })
   if (/target\s*=\s*["']?_blank/i.test(page.html) || page.html.includes('window.open(')) fail('new_tab_navigation_present', { route })
+  if (page.html.includes('href="/solutions/"') || page.html.includes('href="/trust/"')) fail('retired_public_navigation_present', { route })
   if (!page.html.includes(`<link rel="canonical" href="${new URL(route, `${manifest.release.productionDomain}/`).href}"`)) fail('canonical_url_wrong', { route })
 }
 
 const home = pages.get('/')?.html || ''
+if (/\.brand-name\s*\{[^}]*display\s*:\s*none/i.test(home)) fail('mobile_brand_name_hidden')
 for (const token of [
   manifest.company.headline,
   manifest.company.supporting,
-  'Operations and agents share the same truth.',
-  'Run the work',
-  'Scale the team',
-  'Move faster without pretending autonomy is authority.',
-  'Start with one broken workflow.',
+  'id="product"',
+  'Product is a working lifecycle, not another showcase page.',
+  '01 / TODAY',
+  '02 / PRODUCT TEAM',
+  'Discover',
+  'Release',
+  'Learn',
+  'id="operations"',
+  'Two operational wedges. One company foundation.',
+  'id="trust"',
+  'Assistance may organize, inspect, summarize, and draft from approved records.',
+  'https://app.supermega.dev/operations/commerce/?tab=today',
+  'https://app.supermega.dev/operations/production/?tab=today',
 ]) {
   if (!home.includes(token)) fail('homepage_contract_missing', { token })
 }
-
-const solutions = pages.get('/solutions/')?.html || ''
-for (const token of [
-  'One operating layer. Four clear surfaces.',
-  'Shop and Plant are operating modes, not separate brands.',
-  'https://app.supermega.dev/operations/?view=shop',
-  'https://app.supermega.dev/operations/?view=plant',
-  'https://app.supermega.dev/agents/',
-  'A team machine with explicit boundaries.',
-  'Configure the difference. Keep the foundation.',
-]) {
-  if (!solutions.includes(token)) fail('solutions_contract_missing', { token })
-}
 for (const product of manifest.products) {
+  for (const module of product.modules) {
+    if (!home.includes(module)) fail('module_catalog_missing', { product: product.id, module })
+  }
   for (const template of product.templates) {
-    for (const token of [template.name, template.outcome, `product=${product.id}&amp;template=${template.id}`]) {
-      if (!solutions.includes(token)) fail('template_catalog_missing', { product: product.id, template: template.id, token })
-    }
+    if (!home.includes(template.name)) fail('template_catalog_missing', { product: product.id, template: template.id })
   }
 }
-
-const trust = pages.get('/trust/')?.html || ''
-for (const token of ['Automation earns authority.', 'id="governed-ai"', 'Human approval', 'Least authority', 'Source grounded', 'Recovery designed']) {
-  if (!trust.includes(token)) fail('trust_contract_missing', { token })
-}
+if ((home.match(/<a\b/g) || []).length > 8) fail('homepage_link_surface_too_large')
 
 const contact = pages.get('/contact/')?.html || ''
-for (const token of ['data-contact-form', 'action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="product"', 'name="template"', 'name="goal"', 'name="idempotency_key"', 'x-idempotency-key', 'rate_limited', 'No account, data connection, automation, or external action begins from this form.', 'swanhtet@supermega.dev']) {
+for (const token of ['data-contact-form', 'action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="product"', 'value="commerce"', 'value="production"', 'name="template"', 'name="goal"', 'name="idempotency_key"', 'x-idempotency-key', 'rate_limited', 'No account, data connection, automation, or external action begins from this form.', 'swanhtet@supermega.dev']) {
   if (!contact.includes(token)) fail('contact_contract_missing', { token })
 }
 

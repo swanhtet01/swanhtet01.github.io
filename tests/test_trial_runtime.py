@@ -11,6 +11,32 @@ from supermega_runtime.trial_runtime import create_trial_router
 from supermega_runtime.trial_store import InMemoryTrialStore, TrialPrincipal
 
 
+def _decision_packet(release: str = "catalog-v1") -> dict[str, object]:
+    return {
+        "contract": "decision_packet.v1",
+        "subject": {"kind": "release", "id": release, "version": 1},
+        "decision": f"Release {release}",
+        "claims": [
+            {
+                "id": "claim-catalog-review",
+                "claim_type": "fact",
+                "statement": "The catalog passed the bounded trial review.",
+                "source_reference": "review://catalog/1",
+                "captured_at": "2026-07-22T00:00:00+00:00",
+                "status": "verified",
+                "uncertainty": "low",
+                "visibility": "private",
+                "digest": "sha256:" + "0" * 64,
+            }
+        ],
+        "baseline": "Catalog is not released.",
+        "target": f"{release} is available to the trial workspace.",
+        "result": "The bounded review passed.",
+        "acceptance": "The release record and owner decision are preserved.",
+        "artifact_reference": "artifact://catalog/release-v1",
+    }
+
+
 class MergeReducer:
     def __init__(self) -> None:
         self.calls = 0
@@ -35,14 +61,16 @@ class TrialRuntimeTests(unittest.TestCase):
     def setUp(self) -> None:
         self.reducer = MergeReducer()
         self.store = InMemoryTrialStore(reducer=self.reducer)
-        self.operator = TrialPrincipal("workspace-a", "actor-operator")
-        self.manager = TrialPrincipal("workspace-a", "actor-manager")
-        self.other_operator = TrialPrincipal("workspace-b", "actor-other")
-        self.other_manager = TrialPrincipal("workspace-b", "actor-other-manager")
-        self.missing_member = TrialPrincipal("workspace-a", "actor-missing")
+        self.operator = TrialPrincipal("workspace-a", "actor-operator", "human")
+        self.manager = TrialPrincipal("workspace-a", "actor-manager", "human")
+        self.agent_manager = TrialPrincipal("workspace-a", "actor-agent-manager", "agent")
+        self.other_operator = TrialPrincipal("workspace-b", "actor-other", "human")
+        self.other_manager = TrialPrincipal("workspace-b", "actor-other-manager", "human")
+        self.missing_member = TrialPrincipal("workspace-a", "actor-missing", "human")
         self.sessions = {
             "operator-session": self.operator,
             "manager-session": self.manager,
+            "agent-manager-session": self.agent_manager,
             "other-operator-session": self.other_operator,
             "other-manager-session": self.other_manager,
             "missing-session": self.missing_member,
@@ -58,21 +86,31 @@ class TrialRuntimeTests(unittest.TestCase):
         store.provision_membership(
             workspace_id="workspace-a",
             actor_id="actor-operator",
-            capabilities=("shop.write", "approvals.request"),
+            actor_kind="human",
+            capabilities=("commerce.write", "approvals.request"),
         )
         store.provision_membership(
             workspace_id="workspace-a",
             actor_id="actor-manager",
+            actor_kind="human",
+            capabilities=("approvals.decide",),
+        )
+        store.provision_membership(
+            workspace_id="workspace-a",
+            actor_id="actor-agent-manager",
+            actor_kind="agent",
             capabilities=("approvals.decide",),
         )
         store.provision_membership(
             workspace_id="workspace-b",
             actor_id="actor-other",
-            capabilities=("shop.write", "approvals.request"),
+            actor_kind="human",
+            capabilities=("commerce.write", "approvals.request"),
         )
         store.provision_membership(
             workspace_id="workspace-b",
             actor_id="actor-other-manager",
+            actor_kind="human",
             capabilities=("approvals.decide",),
         )
 
@@ -98,8 +136,8 @@ class TrialRuntimeTests(unittest.TestCase):
     ) -> dict[str, object]:
         return {
             "command_id": command_id or str(uuid4()),
-            "surface": "shop",
-            "event_type": "catalog.item.saved",
+            "surface": "commerce",
+            "event_type": "commerce.order.saved",
             "expected_version": expected_version,
             "payload": {"changes": {"sku": sku}},
         }
@@ -149,8 +187,9 @@ class TrialRuntimeTests(unittest.TestCase):
         body = bootstrap.json()
         self.assertEqual(body["identity"]["workspace_id"], "workspace-a")
         self.assertEqual(body["identity"]["actor_id"], "actor-operator")
-        self.assertEqual(body["states"]["shop"]["updated_by"], "actor-operator")
-        self.assertEqual(body["states"]["shop"]["state"]["sku"], "sku-a")
+        self.assertEqual(body["identity"]["actor_kind"], "human")
+        self.assertEqual(body["states"]["commerce"]["updated_by"], "actor-operator")
+        self.assertEqual(body["states"]["commerce"]["state"]["sku"], "sku-a")
 
     def test_bootstrap_is_workspace_scoped(self) -> None:
         shared_command_id = str(uuid4())
@@ -175,8 +214,8 @@ class TrialRuntimeTests(unittest.TestCase):
             "/api/trial/v1/bootstrap",
             headers=self._headers("other-operator-session"),
         ).json()
-        self.assertEqual(workspace_a["states"]["shop"]["state"]["sku"], "workspace-a-sku")
-        self.assertEqual(workspace_b["states"]["shop"]["state"]["sku"], "workspace-b-sku")
+        self.assertEqual(workspace_a["states"]["commerce"]["state"]["sku"], "workspace-a-sku")
+        self.assertEqual(workspace_b["states"]["commerce"]["state"]["sku"], "workspace-b-sku")
 
     def test_runtime_checks_membership_and_capability(self) -> None:
         missing = self.client.post(
@@ -195,7 +234,7 @@ class TrialRuntimeTests(unittest.TestCase):
         self.assertEqual(missing_capability.status_code, 403)
         self.assertEqual(
             missing_capability.json()["detail"]["required_capability"],
-            "shop.write",
+            "commerce.write",
         )
         self.assertEqual(self.reducer.calls, 0)
 
@@ -266,10 +305,22 @@ class TrialRuntimeTests(unittest.TestCase):
         self.assertEqual(stale.json()["detail"]["current_version"], 1)
 
     def test_approval_api_only_allows_pending_to_terminal_decision(self) -> None:
+        opaque_proposal = self.client.post(
+            "/api/trial/v1/approvals",
+            headers=self._headers(),
+            json={
+                "command_id": str(uuid4()),
+                "title": "Opaque release request",
+                "proposal": {"release": "catalog-v1"},
+                "evidence_refs": ["review://catalog/1"],
+            },
+        )
+        self.assertEqual(opaque_proposal.status_code, 422)
+
         client_status = {
             "command_id": str(uuid4()),
             "title": "Release trial catalog",
-            "proposal": {"release": "catalog-v1"},
+            "proposal": _decision_packet(),
             "evidence_refs": ["review://catalog/1"],
             "status": "approved",
         }
@@ -283,7 +334,7 @@ class TrialRuntimeTests(unittest.TestCase):
         request_body = {
             "command_id": str(uuid4()),
             "title": "Release trial catalog",
-            "proposal": {"release": "catalog-v1"},
+            "proposal": _decision_packet(),
             "evidence_refs": ["review://catalog/1"],
         }
         requested = self.client.post(
@@ -295,19 +346,44 @@ class TrialRuntimeTests(unittest.TestCase):
         approval = requested.json()["approval"]
         self.assertEqual(approval["status"], "pending")
         self.assertEqual(approval["requested_by"], "actor-operator")
+        self.assertEqual(approval["requested_actor_kind"], "human")
 
         decision_path = f"/api/trial/v1/approvals/{approval['approval_id']}/decision"
+        missing_note = self.client.post(
+            decision_path,
+            headers=self._headers("manager-session"),
+            json={"command_id": str(uuid4()), "decision": "approved"},
+        )
+        blank_note = self.client.post(
+            decision_path,
+            headers=self._headers("manager-session"),
+            json={"command_id": str(uuid4()), "decision": "approved", "note": "  \t\n"},
+        )
+        self.assertEqual(missing_note.status_code, 422)
+        self.assertEqual(blank_note.status_code, 422)
+
         operator_decision = self.client.post(
             decision_path,
             headers=self._headers("operator-session"),
-            json={"command_id": str(uuid4()), "decision": "approved"},
+            json={"command_id": str(uuid4()), "decision": "approved", "note": "Operator request."},
         )
         self.assertEqual(operator_decision.status_code, 403)
+
+        agent_decision = self.client.post(
+            decision_path,
+            headers=self._headers("agent-manager-session"),
+            json={"command_id": str(uuid4()), "decision": "approved", "note": "Agent attempt."},
+        )
+        self.assertEqual(agent_decision.status_code, 403)
+        self.assertEqual(
+            agent_decision.json()["detail"]["code"],
+            "trial_human_approval_required",
+        )
 
         cross_workspace = self.client.post(
             decision_path,
             headers=self._headers("other-manager-session"),
-            json={"command_id": str(uuid4()), "decision": "approved"},
+            json={"command_id": str(uuid4()), "decision": "approved", "note": "Other workspace."},
         )
         self.assertEqual(cross_workspace.status_code, 404)
 
@@ -315,7 +391,7 @@ class TrialRuntimeTests(unittest.TestCase):
         decision_body = {
             "command_id": decision_command_id,
             "decision": "approved",
-            "note": "Reviewed",
+            "note": "  Reviewed by the named owner.  ",
         }
         decided = self.client.post(
             decision_path,
@@ -330,11 +406,17 @@ class TrialRuntimeTests(unittest.TestCase):
         terminal_retry = self.client.post(
             decision_path,
             headers=self._headers("manager-session"),
-            json={"command_id": str(uuid4()), "decision": "declined"},
+            json={
+                "command_id": str(uuid4()),
+                "decision": "declined",
+                "note": "A second terminal decision is forbidden.",
+            },
         )
         self.assertEqual(decided.status_code, 200)
         self.assertEqual(decided.json()["approval"]["status"], "approved")
         self.assertEqual(decided.json()["approval"]["decided_by"], "actor-manager")
+        self.assertEqual(decided.json()["approval"]["decided_actor_kind"], "human")
+        self.assertEqual(decided.json()["approval"]["decision_note"], "Reviewed by the named owner.")
         self.assertTrue(replay.json()["approval"]["idempotent_replay"])
         self.assertEqual(terminal_retry.status_code, 409)
         self.assertEqual(terminal_retry.json()["detail"]["code"], "trial_invalid_transition")

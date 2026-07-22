@@ -4,7 +4,12 @@ import { resolve } from 'node:path'
 
 const require = createRequire(import.meta.url)
 const handlerPath = resolve('.vercel', 'output', 'functions', 'api', 'contact-submissions.js.func', 'index.js')
-const handler = require(handlerPath)
+const loadHandler = ({ fresh = false } = {}) => {
+  const resolvedPath = require.resolve(handlerPath)
+  if (fresh) delete require.cache[resolvedPath]
+  return require(resolvedPath)
+}
+const handler = loadHandler()
 
 const environmentNames = [
   'SUPERMEGA_CONTACT_IDEMPOTENCY_SECRET',
@@ -37,7 +42,7 @@ function responseRecorder() {
   }
 }
 
-async function invoke({ method = 'POST', body = {}, headers = {} } = {}) {
+async function invoke({ method = 'POST', body = {}, headers = {}, activeHandler = handler } = {}) {
   const req = {
     method,
     body,
@@ -50,7 +55,7 @@ async function invoke({ method = 'POST', body = {}, headers = {} } = {}) {
     },
   }
   const res = responseRecorder()
-  await handler(req, res)
+  await activeHandler(req, res)
   return { status: res.statusCode, headers: res.headers, body: JSON.parse(res.payload || '{}') }
 }
 
@@ -61,10 +66,10 @@ const validSubmission = {
   name: 'Trial Operator',
   email: 'operator@example.com',
   company: 'Example Works',
-  product: 'plant',
+  product: 'production',
   template: 'production-control',
   goal: 'Make shift output and exceptions visible.',
-  source_url: 'https://supermega.dev/contact/?product=plant',
+  source_url: 'https://supermega.dev/contact/?product=production',
 }
 
 try {
@@ -159,21 +164,107 @@ try {
   process.env.SUPERMEGA_CONTACT_IDEMPOTENCY_SECRET = 'test-only-contact-idempotency-secret-0001'
   process.env.SUPABASE_URL = 'https://example.supabase.co'
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-only-service-role'
-  let storeRequest
+  const clone = (value) => JSON.parse(JSON.stringify(value))
+  const jsonResponse = (status, body) => ({ ok: status >= 200 && status < 300, status, json: async () => clone(body) })
+  const persistedLeads = new Map()
+  const storeRequests = []
   let storeCalls = 0
+  let unexpectedDeliveryCalls = 0
   globalThis.fetch = async (url, options) => {
+    const target = new URL(String(url))
+    if (target.origin !== 'https://example.supabase.co') {
+      unexpectedDeliveryCalls += 1
+      return { ok: true, status: 202 }
+    }
     storeCalls += 1
-    storeRequest = { url: String(url), options }
-    return { ok: true, status: 201, json: async () => [] }
+    assert.equal(target.pathname, '/rest/v1/supermega_leads')
+    if (options.method === 'POST') {
+      assert.equal(target.searchParams.get('on_conflict'), 'lead_id')
+      assert.equal(options.headers.prefer, 'resolution=ignore-duplicates,return=representation')
+      const incoming = JSON.parse(options.body)
+      storeRequests.push({ method: 'POST', record: clone(incoming) })
+      if (persistedLeads.has(incoming.lead_id)) return jsonResponse(201, [])
+      persistedLeads.set(incoming.lead_id, clone(incoming))
+      return jsonResponse(201, [incoming])
+    }
+    if (options.method === 'GET') {
+      assert.equal(target.searchParams.get('limit'), '2')
+      assert.match(target.searchParams.get('select'), /lead_id.*raw/)
+      const filter = target.searchParams.get('lead_id') || ''
+      assert.match(filter, /^eq\.LEAD-[A-F0-9]{16}$/)
+      const stored = persistedLeads.get(filter.slice(3))
+      storeRequests.push({ method: 'GET', leadId: filter.slice(3) })
+      return jsonResponse(200, stored ? [stored] : [])
+    }
+    throw new Error('unexpected_supabase_method')
   }
-  const durableReplay = await invoke({ body: validSubmission, headers: withKey(200, { 'x-forwarded-for': '203.0.113.88' }) })
-  assert.equal(durableReplay.status, 202)
-  assert.equal(durableReplay.headers['x-idempotent-replay'], 'true')
-  assert.equal(storeCalls, 1)
-  assert.match(storeRequest.url, /on_conflict=lead_id$/)
-  assert.equal(storeRequest.options.headers.prefer, 'resolution=ignore-duplicates,return=representation')
 
-  console.log(JSON.stringify({ ok: true, contract: 'supermega_public_contact_behavior', checks: 45 }, null, 2))
+  const durableAccepted = await invoke({ body: validSubmission, headers: withKey(200, { 'x-forwarded-for': '203.0.113.88' }) })
+  assert.equal(durableAccepted.status, 202)
+  assert.equal(durableAccepted.headers['x-idempotent-replay'], undefined)
+  assert.equal(storeCalls, 1)
+  const durableRecord = storeRequests[0].record
+  assert.equal(durableRecord.lead_id, durableAccepted.body.request_id)
+  assert.deepEqual(durableRecord.raw.contact_idempotency, {
+    version: 1,
+    algorithm: 'sha256',
+    payload_fingerprint: durableRecord.raw.contact_idempotency.payload_fingerprint,
+  })
+  assert.match(durableRecord.raw.contact_idempotency.payload_fingerprint, /^[a-f0-9]{64}$/)
+
+  const coldSameHandler = loadHandler({ fresh: true })
+  const durableReplay = await invoke({ activeHandler: coldSameHandler, body: validSubmission, headers: withKey(200, { 'x-forwarded-for': '203.0.113.89' }) })
+  assert.equal(durableReplay.status, 202)
+  assert.equal(durableReplay.body.request_id, durableAccepted.body.request_id)
+  assert.equal(durableReplay.headers['x-idempotent-replay'], 'true')
+  assert.equal(storeCalls, 3)
+  assert.deepEqual(storeRequests.slice(-2).map(({ method }) => method), ['POST', 'GET'])
+  assert.equal(
+    storeRequests.at(-2).record.raw.contact_idempotency.payload_fingerprint,
+    durableRecord.raw.contact_idempotency.payload_fingerprint,
+  )
+
+  const coldChangedHandler = loadHandler({ fresh: true })
+  const durableConflict = await invoke({
+    activeHandler: coldChangedHandler,
+    body: { ...validSubmission, goal: 'A changed request must not replay.' },
+    headers: withKey(200, { 'x-forwarded-for': '203.0.113.90' }),
+  })
+  assert.equal(durableConflict.status, 409)
+  assert.equal(durableConflict.body.reason, 'idempotency_conflict')
+  assert.equal(storeCalls, 5)
+  assert.notEqual(
+    storeRequests.at(-2).record.raw.contact_idempotency.payload_fingerprint,
+    durableRecord.raw.contact_idempotency.payload_fingerprint,
+  )
+
+  const legacyAccepted = await invoke({ activeHandler: loadHandler({ fresh: true }), body: validSubmission, headers: withKey(201, { 'x-forwarded-for': '203.0.113.91' }) })
+  assert.equal(legacyAccepted.status, 202)
+  const legacyRecord = persistedLeads.get(legacyAccepted.body.request_id)
+  delete legacyRecord.raw.contact_idempotency
+  legacyRecord.workflow = 'plant'
+  legacyRecord.raw.product = 'plant'
+  const legacyReplay = await invoke({ activeHandler: loadHandler({ fresh: true }), body: validSubmission, headers: withKey(201, { 'x-forwarded-for': '203.0.113.92' }) })
+  assert.equal(legacyReplay.status, 202)
+  assert.equal(legacyReplay.headers['x-idempotent-replay'], 'true')
+  const legacyConflict = await invoke({
+    activeHandler: loadHandler({ fresh: true }),
+    body: { ...validSubmission, company: 'Changed Legacy Company' },
+    headers: withKey(201, { 'x-forwarded-for': '203.0.113.93' }),
+  })
+  assert.equal(legacyConflict.status, 409)
+  assert.equal(legacyConflict.body.reason, 'idempotency_conflict')
+
+  const ambiguousAccepted = await invoke({ activeHandler: loadHandler({ fresh: true }), body: validSubmission, headers: withKey(202, { 'x-forwarded-for': '203.0.113.94' }) })
+  assert.equal(ambiguousAccepted.status, 202)
+  persistedLeads.get(ambiguousAccepted.body.request_id).raw.contact_idempotency.payload_fingerprint = 'not-a-fingerprint'
+  process.env.SUPERMEGA_LEAD_WEBHOOK_URL = 'https://lead-router.example.test/events'
+  const ambiguousReplay = await invoke({ activeHandler: loadHandler({ fresh: true }), body: validSubmission, headers: withKey(202, { 'x-forwarded-for': '203.0.113.95' }) })
+  assert.equal(ambiguousReplay.status, 503)
+  assert.equal(ambiguousReplay.body.reason, 'contact_persistence_unavailable')
+  assert.equal(unexpectedDeliveryCalls, 0)
+
+  console.log(JSON.stringify({ ok: true, contract: 'supermega_public_contact_behavior', checks: 73 }, null, 2))
 } finally {
   globalThis.fetch = originalFetch
   for (const name of environmentNames) {

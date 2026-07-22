@@ -14,16 +14,19 @@ from uuid import UUID, uuid4
 
 
 TRIAL_SCHEMA_COMPONENT = "private_trial_backend"
-TRIAL_SCHEMA_VERSION = 1
-TRIAL_SURFACES = frozenset({"command", "shop", "plant", "setup"})
+TRIAL_SCHEMA_VERSION = 2
+TRIAL_SURFACES = frozenset({"company", "commerce", "production", "setup"})
+TRUSTED_ACTOR_KINDS = frozenset({"human", "service", "agent"})
+HUMAN_ACTOR_KIND = "human"
 SURFACE_WRITE_CAPABILITIES = {
-    "command": "command.write",
-    "shop": "shop.write",
-    "plant": "plant.write",
+    "company": "company.write",
+    "commerce": "commerce.write",
+    "production": "production.write",
     "setup": "setup.write",
 }
 APPROVAL_REQUEST_CAPABILITY = "approvals.request"
 APPROVAL_DECIDE_CAPABILITY = "approvals.decide"
+DECISION_PACKET_CONTRACT = "decision_packet.v1"
 MAX_JSON_BYTES = 64 * 1024
 
 JsonObject = dict[str, Any]
@@ -44,6 +47,11 @@ class TrialPermissionDenied(TrialStoreError):
     def __init__(self, required_capability: str):
         self.required_capability = required_capability
         super().__init__(f"Missing capability: {required_capability}")
+
+
+class TrialHumanApprovalRequired(TrialStoreError):
+    def __init__(self):
+        super().__init__("A trusted human actor must make the approval decision.")
 
 
 class TrialVersionConflict(TrialStoreError):
@@ -77,12 +85,14 @@ class TrialValidationError(TrialStoreError):
 class TrialPrincipal:
     workspace_id: str
     actor_id: str
+    actor_kind: str = "unknown"
     authenticated: bool = True
 
     def normalized(self) -> "TrialPrincipal":
         return TrialPrincipal(
             workspace_id=str(self.workspace_id or "").strip(),
             actor_id=str(self.actor_id or "").strip(),
+            actor_kind=str(self.actor_kind or "").strip().lower(),
             authenticated=bool(self.authenticated),
         )
 
@@ -195,8 +205,10 @@ class ApprovalRecord:
     evidence_refs: tuple[str, ...]
     status: str
     requested_by: str
+    requested_actor_kind: str
     requested_at: str
     decided_by: str = ""
+    decided_actor_kind: str = ""
     decided_at: str = ""
     decision_note: str = ""
     version: int = 0
@@ -211,8 +223,10 @@ class ApprovalRecord:
             "evidence_refs": list(self.evidence_refs),
             "status": self.status,
             "requested_by": self.requested_by,
+            "requested_actor_kind": self.requested_actor_kind,
             "requested_at": self.requested_at,
             "decided_by": self.decided_by,
+            "decided_actor_kind": self.decided_actor_kind,
             "decided_at": self.decided_at,
             "decision_note": self.decision_note,
             "version": self.version,
@@ -255,7 +269,7 @@ class TrialStore(Protocol):
         approval_id: str | UUID,
         command_id: str | UUID,
         decision: str,
-        note: str = "",
+        note: str,
     ) -> ApprovalRecord: ...
 
 
@@ -305,6 +319,125 @@ def _json_object(value: Mapping[str, Any], *, field_name: str) -> JsonObject:
     return json.loads(encoded)
 
 
+def _decision_packet(value: Mapping[str, Any]) -> JsonObject:
+    packet = _json_object(value, field_name="proposal")
+    allowed = {
+        "contract",
+        "subject",
+        "decision",
+        "claims",
+        "baseline",
+        "target",
+        "result",
+        "acceptance",
+        "artifact_reference",
+    }
+    unknown = sorted(set(packet) - allowed)
+    if unknown:
+        raise TrialValidationError(f"proposal contains unsupported fields: {', '.join(unknown)}")
+    if packet.get("contract") != DECISION_PACKET_CONTRACT:
+        raise TrialValidationError(f"proposal.contract must be {DECISION_PACKET_CONTRACT}.")
+
+    normalized: JsonObject = {"contract": DECISION_PACKET_CONTRACT}
+    subject = packet.get("subject")
+    if not isinstance(subject, Mapping) or set(subject) != {"kind", "id", "version"}:
+        raise TrialValidationError("proposal.subject must contain only kind, id, and version.")
+    subject_kind = str(subject.get("kind", "")).strip().lower()
+    subject_id = str(subject.get("id", "")).strip()
+    if not 1 <= len(subject_kind) <= 80 or any(character not in "abcdefghijklmnopqrstuvwxyz0123456789._-" for character in subject_kind):
+        raise TrialValidationError("proposal.subject.kind contains unsupported characters.")
+    try:
+        subject_version = int(subject.get("version", 0) or 0)
+    except (TypeError, ValueError):
+        subject_version = 0
+    if not 1 <= len(subject_id) <= 160 or subject_version != 1:
+        raise TrialValidationError("proposal.subject requires a bounded id and version 1.")
+    normalized["subject"] = {"kind": subject_kind, "id": subject_id, "version": 1}
+
+    for field in ("decision", "baseline", "target", "result", "acceptance"):
+        text = str(packet.get(field, "")).strip()
+        if not 1 <= len(text) <= 500:
+            raise TrialValidationError(f"proposal.{field} must contain between 1 and 500 characters.")
+        normalized[field] = text
+
+    artifact_reference = str(packet.get("artifact_reference", "")).strip()
+    if not 1 <= len(artifact_reference) <= 200:
+        raise TrialValidationError("proposal.artifact_reference must contain between 1 and 200 characters.")
+    normalized["artifact_reference"] = artifact_reference
+
+    claims = packet.get("claims")
+    if not isinstance(claims, list) or not 1 <= len(claims) <= 20:
+        raise TrialValidationError("proposal.claims must contain 1 to 20 structured claims.")
+    normalized_claims = []
+    claim_fields = {
+        "id",
+        "claim_type",
+        "statement",
+        "source_reference",
+        "captured_at",
+        "status",
+        "uncertainty",
+        "visibility",
+        "digest",
+    }
+    for index, claim in enumerate(claims):
+        if not isinstance(claim, Mapping) or set(claim) - claim_fields:
+            raise TrialValidationError(f"proposal.claims[{index}] contains unsupported fields.")
+        claim_id = str(claim.get("id", "")).strip()
+        claim_type = str(claim.get("claim_type", "")).strip().lower()
+        statement = str(claim.get("statement", "")).strip()
+        source_reference = str(claim.get("source_reference", "")).strip()
+        captured_at = str(claim.get("captured_at", "")).strip()
+        status = str(claim.get("status", "")).strip().lower()
+        uncertainty = str(claim.get("uncertainty", "")).strip().lower()
+        visibility = str(claim.get("visibility", "")).strip().lower()
+        digest = str(claim.get("digest", "") or "").strip().lower()
+        if not 1 <= len(claim_id) <= 160:
+            raise TrialValidationError(f"proposal.claims[{index}].id must contain between 1 and 160 characters.")
+        if claim_type not in {"fact", "analysis"}:
+            raise TrialValidationError(f"proposal.claims[{index}].claim_type must be fact or analysis.")
+        if not 1 <= len(statement) <= 500 or not 1 <= len(source_reference) <= 200:
+            raise TrialValidationError(f"proposal.claims[{index}] requires a bounded statement and source_reference.")
+        try:
+            captured = datetime.fromisoformat(captured_at.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise TrialValidationError(f"proposal.claims[{index}].captured_at must be an ISO-8601 timestamp.") from exc
+        if captured.tzinfo is None:
+            raise TrialValidationError(f"proposal.claims[{index}].captured_at must include a timezone.")
+        if status not in {"observed", "verified"} or uncertainty not in {"low", "medium", "high"} or visibility not in {"private", "public"}:
+            raise TrialValidationError(f"proposal.claims[{index}] has an unsupported status, uncertainty, or visibility.")
+        if digest and (len(digest) != 71 or not digest.startswith("sha256:") or any(character not in "0123456789abcdef" for character in digest[7:])):
+            raise TrialValidationError(f"proposal.claims[{index}].digest must be a lowercase sha256 digest.")
+        if status == "verified" and not digest:
+            raise TrialValidationError(f"proposal.claims[{index}] requires a digest when status is verified.")
+        normalized_claims.append(
+            {
+                "id": claim_id,
+                "claim_type": claim_type,
+                "statement": statement,
+                "source_reference": source_reference,
+                "captured_at": captured.isoformat(),
+                "status": status,
+                "uncertainty": uncertainty,
+                "visibility": visibility,
+                **({"digest": digest} if digest else {}),
+            }
+        )
+    normalized["claims"] = normalized_claims
+    return normalized
+
+
+def _decision_evidence_refs(packet: Mapping[str, Any], evidence_refs: Sequence[str]) -> tuple[str, ...]:
+    evidence = tuple(str(item).strip() for item in evidence_refs if str(item).strip())
+    if not evidence or len(evidence) > 20 or any(len(item) > 200 for item in evidence):
+        raise TrialValidationError("evidence_refs must contain 1 to 20 references of at most 200 characters.")
+    claim_sources = {str(claim["source_reference"]) for claim in packet.get("claims", [])}
+    missing = sorted(claim_sources - set(evidence))
+    if missing:
+        raise TrialValidationError("Every decision claim source_reference must be present in evidence_refs.")
+    return evidence
+
+
 def _canonical_fingerprint(kind: str, payload: Mapping[str, Any]) -> str:
     normalized = _json_object(payload, field_name="fingerprint payload")
     encoded = json.dumps(
@@ -325,7 +458,17 @@ def _principal_auth_ready(principal: TrialPrincipal | None) -> bool:
     if principal is None:
         return False
     normalized = principal.normalized()
-    return bool(normalized.authenticated and normalized.workspace_id and normalized.actor_id)
+    return bool(
+        normalized.authenticated
+        and normalized.workspace_id
+        and normalized.actor_id
+        and normalized.actor_kind in TRUSTED_ACTOR_KINDS
+    )
+
+
+def _require_human_decider(principal: TrialPrincipal) -> None:
+    if principal.actor_kind != HUMAN_ACTOR_KIND:
+        raise TrialHumanApprovalRequired()
 
 
 def _approval_from_mapping(row: Mapping[str, Any], *, replay: bool = False) -> ApprovalRecord:
@@ -339,12 +482,14 @@ def _approval_from_mapping(row: Mapping[str, Any], *, replay: bool = False) -> A
         approval_id=str(row.get("approval_id", "")),
         command_id=str(row.get("command_id", "")),
         title=str(row.get("title", "")),
-        proposal=_json_object(proposal or {}, field_name="proposal"),
+        proposal=_decision_packet(proposal or {}),
         evidence_refs=tuple(str(item) for item in (evidence or [])),
         status=str(row.get("status", "pending")),
         requested_by=str(row.get("requested_by", "")),
+        requested_actor_kind=str(row.get("requested_actor_kind", "")),
         requested_at=str(row.get("requested_at", "")),
         decided_by=str(row.get("decided_by", "") or ""),
+        decided_actor_kind=str(row.get("decided_actor_kind", "") or ""),
         decided_at=str(row.get("decided_at", "") or ""),
         decision_note=str(row.get("decision_note", "") or ""),
         version=int(row.get("version", 0) or 0),
@@ -394,22 +539,52 @@ class PostgresTrialStore:
     @staticmethod
     def _set_context(cursor: Any, principal: TrialPrincipal) -> None:
         cursor.execute(
-            "select set_config('app.workspace_id', %s, true), set_config('app.actor_id', %s, true)",
-            (principal.workspace_id, principal.actor_id),
+            "select set_config('app.workspace_id', %s, true), set_config('app.actor_id', %s, true), set_config('app.actor_kind', %s, true)",
+            (principal.workspace_id, principal.actor_id, principal.actor_kind),
         )
 
     @staticmethod
     def _assert_schema(cursor: Any) -> None:
         cursor.execute(
             """
-            select schema_version
-            from app_private.trial_schema_meta
-            where component = %s
+            select
+              schema_meta.schema_version,
+              (
+                select count(*) = 5
+                from information_schema.columns
+                where table_schema = 'app_private'
+                  and (table_name, column_name) in (
+                    ('workspace_memberships', 'actor_kind'),
+                    ('workspace_events', 'actor_kind'),
+                    ('approval_requests', 'requested_actor_kind'),
+                    ('approval_requests', 'decided_actor_kind'),
+                    ('approval_requests', 'decision_contract_version')
+                  )
+              ) as actor_decision_columns_ready,
+              (
+                select count(*) = 2
+                from pg_constraint constraint_record
+                join pg_class table_record on table_record.oid = constraint_record.conrelid
+                join pg_namespace schema_record on schema_record.oid = table_record.relnamespace
+                where schema_record.nspname = 'app_private'
+                  and table_record.relname = 'approval_requests'
+                  and constraint_record.conname in (
+                    'approval_requests_decision_packet_v2_check',
+                    'approval_requests_terminal_decision_v2_check'
+                  )
+              ) as decision_constraints_ready
+            from app_private.trial_schema_meta schema_meta
+            where schema_meta.component = %s
             """,
             (TRIAL_SCHEMA_COMPONENT,),
         )
         row = cursor.fetchone()
-        if not row or int(row["schema_version"]) != TRIAL_SCHEMA_VERSION:
+        if (
+            not row
+            or int(row["schema_version"]) != TRIAL_SCHEMA_VERSION
+            or not bool(row.get("actor_decision_columns_ready"))
+            or not bool(row.get("decision_constraints_ready"))
+        ):
             raise TrialNotReadyError(("schema_ready",))
 
     @staticmethod
@@ -475,7 +650,7 @@ class PostgresTrialStore:
     def _load_membership(cursor: Any, principal: TrialPrincipal) -> frozenset[str]:
         cursor.execute(
             """
-            select capabilities
+            select actor_kind, capabilities
             from app_private.workspace_memberships
             where workspace_id = %s and actor_id = %s and status = 'active'
             """,
@@ -483,6 +658,8 @@ class PostgresTrialStore:
         )
         row = cursor.fetchone()
         if not row:
+            raise TrialNotReadyError(("membership_ready",))
+        if str(row.get("actor_kind", "")).strip().lower() != principal.actor_kind:
             raise TrialNotReadyError(("membership_ready",))
         return frozenset(str(item) for item in (row.get("capabilities") or []))
 
@@ -632,7 +809,8 @@ class PostgresTrialStore:
             cursor.execute(
                 """
                 select approval_id, command_id, title, proposal_json, evidence_refs_json,
-                       status, requested_by, requested_at, decided_by, decided_at,
+                       status, requested_by, requested_actor_kind, requested_at,
+                       decided_by, decided_actor_kind, decided_at,
                        decision_note, version
                 from app_private.approval_requests
                 where workspace_id = %s
@@ -786,9 +964,9 @@ class PostgresTrialStore:
                 """
                 insert into app_private.workspace_events
                   (event_id, workspace_id, command_id, command_fingerprint, surface,
-                   event_type, actor_id, expected_version, resulting_version,
+                   event_type, actor_id, actor_kind, expected_version, resulting_version,
                    payload_json, result_json, created_at)
-                values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s::timestamptz)
+                values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s::timestamptz)
                 """,
                 (
                     str(uuid4()),
@@ -798,6 +976,7 @@ class PostgresTrialStore:
                     surface_value,
                     event_type_value,
                     normalized.actor_id,
+                    normalized.actor_kind,
                     int(expected_version),
                     next_version,
                     json.dumps(payload_value, ensure_ascii=False),
@@ -826,10 +1005,8 @@ class PostgresTrialStore:
         title_value = str(title or "").strip()
         if not 1 <= len(title_value) <= 160:
             raise TrialValidationError("title must contain between 1 and 160 characters.")
-        proposal_value = _json_object(proposal, field_name="proposal")
-        evidence_value = tuple(str(item).strip() for item in evidence_refs if str(item).strip())
-        if not evidence_value or len(evidence_value) > 20 or any(len(item) > 200 for item in evidence_value):
-            raise TrialValidationError("evidence_refs must contain 1 to 20 references of at most 200 characters.")
+        proposal_value = _decision_packet(proposal)
+        evidence_value = _decision_evidence_refs(proposal_value, evidence_refs)
         fingerprint = _canonical_fingerprint(
             "approval_request",
             {"title": title_value, "proposal": proposal_value, "evidence_refs": list(evidence_value)},
@@ -855,8 +1032,9 @@ class PostgresTrialStore:
                 """
                 insert into app_private.approval_requests
                   (approval_id, workspace_id, command_id, command_fingerprint, title,
-                   proposal_json, evidence_refs_json, status, requested_by, requested_at, version)
-                values (%s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, 'pending', %s, %s::timestamptz, 0)
+                   proposal_json, evidence_refs_json, status, requested_by,
+                   requested_actor_kind, requested_at, decision_contract_version, version)
+                values (%s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, 'pending', %s, %s, %s::timestamptz, 2, 0)
                 """,
                 (
                     approval_id,
@@ -867,6 +1045,7 @@ class PostgresTrialStore:
                     json.dumps(proposal_value, ensure_ascii=False),
                     json.dumps(list(evidence_value), ensure_ascii=False),
                     normalized.actor_id,
+                    normalized.actor_kind,
                     now,
                 ),
             )
@@ -878,6 +1057,7 @@ class PostgresTrialStore:
                 evidence_refs=evidence_value,
                 status="pending",
                 requested_by=normalized.actor_id,
+                requested_actor_kind=normalized.actor_kind,
                 requested_at=now,
             )
             result = {"approval": approval.to_dict()}
@@ -885,9 +1065,9 @@ class PostgresTrialStore:
                 """
                 insert into app_private.workspace_events
                   (event_id, workspace_id, command_id, command_fingerprint, surface,
-                   event_type, actor_id, expected_version, resulting_version,
+                   event_type, actor_id, actor_kind, expected_version, resulting_version,
                    payload_json, result_json, created_at)
-                values (%s, %s, %s, %s, 'approvals', 'approval.requested', %s,
+                values (%s, %s, %s, %s, 'approvals', 'approval.requested', %s, %s,
                         null, 0, %s::jsonb, %s::jsonb, %s::timestamptz)
                 """,
                 (
@@ -896,6 +1076,7 @@ class PostgresTrialStore:
                     command_id_value,
                     fingerprint,
                     normalized.actor_id,
+                    normalized.actor_kind,
                     json.dumps(
                         {"title": title_value, "proposal": proposal_value, "evidence_refs": list(evidence_value)},
                         ensure_ascii=False,
@@ -913,7 +1094,7 @@ class PostgresTrialStore:
         approval_id: str | UUID,
         command_id: str | UUID,
         decision: str,
-        note: str = "",
+        note: str,
     ) -> ApprovalRecord:
         approval_id_value = _normalize_uuid(approval_id, field_name="approval_id")
         command_id_value = _normalize_uuid(command_id, field_name="command_id")
@@ -921,13 +1102,14 @@ class PostgresTrialStore:
         if decision_value not in {"approved", "declined"}:
             raise TrialValidationError("decision must be approved or declined.")
         note_value = str(note or "").strip()
-        if len(note_value) > 500:
-            raise TrialValidationError("decision note exceeds 500 characters.")
+        if not 1 <= len(note_value) <= 500:
+            raise TrialValidationError("decision note must contain between 1 and 500 characters.")
         fingerprint = _canonical_fingerprint(
             "approval_decision",
             {"approval_id": approval_id_value, "decision": decision_value, "note": note_value},
         )
         normalized = principal.normalized()
+        _require_human_decider(normalized)
         with self._guarded_cursor(
             normalized,
             write=True,
@@ -946,7 +1128,8 @@ class PostgresTrialStore:
             cursor.execute(
                 """
                 select approval_id, command_id, title, proposal_json, evidence_refs_json,
-                       status, requested_by, requested_at, decided_by, decided_at,
+                       status, requested_by, requested_actor_kind, requested_at,
+                       decided_by, decided_actor_kind, decided_at,
                        decision_note, version
                 from app_private.approval_requests
                 where workspace_id = %s and approval_id = %s
@@ -963,13 +1146,15 @@ class PostgresTrialStore:
             cursor.execute(
                 """
                 update app_private.approval_requests
-                set status = %s, decided_by = %s, decided_at = %s::timestamptz,
+                set status = %s, decided_by = %s, decided_actor_kind = %s,
+                    decided_at = %s::timestamptz,
                     decision_note = %s, version = version + 1
                 where workspace_id = %s and approval_id = %s and status = 'pending'
                 """,
                 (
                     decision_value,
                     normalized.actor_id,
+                    normalized.actor_kind,
                     now,
                     note_value,
                     normalized.workspace_id,
@@ -983,6 +1168,7 @@ class PostgresTrialStore:
                     **dict(row),
                     "status": decision_value,
                     "decided_by": normalized.actor_id,
+                    "decided_actor_kind": normalized.actor_kind,
                     "decided_at": now,
                     "decision_note": note_value,
                     "version": int(row["version"]) + 1,
@@ -993,9 +1179,9 @@ class PostgresTrialStore:
                 """
                 insert into app_private.workspace_events
                   (event_id, workspace_id, command_id, command_fingerprint, surface,
-                   event_type, actor_id, expected_version, resulting_version,
+                   event_type, actor_id, actor_kind, expected_version, resulting_version,
                    payload_json, result_json, created_at)
-                values (%s, %s, %s, %s, 'approvals', 'approval.decided', %s,
+                values (%s, %s, %s, %s, 'approvals', 'approval.decided', %s, %s,
                         0, 1, %s::jsonb, %s::jsonb, %s::timestamptz)
                 """,
                 (
@@ -1004,6 +1190,7 @@ class PostgresTrialStore:
                     command_id_value,
                     fingerprint,
                     normalized.actor_id,
+                    normalized.actor_kind,
                     json.dumps(
                         {"approval_id": approval_id_value, "decision": decision_value, "note": note_value},
                         ensure_ascii=False,
@@ -1034,7 +1221,7 @@ class InMemoryTrialStore:
         self.schema_ready = bool(schema_ready)
         self.audit_ready = bool(audit_ready)
         self.write_enabled = bool(write_enabled)
-        self._memberships: dict[tuple[str, str], tuple[str, frozenset[str]]] = {}
+        self._memberships: dict[tuple[str, str], tuple[str, str, frozenset[str]]] = {}
         self._states: dict[tuple[str, str], TrialState] = {}
         self._events: dict[tuple[str, str], tuple[str, JsonObject]] = {}
         self._approvals: dict[tuple[str, str], ApprovalRecord] = {}
@@ -1046,15 +1233,20 @@ class InMemoryTrialStore:
         *,
         workspace_id: str,
         actor_id: str,
+        actor_kind: str,
         capabilities: Sequence[str],
         status: str = "active",
     ) -> None:
         normalized_status = str(status).strip().lower()
         if normalized_status not in {"active", "suspended", "revoked"}:
             raise TrialValidationError("Unsupported membership status.")
+        normalized_actor_kind = str(actor_kind).strip().lower()
+        if normalized_actor_kind not in TRUSTED_ACTOR_KINDS:
+            raise TrialValidationError("Unsupported actor kind.")
         key = (str(workspace_id).strip(), str(actor_id).strip())
         self._memberships[key] = (
             normalized_status,
+            normalized_actor_kind,
             frozenset(str(item).strip() for item in capabilities if str(item).strip()),
         )
 
@@ -1064,11 +1256,13 @@ class InMemoryTrialStore:
         capabilities: frozenset[str] = frozenset()
         if auth_ready and principal is not None:
             normalized = principal.normalized()
-            status, capabilities = self._memberships.get(
+            status, member_actor_kind, capabilities = self._memberships.get(
                 (normalized.workspace_id, normalized.actor_id),
-                ("missing", frozenset()),
+                ("missing", "", frozenset()),
             )
-            membership_ready = status == "active"
+            membership_ready = status == "active" and member_actor_kind == normalized.actor_kind
+            if not membership_ready:
+                capabilities = frozenset()
         return TrialReadiness(
             backend="memory_test_double",
             database_ready=self.database_ready,
@@ -1222,10 +1416,8 @@ class InMemoryTrialStore:
         title_value = str(title or "").strip()
         if not 1 <= len(title_value) <= 160:
             raise TrialValidationError("title must contain between 1 and 160 characters.")
-        proposal_value = _json_object(proposal, field_name="proposal")
-        evidence_value = tuple(str(item).strip() for item in evidence_refs if str(item).strip())
-        if not evidence_value or len(evidence_value) > 20 or any(len(item) > 200 for item in evidence_value):
-            raise TrialValidationError("evidence_refs must contain 1 to 20 references of at most 200 characters.")
+        proposal_value = _decision_packet(proposal)
+        evidence_value = _decision_evidence_refs(proposal_value, evidence_refs)
         fingerprint = _canonical_fingerprint(
             "approval_request",
             {"title": title_value, "proposal": proposal_value, "evidence_refs": list(evidence_value)},
@@ -1247,6 +1439,7 @@ class InMemoryTrialStore:
                 evidence_refs=evidence_value,
                 status="pending",
                 requested_by=normalized.actor_id,
+                requested_actor_kind=normalized.actor_kind,
                 requested_at=_utc_now(),
             )
             self._approvals[(normalized.workspace_id, approval.approval_id)] = deepcopy(approval)
@@ -1264,7 +1457,7 @@ class InMemoryTrialStore:
         approval_id: str | UUID,
         command_id: str | UUID,
         decision: str,
-        note: str = "",
+        note: str,
     ) -> ApprovalRecord:
         approval_id_value = _normalize_uuid(approval_id, field_name="approval_id")
         command_id_value = _normalize_uuid(command_id, field_name="command_id")
@@ -1272,13 +1465,14 @@ class InMemoryTrialStore:
         if decision_value not in {"approved", "declined"}:
             raise TrialValidationError("decision must be approved or declined.")
         note_value = str(note or "").strip()
-        if len(note_value) > 500:
-            raise TrialValidationError("decision note exceeds 500 characters.")
+        if not 1 <= len(note_value) <= 500:
+            raise TrialValidationError("decision note must contain between 1 and 500 characters.")
         fingerprint = _canonical_fingerprint(
             "approval_decision",
             {"approval_id": approval_id_value, "decision": decision_value, "note": note_value},
         )
         with self._lock:
+            _require_human_decider(principal.normalized())
             normalized, _ = self._guard(
                 principal,
                 write=True,
@@ -1301,8 +1495,10 @@ class InMemoryTrialStore:
                 evidence_refs=current.evidence_refs,
                 status=decision_value,
                 requested_by=current.requested_by,
+                requested_actor_kind=current.requested_actor_kind,
                 requested_at=current.requested_at,
                 decided_by=normalized.actor_id,
+                decided_actor_kind=normalized.actor_kind,
                 decided_at=_utc_now(),
                 decision_note=note_value,
                 version=1,

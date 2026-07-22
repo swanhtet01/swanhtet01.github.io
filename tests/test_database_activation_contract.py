@@ -16,12 +16,19 @@ ROOT = Path(__file__).resolve().parents[1]
 VALIDATOR = ROOT / "tools" / "validate_supermega_database_url.py"
 ACTIVATOR = ROOT / "tools" / "activate_supermega_database.ps1"
 TRIAL_STORE = ROOT / "supermega_runtime" / "trial_store.py"
-MIGRATION = (
+MIGRATION_V1 = (
     ROOT
     / "supabase"
     / "migrations"
     / "20260722005134_private_trial_backend_foundation.sql"
 )
+MIGRATION_V2 = (
+    ROOT
+    / "supabase"
+    / "migrations"
+    / "20260722142801_private_trial_backend_v2.sql"
+)
+MIGRATIONS = (MIGRATION_V1, MIGRATION_V2)
 
 PRIVATE_SCHEMA = "app_private"
 BACKEND_ROLE = "supermega_trial_backend"
@@ -76,8 +83,9 @@ def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def _normalized_sql(path: Path = MIGRATION) -> str:
-    return re.sub(r"\s+", " ", _read(path).lower()).strip()
+def _normalized_sql(path: Path | None = None) -> str:
+    source = _read(path) if path is not None else "\n".join(_read(item) for item in MIGRATIONS)
+    return re.sub(r"\s+", " ", source.lower()).strip()
 
 
 def _extract_json(text: str) -> dict[str, object]:
@@ -106,6 +114,17 @@ def _first_sql_token(statement: str) -> str:
 
 
 class MigrationSecurityEvidenceTests(unittest.TestCase):
+    def test_historical_v1_is_unchanged_and_v2_is_additive(self) -> None:
+        v1 = _normalized_sql(MIGRATION_V1)
+        v2 = _normalized_sql(MIGRATION_V2)
+        self.assertIn("values ('private_trial_backend', 1)", v1)
+        self.assertIn("surface in ('command', 'shop', 'plant', 'setup')", v1)
+        self.assertNotIn("decision_contract_version", v1)
+        self.assertNotIn("actor_kind", v1)
+        self.assertIn("private trial backend v2 requires schema version 1", v2)
+        self.assertIn("add column decision_contract_version integer", v2)
+        self.assertIn("set schema_version = 2", v2)
+
     def test_private_schema_and_runtime_role_are_restricted(self) -> None:
         sql = _normalized_sql()
         self.assertIn("create schema if not exists app_private", sql)
@@ -180,6 +199,24 @@ class MigrationSecurityEvidenceTests(unittest.TestCase):
             self.assertIn(f"create index {index}", sql)
         self.assertNotIn("security definer", sql)
         self.assertGreaterEqual(sql.count("security invoker"), 3)
+
+    def test_approval_decisions_require_a_trusted_human_actor_kind(self) -> None:
+        sql = _normalized_sql(MIGRATION_V2)
+        self.assertIn(
+            "check (actor_kind in ('human', 'service', 'agent', 'legacy'))",
+            sql,
+        )
+        self.assertIn("set requested_actor_kind = 'legacy'", sql)
+        self.assertIn("decision_contract_version = 2", sql)
+        self.assertIn("proposal_json ->> 'contract' = 'decision_packet.v1'", sql)
+        self.assertIn("proposal_json #>> '{subject,version}' = '1'", sql)
+        self.assertIn("jsonb_array_length(proposal_json -> 'claims') between 1 and 20", sql)
+        self.assertIn("current_setting('app.actor_kind', true) = 'human'", sql)
+        self.assertIn("membership.actor_kind = 'human'", sql)
+        self.assertIn("event_type <> 'approval.decided' or actor_kind = 'human'", sql)
+        self.assertIn("decision_note = btrim(decision_note)", sql)
+        self.assertIn("char_length(decision_note) between 1 and 500", sql)
+        self.assertIn("legacy approval must be reissued under decision contract v2", sql)
 
 
 class ActivationWrapperContractTests(unittest.TestCase):
@@ -454,13 +491,13 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                             "workspace_memberships_self_read": (
                                 "workspace_memberships",
                                 "SELECT",
-                                ("app.workspace_id", "app.actor_id", "active"),
+                                ("app.workspace_id", "app.actor_id", "app.actor_kind", "active"),
                                 (),
                             ),
                             "workspace_state_member_read": (
                                 "workspace_state",
                                 "SELECT",
-                                ("app.workspace_id", "app.actor_id", "workspace_memberships", "active"),
+                                ("app.workspace_id", "app.actor_id", "app.actor_kind", "workspace_memberships", "active"),
                                 (),
                             ),
                             "workspace_state_capability_insert": (
@@ -470,31 +507,33 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                                 (
                                     "app.workspace_id",
                                     "app.actor_id",
+                                    "app.actor_kind",
                                     "workspace_memberships",
-                                    "command.write",
-                                    "shop.write",
-                                    "plant.write",
+                                    "company.write",
+                                    "commerce.write",
+                                    "production.write",
                                     "setup.write",
                                 ),
                             ),
                             "workspace_state_capability_update": (
                                 "workspace_state",
                                 "UPDATE",
-                                ("app.workspace_id", "app.actor_id", "workspace_memberships"),
+                                ("app.workspace_id", "app.actor_id", "app.actor_kind", "workspace_memberships"),
                                 (
                                     "app.workspace_id",
                                     "app.actor_id",
+                                    "app.actor_kind",
                                     "workspace_memberships",
-                                    "command.write",
-                                    "shop.write",
-                                    "plant.write",
+                                    "company.write",
+                                    "commerce.write",
+                                    "production.write",
                                     "setup.write",
                                 ),
                             ),
                             "workspace_events_member_read": (
                                 "workspace_events",
                                 "SELECT",
-                                ("app.workspace_id", "app.actor_id", "workspace_memberships", "active"),
+                                ("app.workspace_id", "app.actor_id", "app.actor_kind", "workspace_memberships", "active"),
                                 (),
                             ),
                             "workspace_events_capability_insert": (
@@ -504,32 +543,34 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                                 (
                                     "app.workspace_id",
                                     "app.actor_id",
+                                    "app.actor_kind",
                                     "workspace_memberships",
-                                    "command.write",
-                                    "shop.write",
-                                    "plant.write",
+                                    "company.write",
+                                    "commerce.write",
+                                    "production.write",
                                     "setup.write",
                                     "approvals.request",
                                     "approvals.decide",
+                                    "human",
                                 ),
                             ),
                             "approval_requests_member_read": (
                                 "approval_requests",
                                 "SELECT",
-                                ("app.workspace_id", "app.actor_id", "workspace_memberships", "active"),
+                                ("app.workspace_id", "app.actor_id", "app.actor_kind", "workspace_memberships", "active"),
                                 (),
                             ),
                             "approval_requests_capability_insert": (
                                 "approval_requests",
                                 "INSERT",
                                 (),
-                                ("app.workspace_id", "app.actor_id", "workspace_memberships", "approvals.request"),
+                                ("app.workspace_id", "app.actor_id", "app.actor_kind", "workspace_memberships", "approvals.request"),
                             ),
                             "approval_requests_capability_update": (
                                 "approval_requests",
                                 "UPDATE",
-                                ("app.workspace_id", "app.actor_id", "workspace_memberships", "approvals.decide"),
-                                ("app.workspace_id", "app.actor_id", "workspace_memberships", "approvals.decide"),
+                                ("app.workspace_id", "app.actor_id", "app.actor_kind", "workspace_memberships", "approvals.decide", "human"),
+                                ("app.workspace_id", "app.actor_id", "app.actor_kind", "workspace_memberships", "approvals.decide", "human"),
                             ),
                         }
                         return [
