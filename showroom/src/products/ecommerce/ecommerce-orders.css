@@ -1878,6 +1878,12 @@
     justify-self: start;
   }
 
+  .eco-website-intake strong,
+  .eco-website-intake small {
+    overflow: visible;
+    white-space: normal;
+  }
+
   .eco-order-lines > div {
     grid-template-columns: minmax(0, 1fr) 32px 92px;
   }

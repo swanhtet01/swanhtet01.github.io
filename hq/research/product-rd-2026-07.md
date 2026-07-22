@@ -1,8 +1,8 @@
 # SuperMega product R&D brief — July 2026
 
-Status: founder direction accepted; local prototypes and the guarded non-PII handoff pass current offline gates
+Status: founder direction accepted; local prototypes, the guarded non-PII handoff, and its idempotent local order draft pass current offline gates
 
-Evidence basis: released `d3714723af8b2e90fee6ad33fcc62c32ea003fba`, repository authority, and the shared “Curating Dev Resources” conversation
+Evidence basis: released `7bb2c72973473d5cc10d9a89849065b22b9f18fa`, repository authority, and the shared “Curating Dev Resources” conversation
 
 Prepared: 2026-07-22
 

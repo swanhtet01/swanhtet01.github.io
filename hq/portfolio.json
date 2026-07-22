@@ -29,7 +29,7 @@
       "path": "/products/ecommerce/",
       "job": "Convert website or channel demand into controlled order, catalogue, stock, fulfilment, payment-status, and audit records.",
       "surfaces": ["Orders", "Catalog", "Fulfilment", "Payments"],
-      "nextGate": "Repeat the non-PII Website intake with one named user, then prove idempotent order creation, reservation, reconciliation, and close."
+      "nextGate": "Repeat the non-PII Website intake and idempotent local draft with one named user, then prove controlled completion, reservation, reconciliation, and close."
     },
     {
       "id": "commerce",
