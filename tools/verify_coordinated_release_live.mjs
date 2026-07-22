@@ -101,6 +101,8 @@ const expectedCommit = String(process.env.EXPECTED_RELEASE_COMMIT || '').trim().
 const pairOnly = process.env.VERIFY_RELEASE_PAIR_ONLY === '1'
 const protectedPreview = process.env.VERCEL_PROTECTED_PREVIEW === '1'
 const vercelToken = String(process.env.VERCEL_TOKEN || '').trim()
+const appVercelProjectId = String(process.env.APP_VERCEL_PROJECT_ID || '').trim()
+const publicVercelProjectId = String(process.env.PUBLIC_VERCEL_PROJECT_ID || '').trim()
 const attempts = Number(process.env.RELEASE_BARRIER_ATTEMPTS || 7)
 const retryDelayMs = Number(process.env.RELEASE_BARRIER_RETRY_MS || 3000)
 const timeoutMs = Number(process.env.RELEASE_BARRIER_TIMEOUT_MS || 15000)
@@ -109,6 +111,8 @@ const cliEnv = vercelToken ? { ...process.env, VERCEL_TOKEN: vercelToken } : pro
 assert(appBaseUrl.startsWith('https://'), 'app_release_url_required')
 assert(publicBaseUrl.startsWith('https://'), 'public_release_url_required')
 if (protectedPreview) assert(vercelToken, 'protected_preview_token_required')
+if (protectedPreview) assert(appVercelProjectId, 'app_vercel_project_id_required')
+if (protectedPreview) assert(publicVercelProjectId, 'public_vercel_project_id_required')
 
 function describeCliFailure(error) {
   const status = Number.isInteger(error?.status) ? error.status : 'unknown'
@@ -119,8 +123,8 @@ function describeCliFailure(error) {
   return `exit=${status}${lines.length ? ` message=${lines.join(' | ').slice(0, 480)}` : ''}`
 }
 
-function readProtectedRelease(baseUrl) {
-  const npxArgs = ['--yes', 'vercel@56.1.0', 'curl', '/__release.json', '--deployment', baseUrl]
+function readProtectedRelease(baseUrl, projectId) {
+  const npxArgs = ['--yes', 'vercel@56.1.0', 'curl', '/__release.json', '--deployment', baseUrl, '--yes']
   const executable = process.platform === 'win32' ? process.execPath : 'npx'
   const executableArgs = process.platform === 'win32'
     ? [resolve(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npx-cli.js'), ...npxArgs]
@@ -128,7 +132,7 @@ function readProtectedRelease(baseUrl) {
   try {
     return JSON.parse(execFileSync(executable, executableArgs, {
       encoding: 'utf8',
-      env: cliEnv,
+      env: { ...cliEnv, VERCEL_PROJECT_ID: projectId },
       maxBuffer: 2 * 1024 * 1024,
       stdio: ['ignore', 'pipe', 'pipe'],
     }))
@@ -153,8 +157,8 @@ async function readPublicRelease(baseUrl) {
   return response.json()
 }
 
-async function readRelease(baseUrl) {
-  return protectedPreview ? readProtectedRelease(baseUrl) : readPublicRelease(baseUrl)
+async function readRelease(baseUrl, projectId) {
+  return protectedPreview ? readProtectedRelease(baseUrl, projectId) : readPublicRelease(baseUrl)
 }
 
 const sleep = (milliseconds) => new Promise((resolveSleep) => setTimeout(resolveSleep, milliseconds))
@@ -162,8 +166,8 @@ let lastError
 for (let attempt = 1; attempt <= attempts; attempt += 1) {
   try {
     const [appRelease, publicRelease] = await Promise.all([
-      readRelease(appBaseUrl),
-      readRelease(publicBaseUrl),
+      readRelease(appBaseUrl, appVercelProjectId),
+      readRelease(publicBaseUrl, publicVercelProjectId),
     ])
     const identity = verifyReleasePair(appRelease, publicRelease, { expectedCommit, pairOnly })
     console.log(JSON.stringify({
