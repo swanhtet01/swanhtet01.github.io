@@ -1,6 +1,6 @@
 {
   "schemaVersion": "supermega.hq.portfolio.v1",
-  "updatedAt": "2026-07-22",
+  "updatedAt": "2026-07-23",
   "northStar": "One real workflow reaches a measurable outcome through an accountable operating record.",
   "portfolio": [
     {
@@ -9,9 +9,9 @@
       "status": "core",
       "path": "/",
       "job": "Turn company priorities, product delivery, evidence, exceptions, and owner decisions into one shared operating record.",
-      "surfaces": ["Today", "Product", "Engineering", "Growth", "Finance / Risk"],
+      "surfaces": ["Today", "Product", "Engineering", "Growth", "Finance / Risk", "Agent teams (internal)"],
       "lifecycle": ["discover", "define", "build", "release", "learn"],
-      "nextGate": "Prove one end-to-end Product workflow with acceptance and usage evidence."
+      "nextGate": "Prove one end-to-end Product workflow and one bounded agent handoff with attributed human acceptance and usage evidence."
     },
     {
       "id": "website",
@@ -29,7 +29,7 @@
       "path": "/products/ecommerce/",
       "job": "Convert website or channel demand into controlled order, catalogue, stock, fulfilment, payment-status, and audit records.",
       "surfaces": ["Orders", "Catalog", "Fulfilment", "Payments"],
-      "nextGate": "Repeat the non-PII Website intake and idempotent local draft with one named user, then prove controlled completion, reservation, reconciliation, and close."
+      "nextGate": "Repeat the non-PII Website intake, idempotent draft, and controlled ready record with one named user, then prove reservation, reconciliation, and close."
     },
     {
       "id": "commerce",

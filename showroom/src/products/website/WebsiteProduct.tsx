@@ -51,18 +51,34 @@ const viewCopy: Record<WorkspaceView, { eyebrow: string; title: string; copy: st
   },
 }
 
+function handoffSourceKey(context: ReturnType<typeof readWebsiteEcommerceHandoff>) {
+  if (!context?.display) return ''
+  const source = context.handoff.source
+  return [source.fingerprint, source.approvalId, source.localPublishId, source.pageId].join('|')
+}
+
 export function WebsiteProduct() {
   const { workspace, setWorkspace, storageMode } = useWebsiteWorkspace()
   const [view, setView] = useState<WorkspaceView>('content')
   const [device, setDevice] = useState<PreviewDevice>('desktop')
   const [notice, setNotice] = useState('Local demo loaded. No website has been deployed.')
   const [deleteCandidateId, setDeleteCandidateId] = useState('')
-  const [handoffFingerprint, setHandoffFingerprint] = useState(() => readWebsiteEcommerceHandoff()?.handoff.source.fingerprint ?? '')
+  const [preparedHandoffSource, setPreparedHandoffSource] = useState(() => handoffSourceKey(readWebsiteEcommerceHandoff()))
   const selectedPage = workspace.pages.find((page) => page.id === workspace.selectedPageId) ?? workspace.pages[0]
   const fingerprint = workspaceFingerprint(workspace)
   const checks = readinessChecks(workspace, fingerprint)
   const approvalIsCurrent = isCurrentApproval(workspace.approval, fingerprint)
   const publishIsCurrent = isCurrentPublish(workspace.localPublishes[0], fingerprint)
+  const handoffSourcePage = workspace.pages.find((page) => page.stage === 'ready' && page.slug === '/products')
+    ?? workspace.pages.find((page) => page.stage === 'ready')
+  const currentHandoffSource = workspace.approval && workspace.localPublishes[0] && handoffSourcePage
+    ? [fingerprint, workspace.approval.id, workspace.localPublishes[0].id, handoffSourcePage.id].join('|')
+    : ''
+  const handoffIsCurrent = Boolean(preparedHandoffSource
+    && preparedHandoffSource === currentHandoffSource
+    && approvalIsCurrent
+    && publishIsCurrent
+    && checks.every((check) => check.passed))
   const activeViewCopy = viewCopy[view]
 
   useEffect(() => {
@@ -207,11 +223,22 @@ export function WebsiteProduct() {
     const existingHandoff = readWebsiteEcommerceHandoff()
     const approval = workspace.approval
     const publish = workspace.localPublishes[0]
-    const sourcePage = workspace.pages.find((page) => page.stage === 'ready' && page.slug === '/products')
-      ?? workspace.pages.find((page) => page.stage === 'ready')
+    const sourcePage = handoffSourcePage
 
-    if (existingHandoff?.handoff.state === 'accepted' && existingHandoff.handoff.source.fingerprint !== fingerprint) {
-      setNotice('The prior accepted intake and audit record are retained. This bounded prototype will not overwrite them.')
+    if (existingHandoff?.handoff.state === 'accepted') {
+      const source = existingHandoff.handoff.source
+      const acceptedSourceIsCurrent = Boolean(existingHandoff.display
+        && approval
+        && publish
+        && sourcePage
+        && source.fingerprint === fingerprint
+        && source.approvalId === approval.id
+        && source.localPublishId === publish.id
+        && source.pageId === sourcePage.id)
+      setPreparedHandoffSource(acceptedSourceIsCurrent ? handoffSourceKey(existingHandoff) : '')
+      setNotice(acceptedSourceIsCurrent
+        ? 'This exact Website intake is already accepted and retained with its audit record.'
+        : 'The prior accepted intake and audit record are retained. This bounded prototype will not overwrite them.')
       return
     }
 
@@ -249,7 +276,7 @@ export function WebsiteProduct() {
       return
     }
 
-    setHandoffFingerprint(restored.handoff.source.fingerprint)
+    setPreparedHandoffSource(handoffSourceKey(restored))
     setNotice('Versioned Website intake fixture prepared locally. Review it in Ecommerce & Orders.')
   }
 
@@ -378,7 +405,7 @@ export function WebsiteProduct() {
                 checks={checks}
                 fingerprint={fingerprint}
                 handoffAvailable={storageMode === 'browser-local'}
-                handoffIsCurrent={handoffFingerprint === fingerprint}
+                handoffIsCurrent={handoffIsCurrent}
                 onAddEvidence={addEvidence}
                 onApprove={approveCurrentRevision}
                 onPrepareEcommerceHandoff={prepareEcommerceHandoff}

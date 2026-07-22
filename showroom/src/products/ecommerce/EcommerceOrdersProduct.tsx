@@ -4,8 +4,13 @@ import { ApprovalGate } from './ApprovalGate'
 import { CommerceWorkspaces } from './CommerceWorkspaces'
 import {
   acceptWebsiteEcommerceHandoff,
+  completeWebsiteOrderDraft,
   createWebsiteOrderDraft,
+  getWebsiteOrderCustomerReference,
   readWebsiteEcommerceHandoff,
+  type WebsiteOrderCompletionInput,
+  type WebsiteOrderFulfilmentMethod,
+  type WebsiteOrderPaymentMethod,
   type WebsiteEcommerceHandoffContext,
 } from '../product-handoff'
 import {
@@ -152,7 +157,7 @@ function AuditDrawer({ events, onClose }: { events: AuditEvent[]; onClose: () =>
             </article>
           ))}
         </div>
-        <p className="eco-drawer-boundary">History is held in component memory for this standalone prototype and resets on reload. It is not a production audit store.</p>
+        <p className="eco-drawer-boundary">Scenario history resets on reload; Website handoff and completion evidence persists only in this browser. Neither is a production audit store.</p>
       </aside>
     </div>
   )
@@ -233,6 +238,128 @@ function WebsiteIntakeApproval({
   )
 }
 
+function WebsiteOrderCompletion({
+  context,
+  onComplete,
+  onCancel,
+}: {
+  context: WebsiteEcommerceHandoffContext
+  onComplete: (input: WebsiteOrderCompletionInput) => Promise<void>
+  onCancel: () => void
+}) {
+  const [fulfilmentMethod, setFulfilmentMethod] = useState<WebsiteOrderFulfilmentMethod | ''>('')
+  const [paymentMethod, setPaymentMethod] = useState<WebsiteOrderPaymentMethod | ''>('')
+  const [operatorId, setOperatorId] = useState('')
+  const [evidenceReference, setEvidenceReference] = useState('')
+  const [confirmed, setConfirmed] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const fulfilmentRef = useRef<HTMLSelectElement>(null)
+  const draft = context.draft
+  const customerReference = getWebsiteOrderCustomerReference(context.handoff.id)
+  const canComplete = Boolean(customerReference)
+    && Boolean(fulfilmentMethod)
+    && Boolean(paymentMethod)
+    && /^OP-[A-Z0-9][A-Z0-9_-]{2,31}$/.test(operatorId)
+    && /^EV-[A-HJ-NP-Z2-9]{8,24}$/.test(evidenceReference)
+    && confirmed
+    && !submitting
+
+  useEffect(() => {
+    fulfilmentRef.current?.focus()
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') onCancel()
+    }
+    document.addEventListener('keydown', closeOnEscape)
+    return () => document.removeEventListener('keydown', closeOnEscape)
+  }, [onCancel])
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!canComplete || !fulfilmentMethod || !paymentMethod) return
+    setSubmitting(true)
+    await onComplete({ fulfilmentMethod, paymentMethod, operatorId, evidenceReference })
+    setSubmitting(false)
+  }
+
+  if (!draft || !customerReference) return null
+
+  return (
+    <div className="eco-modal-backdrop">
+      <section aria-labelledby="eco-order-completion-title" aria-modal="true" className="eco-approval-dialog" role="dialog">
+        <header className="eco-dialog-head">
+          <div><span className="eco-eyebrow">Required fields</span><h2 id="eco-order-completion-title">Complete local order · {draft.id}</h2></div>
+          <button aria-label="Cancel order completion" className="eco-icon-button" onClick={onCancel} type="button">×</button>
+        </header>
+        <div className="eco-change-preview" aria-label="Proposed order change">
+          <span><small>Before</small><strong>Draft incomplete</strong></span>
+          <i aria-hidden="true">→</i>
+          <span><small>After approval</small><strong>Ready for confirmation</strong></span>
+        </div>
+        <p className="eco-boundary-note">Completion creates one browser-local record and one audit event. It does not insert into the scenario queue, reserve stock, confirm a customer, collect payment, send a message, or write externally.</p>
+        <form className="eco-approval-form" onSubmit={submit}>
+          <div className="eco-handoff-evidence">
+            <span>Generated non-PII customer reference</span>
+            <code>{customerReference}</code>
+            <small>This opaque reference is derived by the system. The form cannot accept a name, phone number, address, or message.</small>
+          </div>
+          <div className="eco-completion-grid">
+            <label>
+              Fulfilment method
+              <select onChange={(event) => setFulfilmentMethod(event.target.value as WebsiteOrderFulfilmentMethod | '')} ref={fulfilmentRef} required value={fulfilmentMethod}>
+                <option value="">Select method</option>
+                <option value="pickup">Customer pickup</option>
+                <option value="local_delivery">Local delivery</option>
+              </select>
+            </label>
+            <label>
+              Payment method
+              <select onChange={(event) => setPaymentMethod(event.target.value as WebsiteOrderPaymentMethod | '')} required value={paymentMethod}>
+                <option value="">Select method</option>
+                <option value="cash_on_delivery">Cash on delivery</option>
+                <option value="manual_qr">Manual QR review</option>
+                <option value="manual_bank_transfer">Manual bank transfer review</option>
+              </select>
+            </label>
+            <label>
+              Responsible operator ID
+              <input
+                autoComplete="off"
+                maxLength={35}
+                onChange={(event) => setOperatorId(event.target.value.toUpperCase())}
+                pattern="OP-[A-Z0-9][A-Z0-9_-]{2,31}"
+                placeholder="OP-OWNER"
+                required
+                value={operatorId}
+              />
+            </label>
+          </div>
+          <label>
+            Opaque evidence reference
+            <input
+              autoComplete="off"
+              maxLength={27}
+              onChange={(event) => setEvidenceReference(event.target.value.toUpperCase())}
+              pattern="EV-[A-HJ-NP-Z2-9]{8,24}"
+              placeholder="EV-TESTAB23"
+              required
+              value={evidenceReference}
+            />
+          </label>
+          <label className="eco-handoff-confirmation">
+            <input checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} type="checkbox" />
+            <span>I verified the immutable line and MMK total, and confirm these three local fields are ready for the next human-controlled step.</span>
+          </label>
+          <div className="eco-dialog-actions">
+            <span />
+            <button className="eco-button eco-button-quiet" onClick={onCancel} type="button">Cancel</button>
+            <button className="eco-button eco-button-primary" disabled={!canComplete} type="submit">{submitting ? 'Creating…' : 'Create ready record'}</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  )
+}
+
 export function EcommerceOrdersProduct() {
   const [workspace, dispatch] = useReducer(commerceReducer, 0, () => createDemoWorkspace())
   const [activeView, setActiveView] = useState<CommerceView>('orders')
@@ -243,9 +370,11 @@ export function EcommerceOrdersProduct() {
   const [guideStep, setGuideStep] = useState(0)
   const [websiteHandoff, setWebsiteHandoff] = useState(() => readWebsiteEcommerceHandoff())
   const [handoffApprovalOpen, setHandoffApprovalOpen] = useState(false)
+  const [orderCompletionOpen, setOrderCompletionOpen] = useState(false)
   const [announcement, setAnnouncement] = useState(() => {
     if (!websiteHandoff) return 'Scenario records loaded locally. No integrations are connected.'
     if (websiteHandoff.handoff.state !== 'accepted') return 'Approved Website fixture is ready for human intake review. No order has been created.'
+    if (websiteHandoff.order) return `${websiteHandoff.order.id} is ready for confirmation in this browser. No customer confirmation, stock reservation, payment, or send occurred.`
     return websiteHandoff.draft
       ? `${websiteHandoff.draft.id} is a local order draft with customer, fulfilment, and payment fields still missing. No order was confirmed.`
       : `${websiteHandoff.handoff.id} is an accepted local intake; no order draft has been created yet.`
@@ -253,7 +382,7 @@ export function EcommerceOrdersProduct() {
   const activeCopy = viewCopy[activeView]
   const handoffAudit: AuditEvent[] = (websiteHandoff?.audit ?? []).map((event) => ({
     ...event,
-    summary: 'Accepted Website-to-Ecommerce handoff',
+    summary: event.action === 'complete_website_order' ? 'Completed required local order fields' : 'Accepted Website-to-Ecommerce handoff',
   }))
   const combinedAudit = [...handoffAudit, ...workspace.audit]
     .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
@@ -316,18 +445,25 @@ export function EcommerceOrdersProduct() {
       setAnnouncement('No valid Website handoff is available in this browser.')
       return
     }
+    setWebsiteHandoff(current)
+    if (current.handoff.state === 'accepted') {
+      if (current.order) {
+        setAnnouncement(`${current.order.id} already exists for ${current.draft?.id}; idempotency prevented a duplicate ready record.`)
+        return
+      }
+      if (current.draft) {
+        setOrderCompletionOpen(true)
+        setAnnouncement(`${current.draft.id} is waiting for its three required fields and attributable human completion.`)
+        return
+      }
+    }
     const matchingItems = workspace.catalog.filter((candidate) => candidate.sku === current.handoff.intake.sku && candidate.active)
     if (matchingItems.length !== 1) {
       setAnnouncement('The Website fixture does not match exactly one active local catalog item, so intake failed closed.')
       return
     }
     const [item] = matchingItems
-    setWebsiteHandoff(current)
     if (current.handoff.state === 'accepted') {
-      if (current.draft) {
-        setAnnouncement(`${current.draft.id} already exists for ${current.handoff.id}; idempotency prevented a duplicate draft.`)
-        return
-      }
       const drafted = createWebsiteOrderDraft(current.handoff.id, {
         sku: item.sku,
         itemName: item.name,
@@ -364,6 +500,20 @@ export function EcommerceOrdersProduct() {
     setWebsiteHandoff(accepted)
     setHandoffApprovalOpen(false)
     setAnnouncement(`${accepted.handoff.id} accepted locally by ${accepted.handoff.acceptance.operatorId}; create the idempotent local draft when ready.`)
+  }
+
+  async function completeWebsiteDraft(input: WebsiteOrderCompletionInput) {
+    const draft = websiteHandoff?.draft
+    if (!draft || websiteHandoff.order) return
+    const completed = await completeWebsiteOrderDraft(draft.id, input)
+    if (!completed?.order) {
+      setOrderCompletionOpen(false)
+      setAnnouncement('Order completion failed closed. The accepted Website source, draft, operator, or opaque references could not be verified; nothing changed.')
+      return
+    }
+    setWebsiteHandoff(completed)
+    setOrderCompletionOpen(false)
+    setAnnouncement(`${completed.order.id} is ready for confirmation with its immutable MMK price and one completion audit. No stock, payment, customer confirmation, send, or external write occurred.`)
   }
 
   function approveAction(details: ApprovalDetails) {
@@ -468,7 +618,6 @@ export function EcommerceOrdersProduct() {
               selectedOrderId={selectedOrderId}
               view={activeView}
               websiteHandoff={websiteHandoff}
-              websiteDraftCreated={Boolean(websiteHandoff?.draft)}
             />
           </div>
         </main>
@@ -478,6 +627,7 @@ export function EcommerceOrdersProduct() {
       {auditOpen ? <AuditDrawer events={combinedAudit} onClose={() => setAuditOpen(false)} /> : null}
       {pendingAction ? <ApprovalGate action={pendingAction} guidedDemo={guideOpen} onApprove={approveAction} onCancel={() => setPendingAction(null)} /> : null}
       {handoffApprovalOpen && websiteHandoff ? <WebsiteIntakeApproval context={websiteHandoff} onApprove={approveWebsiteIntake} onCancel={() => setHandoffApprovalOpen(false)} /> : null}
+      {orderCompletionOpen && websiteHandoff?.draft && !websiteHandoff.order ? <WebsiteOrderCompletion context={websiteHandoff} onComplete={completeWebsiteDraft} onCancel={() => setOrderCompletionOpen(false)} /> : null}
     </div>
   )
 }

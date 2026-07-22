@@ -6,6 +6,9 @@ export type WorkStatus = 'backlog' | 'in_progress' | 'blocked' | 'review' | 'don
 export type ProductStage = 'discover' | 'define' | 'build' | 'release' | 'learn'
 export type EvidenceKind = 'customer' | 'metric' | 'test' | 'release' | 'decision' | 'source'
 export type EvidenceStatus = 'observed' | 'verified'
+export type AgentState = 'available' | 'assigned' | 'waiting_review' | 'blocked'
+export type AgentCapability = 'research' | 'planning' | 'implementation' | 'verification' | 'analysis' | 'drafting'
+export type AgentApprovalBoundary = 'prepare_only' | 'local_change_review'
 
 export type EvidenceRecord = {
   id: string
@@ -15,6 +18,8 @@ export type EvidenceRecord = {
   reference: string
   status: EvidenceStatus
   verifiedAt?: string
+  verifiedBy?: string
+  verifiedActorKind?: 'human'
 }
 
 export type TeamWorkItem = {
@@ -51,13 +56,36 @@ export type ProductRelease = {
   checks: Array<{ id: string; label: string; complete: boolean }>
 }
 
+export type AgentEvidence = {
+  capturedAt: string
+  summary: string
+  reference: string
+}
+
+export type DelegatedAgent = {
+  id: string
+  createdAt: string
+  updatedAt: string
+  name: string
+  team: TeamId
+  role: string
+  humanOwner: string
+  state: AgentState
+  capabilities: AgentCapability[]
+  approvalBoundary: AgentApprovalBoundary
+  assignedWorkItemId?: string
+  lastEvidence?: AgentEvidence
+}
+
 export type TeamWorkspaceState = {
   items: TeamWorkItem[]
+  agents: DelegatedAgent[]
   decisions: ProductDecision[]
   release: ProductRelease
 }
 
-export const TEAM_WORK_KEY = 'supermega.team.workspace.v2'
+export const TEAM_WORK_KEY = 'supermega.team.workspace.v3'
+export const LEGACY_TEAM_WORK_KEYS = ['supermega.team.workspace.v2'] as const
 
 export const teamDefinitions = [
   { id: 'product', label: 'Product', purpose: 'Outcomes, backlog, acceptance, decisions, and release readiness.' },
@@ -83,11 +111,47 @@ export const evidenceKinds = [
   { id: 'source', label: 'Source' },
 ] as const satisfies ReadonlyArray<{ id: EvidenceKind; label: string }>
 
+export const agentStates = [
+  { id: 'available', label: 'Available' },
+  { id: 'assigned', label: 'Assigned' },
+  { id: 'waiting_review', label: 'Needs review' },
+  { id: 'blocked', label: 'Blocked' },
+] as const satisfies ReadonlyArray<{ id: AgentState; label: string }>
+
+export const agentCapabilities = [
+  { id: 'research', label: 'Research' },
+  { id: 'planning', label: 'Planning' },
+  { id: 'implementation', label: 'Implementation' },
+  { id: 'verification', label: 'Verification' },
+  { id: 'analysis', label: 'Analysis' },
+  { id: 'drafting', label: 'Drafting' },
+] as const satisfies ReadonlyArray<{ id: AgentCapability; label: string }>
+
+export const agentApprovalBoundaries = [
+  {
+    id: 'prepare_only',
+    label: 'Prepare only',
+    description: 'May research, analyse, and draft. A human performs any consequential action.',
+  },
+  {
+    id: 'local_change_review',
+    label: 'Local change + review',
+    description: 'May make bounded local changes. A human reviews before merge, send, payment, publish, or deploy.',
+  },
+] as const satisfies ReadonlyArray<{ id: AgentApprovalBoundary; label: string; description: string }>
+
+export const defaultAgentCapabilities: Record<TeamId, AgentCapability[]> = {
+  product: ['research', 'planning', 'analysis'],
+  engineering: ['implementation', 'verification', 'analysis'],
+  growth: ['research', 'analysis', 'drafting'],
+  finance: ['research', 'verification', 'analysis'],
+}
+
 const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60 * 1000).toISOString()
 
 function seedEvidence(id: string, minutes: number, kind: EvidenceKind, finding: string, reference: string): EvidenceRecord {
   const timestamp = minutesAgo(minutes)
-  return { id, createdAt: timestamp, kind, finding, reference, status: 'verified', verifiedAt: timestamp }
+  return { id, createdAt: timestamp, kind, finding, reference, status: 'verified', verifiedAt: timestamp, verifiedBy: 'Workspace owner', verifiedActorKind: 'human' }
 }
 
 export const seedTeamWorkspace: TeamWorkspaceState = {
@@ -177,6 +241,65 @@ export const seedTeamWorkspace: TeamWorkspaceState = {
       evidence: [],
     },
   ],
+  agents: [
+    {
+      id: 'AGT-PROD-01',
+      createdAt: minutesAgo(66),
+      updatedAt: minutesAgo(32),
+      name: 'Product planner',
+      team: 'product',
+      role: 'Discovery, acceptance, and prioritisation',
+      humanOwner: 'Product lead',
+      state: 'assigned',
+      capabilities: [...defaultAgentCapabilities.product],
+      approvalBoundary: 'prepare_only',
+      assignedWorkItemId: 'PROD-102',
+    },
+    {
+      id: 'AGT-ENG-01',
+      createdAt: minutesAgo(61),
+      updatedAt: minutesAgo(27),
+      name: 'Build engineer',
+      team: 'engineering',
+      role: 'Bounded implementation and release verification',
+      humanOwner: 'Engineering lead',
+      state: 'waiting_review',
+      capabilities: [...defaultAgentCapabilities.engineering],
+      approvalBoundary: 'local_change_review',
+      assignedWorkItemId: 'ENG-201',
+      lastEvidence: {
+        capturedAt: minutesAgo(27),
+        summary: 'Canonical application build and release checks passed locally.',
+        reference: 'local://verification/app-build-contract',
+      },
+    },
+    {
+      id: 'AGT-GROW-01',
+      createdAt: minutesAgo(56),
+      updatedAt: minutesAgo(22),
+      name: 'Growth operator',
+      team: 'growth',
+      role: 'Positioning, onboarding, and follow-up drafts',
+      humanOwner: 'Growth lead',
+      state: 'assigned',
+      capabilities: [...defaultAgentCapabilities.growth],
+      approvalBoundary: 'prepare_only',
+      assignedWorkItemId: 'GROW-301',
+    },
+    {
+      id: 'AGT-FIN-01',
+      createdAt: minutesAgo(49),
+      updatedAt: minutesAgo(18),
+      name: 'Risk reviewer',
+      team: 'finance',
+      role: 'Spend controls, evidence checks, and escalation',
+      humanOwner: 'Finance owner',
+      state: 'blocked',
+      capabilities: [...defaultAgentCapabilities.finance],
+      approvalBoundary: 'prepare_only',
+      assignedWorkItemId: 'FIN-401',
+    },
+  ],
   decisions: [
     {
       id: 'DEC-101',
@@ -235,7 +358,8 @@ function normalizeEvidence(value: unknown, itemId: string, itemCreatedAt: string
 
   const candidate = value as Partial<EvidenceRecord>
   const kind = evidenceKinds.some((entry) => entry.id === candidate.kind) ? candidate.kind as EvidenceKind : 'source'
-  const status: EvidenceStatus = candidate.status === 'verified' ? 'verified' : 'observed'
+  const verifiedBy = String(candidate.verifiedBy || '').trim()
+  const status: EvidenceStatus = candidate.status === 'verified' && candidate.verifiedActorKind === 'human' && verifiedBy ? 'verified' : 'observed'
   const finding = String(candidate.finding || '').trim()
   const reference = String(candidate.reference || '').trim()
   if (!finding && !reference) return null
@@ -250,6 +374,8 @@ function normalizeEvidence(value: unknown, itemId: string, itemCreatedAt: string
     reference: reference || finding,
     status,
     verifiedAt,
+    verifiedBy: status === 'verified' ? verifiedBy : undefined,
+    verifiedActorKind: status === 'verified' ? 'human' : undefined,
   }
 }
 
@@ -282,9 +408,63 @@ function normalizeDecision(decision: ProductDecision): ProductDecision {
   }
 }
 
-function normalizeWorkspace(value: Partial<TeamWorkspaceState>): TeamWorkspaceState {
+function normalizeAgent(value: DelegatedAgent, index: number): DelegatedAgent | null {
+  if (!value || typeof value !== 'object') return null
+  const candidate = value as Partial<DelegatedAgent>
+  const team = teamDefinitions.some((entry) => entry.id === candidate.team) ? candidate.team as TeamId : null
+  const name = String(candidate.name || '').trim()
+  const role = String(candidate.role || '').trim()
+  const humanOwner = String(candidate.humanOwner || '').trim()
+  if (!team || !name || !role || !humanOwner) return null
+
+  const state = agentStates.some((entry) => entry.id === candidate.state) ? candidate.state as AgentState : 'blocked'
+  const capabilityCandidates = Array.isArray(candidate.capabilities) ? candidate.capabilities : null
+  const capabilities = capabilityCandidates
+    ? capabilityCandidates.filter((capability): capability is AgentCapability => agentCapabilities.some((entry) => entry.id === capability))
+    : []
+  if (capabilityCandidates && capabilities.length === 0) return null
+  const approvalBoundary = agentApprovalBoundaries.some((entry) => entry.id === candidate.approvalBoundary)
+    ? candidate.approvalBoundary as AgentApprovalBoundary
+    : 'prepare_only'
+  const createdAt = String(candidate.createdAt || new Date().toISOString())
+  const evidenceCandidate = candidate.lastEvidence
+  const evidenceSummary = String(evidenceCandidate?.summary || '').trim()
+  const evidenceReference = String(evidenceCandidate?.reference || '').trim()
+  const lastEvidence = evidenceSummary && evidenceReference ? {
+    capturedAt: String(evidenceCandidate?.capturedAt || candidate.updatedAt || createdAt),
+    summary: evidenceSummary,
+    reference: evidenceReference,
+  } : undefined
+
   return {
-    items: Array.isArray(value.items) ? value.items.map(normalizeWorkItem) : seedTeamWorkspace.items,
+    id: String(candidate.id || `AGT-${index + 1}`),
+    createdAt,
+    updatedAt: String(candidate.updatedAt || createdAt),
+    name,
+    team,
+    role,
+    humanOwner,
+    state,
+    capabilities: capabilities.length ? [...new Set(capabilities)] : [...defaultAgentCapabilities[team]],
+    approvalBoundary,
+    assignedWorkItemId: String(candidate.assignedWorkItemId || '').trim() || undefined,
+    lastEvidence,
+  }
+}
+
+function normalizeWorkspace(value: Partial<TeamWorkspaceState>): TeamWorkspaceState {
+  const items = Array.isArray(value.items) ? value.items.map(normalizeWorkItem) : seedTeamWorkspace.items
+  const agents = (Array.isArray(value.agents) ? value.agents.map(normalizeAgent).filter((agent): agent is DelegatedAgent => Boolean(agent)) : [])
+    .map((agent) => {
+      const assignedItem = items.find((item) => item.id === agent.assignedWorkItemId)
+      const hasValidAssignment = !agent.assignedWorkItemId || assignedItem?.team === agent.team
+      if (!hasValidAssignment) return { ...agent, assignedWorkItemId: undefined, state: 'blocked' as const }
+      if (agent.state === 'waiting_review' && !agent.lastEvidence) return { ...agent, state: 'blocked' as const }
+      return agent
+    })
+  return {
+    items,
+    agents,
     decisions: Array.isArray(value.decisions) ? value.decisions.map(normalizeDecision) : seedTeamWorkspace.decisions,
     release: value.release && Array.isArray(value.release.checks) ? value.release : seedTeamWorkspace.release,
   }
@@ -292,12 +472,15 @@ function normalizeWorkspace(value: Partial<TeamWorkspaceState>): TeamWorkspaceSt
 
 export function useTeamWorkspace() {
   const [state, setState] = useState<TeamWorkspaceState>(() => {
-    try {
-      const stored = window.localStorage.getItem(TEAM_WORK_KEY)
-      return stored ? normalizeWorkspace(JSON.parse(stored) as Partial<TeamWorkspaceState>) : seedTeamWorkspace
-    } catch {
-      return seedTeamWorkspace
+    for (const storageKey of [TEAM_WORK_KEY, ...LEGACY_TEAM_WORK_KEYS]) {
+      try {
+        const stored = window.localStorage.getItem(storageKey)
+        if (stored) return normalizeWorkspace(JSON.parse(stored) as Partial<TeamWorkspaceState>)
+      } catch {
+        // Continue to a valid legacy record before falling back to the seed.
+      }
     }
+    return seedTeamWorkspace
   })
 
   useEffect(() => {
