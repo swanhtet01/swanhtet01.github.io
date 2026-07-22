@@ -74,6 +74,12 @@ const guidedSteps = [
   },
 ] as const
 
+const pilotWorkspaceStyle = {
+  display: 'grid',
+  gap: '8px',
+  gridTemplateRows: 'auto minmax(0, 1fr)',
+} as const
+
 function ProductBrand() {
   return <a className="eco-brand" aria-label="Back to SuperMega operations" href="/operations/"><span aria-hidden="true">&gt;_</span><strong>SUPERMEGA</strong></a>
 }
@@ -371,6 +377,7 @@ export function EcommerceOrdersProduct() {
   const [websiteHandoff, setWebsiteHandoff] = useState(() => readWebsiteEcommerceHandoff())
   const [handoffApprovalOpen, setHandoffApprovalOpen] = useState(false)
   const [orderCompletionOpen, setOrderCompletionOpen] = useState(false)
+  const [pilotBlockedAttempts, setPilotBlockedAttempts] = useState(0)
   const [announcement, setAnnouncement] = useState(() => {
     if (!websiteHandoff) return 'Scenario records loaded locally. No integrations are connected.'
     if (websiteHandoff.handoff.state !== 'accepted') return 'Approved Website fixture is ready for human intake review. No order has been created.'
@@ -386,6 +393,15 @@ export function EcommerceOrdersProduct() {
   }))
   const combinedAudit = [...handoffAudit, ...workspace.audit]
     .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
+  const pilotResult = websiteHandoff?.order && websiteHandoff.draft ? {
+    businessLabel: websiteHandoff.display?.siteName.trim() || 'Local Website fixture',
+    draftId: websiteHandoff.draft.id,
+    elapsedSeconds: Math.max(0, Math.round((Date.parse(websiteHandoff.order.createdAt) - Date.parse(websiteHandoff.handoff.createdAt)) / 1000)),
+    handoffId: websiteHandoff.handoff.id,
+    humanAuditCount: websiteHandoff.audit.filter((event) => event.actorKind === 'human').length,
+    orderId: websiteHandoff.order.id,
+    state: websiteHandoff.order.state,
+  } : null
 
   useEffect(() => {
     document.title = 'Ecommerce & Orders | SuperMega'
@@ -442,12 +458,14 @@ export function EcommerceOrdersProduct() {
   function requestWebsiteIntake() {
     const current = readWebsiteEcommerceHandoff()
     if (!current) {
+      setPilotBlockedAttempts((attempts) => attempts + 1)
       setAnnouncement('No valid Website handoff is available in this browser.')
       return
     }
     setWebsiteHandoff(current)
     if (current.handoff.state === 'accepted') {
       if (current.order) {
+        setPilotBlockedAttempts((attempts) => attempts + 1)
         setAnnouncement(`${current.order.id} already exists for ${current.draft?.id}; idempotency prevented a duplicate ready record.`)
         return
       }
@@ -459,6 +477,7 @@ export function EcommerceOrdersProduct() {
     }
     const matchingItems = workspace.catalog.filter((candidate) => candidate.sku === current.handoff.intake.sku && candidate.active)
     if (matchingItems.length !== 1) {
+      setPilotBlockedAttempts((attempts) => attempts + 1)
       setAnnouncement('The Website fixture does not match exactly one active local catalog item, so intake failed closed.')
       return
     }
@@ -472,6 +491,7 @@ export function EcommerceOrdersProduct() {
         unitPriceMmk: item.priceMmk,
       })
       if (!drafted?.draft) {
+        setPilotBlockedAttempts((attempts) => attempts + 1)
         setAnnouncement('Draft creation failed closed. The accepted Website source or active catalog price could not be verified; nothing changed.')
         return
       }
@@ -487,12 +507,14 @@ export function EcommerceOrdersProduct() {
     if (!websiteHandoff || websiteHandoff.handoff.state !== 'pending_acceptance') return
     const matchingItems = workspace.catalog.filter((candidate) => candidate.sku === websiteHandoff.handoff.intake.sku && candidate.active)
     if (matchingItems.length !== 1) {
+      setPilotBlockedAttempts((attempts) => attempts + 1)
       setHandoffApprovalOpen(false)
       setAnnouncement('Website intake acceptance failed closed because exactly one active catalog match is required.')
       return
     }
     const accepted = acceptWebsiteEcommerceHandoff(websiteHandoff.handoff.id, operatorId)
     if (!accepted || accepted.handoff.state !== 'accepted') {
+      setPilotBlockedAttempts((attempts) => attempts + 1)
       setHandoffApprovalOpen(false)
       setAnnouncement('Website intake acceptance failed closed; no intake or audit record was created.')
       return
@@ -507,6 +529,7 @@ export function EcommerceOrdersProduct() {
     if (!draft || websiteHandoff.order) return
     const completed = await completeWebsiteOrderDraft(draft.id, input)
     if (!completed?.order) {
+      setPilotBlockedAttempts((attempts) => attempts + 1)
       setOrderCompletionOpen(false)
       setAnnouncement('Order completion failed closed. The accepted Website source, draft, operator, or opaque references could not be verified; nothing changed.')
       return
@@ -605,7 +628,14 @@ export function EcommerceOrdersProduct() {
 
           <p className="eco-announcement" aria-live="polite"><span>&gt;_</span>{announcement}</p>
 
-          <div className="eco-workspace-view">
+          <div className="eco-workspace-view" style={pilotResult ? pilotWorkspaceStyle : undefined}>
+            {pilotResult ? (
+              <section aria-label="Pilot result" className="eco-handoff-evidence">
+                <span>Pilot result · browser-local fixture</span>
+                <code>{pilotResult.businessLabel} · {pilotResult.handoffId} -&gt; {pilotResult.draftId} -&gt; {pilotResult.orderId}</code>
+                <small>{pilotResult.state.replaceAll('_', ' ')} · {pilotResult.elapsedSeconds}s handoff to ready · {pilotResult.humanAuditCount} human audits · {pilotBlockedAttempts} blocked attempts this session</small>
+              </section>
+            ) : null}
             <CommerceWorkspaces
               catalog={workspace.catalog}
               onOpenOrder={openOrder}
