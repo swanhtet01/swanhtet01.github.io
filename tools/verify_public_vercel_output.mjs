@@ -127,9 +127,13 @@ for (const token of [
   'Learn',
   'id="operations"',
   'Two operational wedges. One company foundation.',
+  'Commerce and Production model accountable records and actions in browser-local workspaces.',
   'Explore the product workspace',
   'Start with one real workflow.',
-  'Structure orders that arrive through Messenger, Viber, phone, web, or walk-in channels',
+  'Preview browser-local orders, stock, fulfilment, payment status, follow-up, and close across common channels.',
+  'No live channel, checkout, payment, delivery, customer send, or external write is connected.',
+  'Preview browser-local plans, output, machine state, quality, maintenance, exceptions, and shift handoffs.',
+  'No machine telemetry, production control, access change, or external write is connected.',
   'id="trust"',
   'Assistance may organize, inspect, summarize, and draft from approved records.',
   'https://app.supermega.dev/operations/commerce/?tab=today',
@@ -138,6 +142,7 @@ for (const token of [
   if (!home.includes(token)) fail('homepage_contract_missing', { token })
 }
 for (const product of manifest.products) {
+  if (!home.includes(product.primaryCta.label)) fail('primary_cta_label_missing', { product: product.id, label: product.primaryCta.label })
   for (const module of product.modules) {
     if (!home.includes(module)) fail('module_catalog_missing', { product: product.id, module })
   }
@@ -145,6 +150,10 @@ for (const product of manifest.products) {
     if (!home.includes(template.name)) fail('template_catalog_missing', { product: product.id, template: template.id })
   }
 }
+for (const retiredLabel of ['>Open Commerce<', '>Open Production<']) {
+  if (home.includes(retiredLabel)) fail('ambiguous_demo_cta_present', { retiredLabel })
+}
+if (home.includes('Commerce and Production carry real records and actions.')) fail('unsupported_live_record_claim_present')
 if ((home.match(/<a\b/g) || []).length > 8) fail('homepage_link_surface_too_large')
 
 const contact = pages.get('/contact/')?.html || ''
