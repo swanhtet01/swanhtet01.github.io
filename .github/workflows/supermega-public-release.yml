@@ -20,6 +20,11 @@ on:
       - tools/verify_public_vercel_output.mjs
       - tools/test_public_contact_function.mjs
       - tools/verify_public_deploy_guard.mjs
+      - tools/serve_solution.py
+      - tools/run_vercel_release_gate.ps1
+      - tools/deploy_supermega_gcp.ps1
+      - tools/deploy_showroom_cloud_run.ps1
+      - tools/cloudrun_preflight.ps1
       - tools/verify_public_release_live.mjs
       - tools/verify_public_preview_live.mjs
       - tools/write_app_vercel_config.mjs
@@ -133,9 +138,9 @@ jobs:
           VERCEL_PROJECT_ID: ${{ env.APP_VERCEL_PROJECT_ID }}
         run: |
           npx --yes vercel@56.1.0 project inspect megaos --token="$VERCEL_TOKEN"
-          npx --yes vercel@56.1.0 api /v9/projects/megaos --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_project_state.mjs app
-          npx --yes vercel@56.1.0 api "/v9/projects/$VERCEL_PROJECT_ID/domains?teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_domain_state.mjs app
-          APP_ENV_AUDIT="$(npx --yes vercel@56.1.0 api "/v10/projects/$VERCEL_PROJECT_ID/env?teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_environment_state.mjs app)"
+          npx --yes vercel@56.1.0 api "/v9/projects/$APP_VERCEL_PROJECT_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_project_state.mjs app
+          npx --yes vercel@56.1.0 api "/v9/projects/$APP_VERCEL_PROJECT_ID/domains?teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_domain_state.mjs app
+          APP_ENV_AUDIT="$(npx --yes vercel@56.1.0 api "/v10/projects/$APP_VERCEL_PROJECT_ID/env?teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_environment_state.mjs app)"
           printf '%s\n' "$APP_ENV_AUDIT"
           OPERATING_MODE="$(printf '%s' "$APP_ENV_AUDIT" | node -e "let input='';process.stdin.on('data',chunk=>input+=chunk);process.stdin.on('end',()=>{const value=JSON.parse(input);if(!['isolated_demo','managed_trial'].includes(value.operatingMode))process.exit(1);process.stdout.write(value.operatingMode)})")"
           printf 'operating_mode=%s\n' "$OPERATING_MODE" >> "$GITHUB_OUTPUT"
@@ -196,10 +201,10 @@ jobs:
           VERCEL_PROJECT_ID: ${{ env.PUBLIC_VERCEL_PROJECT_ID }}
         run: |
           npm run vercel:guard
-          npx --yes vercel@56.1.0 api /v9/projects/supermega-public --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_project_state.mjs public
-          npx --yes vercel@56.1.0 api "/v9/projects/$VERCEL_PROJECT_ID/domains?teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_domain_state.mjs public
-          npx --yes vercel@56.1.0 api "/v10/projects/$VERCEL_PROJECT_ID/env?teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_environment_state.mjs public
-          npx --yes vercel@56.1.0 api "/v1/security/firewall/config/active?projectId=$VERCEL_PROJECT_ID&teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_public_firewall_state.mjs
+          npx --yes vercel@56.1.0 api "/v9/projects/$PUBLIC_VERCEL_PROJECT_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_project_state.mjs public
+          npx --yes vercel@56.1.0 api "/v9/projects/$PUBLIC_VERCEL_PROJECT_ID/domains?teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_domain_state.mjs public
+          npx --yes vercel@56.1.0 api "/v10/projects/$PUBLIC_VERCEL_PROJECT_ID/env?teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_environment_state.mjs public
+          npx --yes vercel@56.1.0 api "/v1/security/firewall/config/active?projectId=$PUBLIC_VERCEL_PROJECT_ID&teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_public_firewall_state.mjs
 
       - name: Generate and verify the prebuilt artifact
         env:
@@ -312,10 +317,10 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERIFY_DEPLOYED_STATE: '1'
         run: |
-          VERCEL_PROJECT_ID="$APP_VERCEL_PROJECT_ID" npx --yes vercel@56.1.0 api /v9/projects/megaos --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_project_state.mjs app
+          VERCEL_PROJECT_ID="$APP_VERCEL_PROJECT_ID" npx --yes vercel@56.1.0 api "/v9/projects/$APP_VERCEL_PROJECT_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_project_state.mjs app
           VERCEL_PROJECT_ID="$APP_VERCEL_PROJECT_ID" npx --yes vercel@56.1.0 api "/v9/projects/$APP_VERCEL_PROJECT_ID/domains?teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_domain_state.mjs app
           VERCEL_PROJECT_ID="$APP_VERCEL_PROJECT_ID" npx --yes vercel@56.1.0 api "/v10/projects/$APP_VERCEL_PROJECT_ID/env?teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_environment_state.mjs app
-          VERCEL_PROJECT_ID="$PUBLIC_VERCEL_PROJECT_ID" npx --yes vercel@56.1.0 api /v9/projects/supermega-public --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_project_state.mjs public
+          VERCEL_PROJECT_ID="$PUBLIC_VERCEL_PROJECT_ID" npx --yes vercel@56.1.0 api "/v9/projects/$PUBLIC_VERCEL_PROJECT_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_project_state.mjs public
           VERCEL_PROJECT_ID="$PUBLIC_VERCEL_PROJECT_ID" npx --yes vercel@56.1.0 api "/v9/projects/$PUBLIC_VERCEL_PROJECT_ID/domains?teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_domain_state.mjs public
           VERCEL_PROJECT_ID="$PUBLIC_VERCEL_PROJECT_ID" npx --yes vercel@56.1.0 api "/v10/projects/$PUBLIC_VERCEL_PROJECT_ID/env?teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_environment_state.mjs public
           VERCEL_PROJECT_ID="$PUBLIC_VERCEL_PROJECT_ID" npx --yes vercel@56.1.0 api "/v1/security/firewall/config/active?projectId=$PUBLIC_VERCEL_PROJECT_ID&teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_public_firewall_state.mjs
