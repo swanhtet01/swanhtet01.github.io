@@ -17,8 +17,9 @@ const requireContract = (name, condition) => { if (!condition) failures.push(nam
 
 requireContract('portfolio schema', portfolio.schemaVersion === 'supermega.hq.portfolio.v1')
 requireContract('portfolio is current', portfolio.updatedAt === '2026-07-22' && now.includes('Updated: 2026-07-22'))
-requireContract('portfolio is narrow', portfolio.portfolio?.map((entry) => entry.id).join(',') === 'company-system,commerce,production')
-requireContract('portfolio paths are canonical', portfolio.portfolio?.map((entry) => entry.path).join(',') === '/,/operations/commerce/,/operations/production/')
+requireContract('portfolio is narrow', portfolio.portfolio?.map((entry) => entry.id).join(',') === 'company-system,website,ecommerce,commerce,production')
+requireContract('portfolio paths are canonical', portfolio.portfolio?.map((entry) => entry.path).join(',') === '/,/products/website/,/products/ecommerce/,/operations/commerce/,/operations/production/')
+requireContract('new products remain truthful prototypes', portfolio.portfolio?.filter((entry) => ['website', 'ecommerce'].includes(entry.id)).every((entry) => entry.status === 'prototype-local' && entry.nextGate?.trim()))
 requireContract('product lifecycle is explicit', portfolio.portfolio?.[0]?.lifecycle?.join(',') === 'discover,define,build,release,learn')
 requireContract('manifest aligns to operating modules', manifest.products?.map((entry) => `${entry.id}:${entry.name}`).join(',') === 'commerce:Commerce,production:Production')
 const expectedTemplateIds = {

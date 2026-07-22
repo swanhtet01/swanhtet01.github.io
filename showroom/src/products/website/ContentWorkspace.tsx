@@ -1,12 +1,14 @@
 import {
   createBlankSection,
   formatTimestamp,
+  MAX_WEBSITE_SECTIONS,
   pageIssues,
   type WebsitePage,
 } from './website-model'
 
 type ContentWorkspaceProps = {
   page: WebsitePage
+  canDuplicate: boolean
   deleteArmed: boolean
   onDuplicate: () => void
   onRequestDelete: () => void
@@ -15,6 +17,7 @@ type ContentWorkspaceProps = {
 
 export function ContentWorkspace({
   page,
+  canDuplicate,
   deleteArmed,
   onDuplicate,
   onRequestDelete,
@@ -147,10 +150,12 @@ export function ContentWorkspace({
           <legend>Content sections</legend>
           <button
             className="website-text-button website-fieldset-action"
+            disabled={page.sections.length >= MAX_WEBSITE_SECTIONS}
             onClick={() => editPage((current) => ({
               ...current,
               sections: [...current.sections, createBlankSection()],
             }))}
+            title={page.sections.length >= MAX_WEBSITE_SECTIONS ? 'The four-section page limit is reached' : 'Add a section'}
             type="button"
           >
             + Add section
@@ -289,7 +294,7 @@ export function ContentWorkspace({
 
       <footer className="website-panel-actions">
         <div>
-          <button className="website-button is-secondary" onClick={onDuplicate} type="button">
+          <button className="website-button is-secondary" disabled={!canDuplicate} onClick={onDuplicate} title={canDuplicate ? 'Duplicate this page' : 'The four-page prototype limit is reached'} type="button">
             Duplicate
           </button>
           {page.slug !== '/' && page.stage === 'draft' ? (

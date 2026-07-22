@@ -5,13 +5,18 @@ const root = resolve(import.meta.dirname, '..')
 const dist = resolve(root, 'showroom', 'dist')
 const failures = []
 const fail = (reason) => failures.push(reason)
-const [manifestText, coreSource, teamSource, teamModel] = await Promise.all([
+const [manifestText, appPackageText, appSource, coreSource, teamSource, teamModel, websiteSource, ecommerceSource] = await Promise.all([
   readFile(resolve(root, 'site-manifest.json'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'package.json'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'App.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'CoreApp.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'TeamWorkspace.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'team-work.ts'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'WebsiteProduct.tsx'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'EcommerceOrdersProduct.tsx'), 'utf8'),
 ])
 const manifest = JSON.parse(manifestText)
+const appPackage = JSON.parse(appPackageText)
 
 async function exists(path) {
   try { await stat(path); return true } catch { return false }
@@ -27,7 +32,7 @@ async function walk(directory) {
   return files
 }
 
-for (const route of ['', 'work', 'operations', 'operations/commerce', 'operations/production', 'settings']) {
+for (const route of ['', 'work', 'operations', 'operations/commerce', 'operations/production', 'products/website', 'products/ecommerce', 'settings']) {
   const page = resolve(dist, route, 'index.html')
   if (!await exists(page)) fail(`missing_route:${route || '/'}`)
 }
@@ -70,6 +75,10 @@ if (!coreSource.includes('decisionPacketFingerprint') || !coreSource.includes("s
 if (!coreSource.includes('toManagedDecisionPacket') || !coreSource.includes('managedApprovalRequests')) fail('managed_decision_packet_serializer_missing')
 if (!teamSource.includes('Accept and record') || !teamSource.includes("acceptedActorKind: 'human'") || !teamModel.includes('acceptanceEvidenceReference')) fail('product_decision_not_human_attributed')
 if (!teamModel.includes("status: 'proposed'") || !teamModel.includes('isAttributedHumanAcceptance')) fail('legacy_product_acceptance_not_reopened')
+if (!appSource.includes("lazy(() => import('./products/website/WebsiteProduct')") || !appSource.includes("lazy(() => import('./products/ecommerce/EcommerceOrdersProduct')") || !appSource.includes('Suspense')) fail('prototype_routes_not_lazy_loaded')
+if (!appPackage.scripts?.lint?.includes('src/products')) fail('prototype_sources_not_linted')
+if (!websiteSource.includes('No website has been deployed.') || !websiteSource.includes('No deployment or external write occurred.')) fail('website_prototype_boundary_missing')
+if (!ecommerceSource.includes('No integrations are connected.') || !ecommerceSource.includes('Customer sends, checkout, payments, delivery, and production writes are not connected.')) fail('ecommerce_prototype_boundary_missing')
 let workflowProfiles = 0
 for (const product of manifest.products || []) {
   if (product.templates?.length !== 3) fail(`wrong_template_count:${product.id}`)
@@ -81,7 +90,7 @@ for (const product of manifest.products || []) {
     }
   }
 }
-for (const route of ['/operations/commerce/', '/operations/production/']) {
+for (const route of ['/operations/commerce/', '/operations/production/', '/products/website/', '/products/ecommerce/']) {
   if (!corpus.includes(route)) fail(`missing_canonical_module_route:${route}`)
 }
 for (const forbidden of ['pos.supermega.dev', 'ytf.supermega.dev', 'Yangon Tyre', 'ytf-plant-a', 'Company Systems That Replace Tool Sprawl', 'Workspace draft', 'Service bookings', 'Material receiving']) {
@@ -98,4 +107,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', topLevelRoutes: 4, moduleRoutes: 2, workflowProfiles, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', primaryRoutes: 4, operatingModules: 2, prototypeRoutes: 2, workflowProfiles, bytes }, null, 2))

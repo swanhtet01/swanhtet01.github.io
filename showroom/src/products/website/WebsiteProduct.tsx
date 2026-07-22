@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { ContentWorkspace } from './ContentWorkspace'
 import { NavigationWorkspace } from './NavigationWorkspace'
@@ -11,6 +11,7 @@ import {
   duplicatePage,
   isCurrentApproval,
   isCurrentPublish,
+  MAX_WEBSITE_PAGES,
   previewDevices,
   readinessChecks,
   workspaceFingerprint,
@@ -58,6 +59,11 @@ export function WebsiteProduct() {
   const publishIsCurrent = isCurrentPublish(workspace.localPublishes[0], fingerprint)
   const activeViewCopy = viewCopy[view]
 
+  useEffect(() => {
+    document.title = 'Website | SuperMega'
+    window.scrollTo({ top: 0, behavior: 'instant' })
+  }, [])
+
   function selectPage(pageId: string) {
     setWorkspace((current) => ({ ...current, selectedPageId: pageId }))
     setDeleteCandidateId('')
@@ -75,6 +81,10 @@ export function WebsiteProduct() {
   }
 
   function addPage() {
+    if (workspace.pages.length >= MAX_WEBSITE_PAGES) {
+      setNotice('This prototype is capped at four pages. Remove a draft before adding another.')
+      return
+    }
     const page = createBlankPage(workspace.pages.length + 1)
     setWorkspace((current) => ({
       ...current,
@@ -87,6 +97,10 @@ export function WebsiteProduct() {
   }
 
   function copySelectedPage() {
+    if (workspace.pages.length >= MAX_WEBSITE_PAGES) {
+      setNotice('This prototype is capped at four pages. Remove a draft before duplicating.')
+      return
+    }
     const page = duplicatePage(selectedPage, workspace.pages.length + 1)
     setWorkspace((current) => ({
       ...current,
@@ -188,12 +202,12 @@ export function WebsiteProduct() {
       <a className="website-skip" href="#website-workspace">Skip to website workspace</a>
 
       <header className="website-topbar">
-        <div className="website-brand">
+        <a aria-label="Back to SuperMega operations" className="website-brand" href="/operations/">
           <span aria-hidden="true">&gt;_</span>
           <strong>SUPERMEGA</strong>
           <i>/</i>
           <b>WEBSITE</b>
-        </div>
+        </a>
         <div className="website-runtime">
           <span className="website-local-badge"><i />Local demo</span>
           <small>{storageMode === 'browser-local' ? 'saved in this browser' : 'session only'}</small>
@@ -208,7 +222,7 @@ export function WebsiteProduct() {
           <div className="website-site-record">
             <span>Website workspace</span>
             <strong>{workspace.siteName || 'Untitled site'}</strong>
-            <small>{workspace.pages.length} finite page{workspace.pages.length === 1 ? '' : 's'} · local draft</small>
+            <small>{workspace.pages.length} / {MAX_WEBSITE_PAGES} pages · local draft</small>
           </div>
 
           <nav className="website-workspace-nav" aria-label="Website workspace">
@@ -227,7 +241,7 @@ export function WebsiteProduct() {
           <section className="website-page-index" aria-labelledby="website-pages-title">
             <header>
               <span id="website-pages-title">Pages</span>
-              <button aria-label="Add page" onClick={addPage} type="button">+</button>
+              <button aria-label="Add page" disabled={workspace.pages.length >= MAX_WEBSITE_PAGES} onClick={addPage} title={workspace.pages.length >= MAX_WEBSITE_PAGES ? 'The four-page prototype limit is reached' : 'Add page'} type="button">+</button>
             </header>
             <div>
               {workspace.pages.map((page) => (
@@ -280,6 +294,7 @@ export function WebsiteProduct() {
           <div className={'website-workspace-grid view-' + view}>
             {view === 'content' ? (
               <ContentWorkspace
+                canDuplicate={workspace.pages.length < MAX_WEBSITE_PAGES}
                 deleteArmed={deleteCandidateId === selectedPage.id}
                 onDuplicate={copySelectedPage}
                 onRequestDelete={requestDeletePage}

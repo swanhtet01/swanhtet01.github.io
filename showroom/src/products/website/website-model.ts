@@ -1,4 +1,6 @@
 export const WEBSITE_STORAGE_KEY = 'supermega.website.workspace.v1'
+export const MAX_WEBSITE_PAGES = 4
+export const MAX_WEBSITE_SECTIONS = 4
 
 export const previewDevices = [
   { id: 'desktop', label: 'Desktop', width: '100%' },
@@ -464,7 +466,10 @@ export function restoreWorkspace(value: unknown): WebsiteWorkspace {
   const seed = createInitialWorkspace()
   if (!isRecord(value) || value.version !== 1 || !Array.isArray(value.pages)) return seed
 
-  const pages = value.pages.filter(isWebsitePage)
+  const pages = value.pages.filter(isWebsitePage).slice(0, MAX_WEBSITE_PAGES).map((page) => ({
+    ...page,
+    sections: page.sections.slice(0, MAX_WEBSITE_SECTIONS),
+  }))
   if (!pages.length) return seed
 
   const selectedPageId = typeof value.selectedPageId === 'string'

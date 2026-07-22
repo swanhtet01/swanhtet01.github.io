@@ -22,3 +22,15 @@ img, svg { display: block; max-width: 100%; }
 ::selection { background: rgba(124, 245, 180, .28); }
 :where(a, button, input, select, textarea):focus-visible { outline: 2px solid var(--sm-blue); outline-offset: 3px; }
 #root { min-height: 100vh; }
+
+.product-route-loading {
+  min-height: 100vh;
+  display: grid;
+  place-content: center;
+  gap: 10px;
+  padding: 24px;
+  color: #aab3ad;
+  text-align: center;
+}
+.product-route-loading span { color: var(--sm-green); font: 700 18px/1 Geist Mono, ui-monospace, monospace; }
+.product-route-loading p { margin: 0; }

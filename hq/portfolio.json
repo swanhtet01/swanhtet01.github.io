@@ -14,6 +14,24 @@
       "nextGate": "Prove one end-to-end Product workflow with acceptance and usage evidence."
     },
     {
+      "id": "website",
+      "name": "Website",
+      "status": "prototype-local",
+      "path": "/products/website/",
+      "job": "Turn an approved business brief into a finite, reviewable website candidate with content, navigation, evidence, and human publish approval.",
+      "surfaces": ["Content", "Navigation", "Publish"],
+      "nextGate": "Validate one named business brief and accepted local preview before connecting a customer domain or publish authority."
+    },
+    {
+      "id": "ecommerce",
+      "name": "Ecommerce & Orders",
+      "status": "prototype-local",
+      "path": "/products/ecommerce/",
+      "job": "Convert website or channel demand into controlled order, catalogue, stock, fulfilment, payment-status, and audit records.",
+      "surfaces": ["Orders", "Catalog", "Fulfilment", "Payments"],
+      "nextGate": "Prove one order-intake-to-close scenario with idempotency, reservation, reconciliation, and operator evidence."
+    },
+    {
       "id": "commerce",
       "name": "Commerce",
       "status": "pilot-ready-local",

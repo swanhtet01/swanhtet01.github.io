@@ -1,8 +1,8 @@
 # SuperMega product R&D brief — July 2026
 
-Status: implementation recommendation, not current portfolio authority
+Status: founder direction accepted; local prototypes implemented and passing the current offline gates
 
-Evidence basis: `c12f70db834ba16fa83fc1ced616222e5bef732d` on `codex/supermega-product-depth-v3`
+Evidence basis: released `d3714723af8b2e90fee6ad33fcc62c32ea003fba`, repository authority, and the shared “Curating Dev Resources” conversation
 
 Prepared: 2026-07-22
 
@@ -12,7 +12,7 @@ Decision owner: founder / product lead
 
 Build depth in this order:
 
-1. **Website product** — prove a repeatable, evidence-backed website-delivery workflow inside the existing Product workspace before advertising a new portfolio item.
+1. **Website product** — prove a repeatable, evidence-backed website-delivery workflow before advertising the local prototype as a launched or customer-proven product.
 2. **Ecommerce & Orders** — let an approved website or existing customer channel create a structured order draft that feeds the canonical Commerce module.
 3. **Shop and Plant improvements** — deepen Commerce and Production under their current routes; treat Shop and Plant only as familiar legacy labels.
 4. **Easy-demo AI assistance** — ship three bounded draft-and-review experiences inside the products, not an agent catalogue, marketplace, or autonomous workforce.
@@ -22,8 +22,8 @@ This order preserves the current compact topology:
 | Concern | Keep | Do not add now |
 | --- | --- | --- |
 | Public surface | `supermega.dev`: `/`, `/contact/`, `/privacy/` | A page per feature, public agent pages, public pricing theatre |
-| Product app | Today, Teams, Operations, Settings; Commerce and Production are internal operation modules | A new top-level app, separate Website app, separate Shop/Plant apps |
-| Product authority | Company system, Commerce, Production | A fourth portfolio entry before discovery and pilot evidence |
+| Product app | Today, Teams, Operations, Settings; lazy `/products/website/` and `/products/ecommerce/` prototype routes | A new primary-navigation area, separate domain, separate deployment authority, separate Shop/Plant apps |
+| Product authority | Company system, Commerce, and Production as operating entries; Website and Ecommerce as local prototypes | Claims that a prototype is launched, managed, integrated, or customer-proven |
 | Data | Browser-local truthful demos; gated `/api/trial/v1`; private Postgres/Supabase state, events, approvals | A second CRM, database, queue, or direct browser-to-privileged database path |
 | Release | The paired public/app candidate, promotion, verification, and rollback workflow | Local production deploys, a third Vercel project, agent-owned promotion |
 | AI | Approved inputs, structured drafts, provenance, named human decisions | External sends, payments, publishing, access changes, machine control, production writes |
@@ -32,9 +32,9 @@ The first implementation target is therefore not “launch four products.” It 
 
 ## Source availability and interpretation
 
-The shared direction URL, [“Curating Dev Resources”](https://chatgpt.com/share/6a60e4af-9424-83ec-bd7e-cbfd865984f7), resolved on 2026-07-22, but its conversation body was unavailable. A direct page reader and a rendered Chrome check both exposed only the logged-out ChatGPT shell and composer. No product claims from that conversation are used here.
+The shared direction URL, [“Curating Dev Resources”](https://chatgpt.com/share/6a60e4af-9424-83ec-bd7e-cbfd865984f7), was rendered successfully on 2026-07-22. Its useful instruction is to stop accumulating generic resource lists and instead maintain a compact reality pack grounded in the actual codebase: current product, founder constraints, user flows, examples of good and bad output, ownership, environment map, evidence, and evaluation cases.
 
-Because that source was unavailable, **Website product** is interpreted as a customer-facing website-delivery capability for owner-led businesses, initially implemented as a Product lifecycle workflow. It is not interpreted as permission to replace the current SuperMega public architecture or create a new deployment authority.
+SuperMega applies that guidance through the existing compact authority files rather than importing the suggested 50-file operating-system skeleton. `CURRENT.md`, `hq/NOW.md`, `hq/portfolio.json`, this research brief, implemented routes, tests, and release evidence are the reality pack. New files are added only when they own a durable decision, contract, or evaluation that cannot live clearly in those sources.
 
 Repository authority takes precedence in this order:
 
@@ -50,7 +50,7 @@ Historical traces repeatedly support useful constraints—prove a wedge, avoid r
 | Layer | What exists at this head | R&D implication |
 | --- | --- | --- |
 | Public | A Node-generated static site driven by `site-manifest.json`; three public routes; exactly Commerce and Production in the public catalogue; retired Shop, Plant, product, and agent URLs redirect | Reuse the manifest-and-generator discipline. Do not add Website to the public catalogue until its lifecycle gate passes. |
-| App | React 19, React Router 7, and Vite 7; four route families; Commerce tabs are Today, Orders, Inventory; Production tabs are Today, Production, Issues & equipment | Add depth inside existing routes and panels. Website R&D belongs under Teams/Product; Ecommerce & Orders belongs under Operations/Commerce. |
+| App | React 19, React Router 7, and Vite 7; compact primary navigation plus two lazy `/products/` prototypes; Commerce tabs are Today, Orders, Inventory; Production tabs are Today, Production, Issues & equipment | Keep prototypes slash-addressable and code-split while their delivery records remain connected to Product and Commerce. |
 | Product lifecycle | Product work uses Discover, Define, Build, Release, Learn with owner, outcome, evidence, acceptance, decision, and release checks | Website should be the next fully exercised lifecycle profile, not a detached builder. |
 | Commerce | Browser-local items, single-line orders, channel, payment label, total, fulfilment status, stock decrement, receipts, daily close, and accountable before/after actions | The demo is real local state, but it is not ecommerce infrastructure or a system of record. Separate order intent, confirmation, reservation, payment reconciliation, and fulfilment. |
 | Production | Browser-local jobs, target/good output, issues, machine observations, and attributable actions | Improve shift, output, quality, downtime, and handoff records. Never imply telemetry or equipment control. |
@@ -74,8 +74,8 @@ These are product opportunities only when the demo and claims continue to state 
 
 | Priority | R&D product slice | Existing owner surface | First truthful demo | Graduation evidence |
 | --- | --- | --- | --- | --- |
-| 1 | Website delivery | `/work/?team=product&view=board` and existing Product lifecycle | Approved sample brief → three-page local preview plan → QA/release packet | One named user accepts the workflow and a real preview against explicit criteria |
-| 2 | Ecommerce & Orders | `/operations/commerce/?tab=orders` | Approved website/chat order intent → operator-confirmed order → reserved stock → fulfilment close | Idempotent, transactional managed pilot with measured handling time and completion |
+| 1 | Website delivery | `/products/website/` plus the existing Product lifecycle | Approved sample brief → finite local preview → QA/release packet | One named user accepts the workflow and a real preview against explicit criteria |
+| 2 | Ecommerce & Orders | `/products/ecommerce/` feeding the canonical Commerce boundary | Approved website/chat order intent → operator-confirmed order → reserved stock → fulfilment close | Idempotent, transactional managed pilot with measured handling time and completion |
 | 3a | Shop depth (Commerce) | Existing Commerce tabs | Cancellation/release, reconciliation, exception, and daily-close evidence | One operator runs a full day with zero unexplained stock variance |
 | 3b | Plant depth (Production) | Existing Production tabs | Shift output, issue ownership, machine observation, and evidence-backed handoff | One shift closes with traceable output and all exceptions owned |
 | 4 | Embedded AI demos | Product, Commerce, and Production panels | Website Brief, Order Intake, and Shift Handoff drafts | Golden-set quality, provenance, zero side effects, and named user usefulness |
@@ -491,13 +491,13 @@ Current primary/official technical sources, accessed 2026-07-22:
 - [Shopify Storefront API](https://shopify.dev/docs/storefronts/headless/building-with-the-storefront-api) — conditional reuse of an existing merchant commerce core.
 - [TanStack Table virtualization guide](https://tanstack.com/table/latest/docs/guide/virtualization) — conditional dense-table/virtualization path.
 
-## Decision requested
+## Decision recorded
 
-Approve or amend this sequence before implementation:
+The founder approved this sequence on 2026-07-22 with the following implementation boundary:
 
-1. Treat Website as a Product-workspace R&D profile, not a public portfolio item yet.
+1. Treat Website as a slash-addressable local product prototype, not a public launch claim yet.
 2. Define Ecommerce & Orders as Website/channel intake into Commerce, not a separate commerce engine.
 3. Implement the Shop/Plant depth slices under Commerce/Production and keep current canonical names.
 4. Build Order Intake as the first AI demo; add Website Brief and Shift Handoff only after it passes the same truth and safety contract.
 
-Approval of this document authorizes planning only. Code, schema, external data, API keys, managed activation, customer publishing, payment integration, and production release each require their existing separate gates.
+This decision authorizes local product implementation and validation. Schema changes, external data, API keys, managed activation, customer publishing, payment integration, and production release each retain their existing separate gates.

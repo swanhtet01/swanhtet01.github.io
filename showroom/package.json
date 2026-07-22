@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --configLoader runner",
     "build": "node ./scripts/build-showroom.mjs",
-    "lint": "eslint src/App.tsx src/main.tsx src/core scripts eslint.config.js",
+    "lint": "eslint src/App.tsx src/main.tsx src/core src/products scripts eslint.config.js",
     "preview": "vite preview --configLoader runner"
   },
   "dependencies": {

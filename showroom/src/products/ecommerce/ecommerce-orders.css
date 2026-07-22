@@ -94,6 +94,7 @@
   display: inline-flex;
   align-items: center;
   gap: 11px;
+  text-decoration: none;
 }
 
 .eco-brand > span {

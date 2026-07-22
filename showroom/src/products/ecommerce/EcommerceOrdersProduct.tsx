@@ -64,7 +64,7 @@ const guidedSteps = [
 ] as const
 
 function ProductBrand() {
-  return <div className="eco-brand" aria-label="SuperMega"><span aria-hidden="true">&gt;_</span><strong>SUPERMEGA</strong></div>
+  return <a className="eco-brand" aria-label="Back to SuperMega operations" href="/operations/"><span aria-hidden="true">&gt;_</span><strong>SUPERMEGA</strong></a>
 }
 
 function GuidedDemo({
@@ -162,6 +162,11 @@ export function EcommerceOrdersProduct() {
   const [guideStep, setGuideStep] = useState(0)
   const [announcement, setAnnouncement] = useState('Scenario records loaded locally. No integrations are connected.')
   const activeCopy = viewCopy[activeView]
+
+  useEffect(() => {
+    document.title = 'Ecommerce & Orders | SuperMega'
+    window.scrollTo({ top: 0, behavior: 'instant' })
+  }, [])
 
   const openOrders = workspace.orders.filter((order) => order.fulfillmentStatus !== 'delivered').length
   const paymentReview = workspace.orders.filter((order) => ['evidence_needed', 'evidence_submitted', 'exception'].includes(order.paymentStatus)).length

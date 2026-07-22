@@ -3,17 +3,19 @@
 Last confirmed: 2026-07-22
 Authority: this file, `site-manifest.json`, and `hq/portfolio.json`
 
-SuperMega is operating software for real company work. It connects accountable company delivery, channel-to-fulfilment commerce, production control, evidence, and owner decisions without turning every capability into a separate product or page.
+SuperMega is operating software for real company work. It connects accountable company delivery, website delivery, ecommerce and channel-to-fulfilment operations, production control, evidence, and owner decisions without turning every capability into a separate public page or deployment.
 
 ## Product thesis
 
 SuperMega competes on implementation readiness, local operating context, evidence, and controlled execution—not on the size of a tool catalogue.
 
-The product has three customer-facing capabilities inside one application:
+The portfolio has three operating products and two local product prototypes inside one application:
 
 1. **Company system** — Today plus Product, Engineering, Growth, and Finance team workspaces.
-2. **Commerce** — customer channel, order, stock, fulfilment, payment, follow-up, and close.
-3. **Production** — plan, output, materials, quality, equipment, maintenance, exceptions, and shift handoff.
+2. **Website** — finite page/content workflow, responsive preview, evidence, and explicit publish approval; currently local prototype only.
+3. **Ecommerce & Orders** — website/channel intake, catalogue, stock, fulfilment, payment status, and audit; currently local prototype only.
+4. **Commerce** — customer channel, order, stock, fulfilment, payment, follow-up, and close.
+5. **Production** — plan, output, materials, quality, equipment, maintenance, exceptions, and shift handoff.
 
 AI is an embedded execution capability. It may inspect approved records, organize, summarize, draft, and escalate. It is not a separate public product, fake employee page, or substitute system of record.
 
@@ -31,11 +33,13 @@ Canonical host: `app.supermega.dev`
 
 - `/` — **Today**: company work, customer orders, production exceptions, release readiness, briefs, and owner decisions.
 - `/work/?team=product&view=board` — **Teams**: Product, Engineering, Growth, and Finance workspaces.
+- `/products/website/` — **Website**: lazy-loaded local content, navigation, preview, readiness, and approval prototype.
+- `/products/ecommerce/` — **Ecommerce & Orders**: lazy-loaded local order, catalogue, fulfilment, payment-status, and guided-demo prototype.
 - `/operations/commerce/?tab=today` — **Commerce**: channel orders, fulfilment, stock, local payment, and daily close.
 - `/operations/production/?tab=today` — **Production**: plan versus actual, output, quality, maintenance, equipment, and issues.
 - `/settings/` — pilot definition, evidence export, reset, and managed-readiness status.
 
-Settings is a utility, not a primary product area. Routes stay few; deeper capability is organized through internal tabs and bounded panels. Desktop workspaces fit the available viewport and use panel scrolling. Mobile layouts use a short linear flow.
+Settings is a utility, not a primary product area. Today, Teams, and Operations remain the only primary navigation; the two `/products/` routes are addressable prototype workspaces linked from Operations and loaded only when opened. Deeper capability stays in internal tabs and bounded panels. Desktop workspaces fit the available viewport and use panel scrolling. Mobile layouts use a short linear flow.
 
 Before activation, the pilot definition captures the entry point, current record, baseline, target outcome, responsible owner, human authority boundary, and acceptance evidence. An incomplete pilot remains visible as an owner exception on Today.
 
@@ -65,7 +69,7 @@ Templates configure the starting records and workflow while preserving the share
 ## Data and authority boundary
 
 - The default application remains an isolated browser-local trial, not a customer system of record.
-- Team, Commerce, Production, approval, and setup records can be exercised locally and exported for review; evidence export v8 includes the exact workflow profile, structured team evidence, API-compatible decision packets with provenance and named human decisions, and the human-confirmed before/after action ledger used for the pilot.
+- Team, Website, Ecommerce, Commerce, Production, approval, and setup records can be exercised locally. Website and Ecommerce explicitly remain browser-local prototypes; the core evidence export v8 covers the existing team and operating records until their contracts are accepted for integration.
 - Managed readiness must not be implied until tenant persistence, identity, workspace isolation, source coverage, backup, recovery, audit, and runtime-role checks pass.
 - External sends, payments, publishing, access changes, and production writes remain owner-approved and auditable.
 - The managed trial contract is `/api/trial/v1`; it fails closed until additive private schema v2, a high-entropy v2 signed actor identity, matching typed membership, audit, capability, and write gates pass. Approval proposals must use `decision_packet.v1` with a versioned subject, fact-or-analysis claims, source and capture provenance, verification state, uncertainty, visibility, baseline, target, current result, acceptance rule, and artifact reference. Verified claims require a digest; terminal decisions require a named human and a trimmed nonblank note; agent, service, unknown, and legacy identities cannot make them.
