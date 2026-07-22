@@ -1,8 +1,7 @@
 name: SuperMega Domain Health
 
-# GitHub Actions billing is currently unavailable for this repo.
-# Domain checks now run through Vercel/Codex release gates:
-# powershell -ExecutionPolicy Bypass -File tools/run_vercel_release_gate.ps1 -Target public
+# Read-only health checks may be dispatched here. Production changes are owned
+# exclusively by supermega-public-release.yml after a reviewed main commit.
 on:
   workflow_dispatch:
 

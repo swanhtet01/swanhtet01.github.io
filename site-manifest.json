@@ -1,11 +1,11 @@
 {
   "schemaVersion": "supermega.site-context.v1",
-  "contextVersion": "2026-07-22.2",
-  "catalogVersion": "2026-07-22.2",
+  "contextVersion": "2026-07-22.7",
+  "catalogVersion": "2026-07-22.6",
   "brand": {
     "name": "SuperMega",
     "domain": "supermega.dev",
-    "version": "terminal-v2-2026-07",
+    "version": "terminal-v4-2026-07",
     "mark": "terminal",
     "colors": {
       "background": "#080a09",
@@ -14,128 +14,136 @@
     }
   },
   "company": {
-    "positioning": "The operating layer for ambitious companies.",
-    "statement": "SuperMega brings operations, governed agents, and accountable decisions into one company system.",
-    "headline": "Run the company from one clear system.",
-    "supporting": "Connect commerce, production, company work, and governed agents without losing ownership or evidence.",
+    "positioning": "Operating software for Myanmar companies.",
+    "statement": "SuperMega connects product delivery, customer operations, production records, evidence, and owner decisions in one accountable system.",
+    "headline": "One operating layer behind the work your company already does.",
+    "supporting": "Run Product, Commerce, and Production without forcing customers or staff into a maze of disconnected tools.",
     "publicPricing": false
   },
   "products": [
     {
-      "id": "shop",
-      "name": "Shop",
-      "route": "/solutions/#shop",
+      "id": "commerce",
+      "name": "Commerce",
+      "route": "/#commerce",
       "status": "available-in-app",
-      "eyebrow": "Commerce operations",
-      "headline": "One operating record from counter to close.",
-      "description": "Run sales, stock, local payments, purchasing, exceptions, and daily close without rebuilding context across separate tools.",
+      "eyebrow": "Channel-to-fulfilment commerce",
+      "headline": "Turn conversations into controlled orders.",
+      "description": "Capture orders from Messenger, Viber, phone, web, or walk-in channels, then control stock, fulfilment, payment, follow-up, and close in one record.",
       "primaryCta": {
-        "label": "Open Shop workspace",
-        "url": "https://app.supermega.dev/operations/?view=shop"
+        "label": "Open Commerce workspace",
+        "url": "https://app.supermega.dev/operations/commerce/?tab=today"
       },
       "secondaryCta": {
-        "label": "Configure Shop",
-        "url": "/contact/?product=shop"
+        "label": "Configure Commerce",
+        "url": "/contact/?product=commerce"
       },
       "modules": [
-        "Register and local payments",
-        "Stock and purchasing",
-        "Customers and service",
-        "Reports and daily close",
-        "Roles, audit, backup and recovery",
-        "Governed summaries and draft actions"
+        "Conversation and order intake",
+        "Catalogue and stock control",
+        "Fulfilment and exceptions",
+        "Local payments and reconciliation",
+        "Customer history and follow-up",
+        "Owner brief, audit and recovery"
       ],
       "templates": [
         {
-          "id": "retail-counter",
-          "name": "Retail counter",
-          "outcome": "Fast selling, stock control, customer history, and a reliable close."
+          "id": "social-commerce",
+          "name": "Social commerce",
+          "outcome": "Convert trusted chat channels into structured orders, stock movement, fulfilment, and follow-up.",
+          "workflow": ["Capture conversation", "Confirm order", "Reserve stock", "Fulfil", "Collect payment", "Follow up"],
+          "entryPoints": ["Messenger", "Viber", "Phone"],
+          "metric": "Order handling time and completion rate"
         },
         {
-          "id": "restaurant-inventory",
-          "name": "Restaurant and inventory",
-          "outcome": "Menu sales, ingredients, purchasing, waste, cash, and shift close."
+          "id": "retail-wholesale",
+          "name": "Retail and wholesale",
+          "outcome": "Control customer orders, stock, payment, delivery, and daily reconciliation.",
+          "workflow": ["Capture order", "Allocate stock", "Pick", "Reconcile payment", "Deliver", "Close"],
+          "entryPoints": ["Walk-in", "Phone", "Spreadsheet"],
+          "metric": "Pick-to-close time and stock variance"
         },
         {
-          "id": "service-bookings",
-          "name": "Service and bookings",
-          "outcome": "Appointments, work status, customer follow-up, parts, and payments."
-        },
-        {
-          "id": "multi-branch",
-          "name": "Multi-branch control",
-          "outcome": "Shared catalogue, branch roles, transfers, exceptions, and owner reporting."
+          "id": "restaurant-ordering",
+          "name": "Restaurant ordering",
+          "outcome": "Coordinate channel orders, preparation, handoff, delivery, payment, and close.",
+          "workflow": ["Capture channel order", "Confirm", "Prepare", "Handoff", "Deliver", "Close"],
+          "entryPoints": ["Messenger", "Phone", "Website", "Walk-in"],
+          "metric": "Order-to-handoff time and exception rate"
         }
       ]
     },
     {
-      "id": "plant",
-      "name": "Plant",
-      "route": "/solutions/#plant",
+      "id": "production",
+      "name": "Production",
+      "route": "/#production",
       "status": "available-in-app",
       "eyebrow": "Production operations",
-      "headline": "Give the factory floor one operational memory.",
-      "description": "Connect plans, machine state, materials, quality, maintenance, exceptions, and management handoffs in one controlled system.",
+      "headline": "Give the production floor one operational memory.",
+      "description": "Connect plans, output, machine state, materials, quality, maintenance, exceptions, and shift handoffs in one controlled system.",
       "primaryCta": {
-        "label": "Open Plant workspace",
-        "url": "https://app.supermega.dev/operations/?view=plant"
+        "label": "Open Production workspace",
+        "url": "https://app.supermega.dev/operations/production/?tab=today"
       },
       "secondaryCta": {
-        "label": "Configure Plant",
-        "url": "/contact/?product=plant"
+        "label": "Configure Production",
+        "url": "/contact/?product=production"
       },
       "modules": [
-        "Planning and production records",
-        "Machine state and downtime",
-        "Materials and receiving",
+        "Planning and output records",
+        "Material availability and exceptions",
         "Quality and traceability",
-        "Issues, approvals and shift handoff",
-        "Governed summaries and anomaly review"
+        "Equipment and maintenance",
+        "Shift exceptions and approvals",
+        "Owner brief, audit and recovery"
       ],
       "templates": [
         {
           "id": "production-control",
           "name": "Production control",
-          "outcome": "Plan, run, confirm, and review output by line, shift, and product."
+          "outcome": "Plan, run, confirm, and review output by line, shift, and product.",
+          "workflow": ["Plan", "Run", "Confirm output", "Quality check", "Shift close"],
+          "entryPoints": ["Shift sheet", "Spreadsheet", "ERP export"],
+          "metric": "Plan attainment and confirmed good output"
         },
         {
           "id": "maintenance-downtime",
           "name": "Maintenance and downtime",
-          "outcome": "Record machine state, stoppages, ownership, repair, and return to service."
+          "outcome": "Record machine state, stoppages, ownership, repair, and return to service.",
+          "workflow": ["Detect", "Assign", "Repair", "Test", "Return to service"],
+          "entryPoints": ["Machine log", "Supervisor handoff", "Paper form"],
+          "metric": "Downtime and mean time to restore"
         },
         {
           "id": "quality-traceability",
           "name": "Quality and traceability",
-          "outcome": "Capture checks, exceptions, evidence, approval, and lot history."
-        },
-        {
-          "id": "material-receiving",
-          "name": "Material receiving",
-          "outcome": "Control arrivals, inspection, accepted quantity, variance, and stock handoff."
+          "outcome": "Capture checks, exceptions, evidence, approval, and lot history.",
+          "workflow": ["Inspect", "Hold", "Investigate", "Approve", "Trace"],
+          "entryPoints": ["Quality sheet", "Paper form", "ERP export"],
+          "metric": "Exception closure time and trace completeness"
         }
       ]
     }
   ],
   "pages": [
-    { "route": "/", "file": "index.html", "title": "SuperMega | Company operating system" },
-    { "route": "/solutions/", "file": "solutions/index.html", "title": "System | SuperMega" },
-    { "route": "/trust/", "file": "trust/index.html", "title": "Trust | SuperMega" },
+    { "route": "/", "file": "index.html", "title": "SuperMega | Operating software for real company work" },
     { "route": "/contact/", "file": "contact/index.html", "title": "Contact | SuperMega" },
     { "route": "/privacy/", "file": "privacy/index.html", "title": "Privacy | SuperMega" }
   ],
   "redirects": [
-    { "source": "^/shop(?:/.*)?$", "destination": "/solutions/#shop" },
-    { "source": "^/plant(?:/.*)?$", "destination": "/solutions/#plant" },
-    { "source": "^/templates(?:/.*)?$", "destination": "/solutions/#templates" },
-    { "source": "^/work(?:/.*)?$", "destination": "/solutions/#plant" },
-    { "source": "^/(?:products?|offers|pricing|plans|packages)/?$", "destination": "/solutions/" },
-    { "source": "^/products/(?:retail|restaurant|store|shop)/?.*$", "destination": "/solutions/#shop" },
-    { "source": "^/products/(?:factory|operations|erp|plant)/?.*$", "destination": "/solutions/#plant" },
-    { "source": "^/(?:ai-agent-solutions|ai-agents|agents|agent-templates|workcell|machine|agentops)/?.*$", "destination": "/solutions/#agents" },
-    { "source": "^/(?:find-clients|company-list|receiving-control|receiving-log|founder-brief|reconcile)/?.*$", "destination": "/solutions/#templates" },
+    { "source": "^/solutions/?$", "destination": "/#product" },
+    { "source": "^/trust/?$", "destination": "/#trust" },
+    { "source": "^/shop(?:/.*)?$", "destination": "/#commerce" },
+    { "source": "^/plant(?:/.*)?$", "destination": "/#production" },
+    { "source": "^/templates(?:/.*)?$", "destination": "/#operations" },
+    { "source": "^/work(?:/.*)?$", "destination": "/#product" },
+    { "source": "^/(?:products?|offers|pricing|plans|packages)/?$", "destination": "/#product" },
+    { "source": "^/products/(?:commerce|retail|restaurant|store|shop)/?.*$", "destination": "/#commerce" },
+    { "source": "^/products/(?:production|factory|operations|erp|plant)/?.*$", "destination": "/#production" },
+    { "source": "^/(?:ai-agent-solutions|ai-agents|agents|agent-templates|workcell|machine|agentops)/?.*$", "destination": "/#product" },
+    { "source": "^/(?:find-clients|company-list|receiving-control|receiving-log|founder-brief|reconcile)/?.*$", "destination": "/#operations" },
     { "source": "^/(?:start|book|setup|get-started|intake)/?.*$", "destination": "/contact/" },
     { "source": "^/(?:app|login|clients)/?.*$", "destination": "https://app.supermega.dev/" },
-    { "source": "^/demo/?$", "destination": "https://demo.supermega.dev/" }
+    { "source": "^/demo/?$", "destination": "https://app.supermega.dev/" }
   ],
   "retiredPublicNames": [
     "MegaOS",

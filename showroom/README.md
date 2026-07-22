@@ -1,24 +1,24 @@
 # >_ SuperMega product app
 
-This package is the canonical application for `app.supermega.dev`. It is the SuperMega company operating system: Command, Operations, governed Agents, and Settings in one product shell. It is not the public marketing site or a client-specific deployment.
+This package is the canonical application for `app.supermega.dev`. It is one compact company system: Today, Teams, and Operations, with Settings as a utility. It is not the public marketing site, an agent showcase, or a client-specific deployment.
 
 ## Routes
 
-- `/` — Command: priorities, work, evidence, and the five-role company agent desk.
-- `/operations/?view=shop` — sales, stock, local payments, close, and exceptions.
-- `/operations/?view=plant` — jobs, machines, output, issues, and handoffs.
-- `/agents/` — evidence-grounded briefs and approval-ready work.
-- `/settings/` — workspace setup, trial controls, runtime readiness, and authority boundaries.
+- `/` - Today: company work, orders, production exceptions, release readiness, briefs, and owner decisions.
+- `/work/?team=product&view=board` - Product, Engineering, Growth, and Finance workspaces with outcomes, lifecycle, owners, evidence, decisions, and release checks.
+- `/operations/commerce/?tab=today` - Commerce orders, customer channels, fulfilment, inventory, local payments, and close.
+- `/operations/production/?tab=today` - Production plan, output, quality, materials, equipment, maintenance, and issues.
+- `/settings/` - compact pilot definition, evidence export, reset, runtime readiness, and authority boundaries.
 
-Legacy Shop, Plant, Assist, Setup, and Trust URLs redirect into these four canonical areas. All routes share the `>_ SUPERMEGA` terminal design system and responsive application shell.
+Capability is organized through internal views rather than more routes. Legacy Shop, Plant, Agents, Assist, Setup, and Trust URLs redirect into the canonical areas. Assistance is embedded where work and evidence live.
 
 ## Core files
 
-- `src/core/CoreApp.tsx` — product model, navigation, state, workflows, and agent desk.
-- `src/core/core-app.css` — shared responsive visual system.
-- `src/App.tsx` — canonical app mount.
-- `src/main.tsx` and `src/index.css` — runtime and global foundation.
-- `scripts/prepare-static-routes.mjs` — four-route static shell preparation.
+- `src/core/CoreApp.tsx` - shell, Today, Commerce, Production, settings, and shared primitives; it consumes the root `site-manifest.json` workflow profiles directly.
+- `src/core/TeamWorkspace.tsx` and `src/core/team-work.ts` - company-team workflow, Product lifecycle, decisions, and browser-local state.
+- `src/core/core-app.css` - compact responsive application system.
+- `src/App.tsx` - canonical route mount and legacy redirects.
+- `scripts/prepare-static-routes.mjs` - canonical static shell preparation.
 
 ## Run and verify
 
@@ -29,17 +29,19 @@ npm.cmd run lint
 npm.cmd run build
 ```
 
-From the repository root, `npm.cmd run app:build` also generates release metadata and runs the application, workflow, and security contracts.
+From the repository root, `npm.cmd run app:build` also generates release metadata and runs the application, workflow, security, and HQ contracts.
 
 ## Data and action boundary
 
-The default experience uses reversible browser-local sample state. It makes no claim of durable customer persistence or autonomous consequential action. Managed state is available only through the server-mediated `/api/trial/v1` contract after every activation gate passes; browser code never receives the database URL, service role, or identity-signing secret.
+The default experience uses reversible browser-local sample state. It makes no claim of durable customer persistence or autonomous consequential action. Consequential Commerce and Production changes pause for a named human operator, reason, and evidence reference before they mutate local state, and the resulting before/after record stays in a compact action history. Product proposals also require a named human reviewer, decision note, and evidence reference before acceptance. Owner approvals open one native-modal `decision_packet.v1` review with a versioned subject; fact-or-analysis claims; source, capture time, status, uncertainty, and visibility; baseline, target, current result, acceptance rule, artifact reference, named human reviewer, and decision note. Stale packets are superseded by fingerprint, and unattributed legacy decisions reopen for review. The queue is part of Today rather than another page. Pilot evidence export v8 includes API-compatible managed approval requests, those decisions, accountable actions, the selected workflow profile, and structured team evidence. Work cannot be marked done and release checks cannot be completed without verified evidence. Managed state is available only through the server-mediated `/api/trial/v1` contract after every activation gate passes; browser code never receives the database URL, service role, or identity-signing secret.
+
+Before activation, the pilot definition records the entry point, current operating record, baseline, target outcome, responsible owner, human authority boundary, and acceptance evidence.
 
 ## Deployment
 
 - Vercel project: `megaos`
 - Production domain: `app.supermega.dev`
-- Release workflow: `.github/workflows/supermega-app-deploy.yml`
-- Required release proof: `/__release.json` identifies `supermega-app` and the exact reviewed commit.
+- Release workflow: `.github/workflows/supermega-public-release.yml` coordinates the app and public domains; `.github/workflows/supermega-app-deploy.yml` is a non-deploying guard.
+- Required release proof: both `/__release.json` endpoints identify the exact reviewed commit, brand, context, and catalogue versions.
 
 Do not deploy this package directly to production. The verified GitHub workflow is the release authority.

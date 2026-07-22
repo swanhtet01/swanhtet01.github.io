@@ -1,4 +1,4 @@
-name: SuperMega Public - Verified Prebuilt Release
+name: SuperMega - Coordinated Verified Release
 
 on:
   push:
@@ -6,22 +6,54 @@ on:
       - main
     paths:
       - CURRENT.md
+      - 'hq/**'
       - site-manifest.json
       - package.json
+      - 'api/**'
+      - api_app.py
+      - 'supermega_runtime/**'
+      - 'tests/**'
+      - 'supabase/migrations/**'
+      - 'showroom/**'
       - tools/create_public_vercel_output.mjs
       - tools/verify_public_vercel_artifact_budget.mjs
       - tools/verify_public_vercel_output.mjs
       - tools/test_public_contact_function.mjs
       - tools/verify_public_deploy_guard.mjs
+      - tools/serve_solution.py
+      - tools/run_vercel_release_gate.ps1
+      - tools/deploy_supermega_gcp.ps1
+      - tools/deploy_showroom_cloud_run.ps1
+      - tools/cloudrun_preflight.ps1
       - tools/verify_public_release_live.mjs
       - tools/verify_public_preview_live.mjs
+      - tools/write_app_vercel_config.mjs
+      - tools/write_app_release_metadata.mjs
+      - tools/verify_app_build.mjs
+      - tools/verify_app_deploy_workflow.mjs
+      - tools/verify_app_release_live.mjs
+      - tools/verify_app_security_contract.mjs
+      - tools/verify_coordinated_release_live.mjs
+      - tools/verify_hq_contract.mjs
       - tools/verify_vercel_project_state.mjs
+      - tools/verify_vercel_environment_state.mjs
+      - tools/test_vercel_environment_state.mjs
+      - tools/verify_vercel_domain_state.mjs
+      - tools/test_vercel_domain_state.mjs
       - tools/verify_public_firewall_state.mjs
       - tools/resolve_vercel_rollback_target.mjs
+      - tools/validate_supermega_database_url.py
+      - tools/activate_supermega_database.ps1
       - tools/deny_stale_public_deploy.mjs
       - tools/deploy_website_actions.ps1
       - vercel.json
       - .vercelignore
+      - requirements.txt
+      - requirements-test.txt
+      - pyproject.toml
+      - uv.lock
+      - showroom/package-lock.json
+      - .github/workflows/supermega-app-deploy.yml
       - .github/workflows/supermega-public-release.yml
       - .github/workflows/supermega-public-live-health.yml
       - .github/workflows/public-hosting-guard.yml
@@ -31,18 +63,20 @@ permissions:
   contents: read
 
 concurrency:
-  group: supermega-public-production
+  group: supermega-coordinated-production
   cancel-in-progress: false
 
 jobs:
   verify-deploy-promote:
     if: ${{ github.ref == 'refs/heads/main' && github.repository == 'swanhtet01/swanhtet01.github.io' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     environment: production
     env:
       VERCEL_ORG_ID: team_wI4l7ZgSxcEztQPSlCCYVeJ5
       VERCEL_PROJECT_ID: prj_Yaf0cZYbiFXcLkMcKaAm4alPWMhR
+      APP_VERCEL_PROJECT_ID: prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG
+      PUBLIC_VERCEL_PROJECT_ID: prj_Yaf0cZYbiFXcLkMcKaAm4alPWMhR
 
     steps:
       - name: Checkout the release commit
@@ -56,6 +90,29 @@ jobs:
         with:
           node-version: 24
 
+      - name: Setup Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: '0.11.30'
+          enable-cache: false
+
+      - name: Verify canonical API and release contracts
+        run: |
+          python -m pip install --disable-pip-version-check -r requirements-test.txt
+          python -m unittest discover -s tests -p 'test_*.py' -v
+          python tools/validate_supermega_database_url.py --self-test
+          node tools/verify_coordinated_release_live.mjs --self-test
+          node tools/verify_app_deploy_workflow.mjs
+
+      - name: Install app dependencies
+        working-directory: showroom
+        run: npm ci
+
       - name: Require production deploy credential
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
@@ -65,40 +122,120 @@ jobs:
             exit 1
           fi
 
-      - name: Link the locked Vercel project
+      - name: Generate the canonical app deployment contract
+        run: node tools/write_app_vercel_config.mjs
+
+      - name: Pull app production build settings
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ env.APP_VERCEL_PROJECT_ID }}
         run: npx --yes vercel@56.1.0 pull --yes --environment=production --token="$VERCEL_TOKEN"
+
+      - name: Verify app project and select operating mode
+        id: app-environment
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ env.APP_VERCEL_PROJECT_ID }}
+        run: |
+          npx --yes vercel@56.1.0 project inspect megaos --token="$VERCEL_TOKEN"
+          npx --yes vercel@56.1.0 api "/v9/projects/$APP_VERCEL_PROJECT_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_project_state.mjs app
+          npx --yes vercel@56.1.0 api "/v9/projects/$APP_VERCEL_PROJECT_ID/domains?teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_domain_state.mjs app
+          APP_ENV_AUDIT="$(npx --yes vercel@56.1.0 api "/v10/projects/$APP_VERCEL_PROJECT_ID/env?teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_environment_state.mjs app)"
+          printf '%s\n' "$APP_ENV_AUDIT"
+          OPERATING_MODE="$(printf '%s' "$APP_ENV_AUDIT" | node -e "let input='';process.stdin.on('data',chunk=>input+=chunk);process.stdin.on('end',()=>{const value=JSON.parse(input);if(!['isolated_demo','managed_trial'].includes(value.operatingMode))process.exit(1);process.stdout.write(value.operatingMode)})")"
+          printf 'operating_mode=%s\n' "$OPERATING_MODE" >> "$GITHUB_OUTPUT"
+
+      - name: Build the immutable app artifact
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ env.APP_VERCEL_PROJECT_ID }}
+          SUPERMEGA_RELEASE_COMMIT: ${{ github.sha }}
+        run: npx --yes vercel@56.1.0 build --prod --yes --token="$VERCEL_TOKEN"
+
+      - name: Capture app production rollback target
+        id: app-rollback-target
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ env.APP_VERCEL_PROJECT_ID }}
+        run: |
+          ROLLBACK_TARGET="$(npx --yes vercel@56.1.0 api "/now/aliases/app.supermega.dev" --raw --token="$VERCEL_TOKEN" | node tools/resolve_vercel_rollback_target.mjs alias app.supermega.dev prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG)"
+          read -r PREVIOUS_URL PREVIOUS_ID <<< "$ROLLBACK_TARGET"
+          PREVIOUS_URL="$(npx --yes vercel@56.1.0 inspect "$PREVIOUS_URL" --format=json --token="$VERCEL_TOKEN" | node tools/resolve_vercel_rollback_target.mjs deployment "$PREVIOUS_URL" "$PREVIOUS_ID")"
+          printf 'url=%s\n' "$PREVIOUS_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy isolated app production candidate
+        id: deploy-app
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ env.APP_VERCEL_PROJECT_ID }}
+        run: |
+          DEPLOYMENT_URL="$(npx --yes vercel@56.1.0 deploy --prebuilt --prod --skip-domain --yes --token="$VERCEL_TOKEN" --meta "githubCommitSha=${{ github.sha }}" --meta "githubCommitRef=${{ github.ref_name }}")"
+          if ! [[ "$DEPLOYMENT_URL" =~ ^https:// ]]; then
+            echo "::error::Vercel did not return an app deployment URL."
+            exit 1
+          fi
+          printf 'url=%s\n' "$DEPLOYMENT_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Inspect and verify app candidate
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ env.APP_VERCEL_PROJECT_ID }}
+          VERCEL_PROTECTED_PREVIEW: '1'
+          APP_BASE_URL: ${{ steps.deploy-app.outputs.url }}
+          EXPECTED_RELEASE_COMMIT: ${{ github.sha }}
+        run: |
+          npx --yes vercel@56.1.0 inspect "$APP_BASE_URL" --token="$VERCEL_TOKEN"
+          node tools/verify_app_release_live.mjs
+
+      - name: Link the locked public Vercel project
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ env.PUBLIC_VERCEL_PROJECT_ID }}
+        run: |
+          rm -rf -- .vercel
+          npx --yes vercel@56.1.0 pull --yes --environment=production --token="$VERCEL_TOKEN"
 
       - name: Verify release authority
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ env.PUBLIC_VERCEL_PROJECT_ID }}
         run: |
           npm run vercel:guard
-          npx --yes vercel@56.1.0 api /v9/projects/supermega-public --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_project_state.mjs public
-          npx --yes vercel@56.1.0 api "/v1/security/firewall/config/active?projectId=$VERCEL_PROJECT_ID&teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_public_firewall_state.mjs
+          npx --yes vercel@56.1.0 api "/v9/projects/$PUBLIC_VERCEL_PROJECT_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_project_state.mjs public
+          npx --yes vercel@56.1.0 api "/v9/projects/$PUBLIC_VERCEL_PROJECT_ID/domains?teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_domain_state.mjs public
+          npx --yes vercel@56.1.0 api "/v10/projects/$PUBLIC_VERCEL_PROJECT_ID/env?teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_environment_state.mjs public
+          npx --yes vercel@56.1.0 api "/v1/security/firewall/config/active?projectId=$PUBLIC_VERCEL_PROJECT_ID&teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_public_firewall_state.mjs
 
       - name: Generate and verify the prebuilt artifact
+        env:
+          SUPERMEGA_RELEASE_COMMIT: ${{ github.sha }}
         run: npm run public:prebuilt
 
       - name: Capture current production rollback target
         id: rollback-target
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ env.PUBLIC_VERCEL_PROJECT_ID }}
         run: |
           ROLLBACK_TARGET="$(npx --yes vercel@56.1.0 api "/now/aliases/supermega.dev" --raw --token="$VERCEL_TOKEN" | node tools/resolve_vercel_rollback_target.mjs alias supermega.dev prj_Yaf0cZYbiFXcLkMcKaAm4alPWMhR)"
           read -r PREVIOUS_URL PREVIOUS_ID <<< "$ROLLBACK_TARGET"
           PREVIOUS_URL="$(npx --yes vercel@56.1.0 inspect "$PREVIOUS_URL" --format=json --token="$VERCEL_TOKEN" | node tools/resolve_vercel_rollback_target.mjs deployment "$PREVIOUS_URL" "$PREVIOUS_ID")"
           printf 'url=%s\n' "$PREVIOUS_URL" >> "$GITHUB_OUTPUT"
 
+      - name: Verify current two-domain rollback baseline
+        env:
+          VERIFY_RELEASE_PAIR_ONLY: '1'
+        run: node tools/verify_coordinated_release_live.mjs
+
       - name: Deploy isolated production candidate
         id: deploy
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ env.PUBLIC_VERCEL_PROJECT_ID }}
         run: |
           DEPLOYMENT_URL="$(npx --yes vercel@56.1.0 deploy --prebuilt --prod --skip-domain --yes --token="$VERCEL_TOKEN" --meta "githubCommitSha=${{ github.sha }}" --meta "githubCommitRef=${{ github.ref_name }}")"
           if ! [[ "$DEPLOYMENT_URL" =~ ^https:// ]]; then
-            echo "::error::Vercel did not return a deployment URL."
+            echo "::error::Vercel did not return a public deployment URL."
             exit 1
           fi
           printf 'url=%s\n' "$DEPLOYMENT_URL" >> "$GITHUB_OUTPUT"
@@ -106,6 +243,7 @@ jobs:
       - name: Inspect candidate deployment
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ env.PUBLIC_VERCEL_PROJECT_ID }}
         run: npx --yes vercel@56.1.0 inspect "${{ steps.deploy.outputs.url }}" --token="$VERCEL_TOKEN"
 
       - name: Verify protected candidate content
@@ -115,30 +253,94 @@ jobs:
           EXPECTED_RELEASE_COMMIT: ${{ github.sha }}
         run: node tools/verify_public_preview_live.mjs
 
+      - name: Verify candidate release identity barrier
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROTECTED_PREVIEW: '1'
+          APP_BASE_URL: ${{ steps.deploy-app.outputs.url }}
+          PUBLIC_BASE_URL: ${{ steps.deploy.outputs.url }}
+          EXPECTED_RELEASE_COMMIT: ${{ github.sha }}
+        run: node tools/verify_coordinated_release_live.mjs
+
+      - name: Enforce managed database and RLS promotion gate
+        env:
+          SELECTED_OPERATING_MODE: ${{ steps.app-environment.outputs.operating_mode }}
+          SUPERMEGA_DATABASE_URL: ${{ secrets.SUPERMEGA_DATABASE_URL }}
+        run: |
+          case "$SELECTED_OPERATING_MODE" in
+            managed_trial)
+              if [ -z "$SUPERMEGA_DATABASE_URL" ]; then
+                echo "::error::Managed activation is selected but the owner-gated SUPERMEGA_DATABASE_URL secret is unavailable."
+                exit 1
+              fi
+              python tools/validate_supermega_database_url.py --env-key SUPERMEGA_DATABASE_URL --ensure-schema --require-ready
+              ;;
+            isolated_demo)
+              echo "Managed activation is not selected; production remains isolated_demo."
+              ;;
+            *)
+              echo "::error::Operating mode selection is missing or invalid."
+              exit 1
+              ;;
+          esac
+
+      - name: Promote the verified app artifact
+        id: promote-app
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ env.APP_VERCEL_PROJECT_ID }}
+        run: |
+          printf 'attempted=true\n' >> "$GITHUB_OUTPUT"
+          npx --yes vercel@56.1.0 promote "${{ steps.deploy-app.outputs.url }}" --yes --token="$VERCEL_TOKEN"
+
       - name: Promote the verified artifact
         id: promote
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: npx --yes vercel@56.1.0 promote "${{ steps.deploy.outputs.url }}" --yes --token="$VERCEL_TOKEN"
+          VERCEL_PROJECT_ID: ${{ env.PUBLIC_VERCEL_PROJECT_ID }}
+        run: |
+          printf 'attempted=true\n' >> "$GITHUB_OUTPUT"
+          npx --yes vercel@56.1.0 promote "${{ steps.deploy.outputs.url }}" --yes --token="$VERCEL_TOKEN"
 
       - name: Verify production aliases and exact release
         env:
+          APP_BASE_URL: https://app.supermega.dev
           PUBLIC_BASE_URL: https://supermega.dev
           EXPECTED_RELEASE_COMMIT: ${{ github.sha }}
-        run: npm run public:verify:live
+        run: |
+          node tools/verify_app_release_live.mjs
+          npm run public:verify:live
+          node tools/verify_coordinated_release_live.mjs
 
       - name: Verify production project controls
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERIFY_DEPLOYED_STATE: '1'
         run: |
-          npx --yes vercel@56.1.0 api /v9/projects/supermega-public --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_project_state.mjs public
-          npx --yes vercel@56.1.0 api "/v1/security/firewall/config/active?projectId=$VERCEL_PROJECT_ID&teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_public_firewall_state.mjs
+          VERCEL_PROJECT_ID="$APP_VERCEL_PROJECT_ID" npx --yes vercel@56.1.0 api "/v9/projects/$APP_VERCEL_PROJECT_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_project_state.mjs app
+          VERCEL_PROJECT_ID="$APP_VERCEL_PROJECT_ID" npx --yes vercel@56.1.0 api "/v9/projects/$APP_VERCEL_PROJECT_ID/domains?teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_domain_state.mjs app
+          VERCEL_PROJECT_ID="$APP_VERCEL_PROJECT_ID" npx --yes vercel@56.1.0 api "/v10/projects/$APP_VERCEL_PROJECT_ID/env?teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_environment_state.mjs app
+          VERCEL_PROJECT_ID="$PUBLIC_VERCEL_PROJECT_ID" npx --yes vercel@56.1.0 api "/v9/projects/$PUBLIC_VERCEL_PROJECT_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_project_state.mjs public
+          VERCEL_PROJECT_ID="$PUBLIC_VERCEL_PROJECT_ID" npx --yes vercel@56.1.0 api "/v9/projects/$PUBLIC_VERCEL_PROJECT_ID/domains?teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_domain_state.mjs public
+          VERCEL_PROJECT_ID="$PUBLIC_VERCEL_PROJECT_ID" npx --yes vercel@56.1.0 api "/v10/projects/$PUBLIC_VERCEL_PROJECT_ID/env?teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_environment_state.mjs public
+          VERCEL_PROJECT_ID="$PUBLIC_VERCEL_PROJECT_ID" npx --yes vercel@56.1.0 api "/v1/security/firewall/config/active?projectId=$PUBLIC_VERCEL_PROJECT_ID&teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_public_firewall_state.mjs
 
       - name: Roll back a failed production verification
-        if: ${{ failure() && steps.promote.outcome == 'success' }}
+        if: ${{ failure() && (steps.promote-app.outputs.attempted == 'true' || steps.promote.outputs.attempted == 'true') }}
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          APP_PROMOTION_ATTEMPTED: ${{ steps.promote-app.outputs.attempted == 'true' }}
+          PUBLIC_PROMOTION_ATTEMPTED: ${{ steps.promote.outputs.attempted == 'true' }}
         run: |
-          npx --yes vercel@56.1.0 rollback "${{ steps.rollback-target.outputs.url }}" --yes --token="$VERCEL_TOKEN"
-          npx --yes vercel@56.1.0 rollback status supermega-public --token="$VERCEL_TOKEN"
+          set +e
+          ROLLBACK_FAILED=0
+          if [ "$APP_PROMOTION_ATTEMPTED" = "true" ]; then
+            VERCEL_PROJECT_ID="$APP_VERCEL_PROJECT_ID" npx --yes vercel@56.1.0 rollback "${{ steps.app-rollback-target.outputs.url }}" --yes --token="$VERCEL_TOKEN" || ROLLBACK_FAILED=1
+            VERCEL_PROJECT_ID="$APP_VERCEL_PROJECT_ID" npx --yes vercel@56.1.0 rollback status megaos --token="$VERCEL_TOKEN" || ROLLBACK_FAILED=1
+          fi
+          if [ "$PUBLIC_PROMOTION_ATTEMPTED" = "true" ]; then
+            VERCEL_PROJECT_ID="$PUBLIC_VERCEL_PROJECT_ID" npx --yes vercel@56.1.0 rollback "${{ steps.rollback-target.outputs.url }}" --yes --token="$VERCEL_TOKEN" || ROLLBACK_FAILED=1
+            VERCEL_PROJECT_ID="$PUBLIC_VERCEL_PROJECT_ID" npx --yes vercel@56.1.0 rollback status supermega-public --token="$VERCEL_TOKEN" || ROLLBACK_FAILED=1
+          fi
+          VERIFY_RELEASE_PAIR_ONLY=1 node tools/verify_coordinated_release_live.mjs || ROLLBACK_FAILED=1
+          exit "$ROLLBACK_FAILED"

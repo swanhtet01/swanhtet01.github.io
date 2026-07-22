@@ -2,8 +2,8 @@
 
 SuperMega builds operating software for Myanmar businesses. The product portfolio is deliberately focused:
 
-- **Shop** — sales, catalogue, stock, orders, close, and operating exceptions.
-- **Plant** — production jobs, machines, materials, quality, maintenance, and shift handoffs.
+- **Commerce** — channel orders, catalogue, stock, fulfilment, payment, close, and operating exceptions.
+- **Production** — jobs, output, machines, materials, quality, maintenance, and shift handoffs.
 
 `>_` is the operating signature: direct, evidence-led, and ready for action. AI agents prepare work, surface exceptions, and draft decisions; a named person remains accountable for consequential actions.
 
@@ -11,15 +11,15 @@ SuperMega builds operating software for Myanmar businesses. The product portfoli
 
 | Surface | Domain | Routes | Purpose |
 | --- | --- | --- | --- |
-| Public site | `supermega.dev` | `/`, `/shop/`, `/plant/`, `/templates/`, `/trust/`, `/contact/`, `/privacy/` | Positioning, product proof, templates, trust, and qualified contact intake |
-| Product app | `app.supermega.dev` | `/`, `/shop/`, `/plant/`, `/assist/`, `/setup/`, `/trust/` | Command workspace, Shop, Plant, governed assistance, setup, and controls |
+| Public site | `supermega.dev` | `/`, `/contact/`, `/privacy/` | One product story, trust boundary, qualified contact intake, and privacy |
+| Product app | `app.supermega.dev` | `/`, `/work/`, `/operations/commerce/`, `/operations/production/`, `/settings/` | Today, accountable teams, Commerce, Production, pilot setup, evidence, and controls |
 
 Client-specific deployments, legacy demos, and old product names are not part of the current public or application authority.
 
 ## Source authority
 
 - `CURRENT.md` — company, product, domain, context, and release authority.
-- `site-manifest.json` — public information architecture, Shop/Plant catalogue, versioning, and redirects.
+- `site-manifest.json` — compact public information architecture, Commerce and Production workflow profiles, versioning, and legacy redirects.
 - `showroom/src/core/CoreApp.tsx` — canonical application experience.
 - `api/app.py` — the only Vercel function entrypoint.
 - `supermega_runtime/runtime.py` — canonical FastAPI application runtime.
@@ -52,15 +52,15 @@ npm.cmd run dev
 
 Production releases come only from reviewed `main` commits through:
 
-- `.github/workflows/supermega-app-deploy.yml` for `app.supermega.dev` / Vercel project `megaos`.
-- `.github/workflows/supermega-public-release.yml` for `supermega.dev` / Vercel project `supermega-public`.
+- `.github/workflows/supermega-public-release.yml`, the single coordinated release owner for `app.supermega.dev` / `megaos` and `supermega.dev` / `supermega-public`.
+- `.github/workflows/supermega-app-deploy.yml`, a non-deploying guard that reruns the shared runtime, RLS, and paired-release contracts when app paths change.
 
-Each workflow builds an immutable preview, verifies its exact release metadata and live routes, promotes that same artifact, verifies production, and rolls back a failed promotion. Direct local production deployment is blocked.
+The coordinated workflow builds both immutable candidates, verifies matching commit, brand, context, and catalogue identity, promotes both, verifies production as a pair, and rolls both domains back if either verification fails. Direct local production deployment is blocked.
 
-The public contact endpoint also fails closed unless its dedicated idempotency secret and at least one delivery channel are configured. The public release workflow verifies the active Vercel Firewall rule that limits contact POSTs to five requests per IP per ten minutes. The former Cloud Run deployment workflow is retired; Vercel is the sole production owner of both canonical domains.
+The public contact endpoint also fails closed unless its dedicated idempotency secret and at least one delivery channel are configured. Durable lead records include a SHA-256 payload fingerprint, so same-payload retries remain idempotent while changed cold-start replays conflict. The public release workflow verifies the active Vercel Firewall rule that limits contact POSTs to five requests per IP per ten minutes. The former Cloud Run deployment workflow is retired; Vercel is the sole production owner of both canonical domains.
 
 ## Managed-trial boundary
 
-The deployed app is safe to use as an isolated browser-local demo. It is not a customer system of record until the private Supabase schema, dedicated non-`BYPASSRLS` login, signed identity, named memberships, least-privilege capabilities, immutable audit, backup, restore, acceptance, and human approval gates pass.
+The deployed app is safe to use as an isolated browser-local demo. It is not a customer system of record until the historical schema v1 and additive v2 migration are rehearsed on non-production data and the dedicated non-`BYPASSRLS` login, high-entropy signed identity, named memberships, least-privilege capabilities, immutable audit, backup, restore, acceptance, and human approval gates pass.
 
 Follow `docs/supermega-enterprise-activation.md`. Managed writes default to disabled and fail closed.

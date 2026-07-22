@@ -7,12 +7,15 @@ const manifest = JSON.parse(read('site-manifest.json'))
 const packageJson = JSON.parse(read('package.json'))
 const vercelConfig = JSON.parse(read('vercel.json'))
 const releaseWorkflow = read('.github/workflows/supermega-public-release.yml')
+const ciWorkflow = read('.github/workflows/showroom-ci.yml')
 const healthWorkflow = read('.github/workflows/supermega-public-live-health.yml')
 const previewVerifier = read('tools/verify_public_preview_live.mjs')
 const rollbackResolver = read('tools/resolve_vercel_rollback_target.mjs')
 const firewallVerifier = read('tools/verify_public_firewall_state.mjs')
 const publicGenerator = read('tools/create_public_vercel_output.mjs')
 const releaseWrapper = read('tools/deploy_website_actions.ps1')
+const localMachine = read('tools/supermega_machine.ps1')
+const localControlServer = read('tools/serve_solution.py')
 const denyScript = read('tools/deny_stale_public_deploy.mjs')
 const failures = []
 
@@ -24,6 +27,18 @@ if (manifest.release?.sourceBranch !== 'main') failures.push('manifest_release_s
 if (manifest.release?.workflow !== '.github/workflows/supermega-public-release.yml') failures.push('manifest_release_workflow_drift')
 if (manifest.release?.productionDomain !== 'https://supermega.dev') failures.push('manifest_release_domain_drift')
 if (existsSync(resolve(root, '.github/workflows/supermega-public-deploy.yml'))) failures.push('competing_public_deploy_workflow_present')
+const retiredReleasePaths = [
+  'tools/run_vercel_release_gate.ps1',
+  'tools/deploy_supermega_gcp.ps1',
+  'tools/deploy_showroom_cloud_run.ps1',
+  'tools/cloudrun_preflight.ps1',
+]
+for (const path of retiredReleasePaths) {
+  if (existsSync(resolve(root, path))) failures.push(`legacy_release_bypass_present:${path}`)
+  if (!releaseWorkflow.includes(`- ${path}`) || !ciWorkflow.includes(`- '${path}'`)) failures.push(`legacy_release_path_not_watched:${path}`)
+}
+if (!releaseWorkflow.includes('- tools/serve_solution.py') || !ciWorkflow.includes("- 'tools/serve_solution.py'")) failures.push('local_control_server_not_watched')
+if (localControlServer.includes('/api/cloud/deployments/production') || localControlServer.includes('_run_production_deploy') || localControlServer.includes('command.append("--prod")') || localControlServer.includes('vercel deploy --prebuilt --prod')) failures.push('local_production_deploy_endpoint_present')
 if (vercelConfig.git?.deploymentEnabled !== false) failures.push('native_git_deployments_not_disabled')
 if (!previewVerifier.includes('preview_contact_not_accepting')) failures.push('preview_contact_readiness_not_verified')
 if (!previewVerifier.includes('deployment_function_surface_wrong')) failures.push('preview_function_inventory_not_verified')
@@ -44,7 +59,7 @@ for (const [name, expected] of Object.entries({
   'vercel:deploy': 'node tools/deny_stale_public_deploy.mjs',
   'vercel:deploy:prod': 'node tools/deny_stale_public_deploy.mjs',
   'public:build': 'node tools/create_public_vercel_output.mjs',
-  'public:verify': 'node tools/verify_public_vercel_artifact_budget.mjs && node tools/verify_public_vercel_output.mjs && node tools/test_public_contact_function.mjs',
+  'public:verify': 'node tools/verify_public_vercel_artifact_budget.mjs && node tools/verify_public_vercel_output.mjs && node tools/test_public_contact_function.mjs && npm run vercel:contracts:test && npm run hq:verify',
   'public:prebuilt': 'npm run public:build && npm run public:verify',
   'public:verify:live': 'node tools/verify_public_release_live.mjs',
   'deploy:public:prod': 'node tools/deny_stale_public_deploy.mjs',
@@ -54,7 +69,7 @@ for (const [name, expected] of Object.entries({
 
 for (const token of [
   'branches:\n      - main',
-  'group: supermega-public-production',
+  'group: supermega-coordinated-production',
   "if: ${{ github.ref == 'refs/heads/main' && github.repository == 'swanhtet01/swanhtet01.github.io' }}",
   'VERCEL_PROJECT_ID: prj_Yaf0cZYbiFXcLkMcKaAm4alPWMhR',
   'npx --yes vercel@56.1.0 pull',
@@ -70,6 +85,10 @@ for (const token of [
   'npx --yes vercel@56.1.0 inspect',
   'node tools/verify_public_preview_live.mjs',
   'node tools/verify_vercel_project_state.mjs public',
+  '/v9/projects/$PUBLIC_VERCEL_PROJECT_ID/domains?teamId=$VERCEL_ORG_ID',
+  'node tools/verify_vercel_domain_state.mjs public',
+  '/v10/projects/$PUBLIC_VERCEL_PROJECT_ID/env?teamId=$VERCEL_ORG_ID',
+  'node tools/verify_vercel_environment_state.mjs public',
   'node tools/verify_public_firewall_state.mjs',
   '/v1/security/firewall/config/active?',
   'npx --yes vercel@56.1.0 promote',
@@ -99,6 +118,8 @@ for (const token of ['workflow_dispatch:', 'schedule:', 'npm run public:verify:l
 if (/vercel@\S+\s+(?:deploy|promote)/.test(healthWorkflow)) failures.push('health_workflow_can_deploy')
 
 for (const token of ['dispatch_ref = "main"', 'source_ref = "main"', 'workflow = $workflowFile']) requireToken(releaseWrapper, token, 'release_wrapper_missing')
+if (!releaseWrapper.includes('gh run list --repo $Repo --workflow $workflowFile') || releaseWrapper.includes('$workflowName')) failures.push('release_wrapper_run_lookup_drift')
+if (/cloudrun|gcloud/i.test(`${releaseWrapper}\n${localMachine}`)) failures.push('legacy_cloud_release_surface_present')
 for (const token of ['canonicalBranch = \'main\'', 'supermega-public-release.yml']) requireToken(denyScript, token, 'direct_deploy_guard_missing')
 
 const workflowsDir = resolve(root, '.github', 'workflows')

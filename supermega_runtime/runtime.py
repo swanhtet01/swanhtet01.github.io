@@ -31,13 +31,30 @@ from supermega_runtime.trial_store import (
 SERVICE_NAME = "supermega-service"
 SERVICE_VERSION = "1.0.0"
 TRIAL_EVENT_BY_SURFACE = {
-    "command": "command.snapshot.saved",
-    "shop": "shop.snapshot.saved",
-    "plant": "plant.snapshot.saved",
+    "company": "company.snapshot.saved",
+    "commerce": "commerce.snapshot.saved",
+    "production": "production.snapshot.saved",
     "setup": "setup.snapshot.saved",
 }
 _IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _MAX_IDENTITY_AGE_SECONDS = 300
+_MIN_IDENTITY_SECRET_BYTES = 32
+_MIN_IDENTITY_SECRET_DISTINCT_BYTES = 10
+_IDENTITY_SECRET_PLACEHOLDER_MARKERS = frozenset(
+    {
+        "change-me",
+        "changeme",
+        "example-secret",
+        "example_secret",
+        "placeholder",
+        "replace-me",
+        "replaceme",
+        "test-secret",
+        "test_secret",
+        "your-secret",
+        "your_secret",
+    }
+)
 
 
 def _text(value: object) -> str:
@@ -51,19 +68,32 @@ def _flag(name: str, *, default: bool = False) -> bool:
     return value.casefold() in {"1", "true", "yes", "on"}
 
 
+def _identity_secret_ready(value: object) -> bool:
+    """Apply a bounded fail-closed check to the gateway HMAC key material."""
+
+    secret = _text(value)
+    encoded = secret.encode("utf-8")
+    lowered = secret.casefold()
+    return bool(
+        len(encoded) >= _MIN_IDENTITY_SECRET_BYTES
+        and len(set(encoded)) >= _MIN_IDENTITY_SECRET_DISTINCT_BYTES
+        and not any(marker in lowered for marker in _IDENTITY_SECRET_PLACEHOLDER_MARKERS)
+    )
+
+
 def _validate_state_shape(surface: str, state: Mapping[str, Any]) -> None:
     required_lists = {
-        "command": ("tasks",),
-        "shop": ("items", "sales", "closes"),
-        "plant": ("jobs", "issues", "machines"),
+        "company": ("tasks",),
+        "commerce": ("items", "orders", "closes"),
+        "production": ("jobs", "issues", "machines"),
     }
     if surface in required_lists:
         missing = [key for key in required_lists[surface] if not isinstance(state.get(key), list)]
         if missing:
             raise TrialValidationError(f"{surface} state requires list fields: {', '.join(missing)}.")
     elif surface == "setup":
-        if state.get("product") not in {"shop", "plant"}:
-            raise TrialValidationError("setup product must be shop or plant.")
+        if state.get("product") not in {"commerce", "production"}:
+            raise TrialValidationError("setup product must be commerce or production.")
         for field in ("template", "workspace", "owner"):
             if not isinstance(state.get(field), str) or len(str(state[field])) > 160:
                 raise TrialValidationError(f"setup {field} must be a string of at most 160 characters.")
@@ -97,18 +127,24 @@ def resolve_trial_principal(request: Request) -> TrialPrincipal | None:
     """Verify identity signed by a trusted auth gateway.
 
     Browsers cannot assert workspace or actor identity by themselves. The
-    gateway signs ``v1\n<timestamp>\n<workspace>\n<actor>`` with the server-only
-    ``SUPERMEGA_TRIAL_IDENTITY_SECRET``.
+    gateway signs ``v2\n<timestamp>\n<workspace>\n<actor>\n<actor_kind>`` with
+    the server-only ``SUPERMEGA_TRIAL_IDENTITY_SECRET``. Actor kind is part of
+    the signature so a service or agent identity cannot relabel itself human.
     """
 
     secret = _text(os.getenv("SUPERMEGA_TRIAL_IDENTITY_SECRET"))
     workspace_id = _text(request.headers.get("x-supermega-workspace-id"))
     actor_id = _text(request.headers.get("x-supermega-actor-id"))
+    actor_kind = _text(request.headers.get("x-supermega-actor-kind")).casefold()
     timestamp = _text(request.headers.get("x-supermega-identity-timestamp"))
     signature = _text(request.headers.get("x-supermega-identity-signature")).casefold()
-    if not all((secret, workspace_id, actor_id, timestamp, signature)):
+    if not _identity_secret_ready(secret):
+        return None
+    if not all((workspace_id, actor_id, actor_kind, timestamp, signature)):
         return None
     if not _IDENTIFIER.fullmatch(workspace_id) or not _IDENTIFIER.fullmatch(actor_id):
+        return None
+    if actor_kind not in {"human", "service", "agent"}:
         return None
     try:
         issued_at = int(timestamp)
@@ -116,11 +152,16 @@ def resolve_trial_principal(request: Request) -> TrialPrincipal | None:
         return None
     if abs(int(time.time()) - issued_at) > _MAX_IDENTITY_AGE_SECONDS:
         return None
-    message = f"v1\n{timestamp}\n{workspace_id}\n{actor_id}".encode("utf-8")
+    message = f"v2\n{timestamp}\n{workspace_id}\n{actor_id}\n{actor_kind}".encode("utf-8")
     expected = hmac.new(secret.encode("utf-8"), message, hashlib.sha256).hexdigest()
     if not hmac.compare_digest(expected, signature):
         return None
-    return TrialPrincipal(workspace_id=workspace_id, actor_id=actor_id, authenticated=True)
+    return TrialPrincipal(
+        workspace_id=workspace_id,
+        actor_id=actor_id,
+        actor_kind=actor_kind,
+        authenticated=True,
+    )
 
 
 def _activation_requirements(*, database_ready: bool, role_ready: bool, schema_ready: bool, audit_ready: bool) -> list[str]:
@@ -133,8 +174,13 @@ def _activation_requirements(*, database_ready: bool, role_ready: bool, schema_r
         requirements.append("Use an encrypted, dedicated non-BYPASSRLS login with only the trial backend role.")
     if not schema_ready:
         requirements.append("Apply and verify the private trial schema on a non-production branch first.")
-    if not _text(os.getenv("SUPERMEGA_TRIAL_IDENTITY_SECRET")):
+    identity_secret = _text(os.getenv("SUPERMEGA_TRIAL_IDENTITY_SECRET"))
+    if not identity_secret:
         requirements.append("Configure trusted gateway identity signing and named-user access.")
+    elif not _identity_secret_ready(identity_secret):
+        requirements.append(
+            "Replace the identity signing secret with at least 32 bytes of high-entropy, non-placeholder key material."
+        )
     if not audit_ready:
         requirements.append("Verify immutable audit-event insert access through the runtime role.")
     if not _flag("SUPERMEGA_TRIAL_WRITES_ENABLED"):
@@ -168,6 +214,7 @@ def create_app() -> FastAPI:
             "content-type",
             "x-supermega-workspace-id",
             "x-supermega-actor-id",
+            "x-supermega-actor-kind",
             "x-supermega-identity-timestamp",
             "x-supermega-identity-signature",
         ],
@@ -187,7 +234,7 @@ def create_app() -> FastAPI:
     def health() -> dict[str, Any]:
         readiness = store.readiness(None)
         enterprise_db_ready = readiness.database_ready and readiness.role_ready and readiness.schema_ready and readiness.audit_ready
-        security_ready = bool(_text(os.getenv("SUPERMEGA_TRIAL_IDENTITY_SECRET")))
+        security_ready = _identity_secret_ready(os.getenv("SUPERMEGA_TRIAL_IDENTITY_SECRET"))
         requirements = _activation_requirements(
             database_ready=readiness.database_ready,
             role_ready=readiness.role_ready,

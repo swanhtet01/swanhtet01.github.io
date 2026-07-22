@@ -18,11 +18,11 @@ from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 
-CONTRACT = "supermega_private_trial_database_v1"
+CONTRACT = "supermega_private_trial_database_v2"
 SCHEMA = "app_private"
 BACKEND_ROLE = "supermega_trial_backend"
 SCHEMA_COMPONENT = "private_trial_backend"
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 EXPECTED_TABLES = frozenset(
     {
         "trial_schema_meta",
@@ -56,13 +56,13 @@ EXPECTED_POLICIES: dict[str, dict[str, Any]] = {
     "workspace_memberships_self_read": {
         "table": "workspace_memberships",
         "command": "SELECT",
-        "qual": ("app.workspace_id", "app.actor_id", "active"),
+        "qual": ("app.workspace_id", "app.actor_id", "app.actor_kind", "active"),
         "check": (),
     },
     "workspace_state_member_read": {
         "table": "workspace_state",
         "command": "SELECT",
-        "qual": ("app.workspace_id", "app.actor_id", "workspace_memberships", "active"),
+        "qual": ("app.workspace_id", "app.actor_id", "app.actor_kind", "workspace_memberships", "active"),
         "check": (),
     },
     "workspace_state_capability_insert": {
@@ -72,31 +72,33 @@ EXPECTED_POLICIES: dict[str, dict[str, Any]] = {
         "check": (
             "app.workspace_id",
             "app.actor_id",
+            "app.actor_kind",
             "workspace_memberships",
-            "command.write",
-            "shop.write",
-            "plant.write",
+            "company.write",
+            "commerce.write",
+            "production.write",
             "setup.write",
         ),
     },
     "workspace_state_capability_update": {
         "table": "workspace_state",
         "command": "UPDATE",
-        "qual": ("app.workspace_id", "app.actor_id", "workspace_memberships"),
+        "qual": ("app.workspace_id", "app.actor_id", "app.actor_kind", "workspace_memberships"),
         "check": (
             "app.workspace_id",
             "app.actor_id",
+            "app.actor_kind",
             "workspace_memberships",
-            "command.write",
-            "shop.write",
-            "plant.write",
+            "company.write",
+            "commerce.write",
+            "production.write",
             "setup.write",
         ),
     },
     "workspace_events_member_read": {
         "table": "workspace_events",
         "command": "SELECT",
-        "qual": ("app.workspace_id", "app.actor_id", "workspace_memberships", "active"),
+        "qual": ("app.workspace_id", "app.actor_id", "app.actor_kind", "workspace_memberships", "active"),
         "check": (),
     },
     "workspace_events_capability_insert": {
@@ -106,32 +108,35 @@ EXPECTED_POLICIES: dict[str, dict[str, Any]] = {
         "check": (
             "app.workspace_id",
             "app.actor_id",
+            "app.actor_kind",
             "workspace_memberships",
-            "command.write",
-            "shop.write",
-            "plant.write",
+            "company.write",
+            "commerce.write",
+            "production.write",
             "setup.write",
             "approvals.request",
             "approvals.decide",
+            "human",
         ),
+        "check_or": "approval_human_guard",
     },
     "approval_requests_member_read": {
         "table": "approval_requests",
         "command": "SELECT",
-        "qual": ("app.workspace_id", "app.actor_id", "workspace_memberships", "active"),
+        "qual": ("app.workspace_id", "app.actor_id", "app.actor_kind", "workspace_memberships", "active"),
         "check": (),
     },
     "approval_requests_capability_insert": {
         "table": "approval_requests",
         "command": "INSERT",
         "qual": (),
-        "check": ("app.workspace_id", "app.actor_id", "workspace_memberships", "approvals.request"),
+        "check": ("app.workspace_id", "app.actor_id", "app.actor_kind", "workspace_memberships", "approvals.request"),
     },
     "approval_requests_capability_update": {
         "table": "approval_requests",
         "command": "UPDATE",
-        "qual": ("app.workspace_id", "app.actor_id", "workspace_memberships", "approvals.decide"),
-        "check": ("app.workspace_id", "app.actor_id", "workspace_memberships", "approvals.decide"),
+        "qual": ("app.workspace_id", "app.actor_id", "app.actor_kind", "workspace_memberships", "approvals.decide", "human"),
+        "check": ("app.workspace_id", "app.actor_id", "app.actor_kind", "workspace_memberships", "approvals.decide", "human"),
     },
 }
 
@@ -168,7 +173,190 @@ def _roles(value: Any) -> frozenset[str]:
     return frozenset()
 
 
-def _contains_tokens(expression: Any, tokens: Sequence[str]) -> bool:
+_POLICY_TOKEN_RE = re.compile(
+    r"'(?:''|[^'])*'|::|<>|<=|>=|=|\b[a-z_][a-z0-9_$.]*\b|\d+(?:\.\d+)?|[(),]|\S",
+    re.IGNORECASE,
+)
+_POLICY_CAST_RE = re.compile(
+    r"::\s*(?:pg_catalog\.)?(?:text|character\s+varying|varchar|name|uuid|boolean|integer|bigint)\b",
+    re.IGNORECASE,
+)
+_CURRENT_SETTING_TRUE_RE = re.compile(
+    r"current_setting\s*\(\s*'(?:''|[^'])*'\s*"
+    r"(?:::\s*(?:pg_catalog\.)?(?:text|character\s+varying|varchar|name))?\s*,\s*true\s*\)",
+    re.IGNORECASE,
+)
+_APPROVAL_HUMAN_OR_TOKENS = (
+    "event_type",
+    "<>",
+    "'approval.decided'",
+    "or",
+    "actor_kind",
+    "=",
+    "'human'",
+)
+
+
+def _policy_tokens(expression: Any) -> list[str]:
+    value = _POLICY_CAST_RE.sub("", str(expression or "").lower())
+    return [token.lower() for token in _POLICY_TOKEN_RE.findall(value)]
+
+
+def _semantic_policy_tokens(tokens: Sequence[str]) -> tuple[str, ...]:
+    semantic: list[str] = []
+    for token in tokens:
+        if token in {"(", ")", ","}:
+            continue
+        if token.endswith(".event_type"):
+            token = "event_type"
+        elif token.endswith(".actor_kind"):
+            token = "actor_kind"
+        semantic.append(token)
+    return tuple(semantic)
+
+
+def _has_exact_approval_human_or(tokens: Sequence[str]) -> bool:
+    or_positions = [index for index, token in enumerate(tokens) if token == "or"]
+    if len(or_positions) != 1:
+        return False
+    or_position = or_positions[0]
+
+    stack: list[int] = []
+    enclosing_pairs: list[tuple[int, int]] = []
+    for index, token in enumerate(tokens):
+        if token == "(":
+            stack.append(index)
+        elif token == ")":
+            if not stack:
+                return False
+            start = stack.pop()
+            if start < or_position < index:
+                enclosing_pairs.append((start, index))
+    if stack:
+        return False
+
+    return any(
+        _semantic_policy_tokens(tokens[start + 1 : end]) == _APPROVAL_HUMAN_OR_TOKENS
+        for start, end in enclosing_pairs
+    )
+
+
+def _dangerous_policy_expression(expression: str, tokens: Sequence[str]) -> bool:
+    if any(marker in expression for marker in ("--", "/*", "*/", ";")):
+        return True
+
+    without_current_setting_flags = _CURRENT_SETTING_TRUE_RE.sub("current_setting_guard", expression)
+    if re.search(r"\b(?:true|false)\b", without_current_setting_flags, re.IGNORECASE):
+        return True
+    if re.search(
+        r"\b(?:not|coalesce|nullif|bool_or|bool_and|union|intersect|except)\b",
+        expression,
+        re.IGNORECASE,
+    ):
+        return True
+    if re.search(r"\b(\d+)\s*=\s*\1\b", expression):
+        return True
+    for match in re.finditer(r"('(?:''|[^'])*')\s*=\s*('(?:''|[^'])*')", expression):
+        if match.group(1) == match.group(2):
+            return True
+    return "or" in tokens and not _has_exact_approval_human_or(tokens)
+
+
+def _policy_expression_matches(
+    expression: Any,
+    required_tokens: Sequence[str],
+    *,
+    allowed_or: str | None = None,
+) -> bool:
+    """Validate the complete policy shape, rejecting boolean bypass wrappers.
+
+    Catalog expressions are parsed SQL and therefore contain operators. The
+    operator-free branch exists only for the repository's synthetic catalog
+    fixture; PostgreSQL cannot emit it for a real policy predicate.
+    """
+
+    if not required_tokens:
+        return expression in (None, "")
+    value = str(expression or "").lower()
+    if not all(token.lower() in value for token in required_tokens):
+        return False
+
+    tokens = _policy_tokens(value)
+    structured = any(token in {"=", "<>", "and", "or", "exists", "case"} for token in tokens)
+    if not structured:
+        return True
+    if _dangerous_policy_expression(value, tokens):
+        return False
+
+    or_count = sum(token == "or" for token in tokens)
+    if allowed_or == "approval_human_guard":
+        return or_count == 1 and _has_exact_approval_human_or(tokens)
+    return or_count == 0
+
+
+def _run_policy_self_test() -> dict[str, Any]:
+    membership = (
+        "workspace_id = current_setting('app.workspace_id', true) "
+        "and actor_id = current_setting('app.actor_id', true) "
+        "and actor_kind = current_setting('app.actor_kind', true) "
+        "and status = 'active'"
+    )
+    membership_tokens = EXPECTED_POLICIES["workspace_memberships_self_read"]["qual"]
+    event = (
+        "workspace_id = current_setting('app.workspace_id', true) "
+        "and actor_id = current_setting('app.actor_id', true) "
+        "and actor_kind = current_setting('app.actor_kind', true) "
+        "and (event_type <> 'approval.decided' or actor_kind = 'human') "
+        "and exists (select 1 from app_private.workspace_memberships membership "
+        "where membership.workspace_id = workspace_events.workspace_id "
+        "and membership.actor_id = current_setting('app.actor_id', true) "
+        "and membership.actor_kind = current_setting('app.actor_kind', true) "
+        "and membership.status = 'active' "
+        "and case workspace_events.surface when 'company' then 'company.write' "
+        "when 'commerce' then 'commerce.write' when 'production' then 'production.write' "
+        "when 'setup' then 'setup.write' when 'approvals' then case workspace_events.event_type "
+        "when 'approval.requested' then 'approvals.request' "
+        "when 'approval.decided' then 'approvals.decide' end end = any(membership.capabilities))"
+    )
+    event_tokens = EXPECTED_POLICIES["workspace_events_capability_insert"]["check"]
+    cases = {
+        "canonical_membership": _policy_expression_matches(membership, membership_tokens),
+        "reject_true_or_wrapper": not _policy_expression_matches(
+            f"TRUE OR ({membership})",
+            membership_tokens,
+        ),
+        "reject_numeric_tautology": not _policy_expression_matches(
+            f"({membership}) OR 1 = 1",
+            membership_tokens,
+        ),
+        "canonical_human_guard": _policy_expression_matches(
+            event,
+            event_tokens,
+            allowed_or="approval_human_guard",
+        ),
+        "reject_ungrouped_human_or": not _policy_expression_matches(
+            event.replace(
+                "and (event_type <> 'approval.decided' or actor_kind = 'human')",
+                "and event_type <> 'approval.decided' or actor_kind = 'human'",
+            ),
+            event_tokens,
+            allowed_or="approval_human_guard",
+        ),
+        "reject_human_guard_true_or": not _policy_expression_matches(
+            f"TRUE OR ({event})",
+            event_tokens,
+            allowed_or="approval_human_guard",
+        ),
+    }
+    failed = [name for name, passed in cases.items() if not passed]
+    return {
+        "ok": not failed,
+        "contract": "supermega_rls_policy_validator_self_test",
+        "checks": cases,
+        "failed_checks": failed,
+        "mutation_statements_executed": 0,
+        "secret_values_exposed": False,
+    }
     if not tokens:
         return expression in (None, "")
     value = str(expression or "").lower()
@@ -481,8 +669,16 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
                 and str(row.get("command", "")).upper() == expected["command"]
                 and str(row.get("permissive", "")).upper() == "PERMISSIVE"
                 and _roles(row.get("roles")) == {BACKEND_ROLE}
-                and _contains_tokens(row.get("qual"), expected["qual"])
-                and _contains_tokens(row.get("with_check"), expected["check"])
+                and _policy_expression_matches(
+                    row.get("qual"),
+                    expected["qual"],
+                    allowed_or=expected.get("qual_or"),
+                )
+                and _policy_expression_matches(
+                    row.get("with_check"),
+                    expected["check"],
+                    allowed_or=expected.get("check_or"),
+                )
             )
             if not policy_contract:
                 break
@@ -613,10 +809,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--ensure-schema",
         action="store_true",
-        help="Require the complete v1 schema contract; this flag never applies migrations.",
+        help="Require the complete v2 schema contract; this flag never applies migrations.",
     )
     parser.add_argument("--require-ready", action="store_true")
+    parser.add_argument(
+        "--self-test",
+        action="store_true",
+        help="Exercise policy-bypass fixtures without opening a database connection.",
+    )
     args = parser.parse_args(argv)
+
+    if args.self_test:
+        report = _run_policy_self_test()
+        print(json.dumps(report, sort_keys=True))
+        return 0 if report["ok"] is True else 1
 
     if not re.fullmatch(r"[A-Z][A-Z0-9_]{2,80}", args.env_key):
         print(json.dumps(_safe_failure("env_key_invalid"), sort_keys=True))

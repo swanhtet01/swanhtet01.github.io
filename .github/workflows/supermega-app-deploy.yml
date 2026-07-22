@@ -1,4 +1,4 @@
-name: SuperMega App - Verified Prebuilt Release
+name: SuperMega App - Coordinated Release Guard
 
 on:
   workflow_dispatch:
@@ -12,44 +12,28 @@ on:
       - 'tests/**'
       - 'supabase/migrations/**'
       - 'showroom/**'
-      - 'tools/write_app_vercel_config.mjs'
-      - 'tools/write_app_release_metadata.mjs'
-      - 'tools/verify_app_build.mjs'
+      - 'hq/**'
+      - 'CURRENT.md'
+      - 'site-manifest.json'
+      - 'tools/validate_supermega_database_url.py'
       - 'tools/verify_app_deploy_workflow.mjs'
       - 'tools/verify_app_release_live.mjs'
-      - 'tools/verify_app_security_contract.mjs'
-      - 'tools/verify_vercel_project_state.mjs'
-      - 'tools/resolve_vercel_rollback_target.mjs'
-      - 'tools/validate_supermega_database_url.py'
-      - 'tools/activate_supermega_database.ps1'
-      - 'site-manifest.json'
-      - 'package.json'
-      - 'showroom/package-lock.json'
-      - 'pyproject.toml'
-      - 'uv.lock'
-      - 'requirements.txt'
-      - 'requirements-test.txt'
-      - 'vercel.json'
-      - '.vercelignore'
+      - 'tools/verify_coordinated_release_live.mjs'
       - '.github/workflows/supermega-app-deploy.yml'
+      - '.github/workflows/supermega-public-release.yml'
 
 permissions:
   contents: read
 
 concurrency:
-  group: supermega-app-production
-  cancel-in-progress: false
+  group: supermega-app-release-guard
+  cancel-in-progress: true
 
 jobs:
-  verify-deploy-promote:
-    if: ${{ github.ref == 'refs/heads/main' && github.repository == 'swanhtet01/swanhtet01.github.io' }}
+  validate-coordinated-authority:
+    if: ${{ github.repository == 'swanhtet01/swanhtet01.github.io' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    environment: production
-    env:
-      VERCEL_ORG_ID: team_wI4l7ZgSxcEztQPSlCCYVeJ5
-      VERCEL_PROJECT_ID: prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG
-
+    timeout-minutes: 10
     steps:
       - name: Checkout the release commit
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -67,106 +51,16 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Setup uv
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
-        with:
-          version: '0.11.30'
-          enable-cache: false
-
       - name: Verify canonical API contracts
         run: |
           python -m pip install --disable-pip-version-check -r requirements-test.txt
           python -m unittest discover -s tests -p 'test_*.py' -v
 
-      - name: Install app dependencies
-        working-directory: showroom
-        run: npm ci
-
-      - name: Require production deploy credential
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      - name: Verify delegated release and RLS guards
         run: |
-          if [ -z "$VERCEL_TOKEN" ]; then
-            echo "::error::VERCEL_TOKEN is not configured for the production environment."
-            exit 1
-          fi
-
-      - name: Generate the canonical app deployment contract
-        run: node tools/write_app_vercel_config.mjs
-
-      - name: Pull production build settings
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: npx --yes vercel@56.1.0 pull --yes --environment=production --token="$VERCEL_TOKEN"
-
-      - name: Verify project ownership and release workflow
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: |
-          npx --yes vercel@56.1.0 project inspect megaos --token="$VERCEL_TOKEN"
-          npx --yes vercel@56.1.0 api /v9/projects/megaos --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_project_state.mjs app
+          python tools/validate_supermega_database_url.py --self-test
+          node tools/verify_coordinated_release_live.mjs --self-test
           node tools/verify_app_deploy_workflow.mjs
 
-      - name: Build the immutable production artifact
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          SUPERMEGA_RELEASE_COMMIT: ${{ github.sha }}
-        run: npx --yes vercel@56.1.0 build --prod --yes --token="$VERCEL_TOKEN"
-
-      - name: Capture current production rollback target
-        id: rollback-target
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: |
-          ROLLBACK_TARGET="$(npx --yes vercel@56.1.0 api "/now/aliases/app.supermega.dev" --raw --token="$VERCEL_TOKEN" | node tools/resolve_vercel_rollback_target.mjs alias app.supermega.dev prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG)"
-          read -r PREVIOUS_URL PREVIOUS_ID <<< "$ROLLBACK_TARGET"
-          PREVIOUS_URL="$(npx --yes vercel@56.1.0 inspect "$PREVIOUS_URL" --format=json --token="$VERCEL_TOKEN" | node tools/resolve_vercel_rollback_target.mjs deployment "$PREVIOUS_URL" "$PREVIOUS_ID")"
-          printf 'url=%s\n' "$PREVIOUS_URL" >> "$GITHUB_OUTPUT"
-
-      - name: Deploy isolated production candidate
-        id: deploy
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: |
-          DEPLOYMENT_URL="$(npx --yes vercel@56.1.0 deploy --prebuilt --prod --skip-domain --yes --token="$VERCEL_TOKEN" --meta "githubCommitSha=${{ github.sha }}" --meta "githubCommitRef=${{ github.ref_name }}")"
-          if ! [[ "$DEPLOYMENT_URL" =~ ^https:// ]]; then
-            echo "::error::Vercel did not return a deployment URL."
-            exit 1
-          fi
-          printf 'url=%s\n' "$DEPLOYMENT_URL" >> "$GITHUB_OUTPUT"
-
-      - name: Inspect and verify candidate
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_PROTECTED_PREVIEW: '1'
-          APP_BASE_URL: ${{ steps.deploy.outputs.url }}
-          EXPECTED_RELEASE_COMMIT: ${{ github.sha }}
-        run: |
-          npx --yes vercel@56.1.0 inspect "$APP_BASE_URL" --token="$VERCEL_TOKEN"
-          node tools/verify_app_release_live.mjs
-
-      - name: Promote the verified artifact
-        id: promote
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: npx --yes vercel@56.1.0 promote "${{ steps.deploy.outputs.url }}" --yes --token="$VERCEL_TOKEN"
-
-      - name: Verify app.supermega.dev exact release
-        env:
-          APP_BASE_URL: https://app.supermega.dev
-          EXPECTED_RELEASE_COMMIT: ${{ github.sha }}
-        run: node tools/verify_app_release_live.mjs
-
-      - name: Verify production project controls
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERIFY_DEPLOYED_STATE: '1'
-        run: npx --yes vercel@56.1.0 api /v9/projects/megaos --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_project_state.mjs app
-
-      - name: Roll back a failed production verification
-        if: ${{ failure() && steps.promote.outcome == 'success' }}
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: |
-          npx --yes vercel@56.1.0 rollback "${{ steps.rollback-target.outputs.url }}" --yes --token="$VERCEL_TOKEN"
-          npx --yes vercel@56.1.0 rollback status megaos --token="$VERCEL_TOKEN"
+      - name: Confirm this workflow cannot mutate production
+        run: echo "Production promotion is owned only by supermega-public-release.yml."

@@ -7819,14 +7819,6 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                     "detail": "Ship a linked-project preview deployment using the repo-root Vercel configuration.",
                 }
             )
-            commands.append(
-                {
-                    "id": "vercel-prebuilt-prod",
-                    "label": "Deploy production",
-                    "command": "npx vercel deploy --prebuilt --prod -y",
-                    "detail": "Promote a prebuilt artifact to the production domain once the linked project is configured.",
-                }
-            )
         if str(gmail_client.get("recommended_command", "")).strip() and gmail_status != "ready":
             commands.append(
                 {
@@ -8183,14 +8175,11 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                 return candidate
         return urls[0] if urls else ""
 
-    def _run_vercel_cli_deploy(*, production: bool) -> dict[str, Any]:
+    def _run_vercel_cli_preview() -> dict[str, Any]:
         npx_path = shutil.which("npx")
         if not npx_path:
             raise HTTPException(status_code=503, detail="npx is not available on this host.")
-        command = [npx_path, "vercel", "deploy"]
-        if production:
-            command.append("--prod")
-        command.extend(["-y", "--no-wait"])
+        command = [npx_path, "vercel", "deploy", "-y", "--no-wait"]
         try:
             completed = subprocess.run(
                 command,
@@ -8203,29 +8192,26 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         except subprocess.TimeoutExpired as exc:
             raise HTTPException(
                 status_code=504,
-                detail=f"{'Production' if production else 'Preview'} deploy timed out after {int(exc.timeout or 900)} seconds.",
+                detail=f"Preview deploy timed out after {int(exc.timeout or 900)} seconds.",
             ) from exc
         combined_output = "\n".join(part for part in ((completed.stdout or "").strip(), (completed.stderr or "").strip()) if part).strip()
         if completed.returncode != 0:
-            detail = combined_output or f"{'Production' if production else 'Preview'} deploy failed."
+            detail = combined_output or "Preview deploy failed."
             raise HTTPException(status_code=502, detail=detail[:1200])
         urls = _extract_urls_from_output(combined_output)
         deployment_url = _preferred_deploy_url(urls)
         inspect_url = next((item for item in urls if "vercel.com/" in item), "")
         payload: dict[str, Any] = {
             "provider": "vercel-cli",
-            "mode": "production" if production else "preview",
+            "mode": "preview",
             "status": "pending",
             "deploymentUrl": deployment_url,
             "url": deployment_url,
             "inspectUrl": inspect_url,
             "urls": urls,
             "output": combined_output[-4000:],
+            "previewUrl": deployment_url,
         }
-        if production:
-            payload["productionUrl"] = deployment_url
-        else:
-            payload["previewUrl"] = deployment_url
         return payload
 
     def _run_preview_deploy(mode: str = "claimable_preview") -> dict[str, Any]:
@@ -8267,7 +8253,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                         detail = (completed.stderr or completed.stdout or "Preview deploy failed.").strip()
                         fallback_errors.append(detail[:1200])
         try:
-            payload = _run_vercel_cli_deploy(production=False)
+            payload = _run_vercel_cli_preview()
         except HTTPException as exc:
             if fallback_errors:
                 detail = "; ".join(item for item in fallback_errors if item)
@@ -8282,7 +8268,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             }
         return payload
 
-    def _record_workspace_deployment(session: dict[str, Any], deploy_result: dict[str, Any], *, production: bool) -> None:
+    def _record_workspace_preview(session: dict[str, Any], deploy_result: dict[str, Any]) -> None:
         actor = str(session.get("display_name", session.get("username", "system"))).strip() or "system"
         workspace_id = str(session.get("workspace_id", "")).strip()
         if not workspace_id:
@@ -8290,11 +8276,9 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         deployment_url = str(
             deploy_result.get("deploymentUrl")
             or deploy_result.get("previewUrl")
-            or deploy_result.get("productionUrl")
             or deploy_result.get("url")
             or ""
         ).strip()
-        config_key = "last_production_deploy" if production else "last_preview_deploy"
         deployed_at = datetime.now().astimezone().isoformat()
         for row in enterprise_list_workspace_domains(enterprise_db_url, workspace_id=workspace_id):
             if str(row.get("scope", "")).strip() not in {"public_site", "shared_app", "tenant_portal"}:
@@ -8303,11 +8287,9 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                 "last_deployed_at": deployed_at,
                 "config": {
                     **(row.get("config", {}) if isinstance(row.get("config"), dict) else {}),
-                    config_key: deploy_result,
+                    "last_preview_deploy": deploy_result,
                 },
             }
-            if production and deployment_url:
-                update_kwargs["deployment_url"] = deployment_url
             enterprise_update_workspace_domain(
                 enterprise_db_url,
                 workspace_id=workspace_id,
@@ -8318,11 +8300,11 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             enterprise_db_url,
             workspace_id=workspace_id,
             actor=actor,
-            event_type="deployment.production" if production else "deployment.preview",
+            event_type="deployment.preview",
             entity_type="deployment",
-            entity_id=deployment_url or ("production" if production else "preview"),
-            summary="Triggered production deployment." if production else "Triggered preview deployment.",
-            detail=deployment_url or ("Production deployment started without a deployment URL in the payload." if production else "Preview deployment completed without a preview URL in the payload."),
+            entity_id=deployment_url or "preview",
+            summary="Triggered preview deployment.",
+            detail=deployment_url or "Preview deployment completed without a preview URL in the payload.",
             payload=deploy_result,
         )
 
@@ -8787,9 +8769,6 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "resources": resource_groups,
             "commands": commands,
         }
-
-    def _run_production_deploy() -> dict[str, Any]:
-        return _run_vercel_cli_deploy(production=True)
 
     def _tenant_state_payload(session: dict[str, Any]) -> dict[str, Any]:
         expected_tenant_key = _agent_workspace_resource_key(session)
@@ -10537,18 +10516,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
     def cloud_preview_deploy(request: Request, payload: CloudPreviewDeployRequest) -> dict[str, Any]:
         session = _require_cloud_control_manage_access(request)
         deploy_result = _run_preview_deploy(payload.mode)
-        _record_workspace_deployment(session, deploy_result, production=False)
-        return {
-            "status": "ready",
-            "result": deploy_result,
-            "cloud_control": _cloud_control_payload(session),
-        }
-
-    @app.post("/api/cloud/deployments/production")
-    def cloud_production_deploy(request: Request, payload: CloudPreviewDeployRequest) -> dict[str, Any]:
-        session = _require_cloud_control_manage_access(request)
-        deploy_result = _run_production_deploy()
-        _record_workspace_deployment(session, deploy_result, production=True)
+        _record_workspace_preview(session, deploy_result)
         return {
             "status": "ready",
             "result": deploy_result,
