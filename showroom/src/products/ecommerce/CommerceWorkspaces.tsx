@@ -29,7 +29,6 @@ type CommerceWorkspacesProps = {
   onRequestWebsiteIntake: () => void
   onSelectOrder: (orderId: string) => void
   websiteHandoff: WebsiteEcommerceHandoffContext | null
-  websiteDraftCreated: boolean
 }
 
 type OrderFilter = 'attention' | 'all'
@@ -211,7 +210,6 @@ function OrdersWorkspace({
   onRequestWebsiteIntake,
   onSelectOrder,
   websiteHandoff,
-  websiteDraftCreated,
 }: {
   filter: OrderFilter
   orders: CommerceOrder[]
@@ -222,26 +220,32 @@ function OrdersWorkspace({
   onRequestWebsiteIntake: () => void
   onSelectOrder: (orderId: string) => void
   websiteHandoff: WebsiteEcommerceHandoffContext | null
-  websiteDraftCreated: boolean
 }) {
   const websiteDraft = websiteHandoff?.draft ?? null
+  const websiteOrder = websiteHandoff?.order ?? null
   const draftLine = websiteDraft?.lines[0]
+  const fulfilmentLabel = websiteOrder?.fulfilmentMethod === 'local_delivery' ? 'Local delivery' : 'Customer pickup'
+  const paymentLabel = websiteOrder?.paymentMethod === 'manual_qr'
+    ? 'Manual QR review'
+    : websiteOrder?.paymentMethod === 'manual_bank_transfer'
+      ? 'Manual bank transfer review'
+      : 'Cash on delivery'
 
   return (
     <div className="eco-orders-stack">
       {websiteHandoff ? (
         <section className="eco-website-intake" aria-labelledby="eco-website-intake-title">
-          <span className="eco-mode-badge"><i />{websiteDraft ? 'Order draft' : 'Website handoff'}</span>
+          <span className="eco-mode-badge"><i />{websiteOrder ? 'Ready record' : websiteDraft ? 'Order draft' : 'Website handoff'}</span>
           <div>
-            <strong id="eco-website-intake-title">{websiteDraft ? `${websiteDraft.id} · Needs completion` : websiteHandoff.display ? `${websiteHandoff.display.siteName} · ${websiteHandoff.display.pagePath}` : 'Accepted Website revision'}</strong>
+            <strong id="eco-website-intake-title">{websiteOrder ? `${websiteOrder.id} · Ready for confirmation` : websiteDraft ? `${websiteDraft.id} · Needs completion` : websiteHandoff.display ? `${websiteHandoff.display.siteName} · ${websiteHandoff.display.pagePath}` : 'Accepted Website revision'}</strong>
             <small>{websiteHandoff.display ? `${websiteHandoff.display.pageHeadline} · approved by ${websiteHandoff.display.approvedBy}` : 'The source workspace changed after acceptance; only the audit references remain.'}</small>
           </div>
           <div>
-            <strong>{draftLine ? `${draftLine.quantity} × ${draftLine.itemName} · ${formatMmk(websiteDraft?.totalMmk ?? 0)}` : `${websiteHandoff.handoff.intake.quantity} × ${websiteHandoff.handoff.intake.sku}`}</strong>
-            <small>{draftLine ? `${draftLine.sku} · price snapshot ${formatMmk(draftLine.unitPriceMmk)} · missing customer, fulfilment, payment` : 'Non-PII intake · no order, reservation, payment, or customer contact'}</small>
+            <strong>{websiteOrder ? `${websiteOrder.customerReference} · ${fulfilmentLabel} · ${paymentLabel}` : draftLine ? `${draftLine.quantity} × ${draftLine.itemName} · ${formatMmk(websiteDraft?.totalMmk ?? 0)}` : `${websiteHandoff.handoff.intake.quantity} × ${websiteHandoff.handoff.intake.sku}`}</strong>
+            <small>{websiteOrder ? `${websiteOrder.lines[0].sku} · immutable ${formatMmk(websiteOrder.totalMmk)} · no confirmation, reservation, payment, or send` : draftLine ? `${draftLine.sku} · price snapshot ${formatMmk(draftLine.unitPriceMmk)} · missing customer, fulfilment, payment` : 'Non-PII intake · no order, reservation, payment, or customer contact'}</small>
           </div>
-          <button className="eco-button eco-button-primary" disabled={websiteDraftCreated} onClick={onRequestWebsiteIntake} type="button">
-            {websiteDraftCreated ? 'Draft created' : websiteHandoff.handoff.state === 'accepted' ? 'Create local draft' : 'Review intake'}
+          <button className="eco-button eco-button-primary" disabled={Boolean(websiteOrder)} onClick={onRequestWebsiteIntake} type="button">
+            {websiteOrder ? 'Ready for confirmation' : websiteDraft ? 'Complete draft' : websiteHandoff.handoff.state === 'accepted' ? 'Create local draft' : 'Review intake'}
           </button>
         </section>
       ) : null}
@@ -426,7 +430,6 @@ export function CommerceWorkspaces({
   onRequestWebsiteIntake,
   onSelectOrder,
   websiteHandoff,
-  websiteDraftCreated,
 }: CommerceWorkspacesProps) {
   const [orderFilter, setOrderFilter] = useState<OrderFilter>('attention')
   const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>('review')
@@ -438,5 +441,5 @@ export function CommerceWorkspaces({
   if (view === 'fulfillment') return <FulfillmentWorkspace orders={orders} selectedOrder={selectedOrder} onOpenOrder={onOpenOrder} onRequestFulfillment={onRequestFulfillment} onSelectOrder={onSelectOrder} />
   if (view === 'payments') return <PaymentsWorkspace filter={paymentFilter} orders={orders} selectedOrder={selectedOrder} onFilterChange={setPaymentFilter} onOpenOrder={onOpenOrder} onRequestPayment={onRequestPayment} onSelectOrder={onSelectOrder} />
 
-  return <OrdersWorkspace filter={orderFilter} orders={orders} selectedOrder={selectedOrder} onFilterChange={setOrderFilter} onRequestFulfillment={onRequestFulfillment} onRequestPayment={onRequestPayment} onRequestWebsiteIntake={onRequestWebsiteIntake} onSelectOrder={onSelectOrder} websiteDraftCreated={websiteDraftCreated} websiteHandoff={websiteHandoff} />
+  return <OrdersWorkspace filter={orderFilter} orders={orders} selectedOrder={selectedOrder} onFilterChange={setOrderFilter} onRequestFulfillment={onRequestFulfillment} onRequestPayment={onRequestPayment} onRequestWebsiteIntake={onRequestWebsiteIntake} onSelectOrder={onSelectOrder} websiteHandoff={websiteHandoff} />
 }

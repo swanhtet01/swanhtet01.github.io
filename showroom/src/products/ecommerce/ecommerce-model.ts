@@ -63,13 +63,14 @@ export type CommerceOrder = {
 }
 
 export type AuditActorKind = 'human' | 'demo_fixture'
+export type AuditEventAction = ProposedActionKind | 'scenario_loaded' | 'accept_website_handoff' | 'complete_website_order'
 
 export type AuditEvent = {
   id: string
   createdAt: string
   actorKind: AuditActorKind
   actor: string
-  action: ProposedActionKind | 'scenario_loaded'
+  action: AuditEventAction
   subjectId: string
   summary: string
   before: string
@@ -86,7 +87,6 @@ export type CommerceWorkspace = {
 }
 
 export type ProposedActionKind =
-  | 'accept_website_handoff'
   | 'confirm_order'
   | 'complete_pick'
   | 'approve_dispatch'

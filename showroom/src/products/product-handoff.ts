@@ -4,7 +4,7 @@ import {
   restoreWorkspace,
   workspaceFingerprint,
   type WebsiteWorkspace,
-} from './website/website-model'
+} from './website/website-model.ts'
 
 export const WEBSITE_ECOMMERCE_HANDOFF_KEY = 'supermega.website-ecommerce-handoff.v1'
 
@@ -64,6 +64,45 @@ export type WebsiteOrderDraft = {
   missingFields: ['customer_reference', 'fulfilment_method', 'payment_method']
 }
 
+export const websiteOrderFulfilmentMethods = ['pickup', 'local_delivery'] as const
+export const websiteOrderPaymentMethods = ['cash_on_delivery', 'manual_qr', 'manual_bank_transfer'] as const
+
+export type WebsiteOrderFulfilmentMethod = (typeof websiteOrderFulfilmentMethods)[number]
+export type WebsiteOrderPaymentMethod = (typeof websiteOrderPaymentMethods)[number]
+
+export type WebsiteOrderRecord = {
+  schema: 'ecommerce_order_record.v1'
+  mode: 'browser-local'
+  id: string
+  idempotencyKey: string
+  createdAt: string
+  state: 'ready_for_confirmation'
+  source: {
+    kind: 'website_order_draft'
+    handoffId: string
+    draftId: string
+    websiteEvidenceReference: string
+  }
+  currency: 'MMK'
+  lines: WebsiteOrderDraft['lines']
+  totalMmk: number
+  customerReference: string
+  fulfilmentMethod: WebsiteOrderFulfilmentMethod
+  paymentMethod: WebsiteOrderPaymentMethod
+  completion: {
+    operatorId: string
+    evidenceReference: string
+    auditEventId: string
+  }
+}
+
+export type WebsiteOrderCompletionInput = {
+  fulfilmentMethod: WebsiteOrderFulfilmentMethod
+  paymentMethod: WebsiteOrderPaymentMethod
+  operatorId: string
+  evidenceReference: string
+}
+
 export type WebsiteOrderDraftCatalogItem = {
   sku: string
   itemName: string
@@ -85,15 +124,32 @@ export type WebsiteHandoffAuditEvent = {
   after: 'Accepted local intake'
 }
 
-type HandoffStore = {
-  schema: 'website_ecommerce_handoff_store.v1' | 'website_ecommerce_handoff_store.v2'
-  handoff: WebsiteEcommerceHandoff
-  audit: WebsiteHandoffAuditEvent[]
-  draft?: WebsiteOrderDraft
+export type WebsiteOrderCompletionAuditEvent = {
+  id: string
+  createdAt: string
+  actorKind: 'human'
+  actor: string
+  action: 'complete_website_order'
+  subjectId: string
+  reason: 'Required local order fields verified'
+  evidenceReference: string
+  before: 'Draft incomplete'
+  after: 'Ready for confirmation'
 }
 
-export type WebsiteEcommerceHandoffContext = Omit<HandoffStore, 'draft'> & {
+export type WebsiteEcommerceAuditEvent = WebsiteHandoffAuditEvent | WebsiteOrderCompletionAuditEvent
+
+type HandoffStore = {
+  schema: 'website_ecommerce_handoff_store.v1' | 'website_ecommerce_handoff_store.v2' | 'website_ecommerce_handoff_store.v3'
+  handoff: WebsiteEcommerceHandoff
+  audit: WebsiteEcommerceAuditEvent[]
+  draft?: WebsiteOrderDraft
+  order?: WebsiteOrderRecord
+}
+
+export type WebsiteEcommerceHandoffContext = Omit<HandoffStore, 'draft' | 'order'> & {
   draft: WebsiteOrderDraft | null
+  order: WebsiteOrderRecord | null
   display: {
     siteName: string
     pagePath: string
@@ -105,9 +161,14 @@ export type WebsiteEcommerceHandoffContext = Omit<HandoffStore, 'draft'> & {
 const operatorIdPattern = /^OP-[A-Z0-9][A-Z0-9_-]{2,31}$/
 const handoffIdPattern = /^WEH-[A-Z0-9]{6,32}$/
 const auditIdPattern = /^WHA-[A-Z0-9]{6,32}$/
+const completionAuditIdPattern = /^EOA-[A-Z0-9]{6,32}$/
 const draftIdPattern = /^EOD-[A-Z0-9]{6,32}$/
+const orderIdPattern = /^EOR-[A-Z0-9]{6,32}$/
 const fingerprintPattern = /^web-[a-f0-9]{8}$/
 const skuPattern = /^[A-Z0-9][A-Z0-9_-]{2,31}$/
+const customerReferencePattern = /^CREF-[A-HJ-NP-Z2-9]{12}$/
+const evidenceReferencePattern = /^EV-[A-HJ-NP-Z2-9]{8,24}$/
+const handoffMutationLock = 'supermega.website-ecommerce-handoff.mutation.v1'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -135,11 +196,26 @@ function sameStringSet(left: string[], right: string[]) {
   return sortedLeft.every((value, index) => value === sortedRight[index])
 }
 
-function createId(prefix: 'WEH' | 'WHA') {
+function createId(prefix: 'WEH' | 'WHA' | 'EOA') {
   const suffix = typeof globalThis.crypto?.randomUUID === 'function'
     ? globalThis.crypto.randomUUID().replaceAll('-', '').slice(0, 12)
     : Date.now().toString(36)
   return `${prefix}-${suffix.toUpperCase()}`
+}
+
+function customerReferenceFor(handoffId: string) {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  const source = handoffId.slice(4)
+  let suffix = ''
+  for (let index = 0; index < 12; index += 1) {
+    const character = source[index % source.length]
+    suffix += alphabet[(character.charCodeAt(0) + (index * 11)) % alphabet.length]
+  }
+  return `CREF-${suffix}`
+}
+
+export function getWebsiteOrderCustomerReference(handoffId: string) {
+  return handoffIdPattern.test(handoffId) ? customerReferenceFor(handoffId) : null
 }
 
 function isHandoffSource(value: unknown): value is HandoffSource {
@@ -185,6 +261,21 @@ export function isWebsiteEcommerceHandoff(value: unknown): value is WebsiteEcomm
     && auditIdPattern.test(acceptance.auditEventId)
 }
 
+function isWebsiteOrderLine(value: unknown): value is WebsiteOrderDraft['lines'][number] {
+  if (!isRecord(value) || !hasExactKeys(value, ['sku', 'itemName', 'variant', 'quantity', 'unitPriceMmk'])) return false
+  return typeof value.sku === 'string'
+    && skuPattern.test(value.sku)
+    && isTrimmedText(value.itemName, 120)
+    && isTrimmedText(value.variant, 120)
+    && typeof value.quantity === 'number'
+    && Number.isInteger(value.quantity)
+    && value.quantity >= 1
+    && value.quantity <= 99
+    && typeof value.unitPriceMmk === 'number'
+    && Number.isSafeInteger(value.unitPriceMmk)
+    && value.unitPriceMmk > 0
+}
+
 function isWebsiteOrderDraft(value: unknown): value is WebsiteOrderDraft {
   if (!isRecord(value) || !hasExactKeys(value, ['schema', 'mode', 'id', 'idempotencyKey', 'createdAt', 'state', 'source', 'currency', 'lines', 'totalMmk', 'missingFields'])) return false
   if (value.schema !== 'ecommerce_order_draft.v1' || value.mode !== 'browser-local' || value.state !== 'draft' || value.currency !== 'MMK') return false
@@ -196,16 +287,41 @@ function isWebsiteOrderDraft(value: unknown): value is WebsiteOrderDraft {
     || !handoffIdPattern.test(value.source.handoffId)) return false
   if (!Array.isArray(value.lines) || value.lines.length !== 1) return false
   const line = value.lines[0]
-  if (!isRecord(line) || !hasExactKeys(line, ['sku', 'itemName', 'variant', 'quantity', 'unitPriceMmk'])) return false
-  if (typeof line.sku !== 'string' || !skuPattern.test(line.sku) || !isTrimmedText(line.itemName, 120) || !isTrimmedText(line.variant, 120)) return false
-  if (typeof line.quantity !== 'number' || !Number.isInteger(line.quantity) || line.quantity < 1 || line.quantity > 99) return false
-  if (typeof line.unitPriceMmk !== 'number' || !Number.isSafeInteger(line.unitPriceMmk) || line.unitPriceMmk <= 0) return false
+  if (!isWebsiteOrderLine(line)) return false
   if (typeof value.totalMmk !== 'number' || !Number.isSafeInteger(value.totalMmk) || value.totalMmk !== line.quantity * line.unitPriceMmk) return false
   return Array.isArray(value.missingFields)
     && value.missingFields.length === 3
     && value.missingFields[0] === 'customer_reference'
     && value.missingFields[1] === 'fulfilment_method'
     && value.missingFields[2] === 'payment_method'
+}
+
+function isWebsiteOrderRecord(value: unknown): value is WebsiteOrderRecord {
+  if (!isRecord(value) || !hasExactKeys(value, ['schema', 'mode', 'id', 'idempotencyKey', 'createdAt', 'state', 'source', 'currency', 'lines', 'totalMmk', 'customerReference', 'fulfilmentMethod', 'paymentMethod', 'completion'])) return false
+  if (value.schema !== 'ecommerce_order_record.v1' || value.mode !== 'browser-local' || value.state !== 'ready_for_confirmation' || value.currency !== 'MMK') return false
+  if (typeof value.id !== 'string' || !orderIdPattern.test(value.id)) return false
+  if (typeof value.idempotencyKey !== 'string' || !draftIdPattern.test(value.idempotencyKey) || !isIsoTimestamp(value.createdAt)) return false
+  if (!isRecord(value.source) || !hasExactKeys(value.source, ['kind', 'handoffId', 'draftId', 'websiteEvidenceReference'])) return false
+  if (value.source.kind !== 'website_order_draft'
+    || typeof value.source.handoffId !== 'string'
+    || !handoffIdPattern.test(value.source.handoffId)
+    || typeof value.source.draftId !== 'string'
+    || !draftIdPattern.test(value.source.draftId)
+    || !isTrimmedText(value.source.websiteEvidenceReference, 80)
+    || value.idempotencyKey !== value.source.draftId) return false
+  if (!Array.isArray(value.lines) || value.lines.length !== 1 || !isWebsiteOrderLine(value.lines[0])) return false
+  const line = value.lines[0]
+  if (typeof value.totalMmk !== 'number' || !Number.isSafeInteger(value.totalMmk) || value.totalMmk !== line.quantity * line.unitPriceMmk) return false
+  if (typeof value.customerReference !== 'string' || !customerReferencePattern.test(value.customerReference)) return false
+  if (typeof value.fulfilmentMethod !== 'string' || !websiteOrderFulfilmentMethods.includes(value.fulfilmentMethod as WebsiteOrderFulfilmentMethod)) return false
+  if (typeof value.paymentMethod !== 'string' || !websiteOrderPaymentMethods.includes(value.paymentMethod as WebsiteOrderPaymentMethod)) return false
+  if (!isRecord(value.completion) || !hasExactKeys(value.completion, ['operatorId', 'evidenceReference', 'auditEventId'])) return false
+  return typeof value.completion.operatorId === 'string'
+    && operatorIdPattern.test(value.completion.operatorId)
+    && typeof value.completion.evidenceReference === 'string'
+    && evidenceReferencePattern.test(value.completion.evidenceReference)
+    && typeof value.completion.auditEventId === 'string'
+    && completionAuditIdPattern.test(value.completion.auditEventId)
 }
 
 function isWebsiteHandoffAuditEvent(value: unknown): value is WebsiteHandoffAuditEvent {
@@ -225,32 +341,85 @@ function isWebsiteHandoffAuditEvent(value: unknown): value is WebsiteHandoffAudi
     && value.after === 'Accepted local intake'
 }
 
+function isWebsiteOrderCompletionAuditEvent(value: unknown): value is WebsiteOrderCompletionAuditEvent {
+  if (!isRecord(value) || !hasExactKeys(value, ['id', 'createdAt', 'actorKind', 'actor', 'action', 'subjectId', 'reason', 'evidenceReference', 'before', 'after'])) return false
+  return typeof value.id === 'string'
+    && completionAuditIdPattern.test(value.id)
+    && isIsoTimestamp(value.createdAt)
+    && value.actorKind === 'human'
+    && typeof value.actor === 'string'
+    && operatorIdPattern.test(value.actor)
+    && value.action === 'complete_website_order'
+    && typeof value.subjectId === 'string'
+    && orderIdPattern.test(value.subjectId)
+    && value.reason === 'Required local order fields verified'
+    && typeof value.evidenceReference === 'string'
+    && evidenceReferencePattern.test(value.evidenceReference)
+    && value.before === 'Draft incomplete'
+    && value.after === 'Ready for confirmation'
+}
+
+function isWebsiteEcommerceAuditEvent(value: unknown): value is WebsiteEcommerceAuditEvent {
+  return isWebsiteHandoffAuditEvent(value) || isWebsiteOrderCompletionAuditEvent(value)
+}
+
+function sameOrderLine(left: WebsiteOrderDraft['lines'][number], right: WebsiteOrderDraft['lines'][number]) {
+  return left.sku === right.sku
+    && left.itemName === right.itemName
+    && left.variant === right.variant
+    && left.quantity === right.quantity
+    && left.unitPriceMmk === right.unitPriceMmk
+}
+
 function isHandoffStore(value: unknown): value is HandoffStore {
   if (!isRecord(value)) return false
-  const hasDraft = hasExactKeys(value, ['schema', 'handoff', 'audit', 'draft'])
-  if (!hasDraft && !hasExactKeys(value, ['schema', 'handoff', 'audit'])) return false
   const isV1 = value.schema === 'website_ecommerce_handoff_store.v1'
   const isV2 = value.schema === 'website_ecommerce_handoff_store.v2'
-  if ((!isV1 && !isV2) || (isV1 && hasDraft) || (isV2 && !hasDraft)) return false
+  const isV3 = value.schema === 'website_ecommerce_handoff_store.v3'
+  if (!(isV1 && hasExactKeys(value, ['schema', 'handoff', 'audit']))
+    && !(isV2 && hasExactKeys(value, ['schema', 'handoff', 'audit', 'draft']))
+    && !(isV3 && hasExactKeys(value, ['schema', 'handoff', 'audit', 'draft', 'order']))) return false
   if (!isWebsiteEcommerceHandoff(value.handoff) || !Array.isArray(value.audit)) return false
   const audit = value.audit
-  if (!audit.every(isWebsiteHandoffAuditEvent)) return false
+  if (!audit.every(isWebsiteEcommerceAuditEvent)) return false
   if (value.handoff.state === 'pending_acceptance') return isV1 && audit.length === 0
-  const auditMatches = audit.length === 1
-    && audit[0].id === value.handoff.acceptance.auditEventId
-    && audit[0].subjectId === value.handoff.id
-    && audit[0].actor === value.handoff.acceptance.operatorId
-    && audit[0].createdAt === value.handoff.acceptance.acceptedAt
-    && audit[0].evidenceReference === value.handoff.source.localPublishId
-  if (!auditMatches || isV1) return auditMatches
+  const acceptanceAudit = audit[0]
+  const acceptanceMatches = isWebsiteHandoffAuditEvent(acceptanceAudit)
+    && acceptanceAudit.id === value.handoff.acceptance.auditEventId
+    && acceptanceAudit.subjectId === value.handoff.id
+    && acceptanceAudit.actor === value.handoff.acceptance.operatorId
+    && acceptanceAudit.createdAt === value.handoff.acceptance.acceptedAt
+    && acceptanceAudit.evidenceReference === value.handoff.source.localPublishId
+  if (!acceptanceMatches) return false
+  if (isV1) return audit.length === 1
   if (!isWebsiteOrderDraft(value.draft)) return false
   const line = value.draft.lines[0]
-  return value.draft.id === `EOD-${value.handoff.id.slice(4)}`
+  const draftMatches = value.draft.id === `EOD-${value.handoff.id.slice(4)}`
     && value.draft.idempotencyKey === value.handoff.id
     && Date.parse(value.draft.createdAt) >= Date.parse(value.handoff.acceptance.acceptedAt)
     && value.draft.source.handoffId === value.handoff.id
     && line.sku === value.handoff.intake.sku
     && line.quantity === value.handoff.intake.quantity
+  if (!draftMatches || isV2) return draftMatches && audit.length === 1
+  if (!isWebsiteOrderRecord(value.order) || audit.length !== 2) return false
+  const completionAudit = audit[1]
+  const orderLine = value.order.lines[0]
+  return isWebsiteOrderCompletionAuditEvent(completionAudit)
+    && value.order.id === `EOR-${value.handoff.id.slice(4)}`
+    && value.order.idempotencyKey === value.draft.id
+    && value.order.source.handoffId === value.handoff.id
+    && value.order.source.draftId === value.draft.id
+    && value.order.source.websiteEvidenceReference === value.handoff.source.localPublishId
+    && value.order.customerReference === customerReferenceFor(value.handoff.id)
+    && Date.parse(value.order.createdAt) >= Date.parse(value.draft.createdAt)
+    && value.order.currency === value.draft.currency
+    && value.order.totalMmk === value.draft.totalMmk
+    && sameOrderLine(orderLine, line)
+    && completionAudit.id === value.order.completion.auditEventId
+    && completionAudit.createdAt === value.order.createdAt
+    && completionAudit.actor === value.order.completion.operatorId
+    && completionAudit.subjectId === value.order.id
+    && completionAudit.evidenceReference === value.order.completion.evidenceReference
 }
 
 function validateAgainstWorkspace(handoff: WebsiteEcommerceHandoff, workspace: WebsiteWorkspace) {
@@ -319,7 +488,7 @@ export function readWebsiteEcommerceHandoff(): WebsiteEcommerceHandoffContext | 
     if (!isHandoffStore(store)) return null
     const display = workspace ? validateAgainstWorkspace(store.handoff, workspace) : null
     if (store.handoff.state === 'pending_acceptance' && !display) return null
-    return { ...store, draft: store.draft ?? null, display }
+    return { ...store, draft: store.draft ?? null, order: store.order ?? null, display }
   } catch {
     return null
   }
@@ -444,6 +613,103 @@ export function createWebsiteOrderDraft(handoffId: string, catalogItem: WebsiteO
       && restored.draft.totalMmk === totalMmk
       ? restored
       : null
+  } catch {
+    return null
+  }
+}
+
+function isWebsiteOrderCompletionInput(value: unknown): value is WebsiteOrderCompletionInput {
+  if (!isRecord(value) || !hasExactKeys(value, ['fulfilmentMethod', 'paymentMethod', 'operatorId', 'evidenceReference'])) return false
+  return typeof value.fulfilmentMethod === 'string'
+    && websiteOrderFulfilmentMethods.includes(value.fulfilmentMethod as WebsiteOrderFulfilmentMethod)
+    && typeof value.paymentMethod === 'string'
+    && websiteOrderPaymentMethods.includes(value.paymentMethod as WebsiteOrderPaymentMethod)
+    && typeof value.operatorId === 'string'
+    && operatorIdPattern.test(value.operatorId)
+    && typeof value.evidenceReference === 'string'
+    && evidenceReferencePattern.test(value.evidenceReference)
+}
+
+function completionMatches(order: WebsiteOrderRecord, input: WebsiteOrderCompletionInput) {
+  return order.fulfilmentMethod === input.fulfilmentMethod
+    && order.paymentMethod === input.paymentMethod
+    && order.completion.operatorId === input.operatorId
+    && order.completion.evidenceReference === input.evidenceReference
+}
+
+function completeWebsiteOrderDraftWithLock(draftId: string, input: WebsiteOrderCompletionInput) {
+  try {
+    const current = readWebsiteEcommerceHandoff()
+    if (!current || current.handoff.state !== 'accepted' || current.draft?.id !== draftId) return null
+    if (current.order) return current.order.idempotencyKey === draftId && completionMatches(current.order, input) ? current : null
+    if (!current.display) return null
+
+    const createdAt = new Date().toISOString()
+    if (Date.parse(createdAt) < Date.parse(current.draft.createdAt)) return null
+    const auditEventId = createId('EOA')
+    const orderId = `EOR-${current.handoff.id.slice(4)}`
+    const order: WebsiteOrderRecord = {
+      schema: 'ecommerce_order_record.v1',
+      mode: 'browser-local',
+      id: orderId,
+      idempotencyKey: current.draft.id,
+      createdAt,
+      state: 'ready_for_confirmation',
+      source: {
+        kind: 'website_order_draft',
+        handoffId: current.handoff.id,
+        draftId: current.draft.id,
+        websiteEvidenceReference: current.handoff.source.localPublishId,
+      },
+      currency: current.draft.currency,
+      lines: current.draft.lines.map((line) => ({ ...line })),
+      totalMmk: current.draft.totalMmk,
+      customerReference: customerReferenceFor(current.handoff.id),
+      fulfilmentMethod: input.fulfilmentMethod,
+      paymentMethod: input.paymentMethod,
+      completion: {
+        operatorId: input.operatorId,
+        evidenceReference: input.evidenceReference,
+        auditEventId,
+      },
+    }
+    const audit: WebsiteOrderCompletionAuditEvent = {
+      id: auditEventId,
+      createdAt,
+      actorKind: 'human',
+      actor: input.operatorId,
+      action: 'complete_website_order',
+      subjectId: order.id,
+      reason: 'Required local order fields verified',
+      evidenceReference: input.evidenceReference,
+      before: 'Draft incomplete',
+      after: 'Ready for confirmation',
+    }
+    const store: HandoffStore = {
+      schema: 'website_ecommerce_handoff_store.v3',
+      handoff: current.handoff,
+      audit: [...current.audit, audit],
+      draft: current.draft,
+      order,
+    }
+    if (!isHandoffStore(store)) return null
+    globalThis.localStorage?.setItem(WEBSITE_ECOMMERCE_HANDOFF_KEY, JSON.stringify(store))
+    const restored = readWebsiteEcommerceHandoff()
+    return restored?.order?.id === orderId
+      && restored.order.idempotencyKey === draftId
+      && restored.order.completion.auditEventId === auditEventId
+      && restored.audit.length === current.audit.length + 1
+      ? restored
+      : null
+  } catch {
+    return null
+  }
+}
+
+export async function completeWebsiteOrderDraft(draftId: string, input: WebsiteOrderCompletionInput) {
+  try {
+    if (!draftIdPattern.test(draftId) || !isWebsiteOrderCompletionInput(input) || !globalThis.navigator?.locks) return null
+    return await globalThis.navigator.locks.request(handoffMutationLock, { mode: 'exclusive' }, () => completeWebsiteOrderDraftWithLock(draftId, input))
   } catch {
     return null
   }

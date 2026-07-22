@@ -1383,6 +1383,12 @@
   gap: 9px;
 }
 
+.eco-completion-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
 .eco-approval-form label {
   display: grid;
   gap: 5px;
@@ -1392,6 +1398,7 @@
 }
 
 .eco-approval-form input,
+.eco-approval-form select,
 .eco-approval-form textarea {
   width: 100%;
   min-width: 0;
@@ -1404,6 +1411,7 @@
 }
 
 .eco-approval-form input:focus,
+.eco-approval-form select:focus,
 .eco-approval-form textarea:focus {
   border-color: var(--eco-green);
   box-shadow: 0 0 0 2px rgba(124, 245, 180, 0.08);
@@ -1809,6 +1817,10 @@
 }
 
 @media (max-width: 560px) {
+  .eco-completion-grid {
+    grid-template-columns: 1fr;
+  }
+
   .eco-topbar {
     padding: 0 10px;
   }

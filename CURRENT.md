@@ -1,6 +1,6 @@
 # SuperMega current direction
 
-Last confirmed: 2026-07-22
+Last confirmed: 2026-07-23
 Authority: this file, `site-manifest.json`, and `hq/portfolio.json`
 
 SuperMega is operating software for real company work. It connects accountable company delivery, website delivery, ecommerce and channel-to-fulfilment operations, production control, evidence, and owner decisions without turning every capability into a separate public page or deployment.
@@ -70,7 +70,7 @@ Templates configure the starting records and workflow while preserving the share
 
 - The default application remains an isolated browser-local trial, not a customer system of record.
 - Team, Website, Ecommerce, Commerce, Production, approval, and setup records can be exercised locally. Website and Ecommerce explicitly remain browser-local prototypes; the core evidence export v8 covers the existing team and operating records until their contracts are accepted for integration.
-- The Website-to-Ecommerce handoff carries only an approved local revision reference, SKU, and quantity. Ecommerce revalidates the source, requires a bounded human operator ID, and atomically records one accepted local intake plus its audit event. A separate explicit step can create one deterministic browser-local `ecommerce_order_draft.v1` with an immutable MMK catalogue snapshot and visible missing customer, fulfilment, and payment fields; it does not confirm an order, reserve stock, start payment, send a message, or store customer data.
+- The Website-to-Ecommerce handoff carries only an approved local revision reference, SKU, and quantity. Ecommerce revalidates the source, requires a bounded human operator ID, and atomically records one accepted local intake plus its audit event. A separate explicit step creates one deterministic browser-local `ecommerce_order_draft.v1` with an immutable MMK catalogue snapshot and visible missing customer, fulfilment, and payment fields. A locked, attributable completion can migrate that valid draft to one `ecommerce_order_record.v1` in `ready_for_confirmation`, using a system-generated opaque customer reference, bounded fulfilment/payment methods, exact-retry idempotency, conflict rejection, and a second audit event. It does not insert into Commerce, confirm a customer, reserve stock, start payment, send a message, or write externally.
 - Managed readiness must not be implied until tenant persistence, identity, workspace isolation, source coverage, backup, recovery, audit, and runtime-role checks pass.
 - External sends, payments, publishing, access changes, and production writes remain owner-approved and auditable.
 - The managed trial contract is `/api/trial/v1`; it fails closed until additive private schema v2, a high-entropy v2 signed actor identity, matching typed membership, audit, capability, and write gates pass. Approval proposals must use `decision_packet.v1` with a versioned subject, fact-or-analysis claims, source and capture provenance, verification state, uncertainty, visibility, baseline, target, current result, acceptance rule, and artifact reference. Verified claims require a digest; terminal decisions require a named human and a trimmed nonblank note; agent, service, unknown, and legacy identities cannot make them.
