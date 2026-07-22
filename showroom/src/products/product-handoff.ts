@@ -41,6 +41,37 @@ type AcceptedHandoff = Omit<PendingHandoff, 'state'> & {
 
 export type WebsiteEcommerceHandoff = PendingHandoff | AcceptedHandoff
 
+export type WebsiteOrderDraft = {
+  schema: 'ecommerce_order_draft.v1'
+  mode: 'browser-local'
+  id: string
+  idempotencyKey: string
+  createdAt: string
+  state: 'draft'
+  source: {
+    kind: 'website_handoff'
+    handoffId: string
+  }
+  currency: 'MMK'
+  lines: Array<{
+    sku: string
+    itemName: string
+    variant: string
+    quantity: number
+    unitPriceMmk: number
+  }>
+  totalMmk: number
+  missingFields: ['customer_reference', 'fulfilment_method', 'payment_method']
+}
+
+export type WebsiteOrderDraftCatalogItem = {
+  sku: string
+  itemName: string
+  variant: string
+  active: boolean
+  unitPriceMmk: number
+}
+
 export type WebsiteHandoffAuditEvent = {
   id: string
   createdAt: string
@@ -55,12 +86,14 @@ export type WebsiteHandoffAuditEvent = {
 }
 
 type HandoffStore = {
-  schema: 'website_ecommerce_handoff_store.v1'
+  schema: 'website_ecommerce_handoff_store.v1' | 'website_ecommerce_handoff_store.v2'
   handoff: WebsiteEcommerceHandoff
   audit: WebsiteHandoffAuditEvent[]
+  draft?: WebsiteOrderDraft
 }
 
-export type WebsiteEcommerceHandoffContext = HandoffStore & {
+export type WebsiteEcommerceHandoffContext = Omit<HandoffStore, 'draft'> & {
+  draft: WebsiteOrderDraft | null
   display: {
     siteName: string
     pagePath: string
@@ -72,6 +105,7 @@ export type WebsiteEcommerceHandoffContext = HandoffStore & {
 const operatorIdPattern = /^OP-[A-Z0-9][A-Z0-9_-]{2,31}$/
 const handoffIdPattern = /^WEH-[A-Z0-9]{6,32}$/
 const auditIdPattern = /^WHA-[A-Z0-9]{6,32}$/
+const draftIdPattern = /^EOD-[A-Z0-9]{6,32}$/
 const fingerprintPattern = /^web-[a-f0-9]{8}$/
 const skuPattern = /^[A-Z0-9][A-Z0-9_-]{2,31}$/
 
@@ -151,6 +185,29 @@ export function isWebsiteEcommerceHandoff(value: unknown): value is WebsiteEcomm
     && auditIdPattern.test(acceptance.auditEventId)
 }
 
+function isWebsiteOrderDraft(value: unknown): value is WebsiteOrderDraft {
+  if (!isRecord(value) || !hasExactKeys(value, ['schema', 'mode', 'id', 'idempotencyKey', 'createdAt', 'state', 'source', 'currency', 'lines', 'totalMmk', 'missingFields'])) return false
+  if (value.schema !== 'ecommerce_order_draft.v1' || value.mode !== 'browser-local' || value.state !== 'draft' || value.currency !== 'MMK') return false
+  if (typeof value.id !== 'string' || !draftIdPattern.test(value.id)) return false
+  if (typeof value.idempotencyKey !== 'string' || !handoffIdPattern.test(value.idempotencyKey) || !isIsoTimestamp(value.createdAt)) return false
+  if (!isRecord(value.source) || !hasExactKeys(value.source, ['kind', 'handoffId'])) return false
+  if (value.source.kind !== 'website_handoff'
+    || typeof value.source.handoffId !== 'string'
+    || !handoffIdPattern.test(value.source.handoffId)) return false
+  if (!Array.isArray(value.lines) || value.lines.length !== 1) return false
+  const line = value.lines[0]
+  if (!isRecord(line) || !hasExactKeys(line, ['sku', 'itemName', 'variant', 'quantity', 'unitPriceMmk'])) return false
+  if (typeof line.sku !== 'string' || !skuPattern.test(line.sku) || !isTrimmedText(line.itemName, 120) || !isTrimmedText(line.variant, 120)) return false
+  if (typeof line.quantity !== 'number' || !Number.isInteger(line.quantity) || line.quantity < 1 || line.quantity > 99) return false
+  if (typeof line.unitPriceMmk !== 'number' || !Number.isSafeInteger(line.unitPriceMmk) || line.unitPriceMmk <= 0) return false
+  if (typeof value.totalMmk !== 'number' || !Number.isSafeInteger(value.totalMmk) || value.totalMmk !== line.quantity * line.unitPriceMmk) return false
+  return Array.isArray(value.missingFields)
+    && value.missingFields.length === 3
+    && value.missingFields[0] === 'customer_reference'
+    && value.missingFields[1] === 'fulfilment_method'
+    && value.missingFields[2] === 'payment_method'
+}
+
 function isWebsiteHandoffAuditEvent(value: unknown): value is WebsiteHandoffAuditEvent {
   if (!isRecord(value) || !hasExactKeys(value, ['id', 'createdAt', 'actorKind', 'actor', 'action', 'subjectId', 'reason', 'evidenceReference', 'before', 'after'])) return false
   return typeof value.id === 'string'
@@ -169,17 +226,31 @@ function isWebsiteHandoffAuditEvent(value: unknown): value is WebsiteHandoffAudi
 }
 
 function isHandoffStore(value: unknown): value is HandoffStore {
-  if (!isRecord(value) || !hasExactKeys(value, ['schema', 'handoff', 'audit'])) return false
-  if (value.schema !== 'website_ecommerce_handoff_store.v1' || !isWebsiteEcommerceHandoff(value.handoff) || !Array.isArray(value.audit)) return false
+  if (!isRecord(value)) return false
+  const hasDraft = hasExactKeys(value, ['schema', 'handoff', 'audit', 'draft'])
+  if (!hasDraft && !hasExactKeys(value, ['schema', 'handoff', 'audit'])) return false
+  const isV1 = value.schema === 'website_ecommerce_handoff_store.v1'
+  const isV2 = value.schema === 'website_ecommerce_handoff_store.v2'
+  if ((!isV1 && !isV2) || (isV1 && hasDraft) || (isV2 && !hasDraft)) return false
+  if (!isWebsiteEcommerceHandoff(value.handoff) || !Array.isArray(value.audit)) return false
   const audit = value.audit
   if (!audit.every(isWebsiteHandoffAuditEvent)) return false
-  if (value.handoff.state === 'pending_acceptance') return audit.length === 0
-  return audit.length === 1
+  if (value.handoff.state === 'pending_acceptance') return isV1 && audit.length === 0
+  const auditMatches = audit.length === 1
     && audit[0].id === value.handoff.acceptance.auditEventId
     && audit[0].subjectId === value.handoff.id
     && audit[0].actor === value.handoff.acceptance.operatorId
     && audit[0].createdAt === value.handoff.acceptance.acceptedAt
     && audit[0].evidenceReference === value.handoff.source.localPublishId
+  if (!auditMatches || isV1) return auditMatches
+  if (!isWebsiteOrderDraft(value.draft)) return false
+  const line = value.draft.lines[0]
+  return value.draft.id === `EOD-${value.handoff.id.slice(4)}`
+    && value.draft.idempotencyKey === value.handoff.id
+    && Date.parse(value.draft.createdAt) >= Date.parse(value.handoff.acceptance.acceptedAt)
+    && value.draft.source.handoffId === value.handoff.id
+    && line.sku === value.handoff.intake.sku
+    && line.quantity === value.handoff.intake.quantity
 }
 
 function validateAgainstWorkspace(handoff: WebsiteEcommerceHandoff, workspace: WebsiteWorkspace) {
@@ -248,7 +319,7 @@ export function readWebsiteEcommerceHandoff(): WebsiteEcommerceHandoffContext | 
     if (!isHandoffStore(store)) return null
     const display = workspace ? validateAgainstWorkspace(store.handoff, workspace) : null
     if (store.handoff.state === 'pending_acceptance' && !display) return null
-    return { ...store, display }
+    return { ...store, draft: store.draft ?? null, display }
   } catch {
     return null
   }
@@ -312,7 +383,67 @@ export function acceptWebsiteEcommerceHandoff(handoffId: string, operatorId: str
     }
     globalThis.localStorage?.setItem(WEBSITE_ECOMMERCE_HANDOFF_KEY, JSON.stringify(store))
     const restored = readWebsiteEcommerceHandoff()
-    return restored?.handoff.state === 'accepted' && restored.handoff.acceptance.auditEventId === auditEventId ? restored : null
+    return restored?.handoff.state === 'accepted'
+      && restored.handoff.acceptance.auditEventId === auditEventId
+      && !restored.draft
+      ? restored
+      : null
+  } catch {
+    return null
+  }
+}
+
+export function createWebsiteOrderDraft(handoffId: string, catalogItem: WebsiteOrderDraftCatalogItem) {
+  try {
+    const current = readWebsiteEcommerceHandoff()
+    if (!current || current.handoff.id !== handoffId || current.handoff.state !== 'accepted') return null
+    if (current.draft) return current.draft.idempotencyKey === handoffId ? current : null
+    if (!current.display) return null
+    if (catalogItem.sku !== current.handoff.intake.sku
+      || !catalogItem.active
+      || !isTrimmedText(catalogItem.itemName, 120)
+      || !isTrimmedText(catalogItem.variant, 120)
+      || !Number.isSafeInteger(catalogItem.unitPriceMmk)
+      || catalogItem.unitPriceMmk <= 0) return null
+
+    const totalMmk = current.handoff.intake.quantity * catalogItem.unitPriceMmk
+    if (!Number.isSafeInteger(totalMmk)) return null
+    const draftId = `EOD-${current.handoff.id.slice(4)}`
+    const draft: WebsiteOrderDraft = {
+      schema: 'ecommerce_order_draft.v1',
+      mode: 'browser-local',
+      id: draftId,
+      idempotencyKey: current.handoff.id,
+      createdAt: new Date().toISOString(),
+      state: 'draft',
+      source: {
+        kind: 'website_handoff',
+        handoffId: current.handoff.id,
+      },
+      currency: 'MMK',
+      lines: [{
+        sku: current.handoff.intake.sku,
+        itemName: catalogItem.itemName,
+        variant: catalogItem.variant,
+        quantity: current.handoff.intake.quantity,
+        unitPriceMmk: catalogItem.unitPriceMmk,
+      }],
+      totalMmk,
+      missingFields: ['customer_reference', 'fulfilment_method', 'payment_method'],
+    }
+    const store: HandoffStore = {
+      schema: 'website_ecommerce_handoff_store.v2',
+      handoff: current.handoff,
+      audit: current.audit,
+      draft,
+    }
+    globalThis.localStorage?.setItem(WEBSITE_ECOMMERCE_HANDOFF_KEY, JSON.stringify(store))
+    const restored = readWebsiteEcommerceHandoff()
+    return restored?.draft?.id === draftId
+      && restored.draft.idempotencyKey === handoffId
+      && restored.draft.totalMmk === totalMmk
+      ? restored
+      : null
   } catch {
     return null
   }

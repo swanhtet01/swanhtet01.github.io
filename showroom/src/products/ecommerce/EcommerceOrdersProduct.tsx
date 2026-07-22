@@ -4,6 +4,7 @@ import { ApprovalGate } from './ApprovalGate'
 import { CommerceWorkspaces } from './CommerceWorkspaces'
 import {
   acceptWebsiteEcommerceHandoff,
+  createWebsiteOrderDraft,
   readWebsiteEcommerceHandoff,
   type WebsiteEcommerceHandoffContext,
 } from '../product-handoff'
@@ -244,9 +245,10 @@ export function EcommerceOrdersProduct() {
   const [handoffApprovalOpen, setHandoffApprovalOpen] = useState(false)
   const [announcement, setAnnouncement] = useState(() => {
     if (!websiteHandoff) return 'Scenario records loaded locally. No integrations are connected.'
-    return websiteHandoff.handoff.state === 'accepted'
-      ? `${websiteHandoff.handoff.id} is an accepted local intake with one attributable audit event. No order was created.`
-      : 'Approved Website fixture is ready for human intake review. No order has been created.'
+    if (websiteHandoff.handoff.state !== 'accepted') return 'Approved Website fixture is ready for human intake review. No order has been created.'
+    return websiteHandoff.draft
+      ? `${websiteHandoff.draft.id} is a local order draft with customer, fulfilment, and payment fields still missing. No order was confirmed.`
+      : `${websiteHandoff.handoff.id} is an accepted local intake; no order draft has been created yet.`
   })
   const activeCopy = viewCopy[activeView]
   const handoffAudit: AuditEvent[] = (websiteHandoff?.audit ?? []).map((event) => ({
@@ -314,14 +316,31 @@ export function EcommerceOrdersProduct() {
       setAnnouncement('No valid Website handoff is available in this browser.')
       return
     }
-    const item = workspace.catalog.find((candidate) => candidate.sku === current.handoff.intake.sku && candidate.active)
-    if (!item) {
-      setAnnouncement('The Website fixture does not match an active local catalog item, so intake failed closed.')
+    const matchingItems = workspace.catalog.filter((candidate) => candidate.sku === current.handoff.intake.sku && candidate.active)
+    if (matchingItems.length !== 1) {
+      setAnnouncement('The Website fixture does not match exactly one active local catalog item, so intake failed closed.')
       return
     }
+    const [item] = matchingItems
     setWebsiteHandoff(current)
     if (current.handoff.state === 'accepted') {
-      setAnnouncement(`${current.handoff.id} was already accepted by ${current.handoff.acceptance.operatorId}.`)
+      if (current.draft) {
+        setAnnouncement(`${current.draft.id} already exists for ${current.handoff.id}; idempotency prevented a duplicate draft.`)
+        return
+      }
+      const drafted = createWebsiteOrderDraft(current.handoff.id, {
+        sku: item.sku,
+        itemName: item.name,
+        variant: item.variant,
+        active: item.active,
+        unitPriceMmk: item.priceMmk,
+      })
+      if (!drafted?.draft) {
+        setAnnouncement('Draft creation failed closed. The accepted Website source or active catalog price could not be verified; nothing changed.')
+        return
+      }
+      setWebsiteHandoff(drafted)
+      setAnnouncement(`${drafted.draft.id} created once from ${current.handoff.id}. The saved MMK price is immutable; no order was confirmed, stock reserved, payment started, or message sent.`)
       return
     }
     setHandoffApprovalOpen(true)
@@ -330,10 +349,10 @@ export function EcommerceOrdersProduct() {
 
   function approveWebsiteIntake(operatorId: string) {
     if (!websiteHandoff || websiteHandoff.handoff.state !== 'pending_acceptance') return
-    const item = workspace.catalog.find((candidate) => candidate.sku === websiteHandoff.handoff.intake.sku && candidate.active)
-    if (!item) {
+    const matchingItems = workspace.catalog.filter((candidate) => candidate.sku === websiteHandoff.handoff.intake.sku && candidate.active)
+    if (matchingItems.length !== 1) {
       setHandoffApprovalOpen(false)
-      setAnnouncement('Website intake acceptance failed closed because the catalog item is no longer active.')
+      setAnnouncement('Website intake acceptance failed closed because exactly one active catalog match is required.')
       return
     }
     const accepted = acceptWebsiteEcommerceHandoff(websiteHandoff.handoff.id, operatorId)
@@ -344,7 +363,7 @@ export function EcommerceOrdersProduct() {
     }
     setWebsiteHandoff(accepted)
     setHandoffApprovalOpen(false)
-    setAnnouncement(`${accepted.handoff.id} accepted locally by ${accepted.handoff.acceptance.operatorId}; one audit event was recorded.`)
+    setAnnouncement(`${accepted.handoff.id} accepted locally by ${accepted.handoff.acceptance.operatorId}; create the idempotent local draft when ready.`)
   }
 
   function approveAction(details: ApprovalDetails) {
@@ -449,7 +468,7 @@ export function EcommerceOrdersProduct() {
               selectedOrderId={selectedOrderId}
               view={activeView}
               websiteHandoff={websiteHandoff}
-              websiteHandoffAccepted={websiteHandoff?.handoff.state === 'accepted'}
+              websiteDraftCreated={Boolean(websiteHandoff?.draft)}
             />
           </div>
         </main>
