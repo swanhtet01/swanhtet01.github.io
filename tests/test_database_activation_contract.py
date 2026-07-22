@@ -387,7 +387,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                         schema_exists=scenario != "missing_schema",
                         schema_ready=scenario != "missing_schema",
                         component="private_trial_backend",
-                        schema_version=0 if scenario == "wrong_version" else 1,
+                        schema_version=0 if scenario == "wrong_version" else 2,
                         tables=tables,
                         table_names=tables,
                         table_count=len(tables),
@@ -483,7 +483,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                             return []
                         return [
                             _snapshot(
-                                schema_version=0 if scenario == "wrong_version" else 1,
+                                schema_version=0 if scenario == "wrong_version" else 2,
                             )
                         ]
                     if "pg_policies" in q:
@@ -839,6 +839,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
         payload = _extract_json(result.stdout + result.stderr)
         serialized = json.dumps(payload, sort_keys=True).lower()
         self.assertTrue(payload.get("ok") is True or payload.get("status") == "ready")
+        self.assertEqual(payload.get("contract"), "supermega_private_trial_database_v2")
         checks = payload.get("checks")
         self.assertIsInstance(checks, dict)
         assert isinstance(checks, dict)
@@ -868,7 +869,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
             {
                 "name": PRIVATE_SCHEMA,
                 "component": "private_trial_backend",
-                "version": 1,
+                "version": 2,
             },
         )
         self.assertEqual(

@@ -18,11 +18,11 @@ from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 
-CONTRACT = "supermega_private_trial_database_v1"
+CONTRACT = "supermega_private_trial_database_v2"
 SCHEMA = "app_private"
 BACKEND_ROLE = "supermega_trial_backend"
 SCHEMA_COMPONENT = "private_trial_backend"
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 EXPECTED_TABLES = frozenset(
     {
         "trial_schema_meta",
@@ -809,7 +809,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--ensure-schema",
         action="store_true",
-        help="Require the complete v1 schema contract; this flag never applies migrations.",
+        help="Require the complete v2 schema contract; this flag never applies migrations.",
     )
     parser.add_argument("--require-ready", action="store_true")
     parser.add_argument(
