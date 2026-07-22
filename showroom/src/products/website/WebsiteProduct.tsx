@@ -6,6 +6,11 @@ import { PublishWorkspace } from './PublishWorkspace'
 import { SitePreview } from './SitePreview'
 import { useWebsiteWorkspace } from './useWebsiteWorkspace'
 import {
+  createWebsiteEcommerceHandoff,
+  readWebsiteEcommerceHandoff,
+  writeWebsiteEcommerceHandoff,
+} from '../product-handoff'
+import {
   createBlankPage,
   createId,
   duplicatePage,
@@ -52,6 +57,7 @@ export function WebsiteProduct() {
   const [device, setDevice] = useState<PreviewDevice>('desktop')
   const [notice, setNotice] = useState('Local demo loaded. No website has been deployed.')
   const [deleteCandidateId, setDeleteCandidateId] = useState('')
+  const [handoffFingerprint, setHandoffFingerprint] = useState(() => readWebsiteEcommerceHandoff()?.handoff.source.fingerprint ?? '')
   const selectedPage = workspace.pages.find((page) => page.id === workspace.selectedPageId) ?? workspace.pages[0]
   const fingerprint = workspaceFingerprint(workspace)
   const checks = readinessChecks(workspace, fingerprint)
@@ -197,6 +203,56 @@ export function WebsiteProduct() {
     setNotice('Local publish snapshot recorded. No deployment or external write occurred.')
   }
 
+  function prepareEcommerceHandoff() {
+    const existingHandoff = readWebsiteEcommerceHandoff()
+    const approval = workspace.approval
+    const publish = workspace.localPublishes[0]
+    const sourcePage = workspace.pages.find((page) => page.stage === 'ready' && page.slug === '/products')
+      ?? workspace.pages.find((page) => page.stage === 'ready')
+
+    if (existingHandoff?.handoff.state === 'accepted' && existingHandoff.handoff.source.fingerprint !== fingerprint) {
+      setNotice('The prior accepted intake and audit record are retained. This bounded prototype will not overwrite them.')
+      return
+    }
+
+    if (!approvalIsCurrent || !publishIsCurrent || !approval || !publish || !sourcePage || storageMode !== 'browser-local') {
+      setNotice('A current approval, local publish record, ready source page, and browser storage are required for handoff.')
+      return
+    }
+
+    const readyPageIds = workspace.pages.filter((page) => page.stage === 'ready').map((page) => page.id)
+    const sourceIsCurrent = checks.every((check) => check.passed)
+      && approval.reviewer.trim().length > 0
+      && approval.note.trim().length > 0
+      && publish.recordedBy === approval.reviewer
+      && Date.parse(publish.recordedAt) >= Date.parse(approval.approvedAt)
+      && readyPageIds.length === publish.readyPageIds.length
+      && readyPageIds.every((pageId) => publish.readyPageIds.includes(pageId))
+      && publish.readyPageIds.includes(sourcePage.id)
+    if (!sourceIsCurrent) {
+      setNotice('The current Website evidence, approval, publish record, and ready-page set do not match. Handoff failed closed.')
+      return
+    }
+
+    const handoff = createWebsiteEcommerceHandoff({
+      fingerprint,
+      approvalId: approval.id,
+      localPublishId: publish.id,
+      pageId: sourcePage.id,
+      sku: 'SM-CARE-01',
+      quantity: 1,
+    })
+
+    const restored = writeWebsiteEcommerceHandoff(handoff, workspace)
+    if (!restored) {
+      setNotice('Browser storage is unavailable, so no cross-product handoff was created.')
+      return
+    }
+
+    setHandoffFingerprint(restored.handoff.source.fingerprint)
+    setNotice('Versioned Website intake fixture prepared locally. Review it in Ecommerce & Orders.')
+  }
+
   return (
     <div className="website-product">
       <a className="website-skip" href="#website-workspace">Skip to website workspace</a>
@@ -321,8 +377,11 @@ export function WebsiteProduct() {
                 approvalIsCurrent={approvalIsCurrent}
                 checks={checks}
                 fingerprint={fingerprint}
+                handoffAvailable={storageMode === 'browser-local'}
+                handoffIsCurrent={handoffFingerprint === fingerprint}
                 onAddEvidence={addEvidence}
                 onApprove={approveCurrentRevision}
+                onPrepareEcommerceHandoff={prepareEcommerceHandoff}
                 onRecordPublish={recordLocalPublish}
                 publishIsCurrent={publishIsCurrent}
                 workspace={workspace}

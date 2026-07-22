@@ -35,7 +35,7 @@ Prove one complete company workflow in which a real customer or operator starts 
 
 - Candidate identity is brand `terminal-v4-2026-07`, context `2026-07-22.7`, and catalogue `2026-07-22.6`.
 - Six workflow profiles, 47 coordinated-release checks, 36 security checks, eleven Vercel contract checks, 73 contact checks, six RLS checks, six paired-identity checks, HQ, product-inclusive lint, strict TypeScript, YAML, and 46 Python tests pass locally.
-- Website passes the desktop workflow, browser-local reload, four-page cap, and embedded 390 px preview checks. Ecommerce passes all four module views plus the guided payment-review, human-approval, and audit-increment path. Neither result proves a managed integration or production release.
+- Website and Ecommerce desktop, reload, preview, guided approval, and audit paths pass. Their non-PII handoff revalidates source approval, needs an `OP-` human ID, records one local audit atomically, and creates no order.
 - Core desktop and 390 px layouts remain verified. Operations, Product decisions, and `decision_packet.v1` reviews require attributable human evidence; stale authority reopens safely.
 - Historical schema v1 is unchanged; additive v2 preserves old actors and decisions as `legacy`, requires reclassification, and enforces nonblank human decisions before readiness.
 - Contact intake stores a SHA-256 payload fingerprint; changed cold-start replays conflict and ambiguous persistence fails closed.
@@ -64,7 +64,7 @@ Prove one complete company workflow in which a real customer or operator starts 
 ## Next evidence
 
 - Complete a full-route 390 px viewport audit for both prototypes; desktop interaction, Website's embedded 390 px preview, reload behavior, guided approval, audit, and truthful local-only labels already pass.
-- Convert one approved Website brief into one Ecommerce order-intake fixture and record acceptance evidence before any customer-domain or connector work.
+- Repeat the accepted non-PII Website-to-Ecommerce intake with one named user and measure handling time before customer data or connectors.
 - Approve a narrow Vercel environment cleanup from the audited name-only inventory; do not copy or expose values.
 - Activate managed trial persistence only after v1 then v2 migration rehearsal, the read-only database role/RLS validator, backup, and restore evidence pass on non-production data.
 - Complete one pilot intake containing channel, current record, owner, baseline, target outcome, authority boundary, and acceptance evidence.
