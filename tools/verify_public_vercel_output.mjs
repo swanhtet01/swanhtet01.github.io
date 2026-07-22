@@ -89,6 +89,9 @@ const forbiddenCopy = [
   'Register and local payments',
   'Service bookings',
   'Material receiving',
+  'Start with one live workflow.',
+  'Send one real workflow, screenshot, spreadsheet, or recurring handoff.',
+  'Capture orders from Messenger, Viber, phone, web, or walk-in channels',
 ]
 const encodingCorruption = ['\uFFFD', '\u00e2\u20ac\u201d', '\u00e2\u20ac\u201c', '\u00c2', '\u00f0\u0178']
 
@@ -124,6 +127,9 @@ for (const token of [
   'Learn',
   'id="operations"',
   'Two operational wedges. One company foundation.',
+  'Explore the product workspace',
+  'Start with one real workflow.',
+  'Structure orders that arrive through Messenger, Viber, phone, web, or walk-in channels',
   'id="trust"',
   'Assistance may organize, inspect, summarize, and draft from approved records.',
   'https://app.supermega.dev/operations/commerce/?tab=today',
@@ -142,7 +148,7 @@ for (const product of manifest.products) {
 if ((home.match(/<a\b/g) || []).length > 8) fail('homepage_link_surface_too_large')
 
 const contact = pages.get('/contact/')?.html || ''
-for (const token of ['data-contact-form', 'action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="product"', 'value="commerce"', 'value="production"', 'name="template"', 'name="goal"', 'name="idempotency_key"', 'x-idempotency-key', 'rate_limited', 'No account, data connection, automation, or external action begins from this form.', 'swanhtet@supermega.dev']) {
+for (const token of ['data-contact-form', 'action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="product"', 'value="commerce"', 'value="production"', 'name="template"', 'name="goal"', 'name="idempotency_key"', 'x-idempotency-key', 'rate_limited', 'Describe one real workflow or recurring handoff, and note any screenshot or spreadsheet you can share.', 'Commerce / website-to-order workflow', 'No account, data connection, automation, or external action begins from this form.', 'swanhtet@supermega.dev']) {
   if (!contact.includes(token)) fail('contact_contract_missing', { token })
 }
 
