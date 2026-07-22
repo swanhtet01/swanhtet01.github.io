@@ -20,7 +20,7 @@ async function walk(directory) {
   return files
 }
 
-for (const route of ['', 'shop', 'plant', 'assist', 'setup', 'trust']) {
+for (const route of ['', 'operations', 'agents', 'settings']) {
   const page = resolve(dist, route, 'index.html')
   if (!await exists(page)) fail(`missing_route:${route || '/'}`)
 }
@@ -38,18 +38,18 @@ const manifestPath = resolve(dist, 'site.webmanifest')
 if (!await exists(faviconPath)) fail('missing_terminal_favicon')
 else {
   const favicon = await readFile(faviconPath, 'utf8')
-  if (!favicon.includes('SuperMega terminal mark') || !favicon.includes('#6b95ff') || !favicon.includes('#3dd6a2')) fail('wrong_terminal_favicon')
+  if (!favicon.includes('SuperMega terminal mark') || !favicon.includes('#7cf5b4') || !favicon.includes('#f2f5f1')) fail('wrong_terminal_favicon')
 }
 if (!await exists(manifestPath)) fail('missing_app_webmanifest')
 else {
   const webmanifest = JSON.parse(await readFile(manifestPath, 'utf8'))
-  if (webmanifest.name !== 'SuperMega Operating Workspace' || webmanifest.icons?.[0]?.src !== '/favicon.svg') fail('wrong_app_webmanifest')
+  if (webmanifest.name !== 'SuperMega Company OS' || webmanifest.icons?.[0]?.src !== '/favicon.svg') fail('wrong_app_webmanifest')
 }
 
 const files = await walk(dist)
 const textFiles = files.filter((path) => /\.(?:html|js|css|json|svg)$/.test(path))
 const corpus = (await Promise.all(textFiles.map((path) => readFile(path, 'utf8')))).join('\n')
-for (const required of ['SuperMega', 'Shop', 'Plant', 'Evidence first', '#6b95ff', '#3dd6a2']) {
+for (const required of ['SUPERMEGA', 'Operations', 'Agents', 'Local trial', '#7cf5b4', '#f2f5f1']) {
   if (!corpus.includes(required)) fail(`missing_context:${required}`)
 }
 for (const forbidden of ['pos.supermega.dev', 'ytf.supermega.dev', 'Yangon Tyre', 'ytf-plant-a', 'Company Systems That Replace Tool Sprawl']) {
@@ -66,4 +66,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', routes: 6, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', routes: 4, bytes }, null, 2))

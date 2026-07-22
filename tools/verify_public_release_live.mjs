@@ -41,9 +41,9 @@ async function readPage(route) {
     `meta name="supermega-brand-version" content="${manifest.brand.version}"`,
     `meta name="supermega-context-version" content="${manifest.contextVersion}"`,
     'aria-label="SuperMega home"',
-    'href="/shop/"',
-    'href="/plant/"',
-    'href="/contact/">Talk to us</a>',
+    '<span class="brand-mark" aria-hidden="true">&gt;_</span>',
+    'href="/solutions/"',
+    'href="https://app.supermega.dev/">Open app</a>',
   ]) assert(html.includes(token), 'page_shared_contract_missing', { route, token })
   for (const token of manifest.retiredPublicNames) assert(!html.toLowerCase().includes(token.toLowerCase()), 'retired_context_live', { route, token })
   return html
@@ -68,9 +68,10 @@ async function verifyOnce() {
   const pageResults = await Promise.all(manifest.pages.map(async (page) => [page.route, await readPage(page.route)]))
   const pages = new Map(pageResults)
   assert(pages.get('/')?.includes(manifest.company.headline), 'homepage_headline_wrong')
-  assert(pages.get('/shop/')?.includes('https://app.supermega.dev/shop/'), 'shop_live_demo_wrong')
-  assert(pages.get('/plant/')?.includes('https://app.supermega.dev/plant/'), 'plant_live_demo_wrong')
-  assert(pages.get('/templates/')?.includes('Starting structures, not boxed software.'), 'template_catalog_missing')
+  assert(pages.get('/solutions/')?.includes('https://app.supermega.dev/operations/?view=shop'), 'shop_workspace_wrong')
+  assert(pages.get('/solutions/')?.includes('https://app.supermega.dev/operations/?view=plant'), 'plant_workspace_wrong')
+  assert(pages.get('/solutions/')?.includes('Configure the difference. Keep the foundation.'), 'template_catalog_missing')
+  assert(pages.get('/solutions/')?.includes('https://app.supermega.dev/agents/'), 'agents_workspace_wrong')
   assert(pages.get('/trust/')?.includes('id="governed-ai"'), 'governed_ai_boundary_missing')
 
   const [{ body: release, headers: releaseHeaders }, { body: health }, { body: contact }] = await Promise.all([
@@ -89,10 +90,10 @@ async function verifyOnce() {
   assert(contact.controls?.idempotency === 'required' && contact.controls?.edge_rate_limit === 'required', 'contact_controls_wrong', contact)
 
   await Promise.all([
-    verifyRedirect('/products/shop/', '/shop/'),
-    verifyRedirect('/products/factory/', '/plant/'),
-    verifyRedirect('/ai-agent-solutions/', '/trust/#governed-ai'),
-    verifyRedirect('/offers/', '/'),
+    verifyRedirect('/products/shop/', '/solutions/#shop'),
+    verifyRedirect('/products/factory/', '/solutions/#plant'),
+    verifyRedirect('/ai-agent-solutions/', '/solutions/#agents'),
+    verifyRedirect('/offers/', '/solutions/'),
   ])
 
   const www = await fetch('https://www.supermega.dev/', { redirect: 'follow', cache: 'no-store', headers: { 'user-agent': 'SuperMegaVerifiedRelease/2.0' }, signal: AbortSignal.timeout(timeoutMs) })

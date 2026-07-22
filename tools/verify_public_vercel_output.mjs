@@ -58,14 +58,12 @@ const sharedRequired = [
   `data-brand-version="${manifest.brand.version}"`,
   'href="/favicon.svg?v=',
   'aria-label="SuperMega home"',
-  '<span>supermega<span class="brand-domain">.dev</span></span>',
-  'href="/shop/"',
-  'href="/plant/"',
-  'href="/templates/"',
-  'href="https://app.supermega.dev/assist/"',
-  'href="/contact/">Talk to us</a>',
+  '<span class="brand-mark" aria-hidden="true">&gt;_</span>',
+  '<span class="brand-name">SUPERMEGA</span>',
+  'href="/solutions/"',
+  'href="https://app.supermega.dev/">Open app</a>',
   'href="/trust/">Trust</a>',
-  'Operating software for Myanmar businesses.',
+  'Company systems with accountable automation.',
 ]
 
 const forbiddenCopy = [
@@ -104,48 +102,31 @@ const home = pages.get('/')?.html || ''
 for (const token of [
   manifest.company.headline,
   manifest.company.supporting,
-  'Two operating systems',
-  'Explore Shop',
-  'Explore Plant',
-  'AI helps inside the workflow.',
-  'Human approval for consequential actions',
-  'Bring one workflow that still breaks.',
+  'Operations and agents share the same truth.',
+  'Run the work',
+  'Scale the team',
+  'Move faster without pretending autonomy is authority.',
+  'Start with one broken workflow.',
 ]) {
   if (!home.includes(token)) fail('homepage_contract_missing', { token })
 }
 
-const shop = pages.get('/shop/')?.html || ''
+const solutions = pages.get('/solutions/')?.html || ''
 for (const token of [
-  'One operating system for the counter and the back office.',
-  'https://app.supermega.dev/shop/',
-  'Open the Shop demo',
-  'Live isolated product demo',
-  'Register and local payments',
-  'Roles, audit, backup and recovery',
+  'One operating layer. Four clear surfaces.',
+  'Shop and Plant are operating modes, not separate brands.',
+  'https://app.supermega.dev/operations/?view=shop',
+  'https://app.supermega.dev/operations/?view=plant',
+  'https://app.supermega.dev/agents/',
+  'A team machine with explicit boundaries.',
+  'Configure the difference. Keep the foundation.',
 ]) {
-  if (!shop.includes(token)) fail('shop_contract_missing', { token })
+  if (!solutions.includes(token)) fail('solutions_contract_missing', { token })
 }
-if (shop.includes('pos.supermega.dev')) fail('shop_points_to_retired_pos')
-
-const plant = pages.get('/plant/')?.html || ''
-for (const token of [
-  'Give the factory floor one operational memory.',
-  'Open the Plant demo',
-  'https://app.supermega.dev/plant/',
-  '/contact/?product=plant',
-  'Live isolated product demo',
-  'Quality and traceability',
-  'No client data enters the public demo.',
-]) {
-  if (!plant.includes(token)) fail('plant_contract_missing', { token })
-}
-if (/https:\/(?:\/)?(?:ytf|pos)\.supermega\.dev/i.test(plant)) fail('plant_exposes_retired_workspace')
-
-const templates = pages.get('/templates/')?.html || ''
 for (const product of manifest.products) {
   for (const template of product.templates) {
     for (const token of [template.name, template.outcome, `product=${product.id}&amp;template=${template.id}`]) {
-      if (!templates.includes(token)) fail('template_catalog_missing', { product: product.id, template: template.id, token })
+      if (!solutions.includes(token)) fail('template_catalog_missing', { product: product.id, template: template.id, token })
     }
   }
 }
@@ -166,7 +147,7 @@ for (const token of ['Contact requests', 'Product data', 'AI processing', 'Delet
 }
 
 const favicon = readStatic('favicon.svg')
-for (const token of ['SuperMega terminal mark', manifest.brand.colors.background, manifest.brand.colors.blue, manifest.brand.colors.green]) {
+for (const token of ['SuperMega terminal mark', manifest.brand.colors.background, manifest.brand.colors.accent, manifest.brand.colors.ink]) {
   if (!favicon.includes(token)) fail('brand_mark_contract_missing', { token })
 }
 

@@ -6,7 +6,7 @@ const expectedCommit = String(process.env.EXPECTED_RELEASE_COMMIT || '').trim()
 const protectedPreview = process.env.VERCEL_PROTECTED_PREVIEW === '1'
 const vercelToken = String(process.env.VERCEL_TOKEN || '').trim()
 const cliEnv = vercelToken ? { ...process.env, VERCEL_TOKEN: vercelToken } : process.env
-const routes = ['/', '/shop/', '/plant/', '/assist/', '/setup/', '/trust/']
+const routes = ['/', '/operations/', '/agents/', '/settings/']
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -82,7 +82,7 @@ const rootHtml = pages.get('/')
 const scriptPaths = [...rootHtml.matchAll(/<script[^>]+src="([^"]+)"/g)].map((match) => match[1])
 const cssPaths = [...rootHtml.matchAll(/<link[^>]+href="([^"]+\.css)"/g)].map((match) => match[1])
 const assetCorpus = (await Promise.all([...scriptPaths, ...cssPaths].map(async (path) => (await get(path)).body))).join('\n')
-for (const required of ['Shop', 'Plant', 'Evidence first', '#6b95ff', '#3dd6a2']) {
+for (const required of ['Operations', 'Agents', 'Local trial', '#7cf5b4', '#f2f5f1']) {
   if (!assetCorpus.includes(required)) throw new Error(`missing_live_context:${required}`)
 }
 for (const forbidden of ['pos.supermega.dev', 'ytf.supermega.dev', 'Yangon Tyre', 'ytf-plant-a']) {

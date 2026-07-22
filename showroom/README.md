@@ -1,17 +1,16 @@
 # >_ SuperMega product app
 
-This package is the canonical application for `app.supermega.dev`. It is a focused operating workspace for SuperMega Shop and Plant, not the public marketing site and not a client-specific deployment.
+This package is the canonical application for `app.supermega.dev`. It is the SuperMega company operating system: Command, Operations, governed Agents, and Settings in one product shell. It is not the public marketing site or a client-specific deployment.
 
 ## Routes
 
 - `/` — Command: priorities, work, evidence, and the five-role company agent desk.
-- `/shop/` — sales, catalogue, stock, orders, close, and exceptions.
-- `/plant/` — jobs, machines, materials, quality, maintenance, and handoffs.
-- `/assist/` — evidence-grounded briefs, drafts, and approval-ready recommendations.
-- `/setup/` — Shop/Plant template selection and bounded workspace configuration.
-- `/trust/` — demo boundaries, managed-trial gates, human authority, and controls.
+- `/operations/?view=shop` — sales, stock, local payments, close, and exceptions.
+- `/operations/?view=plant` — jobs, machines, output, issues, and handoffs.
+- `/agents/` — evidence-grounded briefs and approval-ready work.
+- `/settings/` — workspace setup, trial controls, runtime readiness, and authority boundaries.
 
-All routes share the `>_` terminal design system and responsive application shell.
+Legacy Shop, Plant, Assist, Setup, and Trust URLs redirect into these four canonical areas. All routes share the `>_ SUPERMEGA` terminal design system and responsive application shell.
 
 ## Core files
 
@@ -19,7 +18,7 @@ All routes share the `>_` terminal design system and responsive application shel
 - `src/core/core-app.css` — shared responsive visual system.
 - `src/App.tsx` — canonical app mount.
 - `src/main.tsx` and `src/index.css` — runtime and global foundation.
-- `scripts/prepare-static-routes.mjs` — six-route static shell preparation.
+- `scripts/prepare-static-routes.mjs` — four-route static shell preparation.
 
 ## Run and verify
 

@@ -21,9 +21,6 @@ assert(Array.isArray(manifest.products) && manifest.products.length === 2, 'site
 assert(manifest.products.map((product) => product.id).join(',') === 'shop,plant', 'site_manifest_product_order_changed')
 assert(manifest.company?.publicPricing === false, 'public_pricing_must_remain_hidden')
 
-const products = new Map(manifest.products.map((product) => [product.id, product]))
-const shop = products.get('shop')
-const plant = products.get('plant')
 const brand = manifest.brand
 
 function escapeHtml(value) {
@@ -63,50 +60,50 @@ const release = {
   generatedAt: new Date().toISOString(),
 }
 
-const faviconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="SuperMega terminal mark" shape-rendering="geometricPrecision"><rect x="2.5" y="2.5" width="59" height="59" rx="12" fill="${brand.colors.background}"/><rect x="3.25" y="3.25" width="57.5" height="57.5" rx="11.25" fill="none" stroke="#fff" stroke-opacity=".18"/><path d="M15 19 29 32 15 45" fill="none" stroke="${brand.colors.blue}" stroke-width="4.25" stroke-linecap="round" stroke-linejoin="round"/><path d="M36 45h14" fill="none" stroke="${brand.colors.green}" stroke-width="4.25" stroke-linecap="round"/></svg>\n`
+const faviconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="SuperMega terminal mark" shape-rendering="geometricPrecision"><rect width="64" height="64" rx="8" fill="${brand.colors.background}"/><rect x="1" y="1" width="62" height="62" rx="7" fill="none" stroke="${brand.colors.ink}" stroke-opacity=".16"/><path d="M13 18 27 32 13 46" fill="none" stroke="${brand.colors.accent}" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/><path d="M34 46h17" fill="none" stroke="${brand.colors.ink}" stroke-width="4.5" stroke-linecap="square"/></svg>\n`
 
 const sharedStyle = `
   :root {
     color-scheme: dark;
-    --bg: #080b10;
-    --bg-raised: #0d121a;
-    --panel: rgba(18, 25, 35, .82);
-    --panel-solid: #121923;
-    --panel-soft: #101720;
-    --ink: #f4f7fb;
-    --muted: #a4afbe;
-    --quiet: #748193;
-    --line: rgba(231, 239, 255, .13);
-    --line-strong: rgba(231, 239, 255, .23);
-    --blue: #6b95ff;
-    --blue-strong: #8cacff;
-    --green: #3dd6a2;
-    --green-soft: rgba(61, 214, 162, .12);
-    --blue-soft: rgba(107, 149, 255, .12);
-    --shadow: 0 30px 90px rgba(0, 0, 0, .38);
-    --radius: 22px;
+    --bg: #080a09;
+    --bg-raised: #0d100e;
+    --panel: rgba(15, 19, 16, .9);
+    --panel-solid: #101411;
+    --panel-soft: #0c100d;
+    --ink: #f2f5f1;
+    --muted: #a3ada6;
+    --quiet: #707b73;
+    --line: rgba(225, 238, 229, .13);
+    --line-strong: rgba(225, 238, 229, .24);
+    --blue: #7cf5b4;
+    --blue-strong: #a0ffcb;
+    --green: #7cf5b4;
+    --green-soft: rgba(124, 245, 180, .1);
+    --blue-soft: rgba(124, 245, 180, .1);
+    --shadow: 0 30px 90px rgba(0, 0, 0, .44);
+    --radius: 10px;
   }
   * { box-sizing: border-box; }
   html { min-width: 320px; scroll-behavior: smooth; background: var(--bg); }
   body { min-width: 320px; margin: 0; overflow-x: hidden; background: var(--bg); color: var(--ink); font-family: Geist, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.55; text-rendering: optimizeLegibility; }
-  body::before { position: fixed; inset: 0; z-index: -2; background: radial-gradient(circle at 18% -12%, rgba(107,149,255,.17), transparent 32%), radial-gradient(circle at 92% 12%, rgba(61,214,162,.09), transparent 25%), linear-gradient(180deg, #0a0e14 0, #080b10 42%, #090d13 100%); content: ""; }
-  body::after { position: fixed; inset: 0; z-index: -1; opacity: .18; pointer-events: none; background-image: linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px); background-size: 48px 48px; mask-image: linear-gradient(to bottom, #000, transparent 76%); content: ""; }
+  body::before { position: fixed; inset: 0; z-index: -2; background: radial-gradient(circle at 74% -18%, rgba(124,245,180,.1), transparent 34%), linear-gradient(180deg, #0a0d0b 0, #080a09 48%, #090c0a 100%); content: ""; }
+  body::after { position: fixed; inset: 0; z-index: -1; opacity: .16; pointer-events: none; background-image: linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px); background-size: 56px 56px; mask-image: linear-gradient(to bottom, #000, transparent 76%); content: ""; }
   a { color: inherit; }
   button, input, select, textarea { font: inherit; }
   img, svg { display: block; max-width: 100%; }
   .shell { min-height: 100svh; }
   .frame { width: min(calc(100% - 48px), 1200px); margin-inline: auto; }
-  .site-header { position: sticky; top: 0; z-index: 40; padding: 16px 0; background: linear-gradient(to bottom, rgba(8,11,16,.96), rgba(8,11,16,.72), transparent); backdrop-filter: blur(18px); }
-  .header-inner { min-height: 62px; display: flex; align-items: center; justify-content: space-between; gap: 18px; border: 1px solid var(--line); border-radius: 18px; padding: 8px 9px 8px 13px; background: rgba(13,18,26,.78); box-shadow: inset 0 1px rgba(255,255,255,.04), 0 18px 50px rgba(0,0,0,.2); }
-  .brand { display: inline-flex; min-height: 44px; align-items: center; gap: 11px; text-decoration: none; font-size: 17px; font-weight: 790; letter-spacing: -.02em; }
-  .brand img { width: 36px; height: 36px; }
-  .brand-domain { color: var(--quiet); font-weight: 620; }
+  .site-header { position: sticky; top: 0; z-index: 40; border-bottom: 1px solid var(--line); background: rgba(8,10,9,.88); backdrop-filter: blur(18px); }
+  .header-inner { min-height: 72px; display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+  .brand { display: inline-flex; min-height: 44px; align-items: center; gap: 12px; text-decoration: none; font-size: 13px; font-weight: 820; letter-spacing: .08em; }
+  .brand-mark { color: var(--green); font-family: "SFMono-Regular", Consolas, monospace; font-size: 20px; letter-spacing: -.12em; }
+  .brand-name { color: var(--ink); }
   .nav { display: flex; min-width: 0; align-items: center; justify-content: flex-end; gap: 4px; }
   .nav-link { min-height: 44px; display: inline-flex; align-items: center; border-radius: 10px; padding: 0 11px; color: var(--muted); font-size: 13px; font-weight: 720; text-decoration: none; }
   .nav-link:hover, .nav-link[aria-current="page"] { background: rgba(255,255,255,.05); color: var(--ink); }
-  .button { min-height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 9px; border: 1px solid var(--line-strong); border-radius: 12px; padding: 0 18px; background: rgba(255,255,255,.035); color: var(--ink); font-size: 14px; font-weight: 780; text-decoration: none; transition: transform 160ms ease, border-color 160ms ease, background 160ms ease; }
+  .button { min-height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 9px; border: 1px solid var(--line-strong); border-radius: 6px; padding: 0 18px; background: rgba(255,255,255,.025); color: var(--ink); font-size: 13px; font-weight: 780; text-decoration: none; transition: transform 160ms ease, border-color 160ms ease, background 160ms ease; }
   .button:hover { transform: translateY(-1px); border-color: rgba(255,255,255,.34); background: rgba(255,255,255,.07); }
-  .button.primary { border-color: var(--blue); background: var(--blue); color: #07101f; box-shadow: 0 14px 34px rgba(107,149,255,.22); }
+  .button.primary { border-color: var(--green); background: var(--green); color: #07100a; box-shadow: 0 14px 34px rgba(124,245,180,.12); }
   .button.primary:hover { background: var(--blue-strong); }
   .button.compact { min-height: 44px; padding-inline: 15px; }
   .eyebrow { display: inline-flex; align-items: center; gap: 9px; color: var(--green); font-family: "SFMono-Regular", Consolas, monospace; font-size: 12px; font-weight: 760; letter-spacing: .04em; text-transform: uppercase; }
@@ -136,7 +133,7 @@ const sharedStyle = `
   .workspace-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 22px; }
   .workspace-title strong { font-size: 18px; }
   .workspace-title small { display: block; margin-top: 4px; color: var(--quiet); }
-  .live-pill, .status-pill { display: inline-flex; min-height: 28px; align-items: center; gap: 7px; border: 1px solid rgba(61,214,162,.24); border-radius: 999px; padding: 0 10px; background: var(--green-soft); color: var(--green); font-size: 10px; font-weight: 760; text-transform: uppercase; }
+  .live-pill, .status-pill { display: inline-flex; min-height: 28px; align-items: center; gap: 7px; border: 1px solid rgba(124,245,180,.24); border-radius: 4px; padding: 0 10px; background: var(--green-soft); color: var(--green); font-size: 10px; font-weight: 760; text-transform: uppercase; }
   .live-pill::before, .status-pill::before { width: 6px; height: 6px; border-radius: 50%; background: currentColor; content: ""; }
   .metric-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
   .metric { min-height: 94px; border: 1px solid var(--line); border-radius: 13px; padding: 14px; background: rgba(255,255,255,.025); }
@@ -170,7 +167,7 @@ const sharedStyle = `
   .template-card p { color: var(--muted); }
   .template-card .card-link { margin-top: auto; }
   .product-label { display: inline-flex; min-height: 30px; align-items: center; border: 1px solid var(--line); border-radius: 999px; padding: 0 10px; color: var(--muted); font-size: 11px; font-weight: 760; }
-  .callout { display: grid; grid-template-columns: 1fr auto; gap: 34px; align-items: center; border: 1px solid rgba(107,149,255,.28); border-radius: var(--radius); padding: 36px; background: linear-gradient(120deg, rgba(107,149,255,.13), rgba(61,214,162,.055)); }
+  .callout { display: grid; grid-template-columns: 1fr auto; gap: 34px; align-items: center; border: 1px solid rgba(124,245,180,.25); border-radius: var(--radius); padding: 36px; background: linear-gradient(120deg, rgba(124,245,180,.09), rgba(124,245,180,.025)); }
   .callout p { max-width: 700px; margin: 0; color: var(--muted); }
   .steps { counter-reset: step; display: grid; gap: 0; border-top: 1px solid var(--line); }
   .step { counter-increment: step; display: grid; grid-template-columns: 54px 1fr; gap: 22px; border-bottom: 1px solid var(--line); padding: 25px 0; }
@@ -197,7 +194,7 @@ const sharedStyle = `
   label { display: grid; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 700; }
   label.wide { grid-column: 1/-1; }
   input, select, textarea { width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 11px; padding: 13px 14px; background: #0c1118; color: var(--ink); outline: none; }
-  input:focus, select:focus, textarea:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(107,149,255,.13); }
+  input:focus, select:focus, textarea:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(124,245,180,.1); }
   textarea { min-height: 150px; resize: vertical; }
   .form-note, .form-status { margin: 0; color: var(--quiet); font-size: 12px; }
   .form-status { min-height: 1.5em; color: var(--green); }
@@ -209,15 +206,34 @@ const sharedStyle = `
   .footer-links { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 18px; }
   .footer-links a { min-height: 44px; display: inline-flex; align-items: center; text-decoration: none; }
   .footer-links a:hover { color: var(--ink); }
-  :focus-visible { outline: 3px solid rgba(107,149,255,.46); outline-offset: 3px; }
+  .system-preview { transform: none; border-radius: 8px; }
+  .system-preview-body { padding: 28px; }
+  .system-kicker { margin-bottom: 18px; color: var(--quiet); font-family: "SFMono-Regular", Consolas, monospace; font-size: 10px; letter-spacing: .1em; }
+  .system-flow { display: grid; border-top: 1px solid var(--line); }
+  .system-row { min-height: 66px; display: grid; grid-template-columns: 34px 112px minmax(0, 1fr) 10px; gap: 12px; align-items: center; border-bottom: 1px solid var(--line); }
+  .system-row > span { color: var(--green); font-family: "SFMono-Regular", Consolas, monospace; font-size: 10px; }
+  .system-row strong { font-size: 13px; }
+  .system-row small { color: var(--quiet); font-size: 10px; }
+  .system-row i { width: 7px; height: 7px; background: var(--green); box-shadow: 0 0 14px rgba(124,245,180,.55); }
+  .system-boundary { display: grid; gap: 5px; margin-top: 22px; border-left: 2px solid var(--green); padding: 4px 0 4px 14px; }
+  .system-boundary span { color: var(--green); font-family: "SFMono-Regular", Consolas, monospace; font-size: 9px; letter-spacing: .08em; }
+  .system-boundary strong { color: var(--muted); font-size: 11px; font-weight: 650; }
+  .solution-stack { display: grid; gap: 16px; }
+  .solution-block { display: grid; grid-template-columns: minmax(0, .9fr) minmax(340px, 1.1fr); gap: 56px; align-items: start; border: 1px solid var(--line); border-radius: var(--radius); padding: 40px; background: rgba(255,255,255,.018); }
+  .solution-block h3 { margin-top: 24px; font-size: clamp(30px, 4vw, 48px); }
+  .solution-block p { color: var(--muted); }
+  .solution-modules { display: grid; border-top: 1px solid var(--line); }
+  .solution-modules span { min-height: 48px; display: grid; grid-template-columns: 32px 1fr; gap: 10px; align-items: center; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+  .solution-modules i { color: var(--green); font-family: "SFMono-Regular", Consolas, monospace; font-size: 9px; font-style: normal; }
+  :focus-visible { outline: 3px solid rgba(124,245,180,.42); outline-offset: 3px; }
   @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { transition-duration: .01ms !important; } }
-  @media (max-width: 980px) { .hero { grid-template-columns: 1fr; gap: 48px; padding-top: 68px; } .hero-copy { max-width: 820px; } .workspace { transform: none; } .split { grid-template-columns: 1fr; gap: 42px; } .sticky-copy { position: static; } .principle-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } .contact-layout { grid-template-columns: 1fr; gap: 42px; } }
-  @media (max-width: 760px) { .frame { width: min(calc(100% - 30px), 1200px); } .site-header { padding-top: 9px; } .header-inner { min-height: 58px; border-radius: 15px; padding-left: 10px; } .brand span { display: none; } .brand img { width: 34px; height: 34px; } .nav-link { padding-inline: 8px; } .nav-optional { display: none; } .header-cta { min-height: 42px; padding-inline: 13px; } .hero, .page-hero { padding-top: 64px; } .hero { padding-bottom: 78px; } .workspace-body { grid-template-columns: 1fr; min-height: 0; } .workspace-nav { display: none; } .workspace-main { padding: 16px; } .metric-grid { grid-template-columns: 1fr; } .metric { min-height: 76px; } .product-grid, .template-grid, .module-grid, .principle-grid, .case-grid { grid-template-columns: 1fr; } .section { padding: 76px 0; } .callout { grid-template-columns: 1fr; padding: 26px; } .contact-form { padding: 20px; } .field-grid { grid-template-columns: 1fr; } label.wide { grid-column: auto; } .prose section { grid-template-columns: 1fr; gap: 6px; } .footer-inner { display: grid; } .footer-links { justify-content: flex-start; } }
+  @media (max-width: 980px) { .hero { grid-template-columns: 1fr; gap: 48px; padding-top: 68px; } .hero-copy { max-width: 820px; } .workspace { transform: none; } .split, .solution-block { grid-template-columns: 1fr; gap: 42px; } .sticky-copy { position: static; } .principle-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } .contact-layout { grid-template-columns: 1fr; gap: 42px; } }
+  @media (max-width: 760px) { .frame { width: min(calc(100% - 30px), 1200px); } .header-inner { min-height: 62px; } .brand-name { display: none; } .nav-link { padding-inline: 8px; } .nav-optional { display: none; } .header-cta { min-height: 42px; padding-inline: 13px; } .hero, .page-hero { padding-top: 64px; } .hero { padding-bottom: 78px; } .workspace-body { grid-template-columns: 1fr; min-height: 0; } .workspace-nav { display: none; } .workspace-main { padding: 16px; } .metric-grid { grid-template-columns: 1fr; } .metric { min-height: 76px; } .product-grid, .template-grid, .module-grid, .principle-grid, .case-grid { grid-template-columns: 1fr; } .solution-block { padding: 24px; } .system-preview-body { padding: 20px; } .system-row { grid-template-columns: 28px 92px minmax(0, 1fr); } .system-row i { display: none; } .section { padding: 76px 0; } .callout { grid-template-columns: 1fr; padding: 26px; } .contact-form { padding: 20px; } .field-grid { grid-template-columns: 1fr; } label.wide { grid-column: auto; } .prose section { grid-template-columns: 1fr; gap: 6px; } .footer-inner { display: grid; } .footer-links { justify-content: flex-start; } }
   @media (max-width: 420px) { .nav-link { display: none; } h1 { font-size: 43px; } .product-card { padding: 24px; } }
 `
 
 function brandHtml() {
-  return `<a class="brand" href="/" aria-label="SuperMega home"><img src="/favicon.svg" width="64" height="64" alt="" /><span>supermega<span class="brand-domain">.dev</span></span></a>`
+  return `<a class="brand" href="/" aria-label="SuperMega home"><span class="brand-mark" aria-hidden="true">&gt;_</span><span class="brand-name">SUPERMEGA</span></a>`
 }
 
 function navLink(route, label, currentRoute, optional = false) {
@@ -226,11 +242,11 @@ function navLink(route, label, currentRoute, optional = false) {
 }
 
 function headerHtml(currentRoute) {
-  return `<header class="site-header"><div class="frame header-inner">${brandHtml()}<nav class="nav" aria-label="Primary">${navLink(shop.route, 'Shop', currentRoute)}${navLink(plant.route, 'Plant', currentRoute)}${navLink('/templates/', 'Templates', currentRoute, true)}<a class="nav-link nav-optional" href="https://app.supermega.dev/assist/">Assist</a><a class="button primary compact header-cta" href="/contact/">Talk to us</a></nav></div></header>`
+  return `<header class="site-header"><div class="frame header-inner">${brandHtml()}<nav class="nav" aria-label="Primary">${navLink('/solutions/', 'System', currentRoute)}${navLink('/contact/', 'Contact', currentRoute, true)}<a class="button primary compact header-cta" href="https://app.supermega.dev/">Open app</a></nav></div></header>`
 }
 
 function footerHtml() {
-  return `<footer class="site-footer"><div class="frame footer-inner"><span>© ${new Date().getUTCFullYear()} SuperMega · Operating software for Myanmar businesses.</span><span class="footer-links"><a href="/shop/">Shop</a><a href="/plant/">Plant</a><a href="/templates/">Templates</a><a href="/trust/">Trust</a><a href="/contact/">Contact</a><a href="/privacy/">Privacy</a></span></div></footer>`
+  return `<footer class="site-footer"><div class="frame footer-inner"><span>© ${new Date().getUTCFullYear()} SuperMega · Company systems with accountable automation.</span><span class="footer-links"><a href="/solutions/">System</a><a href="/trust/">Trust</a><a href="/contact/">Contact</a><a href="/privacy/">Privacy</a><a href="https://app.supermega.dev/">App</a></span></div></footer>`
 }
 
 function documentHtml({ route, title, description, content, robots = 'index,follow' }) {
@@ -263,56 +279,46 @@ function documentHtml({ route, title, description, content, robots = 'index,foll
 </html>`
 }
 
-function workspacePreview(product) {
-  const isShop = product.id === 'shop'
-  const nav = isShop ? ['Register', 'Stock', 'Customers', 'Bookings', 'Reports', 'Daily close'] : ['Overview', 'Production', 'Machines', 'Materials', 'Quality', 'Handoff']
-  const metrics = isShop ? ['Counter ready', 'Stock connected', 'Close controlled'] : ['Plan visible', 'State recorded', 'Handoff ready']
-  const rows = isShop ? ['Sales and payment flow', 'Stock and reorder review', 'Owner close and exceptions'] : ['Production plan and output', 'Machine state and downtime', 'Material, quality and issues']
-  return `<div class="workspace" aria-label="${escapeHtml(product.name)} demonstration workspace">
-    <div class="workspace-bar"><span>&gt;_ ${escapeHtml(product.id)} / demo-workspace</span><span class="workspace-dots"><i></i><i></i><i></i></span></div>
-    <div class="workspace-body"><aside class="workspace-nav"><strong>${escapeHtml(product.name)}</strong>${nav.map((item, index) => `<span class="${index === 0 ? 'active' : ''}">${escapeHtml(item)}</span>`).join('')}</aside>
-    <div class="workspace-main"><div class="workspace-title"><div><strong>${escapeHtml(isShop ? 'Today’s operating view' : 'Current plant view')}</strong><small>Demonstration interface · no client data</small></div><span class="live-pill">Ready</span></div>
-    <div class="metric-grid">${metrics.map((item) => `<div class="metric"><span>Control</span><strong>${escapeHtml(item)}</strong></div>`).join('')}</div>
-    <div class="work-list">${rows.map((item, index) => `<div class="work-row"><span>${escapeHtml(item)}</span><span class="progress"><i style="width:${[88, 68, 78][index]}%"></i></span></div>`).join('')}</div></div></div>
+function workspacePreview() {
+  const rows = [
+    ['01', 'Command', 'Accountable work and decisions'],
+    ['02', 'Operations', 'Commerce and production records'],
+    ['03', 'Agents', 'Draft, inspect, and escalate'],
+    ['04', 'Controls', 'Approval, evidence, and recovery'],
+  ]
+  return `<div class="workspace system-preview" aria-label="SuperMega operating system preview">
+    <div class="workspace-bar"><span>&gt;_ supermega / company-system</span><span class="live-pill">Local trial</span></div>
+    <div class="system-preview-body">
+      <div class="system-kicker">ONE OPERATING LAYER</div>
+      <div class="system-flow">${rows.map(([index, title, copy]) => `<div class="system-row"><span>${index}</span><strong>${title}</strong><small>${copy}</small><i></i></div>`).join('')}</div>
+      <div class="system-boundary"><span>HUMAN CONTROL</span><strong>External sends · payments · publishing · production changes</strong></div>
+    </div>
   </div>`
-}
-
-function productCard(product, index) {
-  return `<article class="product-card ${escapeHtml(product.id)}"><span class="card-index">0${index + 1} / ${escapeHtml(product.status)}</span><h3>${escapeHtml(product.name)}</h3><p>${escapeHtml(product.description)}</p><a class="card-link" href="${escapeHtml(product.route)}">Explore ${escapeHtml(product.name)}</a></article>`
 }
 
 const homeHtml = documentHtml({
   route: '/',
-  title: 'SuperMega | Shop and Plant operating software',
+  title: 'SuperMega | Company operating system',
   description: manifest.company.statement,
   content: `<main>
-    <section class="frame hero"><div class="hero-copy"><span class="eyebrow">${escapeHtml(manifest.company.positioning)}</span><h1>${escapeHtml(manifest.company.headline)}</h1><p class="lede">${escapeHtml(manifest.company.supporting)}</p><div class="actions"><a class="button primary" href="/shop/">Explore Shop</a><a class="button" href="/plant/">Explore Plant</a></div><div class="hero-note"><span>Configured around real workflows</span><span>Human approval for consequential actions</span><span>No public pricing theatre</span></div></div>${workspacePreview(shop)}</section>
-    <section class="frame section" aria-labelledby="products-heading"><div class="section-head"><span class="eyebrow">Two operating systems</span><h2 id="products-heading">Start with the system closest to the work.</h2><p>One consistent SuperMega foundation, configured for commerce or production. Each implementation begins with a proven template and ends with an owned operating system.</p></div><div class="product-grid">${manifest.products.map(productCard).join('')}</div></section>
-    <section class="frame section"><div class="split"><div class="sticky-copy"><span class="eyebrow">Embedded intelligence</span><h2>AI helps inside the workflow.</h2><p class="lede">It can summarize, detect anomalies, prepare decisions, and draft next actions. Operators stay in control of sends, approvals, payments, and irreversible changes.</p><div class="actions"><a class="button" href="/trust/#governed-ai">See the trust boundary</a></div></div><div class="module-grid">${['Source-grounded summaries','Exception and anomaly review','Draft actions with evidence','Role-aware operating briefs','Approval before external action','Audit history and recovery'].map((item, index) => `<article class="module-card"><span>0${index + 1}</span><strong>${escapeHtml(item)}</strong></article>`).join('')}</div></div></section>
-    <section class="frame section"><div class="callout"><div><h2>Bring one workflow that still breaks.</h2><p>We will map it to Shop or Plant, choose the smallest useful template, and define a controlled path from demo to live operations.</p></div><a class="button primary" href="/contact/">Start the conversation</a></div></section>
+    <section class="frame hero"><div class="hero-copy"><span class="eyebrow">${escapeHtml(manifest.company.positioning)}</span><h1>${escapeHtml(manifest.company.headline)}</h1><p class="lede">${escapeHtml(manifest.company.supporting)}</p><div class="actions"><a class="button primary" href="https://app.supermega.dev/">Open the app</a><a class="button" href="/solutions/">See the system</a></div><div class="hero-note"><span>Real operating workflows</span><span>Evidence before action</span><span>Human authority where it matters</span></div></div>${workspacePreview()}</section>
+    <section class="frame section" aria-labelledby="system-heading"><div class="section-head"><span class="eyebrow">One system</span><h2 id="system-heading">Operations and agents share the same truth.</h2><p>Commerce and production records feed a company command layer. Governed agents inspect that evidence, prepare work, and stop at explicit authority boundaries.</p></div><div class="product-grid"><article class="product-card"><span class="card-index">01 / OPERATIONS</span><h3>Run the work</h3><p>Shop and Plant keep sales, stock, output, machines, issues, and handoffs in reviewable operating records.</p><a class="card-link" href="/solutions/#operations">Explore operations</a></article><article class="product-card plant"><span class="card-index">02 / AGENTS</span><h3>Scale the team</h3><p>Role-based agents organize, summarize, draft, and escalate while consequential actions remain owner-gated.</p><a class="card-link" href="/solutions/#agents">Explore agents</a></article></div></section>
+    <section class="frame section"><div class="split"><div class="sticky-copy"><span class="eyebrow">Built for control</span><h2>Move faster without pretending autonomy is authority.</h2><p class="lede">Every capability has a source boundary, a named owner, visible evidence, and a clear stop condition.</p><div class="actions"><a class="button" href="/trust/">Review the control model</a></div></div><div class="module-grid">${['Command queue','Commerce records','Production records','Governed agent briefs','Approval gates','Export and recovery'].map((item, index) => `<article class="module-card"><span>0${index + 1}</span><strong>${escapeHtml(item)}</strong></article>`).join('')}</div></div></section>
+    <section class="frame section"><div class="callout"><div><h2>Start with one broken workflow.</h2><p>We map the records, owners, decisions, and controls, then configure the smallest system that can prove the outcome.</p></div><a class="button primary" href="/contact/">Talk to SuperMega</a></div></section>
   </main>`,
 })
 
-function productPage(product) {
-  const isShop = product.id === 'shop'
-  return documentHtml({
-    route: product.route,
-    title: `${product.name} | SuperMega`,
-    description: product.description,
-    content: `<main><section class="frame hero"><div class="hero-copy"><span class="eyebrow">${escapeHtml(product.eyebrow)}</span><h1>${escapeHtml(product.headline)}</h1><p class="lede">${escapeHtml(product.description)}</p><div class="actions"><a class="button primary" href="${escapeHtml(product.primaryCta.url)}">${escapeHtml(product.primaryCta.label)}</a><a class="button" href="${escapeHtml(product.secondaryCta.url)}">${escapeHtml(product.secondaryCta.label)}</a></div><div class="hero-note"><span>Live isolated product demo</span><span>Configured for roles and approvals</span><span>Measured acceptance before go-live</span></div></div>${workspacePreview(product)}</section>
-      <section class="frame section"><div class="split"><div class="sticky-copy"><span class="eyebrow">Core system</span><h2>One flow from activity to control.</h2><p class="lede">The modules share the same records, roles, evidence, and operating history. Teams stop rebuilding context at every handoff.</p></div><div class="module-grid">${product.modules.map((module, index) => `<article class="module-card"><span>0${index + 1}</span><strong>${escapeHtml(module)}</strong></article>`).join('')}</div></div></section>
-      <section class="frame section"><div class="section-head"><span class="eyebrow">${escapeHtml(product.name)} templates</span><h2>Start proven. Configure the difference.</h2><p>Templates provide the initial information model, screens, roles, and acceptance path. Your actual workflow decides the final system.</p></div><div class="template-grid">${product.templates.map((template) => `<article class="template-card"><span class="product-label">${escapeHtml(product.name)}</span><h3>${escapeHtml(template.name)}</h3><p>${escapeHtml(template.outcome)}</p><a class="card-link" href="/contact/?product=${escapeHtml(product.id)}&amp;template=${escapeHtml(template.id)}">Configure this template</a></article>`).join('')}</div><div class="actions"><a class="button" href="/templates/">Compare every template</a></div></section>
-      <section class="frame section"><div class="split"><div><span class="eyebrow">Lifecycle</span><h2>Demo to dependable operation.</h2></div><div class="steps">${(isShop ? ['Choose the closest Shop template and branch model.','Configure catalogue, roles, local payments, rules, and opening data.','Validate register, stock, close, backup, and recovery with real operators.','Go live with monitoring and a named support boundary.','Add governed assistance after the workflow is stable.'] : ['Map plants, lines, machines, products, shifts, and approval roles.','Configure planning, records, materials, quality, maintenance, and handoff.','Run role-based acceptance with approved operational data.','Go live by plant or line with audit and recovery controls.','Add governed summaries and anomaly review after the workflow is stable.']).map((step) => `<article class="step"><div><strong>${escapeHtml(step)}</strong><p>Evidence and approval are recorded before the next stage.</p></div></article>`).join('')}</div></div></section>
-      <section class="frame section"><div class="callout"><div><h2>${isShop ? 'Open Shop now.' : 'Open the isolated Plant workspace.'}</h2><p>${isShop ? 'Use the live retail workspace, then tell us what your real counter, branch, and close need.' : 'Use generic production records to test jobs, output, machine state, issues, and handoff. No client data enters the public demo.'}</p></div><a class="button primary" href="${escapeHtml(product.primaryCta.url)}">${escapeHtml(product.primaryCta.label)}</a></div></section>
-    </main>`,
-  })
-}
-
-const templatesHtml = documentHtml({
-  route: '/templates/',
-  title: 'Templates | SuperMega',
-  description: 'Starting structures for Shop and Plant, configured around real operating workflows.',
-  content: `<main><section class="frame page-hero"><span class="eyebrow">Template library</span><h1>Starting structures, not boxed software.</h1><p class="lede">Choose the closest operating pattern. SuperMega configures data, roles, screens, approvals, integrations, and acceptance around how your team actually works.</p></section>${manifest.products.map((product) => `<section class="frame section"><div class="section-head"><span class="eyebrow">${escapeHtml(product.name)}</span><h2>${escapeHtml(product.eyebrow)}</h2><p>${escapeHtml(product.description)}</p></div><div class="template-grid">${product.templates.map((template) => `<article class="template-card"><span class="product-label">${escapeHtml(product.name)}</span><h3>${escapeHtml(template.name)}</h3><p>${escapeHtml(template.outcome)}</p><a class="card-link" href="/contact/?product=${escapeHtml(product.id)}&amp;template=${escapeHtml(template.id)}">Use this starting point</a></article>`).join('')}</div></section>`).join('')}<section class="frame section"><div class="callout"><div><h2>Your workflow does not need a perfect label.</h2><p>Send one example, screenshot, spreadsheet, or handoff. We will choose the closest base and show what needs configuration.</p></div><a class="button primary" href="/contact/?product=guide">Help me choose</a></div></section></main>`,
+const solutionsHtml = documentHtml({
+  route: '/solutions/',
+  title: 'System | SuperMega',
+  description: 'SuperMega unifies company command, commerce, production, governed agents, and control.',
+  content: `<main>
+    <section class="frame page-hero"><span class="eyebrow">The SuperMega system</span><h1>One operating layer. Four clear surfaces.</h1><p class="lede">Command coordinates the company. Operations holds the records. Agents prepare reviewable work. Controls preserve authority, evidence, and recovery.</p><div class="actions"><a class="button primary" href="https://app.supermega.dev/">Open the local trial</a><a class="button" href="/contact/">Configure a workspace</a></div></section>
+    <section class="frame section" id="operations"><div class="section-head"><span class="eyebrow">Operations</span><h2>Shop and Plant are operating modes, not separate brands.</h2><p>They share one visual system, one command layer, one approval model, and one implementation lifecycle.</p></div><div class="solution-stack">${manifest.products.map((product, index) => `<article class="solution-block" id="${escapeHtml(product.id)}"><div><span class="card-index">0${index + 1} / ${escapeHtml(product.eyebrow)}</span><h3>${escapeHtml(product.headline)}</h3><p>${escapeHtml(product.description)}</p><div class="actions"><a class="button primary" href="${escapeHtml(product.primaryCta.url)}">${escapeHtml(product.primaryCta.label)}</a><a class="button" href="${escapeHtml(product.secondaryCta.url)}">${escapeHtml(product.secondaryCta.label)}</a></div></div><div class="solution-modules">${product.modules.map((module, moduleIndex) => `<span><i>0${moduleIndex + 1}</i>${escapeHtml(module)}</span>`).join('')}</div></article>`).join('')}</div></section>
+    <section class="frame section" id="agents"><div class="split"><div class="sticky-copy"><span class="eyebrow">Governed agents</span><h2>A team machine with explicit boundaries.</h2><p class="lede">Product, engineering, operations, growth, and finance agents can organize queues, inspect approved sources, prepare drafts, and escalate uncertainty. They do not silently acquire authority.</p><div class="actions"><a class="button" href="https://app.supermega.dev/agents/">Open Agents</a><a class="button" href="/trust/#governed-ai">See the boundary</a></div></div><div class="steps"><article class="step"><div><strong>Observe approved records</strong><p>Sources and workspace scope are explicit.</p></div></article><article class="step"><div><strong>Prepare evidence-backed work</strong><p>Drafts retain the inputs used to produce them.</p></div></article><article class="step"><div><strong>Escalate uncertainty</strong><p>Missing data and conflicts become visible exceptions.</p></div></article><article class="step"><div><strong>Wait at the authority gate</strong><p>Sends, payments, publishing, and production changes require approval.</p></div></article></div></div></section>
+    <section class="frame section" id="templates"><div class="section-head"><span class="eyebrow">Starting templates</span><h2>Configure the difference. Keep the foundation.</h2><p>Templates accelerate discovery without pretending every business works the same way.</p></div><div class="template-grid">${manifest.products.flatMap((product) => product.templates.map((template) => `<article class="template-card"><span class="product-label">${escapeHtml(product.name)}</span><h3>${escapeHtml(template.name)}</h3><p>${escapeHtml(template.outcome)}</p><a class="card-link" href="/contact/?product=${escapeHtml(product.id)}&amp;template=${escapeHtml(template.id)}">Configure this base</a></article>`)).join('')}</div></section>
+    <section class="frame section"><div class="callout"><div><h2>Your workflow does not need a perfect label.</h2><p>Bring one example, screenshot, spreadsheet, or handoff. We will map it to the right operating base and control boundary.</p></div><a class="button primary" href="/contact/?product=guide">Map my workflow</a></div></section>
+  </main>`,
 })
 
 const trustHtml = documentHtml({
@@ -320,7 +326,7 @@ const trustHtml = documentHtml({
   title: 'Trust | SuperMega',
   description: 'How SuperMega handles governance, privacy, approvals, audit, and production rollout.',
   content: `<main><section class="frame page-hero"><span class="eyebrow">Trust and control</span><h1>Automation earns authority.</h1><p class="lede">Shop and Plant begin with clear data, role, approval, and recovery boundaries. Assistance expands only after the underlying workflow is observable and accepted.</p></section><section class="frame section"><div class="principle-grid">${[
-    ['Private by default','Client records and production workspaces are not public demo content.'],
+    ['Private by default','Client records and production workspaces are not public trial content.'],
     ['Least authority','People and automated helpers receive only the access required for the current task.'],
     ['Human approval','External sends, payments, approvals, and irreversible writes remain behind an explicit gate.'],
     ['Source grounded','Summaries and draft actions identify the records and evidence used to produce them.'],
@@ -329,13 +335,13 @@ const trustHtml = documentHtml({
   ].map(([title, body], index) => `<article class="principle-card"><span class="card-index">0${index + 1}</span><h3>${escapeHtml(title)}</h3><p>${escapeHtml(body)}</p></article>`).join('')}</div></section><section class="frame section" id="governed-ai"><div class="split"><div><span class="eyebrow">Governed assistance</span><h2>AI is a capability, not an unsupervised employee.</h2><p class="lede">It helps teams inspect, summarize, compare, and prepare. The system preserves evidence and routes consequential actions to the responsible person.</p></div><div class="steps"><article class="step"><div><strong>Read approved sources</strong><p>The source boundary is explicit and can be revoked.</p></div></article><article class="step"><div><strong>Prepare reviewable output</strong><p>Claims, exceptions, and proposed actions retain their supporting context.</p></div></article><article class="step"><div><strong>Escalate uncertainty</strong><p>Missing evidence and conflicting data become visible exceptions.</p></div></article><article class="step"><div><strong>Wait for approval</strong><p>Consequential work does not silently cross the human control boundary.</p></div></article></div></div></section><section class="frame section"><div class="callout"><div><h2>Need a security or deployment review?</h2><p>Tell us the systems, data classes, roles, and controls your implementation must satisfy.</p></div><a class="button primary" href="/contact/?from=trust">Talk through the boundary</a></div></section></main>`,
 })
 
-const contactScript = `<script>(function(){var form=document.querySelector('[data-contact-form]');if(!form)return;var query=new URLSearchParams(location.search),status=form.querySelector('[data-form-status]'),submit=form.querySelector('button[type="submit"]'),product=form.querySelector('[name="product"]'),template=form.querySelector('[name="template"]'),requestKey=form.querySelector('[name="idempotency_key"]'),source=form.querySelector('[name="source_url"]'),referrer=form.querySelector('[name="referrer"]');function newKey(){if(window.crypto&&crypto.randomUUID)return crypto.randomUUID();var bytes=new Uint8Array(24);crypto.getRandomValues(bytes);return Array.from(bytes,function(value){return value.toString(16).padStart(2,'0')}).join('')}if(query.get('product')&&product)product.value=query.get('product');if(query.get('template')&&template)template.value=query.get('template');form.addEventListener('submit',async function(event){event.preventDefault();status.textContent='Sending…';submit.disabled=true;if(!requestKey.value)requestKey.value=newKey();source.value=location.href;referrer.value=document.referrer||'';var payload=Object.fromEntries(new FormData(form).entries());try{var response=await fetch('/api/contact-submissions',{method:'POST',headers:{'content-type':'application/json','accept':'application/json','x-idempotency-key':requestKey.value},body:JSON.stringify(payload)});var body=await response.json().catch(function(){return {};});if(!response.ok)throw new Error(body.reason||'send_failed');form.reset();requestKey.value='';status.textContent='Request received. We will reply with the clearest next step.';}catch(error){status.textContent=error&&error.message==='rate_limited'?'Too many requests from this connection. Please wait ten minutes or email swanhtet@supermega.dev.':'Could not route the request here. Email swanhtet@supermega.dev.';}finally{submit.disabled=false;}});})();</script>`
+const contactScript = `<script>(function(){var form=document.querySelector('[data-contact-form]');if(!form)return;var query=new URLSearchParams(location.search),status=form.querySelector('[data-form-status]'),submit=form.querySelector('button[type="submit"]'),product=form.querySelector('[name="product"]'),template=form.querySelector('[name="template"]'),requestKey=form.querySelector('[name="idempotency_key"]'),source=form.querySelector('[name="source_url"]'),referrer=form.querySelector('[name="referrer"]');function newKey(){if(window.crypto&&crypto.randomUUID)return crypto.randomUUID();var bytes=new Uint8Array(24);crypto.getRandomValues(bytes);return Array.from(bytes,function(value){return value.toString(16).padStart(2,'0')}).join('')}if(query.get('product')&&product)product.value=query.get('product');if(query.get('template')&&template)template.value=query.get('template');form.addEventListener('submit',async function(event){event.preventDefault();status.textContent='Sending...';submit.disabled=true;if(!requestKey.value)requestKey.value=newKey();source.value=location.href;referrer.value=document.referrer||'';var payload=Object.fromEntries(new FormData(form).entries());try{var response=await fetch('/api/contact-submissions',{method:'POST',headers:{'content-type':'application/json','accept':'application/json','x-idempotency-key':requestKey.value},body:JSON.stringify(payload)});var body=await response.json().catch(function(){return {};});if(!response.ok)throw new Error(body.reason||'send_failed');form.reset();requestKey.value='';status.textContent='Request received. We will reply with the clearest next step.';}catch(error){status.textContent=error&&error.message==='rate_limited'?'Too many requests from this connection. Please wait ten minutes or email swanhtet@supermega.dev.':'Could not route the request here. Email swanhtet@supermega.dev.';}finally{submit.disabled=false;}});})();</script>`
 
 const contactHtml = documentHtml({
   route: '/contact/',
   title: 'Contact | SuperMega',
-  description: 'Tell SuperMega which Shop or Plant workflow should run better.',
-  content: `<main class="frame"><section class="page-hero"><span class="eyebrow">Direct contact</span><h1>What should run better?</h1><p class="lede">Send one real workflow, screenshot, spreadsheet, or recurring handoff. We will reply with the smallest useful next step.</p></section><section class="contact-layout"><div class="contact-copy"><h2>Start with the work.</h2><p>No account, data connection, automation, or external action begins from this form. We first identify the product, template, and approval boundary.</p><div class="direct-links"><a href="mailto:swanhtet@supermega.dev"><span>Email</span><strong>swanhtet@supermega.dev →</strong></a><a href="tel:+9595000721"><span>Phone</span><strong>+95 9 500 0721 →</strong></a></div></div><form class="contact-form" action="/api/contact-submissions" method="post" data-contact-form><h3>Send the workflow</h3><div class="field-grid"><label>Name<input name="name" autocomplete="name" required maxlength="120" /></label><label>Work email<input name="email" type="email" autocomplete="email" required maxlength="180" /></label><label class="wide">Company<input name="company" autocomplete="organization" required maxlength="180" /></label><label>Starting point<select name="product"><option value="guide">Help me choose</option><option value="shop">Shop</option><option value="plant">Plant</option></select></label><label>Template, if known<input name="template" maxlength="120" /></label><label class="wide">What happens now, and what should be better?<textarea name="goal" required maxlength="4000"></textarea></label></div><input type="hidden" name="source_url" /><input type="hidden" name="referrer" /><input type="hidden" name="idempotency_key" /><input name="website" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px" /><button class="button primary" type="submit">Send request</button><p class="form-note">Your note is used only to respond and prepare the agreed next step.</p><p class="form-status" data-form-status aria-live="polite"></p></form></section></main>${contactScript}`,
+  description: 'Tell SuperMega which company workflow should run better.',
+  content: `<main class="frame"><section class="page-hero"><span class="eyebrow">Start a system</span><h1>What should run better?</h1><p class="lede">Send one real workflow, screenshot, spreadsheet, or recurring handoff. We will reply with the smallest useful system step.</p></section><section class="contact-layout"><div class="contact-copy"><h2>Start with the work.</h2><p>No account, data connection, automation, or external action begins from this form. We first identify the operating records, owner, acceptance test, and authority boundary.</p><div class="direct-links"><a href="mailto:swanhtet@supermega.dev"><span>Email</span><strong>swanhtet@supermega.dev &gt;</strong></a><a href="tel:+9595000721"><span>Phone</span><strong>+95 9 500 0721 &gt;</strong></a></div></div><form class="contact-form" action="/api/contact-submissions" method="post" data-contact-form><h3>Send the workflow</h3><div class="field-grid"><label>Name<input name="name" autocomplete="name" required maxlength="120" /></label><label>Work email<input name="email" type="email" autocomplete="email" required maxlength="180" /></label><label class="wide">Company<input name="company" autocomplete="organization" required maxlength="180" /></label><label>Starting point<select name="product"><option value="guide">Help me choose</option><option value="company-system">Company system</option><option value="shop">Shop operations</option><option value="plant">Plant operations</option><option value="agents">Governed agents</option></select></label><label>Template, if known<input name="template" maxlength="120" /></label><label class="wide">What happens now, and what should be better?<textarea name="goal" required maxlength="4000"></textarea></label></div><input type="hidden" name="source_url" /><input type="hidden" name="referrer" /><input type="hidden" name="idempotency_key" /><input name="website" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px" /><button class="button primary" type="submit">Send workflow</button><p class="form-note">Your note is used only to respond and prepare the agreed next step.</p><p class="form-status" data-form-status aria-live="polite"></p></form></section></main>${contactScript}`,
 })
 
 const privacyHtml = documentHtml({
@@ -350,7 +356,7 @@ const notFoundHtml = documentHtml({
   title: 'Page not found | SuperMega',
   description: 'The requested SuperMega route does not exist.',
   robots: 'noindex,nofollow',
-  content: `<main class="frame"><section class="page-hero"><span class="eyebrow">404 / route retired</span><h1>That page is no longer part of SuperMega.</h1><p class="lede">Return to the current company site, Shop, Plant, or the template library.</p><div class="actions"><a class="button primary" href="/">Home</a><a class="button" href="/shop/">Shop</a><a class="button" href="/plant/">Plant</a></div></section></main>`,
+  content: `<main class="frame"><section class="page-hero"><span class="eyebrow">404 / route retired</span><h1>That page is no longer part of SuperMega.</h1><p class="lede">Return to the company site, review the system, or open the app.</p><div class="actions"><a class="button primary" href="/">Home</a><a class="button" href="/solutions/">System</a><a class="button" href="https://app.supermega.dev/">Open app</a></div></section></main>`,
 })
 
 const healthFunction = `'use strict'
@@ -424,7 +430,7 @@ function normalizePayload(payload) {
     name: text(payload.name, 120),
     email: text(payload.email, 180).toLowerCase(),
     company: text(payload.company, 180),
-    product: ['shop', 'plant', 'guide'].includes(requestedProduct) ? requestedProduct : 'guide',
+    product: ['shop', 'plant', 'agents', 'company-system', 'guide'].includes(requestedProduct) ? requestedProduct : 'guide',
     template: text(payload.template, 120),
     goal: text(payload.goal, 4000),
     source_url: text(payload.source_url, 700),
@@ -595,9 +601,7 @@ module.exports = async function handler(req, res) {
 
 const pageFiles = new Map([
   ['index.html', homeHtml],
-  ['shop/index.html', productPage(shop)],
-  ['plant/index.html', productPage(plant)],
-  ['templates/index.html', templatesHtml],
+  ['solutions/index.html', solutionsHtml],
   ['trust/index.html', trustHtml],
   ['contact/index.html', contactHtml],
   ['privacy/index.html', privacyHtml],
