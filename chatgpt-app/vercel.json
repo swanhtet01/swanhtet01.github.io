@@ -1,0 +1,26 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "git": {
+    "deploymentEnabled": false
+  },
+  "installCommand": "npm ci --ignore-scripts",
+  "buildCommand": "npm run build:vercel",
+  "functions": {
+    "api/*.mjs": {
+      "maxDuration": 30,
+      "memory": 512,
+      "includeFiles": "{catalog.snapshot.json,public/**}"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/mcp",
+      "destination": "/api/mcp"
+    },
+    {
+      "source": "/healthz",
+      "destination": "/api/healthz"
+    }
+  ]
+}

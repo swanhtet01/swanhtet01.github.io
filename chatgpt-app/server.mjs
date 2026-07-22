@@ -385,6 +385,12 @@ export function createHttpApp(options = {}) {
   }
   const app = express();
   app.disable("x-powered-by");
+  if (options.trustProxy !== undefined) {
+    if (options.trustProxy !== 1) {
+      throw new Error("trustProxy must be exactly 1 when enabled.");
+    }
+    app.set("trust proxy", 1);
+  }
   app.use(absoluteRequestDeadline(requestTimeoutMs));
   app.use((_req, res, next) => {
     res.setHeader("Cache-Control", "no-store");

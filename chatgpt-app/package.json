@@ -6,10 +6,15 @@
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
-    "check": "node --check server.mjs && node --check catalog.mjs && node --test"
+    "build": "npm run check:runtime",
+    "build:vercel": "npm run check:runtime && node verify-deployment-env.mjs",
+    "check": "npm run check:runtime && npm run check:repo",
+    "check:runtime": "node --check server.mjs && node --check catalog.mjs && node --check deployment.mjs && node --check verify-deployment-env.mjs && node --check api/mcp.mjs && node --check api/healthz.mjs && node --check test/verify-vercel-output.mjs && node --test test/app.test.mjs test/deployment.test.mjs",
+    "check:repo": "node --test test/repo-contract.test.mjs",
+    "verify:vercel-output": "node test/verify-vercel-output.mjs"
   },
   "engines": {
-    "node": ">=20"
+    "node": "24.x"
   },
   "author": "SuperMega",
   "license": "UNLICENSED",

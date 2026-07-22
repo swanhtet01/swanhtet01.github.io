@@ -1,0 +1,114 @@
+{
+  "catalogVersion": "2026-07-22.6",
+  "products": [
+    {
+      "id": "commerce",
+      "name": "Commerce",
+      "status": "available-in-app",
+      "headline": "Turn conversations into controlled orders.",
+      "description": "Preview browser-local orders, stock, fulfilment, payment status, follow-up, and close across common channels. No live channel, checkout, payment, delivery, customer send, or external write is connected.",
+      "primaryCta": {
+        "url": "https://app.supermega.dev/operations/commerce/?tab=today"
+      },
+      "modules": [
+        "Conversation and order intake",
+        "Catalogue and stock control",
+        "Fulfilment and exceptions",
+        "Local payments and reconciliation",
+        "Customer history and follow-up",
+        "Owner brief, audit and recovery"
+      ],
+      "templates": [
+        {
+          "id": "social-commerce",
+          "name": "Social commerce",
+          "outcome": "Convert trusted chat channels into structured orders, stock movement, fulfilment, and follow-up.",
+          "workflow": [
+            "Capture conversation",
+            "Confirm order",
+            "Reserve stock",
+            "Fulfil",
+            "Collect payment",
+            "Follow up"
+          ],
+          "entryPoints": ["Messenger", "Viber", "Phone"],
+          "metric": "Order handling time and completion rate"
+        },
+        {
+          "id": "retail-wholesale",
+          "name": "Retail and wholesale",
+          "outcome": "Control customer orders, stock, payment, delivery, and daily reconciliation.",
+          "workflow": [
+            "Capture order",
+            "Allocate stock",
+            "Pick",
+            "Reconcile payment",
+            "Deliver",
+            "Close"
+          ],
+          "entryPoints": ["Walk-in", "Phone", "Spreadsheet"],
+          "metric": "Pick-to-close time and stock variance"
+        },
+        {
+          "id": "restaurant-ordering",
+          "name": "Restaurant ordering",
+          "outcome": "Coordinate channel orders, preparation, handoff, delivery, payment, and close.",
+          "workflow": [
+            "Capture channel order",
+            "Confirm",
+            "Prepare",
+            "Handoff",
+            "Deliver",
+            "Close"
+          ],
+          "entryPoints": ["Messenger", "Phone", "Website", "Walk-in"],
+          "metric": "Order-to-handoff time and exception rate"
+        }
+      ]
+    },
+    {
+      "id": "production",
+      "name": "Production",
+      "status": "available-in-app",
+      "headline": "Give the production floor one operational memory.",
+      "description": "Preview browser-local plans, output, machine state, quality, maintenance, exceptions, and shift handoffs. No machine telemetry, production control, access change, or external write is connected.",
+      "primaryCta": {
+        "url": "https://app.supermega.dev/operations/production/?tab=today"
+      },
+      "modules": [
+        "Planning and output records",
+        "Material availability and exceptions",
+        "Quality and traceability",
+        "Equipment and maintenance",
+        "Shift exceptions and approvals",
+        "Owner brief, audit and recovery"
+      ],
+      "templates": [
+        {
+          "id": "production-control",
+          "name": "Production control",
+          "outcome": "Plan, run, confirm, and review output by line, shift, and product.",
+          "workflow": ["Plan", "Run", "Confirm output", "Quality check", "Shift close"],
+          "entryPoints": ["Shift sheet", "Spreadsheet", "ERP export"],
+          "metric": "Plan attainment and confirmed good output"
+        },
+        {
+          "id": "maintenance-downtime",
+          "name": "Maintenance and downtime",
+          "outcome": "Record machine state, stoppages, ownership, repair, and return to service.",
+          "workflow": ["Detect", "Assign", "Repair", "Test", "Return to service"],
+          "entryPoints": ["Machine log", "Supervisor handoff", "Paper form"],
+          "metric": "Downtime and mean time to restore"
+        },
+        {
+          "id": "quality-traceability",
+          "name": "Quality and traceability",
+          "outcome": "Capture checks, exceptions, evidence, approval, and lot history.",
+          "workflow": ["Inspect", "Hold", "Investigate", "Approve", "Trace"],
+          "entryPoints": ["Quality sheet", "Paper form", "ERP export"],
+          "metric": "Exception closure time and trace completeness"
+        }
+      ]
+    }
+  ]
+}

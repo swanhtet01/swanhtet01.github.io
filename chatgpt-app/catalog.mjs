@@ -3,8 +3,8 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
-const siteManifest = JSON.parse(
-  readFileSync(resolve(MODULE_DIR, "../site-manifest.json"), "utf8"),
+const publicCatalog = JSON.parse(
+  readFileSync(resolve(MODULE_DIR, "catalog.snapshot.json"), "utf8"),
 );
 
 function normalize(value) {
@@ -36,10 +36,10 @@ function buildSearchText(item) {
   );
 }
 
-export const CATALOG_VERSION = siteManifest.catalogVersion;
+export const CATALOG_VERSION = publicCatalog.catalogVersion;
 
 export const CATALOG = Object.freeze(
-  siteManifest.products.map((product) => {
+  publicCatalog.products.map((product) => {
     const catalogItem = {
       id: product.id,
       name: product.name,

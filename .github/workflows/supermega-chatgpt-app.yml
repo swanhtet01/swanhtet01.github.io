@@ -53,6 +53,12 @@ jobs:
       - name: Verify MCP, widget, and submission contracts
         run: npm --prefix chatgpt-app run check
 
+      - name: Verify deploy package is self-contained and owner-gated
+        run: |
+          npm --prefix chatgpt-app run build
+          test -f chatgpt-app/vercel.json
+          ! grep -R --fixed-strings '../site-manifest.json' chatgpt-app/catalog.mjs chatgpt-app/server.mjs chatgpt-app/deployment.mjs chatgpt-app/api
+
       - name: Verify launcher references
         run: |
           bash -n setup.sh

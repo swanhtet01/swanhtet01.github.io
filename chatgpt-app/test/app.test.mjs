@@ -349,22 +349,3 @@ test("a rejected host closes an incomplete request before body parsing", async (
     await new Promise((resolvePromise) => listening.server.close(resolvePromise));
   }
 });
-
-test("submission import matches the live descriptors and required case counts", () => {
-  const submission = JSON.parse(
-    readFileSync(new URL("../../chatgpt-app-submission.json", import.meta.url), "utf8"),
-  );
-  assert.equal(submission.schema_version, 1);
-  assert.ok(submission.app_info.subtitle.length <= 30);
-  assert.equal(submission.test_cases.length, 5);
-  assert.equal(submission.negative_test_cases.length, 3);
-  assert.deepEqual(Object.keys(submission.tools).sort(), Object.keys(TOOL_REVIEW).sort());
-  for (const tool of Object.values(submission.tools)) {
-    assert.deepEqual(tool.annotations, {
-      readOnlyHint: true,
-      openWorldHint: false,
-      destructiveHint: false,
-    });
-    assert.ok(Object.values(tool.justifications).every((value) => typeof value === "string" && value.length > 20));
-  }
-});
