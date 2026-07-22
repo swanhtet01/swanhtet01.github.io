@@ -20,6 +20,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from supermega_runtime.cloud_runtime import router as cloud_runtime_router
+from supermega_runtime.supabase_auth import SupabaseAuthConfig, verify_supabase_user_token
 from supermega_runtime.trial_runtime import create_trial_router
 from supermega_runtime.trial_store import (
     PostgresTrialStore,
@@ -29,7 +30,7 @@ from supermega_runtime.trial_store import (
 
 
 SERVICE_NAME = "supermega-service"
-SERVICE_VERSION = "1.0.0"
+SERVICE_VERSION = "1.1.0"
 TRIAL_EVENT_BY_SURFACE = {
     "company": "company.snapshot.saved",
     "commerce": "commerce.snapshot.saved",
@@ -123,8 +124,8 @@ def reduce_trial_state(
     return deepcopy(state)
 
 
-def resolve_trial_principal(request: Request) -> TrialPrincipal | None:
-    """Verify identity signed by a trusted auth gateway.
+def _resolve_gateway_principal(request: Request) -> TrialPrincipal | None:
+    """Verify identity signed by a trusted server-side auth gateway.
 
     Browsers cannot assert workspace or actor identity by themselves. The
     gateway signs ``v2\n<timestamp>\n<workspace>\n<actor>\n<actor_kind>`` with
@@ -164,6 +165,43 @@ def resolve_trial_principal(request: Request) -> TrialPrincipal | None:
     )
 
 
+def _bearer_token(request: Request) -> str:
+    authorization = _text(request.headers.get("authorization"))
+    scheme, separator, token = authorization.partition(" ")
+    if not separator or scheme.casefold() != "bearer":
+        return ""
+    return token.strip()
+
+
+def resolve_trial_principal(request: Request) -> TrialPrincipal | None:
+    """Resolve a trusted gateway identity or a verified Supabase user token.
+
+    A browser may nominate a workspace, but never an actor or actor kind. The
+    Postgres membership and RLS checks remain the authorization authority.
+    """
+
+    gateway_principal = _resolve_gateway_principal(request)
+    if gateway_principal is not None:
+        return gateway_principal
+
+    workspace_id = _text(
+        request.headers.get("x-supermega-workspace-id")
+        or os.getenv("SUPERMEGA_TRIAL_DEFAULT_WORKSPACE_ID")
+    )
+    token = _bearer_token(request)
+    if not token or not _IDENTIFIER.fullmatch(workspace_id):
+        return None
+    actor_id = verify_supabase_user_token(token, SupabaseAuthConfig.from_environment())
+    if not actor_id or not _IDENTIFIER.fullmatch(actor_id):
+        return None
+    return TrialPrincipal(
+        workspace_id=workspace_id,
+        actor_id=actor_id,
+        actor_kind="human",
+        authenticated=True,
+    )
+
+
 def _activation_requirements(*, database_ready: bool, role_ready: bool, schema_ready: bool, audit_ready: bool) -> list[str]:
     requirements: list[str] = []
     if not _text(os.getenv("SUPERMEGA_DATABASE_URL")):
@@ -175,12 +213,14 @@ def _activation_requirements(*, database_ready: bool, role_ready: bool, schema_r
     if not schema_ready:
         requirements.append("Apply and verify the private trial schema on a non-production branch first.")
     identity_secret = _text(os.getenv("SUPERMEGA_TRIAL_IDENTITY_SECRET"))
-    if not identity_secret:
-        requirements.append("Configure trusted gateway identity signing and named-user access.")
-    elif not _identity_secret_ready(identity_secret):
+    gateway_ready = _identity_secret_ready(identity_secret)
+    supabase_auth_ready = SupabaseAuthConfig.from_environment().ready
+    if identity_secret and not gateway_ready and not supabase_auth_ready:
         requirements.append(
             "Replace the identity signing secret with at least 32 bytes of high-entropy, non-placeholder key material."
         )
+    elif not gateway_ready and not supabase_auth_ready:
+        requirements.append("Configure trusted gateway signing or Supabase named-user authentication.")
     if not audit_ready:
         requirements.append("Verify immutable audit-event insert access through the runtime role.")
     if not _flag("SUPERMEGA_TRIAL_WRITES_ENABLED"):
@@ -211,6 +251,7 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "POST", "OPTIONS"],
         allow_headers=[
             "accept",
+            "authorization",
             "content-type",
             "x-supermega-workspace-id",
             "x-supermega-actor-id",
@@ -234,7 +275,9 @@ def create_app() -> FastAPI:
     def health() -> dict[str, Any]:
         readiness = store.readiness(None)
         enterprise_db_ready = readiness.database_ready and readiness.role_ready and readiness.schema_ready and readiness.audit_ready
-        security_ready = _identity_secret_ready(os.getenv("SUPERMEGA_TRIAL_IDENTITY_SECRET"))
+        gateway_ready = _identity_secret_ready(os.getenv("SUPERMEGA_TRIAL_IDENTITY_SECRET"))
+        supabase_auth_ready = SupabaseAuthConfig.from_environment().ready
+        security_ready = gateway_ready or supabase_auth_ready
         requirements = _activation_requirements(
             database_ready=readiness.database_ready,
             role_ready=readiness.role_ready,
@@ -248,6 +291,12 @@ def create_app() -> FastAPI:
             "operating_mode": "managed_trial" if not requirements else "isolated_demo",
             "enterprise_db_ready": enterprise_db_ready,
             "security_ready": security_ready,
+            "authentication": {
+                "trusted_gateway_ready": gateway_ready,
+                "supabase_user_tokens_ready": supabase_auth_ready,
+                "anonymous_users_allowed": False,
+                "client_asserted_roles_allowed": False,
+            },
             "coverage_score": 0,
             "trial_backend": {
                 "database_ready": readiness.database_ready,

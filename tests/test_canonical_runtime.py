@@ -25,6 +25,14 @@ class CanonicalRuntimeTests(unittest.TestCase):
             "SUPERMEGA_DATABASE_URL": "",
             "SUPERMEGA_TRIAL_IDENTITY_SECRET": "",
             "SUPERMEGA_TRIAL_WRITES_ENABLED": "false",
+            "SUPERMEGA_SUPABASE_URL": "",
+            "SUPABASE_URL": "",
+            "SUPERMEGA_SUPABASE_PUBLISHABLE_KEY": "",
+            "SUPABASE_PUBLISHABLE_KEY": "",
+            "SUPABASE_ANON_KEY": "",
+            "VITE_SUPABASE_URL": "",
+            "VITE_SUPABASE_PUBLISHABLE_KEY": "",
+            "VITE_SUPABASE_ANON_KEY": "",
             **environment,
         }
         with patch.dict(os.environ, controlled, clear=False):
@@ -41,6 +49,8 @@ class CanonicalRuntimeTests(unittest.TestCase):
         self.assertEqual(body["operating_mode"], "isolated_demo")
         self.assertFalse(body["enterprise_db_ready"])
         self.assertFalse(body["security_ready"])
+        self.assertFalse(body["authentication"]["supabase_user_tokens_ready"])
+        self.assertFalse(body["authentication"]["anonymous_users_allowed"])
         self.assertFalse(body["trial_backend"]["browser_service_role_exposed"])
         self.assertGreater(len(body["enterprise_activation"]["requirements"]), 0)
         self.assertEqual(response.headers["x-content-type-options"], "nosniff")
@@ -89,6 +99,56 @@ class CanonicalRuntimeTests(unittest.TestCase):
         self.assertEqual(signed.status_code, 200)
         self.assertEqual(signed.json()["status"], "blocked")
         self.assertIn("database_ready", signed.json()["blockers"])
+
+    def test_verified_supabase_user_token_resolves_only_a_human_actor(self) -> None:
+        environment = {
+            "SUPERMEGA_SUPABASE_URL": "https://example.supabase.co",
+            "SUPERMEGA_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_abcdefghijklmnopqrstuvwxyz",
+        }
+        with patch(
+            "supermega_runtime.runtime.verify_supabase_user_token",
+            return_value="2f8d24d8-308c-4dc8-a352-7b61df756728",
+        ) as verify:
+            with self._client(**environment) as client:
+                health = client.get("/api/health")
+                response = client.get(
+                    "/api/trial/v1/readiness",
+                    headers={
+                        "authorization": "Bearer header.payload.signature",
+                        "x-supermega-workspace-id": "workspace-a",
+                        "x-supermega-actor-id": "spoofed-service",
+                        "x-supermega-actor-kind": "service",
+                    },
+                )
+        self.assertTrue(health.json()["security_ready"])
+        self.assertTrue(health.json()["authentication"]["supabase_user_tokens_ready"])
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("database_ready", response.json()["blockers"])
+        verify.assert_called_once()
+
+    def test_invalid_supabase_token_or_workspace_fails_closed(self) -> None:
+        environment = {
+            "SUPERMEGA_SUPABASE_URL": "https://example.supabase.co",
+            "SUPERMEGA_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_abcdefghijklmnopqrstuvwxyz",
+        }
+        with patch("supermega_runtime.runtime.verify_supabase_user_token", return_value=None):
+            with self._client(**environment) as client:
+                rejected_token = client.get(
+                    "/api/trial/v1/readiness",
+                    headers={
+                        "authorization": "Bearer header.payload.signature",
+                        "x-supermega-workspace-id": "workspace-a",
+                    },
+                )
+                rejected_workspace = client.get(
+                    "/api/trial/v1/readiness",
+                    headers={
+                        "authorization": "Bearer header.payload.signature",
+                        "x-supermega-workspace-id": "../../workspace-a",
+                    },
+                )
+        self.assertEqual(rejected_token.status_code, 401)
+        self.assertEqual(rejected_workspace.status_code, 401)
 
     def test_weak_or_placeholder_identity_secret_never_enables_security(self) -> None:
         weak_secrets = (

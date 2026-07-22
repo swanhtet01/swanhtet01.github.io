@@ -3,13 +3,16 @@ import { resolve } from 'node:path'
 
 const root = resolve(import.meta.dirname, '..')
 const read = (path) => readFile(resolve(root, path), 'utf8')
-const [runtime, cloudRuntime, vercelEntry, portableEntry, trialRuntime, trialStore, foundationMigration, currentMigration, databaseValidator, databaseActivator, liveVerifier, workflow, requirements, dockerfile, appEnvironment] = await Promise.all([
+const [runtime, supabaseAuth, cloudRuntime, vercelEntry, portableEntry, trialRuntime, trialStore, managedTrialClient, coreApp, foundationMigration, currentMigration, databaseValidator, databaseActivator, liveVerifier, workflow, requirements, dockerfile, appEnvironment] = await Promise.all([
   read('supermega_runtime/runtime.py'),
+  read('supermega_runtime/supabase_auth.py'),
   read('supermega_runtime/cloud_runtime.py'),
   read('api/app.py'),
   read('api_app.py'),
   read('supermega_runtime/trial_runtime.py'),
   read('supermega_runtime/trial_store.py'),
+  read('showroom/src/core/managed-trial.ts'),
+  read('showroom/src/core/CoreApp.tsx'),
   read('supabase/migrations/20260722005134_private_trial_backend_foundation.sql'),
   read('supabase/migrations/20260722142801_private_trial_backend_v2.sql'),
   read('tools/validate_supermega_database_url.py'),
@@ -44,9 +47,13 @@ requireContract('managed store is server-side Postgres', /PostgresTrialStore/.te
 requireContract('trial writes default fail closed', /SUPERMEGA_TRIAL_WRITES_ENABLED/.test(runtime) && /default: bool = False/.test(runtime))
 requireContract('identity is gateway signed', /SUPERMEGA_TRIAL_IDENTITY_SECRET/.test(runtime) && /hmac\.compare_digest/.test(runtime))
 requireContract('identity signing secret has a fail-closed entropy floor', /_MIN_IDENTITY_SECRET_BYTES = 32/.test(runtime) && /_MIN_IDENTITY_SECRET_DISTINCT_BYTES/.test(runtime) && /_IDENTITY_SECRET_PLACEHOLDER_MARKERS/.test(runtime) && /_identity_secret_ready/.test(runtime))
+requireContract('Supabase identity accepts only a confirmed named-user token', /\/auth\/v1\/user/.test(supabaseAuth) && /_is_publishable_key/.test(supabaseAuth) && /is_anonymous"\) is not False/.test(supabaseAuth) && /actor_kind="human"/.test(runtime))
+requireContract('Supabase token verification disables proxy and redirect forwarding', /ProxyHandler\(\{\}\)/.test(supabaseAuth) && /_NoRedirectHandler/.test(supabaseAuth) && /opener\.open/.test(supabaseAuth))
 requireContract('identity is rejected from request bodies', /_CLIENT_IDENTITY_FIELDS/.test(trialRuntime) && /client_identity_forbidden/.test(trialRuntime))
 requireContract('trial router is mounted', /create_trial_router\(store=store, resolve_principal=resolve_trial_principal\)/.test(runtime))
 requireContract('runtime exposes bounded health truth', /"operating_mode": "managed_trial" if not requirements else "isolated_demo"/.test(runtime) && /"browser_service_role_exposed": False/.test(runtime))
+requireContract('managed browser auth is readiness gated and cannot accept a secret key', /runtime\.status === 'enterprise' && managedTrialAuthConfigured\(\)/.test(coreApp) && /validPublishableKey/.test(managedTrialClient) && !/VITE_SUPABASE_(?:SERVICE_ROLE|SECRET)/.test(managedTrialClient))
+requireContract('managed approval evidence is never persisted in demo storage', /localApprovalsOnly/.test(coreApp) && /persist \? persist\(normalizedState\)/.test(coreApp) && /current\.filter\(\(approval\) => !approval\.managed\)/.test(coreApp))
 requireContract('production CORS is bounded', /https:\/\/app\.supermega\.dev,https:\/\/supermega\.dev/.test(runtime) && !/allow_origins=\["\*"\]/.test(runtime))
 requireContract('API documentation is not public', /docs_url=None/.test(runtime) && /openapi_url=None/.test(runtime))
 requireContract('surface commands use optimistic versions', /expected_version/.test(trialRuntime) && /TrialVersionConflict/.test(trialStore))
