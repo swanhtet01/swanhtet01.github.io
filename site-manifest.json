@@ -28,9 +28,9 @@
       "status": "available-in-app",
       "eyebrow": "Channel-to-fulfilment commerce",
       "headline": "Turn conversations into controlled orders.",
-      "description": "Structure orders that arrive through Messenger, Viber, phone, web, or walk-in channels, then control stock, fulfilment, payment, follow-up, and close in one record.",
+      "description": "Preview browser-local orders, stock, fulfilment, payment status, follow-up, and close across common channels. No live channel, checkout, payment, delivery, customer send, or external write is connected.",
       "primaryCta": {
-        "label": "Open Commerce workspace",
+        "label": "Preview local Commerce demo",
         "url": "https://app.supermega.dev/operations/commerce/?tab=today"
       },
       "secondaryCta": {
@@ -79,9 +79,9 @@
       "status": "available-in-app",
       "eyebrow": "Production operations",
       "headline": "Give the production floor one operational memory.",
-      "description": "Connect plans, output, machine state, materials, quality, maintenance, exceptions, and shift handoffs in one controlled system.",
+      "description": "Preview browser-local plans, output, machine state, quality, maintenance, exceptions, and shift handoffs. No machine telemetry, production control, access change, or external write is connected.",
       "primaryCta": {
-        "label": "Open Production workspace",
+        "label": "Preview local Production demo",
         "url": "https://app.supermega.dev/operations/production/?tab=today"
       },
       "secondaryCta": {
