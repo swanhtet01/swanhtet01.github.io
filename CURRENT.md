@@ -11,7 +11,7 @@ SuperMega competes on implementation readiness, local operating context, evidenc
 
 The portfolio has three operating products and two local product prototypes inside one application:
 
-1. **Company system** — Today plus Product, Engineering, Growth, and Finance team workspaces.
+1. **Company system** — Today plus Product, Engineering, Growth, and Finance team workspaces, including an internal bounded-agent roster and handoff view.
 2. **Website** — finite page/content workflow, responsive preview, evidence, and explicit publish approval; currently local prototype only.
 3. **Ecommerce & Orders** — website/channel intake, catalogue, stock, fulfilment, payment status, and audit; currently local prototype only.
 4. **Commerce** — customer channel, order, stock, fulfilment, payment, follow-up, and close.
@@ -32,7 +32,8 @@ AI is an embedded execution capability. It may inspect approved records, organiz
 Canonical host: `app.supermega.dev`
 
 - `/` — **Today**: company work, customer orders, production exceptions, release readiness, briefs, and owner decisions.
-- `/work/?team=product&view=board` — **Teams**: Product, Engineering, Growth, and Finance workspaces.
+- `/work/?team=product&view=work` — **Teams**: accountable work for Product, Engineering, Growth, and Finance.
+- `/work/?team=engineering&view=agents` — **Agent Teams**: internal role, capability, assignment, evidence, human-owner, and approval-boundary records inside Teams; not another product or public route.
 - `/products/website/` — **Website**: lazy-loaded local content, navigation, preview, readiness, and approval prototype.
 - `/products/ecommerce/` — **Ecommerce & Orders**: lazy-loaded local order, catalogue, fulfilment, payment-status, and guided-demo prototype.
 - `/operations/commerce/?tab=today` — **Commerce**: channel orders, fulfilment, stock, local payment, and daily close.
@@ -53,7 +54,7 @@ Product is the first complete company-team workspace:
 4. **Release** — pass explicit checks and preserve release identity.
 5. **Learn** — record usage evidence and the next decision.
 
-Every team uses the same work contract: observable outcome, named owner, explicit state, structured evidence with provenance and verification status, reviewable brief, and human approval for consequential action. A work record cannot become done and a release check cannot become complete without verified evidence. Product proposals cannot become accepted decisions without a named human reviewer, decision note, and evidence reference.
+Every team uses the same work contract: observable outcome, named owner, explicit state, structured evidence with provenance and verification status, reviewable brief, and human approval for consequential action. A work record cannot become done and a release check cannot become complete without evidence verified by an attributed human reviewer. Product proposals cannot become accepted decisions without a named human reviewer, decision note, and evidence reference. Delegated roles can be assigned existing team work and prepare evidence; they cannot send, pay, publish, merge, deploy, change access, or write to production from the browser-local roster.
 
 ## Template model
 
@@ -69,7 +70,7 @@ Templates configure the starting records and workflow while preserving the share
 ## Data and authority boundary
 
 - The default application remains an isolated browser-local trial, not a customer system of record.
-- Team, Website, Ecommerce, Commerce, Production, approval, and setup records can be exercised locally. Website and Ecommerce explicitly remain browser-local prototypes; the core evidence export v8 covers the existing team and operating records until their contracts are accepted for integration.
+- Team, bounded-agent, Website, Ecommerce, Commerce, Production, approval, and setup records can be exercised locally. Website and Ecommerce explicitly remain browser-local prototypes; core evidence export v9 includes the team roster and operating records while preserving the isolated-demo boundary.
 - The Website-to-Ecommerce handoff carries only an approved local revision reference, SKU, and quantity. Ecommerce revalidates the source, requires a bounded human operator ID, and atomically records one accepted local intake plus its audit event. A separate explicit step creates one deterministic browser-local `ecommerce_order_draft.v1` with an immutable MMK catalogue snapshot and visible missing customer, fulfilment, and payment fields. A locked, attributable completion can migrate that valid draft to one `ecommerce_order_record.v1` in `ready_for_confirmation`, using a system-generated opaque customer reference, bounded fulfilment/payment methods, exact-retry idempotency, conflict rejection, and a second audit event. It does not insert into Commerce, confirm a customer, reserve stock, start payment, send a message, or write externally.
 - Managed readiness must not be implied until tenant persistence, identity, workspace isolation, source coverage, backup, recovery, audit, and runtime-role checks pass.
 - External sends, payments, publishing, access changes, and production writes remain owner-approved and auditable.

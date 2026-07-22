@@ -3,7 +3,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate, useOutletContext, useS
 
 import siteManifest from '../../../site-manifest.json'
 import './core-app.css'
-import { TEAM_WORK_KEY, formatTime, teamDefinitions, useTeamWorkspace } from './team-work'
+import { LEGACY_TEAM_WORK_KEYS, TEAM_WORK_KEY, formatTime, teamDefinitions, useTeamWorkspace } from './team-work'
 
 type CommerceItem = {
   sku: string
@@ -355,9 +355,9 @@ const checkingRuntime: RuntimeHealth = {
 }
 
 const navigation = [
-  { to: '/', label: 'Today', index: '01', end: true },
-  { to: '/work/', label: 'Teams', index: '02', end: false },
-  { to: '/operations/', label: 'Operations', index: '03', end: false },
+  { to: '/', label: 'Today', end: true },
+  { to: '/work/', label: 'Teams', end: false },
+  { to: '/operations/', label: 'Operations', end: false },
 ] as const
 
 const commerceTabs: Array<{ id: CommerceTab; label: string }> = [
@@ -685,28 +685,27 @@ function RuntimeBadge({ status }: { status: RuntimeStatus }) {
 export function CoreLayout() {
   const location = useLocation()
   const runtime = useRuntimeHealth()
+  const routeName = location.pathname.startsWith('/settings/')
+    ? 'Settings'
+    : navigation.find((item) => item.to !== '/' && location.pathname.startsWith(item.to))?.label ?? 'Today'
 
   useEffect(() => {
-    const routeName = location.pathname.startsWith('/settings/')
-      ? 'Settings'
-      : navigation.find((item) => item.to !== '/' && location.pathname.startsWith(item.to))?.label ?? 'Today'
     document.title = `${routeName} | SuperMega`
     window.scrollTo({ top: 0, behavior: 'instant' })
-  }, [location.pathname])
+  }, [location.pathname, location.search, routeName])
 
   return (
     <div className="core-shell">
       <a className="core-skip" href="#workspace-main">Skip to workspace</a>
       <aside className="core-sidebar">
         <Brand />
-        <div className="workspace-label"><span>Company</span><strong>SuperMega HQ</strong></div>
         <nav className="core-nav" aria-label="Application">
-          {navigation.map((item) => <NavLink className={({ isActive }) => isActive ? 'active' : ''} end={item.end} key={item.to} to={item.to}><span>{item.index}</span>{item.label}</NavLink>)}
+          {navigation.map((item) => <NavLink className={({ isActive }) => isActive ? 'active' : ''} end={item.end} key={item.to} to={item.to}>{item.label}</NavLink>)}
         </nav>
-        <div className="sidebar-foot"><RuntimeBadge status={runtime.status} /><p>Browser-local working records. Managed mode stays locked until identity, data, audit, and recovery pass.</p><NavLink to="/settings/">Settings</NavLink></div>
+        <div className="sidebar-foot"><RuntimeBadge status={runtime.status} /><NavLink to="/settings/">Settings</NavLink></div>
       </aside>
       <div className="core-stage">
-        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><span className="terminal-prompt">&gt;_</span><strong>Company operating system</strong></div><div className="topbar-meta"><span>MMK</span><span>UTC+06:30</span><NavLink to="/settings/">Settings</NavLink><RuntimeBadge status={runtime.status} /></div></header>
+        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega HQ</span></div><div className="topbar-meta"><NavLink to="/settings/">Settings</NavLink><RuntimeBadge status={runtime.status} /></div></header>
         <nav className="mobile-nav" aria-label="Mobile application">{navigation.map((item) => <NavLink className={({ isActive }) => isActive ? 'active' : ''} end={item.end} key={item.to} to={item.to}>{item.label}</NavLink>)}</nav>
         <main id="workspace-main" className="core-main"><Outlet context={runtime} /></main>
       </div>
@@ -773,19 +772,22 @@ export function OverviewPage() {
   const openWork = workspace.items.filter((item) => item.status !== 'done')
   const activeWork = workspace.items.filter((item) => ['in_progress', 'review'].includes(item.status))
   const blockedWork = workspace.items.filter((item) => item.status === 'blocked')
+  const visibleWork = workspace.items.filter((item) => ['in_progress', 'review', 'blocked'].includes(item.status))
   const pendingApprovals = approvals.filter((item) => item.status === 'pending')
   const lowStock = commerce.items.filter((item) => item.onHand <= item.reorderAt)
   const openProductionIssues = production.issues.filter((issue) => issue.status === 'open')
   const openOrders = commerce.orders.filter((order) => order.status !== 'completed')
+  const agentHandoffs = workspace.agents.filter((agent) => ['waiting_review', 'blocked'].includes(agent.state) && !blockedWork.some((item) => item.id === agent.assignedWorkItemId))
   const releaseComplete = workspace.release.checks.filter((check) => check.complete).length
   const releasePercent = Math.round((releaseComplete / workspace.release.checks.length) * 100)
   const isPilotReady = pilotReady(setup)
-  const ownerAttention = blockedWork.length + pendingApprovals.length + (isPilotReady ? 0 : 1)
+  const operatingExceptions = lowStock.length + openProductionIssues.length
+  const ownerAttention = blockedWork.length + pendingApprovals.length + agentHandoffs.length + operatingExceptions + (isPilotReady ? 0 : 1)
   const selectedApproval = pendingApprovals.find((approval) => approval.id === selectedApprovalId)
 
   function prepareCompanyBrief() {
     setBrief([
-      `${openWork.length} company work items remain open; ${activeWork.length} are in delivery or review.`,
+      `${openWork.length} company work items remain open; ${activeWork.length} are in delivery or review across ${workspace.agents.length} delegated role records.`,
       `${openOrders.length} Commerce orders, ${lowStock.length} stock exceptions, and ${openProductionIssues.length} Production issues need operating attention.`,
       `${workspace.release.name} is ${releasePercent}% ready from ${workspace.release.checks.length} explicit checks.`,
       isPilotReady ? `${setup.workspace} pilot starts from ${setup.entryPoint}; baseline: ${setup.baseline}; target: ${setup.targetOutcome}.` : `Pilot definition is ${pilotProgress(setup)}% complete and still needs a baseline, target, authority boundary, and acceptance evidence.`,
@@ -845,30 +847,30 @@ export function OverviewPage() {
 
   return (
     <div className="workspace-screen command-screen">
-      <PageHeading eyebrow="Today" title="The work that needs attention." copy="Company delivery, customer operations, production exceptions, and owner decisions in one bounded view." />
-      <section className="summary-strip" aria-label="Workspace summary"><span><small>Open work</small><strong>{openWork.length}</strong></span><span><small>In delivery</small><strong>{activeWork.length}</strong></span><span><small>Open orders</small><strong>{openOrders.length}</strong></span><span><small>Exceptions</small><strong>{lowStock.length + openProductionIssues.length}</strong></span><span><small>Needs owner</small><strong>{ownerAttention}</strong></span></section>
+      <PageHeading eyebrow="Today" title="Decide what moves next." copy="Active work and owner attention, without another dashboard." />
+      <section className="summary-strip compact-summary" aria-label="Workspace summary"><span><small>In progress</small><strong>{activeWork.length}</strong></span><span><small>Needs owner</small><strong>{ownerAttention}</strong></span><span><small>Operating exceptions</small><strong>{operatingExceptions}</strong></span></section>
       <div className="command-grid">
         <section className="core-panel command-queue-panel">
-          <div className="panel-head"><div><span className="core-eyebrow">Company queue</span><h2>Work in motion</h2></div><Link className="text-link" to="/work/?team=product&view=board">Open Teams</Link></div>
-          <div className="record-list">{openWork.map((item) => { const team = teamDefinitions.find((definition) => definition.id === item.team); return <Link className="record-row" key={item.id} to={`/work/?team=${item.team}&view=board`}><span className={`record-status ${item.status}`} /><span><strong>{item.title}</strong><small>{team?.label ?? item.team} · {item.owner} · {item.evidence.length} evidence</small></span><span><b>{item.priority}</b><small>{item.status.replace('_', ' ')}</small></span></Link> })}</div>
+          <div className="panel-head"><div><span className="core-eyebrow">Company queue</span><h2>Work in motion</h2></div><Link className="text-link" to="/work/?team=product&view=work">Open Teams</Link></div>
+          <div className="record-list">{visibleWork.map((item) => { const team = teamDefinitions.find((definition) => definition.id === item.team); return <Link className="record-row" key={item.id} to={`/work/?team=${item.team}&view=work`}><span className={`record-status ${item.status}`} /><span><strong>{item.title}</strong><small>{team?.label ?? item.team} / {item.owner} / {item.evidence.length} evidence</small></span><span><b>{item.priority}</b><small>{item.status.replace('_', ' ')}</small></span></Link> })}</div>
         </section>
         <section className="core-panel attention-panel">
-          <div className="panel-head"><div><span className="core-eyebrow">Needs owner</span><h2>{ownerAttention + lowStock.length + openProductionIssues.length} exceptions</h2></div></div>
+          <div className="panel-head"><div><span className="core-eyebrow">Needs owner</span><h2>{ownerAttention} decisions</h2></div></div>
           <div className="attention-list">
             {!isPilotReady ? <Link to="/settings/"><span>Pilot</span><strong>Define the measurable workflow</strong><small>{pilotProgress(setup)}% complete · baseline and acceptance required</small></Link> : null}
-            {blockedWork.map((item) => <Link key={item.id} to={`/work/?team=${item.team}&view=board`}><span>Work</span><strong>{item.title}</strong><small>{item.owner}</small></Link>)}
+            {blockedWork.map((item) => <Link key={item.id} to={`/work/?team=${item.team}&view=work`}><span>Work</span><strong>{item.title}</strong><small>{item.owner}</small></Link>)}
+            {agentHandoffs.map((agent) => <Link key={agent.id} to={`/work/?team=${agent.team}&view=agents`}><span>Agent</span><strong>{agent.name} {agent.state === 'waiting_review' ? 'needs review' : 'is blocked'}</strong><small>{agent.humanOwner} / {agent.assignedWorkItemId ?? 'unassigned'}</small></Link>)}
             {pendingApprovals.map((approval) => <button className="attention-action" key={approval.id} onClick={() => setSelectedApprovalId(approval.id)} type="button"><span>Approval</span><strong>{approval.title}</strong><small>{approval.packet.claims.length} claims · {formatTime(approval.createdAt)}</small><b>Review</b></button>)}
             {lowStock.map((item) => <Link key={item.sku} to="/operations/commerce/?tab=inventory"><span>Stock</span><strong>{item.name}</strong><small>{item.onHand} on hand · reorder at {item.reorderAt}</small></Link>)}
             {openProductionIssues.map((issue) => <Link key={issue.id} to="/operations/production/?tab=control"><span>{issue.kind}</span><strong>{issue.summary}</strong><small>{issue.area}</small></Link>)}
-            {isPilotReady && !blockedWork.length && !pendingApprovals.length && !lowStock.length && !openProductionIssues.length ? <Empty>No operating exception needs attention.</Empty> : null}
+            {!ownerAttention ? <Empty>No owner decision needs attention.</Empty> : null}
           </div>
         </section>
         <section className="core-panel release-brief-panel">
           <div className="release-line"><div><span className="core-eyebrow">Product release</span><h2>{workspace.release.name}</h2></div><strong>{releasePercent}%</strong></div>
           <div className="progress-track"><i style={{ width: `${releasePercent}%` }} /></div>
-          <div className="release-mini-checks">{workspace.release.checks.map((check) => <span className={check.complete ? 'complete' : ''} key={check.id}>{check.complete ? '✓' : '○'} {check.label}</span>)}</div>
-          <div className="brief-divider"><span>Company brief</span><button className="text-link" onClick={prepareCompanyBrief} type="button">Prepare brief</button></div>
-          {brief.length ? <div className="brief-output compact">{brief.map((line) => <p key={line}>{line}</p>)}<button className="core-button compact" onClick={requestBriefApproval} type="button">Request owner review</button></div> : <p className="panel-copy">Prepared locally from the visible work, release, Commerce, and Production records.</p>}
+          <Link className="release-review-link" to="/work/?team=product&view=review">Review release checks</Link>
+          <details className="company-brief-disclosure"><summary>Company brief</summary><button className="text-link" onClick={prepareCompanyBrief} type="button">Prepare brief</button>{brief.length ? <div className="brief-output compact">{brief.map((line) => <p key={line}>{line}</p>)}<button className="core-button compact" onClick={requestBriefApproval} type="button">Request owner review</button></div> : <p className="panel-copy">Prepared locally from visible work and operating records.</p>}</details>
         </section>
       </div>
       {selectedApproval ? <ApprovalReviewDialog approval={selectedApproval} onClose={() => setSelectedApprovalId('')} onDecision={(status, reviewer, note) => setApprovalStatus(selectedApproval.id, status, reviewer, note)} /> : null}
@@ -912,8 +914,11 @@ export function OperationsPage() {
 
   return (
     <div className="workspace-screen operations-screen">
-      <PageHeading eyebrow="Operations" title={view === 'commerce' ? 'Commerce' : 'Production'} copy={`${operationsCopy} Measure: ${profileMeasure}.`} actions={<div className="operations-profile"><span>{profileLabel}</span><strong>{activeTemplate.name}</strong><small>{activeTemplate.workflow.join(' → ')}</small><Link className="text-link" to="/settings/">Configure</Link></div>} />
-      <div className="workspace-toolbar"><div className="segmented-control" role="group" aria-label="Product workspace"><button aria-pressed={view === 'commerce'} onClick={() => setMode('commerce')} type="button">Commerce</button><Link to="/products/ecommerce/">Ecommerce</Link><Link to="/products/website/">Website</Link><button aria-pressed={view === 'production'} onClick={() => setMode('production')} type="button">Production</button></div><div className="view-tabs" role="tablist" aria-label="Module views">{tabs.map((tab) => <button aria-selected={activeTab === tab.id} key={tab.id} onClick={() => setTab(tab.id)} role="tab" type="button">{tab.label}</button>)}</div></div>
+      <PageHeading eyebrow="Operations" title={view === 'commerce' ? 'Commerce' : 'Production'} copy={`${operationsCopy} Measure: ${profileMeasure}.`} actions={<div className="operations-profile"><span>{profileLabel}</span><strong>{activeTemplate.name}</strong><Link className="text-link" to="/settings/">Configure</Link></div>} />
+      <div className="workspace-toolbar operations-toolbar">
+        <div className="segmented-control" role="group" aria-label="Operating workspace"><button aria-pressed={view === 'commerce'} onClick={() => setMode('commerce')} type="button">Commerce</button><button aria-pressed={view === 'production'} onClick={() => setMode('production')} type="button">Production</button></div>
+        <div className="operations-toolbar-actions"><nav className="view-tabs" aria-label="Module views">{tabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{tab.label}</button>)}</nav><details className="product-app-launcher"><summary>Product apps</summary><div><Link to="/products/website/">Website</Link><Link to="/products/ecommerce/">Ecommerce</Link></div></details></div>
+      </div>
       <div className="workspace-view">{view === 'commerce' ? <CommercePage tab={commerceTab} /> : <ProductionPage tab={productionTab} />}</div>
     </div>
   )
@@ -1100,7 +1105,7 @@ export function SettingsPage() {
   const evidenceDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Yangon' }).format(new Date())
   const evidenceFilename = `supermega-trial-evidence-${evidenceDate}.json`
   const managedApprovalRequests = approvals.map(toManagedApprovalRequest).filter((request): request is NonNullable<typeof request> => Boolean(request))
-  const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 8, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady, setup, workflowProfile: selectedTemplate, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace }, null, 2))}`
+  const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 9, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady, setup, workflowProfile: selectedTemplate, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace }, null, 2))}`
 
   function updateSetup(patch: Partial<SetupState>) {
     setSetup((current) => ({ ...current, ...patch, savedAt: undefined }))
@@ -1124,7 +1129,7 @@ export function SettingsPage() {
   }
 
   function resetDemoWorkspace() {
-    ;[COMMERCE_KEY, PRODUCTION_KEY, APPROVAL_KEY, SETUP_KEY, ACTION_KEY, TEAM_WORK_KEY, ...LEGACY_COMMERCE_KEYS, ...LEGACY_PRODUCTION_KEYS, ...LEGACY_APPROVAL_KEYS, ...LEGACY_SETUP_KEYS].forEach((key) => window.localStorage.removeItem(key))
+    ;[COMMERCE_KEY, PRODUCTION_KEY, APPROVAL_KEY, SETUP_KEY, ACTION_KEY, TEAM_WORK_KEY, ...LEGACY_TEAM_WORK_KEYS, ...LEGACY_COMMERCE_KEYS, ...LEGACY_PRODUCTION_KEYS, ...LEGACY_APPROVAL_KEYS, ...LEGACY_SETUP_KEYS].forEach((key) => window.localStorage.removeItem(key))
     window.location.assign('/')
   }
 

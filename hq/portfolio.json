@@ -9,9 +9,9 @@
       "status": "core",
       "path": "/",
       "job": "Turn company priorities, product delivery, evidence, exceptions, and owner decisions into one shared operating record.",
-      "surfaces": ["Today", "Product", "Engineering", "Growth", "Finance / Risk"],
+      "surfaces": ["Today", "Product", "Engineering", "Growth", "Finance / Risk", "Agent teams (internal)"],
       "lifecycle": ["discover", "define", "build", "release", "learn"],
-      "nextGate": "Prove one end-to-end Product workflow with acceptance and usage evidence."
+      "nextGate": "Prove one end-to-end Product workflow and one bounded agent handoff with attributed human acceptance and usage evidence."
     },
     {
       "id": "website",
