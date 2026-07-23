@@ -657,14 +657,17 @@ class PostgresTrialStore:
             from psycopg.rows import dict_row
         except ImportError as exc:
             raise TrialNotReadyError(("postgres_driver_ready",)) from exc
-        # The Vercel runtime uses short-lived pooled connections. Disable
-        # automatic prepared statements for Supavisor transaction mode and
-        # enforce encrypted transport even if a manually supplied URL omitted
-        # sslmode. A stronger URL setting (verify-ca / verify-full) remains in
-        # the DSN and should be used where the provider certificate is pinned.
+        # The Vercel runtime uses short-lived pooled connections. Keep
+        # autocommit explicitly disabled so every request can bind its identity
+        # to one transaction, disable automatic prepared statements for
+        # Supavisor transaction mode, and enforce encrypted transport even if a
+        # manually supplied URL omitted sslmode. A stronger URL setting
+        # (verify-ca / verify-full) remains in the DSN and should be used where
+        # the provider certificate is pinned.
         connection_kwargs: dict[str, Any] = {
             "row_factory": dict_row,
             "connect_timeout": 5,
+            "autocommit": False,
             "prepare_threshold": None,
             "application_name": "supermega-trial-runtime",
         }
@@ -972,21 +975,22 @@ class PostgresTrialStore:
             raise TrialNotReadyError(("database_ready",)) from exc
 
         with connection:
-            with connection.cursor() as cursor:
-                try:
-                    self._assert_runtime_role(cursor)
-                    self._assert_schema(cursor)
-                    self._set_context(cursor, normalized)
-                    capabilities = self._load_membership(cursor, normalized)
-                    if write:
-                        self._assert_audit(cursor)
-                except TrialStoreError:
-                    raise
-                except Exception as exc:
-                    raise TrialNotReadyError(("database_or_schema_ready",)) from exc
-                if capability and capability not in capabilities:
-                    raise TrialPermissionDenied(capability)
-                yield cursor, capabilities
+            with connection.transaction():
+                with connection.cursor() as cursor:
+                    try:
+                        self._assert_runtime_role(cursor)
+                        self._assert_schema(cursor)
+                        self._set_context(cursor, normalized)
+                        capabilities = self._load_membership(cursor, normalized)
+                        if write:
+                            self._assert_audit(cursor)
+                    except TrialStoreError:
+                        raise
+                    except Exception as exc:
+                        raise TrialNotReadyError(("database_or_schema_ready",)) from exc
+                    if capability and capability not in capabilities:
+                        raise TrialPermissionDenied(capability)
+                    yield cursor, capabilities
 
     def readiness(self, principal: TrialPrincipal | None) -> TrialReadiness:
         auth_ready = _principal_auth_ready(principal)
@@ -1009,20 +1013,21 @@ class PostgresTrialStore:
             )
         try:
             with self._connect() as connection:
-                with connection.cursor() as cursor:
-                    cursor.execute("select 1 as ready")
-                    database_ready = bool((cursor.fetchone() or {}).get("ready"))
-                    self._assert_runtime_role(cursor)
-                    role_ready = True
-                    self._assert_schema(cursor)
-                    schema_ready = True
-                    self._assert_audit(cursor)
-                    audit_ready = True
-                    if auth_ready and principal is not None:
-                        normalized = principal.normalized()
-                        self._set_context(cursor, normalized)
-                        capabilities = self._load_membership(cursor, normalized)
-                        membership_ready = True
+                with connection.transaction():
+                    with connection.cursor() as cursor:
+                        cursor.execute("select 1 as ready")
+                        database_ready = bool((cursor.fetchone() or {}).get("ready"))
+                        self._assert_runtime_role(cursor)
+                        role_ready = True
+                        self._assert_schema(cursor)
+                        schema_ready = True
+                        self._assert_audit(cursor)
+                        audit_ready = True
+                        if auth_ready and principal is not None:
+                            normalized = principal.normalized()
+                            self._set_context(cursor, normalized)
+                            capabilities = self._load_membership(cursor, normalized)
+                            membership_ready = True
         except TrialNotReadyError as exc:
             if "postgres_driver_ready" in exc.reasons:
                 database_ready = False

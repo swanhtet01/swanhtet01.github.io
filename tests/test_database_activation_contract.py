@@ -334,7 +334,13 @@ class ActivationWrapperContractTests(unittest.TestCase):
         self.assertIn("Remove-Item Env:SUPERMEGA_DATABASE_URL", source)
 
     def test_runtime_readiness_queries_are_non_mutating(self) -> None:
-        tree = ast.parse(_read(TRIAL_STORE), filename=str(TRIAL_STORE))
+        source = _read(TRIAL_STORE)
+        tree = ast.parse(source, filename=str(TRIAL_STORE))
+        self.assertIn('"autocommit": False', source)
+        self.assertGreaterEqual(source.count("with connection.transaction():"), 2)
+        self.assertIn("set_config('app.workspace_id', %s, true)", source)
+        self.assertIn("set_config('app.actor_id', %s, true)", source)
+        self.assertIn("set_config('app.actor_kind', %s, true)", source)
         readiness_helpers = {
             "readiness",
             "_assert_schema",

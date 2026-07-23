@@ -40,6 +40,8 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
             "v1_upgrade_preserved",
             "tenant_isolation",
             "identity_transaction_local",
+            "postgrestrialstore",
+            "runtime_adapter_readiness_failed",
             "runtime_set_role_denied",
             "browser_role_isolation",
             "optimistic_concurrency",

@@ -633,6 +633,23 @@ def _verify_upgrade_and_role_boundaries(
                 raise RehearsalFailure("runtime_role_setting_detected")
             checks["runtime_role_settings_empty"] = True
 
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    from supermega_runtime.trial_store import PostgresTrialStore, TrialPrincipal
+
+    adapter = PostgresTrialStore(
+        runtime_database_url,
+        reducer=lambda _surface, _event_type, current, _payload: dict(current),
+        write_enabled=False,
+    )
+    adapter_principal = TrialPrincipal("rehearsal-a", "owner-a", "human")
+    adapter_readiness = adapter.readiness(adapter_principal)
+    if not adapter_readiness.read_ready:
+        raise RehearsalFailure("runtime_adapter_readiness_failed")
+    adapter_state = adapter.get_state(adapter_principal, "commerce")
+    if adapter_state.workspace_id != "rehearsal-a" or adapter_state.version != 0:
+        raise RehearsalFailure("runtime_adapter_read_failed")
+
     with _connect(runtime_database_url) as runtime:
         with runtime.transaction():
             with runtime.cursor() as cursor:
