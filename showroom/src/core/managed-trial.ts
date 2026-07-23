@@ -31,8 +31,10 @@ export type ManagedApprovalRecord = {
   idempotent_replay: boolean
 }
 
+export type ManagedSurface = 'company' | 'commerce' | 'production' | 'website' | 'setup'
+
 export type ManagedStateRecord = {
-  surface: 'company' | 'commerce' | 'production' | 'setup'
+  surface: ManagedSurface
   version: number
   state: Record<string, unknown>
   updated_by: string
@@ -48,10 +50,27 @@ export type ManagedCommerceEvent =
   | 'commerce.stock.received'
   | 'commerce.close.saved'
 
+export type ManagedWebsiteEvent =
+  | 'website.workspace.initialized'
+  | 'website.content.saved'
+  | 'website.selection.changed'
+  | 'website.evidence.recorded'
+  | 'website.revision.approved'
+  | 'website.snapshot.recorded'
+
 export type ManagedCommandResult = {
   command_id: string
   surface: 'commerce'
   event_type: ManagedCommerceEvent
+  version: number
+  state: Record<string, unknown>
+  idempotent_replay: boolean
+}
+
+export type ManagedWebsiteCommandResult = {
+  command_id: string
+  surface: 'website'
+  event_type: ManagedWebsiteEvent
   version: number
   state: Record<string, unknown>
   idempotent_replay: boolean
@@ -72,7 +91,7 @@ export type ManagedBootstrap = {
     actor_kind: 'human' | 'service' | 'agent'
   }
   readiness: Record<string, unknown>
-  states: Record<'company' | 'commerce' | 'production' | 'setup', ManagedStateRecord>
+  states: Record<ManagedSurface, ManagedStateRecord>
   approvals: ManagedApprovalRecord[]
 }
 
@@ -289,6 +308,26 @@ export async function saveManagedCommerceCommand(request: {
     body: JSON.stringify({
       command_id: request.commandId,
       surface: 'commerce',
+      event_type: request.eventType,
+      expected_version: request.expectedVersion,
+      payload: { state: request.state, evidence: request.evidence },
+    }),
+  })
+  return response.result
+}
+
+export async function saveManagedWebsiteCommand(request: {
+  commandId: string
+  evidence: ManagedCommandEvidence
+  eventType: ManagedWebsiteEvent
+  expectedVersion: number
+  state: object
+}) {
+  const response = await authorizedRequest<{ result: ManagedWebsiteCommandResult }>('/api/trial/v1/commands', {
+    method: 'POST',
+    body: JSON.stringify({
+      command_id: request.commandId,
+      surface: 'website',
       event_type: request.eventType,
       expected_version: request.expectedVersion,
       payload: { state: request.state, evidence: request.evidence },

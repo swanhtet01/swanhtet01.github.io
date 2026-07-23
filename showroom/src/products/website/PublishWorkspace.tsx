@@ -26,6 +26,7 @@ type PublishWorkspaceProps = {
   fingerprint: string
   handoffAvailable: boolean
   handoffIsCurrent: boolean
+  managedActorId: string
   publishIsCurrent: boolean
   workspace: WebsiteWorkspace
   onAddEvidence: (input: EvidenceInput) => Promise<boolean>
@@ -40,6 +41,7 @@ export function PublishWorkspace({
   fingerprint,
   handoffAvailable,
   handoffIsCurrent,
+  managedActorId,
   publishIsCurrent,
   workspace,
   onAddEvidence,
@@ -69,7 +71,7 @@ export function PublishWorkspace({
       kind: evidenceKind,
       finding: evidenceFinding.trim(),
       reference: evidenceReference.trim(),
-      verifiedBy: evidenceVerifier.trim(),
+      verifiedBy: managedActorId || evidenceVerifier.trim(),
     })
     setSubmitting('')
     if (saved) {
@@ -82,7 +84,7 @@ export function PublishWorkspace({
     event.preventDefault()
     if (!allChecksPass || !approvalConfirmed) return
     setSubmitting('approval')
-    const saved = await onApprove({ reviewer: reviewer.trim(), note: approvalNote.trim() })
+    const saved = await onApprove({ reviewer: managedActorId || reviewer.trim(), note: approvalNote.trim() })
     setSubmitting('')
     if (saved) setApprovalConfirmed(false)
   }
@@ -99,7 +101,7 @@ export function PublishWorkspace({
         <div>
           <span className="website-eyebrow">Publish control</span>
           <h2 id="publish-editor-title">Readiness and approval</h2>
-          <p>Checks use only the current local workspace revision.</p>
+          <p>Checks use only the current workspace revision.</p>
         </div>
         <span className={'website-status ' + (allChecksPass ? 'is-ready' : 'is-pending')}>
           {passedCount}/{checks.length} passed
@@ -137,7 +139,7 @@ export function PublishWorkspace({
               <span className="website-step">02</span>
               <div>
                 <h3 id="evidence-title">Verified evidence</h3>
-                <p>Recording evidence is an accountable claim; this demo does not run a test for you.</p>
+                <p>Recording evidence is an accountable claim. Managed mode binds it to the signed-in actor.</p>
               </div>
             </div>
             {staleEvidenceCount ? <small>{staleEvidenceCount} stale record{staleEvidenceCount === 1 ? '' : 's'}</small> : null}
@@ -197,13 +199,14 @@ export function PublishWorkspace({
               />
             </label>
             <label>
-              <span>Verified by</span>
+              <span>{managedActorId ? 'Signed-in actor' : 'Verified by'}</span>
               <input
+                disabled={Boolean(managedActorId)}
                 maxLength={80}
                 onChange={(event) => setEvidenceVerifier(event.target.value)}
-                placeholder="Accountable person or role"
+                placeholder={managedActorId ? 'Authenticated identity' : 'Accountable person or role'}
                 required
-                value={evidenceVerifier}
+                value={managedActorId || evidenceVerifier}
               />
             </label>
             <button className="website-button is-secondary" disabled={Boolean(submitting)} type="submit">
@@ -218,7 +221,7 @@ export function PublishWorkspace({
               <span className="website-step">03</span>
               <div>
                 <h3 id="approval-title">Human approval</h3>
-                <p>Approval applies only to the exact fingerprint shown above.</p>
+                <p>Approval applies only to the exact fingerprint; managed mode binds the signed-in actor.</p>
               </div>
             </div>
             <span className={'website-status ' + (approvalIsCurrent ? 'is-ready' : 'is-pending')}>
@@ -239,12 +242,12 @@ export function PublishWorkspace({
               <label>
                 <span>Human reviewer</span>
                 <input
-                  disabled={!allChecksPass || approvalIsCurrent}
+                  disabled={Boolean(managedActorId) || !allChecksPass || approvalIsCurrent}
                   maxLength={80}
                   onChange={(event) => setReviewer(event.target.value)}
-                  placeholder="Name or accountable role"
+                  placeholder={managedActorId ? 'Authenticated identity' : 'Name or accountable role'}
                   required
-                  value={reviewer}
+                  value={managedActorId || reviewer}
                 />
               </label>
               <label>
@@ -266,7 +269,7 @@ export function PublishWorkspace({
                 onChange={(event) => setApprovalConfirmed(event.target.checked)}
                 type="checkbox"
               />
-              <span>I reviewed this exact local revision and accept the recorded evidence.</span>
+              <span>I reviewed this exact content revision and accept the recorded evidence.</span>
             </label>
             <div className="website-gate-actions">
               <small>{approvalIsCurrent
@@ -300,7 +303,7 @@ export function PublishWorkspace({
           <div className="website-local-publish-action">
             <div>
               <strong>{approvalIsCurrent ? 'Approval matches the current revision.' : 'A current approval is required.'}</strong>
-              <p>The action saves an evidence-bound browser-local snapshot. It does not publish a website.</p>
+              <p>The action saves an evidence-bound approved snapshot. It does not publish a website.</p>
             </div>
             <button
               className="website-button is-primary"

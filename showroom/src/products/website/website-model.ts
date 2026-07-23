@@ -353,13 +353,27 @@ export function workspaceFingerprint(workspace: WebsiteWorkspace) {
       seo: page.seo,
     })),
   }
-  const source = JSON.stringify(publishableState)
+  const source = canonicalJson(publishableState)
   let hash = 2166136261
   for (let index = 0; index < source.length; index += 1) {
     hash ^= source.charCodeAt(index)
     hash = Math.imul(hash, 16777619)
   }
   return 'web-' + (hash >>> 0).toString(16).padStart(8, '0')
+}
+
+function canonicalJson(value: unknown): string {
+  return JSON.stringify(canonicalValue(value))
+}
+
+function canonicalValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalValue)
+  if (typeof value !== 'object' || value === null) return value
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
+      .map(([key, nested]) => [key, canonicalValue(nested)]),
+  )
 }
 
 export function websiteSource(workspace: WebsiteWorkspace): WebsiteSourceRef {

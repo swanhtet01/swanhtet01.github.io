@@ -239,7 +239,7 @@ class TrialStoreTests(unittest.TestCase):
                     PostgresTrialStore._assert_runtime_role(cursor)
                 self.assertEqual(error.exception.reasons, ("role_ready",))
 
-    def test_postgres_schema_probe_requires_version_2_columns_and_constraints(self) -> None:
+    def test_postgres_schema_probe_requires_version_3_and_decision_constraints(self) -> None:
         class SchemaCursor:
             def __init__(self, row: dict[str, object] | None):
                 self.row = row
@@ -254,7 +254,7 @@ class TrialStoreTests(unittest.TestCase):
                 return self.row
 
         ready = {
-            "schema_version": 2,
+            "schema_version": 3,
             "actor_decision_columns_ready": True,
             "decision_constraints_ready": True,
         }

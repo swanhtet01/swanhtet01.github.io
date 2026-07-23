@@ -98,11 +98,17 @@ if (!coreSource.includes('view=work&item=${item.id}') || !coreSource.includes('v
 if (!appSource.includes("lazy(() => import('./products/website/WebsiteProduct')") || !appSource.includes('Suspense') || appSource.includes("import('./products/ecommerce/EcommerceOrdersProduct')")) fail('website_prototype_route_not_isolated')
 if (!appSource.includes('<Navigate replace to="/operations/commerce/?tab=orders" />') || !appSource.includes('path="products/ecommerce/*"')) fail('legacy_ecommerce_route_not_redirected')
 if (!appPackage.scripts?.lint?.includes('src/products')) fail('prototype_sources_not_linted')
-if (!websiteSource.includes('No website has been deployed.') || !websiteSource.includes('No deployment or external write occurred.')) fail('website_prototype_boundary_missing')
-if (!websiteModelSource.includes("supermega.website.workspace.v2") || !websiteModelSource.includes('LEGACY_WEBSITE_STORAGE_KEY') || !websiteModelSource.includes('mutateWebsiteWorkspace') || !websiteModelSource.includes('WEBSITE_MUTATION_LOCK') || !websiteModelSource.includes('preservesAppendOnlyHistory')) fail('website_v2_locked_store_missing')
+if (!websiteSource.includes('No website has been deployed.') || !websiteSource.includes('No deployment occurred.') || !websiteSource.includes('Domain and deployment remain separate approval-gated actions.')) fail('website_deployment_boundary_missing')
+if (!websiteModelSource.includes("supermega.website.workspace.v2") || !websiteModelSource.includes('LEGACY_WEBSITE_STORAGE_KEY') || !websiteModelSource.includes('mutateWebsiteWorkspace') || !websiteModelSource.includes('WEBSITE_MUTATION_LOCK') || !websiteModelSource.includes('preservesAppendOnlyHistory') || !websiteModelSource.includes('canonicalJson')) fail('website_v2_locked_store_missing')
 if (!websiteModelSource.includes('contentRevision') || !websiteModelSource.includes('evidenceIds') || !websiteModelSource.includes('migratedFromV1') || !websiteModelSource.includes('getCurrentApproval') || !websiteModelSource.includes('getCurrentPublish')) fail('website_release_provenance_missing')
 if (!sitePreviewSource.includes("ctaHref.startsWith('https://')") || !sitePreviewSource.includes("ctaHref.startsWith('#')") || !sitePreviewSource.includes('aria-disabled="true"')) fail('website_preview_destination_guard_missing')
 if (!websiteWorkspaceSource.includes("addEventListener('storage', refreshFromStorage)") || !websiteWorkspaceSource.includes("removeEventListener('storage', refreshFromStorage)") || !websiteWorkspaceSource.includes('mutateWebsiteWorkspace(update, current.revision, current.contentRevision') || websiteWorkspaceSource.includes('localStorage.setItem(WEBSITE_STORAGE_KEY, JSON.stringify(workspace))')) fail('website_confirmed_write_or_cross_tab_refresh_missing')
+if (!managedTrialSource.includes('saveManagedWebsiteCommand') || !managedTrialSource.includes("surface: 'website'") || !websiteWorkspaceSource.includes('loadManagedBootstrap()') || !websiteWorkspaceSource.includes("storageModeRef.current = 'managed'") || !websiteWorkspaceSource.includes('actor: managedActorRef.current') || !websiteWorkspaceSource.includes("error.code === 'trial_version_conflict'")) fail('managed_website_command_client_missing')
+if (!websiteWorkspaceSource.includes('bindManagedActor') || !websiteWorkspaceSource.includes('verifiedBy: actor') || !websiteWorkspaceSource.includes('reviewer: actor') || !websiteWorkspaceSource.includes('recordedBy: actor')) fail('managed_website_actor_binding_missing')
+const websiteHydrationStart = websiteWorkspaceSource.indexOf('void (async () => {')
+const websiteHydrationEnd = websiteWorkspaceSource.indexOf('})()', websiteHydrationStart)
+const websiteHydration = websiteWorkspaceSource.slice(websiteHydrationStart, websiteHydrationEnd)
+if (websiteHydration.indexOf('try {') < 0 || websiteHydration.indexOf('try {') > websiteHydration.indexOf('currentManagedIdentity()') || websiteHydration.indexOf('finally') < websiteHydration.indexOf('currentManagedIdentity()')) fail('managed_website_identity_failure_can_stick_hydration')
 const websiteTabsContract = websiteSource.slice(websiteSource.indexOf('const workspaceViews'), websiteSource.indexOf('const viewCopy'))
 if ((websiteTabsContract.match(/^\s*\{ id:/gm) || []).length !== 3 || !websiteTabsContract.includes("label: 'Content'") || !websiteTabsContract.includes("label: 'Navigation'") || !websiteTabsContract.includes("label: 'Publish'") || !websiteSource.includes('role="tablist"') || !websiteSource.includes('role="tabpanel"') || !websiteSource.includes("event.key === 'ArrowRight'") || !websiteSource.includes('tabIndex={view === item.id ? 0 : -1}')) fail('website_three_view_accessibility_contract_changed')
 const websiteMobileCss = websiteCssSource.slice(websiteCssSource.indexOf('@media (max-width: 640px)'), websiteCssSource.indexOf('@media (prefers-reduced-motion'))
@@ -188,6 +194,12 @@ async function verifyWebsiteRuntime() {
     const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-model.ts')).href}?website-verify=${Date.now()}`)
     const seed = model.createInitialWorkspace()
     const fingerprint = model.workspaceFingerprint(seed)
+    const reverseObjectKeys = (value) => Array.isArray(value)
+      ? value.map(reverseObjectKeys)
+      : value && typeof value === 'object'
+        ? Object.fromEntries(Object.keys(value).reverse().map((key) => [key, reverseObjectKeys(value[key])]))
+        : value
+    assert(model.workspaceFingerprint(reverseObjectKeys(seed)) === fingerprint, 'website_fingerprint_not_canonical_across_jsonb_key_order')
     const legacyEvidence = ['content', 'responsive', 'links'].map((kind, index) => ({
       id: `legacy-evidence-${kind}`,
       kind,

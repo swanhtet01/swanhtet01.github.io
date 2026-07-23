@@ -14,14 +14,15 @@ from uuid import UUID, uuid4
 
 
 TRIAL_SCHEMA_COMPONENT = "private_trial_backend"
-TRIAL_SCHEMA_VERSION = 2
-TRIAL_SURFACES = frozenset({"company", "commerce", "production", "setup"})
+TRIAL_SCHEMA_VERSION = 3
+TRIAL_SURFACES = frozenset({"company", "commerce", "production", "website", "setup"})
 TRUSTED_ACTOR_KINDS = frozenset({"human", "service", "agent"})
 HUMAN_ACTOR_KIND = "human"
 SURFACE_WRITE_CAPABILITIES = {
     "company": "company.write",
     "commerce": "commerce.write",
     "production": "production.write",
+    "website": "website.write",
     "setup": "setup.write",
 }
 APPROVAL_REQUEST_CAPABILITY = "approvals.request"

@@ -51,7 +51,7 @@ const viewCopy: Record<WorkspaceView, { eyebrow: string; title: string; copy: st
   publish: {
     eyebrow: 'Release control',
     title: 'Prove the revision before approval.',
-    copy: 'Readiness, evidence, and human approval are bound to the current local fingerprint.',
+    copy: 'Readiness, evidence, and human approval are bound to the current content fingerprint.',
   },
 }
 
@@ -62,10 +62,10 @@ function handoffSourceKey(context: ReturnType<typeof readWebsiteEcommerceHandoff
 }
 
 export function WebsiteProduct() {
-  const { workspace, mutateWorkspace, storageMode, storageIssue } = useWebsiteWorkspace()
+  const { workspace, mutateWorkspace, storageMode, storageIssue, managedActorId } = useWebsiteWorkspace()
   const [view, setView] = useState<WorkspaceView>('content')
   const [device, setDevice] = useState<PreviewDevice>('desktop')
-  const [notice, setNotice] = useState('Local demo loaded. No website has been deployed.')
+  const [notice, setNotice] = useState('Website workspace loaded. No website has been deployed.')
   const [deleteCandidateId, setDeleteCandidateId] = useState('')
   const [preparedHandoffSource, setPreparedHandoffSource] = useState(() => handoffSourceKey(readWebsiteEcommerceHandoff()))
   const selectedPage = workspace.pages.find((page) => page.id === workspace.selectedPageId) ?? workspace.pages[0]
@@ -121,7 +121,7 @@ export function WebsiteProduct() {
       ? { ...current, selectedPageId: pageId }
       : current)
     setDeleteCandidateId('')
-    setNotice('Previewing the selected browser-local page.')
+    setNotice('Previewing the selected page.')
   }
 
   async function updatePage(pageId: string, update: (page: WebsitePage) => WebsitePage) {
@@ -171,7 +171,7 @@ export function WebsiteProduct() {
     if (selectedPage.slug === '/' || selectedPage.stage !== 'draft') return
     if (deleteCandidateId !== selectedPage.id) {
       setDeleteCandidateId(selectedPage.id)
-      setNotice('Select “Confirm remove” to delete this browser-local draft.')
+      setNotice('Select “Confirm remove” to delete this draft page.')
       return
     }
 
@@ -184,7 +184,7 @@ export function WebsiteProduct() {
         pages,
         selectedPageId: pages[0]?.id ?? '',
       }
-    }, 'Browser-local draft removed.')
+    }, 'Draft page removed.')
     if (result.ok && result.changed) setDeleteCandidateId('')
   }
 
@@ -197,7 +197,7 @@ export function WebsiteProduct() {
       const [page] = pages.splice(currentIndex, 1)
       pages.splice(nextIndex, 0, page)
       return { ...current, pages }
-    }, 'Navigation order updated locally.')
+    }, 'Navigation order updated.')
   }
 
   async function addEvidence(input: {
@@ -234,7 +234,7 @@ export function WebsiteProduct() {
         actionId: createId('local-snapshot'),
         capturedAt: new Date().toISOString(),
       }),
-      'Approved snapshot saved and confirmed. No deployment or external write occurred.',
+      'Approved snapshot saved and confirmed. No deployment occurred.',
       true,
     )
   }
@@ -310,10 +310,12 @@ export function WebsiteProduct() {
           <b>WEBSITE</b>
         </a>
         <div className="website-runtime">
-          <span className="website-local-badge"><i />Local demo</span>
-          <small>{storageMode === 'browser-local'
-            ? 'saved · content r' + String(workspace.contentRevision)
-            : 'session only'}</small>
+          <span className="website-local-badge"><i />{storageMode === 'managed' ? 'Managed workspace' : storageMode === 'browser-local' ? 'Local workspace' : 'Session only'}</span>
+          <small>{storageMode === 'managed'
+            ? 'synced · content r' + String(workspace.contentRevision)
+            : storageMode === 'browser-local'
+              ? 'saved · content r' + String(workspace.contentRevision)
+              : 'writes paused'}</small>
           <button className="website-button is-primary is-compact" onClick={() => setView('publish')} type="button">
             Review publish
           </button>
@@ -325,7 +327,7 @@ export function WebsiteProduct() {
           <div className="website-site-record">
             <span>Website workspace</span>
             <strong>{workspace.siteName || 'Untitled site'}</strong>
-            <small>{workspace.pages.length} / {MAX_WEBSITE_PAGES} pages · local draft</small>
+            <small>{workspace.pages.length} / {MAX_WEBSITE_PAGES} pages · {storageMode === 'managed' ? 'managed draft' : 'local draft'}</small>
           </div>
 
           <nav className="website-workspace-nav" aria-label="Website workspace" role="tablist">
@@ -371,7 +373,9 @@ export function WebsiteProduct() {
 
           <footer className="website-sidebar-foot">
             <span aria-hidden="true">&gt;_</span>
-            <p>Browser-local records only. No CMS, domain, analytics, or deployment target is connected.</p>
+            <p>{storageMode === 'managed'
+              ? 'Authenticated records are synced. Domain and deployment remain separate approval-gated actions.'
+              : 'Local records only. No CMS, domain, analytics, or deployment target is connected.'}</p>
           </footer>
         </aside>
 
@@ -420,7 +424,7 @@ export function WebsiteProduct() {
                 onMovePage={movePage}
                 onSelectPage={selectPage}
                 onSiteNameChange={(siteName) => {
-                  void commitWorkspace((current) => ({ ...current, siteName }), 'Site identity updated locally.')
+                  void commitWorkspace((current) => ({ ...current, siteName }), 'Site identity updated.')
                 }}
                 onUpdatePage={updatePage}
                 workspace={workspace}
@@ -434,6 +438,7 @@ export function WebsiteProduct() {
                 fingerprint={fingerprint}
                 handoffAvailable={storageMode === 'browser-local'}
                 handoffIsCurrent={handoffIsCurrent}
+                managedActorId={managedActorId}
                 onAddEvidence={addEvidence}
                 onApprove={approveCurrentRevision}
                 onPrepareCommerceHandoff={prepareCommerceHandoff}

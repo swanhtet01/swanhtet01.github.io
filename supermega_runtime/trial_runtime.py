@@ -26,10 +26,11 @@ from supermega_runtime.trial_store import (
     TrialValidationError,
     TrialVersionConflict,
 )
+from supermega_runtime.website_runtime import WEBSITE_HUMAN_EVENTS
 
 
 TRIAL_API_PREFIX = "/api/trial/v1"
-TRIAL_SURFACE_ORDER = ("company", "commerce", "production", "setup")
+TRIAL_SURFACE_ORDER = ("company", "commerce", "production", "website", "setup")
 
 PrincipalResolver = Callable[[Request], TrialPrincipal | None]
 ResultT = TypeVar("ResultT")
@@ -54,7 +55,7 @@ class _StrictRequest(BaseModel):
 
 class TrialCommandRequest(_StrictRequest):
     command_id: UUID
-    surface: Literal["company", "commerce", "production", "setup"]
+    surface: Literal["company", "commerce", "production", "website", "setup"]
     event_type: str = Field(min_length=1, max_length=80)
     expected_version: int = Field(ge=0)
     payload: dict[str, Any] = Field(default_factory=dict)
@@ -290,6 +291,12 @@ def create_trial_router(*, store: TrialStore, resolve_principal: PrincipalResolv
     def trial_command(request: Request, body: TrialCommandRequest) -> dict[str, Any]:
         principal = _resolve_principal(request, resolve_principal)
         _reject_client_identity(body.payload, path="payload")
+        if body.surface == "website":
+            evidence = body.payload.get("evidence")
+            if not isinstance(evidence, Mapping) or evidence.get("actor") != principal.actor_id:
+                raise _error(422, "website_actor_evidence_required")
+            if body.event_type in WEBSITE_HUMAN_EVENTS and principal.actor_kind != "human":
+                raise _error(403, "trial_human_approval_required")
         readiness = _readiness(store, principal)
         _require_write_ready(readiness, SURFACE_WRITE_CAPABILITIES[body.surface])
         result = _invoke(

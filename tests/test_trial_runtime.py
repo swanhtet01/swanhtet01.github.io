@@ -87,7 +87,7 @@ class TrialRuntimeTests(unittest.TestCase):
             workspace_id="workspace-a",
             actor_id="actor-operator",
             actor_kind="human",
-            capabilities=("commerce.write", "approvals.request"),
+            capabilities=("commerce.write", "website.write", "approvals.request"),
         )
         store.provision_membership(
             workspace_id="workspace-a",
@@ -99,7 +99,7 @@ class TrialRuntimeTests(unittest.TestCase):
             workspace_id="workspace-a",
             actor_id="actor-agent-manager",
             actor_kind="agent",
-            capabilities=("approvals.decide",),
+            capabilities=("website.write", "approvals.decide"),
         )
         store.provision_membership(
             workspace_id="workspace-b",
@@ -237,6 +237,56 @@ class TrialRuntimeTests(unittest.TestCase):
             "commerce.write",
         )
         self.assertEqual(self.reducer.calls, 0)
+
+    def test_website_commands_bind_actor_evidence_and_human_release_actions(self) -> None:
+        def website_body(*, actor: str, event_type: str = "website.content.saved") -> dict[str, object]:
+            return {
+                "command_id": str(uuid4()),
+                "surface": "website",
+                "event_type": event_type,
+                "expected_version": 0,
+                "payload": {
+                    "state": {"draft": "bounded"},
+                    "evidence": {
+                        "actionId": "website-action-1",
+                        "capturedAt": "2026-07-23T03:30:00.000Z",
+                        "actor": actor,
+                        "reason": "Website command",
+                        "evidenceReference": "website://draft/1",
+                    },
+                },
+            }
+
+        spoofed = self.client.post(
+            "/api/trial/v1/commands",
+            headers=self._headers(),
+            json=website_body(actor="actor-spoofed"),
+        )
+        self.assertEqual(spoofed.status_code, 422)
+        self.assertEqual(spoofed.json()["detail"]["code"], "website_actor_evidence_required")
+
+        human = self.client.post(
+            "/api/trial/v1/commands",
+            headers=self._headers(),
+            json=website_body(actor="actor-operator", event_type="website.revision.approved"),
+        )
+        self.assertEqual(human.status_code, 200)
+
+        agent = self.client.post(
+            "/api/trial/v1/commands",
+            headers=self._headers("agent-manager-session"),
+            json=website_body(actor="actor-agent-manager", event_type="website.snapshot.recorded"),
+        )
+        self.assertEqual(agent.status_code, 403)
+        self.assertEqual(agent.json()["detail"]["code"], "trial_human_approval_required")
+
+        agent_evidence = self.client.post(
+            "/api/trial/v1/commands",
+            headers=self._headers("agent-manager-session"),
+            json=website_body(actor="actor-agent-manager", event_type="website.evidence.recorded"),
+        )
+        self.assertEqual(agent_evidence.status_code, 403)
+        self.assertEqual(agent_evidence.json()["detail"]["code"], "trial_human_approval_required")
 
     def test_every_runtime_write_readiness_gate_fails_closed(self) -> None:
         for blocked_check in ("database_ready", "role_ready", "schema_ready", "audit_ready", "write_enabled"):

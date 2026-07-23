@@ -28,6 +28,7 @@ from supermega_runtime.trial_store import (
     TrialPrincipal,
     TrialValidationError,
 )
+from supermega_runtime.website_runtime import reduce_website_state
 
 
 SERVICE_NAME = "supermega-service"
@@ -106,10 +107,12 @@ def reduce_trial_state(
     current: Mapping[str, Any],
     payload: Mapping[str, Any],
 ) -> Mapping[str, Any]:
-    """Reduce one bounded command, with explicit lifecycle rules for Commerce."""
+    """Reduce one bounded command with explicit product lifecycle rules."""
 
     if surface == "commerce":
         state = reduce_commerce_state(event_type, current, payload)
+    elif surface == "website":
+        state = reduce_website_state(event_type, current, payload)
     else:
         expected_event = TRIAL_EVENT_BY_SURFACE.get(surface)
         if event_type != expected_event:

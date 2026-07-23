@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 
 const root = resolve(import.meta.dirname, '..')
 const read = (path) => readFile(resolve(root, path), 'utf8')
-const [runtime, supabaseAuth, cloudRuntime, vercelEntry, portableEntry, trialRuntime, trialStore, managedTrialClient, coreApp, foundationMigration, currentMigration, databaseValidator, databaseActivator, liveVerifier, workflow, requirements, dockerfile, appEnvironment] = await Promise.all([
+const [runtime, supabaseAuth, cloudRuntime, vercelEntry, portableEntry, trialRuntime, trialStore, websiteRuntime, managedTrialClient, coreApp, foundationMigration, decisionMigration, websiteMigration, databaseValidator, databaseActivator, liveVerifier, workflow, requirements, dockerfile, appEnvironment] = await Promise.all([
   read('supermega_runtime/runtime.py'),
   read('supermega_runtime/supabase_auth.py'),
   read('supermega_runtime/cloud_runtime.py'),
@@ -11,10 +11,12 @@ const [runtime, supabaseAuth, cloudRuntime, vercelEntry, portableEntry, trialRun
   read('api_app.py'),
   read('supermega_runtime/trial_runtime.py'),
   read('supermega_runtime/trial_store.py'),
+  read('supermega_runtime/website_runtime.py'),
   read('showroom/src/core/managed-trial.ts'),
   read('showroom/src/core/CoreApp.tsx'),
   read('supabase/migrations/20260722005134_private_trial_backend_foundation.sql'),
   read('supabase/migrations/20260722142801_private_trial_backend_v2.sql'),
+  read('supabase/migrations/20260723094500_private_trial_backend_v3_website.sql'),
   read('tools/validate_supermega_database_url.py'),
   read('tools/activate_supermega_database.ps1'),
   read('tools/verify_app_release_live.mjs'),
@@ -23,7 +25,7 @@ const [runtime, supabaseAuth, cloudRuntime, vercelEntry, portableEntry, trialRun
   read('Dockerfile'),
   read('.env.app.example'),
 ])
-const migration = `${foundationMigration}\n${currentMigration}`
+const migration = `${foundationMigration}\n${decisionMigration}\n${websiteMigration}`
 const apiSourceEntries = (await readdir(resolve(root, 'api'), { withFileTypes: true }))
   .filter((entry) => entry.isFile() && /\.(?:py|js|mjs|cjs)$/.test(entry.name))
   .map((entry) => entry.name)
@@ -59,15 +61,16 @@ requireContract('API documentation is not public', /docs_url=None/.test(runtime)
 requireContract('surface commands use optimistic versions', /expected_version/.test(trialRuntime) && /TrialVersionConflict/.test(trialStore))
 requireContract('commands are idempotent', /TrialIdempotencyConflict/.test(trialStore) && /command_fingerprint/.test(migration))
 requireContract('company queue is a managed surface', /"company": "company\.write"/.test(trialStore) && /when 'company' then 'company\.write'/.test(migration))
+requireContract('Website is an authenticated managed surface', /"website": "website\.write"/.test(trialStore) && /reduce_website_state/.test(runtime) && /WEBSITE_HUMAN_EVENTS/.test(trialRuntime) && /when 'website' then 'website\.write'/.test(websiteMigration) && /saveManagedWebsiteCommand/.test(managedTrialClient) && /validate_website_state/.test(websiteRuntime) && /evidence\["actor"\] == event\["actor"\] == record\[actor_field\]/.test(websiteRuntime) && /exact current ready-page set/.test(websiteRuntime) && /sort_keys=True/.test(websiteRuntime))
 requireContract('audit events are immutable', /workspace_events_immutable/.test(migration) && /reject_workspace_event_mutation/.test(migration))
 requireContract('private schema forces RLS', /create schema if not exists app_private/.test(migration) && /force row level security/gi.test(migration))
 requireContract('browser roles have no private schema grant', /revoke all on schema app_private from public, anon, authenticated, service_role/.test(migration))
 requireContract('approval transitions are controlled', /pending to approved or declined/.test(migration) && /APPROVAL_DECIDE_CAPABILITY/.test(trialRuntime))
 requireContract('approval decisions require trusted human identity', /x-supermega-actor-kind/.test(runtime) && /v2\\n/.test(runtime) && /TrialHumanApprovalRequired/.test(trialStore) && /decided_actor_kind = 'human'/.test(migration) && /app\.actor_kind/.test(migration))
 requireContract('approvals require a typed decision packet', /TrialDecisionPacket/.test(trialRuntime) && /TrialDecisionClaim/.test(trialRuntime) && /claim_type: Literal\["fact", "analysis"\]/.test(trialRuntime) && /status == "verified" and not digest/.test(trialStore) && /Every decision claim source_reference must be present in evidence_refs/.test(trialStore) && /DECISION_PACKET_CONTRACT = "decision_packet\.v1"/.test(trialStore) && /proposal_json ->> 'contract' = 'decision_packet\.v1'/.test(migration))
-requireContract('approval decisions require a trimmed nonblank note', /note: str = Field\(min_length=1, max_length=500\)/.test(trialRuntime) && /decision note must not be blank/.test(trialRuntime) && /1 <= len\(note_value\) <= 500/.test(trialStore) && /decision_note = btrim\(decision_note\)/.test(currentMigration) && /char_length\(decision_note\) between 1 and 500/.test(currentMigration))
-requireContract('managed schema contract advances through an additive v2 migration', /TRIAL_SCHEMA_VERSION = 2/.test(trialStore) && /set schema_version = 2/.test(currentMigration) && /schema_version = 1/.test(currentMigration) && /schema_version = 2/.test(currentMigration))
-requireContract('managed database readiness validator targets schema v2', /CONTRACT = "supermega_private_trial_database_v2"/.test(databaseValidator) && /SCHEMA_VERSION = 2/.test(databaseValidator) && /complete v2 schema contract/.test(databaseValidator))
+requireContract('approval decisions require a trimmed nonblank note', /note: str = Field\(min_length=1, max_length=500\)/.test(trialRuntime) && /decision note must not be blank/.test(trialRuntime) && /1 <= len\(note_value\) <= 500/.test(trialStore) && /decision_note = btrim\(decision_note\)/.test(decisionMigration) && /char_length\(decision_note\) between 1 and 500/.test(decisionMigration))
+requireContract('managed schema contract advances through additive v2 and v3 migrations', /TRIAL_SCHEMA_VERSION = 3/.test(trialStore) && /set schema_version = 2/.test(decisionMigration) && /schema_version = 1/.test(decisionMigration) && /set schema_version = 3/.test(websiteMigration) && /schema_version = 2/.test(websiteMigration) && /schema_version = 3/.test(websiteMigration))
+requireContract('managed database readiness validator targets schema v3', /CONTRACT = "supermega_private_trial_database_v3"/.test(databaseValidator) && /SCHEMA_VERSION = 3/.test(databaseValidator) && /complete v3 schema contract/.test(databaseValidator))
 requireContract('Python runtime dependencies are minimal', !/beautifulsoup|google-cloud|sentry|sqlmodel|python-dotenv/i.test(requirements))
 requireContract('Cloud Run uses the canonical ASGI entrypoint', /uvicorn api_app:app/.test(dockerfile) && /COPY supermega_runtime \/app\/supermega_runtime/.test(dockerfile) && !/serve_solution/.test(dockerfile))
 requireContract('release CI executes every API test', workflow.includes("python -m unittest discover -s tests -p 'test_*.py' -v") && workflow.includes("- 'supermega_runtime/**'"))
