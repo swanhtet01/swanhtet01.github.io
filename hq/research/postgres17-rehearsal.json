@@ -1,0 +1,56 @@
+{
+  "schemaVersion": "supermega.hq.database-rehearsal.v1",
+  "recordedAt": "2026-07-24",
+  "runner": "tools/rehearse_supermega_postgres17.py",
+  "engine": {
+    "distribution": "EDB PostgreSQL Windows x86-64 binaries",
+    "version": "17.10",
+    "major": 17,
+    "sourcePage": "https://www.postgresql.org/download/windows/",
+    "archive": "https://get.enterprisedb.com/postgresql/postgresql-17.10-2-windows-x64-binaries.zip",
+    "archiveBytes": 333927270,
+    "observedArchiveSha256": "ef9b1e5e23d2e8a83914ba13d9dc536a72210fba53fd1808ff1f7e06bb22b106",
+    "tlsActive": true,
+    "loopbackOnly": true
+  },
+  "migration": {
+    "count": 5,
+    "schemaVersion": 4,
+    "productionValidatorReady": true
+  },
+  "checks": {
+    "migrationChainApplied": true,
+    "v1UpgradePreserved": true,
+    "legacyActorDenied": true,
+    "dedicatedRuntimeRoleValidated": true,
+    "runtimeRoleSettingsEmpty": true,
+    "runtimeSetRoleDenied": true,
+    "browserRoleIsolation": true,
+    "tenantIsolation": true,
+    "identityTransactionLocal": true,
+    "mismatchedIdentityDenied": true,
+    "capabilityDenial": true,
+    "invalidInitialVersionDenied": true,
+    "optimisticConcurrency": true,
+    "eventImmutability": true,
+    "serverTimestamps": true,
+    "revocation": true,
+    "backupCreated": true,
+    "restoreCompletedOnFreshCluster": true,
+    "restoredDataPreserved": true,
+    "restoredDatabaseValidated": true
+  },
+  "safety": {
+    "cleanupComplete": true,
+    "secretValuesExposed": false,
+    "productionMutated": false,
+    "supabaseMutated": false,
+    "vercelMutated": false
+  },
+  "remainingHostedGates": [
+    "Apply and validate on an isolated Supabase non-production target.",
+    "Run Supabase Security Advisor and resolve applicable findings.",
+    "Exercise the provider transaction-mode pooler and hosted backup/restore process.",
+    "Keep production writes disabled until founder approval."
+  ]
+}

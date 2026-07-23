@@ -18,6 +18,8 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - 'tools/validate_supermega_database_url.py'
+      - 'tools/rehearse_supermega_postgres17.py'
+      - 'tools/run_postgres17_rehearsal.mjs'
       - 'tools/verify_private_trial_migrations.mjs'
       - 'tools/verify_app_deploy_workflow.mjs'
       - 'tools/verify_app_release_live.mjs'

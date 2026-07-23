@@ -4,6 +4,19 @@
 
 The validator is intentionally read-only. It does not apply migrations, create users, provision workspaces, or enable writes.
 
+## Local PostgreSQL 17 release gate
+
+Run this first on a development machine with PostgreSQL 17 binaries, matching `psql`, `pg_dump`, and `pg_restore`, Psycopg 3, and OpenSSL:
+
+```powershell
+npm run database:postgres17:preflight
+npm run database:postgres17:rehearse
+```
+
+The runner accepts only executable paths, never database credentials. It creates two disposable PostgreSQL 17 clusters with generated in-memory secrets, TLS, and a `127.0.0.1` listener. The first cluster applies the five migrations as `postgres`, carries representative v1 records through v4, provisions the exact runtime membership, runs the production read-only validator, and exercises identity locality, tenant and capability denial, browser-role isolation, role settings, `SET ROLE` denial, concurrency, immutable events, server timestamps, and revocation. It then creates a custom-format backup. A second clean cluster recreates only the required global roles, restores the backup, revalidates the schema and runtime role, verifies retained rows, and is removed with the first cluster.
+
+The current sanitized proof is `hq/research/postgres17-rehearsal.json`. It records PostgreSQL 17.10, the official Windows distribution source, the observed archive checksum, all passing checks, complete cleanup, and zero Supabase, Vercel, or production mutation. This is a repeatable local release gate—not hosted activation. It does not replace an isolated Supabase target, Security Advisor, the provider transaction-mode pooler, or provider backup and recovery proof. PostgreSQL documents the [Windows binary distribution](https://www.postgresql.org/download/windows/), and Supabase documents its separate [local-development boundary](https://supabase.com/docs/guides/local-development/overview).
+
 ## One-time non-production proof
 
 1. Create a Supabase branch or separate non-production project and confirm backup and restore responsibilities.
@@ -18,7 +31,7 @@ The validator is intentionally read-only. It does not apply migrations, create u
 powershell -ExecutionPolicy Bypass -File tools/activate_supermega_database.ps1 -DatabaseUrlFile .tmp\supermega-nonproduction-database-url.txt -ValidateOnly
 ```
 
-The audit must prove encrypted read-only transport, exact role-membership edges, no transitive runtime members, trusted ownership, the exact private schema version, forced RLS, exact grants and applicable default ACLs, browser-role isolation, complete policy and security-constraint fingerprints, exact trigger events, structure and function bodies, and exact indexes. Run Supabase Security Advisor after the migration and resolve every applicable finding. Exercise cross-workspace denial, access revocation, duplicate policy names, inverted or swapped identity predicates, trigger `WHEN` bypasses, global/default grants, mismatched approval event/surface combinations, immutable events, optimistic concurrency, backup, and restore on non-production data. PGlite execution is useful local migration evidence but does not replace this PostgreSQL 17.6 non-production proof.
+The audit must prove encrypted read-only transport, exact role-membership edges, no transitive runtime members, trusted ownership, the exact private schema version, forced RLS, exact grants and applicable default ACLs, browser-role isolation, complete policy and security-constraint fingerprints, exact trigger events, structure and function bodies, and exact indexes. Run Supabase Security Advisor after the migration and resolve every applicable finding. Exercise cross-workspace denial, access revocation, duplicate policy names, inverted or swapped identity predicates, trigger `WHEN` bypasses, global/default grants, mismatched approval event/surface combinations, immutable events, optimistic concurrency, backup, and restore on non-production data. PGlite and the local PostgreSQL 17 gate are strong preflight evidence but do not replace this hosted PostgreSQL 17.6 proof.
 
 ## Production handoff
 

@@ -28,6 +28,8 @@
     "kernel:verify": "npm --prefix kernel run verify",
     "deploy:kernel:prod": "npm --prefix kernel run deploy:prod",
     "db:supermega:activate": "powershell -ExecutionPolicy Bypass -File tools/activate_supermega_database.ps1",
+    "database:postgres17:preflight": "node tools/run_postgres17_rehearsal.mjs --preflight",
+    "database:postgres17:rehearse": "node tools/run_postgres17_rehearsal.mjs",
     "database:migrations:verify": "node tools/verify_private_trial_migrations.mjs",
     "smoke:local": "bash tools/run_local_smoke.sh",
     "smoke:public": "npm run public:prebuilt",

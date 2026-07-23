@@ -2,16 +2,18 @@ import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
 const root = resolve(import.meta.dirname, '..')
-const [readme, now, current, manifestText, portfolioText] = await Promise.all([
+const [readme, now, current, manifestText, portfolioText, databaseRehearsalText] = await Promise.all([
   readFile(resolve(root, 'hq', 'README.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'NOW.md'), 'utf8'),
   readFile(resolve(root, 'CURRENT.md'), 'utf8'),
   readFile(resolve(root, 'site-manifest.json'), 'utf8'),
   readFile(resolve(root, 'hq', 'portfolio.json'), 'utf8'),
+  readFile(resolve(root, 'hq', 'research', 'postgres17-rehearsal.json'), 'utf8'),
 ])
 
 const manifest = JSON.parse(manifestText)
 const portfolio = JSON.parse(portfolioText)
+const databaseRehearsal = JSON.parse(databaseRehearsalText)
 const failures = []
 const requireContract = (name, condition) => { if (!condition) failures.push(name) }
 
@@ -43,11 +45,25 @@ requireContract('release evidence is current', now.includes('PR `#258`')
   && now.includes('4ac6a88c1d9699249169bad081807b894e82f4fe')
   && now.includes('run `158` passed every validation job')
   && now.includes('178 product/runtime checks')
-  && now.includes('96 Python tests'))
+  && now.includes('101 Python tests'))
 requireContract('hosted database readiness remains truthful', now.includes('PostgreSQL 17.6.1')
   && now.includes('are not installed')
   && now.includes('27 informational `rls_enabled_no_policy` findings')
   && now.includes('Do not treat its healthy status or server version as application readiness'))
+requireContract('local PostgreSQL 17 rehearsal is real but bounded',
+  databaseRehearsal.schemaVersion === 'supermega.hq.database-rehearsal.v1'
+  && databaseRehearsal.engine?.major === 17
+  && databaseRehearsal.engine?.tlsActive === true
+  && databaseRehearsal.engine?.loopbackOnly === true
+  && Object.keys(databaseRehearsal.checks || {}).length === 20
+  && Object.values(databaseRehearsal.checks || {}).every((value) => value === true)
+  && databaseRehearsal.safety?.cleanupComplete === true
+  && databaseRehearsal.safety?.secretValuesExposed === false
+  && databaseRehearsal.safety?.productionMutated === false
+  && databaseRehearsal.safety?.supabaseMutated === false
+  && databaseRehearsal.safety?.vercelMutated === false
+  && databaseRehearsal.remainingHostedGates?.length === 4
+  && now.includes('does not make hosted Supabase ready'))
 requireContract('product lifecycle is explicit', portfolio.portfolio?.[0]?.lifecycle?.join(',') === 'discover,define,build,release,learn')
 requireContract('manifest aligns to operating modules', manifest.products?.map((entry) => `${entry.id}:${entry.name}`).join(',') === 'commerce:Commerce,production:Production')
 const expectedTemplateIds = {

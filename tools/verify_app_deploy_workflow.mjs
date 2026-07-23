@@ -77,6 +77,10 @@ requireContract('app and public changes trigger one release authority', workflow
 requireContract('all API tests trigger and execute', workflow.includes("- 'tests/**'") && workflow.includes("python -m unittest discover -s tests -p 'test_*.py' -v"))
 requireContract('runtime package changes trigger release', workflow.includes("- 'supermega_runtime/**'"))
 requireContract('database activation controls trigger release', workflow.includes('tools/validate_supermega_database_url.py') && workflow.includes('tools/activate_supermega_database.ps1'))
+requireContract('PostgreSQL 17 rehearsal changes trigger every database-aware workflow',
+  [workflow, ciWorkflow, appWorkflow].every((source) =>
+    source.includes('tools/rehearse_supermega_postgres17.py')
+    && source.includes('tools/run_postgres17_rehearsal.mjs')))
 requireContract('migration proof changes trigger every database-aware workflow',
   [workflow, ciWorkflow, appWorkflow].every((source) => source.includes('tools/verify_private_trial_migrations.mjs') && source.includes('package-lock.json')))
 requireContract('real migration proof precedes every production candidate',

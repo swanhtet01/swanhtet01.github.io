@@ -33,6 +33,8 @@ on:
       - 'tools/test_vercel_domain_state.mjs'
       - 'tools/validate_supermega_database_url.py'
       - 'tools/activate_supermega_database.ps1'
+      - 'tools/rehearse_supermega_postgres17.py'
+      - 'tools/run_postgres17_rehearsal.mjs'
       - 'site-manifest.json'
       - 'package.json'
       - 'package-lock.json'

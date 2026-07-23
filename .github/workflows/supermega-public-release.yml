@@ -46,6 +46,8 @@ on:
       - tools/resolve_vercel_rollback_target.mjs
       - tools/validate_supermega_database_url.py
       - tools/activate_supermega_database.ps1
+      - tools/rehearse_supermega_postgres17.py
+      - tools/run_postgres17_rehearsal.mjs
       - tools/deny_stale_public_deploy.mjs
       - tools/deploy_website_actions.ps1
       - vercel.json
