@@ -23,7 +23,7 @@ Prove one real workflow in which SuperMega keeps the operating record, a respons
 - Products contains Commerce, Production, and Website. No public agent catalogue, demo-domain collection, POS product, or separate internal-console product is in scope.
 - Commerce opens on Orders, with Stock and collapsed close controls. Production opens on Jobs, with Problems and collapsed recurring-job intake. Website keeps Pages, Navigation, Publish, and Split on desktop; mobile reduces the primary choice to Edit or Publish, with page, navigation, and search in Site settings.
 - Commerce, Production, and Website have authenticated tenant commands. Managed Production starts from real records and requires human-bound evidence.
-- Website is the only lazy-loaded product workspace. An approved record retains one deterministic site file without deploying a site or changing a domain.
+- Website is the only lazy-loaded product workspace. An approved record retains one deterministic site file without deploying a site or changing a domain. Invalid local records remain unchanged, show one Recovery settings action, and can only be removed through the confirmed two-step local reset.
 - The managed backend is the private `app_private` schema and dedicated runtime-role contract in Supabase Postgres. Browser code receives neither the database URL nor a service-role key.
 - The repeatable local PostgreSQL 17.10 gate runs the real `PostgresTrialStore` with explicit non-autocommit transactions and passes migration, v1 upgrade, runtime role, TLS, transaction-local identity, RLS behavior, revocation, and fresh-cluster restore checks; it does not make hosted Supabase ready.
 - Sends, payments, publishing, merges, deployments, access changes, and production writes remain responsible-human actions.
@@ -31,11 +31,11 @@ Prove one real workflow in which SuperMega keeps the operating record, a respons
 
 ## Latest verification
 
-- Draft release candidate: GitHub PR `#258` on branch `agent/supermega-release-candidate`; its validated implementation head is `71e9e6e84165d72aef741506e240e91d284c1303`.
-- GitHub `SuperMega App CI` run `165` passed every validation job for pushed head `71e9e6e84165d72aef741506e240e91d284c1303`.
+- Draft release candidate: GitHub PR `#258` on branch `agent/supermega-release-candidate`; its validated product implementation head is `c430f24b324e819a58aaab342cdc3d12e384bc64`.
+- GitHub `SuperMega App CI` run `167` passed every validation job for pushed head `c430f24b324e819a58aaab342cdc3d12e384bc64`.
 - Candidate lint and build pass with 178 product/runtime checks, 51 coordinated-release checks, 44 security checks, 10 migration-chain checks, 11 Vercel environment/domain checks, and 102 Python tests.
 - The PostgreSQL 17.10 evidence records 20 passing migration, authority, isolation, revocation, recovery, and validator checks across two clean TLS clusters. Cleanup passed; external systems were unchanged.
-- Desktop and 375px audits put Website page, Preview, Site settings, and the first Hero field in the initial phone viewport while retaining desktop Split. Commerce, Production, and Website show no overflow, undersized controls, or console errors.
+- Desktop and 375px audits put Website page, Preview, Site settings, and the first Hero field in the initial phone viewport while retaining desktop Split. Commerce, Production, and Website show no overflow, undersized controls, or console errors. The malformed-local-data audit exposes one 44px Recovery settings action and confirms reset scope without deleting browser data.
 - No Vercel deployment was created by the release-candidate push. The latest `megaos` and `supermega-public` production deployments still reference `main` commit `6885c3201d523d42d176c3dcd91de28dc1e17f6f`.
 - The connected `supermegabase` project is active and healthy on hosted PostgreSQL 17.6.1. Read-only inspection confirms `app_private`, `app_private.trial_schema_meta`, and `supermega_trial_backend` are not installed.
 - Supabase migration history currently contains one unrelated public-schema RLS migration, not the five SuperMega private-trial migrations.
