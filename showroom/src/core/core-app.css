@@ -591,6 +591,12 @@ textarea { min-height: 72px; resize: vertical; }
   .settings-grid { min-height: 0; }
   .trial-control-panel { align-items: flex-start; }
   .agent-team-workspace { height: auto; }
+  .team-screen.mobile-focus-open > .page-heading,
+  .team-screen.mobile-focus-open > .simple-toolbar,
+  .team-screen.mobile-focus-open > .compact-summary,
+  .team-screen.mobile-focus-open .agent-team-workspace > .agent-boundary-banner,
+  .team-screen.mobile-focus-open .agent-team-workspace > .agent-summary { display: none; }
+  .team-screen.mobile-focus-open > .workspace-view { flex: 1; }
   .team-board-view.mobile-list-open .record-detail-panel { display: none; }
   .team-board-view.mobile-detail-open .queue-panel { display: none; }
   .team-board-view .team-mobile-back { min-height: 44px; display: inline-flex; align-items: center; margin-bottom: 8px; }

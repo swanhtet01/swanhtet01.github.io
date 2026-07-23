@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from 'react'
+import { type FormEvent, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
 import { AgentTeamsPanel } from './AgentTeamsPanel'
@@ -94,6 +94,9 @@ export function TeamsPage() {
   const intakeOpen = showIntake || requestedView === 'intake'
   const selectedItem = requestedItemId ? teamItems.find((item) => item.id === requestedItemId) : teamItems[0]
   const mobileDetailOpen = Boolean(requestedItemId && selectedItem)
+  const mobileAgentDetailOpen = activeView === 'agents'
+    && Boolean(requestedAgentId && workspace.agents.some((agent) => agent.team === activeTeam && agent.id === requestedAgentId))
+  const mobileFocusOpen = intakeOpen || (activeView === 'work' && mobileDetailOpen) || mobileAgentDetailOpen
   const openItems = teamItems.filter((item) => item.status !== 'done')
   const activeItems = teamItems.filter((item) => ['in_progress', 'review'].includes(item.status))
   const blockedItems = teamItems.filter((item) => item.status === 'blocked')
@@ -102,6 +105,11 @@ export function TeamsPage() {
   const releaseComplete = workspace.release.checks.filter((check) => check.complete).length
   const releasePercent = Math.round((releaseComplete / workspace.release.checks.length) * 100)
   const reviewDecision = workspace.decisions.find((decision) => decision.id === reviewDecisionId && decision.status === 'proposed')
+
+  useEffect(() => {
+    if (!mobileFocusOpen || !window.matchMedia('(max-width: 840px)').matches) return
+    window.scrollTo({ top: 0, behavior: 'auto' })
+  }, [mobileFocusOpen, requestedAgentId, requestedItemId])
 
   function navigate(team: TeamId, view: WorkspaceView, selectedId?: string) {
     const next = { team, view } as Record<string, string>
@@ -276,7 +284,7 @@ export function TeamsPage() {
   }
 
   return (
-    <div className="workspace-screen team-screen">
+    <div className={`workspace-screen team-screen ${mobileFocusOpen ? 'mobile-focus-open' : ''}`}>
       <PageHeading
         eyebrow="Teams"
         title={activeDefinition.label}
