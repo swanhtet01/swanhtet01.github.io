@@ -10,6 +10,7 @@ behaviour, proves dump/restore recovery, and removes the temporary cluster.
 from __future__ import annotations
 
 import argparse
+from copy import deepcopy
 import json
 import os
 import re
@@ -39,6 +40,12 @@ RUNTIME_ROLE = "supermega_trial_login"
 DATABASE_NAME = "supermega_rehearsal"
 RESTORE_DATABASE_NAME = "supermega_rehearsal_restore"
 EXPECTED_POSTGRES_MAJOR = 17
+JOURNEY_PRODUCT_WORKSPACE = "rehearsal-product"
+JOURNEY_PRODUCT_ACTOR = "owner-product"
+JOURNEY_PRODUCTION_WORKSPACE = "rehearsal-b"
+JOURNEY_PRODUCTION_ACTOR = "owner-b"
+
+
 class RehearsalFailure(RuntimeError):
     """A fail-closed error with a safe, credential-free code."""
 
@@ -524,17 +531,677 @@ def _seed_rehearsal_data(admin_database_url: str) -> None:
                   ('rehearsal-a', 'owner-a', 'active',
                    array['commerce.write']::text[], 'human'),
                   ('rehearsal-b', 'owner-b', 'active',
-                   array['production.write']::text[], 'human')
+                   array['production.write']::text[], 'human'),
+                  ('rehearsal-product', 'owner-product', 'active',
+                   array['commerce.write', 'website.write']::text[], 'human')
                 """
             )
-            cursor.execute(
-                """
-                insert into app_private.workspace_state
-                  (workspace_id, surface, version, state_json, updated_by)
-                values
-                  ('rehearsal-b', 'production', 1, '{"jobs": 1}'::jsonb, 'owner-b')
-                """
-            )
+
+
+def _journey_evidence(
+    action_id: str,
+    *,
+    actor: str,
+    captured_at: str,
+    reason: str,
+    reference: str,
+) -> dict[str, str]:
+    return {
+        "actionId": action_id,
+        "capturedAt": captured_at,
+        "actor": actor,
+        "reason": reason,
+        "evidenceReference": reference,
+    }
+
+
+def _journey_website_state() -> dict[str, Any]:
+    return {
+        "schema": "supermega.website.workspace.v2",
+        "version": 2,
+        "revision": 0,
+        "contentRevision": 0,
+        "siteName": "SuperMega Rehearsal",
+        "pages": [
+            {
+                "id": "page-home",
+                "internalName": "Home",
+                "slug": "/",
+                "stage": "ready",
+                "navigation": {"label": "Home", "visible": True},
+                "hero": {
+                    "eyebrow": "Managed website",
+                    "headline": "Order from one accountable website.",
+                    "summary": (
+                        "A retained Website artifact can enter Commerce only "
+                        "after named human review."
+                    ),
+                    "ctaLabel": "Order",
+                    "ctaHref": "/",
+                },
+                "sections": [
+                    {
+                        "id": "section-proof",
+                        "eyebrow": "Proof",
+                        "title": "One retained source",
+                        "body": (
+                            "Website evidence, approval, and snapshot remain "
+                            "bound to the Commerce intake."
+                        ),
+                    }
+                ],
+                "seo": {
+                    "title": "SuperMega managed Website rehearsal",
+                    "description": "A retained Website-to-Commerce workflow.",
+                },
+                "updatedAt": "2026-07-24T08:55:00.000Z",
+            }
+        ],
+        "selectedPageId": "page-home",
+        "evidence": [],
+        "approvals": [],
+        "localPublishes": [],
+        "events": [],
+    }
+
+
+def _journey_website_evidence_state(
+    current: dict[str, Any],
+    *,
+    kind: str,
+    captured_at: str,
+    fingerprint: Callable[[dict[str, Any]], str],
+) -> tuple[dict[str, Any], dict[str, str]]:
+    next_state = deepcopy(current)
+    next_state["revision"] = int(current["revision"]) + 1
+    source = {
+        "contentRevision": int(current["contentRevision"]),
+        "digest": fingerprint(current),
+    }
+    identifier = f"EVIDENCE-WEB-{kind.upper()}"
+    reason = f"Verified managed Website {kind} evidence"
+    reference = f"evidence://website/{kind}"
+    record = {
+        "id": identifier,
+        "kind": kind,
+        "finding": reason,
+        "reference": reference,
+        "verifiedBy": JOURNEY_PRODUCT_ACTOR,
+        "verifiedAt": captured_at,
+        "fingerprint": source["digest"],
+        "source": source,
+        "migratedFromV1": False,
+    }
+    event = {
+        "id": f"EVENT-{identifier}",
+        "createdAt": captured_at,
+        "actorKind": "human",
+        "actor": JOURNEY_PRODUCT_ACTOR,
+        "action": "publish_evidence_recorded",
+        "subjectId": identifier,
+        "reason": reason,
+        "evidenceReference": reference,
+        "source": source,
+    }
+    next_state["evidence"] = [record, *current["evidence"]]
+    next_state["events"] = [event, *current["events"]]
+    return next_state, _journey_evidence(
+        identifier,
+        actor=JOURNEY_PRODUCT_ACTOR,
+        captured_at=captured_at,
+        reason=reason,
+        reference=reference,
+    )
+
+
+def _journey_production_event(
+    evidence: dict[str, str],
+    *,
+    kind: str,
+    subject_id: str,
+    summary: str,
+    **details: object,
+) -> dict[str, Any]:
+    return {
+        "id": f"EVT-{evidence['actionId']}",
+        "actionId": evidence["actionId"],
+        "createdAt": evidence["capturedAt"],
+        "actor": evidence["actor"],
+        "reason": evidence["reason"],
+        "evidenceReference": evidence["evidenceReference"],
+        "kind": kind,
+        "subjectId": subject_id,
+        "summary": summary,
+        **details,
+    }
+
+
+def _exercise_managed_product_journeys(
+    runtime_database_url: str,
+    admin_database_url: str,
+) -> dict[str, bool]:
+    """Run two real product journeys through the exact PostgreSQL adapter."""
+
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    from supermega_runtime.commerce_runtime import reduce_commerce_state
+    from supermega_runtime.production_runtime import reduce_production_state
+    from supermega_runtime.trial_store import PostgresTrialStore, TrialPrincipal
+    from supermega_runtime.website_runtime import (
+        _website_artifact,
+        _website_fingerprint,
+        reduce_website_state,
+        validate_website_snapshot_source,
+    )
+
+    def reducer(
+        surface: str,
+        event_type: str,
+        current: dict[str, Any],
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        if surface == "website":
+            return dict(reduce_website_state(event_type, current, payload))
+        if surface == "commerce":
+            return reduce_commerce_state(event_type, current, payload)
+        if surface == "production":
+            return reduce_production_state(event_type, current, payload)
+        raise RehearsalFailure("managed_journey_surface_unsupported")
+
+    store = PostgresTrialStore(
+        runtime_database_url,
+        reducer=reducer,
+        write_enabled=True,
+    )
+    product_owner = TrialPrincipal(
+        JOURNEY_PRODUCT_WORKSPACE,
+        JOURNEY_PRODUCT_ACTOR,
+        "human",
+    )
+    production_owner = TrialPrincipal(
+        JOURNEY_PRODUCTION_WORKSPACE,
+        JOURNEY_PRODUCTION_ACTOR,
+        "human",
+    )
+    command_number = 100
+
+    def apply(
+        principal: Any,
+        *,
+        surface: str,
+        event_type: str,
+        expected_version: int,
+        state: dict[str, Any],
+        evidence: dict[str, str],
+        related_surfaces: tuple[str, ...] = (),
+        state_precondition: Callable[
+            [dict[str, Any], dict[str, dict[str, Any]]],
+            None,
+        ]
+        | None = None,
+    ) -> tuple[Any, str]:
+        nonlocal command_number
+        command_number += 1
+        command_id = f"10000000-0000-4000-8000-{command_number:012d}"
+        result = store.apply_command(
+            principal,
+            command_id=command_id,
+            surface=surface,
+            event_type=event_type,
+            expected_version=expected_version,
+            payload={"state": state, "evidence": evidence},
+            related_surfaces=related_surfaces,
+            state_precondition=state_precondition,
+        )
+        if (
+            result.idempotent_replay
+            or result.surface != surface
+            or result.event_type != event_type
+            or result.version != expected_version + 1
+        ):
+            raise RehearsalFailure("managed_journey_command_result_invalid")
+        return result, command_id
+
+    website_state = _journey_website_state()
+    website_init_evidence = _journey_evidence(
+        "ACT-WEBSITE-INIT",
+        actor=JOURNEY_PRODUCT_ACTOR,
+        captured_at="2026-07-24T09:00:00.000Z",
+        reason="Initialize retained Website rehearsal",
+        reference="website:revision:0",
+    )
+    website_result, _ = apply(
+        product_owner,
+        surface="website",
+        event_type="website.workspace.initialized",
+        expected_version=0,
+        state=website_state,
+        evidence=website_init_evidence,
+    )
+    for kind, captured_at in (
+        ("content", "2026-07-24T09:05:00.000Z"),
+        ("responsive", "2026-07-24T09:06:00.000Z"),
+        ("links", "2026-07-24T09:07:00.000Z"),
+    ):
+        evidence_state, evidence = _journey_website_evidence_state(
+            dict(website_result.state),
+            kind=kind,
+            captured_at=captured_at,
+            fingerprint=_website_fingerprint,
+        )
+        website_result, _ = apply(
+            product_owner,
+            surface="website",
+            event_type="website.evidence.recorded",
+            expected_version=website_result.version,
+            state=evidence_state,
+            evidence=evidence,
+        )
+
+    approved_state = deepcopy(dict(website_result.state))
+    approved_state["revision"] = int(approved_state["revision"]) + 1
+    website_source = {
+        "contentRevision": int(approved_state["contentRevision"]),
+        "digest": _website_fingerprint(approved_state),
+    }
+    evidence_ids = [str(record["id"]) for record in approved_state["evidence"]]
+    approval_id = "APPROVAL-WEB-REHEARSAL"
+    approval_note = "Approved for retained Commerce intake rehearsal"
+    approval_reference = ",".join(evidence_ids)
+    approval = {
+        "id": approval_id,
+        "reviewer": JOURNEY_PRODUCT_ACTOR,
+        "note": approval_note,
+        "approvedAt": "2026-07-24T09:10:00.000Z",
+        "fingerprint": website_source["digest"],
+        "evidenceIds": evidence_ids,
+        "source": website_source,
+        "migratedFromV1": False,
+    }
+    approval_event = {
+        "id": "EVENT-APPROVAL-WEB-REHEARSAL",
+        "createdAt": approval["approvedAt"],
+        "actorKind": "human",
+        "actor": JOURNEY_PRODUCT_ACTOR,
+        "action": "website_revision_approved",
+        "subjectId": approval_id,
+        "reason": approval_note,
+        "evidenceReference": approval_reference,
+        "source": website_source,
+    }
+    approved_state["approvals"] = [approval, *approved_state["approvals"]]
+    approved_state["events"] = [approval_event, *approved_state["events"]]
+    website_result, _ = apply(
+        product_owner,
+        surface="website",
+        event_type="website.revision.approved",
+        expected_version=website_result.version,
+        state=approved_state,
+        evidence=_journey_evidence(
+            approval_id,
+            actor=JOURNEY_PRODUCT_ACTOR,
+            captured_at=str(approval["approvedAt"]),
+            reason=approval_note,
+            reference=approval_reference,
+        ),
+    )
+
+    snapshot_state = deepcopy(dict(website_result.state))
+    snapshot_state["revision"] = int(snapshot_state["revision"]) + 1
+    snapshot_id = "SNAPSHOT-WEB-REHEARSAL"
+    snapshot_at = "2026-07-24T09:12:00.000Z"
+    snapshot_reason = "Retained approved Website artifact for Commerce intake"
+    snapshot = {
+        "id": snapshot_id,
+        "recordedAt": snapshot_at,
+        "recordedBy": JOURNEY_PRODUCT_ACTOR,
+        "fingerprint": website_source["digest"],
+        "readyPageIds": ["page-home"],
+        "approvalId": approval_id,
+        "evidenceIds": evidence_ids,
+        "source": website_source,
+        "migratedFromV1": False,
+        "artifact": _website_artifact(snapshot_state),
+    }
+    snapshot_event = {
+        "id": "EVENT-SNAPSHOT-WEB-REHEARSAL",
+        "createdAt": snapshot_at,
+        "actorKind": "human",
+        "actor": JOURNEY_PRODUCT_ACTOR,
+        "action": "local_snapshot_recorded",
+        "subjectId": snapshot_id,
+        "reason": snapshot_reason,
+        "evidenceReference": approval_id,
+        "source": website_source,
+    }
+    snapshot_state["localPublishes"] = [
+        snapshot,
+        *snapshot_state["localPublishes"],
+    ]
+    snapshot_state["events"] = [snapshot_event, *snapshot_state["events"]]
+    website_result, _ = apply(
+        product_owner,
+        surface="website",
+        event_type="website.snapshot.recorded",
+        expected_version=website_result.version,
+        state=snapshot_state,
+        evidence=_journey_evidence(
+            snapshot_id,
+            actor=JOURNEY_PRODUCT_ACTOR,
+            captured_at=snapshot_at,
+            reason=snapshot_reason,
+            reference=approval_id,
+        ),
+    )
+
+    commerce_state = {
+        "schema": "supermega.commerce.workspace.v2",
+        "items": [
+            {
+                "sku": "SKU-REHEARSAL-1",
+                "name": "Rehearsal item",
+                "onHand": 10,
+                "reorderAt": 2,
+                "price": 25_000,
+            }
+        ],
+        "orders": [],
+        "movements": [],
+        "closes": [],
+    }
+    commerce_result, _ = apply(
+        product_owner,
+        surface="commerce",
+        event_type="commerce.workspace.initialized",
+        expected_version=0,
+        state=commerce_state,
+        evidence=_journey_evidence(
+            "ACT-COMMERCE-INIT",
+            actor=JOURNEY_PRODUCT_ACTOR,
+            captured_at="2026-07-24T09:15:00.000Z",
+            reason="Initialize accountable Commerce catalog",
+            reference="commerce:catalog:rehearsal",
+        ),
+    )
+
+    commerce_source = {
+        "fingerprint": website_source["digest"],
+        "approvalId": approval_id,
+        "snapshotId": snapshot_id,
+        "pageId": "page-home",
+        "siteName": "SuperMega Rehearsal",
+        "pagePath": "/",
+    }
+    intake_evidence = _journey_evidence(
+        "ACT-WEBSITE-INTAKE-REHEARSAL",
+        actor=JOURNEY_PRODUCT_ACTOR,
+        captured_at="2026-07-24T09:20:00.000Z",
+        reason="Retain approved Website source in Commerce",
+        reference=snapshot_id,
+    )
+    intake_id = "WINT-REHEARSAL-001"
+    intake = {
+        "id": intake_id,
+        "createdAt": intake_evidence["capturedAt"],
+        "status": "pending_confirmation",
+        "source": commerce_source,
+        "sku": "SKU-REHEARSAL-1",
+        "quantity": 2,
+        "itemName": "Rehearsal item",
+        "unitPrice": 25_000,
+        "total": 50_000,
+        "creation": intake_evidence,
+    }
+    intake_state = deepcopy(dict(commerce_result.state))
+    intake_state["websiteIntakes"] = [intake]
+
+    def require_retained_website(
+        _commerce_state: dict[str, Any],
+        related_states: dict[str, dict[str, Any]],
+    ) -> None:
+        validate_website_snapshot_source(
+            related_states.get("website", {}),
+            commerce_source,
+        )
+
+    commerce_result, _ = apply(
+        product_owner,
+        surface="commerce",
+        event_type="commerce.website_intake.created",
+        expected_version=commerce_result.version,
+        state=intake_state,
+        evidence=intake_evidence,
+        related_surfaces=("website",),
+        state_precondition=require_retained_website,
+    )
+
+    conversion_evidence = _journey_evidence(
+        "ACT-WEBSITE-CONVERT-REHEARSAL",
+        actor=JOURNEY_PRODUCT_ACTOR,
+        captured_at="2026-07-24T09:25:00.000Z",
+        reason="Human confirmed retained Website intake",
+        reference="evidence://commerce/website-confirmation",
+    )
+    conversion_state = deepcopy(dict(commerce_result.state))
+    conversion_state["websiteIntakes"][0]["status"] = "converted"
+    conversion_state["websiteIntakes"][0]["conversion"] = {
+        **conversion_evidence,
+        "orderId": "ORD-WEB-REHEARSAL-001",
+    }
+    conversion_state["items"][0]["onHand"] = 8
+    conversion_state["orders"] = [
+        {
+            "id": "ORD-WEB-REHEARSAL-001",
+            "createdAt": conversion_evidence["capturedAt"],
+            "customer": "Website customer reference",
+            "channel": "Website",
+            "item": "Rehearsal item",
+            "itemSku": "SKU-REHEARSAL-1",
+            "quantity": 2,
+            "payment": "Manual review",
+            "paymentStatus": "pending",
+            "refundStatus": "none",
+            "sourceRecordId": intake_id,
+            "evidenceReference": conversion_evidence["evidenceReference"],
+            "total": 50_000,
+            "status": "confirmed",
+        }
+    ]
+    conversion_state["movements"] = [
+        {
+            "id": f"MOV-{conversion_evidence['actionId']}",
+            "actionId": conversion_evidence["actionId"],
+            "createdAt": conversion_evidence["capturedAt"],
+            "actor": conversion_evidence["actor"],
+            "reason": conversion_evidence["reason"],
+            "evidenceReference": conversion_evidence["evidenceReference"],
+            "kind": "reserve",
+            "sku": "SKU-REHEARSAL-1",
+            "quantityDelta": -2,
+            "orderId": "ORD-WEB-REHEARSAL-001",
+        }
+    ]
+    commerce_result, conversion_command_id = apply(
+        product_owner,
+        surface="commerce",
+        event_type="commerce.website_intake.converted",
+        expected_version=commerce_result.version,
+        state=conversion_state,
+        evidence=conversion_evidence,
+    )
+    conversion_replay = store.apply_command(
+        product_owner,
+        command_id=conversion_command_id,
+        surface="commerce",
+        event_type="commerce.website_intake.converted",
+        expected_version=2,
+        payload={"state": conversion_state, "evidence": conversion_evidence},
+    )
+
+    production_state = {
+        "schema": "supermega.production.workspace.v2",
+        "revision": 0,
+        "jobs": [
+            {
+                "id": "JOB-REAL-001",
+                "line": "Assembly team",
+                "product": "Customer batch 001",
+                "target": 100,
+                "output": 0,
+            }
+        ],
+        "issues": [],
+        "machines": [
+            {
+                "id": "MACHINE-REAL-001",
+                "name": "Assembly machine",
+                "state": "running",
+            }
+        ],
+        "events": [],
+    }
+    production_result, _ = apply(
+        production_owner,
+        surface="production",
+        event_type="production.workspace.initialized",
+        expected_version=0,
+        state=production_state,
+        evidence=_journey_evidence(
+            "ACT-PRODUCTION-INIT",
+            actor=JOURNEY_PRODUCTION_ACTOR,
+            captured_at="2026-07-24T09:30:00.000Z",
+            reason="Initialize accountable Production workspace",
+            reference="evidence://production/initial-job",
+        ),
+    )
+
+    job_evidence = _journey_evidence(
+        "ACT-PRODUCTION-JOB",
+        actor=JOURNEY_PRODUCTION_ACTOR,
+        captured_at="2026-07-24T09:35:00.000Z",
+        reason="Create the next accountable customer job",
+        reference="evidence://production/job-002",
+    )
+    job_state = deepcopy(dict(production_result.state))
+    new_job = {
+        "id": "JOB-REAL-002",
+        "line": "Assembly team",
+        "product": "Customer batch 002",
+        "target": 50,
+        "output": 0,
+    }
+    job_state["revision"] = int(job_state["revision"]) + 1
+    job_state["jobs"] = [new_job, *job_state["jobs"]]
+    job_state["events"] = [
+        _journey_production_event(
+            job_evidence,
+            kind="job_created",
+            subject_id=new_job["id"],
+            summary="Created Customer batch 002 job for Assembly team",
+        ),
+        *job_state["events"],
+    ]
+    production_result, _ = apply(
+        production_owner,
+        surface="production",
+        event_type="production.job.created",
+        expected_version=production_result.version,
+        state=job_state,
+        evidence=job_evidence,
+    )
+
+    output_evidence = _journey_evidence(
+        "ACT-PRODUCTION-OUTPUT",
+        actor=JOURNEY_PRODUCTION_ACTOR,
+        captured_at="2026-07-24T09:40:00.000Z",
+        reason="Record five verified good units",
+        reference="evidence://production/output-002",
+    )
+    output_state = deepcopy(dict(production_result.state))
+    output_state["revision"] = int(output_state["revision"]) + 1
+    output_state["jobs"][0]["output"] = 5
+    output_state["events"] = [
+        _journey_production_event(
+            output_evidence,
+            kind="output_recorded",
+            subject_id="JOB-REAL-002",
+            summary="Recorded 5 good units",
+            quantity=5,
+        ),
+        *output_state["events"],
+    ]
+    production_result, output_command_id = apply(
+        production_owner,
+        surface="production",
+        event_type="production.output.recorded",
+        expected_version=production_result.version,
+        state=output_state,
+        evidence=output_evidence,
+    )
+    output_replay = store.apply_command(
+        production_owner,
+        command_id=output_command_id,
+        surface="production",
+        event_type="production.output.recorded",
+        expected_version=2,
+        payload={"state": output_state, "evidence": output_evidence},
+    )
+
+    final_website = store.get_state(product_owner, "website")
+    final_commerce = store.get_state(product_owner, "commerce")
+    final_production = store.get_state(production_owner, "production")
+    validate_website_snapshot_source(final_website.state, commerce_source)
+    if (
+        final_website.version != 6
+        or len(final_website.state.get("localPublishes", [])) != 1
+        or final_commerce.version != 3
+        or final_commerce.state.get("orders", [{}])[0].get("status") != "confirmed"
+        or final_commerce.state.get("items", [{}])[0].get("onHand") != 8
+        or final_commerce.state.get("websiteIntakes", [{}])[0].get("status")
+        != "converted"
+    ):
+        raise RehearsalFailure("managed_website_to_commerce_journey_failed")
+    if (
+        final_production.version != 3
+        or final_production.state.get("jobs", [{}])[0].get("id") != "JOB-REAL-002"
+        or final_production.state.get("jobs", [{}])[0].get("output") != 5
+    ):
+        raise RehearsalFailure("managed_production_job_to_output_failed")
+    if (
+        final_website.updated_by != JOURNEY_PRODUCT_ACTOR
+        or final_commerce.updated_by != JOURNEY_PRODUCT_ACTOR
+        or final_production.updated_by != JOURNEY_PRODUCTION_ACTOR
+    ):
+        raise RehearsalFailure("managed_journey_attribution_failed")
+    if (
+        not conversion_replay.idempotent_replay
+        or conversion_replay.version != 3
+        or not output_replay.idempotent_replay
+        or output_replay.version != 3
+    ):
+        raise RehearsalFailure("managed_journey_exact_retry_failed")
+
+    with _connect(admin_database_url, autocommit=True) as administrator:
+        rows = administrator.execute(
+            """
+            select workspace_id, actor_id, actor_kind, count(*)::integer
+            from app_private.workspace_events
+            where workspace_id in ('rehearsal-product', 'rehearsal-b')
+            group by workspace_id, actor_id, actor_kind
+            order by workspace_id
+            """
+        ).fetchall()
+    if rows != [
+        ("rehearsal-b", "owner-b", "human", 3),
+        ("rehearsal-product", "owner-product", "human", 9),
+    ]:
+        raise RehearsalFailure("managed_journey_event_attribution_failed")
+    return {
+        "managed_website_to_commerce_journey": True,
+        "managed_production_job_to_output": True,
+        "managed_human_attribution": True,
+        "managed_exact_retry": True,
+    }
 
 
 def _set_identity(
@@ -1073,7 +1740,7 @@ def _verify_restored_data(admin_database_url: str) -> None:
               (select count(*) from app_private.approval_requests)
             """
         ).fetchone()
-    if row != (4, 3, 3, 2, 1):
+    if row != (4, 4, 5, 14, 1):
         raise RehearsalFailure("restored_data_mismatch")
 
 
@@ -1186,6 +1853,11 @@ def _run_rehearsal(
                 runtime_database_url,
                 admin_database_url,
             )
+            phase = "managed_product_journeys"
+            product_journeys = _exercise_managed_product_journeys(
+                runtime_database_url,
+                admin_database_url,
+            )
             phase = "runtime_behaviour"
             behaviour = _exercise_runtime(runtime_database_url, admin_database_url)
             phase = "database_backup"
@@ -1285,6 +1957,7 @@ def _run_rehearsal(
                     "migration_chain_applied": True,
                     "dedicated_runtime_role_validated": True,
                     **boundaries,
+                    **product_journeys,
                     **behaviour,
                     "backup_created": True,
                     "restore_completed": True,

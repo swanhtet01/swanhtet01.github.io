@@ -48,6 +48,10 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
             "optimistic_concurrency",
             "event_immutability",
             "revocation",
+            "managed_website_to_commerce_journey",
+            "managed_production_job_to_output",
+            "managed_human_attribution",
+            "managed_exact_retry",
         ):
             self.assertIn(expected, lowered)
 
@@ -85,6 +89,26 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
             package["scripts"]["database:postgres17:rehearse"],
             "node tools/run_postgres17_rehearsal.mjs",
         )
+
+    def test_real_product_journeys_use_the_exact_managed_adapter(self) -> None:
+        source = REHEARSAL.read_text(encoding="utf-8")
+        for expected in (
+            "PostgresTrialStore(",
+            "write_enabled=True",
+            "website.snapshot.recorded",
+            "commerce.website_intake.created",
+            "commerce.website_intake.converted",
+            'related_surfaces=("website",)',
+            "validate_website_snapshot_source",
+            "production.job.created",
+            "production.output.recorded",
+            "idempotent_replay",
+            "rehearsal-product",
+            "owner-product",
+        ):
+            self.assertIn(expected, source)
+        self.assertNotIn("fastapi.testclient", source.casefold())
+        self.assertNotIn("httpx", source.casefold())
 
     def test_missing_local_tooling_returns_only_sanitized_evidence(self) -> None:
         module = _load_rehearsal()
