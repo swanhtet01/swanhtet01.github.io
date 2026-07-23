@@ -1997,12 +1997,13 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
       </div>
       {orderEntryMode === 'website' ? <div className="order-entry-panel" role="tabpanel"><WebsiteCommerceIntake catalog={commerce.items} importedSourceIds={importedWebsiteOrderIds} key={`${managedIdentity ? 'managed' : 'local'}:${websiteIntakes.find((intake) => intake.status === 'pending_confirmation')?.id ?? 'none'}`} managedIntakes={websiteIntakes} mode={managedIdentity ? 'managed' : 'local'} onQueueManagedIntake={queueManagedWebsiteIntake} onQueueReadyOrder={queueWebsiteOrder} /></div> : null}
       {orderEntryMode === 'message' ? <div className="order-entry-panel" role="tabpanel"><ChannelOrderIntake disabled={Boolean(pendingAction)} items={commerce.items} onAcceptedFocus={() => requestAnimationFrame(() => preparedChannelRef.current?.focus())} onUse={useChannelDraft} /></div> : null}
-      {orderEntryMode === 'manual' ? <div className="order-entry-panel" role="tabpanel">
+      {orderEntryMode === 'manual' ? <>
+        <div className="order-entry-panel" role="tabpanel">
         {preparedChannelDraft && channelOrderDraftIsReady(preparedChannelDraft) ? <div className="channel-source-ready" ref={preparedChannelRef} tabIndex={-1}>
           <div><span className="core-eyebrow">Mapped source</span><strong>{preparedChannelDraft.sourceRecordId}</strong><small>Exact excerpts reviewed; the full message was discarded.</small></div>
           <button className="text-link" disabled={Boolean(pendingAction)} onClick={() => { setPreparedChannelDraft(null); setNotice('Source link removed. The structured fields remain as a manual order draft.') }} type="button">Remove source link</button>
         </div> : null}
-        <form className="core-form compact-form" onSubmit={recordOrder}>
+        <form className="core-form compact-form" id="commerce-manual-order-form" onSubmit={recordOrder}>
           <div className="form-row">
             <label>Customer<input disabled={Boolean(pendingAction)} maxLength={80} value={customer} onChange={(event) => { setCustomer(event.target.value); setPreparedChannelDraft(null) }} placeholder="Name or reference" /></label>
             <label>Channel<select disabled={Boolean(pendingAction)} value={channel} onChange={(event) => { setChannel(event.target.value); setPreparedChannelDraft(null) }}><option>Messenger</option><option>Viber</option><option>Phone</option><option>Website</option><option>Walk-in</option></select></label>
@@ -2013,10 +2014,11 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
             <label>Payment<select disabled={Boolean(pendingAction)} value={payment} onChange={(event) => { setPayment(event.target.value); setPreparedChannelDraft(null) }}><option>KBZPay</option><option>WavePay</option><option>Cash on delivery</option><option>Cash</option><option>Card</option></select></label>
           </div>
           <div className="order-total"><span>Order total</span><strong>{formatMoney((selected?.price ?? 0) * Math.max(quantity, 0))}</strong></div>
-          <button className="core-button primary" disabled={Boolean(pendingAction)} type="submit">Review order</button>
           <p className="form-notice" aria-live="polite">{notice || commerceStorageError || 'A responsible operator confirms the change before stock moves. No customer message is sent.'}</p>
         </form>
-      </div> : null}
+        </div>
+        <div className="order-submit-bar"><button className="core-button primary" disabled={Boolean(pendingAction)} form="commerce-manual-order-form" type="submit">Review order</button></div>
+      </> : null}
     </section>
     <section className="core-panel order-queue-panel"><div className="panel-head"><div><span className="core-eyebrow">Fulfilment</span><h2>{openOrders.length} open orders</h2></div><span className="panel-note">{paymentReview.length} payment review</span></div><OrderList canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} orders={commerce.orders} /></section>
   </div>

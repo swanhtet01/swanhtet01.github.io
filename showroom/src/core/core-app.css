@@ -217,7 +217,8 @@ textarea { min-height: 72px; resize: vertical; }
 .action-history-list article small { color: var(--core-quiet); font-size: 8px; }
 .action-history-list article p { margin: 0; color: var(--core-green); font-family: var(--core-mono); font-size: 8px; }
 .action-history-list article > small { grid-column: 1/-1; }
-.form-panel, .guidance-panel, .order-form-panel, .output-panel, .decision-form-panel, .setup-form { overflow: auto; }
+.form-panel, .guidance-panel, .output-panel, .decision-form-panel, .setup-form { overflow: auto; }
+.order-form-panel { display: flex; flex-direction: column; overflow: hidden; }
 .guidance-panel ol { display: grid; gap: 10px; margin: 18px 0 0; padding-left: 22px; color: var(--core-muted); font-size: 12px; }
 
 .review-workspace, .control-workspace, .module-today { height: 100%; min-height: 0; display: flex; flex-direction: column; gap: 11px; }
@@ -306,7 +307,9 @@ textarea { min-height: 72px; resize: vertical; }
 .order-entry-methods button { min-height: 42px; border: 0; border-radius: 9px; background: transparent; color: var(--core-muted); font-size: 13px; font-weight: 740; cursor: pointer; }
 .order-entry-methods button[aria-selected="true"] { background: #fff; color: var(--core-ink); box-shadow: 0 2px 10px rgba(31,68,51,.09); }
 .order-entry-methods button:disabled { cursor: not-allowed; opacity: .55; }
-.order-entry-panel { min-width: 0; }
+.order-entry-panel { min-width: 0; min-height: 0; flex: 1; overflow: auto; }
+.order-submit-bar { flex: 0 0 auto; border-top: 1px solid var(--core-line); padding-top: 11px; background: var(--core-panel); }
+.order-submit-bar .core-button { width: 100%; }
 .order-entry-panel > .website-intake { border-color: var(--core-line); box-shadow: none; }
 .channel-intake-panel { display: grid; gap: 12px; }
 .channel-intake-heading { display: grid; gap: 4px; border-bottom: 1px solid var(--core-line); padding-bottom: 11px; }
@@ -591,6 +594,8 @@ textarea { min-height: 72px; resize: vertical; }
   .settings-grid { min-height: 0; }
   .trial-control-panel { align-items: flex-start; }
   .agent-team-workspace { height: auto; }
+  .order-form-panel { display: block; }
+  .order-entry-panel { overflow: visible; }
   .team-screen.mobile-focus-open > .page-heading,
   .team-screen.mobile-focus-open > .simple-toolbar,
   .team-screen.mobile-focus-open > .compact-summary,
