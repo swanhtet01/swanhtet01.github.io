@@ -18,6 +18,7 @@ TRIAL_SCHEMA_VERSION = 3
 TRIAL_SURFACES = frozenset({"company", "commerce", "production", "website", "setup"})
 TRUSTED_ACTOR_KINDS = frozenset({"human", "service", "agent"})
 HUMAN_ACTOR_KIND = "human"
+HUMAN_COMMAND_EVENTS = frozenset({"commerce.website_intake.converted"})
 SURFACE_WRITE_CAPABILITIES = {
     "company": "company.write",
     "commerce": "commerce.write",
@@ -32,6 +33,7 @@ MAX_JSON_BYTES = 64 * 1024
 
 JsonObject = dict[str, Any]
 StateReducer = Callable[[str, str, Mapping[str, Any], Mapping[str, Any]], Mapping[str, Any]]
+StatePrecondition = Callable[[Mapping[str, Any], Mapping[str, Mapping[str, Any]]], None]
 
 
 class TrialStoreError(RuntimeError):
@@ -251,6 +253,8 @@ class TrialStore(Protocol):
         event_type: str,
         expected_version: int,
         payload: Mapping[str, Any],
+        related_surfaces: Sequence[str] = (),
+        state_precondition: StatePrecondition | None = None,
     ) -> CommandResult: ...
 
     def create_approval(
@@ -300,6 +304,15 @@ def _normalize_event_type(event_type: str) -> str:
     if any(character not in allowed for character in normalized):
         raise TrialValidationError("event_type contains unsupported characters.")
     return normalized
+
+
+def _normalize_related_surfaces(surface: str, related_surfaces: Sequence[str]) -> tuple[str, ...]:
+    normalized: set[str] = set()
+    for related_surface in related_surfaces:
+        candidate = _normalize_surface(related_surface)
+        if candidate != surface:
+            normalized.add(candidate)
+    return tuple(sorted(normalized))
 
 
 def _json_object(value: Mapping[str, Any], *, field_name: str) -> JsonObject:
@@ -860,23 +873,33 @@ class PostgresTrialStore:
         event_type: str,
         expected_version: int,
         payload: Mapping[str, Any],
+        related_surfaces: Sequence[str] = (),
+        state_precondition: StatePrecondition | None = None,
     ) -> CommandResult:
         command_id_value = _normalize_uuid(command_id, field_name="command_id")
         surface_value = _normalize_surface(surface)
         event_type_value = _normalize_event_type(event_type)
+        related_surface_values = _normalize_related_surfaces(surface_value, related_surfaces)
         if int(expected_version) < 0:
             raise TrialValidationError("expected_version must be non-negative.")
+        if related_surface_values and state_precondition is None:
+            raise TrialValidationError("related surfaces require a state precondition.")
         payload_value = _json_object(payload, field_name="payload")
+        command_contract: JsonObject = {
+            "surface": surface_value,
+            "event_type": event_type_value,
+            "expected_version": int(expected_version),
+            "payload": payload_value,
+        }
+        if related_surface_values:
+            command_contract["related_surfaces"] = list(related_surface_values)
         fingerprint = _canonical_fingerprint(
             "state_command",
-            {
-                "surface": surface_value,
-                "event_type": event_type_value,
-                "expected_version": int(expected_version),
-                "payload": payload_value,
-            },
+            command_contract,
         )
         normalized = principal.normalized()
+        if event_type_value in HUMAN_COMMAND_EVENTS and normalized.actor_kind != HUMAN_ACTOR_KIND:
+            raise TrialHumanApprovalRequired()
         capability = _required_surface_capability(surface_value)
         with self._guarded_cursor(normalized, write=True, capability=capability) as (cursor, _):
             self._lock(cursor, f"{normalized.workspace_id}:command:{command_id_value}")
@@ -896,25 +919,45 @@ class PostgresTrialStore:
                     idempotent_replay=True,
                 )
 
-            self._lock(cursor, f"{normalized.workspace_id}:state:{surface_value}")
-            cursor.execute(
-                """
-                select version, state_json
-                from app_private.workspace_state
-                where workspace_id = %s and surface = %s
-                for update
-                """,
-                (normalized.workspace_id, surface_value),
-            )
-            row = cursor.fetchone()
+            locked_surfaces = tuple(sorted({surface_value, *related_surface_values}))
+            for locked_surface in locked_surfaces:
+                self._lock(cursor, f"{normalized.workspace_id}:state:{locked_surface}")
+            rows: dict[str, Mapping[str, Any] | None] = {}
+            states: dict[str, JsonObject] = {}
+            for locked_surface in locked_surfaces:
+                cursor.execute(
+                    """
+                    select version, state_json
+                    from app_private.workspace_state
+                    where workspace_id = %s and surface = %s
+                    for update
+                    """,
+                    (normalized.workspace_id, locked_surface),
+                )
+                locked_row = cursor.fetchone()
+                rows[locked_surface] = locked_row
+                locked_state = locked_row.get("state_json", {}) if locked_row else {}
+                if isinstance(locked_state, str):
+                    locked_state = json.loads(locked_state)
+                states[locked_surface] = _json_object(
+                    locked_state,
+                    field_name=f"{locked_surface} state",
+                )
+            row = rows[surface_value]
             current_version = int(row["version"]) if row else 0
-            current_state = row.get("state_json", {}) if row else {}
-            if isinstance(current_state, str):
-                current_state = json.loads(current_state)
+            current_state = states[surface_value]
             if current_version != int(expected_version):
                 raise TrialVersionConflict(
                     expected_version=int(expected_version),
                     current_version=current_version,
+                )
+            if state_precondition is not None:
+                state_precondition(
+                    deepcopy(current_state),
+                    {
+                        related_surface: deepcopy(states[related_surface])
+                        for related_surface in related_surface_values
+                    },
                 )
             next_state = _json_object(
                 self.reducer(surface_value, event_type_value, deepcopy(current_state), deepcopy(payload_value)),
@@ -1339,21 +1382,29 @@ class InMemoryTrialStore:
         event_type: str,
         expected_version: int,
         payload: Mapping[str, Any],
+        related_surfaces: Sequence[str] = (),
+        state_precondition: StatePrecondition | None = None,
     ) -> CommandResult:
         command_id_value = _normalize_uuid(command_id, field_name="command_id")
         surface_value = _normalize_surface(surface)
         event_type_value = _normalize_event_type(event_type)
+        related_surface_values = _normalize_related_surfaces(surface_value, related_surfaces)
         if int(expected_version) < 0:
             raise TrialValidationError("expected_version must be non-negative.")
+        if related_surface_values and state_precondition is None:
+            raise TrialValidationError("related surfaces require a state precondition.")
         payload_value = _json_object(payload, field_name="payload")
+        command_contract: JsonObject = {
+            "surface": surface_value,
+            "event_type": event_type_value,
+            "expected_version": int(expected_version),
+            "payload": payload_value,
+        }
+        if related_surface_values:
+            command_contract["related_surfaces"] = list(related_surface_values)
         fingerprint = _canonical_fingerprint(
             "state_command",
-            {
-                "surface": surface_value,
-                "event_type": event_type_value,
-                "expected_version": int(expected_version),
-                "payload": payload_value,
-            },
+            command_contract,
         )
         with self._lock:
             normalized, _ = self._guard(
@@ -1361,6 +1412,8 @@ class InMemoryTrialStore:
                 write=True,
                 capability=_required_surface_capability(surface_value),
             )
+            if event_type_value in HUMAN_COMMAND_EVENTS and normalized.actor_kind != HUMAN_ACTOR_KIND:
+                raise TrialHumanApprovalRequired()
             replay = self._replay(normalized.workspace_id, command_id_value, fingerprint)
             if replay is not None:
                 return CommandResult(
@@ -1379,6 +1432,19 @@ class InMemoryTrialStore:
                 raise TrialVersionConflict(
                     expected_version=int(expected_version),
                     current_version=current.version,
+                )
+            if state_precondition is not None:
+                state_precondition(
+                    deepcopy(current.state),
+                    {
+                        related_surface: deepcopy(
+                            self._states.get(
+                                (normalized.workspace_id, related_surface),
+                                TrialState(normalized.workspace_id, related_surface, 0, {}),
+                            ).state
+                        )
+                        for related_surface in related_surface_values
+                    },
                 )
             next_state = _json_object(
                 self.reducer(surface_value, event_type_value, deepcopy(current.state), deepcopy(payload_value)),

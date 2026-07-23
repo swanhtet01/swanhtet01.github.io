@@ -7,6 +7,7 @@ from supermega_runtime.trial_store import TrialValidationError
 from supermega_runtime.website_runtime import (
     _website_fingerprint,
     reduce_website_state,
+    validate_website_snapshot_source,
     validate_website_state,
 )
 
@@ -288,6 +289,39 @@ class WebsiteRuntimeTests(unittest.TestCase):
             ),
         )
         self.assertEqual(result["localPublishes"][0]["approvalId"], "approval-1")
+        intake_source = {
+            "fingerprint": source["digest"],
+            "approvalId": "approval-1",
+            "snapshotId": "snapshot-1",
+            "pageId": "page-home",
+            "siteName": "SuperMega",
+            "pagePath": "/",
+        }
+        self.assertEqual(validate_website_snapshot_source(result, intake_source), intake_source)
+        for field, value in (
+            ("fingerprint", "web-deadbeef"),
+            ("approvalId", "approval-missing"),
+            ("snapshotId", "snapshot-missing"),
+            ("pageId", "page-missing"),
+        ):
+            with self.subTest(intake_source_field=field):
+                with self.assertRaises(TrialValidationError):
+                    validate_website_snapshot_source(result, {**intake_source, field: value})
+        changed_site = deepcopy(result)
+        changed_site["siteName"] = "Changed after snapshot"
+        with self.assertRaises(TrialValidationError):
+            validate_website_snapshot_source(changed_site, intake_source)
+        changed_page = deepcopy(result)
+        changed_page["pages"][0]["slug"] = "/changed"
+        with self.assertRaises(TrialValidationError):
+            validate_website_snapshot_source(changed_page, intake_source)
+        reverted_content = deepcopy(result)
+        reverted_content["revision"] += 2
+        reverted_content["contentRevision"] += 2
+        self.assertEqual(_website_fingerprint(reverted_content), intake_source["fingerprint"])
+        validate_website_state(reverted_content)
+        with self.assertRaises(TrialValidationError):
+            validate_website_snapshot_source(reverted_content, intake_source)
 
         tampered = deepcopy(current)
         tampered["revision"] = int(current["revision"]) + 1

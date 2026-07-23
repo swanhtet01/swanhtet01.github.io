@@ -20,6 +20,11 @@ type ApprovalInput = {
   note: string
 }
 
+type CommerceHandoffInput = {
+  sku: string
+  quantity: number
+}
+
 type PublishWorkspaceProps = {
   approvalIsCurrent: boolean
   checks: ReadinessCheck[]
@@ -31,7 +36,7 @@ type PublishWorkspaceProps = {
   workspace: WebsiteWorkspace
   onAddEvidence: (input: EvidenceInput) => Promise<boolean>
   onApprove: (input: ApprovalInput) => Promise<boolean>
-  onPrepareCommerceHandoff: () => void
+  onPrepareCommerceHandoff: (input: CommerceHandoffInput) => Promise<void>
   onRecordPublish: () => Promise<void>
 }
 
@@ -56,13 +61,26 @@ export function PublishWorkspace({
   const [reviewer, setReviewer] = useState('')
   const [approvalNote, setApprovalNote] = useState('')
   const [approvalConfirmed, setApprovalConfirmed] = useState(false)
-  const [submitting, setSubmitting] = useState<'evidence' | 'approval' | 'snapshot' | ''>('')
+  const [handoffSku, setHandoffSku] = useState('')
+  const [handoffQuantity, setHandoffQuantity] = useState(1)
+  const [submitting, setSubmitting] = useState<'evidence' | 'approval' | 'snapshot' | 'handoff' | ''>('')
   const passedCount = checks.filter((check) => check.passed).length
   const allChecksPass = passedCount === checks.length
   const latestApproval = workspace.approvals[0]
   const staleEvidenceCount = workspace.evidence.filter((entry) => (
     entry.fingerprint !== fingerprint || entry.source.contentRevision !== workspace.contentRevision
   )).length
+
+  async function prepareCommerceHandoff() {
+    const sku = handoffSku.trim().toUpperCase()
+    if (!sku || !Number.isSafeInteger(handoffQuantity) || handoffQuantity < 1 || handoffQuantity > 99) return
+    setSubmitting('handoff')
+    try {
+      await onPrepareCommerceHandoff({ sku, quantity: handoffQuantity })
+    } finally {
+      setSubmitting('')
+    }
+  }
 
   async function submitEvidence(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -318,16 +336,18 @@ export function PublishWorkspace({
           <div className="website-handoff-action">
             <div>
               <strong>Website → Commerce intake</strong>
-              <p>Prepare one non-PII SKU/quantity fixture from this approved local revision. The fingerprint is a revision marker, not a signature; no customer is contacted and no order is created.</p>
+              <p>Send one catalog SKU and quantity from this approved revision into Commerce. No stock, payment, customer message, or order changes until a human confirms it there.</p>
             </div>
-            <div>
+            <div className="website-handoff-controls">
+              <label>Commerce SKU<input autoComplete="off" maxLength={80} onChange={(event) => setHandoffSku(event.target.value.toUpperCase())} placeholder="SKU-001" value={handoffSku} /></label>
+              <label>Qty<input max="99" min="1" onChange={(event) => setHandoffQuantity(Number(event.target.value))} step="1" type="number" value={handoffQuantity} /></label>
               <button
                 className="website-button is-secondary"
-                disabled={!publishIsCurrent || !handoffAvailable || handoffIsCurrent}
-                onClick={onPrepareCommerceHandoff}
+                disabled={!publishIsCurrent || !handoffAvailable || handoffIsCurrent || !handoffSku.trim() || Boolean(submitting)}
+                onClick={() => void prepareCommerceHandoff()}
                 type="button"
               >
-                {handoffIsCurrent ? 'Handoff ready' : 'Prepare intake'}
+                {handoffIsCurrent ? 'Intake sent' : submitting === 'handoff' ? 'Sending…' : 'Send intake'}
               </button>
               {handoffIsCurrent ? <a className="website-button is-primary" href="/operations/commerce/?tab=orders">Review in Commerce</a> : null}
             </div>

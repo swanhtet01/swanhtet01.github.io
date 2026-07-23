@@ -54,12 +54,39 @@ export type CommerceStockMovement = {
   orderId?: string
 }
 
+export type CommerceWebsiteSource = {
+  fingerprint: string
+  approvalId: string
+  snapshotId: string
+  pageId: string
+  siteName: string
+  pagePath: string
+}
+
+export type CommerceWebsiteIntakeStatus = 'pending_confirmation' | 'converted'
+
+export type CommerceWebsiteIntake = {
+  id: string
+  createdAt: string
+  status: CommerceWebsiteIntakeStatus
+  source: CommerceWebsiteSource
+  sku: string
+  quantity: number
+  itemName: string
+  itemVariant?: string
+  unitPrice: number
+  total: number
+  creation: CommerceActionProof
+  conversion?: CommerceActionProof & { orderId: string }
+}
+
 export type CommerceState = {
   schema: typeof COMMERCE_WORKSPACE_SCHEMA
   items: CommerceItem[]
   orders: CommerceOrder[]
   movements: CommerceStockMovement[]
   closes: Array<{ id: string; createdAt: string; total: number; orders: number }>
+  websiteIntakes?: CommerceWebsiteIntake[]
 }
 
 export type CommerceActionProof = {
@@ -68,6 +95,19 @@ export type CommerceActionProof = {
   actor: string
   reason: string
   evidenceReference: string
+}
+
+export type CommerceWebsiteIntakeInput = {
+  id: string
+  source: CommerceWebsiteSource
+  sku: string
+  quantity: number
+}
+
+export type CommerceWebsiteOrderInput = {
+  customer: string
+  fulfilmentMethod: 'pickup' | 'local_delivery'
+  paymentMethod: 'cash_on_delivery' | 'manual_qr' | 'manual_bank_transfer'
 }
 
 type CommerceStorage = {
@@ -93,6 +133,9 @@ const orderStatuses: CommerceOrderStatus[] = ['confirmed', 'preparing', 'ready',
 const paymentStatuses: CommercePaymentStatus[] = ['pending', 'reconciled']
 const refundStatuses: CommerceRefundStatus[] = ['none', 'due']
 const movementKinds: CommerceStockMovementKind[] = ['reserve', 'release', 'receipt']
+const websiteIntakeStatuses: CommerceWebsiteIntakeStatus[] = ['pending_confirmation', 'converted']
+const websiteIntakeIdPattern = /^WINT-[A-Z0-9-]{8,80}$/
+const websiteFingerprintPattern = /^web-[a-f0-9]{8}$/
 const deterministicSeedNow = Date.parse('2026-07-23T08:00:00.000Z')
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -104,12 +147,21 @@ function requiredText(value: unknown, field: string) {
   return value.trim()
 }
 
+function canonicalText(value: unknown, field: string, maximum = 180) {
+  const text = requiredText(value, field)
+  if (value !== text || text.length > maximum) throw new Error(`${field} must be canonical text of at most ${maximum} characters.`)
+  return text
+}
+
 function optionalText(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined
 }
 
 function validTimestamp(value: unknown) {
-  return typeof value === 'string' && Number.isFinite(Date.parse(value))
+  return typeof value === 'string'
+    && value === value.trim()
+    && /(?:Z|[+-]\d{2}:\d{2})$/.test(value)
+    && Number.isFinite(Date.parse(value))
 }
 
 function assertSafeInteger(value: unknown, field: string, minimum = 0) {
@@ -118,6 +170,12 @@ function assertSafeInteger(value: unknown, field: string, minimum = 0) {
 
 function assertUnique(values: string[], field: string) {
   if (new Set(values).size !== values.length) throw new Error(`${field} values must be unique.`)
+}
+
+function hasExactKeys(value: Record<string, unknown>, required: string[], optional: string[] = []) {
+  const fields = Object.keys(value)
+  return required.every((field) => fields.includes(field))
+    && fields.every((field) => required.includes(field) || optional.includes(field))
 }
 
 function sameProof(movement: CommerceStockMovement, proof: CommerceActionProof) {
@@ -129,13 +187,18 @@ function sameProof(movement: CommerceStockMovement, proof: CommerceActionProof) 
 }
 
 function validProof(proof: CommerceActionProof) {
-  return Boolean(
-    proof.actionId.trim()
-    && proof.actor.trim()
-    && proof.reason.trim()
-    && proof.evidenceReference.trim()
-    && Number.isFinite(Date.parse(proof.capturedAt)),
-  )
+  return typeof proof?.actionId === 'string'
+    && typeof proof?.capturedAt === 'string'
+    && typeof proof?.actor === 'string'
+    && typeof proof?.reason === 'string'
+    && typeof proof?.evidenceReference === 'string'
+    && Boolean(
+      proof.actionId.trim()
+      && proof.actor.trim()
+      && proof.reason.trim()
+      && proof.evidenceReference.trim()
+      && Number.isFinite(Date.parse(proof.capturedAt)),
+    )
 }
 
 function safeBalance(value: number, delta: number) {
@@ -144,7 +207,7 @@ function safeBalance(value: number, delta: number) {
 }
 
 export function createEmptyCommerce(): CommerceState {
-  return { schema: COMMERCE_WORKSPACE_SCHEMA, items: [], orders: [], movements: [], closes: [] }
+  return { schema: COMMERCE_WORKSPACE_SCHEMA, items: [], orders: [], movements: [], closes: [], websiteIntakes: [] }
 }
 
 export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
@@ -168,26 +231,36 @@ export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
       { id: 'MOV-ACT-DEMO-1041', actionId: 'ACT-DEMO-1041', createdAt: secondOrderAt, actor: 'Demo operator', reason: 'Seed the local Commerce walkthrough.', evidenceReference: 'DEMO-SEED-ORD-1041', kind: 'reserve', sku: 'SM-1003', quantityDelta: -1, orderId: 'ORD-1041' },
     ],
     closes: [],
+    websiteIntakes: [],
   }
 }
 
 export function validateCommerceState(value: unknown): CommerceState {
   if (!isRecord(value) || value.schema !== COMMERCE_WORKSPACE_SCHEMA) throw new Error('Commerce workspace schema is not v2.')
   if (!Array.isArray(value.items) || !Array.isArray(value.orders) || !Array.isArray(value.movements) || !Array.isArray(value.closes)) throw new Error('Commerce workspace collections are incomplete.')
+  if (value.websiteIntakes !== undefined && !Array.isArray(value.websiteIntakes)) throw new Error('Commerce Website intakes must be an array when present.')
 
   const items = value.items as unknown[]
   const orders = value.orders as unknown[]
   const movements = value.movements as unknown[]
   const closes = value.closes as unknown[]
+  const websiteIntakes = (value.websiteIntakes ?? []) as unknown[]
   const itemSkus: string[] = []
+  const itemBySku = new Map<string, Record<string, unknown>>()
   const orderIds: string[] = []
+  const orderById = new Map<string, Record<string, unknown>>()
+  const sourceRecordIds: string[] = []
   const movementIds: string[] = []
   const movementActionIds: string[] = []
   const reconciliationActionIds: string[] = []
+  const websiteIntakeCreationActionIds: string[] = []
+  const websiteIntakeConversionActionIds: string[] = []
 
   for (const [index, candidate] of items.entries()) {
     if (!isRecord(candidate)) throw new Error(`items[${index}] is invalid.`)
-    itemSkus.push(requiredText(candidate.sku, `items[${index}].sku`))
+    const sku = requiredText(candidate.sku, `items[${index}].sku`)
+    itemSkus.push(sku)
+    itemBySku.set(sku, candidate)
     requiredText(candidate.name, `items[${index}].name`)
     if (candidate.variant !== undefined) requiredText(candidate.variant, `items[${index}].variant`)
     assertSafeInteger(candidate.onHand, `items[${index}].onHand`)
@@ -208,7 +281,10 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (!paymentStatuses.includes(candidate.paymentStatus as CommercePaymentStatus)) throw new Error(`orders[${index}].paymentStatus is invalid.`)
     if (!refundStatuses.includes(candidate.refundStatus as CommerceRefundStatus)) throw new Error(`orders[${index}].refundStatus is invalid.`)
     for (const field of ['fulfilment', 'sourceRecordId', 'evidenceReference'] as const) {
-      if (candidate[field] !== undefined) requiredText(candidate[field], `orders[${index}].${field}`)
+      if (candidate[field] !== undefined) {
+        const fieldValue = requiredText(candidate[field], `orders[${index}].${field}`)
+        if (field === 'sourceRecordId') sourceRecordIds.push(fieldValue)
+      }
     }
     if (candidate.paymentStatus === 'reconciled') {
       if (!validTimestamp(candidate.paymentReconciledAt)) throw new Error(`orders[${index}].paymentReconciledAt is invalid.`)
@@ -221,8 +297,10 @@ export function validateCommerceState(value: unknown): CommerceState {
     }
     if (candidate.refundStatus === 'due' && (candidate.status !== 'cancelled' || candidate.paymentStatus !== 'reconciled')) throw new Error(`orders[${index}] has an invalid refund exception.`)
     if (candidate.status === 'cancelled' && candidate.paymentStatus === 'reconciled' && candidate.refundStatus !== 'due') throw new Error(`orders[${index}] must preserve the refund due exception.`)
+    orderById.set(candidate.id as string, candidate)
   }
   assertUnique(orderIds, 'Order ID')
+  assertUnique(sourceRecordIds, 'Order source record ID')
   assertUnique(reconciliationActionIds, 'Payment reconciliation action ID')
 
   const reserveByOrder = new Map<string, number>()
@@ -251,7 +329,6 @@ export function validateCommerceState(value: unknown): CommerceState {
   }
   assertUnique(movementIds, 'Stock movement ID')
   assertUnique(movementActionIds, 'Stock movement action ID')
-  assertUnique([...movementActionIds, ...reconciliationActionIds], 'Commerce action ID')
   for (const [orderId, count] of reserveByOrder) if (count !== 1) throw new Error(`${orderId} has more than one reservation.`)
   for (const [orderId, count] of releaseByOrder) {
     if (count !== 1 || reserveByOrder.get(orderId) !== 1) throw new Error(`${orderId} has an unproven stock release.`)
@@ -266,6 +343,86 @@ export function validateCommerceState(value: unknown): CommerceState {
     assertSafeInteger(candidate.orders, `closes[${index}].orders`)
   }
   assertUnique(closeIds, 'Daily close ID')
+
+  const intakeIds: string[] = []
+  const intakeSources: string[] = []
+  for (const [index, candidate] of websiteIntakes.entries()) {
+    if (!isRecord(candidate) || !hasExactKeys(
+      candidate,
+      ['id', 'createdAt', 'status', 'source', 'sku', 'quantity', 'itemName', 'unitPrice', 'total', 'creation'],
+      ['itemVariant', 'conversion'],
+    )) throw new Error(`websiteIntakes[${index}] is invalid.`)
+    const intakeId = canonicalText(candidate.id, `websiteIntakes[${index}].id`, 85)
+    if (!websiteIntakeIdPattern.test(intakeId)) throw new Error(`websiteIntakes[${index}].id is invalid.`)
+    if (!validTimestamp(candidate.createdAt)) throw new Error(`websiteIntakes[${index}].createdAt is invalid.`)
+    if (!websiteIntakeStatuses.includes(candidate.status as CommerceWebsiteIntakeStatus)) throw new Error(`websiteIntakes[${index}].status is invalid.`)
+    if (!isRecord(candidate.source) || !hasExactKeys(candidate.source, ['fingerprint', 'approvalId', 'snapshotId', 'pageId', 'siteName', 'pagePath'])) {
+      throw new Error(`websiteIntakes[${index}].source is invalid.`)
+    }
+    const fingerprint = canonicalText(candidate.source.fingerprint, `websiteIntakes[${index}].source.fingerprint`, 12)
+    if (!websiteFingerprintPattern.test(fingerprint)) throw new Error(`websiteIntakes[${index}].source.fingerprint is invalid.`)
+    const approvalId = canonicalText(candidate.source.approvalId, `websiteIntakes[${index}].source.approvalId`, 160)
+    const snapshotId = canonicalText(candidate.source.snapshotId, `websiteIntakes[${index}].source.snapshotId`, 160)
+    const pageId = canonicalText(candidate.source.pageId, `websiteIntakes[${index}].source.pageId`, 160)
+    canonicalText(candidate.source.siteName, `websiteIntakes[${index}].source.siteName`, 160)
+    const pagePath = canonicalText(candidate.source.pagePath, `websiteIntakes[${index}].source.pagePath`, 160)
+    if (!pagePath.startsWith('/')) throw new Error(`websiteIntakes[${index}].source.pagePath must be absolute.`)
+    const sku = canonicalText(candidate.sku, `websiteIntakes[${index}].sku`, 80)
+    assertSafeInteger(candidate.quantity, `websiteIntakes[${index}].quantity`, 1)
+    const item = itemBySku.get(sku)
+    if (!item) throw new Error(`websiteIntakes[${index}].sku is unknown.`)
+    const itemName = canonicalText(candidate.itemName, `websiteIntakes[${index}].itemName`)
+    const itemVariant = candidate.itemVariant === undefined ? undefined : canonicalText(candidate.itemVariant, `websiteIntakes[${index}].itemVariant`)
+    assertSafeInteger(candidate.unitPrice, `websiteIntakes[${index}].unitPrice`, 1)
+    assertSafeInteger(candidate.total, `websiteIntakes[${index}].total`, 1)
+    if (itemName !== item.name || itemVariant !== optionalText(item.variant) || candidate.unitPrice !== item.price || candidate.total !== Number(candidate.quantity) * Number(candidate.unitPrice)) {
+      throw new Error(`websiteIntakes[${index}] does not match its Commerce catalog record.`)
+    }
+    if (!isRecord(candidate.creation) || !hasExactKeys(candidate.creation, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])) {
+      throw new Error(`websiteIntakes[${index}].creation is invalid.`)
+    }
+    const creation = candidate.creation as CommerceActionProof
+    if (!validProof(creation) || creation.capturedAt !== candidate.createdAt) throw new Error(`websiteIntakes[${index}].creation is invalid.`)
+    for (const field of ['actionId', 'actor', 'reason', 'evidenceReference'] as const) canonicalText(creation[field], `websiteIntakes[${index}].creation.${field}`, field === 'actionId' ? 160 : 180)
+    websiteIntakeCreationActionIds.push(creation.actionId)
+
+    const matchingSourceOrders = orders.filter((order) => isRecord(order) && order.sourceRecordId === intakeId) as Record<string, unknown>[]
+    if (candidate.status === 'pending_confirmation') {
+      if (candidate.conversion !== undefined || matchingSourceOrders.length) throw new Error(`websiteIntakes[${index}] pending intake has conversion history.`)
+    } else {
+      if (!isRecord(candidate.conversion) || !hasExactKeys(candidate.conversion, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference', 'orderId'])) {
+        throw new Error(`websiteIntakes[${index}].conversion is invalid.`)
+      }
+      const conversion = candidate.conversion as CommerceActionProof & { orderId: string }
+      if (!validProof(conversion)) throw new Error(`websiteIntakes[${index}].conversion is invalid.`)
+      for (const field of ['actionId', 'actor', 'reason', 'evidenceReference'] as const) canonicalText(conversion[field], `websiteIntakes[${index}].conversion.${field}`, field === 'actionId' ? 160 : 180)
+      const orderId = canonicalText(conversion.orderId, `websiteIntakes[${index}].conversion.orderId`, 160)
+      const order = orderById.get(orderId)
+      const matchingReservation = movements.filter((movement) => isRecord(movement)
+        && movement.kind === 'reserve'
+        && movement.orderId === orderId
+        && movement.actionId === conversion.actionId)
+      if (matchingSourceOrders.length !== 1 || !order || matchingSourceOrders[0] !== order
+        || matchingReservation.length !== 1
+        || !sameProof(matchingReservation[0] as unknown as CommerceStockMovement, conversion)
+        || order.createdAt !== conversion.capturedAt
+        || order.channel !== 'Website'
+        || order.item !== itemName
+        || order.itemSku !== sku
+        || order.quantity !== candidate.quantity
+        || order.total !== candidate.total
+        || order.evidenceReference !== conversion.evidenceReference) {
+        throw new Error(`websiteIntakes[${index}] does not match its converted Website order.`)
+      }
+      websiteIntakeConversionActionIds.push(conversion.actionId)
+    }
+    intakeIds.push(intakeId)
+    intakeSources.push([fingerprint, approvalId, snapshotId, pageId].join('|'))
+  }
+  assertUnique(intakeIds, 'Website intake ID')
+  assertUnique(intakeSources, 'Website intake source')
+  assertUnique(websiteIntakeConversionActionIds, 'Website intake conversion action ID')
+  assertUnique([...movementActionIds, ...reconciliationActionIds, ...websiteIntakeCreationActionIds], 'Commerce action ID')
   return value as CommerceState
 }
 
@@ -333,7 +490,7 @@ function migrateLegacyCommerce(value: unknown): CommerceState {
       orders: legacyInteger(candidate.orders ?? candidate.transactions, 0),
     }
   })
-  return validateCommerceState({ schema: COMMERCE_WORKSPACE_SCHEMA, items, orders, movements: [], closes })
+  return validateCommerceState({ schema: COMMERCE_WORKSPACE_SCHEMA, items, orders, movements: [], closes, websiteIntakes: [] })
 }
 
 export function normalizeCommerce(value: unknown): CommerceState {
@@ -428,6 +585,170 @@ function movementFor(proof: CommerceActionProof, input: Omit<CommerceStockMoveme
 function actionIdIsUsed(state: CommerceState, actionId: string) {
   return state.movements.some((movement) => movement.actionId === actionId)
     || state.orders.some((order) => order.paymentReconciliationActionId === actionId)
+    || commerceWebsiteIntakes(state).some((intake) => intake.creation.actionId === actionId || intake.conversion?.actionId === actionId)
+}
+
+function sameWebsiteSource(left: CommerceWebsiteSource, right: CommerceWebsiteSource) {
+  return left.fingerprint === right.fingerprint
+    && left.approvalId === right.approvalId
+    && left.snapshotId === right.snapshotId
+    && left.pageId === right.pageId
+    && left.siteName === right.siteName
+    && left.pagePath === right.pagePath
+}
+
+function sameActionProof(left: CommerceActionProof, right: CommerceActionProof) {
+  return left.actionId === right.actionId
+    && left.capturedAt === right.capturedAt
+    && left.actor === right.actor
+    && left.reason === right.reason
+    && left.evidenceReference === right.evidenceReference
+}
+
+function validWebsiteSource(source: CommerceWebsiteSource) {
+  return websiteFingerprintPattern.test(source.fingerprint)
+    && [source.approvalId, source.snapshotId, source.pageId, source.siteName, source.pagePath].every((value) => typeof value === 'string' && value === value.trim() && value.length > 0 && value.length <= 160)
+    && source.pagePath.startsWith('/')
+}
+
+export function commerceWebsiteIntakes(state: CommerceState) {
+  return state.websiteIntakes ?? []
+}
+
+export function createCommerceWebsiteIntake(
+  state: CommerceState,
+  input: CommerceWebsiteIntakeInput,
+  proof: CommerceActionProof,
+) {
+  if (!validProof(proof)
+    || proof.capturedAt !== proof.capturedAt.trim()
+    || !websiteIntakeIdPattern.test(input.id)
+    || !validWebsiteSource(input.source)
+    || typeof input.sku !== 'string'
+    || input.sku !== input.sku.trim()
+    || !Number.isSafeInteger(input.quantity)
+    || input.quantity < 1
+    || input.quantity > 99) return null
+  const current = validateCommerceState(state)
+  const intakes = commerceWebsiteIntakes(current)
+  const existing = intakes.find((intake) => intake.id === input.id)
+  if (existing) return sameWebsiteSource(existing.source, input.source)
+    && existing.sku === input.sku
+    && existing.quantity === input.quantity ? current : null
+  const sourceExisting = intakes.find((intake) => [
+    intake.source.fingerprint,
+    intake.source.approvalId,
+    intake.source.snapshotId,
+    intake.source.pageId,
+  ].join('|') === [
+    input.source.fingerprint,
+    input.source.approvalId,
+    input.source.snapshotId,
+    input.source.pageId,
+  ].join('|'))
+  if (sourceExisting) return sourceExisting.sku === input.sku && sourceExisting.quantity === input.quantity ? current : null
+  if (actionIdIsUsed(current, proof.actionId)) return null
+  const matchingItems = current.items.filter((item) => item.sku === input.sku)
+  const item = matchingItems.length === 1 ? matchingItems[0] : null
+  if (!item) return null
+  const total = item.price * input.quantity
+  if (!Number.isSafeInteger(total) || total < 1) return null
+  const intake: CommerceWebsiteIntake = {
+    id: input.id,
+    createdAt: proof.capturedAt,
+    status: 'pending_confirmation',
+    source: { ...input.source },
+    sku: item.sku,
+    quantity: input.quantity,
+    itemName: item.name,
+    unitPrice: item.price,
+    total,
+    creation: { ...proof },
+  }
+  if (item.variant) intake.itemVariant = item.variant
+  return validateCommerceState({
+    ...current,
+    websiteIntakes: [intake, ...intakes],
+  })
+}
+
+export function convertCommerceWebsiteIntake(
+  state: CommerceState,
+  intakeId: string,
+  input: CommerceWebsiteOrderInput,
+  proof: CommerceActionProof,
+) {
+  if (!validProof(proof)
+    || typeof input?.customer !== 'string'
+    || !input.customer.trim()
+    || input.customer !== input.customer.trim()
+    || input.customer.length > 80
+    || !['pickup', 'local_delivery'].includes(input.fulfilmentMethod)
+    || !['cash_on_delivery', 'manual_qr', 'manual_bank_transfer'].includes(input.paymentMethod)) return null
+  const current = validateCommerceState(state)
+  const intakes = commerceWebsiteIntakes(current)
+  const intake = intakes.find((candidate) => candidate.id === intakeId)
+  if (!intake) return null
+  if (intake.status === 'converted') {
+    const order = current.orders.find((candidate) => candidate.id === intake.conversion?.orderId)
+    return intake.conversion
+      && order?.customer === input.customer
+      && order.fulfilment === (input.fulfilmentMethod === 'pickup' ? 'Customer pickup' : 'Local delivery')
+      && order.payment === (input.paymentMethod === 'cash_on_delivery' ? 'Cash on delivery' : input.paymentMethod === 'manual_qr' ? 'Manual QR review' : 'Manual bank transfer')
+      && sameActionProof(intake.conversion, proof) ? current : null
+  }
+  if (actionIdIsUsed(current, proof.actionId)) return null
+  const item = current.items.find((candidate) => candidate.sku === intake.sku)
+  if (!item
+    || item.name !== intake.itemName
+    || (item.variant ?? undefined) !== (intake.itemVariant ?? undefined)
+    || item.price !== intake.unitPrice
+    || item.onHand < intake.quantity) return null
+  const nextBalance = safeBalance(item.onHand, -intake.quantity)
+  if (nextBalance === null) return null
+  const orderId = `ORD-WEB-${intake.id.slice(5)}`
+  if (current.orders.some((order) => order.id === orderId || order.sourceRecordId === intake.id)) return null
+  const fulfilment = input.fulfilmentMethod === 'pickup' ? 'Customer pickup' : 'Local delivery'
+  const payment = input.paymentMethod === 'cash_on_delivery'
+    ? 'Cash on delivery'
+    : input.paymentMethod === 'manual_qr'
+      ? 'Manual QR review'
+      : 'Manual bank transfer'
+  const order: CommerceOrder = {
+    id: orderId,
+    createdAt: proof.capturedAt,
+    customer: input.customer,
+    channel: 'Website',
+    item: intake.itemName,
+    itemSku: intake.sku,
+    quantity: intake.quantity,
+    payment,
+    paymentStatus: 'pending',
+    refundStatus: 'none',
+    fulfilment,
+    sourceRecordId: intake.id,
+    evidenceReference: proof.evidenceReference,
+    total: intake.total,
+    status: 'confirmed',
+  }
+  const movement = movementFor(proof, {
+    kind: 'reserve',
+    sku: intake.sku,
+    quantityDelta: -intake.quantity,
+    orderId,
+  })
+  const conversion = { ...proof, orderId }
+  return validateCommerceState({
+    ...current,
+    items: current.items.map((candidate) => candidate.sku === intake.sku ? { ...candidate, onHand: nextBalance } : candidate),
+    orders: [order, ...current.orders],
+    movements: [movement, ...current.movements],
+    websiteIntakes: intakes.map((candidate) => candidate.id === intake.id ? {
+      ...candidate,
+      status: 'converted' as const,
+      conversion,
+    } : candidate),
+  })
 }
 
 export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder, proof: CommerceActionProof) {

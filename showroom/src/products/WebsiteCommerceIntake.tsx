@@ -1,6 +1,10 @@
 import { type FormEvent, useState } from 'react'
 import { Link } from 'react-router-dom'
 
+import type {
+  CommerceWebsiteIntake,
+  CommerceWebsiteOrderInput,
+} from '../core/commerce-workspace'
 import {
   acceptWebsiteEcommerceHandoff,
   completeWebsiteOrderDraft,
@@ -23,6 +27,9 @@ export type WebsiteCommerceCatalogItem = {
 type WebsiteCommerceIntakeProps = {
   catalog: WebsiteCommerceCatalogItem[]
   importedSourceIds: string[]
+  managedIntakes?: CommerceWebsiteIntake[]
+  mode: 'local' | 'managed'
+  onQueueManagedIntake?: (intakeId: string, input: CommerceWebsiteOrderInput) => boolean
   onQueueReadyOrder: (order: WebsiteOrderRecord) => void
 }
 
@@ -58,8 +65,16 @@ function createDraftFromAcceptedIntake(context: WebsiteEcommerceHandoffContext, 
   })
 }
 
-export function WebsiteCommerceIntake({ catalog, importedSourceIds, onQueueReadyOrder }: WebsiteCommerceIntakeProps) {
-  const [context, setContext] = useState(() => readWebsiteEcommerceHandoff())
+export function WebsiteCommerceIntake({
+  catalog,
+  importedSourceIds,
+  managedIntakes = [],
+  mode,
+  onQueueManagedIntake,
+  onQueueReadyOrder,
+}: WebsiteCommerceIntakeProps) {
+  const [context, setContext] = useState(() => mode === 'local' ? readWebsiteEcommerceHandoff() : null)
+  const [customer, setCustomer] = useState('')
   const [operatorId, setOperatorId] = useState('')
   const [evidenceReference, setEvidenceReference] = useState('')
   const [fulfilmentMethod, setFulfilmentMethod] = useState<WebsiteOrderFulfilmentMethod | ''>('')
@@ -69,6 +84,21 @@ export function WebsiteCommerceIntake({ catalog, importedSourceIds, onQueueReady
   const [notice, setNotice] = useState('')
   const item = context ? matchingCatalogItem(context, catalog) : null
   const imported = Boolean(context?.order && importedSourceIds.includes(context.order.id))
+  const pendingManagedIntakes = managedIntakes.filter((intake) => intake.status === 'pending_confirmation')
+  const pendingManaged = pendingManagedIntakes[0]
+
+  function reviewManagedIntake(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!pendingManaged || !customer.trim() || !fulfilmentMethod || !paymentMethod || !onQueueManagedIntake) return
+    const queued = onQueueManagedIntake(pendingManaged.id, {
+      customer: customer.trim(),
+      fulfilmentMethod,
+      paymentMethod,
+    })
+    setNotice(queued
+      ? `${pendingManaged.id} is ready for accountable order confirmation below.`
+      : `${pendingManaged.id} was not queued. Resolve the Commerce notice, then retry.`)
+  }
 
   function acceptIntake(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -130,6 +160,36 @@ export function WebsiteCommerceIntake({ catalog, importedSourceIds, onQueueReady
         : context.handoff.state === 'accepted'
           ? 'Accepted intake'
           : 'Approval required'
+
+  if (mode === 'managed') {
+    return (
+      <section aria-label="Managed Website order intake" className="website-intake">
+        <header className="website-intake-head">
+          <div><span className="core-eyebrow">Website orders</span><strong>{pendingManaged ? `${pendingManagedIntakes.length} waiting` : 'No intake waiting'}</strong></div>
+          <div><Link className="text-link" to="/products/website/">Open Website</Link></div>
+        </header>
+
+        {pendingManaged ? (
+          <form className="website-intake-completion" onSubmit={reviewManagedIntake}>
+            <div className="website-intake-record">
+              <strong>{pendingManaged.itemName} × {pendingManaged.quantity}</strong>
+              <small>{pendingManaged.id} · {pendingManaged.source.siteName} {pendingManaged.source.pagePath} · {pendingManaged.total.toLocaleString()} MMK</small>
+            </div>
+            <label>Customer name or reference<input maxLength={80} onChange={(event) => setCustomer(event.target.value)} placeholder="Name, phone suffix, or order reference" required value={customer} /></label>
+            <div className="form-row">
+              <label>Fulfilment<select onChange={(event) => setFulfilmentMethod(event.target.value as WebsiteOrderFulfilmentMethod | '')} required value={fulfilmentMethod}><option value="">Select</option><option value="pickup">Customer pickup</option><option value="local_delivery">Local delivery</option></select></label>
+              <label>Payment<select onChange={(event) => setPaymentMethod(event.target.value as WebsiteOrderPaymentMethod | '')} required value={paymentMethod}><option value="">Select</option><option value="cash_on_delivery">Cash on delivery</option><option value="manual_qr">Manual QR review</option><option value="manual_bank_transfer">Manual bank transfer</option></select></label>
+            </div>
+            <button className="core-button primary" disabled={!customer.trim() || !fulfilmentMethod || !paymentMethod} type="submit">Review order</button>
+          </form>
+        ) : (
+          <div className="website-intake-ready"><div><strong>Nothing to process</strong><small>Send an approved SKU and quantity from Website when a real request is ready.</small></div></div>
+        )}
+
+        <p aria-live="polite" className="form-notice">{notice || 'Managed intake only. Stock moves and an order is created only after the authenticated human confirmation.'}</p>
+      </section>
+    )
+  }
 
   return (
     <section aria-label="Website order intake" className="website-intake">

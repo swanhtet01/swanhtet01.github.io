@@ -19,7 +19,7 @@ Prove one real workflow in which SuperMega keeps the operating record, a respons
 
 - Today, Teams, and Operations are the only primary destinations; Settings is a utility.
 - Teams has one team picker and three views: Work, Agents, and Review. Agent records carry a role, human owner, bounded capabilities, one assignment, evidence, and a human approval boundary. They coordinate work only.
-- Website is the only lazy-loaded product workspace at `/products/website/`; authenticated schema-v3 members sync through the managed API, local sessions stay clearly labelled, and its approved local order intake lands inside Commerce Orders.
+- Website is the only lazy-loaded product workspace at `/products/website/`; authenticated schema-v3 members sync through the managed API, local sessions stay clearly labelled, and an approved snapshot can create one retained managed Commerce intake without changing stock or creating an order.
 - Commerce and Production remain `/operations/commerce/` and `/operations/production/`; legacy Shop, Plant, and Ecommerce paths redirect into those operating modules.
 - Product uses Discover, Define, Build, Release, and Learn. One shared manifest defines six executable Commerce/Production workflow profiles.
 - The browser-local trial is not a customer system of record. Sends, payments, publishing, merges, deployments, access changes, and production writes require responsible human authority.
@@ -29,12 +29,12 @@ Prove one real workflow in which SuperMega keeps the operating record, a respons
 ## Latest verification
 
 - Candidate identity is brand `jade-v1-2026-07`, context `2026-07-23.4`, and catalogue `2026-07-23.4`.
-- Product-inclusive lint, strict TypeScript, HQ, one product workspace, one compatibility redirect, six workflow profiles, 24 Website state checks, 12 order-completion checks, 34 Commerce state checks, 51 Production state checks, 48 release checks, 41 security checks, eleven Vercel contract checks, six RLS checks, and 63 Python tests pass locally.
+- Product-inclusive lint, strict TypeScript, HQ, one product workspace, one compatibility redirect, six workflow profiles, 24 Website state checks, 12 local order-completion checks, 44 Commerce state checks, 51 Production state checks, 48 release checks, 43 security checks, eleven Vercel contract checks, six RLS checks, and 73 Python tests pass locally.
 - Core desktop and 390 px paths have no horizontal overflow. Production output, issue creation, attributed resolution, machine-state change, reload persistence, confirmation focus, and all four event types pass in the local browser with no console error.
 - Website desktop and 390 px paths have no horizontal overflow. Content, Navigation, and Publish remain the only views; responsive controls remain visible; preview destinations are operable; arrow-key tab movement works; a migrated v1 approval stays historical; and a fresh evidence-bound approval plus approved snapshot persist after reload with no console error.
 - Team evidence and Product decisions require an attributed human reviewer. Agent handoffs cannot satisfy terminal authority.
 - Website v2 preserves valid v1 browser history without reopening legacy approval, confirms writes before UI success, rejects stale content edits, and binds approval and approved snapshots to the exact current evidence IDs. Authenticated schema-v3 workspaces use explicit managed events and optimistic versions; local fallback remains available. Neither mode can deploy a site.
-- Website-to-Commerce intake remains non-PII and operator-gated. Its locked completion produces one idempotent `ready_for_confirmation` record; a separate accountable confirmation rechecks price and stock, inserts it once, and reserves local stock without a customer send, payment initiation, delivery request, or external write. Commerce v2 then serializes local writes, reconciles payment with human evidence, releases stock only from one proven reservation, preserves refund-due exceptions, and fails closed on malformed or unwritable storage.
+- Website-to-Commerce intake is now an additive managed Commerce v2 record as well as a labelled local fallback. Intake creation retains the approved Website source, catalog SKU, quantity, and attributable actor but cannot move stock or create an order. Commerce collects the customer reference, fulfilment, and payment method in its existing Orders view; one authenticated human confirmation atomically converts the intake, creates one idempotent order, and reserves exact stock. No customer send, payment initiation, delivery request, domain write, or deployment occurs.
 - Production v2 serializes local writes into one revisioned event record, preserves valid v1 records without fabricated history, rejects silent output clamping and stale machine changes, and retains issue-resolution proof. It remains browser-local and does not control machinery.
 - Production release still requires review, owner authorization, and the coordinated `main` workflow; a local pass or pushed branch is not a release.
 
@@ -55,7 +55,7 @@ Prove one real workflow in which SuperMega keeps the operating record, a respons
 
 ## Next evidence
 
-- Repeat the Website-to-Commerce flow with one named user through reservation, payment reconciliation, fulfilment, one controlled cancellation, and stock-ledger review; measure handling time and correction effort.
+- Rehearse the managed Website-to-Commerce flow on non-production tenant data with one named user through intake, reservation, payment reconciliation, fulfilment, one controlled cancellation, and stock-ledger review; measure handling time and correction effort.
 - Run one named shift user through output, issue, resolution, and machine-state records; measure correction time and compare the event record with the source shift sheet.
 - Exercise one agent assignment from accountable work through attributed evidence and human review.
 - Complete one pilot definition and run its acceptance test.

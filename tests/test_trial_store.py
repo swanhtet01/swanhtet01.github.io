@@ -79,7 +79,7 @@ class TrialStoreTests(unittest.TestCase):
             workspace_id="workspace-a",
             actor_id="actor-operator",
             actor_kind="human",
-            capabilities=("commerce.write", "approvals.request"),
+            capabilities=("commerce.write", "website.write", "approvals.request"),
         )
         self.store.provision_membership(
             workspace_id="workspace-a",
@@ -161,6 +161,80 @@ class TrialStoreTests(unittest.TestCase):
         self.assertEqual(raised.exception.expected_version, 0)
         self.assertEqual(raised.exception.current_version, 1)
         self.assertEqual(self.store.get_state(self.operator, "commerce").state["sku"], "sku-a")
+
+    def test_related_state_precondition_is_atomic_and_fails_before_reducer(self) -> None:
+        website = self.store.apply_command(
+            self.operator,
+            command_id=str(uuid4()),
+            surface="website",
+            event_type="website.content.saved",
+            expected_version=0,
+            payload={"changes": {"fingerprint": "web-1234abcd"}},
+        )
+        observed: list[tuple[dict[str, object], dict[str, object]]] = []
+
+        def require_website(
+            current: Mapping[str, object],
+            related: Mapping[str, Mapping[str, object]],
+        ) -> None:
+            observed.append((dict(current), dict(related["website"])))
+            if related["website"].get("fingerprint") != "web-1234abcd":
+                raise TrialValidationError("Website proof changed.")
+
+        created = self.store.apply_command(
+            self.operator,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.website_intake.created",
+            expected_version=0,
+            payload={"changes": {"intake": "retained"}},
+            related_surfaces=("website",),
+            state_precondition=require_website,
+        )
+        self.assertEqual(website.version, 1)
+        self.assertEqual(created.version, 1)
+        self.assertEqual(observed, [({}, {"fingerprint": "web-1234abcd", "last_surface": "website", "last_event_type": "website.content.saved"})])
+
+        calls_before_rejection = self.reducer.calls
+
+        def reject_changed_proof(
+            _current: Mapping[str, object],
+            _related: Mapping[str, Mapping[str, object]],
+        ) -> None:
+            raise TrialValidationError("Website proof changed.")
+
+        with self.assertRaises(TrialValidationError):
+            self.store.apply_command(
+                self.operator,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.website_intake.created",
+                expected_version=1,
+                payload={"changes": {"intake": "not-written"}},
+                related_surfaces=("website",),
+                state_precondition=reject_changed_proof,
+            )
+        self.assertEqual(self.reducer.calls, calls_before_rejection)
+        self.assertEqual(self.store.get_state(self.operator, "commerce").state["intake"], "retained")
+
+    def test_store_enforces_human_only_commerce_conversion(self) -> None:
+        self.store.provision_membership(
+            workspace_id="workspace-a",
+            actor_id="actor-agent-manager",
+            actor_kind="agent",
+            capabilities=("commerce.write",),
+        )
+        calls_before_rejection = self.reducer.calls
+        with self.assertRaises(TrialHumanApprovalRequired):
+            self.store.apply_command(
+                self.agent_manager,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.website_intake.converted",
+                expected_version=0,
+                payload={"changes": {"status": "converted"}},
+            )
+        self.assertEqual(self.reducer.calls, calls_before_rejection)
 
     def test_write_requires_explicit_surface_capability(self) -> None:
         with self.assertRaises(TrialPermissionDenied) as raised:

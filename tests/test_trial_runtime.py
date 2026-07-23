@@ -263,6 +263,17 @@ class TrialRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(human.status_code, 200)
 
+        unproven_source = self.client.post(
+            "/api/trial/v1/commands",
+            headers=self._headers(),
+            json=self._command_body(
+                event_type="commerce.website_intake.created",
+                expected_version=1,
+            ),
+        )
+        self.assertEqual(unproven_source.status_code, 422)
+        self.assertEqual(unproven_source.json()["detail"]["code"], "trial_validation_error")
+
         self.store.provision_membership(
             workspace_id="workspace-a",
             actor_id="actor-agent-manager",
@@ -280,6 +291,73 @@ class TrialRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(agent.status_code, 403)
         self.assertEqual(agent.json()["detail"]["code"], "trial_human_approval_required")
+
+    def test_retained_website_source_preserves_exact_command_replay_only(self) -> None:
+        source = {
+            "fingerprint": "web-1234abcd",
+            "approvalId": "approval-1",
+            "snapshotId": "snapshot-1",
+            "pageId": "page-home",
+            "siteName": "SuperMega",
+            "pagePath": "/",
+        }
+        seeded = self._command_body()
+        seeded["payload"] = {
+            "changes": {"websiteIntakes": [{"source": source}]},
+            "evidence": {"actor": "actor-operator"},
+        }
+        self.assertEqual(
+            self.client.post(
+                "/api/trial/v1/commands",
+                headers=self._headers(),
+                json=seeded,
+            ).status_code,
+            200,
+        )
+
+        command_id = str(uuid4())
+        replayable = self._command_body(
+            command_id=command_id,
+            event_type="commerce.website_intake.created",
+            expected_version=1,
+        )
+        replayable["payload"] = {
+            "state": {"websiteIntakes": [{"source": source}]},
+            "evidence": {"actor": "actor-operator"},
+        }
+        first = self.client.post(
+            "/api/trial/v1/commands",
+            headers=self._headers(),
+            json=replayable,
+        )
+        replay = self.client.post(
+            "/api/trial/v1/commands",
+            headers=self._headers(),
+            json=replayable,
+        )
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(replay.status_code, 200)
+        self.assertEqual(first.json()["result"]["version"], replay.json()["result"]["version"])
+        self.assertEqual(first.json()["result"]["state"], replay.json()["result"]["state"])
+        self.assertFalse(first.json()["result"]["idempotent_replay"])
+        self.assertTrue(replay.json()["result"]["idempotent_replay"])
+
+        changed_source = {**source, "siteName": "Spoofed"}
+        changed = self._command_body(
+            event_type="commerce.website_intake.created",
+            expected_version=2,
+        )
+        changed["payload"] = {
+            "state": {"websiteIntakes": [{"source": changed_source}]},
+            "evidence": {"actor": "actor-operator"},
+        }
+        rejected = self.client.post(
+            "/api/trial/v1/commands",
+            headers=self._headers(),
+            json=changed,
+        )
+        self.assertEqual(rejected.status_code, 422)
+        self.assertEqual(rejected.json()["detail"]["code"], "trial_validation_error")
 
     def test_website_commands_bind_actor_evidence_and_human_release_actions(self) -> None:
         def website_body(*, actor: str, event_type: str = "website.content.saved") -> dict[str, object]:

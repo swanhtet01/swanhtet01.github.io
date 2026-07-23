@@ -16,21 +16,21 @@
     {
       "id": "website",
       "name": "Website",
-      "status": "prototype-local",
+      "status": "managed-trial",
       "path": "/products/website/",
       "job": "Turn an approved business brief into a finite, reviewable website candidate with content, navigation, evidence, and human publish approval.",
       "surfaces": ["Content", "Navigation", "Publish"],
-      "nextGate": "Validate one named business brief and accepted local preview before connecting a customer domain or publish authority."
+      "nextGate": "Rehearse one approved managed snapshot into a retained Commerce intake before connecting a customer domain or publish authority."
     },
     {
       "id": "commerce",
       "name": "Commerce",
-      "status": "pilot-ready-local",
+      "status": "managed-trial",
       "path": "/operations/commerce/",
       "job": "Convert Website and trusted-channel demand into controlled orders, stock, fulfilment, payment status, follow-up, and close.",
       "surfaces": ["Today", "Orders", "Inventory"],
       "templateContract": { "file": "../site-manifest.json", "productId": "commerce" },
-      "nextGate": "Repeat the non-PII Website intake through accountable Commerce confirmation with one named user, then measure handling time, exceptions, and completion."
+      "nextGate": "Repeat the managed Website intake through authenticated human Commerce confirmation with one named user, then measure handling time, exceptions, and completion."
     },
     {
       "id": "production",

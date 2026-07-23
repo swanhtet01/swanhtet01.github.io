@@ -1032,11 +1032,13 @@
 
 .website-publish-panel .website-editor-scroll {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   align-content: start;
   gap: 11px;
 }
 
 .website-publish-section {
+  min-width: 0;
   border: 1px solid var(--website-line);
   border-radius: 6px;
   background: rgba(255, 255, 255, .014);
@@ -1184,12 +1186,13 @@
 }
 
 .website-evidence-form {
-  grid-template-columns: minmax(125px, .8fr) minmax(150px, 1fr) minmax(160px, 1.15fr) minmax(130px, .85fr) auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: end;
 }
 
 .website-evidence-form .website-button {
   min-height: 34px;
+  justify-self: end;
 }
 
 .website-approval-record {
@@ -1268,6 +1271,7 @@
 .website-handoff-action {
   min-height: 58px;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
@@ -1276,13 +1280,41 @@
 }
 
 .website-handoff-action > div:first-child {
+  flex: 1 1 260px;
   min-width: 0;
 }
 
 .website-handoff-action > div:last-child {
   display: flex;
-  flex: 0 0 auto;
+  flex: 1 1 260px;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: flex-end;
+  min-width: 0;
   gap: 6px;
+}
+
+.website-handoff-controls label {
+  display: grid;
+  gap: 3px;
+  color: var(--website-muted);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.website-handoff-controls input {
+  width: 104px;
+  min-height: 40px;
+  border: 1px solid var(--website-line-strong);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, .88);
+  color: var(--website-ink);
+  padding: 0 8px;
+  font: 650 11px/1.2 var(--website-sans);
+}
+
+.website-handoff-controls label:nth-child(2) input {
+  width: 58px;
 }
 
 .website-handoff-action strong {
@@ -1966,7 +1998,35 @@
   }
 
   .website-handoff-action > div:last-child {
+    align-items: end;
     flex-wrap: wrap;
+  }
+
+  .website-handoff-action strong {
+    font-size: 14px;
+  }
+
+  .website-handoff-action p {
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .website-handoff-controls label {
+    font-size: 12px;
+  }
+
+  .website-handoff-controls input,
+  .website-handoff-controls .website-button {
+    min-height: 44px;
+    font-size: 12px;
+  }
+
+  .website-handoff-controls label:first-child {
+    flex: 1 1 150px;
+  }
+
+  .website-handoff-controls label:first-child input {
+    width: 100%;
   }
 
   .website-publish-history > article {

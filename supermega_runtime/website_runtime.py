@@ -88,6 +88,9 @@ _PUBLISH_FIELDS = frozenset(
         "migratedFromV1",
     }
 )
+_COMMERCE_INTAKE_SOURCE_FIELDS = frozenset(
+    {"fingerprint", "approvalId", "snapshotId", "pageId", "siteName", "pagePath"}
+)
 _EVENT_FIELDS = frozenset(
     {"id", "createdAt", "actorKind", "actor", "action", "subjectId", "reason", "evidenceReference", "source"}
 )
@@ -426,6 +429,53 @@ def validate_website_state(value: object) -> dict[str, Any]:
         ):
             raise TrialValidationError("Website snapshot must bind its approval, evidence, and workflow event.")
     return deepcopy(state)
+
+
+def validate_website_snapshot_source(
+    website_state: object,
+    source_value: object,
+) -> dict[str, Any]:
+    """Require a Commerce intake source to name retained managed Website proof."""
+
+    state = validate_website_state(website_state)
+    source = _object(source_value, "commerce Website source")
+    _exact(source, "commerce Website source", _COMMERCE_INTAKE_SOURCE_FIELDS)
+    fingerprint = _text(source["fingerprint"], "commerce Website source.fingerprint", maximum=12)
+    if not _FINGERPRINT.fullmatch(fingerprint):
+        raise TrialValidationError("commerce Website source.fingerprint must be a Website fingerprint.")
+    approval_id = _text(source["approvalId"], "commerce Website source.approvalId", maximum=160)
+    snapshot_id = _text(source["snapshotId"], "commerce Website source.snapshotId", maximum=160)
+    page_id = _text(source["pageId"], "commerce Website source.pageId", maximum=160)
+    _text(source["siteName"], "commerce Website source.siteName", maximum=160)
+    page_path = _text(source["pagePath"], "commerce Website source.pagePath", maximum=160)
+    if not page_path.startswith("/"):
+        raise TrialValidationError("commerce Website source.pagePath must be absolute.")
+
+    snapshots = [record for record in state["localPublishes"] if record["id"] == snapshot_id]
+    approvals = [record for record in state["approvals"] if record["id"] == approval_id]
+    if len(snapshots) != 1 or len(approvals) != 1:
+        raise TrialValidationError("commerce Website source must reference one retained snapshot and approval.")
+    snapshot = snapshots[0]
+    approval = approvals[0]
+    current_pages = [page for page in state["pages"] if page["id"] == page_id]
+    current_source = {"contentRevision": state["contentRevision"], "digest": fingerprint}
+    if (
+        snapshot["migratedFromV1"]
+        or approval["migratedFromV1"]
+        or _website_fingerprint(state) != fingerprint
+        or not _same_source(snapshot["source"], current_source)
+        or not _same_source(approval["source"], current_source)
+        or state["siteName"] != source["siteName"]
+        or len(current_pages) != 1
+        or current_pages[0]["slug"] != page_path
+        or snapshot["fingerprint"] != fingerprint
+        or approval["fingerprint"] != fingerprint
+        or snapshot["approvalId"] != approval_id
+        or page_id not in snapshot["readyPageIds"]
+        or not _same_source(snapshot["source"], approval["source"])
+    ):
+        raise TrialValidationError("commerce Website source does not match retained managed Website proof.")
+    return deepcopy(source)
 
 
 def _command_payload(payload: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, str]]:

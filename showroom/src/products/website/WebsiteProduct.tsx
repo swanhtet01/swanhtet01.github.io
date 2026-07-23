@@ -6,6 +6,17 @@ import { PublishWorkspace } from './PublishWorkspace'
 import { SitePreview } from './SitePreview'
 import { useWebsiteWorkspace } from './useWebsiteWorkspace'
 import {
+  commerceWebsiteIntakes,
+  createCommerceWebsiteIntake,
+  validateCommerceState,
+  type CommerceWebsiteSource,
+} from '../../core/commerce-workspace'
+import {
+  loadManagedBootstrap,
+  ManagedTrialError,
+  saveManagedCommerceCommand,
+} from '../../core/managed-trial'
+import {
   createWebsiteEcommerceHandoff,
   readWebsiteEcommerceHandoff,
   writeWebsiteEcommerceHandoff,
@@ -58,7 +69,16 @@ const viewCopy: Record<WorkspaceView, { eyebrow: string; title: string; copy: st
 function handoffSourceKey(context: ReturnType<typeof readWebsiteEcommerceHandoff>) {
   if (!context?.display) return ''
   const source = context.handoff.source
-  return [source.fingerprint, source.approvalId, source.localPublishId, source.pageId].join('|')
+  return ['local', source.fingerprint, source.approvalId, source.localPublishId, source.pageId].join('|')
+}
+
+function managedHandoffSourceKey(source: CommerceWebsiteSource) {
+  return ['managed', source.fingerprint, source.approvalId, source.snapshotId, source.pageId].join('|')
+}
+
+function secureUuid() {
+  if (typeof globalThis.crypto?.randomUUID !== 'function') throw new Error('Secure command IDs are unavailable in this browser.')
+  return globalThis.crypto.randomUUID()
 }
 
 export function WebsiteProduct() {
@@ -78,7 +98,7 @@ export function WebsiteProduct() {
   const handoffSourcePage = workspace.pages.find((page) => page.stage === 'ready' && page.slug === '/products')
     ?? workspace.pages.find((page) => page.stage === 'ready')
   const currentHandoffSource = approval && publish && handoffSourcePage
-    ? [fingerprint, approval.id, publish.id, handoffSourcePage.id].join('|')
+    ? [storageMode === 'managed' ? 'managed' : 'local', fingerprint, approval.id, publish.id, handoffSourcePage.id].join('|')
     : ''
   const handoffIsCurrent = Boolean(preparedHandoffSource
     && preparedHandoffSource === currentHandoffSource
@@ -239,29 +259,19 @@ export function WebsiteProduct() {
     )
   }
 
-  function prepareCommerceHandoff() {
-    const existingHandoff = readWebsiteEcommerceHandoff()
+  async function prepareCommerceHandoff(input: { sku: string; quantity: number }) {
+    const sku = input.sku.trim().toUpperCase()
     const sourcePage = handoffSourcePage
-
-    if (existingHandoff?.handoff.state === 'accepted') {
-      const source = existingHandoff.handoff.source
-      const acceptedSourceIsCurrent = Boolean(existingHandoff.display
-        && approval
-        && publish
-        && sourcePage
-        && source.fingerprint === fingerprint
-        && source.approvalId === approval.id
-        && source.localPublishId === publish.id
-        && source.pageId === sourcePage.id)
-      setPreparedHandoffSource(acceptedSourceIsCurrent ? handoffSourceKey(existingHandoff) : '')
-      setNotice(acceptedSourceIsCurrent
-        ? 'This exact Website intake is already accepted and retained with its audit record.'
-        : 'The prior accepted intake and audit record are retained. This bounded prototype will not overwrite them.')
+    if (!/^[A-Z0-9][A-Z0-9_-]{2,79}$/.test(sku)
+      || !Number.isSafeInteger(input.quantity)
+      || input.quantity < 1
+      || input.quantity > 99) {
+      setNotice('Enter an exact Commerce SKU and a whole-number quantity from 1 to 99.')
       return
     }
 
-    if (!approvalIsCurrent || !publishIsCurrent || !approval || !publish || !sourcePage || storageMode !== 'browser-local') {
-      setNotice('A current approval, local publish record, ready source page, and browser storage are required for handoff.')
+    if (!approvalIsCurrent || !publishIsCurrent || !approval || !publish || !sourcePage || storageMode === 'session-only') {
+      setNotice('A current approval, recorded snapshot, ready source page, and durable workspace are required for intake.')
       return
     }
 
@@ -275,7 +285,106 @@ export function WebsiteProduct() {
       && readyPageIds.every((pageId) => publish.readyPageIds.includes(pageId))
       && publish.readyPageIds.includes(sourcePage.id)
     if (!sourceIsCurrent) {
-      setNotice('The current Website evidence, approval, publish record, and ready-page set do not match. Handoff failed closed.')
+      setNotice('The current Website evidence, approval, snapshot, and ready-page set do not match. Intake failed closed.')
+      return
+    }
+
+    if (storageMode === 'managed') {
+      const source: CommerceWebsiteSource = {
+        fingerprint,
+        approvalId: approval.id,
+        snapshotId: publish.id,
+        pageId: sourcePage.id,
+        siteName: workspace.siteName,
+        pagePath: sourcePage.slug,
+      }
+      const sourceKey = managedHandoffSourceKey(source)
+      try {
+        const bootstrap = await loadManagedBootstrap()
+        if (!managedActorId || bootstrap.identity.actor_id !== managedActorId) {
+          throw new Error('Managed Website identity changed before the Commerce intake could be prepared.')
+        }
+        const record = bootstrap.states.commerce
+        if (record.surface !== 'commerce' || record.version < 1) {
+          throw new Error('Create the managed Commerce catalog before sending a Website intake.')
+        }
+        const current = validateCommerceState(record.state)
+        const existing = commerceWebsiteIntakes(current).find((intake) => managedHandoffSourceKey(intake.source) === sourceKey)
+        if (existing) {
+          if (existing.sku !== sku || existing.quantity !== input.quantity) {
+            throw new Error('This Website snapshot already has a different retained Commerce intake.')
+          }
+          setPreparedHandoffSource(sourceKey)
+          setNotice(`${existing.id} is already retained in managed Commerce.`)
+          return
+        }
+
+        const commandId = secureUuid()
+        const proof = {
+          actionId: `ACT-WEB-${secureUuid().toUpperCase()}`,
+          capturedAt: new Date().toISOString(),
+          actor: managedActorId,
+          reason: 'Approved Website snapshot sent to Commerce intake',
+          evidenceReference: publish.id,
+        }
+        const candidate = createCommerceWebsiteIntake(current, {
+          id: `WINT-${secureUuid().toUpperCase()}`,
+          source,
+          sku,
+          quantity: input.quantity,
+        }, proof)
+        if (!candidate || candidate === current) throw new Error('The SKU does not match exactly one managed Commerce catalog item.')
+        const saved = await saveManagedCommerceCommand({
+          commandId,
+          eventType: 'commerce.website_intake.created',
+          expectedVersion: record.version,
+          evidence: proof,
+          state: candidate as unknown as Record<string, unknown>,
+        })
+        if (saved.surface !== 'commerce'
+          || saved.event_type !== 'commerce.website_intake.created'
+          || saved.version !== record.version + 1) {
+          throw new Error('Managed Commerce returned an invalid intake confirmation.')
+        }
+        const accepted = validateCommerceState(saved.state)
+        const retained = commerceWebsiteIntakes(accepted).find((intake) => managedHandoffSourceKey(intake.source) === sourceKey)
+        if (!retained || retained.status !== 'pending_confirmation' || retained.sku !== sku || retained.quantity !== input.quantity) {
+          throw new Error('Managed Commerce did not confirm the expected intake record.')
+        }
+        setPreparedHandoffSource(sourceKey)
+        setNotice(`${retained.id} is waiting in Commerce. No stock or order changed.`)
+      } catch (error) {
+        if (error instanceof ManagedTrialError && error.code === 'trial_version_conflict') {
+          try {
+            const refreshed = await loadManagedBootstrap()
+            const current = validateCommerceState(refreshed.states.commerce.state)
+            const retained = commerceWebsiteIntakes(current).find((intake) => managedHandoffSourceKey(intake.source) === sourceKey)
+            if (retained && retained.sku === sku && retained.quantity === input.quantity) {
+              setPreparedHandoffSource(sourceKey)
+              setNotice(`${retained.id} was already retained by another session.`)
+              return
+            }
+          } catch {
+            // Preserve the original version-conflict message below.
+          }
+        }
+        setNotice(`Managed Commerce intake was not created: ${error instanceof Error ? error.message : 'unknown managed error'}`)
+      }
+      return
+    }
+
+    const existingHandoff = readWebsiteEcommerceHandoff()
+    if (existingHandoff?.handoff.state === 'accepted') {
+      const source = existingHandoff.handoff.source
+      const acceptedSourceIsCurrent = Boolean(existingHandoff.display
+        && source.fingerprint === fingerprint
+        && source.approvalId === approval.id
+        && source.localPublishId === publish.id
+        && source.pageId === sourcePage.id)
+      setPreparedHandoffSource(acceptedSourceIsCurrent ? handoffSourceKey(existingHandoff) : '')
+      setNotice(acceptedSourceIsCurrent
+        ? 'This exact local Website intake is already accepted and retained.'
+        : 'The prior accepted local intake is retained and will not be overwritten.')
       return
     }
 
@@ -284,8 +393,8 @@ export function WebsiteProduct() {
       approvalId: approval.id,
       localPublishId: publish.id,
       pageId: sourcePage.id,
-      sku: 'SM-CARE-01',
-      quantity: 1,
+      sku,
+      quantity: input.quantity,
     })
 
     const restored = writeWebsiteEcommerceHandoff(handoff, workspace)
@@ -295,7 +404,7 @@ export function WebsiteProduct() {
     }
 
     setPreparedHandoffSource(handoffSourceKey(restored))
-    setNotice('Versioned Website intake prepared locally. Review it in Commerce Orders.')
+    setNotice('Website intake prepared in this browser. Review it in Commerce Orders.')
   }
 
   return (
@@ -436,7 +545,7 @@ export function WebsiteProduct() {
                 approvalIsCurrent={approvalIsCurrent}
                 checks={checks}
                 fingerprint={fingerprint}
-                handoffAvailable={storageMode === 'browser-local'}
+                handoffAvailable={storageMode !== 'session-only'}
                 handoffIsCurrent={handoffIsCurrent}
                 managedActorId={managedActorId}
                 onAddEvidence={addEvidence}

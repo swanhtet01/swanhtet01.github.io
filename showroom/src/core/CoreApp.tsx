@@ -28,6 +28,8 @@ import {
   advanceCommerceOrder,
   cancelCommerceOrder,
   commerceOrderHasReleasableReservation,
+  commerceWebsiteIntakes,
+  convertCommerceWebsiteIntake,
   createEmptyCommerce,
   loadCommerceWorkspace,
   mutateCommerceWorkspace,
@@ -40,6 +42,7 @@ import {
   type CommerceOrderStatus,
   type CommerceState,
   type CommerceStockMovement,
+  type CommerceWebsiteOrderInput,
 } from './commerce-workspace'
 import {
   LEGACY_PRODUCTION_KEYS,
@@ -154,6 +157,7 @@ type AccountableAction = {
 
 type PendingAccountableAction = Omit<AccountableAction, 'capturedAt' | 'actorKind' | 'actor' | 'reason' | 'evidenceReference'> & {
   apply: (record: AccountableAction) => void | Promise<void>
+  confirmation?: AccountableAction
 }
 
 type ActionDetails = Pick<AccountableAction, 'actor' | 'reason' | 'evidenceReference'>
@@ -524,6 +528,7 @@ function normalizeActions(value: AccountableAction[]) {
 }
 
 function confirmAccountableAction(action: PendingAccountableAction, details: ActionDetails): AccountableAction {
+  if (action.confirmation) return action.confirmation
   return {
     id: action.id,
     commandId: action.commandId,
@@ -689,7 +694,16 @@ function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = null) {
         throw new Error('Managed Commerce returned an invalid command result.')
       }
       const accepted = validateCommerceState(result.state)
-      const nextSnapshot = { state: accepted, mode: 'managed-ready' as const, workspaceId, version: result.version, error: '' }
+      let nextSnapshot: CommerceWorkspaceView = { state: accepted, mode: 'managed-ready', workspaceId, version: result.version, error: '' }
+      if (result.idempotent_replay) {
+        const bootstrap = await loadManagedBootstrap()
+        if (identityRef.current?.workspaceId !== workspaceId) throw new Error('The managed workspace changed before the replay could be reconciled.')
+        const refreshed = managedCommerceView(bootstrap.states.commerce, workspaceId)
+        if (refreshed.mode !== 'managed-ready' || refreshed.version === null || refreshed.version < result.version) {
+          throw new Error('Managed Commerce could not reconcile the committed command with current state.')
+        }
+        nextSnapshot = { ...refreshed, error: '' }
+      }
       snapshotRef.current = nextSnapshot
       setManagedSnapshot(nextSnapshot)
     } catch (error) {
@@ -783,8 +797,9 @@ function formatMoney(value: number) {
   return `${new Intl.NumberFormat('en-US').format(value)} MMK`
 }
 
-function AccountableActionGate({ action, onCancel, onConfirm }: {
+function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm }: {
   action: PendingAccountableAction | null
+  authenticatedActor?: { id: string; label: string }
   onCancel: () => void
   onConfirm: (details: ActionDetails) => void | Promise<void>
 }) {
@@ -809,11 +824,15 @@ function AccountableActionGate({ action, onCancel, onConfirm }: {
 
   async function submit(event: FormEvent) {
     event.preventDefault()
-    if (!actor.trim() || !reason.trim() || !evidenceReference.trim()) return
+    if (!action) return
+    const responsibleActor = action.confirmation?.actor ?? authenticatedActor?.id ?? actor.trim()
+    const confirmedReason = action.confirmation?.reason ?? reason.trim()
+    const confirmedEvidence = action.confirmation?.evidenceReference ?? evidenceReference.trim()
+    if (!responsibleActor || !confirmedReason || !confirmedEvidence) return
     setBusy(true)
     setError('')
     try {
-      await onConfirm({ actor: actor.trim(), reason: reason.trim(), evidenceReference: evidenceReference.trim() })
+      await onConfirm({ actor: responsibleActor, reason: confirmedReason, evidenceReference: confirmedEvidence })
     } catch (submissionError) {
       setError(submissionError instanceof Error ? submissionError.message : 'The change was not applied.')
       setBusy(false)
@@ -823,11 +842,13 @@ function AccountableActionGate({ action, onCancel, onConfirm }: {
   return <section className="core-panel accountable-action-gate" aria-label="Human action confirmation">
     <div className="action-change"><span className="core-eyebrow">Human confirmation</span><h2 ref={headingRef} tabIndex={-1}>{action.summary}</h2><p><strong>{action.before}</strong><span>→</span><strong>{action.after}</strong></p></div>
     <form className="core-form action-confirm-form" onSubmit={(event) => void submit(event)}>
-      <label>Responsible operator<input maxLength={80} required value={actor} onChange={(event) => setActor(event.target.value)} placeholder="Name or accountable role" /></label>
-      <label>Reason<input maxLength={180} required value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Why this change is correct now" /></label>
-      <label>Evidence source or reference<input maxLength={180} required value={evidenceReference} onChange={(event) => setEvidenceReference(event.target.value)} placeholder="Message ID, receipt, count sheet, or observation" /></label>
-      <div className="form-actions"><button className="text-link" disabled={busy} onClick={onCancel} type="button">Cancel</button><button className="core-button primary compact" disabled={busy} type="submit">{busy ? 'Applying…' : 'Confirm and record'}</button></div>
-      {error ? <p className="form-notice" role="status">{error}</p> : null}
+      {authenticatedActor
+        ? <label>Authenticated operator<input readOnly value={authenticatedActor.label} /></label>
+        : <label>Responsible operator<input maxLength={80} readOnly={Boolean(action.confirmation)} required value={action.confirmation?.actor ?? actor} onChange={(event) => setActor(event.target.value)} placeholder="Name or accountable role" /></label>}
+      <label>Reason<input maxLength={180} readOnly={Boolean(action.confirmation)} required value={action.confirmation?.reason ?? reason} onChange={(event) => setReason(event.target.value)} placeholder="Why this change is correct now" /></label>
+      <label>Evidence source or reference<input maxLength={180} readOnly={Boolean(action.confirmation)} required value={action.confirmation?.evidenceReference ?? evidenceReference} onChange={(event) => setEvidenceReference(event.target.value)} placeholder="Message ID, receipt, count sheet, or observation" /></label>
+      <div className="form-actions"><button className="text-link" disabled={busy || Boolean(action.confirmation)} onClick={onCancel} type="button">Cancel</button><button className="core-button primary compact" disabled={busy} type="submit">{busy ? 'Applying…' : action.confirmation ? 'Retry same confirmation' : 'Confirm and record'}</button></div>
+      {error || action.confirmation ? <p className="form-notice" role="status">{error || 'This command proof is frozen. Any retry reuses the same command and evidence; reload can reconcile managed state.'}</p> : null}
     </form>
   </section>
 }
@@ -1226,6 +1247,7 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
   const openOrders = commerce.orders.filter((order) => order.status !== 'completed' && order.status !== 'cancelled')
   const paymentReview = commerce.orders.filter((order) => order.refundStatus === 'due' || (order.status !== 'cancelled' && order.paymentStatus === 'pending'))
   const importedWebsiteOrderIds = commerce.orders.flatMap((order) => order.sourceRecordId ? [order.sourceRecordId] : [])
+  const websiteIntakes = commerceWebsiteIntakes(commerce)
 
   async function initializeManagedCatalog(event: FormEvent) {
     event.preventDefault()
@@ -1244,14 +1266,14 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
     const proof: CommerceActionProof = {
       actionId: uid('ACT'),
       capturedAt: new Date().toISOString(),
-      actor: managedIdentity.email,
+      actor: managedIdentity.userId,
       reason,
       evidenceReference,
     }
     setCatalogBusy(true)
     setCatalogError('')
     try {
-      await mutateCommerce('commerce.workspace.initialized', commandUuid(), proof, (current) => current.items.length || current.orders.length || current.movements.length || current.closes.length ? null : validateCommerceState({
+      await mutateCommerce('commerce.workspace.initialized', commandUuid(), proof, (current) => current.items.length || current.orders.length || current.movements.length || current.closes.length || commerceWebsiteIntakes(current).length ? null : validateCommerceState({
         ...current,
         items: [{ sku: skuValue, name, onHand, reorderAt, price }],
       }))
@@ -1288,18 +1310,27 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
 
   const sourceNotice = <p className="form-notice commerce-source-notice" role="status">{managedIdentity ? `Managed workspace ${managedIdentity.workspaceId} · revision ${managedVersion ?? 0} · writes are confirmed by the tenant API.` : 'Browser demo · data stays on this device and is not a managed business record.'}</p>
 
-  function queueAction(action: Omit<PendingAccountableAction, 'id' | 'commandId' | 'domain'>) {
+  function queueAction(action: Omit<PendingAccountableAction, 'id' | 'commandId' | 'domain'>): boolean {
     if (pendingAction) {
       setNotice(`Finish or cancel ${pendingAction.id} before reviewing another change.`)
-      return
+      return false
     }
     setPendingAction({ ...action, id: uid('ACT'), commandId: commandUuid(), domain: 'commerce' })
     setNotice('Review the change, accountable operator, and evidence before it is applied.')
+    return true
   }
 
   async function confirmAction(details: ActionDetails) {
     if (!pendingAction) return
-    const record = confirmAccountableAction(pendingAction, details)
+    const record = confirmAccountableAction(
+      pendingAction,
+      managedIdentity ? { ...details, actor: managedIdentity.userId } : details,
+    )
+    if (!pendingAction.confirmation) {
+      setPendingAction((current) => current?.id === pendingAction.id
+        ? { ...current, confirmation: record }
+        : current)
+    }
     await pendingAction.apply(record)
     if (!managedIdentity) setActions((current) => [record, ...current])
     setNotice(managedIdentity ? `${record.id} confirmed by the managed Commerce API.` : `${record.id} applied and added to the action history.`)
@@ -1377,6 +1408,34 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
     })
   }
 
+  function queueManagedWebsiteIntake(intakeId: string, input: CommerceWebsiteOrderInput): boolean {
+    const intake = websiteIntakes.find((candidate) => candidate.id === intakeId && candidate.status === 'pending_confirmation')
+    const item = intake ? commerce.items.find((candidate) => candidate.sku === intake.sku) : null
+    if (!intake || !item || item.onHand < intake.quantity || item.price !== intake.unitPrice) {
+      setNotice('Managed Website intake failed closed. Recheck the retained intake, catalog price, and available stock.')
+      return false
+    }
+    const orderId = `ORD-WEB-${intake.id.slice(5)}`
+    if (pendingAction?.kind === 'order_create' && pendingAction.subjectId === orderId) {
+      setNotice(`${orderId} is already waiting for authenticated confirmation.`)
+      return true
+    }
+    const fulfilment = input.fulfilmentMethod === 'pickup' ? 'Customer pickup' : 'Local delivery'
+    return queueAction({
+      kind: 'order_create',
+      subjectId: orderId,
+      summary: `Confirm ${orderId} from Website`,
+      before: `${intake.id} waiting · ${item.onHand} on hand`,
+      after: `${fulfilment} · ${item.onHand - intake.quantity} on hand`,
+      apply: (action) => mutateCommerce(
+        'commerce.website_intake.converted',
+        action.commandId,
+        commerceActionProof(action),
+        (current) => convertCommerceWebsiteIntake(current, intake.id, input, commerceActionProof(action)),
+      ),
+    })
+  }
+
   function advanceOrder(orderId: string) {
     const order = commerce.orders.find((candidate) => candidate.id === orderId)
     if (!order || order.status === 'completed' || order.status === 'cancelled') return
@@ -1424,9 +1483,9 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
     queueAction({ kind: 'daily_close', subjectId: close.id, summary: `Save ${close.id} daily close`, before: `${commerce.closes.length} snapshots`, after: `${commerce.closes.length + 1} snapshots · ${formatMoney(close.total)}`, apply: (action) => mutateCommerce('commerce.close.saved', action.commandId, commerceActionProof(action), (current) => current.closes.some((candidate) => candidate.id === close.id) ? current : { ...current, closes: [close, ...current.closes] }) })
   }
 
-  const actionControls = <><AccountableActionGate key={pendingAction?.id ?? 'commerce-idle'} action={pendingAction} onCancel={() => setPendingAction(null)} onConfirm={confirmAction} />{managedIdentity ? null : <ActionHistory actions={actions} domain="commerce" />}</>
+  const actionControls = <><AccountableActionGate authenticatedActor={managedIdentity ? { id: managedIdentity.userId, label: managedIdentity.email } : undefined} key={pendingAction?.id ?? 'commerce-idle'} action={pendingAction} onCancel={() => setPendingAction(null)} onConfirm={confirmAction} />{managedIdentity ? null : <ActionHistory actions={actions} domain="commerce" />}</>
 
-  if (tab === 'orders') return <div className="operation-module">{sourceNotice}<WebsiteCommerceIntake catalog={commerce.items} importedSourceIds={importedWebsiteOrderIds} onQueueReadyOrder={queueWebsiteOrder} /><div className="split-workspace order-view">
+  if (tab === 'orders') return <div className="operation-module">{sourceNotice}<WebsiteCommerceIntake catalog={commerce.items} importedSourceIds={importedWebsiteOrderIds} key={`${managedIdentity ? 'managed' : 'local'}:${websiteIntakes.find((intake) => intake.status === 'pending_confirmation')?.id ?? 'none'}`} managedIntakes={websiteIntakes} mode={managedIdentity ? 'managed' : 'local'} onQueueManagedIntake={queueManagedWebsiteIntake} onQueueReadyOrder={queueWebsiteOrder} /><div className="split-workspace order-view">
     <section className="core-panel order-form-panel">
       <div className="panel-head"><div><span className="core-eyebrow">Channel order</span><h2>Enter an order</h2></div><span className="status-pill ready">Stock checked</span></div>
       <form className="core-form compact-form" onSubmit={recordOrder}>
@@ -1560,6 +1619,11 @@ function ProductionPage({ tab }: { tab: ProductionTab }) {
     if (!pendingAction) return
     const action = pendingAction
     const record = confirmAccountableAction(action, details)
+    if (!action.confirmation) {
+      setPendingAction((current) => current?.id === action.id
+        ? { ...current, confirmation: record }
+        : current)
+    }
     await action.apply(record)
     setActions((current) => [record, ...current])
     setNotice(`${record.id} persisted with attributed Production evidence.`)

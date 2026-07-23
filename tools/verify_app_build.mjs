@@ -113,6 +113,7 @@ const websiteTabsContract = websiteSource.slice(websiteSource.indexOf('const wor
 if ((websiteTabsContract.match(/^\s*\{ id:/gm) || []).length !== 3 || !websiteTabsContract.includes("label: 'Content'") || !websiteTabsContract.includes("label: 'Navigation'") || !websiteTabsContract.includes("label: 'Publish'") || !websiteSource.includes('role="tablist"') || !websiteSource.includes('role="tabpanel"') || !websiteSource.includes("event.key === 'ArrowRight'") || !websiteSource.includes('tabIndex={view === item.id ? 0 : -1}')) fail('website_three_view_accessibility_contract_changed')
 const websiteMobileCss = websiteCssSource.slice(websiteCssSource.indexOf('@media (max-width: 640px)'), websiteCssSource.indexOf('@media (prefers-reduced-motion'))
 if (!websiteMobileCss.includes('.website-preview-controls') || !websiteMobileCss.includes('display: flex') || websiteMobileCss.includes('.website-preview-controls {\n    display: none')) fail('website_mobile_review_controls_hidden')
+if (!websiteMobileCss.includes('.website-handoff-controls input') || !websiteMobileCss.includes('min-height: 44px') || !websiteMobileCss.includes('font-size: 12px')) fail('website_mobile_handoff_controls_undersized')
 if (!commerceIntakeSource.includes('Browser-local evidence only.') || !commerceIntakeSource.includes('No customer message, payment, delivery request, or external write occurs.')) fail('commerce_intake_boundary_missing')
 if (!handoffSource.includes("schema: 'website_ecommerce_handoff.v1'") || !handoffSource.includes("state: 'pending_acceptance'") || !handoffSource.includes('hasExactKeys') || !handoffSource.includes('validateAgainstWorkspace') || !handoffSource.includes('readinessChecks(workspace, fingerprint).every') || !handoffSource.includes('acceptWebsiteEcommerceHandoff')) fail('website_ecommerce_handoff_contract_missing')
 const handoffIntakeSource = handoffSource.slice(handoffSource.indexOf('type HandoffIntake'), handoffSource.indexOf('type PendingHandoff'))
@@ -120,7 +121,12 @@ if (!handoffIntakeSource.includes('sku: string') || !handoffIntakeSource.include
 if (!handoffSource.includes("actorKind: 'human'") || !handoffSource.includes("action: 'accept_website_handoff'") || !handoffSource.includes('audit: [audit]') || !handoffSource.includes("existing.handoff.state === 'accepted'") || !handoffSource.includes('setItem(WEBSITE_ECOMMERCE_HANDOFF_KEY, JSON.stringify(store))')) fail('website_handoff_atomic_audit_missing')
 if (!handoffSource.includes("schema: 'ecommerce_order_draft.v1'") || !handoffSource.includes("mode: 'browser-local'") || !handoffSource.includes("schema: 'website_ecommerce_handoff_store.v2'") || !handoffSource.includes('createWebsiteOrderDraft') || !handoffSource.includes('idempotencyKey: current.handoff.id') || !handoffSource.includes("missingFields: ['customer_reference', 'fulfilment_method', 'payment_method']") || !handoffSource.includes('current.draft.idempotencyKey === handoffId') || !handoffSource.includes('if (!current.display) return null')) fail('ecommerce_order_draft_contract_missing')
 if (!handoffSource.includes("schema: 'ecommerce_order_record.v1'") || !handoffSource.includes("schema: 'website_ecommerce_handoff_store.v3'") || !handoffSource.includes("state: 'ready_for_confirmation'") || !handoffSource.includes("action: 'complete_website_order'") || !handoffSource.includes('customerReferenceFor(current.handoff.id)') || !handoffSource.includes('websiteEvidenceReference: current.handoff.source.localPublishId') || !handoffSource.includes('completionMatches(current.order, input)') || !handoffSource.includes('globalThis.navigator.locks.request') || !handoffSource.includes('if (!isHandoffStore(store)) return null')) fail('ecommerce_order_completion_contract_missing')
-if (!websiteSource.includes('approvalIsCurrent || !publishIsCurrent') || !websiteSource.includes('checks.every((check) => check.passed)') || !websiteSource.includes('writeWebsiteEcommerceHandoff(handoff, workspace)') || !publishSource.includes('fingerprint is a revision marker, not a signature')) fail('website_handoff_gate_missing')
+if (!websiteSource.includes('approvalIsCurrent || !publishIsCurrent')
+  || !websiteSource.includes('checks.every((check) => check.passed)')
+  || !websiteSource.includes('writeWebsiteEcommerceHandoff(handoff, workspace)')
+  || !websiteSource.includes('createCommerceWebsiteIntake(current')
+  || !websiteSource.includes("storageMode === 'managed' ? 'managed' : 'local'")
+  || !publishSource.includes('No stock, payment, customer message, or order changes')) fail('website_handoff_gate_missing')
 if (!commerceIntakeSource.includes('acceptWebsiteEcommerceHandoff') || !commerceIntakeSource.includes('matches.length === 1') || !commerceIntakeSource.includes('createWebsiteOrderDraft(context.handoff.id') || !commerceIntakeSource.includes('I reviewed this SKU, quantity, and Website evidence.')) fail('commerce_intake_approval_contract_missing')
 if (!commerceIntakeSource.includes('await completeWebsiteOrderDraft') || !commerceIntakeSource.includes('opaque customer reference generated on completion') || !commerceIntakeSource.includes('Create ready order') || !commerceIntakeSource.includes('Confirm into orders')) fail('commerce_order_completion_ui_missing')
 if (!coreSource.includes('function queueWebsiteOrder') || !coreSource.includes('sourceRecordId') || !coreSource.includes('item.price !== line.unitPriceMmk') || !coreSource.includes('Website order confirmation failed closed') || !coreSource.includes('Confirm ${record.id} from Website')) fail('website_order_not_integrated_with_commerce')
@@ -129,10 +135,12 @@ if (!commerceSource.includes("CommercePaymentStatus = 'pending' | 'reconciled'")
 if (!commerceSource.includes('commerceOrderHasReleasableReservation') || !commerceSource.includes("movement.kind === 'reserve'") || !commerceSource.includes("movement.kind === 'release'") || !commerceSource.includes("kind: 'receipt'")) fail('commerce_stock_ledger_contract_missing')
 if (!commerceSource.includes('Recovery failed closed') || !commerceSource.includes('currentRaw !== null') || !commerceSource.includes("movements: []")) fail('commerce_migration_fail_closed_contract_missing')
 if (!managedTrialSource.includes('saveManagedCommerceCommand') || !managedTrialSource.includes('expected_version: request.expectedVersion') || !managedTrialSource.includes("surface: 'commerce'") || !managedTrialSource.includes('payload: { state: request.state, evidence: request.evidence }')) fail('managed_commerce_command_client_missing')
-for (const eventType of ['commerce.workspace.initialized', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.payment.reconciled', 'commerce.stock.received', 'commerce.close.saved']) {
-  if (!coreSource.includes(eventType) || !managedCommerceRuntime.includes(eventType)) fail(`managed_commerce_event_missing:${eventType}`)
+const managedCommerceClientSources = `${coreSource}\n${websiteSource}`
+for (const eventType of ['commerce.workspace.initialized', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.payment.reconciled', 'commerce.stock.received', 'commerce.close.saved', 'commerce.website_intake.created', 'commerce.website_intake.converted']) {
+  if (!managedCommerceClientSources.includes(eventType) || !managedCommerceRuntime.includes(eventType)) fail(`managed_commerce_event_missing:${eventType}`)
 }
 if (!coreSource.includes("mode: 'managed-unprovisioned'") || !coreSource.includes('No browser demo orders, customers, or stock records are copied') || !coreSource.includes('Create managed catalog') || !coreSource.includes('Opening balance reason') || !coreSource.includes('result.version !== current.version + 1') || !coreSource.includes('validateCommerceState(result.state)') || !coreSource.includes("error.code === 'trial_version_conflict'") || !coreSource.includes('managedIdentity ? null : <ActionHistory')) fail('managed_commerce_ui_not_fail_closed')
+if (!coreSource.includes('confirmation?: AccountableAction') || !coreSource.includes('if (action.confirmation) return action.confirmation') || !coreSource.includes('Retry same confirmation') || !coreSource.includes('result.idempotent_replay') || !coreSource.includes('before the replay could be reconciled')) fail('managed_command_retry_not_frozen_or_reconciled')
 if (!managedCommerceRuntime.includes('commerce.workspace.initialized') || managedCommerceRuntime.includes('commerce.snapshot.saved') || !managedCommerceRuntime.includes('_one_changed') || !managedCommerceRuntime.includes('_validate_event_evidence') || !managedCommerceRuntime.includes('daily close totals must match completed, reconciled orders')) fail('managed_commerce_server_transition_contract_missing')
 if (!coreSource.includes("const commerceTabs") || !coreSource.includes("{ id: 'today', label: 'Today' }") || !coreSource.includes("{ id: 'orders', label: 'Orders' }") || !coreSource.includes("{ id: 'inventory', label: 'Inventory' }") || coreSource.includes("{ id: 'payments'")) fail('commerce_three_tab_contract_changed')
 if (!productionSource.includes("supermega.production.workspace.v2") || !productionSource.includes('mutateProductionWorkspace') || !productionSource.includes('lockManager.request') || !productionSource.includes('next.revision !== current.revision + 1')) fail('production_v2_locked_store_missing')
@@ -661,6 +669,62 @@ async function verifyCommerceRuntime() {
       ...model.createEmptyCommerce(),
       items: [{ sku: 'SKU-1', name: 'Test item', onHand: 10, reorderAt: 2, price: 100 }],
     }
+    assertThrows(() => model.validateCommerceState({
+      ...base,
+      closes: [{ id: 'CLOSE-NO-ZONE', createdAt: '2026-07-23T09:00:00', total: 0, orders: 0 }],
+    }), 'timezone_less_commerce_timestamp_succeeded')
+    const websiteSource = {
+      fingerprint: 'web-1234abcd',
+      approvalId: 'approval-1',
+      snapshotId: 'snapshot-1',
+      pageId: 'page-products',
+      siteName: 'Test Website',
+      pagePath: '/products',
+    }
+    const intakeProof = proof('ACT-WEBSITE-INTAKE')
+    const intake = model.createCommerceWebsiteIntake(base, {
+      id: 'WINT-12345678',
+      source: websiteSource,
+      sku: 'SKU-1',
+      quantity: 2,
+    }, intakeProof)
+    assert(intake?.websiteIntakes?.length === 1 && intake.websiteIntakes[0].status === 'pending_confirmation', 'managed_website_intake_not_recorded')
+    assert(intake.items[0].onHand === 10 && intake.orders.length === 0 && intake.movements.length === 0, 'managed_website_intake_moved_stock_or_created_order')
+    assert(model.createCommerceWebsiteIntake(intake, {
+      id: 'WINT-OTHER123',
+      source: websiteSource,
+      sku: 'SKU-1',
+      quantity: 2,
+    }, proof('ACT-WEBSITE-RETRY')) === intake, 'managed_website_source_retry_not_idempotent')
+    assert(model.createCommerceWebsiteIntake(intake, {
+      id: 'WINT-CONFLICT1',
+      source: websiteSource,
+      sku: 'SKU-1',
+      quantity: 3,
+    }, proof('ACT-WEBSITE-CONFLICT')) === null, 'managed_website_source_conflict_succeeded')
+    const conversionProof = proof('ACT-WEBSITE-CONVERT', 1_000)
+    const convertedIntake = model.convertCommerceWebsiteIntake(intake, 'WINT-12345678', {
+      customer: 'Customer reference',
+      fulfilmentMethod: 'local_delivery',
+      paymentMethod: 'manual_qr',
+    }, conversionProof)
+    assert(convertedIntake?.websiteIntakes?.[0].status === 'converted' && convertedIntake.websiteIntakes[0].conversion.orderId === 'ORD-WEB-12345678', 'managed_website_intake_not_converted')
+    assert(convertedIntake.items[0].onHand === 8 && convertedIntake.orders[0].sourceRecordId === 'WINT-12345678' && convertedIntake.movements[0].quantityDelta === -2, 'managed_website_conversion_not_atomic')
+    assertThrows(() => model.validateCommerceState({
+      ...convertedIntake,
+      movements: [{ ...convertedIntake.movements[0], actor: 'spoofed-actor' }, ...convertedIntake.movements.slice(1)],
+    }), 'managed_website_conversion_reservation_proof_mismatch_succeeded')
+    assert(model.convertCommerceWebsiteIntake(convertedIntake, 'WINT-12345678', {
+      customer: 'Customer reference',
+      fulfilmentMethod: 'local_delivery',
+      paymentMethod: 'manual_qr',
+    }, conversionProof) === convertedIntake, 'managed_website_conversion_retry_not_idempotent')
+    assert(model.convertCommerceWebsiteIntake(intake, 'WINT-12345678', {
+      customer: 'Customer reference',
+      fulfilmentMethod: 'local_delivery',
+      paymentMethod: 'manual_qr',
+    }, { ...conversionProof, actionId: intakeProof.actionId }) === null, 'managed_website_action_id_reuse_succeeded')
+
     const order = {
       id: 'ORD-1',
       createdAt: '2026-07-23T09:00:00.000Z',
