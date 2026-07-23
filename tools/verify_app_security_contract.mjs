@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 
 const root = resolve(import.meta.dirname, '..')
 const read = (path) => readFile(resolve(root, path), 'utf8')
-const [runtime, supabaseAuth, cloudRuntime, vercelEntry, portableEntry, trialRuntime, trialStore, websiteRuntime, managedTrialClient, coreApp, foundationMigration, decisionMigration, websiteMigration, databaseValidator, databaseActivator, liveVerifier, workflow, requirements, dockerfile, appEnvironment] = await Promise.all([
+const [runtime, supabaseAuth, cloudRuntime, vercelEntry, portableEntry, trialRuntime, trialStore, commerceRuntime, websiteRuntime, managedTrialClient, coreApp, foundationMigration, decisionMigration, websiteMigration, databaseValidator, databaseActivator, liveVerifier, workflow, requirements, dockerfile, appEnvironment] = await Promise.all([
   read('supermega_runtime/runtime.py'),
   read('supermega_runtime/supabase_auth.py'),
   read('supermega_runtime/cloud_runtime.py'),
@@ -11,6 +11,7 @@ const [runtime, supabaseAuth, cloudRuntime, vercelEntry, portableEntry, trialRun
   read('api_app.py'),
   read('supermega_runtime/trial_runtime.py'),
   read('supermega_runtime/trial_store.py'),
+  read('supermega_runtime/commerce_runtime.py'),
   read('supermega_runtime/website_runtime.py'),
   read('showroom/src/core/managed-trial.ts'),
   read('showroom/src/core/CoreApp.tsx'),
@@ -39,6 +40,21 @@ const requireContract = (name, condition) => {
   checks.push(name)
   if (!condition) failures.push(name)
 }
+const expectedHumanCommerceEvents = [
+  'commerce.close.saved',
+  'commerce.item.created',
+  'commerce.order.advanced',
+  'commerce.order.cancelled',
+  'commerce.order.created',
+  'commerce.payment.reconciled',
+  'commerce.stock.received',
+  'commerce.website_intake.converted',
+  'commerce.workspace.initialized',
+]
+const humanEventList = (source, start, end) => {
+  const contract = source.slice(source.indexOf(start), source.indexOf(end))
+  return [...contract.matchAll(/"(commerce\.[^"]+)"/g)].map((match) => match[1]).sort()
+}
 
 requireContract('Vercel entrypoint uses canonical runtime', /from supermega_runtime\.runtime import app/.test(vercelEntry) && !/serve_solution/.test(vercelEntry))
 requireContract('portable entrypoint uses canonical runtime', /from supermega_runtime\.runtime import app/.test(portableEntry) && !/serve_solution/.test(portableEntry))
@@ -63,7 +79,10 @@ requireContract('commands are idempotent', /TrialIdempotencyConflict/.test(trial
 requireContract('company queue is a managed surface', /"company": "company\.write"/.test(trialStore) && /when 'company' then 'company\.write'/.test(migration))
 requireContract('Website is an authenticated managed surface', /"website": "website\.write"/.test(trialStore) && /reduce_website_state/.test(runtime) && /WEBSITE_HUMAN_EVENTS/.test(trialRuntime) && /when 'website' then 'website\.write'/.test(websiteMigration) && /saveManagedWebsiteCommand/.test(managedTrialClient) && /validate_website_state/.test(websiteRuntime) && /evidence\["actor"\] == event\["actor"\] == record\[actor_field\]/.test(websiteRuntime) && /exact current ready-page set/.test(websiteRuntime) && /sort_keys=True/.test(websiteRuntime))
 requireContract('Website Commerce intake source is transactionally verified with replay-safe retained proof', /commerce\.website_intake\.created/.test(trialRuntime) && /validate_website_snapshot_source/.test(trialRuntime) && /related_surfaces = \("website",\)/.test(trialRuntime) && /state_precondition=state_precondition/.test(trialRuntime) && /_commerce_retains_website_source/.test(trialRuntime) && /_website_fingerprint\(state\) != fingerprint/.test(websiteRuntime) && /not _same_source\(snapshot\["source"\], current_source\)/.test(websiteRuntime) && /locked_surfaces/.test(trialStore) && /for update/i.test(trialStore))
-requireContract('consequential Commerce conversion is human-only in router and store', /COMMERCE_HUMAN_EVENTS/.test(trialRuntime) && /HUMAN_COMMAND_EVENTS = frozenset\(\{"commerce\.website_intake\.converted"\}\)/.test(trialStore) && /TrialHumanApprovalRequired/.test(trialStore))
+requireContract('consequential Commerce events are human-only in router and store', /COMMERCE_HUMAN_EVENTS/.test(trialRuntime)
+  && JSON.stringify(humanEventList(trialStore, 'HUMAN_COMMAND_EVENTS', 'SURFACE_WRITE_CAPABILITIES')) === JSON.stringify(expectedHumanCommerceEvents)
+  && JSON.stringify(humanEventList(commerceRuntime, 'COMMERCE_HUMAN_EVENTS', '_ORDER_STATUSES')) === JSON.stringify(expectedHumanCommerceEvents)
+  && /TrialHumanApprovalRequired/.test(trialStore))
 requireContract('audit events are immutable', /workspace_events_immutable/.test(migration) && /reject_workspace_event_mutation/.test(migration))
 requireContract('private schema forces RLS', /create schema if not exists app_private/.test(migration) && /force row level security/gi.test(migration))
 requireContract('browser roles have no private schema grant', /revoke all on schema app_private from public, anon, authenticated, service_role/.test(migration))

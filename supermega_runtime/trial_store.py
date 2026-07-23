@@ -18,7 +18,19 @@ TRIAL_SCHEMA_VERSION = 3
 TRIAL_SURFACES = frozenset({"company", "commerce", "production", "website", "setup"})
 TRUSTED_ACTOR_KINDS = frozenset({"human", "service", "agent"})
 HUMAN_ACTOR_KIND = "human"
-HUMAN_COMMAND_EVENTS = frozenset({"commerce.website_intake.converted"})
+HUMAN_COMMAND_EVENTS = frozenset(
+    {
+        "commerce.workspace.initialized",
+        "commerce.item.created",
+        "commerce.order.created",
+        "commerce.order.advanced",
+        "commerce.order.cancelled",
+        "commerce.payment.reconciled",
+        "commerce.stock.received",
+        "commerce.close.saved",
+        "commerce.website_intake.converted",
+    }
+)
 SURFACE_WRITE_CAPABILITIES = {
     "company": "company.write",
     "commerce": "commerce.write",

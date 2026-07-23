@@ -247,7 +247,7 @@ class TrialRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(self.reducer.calls, 0)
 
-    def test_commerce_commands_bind_actor_evidence_and_human_conversion(self) -> None:
+    def test_commerce_commands_bind_actor_evidence_and_human_authority(self) -> None:
         spoofed = self.client.post(
             "/api/trial/v1/commands",
             headers=self._headers(),
@@ -280,17 +280,30 @@ class TrialRuntimeTests(unittest.TestCase):
             actor_kind="agent",
             capabilities=("website.write", "approvals.decide", "commerce.write"),
         )
-        agent = self.client.post(
-            "/api/trial/v1/commands",
-            headers=self._headers("agent-manager-session"),
-            json=self._command_body(
-                actor="actor-agent-manager",
-                event_type="commerce.website_intake.converted",
-                expected_version=1,
-            ),
+        human_only_events = (
+            "commerce.workspace.initialized",
+            "commerce.item.created",
+            "commerce.order.created",
+            "commerce.order.advanced",
+            "commerce.order.cancelled",
+            "commerce.payment.reconciled",
+            "commerce.stock.received",
+            "commerce.close.saved",
+            "commerce.website_intake.converted",
         )
-        self.assertEqual(agent.status_code, 403)
-        self.assertEqual(agent.json()["detail"]["code"], "trial_human_approval_required")
+        for event_type in human_only_events:
+            with self.subTest(event_type=event_type):
+                agent = self.client.post(
+                    "/api/trial/v1/commands",
+                    headers=self._headers("agent-manager-session"),
+                    json=self._command_body(
+                        actor="actor-agent-manager",
+                        event_type=event_type,
+                        expected_version=1,
+                    ),
+                )
+                self.assertEqual(agent.status_code, 403)
+                self.assertEqual(agent.json()["detail"]["code"], "trial_human_approval_required")
 
     def test_retained_website_source_preserves_exact_command_replay_only(self) -> None:
         source = {

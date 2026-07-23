@@ -217,7 +217,7 @@ class TrialStoreTests(unittest.TestCase):
         self.assertEqual(self.reducer.calls, calls_before_rejection)
         self.assertEqual(self.store.get_state(self.operator, "commerce").state["intake"], "retained")
 
-    def test_store_enforces_human_only_commerce_conversion(self) -> None:
+    def test_store_enforces_human_only_consequential_commerce_events(self) -> None:
         self.store.provision_membership(
             workspace_id="workspace-a",
             actor_id="actor-agent-manager",
@@ -225,15 +225,27 @@ class TrialStoreTests(unittest.TestCase):
             capabilities=("commerce.write",),
         )
         calls_before_rejection = self.reducer.calls
-        with self.assertRaises(TrialHumanApprovalRequired):
-            self.store.apply_command(
-                self.agent_manager,
-                command_id=str(uuid4()),
-                surface="commerce",
-                event_type="commerce.website_intake.converted",
-                expected_version=0,
-                payload={"changes": {"status": "converted"}},
-            )
+        human_only_events = (
+            "commerce.workspace.initialized",
+            "commerce.item.created",
+            "commerce.order.created",
+            "commerce.order.advanced",
+            "commerce.order.cancelled",
+            "commerce.payment.reconciled",
+            "commerce.stock.received",
+            "commerce.close.saved",
+            "commerce.website_intake.converted",
+        )
+        for event_type in human_only_events:
+            with self.subTest(event_type=event_type), self.assertRaises(TrialHumanApprovalRequired):
+                self.store.apply_command(
+                    self.agent_manager,
+                    command_id=str(uuid4()),
+                    surface="commerce",
+                    event_type=event_type,
+                    expected_version=0,
+                    payload={"changes": {"status": "agent-write-blocked"}},
+                )
         self.assertEqual(self.reducer.calls, calls_before_rejection)
 
     def test_write_requires_explicit_surface_capability(self) -> None:

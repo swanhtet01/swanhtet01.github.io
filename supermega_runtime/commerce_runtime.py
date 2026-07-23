@@ -26,7 +26,19 @@ COMMERCE_EVENTS = frozenset(
         "commerce.website_intake.converted",
     }
 )
-COMMERCE_HUMAN_EVENTS = frozenset({"commerce.website_intake.converted"})
+COMMERCE_HUMAN_EVENTS = frozenset(
+    {
+        "commerce.workspace.initialized",
+        "commerce.item.created",
+        "commerce.order.created",
+        "commerce.order.advanced",
+        "commerce.order.cancelled",
+        "commerce.payment.reconciled",
+        "commerce.stock.received",
+        "commerce.close.saved",
+        "commerce.website_intake.converted",
+    }
+)
 _ORDER_STATUSES = ("confirmed", "preparing", "ready", "completed", "cancelled")
 _NEXT_ORDER_STATUS = {"confirmed": "preparing", "preparing": "ready", "ready": "completed"}
 _PAYMENT_STATUSES = ("pending", "reconciled")

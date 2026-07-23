@@ -230,7 +230,19 @@ class CommerceRuntimeTests(unittest.TestCase):
 
         self.assertEqual(
             COMMERCE_HUMAN_EVENTS,
-            frozenset({"commerce.website_intake.converted"}),
+            frozenset(
+                {
+                    "commerce.workspace.initialized",
+                    "commerce.item.created",
+                    "commerce.order.created",
+                    "commerce.order.advanced",
+                    "commerce.order.cancelled",
+                    "commerce.payment.reconciled",
+                    "commerce.stock.received",
+                    "commerce.close.saved",
+                    "commerce.website_intake.converted",
+                }
+            ),
         )
 
     def test_website_intake_creation_records_no_order_or_stock_movement(self) -> None:
