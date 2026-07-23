@@ -5,10 +5,14 @@ type SitePreviewProps = {
   page: WebsitePage
   pages: WebsitePage[]
   siteName: string
+  onSelectPage: (pageId: string) => void
 }
 
-export function SitePreview({ device, page, pages, siteName }: SitePreviewProps) {
+export function SitePreview({ device, page, pages, siteName, onSelectPage }: SitePreviewProps) {
   const visiblePages = pages.filter((candidate) => candidate.navigation.visible)
+  const ctaHref = page.hero.ctaHref.trim()
+  const ctaPage = pages.find((candidate) => candidate.slug === ctaHref)
+  const safeStandaloneCta = ctaHref.startsWith('https://') || ctaHref.startsWith('#') ? ctaHref : ''
 
   return (
     <section className="website-preview-panel" aria-labelledby="site-preview-title">
@@ -28,9 +32,15 @@ export function SitePreview({ device, page, pages, siteName }: SitePreviewProps)
               <strong><span aria-hidden="true">&gt;_</span>{siteName || 'Untitled site'}</strong>
               <nav aria-label="Preview navigation">
                 {visiblePages.map((candidate) => (
-                  <span className={candidate.id === page.id ? 'is-current' : ''} key={candidate.id}>
+                  <button
+                    aria-current={candidate.id === page.id ? 'page' : undefined}
+                    className={candidate.id === page.id ? 'is-current' : ''}
+                    key={candidate.id}
+                    onClick={() => onSelectPage(candidate.id)}
+                    type="button"
+                  >
                     {candidate.navigation.label || candidate.internalName}
-                  </span>
+                  </button>
                 ))}
               </nav>
               <i aria-hidden="true">MENU</i>
@@ -41,7 +51,21 @@ export function SitePreview({ device, page, pages, siteName }: SitePreviewProps)
                 <span>{page.hero.eyebrow || 'Page eyebrow'}</span>
                 <h1>{page.hero.headline || 'Add a clear page headline.'}</h1>
                 <p>{page.hero.summary || 'The page summary will appear here as you write.'}</p>
-                {page.hero.ctaLabel ? <b>{page.hero.ctaLabel}<i aria-hidden="true">→</i></b> : null}
+                {page.hero.ctaLabel && ctaPage ? (
+                  <button className="preview-cta" onClick={() => onSelectPage(ctaPage.id)} type="button">
+                    {page.hero.ctaLabel}<i aria-hidden="true">→</i>
+                  </button>
+                ) : null}
+                {page.hero.ctaLabel && !ctaPage && safeStandaloneCta ? (
+                  <a className="preview-cta" href={safeStandaloneCta} rel="noreferrer" target="_blank">
+                    {page.hero.ctaLabel}<i aria-hidden="true">→</i>
+                  </a>
+                ) : null}
+                {page.hero.ctaLabel && !ctaPage && !safeStandaloneCta ? (
+                  <span aria-disabled="true" className="preview-cta is-disabled">
+                    {page.hero.ctaLabel}<i aria-hidden="true">→</i>
+                  </span>
+                ) : null}
               </section>
 
               <section className="preview-section-grid">

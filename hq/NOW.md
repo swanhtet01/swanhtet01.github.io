@@ -11,7 +11,7 @@ Prove one real workflow in which SuperMega keeps the operating record, a respons
 ## Current outcomes
 
 1. **Company system** — validate the simpler Today, Teams, and Operations shell plus one bounded internal agent handoff.
-2. **Product** — validate the Website-to-Commerce order flow without expanding primary navigation.
+2. **Product** — validate the revisioned Website-to-Commerce order flow without expanding primary navigation.
 3. **Pilot** — choose one Commerce or Production workflow with an owner, baseline, target, authority boundary, and evidence plan.
 4. **Managed mode** — keep activation locked until tenant data, identity, membership, audit, recovery, runtime role, and source coverage pass.
 
@@ -28,10 +28,12 @@ Prove one real workflow in which SuperMega keeps the operating record, a respons
 
 ## Latest verification
 
-- Candidate identity is brand `jade-v1-2026-07`, context `2026-07-23.3`, and catalogue `2026-07-23.3`.
-- Product-inclusive lint, strict TypeScript, HQ, one product prototype, one compatibility redirect, six workflow profiles, 12 order-completion checks, 34 Commerce state checks, 51 Production state checks, 48 release checks, 40 security checks, eleven Vercel contract checks, and six RLS checks pass locally.
+- Candidate identity is brand `jade-v1-2026-07`, context `2026-07-23.4`, and catalogue `2026-07-23.4`.
+- Product-inclusive lint, strict TypeScript, HQ, one product prototype, one compatibility redirect, six workflow profiles, 23 Website state checks, 12 order-completion checks, 34 Commerce state checks, 51 Production state checks, 48 release checks, 40 security checks, eleven Vercel contract checks, and six RLS checks pass locally.
 - Core desktop and 390 px paths have no horizontal overflow. Production output, issue creation, attributed resolution, machine-state change, reload persistence, confirmation focus, and all four event types pass in the local browser with no console error.
+- Website desktop and 390 px paths have no horizontal overflow. Content, Navigation, and Publish remain the only views; responsive controls remain visible; preview destinations are operable; arrow-key tab movement works; a migrated v1 approval stays historical; and a fresh evidence-bound approval plus approved snapshot persist after reload with no console error.
 - Team evidence and Product decisions require an attributed human reviewer. Agent handoffs cannot satisfy terminal authority.
+- Website v2 preserves valid v1 history without reopening legacy approval, confirms locked writes before UI success, merges independent evidence against unchanged content, rejects stale content edits, and binds approval and approved snapshots to the exact current evidence IDs. It remains browser-local and cannot deploy a site.
 - Website-to-Commerce intake remains non-PII and operator-gated. Its locked completion produces one idempotent `ready_for_confirmation` record; a separate accountable confirmation rechecks price and stock, inserts it once, and reserves local stock without a customer send, payment initiation, delivery request, or external write. Commerce v2 then serializes local writes, reconciles payment with human evidence, releases stock only from one proven reservation, preserves refund-due exceptions, and fails closed on malformed or unwritable storage.
 - Production v2 serializes local writes into one revisioned event record, preserves valid v1 records without fabricated history, rejects silent output clamping and stale machine changes, and retains issue-resolution proof. It remains browser-local and does not control machinery.
 - Production release still requires review, owner authorization, and the coordinated `main` workflow; a local pass or pushed branch is not a release.
