@@ -84,6 +84,7 @@ function secureUuid() {
 export function WebsiteProduct() {
   const { workspace, mutateWorkspace, storageMode, storageIssue, managedActorId } = useWebsiteWorkspace()
   const [view, setView] = useState<WorkspaceView>('content')
+  const [mobilePane, setMobilePane] = useState<'edit' | 'preview'>('edit')
   const [device, setDevice] = useState<PreviewDevice>('desktop')
   const [notice, setNotice] = useState('Website workspace loaded. No website has been deployed.')
   const [deleteCandidateId, setDeleteCandidateId] = useState('')
@@ -112,6 +113,11 @@ export function WebsiteProduct() {
     window.scrollTo({ top: 0, behavior: 'instant' })
   }, [])
 
+  function openWorkspaceView(nextView: WorkspaceView) {
+    setView(nextView)
+    setMobilePane('edit')
+  }
+
   async function commitWorkspace(update: WebsiteWorkspaceUpdate, success = '', durable = false) {
     const result = await mutateWorkspace(update, { durable })
     if (!result.ok) {
@@ -133,7 +139,7 @@ export function WebsiteProduct() {
     else return
     event.preventDefault()
     tabs[nextIndex]?.focus()
-    setView(workspaceViews[nextIndex].id)
+    openWorkspaceView(workspaceViews[nextIndex].id)
   }
 
   async function selectPage(pageId: string) {
@@ -165,7 +171,7 @@ export function WebsiteProduct() {
       return { ...current, pages: [...current.pages, page], selectedPageId: page.id }
     }, 'Draft page added. Complete its content before marking it ready.')
     if (result.ok && result.changed) {
-      setView('content')
+      openWorkspaceView('content')
       setDeleteCandidateId('')
     }
   }
@@ -182,7 +188,7 @@ export function WebsiteProduct() {
       return { ...current, pages: [...current.pages, page], selectedPageId: page.id }
     }, 'Draft copy added with navigation hidden.')
     if (result.ok && result.changed) {
-      setView('content')
+      openWorkspaceView('content')
       setDeleteCandidateId('')
     }
   }
@@ -425,7 +431,7 @@ export function WebsiteProduct() {
             : storageMode === 'browser-local'
               ? 'saved · content r' + String(workspace.contentRevision)
               : 'writes paused'}</small>
-          <button className="website-button is-primary is-compact" onClick={() => setView('publish')} type="button">
+          <button className="website-button is-primary is-compact" onClick={() => openWorkspaceView('publish')} type="button">
             Review publish
           </button>
         </div>
@@ -446,7 +452,7 @@ export function WebsiteProduct() {
                 aria-selected={view === item.id}
                 key={item.id}
                 onKeyDown={(event) => moveWorkspaceTabFocus(event, index)}
-                onClick={() => setView(item.id)}
+                onClick={() => openWorkspaceView(item.id)}
                 role="tab"
                 tabIndex={view === item.id ? 0 : -1}
                 type="button"
@@ -488,32 +494,38 @@ export function WebsiteProduct() {
           </footer>
         </aside>
 
-        <main id="website-workspace" className="website-main">
+        <main id="website-workspace" className={'website-main mobile-pane-' + mobilePane}>
           <header className="website-heading">
             <div>
               <span className="website-eyebrow">{activeViewCopy.eyebrow}</span>
               <h1>{activeViewCopy.title}</h1>
               <p>{activeViewCopy.copy}</p>
             </div>
-            <div className="website-preview-controls" role="group" aria-label="Responsive preview size">
-              <span>Preview</span>
-              {previewDevices.map((option) => (
-                <button
-                  aria-pressed={device === option.id}
-                  key={option.id}
-                  onClick={() => setDevice(option.id)}
-                  title={option.label + ' preview'}
-                  type="button"
-                >
-                  {option.label}
-                </button>
-              ))}
+            <div className="website-heading-actions">
+              <div className="website-mobile-pane-controls" role="group" aria-label="Mobile Website workspace">
+                <button aria-pressed={mobilePane === 'edit'} onClick={() => setMobilePane('edit')} type="button">Edit</button>
+                <button aria-pressed={mobilePane === 'preview'} onClick={() => setMobilePane('preview')} type="button">Preview</button>
+              </div>
+              <div className="website-preview-controls" role="group" aria-label="Responsive preview size">
+                <span>Preview</span>
+                {previewDevices.map((option) => (
+                  <button
+                    aria-pressed={device === option.id}
+                    key={option.id}
+                    onClick={() => setDevice(option.id)}
+                    title={option.label + ' preview'}
+                    type="button"
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </header>
 
           <div
             aria-label={workspaceViews.find((item) => item.id === view)?.label}
-            className={'website-workspace-grid view-' + view}
+            className={'website-workspace-grid view-' + view + ' mobile-pane-' + mobilePane}
             id="website-active-panel"
             role="tabpanel"
           >
