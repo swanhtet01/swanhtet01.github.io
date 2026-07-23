@@ -13,7 +13,7 @@ Prove one real workflow in which SuperMega keeps the operating record, a respons
 1. **Release candidate** — review one combined candidate for the simpler company system, product apps, and managed-backend safety gates.
 2. **Managed persistence** — rehearse the complete private-schema migration and runtime-role contract on isolated hosted PostgreSQL before production activation.
 3. **Pilot** — choose one Commerce or Production workflow with a named owner, baseline, target, authority boundary, and evidence plan.
-4. **Website delivery** — turn the current approved snapshot into one immutable, deterministic downloadable site artifact inside Publish, without adding another page or automatic deployment.
+4. **Website-to-Commerce proof** — rehearse one approved, retained site artifact through managed Commerce intake and human confirmation without adding automatic deployment or customer sends.
 5. **AI intake** — keep model execution disconnected until the source-backed order-intake evaluation passes without operational side effects.
 
 ## Current system
@@ -22,20 +22,20 @@ Prove one real workflow in which SuperMega keeps the operating record, a respons
 - Home reveals one accountable next action, then the three product entries.
 - Work has one team picker and three views: Work, Agents, and Review. On mobile, work records and agent roles use list-to-detail navigation; desktop keeps the split workspace.
 - Products contains Commerce, Production, and Website. No public agent catalogue, demo-domain collection, POS product, or separate internal-console product is in scope.
-- Commerce uses Today, Orders, and Stock. Production uses Today, Jobs, and Problems; Jobs includes one collapsed recurring-job intake rather than another module. Website uses Pages, Navigation, and Publish.
+- Commerce opens directly on Orders and has one second task, Stock; daily close and exceptions stay collapsed inside Orders. Production opens directly on Jobs and has one second task, Problems; Jobs keeps the completion context and one collapsed recurring-job intake. Website uses Pages, Navigation, and Publish.
 - Commerce, Production, and Website have authenticated tenant command paths. Managed Production starts from one real job and machine, copies no browser demo data, and requires human-bound evidence for job, output, issue, resolution, and machine-state commands.
-- Website is the only lazy-loaded product workspace at `/products/website/`. Its local mode is labelled, and its publish workflow records evidence and human approval without deploying a site or changing a domain.
+- Website is the only lazy-loaded product workspace at `/products/website/`. Its local mode is labelled, and an approved record retains ready public content plus one deterministic, self-contained site file without deploying a site or changing a domain.
 - The managed backend is the private `app_private` schema and dedicated runtime-role contract in Supabase Postgres. Browser code receives neither the database URL nor a service-role key.
 - Sends, payments, publishing, merges, deployments, access changes, and production writes remain responsible-human actions.
 - Vercel canonical mappings remain `app.supermega.dev` → `megaos`, and `supermega.dev` plus `www.supermega.dev` → `supermega-public`.
 
 ## Latest verification
 
-- Draft release candidate: GitHub PR `#258` on branch `agent/supermega-release-candidate`; GitHub is the source of truth for its pushed head `99a57f6385cfe582ded0e5c5c4034372d7899458`.
-- GitHub `SuperMega App CI` run `153` passed every validation job for pushed head `99a57f6385cfe582ded0e5c5c4034372d7899458`.
-- Candidate lint and build pass with 169 product/runtime checks, 50 coordinated-release checks, 44 security checks, 10 migration-chain checks, 11 Vercel environment/domain checks, and 96 Python tests.
-- Mobile and desktop audits cover Home, Products, Commerce, Production, Website, Work, Agents, and Settings. The public mobile Home stays under four viewport lengths with secondary detail closed by default. The bounded audit found no horizontal overflow, visible unlabeled controls, undersized visible controls, or browser warnings/errors.
-- No Vercel deployment was created by the release-candidate push.
+- Draft release candidate: GitHub PR `#258` on branch `agent/supermega-release-candidate`; its validated implementation head is `d0728bfb0d391af7ca6b558cf25a05f1fff68802`.
+- GitHub `SuperMega App CI` run `156` passed every validation job for pushed head `d0728bfb0d391af7ca6b558cf25a05f1fff68802`.
+- Candidate lint and build pass with 178 product/runtime checks, 50 coordinated-release checks, 44 security checks, 10 migration-chain checks, 11 Vercel environment/domain checks, and 96 Python tests.
+- Current desktop and 375px browser audits rechecked direct product entry, legacy route canonicalization, Commerce, and Production. Both products have two tasks, no horizontal overflow, no undersized visible controls, and no browser warnings or errors; the existing bounded candidate audit covers Home, Products, Website, Work, Agents, and Settings.
+- No Vercel deployment was created by the release-candidate push. The latest `megaos` and `supermega-public` production deployments still reference `main` commit `6885c3201d523d42d176c3dcd91de28dc1e17f6f`.
 - The connected `supermegabase` project is active and healthy on hosted PostgreSQL 17.6.1. Read-only inspection confirms `app_private`, `app_private.trial_schema_meta`, and `supermega_trial_backend` are not installed.
 - Supabase migration history currently contains one unrelated public-schema RLS migration, not the five SuperMega private-trial migrations.
 - Supabase Security Advisor currently reports 27 informational `rls_enabled_no_policy` findings on existing public tables. Performance Advisor reports 64 informational findings. These are existing-project findings, not proof that the SuperMega private schema is ready.
@@ -47,7 +47,6 @@ Prove one real workflow in which SuperMega keeps the operating record, a respons
 - The connected production project contains unrelated existing public-schema objects and advisor findings. Do not treat its healthy status or server version as application readiness.
 - Production still needs the server-only database URL, signing secret, explicit memberships/capabilities, writes-disabled smoke test, founder approval, and a separately authorized writes enablement.
 - No pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
-- Website approval still records metadata rather than retaining a reconstructable downloadable site artifact; this is the next bounded product-lifecycle gap.
 
 ## Decisions in force
 
