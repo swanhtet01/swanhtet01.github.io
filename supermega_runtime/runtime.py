@@ -20,6 +20,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from supermega_runtime.cloud_runtime import router as cloud_runtime_router
+from supermega_runtime.commerce_runtime import reduce_commerce_state
 from supermega_runtime.supabase_auth import SupabaseAuthConfig, verify_supabase_user_token
 from supermega_runtime.trial_runtime import create_trial_router
 from supermega_runtime.trial_store import (
@@ -33,7 +34,6 @@ SERVICE_NAME = "supermega-service"
 SERVICE_VERSION = "1.1.0"
 TRIAL_EVENT_BY_SURFACE = {
     "company": "company.snapshot.saved",
-    "commerce": "commerce.snapshot.saved",
     "production": "production.snapshot.saved",
     "setup": "setup.snapshot.saved",
 }
@@ -103,18 +103,21 @@ def _validate_state_shape(surface: str, state: Mapping[str, Any]) -> None:
 def reduce_trial_state(
     surface: str,
     event_type: str,
-    _current: Mapping[str, Any],
+    current: Mapping[str, Any],
     payload: Mapping[str, Any],
 ) -> Mapping[str, Any]:
-    """Allow one explicit, versioned snapshot command per product surface."""
+    """Reduce one bounded command, with explicit lifecycle rules for Commerce."""
 
-    expected_event = TRIAL_EVENT_BY_SURFACE.get(surface)
-    if event_type != expected_event:
-        raise TrialValidationError(f"event_type must be {expected_event or 'a supported snapshot event'}.")
-    if set(payload) != {"state"} or not isinstance(payload.get("state"), Mapping):
-        raise TrialValidationError("payload must contain exactly one object field named state.")
-    state = dict(payload["state"])
-    _validate_state_shape(surface, state)
+    if surface == "commerce":
+        state = reduce_commerce_state(event_type, current, payload)
+    else:
+        expected_event = TRIAL_EVENT_BY_SURFACE.get(surface)
+        if event_type != expected_event:
+            raise TrialValidationError(f"event_type must be {expected_event or 'a supported snapshot event'}.")
+        if set(payload) != {"state"} or not isinstance(payload.get("state"), Mapping):
+            raise TrialValidationError("payload must contain exactly one object field named state.")
+        state = dict(payload["state"])
+        _validate_state_shape(surface, state)
     try:
         encoded = json.dumps(state, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
     except (TypeError, ValueError) as exc:

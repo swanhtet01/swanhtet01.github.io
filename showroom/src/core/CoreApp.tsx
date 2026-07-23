@@ -11,11 +11,15 @@ import {
   currentManagedWorkspace,
   decideManagedApproval,
   loadManagedBootstrap,
+  ManagedTrialError,
   managedTrialAuthConfigured,
+  saveManagedCommerceCommand,
   signInManagedTrial,
   signOutManagedTrial,
   type ManagedApprovalRecord,
+  type ManagedCommerceEvent,
   type ManagedIdentity,
+  type ManagedStateRecord,
 } from './managed-trial'
 import { LEGACY_TEAM_WORK_KEYS, TEAM_WORK_KEY, formatTime, teamDefinitions, useTeamWorkspace } from './team-work'
 import {
@@ -24,11 +28,13 @@ import {
   advanceCommerceOrder,
   cancelCommerceOrder,
   commerceOrderHasReleasableReservation,
+  createEmptyCommerce,
   loadCommerceWorkspace,
   mutateCommerceWorkspace,
   receiveCommerceStock,
   reconcileCommercePayment,
   reserveCommerceOrder,
+  validateCommerceState,
   type CommerceActionProof,
   type CommerceOrder,
   type CommerceOrderStatus,
@@ -132,6 +138,7 @@ type ActionKind =
 
 type AccountableAction = {
   id: string
+  commandId: string
   capturedAt: string
   domain: ActionDomain
   kind: ActionKind
@@ -519,6 +526,7 @@ function normalizeActions(value: AccountableAction[]) {
 function confirmAccountableAction(action: PendingAccountableAction, details: ActionDetails): AccountableAction {
   return {
     id: action.id,
+    commandId: action.commandId,
     capturedAt: new Date().toISOString(),
     domain: action.domain,
     kind: action.kind,
@@ -580,19 +588,135 @@ function useStoredState<T>(key: string, seed: T, normalize?: (value: T) => T, le
   return [normalizedState, setState] as const
 }
 
-function useCommerceWorkspace() {
-  const [snapshot, setSnapshot] = useState(() => loadCommerceWorkspace())
+type CommerceWorkspaceMode = 'local' | 'managed-loading' | 'managed-ready' | 'managed-unprovisioned' | 'managed-error'
 
-  async function mutate(transition: (state: CommerceState) => CommerceState | null) {
-    const result = await mutateCommerceWorkspace(transition)
-    if (!result.ok) {
-      setSnapshot((current) => ({ ...current, error: result.error }))
-      throw new Error(result.error)
+type CommerceWorkspaceView = {
+  state: CommerceState
+  mode: CommerceWorkspaceMode
+  workspaceId: string
+  version: number | null
+  error: string
+}
+
+function managedCommerceView(record: ManagedStateRecord, workspaceId: string): CommerceWorkspaceView {
+  if (record.surface !== 'commerce' || !Number.isSafeInteger(record.version) || record.version < 0) throw new Error('Managed Commerce returned an invalid state envelope.')
+  if (record.version === 0) {
+    if (Object.keys(record.state).length) throw new Error('Managed Commerce has state without a valid revision.')
+    return { state: createEmptyCommerce(), mode: 'managed-unprovisioned', workspaceId, version: 0, error: 'This managed workspace has no Commerce catalog yet.' }
+  }
+  return { state: validateCommerceState(record.state), mode: 'managed-ready', workspaceId, version: record.version, error: '' }
+}
+
+function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = null) {
+  const [localSnapshot, setLocalSnapshot] = useState<CommerceWorkspaceView>(() => {
+    const local = loadCommerceWorkspace()
+    return { state: local.state, mode: 'local', workspaceId: '', version: null, error: local.error }
+  })
+  const [managedSnapshot, setManagedSnapshot] = useState<CommerceWorkspaceView>(() => ({
+    state: createEmptyCommerce(), mode: 'managed-loading', workspaceId: '', version: null, error: '',
+  }))
+  const snapshotRef = useRef(localSnapshot)
+  const identityRef = useRef(managedIdentity)
+
+  useEffect(() => {
+    identityRef.current = managedIdentity
+    snapshotRef.current = managedIdentity ? managedSnapshot : localSnapshot
+  }, [localSnapshot, managedIdentity, managedSnapshot])
+
+  useEffect(() => {
+    if (!managedIdentity) return undefined
+
+    let active = true
+    loadManagedBootstrap()
+      .then((bootstrap) => {
+        if (!active || identityRef.current?.workspaceId !== managedIdentity.workspaceId) return
+        const next = managedCommerceView(bootstrap.states.commerce, managedIdentity.workspaceId)
+        snapshotRef.current = next
+        setManagedSnapshot(next)
+      })
+      .catch((error) => {
+        if (!active || identityRef.current?.workspaceId !== managedIdentity.workspaceId) return
+        const next = { state: createEmptyCommerce(), mode: 'managed-error' as const, workspaceId: managedIdentity.workspaceId, version: null, error: error instanceof Error ? error.message : 'Managed Commerce could not be loaded.' }
+        snapshotRef.current = next
+        setManagedSnapshot(next)
+      })
+    return () => { active = false }
+  }, [managedIdentity])
+
+  async function mutate(
+    eventType: ManagedCommerceEvent,
+    commandId: string,
+    transition: (state: CommerceState) => CommerceState | null,
+  ) {
+    if (!managedIdentity) {
+      const result = await mutateCommerceWorkspace(transition)
+      if (!result.ok) {
+        const rejected = { ...snapshotRef.current, error: result.error }
+        snapshotRef.current = rejected
+        setLocalSnapshot(rejected)
+        throw new Error(result.error)
+      }
+      const accepted = { state: result.state, mode: 'local' as const, workspaceId: '', version: null, error: '' }
+      snapshotRef.current = accepted
+      setLocalSnapshot(accepted)
+      return
     }
-    setSnapshot({ state: result.state, source: 'current', error: '' })
+
+    const workspaceId = managedIdentity.workspaceId
+    const current = snapshotRef.current
+    if (current.mode !== 'managed-ready' || current.workspaceId !== workspaceId || current.version === null) {
+      throw new Error(current.error || 'Managed Commerce is not ready for writes.')
+    }
+    const next = transition(current.state)
+    if (!next) throw new Error('The Commerce state changed or this lifecycle step is no longer valid. Nothing was written.')
+    if (next === current.state) return
+    const candidate = validateCommerceState(next)
+
+    try {
+      const result = await saveManagedCommerceCommand({
+        commandId,
+        eventType,
+        expectedVersion: current.version,
+        state: candidate as unknown as Record<string, unknown>,
+      })
+      if (identityRef.current?.workspaceId !== workspaceId) throw new Error('The managed workspace changed before the write was confirmed.')
+      if (result.surface !== 'commerce' || result.event_type !== eventType || result.version !== current.version + 1) {
+        throw new Error('Managed Commerce returned an invalid command result.')
+      }
+      const accepted = validateCommerceState(result.state)
+      const nextSnapshot = { state: accepted, mode: 'managed-ready' as const, workspaceId, version: result.version, error: '' }
+      snapshotRef.current = nextSnapshot
+      setManagedSnapshot(nextSnapshot)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'The managed Commerce write was not confirmed.'
+      if (error instanceof ManagedTrialError && error.code === 'trial_version_conflict') {
+        try {
+          const bootstrap = await loadManagedBootstrap()
+          if (identityRef.current?.workspaceId !== workspaceId) throw new Error('The managed workspace changed before Commerce could refresh.')
+          const refreshed = managedCommerceView(bootstrap.states.commerce, workspaceId)
+          const conflict = { ...refreshed, error: 'Commerce changed in another session. The latest revision is loaded; review and confirm the action again.' }
+          snapshotRef.current = conflict
+          setManagedSnapshot(conflict)
+        } catch (refreshError) {
+          const refreshMessage = refreshError instanceof Error ? refreshError.message : 'Commerce changed and the latest revision could not be loaded.'
+          const rejected = { ...snapshotRef.current, error: refreshMessage }
+          snapshotRef.current = rejected
+          setManagedSnapshot(rejected)
+          throw refreshError
+        }
+        throw new Error('Commerce changed in another session. The latest revision is loaded; review and confirm the action again.')
+      }
+      if (identityRef.current?.workspaceId === workspaceId) {
+        const rejected = { ...snapshotRef.current, error: message }
+        snapshotRef.current = rejected
+        setManagedSnapshot(rejected)
+      }
+      throw error
+    }
   }
 
-  return [snapshot.state, mutate, snapshot.error] as const
+  const visible = managedIdentity ? managedSnapshot : localSnapshot
+  return [visible.state, mutate, visible.error, visible.mode, visible.version, visible.workspaceId] as const
 }
 
 function useProductionWorkspace() {
@@ -859,14 +983,14 @@ function ApprovalReviewDialog({ approval, onClose, onDecision }: { approval: App
 
 export function OverviewPage() {
   const runtime = useOutletContext<RuntimeHealth>()
-  const [commerce] = useCommerceWorkspace()
+  const [managedIdentity] = useManagedIdentity(runtime.status === 'enterprise')
+  const [commerce] = useCommerceWorkspace(managedIdentity)
   const [production] = useProductionWorkspace()
   const [approvals, setApprovals] = useApprovalWorkspace()
   const [setup] = useSetupWorkspace()
   const [workspace] = useTeamWorkspace()
   const [brief, setBrief] = useState<string[]>([])
   const [selectedApprovalId, setSelectedApprovalId] = useState('')
-  const [managedIdentity] = useManagedIdentity(runtime.status === 'enterprise')
   const [briefNotice, setBriefNotice] = useState('')
   const [briefBusy, setBriefBusy] = useState(false)
   const openWork = workspace.items.filter((item) => item.status !== 'done')
@@ -1028,10 +1152,12 @@ export function OverviewPage() {
 }
 
 export function OperationsPage() {
+  const runtime = useOutletContext<RuntimeHealth>()
   const location = useLocation()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [setup] = useSetupWorkspace()
+  const [managedIdentity] = useManagedIdentity(runtime.status === 'enterprise')
   const routeModule = location.pathname.split('/').filter(Boolean)[1]
   const requestedView = searchParams.get('view')
   const view: ProductId = routeModule === 'production' || requestedView === 'production' || requestedView === 'plant' ? 'production' : 'commerce'
@@ -1068,13 +1194,13 @@ export function OperationsPage() {
         <div className="segmented-control" role="group" aria-label="Operating workspace"><button aria-pressed={view === 'commerce'} onClick={() => setMode('commerce')} type="button">Commerce</button><button aria-pressed={view === 'production'} onClick={() => setMode('production')} type="button">Production</button></div>
         <div className="operations-toolbar-actions"><nav className="view-tabs" aria-label="Module views">{tabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{tab.label}</button>)}</nav></div>
       </div>
-      <div className="workspace-view">{view === 'commerce' ? <CommercePage tab={commerceTab} /> : <ProductionPage tab={productionTab} />}</div>
+      <div className="workspace-view">{view === 'commerce' ? <CommercePage managedIdentity={managedIdentity} tab={commerceTab} /> : <ProductionPage tab={productionTab} />}</div>
     </div>
   )
 }
 
-function CommercePage({ tab }: { tab: CommerceTab }) {
-  const [commerce, mutateCommerce, commerceStorageError] = useCommerceWorkspace()
+function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdentity | null; tab: CommerceTab }) {
+  const [commerce, mutateCommerce, commerceStorageError, workspaceMode, managedVersion, managedWorkspaceId] = useCommerceWorkspace(managedIdentity)
   const [actions, setActions] = useStoredState<AccountableAction[]>(ACTION_KEY, [], normalizeActions)
   const [pendingAction, setPendingAction] = useState<PendingAccountableAction | null>(null)
   const [sku, setSku] = useState(commerce.items[0]?.sku ?? '')
@@ -1083,7 +1209,8 @@ function CommercePage({ tab }: { tab: CommerceTab }) {
   const [channel, setChannel] = useState('Messenger')
   const [payment, setPayment] = useState('KBZPay')
   const [notice, setNotice] = useState('')
-  const selected = commerce.items.find((item) => item.sku === sku) ?? commerce.items[0]
+  const selectedSku = commerce.items.some((item) => item.sku === sku) ? sku : commerce.items[0]?.sku ?? ''
+  const selected = commerce.items.find((item) => item.sku === selectedSku)
   const orderValue = commerce.orders.filter((order) => order.status !== 'cancelled').reduce((total, order) => total + order.total, 0)
   const closableOrders = commerce.orders.filter((order) => order.status === 'completed' && order.paymentStatus === 'reconciled')
   const reconciledValue = closableOrders.reduce((total, order) => total + order.total, 0)
@@ -1092,12 +1219,24 @@ function CommercePage({ tab }: { tab: CommerceTab }) {
   const paymentReview = commerce.orders.filter((order) => order.refundStatus === 'due' || (order.status !== 'cancelled' && order.paymentStatus === 'pending'))
   const importedWebsiteOrderIds = commerce.orders.flatMap((order) => order.sourceRecordId ? [order.sourceRecordId] : [])
 
-  function queueAction(action: Omit<PendingAccountableAction, 'id' | 'domain'>) {
+  const effectiveMode = managedIdentity && (workspaceMode === 'local' || managedWorkspaceId !== managedIdentity.workspaceId) ? 'managed-loading' : workspaceMode
+  if (managedIdentity && effectiveMode !== 'managed-ready') {
+    const unprovisioned = effectiveMode === 'managed-unprovisioned'
+    return <section className="core-panel managed-commerce-boundary">
+      <div className="panel-head"><div><span className="core-eyebrow">Managed Commerce</span><h2>{unprovisioned ? 'Catalog setup required' : effectiveMode === 'managed-error' ? 'Managed workspace unavailable' : 'Loading authenticated workspace'}</h2></div><span className={`status-pill ${unprovisioned ? 'pending' : 'bounded'}`}>{unprovisioned ? 'Not provisioned' : effectiveMode === 'managed-error' ? 'Blocked' : 'Checking'}</span></div>
+      <p className="panel-copy">{commerceStorageError || (unprovisioned ? 'Add the real catalog before taking orders. Demo records are never copied into a managed workspace.' : 'Commerce remains read-only until the authenticated tenant state is confirmed.')}</p>
+      <div className="form-actions"><Link className="core-button" to="/settings/">Open workspace settings</Link></div>
+    </section>
+  }
+
+  const sourceNotice = <p className="form-notice commerce-source-notice" role="status">{managedIdentity ? `Managed workspace ${managedIdentity.workspaceId} · revision ${managedVersion ?? 0} · writes are confirmed by the tenant API.` : 'Browser demo · data stays on this device and is not a managed business record.'}</p>
+
+  function queueAction(action: Omit<PendingAccountableAction, 'id' | 'commandId' | 'domain'>) {
     if (pendingAction) {
       setNotice(`Finish or cancel ${pendingAction.id} before reviewing another change.`)
       return
     }
-    setPendingAction({ ...action, id: uid('ACT'), domain: 'commerce' })
+    setPendingAction({ ...action, id: uid('ACT'), commandId: commandUuid(), domain: 'commerce' })
     setNotice('Review the change, accountable operator, and evidence before it is applied.')
   }
 
@@ -1105,8 +1244,8 @@ function CommercePage({ tab }: { tab: CommerceTab }) {
     if (!pendingAction) return
     const record = confirmAccountableAction(pendingAction, details)
     await pendingAction.apply(record)
-    setActions((current) => [record, ...current])
-    setNotice(`${record.id} applied and added to the action history.`)
+    if (!managedIdentity) setActions((current) => [record, ...current])
+    setNotice(managedIdentity ? `${record.id} confirmed by the managed Commerce API.` : `${record.id} applied and added to the action history.`)
     setPendingAction(null)
   }
 
@@ -1126,7 +1265,7 @@ function CommercePage({ tab }: { tab: CommerceTab }) {
       before: `${itemSku} · ${beforeStock} on hand`,
       after: `${order.status} · ${beforeStock - quantity} on hand`,
       apply: async (action) => {
-        await mutateCommerce((current) => reserveCommerceOrder(current, order, commerceActionProof(action)))
+        await mutateCommerce('commerce.order.created', action.commandId, (current) => reserveCommerceOrder(current, order, commerceActionProof(action)))
         setQuantity(1)
         setCustomer('')
       },
@@ -1177,7 +1316,7 @@ function CommercePage({ tab }: { tab: CommerceTab }) {
       summary: `Confirm ${record.id} from Website`,
       before: `ready for confirmation · ${item.sku} · ${beforeStock} on hand`,
       after: `confirmed · ${fulfilmentLabel} · ${beforeStock - line.quantity} on hand`,
-      apply: (action) => mutateCommerce((current) => reserveCommerceOrder(current, order, commerceActionProof(action))),
+      apply: (action) => mutateCommerce('commerce.order.created', action.commandId, (current) => reserveCommerceOrder(current, order, commerceActionProof(action))),
     })
   }
 
@@ -1190,7 +1329,7 @@ function CommercePage({ tab }: { tab: CommerceTab }) {
     }
     const next: Record<'confirmed' | 'preparing' | 'ready', CommerceOrderStatus> = { confirmed: 'preparing', preparing: 'ready', ready: 'completed' }
     const nextStatus = next[order.status]
-    queueAction({ kind: 'order_status', subjectId: orderId, summary: `Advance ${orderId} fulfilment`, before: order.status, after: nextStatus, apply: () => mutateCommerce((current) => advanceCommerceOrder(current, orderId, order.status)) })
+    queueAction({ kind: 'order_status', subjectId: orderId, summary: `Advance ${orderId} fulfilment`, before: order.status, after: nextStatus, apply: (action) => mutateCommerce('commerce.order.advanced', action.commandId, (current) => advanceCommerceOrder(current, orderId, order.status)) })
   }
 
   function reconcilePayment(orderId: string) {
@@ -1200,7 +1339,7 @@ function CommercePage({ tab }: { tab: CommerceTab }) {
       setNotice(`${order.id} payment is already reconciled.`)
       return
     }
-    queueAction({ kind: 'payment_reconcile', subjectId: orderId, summary: `Reconcile ${order.id} payment`, before: `${order.payment} · ${order.paymentStatus}`, after: `${order.payment} · reconciled`, apply: (action) => mutateCommerce((current) => reconcileCommercePayment(current, orderId, commerceActionProof(action))) })
+    queueAction({ kind: 'payment_reconcile', subjectId: orderId, summary: `Reconcile ${order.id} payment`, before: `${order.payment} · ${order.paymentStatus}`, after: `${order.payment} · reconciled`, apply: (action) => mutateCommerce('commerce.payment.reconciled', action.commandId, (current) => reconcileCommercePayment(current, orderId, commerceActionProof(action))) })
   }
 
   function cancelOrder(orderId: string) {
@@ -1214,23 +1353,23 @@ function CommercePage({ tab }: { tab: CommerceTab }) {
       return
     }
     const paymentAfter = order.paymentStatus === 'reconciled' ? 'reconciled · refund due' : 'pending'
-    queueAction({ kind: 'order_cancel', subjectId: orderId, summary: `Cancel ${order.id} and release stock`, before: `${order.status} · ${item.onHand} on hand · ${order.paymentStatus}`, after: `cancelled · ${item.onHand + order.quantity} on hand · ${paymentAfter}`, apply: (action) => mutateCommerce((current) => cancelCommerceOrder(current, orderId, commerceActionProof(action))) })
+    queueAction({ kind: 'order_cancel', subjectId: orderId, summary: `Cancel ${order.id} and release stock`, before: `${order.status} · ${item.onHand} on hand · ${order.paymentStatus}`, after: `cancelled · ${item.onHand + order.quantity} on hand · ${paymentAfter}`, apply: (action) => mutateCommerce('commerce.order.cancelled', action.commandId, (current) => cancelCommerceOrder(current, orderId, commerceActionProof(action))) })
   }
 
   function restock(itemSku: string) {
     const item = commerce.items.find((candidate) => candidate.sku === itemSku)
     if (!item) return
-    queueAction({ kind: 'inventory_receipt', subjectId: itemSku, summary: `Receive 10 units of ${item.name}`, before: `${item.onHand} on hand`, after: `${item.onHand + 10} on hand`, apply: (action) => mutateCommerce((current) => receiveCommerceStock(current, itemSku, 10, commerceActionProof(action))) })
+    queueAction({ kind: 'inventory_receipt', subjectId: itemSku, summary: `Receive 10 units of ${item.name}`, before: `${item.onHand} on hand`, after: `${item.onHand + 10} on hand`, apply: (action) => mutateCommerce('commerce.stock.received', action.commandId, (current) => receiveCommerceStock(current, itemSku, 10, commerceActionProof(action))) })
   }
 
   function closeDay() {
     const close = { id: uid('CLOSE'), createdAt: new Date().toISOString(), total: reconciledValue, orders: closableOrders.length }
-    queueAction({ kind: 'daily_close', subjectId: close.id, summary: `Save ${close.id} daily close`, before: `${commerce.closes.length} snapshots`, after: `${commerce.closes.length + 1} snapshots · ${formatMoney(close.total)}`, apply: () => mutateCommerce((current) => current.closes.some((candidate) => candidate.id === close.id) ? current : { ...current, closes: [close, ...current.closes] }) })
+    queueAction({ kind: 'daily_close', subjectId: close.id, summary: `Save ${close.id} daily close`, before: `${commerce.closes.length} snapshots`, after: `${commerce.closes.length + 1} snapshots · ${formatMoney(close.total)}`, apply: (action) => mutateCommerce('commerce.close.saved', action.commandId, (current) => current.closes.some((candidate) => candidate.id === close.id) ? current : { ...current, closes: [close, ...current.closes] }) })
   }
 
-  const actionControls = <><AccountableActionGate key={pendingAction?.id ?? 'commerce-idle'} action={pendingAction} onCancel={() => setPendingAction(null)} onConfirm={confirmAction} /><ActionHistory actions={actions} domain="commerce" /></>
+  const actionControls = <><AccountableActionGate key={pendingAction?.id ?? 'commerce-idle'} action={pendingAction} onCancel={() => setPendingAction(null)} onConfirm={confirmAction} />{managedIdentity ? null : <ActionHistory actions={actions} domain="commerce" />}</>
 
-  if (tab === 'orders') return <div className="operation-module"><WebsiteCommerceIntake catalog={commerce.items} importedSourceIds={importedWebsiteOrderIds} onQueueReadyOrder={queueWebsiteOrder} /><div className="split-workspace order-view">
+  if (tab === 'orders') return <div className="operation-module">{sourceNotice}<WebsiteCommerceIntake catalog={commerce.items} importedSourceIds={importedWebsiteOrderIds} onQueueReadyOrder={queueWebsiteOrder} /><div className="split-workspace order-view">
     <section className="core-panel order-form-panel">
       <div className="panel-head"><div><span className="core-eyebrow">Channel order</span><h2>Enter an order</h2></div><span className="status-pill ready">Stock checked</span></div>
       <form className="core-form compact-form" onSubmit={recordOrder}>
@@ -1238,7 +1377,7 @@ function CommercePage({ tab }: { tab: CommerceTab }) {
           <label>Customer<input maxLength={80} value={customer} onChange={(event) => setCustomer(event.target.value)} placeholder="Name or reference" /></label>
           <label>Channel<select value={channel} onChange={(event) => setChannel(event.target.value)}><option>Messenger</option><option>Viber</option><option>Phone</option><option>Website</option><option>Walk-in</option></select></label>
         </div>
-        <label>Item<select value={sku} onChange={(event) => setSku(event.target.value)}>{commerce.items.map((item) => <option key={item.sku} value={item.sku}>{item.name} · {item.onHand} available</option>)}</select></label>
+        <label>Item<select value={selectedSku} onChange={(event) => setSku(event.target.value)}>{commerce.items.map((item) => <option key={item.sku} value={item.sku}>{item.name} · {item.onHand} available</option>)}</select></label>
         <div className="form-row">
           <label>Quantity<input min="1" max={selected?.onHand ?? 1} type="number" value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} /></label>
           <label>Payment<select value={payment} onChange={(event) => setPayment(event.target.value)}><option>KBZPay</option><option>WavePay</option><option>Cash on delivery</option><option>Cash</option><option>Card</option></select></label>
@@ -1251,9 +1390,9 @@ function CommercePage({ tab }: { tab: CommerceTab }) {
     <section className="core-panel order-queue-panel"><div className="panel-head"><div><span className="core-eyebrow">Fulfilment</span><h2>{openOrders.length} open orders</h2></div><span className="panel-note">{paymentReview.length} payment review</span></div><OrderList canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} orders={commerce.orders} /></section>
   </div>{actionControls}</div>
 
-  if (tab === 'inventory') return <div className="operation-module"><section className="core-panel inventory-panel"><div className="panel-head"><div><span className="core-eyebrow">Stock control</span><h2>Inventory and reorder boundaries</h2></div><span className="panel-note">{lowStock.length} at boundary</span></div><div className="data-table" role="table" aria-label="Commerce inventory"><div className="data-row table-head" role="row"><span>Item</span><span>On hand</span><span>Reorder</span><span>Price</span><span>Action</span></div>{commerce.items.map((item) => <div className="data-row" role="row" key={item.sku}><span><strong>{item.name}</strong><small>{item.sku}</small></span><span className={item.onHand <= item.reorderAt ? 'warning-text' : ''}>{item.onHand}</span><span>{item.reorderAt}</span><span>{formatMoney(item.price)}</span><span><button className="text-link" type="button" onClick={() => restock(item.sku)}>Receive +10</button></span></div>)}</div><p className="form-notice" aria-live="polite">{notice || commerceStorageError || 'Receipts require attributable confirmation and append one stock movement.'}</p></section><StockMovementHistory movements={commerce.movements} />{actionControls}</div>
+  if (tab === 'inventory') return <div className="operation-module">{sourceNotice}<section className="core-panel inventory-panel"><div className="panel-head"><div><span className="core-eyebrow">Stock control</span><h2>Inventory and reorder boundaries</h2></div><span className="panel-note">{lowStock.length} at boundary</span></div><div className="data-table" role="table" aria-label="Commerce inventory"><div className="data-row table-head" role="row"><span>Item</span><span>On hand</span><span>Reorder</span><span>Price</span><span>Action</span></div>{commerce.items.map((item) => <div className="data-row" role="row" key={item.sku}><span><strong>{item.name}</strong><small>{item.sku}</small></span><span className={item.onHand <= item.reorderAt ? 'warning-text' : ''}>{item.onHand}</span><span>{item.reorderAt}</span><span>{formatMoney(item.price)}</span><span><button className="text-link" type="button" onClick={() => restock(item.sku)}>Receive +10</button></span></div>)}</div><p className="form-notice" aria-live="polite">{notice || commerceStorageError || 'Receipts require attributable confirmation and append one stock movement.'}</p></section><StockMovementHistory movements={commerce.movements} />{actionControls}</div>
 
-  return <div className="operation-module"><div className="module-today"><section className="summary-strip"><span><small>Order value</small><strong>{formatMoney(orderValue)}</strong></span><span><small>Open orders</small><strong>{openOrders.length}</strong></span><span><small>Payment review</small><strong>{paymentReview.length}</strong></span><span><small>Low stock</small><strong>{lowStock.length}</strong></span></section><div className="split-workspace ops-today-grid"><section className="core-panel"><div className="panel-head"><div><span className="core-eyebrow">Order flow</span><h2>Latest channel orders</h2></div><Link className="text-link" to="/operations/commerce/?tab=orders">Open orders</Link></div><OrderList canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} orders={commerce.orders.slice(0, 5)} /></section><section className="core-panel"><div className="panel-head"><div><span className="core-eyebrow">Daily control</span><h2>Exceptions and close</h2></div><span className="panel-note">{commerce.closes.length} snapshots</span></div><div className="exception-summary"><span><strong>{paymentReview.length}</strong><small>payment review</small></span><span><strong>{lowStock.length}</strong><small>reorder boundaries</small></span></div><div className="boundary-list">{lowStock.map((item) => <Link key={item.sku} to="/operations/commerce/?tab=inventory"><strong>{item.name}</strong><small>{item.onHand} on hand</small></Link>)}</div><button className="core-button" onClick={closeDay} type="button">Save daily close</button><p className="form-notice" aria-live="polite">{notice || commerceStorageError || `${closableOrders.length} completed, reconciled orders · ${formatMoney(reconciledValue)} ready to close.`}</p></section></div></div>{actionControls}</div>
+  return <div className="operation-module">{sourceNotice}<div className="module-today"><section className="summary-strip"><span><small>Order value</small><strong>{formatMoney(orderValue)}</strong></span><span><small>Open orders</small><strong>{openOrders.length}</strong></span><span><small>Payment review</small><strong>{paymentReview.length}</strong></span><span><small>Low stock</small><strong>{lowStock.length}</strong></span></section><div className="split-workspace ops-today-grid"><section className="core-panel"><div className="panel-head"><div><span className="core-eyebrow">Order flow</span><h2>Latest channel orders</h2></div><Link className="text-link" to="/operations/commerce/?tab=orders">Open orders</Link></div><OrderList canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} orders={commerce.orders.slice(0, 5)} /></section><section className="core-panel"><div className="panel-head"><div><span className="core-eyebrow">Daily control</span><h2>Exceptions and close</h2></div><span className="panel-note">{commerce.closes.length} snapshots</span></div><div className="exception-summary"><span><strong>{paymentReview.length}</strong><small>payment review</small></span><span><strong>{lowStock.length}</strong><small>reorder boundaries</small></span></div><div className="boundary-list">{lowStock.map((item) => <Link key={item.sku} to="/operations/commerce/?tab=inventory"><strong>{item.name}</strong><small>{item.onHand} on hand</small></Link>)}</div><button className="core-button" onClick={closeDay} type="button">Save daily close</button><p className="form-notice" aria-live="polite">{notice || commerceStorageError || `${closableOrders.length} completed, reconciled orders · ${formatMoney(reconciledValue)} ready to close.`}</p></section></div></div>{actionControls}</div>
 }
 
 function OrderList({
@@ -1351,12 +1490,12 @@ function ProductionPage({ tab }: { tab: ProductionTab }) {
   const selectedRemaining = selectedJob ? selectedJob.target - selectedJob.output : 0
   const completion = target > 0 ? Math.round((output / target) * 100) : 0
 
-  function queueAction(action: Omit<PendingAccountableAction, 'id' | 'domain'>) {
+  function queueAction(action: Omit<PendingAccountableAction, 'id' | 'commandId' | 'domain'>) {
     if (pendingAction) {
       setNotice(`Finish or cancel ${pendingAction.id} before reviewing another change.`)
       return
     }
-    setPendingAction({ ...action, id: uid('ACT'), domain: 'production' })
+    setPendingAction({ ...action, id: uid('ACT'), commandId: commandUuid(), domain: 'production' })
     setNotice('Review the change, accountable operator, and evidence before it is applied.')
   }
 
