@@ -1593,7 +1593,7 @@
 
 .preview-hero > span,
 .preview-section-grid article > span {
-  color: #18884c;
+  color: #137943;
   font-family: var(--website-mono);
   font-size: clamp(7px, 1vw, 9px);
   font-weight: 780;
@@ -3123,5 +3123,51 @@
 
   .website-preview-site {
     min-height: 0;
+  }
+}
+
+.website-editor-section-picker {
+  display: grid;
+  grid-template-columns: auto minmax(180px, 280px);
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--website-line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--website-panel-raised);
+}
+
+.website-editor-section-picker > span {
+  color: var(--website-muted);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.website-editor-section-picker > select {
+  min-height: 42px;
+  border-radius: 8px;
+}
+
+.website-editor-scroll[data-editor-section] > [data-content-section] {
+  display: none;
+}
+
+.website-editor-scroll[data-editor-section="page"] > [data-content-section="page"],
+.website-editor-scroll[data-editor-section="hero"] > [data-content-section="hero"],
+.website-editor-scroll[data-editor-section="sections"] > [data-content-section="sections"],
+.website-editor-scroll[data-editor-section="seo"] > [data-content-section="seo"] {
+  display: block;
+}
+
+@media (max-width: 640px) {
+  .website-editor-section-picker {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .website-editor-section-picker > select {
+    width: 100%;
+    min-height: 48px;
+    font-size: 16px;
   }
 }

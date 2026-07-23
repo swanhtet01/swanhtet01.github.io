@@ -10,7 +10,7 @@ let websiteRuntimeChecks = 0
 let commerceRuntimeChecks = 0
 let productionRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
-const [manifestText, appPackageText, appSource, coreSource, commerceSource, managedTrialSource, managedCommerceRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, publishSource, sitePreviewSource, websiteModelSource, websiteWorkspaceSource, websiteCssSource, commerceIntakeSource, handoffSource] = await Promise.all([
+const [manifestText, appPackageText, appSource, coreSource, commerceSource, managedTrialSource, managedCommerceRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, sitePreviewSource, websiteModelSource, websiteWorkspaceSource, websiteCssSource, commerceIntakeSource, handoffSource] = await Promise.all([
   readFile(resolve(root, 'site-manifest.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'package.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'App.tsx'), 'utf8'),
@@ -23,6 +23,7 @@ const [manifestText, appPackageText, appSource, coreSource, commerceSource, mana
   readFile(resolve(root, 'showroom', 'src', 'core', 'AgentTeamsPanel.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'team-work.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'WebsiteProduct.tsx'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'ContentWorkspace.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'PublishWorkspace.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'SitePreview.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-model.ts'), 'utf8'),
@@ -98,7 +99,10 @@ if (!coreSource.includes('view=work&item=${item.id}') || !coreSource.includes('v
 if (!appSource.includes("lazy(() => import('./products/website/WebsiteProduct')") || !appSource.includes('Suspense') || appSource.includes("import('./products/ecommerce/EcommerceOrdersProduct')")) fail('website_prototype_route_not_isolated')
 if (!appSource.includes('<Navigate replace to="/operations/commerce/?tab=orders" />') || !appSource.includes('path="products/ecommerce/*"')) fail('legacy_ecommerce_route_not_redirected')
 if (!appPackage.scripts?.lint?.includes('src/products')) fail('prototype_sources_not_linted')
-if (!websiteSource.includes('No website has been deployed.') || !websiteSource.includes('No deployment occurred.') || !websiteSource.includes('Domain and deployment remain separate approval-gated actions.')) fail('website_deployment_boundary_missing')
+if (!websiteSource.includes('No website has been deployed.')
+  || !websiteSource.includes('No deployment occurred.')
+  || !publishSource.includes('No deployment target, domain write, or external connection exists in this prototype.')
+  || !publishSource.includes('It does not publish a website.')) fail('website_deployment_boundary_missing')
 if (!websiteModelSource.includes("supermega.website.workspace.v2") || !websiteModelSource.includes('LEGACY_WEBSITE_STORAGE_KEY') || !websiteModelSource.includes('mutateWebsiteWorkspace') || !websiteModelSource.includes('WEBSITE_MUTATION_LOCK') || !websiteModelSource.includes('preservesAppendOnlyHistory') || !websiteModelSource.includes('canonicalJson')) fail('website_v2_locked_store_missing')
 if (!websiteModelSource.includes('contentRevision') || !websiteModelSource.includes('evidenceIds') || !websiteModelSource.includes('migratedFromV1') || !websiteModelSource.includes('getCurrentApproval') || !websiteModelSource.includes('getCurrentPublish')) fail('website_release_provenance_missing')
 if (!sitePreviewSource.includes("ctaHref.startsWith('https://')") || !sitePreviewSource.includes("ctaHref.startsWith('#')") || !sitePreviewSource.includes('aria-disabled="true"')) fail('website_preview_destination_guard_missing')
@@ -111,13 +115,21 @@ const websiteHydration = websiteWorkspaceSource.slice(websiteHydrationStart, web
 if (websiteHydration.indexOf('try {') < 0 || websiteHydration.indexOf('try {') > websiteHydration.indexOf('currentManagedIdentity()') || websiteHydration.indexOf('finally') < websiteHydration.indexOf('currentManagedIdentity()')) fail('managed_website_identity_failure_can_stick_hydration')
 const websiteTabsContract = websiteSource.slice(websiteSource.indexOf('const workspaceViews'), websiteSource.indexOf('const viewCopy'))
 if ((websiteTabsContract.match(/^\s*\{ id:/gm) || []).length !== 3 || !websiteTabsContract.includes("label: 'Content'") || !websiteTabsContract.includes("label: 'Navigation'") || !websiteTabsContract.includes("label: 'Publish'") || !websiteSource.includes('role="tablist"') || !websiteSource.includes('role="tabpanel"') || !websiteSource.includes("event.key === 'ArrowRight'") || !websiteSource.includes('tabIndex={view === item.id ? 0 : -1}')) fail('website_three_view_accessibility_contract_changed')
-if (!websiteSource.includes("const [mobilePane, setMobilePane] = useState<'edit' | 'preview'>('edit')")
-  || !websiteSource.includes('aria-label="Mobile Website workspace"')
-  || !websiteSource.includes("className={'website-workspace-grid view-' + view + ' mobile-pane-' + mobilePane}")
-  || !websiteSource.includes("setMobilePane('edit')")) fail('website_mobile_focus_mode_missing')
-if (!websiteCssSource.includes('.website-workspace-grid.mobile-pane-edit > .website-preview-panel')
-  || !websiteCssSource.includes('.website-workspace-grid.mobile-pane-preview > :not(.website-preview-panel)')
-  || !websiteCssSource.includes('height: clamp(480px, calc(100svh - 310px), 620px)')) fail('website_mobile_panels_not_bounded')
+if (!websiteSource.includes("const [surface, setSurface] = useState<'work' | 'preview'>('work')")
+  || !websiteSource.includes('aria-label="Website workspace surface"')
+  || !websiteSource.includes('data-surface={surface}')
+  || !websiteSource.includes("setSurface('work')")
+  || !websiteSource.includes('data-split={splitPreview')
+  || !websiteSource.includes('setSplitPreview(false)')) fail('website_mobile_focus_mode_missing')
+if (!websiteCssSource.includes('.website-workspace-grid[data-surface="work"] > .website-preview-surface')
+  || !websiteCssSource.includes('.website-workspace-grid[data-surface="preview"] > .website-work-surface')
+  || !websiteCssSource.includes('.website-workspace-grid[data-surface="preview"] > .website-preview-surface')
+  || !websiteCssSource.includes('.website-split-control')
+  || !websiteCssSource.includes('display: none')) fail('website_mobile_panels_not_bounded')
+if (!contentSource.includes("type EditorSection = 'page' | 'hero' | 'sections' | 'seo'")
+  || !contentSource.includes('aria-label="Page section to edit"')
+  || !contentSource.includes('data-editor-section={editorSection}')
+  || !websiteCssSource.includes('.website-editor-scroll[data-editor-section] > [data-content-section]')) fail('website_content_focus_contract_missing')
 const websiteMobileCss = websiteCssSource.slice(websiteCssSource.indexOf('@media (max-width: 640px)'), websiteCssSource.indexOf('@media (prefers-reduced-motion'))
 const websitePreviewControlsHiddenUnconditionally = /(?:^|\n)\s*\.website-preview-controls\s*\{\s*display:\s*none/.test(websiteMobileCss)
 if (!websiteMobileCss.includes('.website-preview-controls') || !websiteMobileCss.includes('display: flex') || websitePreviewControlsHiddenUnconditionally) fail('website_mobile_review_controls_hidden')
