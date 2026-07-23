@@ -35,29 +35,23 @@ import {
   type CommerceState,
   type CommerceStockMovement,
 } from './commerce-workspace'
-
-type ProductionJob = {
-  id: string
-  line: string
-  product: string
-  target: number
-  output: number
-}
-
-type ProductionIssue = {
-  id: string
-  createdAt: string
-  area: string
-  kind: 'quality' | 'maintenance' | 'materials' | 'operations'
-  summary: string
-  status: 'open' | 'resolved'
-}
-
-type ProductionState = {
-  jobs: ProductionJob[]
-  issues: ProductionIssue[]
-  machines: Array<{ id: string; name: string; state: 'running' | 'attention' | 'stopped' }>
-}
+import {
+  LEGACY_PRODUCTION_KEYS,
+  PRODUCTION_KEY,
+  advanceProductionMachineState,
+  loadProductionWorkspace,
+  mutateProductionWorkspace,
+  openProductionIssue,
+  productionMachineTransitions,
+  recordProductionOutput,
+  resolveProductionIssue,
+  type ProductionActionProof,
+  type ProductionEvent,
+  type ProductionIssue,
+  type ProductionJob,
+  type ProductionMachineState,
+  type ProductionState,
+} from './production-workspace'
 
 type DecisionClaim = {
   id: string
@@ -203,11 +197,9 @@ type RuntimeHealth = {
 type CommerceTab = 'today' | 'orders' | 'inventory'
 type ProductionTab = 'today' | 'production' | 'control'
 
-const PRODUCTION_KEY = 'supermega.production.workspace.v1'
 const APPROVAL_KEY = 'supermega.approvals.v3'
 const SETUP_KEY = 'supermega.setup.v3'
 const ACTION_KEY = 'supermega.accountable.actions.v1'
-const LEGACY_PRODUCTION_KEYS = ['supermega.plant.workspace.v2']
 const LEGACY_APPROVAL_KEYS = ['supermega.approvals.v2']
 const LEGACY_SETUP_KEYS = ['supermega.setup.v2']
 
@@ -274,35 +266,6 @@ function pilotReady(setup: SetupState) {
   return pilotProgress(setup) === 100 && Boolean(setup.savedAt)
 }
 
-const seedProduction: ProductionState = {
-  jobs: [
-    { id: 'JOB-201', line: 'Line 01', product: 'Batch Alpha', target: 1200, output: 860 },
-    { id: 'JOB-202', line: 'Line 02', product: 'Batch Beta', target: 900, output: 745 },
-    { id: 'JOB-203', line: 'Line 03', product: 'Batch Gamma', target: 650, output: 650 },
-  ],
-  issues: [
-    { id: 'ISS-301', createdAt: new Date(Date.now() - 82 * 60 * 1000).toISOString(), area: 'Line 02', kind: 'quality', summary: 'Temperature drift requires supervisor review', status: 'open' },
-  ],
-  machines: [
-    { id: 'MC-01', name: 'Mixer 01', state: 'running' },
-    { id: 'MC-02', name: 'Press 02', state: 'attention' },
-    { id: 'MC-03', name: 'Finishing 01', state: 'running' },
-  ],
-}
-
-function normalizeProduction(value: ProductionState) {
-  const source = value && typeof value === 'object' ? value : seedProduction
-  const normalized: ProductionState = {
-    jobs: Array.isArray(source.jobs) ? source.jobs : seedProduction.jobs,
-    issues: Array.isArray(source.issues) ? source.issues.map((issue) => ({
-      ...issue,
-      kind: ['quality', 'maintenance', 'materials', 'operations'].includes(issue.kind) ? issue.kind : 'operations',
-    })) : seedProduction.issues,
-    machines: Array.isArray(source.machines) ? source.machines : seedProduction.machines,
-  }
-  return JSON.stringify(normalized) === JSON.stringify(value) ? value : normalized
-}
-
 const checkingRuntime: RuntimeHealth = {
   status: 'checking',
   serviceStatus: 'checking',
@@ -331,6 +294,12 @@ const productionTabs: Array<{ id: ProductionTab; label: string }> = [
   { id: 'production', label: 'Production' },
   { id: 'control', label: 'Issues & equipment' },
 ]
+
+const productionMachineActionLabels: Record<ProductionMachineState, string> = {
+  running: 'Flag attention',
+  attention: 'Stop machine',
+  stopped: 'Return to service',
+}
 
 function uid(prefix: string) {
   const cryptoId = globalThis.crypto?.randomUUID?.().slice(0, 8)
@@ -574,6 +543,16 @@ function commerceActionProof(action: AccountableAction): CommerceActionProof {
   }
 }
 
+function productionActionProof(action: AccountableAction): ProductionActionProof {
+  return {
+    actionId: action.id,
+    capturedAt: action.capturedAt,
+    actor: action.actor,
+    reason: action.reason,
+    evidenceReference: action.evidenceReference,
+  }
+}
+
 function useStoredState<T>(key: string, seed: T, normalize?: (value: T) => T, legacyKeys: string[] = [], persist?: (value: T) => T) {
   const [state, setState] = useState<T>(() => {
     for (const storageKey of [key, ...legacyKeys]) {
@@ -617,7 +596,31 @@ function useCommerceWorkspace() {
 }
 
 function useProductionWorkspace() {
-  return useStoredState(PRODUCTION_KEY, seedProduction, normalizeProduction, LEGACY_PRODUCTION_KEYS)
+  const [snapshot, setSnapshot] = useState(() => loadProductionWorkspace())
+
+  useEffect(() => {
+    function refreshFromStorage(event: StorageEvent) {
+      if (event.key === PRODUCTION_KEY) setSnapshot(loadProductionWorkspace())
+    }
+    window.addEventListener('storage', refreshFromStorage)
+    return () => window.removeEventListener('storage', refreshFromStorage)
+  }, [])
+
+  async function mutate(transition: (state: ProductionState) => ProductionState | null) {
+    const result = await mutateProductionWorkspace(transition)
+    if (!result.ok) {
+      const refreshed = loadProductionWorkspace()
+      setSnapshot((current) => ({
+        state: refreshed.error ? current.state : refreshed.state,
+        source: refreshed.error ? current.source : refreshed.source,
+        error: result.error,
+      }))
+      throw new Error(result.error)
+    }
+    setSnapshot({ state: result.state, source: 'current', error: '' })
+  }
+
+  return [snapshot.state, mutate, snapshot.error] as const
 }
 
 function useApprovalWorkspace() {
@@ -661,6 +664,17 @@ function AccountableActionGate({ action, onCancel, onConfirm }: {
   const [evidenceReference, setEvidenceReference] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const headingRef = useRef<HTMLHeadingElement>(null)
+  const previousFocusRef = useRef<HTMLElement | null>(null)
+
+  useEffect(() => {
+    if (!action) return undefined
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    headingRef.current?.focus()
+    return () => {
+      if (previousFocusRef.current?.isConnected) previousFocusRef.current.focus()
+    }
+  }, [action])
 
   if (!action) return null
 
@@ -678,7 +692,7 @@ function AccountableActionGate({ action, onCancel, onConfirm }: {
   }
 
   return <section className="core-panel accountable-action-gate" aria-label="Human action confirmation">
-    <div className="action-change"><span className="core-eyebrow">Human confirmation</span><h2>{action.summary}</h2><p><strong>{action.before}</strong><span>→</span><strong>{action.after}</strong></p></div>
+    <div className="action-change"><span className="core-eyebrow">Human confirmation</span><h2 ref={headingRef} tabIndex={-1}>{action.summary}</h2><p><strong>{action.before}</strong><span>→</span><strong>{action.after}</strong></p></div>
     <form className="core-form action-confirm-form" onSubmit={(event) => void submit(event)}>
       <label>Responsible operator<input maxLength={80} required value={actor} onChange={(event) => setActor(event.target.value)} placeholder="Name or accountable role" /></label>
       <label>Reason<input maxLength={180} required value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Why this change is correct now" /></label>
@@ -1296,9 +1310,33 @@ function StockMovementHistory({ movements }: { movements: CommerceStockMovement[
   </details>
 }
 
+const productionEventLabels: Record<ProductionEvent['kind'], string> = {
+  output_recorded: 'Output recorded',
+  issue_opened: 'Issue opened',
+  issue_resolved: 'Issue resolved',
+  machine_state_changed: 'Machine state changed',
+}
+
+function ProductionEventHistory({ events }: { events: ProductionEvent[] }) {
+  const [showAll, setShowAll] = useState(false)
+  const visibleEvents = showAll ? events : events.slice(0, 8)
+  return <details className="core-panel action-history production-event-history">
+    <summary><span>Production record</span><strong>{events.length} attributed events</strong></summary>
+    {visibleEvents.length ? <div className="action-history-list">{visibleEvents.map((event) => <article key={event.id}>
+      <div>
+        <strong>{productionEventLabels[event.kind]} - {event.summary}</strong>
+        <small>{event.subjectId} - {event.actionId} - {event.actor}</small>
+        <p>{event.reason} - Evidence: {event.evidenceReference}</p>
+      </div>
+      <small>{formatTime(event.createdAt)}</small>
+    </article>)}</div> : <Empty>No attributed Production event has been recorded yet.</Empty>}
+    {events.length > 8 ? <button className="text-link" type="button" onClick={() => setShowAll((current) => !current)}>{showAll ? 'Show latest 8' : `Show all ${events.length}`}</button> : null}
+  </details>
+}
+
 function ProductionPage({ tab }: { tab: ProductionTab }) {
-  const [production, setProduction] = useProductionWorkspace()
-  const [actions, setActions] = useStoredState<AccountableAction[]>(ACTION_KEY, [], normalizeActions)
+  const [production, mutateProduction, productionStorageError] = useProductionWorkspace()
+  const [, setActions] = useStoredState<AccountableAction[]>(ACTION_KEY, [], normalizeActions)
   const [pendingAction, setPendingAction] = useState<PendingAccountableAction | null>(null)
   const [jobId, setJobId] = useState(production.jobs[0]?.id ?? '')
   const [quantity, setQuantity] = useState(25)
@@ -1309,6 +1347,9 @@ function ProductionPage({ tab }: { tab: ProductionTab }) {
   const output = production.jobs.reduce((total, job) => total + job.output, 0)
   const target = production.jobs.reduce((total, job) => total + job.target, 0)
   const openIssues = production.issues.filter((issue) => issue.status === 'open')
+  const selectedJob = production.jobs.find((job) => job.id === jobId)
+  const selectedRemaining = selectedJob ? selectedJob.target - selectedJob.output : 0
+  const completion = target > 0 ? Math.round((output / target) * 100) : 0
 
   function queueAction(action: Omit<PendingAccountableAction, 'id' | 'domain'>) {
     if (pendingAction) {
@@ -1321,51 +1362,140 @@ function ProductionPage({ tab }: { tab: ProductionTab }) {
 
   async function confirmAction(details: ActionDetails) {
     if (!pendingAction) return
-    const record = confirmAccountableAction(pendingAction, details)
-    await pendingAction.apply(record)
+    const action = pendingAction
+    const record = confirmAccountableAction(action, details)
+    await action.apply(record)
     setActions((current) => [record, ...current])
-    setNotice(`${record.id} applied and added to the action history.`)
+    setNotice(`${record.id} persisted with attributed Production evidence.`)
     setPendingAction(null)
   }
 
   function recordOutput(event: FormEvent) {
     event.preventDefault()
-    if (quantity < 1) return
-    const selectedJob = production.jobs.find((job) => job.id === jobId)
+    if (!Number.isSafeInteger(quantity) || quantity < 1) return setNotice('Enter a whole-unit quantity of at least 1.')
     if (!selectedJob) return setNotice('Choose an active job before recording output.')
-    const recordedQuantity = Math.min(quantity, Math.max(0, selectedJob.target - selectedJob.output))
-    if (recordedQuantity < 1) return setNotice(`${jobId} is already at target.`)
-    queueAction({ kind: 'production_output', subjectId: jobId, summary: `Record ${recordedQuantity} good units for ${jobId}`, before: `${selectedJob.output} / ${selectedJob.target}`, after: `${selectedJob.output + recordedQuantity} / ${selectedJob.target}`, apply: () => setProduction((current) => ({ ...current, jobs: current.jobs.map((job) => job.id === jobId ? { ...job, output: Math.min(job.target, job.output + recordedQuantity) } : job) })) })
+    if (selectedRemaining < 1) return setNotice(`${selectedJob.id} is already at target.`)
+    if (quantity > selectedRemaining) return setNotice(`Only ${selectedRemaining} units remain for ${selectedJob.id}. No output was recorded.`)
+    const recordedJobId = selectedJob.id
+    const recordedQuantity = quantity
+    queueAction({
+      kind: 'production_output',
+      subjectId: recordedJobId,
+      summary: `Record ${recordedQuantity} good units for ${recordedJobId}`,
+      before: `${selectedJob.output} / ${selectedJob.target}`,
+      after: `${selectedJob.output + recordedQuantity} / ${selectedJob.target}`,
+      apply: async (record) => {
+        await mutateProduction((current) => recordProductionOutput(current, recordedJobId, recordedQuantity, productionActionProof(record)))
+      },
+    })
   }
 
   function createIssue(event: FormEvent) {
     event.preventDefault()
     if (!summary.trim()) return
     const issue: ProductionIssue = { id: uid('ISS'), createdAt: new Date().toISOString(), area, kind, summary: summary.trim(), status: 'open' }
-    queueAction({ kind: 'issue_create', subjectId: issue.id, summary: `Open ${issue.kind} issue for ${issue.area}`, before: 'No issue record', after: `${issue.id} · open`, apply: () => { setProduction((current) => ({ ...current, issues: [issue, ...current.issues] })); setSummary('') } })
+    queueAction({
+      kind: 'issue_create',
+      subjectId: issue.id,
+      summary: `Open ${issue.kind} issue for ${issue.area}`,
+      before: 'No issue record',
+      after: `${issue.id} - open`,
+      apply: async (record) => {
+        await mutateProduction((current) => openProductionIssue(current, issue, productionActionProof(record)))
+        setSummary('')
+      },
+    })
   }
 
   function resolveIssue(issueId: string) {
     const issue = production.issues.find((candidate) => candidate.id === issueId)
     if (!issue || issue.status === 'resolved') return
-    queueAction({ kind: 'issue_resolution', subjectId: issueId, summary: `Resolve ${issueId}`, before: issue.status, after: 'resolved', apply: () => setProduction((current) => ({ ...current, issues: current.issues.map((candidate) => candidate.id === issueId ? { ...candidate, status: 'resolved' } : candidate) })) })
+    queueAction({
+      kind: 'issue_resolution',
+      subjectId: issueId,
+      summary: `Resolve ${issueId}`,
+      before: issue.status,
+      after: 'resolved with operator evidence',
+      apply: async (record) => {
+        await mutateProduction((current) => resolveProductionIssue(current, issueId, productionActionProof(record)))
+      },
+    })
   }
 
   function cycleMachine(machineId: string) {
-    const next = { running: 'attention', attention: 'stopped', stopped: 'running' } as const
     const machine = production.machines.find((candidate) => candidate.id === machineId)
     if (!machine) return
-    const nextState = next[machine.state]
-    queueAction({ kind: 'machine_state', subjectId: machineId, summary: `Change ${machine.name} state`, before: machine.state, after: nextState, apply: () => setProduction((current) => ({ ...current, machines: current.machines.map((candidate) => candidate.id === machineId ? { ...candidate, state: next[candidate.state] } : candidate) })) })
+    const expectedState = machine.state
+    const nextState = productionMachineTransitions[expectedState]
+    queueAction({
+      kind: 'machine_state',
+      subjectId: machineId,
+      summary: `${productionMachineActionLabels[expectedState]} for ${machine.name}`,
+      before: expectedState,
+      after: nextState,
+      apply: async (record) => {
+        await mutateProduction((current) => advanceProductionMachineState(current, machineId, expectedState, productionActionProof(record)))
+      },
+    })
   }
 
-  const actionControls = <><AccountableActionGate key={pendingAction?.id ?? 'production-idle'} action={pendingAction} onCancel={() => setPendingAction(null)} onConfirm={confirmAction} /><ActionHistory actions={actions} domain="production" /></>
+  const actionControls = <>
+    <p className="form-notice" aria-live="polite">{productionStorageError || notice}</p>
+    <AccountableActionGate key={pendingAction?.id ?? 'production-idle'} action={pendingAction} onCancel={() => { setPendingAction(null); setNotice('Change cancelled. Production data was not modified.') }} onConfirm={confirmAction} />
+    <ProductionEventHistory events={production.events} />
+  </>
 
-  if (tab === 'production') return <div className="operation-module"><div className="split-workspace production-view"><section className="core-panel job-panel"><div className="panel-head"><div><span className="core-eyebrow">Production plan</span><h2>Active jobs</h2></div><span className="panel-note">Output is capped at target</span></div><JobList jobs={production.jobs} /></section><section className="core-panel output-panel"><span className="core-eyebrow">Good output</span><h2>Confirm production</h2><form className="core-form compact-form" onSubmit={recordOutput}><label>Job<select value={jobId} onChange={(event) => setJobId(event.target.value)}>{production.jobs.map((job) => <option key={job.id}>{job.id}</option>)}</select></label><label>Quantity<input min="1" type="number" value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} /></label><button className="core-button primary" type="submit">Record output</button><p className="form-notice" aria-live="polite">{notice || 'A managed workspace accepts output only from an authorized operator or source.'}</p></form></section></div>{actionControls}</div>
+  if (tab === 'production') return <div className="operation-module">
+    <div className="split-workspace production-view">
+      <section className="core-panel job-panel">
+        <div className="panel-head"><div><span className="core-eyebrow">Production plan</span><h2>Active jobs</h2></div><span className="panel-note">Target is a hard limit</span></div>
+        <JobList jobs={production.jobs} />
+      </section>
+      <section className="core-panel output-panel">
+        <span className="core-eyebrow">Good output</span><h2>Confirm production</h2>
+        <form className="core-form compact-form" onSubmit={recordOutput}>
+          <label>Job<select value={jobId} onChange={(event) => setJobId(event.target.value)}>{production.jobs.map((job) => <option key={job.id} value={job.id}>{job.id}</option>)}</select></label>
+          <label>Quantity<input min="1" step="1" type="number" value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} /></label>
+          <button className="core-button primary" disabled={!selectedJob || selectedRemaining < 1} type="submit">Record output</button>
+          <p className="panel-copy">{selectedJob ? `${selectedRemaining.toLocaleString()} units remain for ${selectedJob.id}.` : 'Choose an active job.'} Every change requires an operator, reason, and evidence.</p>
+        </form>
+      </section>
+    </div>
+    {actionControls}
+  </div>
 
-  if (tab === 'control') return <div className="operation-module"><div className="control-workspace"><div className="split-workspace"><section className="core-panel"><div className="panel-head"><div><span className="core-eyebrow">Equipment</span><h2>Machine state</h2></div></div><div className="machine-list">{production.machines.map((machine) => <button key={machine.id} type="button" onClick={() => cycleMachine(machine.id)}><span className={`machine-dot ${machine.state}`} /><span><strong>{machine.name}</strong><small>{machine.id}</small></span><b>{machine.state}</b></button>)}</div><p className="panel-copy">Local state only; managed telemetry must be authorized and attributable.</p></section><section className="core-panel"><span className="core-eyebrow">Exception</span><h2>Open an issue</h2><form className="core-form compact-form" onSubmit={createIssue}><div className="form-row"><label>Type<select value={kind} onChange={(event) => setKind(event.target.value as ProductionIssue['kind'])}><option value="quality">Quality</option><option value="maintenance">Maintenance</option><option value="materials">Materials</option><option value="operations">Operations</option></select></label><label>Area<select value={area} onChange={(event) => setArea(event.target.value)}><option>Line 01</option><option>Line 02</option><option>Line 03</option><option>Materials</option><option>Quality</option></select></label></div><label>Observation<textarea maxLength={240} required value={summary} onChange={(event) => setSummary(event.target.value)} placeholder="Describe what happened, not the assumption." /></label><button className="core-button primary" type="submit">Open issue</button></form></section></div><section className="core-panel issue-register"><div className="panel-head"><div><span className="core-eyebrow">Shift review</span><h2>Issue register</h2></div><span className="panel-note">{openIssues.length} open</span></div><IssueList issues={production.issues} onResolve={resolveIssue} /></section></div>{actionControls}</div>
+  if (tab === 'control') return <div className="operation-module">
+    <div className="control-workspace">
+      <div className="split-workspace">
+        <section className="core-panel">
+          <div className="panel-head"><div><span className="core-eyebrow">Equipment</span><h2>Machine state</h2></div></div>
+          <div className="machine-list">{production.machines.map((machine) => <button aria-label={`${productionMachineActionLabels[machine.state]} for ${machine.name}; current state ${machine.state}`} key={machine.id} type="button" onClick={() => cycleMachine(machine.id)}><span className={`machine-dot ${machine.state}`} /><span><strong>{machine.name}</strong><small>{machine.id} - Current: {machine.state}</small></span><b>{productionMachineActionLabels[machine.state]}</b></button>)}</div>
+          <p className="panel-copy">Local operating record only. No telemetry or machine control is connected.</p>
+        </section>
+        <section className="core-panel">
+          <span className="core-eyebrow">Exception</span><h2>Open an issue</h2>
+          <form className="core-form compact-form" onSubmit={createIssue}>
+            <div className="form-row"><label>Type<select value={kind} onChange={(event) => setKind(event.target.value as ProductionIssue['kind'])}><option value="quality">Quality</option><option value="maintenance">Maintenance</option><option value="materials">Materials</option><option value="operations">Operations</option></select></label><label>Area<select value={area} onChange={(event) => setArea(event.target.value)}><option>Line 01</option><option>Line 02</option><option>Line 03</option><option>Materials</option><option>Quality</option></select></label></div>
+            <label>Observation<textarea maxLength={240} required value={summary} onChange={(event) => setSummary(event.target.value)} placeholder="Describe what happened, not the assumption." /></label>
+            <button className="core-button primary" type="submit">Open issue</button>
+          </form>
+        </section>
+      </div>
+      <section className="core-panel issue-register"><div className="panel-head"><div><span className="core-eyebrow">Shift review</span><h2>Issue register</h2></div><span className="panel-note">{openIssues.length} open</span></div><IssueList issues={production.issues} onResolve={resolveIssue} /></section>
+    </div>
+    {actionControls}
+  </div>
 
-  return <div className="operation-module"><div className="module-today"><section className="summary-strip"><span><small>Output</small><strong>{output.toLocaleString()}</strong></span><span><small>Target</small><strong>{target.toLocaleString()}</strong></span><span><small>Completion</small><strong>{Math.round((output / target) * 100)}%</strong></span><span><small>Open issues</small><strong>{openIssues.length}</strong></span><span><small>Machines running</small><strong>{production.machines.filter((item) => item.state === 'running').length}/{production.machines.length}</strong></span></section><div className="split-workspace ops-today-grid"><section className="core-panel"><div className="panel-head"><div><span className="core-eyebrow">Plan vs actual</span><h2>Active production</h2></div><Link className="text-link" to="/operations/production/?tab=production">Record output</Link></div><JobList jobs={production.jobs} /></section><section className="core-panel"><div className="panel-head"><div><span className="core-eyebrow">Exceptions</span><h2>Quality and equipment</h2></div><Link className="text-link" to="/operations/production/?tab=control">Open controls</Link></div><IssueList issues={openIssues} onResolve={resolveIssue} /></section></div></div>{actionControls}</div>
+  return <div className="operation-module">
+    <div className="module-today">
+      <section className="summary-strip"><span><small>Output</small><strong>{output.toLocaleString()}</strong></span><span><small>Target</small><strong>{target.toLocaleString()}</strong></span><span><small>Completion</small><strong>{completion}%</strong></span><span><small>Open issues</small><strong>{openIssues.length}</strong></span><span><small>Machines running</small><strong>{production.machines.filter((item) => item.state === 'running').length}/{production.machines.length}</strong></span></section>
+      <div className="split-workspace ops-today-grid">
+        <section className="core-panel"><div className="panel-head"><div><span className="core-eyebrow">Plan vs actual</span><h2>Active production</h2></div><Link className="text-link" to="/operations/production/?tab=production">Record output</Link></div><JobList jobs={production.jobs} /></section>
+        <section className="core-panel"><div className="panel-head"><div><span className="core-eyebrow">Exceptions</span><h2>Quality and equipment</h2></div><Link className="text-link" to="/operations/production/?tab=control">Open controls</Link></div><IssueList issues={openIssues} onResolve={resolveIssue} /></section>
+      </div>
+    </div>
+    {actionControls}
+  </div>
 }
 
 function JobList({ jobs }: { jobs: ProductionJob[] }) {
@@ -1374,7 +1504,15 @@ function JobList({ jobs }: { jobs: ProductionJob[] }) {
 
 function IssueList({ issues, onResolve }: { issues: ProductionIssue[]; onResolve: (id: string) => void }) {
   if (!issues.length) return <Empty>No production issue is open.</Empty>
-  return <div className="issue-list">{issues.map((issue) => <article key={issue.id}><span className={`issue-mark ${issue.status}`}>{issue.status === 'open' ? '!' : '✓'}</span><div><strong>{issue.summary}</strong><small>{issue.id} · {issue.kind} · {issue.area} · {formatTime(issue.createdAt)}</small></div>{issue.status === 'open' ? <button className="text-link" onClick={() => onResolve(issue.id)} type="button">Resolve</button> : <b>Resolved</b>}</article>)}</div>
+  return <div className="issue-list">{issues.map((issue) => <article key={issue.id}>
+    <span className={`issue-mark ${issue.status}`}>{issue.status === 'open' ? '!' : '✓'}</span>
+    <div>
+      <strong>{issue.summary}</strong>
+      <small>{issue.id} · {issue.kind} · {issue.area} · {formatTime(issue.createdAt)}</small>
+      {issue.status === 'resolved' ? <small>{issue.resolution ? `Resolved by ${issue.resolution.resolvedBy} · Evidence: ${issue.resolution.evidenceReference}` : 'Legacy resolution · no attributed proof was available'}</small> : null}
+    </div>
+    {issue.status === 'open' ? <button className="text-link" onClick={() => onResolve(issue.id)} type="button">Resolve</button> : <b>Resolved</b>}
+  </article>)}</div>
 }
 
 export function SettingsPage() {
