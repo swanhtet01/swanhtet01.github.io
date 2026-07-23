@@ -19,7 +19,7 @@ Prove one real workflow in which SuperMega keeps the operating record, a respons
 
 - Home, Work, and Products are the only primary destinations; Settings is a utility.
 - Home reveals one accountable next action, then the three product entries.
-- Work has one team picker and three views: Work, Agents, and Review. On mobile, new-work intake, work records, and agent roles use a focused list-to-detail state that hides repeated overview controls until Back; desktop keeps the split workspace.
+- Work has one team picker and Work, Agents, Review. Mobile intake, records, and roles hide repeated overview until Back; desktop stays split. New work appears only in Work, and each view states its purpose.
 - Products contains Commerce, Production, and Website. No public agent catalogue, demo-domain collection, POS product, or separate internal-console product is in scope.
 - Commerce opens on Orders, with Stock and collapsed close controls. Production opens on Jobs, with Problems and collapsed recurring-job intake. Website keeps Pages, Navigation, Publish, and Split on desktop; mobile reduces the primary choice to Edit or Publish, with page, navigation, and search in Site settings.
 - Commerce, Production, and Website have authenticated tenant commands. Managed Production starts from real records and requires human-bound evidence.
@@ -31,11 +31,11 @@ Prove one real workflow in which SuperMega keeps the operating record, a respons
 
 ## Latest verification
 
-- Draft release candidate: GitHub PR `#258` on branch `agent/supermega-release-candidate`; its validated product implementation head is `7c2dc13009252b43e6d676a92ef51b00610c62d9`.
-- GitHub `SuperMega App CI` run `169` passed every validation job for pushed head `7c2dc13009252b43e6d676a92ef51b00610c62d9`.
+- Draft release candidate: GitHub PR `#258` on branch `agent/supermega-release-candidate`; its validated product implementation head is `ef667f28853fb3d154bf812d140a2d76ddf2ef9f`.
+- GitHub `SuperMega App CI` run `171` passed every validation job for pushed head `ef667f28853fb3d154bf812d140a2d76ddf2ef9f`.
 - Candidate lint and build pass with 178 product/runtime checks, 51 coordinated-release checks, 44 security checks, 10 migration-chain checks, 11 Vercel environment/domain checks, and 102 Python tests.
 - The PostgreSQL 17.10 evidence records 20 passing migration, authority, isolation, revocation, recovery, and validator checks across two clean TLS clusters. Cleanup passed; external systems were unchanged.
-- 375px browser audits show no overflow, undersized controls, or console errors. Website exposes one 44px Recovery settings action; reset scope was inspected without deletion. Work moves agent detail from 579px to 72px and its first field from 773px to 266px; work detail and new-work intake also start at 72px.
+- 375px browser audits show no overflow, undersized controls, or console errors. Website exposes one 44px Recovery settings action; reset scope was inspected without deletion. Work moves agent detail from 579px to 72px and its first field from 773px to 266px; work detail and new-work intake also start at 72px. Review Prepare moved from 806px to 724px.
 - No Vercel deployment was created by the release-candidate push. The latest `megaos` and `supermega-public` production deployments still reference `main` commit `6885c3201d523d42d176c3dcd91de28dc1e17f6f`.
 - The connected `supermegabase` project is active and healthy on hosted PostgreSQL 17.6.1. Read-only inspection confirms `app_private`, `app_private.trial_schema_meta`, and `supermega_trial_backend` are not installed.
 - Supabase migration history currently contains one unrelated public-schema RLS migration, not the five SuperMega private-trial migrations.
