@@ -351,6 +351,8 @@ if (productionTabsContract.includes("{ id: 'today', label: 'Today' }") || !produ
 const productionPageContract = coreSource.slice(coreSource.indexOf('function ProductionPage'), coreSource.indexOf('function JobList'))
 const productionJobsContract = productionPageContract.slice(productionPageContract.indexOf("if (tab === 'production')"), productionPageContract.indexOf("if (tab === 'control')"))
 if (!productionJobsContract.includes('className="summary-strip"') || !productionJobsContract.includes('Open problems') || !coreSource.includes('No jobs yet. Add the first job below to start recording output.')) fail('production_jobs_not_task_first')
+if (!coreCssSource.includes('.production-view > .output-panel { grid-row: 1; }')
+  || !coreCssSource.includes('.production-view > .job-panel { grid-row: 2; }')) fail('production_mobile_primary_action_not_first')
 if (coreSource.includes('Math.min(quantity') || !productionPageContract.includes('No output was recorded.') || !productionPageContract.includes('Number.isSafeInteger(quantity)') || productionPageContract.includes('max={selectedRemaining')) fail('production_output_silently_clamped')
 if (!productionPageContract.includes('persisted with attributed Production evidence.') || productionPageContract.includes('<ActionHistory actions={actions} domain="production"')) fail('production_confirmation_record_not_domain_specific')
 if (!coreSource.includes("addEventListener('storage', refreshFromStorage)") || !coreSource.includes("removeEventListener('storage', refreshFromStorage)")) fail('production_cross_tab_refresh_missing')

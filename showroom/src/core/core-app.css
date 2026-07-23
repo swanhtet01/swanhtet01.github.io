@@ -578,6 +578,8 @@ textarea { min-height: 72px; resize: vertical; }
   .summary-strip.compact-summary > span:last-child { grid-column: auto; border-right: 0; }
   .summary-strip small { font-size: 7px; }
   .split-workspace, .settings-grid, .command-grid { height: auto; display: grid; grid-template-columns: 1fr; grid-template-rows: auto; }
+  .production-view > .output-panel { grid-row: 1; }
+  .production-view > .job-panel { grid-row: 2; }
   .task-first-grid { grid-template-columns: 1fr; }
   .home-more .command-grid { min-height: 0; }
   .command-queue-panel { grid-row: auto; }
