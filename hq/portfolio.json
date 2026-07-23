@@ -30,7 +30,7 @@
       "job": "Convert Website and trusted-channel demand into controlled orders, stock, fulfilment, payment status, follow-up, and close.",
       "surfaces": ["Today", "Orders", "Inventory"],
       "templateContract": { "file": "../site-manifest.json", "productId": "commerce" },
-      "nextGate": "Repeat the managed Website intake through authenticated human Commerce confirmation with one named user, then measure handling time, exceptions, and completion."
+      "nextGate": "Repeat the managed Website intake through authenticated human Commerce confirmation across at least two attributable catalog items, then define the twenty-fixture source-backed AI Order Intake evaluation."
     },
     {
       "id": "production",

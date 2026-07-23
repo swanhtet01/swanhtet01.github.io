@@ -29,21 +29,19 @@ Prove one real workflow in which SuperMega keeps the operating record, a respons
 ## Latest verification
 
 - Candidate identity is brand `jade-v1-2026-07`, context `2026-07-23.4`, and catalogue `2026-07-23.4`.
-- Product-inclusive lint, strict TypeScript, HQ, one product workspace, one compatibility redirect, six workflow profiles, 24 Website state checks, 12 local order-completion checks, 44 Commerce state checks, 51 Production state checks, 48 release checks, 43 security checks, eleven Vercel contract checks, six RLS checks, and 73 Python tests pass locally.
-- Core desktop and 390 px paths have no horizontal overflow. Production output, issue creation, attributed resolution, machine-state change, reload persistence, confirmation focus, and all four event types pass in the local browser with no console error.
-- Website desktop and 390 px paths have no horizontal overflow. Content, Navigation, and Publish remain the only views; responsive controls remain visible; preview destinations are operable; arrow-key tab movement works; a migrated v1 approval stays historical; and a fresh evidence-bound approval plus approved snapshot persist after reload with no console error.
+- Product-inclusive lint, strict TypeScript, HQ, one product workspace, one compatibility redirect, six workflow profiles, 24 Website state checks, 12 local order-completion checks, 48 Commerce state checks, 51 Production state checks, 48 release checks, 43 security checks, eleven Vercel contract checks, six RLS checks, and 74 Python tests pass locally.
+- Desktop and 390 px paths have no horizontal overflow. Website content/navigation/publish persistence, Commerce lifecycle controls, and Production output/issues/machine observations pass in the browser without console errors.
 - Team evidence and Product decisions require an attributed human reviewer. Agent handoffs cannot satisfy terminal authority.
-- Website v2 preserves valid v1 browser history without reopening legacy approval, confirms writes before UI success, rejects stale content edits, and binds approval and approved snapshots to the exact current evidence IDs. Authenticated schema-v3 workspaces use explicit managed events and optimistic versions; local fallback remains available. Neither mode can deploy a site.
-- Website-to-Commerce intake is now an additive managed Commerce v2 record as well as a labelled local fallback. Intake creation retains the approved Website source, catalog SKU, quantity, and attributable actor but cannot move stock or create an order. Commerce collects the customer reference, fulfilment, and payment method in its existing Orders view; one authenticated human confirmation atomically converts the intake, creates one idempotent order, and reserves exact stock. No customer send, payment initiation, delivery request, domain write, or deployment occurs.
-- Production v2 serializes local writes into one revisioned event record, preserves valid v1 records without fabricated history, rejects silent output clamping and stale machine changes, and retains issue-resolution proof. It remains browser-local and does not control machinery.
-- Production release still requires review, owner authorization, and the coordinated `main` workflow; a local pass or pushed branch is not a release.
+- Website v2 confirms writes, rejects stale evidence, and supports managed-v3 or labelled local state; neither mode can deploy.
+- Website intake retains approved source, SKU, quantity, and actor without moving stock. A human conversion atomically creates one order and reservation. No customer send, payment initiation, delivery request, domain write, or deployment occurs.
+- Inventory can add multiple SKUs with an attributable exact opening movement. Agents may prepare intake only; catalog, order, stock, payment, close, and initialization commands are human-only. No route or tab was added.
+- Production v2 remains a revisioned browser-local event record with no machinery control. Release still requires review, owner authorization, and the coordinated `main` workflow.
 
 ## Blockers
 
 - Managed activation still needs a separately validated runtime database URL, v1→v2→v3 migration rehearsal on non-production data, explicit least-privilege `website.write` grants, backup/restore evidence, a high-entropy signing secret, and explicit writes enablement.
 - No pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
-- Vercel audit reports obsolete/unused variable names and separate legacy hosts; no value is exposed and no cleanup or retirement is authorized here.
-- Durable workflow, AI SDK, telemetry, dense-table, and realtime candidates remain adoption-gated.
+- Vercel has obsolete variable names and legacy hosts; no cleanup is authorized. Durable workflow, AI SDK, telemetry, dense-table, and realtime candidates remain gated.
 
 ## Decisions in force
 
@@ -55,7 +53,9 @@ Prove one real workflow in which SuperMega keeps the operating record, a respons
 
 ## Next evidence
 
-- Rehearse the managed Website-to-Commerce flow on non-production tenant data with one named user through intake, reservation, payment reconciliation, fulfilment, one controlled cancellation, and stock-ledger review; measure handling time and correction effort.
+- Rehearse the managed Website-to-Commerce flow on non-production tenant data with one named user and at least two attributable catalog items through intake, reservation, payment reconciliation, fulfilment, one controlled cancellation, and stock-ledger review; measure handling time and correction effort.
+- Define and evaluate the source-backed AI Order Intake draft against twenty approved synthetic fixtures before connecting a model or adding another product surface.
+- Specify `action_intent.v1` for one agent-proposed, human-applied cancellation; execution stays blocked until approval and Commerce changes are atomic and the non-production RLS rehearsal passes.
 - Run one named shift user through output, issue, resolution, and machine-state records; measure correction time and compare the event record with the source shift sheet.
 - Exercise one agent assignment from accountable work through attributed evidence and human review.
 - Complete one pilot definition and run its acceptance test.
