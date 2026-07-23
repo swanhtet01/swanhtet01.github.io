@@ -105,6 +105,11 @@ export function TeamsPage() {
   const releaseComplete = workspace.release.checks.filter((check) => check.complete).length
   const releasePercent = Math.round((releaseComplete / workspace.release.checks.length) * 100)
   const reviewDecision = workspace.decisions.find((decision) => decision.id === reviewDecisionId && decision.status === 'proposed')
+  const workspaceCopy = activeView === 'agents'
+    ? 'Assign bounded roles to work; named humans keep authority.'
+    : activeView === 'review'
+      ? 'Check release evidence and decisions before approval.'
+      : 'Own one outcome, its evidence, and its next status.'
 
   useEffect(() => {
     if (!mobileFocusOpen || !window.matchMedia('(max-width: 840px)').matches) return
@@ -288,8 +293,8 @@ export function TeamsPage() {
       <PageHeading
         eyebrow="Teams"
         title={activeDefinition.label}
-        copy="Accountable work, delegated roles, evidence, and human review in one workspace."
-        actions={<button className="core-button primary" onClick={openNewWork} type="button">New work</button>}
+        copy={workspaceCopy}
+        actions={activeView === 'work' && !intakeOpen ? <button className="core-button primary" onClick={openNewWork} type="button">New work</button> : undefined}
       />
       <div className="workspace-toolbar simple-toolbar">
         <label className="team-picker"><span>Team</span><select aria-label="Team" value={activeTeam} onChange={(event) => selectTeam(event.target.value as TeamId)}>{teamDefinitions.map((team) => <option key={team.id} value={team.id}>{team.label}</option>)}</select></label>
