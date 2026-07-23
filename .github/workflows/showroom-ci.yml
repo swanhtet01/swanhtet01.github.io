@@ -59,7 +59,9 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: showroom/package-lock.json
+          cache-dependency-path: |
+            package-lock.json
+            showroom/package-lock.json
 
       - name: Setup Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -71,9 +73,13 @@ jobs:
           python -m pip install --disable-pip-version-check -r requirements-test.txt
           python -m unittest discover -s tests -p 'test_*.py' -v
 
+      - name: Install migration verifier
+        run: npm ci --ignore-scripts
+
       - name: Verify coordinated release and RLS guards
         run: |
           python tools/validate_supermega_database_url.py --self-test
+          node tools/verify_private_trial_migrations.mjs
           node tools/verify_coordinated_release_live.mjs --self-test
           node tools/verify_app_deploy_workflow.mjs
           node tools/verify_public_deploy_guard.mjs

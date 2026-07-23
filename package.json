@@ -6,7 +6,7 @@
     "build": "npm run public:build",
     "app:release:write": "node tools/write_app_release_metadata.mjs",
     "app:build": "npm run app:release:write && npm --prefix showroom run build && npm run app:verify",
-    "app:verify": "node tools/verify_app_build.mjs && node tools/verify_app_deploy_workflow.mjs && node tools/verify_app_security_contract.mjs && npm run database:validator:self-test && npm run vercel:contracts:test && npm run hq:verify",
+    "app:verify": "node tools/verify_app_build.mjs && node tools/verify_app_deploy_workflow.mjs && node tools/verify_app_security_contract.mjs && npm run database:validator:self-test && npm run database:migrations:verify && npm run vercel:contracts:test && npm run hq:verify",
     "app:verify:live": "node tools/verify_app_release_live.mjs",
     "dev": "npm --prefix showroom run dev",
     "bundle:preview": "python3 tools/package_preview_bundle.py",
@@ -28,10 +28,14 @@
     "kernel:verify": "npm --prefix kernel run verify",
     "deploy:kernel:prod": "npm --prefix kernel run deploy:prod",
     "db:supermega:activate": "powershell -ExecutionPolicy Bypass -File tools/activate_supermega_database.ps1",
+    "database:migrations:verify": "node tools/verify_private_trial_migrations.mjs",
     "smoke:local": "bash tools/run_local_smoke.sh",
     "smoke:public": "npm run public:prebuilt",
     "audit:lead-ledger": "node tools/audit_lead_ledger.mjs",
     "verify:app-deploy-workflow": "node tools/verify_app_deploy_workflow.mjs",
     "hq:verify": "node tools/verify_hq_contract.mjs"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.4"
   }
 }
