@@ -39,7 +39,7 @@ export function NavigationWorkspace({
               value={workspace.siteName}
             />
           </label>
-          <p className="website-field-help">Used in the preview header and the local publish snapshot.</p>
+          <p className="website-field-help">Used in the preview header and the approved snapshot.</p>
         </fieldset>
 
         <section className="website-navigation-editor" aria-labelledby="primary-navigation-title">
@@ -117,7 +117,7 @@ export function NavigationWorkspace({
         <aside className="website-boundary-note">
           <span aria-hidden="true">&gt;_</span>
           <div>
-            <strong>Navigation changes are local draft data.</strong>
+            <strong>Navigation changes remain draft data.</strong>
             <p>A visible draft page will fail the publish-readiness gate. No route or deployment configuration is changed here.</p>
           </div>
         </aside>

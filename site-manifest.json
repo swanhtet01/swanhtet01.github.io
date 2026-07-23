@@ -1,7 +1,7 @@
 {
   "schemaVersion": "supermega.site-context.v1",
-  "contextVersion": "2026-07-22.7",
-  "catalogVersion": "2026-07-22.6",
+  "contextVersion": "2026-07-23.4",
+  "catalogVersion": "2026-07-23.4",
   "brand": {
     "name": "SuperMega",
     "domain": "supermega.dev",
@@ -122,6 +122,19 @@
           "metric": "Exception closure time and trace completeness"
         }
       ]
+    }
+  ],
+  "prototypeProducts": [
+    {
+      "id": "website",
+      "name": "Website",
+      "route": "https://app.supermega.dev/products/website/",
+      "status": "browser-local-prototype",
+      "workspaceSchema": "supermega.website.workspace.v2",
+      "views": ["Content", "Navigation", "Publish"],
+      "workflow": ["Edit finite pages", "Review responsive preview", "Record attributed evidence", "Approve exact evidence set", "Record approved snapshot", "Prepare bounded Commerce intake"],
+      "proof": ["Monotonic content revision", "Source digest", "Evidence IDs", "Human approval", "Append-only events", "Confirmed browser write"],
+      "boundaries": ["No CMS", "No domain write", "No analytics connection", "No deployment", "No customer send", "No payment action"]
     }
   ],
   "pages": [

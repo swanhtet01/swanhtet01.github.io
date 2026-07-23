@@ -6,11 +6,11 @@ This package is the canonical application for `app.supermega.dev`. It is one com
 
 - `/` - Today: company work, orders, production exceptions, release readiness, briefs, and owner decisions.
 - `/work/?team=product&view=board` - Product, Engineering, Growth, and Finance workspaces with outcomes, lifecycle, owners, evidence, decisions, and release checks.
-- `/operations/commerce/?tab=today` - Commerce orders, customer channels, fulfilment, inventory, local payments, and close.
+- `/operations/commerce/?tab=today` - Website and customer-channel orders, accountable confirmation, fulfilment, inventory, local payment status, and close.
 - `/operations/production/?tab=today` - Production plan, output, quality, materials, equipment, maintenance, and issues.
 - `/settings/` - compact pilot definition, evidence export, reset, runtime readiness, and authority boundaries.
 
-Capability is organized through internal views rather than more routes. Legacy Shop, Plant, Agents, Assist, Setup, and Trust URLs redirect into the canonical areas. Assistance is embedded where work and evidence live.
+Capability is organized through internal views rather than more routes. Legacy Shop, Plant, Ecommerce, Agents, Assist, Setup, and Trust URLs redirect into the canonical areas. Website remains the only local product prototype, and its order handoff is completed inside Commerce rather than a second order app.
 
 ## Core files
 

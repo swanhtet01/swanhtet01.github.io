@@ -7,6 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from supermega_runtime.commerce_runtime import COMMERCE_HUMAN_EVENTS
 from supermega_runtime.trial_store import (
     APPROVAL_DECIDE_CAPABILITY,
     APPROVAL_REQUEST_CAPABILITY,
@@ -25,11 +26,13 @@ from supermega_runtime.trial_store import (
     TrialStoreError,
     TrialValidationError,
     TrialVersionConflict,
+    StatePrecondition,
 )
+from supermega_runtime.website_runtime import WEBSITE_HUMAN_EVENTS, validate_website_snapshot_source
 
 
 TRIAL_API_PREFIX = "/api/trial/v1"
-TRIAL_SURFACE_ORDER = ("company", "commerce", "production", "setup")
+TRIAL_SURFACE_ORDER = ("company", "commerce", "production", "website", "setup")
 
 PrincipalResolver = Callable[[Request], TrialPrincipal | None]
 ResultT = TypeVar("ResultT")
@@ -54,7 +57,7 @@ class _StrictRequest(BaseModel):
 
 class TrialCommandRequest(_StrictRequest):
     command_id: UUID
-    surface: Literal["company", "commerce", "production", "setup"]
+    surface: Literal["company", "commerce", "production", "website", "setup"]
     event_type: str = Field(min_length=1, max_length=80)
     expected_version: int = Field(ge=0)
     payload: dict[str, Any] = Field(default_factory=dict)
@@ -250,6 +253,35 @@ def _command_response(result: CommandResult) -> dict[str, Any]:
     return {"result": result.to_dict()}
 
 
+def _website_source_identity(value: object) -> tuple[str, str, str, str] | None:
+    if not isinstance(value, Mapping):
+        return None
+    fields = ("fingerprint", "approvalId", "snapshotId", "pageId")
+    identity: list[str] = []
+    for field in fields:
+        item = value.get(field)
+        if not isinstance(item, str) or not item:
+            return None
+        identity.append(item)
+    return identity[0], identity[1], identity[2], identity[3]
+
+
+def _commerce_retains_website_source(commerce_state: object, source: object) -> bool:
+    source_identity = _website_source_identity(source)
+    if source_identity is None or not isinstance(commerce_state, Mapping):
+        return False
+    intakes = commerce_state.get("websiteIntakes", [])
+    if not isinstance(intakes, list):
+        return False
+    return any(
+        isinstance(intake, Mapping)
+        and isinstance(intake.get("source"), Mapping)
+        and _website_source_identity(intake.get("source")) == source_identity
+        and intake.get("source") == source
+        for intake in intakes
+    )
+
+
 def create_trial_router(*, store: TrialStore, resolve_principal: PrincipalResolver) -> APIRouter:
     """Create an unwired private-trial router with injected storage and auth.
 
@@ -290,8 +322,40 @@ def create_trial_router(*, store: TrialStore, resolve_principal: PrincipalResolv
     def trial_command(request: Request, body: TrialCommandRequest) -> dict[str, Any]:
         principal = _resolve_principal(request, resolve_principal)
         _reject_client_identity(body.payload, path="payload")
+        if body.surface == "commerce":
+            evidence = body.payload.get("evidence")
+            if not isinstance(evidence, Mapping) or evidence.get("actor") != principal.actor_id:
+                raise _error(422, "commerce_actor_evidence_required")
+            if body.event_type in COMMERCE_HUMAN_EVENTS and principal.actor_kind != "human":
+                raise _error(403, "trial_human_approval_required")
+        if body.surface == "website":
+            evidence = body.payload.get("evidence")
+            if not isinstance(evidence, Mapping) or evidence.get("actor") != principal.actor_id:
+                raise _error(422, "website_actor_evidence_required")
+            if body.event_type in WEBSITE_HUMAN_EVENTS and principal.actor_kind != "human":
+                raise _error(403, "trial_human_approval_required")
         readiness = _readiness(store, principal)
         _require_write_ready(readiness, SURFACE_WRITE_CAPABILITIES[body.surface])
+        related_surfaces: tuple[str, ...] = ()
+        state_precondition: StatePrecondition | None = None
+        if body.surface == "commerce" and body.event_type == "commerce.website_intake.created":
+            next_state = body.payload.get("state")
+            website_intakes = next_state.get("websiteIntakes") if isinstance(next_state, Mapping) else None
+            source = website_intakes[0].get("source") if (
+                isinstance(website_intakes, list)
+                and website_intakes
+                and isinstance(website_intakes[0], Mapping)
+            ) else None
+
+            def require_website_source(
+                commerce_state: Mapping[str, Any],
+                related_states: Mapping[str, Mapping[str, Any]],
+            ) -> None:
+                if not _commerce_retains_website_source(commerce_state, source):
+                    validate_website_snapshot_source(related_states.get("website", {}), source)
+
+            related_surfaces = ("website",)
+            state_precondition = require_website_source
         result = _invoke(
             lambda: store.apply_command(
                 principal,
@@ -300,6 +364,8 @@ def create_trial_router(*, store: TrialStore, resolve_principal: PrincipalResolv
                 event_type=body.event_type,
                 expected_version=body.expected_version,
                 payload=body.payload,
+                related_surfaces=related_surfaces,
+                state_precondition=state_precondition,
             )
         )
         return _command_response(result)

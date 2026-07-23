@@ -20,18 +20,24 @@ type ApprovalInput = {
   note: string
 }
 
+type CommerceHandoffInput = {
+  sku: string
+  quantity: number
+}
+
 type PublishWorkspaceProps = {
   approvalIsCurrent: boolean
   checks: ReadinessCheck[]
   fingerprint: string
   handoffAvailable: boolean
   handoffIsCurrent: boolean
+  managedActorId: string
   publishIsCurrent: boolean
   workspace: WebsiteWorkspace
-  onAddEvidence: (input: EvidenceInput) => void
-  onApprove: (input: ApprovalInput) => void
-  onPrepareEcommerceHandoff: () => void
-  onRecordPublish: () => void
+  onAddEvidence: (input: EvidenceInput) => Promise<boolean>
+  onApprove: (input: ApprovalInput) => Promise<boolean>
+  onPrepareCommerceHandoff: (input: CommerceHandoffInput) => Promise<void>
+  onRecordPublish: () => Promise<void>
 }
 
 export function PublishWorkspace({
@@ -40,11 +46,12 @@ export function PublishWorkspace({
   fingerprint,
   handoffAvailable,
   handoffIsCurrent,
+  managedActorId,
   publishIsCurrent,
   workspace,
   onAddEvidence,
   onApprove,
-  onPrepareEcommerceHandoff,
+  onPrepareCommerceHandoff,
   onRecordPublish,
 }: PublishWorkspaceProps) {
   const [evidenceKind, setEvidenceKind] = useState<EvidenceKind>('content')
@@ -54,27 +61,56 @@ export function PublishWorkspace({
   const [reviewer, setReviewer] = useState('')
   const [approvalNote, setApprovalNote] = useState('')
   const [approvalConfirmed, setApprovalConfirmed] = useState(false)
+  const [handoffSku, setHandoffSku] = useState('')
+  const [handoffQuantity, setHandoffQuantity] = useState(1)
+  const [submitting, setSubmitting] = useState<'evidence' | 'approval' | 'snapshot' | 'handoff' | ''>('')
   const passedCount = checks.filter((check) => check.passed).length
   const allChecksPass = passedCount === checks.length
-  const staleEvidenceCount = workspace.evidence.filter((entry) => entry.fingerprint !== fingerprint).length
+  const latestApproval = workspace.approvals[0]
+  const staleEvidenceCount = workspace.evidence.filter((entry) => (
+    entry.fingerprint !== fingerprint || entry.source.contentRevision !== workspace.contentRevision
+  )).length
 
-  function submitEvidence(event: FormEvent<HTMLFormElement>) {
+  async function prepareCommerceHandoff() {
+    const sku = handoffSku.trim().toUpperCase()
+    if (!sku || !Number.isSafeInteger(handoffQuantity) || handoffQuantity < 1 || handoffQuantity > 99) return
+    setSubmitting('handoff')
+    try {
+      await onPrepareCommerceHandoff({ sku, quantity: handoffQuantity })
+    } finally {
+      setSubmitting('')
+    }
+  }
+
+  async function submitEvidence(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    onAddEvidence({
+    setSubmitting('evidence')
+    const saved = await onAddEvidence({
       kind: evidenceKind,
       finding: evidenceFinding.trim(),
       reference: evidenceReference.trim(),
-      verifiedBy: evidenceVerifier.trim(),
+      verifiedBy: managedActorId || evidenceVerifier.trim(),
     })
-    setEvidenceFinding('')
-    setEvidenceReference('')
+    setSubmitting('')
+    if (saved) {
+      setEvidenceFinding('')
+      setEvidenceReference('')
+    }
   }
 
-  function submitApproval(event: FormEvent<HTMLFormElement>) {
+  async function submitApproval(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!allChecksPass || !approvalConfirmed) return
-    onApprove({ reviewer: reviewer.trim(), note: approvalNote.trim() })
-    setApprovalConfirmed(false)
+    setSubmitting('approval')
+    const saved = await onApprove({ reviewer: managedActorId || reviewer.trim(), note: approvalNote.trim() })
+    setSubmitting('')
+    if (saved) setApprovalConfirmed(false)
+  }
+
+  async function recordSnapshot() {
+    setSubmitting('snapshot')
+    await onRecordPublish()
+    setSubmitting('')
   }
 
   return (
@@ -83,7 +119,7 @@ export function PublishWorkspace({
         <div>
           <span className="website-eyebrow">Publish control</span>
           <h2 id="publish-editor-title">Readiness and approval</h2>
-          <p>Checks use only the current local workspace revision.</p>
+          <p>Checks use only the current workspace revision.</p>
         </div>
         <span className={'website-status ' + (allChecksPass ? 'is-ready' : 'is-pending')}>
           {passedCount}/{checks.length} passed
@@ -121,7 +157,7 @@ export function PublishWorkspace({
               <span className="website-step">02</span>
               <div>
                 <h3 id="evidence-title">Verified evidence</h3>
-                <p>Recording evidence is an accountable claim; this demo does not run a test for you.</p>
+                <p>Recording evidence is an accountable claim. Managed mode binds it to the signed-in actor.</p>
               </div>
             </div>
             {staleEvidenceCount ? <small>{staleEvidenceCount} stale record{staleEvidenceCount === 1 ? '' : 's'}</small> : null}
@@ -130,7 +166,9 @@ export function PublishWorkspace({
           <div className="website-evidence-status">
             {evidenceRequirements.map((requirement) => {
               const evidence = workspace.evidence.find((entry) => (
-                entry.kind === requirement.id && entry.fingerprint === fingerprint
+                entry.kind === requirement.id
+                && entry.fingerprint === fingerprint
+                && entry.source.contentRevision === workspace.contentRevision
               ))
               return (
                 <article className={evidence ? 'is-current' : ''} key={requirement.id}>
@@ -179,16 +217,19 @@ export function PublishWorkspace({
               />
             </label>
             <label>
-              <span>Verified by</span>
+              <span>{managedActorId ? 'Signed-in actor' : 'Verified by'}</span>
               <input
+                disabled={Boolean(managedActorId)}
                 maxLength={80}
                 onChange={(event) => setEvidenceVerifier(event.target.value)}
-                placeholder="Accountable person or role"
+                placeholder={managedActorId ? 'Authenticated identity' : 'Accountable person or role'}
                 required
-                value={evidenceVerifier}
+                value={managedActorId || evidenceVerifier}
               />
             </label>
-            <button className="website-button is-secondary" type="submit">Record evidence</button>
+            <button className="website-button is-secondary" disabled={Boolean(submitting)} type="submit">
+              {submitting === 'evidence' ? 'Saving…' : 'Record evidence'}
+            </button>
           </form>
         </section>
 
@@ -198,19 +239,19 @@ export function PublishWorkspace({
               <span className="website-step">03</span>
               <div>
                 <h3 id="approval-title">Human approval</h3>
-                <p>Approval applies only to the exact fingerprint shown above.</p>
+                <p>Approval applies only to the exact fingerprint; managed mode binds the signed-in actor.</p>
               </div>
             </div>
             <span className={'website-status ' + (approvalIsCurrent ? 'is-ready' : 'is-pending')}>
-              {approvalIsCurrent ? 'approved' : workspace.approval ? 'stale' : 'required'}
+              {approvalIsCurrent ? 'approved' : latestApproval ? 'stale' : 'required'}
             </span>
           </header>
 
-          {workspace.approval ? (
+          {latestApproval ? (
             <div className={'website-approval-record ' + (approvalIsCurrent ? 'is-current' : 'is-stale')}>
-              <strong>{approvalIsCurrent ? 'Current approval' : 'Superseded by workspace changes'}</strong>
-              <p>{workspace.approval.note}</p>
-              <small>{workspace.approval.reviewer} · {formatTimestamp(workspace.approval.approvedAt)} · {workspace.approval.fingerprint}</small>
+              <strong>{approvalIsCurrent ? 'Current approval' : latestApproval.migratedFromV1 ? 'Historical v1 approval' : 'Superseded by workspace changes'}</strong>
+              <p>{latestApproval.note}</p>
+              <small>{latestApproval.reviewer} · {formatTimestamp(latestApproval.approvedAt)} · content r{latestApproval.source.contentRevision}</small>
             </div>
           ) : null}
 
@@ -219,18 +260,18 @@ export function PublishWorkspace({
               <label>
                 <span>Human reviewer</span>
                 <input
-                  disabled={!allChecksPass}
+                  disabled={Boolean(managedActorId) || !allChecksPass || approvalIsCurrent}
                   maxLength={80}
                   onChange={(event) => setReviewer(event.target.value)}
-                  placeholder="Name or accountable role"
+                  placeholder={managedActorId ? 'Authenticated identity' : 'Name or accountable role'}
                   required
-                  value={reviewer}
+                  value={managedActorId || reviewer}
                 />
               </label>
               <label>
                 <span>Decision note</span>
                 <input
-                  disabled={!allChecksPass}
+                  disabled={!allChecksPass || approvalIsCurrent}
                   maxLength={240}
                   onChange={(event) => setApprovalNote(event.target.value)}
                   placeholder="Why this revision is approved"
@@ -242,20 +283,22 @@ export function PublishWorkspace({
             <label className="website-confirmation">
               <input
                 checked={approvalConfirmed}
-                disabled={!allChecksPass}
+                disabled={!allChecksPass || approvalIsCurrent}
                 onChange={(event) => setApprovalConfirmed(event.target.checked)}
                 type="checkbox"
               />
-              <span>I reviewed this exact local revision and accept the recorded evidence.</span>
+              <span>I reviewed this exact content revision and accept the recorded evidence.</span>
             </label>
             <div className="website-gate-actions">
-              <small>{allChecksPass ? 'Ready for a named human decision.' : 'Complete all readiness checks to unlock approval.'}</small>
+              <small>{approvalIsCurrent
+                ? 'This exact evidence set already has a current human approval.'
+                : allChecksPass ? 'Ready for a named human decision.' : 'Complete all readiness checks to unlock approval.'}</small>
               <button
                 className="website-button is-primary"
-                disabled={!allChecksPass || !approvalConfirmed}
+                disabled={!allChecksPass || !approvalConfirmed || approvalIsCurrent || Boolean(submitting)}
                 type="submit"
               >
-                Record approval
+                {approvalIsCurrent ? 'Current revision approved' : submitting === 'approval' ? 'Saving…' : 'Record approval'}
               </button>
             </div>
           </form>
@@ -266,50 +309,53 @@ export function PublishWorkspace({
             <div>
               <span className="website-step">04</span>
               <div>
-                <h3 id="local-publish-title">Local publish record</h3>
+                <h3 id="local-publish-title">Approved snapshot</h3>
                 <p>No deployment target, domain write, or external connection exists in this prototype.</p>
               </div>
             </div>
             <span className={'website-status ' + (publishIsCurrent ? 'is-ready' : 'is-local')}>
-              {publishIsCurrent ? 'recorded' : 'local only'}
+              {publishIsCurrent ? 'recorded' : 'not recorded'}
             </span>
           </header>
 
           <div className="website-local-publish-action">
             <div>
               <strong>{approvalIsCurrent ? 'Approval matches the current revision.' : 'A current approval is required.'}</strong>
-              <p>The action saves a bounded browser-local snapshot. It does not publish a website.</p>
+              <p>The action saves an evidence-bound approved snapshot. It does not publish a website.</p>
             </div>
             <button
               className="website-button is-primary"
-              disabled={!approvalIsCurrent || publishIsCurrent}
-              onClick={onRecordPublish}
+              disabled={!approvalIsCurrent || publishIsCurrent || Boolean(submitting)}
+              onClick={recordSnapshot}
               type="button"
             >
-              {publishIsCurrent ? 'Current revision recorded' : 'Record local publish'}
+              {publishIsCurrent ? 'Current revision recorded' : submitting === 'snapshot' ? 'Saving…' : 'Record approved snapshot'}
             </button>
           </div>
 
           <div className="website-handoff-action">
             <div>
-              <strong>Website → Ecommerce intake</strong>
-              <p>Prepare one non-PII SKU/quantity fixture from this approved local revision. The fingerprint is a revision marker, not a signature; no customer is contacted and no order is created.</p>
+              <strong>Website → Commerce intake</strong>
+              <p>Send one catalog SKU and quantity from this approved revision into Commerce. No stock, payment, customer message, or order changes until a human confirms it there.</p>
             </div>
-            <div>
+            <div className="website-handoff-controls">
+              <label>Commerce SKU<input autoComplete="off" maxLength={80} onChange={(event) => setHandoffSku(event.target.value.toUpperCase())} placeholder="SKU-001" value={handoffSku} /></label>
+              <label>Qty<input max="99" min="1" onChange={(event) => setHandoffQuantity(Number(event.target.value))} step="1" type="number" value={handoffQuantity} /></label>
               <button
                 className="website-button is-secondary"
-                disabled={!publishIsCurrent || !handoffAvailable || handoffIsCurrent}
-                onClick={onPrepareEcommerceHandoff}
+                disabled={!publishIsCurrent || !handoffAvailable || handoffIsCurrent || !handoffSku.trim() || Boolean(submitting)}
+                onClick={() => void prepareCommerceHandoff()}
                 type="button"
               >
-                {handoffIsCurrent ? 'Handoff ready' : 'Prepare intake'}
+                {handoffIsCurrent ? 'Intake sent' : submitting === 'handoff' ? 'Sending…' : 'Send intake'}
               </button>
-              {handoffIsCurrent ? <a className="website-button is-primary" href="/products/ecommerce/">Review in Ecommerce</a> : null}
+              {handoffIsCurrent ? <a className="website-button is-primary" href="/operations/commerce/?tab=orders">Review in Commerce</a> : null}
             </div>
           </div>
 
           {workspace.localPublishes.length ? (
             <div className="website-publish-history">
+              <small>Showing {Math.min(3, workspace.localPublishes.length)} of {workspace.localPublishes.length} retained snapshots</small>
               {workspace.localPublishes.slice(0, 3).map((record) => (
                 <article key={record.id}>
                   <span aria-hidden="true">&gt;_</span>
@@ -324,7 +370,7 @@ export function PublishWorkspace({
           ) : (
             <div className="website-empty compact">
               <span aria-hidden="true">&gt;_</span>
-              <p>No local publish records yet.</p>
+              <p>No approved snapshots yet.</p>
             </div>
           )}
         </section>

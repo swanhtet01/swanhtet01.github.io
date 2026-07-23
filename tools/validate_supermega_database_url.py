@@ -18,11 +18,11 @@ from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 
-CONTRACT = "supermega_private_trial_database_v2"
+CONTRACT = "supermega_private_trial_database_v3"
 SCHEMA = "app_private"
 BACKEND_ROLE = "supermega_trial_backend"
 SCHEMA_COMPONENT = "private_trial_backend"
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 EXPECTED_TABLES = frozenset(
     {
         "trial_schema_meta",
@@ -77,6 +77,7 @@ EXPECTED_POLICIES: dict[str, dict[str, Any]] = {
             "company.write",
             "commerce.write",
             "production.write",
+            "website.write",
             "setup.write",
         ),
     },
@@ -92,6 +93,7 @@ EXPECTED_POLICIES: dict[str, dict[str, Any]] = {
             "company.write",
             "commerce.write",
             "production.write",
+            "website.write",
             "setup.write",
         ),
     },
@@ -113,6 +115,7 @@ EXPECTED_POLICIES: dict[str, dict[str, Any]] = {
             "company.write",
             "commerce.write",
             "production.write",
+            "website.write",
             "setup.write",
             "approvals.request",
             "approvals.decide",
@@ -314,7 +317,8 @@ def _run_policy_self_test() -> dict[str, Any]:
         "and membership.status = 'active' "
         "and case workspace_events.surface when 'company' then 'company.write' "
         "when 'commerce' then 'commerce.write' when 'production' then 'production.write' "
-        "when 'setup' then 'setup.write' when 'approvals' then case workspace_events.event_type "
+        "when 'website' then 'website.write' when 'setup' then 'setup.write' "
+        "when 'approvals' then case workspace_events.event_type "
         "when 'approval.requested' then 'approvals.request' "
         "when 'approval.decided' then 'approvals.decide' end end = any(membership.capabilities))"
     )
@@ -809,7 +813,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--ensure-schema",
         action="store_true",
-        help="Require the complete v2 schema contract; this flag never applies migrations.",
+        help="Require the complete v3 schema contract; this flag never applies migrations.",
     )
     parser.add_argument("--require-ready", action="store_true")
     parser.add_argument(

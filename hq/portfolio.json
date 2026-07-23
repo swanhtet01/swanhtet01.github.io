@@ -16,30 +16,21 @@
     {
       "id": "website",
       "name": "Website",
-      "status": "prototype-local",
+      "status": "managed-trial",
       "path": "/products/website/",
       "job": "Turn an approved business brief into a finite, reviewable website candidate with content, navigation, evidence, and human publish approval.",
       "surfaces": ["Content", "Navigation", "Publish"],
-      "nextGate": "Validate one named business brief and accepted local preview before connecting a customer domain or publish authority."
-    },
-    {
-      "id": "ecommerce",
-      "name": "Ecommerce & Orders",
-      "status": "prototype-local",
-      "path": "/products/ecommerce/",
-      "job": "Convert website or channel demand into controlled order, catalogue, stock, fulfilment, payment-status, and audit records.",
-      "surfaces": ["Orders", "Catalog", "Fulfilment", "Payments"],
-      "nextGate": "Repeat the non-PII Website intake, idempotent draft, and controlled ready record with one named user, then prove reservation, reconciliation, and close."
+      "nextGate": "Rehearse one approved managed snapshot into a retained Commerce intake before connecting a customer domain or publish authority."
     },
     {
       "id": "commerce",
       "name": "Commerce",
-      "status": "pilot-ready-local",
+      "status": "managed-trial",
       "path": "/operations/commerce/",
-      "job": "Convert orders from trusted customer channels into controlled stock, fulfilment, payment, follow-up, and close.",
+      "job": "Convert Website and trusted-channel demand into controlled orders, stock, fulfilment, payment status, follow-up, and close.",
       "surfaces": ["Today", "Orders", "Inventory"],
       "templateContract": { "file": "../site-manifest.json", "productId": "commerce" },
-      "nextGate": "Connect one approved channel and measure order-handling time, exceptions, and completion."
+      "nextGate": "Repeat the managed Website intake through authenticated human Commerce confirmation across at least two catalog items; then review the twenty-fixture AI Order Intake corpus, run the server-only model evaluation, and connect it inside Orders only after the zero-side-effect gate passes."
     },
     {
       "id": "production",

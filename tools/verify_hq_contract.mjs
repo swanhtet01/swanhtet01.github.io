@@ -17,9 +17,14 @@ const requireContract = (name, condition) => { if (!condition) failures.push(nam
 
 requireContract('portfolio schema', portfolio.schemaVersion === 'supermega.hq.portfolio.v1')
 requireContract('portfolio is current', portfolio.updatedAt === '2026-07-23' && now.includes('Updated: 2026-07-23'))
-requireContract('portfolio is narrow', portfolio.portfolio?.map((entry) => entry.id).join(',') === 'company-system,website,ecommerce,commerce,production')
-requireContract('portfolio paths are canonical', portfolio.portfolio?.map((entry) => entry.path).join(',') === '/,/products/website/,/products/ecommerce/,/operations/commerce/,/operations/production/')
-requireContract('new products remain truthful prototypes', portfolio.portfolio?.filter((entry) => ['website', 'ecommerce'].includes(entry.id)).every((entry) => entry.status === 'prototype-local' && entry.nextGate?.trim()))
+requireContract('portfolio is narrow', portfolio.portfolio?.map((entry) => entry.id).join(',') === 'company-system,website,commerce,production')
+requireContract('portfolio paths are canonical', portfolio.portfolio?.map((entry) => entry.path).join(',') === '/,/products/website/,/operations/commerce/,/operations/production/')
+requireContract('Website remains a truthful managed trial', portfolio.portfolio?.find((entry) => entry.id === 'website')?.status === 'managed-trial'
+  && portfolio.portfolio?.find((entry) => entry.id === 'website')?.nextGate?.includes('before connecting a customer domain or publish authority')
+  && now.includes('No customer send, payment initiation, delivery request, domain write, or deployment occurs.'))
+requireContract('Commerce owns Website order intake', portfolio.portfolio?.find((entry) => entry.id === 'commerce')?.job.includes('Website') && !portfolio.portfolio?.some((entry) => entry.id === 'ecommerce'))
+requireContract('Commerce managed intake remains adoption-gated', portfolio.portfolio?.find((entry) => entry.id === 'commerce')?.status === 'managed-trial'
+  && portfolio.portfolio?.find((entry) => entry.id === 'commerce')?.nextGate?.includes('authenticated human Commerce confirmation'))
 requireContract('product lifecycle is explicit', portfolio.portfolio?.[0]?.lifecycle?.join(',') === 'discover,define,build,release,learn')
 requireContract('manifest aligns to operating modules', manifest.products?.map((entry) => `${entry.id}:${entry.name}`).join(',') === 'commerce:Commerce,production:Production')
 const expectedTemplateIds = {

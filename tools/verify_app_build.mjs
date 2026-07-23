@@ -6,20 +6,29 @@ const root = resolve(import.meta.dirname, '..')
 const dist = resolve(root, 'showroom', 'dist')
 const failures = []
 let orderCompletionRuntimeChecks = 0
+let websiteRuntimeChecks = 0
+let commerceRuntimeChecks = 0
+let productionRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
-const [manifestText, appPackageText, appSource, coreSource, teamSource, agentTeamsSource, teamModel, websiteSource, publishSource, ecommerceSource, ecommerceWorkspacesSource, ecommerceModel, handoffSource] = await Promise.all([
+const [manifestText, appPackageText, appSource, coreSource, commerceSource, managedTrialSource, managedCommerceRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, publishSource, sitePreviewSource, websiteModelSource, websiteWorkspaceSource, websiteCssSource, commerceIntakeSource, handoffSource] = await Promise.all([
   readFile(resolve(root, 'site-manifest.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'package.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'App.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'CoreApp.tsx'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'core', 'managed-trial.ts'), 'utf8'),
+  readFile(resolve(root, 'supermega_runtime', 'commerce_runtime.py'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'core', 'production-workspace.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'TeamWorkspace.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'AgentTeamsPanel.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'team-work.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'WebsiteProduct.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'PublishWorkspace.tsx'), 'utf8'),
-  readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'EcommerceOrdersProduct.tsx'), 'utf8'),
-  readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'CommerceWorkspaces.tsx'), 'utf8'),
-  readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'ecommerce-model.ts'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'SitePreview.tsx'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-model.ts'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'useWebsiteWorkspace.ts'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-product.css'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'products', 'WebsiteCommerceIntake.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'product-handoff.ts'), 'utf8'),
 ])
 const manifest = JSON.parse(manifestText)
@@ -86,23 +95,65 @@ if (!teamSource.includes("verifiedActorKind: 'human'") || !teamModel.includes("c
 if (!teamModel.includes("supermega.team.workspace.v3") || !teamModel.includes("supermega.team.workspace.v2") || !teamModel.includes('hasValidAssignment')) fail('agent_team_migration_or_integrity_missing')
 if (!agentTeamsSource.includes('No agent can send, pay, publish, merge, deploy, or write to production') || !agentTeamsSource.includes('humanOwner') || !agentTeamsSource.includes('approvalBoundary') || agentTeamsSource.includes('>Run<')) fail('agent_authority_boundary_missing')
 if (!coreSource.includes('view=work&item=${item.id}') || !coreSource.includes('view=agents&agent=${agent.id}') || !teamSource.includes("const requestedItemId = searchParams.get('item')") || !teamSource.includes("const requestedAgentId = searchParams.get('agent')") || !teamSource.includes("if (view === 'work' && selectedId) next.item = selectedId") || !teamSource.includes("if (view === 'agents' && selectedId) next.agent = selectedId") || !agentTeamsSource.includes('onSelectAgent: (agentId: string) => void') || agentTeamsSource.includes('const [selectedAgentId')) fail('team_record_deep_links_missing')
-if (!appSource.includes("lazy(() => import('./products/website/WebsiteProduct')") || !appSource.includes("lazy(() => import('./products/ecommerce/EcommerceOrdersProduct')") || !appSource.includes('Suspense')) fail('prototype_routes_not_lazy_loaded')
+if (!appSource.includes("lazy(() => import('./products/website/WebsiteProduct')") || !appSource.includes('Suspense') || appSource.includes("import('./products/ecommerce/EcommerceOrdersProduct')")) fail('website_prototype_route_not_isolated')
+if (!appSource.includes('<Navigate replace to="/operations/commerce/?tab=orders" />') || !appSource.includes('path="products/ecommerce/*"')) fail('legacy_ecommerce_route_not_redirected')
 if (!appPackage.scripts?.lint?.includes('src/products')) fail('prototype_sources_not_linted')
-if (!websiteSource.includes('No website has been deployed.') || !websiteSource.includes('No deployment or external write occurred.')) fail('website_prototype_boundary_missing')
-if (!ecommerceSource.includes('No integrations are connected.') || !ecommerceSource.includes('Customer sends, checkout, payments, delivery, and production writes are not connected.')) fail('ecommerce_prototype_boundary_missing')
+if (!websiteSource.includes('No website has been deployed.') || !websiteSource.includes('No deployment occurred.') || !websiteSource.includes('Domain and deployment remain separate approval-gated actions.')) fail('website_deployment_boundary_missing')
+if (!websiteModelSource.includes("supermega.website.workspace.v2") || !websiteModelSource.includes('LEGACY_WEBSITE_STORAGE_KEY') || !websiteModelSource.includes('mutateWebsiteWorkspace') || !websiteModelSource.includes('WEBSITE_MUTATION_LOCK') || !websiteModelSource.includes('preservesAppendOnlyHistory') || !websiteModelSource.includes('canonicalJson')) fail('website_v2_locked_store_missing')
+if (!websiteModelSource.includes('contentRevision') || !websiteModelSource.includes('evidenceIds') || !websiteModelSource.includes('migratedFromV1') || !websiteModelSource.includes('getCurrentApproval') || !websiteModelSource.includes('getCurrentPublish')) fail('website_release_provenance_missing')
+if (!sitePreviewSource.includes("ctaHref.startsWith('https://')") || !sitePreviewSource.includes("ctaHref.startsWith('#')") || !sitePreviewSource.includes('aria-disabled="true"')) fail('website_preview_destination_guard_missing')
+if (!websiteWorkspaceSource.includes("addEventListener('storage', refreshFromStorage)") || !websiteWorkspaceSource.includes("removeEventListener('storage', refreshFromStorage)") || !websiteWorkspaceSource.includes('mutateWebsiteWorkspace(update, current.revision, current.contentRevision') || websiteWorkspaceSource.includes('localStorage.setItem(WEBSITE_STORAGE_KEY, JSON.stringify(workspace))')) fail('website_confirmed_write_or_cross_tab_refresh_missing')
+if (!managedTrialSource.includes('saveManagedWebsiteCommand') || !managedTrialSource.includes("surface: 'website'") || !websiteWorkspaceSource.includes('loadManagedBootstrap()') || !websiteWorkspaceSource.includes("storageModeRef.current = 'managed'") || !websiteWorkspaceSource.includes('actor: managedActorRef.current') || !websiteWorkspaceSource.includes("error.code === 'trial_version_conflict'")) fail('managed_website_command_client_missing')
+if (!websiteWorkspaceSource.includes('bindManagedActor') || !websiteWorkspaceSource.includes('verifiedBy: actor') || !websiteWorkspaceSource.includes('reviewer: actor') || !websiteWorkspaceSource.includes('recordedBy: actor')) fail('managed_website_actor_binding_missing')
+const websiteHydrationStart = websiteWorkspaceSource.indexOf('void (async () => {')
+const websiteHydrationEnd = websiteWorkspaceSource.indexOf('})()', websiteHydrationStart)
+const websiteHydration = websiteWorkspaceSource.slice(websiteHydrationStart, websiteHydrationEnd)
+if (websiteHydration.indexOf('try {') < 0 || websiteHydration.indexOf('try {') > websiteHydration.indexOf('currentManagedIdentity()') || websiteHydration.indexOf('finally') < websiteHydration.indexOf('currentManagedIdentity()')) fail('managed_website_identity_failure_can_stick_hydration')
+const websiteTabsContract = websiteSource.slice(websiteSource.indexOf('const workspaceViews'), websiteSource.indexOf('const viewCopy'))
+if ((websiteTabsContract.match(/^\s*\{ id:/gm) || []).length !== 3 || !websiteTabsContract.includes("label: 'Content'") || !websiteTabsContract.includes("label: 'Navigation'") || !websiteTabsContract.includes("label: 'Publish'") || !websiteSource.includes('role="tablist"') || !websiteSource.includes('role="tabpanel"') || !websiteSource.includes("event.key === 'ArrowRight'") || !websiteSource.includes('tabIndex={view === item.id ? 0 : -1}')) fail('website_three_view_accessibility_contract_changed')
+const websiteMobileCss = websiteCssSource.slice(websiteCssSource.indexOf('@media (max-width: 640px)'), websiteCssSource.indexOf('@media (prefers-reduced-motion'))
+if (!websiteMobileCss.includes('.website-preview-controls') || !websiteMobileCss.includes('display: flex') || websiteMobileCss.includes('.website-preview-controls {\n    display: none')) fail('website_mobile_review_controls_hidden')
+if (!websiteMobileCss.includes('.website-handoff-controls input') || !websiteMobileCss.includes('min-height: 44px') || !websiteMobileCss.includes('font-size: 12px')) fail('website_mobile_handoff_controls_undersized')
+if (!commerceIntakeSource.includes('Browser-local evidence only.') || !commerceIntakeSource.includes('No customer message, payment, delivery request, or external write occurs.')) fail('commerce_intake_boundary_missing')
 if (!handoffSource.includes("schema: 'website_ecommerce_handoff.v1'") || !handoffSource.includes("state: 'pending_acceptance'") || !handoffSource.includes('hasExactKeys') || !handoffSource.includes('validateAgainstWorkspace') || !handoffSource.includes('readinessChecks(workspace, fingerprint).every') || !handoffSource.includes('acceptWebsiteEcommerceHandoff')) fail('website_ecommerce_handoff_contract_missing')
 const handoffIntakeSource = handoffSource.slice(handoffSource.indexOf('type HandoffIntake'), handoffSource.indexOf('type PendingHandoff'))
 if (!handoffIntakeSource.includes('sku: string') || !handoffIntakeSource.includes('quantity: number') || ['customer', 'phone', 'township', 'payment', 'delivery', 'fulfilment'].some((field) => handoffIntakeSource.toLowerCase().includes(field))) fail('website_handoff_contains_pii_shaped_fields')
 if (!handoffSource.includes("actorKind: 'human'") || !handoffSource.includes("action: 'accept_website_handoff'") || !handoffSource.includes('audit: [audit]') || !handoffSource.includes("existing.handoff.state === 'accepted'") || !handoffSource.includes('setItem(WEBSITE_ECOMMERCE_HANDOFF_KEY, JSON.stringify(store))')) fail('website_handoff_atomic_audit_missing')
 if (!handoffSource.includes("schema: 'ecommerce_order_draft.v1'") || !handoffSource.includes("mode: 'browser-local'") || !handoffSource.includes("schema: 'website_ecommerce_handoff_store.v2'") || !handoffSource.includes('createWebsiteOrderDraft') || !handoffSource.includes('idempotencyKey: current.handoff.id') || !handoffSource.includes("missingFields: ['customer_reference', 'fulfilment_method', 'payment_method']") || !handoffSource.includes('current.draft.idempotencyKey === handoffId') || !handoffSource.includes('if (!current.display) return null')) fail('ecommerce_order_draft_contract_missing')
 if (!handoffSource.includes("schema: 'ecommerce_order_record.v1'") || !handoffSource.includes("schema: 'website_ecommerce_handoff_store.v3'") || !handoffSource.includes("state: 'ready_for_confirmation'") || !handoffSource.includes("action: 'complete_website_order'") || !handoffSource.includes('customerReferenceFor(current.handoff.id)') || !handoffSource.includes('websiteEvidenceReference: current.handoff.source.localPublishId') || !handoffSource.includes('completionMatches(current.order, input)') || !handoffSource.includes('globalThis.navigator.locks.request') || !handoffSource.includes('if (!isHandoffStore(store)) return null')) fail('ecommerce_order_completion_contract_missing')
-if (!websiteSource.includes('approvalIsCurrent || !publishIsCurrent') || !websiteSource.includes('checks.every((check) => check.passed)') || !websiteSource.includes('writeWebsiteEcommerceHandoff(handoff, workspace)') || !publishSource.includes('fingerprint is a revision marker, not a signature')) fail('website_handoff_gate_missing')
-if (!ecommerceModel.includes("'accept_website_handoff'") || !ecommerceModel.includes('isValidApprovalDetails(action.approval)') || !ecommerceSource.includes('waiting for attributable human approval') || !ecommerceSource.includes('Responsible operator ID') || !ecommerceSource.includes('matchingItems.length !== 1') || !ecommerceSource.includes('createWebsiteOrderDraft(current.handoff.id') || !ecommerceSource.includes('It does not create an order, contact a customer, reserve stock, collect payment, or write to Commerce.')) fail('ecommerce_intake_approval_contract_missing')
-if (!ecommerceModel.includes("'complete_website_order'") || !ecommerceSource.includes('Generated non-PII customer reference') || !ecommerceSource.includes('await completeWebsiteOrderDraft') || !ecommerceSource.includes('It does not insert into the scenario queue, reserve stock, confirm a customer, collect payment, send a message, or write externally.') || !ecommerceSource.includes('Website handoff and completion evidence persists only in this browser') || !ecommerceWorkspacesSource.includes('Ready for confirmation') || !ecommerceWorkspacesSource.includes('no confirmation, reservation, payment, or send')) fail('ecommerce_order_completion_ui_missing')
-const requestWebsiteIntakeSource = ecommerceSource.slice(ecommerceSource.indexOf('function requestWebsiteIntake'), ecommerceSource.indexOf('function approveWebsiteIntake'))
-if (requestWebsiteIntakeSource.indexOf('if (current.draft)') < 0 || requestWebsiteIntakeSource.indexOf('if (current.draft)') > requestWebsiteIntakeSource.indexOf('const matchingItems = workspace.catalog.filter')) fail('immutable_draft_blocked_by_current_catalog')
-const proposalKindSource = ecommerceModel.slice(ecommerceModel.indexOf('export type ProposedActionKind'), ecommerceModel.indexOf('type FulfillmentChange'))
-if (proposalKindSource.includes('accept_website_handoff') || proposalKindSource.includes('complete_website_order')) fail('audit_action_leaked_into_proposal_kind')
+if (!websiteSource.includes('approvalIsCurrent || !publishIsCurrent')
+  || !websiteSource.includes('checks.every((check) => check.passed)')
+  || !websiteSource.includes('writeWebsiteEcommerceHandoff(handoff, workspace)')
+  || !websiteSource.includes('createCommerceWebsiteIntake(current')
+  || !websiteSource.includes("storageMode === 'managed' ? 'managed' : 'local'")
+  || !publishSource.includes('No stock, payment, customer message, or order changes')) fail('website_handoff_gate_missing')
+if (!commerceIntakeSource.includes('acceptWebsiteEcommerceHandoff') || !commerceIntakeSource.includes('matches.length === 1') || !commerceIntakeSource.includes('createWebsiteOrderDraft(context.handoff.id') || !commerceIntakeSource.includes('I reviewed this SKU, quantity, and Website evidence.')) fail('commerce_intake_approval_contract_missing')
+if (!commerceIntakeSource.includes('await completeWebsiteOrderDraft') || !commerceIntakeSource.includes('opaque customer reference generated on completion') || !commerceIntakeSource.includes('Create ready order') || !commerceIntakeSource.includes('Confirm into orders')) fail('commerce_order_completion_ui_missing')
+if (!coreSource.includes('function queueWebsiteOrder') || !coreSource.includes('sourceRecordId') || !coreSource.includes('item.price !== line.unitPriceMmk') || !coreSource.includes('Website order confirmation failed closed') || !coreSource.includes('Confirm ${record.id} from Website')) fail('website_order_not_integrated_with_commerce')
+if (!commerceSource.includes("supermega.commerce.workspace.v2") || !commerceSource.includes('loadCommerceWorkspace') || !commerceSource.includes('mutateCommerceWorkspace') || !commerceSource.includes('lockManager.request')) fail('commerce_v2_locked_store_missing')
+if (!commerceSource.includes("CommercePaymentStatus = 'pending' | 'reconciled'") || !commerceSource.includes("CommerceRefundStatus = 'none' | 'due'") || commerceSource.includes("'unrecorded'") || commerceSource.includes("'refund_due'")) fail('commerce_payment_or_refund_contract_invalid')
+if (!commerceSource.includes('commerceOrderHasReleasableReservation') || !commerceSource.includes("movement.kind === 'reserve'") || !commerceSource.includes("movement.kind === 'release'") || !commerceSource.includes("kind: 'receipt'") || !commerceSource.includes("kind: 'opening'")) fail('commerce_stock_ledger_contract_missing')
+if (!commerceSource.includes('Recovery failed closed') || !commerceSource.includes('currentRaw !== null') || !commerceSource.includes("movements: []")) fail('commerce_migration_fail_closed_contract_missing')
+if (!managedTrialSource.includes('saveManagedCommerceCommand') || !managedTrialSource.includes('expected_version: request.expectedVersion') || !managedTrialSource.includes("surface: 'commerce'") || !managedTrialSource.includes('payload: { state: request.state, evidence: request.evidence }')) fail('managed_commerce_command_client_missing')
+const managedCommerceClientSources = `${coreSource}\n${websiteSource}`
+for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.payment.reconciled', 'commerce.stock.received', 'commerce.close.saved', 'commerce.website_intake.created', 'commerce.website_intake.converted']) {
+  if (!managedCommerceClientSources.includes(eventType) || !managedCommerceRuntime.includes(eventType)) fail(`managed_commerce_event_missing:${eventType}`)
+}
+if (!coreSource.includes("mode: 'managed-unprovisioned'") || !coreSource.includes('No browser demo orders, customers, or stock records are copied') || !coreSource.includes('Create managed catalog') || !coreSource.includes('Opening balance reason') || !coreSource.includes('result.version !== current.version + 1') || !coreSource.includes('validateCommerceState(result.state)') || !coreSource.includes("error.code === 'trial_version_conflict'") || !coreSource.includes('managedIdentity ? null : <ActionHistory')) fail('managed_commerce_ui_not_fail_closed')
+if (!coreSource.includes('confirmation?: AccountableAction') || !coreSource.includes('if (action.confirmation) return action.confirmation') || !coreSource.includes('Retry same confirmation') || !coreSource.includes('result.idempotent_replay') || !coreSource.includes('before the replay could be reconciled')) fail('managed_command_retry_not_frozen_or_reconciled')
+if (!managedCommerceRuntime.includes('commerce.workspace.initialized') || managedCommerceRuntime.includes('commerce.snapshot.saved') || !managedCommerceRuntime.includes('_one_changed') || !managedCommerceRuntime.includes('_validate_event_evidence') || !managedCommerceRuntime.includes('daily close totals must match completed, reconciled orders')) fail('managed_commerce_server_transition_contract_missing')
+if (!commerceSource.includes('registerCommerceItem') || !coreSource.includes('Add catalog item') || !coreSource.includes('Review catalog item') || !coreSource.includes('The opening balance may be zero.') || !managedCommerceRuntime.includes('one exact attributable opening balance')) fail('commerce_catalog_creation_contract_missing')
+if (!coreSource.includes("const commerceTabs") || !coreSource.includes("{ id: 'today', label: 'Today' }") || !coreSource.includes("{ id: 'orders', label: 'Orders' }") || !coreSource.includes("{ id: 'inventory', label: 'Inventory' }") || coreSource.includes("{ id: 'payments'")) fail('commerce_three_tab_contract_changed')
+if (!productionSource.includes("supermega.production.workspace.v2") || !productionSource.includes('mutateProductionWorkspace') || !productionSource.includes('lockManager.request') || !productionSource.includes('next.revision !== current.revision + 1')) fail('production_v2_locked_store_missing')
+if (!productionSource.includes("'output_recorded' | 'issue_opened' | 'issue_resolved' | 'machine_state_changed'") || !productionSource.includes('events: [event, ...state.events]') || !productionSource.includes('Production revision must equal the append-only event count.')) fail('production_append_only_record_missing')
+if (!productionSource.includes('currentRaw !== null') || !productionSource.includes('Migration failed closed') || !productionSource.includes('events: []')) fail('production_migration_fail_closed_contract_missing')
+const productionTabsContract = coreSource.slice(coreSource.indexOf('const productionTabs'), coreSource.indexOf('function uid'))
+if (!productionTabsContract.includes("{ id: 'today', label: 'Today' }") || !productionTabsContract.includes("{ id: 'production', label: 'Production' }") || !productionTabsContract.includes("{ id: 'control', label: 'Issues & equipment' }") || (productionTabsContract.match(/^\s*\{ id:/gm) || []).length !== 3) fail('production_three_tab_contract_changed')
+const productionPageContract = coreSource.slice(coreSource.indexOf('function ProductionPage'), coreSource.indexOf('function JobList'))
+if (coreSource.includes('Math.min(quantity') || !productionPageContract.includes('No output was recorded.') || !productionPageContract.includes('Number.isSafeInteger(quantity)') || productionPageContract.includes('max={selectedRemaining')) fail('production_output_silently_clamped')
+if (!productionPageContract.includes('persisted with attributed Production evidence.') || productionPageContract.includes('<ActionHistory actions={actions} domain="production"')) fail('production_confirmation_record_not_domain_specific')
+if (!coreSource.includes("addEventListener('storage', refreshFromStorage)") || !coreSource.includes("removeEventListener('storage', refreshFromStorage)")) fail('production_cross_tab_refresh_missing')
+if (!coreSource.includes('headingRef.current?.focus()') || !coreSource.includes('previousFocusRef.current.focus()') || !coreSource.includes('aria-live="polite"') || !coreSource.includes('current state ${machine.state}')) fail('production_confirmation_accessibility_missing')
 let workflowProfiles = 0
 for (const product of manifest.products || []) {
   if (product.templates?.length !== 3) fail(`wrong_template_count:${product.id}`)
@@ -114,7 +165,7 @@ for (const product of manifest.products || []) {
     }
   }
 }
-for (const route of ['/operations/commerce/', '/operations/production/', '/products/website/', '/products/ecommerce/']) {
+for (const route of ['/operations/commerce/', '/operations/production/', '/products/website/']) {
   if (!corpus.includes(route)) fail(`missing_canonical_module_route:${route}`)
 }
 for (const forbidden of ['pos.supermega.dev', 'ytf.supermega.dev', 'Yangon Tyre', 'ytf-plant-a', 'Company Systems That Replace Tool Sprawl', 'Workspace draft', 'Service bookings', 'Material receiving']) {
@@ -122,6 +173,304 @@ for (const forbidden of ['pos.supermega.dev', 'ytf.supermega.dev', 'Yangon Tyre'
 }
 for (const marker of ['\uFFFD', '\u00e2\u20ac\u201d', '\u00e2\u20ac\u201c', '\u00c2', '\u00f0\u0178']) {
   if (corpus.includes(marker)) fail('app_copy_encoding_corrupt')
+}
+
+async function verifyWebsiteRuntime() {
+  const values = new Map()
+  let lockRequests = 0
+  let lockTail = Promise.resolve()
+  const storage = {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, String(value)),
+  }
+  const locks = {
+    request: async (_name, _options, callback) => {
+      const previous = lockTail
+      let release
+      lockTail = new Promise((resolveLock) => { release = resolveLock })
+      await previous
+      lockRequests += 1
+      try { return await callback() } finally { release() }
+    },
+  }
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    websiteRuntimeChecks += 1
+  }
+  const at = (offset) => new Date(Date.UTC(2026, 6, 23, 0, 0, 0) + offset).toISOString()
+
+  try {
+    const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-model.ts')).href}?website-verify=${Date.now()}`)
+    const seed = model.createInitialWorkspace()
+    const fingerprint = model.workspaceFingerprint(seed)
+    const reverseObjectKeys = (value) => Array.isArray(value)
+      ? value.map(reverseObjectKeys)
+      : value && typeof value === 'object'
+        ? Object.fromEntries(Object.keys(value).reverse().map((key) => [key, reverseObjectKeys(value[key])]))
+        : value
+    assert(model.workspaceFingerprint(reverseObjectKeys(seed)) === fingerprint, 'website_fingerprint_not_canonical_across_jsonb_key_order')
+    const legacyEvidence = ['content', 'responsive', 'links'].map((kind, index) => ({
+      id: `legacy-evidence-${kind}`,
+      kind,
+      finding: `${kind} legacy review`,
+      reference: `LEGACY-${kind.toUpperCase()}`,
+      verifiedBy: 'OP-LEGACY',
+      verifiedAt: at(index),
+      fingerprint,
+    }))
+    const legacy = {
+      version: 1,
+      siteName: seed.siteName,
+      pages: seed.pages,
+      selectedPageId: seed.selectedPageId,
+      evidence: legacyEvidence,
+      approval: {
+        id: 'legacy-approval',
+        reviewer: 'OP-LEGACY',
+        note: 'Legacy approval retained for history',
+        approvedAt: at(10),
+        fingerprint,
+      },
+      localPublishes: [{
+        id: 'legacy-publish',
+        recordedAt: at(20),
+        recordedBy: 'OP-LEGACY',
+        fingerprint,
+        readyPageIds: seed.pages.filter((page) => page.stage === 'ready').map((page) => page.id),
+      }],
+    }
+
+    values.set(model.LEGACY_WEBSITE_STORAGE_KEY, JSON.stringify(legacy))
+    const migratedOnce = model.loadWebsiteWorkspace(storage)
+    const migratedTwice = model.loadWebsiteWorkspace(storage)
+    assert(migratedOnce.ok && migratedTwice.ok && migratedOnce.source === 'v1' && JSON.stringify(migratedOnce.workspace) === JSON.stringify(migratedTwice.workspace), 'website_v1_migration_not_deterministic')
+    assert(migratedOnce.ok && migratedOnce.workspace.evidence.length === 3 && migratedOnce.workspace.approvals.length === 1 && migratedOnce.workspace.localPublishes.length === 1 && migratedOnce.workspace.events.length === 0, 'website_v1_records_not_preserved')
+    assert(migratedOnce.ok && migratedOnce.workspace.approvals[0].migratedFromV1 && model.getCurrentApproval(migratedOnce.workspace) === null && model.getCurrentPublish(migratedOnce.workspace) === null, 'website_v1_release_claim_not_reopened')
+
+    values.set(model.WEBSITE_STORAGE_KEY, JSON.stringify(seed))
+    const v2Precedence = model.loadWebsiteWorkspace(storage)
+    assert(v2Precedence.ok && v2Precedence.source === 'v2' && v2Precedence.workspace.approvals.length === 0, 'website_v2_did_not_take_precedence')
+    const malformed = '{broken'
+    values.set(model.WEBSITE_STORAGE_KEY, malformed)
+    const malformedLoad = model.loadWebsiteWorkspace(storage)
+    assert(!malformedLoad.ok && values.get(model.WEBSITE_STORAGE_KEY) === malformed, 'website_malformed_v2_fell_back_or_was_replaced')
+
+    values.clear()
+    assert(model.restoreWorkspace({ ...seed, unexpected: true }) === null, 'website_extra_key_was_accepted')
+    assert(model.restoreWorkspace({ ...seed, pages: [seed.pages[0], { ...seed.pages[0] }] }) === null, 'website_duplicate_page_id_was_accepted')
+    const retainedHistory = {
+      ...seed,
+      revision: 501,
+      events: Array.from({ length: 501 }, (_, index) => ({
+        id: `event-retained-${index}`,
+        createdAt: at(index),
+        actorKind: 'human',
+        actor: 'OP-HISTORY',
+        action: 'publish_evidence_recorded',
+        subjectId: `history-${index}`,
+        reason: 'Retained Website history',
+        evidenceReference: `HISTORY-${index}`,
+        source: { contentRevision: 0, digest: fingerprint },
+      })),
+    }
+    assert(model.restoreWorkspace(retainedHistory)?.events.length === 501, 'website_history_was_truncated')
+
+    const firstInput = {
+      actionId: 'evidence-content-runtime',
+      capturedAt: at(1000),
+      kind: 'content',
+      finding: 'Content owner verified the current copy',
+      reference: 'CONTENT-REVIEW-1',
+      verifiedBy: 'OP-OWNER',
+    }
+    const first = await model.mutateWebsiteWorkspace(
+      (current) => model.recordWebsiteEvidence(current, firstInput),
+      0,
+      0,
+      storage,
+      locks,
+    )
+    assert(first.ok && first.changed && first.workspace.revision === 1 && first.workspace.contentRevision === 0 && first.workspace.events.length === 1, 'website_evidence_not_confirmed_atomically')
+    const firstRaw = values.get(model.WEBSITE_STORAGE_KEY)
+    const exactEvidence = await model.mutateWebsiteWorkspace(
+      (current) => model.recordWebsiteEvidence(current, firstInput),
+      1,
+      0,
+      storage,
+      locks,
+    )
+    assert(exactEvidence.ok && !exactEvidence.changed && values.get(model.WEBSITE_STORAGE_KEY) === firstRaw, 'website_evidence_exact_retry_changed_state')
+    const conflictingEvidence = await model.mutateWebsiteWorkspace(
+      (current) => model.recordWebsiteEvidence(current, { ...firstInput, finding: 'Conflicting reuse' }),
+      1,
+      0,
+      storage,
+      locks,
+    )
+    assert(!conflictingEvidence.ok && values.get(model.WEBSITE_STORAGE_KEY) === firstRaw, 'website_evidence_conflict_overwrote_state')
+
+    const [responsiveResult, linksResult] = await Promise.all([
+      model.mutateWebsiteWorkspace(
+        (current) => model.recordWebsiteEvidence(current, {
+          actionId: 'evidence-responsive-runtime',
+          capturedAt: at(1010),
+          kind: 'responsive',
+          finding: 'Desktop, tablet, and mobile previews verified',
+          reference: 'RESPONSIVE-REVIEW-1',
+          verifiedBy: 'OP-OWNER',
+        }),
+        1,
+        0,
+        storage,
+        locks,
+      ),
+      model.mutateWebsiteWorkspace(
+        (current) => model.recordWebsiteEvidence(current, {
+          actionId: 'evidence-links-runtime',
+          capturedAt: at(1020),
+          kind: 'links',
+          finding: 'Navigation and CTA destinations verified',
+          reference: 'LINK-REVIEW-1',
+          verifiedBy: 'OP-OWNER',
+        }),
+        1,
+        0,
+        storage,
+        locks,
+      ),
+    ])
+    const afterConcurrentEvidence = model.loadWebsiteWorkspace(storage)
+    assert(responsiveResult.ok && linksResult.ok && afterConcurrentEvidence.ok && afterConcurrentEvidence.workspace.evidence.length === 3 && afterConcurrentEvidence.workspace.events.length === 3, 'website_concurrent_evidence_writes_did_not_both_survive')
+
+    const readyForApproval = afterConcurrentEvidence.workspace
+    const approvalInput = {
+      actionId: 'approval-runtime-v2',
+      capturedAt: at(2000),
+      reviewer: 'OP-OWNER',
+      note: 'All current evidence reviewed and accepted',
+    }
+    const approved = await model.mutateWebsiteWorkspace(
+      (current) => model.approveWebsiteRevision(current, approvalInput),
+      readyForApproval.revision,
+      readyForApproval.contentRevision,
+      storage,
+      locks,
+    )
+    assert(approved.ok && approved.changed && model.getCurrentApproval(approved.workspace)?.evidenceIds.length === 3 && approved.workspace.events.length === 4, 'website_approval_not_bound_to_evidence')
+    const approvalRaw = values.get(model.WEBSITE_STORAGE_KEY)
+    const exactApproval = await model.mutateWebsiteWorkspace(
+      (current) => model.approveWebsiteRevision(current, approvalInput),
+      approved.workspace.revision,
+      approved.workspace.contentRevision,
+      storage,
+      locks,
+    )
+    assert(exactApproval.ok && !exactApproval.changed && values.get(model.WEBSITE_STORAGE_KEY) === approvalRaw, 'website_approval_exact_retry_changed_state')
+
+    const refreshedEvidence = await model.mutateWebsiteWorkspace(
+      (current) => model.recordWebsiteEvidence(current, {
+        actionId: 'evidence-links-runtime-2',
+        capturedAt: at(2100),
+        kind: 'links',
+        finding: 'Destinations rechecked after approval',
+        reference: 'LINK-REVIEW-2',
+        verifiedBy: 'OP-OWNER',
+      }),
+      approved.workspace.revision,
+      approved.workspace.contentRevision,
+      storage,
+      locks,
+    )
+    assert(refreshedEvidence.ok && model.getCurrentApproval(refreshedEvidence.workspace) === null, 'website_new_evidence_did_not_stale_approval')
+    const reapproved = await model.mutateWebsiteWorkspace(
+      (current) => model.approveWebsiteRevision(current, {
+        actionId: 'approval-runtime-v2-2',
+        capturedAt: at(2200),
+        reviewer: 'OP-OWNER',
+        note: 'Updated destination evidence reviewed and accepted',
+      }),
+      refreshedEvidence.workspace.revision,
+      refreshedEvidence.workspace.contentRevision,
+      storage,
+      locks,
+    )
+    const snapshotInput = { actionId: 'local-snapshot-runtime-v2', capturedAt: at(2300) }
+    const snapshotted = await model.mutateWebsiteWorkspace(
+      (current) => model.recordWebsiteSnapshot(current, snapshotInput),
+      reapproved.workspace.revision,
+      reapproved.workspace.contentRevision,
+      storage,
+      locks,
+    )
+    assert(snapshotted.ok && snapshotted.changed && model.getCurrentPublish(snapshotted.workspace)?.approvalId === model.getCurrentApproval(snapshotted.workspace)?.id, 'website_snapshot_not_bound_to_current_approval')
+    const snapshotRaw = values.get(model.WEBSITE_STORAGE_KEY)
+    const exactSnapshot = await model.mutateWebsiteWorkspace(
+      (current) => model.recordWebsiteSnapshot(current, snapshotInput),
+      snapshotted.workspace.revision,
+      snapshotted.workspace.contentRevision,
+      storage,
+      locks,
+    )
+    assert(exactSnapshot.ok && !exactSnapshot.changed && values.get(model.WEBSITE_STORAGE_KEY) === snapshotRaw, 'website_snapshot_exact_retry_changed_state')
+
+    const beforeContentRace = snapshotted.workspace
+    const [firstContentEdit, staleContentEdit] = await Promise.all([
+      model.mutateWebsiteWorkspace(
+        (current) => ({ ...current, siteName: 'First tab edit' }),
+        beforeContentRace.revision,
+        beforeContentRace.contentRevision,
+        storage,
+        locks,
+      ),
+      model.mutateWebsiteWorkspace(
+        (current) => ({ ...current, siteName: 'Stale tab edit' }),
+        beforeContentRace.revision,
+        beforeContentRace.contentRevision,
+        storage,
+        locks,
+      ),
+    ])
+    const afterContentRace = model.loadWebsiteWorkspace(storage)
+    assert(firstContentEdit.ok && !staleContentEdit.ok && afterContentRace.ok && afterContentRace.workspace.siteName === 'First tab edit', 'website_stale_content_edit_overwrote_current_state')
+    assert(afterContentRace.ok && model.getCurrentApproval(afterContentRace.workspace) === null && model.getCurrentPublish(afterContentRace.workspace) === null, 'website_content_change_did_not_stale_release')
+
+    const beforeFailure = values.get(model.WEBSITE_STORAGE_KEY)
+    const failingStorage = { getItem: storage.getItem, setItem: () => { throw new Error('quota') } }
+    const failedWrite = await model.mutateWebsiteWorkspace(
+      (current) => ({ ...current, siteName: 'Should not persist' }),
+      afterContentRace.workspace.revision,
+      afterContentRace.workspace.contentRevision,
+      failingStorage,
+      locks,
+    )
+    assert(!failedWrite.ok && values.get(model.WEBSITE_STORAGE_KEY) === beforeFailure, 'website_storage_failure_advanced_state')
+    const blankEvidence = await model.mutateWebsiteWorkspace(
+      (current) => model.recordWebsiteEvidence(current, {
+        actionId: 'evidence-blank-runtime',
+        capturedAt: at(3000),
+        kind: 'content',
+        finding: ' ',
+        reference: ' ',
+        verifiedBy: ' ',
+      }),
+      afterContentRace.workspace.revision,
+      afterContentRace.workspace.contentRevision,
+      storage,
+      locks,
+    )
+    assert(!blankEvidence.ok && values.get(model.WEBSITE_STORAGE_KEY) === beforeFailure, 'website_blank_evidence_was_accepted')
+    const unlocked = await model.mutateWebsiteWorkspace(
+      (current) => ({ ...current, selectedPageId: 'page-products' }),
+      afterContentRace.workspace.revision,
+      afterContentRace.workspace.contentRevision,
+      storage,
+      {},
+    )
+    assert(!unlocked.ok && values.get(model.WEBSITE_STORAGE_KEY) === beforeFailure, 'website_unlocked_write_succeeded')
+    assert(lockRequests >= 14, 'website_mutations_did_not_use_web_lock')
+  } catch (error) {
+    fail(`website_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
 }
 
 async function verifyWebsiteOrderCompletionRuntime() {
@@ -158,38 +507,43 @@ async function verifyWebsiteOrderCompletionRuntime() {
 
     const websiteModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-model.ts')).href}?verify=${Date.now()}`)
     const handoffContract = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'product-handoff.ts')).href}?verify=${Date.now()}`)
-    const workspace = websiteModel.createInitialWorkspace()
-    const fingerprint = websiteModel.workspaceFingerprint(workspace)
+    let workspace = websiteModel.createInitialWorkspace()
     const at = (offset) => new Date(Date.now() + offset).toISOString()
-    workspace.evidence = ['content', 'responsive', 'links'].map((kind, index) => ({
-      id: `evidence-${kind}`,
-      kind,
-      finding: `${kind} verified`,
-      reference: `REF-${kind.toUpperCase()}`,
-      verifiedBy: 'OP-OWNER',
-      verifiedAt: at(-5_000 + index),
-      fingerprint,
-    }))
-    workspace.approval = {
-      id: 'approval-runtime',
+    const applyWebsite = (update) => {
+      const result = websiteModel.applyWebsiteWorkspaceUpdate(workspace, update)
+      if (!result.ok) throw new Error(result.error)
+      workspace = result.workspace
+    }
+    for (const [index, kind] of ['content', 'responsive', 'links'].entries()) {
+      applyWebsite((current) => websiteModel.recordWebsiteEvidence(current, {
+        actionId: `evidence-${kind}`,
+        capturedAt: at(-5_000 + index),
+        kind,
+        finding: `${kind} verified`,
+        reference: `REF-${kind.toUpperCase()}`,
+        verifiedBy: 'OP-OWNER',
+      }))
+    }
+    applyWebsite((current) => websiteModel.approveWebsiteRevision(current, {
+      actionId: 'approval-runtime',
+      capturedAt: at(-4_000),
       reviewer: 'OP-OWNER',
       note: 'Approved for runtime contract verification',
-      approvedAt: at(-4_000),
-      fingerprint,
-    }
-    workspace.localPublishes = [{
-      id: 'local-publish-runtime',
-      recordedAt: at(-3_000),
-      recordedBy: 'OP-OWNER',
-      fingerprint,
-      readyPageIds: workspace.pages.filter((page) => page.stage === 'ready').map((page) => page.id),
-    }]
+    }))
+    applyWebsite((current) => websiteModel.recordWebsiteSnapshot(current, {
+      actionId: 'local-publish-runtime',
+      capturedAt: at(-3_000),
+    }))
+    const fingerprint = websiteModel.workspaceFingerprint(workspace)
+    const currentApproval = websiteModel.getCurrentApproval(workspace)
+    const currentPublish = websiteModel.getCurrentPublish(workspace)
+    if (!currentApproval || !currentPublish) throw new Error('runtime_website_release_setup_invalid')
     localStorage.setItem(websiteModel.WEBSITE_STORAGE_KEY, JSON.stringify(workspace))
 
     const pendingHandoff = handoffContract.createWebsiteEcommerceHandoff({
       fingerprint,
-      approvalId: workspace.approval.id,
-      localPublishId: workspace.localPublishes[0].id,
+      approvalId: currentApproval.id,
+      localPublishId: currentPublish.id,
       pageId: 'page-products',
       sku: 'SM-CARE-01',
       quantity: 1,
@@ -216,7 +570,7 @@ async function verifyWebsiteOrderCompletionRuntime() {
     const completed = await handoffContract.completeWebsiteOrderDraft(drafted.draft.id, input)
     assert(completed?.schema === 'website_ecommerce_handoff_store.v3' && completed.order?.state === 'ready_for_confirmation' && completed.audit.length === 2, 'runtime_v3_completion_invalid')
     assert(/^CREF-[A-HJ-NP-Z2-9]{12}$/.test(completed.order.customerReference), 'runtime_customer_reference_not_opaque')
-    assert(completed.order.idempotencyKey === drafted.draft.id && completed.order.source.websiteEvidenceReference === workspace.localPublishes[0].id, 'runtime_source_identity_invalid')
+    assert(completed.order.idempotencyKey === drafted.draft.id && completed.order.source.websiteEvidenceReference === currentPublish.id, 'runtime_source_identity_invalid')
     assert(JSON.stringify(completed.order.lines) === JSON.stringify(drafted.draft.lines) && completed.order.totalMmk === drafted.draft.totalMmk, 'runtime_price_snapshot_changed')
     const v3Raw = localStorage.getItem(handoffContract.WEBSITE_ECOMMERCE_HANDOFF_KEY)
     const exactRetry = await handoffContract.completeWebsiteOrderDraft(drafted.draft.id, input)
@@ -226,7 +580,9 @@ async function verifyWebsiteOrderCompletionRuntime() {
     assert(lockRequests === 3, 'runtime_completion_lock_missing')
 
     localStorage.setItem(handoffContract.WEBSITE_ECOMMERCE_HANDOFF_KEY, v2Raw)
-    localStorage.setItem(websiteModel.WEBSITE_STORAGE_KEY, JSON.stringify({ ...workspace, siteName: 'Changed Website source' }))
+    const changedSource = websiteModel.applyWebsiteWorkspaceUpdate(workspace, (current) => ({ ...current, siteName: 'Changed Website source' }))
+    if (!changedSource.ok) throw new Error(changedSource.error)
+    localStorage.setItem(websiteModel.WEBSITE_STORAGE_KEY, JSON.stringify(changedSource.workspace))
     const staleAttempt = await handoffContract.completeWebsiteOrderDraft(drafted.draft.id, input)
     assert(staleAttempt === null && localStorage.getItem(handoffContract.WEBSITE_ECOMMERCE_HANDOFF_KEY) === v2Raw, 'runtime_stale_source_did_not_fail_closed')
 
@@ -244,7 +600,423 @@ async function verifyWebsiteOrderCompletionRuntime() {
   }
 }
 
+async function verifyCommerceRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    commerceRuntimeChecks += 1
+  }
+  const assertThrows = (callback, reason) => {
+    try { callback() } catch { commerceRuntimeChecks += 1; return }
+    throw new Error(reason)
+  }
+  const values = new Map()
+  const storage = {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, String(value)),
+  }
+  let lockRequests = 0
+  let lockQueue = Promise.resolve()
+  const locks = {
+    request: (_name, _options, callback) => {
+      lockRequests += 1
+      const run = lockQueue.then(callback, callback)
+      lockQueue = run.then(() => undefined, () => undefined)
+      return run
+    },
+  }
+  const proof = (actionId, offset = 0, patch = {}) => ({
+    actionId,
+    capturedAt: new Date(Date.parse('2026-07-23T09:00:00.000Z') + offset).toISOString(),
+    actor: 'OP-OWNER',
+    reason: 'Verified against the source record.',
+    evidenceReference: `EV-${actionId}`,
+    ...patch,
+  })
+
+  try {
+    const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?verify=${Date.now()}`)
+    const legacy = {
+      items: [{ sku: 'SKU-1', name: 'Test item', onHand: 10, reorderAt: 2, price: 100 }],
+      orders: [{ id: 'ORD-LEGACY', createdAt: '2026-07-22T09:00:00.000Z', customer: 'Customer', channel: 'Phone', item: 'Test item', quantity: 2, payment: 'Cash', total: 200, status: 'ready' }],
+      closes: [{ id: 'CLOSE-1', createdAt: '2026-07-22T17:00:00.000Z', total: 200, orders: 1 }],
+    }
+    const migrated = model.normalizeCommerce(legacy)
+    const migratedAgain = model.normalizeCommerce(legacy)
+    assert(JSON.stringify(migrated) === JSON.stringify(migratedAgain), 'migration_not_deterministic')
+    assert(migrated.schema === model.COMMERCE_WORKSPACE_SCHEMA && migrated.items[0].onHand === 10 && migrated.orders[0].id === 'ORD-LEGACY' && migrated.closes[0].id === 'CLOSE-1', 'migration_did_not_preserve_records')
+    assert(migrated.orders[0].paymentStatus === 'pending' && migrated.orders[0].refundStatus === 'none' && migrated.movements.length === 0, 'migration_invented_payment_or_movement_history')
+    assert(model.normalizeCommerce(migrated) === migrated, 'valid_v2_not_byte_idempotent')
+
+    const ledger501 = {
+      ...model.createEmptyCommerce(),
+      items: [{ sku: 'SKU-1', name: 'Test item', onHand: 10, reorderAt: 2, price: 100 }],
+      movements: Array.from({ length: 501 }, (_, index) => ({
+        id: `MOV-${index}`,
+        actionId: `ACT-${index}`,
+        createdAt: '2026-07-23T09:00:00.000Z',
+        actor: 'OP-OWNER',
+        reason: 'Counted receipt.',
+        evidenceReference: `EV-${index}`,
+        kind: 'receipt',
+        sku: 'SKU-1',
+        quantityDelta: 1,
+      })),
+    }
+    assert(model.validateCommerceState(ledger501).movements.length === 501, 'ledger_was_silently_truncated')
+    assertThrows(() => model.validateCommerceState({ ...ledger501, items: [...ledger501.items, ledger501.items[0]] }), 'duplicate_sku_was_accepted')
+    assertThrows(() => model.validateCommerceState({ ...ledger501, movements: [...ledger501.movements, ledger501.movements[0]] }), 'duplicate_movement_was_accepted')
+
+    const base = {
+      ...model.createEmptyCommerce(),
+      items: [{ sku: 'SKU-1', name: 'Test item', onHand: 10, reorderAt: 2, price: 100 }],
+    }
+    assertThrows(() => model.validateCommerceState({
+      ...base,
+      closes: [{ id: 'CLOSE-NO-ZONE', createdAt: '2026-07-23T09:00:00', total: 0, orders: 0 }],
+    }), 'timezone_less_commerce_timestamp_succeeded')
+    const websiteSource = {
+      fingerprint: 'web-1234abcd',
+      approvalId: 'approval-1',
+      snapshotId: 'snapshot-1',
+      pageId: 'page-products',
+      siteName: 'Test Website',
+      pagePath: '/products',
+    }
+    const intakeProof = proof('ACT-WEBSITE-INTAKE')
+    const intake = model.createCommerceWebsiteIntake(base, {
+      id: 'WINT-12345678',
+      source: websiteSource,
+      sku: 'SKU-1',
+      quantity: 2,
+    }, intakeProof)
+    assert(intake?.websiteIntakes?.length === 1 && intake.websiteIntakes[0].status === 'pending_confirmation', 'managed_website_intake_not_recorded')
+    assert(intake.items[0].onHand === 10 && intake.orders.length === 0 && intake.movements.length === 0, 'managed_website_intake_moved_stock_or_created_order')
+    assert(model.createCommerceWebsiteIntake(intake, {
+      id: 'WINT-OTHER123',
+      source: websiteSource,
+      sku: 'SKU-1',
+      quantity: 2,
+    }, proof('ACT-WEBSITE-RETRY')) === intake, 'managed_website_source_retry_not_idempotent')
+    assert(model.createCommerceWebsiteIntake(intake, {
+      id: 'WINT-CONFLICT1',
+      source: websiteSource,
+      sku: 'SKU-1',
+      quantity: 3,
+    }, proof('ACT-WEBSITE-CONFLICT')) === null, 'managed_website_source_conflict_succeeded')
+    const conversionProof = proof('ACT-WEBSITE-CONVERT', 1_000)
+    const convertedIntake = model.convertCommerceWebsiteIntake(intake, 'WINT-12345678', {
+      customer: 'Customer reference',
+      fulfilmentMethod: 'local_delivery',
+      paymentMethod: 'manual_qr',
+    }, conversionProof)
+    assert(convertedIntake?.websiteIntakes?.[0].status === 'converted' && convertedIntake.websiteIntakes[0].conversion.orderId === 'ORD-WEB-12345678', 'managed_website_intake_not_converted')
+    assert(convertedIntake.items[0].onHand === 8 && convertedIntake.orders[0].sourceRecordId === 'WINT-12345678' && convertedIntake.movements[0].quantityDelta === -2, 'managed_website_conversion_not_atomic')
+    assertThrows(() => model.validateCommerceState({
+      ...convertedIntake,
+      movements: [{ ...convertedIntake.movements[0], actor: 'spoofed-actor' }, ...convertedIntake.movements.slice(1)],
+    }), 'managed_website_conversion_reservation_proof_mismatch_succeeded')
+    assert(model.convertCommerceWebsiteIntake(convertedIntake, 'WINT-12345678', {
+      customer: 'Customer reference',
+      fulfilmentMethod: 'local_delivery',
+      paymentMethod: 'manual_qr',
+    }, conversionProof) === convertedIntake, 'managed_website_conversion_retry_not_idempotent')
+    assert(model.convertCommerceWebsiteIntake(intake, 'WINT-12345678', {
+      customer: 'Customer reference',
+      fulfilmentMethod: 'local_delivery',
+      paymentMethod: 'manual_qr',
+    }, { ...conversionProof, actionId: intakeProof.actionId }) === null, 'managed_website_action_id_reuse_succeeded')
+
+    const newItem = { sku: 'SKU-2', name: 'Second item', onHand: 0, reorderAt: 3, price: 250 }
+    const openingProof = proof('ACT-ITEM-CREATE')
+    const withItem = model.registerCommerceItem(base, newItem, openingProof)
+    assert(withItem?.items[0].sku === newItem.sku && withItem.movements[0].kind === 'opening' && withItem.movements[0].quantityDelta === 0, 'catalog_item_opening_not_recorded')
+    assert(model.registerCommerceItem(withItem, newItem, openingProof) === withItem, 'catalog_item_retry_not_idempotent')
+    assert(model.registerCommerceItem(withItem, { ...newItem, price: 251 }, openingProof) === null, 'catalog_item_conflicting_retry_succeeded')
+    assert(model.registerCommerceItem(withItem, newItem, proof('ACT-ITEM-DUPLICATE')) === null, 'duplicate_catalog_sku_succeeded')
+    const order = {
+      id: 'ORD-1',
+      createdAt: '2026-07-23T09:00:00.000Z',
+      customer: 'Customer',
+      channel: 'Website',
+      item: 'Test item',
+      itemSku: 'SKU-1',
+      quantity: 2,
+      payment: 'Manual QR review',
+      paymentStatus: 'pending',
+      refundStatus: 'none',
+      sourceRecordId: 'WEB-1',
+      total: 200,
+      status: 'confirmed',
+    }
+    const reserveProof = proof('ACT-RESERVE')
+    const reserved = model.reserveCommerceOrder(base, order, reserveProof)
+    assert(reserved?.items[0].onHand === 8 && reserved.orders.length === 1 && reserved.movements.length === 1, 'reservation_did_not_apply_once')
+    assert(model.reserveCommerceOrder(reserved, order, reserveProof) === reserved, 'exact_reservation_retry_not_idempotent')
+    assert(model.reserveCommerceOrder(reserved, { ...order, quantity: 3, total: 300 }, reserveProof) === null, 'conflicting_reservation_retry_succeeded')
+    assert(model.reserveCommerceOrder(reserved, { ...order, id: 'ORD-2' }, proof('ACT-RESERVE-2')) === null, 'duplicate_source_order_succeeded')
+
+    const preparing = model.advanceCommerceOrder(reserved, order.id, 'confirmed')
+    const ready = model.advanceCommerceOrder(preparing, order.id, 'preparing')
+    assert(preparing?.orders[0].status === 'preparing' && ready?.orders[0].status === 'ready', 'fulfilment_progression_failed')
+    assert(model.advanceCommerceOrder(ready, order.id, 'ready') === null, 'pending_payment_completed_order')
+    const paymentProof = proof('ACT-PAYMENT', 1_000)
+    const reconciled = model.reconcileCommercePayment(ready, order.id, paymentProof)
+    assert(reconciled?.orders[0].paymentStatus === 'reconciled' && reconciled.orders[0].paymentReconciledBy === paymentProof.actor && reconciled.orders[0].paymentEvidenceReference === paymentProof.evidenceReference, 'payment_reconciliation_lost_human_evidence')
+    assert(model.reconcileCommercePayment(reconciled, order.id, paymentProof) === reconciled, 'exact_payment_retry_not_idempotent')
+    assert(model.reconcileCommercePayment(reconciled, order.id, { ...paymentProof, evidenceReference: 'EV-CONFLICT' }) === null, 'conflicting_payment_retry_succeeded')
+    const completed = model.advanceCommerceOrder(reconciled, order.id, 'ready')
+    assert(completed?.orders[0].status === 'completed' && model.cancelCommerceOrder(completed, order.id, proof('ACT-CANCEL-COMPLETED')) === null, 'completed_order_was_cancellable')
+
+    const cancelOrder = { ...order, id: 'ORD-CANCEL', sourceRecordId: 'WEB-CANCEL' }
+    const cancelReserved = model.reserveCommerceOrder(base, cancelOrder, proof('ACT-RESERVE-CANCEL'))
+    const cancelProof = proof('ACT-CANCEL', 2_000)
+    const cancelled = model.cancelCommerceOrder(cancelReserved, cancelOrder.id, cancelProof)
+    assert(cancelled?.items[0].onHand === 10 && cancelled.orders[0].status === 'cancelled' && cancelled.movements.filter((movement) => movement.kind === 'release').length === 1, 'cancellation_did_not_release_once')
+    assert(model.cancelCommerceOrder(cancelled, cancelOrder.id, cancelProof) === cancelled, 'exact_cancellation_retry_not_idempotent')
+    assert(model.cancelCommerceOrder(cancelled, cancelOrder.id, proof('ACT-CANCEL-OTHER')) === null, 'different_cancellation_retry_succeeded')
+    assert(model.cancelCommerceOrder(migrated, 'ORD-LEGACY', proof('ACT-CANCEL-LEGACY')) === null && migrated.items[0].onHand === 10, 'untracked_legacy_order_invented_stock')
+
+    const paidOrder = { ...order, id: 'ORD-PAID-CANCEL', sourceRecordId: 'WEB-PAID-CANCEL' }
+    const paidReserved = model.reserveCommerceOrder(base, paidOrder, proof('ACT-RESERVE-PAID'))
+    const paid = model.reconcileCommercePayment(paidReserved, paidOrder.id, proof('ACT-PAY-PAID'))
+    const paidCancelled = model.cancelCommerceOrder(paid, paidOrder.id, proof('ACT-CANCEL-PAID'))
+    assert(paidCancelled?.orders[0].paymentStatus === 'reconciled' && paidCancelled.orders[0].refundStatus === 'due', 'paid_cancellation_erased_reconciliation_or_refund_exception')
+    assert(model.reconcileCommercePayment(paidCancelled, paidOrder.id, proof('ACT-PAY-AFTER-CANCEL')) === null, 'cancelled_payment_reconciled_again')
+
+    const receiptProof = proof('ACT-RECEIPT')
+    const received = model.receiveCommerceStock(base, 'SKU-1', 10, receiptProof)
+    assert(received?.items[0].onHand === 20 && received.movements[0].kind === 'receipt', 'receipt_not_recorded')
+    assert(model.receiveCommerceStock(received, 'SKU-1', 10, receiptProof) === received, 'exact_receipt_retry_not_idempotent')
+    assert(model.receiveCommerceStock(received, 'SKU-1', 11, receiptProof) === null, 'conflicting_receipt_retry_succeeded')
+    assert(model.receiveCommerceStock({ ...base, items: [{ ...base.items[0], onHand: Number.MAX_SAFE_INTEGER }] }, 'SKU-1', 1, proof('ACT-OVERFLOW')) === null, 'stock_overflow_succeeded')
+
+    values.clear()
+    const currentState = model.createSeedCommerce()
+    values.set(model.COMMERCE_KEY, JSON.stringify(currentState))
+    values.set(model.LEGACY_COMMERCE_KEYS[0], '{malformed')
+    const currentSnapshot = model.loadCommerceWorkspace(storage)
+    assert(currentSnapshot.source === 'current' && currentSnapshot.state.orders.length === currentState.orders.length, 'valid_v2_did_not_take_precedence')
+    const malformed = '{broken'
+    values.set(model.COMMERCE_KEY, malformed)
+    values.set(model.LEGACY_COMMERCE_KEYS[0], JSON.stringify(legacy))
+    const recoverySnapshot = model.loadCommerceWorkspace(storage)
+    assert(recoverySnapshot.source === 'recovery' && recoverySnapshot.state.orders.length === 0 && values.get(model.COMMERCE_KEY) === malformed, 'malformed_v2_restored_or_replaced_legacy')
+    values.clear()
+    values.set(model.LEGACY_COMMERCE_KEYS[0], JSON.stringify(legacy))
+    const legacySnapshot = model.loadCommerceWorkspace(storage)
+    assert(legacySnapshot.source === 'legacy' && JSON.parse(values.get(model.COMMERCE_KEY)).movements.length === 0, 'absent_v2_migration_failed')
+
+    values.clear()
+    const concurrentReserved = model.reserveCommerceOrder(base, cancelOrder, proof('ACT-CONCURRENT-RESERVE'))
+    values.set(model.COMMERCE_KEY, JSON.stringify(concurrentReserved))
+    const concurrentResults = await Promise.all([
+      model.mutateCommerceWorkspace((state) => model.cancelCommerceOrder(state, cancelOrder.id, proof('ACT-CONCURRENT-CANCEL-A')), storage, locks),
+      model.mutateCommerceWorkspace((state) => model.cancelCommerceOrder(state, cancelOrder.id, proof('ACT-CONCURRENT-CANCEL-B')), storage, locks),
+    ])
+    const concurrentState = JSON.parse(values.get(model.COMMERCE_KEY))
+    assert(lockRequests === 2 && concurrentResults.filter((result) => result.ok).length === 1, 'concurrent_cancellation_not_serialized')
+    assert(concurrentState.items[0].onHand === 10 && concurrentState.movements.filter((movement) => movement.kind === 'release').length === 1, 'concurrent_cancellation_released_twice')
+    const replay = await model.mutateCommerceWorkspace((state) => model.cancelCommerceOrder(state, cancelOrder.id, proof('ACT-CONCURRENT-CANCEL-A')), storage, locks)
+    assert(replay.ok && replay.replayed === true && JSON.parse(values.get(model.COMMERCE_KEY)).movements.length === 2, 'persisted_cancellation_replay_changed_ledger')
+
+    const beforeFailure = values.get(model.COMMERCE_KEY)
+    const failingStorage = { getItem: storage.getItem, setItem: () => { throw new Error('quota') } }
+    const failedWrite = await model.mutateCommerceWorkspace((state) => model.receiveCommerceStock(state, 'SKU-1', 1, proof('ACT-WRITE-FAIL')), failingStorage, locks)
+    assert(!failedWrite.ok && values.get(model.COMMERCE_KEY) === beforeFailure, 'storage_failure_advanced_interface_state')
+  } catch (error) {
+    fail(`commerce_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
+async function verifyProductionRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    productionRuntimeChecks += 1
+  }
+  const assertThrows = (callback, reason) => {
+    try { callback() } catch { productionRuntimeChecks += 1; return }
+    throw new Error(reason)
+  }
+  const values = new Map()
+  const storage = {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, String(value)),
+  }
+  let lockRequests = 0
+  let lockQueue = Promise.resolve()
+  const locks = {
+    request: (_name, _options, callback) => {
+      lockRequests += 1
+      const run = lockQueue.then(callback, callback)
+      lockQueue = run.then(() => undefined, () => undefined)
+      return run
+    },
+  }
+  const proof = (actionId, offset = 0, patch = {}) => ({
+    actionId,
+    capturedAt: new Date(Date.parse('2026-07-23T10:00:00.000Z') + offset).toISOString(),
+    actor: 'OP-OWNER',
+    reason: 'Verified against the shift record.',
+    evidenceReference: `EV-${actionId}`,
+    ...patch,
+  })
+
+  try {
+    const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'production-workspace.ts')).href}?verify=${Date.now()}`)
+    const legacy = {
+      jobs: [{ id: 'JOB-1', line: 'Line 01', product: 'Test batch', target: 100, output: 90 }],
+      issues: [{ id: 'ISS-LEGACY', createdAt: '2026-07-22T10:00:00.000Z', area: 'Line 01', kind: 'quality', summary: 'Reviewed legacy issue', status: 'resolved' }],
+      machines: [{ id: 'MC-1', name: 'Test machine', state: 'running' }],
+    }
+    const migrated = model.normalizeProduction(legacy)
+    const migratedAgain = model.normalizeProduction(legacy)
+    assert(JSON.stringify(migrated) === JSON.stringify(migratedAgain), 'production_migration_not_deterministic')
+    assert(migrated.schema === model.PRODUCTION_WORKSPACE_SCHEMA && migrated.revision === 0 && migrated.jobs[0].output === 90 && migrated.issues[0].id === 'ISS-LEGACY' && migrated.machines[0].state === 'running', 'production_migration_did_not_preserve_records')
+    assert(migrated.events.length === 0 && !migrated.issues[0].resolution, 'production_migration_invented_history')
+    assert(model.normalizeProduction(migrated) === migrated, 'production_valid_v2_not_identity_stable')
+    assertThrows(() => model.normalizeProduction({ ...legacy, jobs: [{ ...legacy.jobs[0], id: '' }] }), 'production_malformed_legacy_field_was_fabricated')
+
+    const ledger501 = {
+      ...model.createEmptyProduction(),
+      revision: 501,
+      jobs: [{ id: 'JOB-1', line: 'Line 01', product: 'Test batch', target: 1_000, output: 600 }],
+      events: Array.from({ length: 501 }, (_, index) => ({
+        id: `EVT-ACT-${index}`,
+        actionId: `ACT-${index}`,
+        createdAt: '2026-07-23T10:00:00.000Z',
+        actor: 'OP-OWNER',
+        reason: 'Verified count.',
+        evidenceReference: `EV-${index}`,
+        kind: 'output_recorded',
+        subjectId: 'JOB-1',
+        summary: 'Recorded 1 good unit',
+        quantity: 1,
+      })),
+    }
+    assert(model.validateProductionState(ledger501).events.length === 501, 'production_ledger_was_truncated')
+    assertThrows(() => model.validateProductionState({ ...ledger501, jobs: [...ledger501.jobs, ledger501.jobs[0]] }), 'production_duplicate_job_accepted')
+    const duplicateIssue = { id: 'ISS-1', createdAt: '2026-07-23T10:00:00.000Z', area: 'Line 01', kind: 'quality', summary: 'Issue', status: 'open' }
+    assertThrows(() => model.validateProductionState({ ...model.createEmptyProduction(), issues: [duplicateIssue, duplicateIssue] }), 'production_duplicate_issue_accepted')
+    const duplicateMachine = { id: 'MC-1', name: 'Machine', state: 'running' }
+    assertThrows(() => model.validateProductionState({ ...model.createEmptyProduction(), machines: [duplicateMachine, duplicateMachine] }), 'production_duplicate_machine_accepted')
+    assertThrows(() => model.validateProductionState({ ...ledger501, revision: 502, events: [...ledger501.events, ledger501.events[0]] }), 'production_duplicate_event_accepted')
+    assertThrows(() => model.validateProductionState({ ...model.createEmptyProduction(), jobs: [{ ...legacy.jobs[0], output: 101 }] }), 'production_over_target_state_accepted')
+    assertThrows(() => model.validateProductionState({ ...model.createEmptyProduction(), jobs: [{ ...legacy.jobs[0], target: Number.MAX_SAFE_INTEGER + 1 }] }), 'production_unsafe_integer_accepted')
+    assertThrows(() => model.validateProductionState({ ...model.createEmptyProduction(), machines: [{ ...duplicateMachine, state: 'unknown' }] }), 'production_invalid_machine_state_accepted')
+    assertThrows(() => model.validateProductionState({ ...model.createEmptyProduction(), issues: [{ ...duplicateIssue, createdAt: 'not-a-date' }] }), 'production_invalid_issue_timestamp_accepted')
+    assertThrows(() => model.validateProductionState({ ...ledger501, revision: 500 }), 'production_revision_event_mismatch_accepted')
+
+    const base = {
+      ...model.createEmptyProduction(),
+      jobs: [{ id: 'JOB-1', line: 'Line 01', product: 'Test batch', target: 100, output: 90 }],
+      machines: [{ id: 'MC-1', name: 'Test machine', state: 'running' }],
+    }
+    const outputProof = proof('ACT-OUTPUT')
+    const outputState = model.recordProductionOutput(base, 'JOB-1', 10, outputProof)
+    assert(outputState?.jobs[0].output === 100 && outputState.revision === 1 && outputState.events[0].quantity === 10 && outputState.events[0].actor === outputProof.actor, 'production_output_not_recorded_once')
+    assert(model.recordProductionOutput(outputState, 'JOB-1', 10, outputProof) === outputState, 'production_output_retry_not_idempotent')
+    assert(model.recordProductionOutput(outputState, 'JOB-1', 9, outputProof) === null, 'production_output_conflicting_quantity_succeeded')
+    assert(model.recordProductionOutput(outputState, 'JOB-1', 10, { ...outputProof, evidenceReference: 'EV-CONFLICT' }) === null, 'production_output_conflicting_evidence_succeeded')
+    assert([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY].every((quantity) => model.recordProductionOutput(base, 'JOB-1', quantity, proof(`ACT-BAD-${String(quantity)}`)) === null), 'production_invalid_output_quantity_succeeded')
+    assert(model.recordProductionOutput(base, 'JOB-1', 11, proof('ACT-OVER-TARGET')) === null, 'production_over_target_output_succeeded')
+    assert(model.recordProductionOutput(base, 'JOB-MISSING', 1, proof('ACT-MISSING-JOB')) === null, 'production_missing_job_output_succeeded')
+    const maxed = { ...model.createEmptyProduction(), jobs: [{ ...legacy.jobs[0], target: Number.MAX_SAFE_INTEGER, output: Number.MAX_SAFE_INTEGER }] }
+    assert(model.recordProductionOutput(maxed, 'JOB-1', 1, proof('ACT-OVERFLOW')) === null, 'production_output_overflow_succeeded')
+
+    const issue = { id: 'ISS-1', createdAt: '2026-07-23T10:01:00.000Z', area: 'Line 01', kind: 'quality', summary: 'Temperature drift observed', status: 'open' }
+    const openProof = proof('ACT-ISSUE-OPEN', 1_000)
+    const opened = model.openProductionIssue(outputState, issue, openProof)
+    assert(opened?.issues[0].id === issue.id && opened.revision === 2 && opened.events[0].kind === 'issue_opened', 'production_issue_not_opened_once')
+    assert(model.openProductionIssue(opened, issue, openProof) === opened, 'production_issue_open_retry_not_idempotent')
+    assert(model.openProductionIssue(opened, { ...issue, summary: 'Changed' }, openProof) === null, 'production_issue_conflicting_retry_succeeded')
+    assert(model.openProductionIssue(opened, issue, proof('ACT-ISSUE-DUPLICATE')) === null, 'production_duplicate_issue_id_succeeded')
+    assert(model.openProductionIssue(opened, { ...issue, id: 'ISS-2' }, openProof) === null, 'production_reused_action_id_succeeded')
+    const resolutionProof = proof('ACT-ISSUE-RESOLVE', 2_000)
+    const resolved = model.resolveProductionIssue(opened, issue.id, resolutionProof)
+    assert(resolved?.issues[0].status === 'resolved' && resolved.issues[0].resolution?.resolvedBy === resolutionProof.actor && resolved.issues[0].resolution?.evidenceReference === resolutionProof.evidenceReference && resolved.events[0].kind === 'issue_resolved', 'production_issue_resolution_lost_proof')
+    assert(model.resolveProductionIssue(resolved, issue.id, resolutionProof) === resolved, 'production_resolution_retry_not_idempotent')
+    assert(model.resolveProductionIssue(resolved, issue.id, { ...resolutionProof, reason: 'Changed' }) === null, 'production_resolution_conflicting_retry_succeeded')
+    assert(model.resolveProductionIssue(resolved, issue.id, proof('ACT-RESOLVE-AGAIN')) === null, 'production_second_resolution_succeeded')
+    assert(model.resolveProductionIssue(resolved, 'ISS-MISSING', proof('ACT-RESOLVE-MISSING')) === null, 'production_missing_issue_resolution_succeeded')
+
+    const machineProof = proof('ACT-MACHINE', 3_000)
+    const attention = model.advanceProductionMachineState(resolved, 'MC-1', 'running', machineProof)
+    assert(attention?.machines[0].state === 'attention' && attention.events[0].fromState === 'running' && attention.events[0].toState === 'attention', 'production_machine_transition_not_explicit')
+    assert(model.advanceProductionMachineState(attention, 'MC-1', 'running', machineProof) === attention, 'production_machine_retry_not_idempotent')
+    assert(model.advanceProductionMachineState(attention, 'MC-1', 'running', proof('ACT-MACHINE-STALE')) === null, 'production_stale_machine_transition_succeeded')
+    assert(model.advanceProductionMachineState(attention, 'MC-1', 'attention', machineProof) === null, 'production_machine_conflicting_retry_succeeded')
+    const stopped = model.advanceProductionMachineState(attention, 'MC-1', 'attention', proof('ACT-MACHINE-STOP', 4_000))
+    assert(stopped?.machines[0].state === 'stopped' && stopped.revision === 5, 'production_machine_sequence_invalid')
+
+    values.clear()
+    const currentState = model.createSeedProduction()
+    values.set(model.PRODUCTION_KEY, JSON.stringify(currentState))
+    values.set(model.LEGACY_PRODUCTION_KEYS[0], '{malformed')
+    const currentSnapshot = model.loadProductionWorkspace(storage)
+    assert(currentSnapshot.source === 'current' && currentSnapshot.state.jobs.length === currentState.jobs.length, 'production_valid_v2_did_not_take_precedence')
+    const malformed = '{broken'
+    values.set(model.PRODUCTION_KEY, malformed)
+    values.set(model.LEGACY_PRODUCTION_KEYS[0], JSON.stringify(legacy))
+    const recoverySnapshot = model.loadProductionWorkspace(storage)
+    assert(recoverySnapshot.source === 'recovery' && recoverySnapshot.state.jobs.length === 0 && values.get(model.PRODUCTION_KEY) === malformed, 'production_malformed_v2_restored_or_replaced_legacy')
+    values.clear()
+    values.set(model.LEGACY_PRODUCTION_KEYS[0], JSON.stringify(legacy))
+    const legacySnapshot = model.loadProductionWorkspace(storage)
+    assert(legacySnapshot.source === 'legacy' && JSON.parse(values.get(model.PRODUCTION_KEY)).revision === 0 && JSON.parse(values.get(model.PRODUCTION_KEY)).events.length === 0, 'production_absent_v2_migration_failed')
+    values.clear()
+    values.set(model.LEGACY_PRODUCTION_KEYS[0], JSON.stringify({ ...legacy, issues: [{ ...legacy.issues[0], kind: 'unknown' }] }))
+    const invalidLegacy = model.loadProductionWorkspace(storage)
+    assert(invalidLegacy.source === 'recovery' && !values.has(model.PRODUCTION_KEY), 'production_invalid_legacy_did_not_fail_closed')
+    values.clear()
+    values.set(model.LEGACY_PRODUCTION_KEYS[0], '{broken')
+    values.set(model.LEGACY_PRODUCTION_KEYS[1], JSON.stringify(legacy))
+    const staleLegacyFallback = model.loadProductionWorkspace(storage)
+    assert(staleLegacyFallback.source === 'recovery' && !values.has(model.PRODUCTION_KEY), 'production_malformed_newer_legacy_restored_stale_data')
+
+    values.clear()
+    values.set(model.PRODUCTION_KEY, JSON.stringify(base))
+    lockRequests = 0
+    const concurrentOutput = await Promise.all([
+      model.mutateProductionWorkspace((state) => model.recordProductionOutput(state, 'JOB-1', 7, proof('ACT-CONCURRENT-7')), storage, locks),
+      model.mutateProductionWorkspace((state) => model.recordProductionOutput(state, 'JOB-1', 5, proof('ACT-CONCURRENT-5')), storage, locks),
+    ])
+    const concurrentOutputState = JSON.parse(values.get(model.PRODUCTION_KEY))
+    assert(lockRequests === 2 && concurrentOutput.filter((result) => result.ok).length === 1, 'production_concurrent_output_not_serialized')
+    assert(concurrentOutputState.jobs[0].output <= concurrentOutputState.jobs[0].target && concurrentOutputState.events.length === 1 && concurrentOutputState.revision === 1, 'production_concurrent_output_exceeded_target')
+    const replay = await model.mutateProductionWorkspace((state) => model.recordProductionOutput(state, 'JOB-1', 7, proof('ACT-CONCURRENT-7')), storage, locks)
+    assert(replay.ok && replay.replayed === true && JSON.parse(values.get(model.PRODUCTION_KEY)).revision === 1, 'production_persisted_retry_changed_state')
+
+    values.clear()
+    values.set(model.PRODUCTION_KEY, JSON.stringify(base))
+    const concurrentIssue = { ...issue, id: 'ISS-CONCURRENT' }
+    const mixedResults = await Promise.all([
+      model.mutateProductionWorkspace((state) => model.recordProductionOutput(state, 'JOB-1', 5, proof('ACT-MIXED-OUTPUT')), storage, locks),
+      model.mutateProductionWorkspace((state) => model.openProductionIssue(state, concurrentIssue, proof('ACT-MIXED-ISSUE')), storage, locks),
+    ])
+    const mixedState = JSON.parse(values.get(model.PRODUCTION_KEY))
+    assert(mixedResults.every((result) => result.ok) && mixedState.jobs[0].output === 95 && mixedState.issues[0].id === concurrentIssue.id && mixedState.events.length === 2 && mixedState.revision === 2, 'production_concurrent_records_did_not_both_survive')
+
+    values.clear()
+    values.set(model.PRODUCTION_KEY, JSON.stringify(base))
+    const beforeFailure = values.get(model.PRODUCTION_KEY)
+    const failingStorage = { getItem: storage.getItem, setItem: () => { throw new Error('quota') } }
+    const failedWrite = await model.mutateProductionWorkspace((state) => model.recordProductionOutput(state, 'JOB-1', 1, proof('ACT-WRITE-FAIL')), failingStorage, locks)
+    assert(!failedWrite.ok && values.get(model.PRODUCTION_KEY) === beforeFailure, 'production_storage_failure_advanced_state')
+    const invalidMutation = await model.mutateProductionWorkspace((state) => ({ ...state, revision: state.revision + 1 }), storage, locks)
+    assert(!invalidMutation.ok && values.get(model.PRODUCTION_KEY) === beforeFailure, 'production_non_append_mutation_succeeded')
+    const throwingMutation = await model.mutateProductionWorkspace(() => { throw new Error('transition') }, storage, locks)
+    assert(!throwingMutation.ok && throwingMutation.error.includes('transition failed') && values.get(model.PRODUCTION_KEY) === beforeFailure, 'production_transition_failure_was_misclassified')
+    const unlocked = await model.mutateProductionWorkspace((state) => model.recordProductionOutput(state, 'JOB-1', 1, proof('ACT-NO-LOCK')), storage, {})
+    assert(!unlocked.ok && values.get(model.PRODUCTION_KEY) === beforeFailure, 'production_unlocked_write_succeeded')
+  } catch (error) {
+    fail(`production_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
+await verifyWebsiteRuntime()
 await verifyWebsiteOrderCompletionRuntime()
+await verifyCommerceRuntime()
+await verifyProductionRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
 if (bytes > 2_500_000) fail(`artifact_budget:${bytes}`)
@@ -253,4 +1025,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', primaryRoutes: 4, operatingModules: 2, prototypeRoutes: 2, workflowProfiles, orderCompletionRuntimeChecks, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', primaryRoutes: 4, operatingModules: 2, prototypeRoutes: 1, compatibilityRedirects: 1, workflowProfiles, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, bytes }, null, 2))

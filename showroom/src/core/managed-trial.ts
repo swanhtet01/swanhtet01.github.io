@@ -31,6 +31,62 @@ export type ManagedApprovalRecord = {
   idempotent_replay: boolean
 }
 
+export type ManagedSurface = 'company' | 'commerce' | 'production' | 'website' | 'setup'
+
+export type ManagedStateRecord = {
+  surface: ManagedSurface
+  version: number
+  state: Record<string, unknown>
+  updated_by: string
+  updated_at: string
+}
+
+export type ManagedCommerceEvent =
+  | 'commerce.workspace.initialized'
+  | 'commerce.item.created'
+  | 'commerce.website_intake.created'
+  | 'commerce.website_intake.converted'
+  | 'commerce.order.created'
+  | 'commerce.order.advanced'
+  | 'commerce.order.cancelled'
+  | 'commerce.payment.reconciled'
+  | 'commerce.stock.received'
+  | 'commerce.close.saved'
+
+export type ManagedWebsiteEvent =
+  | 'website.workspace.initialized'
+  | 'website.content.saved'
+  | 'website.selection.changed'
+  | 'website.evidence.recorded'
+  | 'website.revision.approved'
+  | 'website.snapshot.recorded'
+
+export type ManagedCommandResult = {
+  command_id: string
+  surface: 'commerce'
+  event_type: ManagedCommerceEvent
+  version: number
+  state: Record<string, unknown>
+  idempotent_replay: boolean
+}
+
+export type ManagedWebsiteCommandResult = {
+  command_id: string
+  surface: 'website'
+  event_type: ManagedWebsiteEvent
+  version: number
+  state: Record<string, unknown>
+  idempotent_replay: boolean
+}
+
+export type ManagedCommandEvidence = {
+  actionId: string
+  capturedAt: string
+  actor: string
+  reason: string
+  evidenceReference: string
+}
+
 export type ManagedBootstrap = {
   identity: {
     workspace_id: string
@@ -38,7 +94,7 @@ export type ManagedBootstrap = {
     actor_kind: 'human' | 'service' | 'agent'
   }
   readiness: Record<string, unknown>
-  states: Record<string, unknown>
+  states: Record<ManagedSurface, ManagedStateRecord>
   approvals: ManagedApprovalRecord[]
 }
 
@@ -241,6 +297,46 @@ async function authorizedRequest<T>(path: string, init: RequestInit = {}, retry 
 
 export function loadManagedBootstrap() {
   return authorizedRequest<ManagedBootstrap>('/api/trial/v1/bootstrap')
+}
+
+export async function saveManagedCommerceCommand(request: {
+  commandId: string
+  evidence: ManagedCommandEvidence
+  eventType: ManagedCommerceEvent
+  expectedVersion: number
+  state: Record<string, unknown>
+}) {
+  const response = await authorizedRequest<{ result: ManagedCommandResult }>('/api/trial/v1/commands', {
+    method: 'POST',
+    body: JSON.stringify({
+      command_id: request.commandId,
+      surface: 'commerce',
+      event_type: request.eventType,
+      expected_version: request.expectedVersion,
+      payload: { state: request.state, evidence: request.evidence },
+    }),
+  })
+  return response.result
+}
+
+export async function saveManagedWebsiteCommand(request: {
+  commandId: string
+  evidence: ManagedCommandEvidence
+  eventType: ManagedWebsiteEvent
+  expectedVersion: number
+  state: object
+}) {
+  const response = await authorizedRequest<{ result: ManagedWebsiteCommandResult }>('/api/trial/v1/commands', {
+    method: 'POST',
+    body: JSON.stringify({
+      command_id: request.commandId,
+      surface: 'website',
+      event_type: request.eventType,
+      expected_version: request.expectedVersion,
+      payload: { state: request.state, evidence: request.evidence },
+    }),
+  })
+  return response.result
 }
 
 export async function createManagedApproval(request: ManagedApprovalRequest) {

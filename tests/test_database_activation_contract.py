@@ -28,7 +28,13 @@ MIGRATION_V2 = (
     / "migrations"
     / "20260722142801_private_trial_backend_v2.sql"
 )
-MIGRATIONS = (MIGRATION_V1, MIGRATION_V2)
+MIGRATION_V3 = (
+    ROOT
+    / "supabase"
+    / "migrations"
+    / "20260723094500_private_trial_backend_v3_website.sql"
+)
+MIGRATIONS = (MIGRATION_V1, MIGRATION_V2, MIGRATION_V3)
 
 PRIVATE_SCHEMA = "app_private"
 BACKEND_ROLE = "supermega_trial_backend"
@@ -114,9 +120,10 @@ def _first_sql_token(statement: str) -> str:
 
 
 class MigrationSecurityEvidenceTests(unittest.TestCase):
-    def test_historical_v1_is_unchanged_and_v2_is_additive(self) -> None:
+    def test_historical_migrations_are_unchanged_and_v3_is_additive(self) -> None:
         v1 = _normalized_sql(MIGRATION_V1)
         v2 = _normalized_sql(MIGRATION_V2)
+        v3 = _normalized_sql(MIGRATION_V3)
         self.assertIn("values ('private_trial_backend', 1)", v1)
         self.assertIn("surface in ('command', 'shop', 'plant', 'setup')", v1)
         self.assertNotIn("decision_contract_version", v1)
@@ -124,6 +131,10 @@ class MigrationSecurityEvidenceTests(unittest.TestCase):
         self.assertIn("private trial backend v2 requires schema version 1", v2)
         self.assertIn("add column decision_contract_version integer", v2)
         self.assertIn("set schema_version = 2", v2)
+        self.assertIn("private trial backend v3 requires schema version 2", v3)
+        self.assertIn("surface in ('company', 'commerce', 'production', 'website', 'setup')", v3)
+        self.assertIn("when 'website' then 'website.write'", v3)
+        self.assertIn("set schema_version = 3", v3)
 
     def test_private_schema_and_runtime_role_are_restricted(self) -> None:
         sql = _normalized_sql()
@@ -387,7 +398,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                         schema_exists=scenario != "missing_schema",
                         schema_ready=scenario != "missing_schema",
                         component="private_trial_backend",
-                        schema_version=0 if scenario == "wrong_version" else 2,
+                        schema_version=0 if scenario == "wrong_version" else 3,
                         tables=tables,
                         table_names=tables,
                         table_count=len(tables),
@@ -483,7 +494,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                             return []
                         return [
                             _snapshot(
-                                schema_version=0 if scenario == "wrong_version" else 2,
+                                schema_version=0 if scenario == "wrong_version" else 3,
                             )
                         ]
                     if "pg_policies" in q:
@@ -512,6 +523,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                                     "company.write",
                                     "commerce.write",
                                     "production.write",
+                                    "website.write",
                                     "setup.write",
                                 ),
                             ),
@@ -527,6 +539,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                                     "company.write",
                                     "commerce.write",
                                     "production.write",
+                                    "website.write",
                                     "setup.write",
                                 ),
                             ),
@@ -548,6 +561,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                                     "company.write",
                                     "commerce.write",
                                     "production.write",
+                                    "website.write",
                                     "setup.write",
                                     "approvals.request",
                                     "approvals.decide",
@@ -839,7 +853,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
         payload = _extract_json(result.stdout + result.stderr)
         serialized = json.dumps(payload, sort_keys=True).lower()
         self.assertTrue(payload.get("ok") is True or payload.get("status") == "ready")
-        self.assertEqual(payload.get("contract"), "supermega_private_trial_database_v2")
+        self.assertEqual(payload.get("contract"), "supermega_private_trial_database_v3")
         checks = payload.get("checks")
         self.assertIsInstance(checks, dict)
         assert isinstance(checks, dict)
@@ -869,7 +883,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
             {
                 "name": PRIVATE_SCHEMA,
                 "component": "private_trial_backend",
-                "version": 2,
+                "version": 3,
             },
         )
         self.assertEqual(

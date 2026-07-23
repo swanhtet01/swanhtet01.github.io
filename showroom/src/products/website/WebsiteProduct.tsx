@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { type KeyboardEvent, useEffect, useState } from 'react'
 
 import { ContentWorkspace } from './ContentWorkspace'
 import { NavigationWorkspace } from './NavigationWorkspace'
@@ -6,23 +6,38 @@ import { PublishWorkspace } from './PublishWorkspace'
 import { SitePreview } from './SitePreview'
 import { useWebsiteWorkspace } from './useWebsiteWorkspace'
 import {
+  commerceWebsiteIntakes,
+  createCommerceWebsiteIntake,
+  validateCommerceState,
+  type CommerceWebsiteSource,
+} from '../../core/commerce-workspace'
+import {
+  loadManagedBootstrap,
+  ManagedTrialError,
+  saveManagedCommerceCommand,
+} from '../../core/managed-trial'
+import {
   createWebsiteEcommerceHandoff,
   readWebsiteEcommerceHandoff,
   writeWebsiteEcommerceHandoff,
 } from '../product-handoff'
 import {
+  approveWebsiteRevision,
   createBlankPage,
   createId,
   duplicatePage,
-  isCurrentApproval,
-  isCurrentPublish,
+  getCurrentApproval,
+  getCurrentPublish,
   MAX_WEBSITE_PAGES,
   previewDevices,
   readinessChecks,
+  recordWebsiteEvidence,
+  recordWebsiteSnapshot,
   workspaceFingerprint,
   type EvidenceKind,
   type PreviewDevice,
   type WebsitePage,
+  type WebsiteWorkspaceUpdate,
   type WorkspaceView,
 } from './website-model'
 import './website-product.css'
@@ -47,32 +62,43 @@ const viewCopy: Record<WorkspaceView, { eyebrow: string; title: string; copy: st
   publish: {
     eyebrow: 'Release control',
     title: 'Prove the revision before approval.',
-    copy: 'Readiness, evidence, and human approval are bound to the current local fingerprint.',
+    copy: 'Readiness, evidence, and human approval are bound to the current content fingerprint.',
   },
 }
 
 function handoffSourceKey(context: ReturnType<typeof readWebsiteEcommerceHandoff>) {
   if (!context?.display) return ''
   const source = context.handoff.source
-  return [source.fingerprint, source.approvalId, source.localPublishId, source.pageId].join('|')
+  return ['local', source.fingerprint, source.approvalId, source.localPublishId, source.pageId].join('|')
+}
+
+function managedHandoffSourceKey(source: CommerceWebsiteSource) {
+  return ['managed', source.fingerprint, source.approvalId, source.snapshotId, source.pageId].join('|')
+}
+
+function secureUuid() {
+  if (typeof globalThis.crypto?.randomUUID !== 'function') throw new Error('Secure command IDs are unavailable in this browser.')
+  return globalThis.crypto.randomUUID()
 }
 
 export function WebsiteProduct() {
-  const { workspace, setWorkspace, storageMode } = useWebsiteWorkspace()
+  const { workspace, mutateWorkspace, storageMode, storageIssue, managedActorId } = useWebsiteWorkspace()
   const [view, setView] = useState<WorkspaceView>('content')
   const [device, setDevice] = useState<PreviewDevice>('desktop')
-  const [notice, setNotice] = useState('Local demo loaded. No website has been deployed.')
+  const [notice, setNotice] = useState('Website workspace loaded. No website has been deployed.')
   const [deleteCandidateId, setDeleteCandidateId] = useState('')
   const [preparedHandoffSource, setPreparedHandoffSource] = useState(() => handoffSourceKey(readWebsiteEcommerceHandoff()))
   const selectedPage = workspace.pages.find((page) => page.id === workspace.selectedPageId) ?? workspace.pages[0]
   const fingerprint = workspaceFingerprint(workspace)
   const checks = readinessChecks(workspace, fingerprint)
-  const approvalIsCurrent = isCurrentApproval(workspace.approval, fingerprint)
-  const publishIsCurrent = isCurrentPublish(workspace.localPublishes[0], fingerprint)
+  const approval = getCurrentApproval(workspace)
+  const publish = getCurrentPublish(workspace)
+  const approvalIsCurrent = Boolean(approval)
+  const publishIsCurrent = Boolean(publish)
   const handoffSourcePage = workspace.pages.find((page) => page.stage === 'ready' && page.slug === '/products')
     ?? workspace.pages.find((page) => page.stage === 'ready')
-  const currentHandoffSource = workspace.approval && workspace.localPublishes[0] && handoffSourcePage
-    ? [fingerprint, workspace.approval.id, workspace.localPublishes[0].id, handoffSourcePage.id].join('|')
+  const currentHandoffSource = approval && publish && handoffSourcePage
+    ? [storageMode === 'managed' ? 'managed' : 'local', fingerprint, approval.id, publish.id, handoffSourcePage.id].join('|')
     : ''
   const handoffIsCurrent = Boolean(preparedHandoffSource
     && preparedHandoffSource === currentHandoffSource
@@ -86,14 +112,40 @@ export function WebsiteProduct() {
     window.scrollTo({ top: 0, behavior: 'instant' })
   }, [])
 
-  function selectPage(pageId: string) {
-    setWorkspace((current) => ({ ...current, selectedPageId: pageId }))
-    setDeleteCandidateId('')
-    setNotice('Previewing the selected browser-local page.')
+  async function commitWorkspace(update: WebsiteWorkspaceUpdate, success = '', durable = false) {
+    const result = await mutateWorkspace(update, { durable })
+    if (!result.ok) {
+      setNotice(result.error)
+      return result
+    }
+    if (result.changed && success) setNotice(success)
+    return result
   }
 
-  function updatePage(pageId: string, update: (page: WebsitePage) => WebsitePage) {
-    setWorkspace((current) => ({
+  function moveWorkspaceTabFocus(event: KeyboardEvent<HTMLButtonElement>, currentIndex: number) {
+    const tabs = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')
+    if (!tabs?.length) return
+    let nextIndex = currentIndex
+    if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % tabs.length
+    else if (event.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + tabs.length) % tabs.length
+    else if (event.key === 'Home') nextIndex = 0
+    else if (event.key === 'End') nextIndex = tabs.length - 1
+    else return
+    event.preventDefault()
+    tabs[nextIndex]?.focus()
+    setView(workspaceViews[nextIndex].id)
+  }
+
+  async function selectPage(pageId: string) {
+    await commitWorkspace((current) => current.pages.some((page) => page.id === pageId)
+      ? { ...current, selectedPageId: pageId }
+      : current)
+    setDeleteCandidateId('')
+    setNotice('Previewing the selected page.')
+  }
+
+  async function updatePage(pageId: string, update: (page: WebsitePage) => WebsitePage) {
+    await commitWorkspace((current) => ({
       ...current,
       pages: current.pages.map((page) => page.id === pageId
         ? { ...update(page), updatedAt: new Date().toISOString() }
@@ -102,60 +154,62 @@ export function WebsiteProduct() {
     setDeleteCandidateId('')
   }
 
-  function addPage() {
+  async function addPage() {
     if (workspace.pages.length >= MAX_WEBSITE_PAGES) {
       setNotice('This prototype is capped at four pages. Remove a draft before adding another.')
       return
     }
-    const page = createBlankPage(workspace.pages.length + 1)
-    setWorkspace((current) => ({
-      ...current,
-      pages: [...current.pages, page],
-      selectedPageId: page.id,
-    }))
-    setView('content')
-    setDeleteCandidateId('')
-    setNotice('Draft page added. Complete its content before marking it ready.')
+    const result = await commitWorkspace((current) => {
+      if (current.pages.length >= MAX_WEBSITE_PAGES) return current
+      const page = createBlankPage(current.pages.length + 1)
+      return { ...current, pages: [...current.pages, page], selectedPageId: page.id }
+    }, 'Draft page added. Complete its content before marking it ready.')
+    if (result.ok && result.changed) {
+      setView('content')
+      setDeleteCandidateId('')
+    }
   }
 
-  function copySelectedPage() {
+  async function copySelectedPage() {
     if (workspace.pages.length >= MAX_WEBSITE_PAGES) {
       setNotice('This prototype is capped at four pages. Remove a draft before duplicating.')
       return
     }
-    const page = duplicatePage(selectedPage, workspace.pages.length + 1)
-    setWorkspace((current) => ({
-      ...current,
-      pages: [...current.pages, page],
-      selectedPageId: page.id,
-    }))
-    setView('content')
-    setDeleteCandidateId('')
-    setNotice('Draft copy added with navigation hidden.')
+    const result = await commitWorkspace((current) => {
+      if (current.pages.length >= MAX_WEBSITE_PAGES) return current
+      const sourcePage = current.pages.find((page) => page.id === current.selectedPageId) ?? current.pages[0]
+      const page = duplicatePage(sourcePage, current.pages.length + 1)
+      return { ...current, pages: [...current.pages, page], selectedPageId: page.id }
+    }, 'Draft copy added with navigation hidden.')
+    if (result.ok && result.changed) {
+      setView('content')
+      setDeleteCandidateId('')
+    }
   }
 
-  function requestDeletePage() {
+  async function requestDeletePage() {
     if (selectedPage.slug === '/' || selectedPage.stage !== 'draft') return
     if (deleteCandidateId !== selectedPage.id) {
       setDeleteCandidateId(selectedPage.id)
-      setNotice('Select “Confirm remove” to delete this browser-local draft.')
+      setNotice('Select “Confirm remove” to delete this draft page.')
       return
     }
 
-    setWorkspace((current) => {
-      const pages = current.pages.filter((page) => page.id !== selectedPage.id)
+    const result = await commitWorkspace((current) => {
+      const target = current.pages.find((page) => page.id === selectedPage.id)
+      if (!target || target.slug === '/' || target.stage !== 'draft') return current
+      const pages = current.pages.filter((page) => page.id !== target.id)
       return {
         ...current,
         pages,
         selectedPageId: pages[0]?.id ?? '',
       }
-    })
-    setDeleteCandidateId('')
-    setNotice('Browser-local draft removed.')
+    }, 'Draft page removed.')
+    if (result.ok && result.changed) setDeleteCandidateId('')
   }
 
-  function movePage(pageId: string, direction: -1 | 1) {
-    setWorkspace((current) => {
+  async function movePage(pageId: string, direction: -1 | 1) {
+    await commitWorkspace((current) => {
       const currentIndex = current.pages.findIndex((page) => page.id === pageId)
       const nextIndex = currentIndex + direction
       if (currentIndex < 0 || nextIndex < 0 || nextIndex >= current.pages.length) return current
@@ -163,87 +217,61 @@ export function WebsiteProduct() {
       const [page] = pages.splice(currentIndex, 1)
       pages.splice(nextIndex, 0, page)
       return { ...current, pages }
-    })
-    setNotice('Navigation order updated locally.')
+    }, 'Navigation order updated.')
   }
 
-  function addEvidence(input: {
+  async function addEvidence(input: {
     kind: EvidenceKind
     finding: string
     reference: string
     verifiedBy: string
   }) {
-    const evidence = {
-      ...input,
-      id: createId('evidence'),
-      verifiedAt: new Date().toISOString(),
-      fingerprint,
-    }
-    setWorkspace((current) => ({
-      ...current,
-      evidence: [
-        evidence,
-        ...current.evidence.filter((entry) => entry.kind !== input.kind || entry.fingerprint !== fingerprint),
-      ].slice(0, 24),
-    }))
-    setNotice('Verified evidence recorded for ' + fingerprint + '.')
+    const actionId = createId('evidence')
+    const capturedAt = new Date().toISOString()
+    const result = await commitWorkspace(
+      (current) => recordWebsiteEvidence(current, { ...input, actionId, capturedAt }),
+      'Verified evidence was saved and confirmed for the current content revision.',
+      true,
+    )
+    return result.ok && result.changed
   }
 
-  function approveCurrentRevision(input: { reviewer: string; note: string }) {
-    setWorkspace((current) => ({
-      ...current,
-      approval: {
-        id: createId('approval'),
-        reviewer: input.reviewer,
-        note: input.note,
-        approvedAt: new Date().toISOString(),
-        fingerprint,
-      },
-    }))
-    setNotice('Human approval recorded for the current local fingerprint.')
+  async function approveCurrentRevision(input: { reviewer: string; note: string }) {
+    const actionId = createId('approval')
+    const capturedAt = new Date().toISOString()
+    const result = await commitWorkspace(
+      (current) => approveWebsiteRevision(current, { ...input, actionId, capturedAt }),
+      'Evidence-bound human approval was saved and confirmed for this content revision.',
+      true,
+    )
+    return result.ok && result.changed
   }
 
-  function recordLocalPublish() {
-    if (!approvalIsCurrent || publishIsCurrent || !workspace.approval) return
-    const record = {
-      id: createId('local-publish'),
-      recordedAt: new Date().toISOString(),
-      recordedBy: workspace.approval.reviewer,
-      fingerprint,
-      readyPageIds: workspace.pages.filter((page) => page.stage === 'ready').map((page) => page.id),
-    }
-    setWorkspace((current) => ({
-      ...current,
-      localPublishes: [record, ...current.localPublishes].slice(0, 5),
-    }))
-    setNotice('Local publish snapshot recorded. No deployment or external write occurred.')
+  async function recordLocalPublish() {
+    if (!approvalIsCurrent || publishIsCurrent) return
+    await commitWorkspace(
+      (current) => recordWebsiteSnapshot(current, {
+        actionId: createId('local-snapshot'),
+        capturedAt: new Date().toISOString(),
+      }),
+      'Approved snapshot saved and confirmed. No deployment occurred.',
+      true,
+    )
   }
 
-  function prepareEcommerceHandoff() {
-    const existingHandoff = readWebsiteEcommerceHandoff()
-    const approval = workspace.approval
-    const publish = workspace.localPublishes[0]
+  async function prepareCommerceHandoff(input: { sku: string; quantity: number }) {
+    const sku = input.sku.trim().toUpperCase()
     const sourcePage = handoffSourcePage
-
-    if (existingHandoff?.handoff.state === 'accepted') {
-      const source = existingHandoff.handoff.source
-      const acceptedSourceIsCurrent = Boolean(existingHandoff.display
-        && approval
-        && publish
-        && sourcePage
-        && source.fingerprint === fingerprint
-        && source.approvalId === approval.id
-        && source.localPublishId === publish.id
-        && source.pageId === sourcePage.id)
-      setPreparedHandoffSource(acceptedSourceIsCurrent ? handoffSourceKey(existingHandoff) : '')
-      setNotice(acceptedSourceIsCurrent
-        ? 'This exact Website intake is already accepted and retained with its audit record.'
-        : 'The prior accepted intake and audit record are retained. This bounded prototype will not overwrite them.')
+    if (!/^[A-Z0-9][A-Z0-9_-]{2,79}$/.test(sku)
+      || !Number.isSafeInteger(input.quantity)
+      || input.quantity < 1
+      || input.quantity > 99) {
+      setNotice('Enter an exact Commerce SKU and a whole-number quantity from 1 to 99.')
       return
     }
 
-    if (!approvalIsCurrent || !publishIsCurrent || !approval || !publish || !sourcePage || storageMode !== 'browser-local') {
-      setNotice('A current approval, local publish record, ready source page, and browser storage are required for handoff.')
+    if (!approvalIsCurrent || !publishIsCurrent || !approval || !publish || !sourcePage || storageMode === 'session-only') {
+      setNotice('A current approval, recorded snapshot, ready source page, and durable workspace are required for intake.')
       return
     }
 
@@ -257,7 +285,106 @@ export function WebsiteProduct() {
       && readyPageIds.every((pageId) => publish.readyPageIds.includes(pageId))
       && publish.readyPageIds.includes(sourcePage.id)
     if (!sourceIsCurrent) {
-      setNotice('The current Website evidence, approval, publish record, and ready-page set do not match. Handoff failed closed.')
+      setNotice('The current Website evidence, approval, snapshot, and ready-page set do not match. Intake failed closed.')
+      return
+    }
+
+    if (storageMode === 'managed') {
+      const source: CommerceWebsiteSource = {
+        fingerprint,
+        approvalId: approval.id,
+        snapshotId: publish.id,
+        pageId: sourcePage.id,
+        siteName: workspace.siteName,
+        pagePath: sourcePage.slug,
+      }
+      const sourceKey = managedHandoffSourceKey(source)
+      try {
+        const bootstrap = await loadManagedBootstrap()
+        if (!managedActorId || bootstrap.identity.actor_id !== managedActorId) {
+          throw new Error('Managed Website identity changed before the Commerce intake could be prepared.')
+        }
+        const record = bootstrap.states.commerce
+        if (record.surface !== 'commerce' || record.version < 1) {
+          throw new Error('Create the managed Commerce catalog before sending a Website intake.')
+        }
+        const current = validateCommerceState(record.state)
+        const existing = commerceWebsiteIntakes(current).find((intake) => managedHandoffSourceKey(intake.source) === sourceKey)
+        if (existing) {
+          if (existing.sku !== sku || existing.quantity !== input.quantity) {
+            throw new Error('This Website snapshot already has a different retained Commerce intake.')
+          }
+          setPreparedHandoffSource(sourceKey)
+          setNotice(`${existing.id} is already retained in managed Commerce.`)
+          return
+        }
+
+        const commandId = secureUuid()
+        const proof = {
+          actionId: `ACT-WEB-${secureUuid().toUpperCase()}`,
+          capturedAt: new Date().toISOString(),
+          actor: managedActorId,
+          reason: 'Approved Website snapshot sent to Commerce intake',
+          evidenceReference: publish.id,
+        }
+        const candidate = createCommerceWebsiteIntake(current, {
+          id: `WINT-${secureUuid().toUpperCase()}`,
+          source,
+          sku,
+          quantity: input.quantity,
+        }, proof)
+        if (!candidate || candidate === current) throw new Error('The SKU does not match exactly one managed Commerce catalog item.')
+        const saved = await saveManagedCommerceCommand({
+          commandId,
+          eventType: 'commerce.website_intake.created',
+          expectedVersion: record.version,
+          evidence: proof,
+          state: candidate as unknown as Record<string, unknown>,
+        })
+        if (saved.surface !== 'commerce'
+          || saved.event_type !== 'commerce.website_intake.created'
+          || saved.version !== record.version + 1) {
+          throw new Error('Managed Commerce returned an invalid intake confirmation.')
+        }
+        const accepted = validateCommerceState(saved.state)
+        const retained = commerceWebsiteIntakes(accepted).find((intake) => managedHandoffSourceKey(intake.source) === sourceKey)
+        if (!retained || retained.status !== 'pending_confirmation' || retained.sku !== sku || retained.quantity !== input.quantity) {
+          throw new Error('Managed Commerce did not confirm the expected intake record.')
+        }
+        setPreparedHandoffSource(sourceKey)
+        setNotice(`${retained.id} is waiting in Commerce. No stock or order changed.`)
+      } catch (error) {
+        if (error instanceof ManagedTrialError && error.code === 'trial_version_conflict') {
+          try {
+            const refreshed = await loadManagedBootstrap()
+            const current = validateCommerceState(refreshed.states.commerce.state)
+            const retained = commerceWebsiteIntakes(current).find((intake) => managedHandoffSourceKey(intake.source) === sourceKey)
+            if (retained && retained.sku === sku && retained.quantity === input.quantity) {
+              setPreparedHandoffSource(sourceKey)
+              setNotice(`${retained.id} was already retained by another session.`)
+              return
+            }
+          } catch {
+            // Preserve the original version-conflict message below.
+          }
+        }
+        setNotice(`Managed Commerce intake was not created: ${error instanceof Error ? error.message : 'unknown managed error'}`)
+      }
+      return
+    }
+
+    const existingHandoff = readWebsiteEcommerceHandoff()
+    if (existingHandoff?.handoff.state === 'accepted') {
+      const source = existingHandoff.handoff.source
+      const acceptedSourceIsCurrent = Boolean(existingHandoff.display
+        && source.fingerprint === fingerprint
+        && source.approvalId === approval.id
+        && source.localPublishId === publish.id
+        && source.pageId === sourcePage.id)
+      setPreparedHandoffSource(acceptedSourceIsCurrent ? handoffSourceKey(existingHandoff) : '')
+      setNotice(acceptedSourceIsCurrent
+        ? 'This exact local Website intake is already accepted and retained.'
+        : 'The prior accepted local intake is retained and will not be overwritten.')
       return
     }
 
@@ -266,8 +393,8 @@ export function WebsiteProduct() {
       approvalId: approval.id,
       localPublishId: publish.id,
       pageId: sourcePage.id,
-      sku: 'SM-CARE-01',
-      quantity: 1,
+      sku,
+      quantity: input.quantity,
     })
 
     const restored = writeWebsiteEcommerceHandoff(handoff, workspace)
@@ -277,7 +404,7 @@ export function WebsiteProduct() {
     }
 
     setPreparedHandoffSource(handoffSourceKey(restored))
-    setNotice('Versioned Website intake fixture prepared locally. Review it in Ecommerce & Orders.')
+    setNotice('Website intake prepared in this browser. Review it in Commerce Orders.')
   }
 
   return (
@@ -292,8 +419,12 @@ export function WebsiteProduct() {
           <b>WEBSITE</b>
         </a>
         <div className="website-runtime">
-          <span className="website-local-badge"><i />Local demo</span>
-          <small>{storageMode === 'browser-local' ? 'saved in this browser' : 'session only'}</small>
+          <span className="website-local-badge"><i />{storageMode === 'managed' ? 'Managed workspace' : storageMode === 'browser-local' ? 'Local workspace' : 'Session only'}</span>
+          <small>{storageMode === 'managed'
+            ? 'synced · content r' + String(workspace.contentRevision)
+            : storageMode === 'browser-local'
+              ? 'saved · content r' + String(workspace.contentRevision)
+              : 'writes paused'}</small>
           <button className="website-button is-primary is-compact" onClick={() => setView('publish')} type="button">
             Review publish
           </button>
@@ -305,15 +436,19 @@ export function WebsiteProduct() {
           <div className="website-site-record">
             <span>Website workspace</span>
             <strong>{workspace.siteName || 'Untitled site'}</strong>
-            <small>{workspace.pages.length} / {MAX_WEBSITE_PAGES} pages · local draft</small>
+            <small>{workspace.pages.length} / {MAX_WEBSITE_PAGES} pages · {storageMode === 'managed' ? 'managed draft' : 'local draft'}</small>
           </div>
 
-          <nav className="website-workspace-nav" aria-label="Website workspace">
-            {workspaceViews.map((item) => (
+          <nav className="website-workspace-nav" aria-label="Website workspace" role="tablist">
+            {workspaceViews.map((item, index) => (
               <button
-                aria-current={view === item.id ? 'page' : undefined}
+                aria-controls="website-active-panel"
+                aria-selected={view === item.id}
                 key={item.id}
+                onKeyDown={(event) => moveWorkspaceTabFocus(event, index)}
                 onClick={() => setView(item.id)}
+                role="tab"
+                tabIndex={view === item.id ? 0 : -1}
                 type="button"
               >
                 <span>{item.index}</span>{item.label}
@@ -347,7 +482,9 @@ export function WebsiteProduct() {
 
           <footer className="website-sidebar-foot">
             <span aria-hidden="true">&gt;_</span>
-            <p>Browser-local records only. No CMS, domain, analytics, or deployment target is connected.</p>
+            <p>{storageMode === 'managed'
+              ? 'Authenticated records are synced. Domain and deployment remain separate approval-gated actions.'
+              : 'Local records only. No CMS, domain, analytics, or deployment target is connected.'}</p>
           </footer>
         </aside>
 
@@ -374,7 +511,12 @@ export function WebsiteProduct() {
             </div>
           </header>
 
-          <div className={'website-workspace-grid view-' + view}>
+          <div
+            aria-label={workspaceViews.find((item) => item.id === view)?.label}
+            className={'website-workspace-grid view-' + view}
+            id="website-active-panel"
+            role="tabpanel"
+          >
             {view === 'content' ? (
               <ContentWorkspace
                 canDuplicate={workspace.pages.length < MAX_WEBSITE_PAGES}
@@ -391,8 +533,7 @@ export function WebsiteProduct() {
                 onMovePage={movePage}
                 onSelectPage={selectPage}
                 onSiteNameChange={(siteName) => {
-                  setWorkspace((current) => ({ ...current, siteName }))
-                  setNotice('Site identity updated locally.')
+                  void commitWorkspace((current) => ({ ...current, siteName }), 'Site identity updated.')
                 }}
                 onUpdatePage={updatePage}
                 workspace={workspace}
@@ -404,11 +545,12 @@ export function WebsiteProduct() {
                 approvalIsCurrent={approvalIsCurrent}
                 checks={checks}
                 fingerprint={fingerprint}
-                handoffAvailable={storageMode === 'browser-local'}
+                handoffAvailable={storageMode !== 'session-only'}
                 handoffIsCurrent={handoffIsCurrent}
+                managedActorId={managedActorId}
                 onAddEvidence={addEvidence}
                 onApprove={approveCurrentRevision}
-                onPrepareEcommerceHandoff={prepareEcommerceHandoff}
+                onPrepareCommerceHandoff={prepareCommerceHandoff}
                 onRecordPublish={recordLocalPublish}
                 publishIsCurrent={publishIsCurrent}
                 workspace={workspace}
@@ -417,6 +559,7 @@ export function WebsiteProduct() {
 
             <SitePreview
               device={device}
+              onSelectPage={selectPage}
               page={selectedPage}
               pages={workspace.pages}
               siteName={workspace.siteName}
@@ -426,7 +569,7 @@ export function WebsiteProduct() {
       </div>
 
       <div className="website-notice" aria-live="polite" role="status">
-        <span aria-hidden="true">&gt;_</span>{notice}
+        <span aria-hidden="true">&gt;_</span>{storageIssue || notice}
       </div>
     </div>
   )
