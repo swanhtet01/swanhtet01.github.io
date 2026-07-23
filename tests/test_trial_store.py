@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from contextlib import contextmanager
+from copy import deepcopy
+from datetime import datetime, timedelta, timezone
+import json
 import unittest
 from uuid import uuid4
 
+import supermega_runtime.trial_store as trial_store_module
 from supermega_runtime.trial_store import (
     InMemoryTrialStore,
     PostgresTrialStore,
@@ -297,6 +302,9 @@ class TrialStoreTests(unittest.TestCase):
             "no_create_db",
             "no_replication",
             "inherits_backend",
+            "direct_parent_membership_exact",
+            "backend_member_exact",
+            "no_runtime_role_members",
             "no_elevated_membership",
             "tls_active",
         )
@@ -317,6 +325,10 @@ class TrialStoreTests(unittest.TestCase):
         PostgresTrialStore._assert_runtime_role(safe_cursor)
         self.assertIn("rolbypassrls", safe_cursor.query.lower())
         self.assertIn("pg_stat_ssl", safe_cursor.query.lower())
+        self.assertIn("pg_auth_members", safe_cursor.query.lower())
+        self.assertIn("membership.inherit_option", safe_cursor.query.lower())
+        self.assertIn("not membership.set_option", safe_cursor.query.lower())
+        self.assertIn("not membership.admin_option", safe_cursor.query.lower())
 
         for failed_check in required:
             with self.subTest(failed_check=failed_check):
@@ -325,40 +337,194 @@ class TrialStoreTests(unittest.TestCase):
                     PostgresTrialStore._assert_runtime_role(cursor)
                 self.assertEqual(error.exception.reasons, ("role_ready",))
 
-    def test_postgres_schema_probe_requires_version_3_and_decision_constraints(self) -> None:
+    def test_postgres_schema_probe_requires_version_4_and_hardening_controls(self) -> None:
+        def canonical_trigger_rows() -> list[dict[str, object]]:
+            return [
+                {
+                    "table_name": table_name,
+                    "trigger_name": trigger_name,
+                    "event_mask": contract["event_mask"],
+                    "enabled": "O",
+                    "no_when_clause": True,
+                    "no_arguments": True,
+                    "no_column_filter": True,
+                    "no_constraint_link": True,
+                    "not_deferrable": True,
+                    "not_initially_deferred": True,
+                    "no_transition_tables": True,
+                    "function_schema": "app_private",
+                    "function_name": contract["function_name"],
+                    "function_source": contract["function_source"],
+                    "function_language": "plpgsql",
+                    "security_definer": False,
+                    "function_config": ["search_path=pg_catalog, app_private"],
+                }
+                for (table_name, trigger_name), contract in sorted(
+                    trial_store_module._PRIVATE_HARDENING_TRIGGER_CONTRACT.items()
+                )
+            ]
+
         class SchemaCursor:
-            def __init__(self, row: dict[str, object] | None):
+            def __init__(
+                self,
+                row: dict[str, object] | None,
+                trigger_rows: list[dict[str, object]] | None = None,
+            ):
                 self.row = row
-                self.query = ""
+                self.trigger_rows = canonical_trigger_rows() if trigger_rows is None else trigger_rows
+                self.queries: list[str] = []
                 self.parameters: tuple[object, ...] = ()
 
-            def execute(self, query: str, parameters: tuple[object, ...]) -> None:
-                self.query = query
+            def execute(self, query: str, parameters: tuple[object, ...] = ()) -> None:
+                self.queries.append(query)
                 self.parameters = parameters
 
             def fetchone(self) -> dict[str, object] | None:
                 return self.row
 
+            def fetchall(self) -> list[dict[str, object]]:
+                return self.trigger_rows
+
         ready = {
-            "schema_version": 3,
+            "schema_version": 4,
             "actor_decision_columns_ready": True,
-            "decision_constraints_ready": True,
+            "security_constraints_ready": True,
         }
         cursor = SchemaCursor(ready)
         PostgresTrialStore._assert_schema(cursor)
-        self.assertIn("information_schema.columns", cursor.query.lower())
-        self.assertIn("approval_requests_terminal_decision_v2_check", cursor.query)
-        self.assertEqual(cursor.parameters, ("private_trial_backend",))
+        combined_query = "\n".join(cursor.queries)
+        self.assertIn("information_schema.columns", combined_query.lower())
+        self.assertIn("approval_requests_terminal_decision_v2_check", combined_query)
+        self.assertIn("workspace_events_approval_surface_v4_check", combined_query)
+        self.assertIn("trigger_record.tgenabled", combined_query)
+        self.assertIn("function_record.prosrc", combined_query)
+        self.assertIn("function_record.prosecdef", combined_query)
+        self.assertIn("function_record.proconfig", combined_query)
+        self.assertEqual(cursor.parameters, ())
 
         for field, value in (
-            ("schema_version", 1),
+            ("schema_version", 3),
             ("actor_decision_columns_ready", False),
-            ("decision_constraints_ready", False),
+            ("security_constraints_ready", False),
         ):
             with self.subTest(field=field):
                 with self.assertRaises(TrialNotReadyError) as error:
                     PostgresTrialStore._assert_schema(SchemaCursor({**ready, field: value}))
                 self.assertEqual(error.exception.reasons, ("schema_ready",))
+
+        trigger_drifts = {
+            "missing": lambda rows: rows.pop(),
+            "extra": lambda rows: rows.append({**rows[0], "trigger_name": "unexpected_trigger"}),
+            "disabled": lambda rows: rows[0].update(enabled="D"),
+            "wrong_function": lambda rows: rows[0].update(function_name="unsafe_function"),
+            "security_definer": lambda rows: rows[0].update(security_definer=True),
+            "wrong_language": lambda rows: rows[0].update(function_language="sql"),
+            "wrong_search_path": lambda rows: rows[0].update(function_config=["search_path=public"]),
+            "wrong_event_mask": lambda rows: rows[0].update(event_mask=0),
+            "when_false": lambda rows: rows[0].update(no_when_clause=False),
+            "trigger_arguments": lambda rows: rows[0].update(no_arguments=False),
+            "mutated_source": lambda rows: rows[0].update(
+                function_source=str(rows[0]["function_source"]) + "\nperform dangerous_side_effect();"
+            ),
+        }
+        for drift_name, mutate in trigger_drifts.items():
+            with self.subTest(trigger_drift=drift_name):
+                drifted_rows = deepcopy(canonical_trigger_rows())
+                mutate(drifted_rows)
+                with self.assertRaises(TrialNotReadyError) as error:
+                    PostgresTrialStore._assert_schema(SchemaCursor(ready, drifted_rows))
+                self.assertEqual(error.exception.reasons, ("schema_ready",))
+
+    def test_postgres_approval_timestamps_are_database_authored_and_iso_normalized(self) -> None:
+        requested_at = datetime(2026, 7, 23, 9, 10, 11, tzinfo=timezone(timedelta(hours=6, minutes=30)))
+        decided_at = datetime(2026, 7, 23, 12, 30, 45, tzinfo=timezone(timedelta(hours=6, minutes=30)))
+
+        class ApprovalCursor:
+            def __init__(self, fetch_rows: list[dict[str, object] | None]):
+                self.fetch_rows = list(fetch_rows)
+                self.executions: list[tuple[str, tuple[object, ...]]] = []
+                self.rowcount = 0
+
+            def execute(self, query: str, parameters: tuple[object, ...] = ()) -> None:
+                self.executions.append((query, parameters))
+                self.rowcount = 1 if "update app_private.approval_requests" in query.lower() else 0
+
+            def fetchone(self) -> dict[str, object] | None:
+                return self.fetch_rows.pop(0)
+
+        class ApprovalStore(PostgresTrialStore):
+            def __init__(self, cursor: ApprovalCursor):
+                super().__init__("postgres://runtime", reducer=RecordingReducer(), write_enabled=True)
+                self.cursor = cursor
+
+            @contextmanager
+            def _guarded_cursor(self, *_args, **_kwargs):
+                yield self.cursor, frozenset({"approvals.request", "approvals.decide"})
+
+        request_cursor = ApprovalCursor([None, {"requested_at": requested_at}])
+        request_store = ApprovalStore(request_cursor)
+        requested = request_store.create_approval(
+            self.operator,
+            command_id=str(uuid4()),
+            title="Release database-authored timestamp",
+            proposal=_decision_packet(),
+            evidence_refs=("review://catalog/1",),
+        )
+        expected_requested_at = requested_at.astimezone(timezone.utc).isoformat()
+        self.assertEqual(requested.requested_at, expected_requested_at)
+        request_insert = next(
+            execution for execution in request_cursor.executions
+            if "insert into app_private.approval_requests" in execution[0].lower()
+        )
+        request_event = next(
+            execution for execution in request_cursor.executions
+            if "insert into app_private.workspace_events" in execution[0].lower()
+        )
+        self.assertIn("returning requested_at", request_insert[0].lower())
+        self.assertNotIn("requested_at,", request_insert[0].lower())
+        self.assertNotIn("created_at", request_event[0].lower())
+        self.assertIn(expected_requested_at, json.loads(str(request_event[1][-1]))["approval"]["requested_at"])
+
+        pending_row = {
+            "approval_id": requested.approval_id,
+            "command_id": requested.command_id,
+            "title": requested.title,
+            "proposal_json": requested.proposal,
+            "evidence_refs_json": list(requested.evidence_refs),
+            "status": "pending",
+            "requested_by": requested.requested_by,
+            "requested_actor_kind": requested.requested_actor_kind,
+            "requested_at": requested_at,
+            "decided_by": None,
+            "decided_actor_kind": None,
+            "decided_at": None,
+            "decision_note": "",
+            "version": 0,
+        }
+        decision_cursor = ApprovalCursor([None, pending_row, {"decided_at": decided_at}])
+        decision_store = ApprovalStore(decision_cursor)
+        decided = decision_store.decide_approval(
+            self.manager,
+            approval_id=requested.approval_id,
+            command_id=str(uuid4()),
+            decision="approved",
+            note="Owner approved.",
+        )
+        expected_decided_at = decided_at.astimezone(timezone.utc).isoformat()
+        self.assertEqual(decided.requested_at, expected_requested_at)
+        self.assertEqual(decided.decided_at, expected_decided_at)
+        decision_update = next(
+            execution for execution in decision_cursor.executions
+            if "update app_private.approval_requests" in execution[0].lower()
+        )
+        decision_event = next(
+            execution for execution in decision_cursor.executions
+            if "insert into app_private.workspace_events" in execution[0].lower()
+        )
+        self.assertIn("returning decided_at", decision_update[0].lower())
+        self.assertNotIn("decided_at =", decision_update[0].lower())
+        self.assertNotIn("created_at", decision_event[0].lower())
+        self.assertIn(expected_decided_at, json.loads(str(decision_event[1][-1]))["approval"]["decided_at"])
 
     def test_auth_and_active_membership_are_required_for_writes(self) -> None:
         unauthenticated = TrialPrincipal("workspace-a", "actor-operator", "human", authenticated=False)

@@ -14,7 +14,7 @@ from uuid import UUID, uuid4
 
 
 TRIAL_SCHEMA_COMPONENT = "private_trial_backend"
-TRIAL_SCHEMA_VERSION = 3
+TRIAL_SCHEMA_VERSION = 4
 TRIAL_SURFACES = frozenset({"company", "commerce", "production", "website", "setup"})
 TRUSTED_ACTOR_KINDS = frozenset({"human", "service", "agent"})
 HUMAN_ACTOR_KIND = "human"
@@ -46,6 +46,98 @@ MAX_JSON_BYTES = 64 * 1024
 JsonObject = dict[str, Any]
 StateReducer = Callable[[str, str, Mapping[str, Any], Mapping[str, Any]], Mapping[str, Any]]
 StatePrecondition = Callable[[Mapping[str, Any], Mapping[str, Mapping[str, Any]]], None]
+
+_PRIVATE_HARDENING_TRIGGER_CONTRACT: dict[tuple[str, str], dict[str, Any]] = {
+    ("workspace_state", "workspace_state_version_guard"): {
+        "event_mask": 23,
+        "function_name": "guard_workspace_state_update",
+        "function_source": """
+            begin
+              if tg_op = 'INSERT' then
+                if new.version <> 1 then
+                  raise exception using errcode = '55000', message = 'initial workspace state version must be one';
+                end if;
+              else
+                if new.workspace_id is distinct from old.workspace_id
+                   or new.surface is distinct from old.surface then
+                  raise exception using errcode = '55000', message = 'workspace state identity is immutable';
+                end if;
+                if new.version <> old.version + 1 then
+                  raise exception using errcode = '40001', message = 'workspace state version must increment by one';
+                end if;
+              end if;
+              new.updated_at := transaction_timestamp();
+              return new;
+            end
+        """,
+    },
+    ("workspace_events", "workspace_events_immutable"): {
+        "event_mask": 27,
+        "function_name": "reject_workspace_event_mutation",
+        "function_source": """
+            begin
+              raise exception using
+                errcode = '55000',
+                message = 'workspace events are immutable';
+            end
+        """,
+    },
+    ("workspace_events", "workspace_events_server_timestamp"): {
+        "event_mask": 7,
+        "function_name": "stamp_workspace_event_insert",
+        "function_source": """
+            begin
+              new.created_at := transaction_timestamp();
+              return new;
+            end
+        """,
+    },
+    ("approval_requests", "approval_requests_controlled_mutation"): {
+        "event_mask": 31,
+        "function_name": "guard_approval_mutation",
+        "function_source": """
+            begin
+              if tg_op = 'INSERT' then
+                new.requested_at := transaction_timestamp();
+                return new;
+              end if;
+              if tg_op = 'DELETE' then
+                raise exception using errcode = '55000', message = 'approval records cannot be deleted';
+              end if;
+              if new.approval_id is distinct from old.approval_id
+                 or new.workspace_id is distinct from old.workspace_id
+                 or new.command_id is distinct from old.command_id
+                 or new.command_fingerprint is distinct from old.command_fingerprint
+                 or new.title is distinct from old.title
+                 or new.proposal_json is distinct from old.proposal_json
+                 or new.evidence_refs_json is distinct from old.evidence_refs_json
+                 or new.requested_by is distinct from old.requested_by
+                 or new.requested_actor_kind is distinct from old.requested_actor_kind
+                 or new.requested_at is distinct from old.requested_at
+                 or new.decision_contract_version is distinct from old.decision_contract_version then
+                raise exception using errcode = '55000', message = 'approval proposal and evidence are immutable';
+              end if;
+              if old.decision_contract_version <> 2 then
+                raise exception using errcode = '55000', message = 'legacy approval must be reissued under decision contract v2';
+              end if;
+              if old.status <> 'pending' or new.status not in ('approved', 'declined') then
+                raise exception using errcode = '55000', message = 'approval transition must be pending to approved or declined';
+              end if;
+              if new.version <> old.version + 1
+                 or new.decided_by is null
+                 or new.decided_by <> btrim(new.decided_by)
+                 or new.decided_by = ''
+                 or new.decided_actor_kind <> 'human'
+                 or new.decision_note <> btrim(new.decision_note)
+                 or char_length(new.decision_note) not between 1 and 500 then
+                raise exception using errcode = '55000', message = 'approval decision requires a named human and nonblank note';
+              end if;
+              new.decided_at := transaction_timestamp();
+              return new;
+            end
+        """,
+    },
+}
 
 
 class TrialStoreError(RuntimeError):
@@ -492,6 +584,19 @@ def _principal_auth_ready(principal: TrialPrincipal | None) -> bool:
     )
 
 
+def _iso_timestamp(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, datetime):
+        normalized = value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+        return normalized.astimezone(timezone.utc).isoformat()
+    return str(value)
+
+
+def _normalize_sql_source(value: Any) -> str:
+    return " ".join(str(value or "").strip().lower().split())
+
+
 def _require_human_decider(principal: TrialPrincipal) -> None:
     if principal.actor_kind != HUMAN_ACTOR_KIND:
         raise TrialHumanApprovalRequired()
@@ -513,10 +618,10 @@ def _approval_from_mapping(row: Mapping[str, Any], *, replay: bool = False) -> A
         status=str(row.get("status", "pending")),
         requested_by=str(row.get("requested_by", "")),
         requested_actor_kind=str(row.get("requested_actor_kind", "")),
-        requested_at=str(row.get("requested_at", "")),
+        requested_at=_iso_timestamp(row.get("requested_at")),
         decided_by=str(row.get("decided_by", "") or ""),
         decided_actor_kind=str(row.get("decided_actor_kind", "") or ""),
-        decided_at=str(row.get("decided_at", "") or ""),
+        decided_at=_iso_timestamp(row.get("decided_at")),
         decision_note=str(row.get("decision_note", "") or ""),
         version=int(row.get("version", 0) or 0),
         idempotent_replay=replay,
@@ -588,17 +693,42 @@ class PostgresTrialStore:
                   )
               ) as actor_decision_columns_ready,
               (
-                select count(*) = 2
+                select count(*) = 3
+                  and bool_and(
+                    constraint_record.contype = 'c'
+                    and constraint_record.convalidated
+                    and table_record.relname = case constraint_record.conname
+                      when 'workspace_events_approval_surface_v4_check'
+                        then 'workspace_events'
+                      else 'approval_requests'
+                    end
+                    and md5(
+                      regexp_replace(
+                        lower(pg_get_constraintdef(constraint_record.oid, true)),
+                        '[[:space:]]+',
+                        ' ',
+                        'g'
+                      )
+                    ) = case constraint_record.conname
+                      when 'approval_requests_decision_packet_v2_check'
+                        then '1dd6a9dcdbb54e0c4f2c2a8982e8c5b8'
+                      when 'approval_requests_terminal_decision_v2_check'
+                        then '60d677e7b45dc392363aac8ed611b2e9'
+                      when 'workspace_events_approval_surface_v4_check'
+                        then '984de8f9066e2caaa3b5d4507da2d11f'
+                    end
+                  )
                 from pg_constraint constraint_record
                 join pg_class table_record on table_record.oid = constraint_record.conrelid
                 join pg_namespace schema_record on schema_record.oid = table_record.relnamespace
                 where schema_record.nspname = 'app_private'
-                  and table_record.relname = 'approval_requests'
                   and constraint_record.conname in (
                     'approval_requests_decision_packet_v2_check',
-                    'approval_requests_terminal_decision_v2_check'
+                    'approval_requests_terminal_decision_v2_check',
+                    'workspace_events_approval_surface_v4_check'
                   )
-              ) as decision_constraints_ready
+              ) as security_constraints_ready,
+              true as schema_contract_row_ready
             from app_private.trial_schema_meta schema_meta
             where schema_meta.component = %s
             """,
@@ -609,8 +739,87 @@ class PostgresTrialStore:
             not row
             or int(row["schema_version"]) != TRIAL_SCHEMA_VERSION
             or not bool(row.get("actor_decision_columns_ready"))
-            or not bool(row.get("decision_constraints_ready"))
+            or not bool(row.get("security_constraints_ready"))
         ):
+            raise TrialNotReadyError(("schema_ready",))
+        cursor.execute(
+            """
+            select
+              table_record.relname as table_name,
+              trigger_record.tgname as trigger_name,
+              trigger_record.tgtype::integer as event_mask,
+              trigger_record.tgenabled as enabled,
+              trigger_record.tgqual is null as no_when_clause,
+              trigger_record.tgnargs = 0 as no_arguments,
+              cardinality(trigger_record.tgattr::int2[]) = 0 as no_column_filter,
+              trigger_record.tgconstraint = 0 as no_constraint_link,
+              not trigger_record.tgdeferrable as not_deferrable,
+              not trigger_record.tginitdeferred as not_initially_deferred,
+              trigger_record.tgoldtable is null
+                and trigger_record.tgnewtable is null as no_transition_tables,
+              function_schema.nspname as function_schema,
+              function_record.proname as function_name,
+              function_record.prosrc as function_source,
+              language_record.lanname as function_language,
+              function_record.prosecdef as security_definer,
+              function_record.proconfig as function_config
+            from pg_trigger trigger_record
+            join pg_class table_record on table_record.oid = trigger_record.tgrelid
+            join pg_namespace table_schema on table_schema.oid = table_record.relnamespace
+            join pg_proc function_record on function_record.oid = trigger_record.tgfoid
+            join pg_namespace function_schema on function_schema.oid = function_record.pronamespace
+            join pg_language language_record on language_record.oid = function_record.prolang
+            where table_schema.nspname = 'app_private'
+              and not trigger_record.tgisinternal
+            order by table_record.relname, trigger_record.tgname
+            """
+        )
+        trigger_rows = cursor.fetchall()
+        if len(trigger_rows) != len(_PRIVATE_HARDENING_TRIGGER_CONTRACT):
+            raise TrialNotReadyError(("schema_ready",))
+        actual_triggers: dict[tuple[str, str], dict[str, Any]] = {}
+        for trigger_row in trigger_rows:
+            key = (str(trigger_row.get("table_name", "")), str(trigger_row.get("trigger_name", "")))
+            actual_triggers[key] = {
+                "event_mask": int(trigger_row.get("event_mask", 0)),
+                "enabled": str(trigger_row.get("enabled", "")),
+                "no_when_clause": bool(trigger_row.get("no_when_clause")),
+                "no_arguments": bool(trigger_row.get("no_arguments")),
+                "no_column_filter": bool(trigger_row.get("no_column_filter")),
+                "no_constraint_link": bool(trigger_row.get("no_constraint_link")),
+                "not_deferrable": bool(trigger_row.get("not_deferrable")),
+                "not_initially_deferred": bool(
+                    trigger_row.get("not_initially_deferred")
+                ),
+                "no_transition_tables": bool(trigger_row.get("no_transition_tables")),
+                "function_schema": str(trigger_row.get("function_schema", "")),
+                "function_name": str(trigger_row.get("function_name", "")),
+                "function_source": _normalize_sql_source(trigger_row.get("function_source")),
+                "function_language": str(trigger_row.get("function_language", "")),
+                "security_definer": bool(trigger_row.get("security_definer")),
+                "function_config": tuple(str(item) for item in (trigger_row.get("function_config") or ())),
+            }
+        expected_triggers = {
+            key: {
+                "event_mask": int(contract["event_mask"]),
+                "enabled": "O",
+                "no_when_clause": True,
+                "no_arguments": True,
+                "no_column_filter": True,
+                "no_constraint_link": True,
+                "not_deferrable": True,
+                "not_initially_deferred": True,
+                "no_transition_tables": True,
+                "function_schema": "app_private",
+                "function_name": str(contract["function_name"]),
+                "function_source": _normalize_sql_source(contract["function_source"]),
+                "function_language": "plpgsql",
+                "security_definer": False,
+                "function_config": ("search_path=pg_catalog, app_private",),
+            }
+            for key, contract in _PRIVATE_HARDENING_TRIGGER_CONTRACT.items()
+        }
+        if actual_triggers != expected_triggers:
             raise TrialNotReadyError(("schema_ready",))
 
     @staticmethod
@@ -646,6 +855,37 @@ class PostgresTrialStore:
                 select pg_has_role(runtime_role.oid, backend_role.oid, 'USAGE')
                 from runtime_role cross join backend_role
               ), false) as inherits_backend,
+              coalesce((
+                select
+                  count(*) = 1
+                  and bool_and(
+                    parent_role.rolname = 'supermega_trial_backend'
+                    and membership.inherit_option
+                    and not membership.set_option
+                    and not membership.admin_option
+                  )
+                from runtime_role
+                join pg_auth_members membership on membership.member = runtime_role.oid
+                join pg_roles parent_role on parent_role.oid = membership.roleid
+              ), false) as direct_parent_membership_exact,
+              coalesce((
+                select
+                  count(*) = 1
+                  and bool_and(
+                    member_role.rolname = current_user
+                    and membership.inherit_option
+                    and not membership.set_option
+                    and not membership.admin_option
+                  )
+                from backend_role
+                join pg_auth_members membership on membership.roleid = backend_role.oid
+                join pg_roles member_role on member_role.oid = membership.member
+              ), false) as backend_member_exact,
+              not exists (
+                select 1
+                from runtime_role
+                join pg_auth_members membership on membership.roleid = runtime_role.oid
+              ) as no_runtime_role_members,
               not exists (
                 select 1
                 from runtime_role cross join elevated_role
@@ -666,6 +906,9 @@ class PostgresTrialStore:
             "no_create_db",
             "no_replication",
             "inherits_backend",
+            "direct_parent_membership_exact",
+            "backend_member_exact",
+            "no_runtime_role_members",
             "no_elevated_membership",
             "tls_active",
         )
@@ -1083,14 +1326,14 @@ class PostgresTrialStore:
             if replay is not None:
                 return _approval_from_mapping(replay["approval"], replay=True)
             approval_id = str(uuid4())
-            now = _utc_now()
             cursor.execute(
                 """
                 insert into app_private.approval_requests
                   (approval_id, workspace_id, command_id, command_fingerprint, title,
-                   proposal_json, evidence_refs_json, status, requested_by,
-                   requested_actor_kind, requested_at, decision_contract_version, version)
-                values (%s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, 'pending', %s, %s, %s::timestamptz, 2, 0)
+                    proposal_json, evidence_refs_json, status, requested_by,
+                    requested_actor_kind, decision_contract_version, version)
+                values (%s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, 'pending', %s, %s, 2, 0)
+                returning requested_at
                 """,
                 (
                     approval_id,
@@ -1102,9 +1345,11 @@ class PostgresTrialStore:
                     json.dumps(list(evidence_value), ensure_ascii=False),
                     normalized.actor_id,
                     normalized.actor_kind,
-                    now,
                 ),
             )
+            requested_at = _iso_timestamp((cursor.fetchone() or {}).get("requested_at"))
+            if not requested_at:
+                raise TrialNotReadyError(("schema_ready",))
             approval = ApprovalRecord(
                 approval_id=approval_id,
                 command_id=command_id_value,
@@ -1114,17 +1359,17 @@ class PostgresTrialStore:
                 status="pending",
                 requested_by=normalized.actor_id,
                 requested_actor_kind=normalized.actor_kind,
-                requested_at=now,
+                requested_at=requested_at,
             )
             result = {"approval": approval.to_dict()}
             cursor.execute(
                 """
                 insert into app_private.workspace_events
                   (event_id, workspace_id, command_id, command_fingerprint, surface,
-                   event_type, actor_id, actor_kind, expected_version, resulting_version,
-                   payload_json, result_json, created_at)
+                    event_type, actor_id, actor_kind, expected_version, resulting_version,
+                    payload_json, result_json)
                 values (%s, %s, %s, %s, 'approvals', 'approval.requested', %s, %s,
-                        null, 0, %s::jsonb, %s::jsonb, %s::timestamptz)
+                        null, 0, %s::jsonb, %s::jsonb)
                 """,
                 (
                     str(uuid4()),
@@ -1138,7 +1383,6 @@ class PostgresTrialStore:
                         ensure_ascii=False,
                     ),
                     json.dumps(result, ensure_ascii=False),
-                    now,
                 ),
             )
         return approval
@@ -1198,20 +1442,18 @@ class PostgresTrialStore:
                 raise TrialNotFound("Approval not found.")
             if str(row["status"]) != "pending":
                 raise TrialInvalidTransition("Approval has already reached a terminal decision.")
-            now = _utc_now()
             cursor.execute(
                 """
                 update app_private.approval_requests
                 set status = %s, decided_by = %s, decided_actor_kind = %s,
-                    decided_at = %s::timestamptz,
                     decision_note = %s, version = version + 1
                 where workspace_id = %s and approval_id = %s and status = 'pending'
+                returning decided_at
                 """,
                 (
                     decision_value,
                     normalized.actor_id,
                     normalized.actor_kind,
-                    now,
                     note_value,
                     normalized.workspace_id,
                     approval_id_value,
@@ -1219,13 +1461,16 @@ class PostgresTrialStore:
             )
             if cursor.rowcount != 1:
                 raise TrialInvalidTransition("Approval decision lost a concurrent update race.")
+            decided_at = _iso_timestamp((cursor.fetchone() or {}).get("decided_at"))
+            if not decided_at:
+                raise TrialNotReadyError(("schema_ready",))
             decided = _approval_from_mapping(
                 {
                     **dict(row),
                     "status": decision_value,
                     "decided_by": normalized.actor_id,
                     "decided_actor_kind": normalized.actor_kind,
-                    "decided_at": now,
+                    "decided_at": decided_at,
                     "decision_note": note_value,
                     "version": int(row["version"]) + 1,
                 }
@@ -1235,10 +1480,10 @@ class PostgresTrialStore:
                 """
                 insert into app_private.workspace_events
                   (event_id, workspace_id, command_id, command_fingerprint, surface,
-                   event_type, actor_id, actor_kind, expected_version, resulting_version,
-                   payload_json, result_json, created_at)
+                    event_type, actor_id, actor_kind, expected_version, resulting_version,
+                    payload_json, result_json)
                 values (%s, %s, %s, %s, 'approvals', 'approval.decided', %s, %s,
-                        0, 1, %s::jsonb, %s::jsonb, %s::timestamptz)
+                        0, 1, %s::jsonb, %s::jsonb)
                 """,
                 (
                     str(uuid4()),
@@ -1252,7 +1497,6 @@ class PostgresTrialStore:
                         ensure_ascii=False,
                     ),
                     json.dumps(result, ensure_ascii=False),
-                    now,
                 ),
             )
         return decided

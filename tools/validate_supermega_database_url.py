@@ -9,6 +9,7 @@ migration, and executes every catalog probe inside a read-only transaction.
 from __future__ import annotations
 
 import argparse
+from hashlib import sha256
 import json
 import os
 import re
@@ -18,11 +19,12 @@ from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 
-CONTRACT = "supermega_private_trial_database_v3"
+CONTRACT = "supermega_private_trial_database_v4"
 SCHEMA = "app_private"
 BACKEND_ROLE = "supermega_trial_backend"
+TRUSTED_OWNER = "postgres"
 SCHEMA_COMPONENT = "private_trial_backend"
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 EXPECTED_TABLES = frozenset(
     {
         "trial_schema_meta",
@@ -47,6 +49,128 @@ EXPECTED_INDEXES = frozenset(
         "approval_requests_queue_idx",
     }
 )
+EXPECTED_INDEX_CONTRACT: dict[str, dict[str, Any]] = {
+    "trial_schema_meta_pkey": {
+        "table": "trial_schema_meta",
+        "keys": ("component",),
+        "options": (0,),
+        "unique": True,
+        "primary": True,
+        "constraint": "p",
+    },
+    "workspace_memberships_pkey": {
+        "table": "workspace_memberships",
+        "keys": ("workspace_id", "actor_id"),
+        "options": (0, 0),
+        "unique": True,
+        "primary": True,
+        "constraint": "p",
+    },
+    "workspace_state_pkey": {
+        "table": "workspace_state",
+        "keys": ("workspace_id", "surface"),
+        "options": (0, 0),
+        "unique": True,
+        "primary": True,
+        "constraint": "p",
+    },
+    "workspace_events_pkey": {
+        "table": "workspace_events",
+        "keys": ("event_id",),
+        "options": (0,),
+        "unique": True,
+        "primary": True,
+        "constraint": "p",
+    },
+    "workspace_events_workspace_id_command_id_key": {
+        "table": "workspace_events",
+        "keys": ("workspace_id", "command_id"),
+        "options": (0, 0),
+        "unique": True,
+        "primary": False,
+        "constraint": "u",
+    },
+    "workspace_events_timeline_idx": {
+        "table": "workspace_events",
+        "keys": ("workspace_id", "created_at"),
+        "options": (0, 3),
+        "unique": False,
+        "primary": False,
+        "constraint": None,
+    },
+    "approval_requests_pkey": {
+        "table": "approval_requests",
+        "keys": ("approval_id",),
+        "options": (0,),
+        "unique": True,
+        "primary": True,
+        "constraint": "p",
+    },
+    "approval_requests_workspace_id_command_id_key": {
+        "table": "approval_requests",
+        "keys": ("workspace_id", "command_id"),
+        "options": (0, 0),
+        "unique": True,
+        "primary": False,
+        "constraint": "u",
+    },
+    "approval_requests_queue_idx": {
+        "table": "approval_requests",
+        "keys": ("workspace_id", "status", "requested_at"),
+        "options": (0, 0, 3),
+        "unique": False,
+        "primary": False,
+        "constraint": None,
+    },
+}
+EXPECTED_FUNCTIONS = frozenset(
+    {
+        "reject_workspace_event_mutation",
+        "guard_workspace_state_update",
+        "stamp_workspace_event_insert",
+        "guard_approval_mutation",
+    }
+)
+EXPECTED_NON_OWNER_ACL = frozenset(
+    {
+        ("schema", SCHEMA, BACKEND_ROLE, "USAGE", False),
+        ("table", "trial_schema_meta", BACKEND_ROLE, "SELECT", False),
+        ("table", "workspace_memberships", BACKEND_ROLE, "SELECT", False),
+        ("table", "workspace_state", BACKEND_ROLE, "SELECT", False),
+        ("table", "workspace_state", BACKEND_ROLE, "INSERT", False),
+        ("table", "workspace_state", BACKEND_ROLE, "UPDATE", False),
+        ("table", "workspace_events", BACKEND_ROLE, "SELECT", False),
+        ("table", "workspace_events", BACKEND_ROLE, "INSERT", False),
+        ("table", "approval_requests", BACKEND_ROLE, "SELECT", False),
+        ("table", "approval_requests", BACKEND_ROLE, "INSERT", False),
+        ("table", "approval_requests", BACKEND_ROLE, "UPDATE", False),
+    }
+)
+EXPECTED_BACKEND_ACL_DEPENDENCIES = frozenset(
+    {
+        ("schema", SCHEMA, 0),
+        ("relation", f"{SCHEMA}.trial_schema_meta", 0),
+        ("relation", f"{SCHEMA}.workspace_memberships", 0),
+        ("relation", f"{SCHEMA}.workspace_state", 0),
+        ("relation", f"{SCHEMA}.workspace_events", 0),
+        ("relation", f"{SCHEMA}.approval_requests", 0),
+    }
+)
+EVENT_SURFACE_CONSTRAINT = "workspace_events_approval_surface_v4_check"
+EXPECTED_SECURITY_CONSTRAINTS: dict[str, dict[str, str]] = {
+    "approval_requests_decision_packet_v2_check": {
+        "table": "approval_requests",
+        "sha256": "2a65522b7475a40847f181426330ca54ca185c823b539c7471278c03ac835839",
+    },
+    "approval_requests_terminal_decision_v2_check": {
+        "table": "approval_requests",
+        "sha256": "7891087b1b69ffddbd350a3f1bfd0417e1b97c4b68da6cdaafb9851dad88a839",
+    },
+    EVENT_SURFACE_CONSTRAINT: {
+        "table": "workspace_events",
+        "sha256": "61c55fa60aa2b47ea8cbc5292aad5351fd54a43d15752413c0d6c511d1f5ea10",
+    },
+}
 EXPECTED_TRIGGERS: dict[str, dict[str, Any]] = {
     "workspace_events_immutable": {
         "table": "workspace_events",
@@ -63,16 +187,34 @@ EXPECTED_TRIGGERS: dict[str, dict[str, Any]] = {
     "workspace_state_version_guard": {
         "table": "workspace_state",
         "function": "guard_workspace_state_update",
-        "trigger_type": 19,  # ROW | BEFORE | UPDATE
+        "trigger_type": 23,  # ROW | BEFORE | INSERT | UPDATE
         "function_source": """
             begin
-              if new.workspace_id is distinct from old.workspace_id
-                 or new.surface is distinct from old.surface then
-                raise exception using errcode = '55000', message = 'workspace state identity is immutable';
+              if tg_op = 'INSERT' then
+                if new.version <> 1 then
+                  raise exception using errcode = '55000', message = 'initial workspace state version must be one';
+                end if;
+              else
+                if new.workspace_id is distinct from old.workspace_id
+                   or new.surface is distinct from old.surface then
+                  raise exception using errcode = '55000', message = 'workspace state identity is immutable';
+                end if;
+                if new.version <> old.version + 1 then
+                  raise exception using errcode = '40001', message = 'workspace state version must increment by one';
+                end if;
               end if;
-              if new.version <> old.version + 1 then
-                raise exception using errcode = '40001', message = 'workspace state version must increment by one';
-              end if;
+              new.updated_at := transaction_timestamp();
+              return new;
+            end
+        """,
+    },
+    "workspace_events_server_timestamp": {
+        "table": "workspace_events",
+        "function": "stamp_workspace_event_insert",
+        "trigger_type": 7,  # ROW | BEFORE | INSERT
+        "function_source": """
+            begin
+              new.created_at := transaction_timestamp();
               return new;
             end
         """,
@@ -80,9 +222,13 @@ EXPECTED_TRIGGERS: dict[str, dict[str, Any]] = {
     "approval_requests_controlled_mutation": {
         "table": "approval_requests",
         "function": "guard_approval_mutation",
-        "trigger_type": 27,  # ROW | BEFORE | DELETE | UPDATE
+        "trigger_type": 31,  # ROW | BEFORE | INSERT | DELETE | UPDATE
         "function_source": """
             begin
+              if tg_op = 'INSERT' then
+                new.requested_at := transaction_timestamp();
+                return new;
+              end if;
               if tg_op = 'DELETE' then
                 raise exception using errcode = '55000', message = 'approval records cannot be deleted';
               end if;
@@ -110,11 +256,11 @@ EXPECTED_TRIGGERS: dict[str, dict[str, Any]] = {
                  or new.decided_by <> btrim(new.decided_by)
                  or new.decided_by = ''
                  or new.decided_actor_kind <> 'human'
-                 or new.decided_at is null
                  or new.decision_note <> btrim(new.decision_note)
                  or char_length(new.decision_note) not between 1 and 500 then
                 raise exception using errcode = '55000', message = 'approval decision requires a named human and nonblank note';
               end if;
+              new.decided_at := transaction_timestamp();
               return new;
             end
         """,
@@ -147,6 +293,7 @@ EXPECTED_POLICIES: dict[str, dict[str, Any]] = {
             "production.write",
             "website.write",
             "setup.write",
+            "version",
         ),
     },
     "workspace_state_capability_update": {
@@ -187,6 +334,8 @@ EXPECTED_POLICIES: dict[str, dict[str, Any]] = {
             "setup.write",
             "approvals.request",
             "approvals.decide",
+            "event_type",
+            "surface",
             "human",
         ),
         "check_or": "approval_human_guard",
@@ -208,6 +357,44 @@ EXPECTED_POLICIES: dict[str, dict[str, Any]] = {
         "command": "UPDATE",
         "qual": ("app.workspace_id", "app.actor_id", "app.actor_kind", "workspace_memberships", "approvals.decide", "human"),
         "check": ("app.workspace_id", "app.actor_id", "app.actor_kind", "workspace_memberships", "approvals.decide", "human"),
+    },
+}
+EXPECTED_POLICY_FINGERPRINTS: dict[str, dict[str, str | None]] = {
+    "workspace_memberships_self_read": {
+        "qual": "4c3f673c1afe3e423619aed98c55d2a41a7cd22c408a35542e546bc3a0dc0c21",
+        "check": None,
+    },
+    "workspace_state_member_read": {
+        "qual": "a9d2ddd3b6c10273885205138d7bec47b870b0158840e0cc3e93a38cdafdb15d",
+        "check": None,
+    },
+    "workspace_state_capability_insert": {
+        "qual": None,
+        "check": "467bb07bd20d8980c3f389caf0378871d70f5018bd7af8d95c6947e14f8670d8",
+    },
+    "workspace_state_capability_update": {
+        "qual": "526eb69cc66c78743dc9f35f33c1c189d03b746e18706a7b3c977b907ceb15fd",
+        "check": "5ba3422b3b6e3439bab09012219d76dde5e1770a47f7a35b70baee218a086d9c",
+    },
+    "workspace_events_member_read": {
+        "qual": "dbd92612761332506cb8000e88bcff3b04fb0a499486c3e4d214dfbdaaf6cbae",
+        "check": None,
+    },
+    "workspace_events_capability_insert": {
+        "qual": None,
+        "check": "c66753e2421b833b77a5b47f7248bc6fa8a7907fc7a217b520a1eb0af2b91462",
+    },
+    "approval_requests_member_read": {
+        "qual": "d3b1ca91bdb376190b1b6fa144943079c3b403c29449231d5f9a74f8dfb9e7d9",
+        "check": None,
+    },
+    "approval_requests_capability_insert": {
+        "qual": None,
+        "check": "f47353f3c26c797e3216f3197dc2f0b10ec86632815135720719dd47bfd0151f",
+    },
+    "approval_requests_capability_update": {
+        "qual": "755a51d7490c8803959e92f46e77feeb754aa436d8ebeb788392f809c63986f8",
+        "check": "33e38466ad153ad850fb4620e290dd1c78c0bae1fe18d89e4f7bbefe0ce091fd",
     },
 }
 
@@ -244,246 +431,90 @@ def _roles(value: Any) -> frozenset[str]:
     return frozenset()
 
 
-_POLICY_TOKEN_RE = re.compile(
-    r"'(?:''|[^'])*'|::|<>|<=|>=|=|\b[a-z_][a-z0-9_$.]*\b|\d+(?:\.\d+)?|[(),]|\S",
-    re.IGNORECASE,
-)
+def _ordered_texts(value: Any) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, str):
+        return tuple(
+            part.strip().strip('"')
+            for part in value.strip("{}").split(",")
+            if part.strip().strip('"')
+        )
+    if isinstance(value, Sequence):
+        return tuple(str(part) for part in value)
+    return ()
+
+
+def _normalized_index_keys(value: Any) -> tuple[str, ...]:
+    return tuple(
+        re.sub(r"\s+", " ", item).strip().lower()
+        for item in _ordered_texts(value)
+    )
+
+
+def _ordered_ints(value: Any) -> tuple[int, ...]:
+    try:
+        return tuple(int(item) for item in _ordered_texts(value))
+    except (TypeError, ValueError):
+        return ()
+
+
 _POLICY_CAST_RE = re.compile(
     r"::\s*(?:pg_catalog\.)?(?:text|character\s+varying|varchar|name|uuid|boolean|integer|bigint)\b",
     re.IGNORECASE,
 )
-_CURRENT_SETTING_TRUE_RE = re.compile(
-    r"current_setting\s*\(\s*'(?:''|[^'])*'\s*"
-    r"(?:::\s*(?:pg_catalog\.)?(?:text|character\s+varying|varchar|name))?\s*,\s*true\s*\)",
-    re.IGNORECASE,
-)
-_APPROVAL_HUMAN_OR_TOKENS = (
-    "event_type",
-    "<>",
-    "'approval.decided'",
-    "or",
-    "actor_kind",
-    "=",
-    "'human'",
-)
-_IDENTITY_BINDING_RE = re.compile(
-    r"\b(?:[a-z_][a-z0-9_]*\.)?"
-    r"(?P<field>workspace_id|actor_id|actor_kind|updated_by|requested_by|"
-    r"requested_actor_kind|decided_by|decided_actor_kind)"
-    r"\s*(?P<operator>=|<>)\s*"
-    r"current_setting\s*\(\s*'(?P<setting>app\.(?:workspace_id|actor_id|actor_kind))'"
-    r"\s*,\s*true\s*\)",
-    re.IGNORECASE,
-)
-_IDENTITY_FIELDS_BY_SETTING = {
-    "app.workspace_id": frozenset({"workspace_id"}),
-    "app.actor_id": frozenset({"actor_id", "updated_by", "requested_by", "decided_by"}),
-    "app.actor_kind": frozenset({"actor_kind", "requested_actor_kind", "decided_actor_kind"}),
-}
+def _normalized_catalog_expression(expression: Any) -> str | None:
+    if expression is None or not str(expression).strip():
+        return None
+    without_simple_casts = _POLICY_CAST_RE.sub("", str(expression).lower())
+    return re.sub(r"\s+", " ", without_simple_casts).strip()
 
 
-def _policy_tokens(expression: Any) -> list[str]:
-    value = _POLICY_CAST_RE.sub("", str(expression or "").lower())
-    return [token.lower() for token in _POLICY_TOKEN_RE.findall(value)]
+def _catalog_expression_fingerprint(expression: Any) -> str | None:
+    normalized = _normalized_catalog_expression(expression)
+    if normalized is None:
+        return None
+    return sha256(normalized.encode("utf-8")).hexdigest()
 
 
-def _semantic_policy_tokens(tokens: Sequence[str]) -> tuple[str, ...]:
-    semantic: list[str] = []
-    for token in tokens:
-        if token in {"(", ")", ","}:
-            continue
-        if token.endswith(".event_type"):
-            token = "event_type"
-        elif token.endswith(".actor_kind"):
-            token = "actor_kind"
-        semantic.append(token)
-    return tuple(semantic)
+def _policy_expression_matches(expression: Any, expected_sha256: str | None) -> bool:
+    """Require the exact normalized PostgreSQL catalog expression."""
 
-
-def _has_exact_approval_human_or(tokens: Sequence[str]) -> bool:
-    or_positions = [index for index, token in enumerate(tokens) if token == "or"]
-    if len(or_positions) != 1:
-        return False
-    or_position = or_positions[0]
-
-    stack: list[int] = []
-    enclosing_pairs: list[tuple[int, int]] = []
-    for index, token in enumerate(tokens):
-        if token == "(":
-            stack.append(index)
-        elif token == ")":
-            if not stack:
-                return False
-            start = stack.pop()
-            if start < or_position < index:
-                enclosing_pairs.append((start, index))
-    if stack:
-        return False
-
-    return any(
-        _semantic_policy_tokens(tokens[start + 1 : end]) == _APPROVAL_HUMAN_OR_TOKENS
-        for start, end in enclosing_pairs
-    )
-
-
-def _dangerous_policy_expression(expression: str, tokens: Sequence[str]) -> bool:
-    if any(marker in expression for marker in ("--", "/*", "*/", ";")):
-        return True
-
-    without_current_setting_flags = _CURRENT_SETTING_TRUE_RE.sub("current_setting_guard", expression)
-    if re.search(r"\b(?:true|false)\b", without_current_setting_flags, re.IGNORECASE):
-        return True
-    if re.search(
-        r"\b(?:not|coalesce|nullif|bool_or|bool_and|union|intersect|except)\b",
-        expression,
-        re.IGNORECASE,
-    ):
-        return True
-    if re.search(r"\b(\d+)\s*=\s*\1\b", expression):
-        return True
-    for match in re.finditer(r"('(?:''|[^'])*')\s*=\s*('(?:''|[^'])*')", expression):
-        if match.group(1) == match.group(2):
-            return True
-    not_equal_count = sum(token == "<>" for token in tokens)
-    if not_equal_count and not (
-        not_equal_count == 1 and _has_exact_approval_human_or(tokens)
-    ):
-        return True
-    normalized = _POLICY_CAST_RE.sub("", expression)
-    for match in _IDENTITY_BINDING_RE.finditer(normalized):
-        setting = match.group("setting").lower()
-        field = match.group("field").lower()
-        if (
-            match.group("operator") != "="
-            or field not in _IDENTITY_FIELDS_BY_SETTING[setting]
-        ):
-            return True
-    return "or" in tokens and not _has_exact_approval_human_or(tokens)
-
-
-def _required_identity_bindings_present(
-    expression: str,
-    required_tokens: Sequence[str],
-) -> bool:
-    required_settings = {
-        setting
-        for setting in _IDENTITY_FIELDS_BY_SETTING
-        if setting in {token.lower() for token in required_tokens}
-    }
-    if not required_settings:
-        return True
-    normalized = _POLICY_CAST_RE.sub("", expression)
-    observed: set[str] = set()
-    for match in _IDENTITY_BINDING_RE.finditer(normalized):
-        setting = match.group("setting").lower()
-        field = match.group("field").lower()
-        if (
-            match.group("operator") == "="
-            and field in _IDENTITY_FIELDS_BY_SETTING[setting]
-        ):
-            observed.add(setting)
-    return required_settings.issubset(observed)
-
-
-def _policy_expression_matches(
-    expression: Any,
-    required_tokens: Sequence[str],
-    *,
-    allowed_or: str | None = None,
-) -> bool:
-    """Validate the complete policy shape, rejecting boolean bypass wrappers.
-
-    Catalog expressions are parsed SQL and therefore contain operators. The
-    operator-free branch exists only for the repository's synthetic catalog
-    fixture; PostgreSQL cannot emit it for a real policy predicate.
-    """
-
-    if not required_tokens:
-        return expression in (None, "")
-    value = str(expression or "").lower()
-    if not all(token.lower() in value for token in required_tokens):
-        return False
-
-    tokens = _policy_tokens(value)
-    structured = any(token in {"=", "<>", "and", "or", "exists", "case"} for token in tokens)
-    if not structured:
-        return True
-    if _dangerous_policy_expression(value, tokens):
-        return False
-    if not _required_identity_bindings_present(value, required_tokens):
-        return False
-
-    or_count = sum(token == "or" for token in tokens)
-    if allowed_or == "approval_human_guard":
-        return or_count == 1 and _has_exact_approval_human_or(tokens)
-    return or_count == 0
+    return _catalog_expression_fingerprint(expression) == expected_sha256
 
 
 def _run_policy_self_test() -> dict[str, Any]:
     membership = (
-        "workspace_id = current_setting('app.workspace_id', true) "
-        "and actor_id = current_setting('app.actor_id', true) "
-        "and actor_kind = current_setting('app.actor_kind', true) "
-        "and status = 'active'"
+        "((workspace_id = current_setting('app.workspace_id', true)) "
+        "and (actor_id = current_setting('app.actor_id', true)) "
+        "and (current_setting('app.actor_kind', true) = any "
+        "(array['human', 'service', 'agent'])) "
+        "and (actor_kind = current_setting('app.actor_kind', true)) "
+        "and (status = 'active'))"
     )
-    membership_tokens = EXPECTED_POLICIES["workspace_memberships_self_read"]["qual"]
-    event = (
-        "workspace_id = current_setting('app.workspace_id', true) "
-        "and actor_id = current_setting('app.actor_id', true) "
-        "and actor_kind = current_setting('app.actor_kind', true) "
-        "and (event_type <> 'approval.decided' or actor_kind = 'human') "
-        "and exists (select 1 from app_private.workspace_memberships membership "
-        "where membership.workspace_id = workspace_events.workspace_id "
-        "and membership.actor_id = current_setting('app.actor_id', true) "
-        "and membership.actor_kind = current_setting('app.actor_kind', true) "
-        "and membership.status = 'active' "
-        "and case workspace_events.surface when 'company' then 'company.write' "
-        "when 'commerce' then 'commerce.write' when 'production' then 'production.write' "
-        "when 'website' then 'website.write' when 'setup' then 'setup.write' "
-        "when 'approvals' then case workspace_events.event_type "
-        "when 'approval.requested' then 'approvals.request' "
-        "when 'approval.decided' then 'approvals.decide' end end = any(membership.capabilities))"
-    )
-    event_tokens = EXPECTED_POLICIES["workspace_events_capability_insert"]["check"]
+    expected = EXPECTED_POLICY_FINGERPRINTS["workspace_memberships_self_read"]["qual"]
     cases = {
-        "canonical_membership": _policy_expression_matches(membership, membership_tokens),
-        "reject_true_or_wrapper": not _policy_expression_matches(
-            f"TRUE OR ({membership})",
-            membership_tokens,
+        "canonical_membership": _policy_expression_matches(membership, expected),
+        "reject_dead_case_wrapper": not _policy_expression_matches(
+            f"case when false then true else ({membership}) end",
+            expected,
         ),
-        "reject_numeric_tautology": not _policy_expression_matches(
-            f"({membership}) OR 1 = 1",
-            membership_tokens,
+        "reject_weakened_status": not _policy_expression_matches(
+            membership.replace("status = 'active'", "status <> 'revoked'"),
+            expected,
         ),
         "reject_inverted_identity_predicates": not _policy_expression_matches(
             membership.replace(" = ", " <> "),
-            membership_tokens,
+            expected,
         ),
         "reject_swapped_identity_settings": not _policy_expression_matches(
             membership
             .replace("'app.workspace_id'", "'app.__swap__'", 1)
             .replace("'app.actor_id'", "'app.workspace_id'", 1)
             .replace("'app.__swap__'", "'app.actor_id'", 1),
-            membership_tokens,
+            expected,
         ),
-        "canonical_human_guard": _policy_expression_matches(
-            event,
-            event_tokens,
-            allowed_or="approval_human_guard",
-        ),
-        "reject_ungrouped_human_or": not _policy_expression_matches(
-            event.replace(
-                "and (event_type <> 'approval.decided' or actor_kind = 'human')",
-                "and event_type <> 'approval.decided' or actor_kind = 'human'",
-            ),
-            event_tokens,
-            allowed_or="approval_human_guard",
-        ),
-        "reject_human_guard_true_or": not _policy_expression_matches(
-            f"TRUE OR ({event})",
-            event_tokens,
-            allowed_or="approval_human_guard",
-        ),
+        "null_expression_is_exact": _policy_expression_matches(None, None),
     }
     failed = [name for name, passed in cases.items() if not passed]
     return {
@@ -576,6 +607,20 @@ def collect_snapshot(connection: Any) -> dict[str, Any]:
               coalesce((select not rolcreaterole from current_login), false) as no_create_role,
               coalesce((select not rolcreatedb from current_login), false) as no_create_db,
               coalesce((select not rolreplication from current_login), false) as no_replication,
+              not exists (
+                select 1
+                from current_login
+                join pg_shdepend dependency
+                  on dependency.refclassid = 'pg_authid'::regclass
+                 and dependency.refobjid = current_login.oid
+                 and dependency.deptype in ('a', 'o')
+              ) as no_direct_acl_or_ownership,
+              not exists (
+                select 1
+                from current_login
+                join pg_auth_members membership
+                  on membership.roleid = current_login.oid
+              ) as no_runtime_role_members,
               coalesce((
                 select pg_has_role(current_login.oid, backend.oid, 'USAGE')
                 from current_login cross join backend
@@ -613,22 +658,71 @@ def collect_snapshot(connection: Any) -> dict[str, Any]:
               coalesce((select not rolreplication from backend), false) as no_replication,
               not exists (
                 select 1
+                from backend
+                join pg_auth_members membership on membership.member = backend.oid
+              ) as no_parent_membership,
+              not exists (
+                select 1
                 from backend cross join elevated
                 where backend.oid <> elevated.oid
                   and pg_has_role(backend.oid, elevated.oid, 'USAGE')
-              ) as no_elevated_membership
+              ) as no_elevated_membership,
+              not exists (
+                select 1
+                from backend
+                join pg_shdepend dependency
+                  on dependency.refclassid = 'pg_authid'::regclass
+                 and dependency.refobjid = backend.oid
+                 and dependency.deptype = 'o'
+              ) as no_object_ownership
             """
         )
         backend_role = _mapping(cursor.fetchone())
+        backend_acl_dependencies = _execute_rows(
+            cursor,
+            """
+            select
+              case
+                when dependency.classid = 'pg_namespace'::regclass then 'schema'
+                when dependency.classid = 'pg_class'::regclass then 'relation'
+                else 'unexpected:' || dependency.classid::regclass::text
+              end as object_kind,
+              case
+                when dependency.classid = 'pg_namespace'::regclass
+                  then schema_record.nspname
+                when dependency.classid = 'pg_class'::regclass
+                  then relation_schema.nspname || '.' || relation_record.relname
+                else dependency.objid::text
+              end as object_name,
+              dependency.objsubid
+            from pg_roles backend_role
+            join pg_shdepend dependency
+              on dependency.refclassid = 'pg_authid'::regclass
+             and dependency.refobjid = backend_role.oid
+             and dependency.deptype = 'a'
+            left join pg_namespace schema_record
+              on dependency.classid = 'pg_namespace'::regclass
+             and schema_record.oid = dependency.objid
+            left join pg_class relation_record
+              on dependency.classid = 'pg_class'::regclass
+             and relation_record.oid = dependency.objid
+            left join pg_namespace relation_schema
+              on relation_schema.oid = relation_record.relnamespace
+            where backend_role.rolname = 'supermega_trial_backend'
+            order by object_kind, object_name, dependency.objsubid
+            """,
+        )
 
         cursor.execute(
             """
             select
               exists(select 1 from pg_namespace where nspname = 'app_private') as schema_exists,
               coalesce((
-                select nspowner = (select oid from pg_roles where rolname = current_user)
-                from pg_namespace where nspname = 'app_private'
-              ), false) as schema_owned_by_connection
+                select owner_role.rolname
+                from pg_namespace schema_record
+                join pg_roles owner_role on owner_role.oid = schema_record.nspowner
+                where schema_record.nspname = 'app_private'
+              ), '') as owner_name
             """
         )
         schema = _mapping(cursor.fetchone())
@@ -638,12 +732,15 @@ def collect_snapshot(connection: Any) -> dict[str, Any]:
             """
             select
               c.relname as table_name,
+              c.relkind::text as relation_kind,
               c.relrowsecurity as rls_enabled,
               c.relforcerowsecurity as rls_forced,
-              c.relowner = (select oid from pg_roles where rolname = current_user) as owned_by_connection
+              owner_role.rolname as owner_name
             from pg_class c
             join pg_namespace n on n.oid = c.relnamespace
-            where n.nspname = 'app_private' and c.relkind in ('r', 'p')
+            join pg_roles owner_role on owner_role.oid = c.relowner
+            where n.nspname = 'app_private'
+              and c.relkind in ('r', 'p', 'v', 'm', 'S', 'f')
             order by c.relname
             """,
         )
@@ -672,6 +769,23 @@ def collect_snapshot(connection: Any) -> dict[str, Any]:
             order by tablename, policyname
             """,
         )
+        hardening_constraints = _execute_rows(
+            cursor,
+            """
+            select c.relname as table_name,
+                   constraint_record.conname as constraint_name,
+                   constraint_record.contype as constraint_type,
+                   constraint_record.convalidated as validated,
+                   pg_get_constraintdef(constraint_record.oid, true) as definition
+            from pg_constraint constraint_record
+            join pg_class c on c.oid = constraint_record.conrelid
+            join pg_namespace n on n.oid = c.relnamespace
+            where n.nspname = 'app_private'
+              and constraint_record.conname = any(%s)
+            order by constraint_record.conname
+            """,
+            (list(EXPECTED_SECURITY_CONSTRAINTS),),
+        )
         triggers = _execute_rows(
             cursor,
             """
@@ -679,7 +793,15 @@ def collect_snapshot(connection: Any) -> dict[str, Any]:
                    p.proname as function_name, t.tgenabled as enabled,
                    t.tgtype::integer as trigger_type,
                    pg_get_triggerdef(t.oid, true) as definition,
+                   t.tgqual is null as no_when_clause,
+                   t.tgnargs = 0 as no_arguments,
+                   cardinality(t.tgattr::int2[]) = 0 as no_column_filter,
+                   t.tgconstraint = 0 as no_constraint_link,
+                   not t.tgdeferrable as not_deferrable,
+                   not t.tginitdeferred as not_initially_deferred,
+                   t.tgoldtable is null and t.tgnewtable is null as no_transition_tables,
                    p.prosrc as function_source,
+                   owner_role.rolname as owner_name,
                    p.prosecdef as security_definer,
                    p.proconfig as function_config,
                    language_record.lanname as function_language
@@ -687,32 +809,87 @@ def collect_snapshot(connection: Any) -> dict[str, Any]:
             join pg_class c on c.oid = t.tgrelid
             join pg_namespace n on n.oid = c.relnamespace
             join pg_proc p on p.oid = t.tgfoid
+            join pg_roles owner_role on owner_role.oid = p.proowner
             join pg_language language_record on language_record.oid = p.prolang
             where n.nspname = 'app_private' and not t.tgisinternal
             order by c.relname, t.tgname
             """,
         )
+        functions = _execute_rows(
+            cursor,
+            """
+            select function_record.proname as function_name,
+                   owner_role.rolname as owner_name,
+                   function_record.prokind::text as function_kind,
+                   pg_get_function_identity_arguments(function_record.oid) as identity_arguments,
+                   pg_get_function_result(function_record.oid) as result_type
+            from pg_proc function_record
+            join pg_namespace schema_record
+              on schema_record.oid = function_record.pronamespace
+            join pg_roles owner_role on owner_role.oid = function_record.proowner
+            where schema_record.nspname = 'app_private'
+            order by function_record.proname, function_record.oid
+            """,
+        )
         indexes = _execute_rows(
             cursor,
             """
-            select tablename as table_name, indexname as index_name, indexdef as definition
-            from pg_indexes
-            where schemaname = 'app_private'
-            order by tablename, indexname
+            select table_record.relname as table_name,
+                   index_record.relname as index_name,
+                   access_method.amname as access_method,
+                   index_catalog.indisunique as is_unique,
+                   index_catalog.indisprimary as is_primary,
+                   index_catalog.indisvalid as is_valid,
+                   index_catalog.indisready as is_ready,
+                   index_catalog.indislive as is_live,
+                   index_catalog.indimmediate as is_immediate,
+                   not index_catalog.indisexclusion as not_exclusion,
+                   index_catalog.indnatts = index_catalog.indnkeyatts as no_included_columns,
+                   not index_catalog.indnullsnotdistinct as nulls_distinct,
+                   index_catalog.indpred is null as no_predicate,
+                   index_catalog.indexprs is null as no_expressions,
+                   array(
+                     select pg_get_indexdef(
+                       index_catalog.indexrelid,
+                       key_position,
+                       true
+                     )
+                     from generate_series(1, index_catalog.indnkeyatts) key_position
+                     order by key_position
+                   ) as key_columns,
+                   index_catalog.indoption::int2[] as key_options,
+                   constraint_record.contype::text as constraint_type
+            from pg_index index_catalog
+            join pg_class index_record on index_record.oid = index_catalog.indexrelid
+            join pg_class table_record on table_record.oid = index_catalog.indrelid
+            join pg_namespace schema_record on schema_record.oid = table_record.relnamespace
+            join pg_am access_method on access_method.oid = index_record.relam
+            left join pg_constraint constraint_record
+              on constraint_record.conindid = index_catalog.indexrelid
+            where schema_record.nspname = 'app_private'
+            order by table_record.relname, index_record.relname
             """,
         )
-        disallowed_acl = _execute_rows(
+        acl_entries = _execute_rows(
             cursor,
             """
             with acl_rows as (
               select 'schema'::text as object_kind, n.nspname as object_name,
-                     acl.grantee, acl.privilege_type
+                     n.nspowner as object_owner, acl.grantee, acl.privilege_type,
+                     acl.is_grantable
               from pg_namespace n
               cross join lateral aclexplode(coalesce(n.nspacl, acldefault('n', n.nspowner))) acl
               where n.nspname = 'app_private'
               union all
-              select case when c.relkind = 'S' then 'sequence' else 'table' end,
-                     c.relname, acl.grantee, acl.privilege_type
+              select case
+                       when c.relkind = 'S' then 'sequence'
+                       when c.relkind = 'v' then 'view'
+                       when c.relkind = 'm' then 'materialized_view'
+                       when c.relkind = 'f' then 'foreign_table'
+                       else 'table'
+                     end,
+                     c.relname, c.relowner, acl.grantee, acl.privilege_type,
+                     acl.is_grantable
               from pg_class c
               join pg_namespace n on n.oid = c.relnamespace
               cross join lateral aclexplode(
@@ -724,9 +901,11 @@ def collect_snapshot(connection: Any) -> dict[str, Any]:
                   )
                 )
               ) acl
-              where n.nspname = 'app_private' and c.relkind in ('r', 'p', 'S')
+              where n.nspname = 'app_private'
+                and c.relkind in ('r', 'p', 'S', 'v', 'm', 'f')
               union all
-              select 'function', p.proname, acl.grantee, acl.privilege_type
+              select 'function', p.proname, p.proowner, acl.grantee, acl.privilege_type,
+                     acl.is_grantable
               from pg_proc p
               join pg_namespace n on n.oid = p.pronamespace
               cross join lateral aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) acl
@@ -734,12 +913,35 @@ def collect_snapshot(connection: Any) -> dict[str, Any]:
             )
             select acl_rows.object_kind, acl_rows.object_name,
                    coalesce(grantee.rolname, 'PUBLIC') as grantee,
-                   acl_rows.privilege_type
+                   acl_rows.privilege_type, acl_rows.is_grantable
             from acl_rows
             left join pg_roles grantee on grantee.oid = acl_rows.grantee
-            where acl_rows.grantee = 0
-               or grantee.rolname in ('anon', 'authenticated', 'service_role')
+            where acl_rows.grantee <> acl_rows.object_owner
             order by acl_rows.object_kind, acl_rows.object_name, grantee, acl_rows.privilege_type
+            """,
+        )
+        default_acl_entries = _execute_rows(
+            cursor,
+            """
+            select owner_role.rolname as owner_name,
+                   coalesce(schema_record.nspname, 'GLOBAL') as schema_name,
+                   default_acl.defaclobjtype::text as object_type,
+                   coalesce(grantee_role.rolname, 'PUBLIC') as grantee,
+                   acl.privilege_type,
+                   acl.is_grantable
+            from pg_default_acl default_acl
+            join pg_roles owner_role on owner_role.oid = default_acl.defaclrole
+            left join pg_namespace schema_record
+              on schema_record.oid = default_acl.defaclnamespace
+            cross join lateral aclexplode(default_acl.defaclacl) acl
+            left join pg_roles grantee_role on grantee_role.oid = acl.grantee
+            where (
+                default_acl.defaclnamespace = 0
+                or schema_record.nspname = 'app_private'
+              )
+              and acl.grantee <> default_acl.defaclrole
+            order by owner_role.rolname, default_acl.defaclobjtype,
+                     grantee_role.rolname, acl.privilege_type
             """,
         )
         browser_roles = _execute_rows(
@@ -755,31 +957,77 @@ def collect_snapshot(connection: Any) -> dict[str, Any]:
             order by browser.rolname
             """,
         )
+        runtime_parent_memberships = _execute_rows(
+            cursor,
+            """
+            select parent_role.rolname as parent_role,
+                   membership.admin_option,
+                   membership.inherit_option,
+                   membership.set_option
+            from pg_roles runtime_role
+            join pg_auth_members membership on membership.member = runtime_role.oid
+            join pg_roles parent_role on parent_role.oid = membership.roleid
+            where runtime_role.rolname = current_user
+            order by parent_role.rolname
+            """,
+        )
+        backend_members = _execute_rows(
+            cursor,
+            """
+            select member_role.rolname = current_user as is_current_runtime,
+                   membership.admin_option,
+                   membership.inherit_option,
+                   membership.set_option
+            from pg_roles backend_role
+            join pg_auth_members membership on membership.roleid = backend_role.oid
+            join pg_roles member_role on member_role.oid = membership.member
+            where backend_role.rolname = 'supermega_trial_backend'
+            order by member_role.rolname
+            """,
+        )
 
     return {
         "identity": identity,
         "backend_role": backend_role,
+        "backend_acl_dependencies": backend_acl_dependencies,
         "schema": schema,
         "schema_version": schema_version,
         "tables": tables,
         "policies": policies,
+        "hardening_constraints": hardening_constraints,
         "triggers": triggers,
+        "functions": functions,
         "indexes": indexes,
-        "disallowed_acl": disallowed_acl,
+        "acl_entries": acl_entries,
+        "default_acl_entries": default_acl_entries,
         "browser_roles": browser_roles,
+        "runtime_parent_memberships": runtime_parent_memberships,
+        "backend_members": backend_members,
     }
 
 
 def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
     identity = _mapping(snapshot.get("identity", {}))
     backend = _mapping(snapshot.get("backend_role", {}))
+    backend_acl_dependency_rows = [
+        _mapping(row) for row in snapshot.get("backend_acl_dependencies", [])
+    ]
     schema = _mapping(snapshot.get("schema", {}))
     table_rows = [_mapping(row) for row in snapshot.get("tables", [])]
     policy_rows = [_mapping(row) for row in snapshot.get("policies", [])]
+    hardening_constraint_rows = [
+        _mapping(row) for row in snapshot.get("hardening_constraints", [])
+    ]
     trigger_rows = [_mapping(row) for row in snapshot.get("triggers", [])]
+    function_rows = [_mapping(row) for row in snapshot.get("functions", [])]
     index_rows = [_mapping(row) for row in snapshot.get("indexes", [])]
-    acl_rows = [_mapping(row) for row in snapshot.get("disallowed_acl", [])]
+    acl_rows = [_mapping(row) for row in snapshot.get("acl_entries", [])]
+    default_acl_rows = [_mapping(row) for row in snapshot.get("default_acl_entries", [])]
     browser_rows = [_mapping(row) for row in snapshot.get("browser_roles", [])]
+    runtime_parent_rows = [
+        _mapping(row) for row in snapshot.get("runtime_parent_memberships", [])
+    ]
+    backend_member_rows = [_mapping(row) for row in snapshot.get("backend_members", [])]
 
     connection_keys = (
         "transaction_read_only",
@@ -792,6 +1040,8 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
         "no_create_role",
         "no_create_db",
         "no_replication",
+        "no_direct_acl_or_ownership",
+        "no_runtime_role_members",
         "inherits_backend",
         "no_elevated_membership",
     )
@@ -803,41 +1053,78 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
         "no_create_role",
         "no_create_db",
         "no_replication",
+        "no_parent_membership",
         "no_elevated_membership",
+        "no_object_ownership",
     )
 
     tables = {str(row.get("table_name")): row for row in table_rows}
-    exact_tables = frozenset(tables) == EXPECTED_TABLES
+    exact_tables = (
+        len(table_rows) == len(EXPECTED_TABLES)
+        and frozenset(tables) == EXPECTED_TABLES
+        and all(str(tables[name].get("relation_kind")) == "r" for name in EXPECTED_TABLES)
+    )
     tenant_rls = exact_tables and all(
         _bool(tables[name].get("rls_enabled")) and _bool(tables[name].get("rls_forced"))
         for name in TENANT_TABLES
     )
-    runtime_owns_no_objects = not _bool(schema.get("schema_owned_by_connection")) and all(
-        not _bool(row.get("owned_by_connection")) for row in table_rows
+    functions = {str(row.get("function_name")): row for row in function_rows}
+    exact_functions = (
+        len(function_rows) == len(EXPECTED_FUNCTIONS)
+        and frozenset(functions) == EXPECTED_FUNCTIONS
+        and all(
+            str(functions[name].get("owner_name")) == TRUSTED_OWNER
+            and str(functions[name].get("function_kind")) == "f"
+            and str(functions[name].get("identity_arguments", "")) == ""
+            and str(functions[name].get("result_type", "")).lower() == "trigger"
+            for name in EXPECTED_FUNCTIONS
+        )
+    )
+    trusted_private_ownership = (
+        str(schema.get("owner_name")) == TRUSTED_OWNER
+        and exact_tables
+        and all(str(row.get("owner_name")) == TRUSTED_OWNER for row in table_rows)
+        and exact_functions
     )
 
     policies = {str(row.get("policy_name")): row for row in policy_rows}
-    policy_contract = frozenset(policies) == frozenset(EXPECTED_POLICIES)
+    policy_contract = (
+        len(policy_rows) == len(EXPECTED_POLICIES)
+        and frozenset(policies) == frozenset(EXPECTED_POLICIES)
+    )
     if policy_contract:
         for name, expected in EXPECTED_POLICIES.items():
             row = policies[name]
+            fingerprints = EXPECTED_POLICY_FINGERPRINTS[name]
             policy_contract = policy_contract and (
                 str(row.get("table_name")) == expected["table"]
                 and str(row.get("command", "")).upper() == expected["command"]
                 and str(row.get("permissive", "")).upper() == "PERMISSIVE"
                 and _roles(row.get("roles")) == {BACKEND_ROLE}
-                and _policy_expression_matches(
-                    row.get("qual"),
-                    expected["qual"],
-                    allowed_or=expected.get("qual_or"),
-                )
-                and _policy_expression_matches(
-                    row.get("with_check"),
-                    expected["check"],
-                    allowed_or=expected.get("check_or"),
-                )
+                and _policy_expression_matches(row.get("qual"), fingerprints["qual"])
+                and _policy_expression_matches(row.get("with_check"), fingerprints["check"])
             )
             if not policy_contract:
+                break
+
+    constraints = {
+        str(row.get("constraint_name")): row for row in hardening_constraint_rows
+    }
+    security_constraints_exact = (
+        len(hardening_constraint_rows) == len(EXPECTED_SECURITY_CONSTRAINTS)
+        and frozenset(constraints) == frozenset(EXPECTED_SECURITY_CONSTRAINTS)
+    )
+    if security_constraints_exact:
+        for name, expected in EXPECTED_SECURITY_CONSTRAINTS.items():
+            row = constraints[name]
+            security_constraints_exact = security_constraints_exact and (
+                str(row.get("table_name")) == expected["table"]
+                and str(row.get("constraint_type")) == "c"
+                and row.get("validated") is True
+                and _catalog_expression_fingerprint(row.get("definition"))
+                == expected["sha256"]
+            )
+            if not security_constraints_exact:
                 break
 
     triggers = {str(row.get("trigger_name")): row for row in trigger_rows}
@@ -848,8 +1135,16 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
             trigger_contract = trigger_contract and (
                 str(row.get("table_name")) == expected["table"]
                 and str(row.get("function_name")) == expected["function"]
+                and str(row.get("owner_name")) == TRUSTED_OWNER
                 and str(row.get("enabled")) in {"O", "A"}
                 and int(row.get("trigger_type", -1)) == expected["trigger_type"]
+                and _bool(row.get("no_when_clause"))
+                and _bool(row.get("no_arguments"))
+                and _bool(row.get("no_column_filter"))
+                and _bool(row.get("no_constraint_link"))
+                and _bool(row.get("not_deferrable"))
+                and _bool(row.get("not_initially_deferred"))
+                and _bool(row.get("no_transition_tables"))
                 and str(row.get("function_language", "")).lower() == "plpgsql"
                 and row.get("security_definer") is False
                 and _function_settings(row.get("function_config"))
@@ -860,7 +1155,83 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
             if not trigger_contract:
                 break
 
-    index_names = frozenset(str(row.get("index_name")) for row in index_rows)
+    indexes = {str(row.get("index_name")): row for row in index_rows}
+    index_contract = (
+        len(index_rows) == len(EXPECTED_INDEX_CONTRACT)
+        and frozenset(indexes) == EXPECTED_INDEXES
+    )
+    if index_contract:
+        for name, expected in EXPECTED_INDEX_CONTRACT.items():
+            row = indexes[name]
+            observed_constraint = row.get("constraint_type")
+            if observed_constraint in ("", None):
+                observed_constraint = None
+            index_contract = index_contract and (
+                str(row.get("table_name")) == expected["table"]
+                and str(row.get("access_method", "")).lower() == "btree"
+                and row.get("is_unique") is expected["unique"]
+                and row.get("is_primary") is expected["primary"]
+                and _bool(row.get("is_valid"))
+                and _bool(row.get("is_ready"))
+                and _bool(row.get("is_live"))
+                and _bool(row.get("is_immediate"))
+                and _bool(row.get("not_exclusion"))
+                and _bool(row.get("no_included_columns"))
+                and _bool(row.get("nulls_distinct"))
+                and _bool(row.get("no_predicate"))
+                and _bool(row.get("no_expressions"))
+                and _normalized_index_keys(row.get("key_columns")) == expected["keys"]
+                and _ordered_ints(row.get("key_options")) == expected["options"]
+                and observed_constraint == expected["constraint"]
+            )
+            if not index_contract:
+                break
+
+    observed_acl = [
+        (
+            str(row.get("object_kind")),
+            str(row.get("object_name")),
+            str(row.get("grantee")),
+            str(row.get("privilege_type", "")).upper(),
+            row.get("is_grantable") is True,
+        )
+        for row in acl_rows
+    ]
+    acl_contract = (
+        len(observed_acl) == len(EXPECTED_NON_OWNER_ACL)
+        and frozenset(observed_acl) == EXPECTED_NON_OWNER_ACL
+    )
+    observed_backend_acl_dependencies = [
+        (
+            str(row.get("object_kind")),
+            str(row.get("object_name")),
+            int(row.get("objsubid", -1)),
+        )
+        for row in backend_acl_dependency_rows
+    ]
+    backend_acl_scope_exact = (
+        len(observed_backend_acl_dependencies) == len(EXPECTED_BACKEND_ACL_DEPENDENCIES)
+        and frozenset(observed_backend_acl_dependencies)
+        == EXPECTED_BACKEND_ACL_DEPENDENCIES
+    )
+
+    def safe_membership_options(row: Mapping[str, Any]) -> bool:
+        return (
+            row.get("admin_option") is False
+            and _bool(row.get("inherit_option"))
+            and row.get("set_option") is False
+        )
+
+    runtime_membership_exact = (
+        len(runtime_parent_rows) == 1
+        and str(runtime_parent_rows[0].get("parent_role")) == BACKEND_ROLE
+        and safe_membership_options(runtime_parent_rows[0])
+    )
+    backend_membership_exact = (
+        len(backend_member_rows) == 1
+        and _bool(backend_member_rows[0].get("is_current_runtime"))
+        and safe_membership_options(backend_member_rows[0])
+    )
     browser_names = frozenset(str(row.get("role_name")) for row in browser_rows)
     browser_roles_isolated = browser_names == BROWSER_ROLES and all(
         not _bool(row.get("inherits_backend")) for row in browser_rows
@@ -876,11 +1247,16 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
         "schema_version_current": snapshot.get("schema_version") == SCHEMA_VERSION,
         "expected_private_tables_only": exact_tables,
         "tenant_tables_force_rls": tenant_rls,
-        "runtime_role_owns_no_private_objects": runtime_owns_no_objects,
+        "trusted_private_object_ownership": trusted_private_ownership,
+        "runtime_role_membership_exact": runtime_membership_exact,
+        "backend_membership_exact": backend_membership_exact,
         "policy_contract_exact": policy_contract,
+        "security_constraints_exact": security_constraints_exact,
         "immutable_and_version_triggers_exact": trigger_contract,
-        "required_policy_indexes_present": EXPECTED_INDEXES.issubset(index_names),
-        "browser_and_public_acl_empty": not acl_rows,
+        "private_indexes_exact": index_contract,
+        "private_acl_exact": acl_contract,
+        "backend_acl_scope_exact": backend_acl_scope_exact,
+        "private_default_acl_empty": not default_acl_rows,
         "browser_roles_not_backend_members": browser_roles_isolated,
     }
     failed = [name for name, passed in checks.items() if not passed]
@@ -913,10 +1289,12 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
                 "required_tables": sorted(TENANT_TABLES),
             },
             "grant": {
-                "forbidden_roles": ["PUBLIC", *sorted(BROWSER_ROLES)],
-                "disallowed_acl_entries": len(acl_rows),
+                "runtime_acl_entries": len(observed_acl),
+                "expected_runtime_acl_entries": len(EXPECTED_NON_OWNER_ACL),
+                "default_acl_entries": len(default_acl_rows),
             },
             "policies": sorted(EXPECTED_POLICIES),
+            "hardening_constraints": sorted(EXPECTED_SECURITY_CONSTRAINTS),
             "triggers": sorted(EXPECTED_TRIGGERS),
             "indexes": sorted(EXPECTED_INDEXES),
         },
@@ -972,7 +1350,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--ensure-schema",
         action="store_true",
-        help="Require the complete v3 schema contract; this flag never applies migrations.",
+        help="Require the complete v4 schema contract; this flag never applies migrations.",
     )
     parser.add_argument("--require-ready", action="store_true")
     parser.add_argument(
