@@ -563,7 +563,7 @@ textarea { min-height: 72px; resize: vertical; }
   .agent-create-form { position: static; width: min(100%,300px); margin-top: 8px; }
   .agent-roster-panel .panel-head { align-items: flex-start; }
   .compact-disclosure > summary { min-height: 44px; }
-  .core-button, .core-button.compact, .segmented-control button, .segmented-control a, .view-tabs button, .mobile-nav a { min-height: 44px; }
+  .core-button, .core-button.compact, .text-link, .operations-profile .text-link, .core-topbar .mobile-brand .core-brand, .topbar-meta > a, .segmented-control button, .segmented-control a, .view-tabs button, .mobile-nav a { min-height: 44px; }
 }
 
 @media (max-width: 720px) {

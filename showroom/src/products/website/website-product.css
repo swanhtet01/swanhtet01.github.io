@@ -1892,6 +1892,21 @@
     padding-inline: 12px;
   }
 
+  .website-brand,
+  .website-button,
+  .website-button.is-compact,
+  .website-text-button,
+  .website-preview-controls > button,
+  .website-inline-actions > button,
+  .website-navigation-actions > button {
+    min-height: 44px;
+  }
+
+  .website-product input:not([type="checkbox"]):not([type="radio"]),
+  .website-product select {
+    min-height: 44px;
+  }
+
   .website-brand > i,
   .website-brand > b,
   .website-runtime > small {
