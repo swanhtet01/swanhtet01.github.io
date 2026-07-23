@@ -128,6 +128,17 @@ for (const token of [
   'id="operations"',
   'Two operational wedges. One company foundation.',
   'Commerce and Production model accountable records and actions in browser-local workspaces.',
+  'id="company-system-rail-hint"',
+  'class="operating-cards" role="list" tabindex="-1" data-mobile-rail data-mobile-description="company-system-rail-hint"',
+  'id="operations-rail-hint"',
+  'class="compact-solutions" role="list" tabindex="-1" data-mobile-rail data-mobile-description="operations-rail-hint"',
+  "['ArrowLeft','ArrowRight','Home','End']",
+  'event.target!==rail',
+  'event.altKey||event.ctrlKey||event.metaKey||event.shiftKey',
+  "rail.setAttribute('aria-describedby',rail.dataset.mobileDescription)",
+  "rail.removeAttribute('aria-describedby')",
+  'grid-auto-columns: 86%',
+  'scroll-snap-type: x mandatory',
   'Explore the product workspace',
   'Start with one real workflow.',
   'Preview browser-local orders, stock, fulfilment, payment status, follow-up, and close across common channels.',
@@ -141,6 +152,8 @@ for (const token of [
 ]) {
   if (!home.includes(token)) fail('homepage_contract_missing', { token })
 }
+if ((home.match(/data-mobile-rail data-mobile-description=/g) || []).length !== 2) fail('mobile_rail_count_wrong')
+if (!/@media \(max-width: 760px\)\s*\{[\s\S]*?\.operating-cards, \.compact-solutions\s*\{[^}]*overflow-x:\s*auto;[^}]*scroll-snap-type:\s*x mandatory;/.test(home)) fail('mobile_rail_css_contract_missing')
 for (const product of manifest.products) {
   if (!home.includes(product.primaryCta.label)) fail('primary_cta_label_missing', { product: product.id, label: product.primaryCta.label })
   for (const module of product.modules) {
