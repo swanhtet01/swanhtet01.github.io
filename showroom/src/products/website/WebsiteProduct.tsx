@@ -42,27 +42,24 @@ import {
 } from './website-model'
 import './website-product.css'
 
-const workspaceViews: Array<{ id: WorkspaceView; index: string; label: string }> = [
-  { id: 'content', index: '01', label: 'Content' },
-  { id: 'navigation', index: '02', label: 'Navigation' },
-  { id: 'publish', index: '03', label: 'Publish' },
+const workspaceViews: Array<{ id: WorkspaceView; label: string }> = [
+  { id: 'content', label: 'Content' },
+  { id: 'navigation', label: 'Navigation' },
+  { id: 'publish', label: 'Publish' },
 ]
 
-const viewCopy: Record<WorkspaceView, { eyebrow: string; title: string; copy: string }> = {
+const viewCopy: Record<WorkspaceView, { title: string; copy: string }> = {
   content: {
-    eyebrow: 'Page workspace',
-    title: 'Edit one page at a time.',
-    copy: 'Change the content, then review the result before publishing.',
+    title: 'Edit page',
+    copy: 'Update the selected page, then preview it when you are ready.',
   },
   navigation: {
-    eyebrow: 'Site structure',
-    title: 'Make every destination intentional.',
-    copy: 'Order pages, control visibility, and keep drafts out of public navigation.',
+    title: 'Organize navigation',
+    copy: 'Choose what visitors can see and put pages in the right order.',
   },
   publish: {
-    eyebrow: 'Release control',
-    title: 'Prove the revision before approval.',
-    copy: 'Readiness, evidence, and human approval are bound to the current content fingerprint.',
+    title: 'Review and publish',
+    copy: 'Check readiness, record evidence, and approve the current revision.',
   },
 }
 
@@ -84,8 +81,11 @@ function secureUuid() {
 export function WebsiteProduct() {
   const { workspace, mutateWorkspace, storageMode, storageIssue, managedActorId } = useWebsiteWorkspace()
   const [view, setView] = useState<WorkspaceView>('content')
-  const [mobilePane, setMobilePane] = useState<'edit' | 'preview'>('edit')
-  const [device, setDevice] = useState<PreviewDevice>('desktop')
+  const [surface, setSurface] = useState<'work' | 'preview'>('work')
+  const [splitPreview, setSplitPreview] = useState(false)
+  const [device, setDevice] = useState<PreviewDevice>(() => (
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 900px)').matches ? 'mobile' : 'desktop'
+  ))
   const [notice, setNotice] = useState('Website workspace loaded. No website has been deployed.')
   const [deleteCandidateId, setDeleteCandidateId] = useState('')
   const [preparedHandoffSource, setPreparedHandoffSource] = useState(() => handoffSourceKey(readWebsiteEcommerceHandoff()))
@@ -113,9 +113,19 @@ export function WebsiteProduct() {
     window.scrollTo({ top: 0, behavior: 'instant' })
   }, [])
 
+  useEffect(() => {
+    const compactViewport = window.matchMedia('(max-width: 900px)')
+    const collapseSplitView = (event: MediaQueryListEvent) => {
+      if (event.matches) setSplitPreview(false)
+    }
+    compactViewport.addEventListener('change', collapseSplitView)
+    return () => compactViewport.removeEventListener('change', collapseSplitView)
+  }, [])
+
   function openWorkspaceView(nextView: WorkspaceView) {
     setView(nextView)
-    setMobilePane('edit')
+    setSurface('work')
+    setSplitPreview(false)
   }
 
   async function commitWorkspace(update: WebsiteWorkspaceUpdate, success = '', durable = false) {
@@ -415,15 +425,18 @@ export function WebsiteProduct() {
 
   return (
     <div className="website-product">
-      <a className="website-skip" href="#website-workspace">Skip to website workspace</a>
+      <a className="website-skip" href="#website-workspace">Skip to website task</a>
 
       <header className="website-topbar">
         <a aria-label="Back to SuperMega operations" className="website-brand" href="/operations/">
           <span aria-hidden="true">&gt;_</span>
           <strong>SUPERMEGA</strong>
-          <i>/</i>
-          <b>WEBSITE</b>
+          <b>Website</b>
         </a>
+        <div className="website-site-summary">
+          <strong>{workspace.siteName || 'Untitled site'}</strong>
+          <small>{workspace.pages.length} of {MAX_WEBSITE_PAGES} pages</small>
+        </div>
         <div className="website-runtime">
           <span className="website-local-badge"><i />{storageMode === 'managed' ? 'Managed workspace' : storageMode === 'browser-local' ? 'Local workspace' : 'Session only'}</span>
           <small>{storageMode === 'managed'
@@ -431,20 +444,11 @@ export function WebsiteProduct() {
             : storageMode === 'browser-local'
               ? 'saved · content r' + String(workspace.contentRevision)
               : 'writes paused'}</small>
-          <button className="website-button is-primary is-compact" onClick={() => openWorkspaceView('publish')} type="button">
-            Review publish
-          </button>
         </div>
       </header>
 
       <div className="website-shell">
-        <aside className="website-sidebar">
-          <div className="website-site-record">
-            <span>Website workspace</span>
-            <strong>{workspace.siteName || 'Untitled site'}</strong>
-            <small>{workspace.pages.length} / {MAX_WEBSITE_PAGES} pages · {storageMode === 'managed' ? 'managed draft' : 'local draft'}</small>
-          </div>
-
+        <main id="website-workspace" className="website-main">
           <nav className="website-workspace-nav" aria-label="Website workspace" role="tablist">
             {workspaceViews.map((item, index) => (
               <button
@@ -457,131 +461,160 @@ export function WebsiteProduct() {
                 tabIndex={view === item.id ? 0 : -1}
                 type="button"
               >
-                <span>{item.index}</span>{item.label}
+                {item.label}
               </button>
             ))}
           </nav>
 
-          <section className="website-page-index" aria-labelledby="website-pages-title">
-            <header>
-              <span id="website-pages-title">Pages</span>
-              <button aria-label="Add page" disabled={workspace.pages.length >= MAX_WEBSITE_PAGES} onClick={addPage} title={workspace.pages.length >= MAX_WEBSITE_PAGES ? 'The four-page prototype limit is reached' : 'Add page'} type="button">+</button>
-            </header>
-            <div>
-              {workspace.pages.map((page) => (
-                <button
-                  aria-current={selectedPage.id === page.id ? 'true' : undefined}
-                  key={page.id}
-                  onClick={() => selectPage(page.id)}
-                  type="button"
-                >
-                  <i className={page.stage === 'ready' ? 'is-ready' : ''} />
-                  <span>
-                    <strong>{page.internalName || 'Untitled page'}</strong>
-                    <small>{page.slug || 'No path'}</small>
-                  </span>
-                  <b>{page.stage === 'ready' ? 'R' : 'D'}</b>
-                </button>
-              ))}
-            </div>
-          </section>
+          <div className="website-notice" aria-live="polite" role="status">
+            {storageIssue || notice}
+          </div>
 
-          <footer className="website-sidebar-foot">
-            <span aria-hidden="true">&gt;_</span>
-            <p>{storageMode === 'managed'
-              ? 'Authenticated records are synced. Domain and deployment remain separate approval-gated actions.'
-              : 'Local records only. No CMS, domain, analytics, or deployment target is connected.'}</p>
-          </footer>
-        </aside>
+          {view === 'content' ? (
+            <section className="website-page-switcher" aria-label="Selected page">
+              <label htmlFor="website-page-select">Page</label>
+              <select
+                id="website-page-select"
+                onChange={(event) => void selectPage(event.currentTarget.value)}
+                value={selectedPage.id}
+              >
+                {workspace.pages.map((page) => (
+                  <option key={page.id} value={page.id}>
+                    {page.internalName || 'Untitled page'} — {page.slug || 'No path'} ({page.stage})
+                  </option>
+                ))}
+              </select>
+              <button
+                className="website-button is-secondary"
+                disabled={workspace.pages.length >= MAX_WEBSITE_PAGES}
+                onClick={addPage}
+                title={workspace.pages.length >= MAX_WEBSITE_PAGES ? 'The four-page prototype limit is reached' : 'Add page'}
+                type="button"
+              >
+                New page
+              </button>
+            </section>
+          ) : null}
 
-        <main id="website-workspace" className={'website-main mobile-pane-' + mobilePane}>
           <header className="website-heading">
             <div>
-              <span className="website-eyebrow">{activeViewCopy.eyebrow}</span>
               <h1>{activeViewCopy.title}</h1>
               <p>{activeViewCopy.copy}</p>
             </div>
             <div className="website-heading-actions">
-              <div className="website-mobile-pane-controls" role="group" aria-label="Mobile Website workspace">
-                <button aria-pressed={mobilePane === 'edit'} onClick={() => setMobilePane('edit')} type="button">Edit</button>
-                <button aria-pressed={mobilePane === 'preview'} onClick={() => setMobilePane('preview')} type="button">Preview</button>
-              </div>
-              <div className="website-preview-controls" role="group" aria-label="Responsive preview size">
-                <span>Preview</span>
-                {previewDevices.map((option) => (
-                  <button
-                    aria-pressed={device === option.id}
-                    key={option.id}
-                    onClick={() => setDevice(option.id)}
-                    title={option.label + ' preview'}
-                    type="button"
-                  >
-                    {option.label}
-                  </button>
-                ))}
+              <div className="website-surface-controls" role="group" aria-label="Website workspace surface">
+                <button
+                  aria-pressed={surface === 'work' && !splitPreview}
+                  onClick={() => {
+                    setSurface('work')
+                    setSplitPreview(false)
+                  }}
+                  type="button"
+                >
+                  Work
+                </button>
+                <button
+                  aria-pressed={surface === 'preview' && !splitPreview}
+                  onClick={() => {
+                    setSurface('preview')
+                    setSplitPreview(false)
+                  }}
+                  type="button"
+                >
+                  Preview
+                </button>
+                <button
+                  aria-pressed={splitPreview}
+                  className="website-split-control"
+                  onClick={() => setSplitPreview((current) => !current)}
+                  type="button"
+                >
+                  Split
+                </button>
               </div>
             </div>
           </header>
 
           <div
             aria-label={workspaceViews.find((item) => item.id === view)?.label}
-            className={'website-workspace-grid view-' + view + ' mobile-pane-' + mobilePane}
+            className={'website-workspace-grid view-' + view}
+            data-split={splitPreview ? 'true' : 'false'}
+            data-surface={surface}
             id="website-active-panel"
             role="tabpanel"
           >
-            {view === 'content' ? (
-              <ContentWorkspace
-                canDuplicate={workspace.pages.length < MAX_WEBSITE_PAGES}
-                deleteArmed={deleteCandidateId === selectedPage.id}
-                onDuplicate={copySelectedPage}
-                onRequestDelete={requestDeletePage}
-                onUpdatePage={(update) => updatePage(selectedPage.id, update)}
-                page={selectedPage}
-              />
-            ) : null}
+            <div className="website-work-surface">
+              {view === 'content' ? (
+                <ContentWorkspace
+                  canDuplicate={workspace.pages.length < MAX_WEBSITE_PAGES}
+                  deleteArmed={deleteCandidateId === selectedPage.id}
+                  onDuplicate={copySelectedPage}
+                  onRequestDelete={requestDeletePage}
+                  onUpdatePage={(update) => updatePage(selectedPage.id, update)}
+                  page={selectedPage}
+                />
+              ) : null}
 
-            {view === 'navigation' ? (
-              <NavigationWorkspace
-                onMovePage={movePage}
+              {view === 'navigation' ? (
+                <NavigationWorkspace
+                  onMovePage={movePage}
+                  onSelectPage={selectPage}
+                  onSiteNameChange={(siteName) => {
+                    void commitWorkspace((current) => ({ ...current, siteName }), 'Site identity updated.')
+                  }}
+                  onUpdatePage={updatePage}
+                  workspace={workspace}
+                />
+              ) : null}
+
+              {view === 'publish' ? (
+                <PublishWorkspace
+                  approvalIsCurrent={approvalIsCurrent}
+                  checks={checks}
+                  fingerprint={fingerprint}
+                  handoffAvailable={storageMode !== 'session-only'}
+                  handoffIsCurrent={handoffIsCurrent}
+                  managedActorId={managedActorId}
+                  onAddEvidence={addEvidence}
+                  onApprove={approveCurrentRevision}
+                  onPrepareCommerceHandoff={prepareCommerceHandoff}
+                  onRecordPublish={recordLocalPublish}
+                  publishIsCurrent={publishIsCurrent}
+                  workspace={workspace}
+                />
+              ) : null}
+            </div>
+
+            <div className="website-preview-surface">
+              <header className="website-preview-surface-head">
+                <div>
+                  <strong>Preview</strong>
+                  <small>{selectedPage.internalName || 'Untitled page'}</small>
+                </div>
+                <div className="website-preview-controls" role="group" aria-label="Responsive preview size">
+                  {previewDevices.map((option) => (
+                    <button
+                      aria-pressed={device === option.id}
+                      key={option.id}
+                      onClick={() => setDevice(option.id)}
+                      title={option.label + ' preview'}
+                      type="button"
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </header>
+              <SitePreview
+                device={device}
                 onSelectPage={selectPage}
-                onSiteNameChange={(siteName) => {
-                  void commitWorkspace((current) => ({ ...current, siteName }), 'Site identity updated.')
-                }}
-                onUpdatePage={updatePage}
-                workspace={workspace}
+                page={selectedPage}
+                pages={workspace.pages}
+                siteName={workspace.siteName}
               />
-            ) : null}
-
-            {view === 'publish' ? (
-              <PublishWorkspace
-                approvalIsCurrent={approvalIsCurrent}
-                checks={checks}
-                fingerprint={fingerprint}
-                handoffAvailable={storageMode !== 'session-only'}
-                handoffIsCurrent={handoffIsCurrent}
-                managedActorId={managedActorId}
-                onAddEvidence={addEvidence}
-                onApprove={approveCurrentRevision}
-                onPrepareCommerceHandoff={prepareCommerceHandoff}
-                onRecordPublish={recordLocalPublish}
-                publishIsCurrent={publishIsCurrent}
-                workspace={workspace}
-              />
-            ) : null}
-
-            <SitePreview
-              device={device}
-              onSelectPage={selectPage}
-              page={selectedPage}
-              pages={workspace.pages}
-              siteName={workspace.siteName}
-            />
+            </div>
           </div>
         </main>
-      </div>
-
-      <div className="website-notice" aria-live="polite" role="status">
-        <span aria-hidden="true">&gt;_</span>{storageIssue || notice}
       </div>
     </div>
   )
