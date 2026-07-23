@@ -43,7 +43,7 @@ import {
 import './website-product.css'
 
 const workspaceViews: Array<{ id: WorkspaceView; label: string }> = [
-  { id: 'content', label: 'Content' },
+  { id: 'content', label: 'Pages' },
   { id: 'navigation', label: 'Navigation' },
   { id: 'publish', label: 'Publish' },
 ]
@@ -434,11 +434,11 @@ export function WebsiteProduct() {
           <b>Website</b>
         </a>
         <div className="website-site-summary">
-          <strong>{workspace.siteName || 'Untitled site'}</strong>
+          <strong><span className="website-product-label">Website</span><span className="website-site-label">{workspace.siteName || 'Untitled site'}</span></strong>
           <small>{workspace.pages.length} of {MAX_WEBSITE_PAGES} pages</small>
         </div>
         <div className="website-runtime">
-          <span className="website-local-badge"><i />{storageMode === 'managed' ? 'Managed workspace' : storageMode === 'browser-local' ? 'Local workspace' : 'Session only'}</span>
+          <span className="website-local-badge"><i /><span className="website-runtime-label">{storageMode === 'managed' ? 'Managed workspace' : storageMode === 'browser-local' ? 'Local workspace' : 'Session only'}</span><span className="website-runtime-label-short">{storageMode === 'managed' ? 'Managed' : storageMode === 'browser-local' ? 'Local' : 'Session'}</span></span>
           <small>{storageMode === 'managed'
             ? 'synced · content r' + String(workspace.contentRevision)
             : storageMode === 'browser-local'
@@ -511,7 +511,7 @@ export function WebsiteProduct() {
                   }}
                   type="button"
                 >
-                  Work
+                  {view === 'content' ? 'Edit' : view === 'navigation' ? 'Organize' : 'Review'}
                 </button>
                 <button
                   aria-pressed={surface === 'preview' && !splitPreview}

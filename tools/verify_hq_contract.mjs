@@ -16,15 +16,28 @@ const failures = []
 const requireContract = (name, condition) => { if (!condition) failures.push(name) }
 
 requireContract('portfolio schema', portfolio.schemaVersion === 'supermega.hq.portfolio.v1')
-requireContract('portfolio is current', portfolio.updatedAt === '2026-07-23' && now.includes('Updated: 2026-07-23'))
+requireContract('portfolio is current', portfolio.updatedAt === '2026-07-24' && now.includes('Updated: 2026-07-24') && current.includes('Last confirmed: 2026-07-24'))
 requireContract('portfolio is narrow', portfolio.portfolio?.map((entry) => entry.id).join(',') === 'company-system,website,commerce,production')
 requireContract('portfolio paths are canonical', portfolio.portfolio?.map((entry) => entry.path).join(',') === '/,/products/website/,/operations/commerce/,/operations/production/')
-requireContract('Website remains a truthful managed trial', portfolio.portfolio?.find((entry) => entry.id === 'website')?.status === 'managed-trial'
-  && portfolio.portfolio?.find((entry) => entry.id === 'website')?.nextGate?.includes('before connecting a customer domain or publish authority')
-  && now.includes('No customer send, payment initiation, delivery request, domain write, or deployment occurs.'))
+requireContract('Website remains a truthful local release candidate', portfolio.portfolio?.find((entry) => entry.id === 'website')?.status === 'release-candidate-local'
+  && portfolio.portfolio?.find((entry) => entry.id === 'website')?.surfaces?.join(',') === 'Pages,Navigation,Publish'
+  && portfolio.portfolio?.find((entry) => entry.id === 'website')?.nextGate?.includes('managed snapshot')
+  && now.includes('without deploying a site or changing a domain'))
 requireContract('Commerce owns Website order intake', portfolio.portfolio?.find((entry) => entry.id === 'commerce')?.job.includes('Website') && !portfolio.portfolio?.some((entry) => entry.id === 'ecommerce'))
-requireContract('Commerce managed intake remains adoption-gated', portfolio.portfolio?.find((entry) => entry.id === 'commerce')?.status === 'managed-trial'
+requireContract('Commerce managed intake remains adoption-gated', portfolio.portfolio?.find((entry) => entry.id === 'commerce')?.status === 'release-candidate-local'
   && portfolio.portfolio?.find((entry) => entry.id === 'commerce')?.nextGate?.includes('authenticated human Commerce confirmation'))
+requireContract('application navigation is current', portfolio.portfolio?.[0]?.surfaces?.join(',') === 'Home,Work,Products,Settings (utility),Agent teams (internal)'
+  && now.includes('Home, Work, and Products are the only primary destinations')
+  && current.includes('Home, Work, and Products are the only primary navigation'))
+requireContract('release evidence is current', now.includes('PR `#258`')
+  && now.includes('GitHub is the source of truth for its current head')
+  && now.includes('3680cb3b55b8c0deb9aae7f0c6f1e87f9cd387da')
+  && now.includes('162 product/runtime checks')
+  && now.includes('86 Python tests'))
+requireContract('hosted database readiness remains truthful', now.includes('PostgreSQL 17.6.1')
+  && now.includes('are not installed')
+  && now.includes('27 informational `rls_enabled_no_policy` findings')
+  && now.includes('Do not treat its healthy status or server version as application readiness'))
 requireContract('product lifecycle is explicit', portfolio.portfolio?.[0]?.lifecycle?.join(',') === 'discover,define,build,release,learn')
 requireContract('manifest aligns to operating modules', manifest.products?.map((entry) => `${entry.id}:${entry.name}`).join(',') === 'commerce:Commerce,production:Production')
 const expectedTemplateIds = {
@@ -41,7 +54,7 @@ for (const productId of Object.keys(expectedTemplateIds)) {
   workflowProfileCount += manifestProduct?.templates?.length || 0
 }
 requireContract('current authority includes HQ', current.includes('hq/portfolio.json') && current.includes('## Internal HQ'))
-requireContract('OneDrive archive is not authority', readme.includes('historical archive and source intake') && now.includes('unpinned/offline'))
+requireContract('OneDrive archive is not authority', readme.includes('historical archive and source intake') && readme.includes('does not override this repository'))
 requireContract('source provenance retained', ['1VkuZ5_aUQ7DiYirt2asvzwsQJT9F_AuA', '1uxZ1Ey8xLX5yGmOCZrJ7Mx3I0HMd1unT', 'DawBDyzkTf8', '7483054882816675840'].every((token) => readme.includes(token)))
 requireContract('HQ stays concise', readme.length < 7000 && now.length < 7000 && portfolioText.length < 12000)
 requireContract('research remains gated', portfolio.researchGates?.some((entry) => entry.decision === 'reject') && current.includes('Research does not automatically become a dependency.'))

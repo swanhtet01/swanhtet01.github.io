@@ -1,44 +1,44 @@
 {
   "schemaVersion": "supermega.hq.portfolio.v1",
-  "updatedAt": "2026-07-23",
+  "updatedAt": "2026-07-24",
   "northStar": "One real workflow reaches a measurable outcome through an accountable operating record.",
   "portfolio": [
     {
       "id": "company-system",
       "name": "Company system",
-      "status": "core",
+      "status": "release-candidate",
       "path": "/",
       "job": "Turn company priorities, product delivery, evidence, exceptions, and owner decisions into one shared operating record.",
-      "surfaces": ["Today", "Product", "Engineering", "Growth", "Finance / Risk", "Agent teams (internal)"],
+      "surfaces": ["Home", "Work", "Products", "Settings (utility)", "Agent teams (internal)"],
       "lifecycle": ["discover", "define", "build", "release", "learn"],
-      "nextGate": "Prove one end-to-end Product workflow and one bounded agent handoff with attributed human acceptance and usage evidence."
+      "nextGate": "Rehearse the private managed-backend contract on isolated hosted PostgreSQL, then prove one end-to-end Product workflow and one bounded agent handoff with attributed human acceptance."
     },
     {
       "id": "website",
       "name": "Website",
-      "status": "managed-trial",
+      "status": "release-candidate-local",
       "path": "/products/website/",
       "job": "Turn an approved business brief into a finite, reviewable website candidate with content, navigation, evidence, and human publish approval.",
-      "surfaces": ["Content", "Navigation", "Publish"],
+      "surfaces": ["Pages", "Navigation", "Publish"],
       "nextGate": "Rehearse one approved managed snapshot into a retained Commerce intake before connecting a customer domain or publish authority."
     },
     {
       "id": "commerce",
       "name": "Commerce",
-      "status": "managed-trial",
+      "status": "release-candidate-local",
       "path": "/operations/commerce/",
       "job": "Convert Website and trusted-channel demand into controlled orders, stock, fulfilment, payment status, follow-up, and close.",
-      "surfaces": ["Today", "Orders", "Inventory"],
+      "surfaces": ["Today", "Orders", "Stock"],
       "templateContract": { "file": "../site-manifest.json", "productId": "commerce" },
       "nextGate": "Repeat the managed Website intake through authenticated human Commerce confirmation across at least two catalog items; then review the twenty-fixture AI Order Intake corpus, run the server-only model evaluation, and connect it inside Orders only after the zero-side-effect gate passes."
     },
     {
       "id": "production",
       "name": "Production",
-      "status": "pilot-ready-local",
+      "status": "release-candidate-local",
       "path": "/operations/production/",
       "job": "Connect plan, output, quality, materials, equipment, maintenance, and shift exceptions in one production record.",
-      "surfaces": ["Today", "Production", "Issues & equipment"],
+      "surfaces": ["Today", "Jobs", "Problems"],
       "templateContract": { "file": "../site-manifest.json", "productId": "production" },
       "nextGate": "Validate one line, maintenance, or quality workflow with operator evidence and owner review."
     }

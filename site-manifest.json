@@ -1,7 +1,7 @@
 {
   "schemaVersion": "supermega.site-context.v1",
-  "contextVersion": "2026-07-23.4",
-  "catalogVersion": "2026-07-23.4",
+  "contextVersion": "2026-07-24.2",
+  "catalogVersion": "2026-07-24.2",
   "brand": {
     "name": "SuperMega",
     "domain": "supermega.dev",
@@ -15,9 +15,9 @@
   },
   "company": {
     "positioning": "Operating software for Myanmar companies.",
-    "statement": "SuperMega connects product delivery, customer operations, production records, evidence, and owner decisions in one accountable system.",
+    "statement": "SuperMega connects company work, websites, orders, production records, evidence, and owner decisions in one accountable system.",
     "headline": "One operating layer behind the work your company already does.",
-    "supporting": "Run Product, Commerce, and Production without forcing customers or staff into a maze of disconnected tools.",
+    "supporting": "Run company work, Website, Commerce, and Production without forcing staff or customers through disconnected tools.",
     "publicPricing": false
   },
   "products": [

@@ -953,7 +953,11 @@ export function CoreLayout() {
   const runtime = useRuntimeHealth()
   const routeName = location.pathname.startsWith('/settings/')
     ? 'Settings'
-    : navigation.find((item) => item.to !== '/' && location.pathname.startsWith(item.to))?.label ?? 'Home'
+    : location.pathname.startsWith('/operations/commerce/')
+      ? 'Commerce'
+      : location.pathname.startsWith('/operations/production/')
+        ? 'Production'
+        : navigation.find((item) => item.to !== '/' && location.pathname.startsWith(item.to))?.label ?? 'Home'
 
   useEffect(() => {
     document.title = `${routeName} | SuperMega`
@@ -1272,7 +1276,7 @@ export function OperationsPage() {
 
   if (!isProductRoute && !requestedView) {
     return <div className="workspace-screen product-catalog-screen">
-      <PageHeading eyebrow="Products" title="Apps" copy="Choose the workspace for the job you need to do." />
+      <PageHeading eyebrow="Products" title="Choose a workspace" copy="Open the workspace for the job you need to do." />
       <nav aria-label="SuperMega apps" className="product-launcher product-catalog">
         <Link to="/operations/commerce/?tab=today"><span><strong>Commerce</strong><small>Orders, payments, and stock</small></span><b>Open</b></Link>
         <Link to="/operations/production/?tab=today"><span><strong>Production</strong><small>Jobs, output, and problems</small></span><b>Open</b></Link>

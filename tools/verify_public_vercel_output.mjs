@@ -120,8 +120,15 @@ for (const token of [
   manifest.company.supporting,
   'id="product"',
   'Product is a working lifecycle, not another showcase page.',
-  '01 / TODAY',
-  '02 / PRODUCT TEAM',
+  'Home, Work, and Products share owners, outcomes, evidence, exceptions, release checks, and decisions.',
+  '01 / HOME',
+  '02 / WORK',
+  'One next action for the company.',
+  'Owners, evidence, review, and release',
+  'Website, Commerce, and Production',
+  '<summary>How work moves</summary>',
+  '<summary>What it covers</summary>',
+  'min-height: 44px',
   'Discover',
   'Release',
   'Learn',
@@ -157,7 +164,7 @@ if (home.includes('Commerce and Production carry real records and actions.')) fa
 if ((home.match(/<a\b/g) || []).length > 8) fail('homepage_link_surface_too_large')
 
 const contact = pages.get('/contact/')?.html || ''
-for (const token of ['data-contact-form', 'action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="product"', 'value="commerce"', 'value="production"', 'name="template"', 'name="goal"', 'name="idempotency_key"', 'x-idempotency-key', 'rate_limited', 'Describe one real workflow or recurring handoff, and note any screenshot or spreadsheet you can share.', 'Commerce / website-to-order workflow', 'No account, data connection, automation, or external action begins from this form.', 'swanhtet@supermega.dev']) {
+for (const token of ['data-contact-form', 'action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="product"', 'value="website"', 'value="commerce"', 'value="production"', 'name="template"', 'name="goal"', 'name="idempotency_key"', 'x-idempotency-key', 'rate_limited', 'Describe one real workflow or recurring handoff, and note any screenshot or spreadsheet you can share.', 'Company work', 'Website', 'Commerce and orders', 'No account, data connection, automation, or external action begins from this form.', 'swanhtet@supermega.dev']) {
   if (!contact.includes(token)) fail('contact_contract_missing', { token })
 }
 

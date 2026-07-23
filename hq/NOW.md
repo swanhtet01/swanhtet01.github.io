@@ -1,8 +1,8 @@
 # HQ now
 
-Updated: 2026-07-23
+Updated: 2026-07-24
 Owner: founder / CEO
-Mode: guarded release; canonical `__release.json` metadata is the live authority
+Mode: guarded release candidate; production remains isolated
 
 ## North-star outcome
 
@@ -10,54 +10,55 @@ Prove one real workflow in which SuperMega keeps the operating record, a respons
 
 ## Current outcomes
 
-1. **Company system** — validate the simpler Today, Teams, and Operations shell plus one bounded internal agent handoff.
-2. **Product** — validate the revisioned Website-to-Commerce order flow without expanding primary navigation.
-3. **Pilot** — choose one Commerce or Production workflow with an owner, baseline, target, authority boundary, and evidence plan.
-4. **Managed mode** — keep activation locked until tenant data, identity, membership, audit, recovery, runtime role, and source coverage pass.
+1. **Release candidate** — review one combined candidate for the simpler company system, product apps, and managed-backend safety gates.
+2. **Managed persistence** — rehearse the complete private-schema migration and runtime-role contract on isolated hosted PostgreSQL before production activation.
+3. **Pilot** — choose one Commerce or Production workflow with a named owner, baseline, target, authority boundary, and evidence plan.
+4. **AI intake** — keep model execution disconnected until the source-backed order-intake evaluation passes without operational side effects.
 
 ## Current system
 
-- Today, Teams, and Operations are the only primary destinations; Settings is a utility.
-- Teams has one team picker and three views: Work, Agents, and Review. Agent records carry a role, human owner, bounded capabilities, one assignment, evidence, and a human approval boundary. They coordinate work only.
-- Website is the only lazy-loaded product workspace at `/products/website/`; authenticated schema-v3 members sync through the managed API, local sessions stay clearly labelled, and an approved snapshot can create one retained managed Commerce intake without changing stock or creating an order.
-- Commerce and Production remain `/operations/commerce/` and `/operations/production/`; legacy Shop, Plant, and Ecommerce paths redirect into those operating modules.
-- Product uses Discover, Define, Build, Release, and Learn. One shared manifest defines six executable Commerce/Production workflow profiles.
-- The browser-local trial is not a customer system of record. Sends, payments, publishing, merges, deployments, access changes, and production writes require responsible human authority.
+- Home, Work, and Products are the only primary destinations; Settings is a utility.
+- Home reveals one accountable next action, then the three product entries.
+- Work has one team picker and three views: Work, Agents, and Review. On mobile, work records and agent roles use list-to-detail navigation; desktop keeps the split workspace.
+- Products contains Commerce, Production, and Website. No public agent catalogue, demo-domain collection, POS product, or separate internal-console product is in scope.
+- Commerce uses Today, Orders, and Stock. Production uses Today, Jobs, and Problems. Website uses Pages, Navigation, and Publish.
+- Website is the only lazy-loaded product workspace at `/products/website/`. Its local mode is labelled, and its publish workflow records evidence and human approval without deploying a site or changing a domain.
+- The managed backend is the private `app_private` schema and dedicated runtime-role contract in Supabase Postgres. Browser code receives neither the database URL nor a service-role key.
+- Sends, payments, publishing, merges, deployments, access changes, and production writes remain responsible-human actions.
 - Vercel canonical mappings remain `app.supermega.dev` → `megaos`, and `supermega.dev` plus `www.supermega.dev` → `supermega-public`.
-- The OneDrive `codex_hq` archive is unpinned/offline and is not current authority.
 
 ## Latest verification
 
-- Candidate identity is brand `jade-v1-2026-07`, context `2026-07-23.4`, and catalogue `2026-07-23.4`.
-- Product-inclusive lint, strict TypeScript, HQ, one product workspace, one compatibility redirect, six workflow profiles, 24 Website state checks, 12 local order-completion checks, 48 Commerce state checks, 51 Production state checks, 48 release checks, 43 security checks, eleven Vercel contract checks, six RLS checks, and 83 Python tests pass locally.
-- Desktop and 390 px paths have no horizontal overflow. Website content/navigation/publish persistence, Commerce lifecycle controls, and Production output/issues/machine observations pass in the browser without console errors.
-- Team evidence and Product decisions require an attributed human reviewer. Agent handoffs cannot satisfy terminal authority.
-- Website v2 confirms writes, rejects stale evidence, and supports managed-v3 or labelled local state; neither mode can deploy.
-- Website intake retains approved source, SKU, quantity, and actor without moving stock. A human conversion atomically creates one order and reservation. No customer send, payment initiation, delivery request, domain write, or deployment occurs.
-- Inventory can add multiple SKUs with an attributable exact opening movement. Agents may prepare intake only; catalog, order, stock, payment, close, and initialization commands are human-only. No route or tab was added.
-- AI Order Intake now has a strict ephemeral draft contract, exact source spans, twenty Burmese/English/mixed candidate fixtures, and a zero-side-effect offline scorer. No model, endpoint, UI, storage write, command, customer send, or payment action is connected yet.
-- Production v2 remains a revisioned browser-local event record with no machinery control. Release still requires review, owner authorization, and the coordinated `main` workflow.
+- Draft release candidate: GitHub PR `#258` on branch `agent/supermega-release-candidate`; GitHub is the source of truth for its current head. The prior verified base was `3680cb3b55b8c0deb9aae7f0c6f1e87f9cd387da`.
+- GitHub `SuperMega App CI` run `151` passed and the pull request is mergeable.
+- Product-inclusive lint and build pass with 162 product/runtime checks, 50 coordinated-release checks, 44 security checks, 10 migration-chain checks, 11 Vercel environment/domain checks, and 86 Python tests.
+- Mobile and desktop audits cover Home, Products, Commerce, Production, Website, Work, Agents, and Settings. The public mobile Home stays under four viewport lengths with secondary detail closed by default. The bounded audit found no horizontal overflow, visible unlabeled controls, undersized visible controls, or browser warnings/errors.
+- No Vercel deployment was created by the release-candidate push.
+- The connected `supermegabase` project is active and healthy on hosted PostgreSQL 17.6.1. Read-only inspection confirms `app_private`, `app_private.trial_schema_meta`, and `supermega_trial_backend` are not installed.
+- Supabase migration history currently contains one unrelated public-schema RLS migration, not the five SuperMega private-trial migrations.
+- Supabase Security Advisor currently reports 27 informational `rls_enabled_no_policy` findings on existing public tables. Performance Advisor reports 64 informational findings. These are existing-project findings, not proof that the SuperMega private schema is ready.
 
 ## Blockers
 
-- Managed activation still needs a separately validated runtime database URL, v1→v2→v3 migration rehearsal on non-production data, explicit least-privilege `website.write` grants, backup/restore evidence, a high-entropy signing secret, and explicit writes enablement.
+- No isolated Supabase branch or separate non-production project has completed the five-migration PostgreSQL 17.6 rehearsal.
+- The dedicated runtime login, exact role membership, read-only contract audit, cross-workspace denial, revocation, backup, and restore evidence are still missing.
+- The connected production project contains unrelated existing public-schema objects and advisor findings. Do not treat its healthy status or server version as application readiness.
+- Production still needs the server-only database URL, signing secret, explicit memberships/capabilities, writes-disabled smoke test, founder approval, and a separately authorized writes enablement.
 - No pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
-- Vercel has obsolete variable names and legacy hosts; no cleanup is authorized. Durable workflow, AI SDK, telemetry, dense-table, and realtime candidates remain gated.
 
 ## Decisions in force
 
+- PR `#258` is the single integration candidate; its component drafts are not separate release candidates.
+- Do not apply the private-trial migrations to the connected production project before an isolated rehearsal passes.
+- Do not create a paid Supabase branch or project without confirming its organization and cost.
 - One company system; no public agent catalogue, internal-console product, or demo-domain collection.
-- Company system, Commerce, and Production are operating entries. Website remains a separately addressable product workspace with managed-v3 and labelled local modes.
 - AI prepares bounded work from approved records; responsible owners retain consequential authority.
-- Agent Teams is an internal coordination module, not proof of an autonomous runtime.
 - Do not add another CRM, queue, orchestrator, or agent runtime until a measured gap proves it necessary.
 
 ## Next evidence
 
-- Rehearse the managed Website-to-Commerce flow on non-production tenant data with one named user and at least two attributable catalog items through intake, reservation, payment reconciliation, fulfilment, one controlled cancellation, and stock-ledger review; measure handling time and correction effort.
-- Review the twenty candidate AI Order Intake fixtures, run the server-only model against all of them, and connect the existing Orders view only after the source-backed evaluation passes without operational side effects.
-- Specify `action_intent.v1` for one agent-proposed, human-applied cancellation; execution stays blocked until approval and Commerce changes are atomic and the non-production RLS rehearsal passes.
-- Run one named shift user through output, issue, resolution, and machine-state records; measure correction time and compare the event record with the source shift sheet.
-- Exercise one agent assignment from accountable work through attributed evidence and human review.
-- Complete one pilot definition and run its acceptance test.
-- Activate managed persistence only after migration, RLS, backup, and restore rehearsal passes on non-production data.
+1. Approve and provision one isolated hosted PostgreSQL rehearsal target.
+2. Apply the five migrations in filename order, create the dedicated runtime login, and run the read-only v4 validator plus Supabase Security Advisor.
+3. Prove backup/restore, isolation, revocation, optimistic concurrency, and the managed Website-to-Commerce workflow with named users and attributable catalog items.
+4. Repeat the validated migration against production with writes disabled; configure server-only identity and database secrets.
+5. Merge and release the exact reviewed commit only after the coordinated live gates pass; enable writes in a separate owner-approved action.

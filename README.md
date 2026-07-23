@@ -12,7 +12,7 @@ SuperMega builds operating software for Myanmar businesses. The product portfoli
 | Surface | Domain | Routes | Purpose |
 | --- | --- | --- | --- |
 | Public site | `supermega.dev` | `/`, `/contact/`, `/privacy/` | One product story, trust boundary, qualified contact intake, and privacy |
-| Product app | `app.supermega.dev` | `/`, `/work/`, `/operations/commerce/`, `/operations/production/`, `/settings/` | Today, accountable teams, Commerce, Production, pilot setup, evidence, and controls |
+| Product app | `app.supermega.dev` | `/`, `/work/`, `/operations/commerce/`, `/operations/production/`, `/products/website/`, `/settings/` | Home, accountable work, Commerce, Production, Website, pilot setup, evidence, and controls |
 
 Client-specific deployments, legacy demos, and old product names are not part of the current public or application authority.
 
