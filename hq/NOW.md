@@ -19,9 +19,9 @@ Prove one real workflow in which SuperMega keeps the operating record, a respons
 
 - Home, Work, and Products are the only primary destinations; Settings is a utility.
 - Home reveals one accountable next action, then the three product entries.
-- Work has one team picker and Work, Agents, Review. Mobile intake, records, and roles hide repeated overview until Back; desktop stays split. New work appears only in Work, and each view states its purpose.
+- Work has one team picker and Work, Agents, Review. Mobile intake/details focus until Back; desktop stays split. New work appears only in Work.
 - Products contains Commerce, Production, and Website. No public agent catalogue, demo-domain collection, POS product, or separate internal-console product is in scope.
-- Commerce opens on Orders, with Stock and collapsed close controls. Production opens on Jobs, with Problems and collapsed recurring-job intake. Website keeps Pages, Navigation, Publish, and Split on desktop; mobile reduces the primary choice to Edit or Publish, with page, navigation, and search in Site settings.
+- Commerce: Orders, Stock, collapsed close controls. At 1280x800, Review order stays at 562-606px inside its 219-625px panel; mobile stays page-flow. Production: Jobs, Problems, collapsed recurring-job intake. Website: desktop Pages, Navigation, Publish, Split; mobile Edit, Publish, and Site settings.
 - Commerce, Production, and Website have authenticated tenant commands. Managed Production starts from real records and requires human-bound evidence.
 - Website is the only lazy-loaded product workspace. An approved record retains one deterministic site file without deploying a site or changing a domain. Invalid local records remain unchanged, show one Recovery settings action, and can only be removed through the confirmed two-step local reset.
 - The managed backend is the private `app_private` schema and dedicated runtime-role contract in Supabase Postgres. Browser code receives neither the database URL nor a service-role key.
@@ -31,8 +31,8 @@ Prove one real workflow in which SuperMega keeps the operating record, a respons
 
 ## Latest verification
 
-- Draft release candidate: GitHub PR `#258` on branch `agent/supermega-release-candidate`; its validated product implementation head is `ef667f28853fb3d154bf812d140a2d76ddf2ef9f`.
-- GitHub `SuperMega App CI` run `171` passed every validation job for pushed head `ef667f28853fb3d154bf812d140a2d76ddf2ef9f`.
+- Draft release candidate: GitHub PR `#258` on branch `agent/supermega-release-candidate`; its validated product implementation head is `e48d15b35ce0e4122cdae4eb2ab0541d5bcba84f`.
+- GitHub `SuperMega App CI` run `173` passed every validation job for pushed head `e48d15b35ce0e4122cdae4eb2ab0541d5bcba84f`.
 - Candidate lint and build pass with 178 product/runtime checks, 51 coordinated-release checks, 44 security checks, 10 migration-chain checks, 11 Vercel environment/domain checks, and 102 Python tests.
 - The PostgreSQL 17.10 evidence records 20 passing migration, authority, isolation, revocation, recovery, and validator checks across two clean TLS clusters. Cleanup passed; external systems were unchanged.
 - 375px browser audits show no overflow, undersized controls, or console errors. Website exposes one 44px Recovery settings action; reset scope was inspected without deletion. Work moves agent detail from 579px to 72px and its first field from 773px to 266px; work detail and new-work intake also start at 72px. Review Prepare moved from 806px to 724px.
