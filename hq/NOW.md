@@ -29,12 +29,13 @@ Prove one real workflow in which SuperMega keeps the operating record, a respons
 ## Latest verification
 
 - Candidate identity is brand `jade-v1-2026-07`, context `2026-07-23.4`, and catalogue `2026-07-23.4`.
-- Product-inclusive lint, strict TypeScript, HQ, one product workspace, one compatibility redirect, six workflow profiles, 24 Website state checks, 12 local order-completion checks, 48 Commerce state checks, 51 Production state checks, 48 release checks, 43 security checks, eleven Vercel contract checks, six RLS checks, and 74 Python tests pass locally.
+- Product-inclusive lint, strict TypeScript, HQ, one product workspace, one compatibility redirect, six workflow profiles, 24 Website state checks, 12 local order-completion checks, 48 Commerce state checks, 51 Production state checks, 48 release checks, 43 security checks, eleven Vercel contract checks, six RLS checks, and 83 Python tests pass locally.
 - Desktop and 390 px paths have no horizontal overflow. Website content/navigation/publish persistence, Commerce lifecycle controls, and Production output/issues/machine observations pass in the browser without console errors.
 - Team evidence and Product decisions require an attributed human reviewer. Agent handoffs cannot satisfy terminal authority.
 - Website v2 confirms writes, rejects stale evidence, and supports managed-v3 or labelled local state; neither mode can deploy.
 - Website intake retains approved source, SKU, quantity, and actor without moving stock. A human conversion atomically creates one order and reservation. No customer send, payment initiation, delivery request, domain write, or deployment occurs.
 - Inventory can add multiple SKUs with an attributable exact opening movement. Agents may prepare intake only; catalog, order, stock, payment, close, and initialization commands are human-only. No route or tab was added.
+- AI Order Intake now has a strict ephemeral draft contract, exact source spans, twenty Burmese/English/mixed candidate fixtures, and a zero-side-effect offline scorer. No model, endpoint, UI, storage write, command, customer send, or payment action is connected yet.
 - Production v2 remains a revisioned browser-local event record with no machinery control. Release still requires review, owner authorization, and the coordinated `main` workflow.
 
 ## Blockers
@@ -54,7 +55,7 @@ Prove one real workflow in which SuperMega keeps the operating record, a respons
 ## Next evidence
 
 - Rehearse the managed Website-to-Commerce flow on non-production tenant data with one named user and at least two attributable catalog items through intake, reservation, payment reconciliation, fulfilment, one controlled cancellation, and stock-ledger review; measure handling time and correction effort.
-- Define and evaluate the source-backed AI Order Intake draft against twenty approved synthetic fixtures before connecting a model or adding another product surface.
+- Review the twenty candidate AI Order Intake fixtures, run the server-only model against all of them, and connect the existing Orders view only after the source-backed evaluation passes without operational side effects.
 - Specify `action_intent.v1` for one agent-proposed, human-applied cancellation; execution stays blocked until approval and Commerce changes are atomic and the non-production RLS rehearsal passes.
 - Run one named shift user through output, issue, resolution, and machine-state records; measure correction time and compare the event record with the source shift sheet.
 - Exercise one agent assignment from accountable work through attributed evidence and human review.
