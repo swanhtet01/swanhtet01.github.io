@@ -21,6 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from supermega_runtime.cloud_runtime import router as cloud_runtime_router
 from supermega_runtime.commerce_runtime import reduce_commerce_state
+from supermega_runtime.production_runtime import reduce_production_state
 from supermega_runtime.supabase_auth import SupabaseAuthConfig, verify_supabase_user_token
 from supermega_runtime.trial_runtime import create_trial_router
 from supermega_runtime.trial_store import (
@@ -34,7 +35,6 @@ SERVICE_NAME = "supermega-service"
 SERVICE_VERSION = "1.1.0"
 TRIAL_EVENT_BY_SURFACE = {
     "company": "company.snapshot.saved",
-    "production": "production.snapshot.saved",
     "setup": "setup.snapshot.saved",
 }
 _IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
@@ -106,10 +106,12 @@ def reduce_trial_state(
     current: Mapping[str, Any],
     payload: Mapping[str, Any],
 ) -> Mapping[str, Any]:
-    """Reduce one bounded command, with explicit lifecycle rules for Commerce."""
+    """Reduce one bounded command, with explicit lifecycle rules for Commerce and Production."""
 
     if surface == "commerce":
         state = reduce_commerce_state(event_type, current, payload)
+    elif surface == "production":
+        state = reduce_production_state(event_type, current, payload)
     else:
         expected_event = TRIAL_EVENT_BY_SURFACE.get(surface)
         if event_type != expected_event:

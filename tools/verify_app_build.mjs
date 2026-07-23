@@ -9,7 +9,7 @@ let orderCompletionRuntimeChecks = 0
 let commerceRuntimeChecks = 0
 let productionRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
-const [manifestText, appPackageText, appSource, coreSource, commerceSource, managedTrialSource, managedCommerceRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, publishSource, commerceIntakeSource, handoffSource] = await Promise.all([
+const [manifestText, appPackageText, appSource, coreSource, commerceSource, managedTrialSource, managedCommerceRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, publishSource, commerceIntakeSource, handoffSource] = await Promise.all([
   readFile(resolve(root, 'site-manifest.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'package.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'App.tsx'), 'utf8'),
@@ -17,6 +17,7 @@ const [manifestText, appPackageText, appSource, coreSource, commerceSource, mana
   readFile(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'managed-trial.ts'), 'utf8'),
   readFile(resolve(root, 'supermega_runtime', 'commerce_runtime.py'), 'utf8'),
+  readFile(resolve(root, 'supermega_runtime', 'production_runtime.py'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'production-workspace.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'TeamWorkspace.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'AgentTeamsPanel.tsx'), 'utf8'),
@@ -119,6 +120,12 @@ if (!coreSource.includes("const commerceTabs") || !coreSource.includes("{ id: 't
 if (!productionSource.includes("supermega.production.workspace.v2") || !productionSource.includes('mutateProductionWorkspace') || !productionSource.includes('lockManager.request') || !productionSource.includes('next.revision !== current.revision + 1')) fail('production_v2_locked_store_missing')
 if (!productionSource.includes("'output_recorded' | 'issue_opened' | 'issue_resolved' | 'machine_state_changed'") || !productionSource.includes('events: [event, ...state.events]') || !productionSource.includes('Production revision must equal the append-only event count.')) fail('production_append_only_record_missing')
 if (!productionSource.includes('currentRaw !== null') || !productionSource.includes('Migration failed closed') || !productionSource.includes('events: []')) fail('production_migration_fail_closed_contract_missing')
+if (!managedTrialSource.includes('saveManagedProductionCommand') || !managedTrialSource.includes("surface: 'production'") || !managedTrialSource.includes("'production.workspace.initialized'") || !managedTrialSource.includes('ManagedProductionEvent')) fail('managed_production_command_client_missing')
+for (const eventType of ['production.workspace.initialized', 'production.output.recorded', 'production.issue.opened', 'production.issue.resolved', 'production.machine.state_changed']) {
+  if (!coreSource.includes(eventType) || !managedProductionRuntime.includes(eventType)) fail(`managed_production_event_missing:${eventType}`)
+}
+if (!coreSource.includes('Create managed Production') || !coreSource.includes('No browser demo output, issues, or machine history is copied') || !coreSource.includes('This records state; it does not control equipment.') || !coreSource.includes("error.code === 'trial_version_conflict'") || !coreSource.includes("result.surface !== 'production'")) fail('managed_production_ui_not_fail_closed')
+if (managedProductionRuntime.includes('production.snapshot.saved') || !managedProductionRuntime.includes('_new_event') || !managedProductionRuntime.includes('command evidence must match the appended Production event.') || !managedProductionRuntime.includes('Production initialization requires jobs and machines with no output or operating history.')) fail('managed_production_server_transition_contract_missing')
 const productionTabsContract = coreSource.slice(coreSource.indexOf('const productionTabs'), coreSource.indexOf('function uid'))
 if (!productionTabsContract.includes("{ id: 'today', label: 'Today' }") || !productionTabsContract.includes("{ id: 'production', label: 'Production' }") || !productionTabsContract.includes("{ id: 'control', label: 'Issues & equipment' }") || (productionTabsContract.match(/^\s*\{ id:/gm) || []).length !== 3) fail('production_three_tab_contract_changed')
 const productionPageContract = coreSource.slice(coreSource.indexOf('function ProductionPage'), coreSource.indexOf('function JobList'))
