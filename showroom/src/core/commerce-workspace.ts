@@ -39,7 +39,7 @@ export type CommerceOrder = {
   status: CommerceOrderStatus
 }
 
-export type CommerceStockMovementKind = 'reserve' | 'release' | 'receipt'
+export type CommerceStockMovementKind = 'opening' | 'reserve' | 'release' | 'receipt'
 
 export type CommerceStockMovement = {
   id: string
@@ -132,7 +132,7 @@ export type CommerceMutationResult =
 const orderStatuses: CommerceOrderStatus[] = ['confirmed', 'preparing', 'ready', 'completed', 'cancelled']
 const paymentStatuses: CommercePaymentStatus[] = ['pending', 'reconciled']
 const refundStatuses: CommerceRefundStatus[] = ['none', 'due']
-const movementKinds: CommerceStockMovementKind[] = ['reserve', 'release', 'receipt']
+const movementKinds: CommerceStockMovementKind[] = ['opening', 'reserve', 'release', 'receipt']
 const websiteIntakeStatuses: CommerceWebsiteIntakeStatus[] = ['pending_confirmation', 'converted']
 const websiteIntakeIdPattern = /^WINT-[A-Z0-9-]{8,80}$/
 const websiteFingerprintPattern = /^web-[a-f0-9]{8}$/
@@ -313,6 +313,11 @@ export function validateCommerceState(value: unknown): CommerceState {
     for (const field of ['actor', 'reason', 'evidenceReference', 'sku'] as const) requiredText(candidate[field], `movements[${index}].${field}`)
     if (!itemSkus.includes(candidate.sku as string)) throw new Error(`movements[${index}].sku is unknown.`)
     if (!movementKinds.includes(candidate.kind as CommerceStockMovementKind)) throw new Error(`movements[${index}].kind is invalid.`)
+    if (candidate.kind === 'opening') {
+      assertSafeInteger(candidate.quantityDelta, `movements[${index}].quantityDelta`)
+      if (candidate.orderId !== undefined) throw new Error(`movements[${index}] opening balance cannot reference an order.`)
+      continue
+    }
     if (!Number.isSafeInteger(candidate.quantityDelta) || candidate.quantityDelta === 0) throw new Error(`movements[${index}].quantityDelta is invalid.`)
     if (candidate.kind === 'reserve' && Number(candidate.quantityDelta) >= 0) throw new Error(`movements[${index}] reserve must be negative.`)
     if (candidate.kind !== 'reserve' && Number(candidate.quantityDelta) <= 0) throw new Error(`movements[${index}] release or receipt must be positive.`)
@@ -749,6 +754,31 @@ export function convertCommerceWebsiteIntake(
       conversion,
     } : candidate),
   })
+}
+
+export function registerCommerceItem(state: CommerceState, item: CommerceItem, proof: CommerceActionProof) {
+  const sku = optionalText(item.sku)
+  const name = optionalText(item.name)
+  const variant = item.variant === undefined ? undefined : optionalText(item.variant)
+  if (!validProof(proof)
+    || !sku || sku !== item.sku
+    || !name || name !== item.name
+    || (item.variant !== undefined && variant !== item.variant)
+    || !Number.isSafeInteger(item.onHand) || item.onHand < 0
+    || !Number.isSafeInteger(item.reorderAt) || item.reorderAt < 0
+    || !Number.isSafeInteger(item.price) || item.price < 1) return null
+  const proofMovement = state.movements.find((movement) => movement.actionId === proof.actionId)
+  if (proofMovement) {
+    const storedItem = state.items.find((candidate) => candidate.sku === item.sku)
+    return proofMovement.kind === 'opening'
+      && proofMovement.sku === item.sku
+      && proofMovement.quantityDelta === item.onHand
+      && sameProof(proofMovement, proof)
+      && JSON.stringify(storedItem) === JSON.stringify(item) ? state : null
+  }
+  if (actionIdIsUsed(state, proof.actionId) || state.items.some((candidate) => candidate.sku === item.sku)) return null
+  const opening = movementFor(proof, { kind: 'opening', sku: item.sku, quantityDelta: item.onHand })
+  return validateCommerceState({ ...state, items: [item, ...state.items], movements: [opening, ...state.movements] })
 }
 
 export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder, proof: CommerceActionProof) {

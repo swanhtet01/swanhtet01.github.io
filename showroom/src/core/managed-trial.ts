@@ -43,6 +43,7 @@ export type ManagedStateRecord = {
 
 export type ManagedCommerceEvent =
   | 'commerce.workspace.initialized'
+  | 'commerce.item.created'
   | 'commerce.website_intake.created'
   | 'commerce.website_intake.converted'
   | 'commerce.order.created'

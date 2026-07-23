@@ -15,6 +15,7 @@ COMMERCE_SCHEMA = "supermega.commerce.workspace.v2"
 COMMERCE_EVENTS = frozenset(
     {
         "commerce.workspace.initialized",
+        "commerce.item.created",
         "commerce.order.created",
         "commerce.order.advanced",
         "commerce.order.cancelled",
@@ -30,7 +31,7 @@ _ORDER_STATUSES = ("confirmed", "preparing", "ready", "completed", "cancelled")
 _NEXT_ORDER_STATUS = {"confirmed": "preparing", "preparing": "ready", "ready": "completed"}
 _PAYMENT_STATUSES = ("pending", "reconciled")
 _REFUND_STATUSES = ("none", "due")
-_MOVEMENT_KINDS = ("reserve", "release", "receipt")
+_MOVEMENT_KINDS = ("opening", "reserve", "release", "receipt")
 _WEBSITE_INTAKE_STATUSES = ("pending_confirmation", "converted")
 _MAX_SAFE_INTEGER = 9_007_199_254_740_991
 _WEBSITE_FINGERPRINT_PATTERN = re.compile(r"web-[a-f0-9]{8}")
@@ -273,15 +274,18 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         kind = movement["kind"]
         if kind not in _MOVEMENT_KINDS:
             raise TrialValidationError(f"movements[{index}].kind is invalid.")
-        quantity_delta = _integer(abs(movement["quantityDelta"]) if isinstance(movement["quantityDelta"], int) and not isinstance(movement["quantityDelta"], bool) else movement["quantityDelta"], f"movements[{index}].quantityDelta", minimum=1)
-        signed_delta = movement["quantityDelta"]
-        if kind == "reserve" and signed_delta >= 0:
-            raise TrialValidationError(f"movements[{index}] reserve must be negative.")
-        if kind != "reserve" and signed_delta <= 0:
-            raise TrialValidationError(f"movements[{index}] release or receipt must be positive.")
-        if kind == "receipt":
+        if kind == "opening":
+            quantity_delta = _integer(movement["quantityDelta"], f"movements[{index}].quantityDelta")
+        else:
+            quantity_delta = _integer(abs(movement["quantityDelta"]) if isinstance(movement["quantityDelta"], int) and not isinstance(movement["quantityDelta"], bool) else movement["quantityDelta"], f"movements[{index}].quantityDelta", minimum=1)
+            signed_delta = movement["quantityDelta"]
+            if kind == "reserve" and signed_delta >= 0:
+                raise TrialValidationError(f"movements[{index}] reserve must be negative.")
+            if kind != "reserve" and signed_delta <= 0:
+                raise TrialValidationError(f"movements[{index}] release or receipt must be positive.")
+        if kind in {"opening", "receipt"}:
             if "orderId" in movement:
-                raise TrialValidationError(f"movements[{index}] receipt cannot reference an order.")
+                raise TrialValidationError(f"movements[{index}] {kind} cannot reference an order.")
         else:
             order_id = _text(movement.get("orderId"), f"movements[{index}].orderId", maximum=160)
             order = order_by_id.get(order_id)
@@ -468,6 +472,7 @@ def _validate_event_evidence(event_type: str, next_state: Mapping[str, Any], evi
             raise TrialValidationError("command evidence must match the Website intake conversion proof.")
 
     movement_kind = {
+        "commerce.item.created": "opening",
         "commerce.order.created": "reserve",
         "commerce.order.cancelled": "release",
         "commerce.stock.received": "receipt",
@@ -573,6 +578,25 @@ def _validate_new_order_and_reservation(
 def _validate_created(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
     _validate_new_order_and_reservation(current, next_state, event_type="commerce.order.created")
     _require_website_intakes_unchanged(current, next_state)
+
+
+def _validate_item_created(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
+    _require_unchanged(current, next_state, "orders", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    if len(next_state["items"]) != len(current["items"]) + 1 or next_state["items"][1:] != current["items"]:
+        raise TrialValidationError("commerce.item.created must prepend exactly one catalog item.")
+    if len(next_state["movements"]) != len(current["movements"]) + 1 or next_state["movements"][1:] != current["movements"]:
+        raise TrialValidationError("commerce.item.created must prepend exactly one opening balance.")
+    item = next_state["items"][0]
+    movement = next_state["movements"][0]
+    if (
+        movement.get("kind") != "opening"
+        or movement.get("sku") != item["sku"]
+        or movement.get("quantityDelta") != item["onHand"]
+        or "orderId" in movement
+        or movement.get("id") != f"MOV-{movement.get('actionId')}"
+    ):
+        raise TrialValidationError("a new catalog item requires one exact attributable opening balance.")
 
 
 def _validate_advanced(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
@@ -686,6 +710,7 @@ def _validate_website_intake_converted(current: Mapping[str, Any], next_state: M
 
 
 _TRANSITION_VALIDATORS = {
+    "commerce.item.created": _validate_item_created,
     "commerce.order.created": _validate_created,
     "commerce.order.advanced": _validate_advanced,
     "commerce.order.cancelled": _validate_cancelled,
