@@ -11,7 +11,7 @@ let websiteRuntimeChecks = 0
 let commerceRuntimeChecks = 0
 let productionRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
-const [manifestText, appPackageText, appSource, coreSource, commerceSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, publishSource, sitePreviewSource, websiteModelSource, websiteWorkspaceSource, websiteCssSource, commerceIntakeSource, handoffSource] = await Promise.all([
+const [manifestText, appPackageText, appSource, coreSource, commerceSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteWorkspaceSource, websiteCssSource, commerceIntakeSource, handoffSource] = await Promise.all([
   readFile(resolve(root, 'site-manifest.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'package.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'App.tsx'), 'utf8'),
@@ -25,7 +25,9 @@ const [manifestText, appPackageText, appSource, coreSource, commerceSource, chan
   readFile(resolve(root, 'showroom', 'src', 'core', 'AgentTeamsPanel.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'team-work.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'WebsiteProduct.tsx'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'ContentWorkspace.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'PublishWorkspace.tsx'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'publish-workspace.css'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'SitePreview.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-model.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'useWebsiteWorkspace.ts'), 'utf8'),
@@ -108,7 +110,10 @@ if (!coreSource.includes('view=work&item=${item.id}') || !coreSource.includes('v
 if (!appSource.includes("lazy(() => import('./products/website/WebsiteProduct')") || !appSource.includes('Suspense') || appSource.includes("import('./products/ecommerce/EcommerceOrdersProduct')")) fail('website_prototype_route_not_isolated')
 if (!appSource.includes('<Navigate replace to="/operations/commerce/?tab=orders" />') || !appSource.includes('path="products/ecommerce/*"')) fail('legacy_ecommerce_route_not_redirected')
 if (!appPackage.scripts?.lint?.includes('src/products')) fail('prototype_sources_not_linted')
-if (!websiteSource.includes('No website has been deployed.') || !websiteSource.includes('No deployment occurred.') || !websiteSource.includes('Domain and deployment remain separate approval-gated actions.')) fail('website_deployment_boundary_missing')
+if (!websiteSource.includes('No website has been deployed.')
+  || !websiteSource.includes('No deployment occurred.')
+  || !publishSource.includes('No deployment, domain write, payment, stock, customer message, or order change happens here.')
+  || !publishSource.includes('It does not publish a website.')) fail('website_deployment_boundary_missing')
 if (!websiteModelSource.includes("supermega.website.workspace.v2") || !websiteModelSource.includes('LEGACY_WEBSITE_STORAGE_KEY') || !websiteModelSource.includes('mutateWebsiteWorkspace') || !websiteModelSource.includes('WEBSITE_MUTATION_LOCK') || !websiteModelSource.includes('preservesAppendOnlyHistory') || !websiteModelSource.includes('canonicalJson')) fail('website_v2_locked_store_missing')
 if (!websiteModelSource.includes('contentRevision') || !websiteModelSource.includes('evidenceIds') || !websiteModelSource.includes('migratedFromV1') || !websiteModelSource.includes('getCurrentApproval') || !websiteModelSource.includes('getCurrentPublish')) fail('website_release_provenance_missing')
 if (!sitePreviewSource.includes("ctaHref.startsWith('https://')") || !sitePreviewSource.includes("ctaHref.startsWith('#')") || !sitePreviewSource.includes('aria-disabled="true"')) fail('website_preview_destination_guard_missing')
@@ -121,8 +126,37 @@ const websiteHydration = websiteWorkspaceSource.slice(websiteHydrationStart, web
 if (websiteHydration.indexOf('try {') < 0 || websiteHydration.indexOf('try {') > websiteHydration.indexOf('currentManagedIdentity()') || websiteHydration.indexOf('finally') < websiteHydration.indexOf('currentManagedIdentity()')) fail('managed_website_identity_failure_can_stick_hydration')
 const websiteTabsContract = websiteSource.slice(websiteSource.indexOf('const workspaceViews'), websiteSource.indexOf('const viewCopy'))
 if ((websiteTabsContract.match(/^\s*\{ id:/gm) || []).length !== 3 || !websiteTabsContract.includes("label: 'Content'") || !websiteTabsContract.includes("label: 'Navigation'") || !websiteTabsContract.includes("label: 'Publish'") || !websiteSource.includes('role="tablist"') || !websiteSource.includes('role="tabpanel"') || !websiteSource.includes("event.key === 'ArrowRight'") || !websiteSource.includes('tabIndex={view === item.id ? 0 : -1}')) fail('website_three_view_accessibility_contract_changed')
+if (!websiteSource.includes("const [surface, setSurface] = useState<'work' | 'preview'>('work')")
+  || !websiteSource.includes('aria-label="Website workspace surface"')
+  || !websiteSource.includes('data-surface={surface}')
+  || !websiteSource.includes("setSurface('work')")
+  || !websiteSource.includes('data-split={splitPreview')
+  || !websiteSource.includes('setSplitPreview(false)')) fail('website_mobile_focus_mode_missing')
+if (!websiteCssSource.includes('.website-workspace-grid[data-surface="work"] > .website-preview-surface')
+  || !websiteCssSource.includes('.website-workspace-grid[data-surface="preview"] > .website-work-surface')
+  || !websiteCssSource.includes('.website-workspace-grid[data-surface="preview"] > .website-preview-surface')
+  || !websiteCssSource.includes('.website-split-control')
+  || !websiteCssSource.includes('display: none')) fail('website_mobile_panels_not_bounded')
+if (!contentSource.includes("type EditorSection = 'page' | 'hero' | 'sections' | 'seo'")
+  || !contentSource.includes('aria-label="Page section to edit"')
+  || !contentSource.includes('data-editor-section={editorSection}')
+  || !websiteCssSource.includes('.website-editor-scroll[data-editor-section] > [data-content-section]')) fail('website_content_focus_contract_missing')
+if (!publishSource.includes("type PublishStep = 'checks' | 'evidence' | 'approval' | 'snapshot'")
+  || !publishSource.includes("{ id: 'checks', label: 'Checks' }")
+  || !publishSource.includes("{ id: 'evidence', label: 'Evidence' }")
+  || !publishSource.includes("{ id: 'approval', label: 'Approval' }")
+  || !publishSource.includes("{ id: 'snapshot', label: 'Snapshot & handoff' }")
+  || !publishSource.includes('aria-current={activeStep === step.id')
+  || !publishSource.includes("activeStep === 'checks'")
+  || !publishSource.includes("activeStep === 'evidence'")
+  || !publishSource.includes("activeStep === 'approval'")
+  || !publishSource.includes("activeStep === 'snapshot'")
+  || !publishCssSource.includes('grid-template-columns: repeat(4, minmax(0, 1fr))')
+  || !publishCssSource.includes('grid-template-columns: repeat(2, minmax(0, 1fr))')
+  || !publishCssSource.includes('font-size: 16px')) fail('website_publish_task_flow_missing')
 const websiteMobileCss = websiteCssSource.slice(websiteCssSource.indexOf('@media (max-width: 640px)'), websiteCssSource.indexOf('@media (prefers-reduced-motion'))
-if (!websiteMobileCss.includes('.website-preview-controls') || !websiteMobileCss.includes('display: flex') || websiteMobileCss.includes('.website-preview-controls {\n    display: none')) fail('website_mobile_review_controls_hidden')
+const websitePreviewControlsHiddenUnconditionally = /(?:^|\n)\s*\.website-preview-controls\s*\{\s*display:\s*none/.test(websiteMobileCss)
+if (!websiteMobileCss.includes('.website-preview-controls') || !websiteMobileCss.includes('display: flex') || websitePreviewControlsHiddenUnconditionally) fail('website_mobile_review_controls_hidden')
 if (!websiteMobileCss.includes('.website-handoff-controls input') || !websiteMobileCss.includes('min-height: 44px') || !websiteMobileCss.includes('font-size: 12px')) fail('website_mobile_handoff_controls_undersized')
 if (!commerceIntakeSource.includes('Browser-local evidence only.') || !commerceIntakeSource.includes('No customer message, payment, delivery request, or external write occurs.')) fail('commerce_intake_boundary_missing')
 if (!coreSource.includes('Start from a channel message')
@@ -161,7 +195,7 @@ if (!websiteSource.includes('approvalIsCurrent || !publishIsCurrent')
   || !websiteSource.includes('writeWebsiteEcommerceHandoff(handoff, workspace)')
   || !websiteSource.includes('createCommerceWebsiteIntake(current')
   || !websiteSource.includes("storageMode === 'managed' ? 'managed' : 'local'")
-  || !publishSource.includes('No stock, payment, customer message, or order changes')) fail('website_handoff_gate_missing')
+  || !publishSource.includes('No deployment, domain write, payment, stock, customer message, or order change happens here.')) fail('website_handoff_gate_missing')
 if (!commerceIntakeSource.includes('acceptWebsiteEcommerceHandoff') || !commerceIntakeSource.includes('matches.length === 1') || !commerceIntakeSource.includes('createWebsiteOrderDraft(context.handoff.id') || !commerceIntakeSource.includes('I reviewed this SKU, quantity, and Website evidence.')) fail('commerce_intake_approval_contract_missing')
 if (!commerceIntakeSource.includes('await completeWebsiteOrderDraft') || !commerceIntakeSource.includes('opaque customer reference generated on completion') || !commerceIntakeSource.includes('Create ready order') || !commerceIntakeSource.includes('Confirm into orders')) fail('commerce_order_completion_ui_missing')
 if (!coreSource.includes('function queueWebsiteOrder') || !coreSource.includes('sourceRecordId') || !coreSource.includes('item.price !== line.unitPriceMmk') || !coreSource.includes('Website order confirmation failed closed') || !coreSource.includes('Confirm ${record.id} from Website')) fail('website_order_not_integrated_with_commerce')
