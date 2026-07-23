@@ -1,11 +1,15 @@
 param(
     [string]$BaseUrl = "http://127.0.0.1:8787",
     [string]$Username = "owner",
-    [string]$Password = "supermega-demo",
+    [string]$Password = $env:SUPERMEGA_APP_PASSWORD,
     [string]$WorkspaceSlug = "supermega-lab"
 )
 
 $ErrorActionPreference = "Stop"
+
+if ([string]::IsNullOrWhiteSpace($Password)) {
+    throw "Set SUPERMEGA_APP_PASSWORD before starting the private SuperMega MCP server."
+}
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Split-Path -Parent $scriptDir

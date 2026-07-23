@@ -1,15 +1,16 @@
 {
   "name": "@supermega/mark1-mcp",
-  "version": "1.0.0",
-  "description": "Mark 1 MCP Server — Expose SuperMega workspace as tools for Claude Code, Cline, Cursor, Windsurf",
+  "version": "2.1.0",
+  "description": "Private SuperMega operations MCP server with a review-safe default tool surface",
   "type": "module",
   "bin": {
     "mark1-mcp": "./server.mjs"
   },
   "scripts": {
-    "start": "node server.mjs"
+    "start": "node server.mjs",
+    "submission:verify": "node ../tools/verify_mark1_mcp_submission.mjs"
   },
-  "keywords": ["mcp", "ai", "workspace", "claude", "cursor", "cline"],
+  "keywords": ["mcp", "chatgpt", "ai", "private-operations", "workspace"],
   "author": "Swan Htet <swanhtet@supermega.dev>",
   "license": "MIT",
   "dependencies": {}

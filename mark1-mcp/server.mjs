@@ -2,16 +2,16 @@
 
 import { execSync } from 'child_process';
 import { readdirSync, statSync } from 'fs';
-import { resolve } from 'path';
+import { dirname, resolve } from 'path';
+import { fileURLToPath } from 'url';
 
 const BASE_URL = (process.env.SUPERMEGA_BASE_URL || 'http://127.0.0.1:8787').replace(/\/$/, '');
-const USERNAME = String(process.env.SUPERMEGA_APP_USERNAME || 'owner').trim();
-const PASSWORD = String(process.env.SUPERMEGA_APP_PASSWORD || 'supermega-demo').trim();
+const USERNAME = String(process.env.SUPERMEGA_APP_USERNAME || '').trim();
+const PASSWORD = String(process.env.SUPERMEGA_APP_PASSWORD || '').trim();
 const WORKSPACE = String(process.env.SUPERMEGA_WORKSPACE_SLUG || 'supermega-lab').trim();
-const REPO_ROOT = String(
-  process.env.SUPERMEGA_REPO_ROOT ||
-    'C:\\Users\\swann\\OneDrive - BDA\\swanhtet01.github.io.worktrees\\copilot-worktree-2026-03-04T08-10-33',
-).trim();
+const SERVER_ROOT = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = String(process.env.SUPERMEGA_REPO_ROOT || resolve(SERVER_ROOT, '..')).trim();
+const ENABLE_LOCAL_TOOLS = process.env.SUPERMEGA_ENABLE_LOCAL_TOOLS === 'true';
 
 let cookieHeader = '';
 let initialized = false;
@@ -23,13 +23,25 @@ function writeMessage(payload) {
   process.stdout.write(Buffer.concat([header, body]));
 }
 
-function toolText(text) {
-  return { content: [{ type: 'text', text }] };
+function toolData(data) {
+  return {
+    content: [{ type: 'text', text: typeof data === 'string' ? data : JSON.stringify(data, null, 2) }],
+    structuredContent: { data },
+  };
+}
+
+function boundedInteger(value, fallback, minimum, maximum) {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed)) return fallback;
+  return Math.max(minimum, Math.min(parsed, maximum));
 }
 
 async function loginIfNeeded(force = false) {
   if (cookieHeader && !force) {
     return cookieHeader;
+  }
+  if (!USERNAME || !PASSWORD) {
+    throw new Error('SuperMega credentials are not configured for private API access.');
   }
 
   const response = await fetch(`${BASE_URL}/api/auth/login`, {
@@ -100,7 +112,6 @@ function listTopFiles(rootPath) {
       const stats = statSync(fullPath);
       return {
         name,
-        fullPath,
         type: stats.isDirectory() ? 'dir' : 'file',
       };
     })
@@ -108,93 +119,177 @@ function listTopFiles(rootPath) {
     .slice(0, 80);
 }
 
+const SAFE_LEAD_FIELDS = [
+  'lead_id',
+  'company_name',
+  'archetype',
+  'stage',
+  'status',
+  'owner',
+  'campaign_goal',
+  'service_pack',
+  'wedge_product',
+  'starter_modules',
+  'semi_products',
+  'website',
+  'source',
+  'source_url',
+  'provider',
+  'score',
+  'created_at',
+  'synced_at',
+];
+
+function redactLeadPipeline(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return payload;
+  const rows = Array.isArray(payload.rows)
+    ? payload.rows.map((row) => {
+        if (!row || typeof row !== 'object' || Array.isArray(row)) return {};
+        return Object.fromEntries(SAFE_LEAD_FIELDS.filter((field) => field in row).map((field) => [field, row[field]]));
+      })
+    : [];
+  return { ...payload, rows };
+}
+
+const TOOL_OUTPUT_SCHEMA = {
+  type: 'object',
+  properties: { data: {} },
+  required: ['data'],
+  additionalProperties: false,
+};
+
 function buildTools() {
-  return [
+  const tools = [
     {
       name: 'mark1_status',
-      description: 'Get health and summary from the live SuperMega app.',
-      inputSchema: { type: 'object', properties: {}, required: [] },
+      description: 'Read health and operating-summary data from the configured private SuperMega workspace.',
+      inputSchema: { type: 'object', properties: {}, required: [], additionalProperties: false },
+      outputSchema: TOOL_OUTPUT_SCHEMA,
+      annotations: { readOnlyHint: true, openWorldHint: false, destructiveHint: false },
     },
     {
       name: 'mark1_insights',
-      description: 'Get the current operating brief and recommended actions.',
-      inputSchema: { type: 'object', properties: {}, required: [] },
+      description: 'Read the current private operating brief and its recommended actions without changing workspace state.',
+      inputSchema: { type: 'object', properties: {}, required: [], additionalProperties: false },
+      outputSchema: TOOL_OUTPUT_SCHEMA,
+      annotations: { readOnlyHint: true, openWorldHint: false, destructiveHint: false },
     },
     {
       name: 'mark1_exceptions',
-      description: 'Get the live exception queue from the private app.',
+      description: 'Read a bounded page of current exceptions from the configured private SuperMega workspace.',
       inputSchema: {
         type: 'object',
         properties: {
-          limit: { type: 'number', description: 'Maximum rows to return' },
+          limit: { type: 'integer', minimum: 1, maximum: 50, description: 'Maximum exception records to return' },
         },
         required: [],
+        additionalProperties: false,
       },
+      outputSchema: TOOL_OUTPUT_SCHEMA,
+      annotations: { readOnlyHint: true, openWorldHint: false, destructiveHint: false },
     },
     {
       name: 'mark1_approvals',
-      description: 'List approvals or create a new approval item.',
+      description: 'List private approval items, or create one pending private approval when action is create.',
       inputSchema: {
         type: 'object',
         properties: {
           action: { type: 'string', enum: ['list', 'create'], description: 'Approval action' },
-          limit: { type: 'number', description: 'Maximum rows to return for list' },
-          title: { type: 'string' },
-          summary: { type: 'string' },
-          approval_gate: { type: 'string' },
-          requested_by: { type: 'string' },
-          owner: { type: 'string' },
-          due: { type: 'string' },
-          related_route: { type: 'string' },
-          related_entity: { type: 'string' },
+          limit: { type: 'integer', minimum: 1, maximum: 50, description: 'Maximum approval records to return for list' },
+          title: { type: 'string', maxLength: 120 },
+          summary: { type: 'string', maxLength: 1000 },
+          approval_gate: { type: 'string', maxLength: 80 },
+          requested_by: { type: 'string', maxLength: 80 },
+          owner: { type: 'string', maxLength: 80 },
+          due: { type: 'string', maxLength: 40 },
+          related_route: { type: 'string', maxLength: 200 },
+          related_entity: { type: 'string', maxLength: 120 },
         },
         required: ['action'],
+        additionalProperties: false,
       },
+      outputSchema: TOOL_OUTPUT_SCHEMA,
+      annotations: { readOnlyHint: false, openWorldHint: false, destructiveHint: false },
     },
     {
       name: 'mark1_leads',
-      description: 'List the saved lead pipeline from the live workspace.',
-      inputSchema: { type: 'object', properties: {}, required: [] },
+      description: 'Read a redacted private lead pipeline without contact details, outreach messages, discovery notes, or free-form notes.',
+      inputSchema: { type: 'object', properties: {}, required: [], additionalProperties: false },
+      outputSchema: TOOL_OUTPUT_SCHEMA,
+      annotations: { readOnlyHint: true, openWorldHint: false, destructiveHint: false },
     },
-    {
+  ];
+
+  if (ENABLE_LOCAL_TOOLS) tools.push({
       name: 'mark1_files',
-      description: 'List top-level files and folders in the SuperMega repo root.',
-      inputSchema: { type: 'object', properties: {}, required: [] },
-    },
-    {
+      description: 'List top-level names and types in the configured local SuperMega repository; available only in explicit internal-local mode.',
+      inputSchema: { type: 'object', properties: {}, required: [], additionalProperties: false },
+      outputSchema: TOOL_OUTPUT_SCHEMA,
+      annotations: { readOnlyHint: true, openWorldHint: false, destructiveHint: false },
+    }, {
       name: 'mark1_execute',
-      description: 'Execute a local shell command against the SuperMega workspace.',
+      description: 'Run an arbitrary local shell command in the configured SuperMega repository; may change files, external systems, or public state and is available only in explicit internal-local mode.',
       inputSchema: {
         type: 'object',
         properties: {
-          command: { type: 'string', description: 'Command to run' },
-          timeout: { type: 'number', description: 'Timeout seconds' },
+          command: { type: 'string', minLength: 1, maxLength: 2000, description: 'Command to run' },
+          timeout: { type: 'integer', minimum: 5, maximum: 300, description: 'Timeout in seconds' },
         },
         required: ['command'],
+        additionalProperties: false,
       },
-    },
-  ];
+      outputSchema: TOOL_OUTPUT_SCHEMA,
+      annotations: { readOnlyHint: false, openWorldHint: true, destructiveHint: true },
+    });
+
+  return tools;
+}
+
+if (process.argv.includes('--describe-tools')) {
+  process.stdout.write(`${JSON.stringify(buildTools(), null, 2)}\n`);
+  process.exit(0);
+}
+
+if (process.argv.includes('--redact-lead-fixture')) {
+  process.stdout.write(`${JSON.stringify(redactLeadPipeline({
+    status: 'ready',
+    rows: [{
+      lead_id: 'LEAD-1',
+      company_name: 'Example Company',
+      stage: 'qualified',
+      contact_email: 'private@example.com',
+      contact_phone: '+95 000000',
+      outreach_message: 'Private draft',
+      discovery_questions: ['Private question'],
+      notes: 'Private note',
+    }],
+  }))}\n`);
+  process.exit(0);
 }
 
 async function callTool(name, args = {}) {
+  if (!ENABLE_LOCAL_TOOLS && (name === 'mark1_files' || name === 'mark1_execute')) {
+    throw new Error('This local-only tool is disabled. Set SUPERMEGA_ENABLE_LOCAL_TOOLS=true only in an approved internal environment.');
+  }
   switch (name) {
     case 'mark1_status': {
       const [health, summary] = await Promise.all([
         apiRequest('/api/health'),
         apiRequest('/api/summary'),
       ]);
-      return toolText(JSON.stringify({ health, summary }, null, 2));
+      return toolData({ health, summary });
     }
     case 'mark1_insights': {
       const payload = await apiRequest('/api/insights');
-      return toolText(JSON.stringify(payload, null, 2));
+      return toolData(payload);
     }
     case 'mark1_exceptions': {
-      const limit = Math.max(1, Math.min(Number(args.limit || 10), 50));
+      const limit = boundedInteger(args.limit, 10, 1, 50);
       const payload = await apiRequest(`/api/exceptions?limit=${limit}`);
-      return toolText(JSON.stringify(payload, null, 2));
+      return toolData(payload);
     }
     case 'mark1_approvals': {
+      if (args.action !== 'list' && args.action !== 'create') throw new Error('Approval action must be list or create.');
       if (args.action === 'create') {
         const payload = await apiRequest('/api/approvals', {
           method: 'POST',
@@ -203,7 +298,7 @@ async function callTool(name, args = {}) {
             title: String(args.title || 'Untitled approval').trim(),
             summary: String(args.summary || '').trim(),
             approval_gate: String(args.approval_gate || 'general').trim(),
-            requested_by: String(args.requested_by || 'Codex MCP').trim(),
+            requested_by: String(args.requested_by || 'MCP client').trim(),
             owner: String(args.owner || 'Management').trim(),
             due: String(args.due || '').trim(),
             related_route: String(args.related_route || '/app').trim(),
@@ -211,28 +306,30 @@ async function callTool(name, args = {}) {
             status: 'pending',
           }),
         });
-        return toolText(JSON.stringify(payload, null, 2));
+        return toolData(payload);
       }
-      const limit = Math.max(1, Math.min(Number(args.limit || 10), 50));
+      const limit = boundedInteger(args.limit, 10, 1, 50);
       const payload = await apiRequest(`/api/approvals?limit=${limit}`);
-      return toolText(JSON.stringify(payload, null, 2));
+      return toolData(payload);
     }
     case 'mark1_leads': {
       const payload = await apiRequest('/api/lead-pipeline');
-      return toolText(JSON.stringify(payload, null, 2));
+      return toolData(redactLeadPipeline(payload));
     }
     case 'mark1_files': {
-      return toolText(JSON.stringify(listTopFiles(REPO_ROOT), null, 2));
+      return toolData(listTopFiles(REPO_ROOT));
     }
     case 'mark1_execute': {
-      const timeout = Math.max(5, Number(args.timeout || 30)) * 1000;
-      const output = execSync(String(args.command || ''), {
+      const timeout = boundedInteger(args.timeout, 30, 5, 300) * 1000;
+      const command = String(args.command || '').trim();
+      if (!command) throw new Error('A non-empty local command is required.');
+      const output = execSync(command, {
         cwd: REPO_ROOT,
         timeout,
         encoding: 'utf-8',
         maxBuffer: 1024 * 1024,
       });
-      return toolText(output);
+      return toolData(output);
     }
     default:
       throw new Error(`Unknown tool: ${name}`);
@@ -250,7 +347,7 @@ async function handleMessage(message) {
       result: {
         protocolVersion: '2024-11-05',
         capabilities: { tools: {} },
-        serverInfo: { name: 'supermega-mark1', version: '2.0.0' },
+          serverInfo: { name: 'supermega-mark1', version: '2.1.0' },
       },
     });
     return;

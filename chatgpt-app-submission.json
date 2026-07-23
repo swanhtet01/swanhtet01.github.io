@@ -1,0 +1,140 @@
+{
+  "$schema": "https://developers.openai.com/apps-sdk/schemas/chatgpt-app-submission.v1.json",
+  "schema_version": 1,
+  "app_info": {
+    "display_name": "SuperMega Mark 1",
+    "subtitle": "Review private operations",
+    "description": "SuperMega Mark 1 helps authorized operators review a private workspace, inspect exceptions and a contact-redacted lead pipeline, read the current operating brief, and create a pending approval item for human review.",
+    "category": "BUSINESS"
+  },
+  "tools": {
+    "mark1_status": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Retrieves health and operating-summary data without creating or changing workspace records.",
+        "open_world_justification": "Reads only the configured private SuperMega workspace and does not change public or third-party state.",
+        "destructive_justification": "Does not delete, overwrite, revoke, send, or perform an irreversible action."
+      }
+    },
+    "mark1_insights": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Retrieves the current operating brief and recommended actions without modifying workspace data.",
+        "open_world_justification": "Reads only private SuperMega operating data and does not publish or write to an external system.",
+        "destructive_justification": "Cannot delete, overwrite, revoke, send, or commit an irreversible operation."
+      }
+    },
+    "mark1_exceptions": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Retrieves a bounded list of private exception records and does not update their state.",
+        "open_world_justification": "Reads from the configured private workspace without changing public internet or third-party state.",
+        "destructive_justification": "Does not resolve, delete, overwrite, or otherwise irreversibly change an exception."
+      }
+    },
+    "mark1_approvals": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Can create one pending approval item in the configured private SuperMega workspace when action is create.",
+        "open_world_justification": "Changes only a private workspace record and does not publish, message, submit, or write to a third-party system.",
+        "destructive_justification": "Creates a reviewable pending item and does not delete, overwrite, revoke, or execute an irreversible approval decision."
+      }
+    },
+    "mark1_leads": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Retrieves a contact-redacted private lead pipeline without creating, updating, or contacting a lead.",
+        "open_world_justification": "Reads only private workspace data and cannot contact leads or change an external service.",
+        "destructive_justification": "Does not delete, overwrite, send, revoke, or perform another irreversible action."
+      }
+    }
+  },
+  "test_cases": [
+    {
+      "description": "Review current workspace health and summary.",
+      "user_prompt": "Show me the current SuperMega workspace status and operating summary.",
+      "file_attachment_urls": null,
+      "tools_triggered": "mark1_status",
+      "expected_output": "Returns the private workspace health and current operating summary with no state change.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Read the current operating brief.",
+      "user_prompt": "What does the current SuperMega operating brief recommend next?",
+      "file_attachment_urls": null,
+      "tools_triggered": "mark1_insights",
+      "expected_output": "Summarizes the current private operating brief and recommended actions.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Return a bounded exception queue.",
+      "user_prompt": "Show the five most relevant current SuperMega exceptions.",
+      "file_attachment_urls": null,
+      "tools_triggered": "mark1_exceptions",
+      "expected_output": "Returns no more than five current private exception records with enough context for review.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Create a pending private approval item.",
+      "user_prompt": "Create a pending approval titled Release evidence review, owned by Product, for a human to review this week.",
+      "file_attachment_urls": null,
+      "tools_triggered": "mark1_approvals",
+      "expected_output": "Creates one pending private approval item and returns the resulting review record without making the final decision.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Review the saved lead pipeline without outreach.",
+      "user_prompt": "List the leads currently saved in the SuperMega workspace; do not contact anyone.",
+      "file_attachment_urls": null,
+      "tools_triggered": "mark1_leads",
+      "expected_output": "Returns saved private lead records without contact details, outreach drafts, free-form notes, messages, or state changes.",
+      "expected_output_url": null
+    }
+  ],
+  "negative_test_cases": [
+    {
+      "description": "Do not trigger for email delivery.",
+      "user_prompt": "Send a marketing email to my customer list.",
+      "file_attachment_urls": null,
+      "tools_triggered": null,
+      "expected_output": "The app should not be invoked because its default tool surface cannot send email or contact customers.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Do not trigger for public deployment.",
+      "user_prompt": "Deploy my website to production and change its domain.",
+      "file_attachment_urls": null,
+      "tools_triggered": null,
+      "expected_output": "The app should not be invoked because it cannot deploy, publish, or change domains.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Do not trigger for calendar scheduling.",
+      "user_prompt": "Schedule a meeting with my team tomorrow afternoon.",
+      "file_attachment_urls": null,
+      "tools_triggered": null,
+      "expected_output": "The app should not be invoked because calendar scheduling is outside its supported workflows.",
+      "expected_output_url": null
+    }
+  ]
+}
