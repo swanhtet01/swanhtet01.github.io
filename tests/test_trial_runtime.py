@@ -133,13 +133,18 @@ class TrialRuntimeTests(unittest.TestCase):
         command_id: str | None = None,
         expected_version: int = 0,
         sku: str = "sku-a",
+        actor: str = "actor-operator",
+        event_type: str = "commerce.order.saved",
     ) -> dict[str, object]:
         return {
             "command_id": command_id or str(uuid4()),
             "surface": "commerce",
-            "event_type": "commerce.order.saved",
+            "event_type": event_type,
             "expected_version": expected_version,
-            "payload": {"changes": {"sku": sku}},
+            "payload": {
+                "changes": {"sku": sku},
+                "evidence": {"actor": actor},
+            },
         }
 
     def test_auth_is_required_and_client_identity_is_rejected(self) -> None:
@@ -201,7 +206,11 @@ class TrialRuntimeTests(unittest.TestCase):
         second = self.client.post(
             "/api/trial/v1/commands",
             headers=self._headers("other-operator-session"),
-            json=self._command_body(command_id=shared_command_id, sku="workspace-b-sku"),
+            json=self._command_body(
+                command_id=shared_command_id,
+                sku="workspace-b-sku",
+                actor="actor-other",
+            ),
         )
         self.assertEqual(first.status_code, 200)
         self.assertEqual(second.status_code, 200)
@@ -221,7 +230,7 @@ class TrialRuntimeTests(unittest.TestCase):
         missing = self.client.post(
             "/api/trial/v1/commands",
             headers=self._headers("missing-session"),
-            json=self._command_body(),
+            json=self._command_body(actor="actor-missing"),
         )
         self.assertEqual(missing.status_code, 403)
         self.assertEqual(missing.json()["detail"]["code"], "trial_membership_required")
@@ -229,7 +238,7 @@ class TrialRuntimeTests(unittest.TestCase):
         missing_capability = self.client.post(
             "/api/trial/v1/commands",
             headers=self._headers("manager-session"),
-            json=self._command_body(),
+            json=self._command_body(actor="actor-manager"),
         )
         self.assertEqual(missing_capability.status_code, 403)
         self.assertEqual(
@@ -237,6 +246,40 @@ class TrialRuntimeTests(unittest.TestCase):
             "commerce.write",
         )
         self.assertEqual(self.reducer.calls, 0)
+
+    def test_commerce_commands_bind_actor_evidence_and_human_conversion(self) -> None:
+        spoofed = self.client.post(
+            "/api/trial/v1/commands",
+            headers=self._headers(),
+            json=self._command_body(actor="actor-spoofed"),
+        )
+        self.assertEqual(spoofed.status_code, 422)
+        self.assertEqual(spoofed.json()["detail"]["code"], "commerce_actor_evidence_required")
+
+        human = self.client.post(
+            "/api/trial/v1/commands",
+            headers=self._headers(),
+            json=self._command_body(event_type="commerce.website_intake.converted"),
+        )
+        self.assertEqual(human.status_code, 200)
+
+        self.store.provision_membership(
+            workspace_id="workspace-a",
+            actor_id="actor-agent-manager",
+            actor_kind="agent",
+            capabilities=("website.write", "approvals.decide", "commerce.write"),
+        )
+        agent = self.client.post(
+            "/api/trial/v1/commands",
+            headers=self._headers("agent-manager-session"),
+            json=self._command_body(
+                actor="actor-agent-manager",
+                event_type="commerce.website_intake.converted",
+                expected_version=1,
+            ),
+        )
+        self.assertEqual(agent.status_code, 403)
+        self.assertEqual(agent.json()["detail"]["code"], "trial_human_approval_required")
 
     def test_website_commands_bind_actor_evidence_and_human_release_actions(self) -> None:
         def website_body(*, actor: str, event_type: str = "website.content.saved") -> dict[str, object]:
