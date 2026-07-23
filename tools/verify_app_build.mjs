@@ -6,12 +6,14 @@ const root = resolve(import.meta.dirname, '..')
 const dist = resolve(root, 'showroom', 'dist')
 const failures = []
 let orderCompletionRuntimeChecks = 0
+let commerceRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
-const [manifestText, appPackageText, appSource, coreSource, teamSource, agentTeamsSource, teamModel, websiteSource, publishSource, commerceIntakeSource, handoffSource] = await Promise.all([
+const [manifestText, appPackageText, appSource, coreSource, commerceSource, teamSource, agentTeamsSource, teamModel, websiteSource, publishSource, commerceIntakeSource, handoffSource] = await Promise.all([
   readFile(resolve(root, 'site-manifest.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'package.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'App.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'CoreApp.tsx'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'TeamWorkspace.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'AgentTeamsPanel.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'team-work.ts'), 'utf8'),
@@ -99,6 +101,11 @@ if (!websiteSource.includes('approvalIsCurrent || !publishIsCurrent') || !websit
 if (!commerceIntakeSource.includes('acceptWebsiteEcommerceHandoff') || !commerceIntakeSource.includes('matches.length === 1') || !commerceIntakeSource.includes('createWebsiteOrderDraft(context.handoff.id') || !commerceIntakeSource.includes('I reviewed this SKU, quantity, and Website evidence.')) fail('commerce_intake_approval_contract_missing')
 if (!commerceIntakeSource.includes('await completeWebsiteOrderDraft') || !commerceIntakeSource.includes('opaque customer reference generated on completion') || !commerceIntakeSource.includes('Create ready order') || !commerceIntakeSource.includes('Confirm into orders')) fail('commerce_order_completion_ui_missing')
 if (!coreSource.includes('function queueWebsiteOrder') || !coreSource.includes('sourceRecordId') || !coreSource.includes('item.price !== line.unitPriceMmk') || !coreSource.includes('Website order confirmation failed closed') || !coreSource.includes('Confirm ${record.id} from Website')) fail('website_order_not_integrated_with_commerce')
+if (!commerceSource.includes("supermega.commerce.workspace.v2") || !commerceSource.includes('loadCommerceWorkspace') || !commerceSource.includes('mutateCommerceWorkspace') || !commerceSource.includes('lockManager.request')) fail('commerce_v2_locked_store_missing')
+if (!commerceSource.includes("CommercePaymentStatus = 'pending' | 'reconciled'") || !commerceSource.includes("CommerceRefundStatus = 'none' | 'due'") || commerceSource.includes("'unrecorded'") || commerceSource.includes("'refund_due'")) fail('commerce_payment_or_refund_contract_invalid')
+if (!commerceSource.includes('commerceOrderHasReleasableReservation') || !commerceSource.includes("movement.kind === 'reserve'") || !commerceSource.includes("movement.kind === 'release'") || !commerceSource.includes("kind: 'receipt'")) fail('commerce_stock_ledger_contract_missing')
+if (!commerceSource.includes('Recovery failed closed') || !commerceSource.includes('currentRaw !== null') || !commerceSource.includes("movements: []")) fail('commerce_migration_fail_closed_contract_missing')
+if (!coreSource.includes("const commerceTabs") || !coreSource.includes("{ id: 'today', label: 'Today' }") || !coreSource.includes("{ id: 'orders', label: 'Orders' }") || !coreSource.includes("{ id: 'inventory', label: 'Inventory' }") || coreSource.includes("{ id: 'payments'")) fail('commerce_three_tab_contract_changed')
 let workflowProfiles = 0
 for (const product of manifest.products || []) {
   if (product.templates?.length !== 3) fail(`wrong_template_count:${product.id}`)
@@ -240,7 +247,173 @@ async function verifyWebsiteOrderCompletionRuntime() {
   }
 }
 
+async function verifyCommerceRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    commerceRuntimeChecks += 1
+  }
+  const assertThrows = (callback, reason) => {
+    try { callback() } catch { commerceRuntimeChecks += 1; return }
+    throw new Error(reason)
+  }
+  const values = new Map()
+  const storage = {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, String(value)),
+  }
+  let lockRequests = 0
+  let lockQueue = Promise.resolve()
+  const locks = {
+    request: (_name, _options, callback) => {
+      lockRequests += 1
+      const run = lockQueue.then(callback, callback)
+      lockQueue = run.then(() => undefined, () => undefined)
+      return run
+    },
+  }
+  const proof = (actionId, offset = 0, patch = {}) => ({
+    actionId,
+    capturedAt: new Date(Date.parse('2026-07-23T09:00:00.000Z') + offset).toISOString(),
+    actor: 'OP-OWNER',
+    reason: 'Verified against the source record.',
+    evidenceReference: `EV-${actionId}`,
+    ...patch,
+  })
+
+  try {
+    const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?verify=${Date.now()}`)
+    const legacy = {
+      items: [{ sku: 'SKU-1', name: 'Test item', onHand: 10, reorderAt: 2, price: 100 }],
+      orders: [{ id: 'ORD-LEGACY', createdAt: '2026-07-22T09:00:00.000Z', customer: 'Customer', channel: 'Phone', item: 'Test item', quantity: 2, payment: 'Cash', total: 200, status: 'ready' }],
+      closes: [{ id: 'CLOSE-1', createdAt: '2026-07-22T17:00:00.000Z', total: 200, orders: 1 }],
+    }
+    const migrated = model.normalizeCommerce(legacy)
+    const migratedAgain = model.normalizeCommerce(legacy)
+    assert(JSON.stringify(migrated) === JSON.stringify(migratedAgain), 'migration_not_deterministic')
+    assert(migrated.schema === model.COMMERCE_WORKSPACE_SCHEMA && migrated.items[0].onHand === 10 && migrated.orders[0].id === 'ORD-LEGACY' && migrated.closes[0].id === 'CLOSE-1', 'migration_did_not_preserve_records')
+    assert(migrated.orders[0].paymentStatus === 'pending' && migrated.orders[0].refundStatus === 'none' && migrated.movements.length === 0, 'migration_invented_payment_or_movement_history')
+    assert(model.normalizeCommerce(migrated) === migrated, 'valid_v2_not_byte_idempotent')
+
+    const ledger501 = {
+      ...model.createEmptyCommerce(),
+      items: [{ sku: 'SKU-1', name: 'Test item', onHand: 10, reorderAt: 2, price: 100 }],
+      movements: Array.from({ length: 501 }, (_, index) => ({
+        id: `MOV-${index}`,
+        actionId: `ACT-${index}`,
+        createdAt: '2026-07-23T09:00:00.000Z',
+        actor: 'OP-OWNER',
+        reason: 'Counted receipt.',
+        evidenceReference: `EV-${index}`,
+        kind: 'receipt',
+        sku: 'SKU-1',
+        quantityDelta: 1,
+      })),
+    }
+    assert(model.validateCommerceState(ledger501).movements.length === 501, 'ledger_was_silently_truncated')
+    assertThrows(() => model.validateCommerceState({ ...ledger501, items: [...ledger501.items, ledger501.items[0]] }), 'duplicate_sku_was_accepted')
+    assertThrows(() => model.validateCommerceState({ ...ledger501, movements: [...ledger501.movements, ledger501.movements[0]] }), 'duplicate_movement_was_accepted')
+
+    const base = {
+      ...model.createEmptyCommerce(),
+      items: [{ sku: 'SKU-1', name: 'Test item', onHand: 10, reorderAt: 2, price: 100 }],
+    }
+    const order = {
+      id: 'ORD-1',
+      createdAt: '2026-07-23T09:00:00.000Z',
+      customer: 'Customer',
+      channel: 'Website',
+      item: 'Test item',
+      itemSku: 'SKU-1',
+      quantity: 2,
+      payment: 'Manual QR review',
+      paymentStatus: 'pending',
+      refundStatus: 'none',
+      sourceRecordId: 'WEB-1',
+      total: 200,
+      status: 'confirmed',
+    }
+    const reserveProof = proof('ACT-RESERVE')
+    const reserved = model.reserveCommerceOrder(base, order, reserveProof)
+    assert(reserved?.items[0].onHand === 8 && reserved.orders.length === 1 && reserved.movements.length === 1, 'reservation_did_not_apply_once')
+    assert(model.reserveCommerceOrder(reserved, order, reserveProof) === reserved, 'exact_reservation_retry_not_idempotent')
+    assert(model.reserveCommerceOrder(reserved, { ...order, quantity: 3, total: 300 }, reserveProof) === null, 'conflicting_reservation_retry_succeeded')
+    assert(model.reserveCommerceOrder(reserved, { ...order, id: 'ORD-2' }, proof('ACT-RESERVE-2')) === null, 'duplicate_source_order_succeeded')
+
+    const preparing = model.advanceCommerceOrder(reserved, order.id, 'confirmed')
+    const ready = model.advanceCommerceOrder(preparing, order.id, 'preparing')
+    assert(preparing?.orders[0].status === 'preparing' && ready?.orders[0].status === 'ready', 'fulfilment_progression_failed')
+    assert(model.advanceCommerceOrder(ready, order.id, 'ready') === null, 'pending_payment_completed_order')
+    const paymentProof = proof('ACT-PAYMENT', 1_000)
+    const reconciled = model.reconcileCommercePayment(ready, order.id, paymentProof)
+    assert(reconciled?.orders[0].paymentStatus === 'reconciled' && reconciled.orders[0].paymentReconciledBy === paymentProof.actor && reconciled.orders[0].paymentEvidenceReference === paymentProof.evidenceReference, 'payment_reconciliation_lost_human_evidence')
+    assert(model.reconcileCommercePayment(reconciled, order.id, paymentProof) === reconciled, 'exact_payment_retry_not_idempotent')
+    assert(model.reconcileCommercePayment(reconciled, order.id, { ...paymentProof, evidenceReference: 'EV-CONFLICT' }) === null, 'conflicting_payment_retry_succeeded')
+    const completed = model.advanceCommerceOrder(reconciled, order.id, 'ready')
+    assert(completed?.orders[0].status === 'completed' && model.cancelCommerceOrder(completed, order.id, proof('ACT-CANCEL-COMPLETED')) === null, 'completed_order_was_cancellable')
+
+    const cancelOrder = { ...order, id: 'ORD-CANCEL', sourceRecordId: 'WEB-CANCEL' }
+    const cancelReserved = model.reserveCommerceOrder(base, cancelOrder, proof('ACT-RESERVE-CANCEL'))
+    const cancelProof = proof('ACT-CANCEL', 2_000)
+    const cancelled = model.cancelCommerceOrder(cancelReserved, cancelOrder.id, cancelProof)
+    assert(cancelled?.items[0].onHand === 10 && cancelled.orders[0].status === 'cancelled' && cancelled.movements.filter((movement) => movement.kind === 'release').length === 1, 'cancellation_did_not_release_once')
+    assert(model.cancelCommerceOrder(cancelled, cancelOrder.id, cancelProof) === cancelled, 'exact_cancellation_retry_not_idempotent')
+    assert(model.cancelCommerceOrder(cancelled, cancelOrder.id, proof('ACT-CANCEL-OTHER')) === null, 'different_cancellation_retry_succeeded')
+    assert(model.cancelCommerceOrder(migrated, 'ORD-LEGACY', proof('ACT-CANCEL-LEGACY')) === null && migrated.items[0].onHand === 10, 'untracked_legacy_order_invented_stock')
+
+    const paidOrder = { ...order, id: 'ORD-PAID-CANCEL', sourceRecordId: 'WEB-PAID-CANCEL' }
+    const paidReserved = model.reserveCommerceOrder(base, paidOrder, proof('ACT-RESERVE-PAID'))
+    const paid = model.reconcileCommercePayment(paidReserved, paidOrder.id, proof('ACT-PAY-PAID'))
+    const paidCancelled = model.cancelCommerceOrder(paid, paidOrder.id, proof('ACT-CANCEL-PAID'))
+    assert(paidCancelled?.orders[0].paymentStatus === 'reconciled' && paidCancelled.orders[0].refundStatus === 'due', 'paid_cancellation_erased_reconciliation_or_refund_exception')
+    assert(model.reconcileCommercePayment(paidCancelled, paidOrder.id, proof('ACT-PAY-AFTER-CANCEL')) === null, 'cancelled_payment_reconciled_again')
+
+    const receiptProof = proof('ACT-RECEIPT')
+    const received = model.receiveCommerceStock(base, 'SKU-1', 10, receiptProof)
+    assert(received?.items[0].onHand === 20 && received.movements[0].kind === 'receipt', 'receipt_not_recorded')
+    assert(model.receiveCommerceStock(received, 'SKU-1', 10, receiptProof) === received, 'exact_receipt_retry_not_idempotent')
+    assert(model.receiveCommerceStock(received, 'SKU-1', 11, receiptProof) === null, 'conflicting_receipt_retry_succeeded')
+    assert(model.receiveCommerceStock({ ...base, items: [{ ...base.items[0], onHand: Number.MAX_SAFE_INTEGER }] }, 'SKU-1', 1, proof('ACT-OVERFLOW')) === null, 'stock_overflow_succeeded')
+
+    values.clear()
+    const currentState = model.createSeedCommerce()
+    values.set(model.COMMERCE_KEY, JSON.stringify(currentState))
+    values.set(model.LEGACY_COMMERCE_KEYS[0], '{malformed')
+    const currentSnapshot = model.loadCommerceWorkspace(storage)
+    assert(currentSnapshot.source === 'current' && currentSnapshot.state.orders.length === currentState.orders.length, 'valid_v2_did_not_take_precedence')
+    const malformed = '{broken'
+    values.set(model.COMMERCE_KEY, malformed)
+    values.set(model.LEGACY_COMMERCE_KEYS[0], JSON.stringify(legacy))
+    const recoverySnapshot = model.loadCommerceWorkspace(storage)
+    assert(recoverySnapshot.source === 'recovery' && recoverySnapshot.state.orders.length === 0 && values.get(model.COMMERCE_KEY) === malformed, 'malformed_v2_restored_or_replaced_legacy')
+    values.clear()
+    values.set(model.LEGACY_COMMERCE_KEYS[0], JSON.stringify(legacy))
+    const legacySnapshot = model.loadCommerceWorkspace(storage)
+    assert(legacySnapshot.source === 'legacy' && JSON.parse(values.get(model.COMMERCE_KEY)).movements.length === 0, 'absent_v2_migration_failed')
+
+    values.clear()
+    const concurrentReserved = model.reserveCommerceOrder(base, cancelOrder, proof('ACT-CONCURRENT-RESERVE'))
+    values.set(model.COMMERCE_KEY, JSON.stringify(concurrentReserved))
+    const concurrentResults = await Promise.all([
+      model.mutateCommerceWorkspace((state) => model.cancelCommerceOrder(state, cancelOrder.id, proof('ACT-CONCURRENT-CANCEL-A')), storage, locks),
+      model.mutateCommerceWorkspace((state) => model.cancelCommerceOrder(state, cancelOrder.id, proof('ACT-CONCURRENT-CANCEL-B')), storage, locks),
+    ])
+    const concurrentState = JSON.parse(values.get(model.COMMERCE_KEY))
+    assert(lockRequests === 2 && concurrentResults.filter((result) => result.ok).length === 1, 'concurrent_cancellation_not_serialized')
+    assert(concurrentState.items[0].onHand === 10 && concurrentState.movements.filter((movement) => movement.kind === 'release').length === 1, 'concurrent_cancellation_released_twice')
+    const replay = await model.mutateCommerceWorkspace((state) => model.cancelCommerceOrder(state, cancelOrder.id, proof('ACT-CONCURRENT-CANCEL-A')), storage, locks)
+    assert(replay.ok && replay.replayed === true && JSON.parse(values.get(model.COMMERCE_KEY)).movements.length === 2, 'persisted_cancellation_replay_changed_ledger')
+
+    const beforeFailure = values.get(model.COMMERCE_KEY)
+    const failingStorage = { getItem: storage.getItem, setItem: () => { throw new Error('quota') } }
+    const failedWrite = await model.mutateCommerceWorkspace((state) => model.receiveCommerceStock(state, 'SKU-1', 1, proof('ACT-WRITE-FAIL')), failingStorage, locks)
+    assert(!failedWrite.ok && values.get(model.COMMERCE_KEY) === beforeFailure, 'storage_failure_advanced_interface_state')
+  } catch (error) {
+    fail(`commerce_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
 await verifyWebsiteOrderCompletionRuntime()
+await verifyCommerceRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
 if (bytes > 2_500_000) fail(`artifact_budget:${bytes}`)
@@ -249,4 +422,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', primaryRoutes: 4, operatingModules: 2, prototypeRoutes: 1, compatibilityRedirects: 1, workflowProfiles, orderCompletionRuntimeChecks, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', primaryRoutes: 4, operatingModules: 2, prototypeRoutes: 1, compatibilityRedirects: 1, workflowProfiles, orderCompletionRuntimeChecks, commerceRuntimeChecks, bytes }, null, 2))

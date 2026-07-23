@@ -18,38 +18,23 @@ import {
   type ManagedIdentity,
 } from './managed-trial'
 import { LEGACY_TEAM_WORK_KEYS, TEAM_WORK_KEY, formatTime, teamDefinitions, useTeamWorkspace } from './team-work'
-
-type CommerceItem = {
-  sku: string
-  name: string
-  variant?: string
-  onHand: number
-  reorderAt: number
-  price: number
-}
-
-type CommerceOrderStatus = 'confirmed' | 'preparing' | 'ready' | 'completed'
-
-type CommerceOrder = {
-  id: string
-  createdAt: string
-  customer: string
-  channel: string
-  item: string
-  quantity: number
-  payment: string
-  fulfilment?: string
-  sourceRecordId?: string
-  evidenceReference?: string
-  total: number
-  status: CommerceOrderStatus
-}
-
-type CommerceState = {
-  items: CommerceItem[]
-  orders: CommerceOrder[]
-  closes: Array<{ id: string; createdAt: string; total: number; orders: number }>
-}
+import {
+  COMMERCE_KEY,
+  LEGACY_COMMERCE_KEYS,
+  advanceCommerceOrder,
+  cancelCommerceOrder,
+  commerceOrderHasReleasableReservation,
+  loadCommerceWorkspace,
+  mutateCommerceWorkspace,
+  receiveCommerceStock,
+  reconcileCommercePayment,
+  reserveCommerceOrder,
+  type CommerceActionProof,
+  type CommerceOrder,
+  type CommerceOrderStatus,
+  type CommerceState,
+  type CommerceStockMovement,
+} from './commerce-workspace'
 
 type ProductionJob = {
   id: string
@@ -142,6 +127,8 @@ type ActionDomain = 'commerce' | 'production'
 type ActionKind =
   | 'order_create'
   | 'order_status'
+  | 'order_cancel'
+  | 'payment_reconcile'
   | 'inventory_receipt'
   | 'daily_close'
   | 'production_output'
@@ -165,7 +152,7 @@ type AccountableAction = {
 }
 
 type PendingAccountableAction = Omit<AccountableAction, 'capturedAt' | 'actorKind' | 'actor' | 'reason' | 'evidenceReference'> & {
-  apply: () => void
+  apply: (record: AccountableAction) => void | Promise<void>
 }
 
 type ActionDetails = Pick<AccountableAction, 'actor' | 'reason' | 'evidenceReference'>
@@ -216,12 +203,10 @@ type RuntimeHealth = {
 type CommerceTab = 'today' | 'orders' | 'inventory'
 type ProductionTab = 'today' | 'production' | 'control'
 
-const COMMERCE_KEY = 'supermega.commerce.workspace.v1'
 const PRODUCTION_KEY = 'supermega.production.workspace.v1'
 const APPROVAL_KEY = 'supermega.approvals.v3'
 const SETUP_KEY = 'supermega.setup.v3'
 const ACTION_KEY = 'supermega.accountable.actions.v1'
-const LEGACY_COMMERCE_KEYS = ['supermega.shop.workspace.v2']
 const LEGACY_PRODUCTION_KEYS = ['supermega.plant.workspace.v2']
 const LEGACY_APPROVAL_KEYS = ['supermega.approvals.v2']
 const LEGACY_SETUP_KEYS = ['supermega.setup.v2']
@@ -289,21 +274,6 @@ function pilotReady(setup: SetupState) {
   return pilotProgress(setup) === 100 && Boolean(setup.savedAt)
 }
 
-const seedCommerce: CommerceState = {
-  items: [
-    { sku: 'SM-1001', name: 'Daily essentials basket', onHand: 34, reorderAt: 10, price: 18500 },
-    { sku: 'SM-1002', name: 'Cold drink pack', onHand: 8, reorderAt: 12, price: 6500 },
-    { sku: 'SM-1003', name: 'Household refill', onHand: 21, reorderAt: 8, price: 12000 },
-    { sku: 'SM-1004', name: 'Personal care set', onHand: 13, reorderAt: 6, price: 22500 },
-    { sku: 'SM-CARE-01', name: 'Family care set', variant: 'Standard bundle', onHand: 14, reorderAt: 6, price: 31000 },
-  ],
-  orders: [
-    { id: 'ORD-1042', createdAt: new Date(Date.now() - 54 * 60 * 1000).toISOString(), customer: 'May', channel: 'Messenger', item: 'Daily essentials basket', quantity: 2, payment: 'KBZPay', total: 37000, status: 'preparing' },
-    { id: 'ORD-1041', createdAt: new Date(Date.now() - 29 * 60 * 1000).toISOString(), customer: 'Ko Aung', channel: 'Phone', item: 'Household refill', quantity: 1, payment: 'Cash on delivery', total: 12000, status: 'ready' },
-  ],
-  closes: [],
-}
-
 const seedProduction: ProductionState = {
   jobs: [
     { id: 'JOB-201', line: 'Line 01', product: 'Batch Alpha', target: 1200, output: 860 },
@@ -318,40 +288,6 @@ const seedProduction: ProductionState = {
     { id: 'MC-02', name: 'Press 02', state: 'attention' },
     { id: 'MC-03', name: 'Finishing 01', state: 'running' },
   ],
-}
-
-function normalizeCommerce(value: CommerceState) {
-  const source = (value && typeof value === 'object' ? value : seedCommerce) as CommerceState & { sales?: Array<Record<string, unknown>> }
-  const items = Array.isArray(source.items) ? source.items : seedCommerce.items
-  const orders = Array.isArray(source.orders)
-    ? source.orders.map((order) => ({
-        ...order,
-        customer: order.customer === 'Legacy customer unavailable' ? 'Walk-in customer' : order.customer,
-        channel: order.channel === 'Legacy local sale' ? 'Imported sale' : order.channel,
-      }))
-    : Array.isArray(source.sales)
-      ? source.sales.map((sale, index): CommerceOrder => ({
-          id: String(sale.id || `ORD-LEGACY-${index + 1}`),
-          createdAt: String(sale.createdAt || '1970-01-01T00:00:00.000Z'),
-          customer: 'Legacy customer unavailable',
-          channel: 'Legacy local sale',
-          item: String(sale.item || 'Legacy item'),
-          quantity: Math.max(1, Number(sale.quantity) || 1),
-          payment: String(sale.payment || 'Legacy payment'),
-          total: Math.max(0, Number(sale.total) || 0),
-          status: 'completed',
-        }))
-      : seedCommerce.orders
-  const closes = Array.isArray(source.closes)
-    ? source.closes.map((close, index) => ({
-        id: String(close.id || `CLOSE-LEGACY-${index + 1}`),
-        createdAt: String(close.createdAt || '1970-01-01T00:00:00.000Z'),
-        total: Math.max(0, Number(close.total) || 0),
-        orders: Math.max(0, Number((close as { orders?: number; transactions?: number }).orders ?? (close as { transactions?: number }).transactions) || 0),
-      }))
-    : []
-  const normalized: CommerceState = { items, orders, closes }
-  return JSON.stringify(normalized) === JSON.stringify(value) ? value : normalized
 }
 
 function normalizeProduction(value: ProductionState) {
@@ -628,6 +564,16 @@ function confirmAccountableAction(action: PendingAccountableAction, details: Act
   }
 }
 
+function commerceActionProof(action: AccountableAction): CommerceActionProof {
+  return {
+    actionId: action.id,
+    capturedAt: action.capturedAt,
+    actor: action.actor,
+    reason: action.reason,
+    evidenceReference: action.evidenceReference,
+  }
+}
+
 function useStoredState<T>(key: string, seed: T, normalize?: (value: T) => T, legacyKeys: string[] = [], persist?: (value: T) => T) {
   const [state, setState] = useState<T>(() => {
     for (const storageKey of [key, ...legacyKeys]) {
@@ -656,7 +602,18 @@ function useStoredState<T>(key: string, seed: T, normalize?: (value: T) => T, le
 }
 
 function useCommerceWorkspace() {
-  return useStoredState(COMMERCE_KEY, seedCommerce, normalizeCommerce, LEGACY_COMMERCE_KEYS)
+  const [snapshot, setSnapshot] = useState(() => loadCommerceWorkspace())
+
+  async function mutate(transition: (state: CommerceState) => CommerceState | null) {
+    const result = await mutateCommerceWorkspace(transition)
+    if (!result.ok) {
+      setSnapshot((current) => ({ ...current, error: result.error }))
+      throw new Error(result.error)
+    }
+    setSnapshot({ state: result.state, source: 'current', error: '' })
+  }
+
+  return [snapshot.state, mutate, snapshot.error] as const
 }
 
 function useProductionWorkspace() {
@@ -697,27 +654,37 @@ function formatMoney(value: number) {
 function AccountableActionGate({ action, onCancel, onConfirm }: {
   action: PendingAccountableAction | null
   onCancel: () => void
-  onConfirm: (details: ActionDetails) => void
+  onConfirm: (details: ActionDetails) => void | Promise<void>
 }) {
   const [actor, setActor] = useState('')
   const [reason, setReason] = useState('')
   const [evidenceReference, setEvidenceReference] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
 
   if (!action) return null
 
-  function submit(event: FormEvent) {
+  async function submit(event: FormEvent) {
     event.preventDefault()
     if (!actor.trim() || !reason.trim() || !evidenceReference.trim()) return
-    onConfirm({ actor: actor.trim(), reason: reason.trim(), evidenceReference: evidenceReference.trim() })
+    setBusy(true)
+    setError('')
+    try {
+      await onConfirm({ actor: actor.trim(), reason: reason.trim(), evidenceReference: evidenceReference.trim() })
+    } catch (submissionError) {
+      setError(submissionError instanceof Error ? submissionError.message : 'The change was not applied.')
+      setBusy(false)
+    }
   }
 
   return <section className="core-panel accountable-action-gate" aria-label="Human action confirmation">
     <div className="action-change"><span className="core-eyebrow">Human confirmation</span><h2>{action.summary}</h2><p><strong>{action.before}</strong><span>→</span><strong>{action.after}</strong></p></div>
-    <form className="core-form action-confirm-form" onSubmit={submit}>
+    <form className="core-form action-confirm-form" onSubmit={(event) => void submit(event)}>
       <label>Responsible operator<input maxLength={80} required value={actor} onChange={(event) => setActor(event.target.value)} placeholder="Name or accountable role" /></label>
       <label>Reason<input maxLength={180} required value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Why this change is correct now" /></label>
       <label>Evidence source or reference<input maxLength={180} required value={evidenceReference} onChange={(event) => setEvidenceReference(event.target.value)} placeholder="Message ID, receipt, count sheet, or observation" /></label>
-      <div className="form-actions"><button className="text-link" onClick={onCancel} type="button">Cancel</button><button className="core-button primary compact" type="submit">Confirm and record</button></div>
+      <div className="form-actions"><button className="text-link" disabled={busy} onClick={onCancel} type="button">Cancel</button><button className="core-button primary compact" disabled={busy} type="submit">{busy ? 'Applying…' : 'Confirm and record'}</button></div>
+      {error ? <p className="form-notice" role="status">{error}</p> : null}
     </form>
   </section>
 }
@@ -895,7 +862,7 @@ export function OverviewPage() {
   const pendingApprovals = approvals.filter((item) => item.status === 'pending')
   const lowStock = commerce.items.filter((item) => item.onHand <= item.reorderAt)
   const openProductionIssues = production.issues.filter((issue) => issue.status === 'open')
-  const openOrders = commerce.orders.filter((order) => order.status !== 'completed')
+  const openOrders = commerce.orders.filter((order) => order.status !== 'completed' && order.status !== 'cancelled')
   const agentHandoffs = workspace.agents.filter((agent) => ['waiting_review', 'blocked'].includes(agent.state) && !blockedWork.some((item) => item.id === agent.assignedWorkItemId))
   const releaseComplete = workspace.release.checks.filter((check) => check.complete).length
   const releasePercent = Math.round((releaseComplete / workspace.release.checks.length) * 100)
@@ -1093,7 +1060,7 @@ export function OperationsPage() {
 }
 
 function CommercePage({ tab }: { tab: CommerceTab }) {
-  const [commerce, setCommerce] = useCommerceWorkspace()
+  const [commerce, mutateCommerce, commerceStorageError] = useCommerceWorkspace()
   const [actions, setActions] = useStoredState<AccountableAction[]>(ACTION_KEY, [], normalizeActions)
   const [pendingAction, setPendingAction] = useState<PendingAccountableAction | null>(null)
   const [sku, setSku] = useState(commerce.items[0]?.sku ?? '')
@@ -1103,20 +1070,27 @@ function CommercePage({ tab }: { tab: CommerceTab }) {
   const [payment, setPayment] = useState('KBZPay')
   const [notice, setNotice] = useState('')
   const selected = commerce.items.find((item) => item.sku === sku) ?? commerce.items[0]
-  const revenue = commerce.orders.reduce((total, order) => total + order.total, 0)
+  const orderValue = commerce.orders.filter((order) => order.status !== 'cancelled').reduce((total, order) => total + order.total, 0)
+  const closableOrders = commerce.orders.filter((order) => order.status === 'completed' && order.paymentStatus === 'reconciled')
+  const reconciledValue = closableOrders.reduce((total, order) => total + order.total, 0)
   const lowStock = commerce.items.filter((item) => item.onHand <= item.reorderAt)
-  const openOrders = commerce.orders.filter((order) => order.status !== 'completed')
+  const openOrders = commerce.orders.filter((order) => order.status !== 'completed' && order.status !== 'cancelled')
+  const paymentReview = commerce.orders.filter((order) => order.refundStatus === 'due' || (order.status !== 'cancelled' && order.paymentStatus === 'pending'))
   const importedWebsiteOrderIds = commerce.orders.flatMap((order) => order.sourceRecordId ? [order.sourceRecordId] : [])
 
   function queueAction(action: Omit<PendingAccountableAction, 'id' | 'domain'>) {
+    if (pendingAction) {
+      setNotice(`Finish or cancel ${pendingAction.id} before reviewing another change.`)
+      return
+    }
     setPendingAction({ ...action, id: uid('ACT'), domain: 'commerce' })
     setNotice('Review the change, accountable operator, and evidence before it is applied.')
   }
 
-  function confirmAction(details: ActionDetails) {
+  async function confirmAction(details: ActionDetails) {
     if (!pendingAction) return
-    pendingAction.apply()
     const record = confirmAccountableAction(pendingAction, details)
+    await pendingAction.apply(record)
     setActions((current) => [record, ...current])
     setNotice(`${record.id} applied and added to the action history.`)
     setPendingAction(null)
@@ -1128,7 +1102,7 @@ function CommercePage({ tab }: { tab: CommerceTab }) {
       setNotice('Quantity is not available. Review stock before confirming the order.')
       return
     }
-    const order: CommerceOrder = { id: uid('ORD'), createdAt: new Date().toISOString(), customer: customer.trim() || 'Guest', channel, item: selected.name, quantity, payment, total: selected.price * quantity, status: 'confirmed' }
+    const order: CommerceOrder = { id: uid('ORD'), createdAt: new Date().toISOString(), customer: customer.trim() || 'Guest', channel, item: selected.name, itemSku: selected.sku, quantity, payment, paymentStatus: 'pending', refundStatus: 'none', total: selected.price * quantity, status: 'confirmed' }
     const itemSku = selected.sku
     const beforeStock = selected.onHand
     queueAction({
@@ -1137,8 +1111,8 @@ function CommercePage({ tab }: { tab: CommerceTab }) {
       summary: `Confirm ${order.id} from ${channel}`,
       before: `${itemSku} · ${beforeStock} on hand`,
       after: `${order.status} · ${beforeStock - quantity} on hand`,
-      apply: () => {
-        setCommerce((current) => ({ ...current, items: current.items.map((item) => item.sku === itemSku ? { ...item, onHand: item.onHand - quantity } : item), orders: [order, ...current.orders] }))
+      apply: async (action) => {
+        await mutateCommerce((current) => reserveCommerceOrder(current, order, commerceActionProof(action)))
         setQuantity(1)
         setCustomer('')
       },
@@ -1171,8 +1145,11 @@ function CommercePage({ tab }: { tab: CommerceTab }) {
       customer: record.customerReference,
       channel: 'Website',
       item: line.itemName,
+      itemSku: line.sku,
       quantity: line.quantity,
       payment: paymentLabel,
+      paymentStatus: 'pending',
+      refundStatus: 'none',
       fulfilment: fulfilmentLabel,
       sourceRecordId: record.id,
       evidenceReference: record.completion.evidenceReference,
@@ -1186,36 +1163,55 @@ function CommercePage({ tab }: { tab: CommerceTab }) {
       summary: `Confirm ${record.id} from Website`,
       before: `ready for confirmation · ${item.sku} · ${beforeStock} on hand`,
       after: `confirmed · ${fulfilmentLabel} · ${beforeStock - line.quantity} on hand`,
-      apply: () => setCommerce((current) => {
-        if (current.orders.some((candidate) => candidate.id === record.id || candidate.sourceRecordId === record.id)) return current
-        const currentItem = current.items.find((candidate) => candidate.sku === item.sku)
-        if (!currentItem || currentItem.onHand < line.quantity || currentItem.price !== line.unitPriceMmk) return current
-        return {
-          ...current,
-          items: current.items.map((candidate) => candidate.sku === item.sku ? { ...candidate, onHand: candidate.onHand - line.quantity } : candidate),
-          orders: [order, ...current.orders],
-        }
-      }),
+      apply: (action) => mutateCommerce((current) => reserveCommerceOrder(current, order, commerceActionProof(action))),
     })
   }
 
   function advanceOrder(orderId: string) {
-    const next: Record<CommerceOrderStatus, CommerceOrderStatus> = { confirmed: 'preparing', preparing: 'ready', ready: 'completed', completed: 'completed' }
     const order = commerce.orders.find((candidate) => candidate.id === orderId)
-    if (!order || order.status === 'completed') return
+    if (!order || order.status === 'completed' || order.status === 'cancelled') return
+    if (order.status === 'ready' && order.paymentStatus !== 'reconciled') {
+      setNotice(`Reconcile ${order.id} payment before completion.`)
+      return
+    }
+    const next: Record<'confirmed' | 'preparing' | 'ready', CommerceOrderStatus> = { confirmed: 'preparing', preparing: 'ready', ready: 'completed' }
     const nextStatus = next[order.status]
-    queueAction({ kind: 'order_status', subjectId: orderId, summary: `Advance ${orderId} fulfilment`, before: order.status, after: nextStatus, apply: () => setCommerce((current) => ({ ...current, orders: current.orders.map((candidate) => candidate.id === orderId ? { ...candidate, status: next[candidate.status] } : candidate) })) })
+    queueAction({ kind: 'order_status', subjectId: orderId, summary: `Advance ${orderId} fulfilment`, before: order.status, after: nextStatus, apply: () => mutateCommerce((current) => advanceCommerceOrder(current, orderId, order.status)) })
+  }
+
+  function reconcilePayment(orderId: string) {
+    const order = commerce.orders.find((candidate) => candidate.id === orderId)
+    if (!order || order.status === 'cancelled') return
+    if (order.paymentStatus === 'reconciled') {
+      setNotice(`${order.id} payment is already reconciled.`)
+      return
+    }
+    queueAction({ kind: 'payment_reconcile', subjectId: orderId, summary: `Reconcile ${order.id} payment`, before: `${order.payment} · ${order.paymentStatus}`, after: `${order.payment} · reconciled`, apply: (action) => mutateCommerce((current) => reconcileCommercePayment(current, orderId, commerceActionProof(action))) })
+  }
+
+  function cancelOrder(orderId: string) {
+    const order = commerce.orders.find((candidate) => candidate.id === orderId)
+    if (!order || order.status === 'completed' || order.status === 'cancelled') return
+    if (!commerceOrderHasReleasableReservation(commerce, orderId)) return setNotice(`${order.id} has no unmatched, attributable reservation. Cancellation failed closed without changing stock.`)
+    if (!order.itemSku) return
+    const item = commerce.items.find((candidate) => candidate.sku === order.itemSku)
+    if (!item) {
+      setNotice(`${order.id} inventory reference is unavailable, so cancellation failed closed.`)
+      return
+    }
+    const paymentAfter = order.paymentStatus === 'reconciled' ? 'reconciled · refund due' : 'pending'
+    queueAction({ kind: 'order_cancel', subjectId: orderId, summary: `Cancel ${order.id} and release stock`, before: `${order.status} · ${item.onHand} on hand · ${order.paymentStatus}`, after: `cancelled · ${item.onHand + order.quantity} on hand · ${paymentAfter}`, apply: (action) => mutateCommerce((current) => cancelCommerceOrder(current, orderId, commerceActionProof(action))) })
   }
 
   function restock(itemSku: string) {
     const item = commerce.items.find((candidate) => candidate.sku === itemSku)
     if (!item) return
-    queueAction({ kind: 'inventory_receipt', subjectId: itemSku, summary: `Receive 10 units of ${item.name}`, before: `${item.onHand} on hand`, after: `${item.onHand + 10} on hand`, apply: () => setCommerce((current) => ({ ...current, items: current.items.map((candidate) => candidate.sku === itemSku ? { ...candidate, onHand: candidate.onHand + 10 } : candidate) })) })
+    queueAction({ kind: 'inventory_receipt', subjectId: itemSku, summary: `Receive 10 units of ${item.name}`, before: `${item.onHand} on hand`, after: `${item.onHand + 10} on hand`, apply: (action) => mutateCommerce((current) => receiveCommerceStock(current, itemSku, 10, commerceActionProof(action))) })
   }
 
   function closeDay() {
-    const close = { id: uid('CLOSE'), createdAt: new Date().toISOString(), total: revenue, orders: commerce.orders.length }
-    queueAction({ kind: 'daily_close', subjectId: close.id, summary: `Save ${close.id} daily close`, before: `${commerce.closes.length} snapshots`, after: `${commerce.closes.length + 1} snapshots · ${formatMoney(close.total)}`, apply: () => setCommerce((current) => ({ ...current, closes: [close, ...current.closes] })) })
+    const close = { id: uid('CLOSE'), createdAt: new Date().toISOString(), total: reconciledValue, orders: closableOrders.length }
+    queueAction({ kind: 'daily_close', subjectId: close.id, summary: `Save ${close.id} daily close`, before: `${commerce.closes.length} snapshots`, after: `${commerce.closes.length + 1} snapshots · ${formatMoney(close.total)}`, apply: () => mutateCommerce((current) => current.closes.some((candidate) => candidate.id === close.id) ? current : { ...current, closes: [close, ...current.closes] }) })
   }
 
   const actionControls = <><AccountableActionGate key={pendingAction?.id ?? 'commerce-idle'} action={pendingAction} onCancel={() => setPendingAction(null)} onConfirm={confirmAction} /><ActionHistory actions={actions} domain="commerce" /></>
@@ -1235,21 +1231,69 @@ function CommercePage({ tab }: { tab: CommerceTab }) {
         </div>
         <div className="order-total"><span>Order total</span><strong>{formatMoney((selected?.price ?? 0) * Math.max(quantity, 0))}</strong></div>
         <button className="core-button primary" type="submit">Review order</button>
-        <p className="form-notice" aria-live="polite">{notice || 'A responsible operator confirms the change before stock moves. No customer message is sent.'}</p>
+        <p className="form-notice" aria-live="polite">{notice || commerceStorageError || 'A responsible operator confirms the change before stock moves. No customer message is sent.'}</p>
       </form>
     </section>
-    <section className="core-panel order-queue-panel"><div className="panel-head"><div><span className="core-eyebrow">Fulfilment</span><h2>{openOrders.length} open orders</h2></div></div><OrderList orders={commerce.orders} onAdvance={advanceOrder} /></section>
+    <section className="core-panel order-queue-panel"><div className="panel-head"><div><span className="core-eyebrow">Fulfilment</span><h2>{openOrders.length} open orders</h2></div><span className="panel-note">{paymentReview.length} payment review</span></div><OrderList canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} orders={commerce.orders} /></section>
   </div>{actionControls}</div>
 
-  if (tab === 'inventory') return <div className="operation-module"><section className="core-panel inventory-panel"><div className="panel-head"><div><span className="core-eyebrow">Stock control</span><h2>Inventory and reorder boundaries</h2></div><span className="panel-note">{lowStock.length} at boundary</span></div><div className="data-table" role="table" aria-label="Commerce inventory"><div className="data-row table-head" role="row"><span>Item</span><span>On hand</span><span>Reorder</span><span>Price</span><span>Action</span></div>{commerce.items.map((item) => <div className="data-row" role="row" key={item.sku}><span><strong>{item.name}</strong><small>{item.sku}</small></span><span className={item.onHand <= item.reorderAt ? 'warning-text' : ''}>{item.onHand}</span><span>{item.reorderAt}</span><span>{formatMoney(item.price)}</span><span><button className="text-link" type="button" onClick={() => restock(item.sku)}>Receive +10</button></span></div>)}</div><p className="form-notice" aria-live="polite">{notice || 'Receipts update only this browser workspace.'}</p></section>{actionControls}</div>
+  if (tab === 'inventory') return <div className="operation-module"><section className="core-panel inventory-panel"><div className="panel-head"><div><span className="core-eyebrow">Stock control</span><h2>Inventory and reorder boundaries</h2></div><span className="panel-note">{lowStock.length} at boundary</span></div><div className="data-table" role="table" aria-label="Commerce inventory"><div className="data-row table-head" role="row"><span>Item</span><span>On hand</span><span>Reorder</span><span>Price</span><span>Action</span></div>{commerce.items.map((item) => <div className="data-row" role="row" key={item.sku}><span><strong>{item.name}</strong><small>{item.sku}</small></span><span className={item.onHand <= item.reorderAt ? 'warning-text' : ''}>{item.onHand}</span><span>{item.reorderAt}</span><span>{formatMoney(item.price)}</span><span><button className="text-link" type="button" onClick={() => restock(item.sku)}>Receive +10</button></span></div>)}</div><p className="form-notice" aria-live="polite">{notice || commerceStorageError || 'Receipts require attributable confirmation and append one stock movement.'}</p></section><StockMovementHistory movements={commerce.movements} />{actionControls}</div>
 
-  return <div className="operation-module"><div className="module-today"><section className="summary-strip"><span><small>Order value</small><strong>{formatMoney(revenue)}</strong></span><span><small>Open orders</small><strong>{openOrders.length}</strong></span><span><small>Low stock</small><strong>{lowStock.length}</strong></span><span><small>Close snapshots</small><strong>{commerce.closes.length}</strong></span></section><div className="split-workspace ops-today-grid"><section className="core-panel"><div className="panel-head"><div><span className="core-eyebrow">Order flow</span><h2>Latest channel orders</h2></div><Link className="text-link" to="/operations/commerce/?tab=orders">Open orders</Link></div><OrderList orders={commerce.orders.slice(0, 5)} onAdvance={advanceOrder} /></section><section className="core-panel"><div className="panel-head"><div><span className="core-eyebrow">Daily control</span><h2>Exceptions and close</h2></div></div><div className="exception-summary"><span><strong>{lowStock.length}</strong><small>reorder boundaries</small></span><span><strong>{openOrders.length}</strong><small>orders not complete</small></span></div><div className="boundary-list">{lowStock.map((item) => <Link key={item.sku} to="/operations/commerce/?tab=inventory"><strong>{item.name}</strong><small>{item.onHand} on hand</small></Link>)}</div><button className="core-button" onClick={closeDay} type="button">Save daily close</button><p className="form-notice" aria-live="polite">{notice}</p></section></div></div>{actionControls}</div>
+  return <div className="operation-module"><div className="module-today"><section className="summary-strip"><span><small>Order value</small><strong>{formatMoney(orderValue)}</strong></span><span><small>Open orders</small><strong>{openOrders.length}</strong></span><span><small>Payment review</small><strong>{paymentReview.length}</strong></span><span><small>Low stock</small><strong>{lowStock.length}</strong></span></section><div className="split-workspace ops-today-grid"><section className="core-panel"><div className="panel-head"><div><span className="core-eyebrow">Order flow</span><h2>Latest channel orders</h2></div><Link className="text-link" to="/operations/commerce/?tab=orders">Open orders</Link></div><OrderList canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} orders={commerce.orders.slice(0, 5)} /></section><section className="core-panel"><div className="panel-head"><div><span className="core-eyebrow">Daily control</span><h2>Exceptions and close</h2></div><span className="panel-note">{commerce.closes.length} snapshots</span></div><div className="exception-summary"><span><strong>{paymentReview.length}</strong><small>payment review</small></span><span><strong>{lowStock.length}</strong><small>reorder boundaries</small></span></div><div className="boundary-list">{lowStock.map((item) => <Link key={item.sku} to="/operations/commerce/?tab=inventory"><strong>{item.name}</strong><small>{item.onHand} on hand</small></Link>)}</div><button className="core-button" onClick={closeDay} type="button">Save daily close</button><p className="form-notice" aria-live="polite">{notice || commerceStorageError || `${closableOrders.length} completed, reconciled orders · ${formatMoney(reconciledValue)} ready to close.`}</p></section></div></div>{actionControls}</div>
 }
 
-function OrderList({ orders, onAdvance }: { orders: CommerceOrder[]; onAdvance: (id: string) => void }) {
+function OrderList({
+  orders,
+  canCancel,
+  onAdvance,
+  onCancel,
+  onReconcilePayment,
+}: {
+  orders: CommerceOrder[]
+  canCancel: (id: string) => boolean
+  onAdvance: (id: string) => void
+  onCancel: (id: string) => void
+  onReconcilePayment: (id: string) => void
+}) {
   if (!orders.length) return <Empty>No orders recorded.</Empty>
-  const nextAction: Record<CommerceOrderStatus, string> = { confirmed: 'Start preparing', preparing: 'Mark ready', ready: 'Complete', completed: 'Complete' }
-  return <div className="order-list">{orders.map((order) => <article key={order.id}><div><span className={`status-pill ${order.status === 'completed' ? 'approved' : 'bounded'}`}>{order.status}</span><strong>{order.customer} · {order.item} × {order.quantity}</strong><small>{order.id} · {order.channel} · {order.payment}{order.fulfilment ? ` · ${order.fulfilment}` : ''} · {formatTime(order.createdAt)}</small></div><div><b>{formatMoney(order.total)}</b>{order.status !== 'completed' ? <button className="text-link" onClick={() => onAdvance(order.id)} type="button">{nextAction[order.status]}</button> : null}</div></article>)}</div>
+  const nextAction: Record<'confirmed' | 'preparing' | 'ready', string> = { confirmed: 'Start preparing', preparing: 'Mark ready', ready: 'Complete' }
+  return <div className="order-list">{orders.map((order) => {
+    const active = order.status === 'confirmed' || order.status === 'preparing' || order.status === 'ready'
+    const needsPayment = order.paymentStatus === 'pending'
+    const reconcileIsPrimary = needsPayment && (order.status === 'ready' || order.status === 'completed')
+    const canAdvance = active && !reconcileIsPrimary
+    return <article key={order.id}>
+      <div>
+        <div className="order-statuses">
+          <span className={`status-pill ${order.status === 'completed' ? 'approved' : order.status === 'cancelled' ? 'pending' : 'bounded'}`}>{order.status}</span>
+          <span className={`status-pill ${order.paymentStatus === 'reconciled' ? 'approved' : 'pending'}`}>payment {order.paymentStatus}</span>
+          {order.refundStatus === 'due' ? <span className="status-pill pending">refund due</span> : null}
+        </div>
+        <strong>{order.customer} · {order.item} × {order.quantity}</strong>
+        <small>{order.id} · {order.channel} · {order.payment}{order.fulfilment ? ` · ${order.fulfilment}` : ''} · {formatTime(order.createdAt)}</small>
+      </div>
+      <div className="order-row-actions">
+        <b>{formatMoney(order.total)}</b>
+        {reconcileIsPrimary ? <button className="text-link" onClick={() => onReconcilePayment(order.id)} type="button">Reconcile payment</button> : null}
+        {canAdvance ? <button className="text-link" onClick={() => onAdvance(order.id)} type="button">{nextAction[order.status as 'confirmed' | 'preparing' | 'ready']}</button> : null}
+        {active && canCancel(order.id) ? <button className="text-link subtle" onClick={() => onCancel(order.id)} type="button">Cancel</button> : null}
+      </div>
+    </article>
+  })}</div>
+}
+
+function StockMovementHistory({ movements }: { movements: CommerceStockMovement[] }) {
+  return <details className="core-panel action-history stock-movement-history">
+    <summary><span>Stock movements</span><strong>{movements.length} attributable entries</strong></summary>
+    {movements.length ? <div className="action-history-list">{movements.map((movement) => <article key={movement.id}>
+      <div>
+        <strong>{movement.kind} · {movement.sku} · {movement.quantityDelta > 0 ? '+' : ''}{movement.quantityDelta}</strong>
+        <small>{movement.orderId ? `${movement.orderId} · ` : ''}{movement.actionId} · {movement.actor}</small>
+        <p>{movement.reason} · Evidence: {movement.evidenceReference}</p>
+      </div>
+      <small>{formatTime(movement.createdAt)}</small>
+    </article>)}</div> : <Empty>No attributable stock movements yet.</Empty>}
+  </details>
 }
 
 function ProductionPage({ tab }: { tab: ProductionTab }) {
@@ -1267,14 +1311,18 @@ function ProductionPage({ tab }: { tab: ProductionTab }) {
   const openIssues = production.issues.filter((issue) => issue.status === 'open')
 
   function queueAction(action: Omit<PendingAccountableAction, 'id' | 'domain'>) {
+    if (pendingAction) {
+      setNotice(`Finish or cancel ${pendingAction.id} before reviewing another change.`)
+      return
+    }
     setPendingAction({ ...action, id: uid('ACT'), domain: 'production' })
     setNotice('Review the change, accountable operator, and evidence before it is applied.')
   }
 
-  function confirmAction(details: ActionDetails) {
+  async function confirmAction(details: ActionDetails) {
     if (!pendingAction) return
-    pendingAction.apply()
     const record = confirmAccountableAction(pendingAction, details)
+    await pendingAction.apply(record)
     setActions((current) => [record, ...current])
     setNotice(`${record.id} applied and added to the action history.`)
     setPendingAction(null)

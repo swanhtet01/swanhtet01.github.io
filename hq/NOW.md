@@ -28,11 +28,11 @@ Prove one real workflow in which SuperMega keeps the operating record, a respons
 
 ## Latest verification
 
-- Candidate identity is brand `jade-v1-2026-07`, context `2026-07-23.1`, and catalogue `2026-07-23.1`.
-- Product-inclusive lint, strict TypeScript, HQ, one product prototype, one compatibility redirect, six workflow profiles, 12 order-completion checks, 48 release checks, 40 security checks, eleven Vercel contract checks, and six RLS checks pass locally.
+- Candidate identity is brand `jade-v1-2026-07`, context `2026-07-23.2`, and catalogue `2026-07-23.2`.
+- Product-inclusive lint, strict TypeScript, HQ, one product prototype, one compatibility redirect, six workflow profiles, 12 order-completion checks, 34 Commerce state checks, 48 release checks, 40 security checks, eleven Vercel contract checks, and six RLS checks pass locally.
 - Core desktop and 390 px paths have no horizontal overflow. Query-view navigation resets scroll, mobile Settings stays available, and Operations has no duplicate product-app launcher.
 - Team evidence and Product decisions require an attributed human reviewer. Agent handoffs cannot satisfy terminal authority.
-- Website-to-Commerce intake remains non-PII and operator-gated. Its locked completion produces one idempotent `ready_for_confirmation` record; a separate accountable confirmation rechecks price and stock, inserts it once, and reserves local stock without a customer send, payment initiation, delivery request, or external write.
+- Website-to-Commerce intake remains non-PII and operator-gated. Its locked completion produces one idempotent `ready_for_confirmation` record; a separate accountable confirmation rechecks price and stock, inserts it once, and reserves local stock without a customer send, payment initiation, delivery request, or external write. Commerce v2 then serializes local writes, reconciles payment with human evidence, releases stock only from one proven reservation, preserves refund-due exceptions, and fails closed on malformed or unwritable storage.
 - Production release still requires review, owner authorization, and the coordinated `main` workflow; a local pass or pushed branch is not a release.
 
 ## Blockers
@@ -52,7 +52,7 @@ Prove one real workflow in which SuperMega keeps the operating record, a respons
 
 ## Next evidence
 
-- Repeat the complete Website-to-Commerce confirmed-order flow with one named user and measure handling time and correction effort.
+- Repeat the Website-to-Commerce flow with one named user through reservation, payment reconciliation, fulfilment, one controlled cancellation, and stock-ledger review; measure handling time and correction effort.
 - Exercise one agent assignment from accountable work through attributed evidence and human review.
 - Complete one pilot definition and run its acceptance test.
 - Activate managed persistence only after migration, RLS, backup, and restore rehearsal passes on non-production data.

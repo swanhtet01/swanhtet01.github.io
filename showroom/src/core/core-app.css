@@ -172,6 +172,7 @@ textarea { min-height: 72px; resize: vertical; }
 .action-change p span { color: var(--core-green); }
 .action-confirm-form { grid-template-columns: minmax(130px,.7fr) minmax(170px,1fr) minmax(200px,1.2fr) auto; align-items: end; gap: 8px; }
 .action-confirm-form .form-actions { min-width: max-content; align-items: center; }
+.action-confirm-form > .form-notice { grid-column: 1/-1; }
 .action-history { flex: 0 0 auto; min-height: 0; padding: 0; }
 .action-history summary { min-height: 38px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 13px; color: var(--core-muted); font-size: 9px; cursor: pointer; list-style: none; }
 .action-history summary::-webkit-details-marker { display: none; }
@@ -270,6 +271,10 @@ textarea { min-height: 72px; resize: vertical; }
 .order-list strong { font-size: 11px; }
 .order-list small { color: var(--core-quiet); font-size: 9px; }
 .order-list b { color: var(--core-green); font-family: var(--core-mono); font-size: 9px; }
+.order-list article .order-statuses, .order-list article .order-row-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 8px; }
+.order-row-actions { justify-content: flex-end; }
+.order-row-actions .subtle { color: var(--core-quiet); }
+.stock-movement-history .empty-state { padding: 12px 13px; }
 .exception-summary { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); border: 1px solid var(--core-line); border-radius: 5px; }
 .exception-summary span { display: grid; gap: 3px; padding: 10px; border-right: 1px solid var(--core-line); }
 .exception-summary span:last-child { border-right: 0; }
@@ -542,6 +547,7 @@ textarea { min-height: 72px; resize: vertical; }
   .job-list article { grid-template-columns: 1fr; padding: 9px 0; }
   .order-list article { grid-template-columns: 1fr; }
   .order-list article > div:last-child { justify-items: start; }
+  .order-row-actions { justify-content: flex-start; }
   .trial-control-panel { display: grid; }
   .trial-actions { justify-content: flex-start; }
   .agent-boundary-banner { display: grid; }
