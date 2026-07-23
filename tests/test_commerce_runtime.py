@@ -428,6 +428,28 @@ class CommerceRuntimeTests(unittest.TestCase):
         with self.assertRaises(TrialValidationError):
             apply_event(current, "commerce.item.created", changed_existing)
 
+        pending = pending_intake_state()
+        converted = converted_intake_state(pending)
+        for label, state_with_intake in (("pending", pending), ("converted", converted)):
+            with self.subTest(existing_intake=label):
+                item = {
+                    "sku": f"SKU-{label.upper()}",
+                    "name": f"{label.title()} intake item",
+                    "onHand": 7,
+                    "reorderAt": 2,
+                    "price": 300,
+                }
+                next_state = deepcopy(state_with_intake)
+                next_state["items"] = [item, *state_with_intake["items"]]  # type: ignore[misc]
+                next_state["movements"] = [
+                    movement("opening", f"ACT-ITEM-{label.upper()}", 7, sku=str(item["sku"])),
+                    *state_with_intake["movements"],  # type: ignore[misc]
+                ]
+                accepted_with_intake = apply_event(state_with_intake, "commerce.item.created", next_state)
+                self.assertEqual(accepted_with_intake["items"][0], item)  # type: ignore[index]
+                self.assertEqual(accepted_with_intake["movements"][0]["quantityDelta"], 7)  # type: ignore[index]
+                self.assertEqual(accepted_with_intake["websiteIntakes"], state_with_intake["websiteIntakes"])
+
     def test_order_create_and_stock_receipt_allow_only_the_declared_diff(self) -> None:
         current = catalog_state()
         created = apply_event(current, "commerce.order.created", created_state())
