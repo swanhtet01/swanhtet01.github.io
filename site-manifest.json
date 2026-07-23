@@ -1,7 +1,7 @@
 {
   "schemaVersion": "supermega.site-context.v1",
-  "contextVersion": "2026-07-24.4",
-  "catalogVersion": "2026-07-24.4",
+  "contextVersion": "2026-07-24.5",
+  "catalogVersion": "2026-07-24.5",
   "brand": {
     "name": "SuperMega",
     "domain": "supermega.dev",
@@ -30,20 +30,17 @@
       "headline": "Turn conversations into controlled orders.",
       "description": "Preview browser-local orders, stock, fulfilment, payment status, follow-up, and close across common channels. No live channel, checkout, payment, delivery, customer send, or external write is connected.",
       "primaryCta": {
-        "label": "Preview local Commerce demo",
-        "url": "https://app.supermega.dev/operations/commerce/?tab=today"
+        "label": "Open Commerce orders",
+        "url": "https://app.supermega.dev/operations/commerce/?tab=orders"
       },
       "secondaryCta": {
         "label": "Configure Commerce",
         "url": "/contact/?product=commerce"
       },
       "modules": [
-        "Conversation and order intake",
-        "Catalogue and stock control",
-        "Fulfilment and exceptions",
-        "Local payments and reconciliation",
-        "Customer history and follow-up",
-        "Owner brief, audit and recovery"
+        "Orders: intake, fulfilment, payments, follow-up and close",
+        "Stock: catalogue, balances, receipts and reorder exceptions",
+        "Accountability: evidence, owner review and recovery"
       ],
       "templates": [
         {
@@ -81,20 +78,17 @@
       "headline": "Give the production floor one operational memory.",
       "description": "Preview recurring jobs, output, machine state, quality, maintenance, exceptions, and shift handoffs in a clearly labelled local demo. Authenticated tenant writes stay locked until managed activation gates pass. No machine telemetry, machine control, access change, or external write is connected.",
       "primaryCta": {
-        "label": "Preview local Production demo",
-        "url": "https://app.supermega.dev/operations/production/?tab=today"
+        "label": "Open Production jobs",
+        "url": "https://app.supermega.dev/operations/production/?tab=production"
       },
       "secondaryCta": {
         "label": "Configure Production",
         "url": "/contact/?product=production"
       },
       "modules": [
-        "Recurring jobs and output records",
-        "Material availability and exceptions",
-        "Quality and traceability",
-        "Equipment and maintenance",
-        "Shift exceptions and approvals",
-        "Owner brief, audit and recovery"
+        "Jobs: recurring plans, targets and confirmed output",
+        "Problems: quality, materials, equipment and maintenance",
+        "Accountability: shift evidence, owner review and recovery"
       ],
       "templates": [
         {

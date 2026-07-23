@@ -143,8 +143,8 @@ for (const token of [
   'No machine telemetry, machine control, access change, or external write is connected.',
   'id="trust"',
   'Assistance may organize, inspect, summarize, and draft from approved records.',
-  'https://app.supermega.dev/operations/commerce/?tab=today',
-  'https://app.supermega.dev/operations/production/?tab=today',
+  'https://app.supermega.dev/operations/commerce/?tab=orders',
+  'https://app.supermega.dev/operations/production/?tab=production',
 ]) {
   if (!home.includes(token)) fail('homepage_contract_missing', { token })
 }

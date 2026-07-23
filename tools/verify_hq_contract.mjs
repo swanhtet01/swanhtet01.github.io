@@ -26,6 +26,12 @@ requireContract('Website remains a truthful local release candidate', portfolio.
 requireContract('Commerce owns Website order intake', portfolio.portfolio?.find((entry) => entry.id === 'commerce')?.job.includes('Website') && !portfolio.portfolio?.some((entry) => entry.id === 'ecommerce'))
 requireContract('Commerce managed intake remains adoption-gated', portfolio.portfolio?.find((entry) => entry.id === 'commerce')?.status === 'release-candidate-local'
   && portfolio.portfolio?.find((entry) => entry.id === 'commerce')?.nextGate?.includes('authenticated human Commerce confirmation'))
+requireContract('product workspaces open on real work', portfolio.portfolio?.find((entry) => entry.id === 'commerce')?.surfaces?.join(',') === 'Orders,Stock'
+  && portfolio.portfolio?.find((entry) => entry.id === 'production')?.surfaces?.join(',') === 'Jobs,Problems'
+  && current.includes('/operations/commerce/?tab=orders')
+  && current.includes('/operations/production/?tab=production')
+  && !current.includes('/operations/commerce/?tab=today')
+  && !current.includes('/operations/production/?tab=today'))
 requireContract('application navigation is current', portfolio.portfolio?.[0]?.surfaces?.join(',') === 'Home,Work,Products,Settings (utility),Agent teams (internal)'
   && now.includes('Home, Work, and Products are the only primary destinations')
   && current.includes('Home, Work, and Products are the only primary navigation'))

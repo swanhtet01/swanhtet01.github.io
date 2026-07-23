@@ -228,8 +228,8 @@ type RuntimeHealth = {
   requirements: string[]
 }
 
-type CommerceTab = 'today' | 'orders' | 'inventory'
-type ProductionTab = 'today' | 'production' | 'control'
+type CommerceTab = 'orders' | 'inventory'
+type ProductionTab = 'production' | 'control'
 
 const APPROVAL_KEY = 'supermega.approvals.v3'
 const SETUP_KEY = 'supermega.setup.v3'
@@ -318,13 +318,11 @@ const navigation = [
 ] as const
 
 const commerceTabs: Array<{ id: CommerceTab; label: string }> = [
-  { id: 'today', label: 'Today' },
   { id: 'orders', label: 'Orders' },
   { id: 'inventory', label: 'Stock' },
 ]
 
 const productionTabs: Array<{ id: ProductionTab; label: string }> = [
-  { id: 'today', label: 'Today' },
   { id: 'production', label: 'Jobs' },
   { id: 'control', label: 'Problems' },
 ]
@@ -1126,8 +1124,8 @@ export function CoreLayout() {
   )
 }
 
-export function PageHeading({ eyebrow, title, copy, actions }: { eyebrow: string; title: string; copy: string; actions?: ReactNode }) {
-  return <header className="page-heading"><div><span className="core-eyebrow">{eyebrow}</span><h1>{title}</h1><p>{copy}</p></div>{actions ? <div className="heading-actions">{actions}</div> : null}</header>
+export function PageHeading({ eyebrow, title, copy, actions }: { eyebrow?: string; title: string; copy: string; actions?: ReactNode }) {
+  return <header className="page-heading"><div>{eyebrow ? <span className="core-eyebrow">{eyebrow}</span> : null}<h1>{title}</h1><p>{copy}</p></div>{actions ? <div className="heading-actions">{actions}</div> : null}</header>
 }
 
 export function Empty({ children }: { children: ReactNode }) {
@@ -1343,11 +1341,11 @@ export function OverviewPage() {
           : <Link className="core-button primary" to={nextPriority.href ?? '/'}>{nextPriority.action}</Link>}
       </section>
       <nav aria-label="Products" className="product-launcher">
-        <Link to="/operations/commerce/?tab=today">
+        <Link to="/operations/commerce/?tab=orders">
           <span><strong>Commerce</strong><small>Orders, stock and payments</small></span>
           <b>{openOrders.length ? `${openOrders.length} open` : 'Ready'}</b>
         </Link>
-        <Link to="/operations/production/?tab=today">
+        <Link to="/operations/production/?tab=production">
           <span><strong>Production</strong><small>Jobs, output and equipment</small></span>
           <b>{openProductionIssues.length ? `${openProductionIssues.length} issue` : 'Ready'}</b>
         </Link>
@@ -1398,15 +1396,17 @@ export function OperationsPage() {
   const requestedView = searchParams.get('view')
   const isProductRoute = routeModule === 'commerce' || routeModule === 'production'
   const view: ProductId = routeModule === 'production' || requestedView === 'production' || requestedView === 'plant' ? 'production' : 'commerce'
-  const commerceTab = commerceTabs.some((tab) => tab.id === searchParams.get('tab')) ? searchParams.get('tab') as CommerceTab : 'today'
-  const productionTab = productionTabs.some((tab) => tab.id === searchParams.get('tab')) ? searchParams.get('tab') as ProductionTab : 'today'
+  const requestedTab = searchParams.get('tab')
+  const commerceTab = commerceTabs.some((tab) => tab.id === requestedTab) ? requestedTab as CommerceTab : 'orders'
+  const productionTab = productionTabs.some((tab) => tab.id === requestedTab) ? requestedTab as ProductionTab : 'production'
   const activeTab = view === 'commerce' ? commerceTab : productionTab
+  const requestedTabIsCanonical = requestedTab === activeTab
 
   useEffect(() => {
     if (!isProductRoute && !requestedView) return
     const canonicalPath = `/operations/${view}/`
-    if (location.pathname !== canonicalPath || requestedView) navigate(`${canonicalPath}?tab=${activeTab}`, { replace: true })
-  }, [activeTab, isProductRoute, location.pathname, navigate, requestedView, view])
+    if (location.pathname !== canonicalPath || requestedView || !requestedTabIsCanonical) navigate(`${canonicalPath}?tab=${activeTab}`, { replace: true })
+  }, [activeTab, isProductRoute, location.pathname, navigate, requestedTabIsCanonical, requestedView, view])
 
   function setTab(tab: CommerceTab | ProductionTab) {
     navigate(`/operations/${view}/?tab=${tab}`, { replace: true })
@@ -1421,8 +1421,8 @@ export function OperationsPage() {
     return <div className="workspace-screen product-catalog-screen">
       <PageHeading eyebrow="Products" title="Choose a workspace" copy="Open the workspace for the job you need to do." />
       <nav aria-label="SuperMega apps" className="product-launcher product-catalog">
-        <Link to="/operations/commerce/?tab=today"><span><strong>Commerce</strong><small>Orders, payments, and stock</small></span><b>Open</b></Link>
-        <Link to="/operations/production/?tab=today"><span><strong>Production</strong><small>Jobs, output, and problems</small></span><b>Open</b></Link>
+        <Link to="/operations/commerce/?tab=orders"><span><strong>Commerce</strong><small>Orders, payments, and stock</small></span><b>Open</b></Link>
+        <Link to="/operations/production/?tab=production"><span><strong>Production</strong><small>Jobs, output, and problems</small></span><b>Open</b></Link>
         <Link to="/products/website/"><span><strong>Website</strong><small>Edit, preview, and prepare to publish</small></span><b>Open</b></Link>
       </nav>
     </div>
@@ -1430,7 +1430,7 @@ export function OperationsPage() {
 
   return (
     <div className="workspace-screen operations-screen">
-      <PageHeading eyebrow={view === 'commerce' ? 'Commerce' : 'Production'} title={view === 'commerce' ? 'Commerce' : 'Production'} copy={productCopy} actions={<Link className="text-link all-apps-link" to="/operations/">All apps</Link>} />
+      <PageHeading title={view === 'commerce' ? 'Commerce' : 'Production'} copy={productCopy} actions={<Link className="text-link all-apps-link" to="/operations/">Products</Link>} />
       <nav className="workspace-toolbar view-tabs product-task-tabs" aria-label={`${view === 'commerce' ? 'Commerce' : 'Production'} tasks`}>{tabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{tab.label}</button>)}</nav>
       <div className="workspace-view">{view === 'commerce' ? <CommercePage managedIdentity={managedIdentity} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
     </div>
@@ -1652,7 +1652,6 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
   const [catalogError, setCatalogError] = useState('')
   const selectedSku = commerce.items.some((item) => item.sku === sku) ? sku : commerce.items[0]?.sku ?? ''
   const selected = commerce.items.find((item) => item.sku === selectedSku)
-  const orderValue = commerce.orders.filter((order) => order.status !== 'cancelled').reduce((total, order) => total + order.total, 0)
   const closableOrders = commerce.orders.filter((order) => order.status === 'completed' && order.paymentStatus === 'reconciled')
   const reconciledValue = closableOrders.reduce((total, order) => total + order.total, 0)
   const lowStock = commerce.items.filter((item) => item.onHand <= item.reorderAt)
@@ -2015,7 +2014,17 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
       </div> : null}
     </section>
     <section className="core-panel order-queue-panel"><div className="panel-head"><div><span className="core-eyebrow">Fulfilment</span><h2>{openOrders.length} open orders</h2></div><span className="panel-note">{paymentReview.length} payment review</span></div><OrderList canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} orders={commerce.orders} /></section>
-  </div>{sourceNotice}{actionControls}</div>
+  </div>
+  <details className="core-panel today-more order-daily-controls">
+    <summary><span>Close and exceptions</span><small>{paymentReview.length + lowStock.length} items need attention</small></summary>
+    <div className="today-more-content">
+      <div className="exception-summary"><span><strong>{paymentReview.length}</strong><small>payment review</small></span><span><strong>{lowStock.length}</strong><small>reorder boundaries</small></span></div>
+      <div className="boundary-list">{lowStock.map((item) => <Link key={item.sku} to="/operations/commerce/?tab=inventory"><strong>{item.name}</strong><small>{item.onHand} on hand</small></Link>)}</div>
+      <button className="core-button" onClick={closeDay} type="button">Save daily close</button>
+      <p className="form-notice" aria-live="polite">{`${closableOrders.length} completed, reconciled orders · ${formatMoney(reconciledValue)} ready to close.`}</p>
+    </div>
+  </details>
+  {sourceNotice}{actionControls}</div>
 
   if (tab === 'inventory') return <div className="operation-module">
     {sourceNotice}
@@ -2038,13 +2047,7 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
     {actionControls}
   </div>
 
-  return <div className="operation-module">{sourceNotice}<div className="module-today">
-    <section className="summary-strip compact-summary"><span><small>Open orders</small><strong>{openOrders.length}</strong></span><span><small>Order value</small><strong>{formatMoney(orderValue)}</strong></span></section>
-    <div className="ops-today-grid task-first-grid">
-      <section className="core-panel"><div className="panel-head"><div><span className="core-eyebrow">Next work</span><h2>Open orders</h2></div><Link className="core-button primary compact" to="/operations/commerce/?tab=orders">Handle orders</Link></div><OrderList canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} orders={openOrders.slice(0, 3)} /></section>
-      <details className="core-panel today-more"><summary><span>Daily controls</span><small>{paymentReview.length + lowStock.length} items need attention</small></summary><div className="today-more-content"><div className="exception-summary"><span><strong>{paymentReview.length}</strong><small>payment review</small></span><span><strong>{lowStock.length}</strong><small>reorder boundaries</small></span></div><div className="boundary-list">{lowStock.map((item) => <Link key={item.sku} to="/operations/commerce/?tab=inventory"><strong>{item.name}</strong><small>{item.onHand} on hand</small></Link>)}</div><button className="core-button" onClick={closeDay} type="button">Save daily close</button><p className="form-notice" aria-live="polite">{notice || commerceStorageError || `${closableOrders.length} completed, reconciled orders · ${formatMoney(reconciledValue)} ready to close.`}</p></div></details>
-    </div>
-  </div>{actionControls}</div>
+  return null
 }
 
 function OrderList({
@@ -2060,7 +2063,7 @@ function OrderList({
   onCancel: (id: string) => void
   onReconcilePayment: (id: string) => void
 }) {
-  if (!orders.length) return <Empty>No orders recorded.</Empty>
+  if (!orders.length) return <Empty>No orders yet. Use the order form to review the first one.</Empty>
   const nextAction: Record<'confirmed' | 'preparing' | 'ready', string> = { confirmed: 'Start preparing', preparing: 'Mark ready', ready: 'Complete' }
   return <div className="order-list">{orders.map((order) => {
     const active = order.status === 'confirmed' || order.status === 'preparing' || order.status === 'ready'
@@ -2337,6 +2340,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   </>
 
   if (tab === 'production') return <div className="operation-module">
+    <section className="summary-strip"><span><small>Completion</small><strong>{completion}%</strong></span><span><small>Open problems</small><strong>{openIssues.length}</strong></span></section>
     <div className="split-workspace production-view">
       <section className="core-panel job-panel">
         <div className="panel-head"><div><span className="core-eyebrow">Production plan</span><h2>Active jobs</h2></div><span className="panel-note">Target is a hard limit</span></div>
@@ -2386,19 +2390,11 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     {actionControls}
   </div>
 
-  return <div className="operation-module">
-    <div className="module-today">
-      <section className="summary-strip compact-summary"><span><small>Completion</small><strong>{completion}%</strong></span><span><small>Open problems</small><strong>{openIssues.length}</strong></span></section>
-      <div className="ops-today-grid task-first-grid">
-        <section className="core-panel"><div className="panel-head"><div><span className="core-eyebrow">Current jobs</span><h2>Production progress</h2></div><Link className="core-button primary compact" to="/operations/production/?tab=production">Record output</Link></div><JobList jobs={production.jobs} /><p className="form-notice">{output.toLocaleString()} of {target.toLocaleString()} good units recorded.</p></section>
-        <details className="core-panel today-more"><summary><span>Problems and equipment</span><small>{openIssues.length} open</small></summary><div className="today-more-content"><IssueList issues={openIssues} onResolve={resolveIssue} /><Link className="core-button" to="/operations/production/?tab=control">Open problems</Link></div></details>
-      </div>
-    </div>
-    {actionControls}
-  </div>
+  return null
 }
 
 function JobList({ jobs }: { jobs: ProductionJob[] }) {
+  if (!jobs.length) return <Empty>No jobs yet. Add the first job below to start recording output.</Empty>
   return <div className="job-list">{jobs.map((job) => { const progress = Math.min(100, Math.round((job.output / job.target) * 100)); return <article key={job.id}><div><span>{job.id} · {job.line}</span><strong>{job.product}</strong></div><div className="job-progress"><span><i style={{ width: `${progress}%` }} /></span><small>{job.output.toLocaleString()} / {job.target.toLocaleString()} · {progress}%</small></div></article> })}</div>
 }
 

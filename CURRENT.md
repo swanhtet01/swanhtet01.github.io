@@ -34,13 +34,13 @@ Canonical host: `app.supermega.dev`
 - `/work/?team=product&view=work` — **Work**: accountable records for Product, Engineering, Growth, and Finance.
 - `/work/?team=engineering&view=agents` — **Agent Teams**: internal role, capability, assignment, evidence, human-owner, and approval-boundary records inside Teams; not another product or public route.
 - `/products/website/` — **Website**: lazy-loaded Pages, Navigation, and Publish workflow with responsive preview, revisioned evidence, approval, and a retained self-contained HTML site file; authenticated v3 workspaces sync through the managed API and all other sessions remain local or fail closed.
-- `/operations/commerce/?tab=today` — **Commerce**: Website and channel orders, fulfilment, stock, attributable payment reconciliation, safe cancellation, stock movements, and daily close. The retired `/products/ecommerce/` path redirects to Commerce Orders.
-- `/operations/production/?tab=today` — **Production**: plan versus actual, recurring job creation, output, quality, maintenance, equipment, issues, and one attributed event record across three tabs. Authenticated workspaces use versioned tenant commands; the clearly labelled browser demo stays local.
+- `/operations/commerce/?tab=orders` — **Commerce**: Orders opens first, Stock is the only second task, and close or exception controls stay collapsed inside Orders. Website and channel intake, fulfilment, attributable payment reconciliation, safe cancellation, stock movements, and daily close share one record. The retired `/products/ecommerce/` path redirects to Commerce Orders.
+- `/operations/production/?tab=production` — **Production**: Jobs opens first with completion and open-problem context; Problems is the only second task. Recurring job creation, output, quality, maintenance, equipment, issues, and one attributed event record stay within those two tasks. Authenticated workspaces use versioned tenant commands; the clearly labelled browser demo stays local.
 - `/settings/` — pilot definition, evidence export, reset, and managed-readiness status.
 
 Settings is a utility, not a primary product area. Home, Work, and Products are the only primary navigation. Website is the only addressable `/products/` prototype and is linked from the Commerce order intake. Deeper capability stays in internal tabs and bounded panels. Desktop workspaces fit the available viewport and use panel scrolling. Mobile Work and Agents use list-to-detail navigation; product tasks use short linear flows.
 
-Before activation, the pilot definition captures the entry point, current record, baseline, target outcome, responsible owner, human authority boundary, and acceptance evidence. An incomplete pilot remains visible as an owner exception on Today.
+Before activation, the pilot definition captures the entry point, current record, baseline, target outcome, responsible owner, human authority boundary, and acceptance evidence. An incomplete pilot remains visible as an owner exception on Home.
 
 ## Product team lifecycle
 

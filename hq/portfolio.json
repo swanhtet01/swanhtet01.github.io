@@ -28,7 +28,7 @@
       "status": "release-candidate-local",
       "path": "/operations/commerce/",
       "job": "Convert Website and trusted-channel demand into controlled orders, stock, fulfilment, payment status, follow-up, and close.",
-      "surfaces": ["Today", "Orders", "Stock"],
+      "surfaces": ["Orders", "Stock"],
       "templateContract": { "file": "../site-manifest.json", "productId": "commerce" },
       "nextGate": "Repeat the managed Website intake through authenticated human Commerce confirmation across at least two catalog items; then review the twenty-fixture AI Order Intake corpus, run the server-only model evaluation, and connect it inside Orders only after the zero-side-effect gate passes."
     },
@@ -38,7 +38,7 @@
       "status": "release-candidate-local",
       "path": "/operations/production/",
       "job": "Connect recurring jobs, output, quality, materials, equipment, maintenance, and shift exceptions in one production record.",
-      "surfaces": ["Today", "Jobs", "Problems"],
+      "surfaces": ["Jobs", "Problems"],
       "templateContract": { "file": "../site-manifest.json", "productId": "production" },
       "nextGate": "Rehearse the managed job-create to output flow on isolated PostgreSQL, then validate one line, maintenance, or quality workflow with operator evidence and owner review."
     }
