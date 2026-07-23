@@ -31,10 +31,10 @@ Prove one real workflow in which SuperMega keeps the operating record, a respons
 
 ## Latest verification
 
-- Draft release candidate: GitHub PR `#258` on branch `agent/supermega-release-candidate`; its validated implementation head is `d0728bfb0d391af7ca6b558cf25a05f1fff68802`.
-- GitHub `SuperMega App CI` run `156` passed every validation job for pushed head `d0728bfb0d391af7ca6b558cf25a05f1fff68802`.
+- Draft release candidate: GitHub PR `#258` on branch `agent/supermega-release-candidate`; its validated implementation head is `4ac6a88c1d9699249169bad081807b894e82f4fe`.
+- GitHub `SuperMega App CI` run `158` passed every validation job for pushed head `4ac6a88c1d9699249169bad081807b894e82f4fe`.
 - Candidate lint and build pass with 178 product/runtime checks, 50 coordinated-release checks, 44 security checks, 10 migration-chain checks, 11 Vercel environment/domain checks, and 96 Python tests.
-- Current desktop and 375px browser audits rechecked direct product entry, legacy route canonicalization, Commerce, and Production. Both products have two tasks, no horizontal overflow, no undersized visible controls, and no browser warnings or errors; the existing bounded candidate audit covers Home, Products, Website, Work, Agents, and Settings.
+- Desktop and 375px audits rechecked Commerce, Production, legacy routes, and Website Edit/Publish. Website puts the page, Preview, Site settings, and first Hero field in the initial phone viewport while retaining desktop Split. Audited products have no horizontal overflow, undersized controls, or console errors; the existing candidate audit covers Home, Products, Work, Agents, and Settings.
 - No Vercel deployment was created by the release-candidate push. The latest `megaos` and `supermega-public` production deployments still reference `main` commit `6885c3201d523d42d176c3dcd91de28dc1e17f6f`.
 - The connected `supermegabase` project is active and healthy on hosted PostgreSQL 17.6.1. Read-only inspection confirms `app_private`, `app_private.trial_schema_meta`, and `supermega_trial_backend` are not installed.
 - Supabase migration history currently contains one unrelated public-schema RLS migration, not the five SuperMega private-trial migrations.
