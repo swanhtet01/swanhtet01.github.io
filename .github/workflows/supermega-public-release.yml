@@ -145,6 +145,26 @@ jobs:
           OPERATING_MODE="$(printf '%s' "$APP_ENV_AUDIT" | node -e "let input='';process.stdin.on('data',chunk=>input+=chunk);process.stdin.on('end',()=>{const value=JSON.parse(input);if(!['isolated_demo','managed_trial'].includes(value.operatingMode))process.exit(1);process.stdout.write(value.operatingMode)})")"
           printf 'operating_mode=%s\n' "$OPERATING_MODE" >> "$GITHUB_OUTPUT"
 
+      - name: Enforce exact app runtime database and RLS gate
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ env.APP_VERCEL_PROJECT_ID }}
+          SELECTED_OPERATING_MODE: ${{ steps.app-environment.outputs.operating_mode }}
+        run: |
+          case "$SELECTED_OPERATING_MODE" in
+            managed_trial)
+              npx --yes vercel@56.1.0 env run --environment=production --token="$VERCEL_TOKEN" -- \
+                python tools/validate_supermega_database_url.py --env-key SUPERMEGA_DATABASE_URL --ensure-schema --require-ready
+              ;;
+            isolated_demo)
+              echo "Managed activation is not selected; production remains isolated_demo."
+              ;;
+            *)
+              echo "::error::Operating mode selection is missing or invalid."
+              exit 1
+              ;;
+          esac
+
       - name: Build the immutable app artifact
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
@@ -261,28 +281,6 @@ jobs:
           PUBLIC_BASE_URL: ${{ steps.deploy.outputs.url }}
           EXPECTED_RELEASE_COMMIT: ${{ github.sha }}
         run: node tools/verify_coordinated_release_live.mjs
-
-      - name: Enforce managed database and RLS promotion gate
-        env:
-          SELECTED_OPERATING_MODE: ${{ steps.app-environment.outputs.operating_mode }}
-          SUPERMEGA_DATABASE_URL: ${{ secrets.SUPERMEGA_DATABASE_URL }}
-        run: |
-          case "$SELECTED_OPERATING_MODE" in
-            managed_trial)
-              if [ -z "$SUPERMEGA_DATABASE_URL" ]; then
-                echo "::error::Managed activation is selected but the owner-gated SUPERMEGA_DATABASE_URL secret is unavailable."
-                exit 1
-              fi
-              python tools/validate_supermega_database_url.py --env-key SUPERMEGA_DATABASE_URL --ensure-schema --require-ready
-              ;;
-            isolated_demo)
-              echo "Managed activation is not selected; production remains isolated_demo."
-              ;;
-            *)
-              echo "::error::Operating mode selection is missing or invalid."
-              exit 1
-              ;;
-          esac
 
       - name: Promote the verified app artifact
         id: promote-app

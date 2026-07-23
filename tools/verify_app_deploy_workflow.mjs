@@ -89,8 +89,25 @@ requireContract('cross-platform protected deployment requests', !appVerifier.inc
 requireContract('both project controls are verified', workflow.includes('verify_vercel_project_state.mjs app') && workflow.includes('verify_vercel_project_state.mjs public') && workflow.includes('verify_vercel_domain_state.mjs app') && workflow.includes('verify_vercel_domain_state.mjs public') && workflow.includes('verify_vercel_environment_state.mjs app') && workflow.includes('verify_vercel_environment_state.mjs public'))
 requireContract('all control URLs use explicit project identities', workflow.includes('api "/v9/projects/$APP_VERCEL_PROJECT_ID"') && workflow.includes('/v9/projects/$APP_VERCEL_PROJECT_ID/domains?teamId=$VERCEL_ORG_ID') && workflow.includes('/v10/projects/$APP_VERCEL_PROJECT_ID/env?teamId=$VERCEL_ORG_ID') && workflow.includes('api "/v9/projects/$PUBLIC_VERCEL_PROJECT_ID"') && workflow.includes('/v9/projects/$PUBLIC_VERCEL_PROJECT_ID/domains?teamId=$VERCEL_ORG_ID') && workflow.includes('/v10/projects/$PUBLIC_VERCEL_PROJECT_ID/env?teamId=$VERCEL_ORG_ID') && workflow.includes('projectId=$PUBLIC_VERCEL_PROJECT_ID&teamId=$VERCEL_ORG_ID') && !workflow.includes('/v9/projects/megaos') && !workflow.includes('/v9/projects/supermega-public'))
 requireContract('managed mode is derived from production environment state', workflow.includes('id: app-environment') && workflow.includes("operating_mode=%s") && workflow.includes("['isolated_demo','managed_trial']"))
-requireContract('managed database audit executes fail closed before promotion', workflow.includes('Enforce managed database and RLS promotion gate') && workflow.includes('SELECTED_OPERATING_MODE') && workflow.includes('SUPERMEGA_DATABASE_URL: ${{ secrets.SUPERMEGA_DATABASE_URL }}') && workflow.includes('python tools/validate_supermega_database_url.py --env-key SUPERMEGA_DATABASE_URL --ensure-schema --require-ready') && workflow.includes('Operating mode selection is missing or invalid'))
-requireContract('RLS policy validator rejects boolean bypasses', !databaseValidator.includes('def _contains_tokens') && databaseValidator.includes('def _policy_expression_matches') && databaseValidator.includes('TRUE OR (') && databaseValidator.includes('reject_ungrouped_human_or') && databaseValidator.includes('"--self-test"'))
+requireContract('managed database audit uses the exact app runtime environment before candidate creation',
+  workflow.includes('Enforce exact app runtime database and RLS gate')
+  && workflow.includes('VERCEL_PROJECT_ID: ${{ env.APP_VERCEL_PROJECT_ID }}')
+  && workflow.includes('vercel@56.1.0 env run --environment=production')
+  && workflow.includes('python tools/validate_supermega_database_url.py --env-key SUPERMEGA_DATABASE_URL --ensure-schema --require-ready')
+  && workflow.includes('Operating mode selection is missing or invalid')
+  && !workflow.includes('SUPERMEGA_DATABASE_URL: ${{ secrets.SUPERMEGA_DATABASE_URL }}')
+  && workflow.indexOf('Enforce exact app runtime database and RLS gate') < workflow.indexOf('Deploy isolated app production candidate')
+  && workflow.indexOf('Enforce exact app runtime database and RLS gate') < workflow.indexOf('Deploy isolated production candidate'))
+requireContract('RLS and trigger validator rejects semantic bypasses',
+  !databaseValidator.includes('def _contains_tokens')
+  && databaseValidator.includes('def _policy_expression_matches')
+  && databaseValidator.includes('TRUE OR (')
+  && databaseValidator.includes('reject_ungrouped_human_or')
+  && databaseValidator.includes('reject_inverted_identity_predicates')
+  && databaseValidator.includes('reject_swapped_identity_settings')
+  && databaseValidator.includes('trigger_type')
+  && databaseValidator.includes('function_source')
+  && databaseValidator.includes('"--self-test"'))
 requireContract('app rollback target captured from exact live alias', workflow.includes('api "/now/aliases/app.supermega.dev" --raw') && workflow.includes('resolve_vercel_rollback_target.mjs alias app.supermega.dev prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG') && workflow.includes('id: app-rollback-target'))
 requireContract('public rollback target captured from exact live alias', workflow.includes('api "/now/aliases/supermega.dev" --raw') && workflow.includes('resolve_vercel_rollback_target.mjs alias supermega.dev prj_Yaf0cZYbiFXcLkMcKaAm4alPWMhR') && workflow.includes('id: rollback-target'))
 requireContract('rollback resolver validates exact deployment identity', workflow.includes('read -r PREVIOUS_URL PREVIOUS_ID') && workflow.includes('resolve_vercel_rollback_target.mjs deployment "$PREVIOUS_URL" "$PREVIOUS_ID"') && rollbackResolver.includes("mode === 'alias'") && rollbackResolver.includes("mode === 'deployment'") && rollbackResolver.includes("state.projectId !== expectedProjectId") && rollbackResolver.includes("nestedDeploymentId !== deploymentId") && rollbackResolver.includes("state.id !== expectedDeploymentId") && rollbackResolver.includes("state.target !== 'production'") && rollbackResolver.includes("state.readyState !== 'READY'"))
@@ -120,10 +137,10 @@ requireContract('no POS route', !/\/pos\/login/i.test(combined))
 requireContract('no YTF schedule', !/\/api\/cron\/ytf/i.test(combined))
 
 const orderedSteps = [
+  'Enforce exact app runtime database and RLS gate',
   'Inspect and verify app candidate',
   'Verify protected candidate content',
   'Verify candidate release identity barrier',
-  'Enforce managed database and RLS promotion gate',
   'Promote the verified app artifact',
   'Promote the verified artifact',
   'Verify production aliases and exact release',

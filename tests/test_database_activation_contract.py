@@ -350,6 +350,57 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                     "workspace_state_version_guard",
                     "approval_requests_controlled_mutation",
                 ]
+                TRIGGER_TYPES = {
+                    "workspace_events_immutable": 27,
+                    "workspace_state_version_guard": 19,
+                    "approval_requests_controlled_mutation": 27,
+                }
+                FUNCTION_SOURCES = {
+                    "reject_workspace_event_mutation": (
+                        "begin raise exception using errcode = '55000', "
+                        "message = 'workspace events are immutable'; end"
+                    ),
+                    "guard_workspace_state_update": (
+                        "begin if new.workspace_id is distinct from old.workspace_id "
+                        "or new.surface is distinct from old.surface then "
+                        "raise exception using errcode = '55000', "
+                        "message = 'workspace state identity is immutable'; end if; "
+                        "if new.version <> old.version + 1 then "
+                        "raise exception using errcode = '40001', "
+                        "message = 'workspace state version must increment by one'; "
+                        "end if; return new; end"
+                    ),
+                    "guard_approval_mutation": (
+                        "begin if tg_op = 'DELETE' then raise exception using "
+                        "errcode = '55000', message = 'approval records cannot be deleted'; "
+                        "end if; if new.approval_id is distinct from old.approval_id "
+                        "or new.workspace_id is distinct from old.workspace_id "
+                        "or new.command_id is distinct from old.command_id "
+                        "or new.command_fingerprint is distinct from old.command_fingerprint "
+                        "or new.title is distinct from old.title "
+                        "or new.proposal_json is distinct from old.proposal_json "
+                        "or new.evidence_refs_json is distinct from old.evidence_refs_json "
+                        "or new.requested_by is distinct from old.requested_by "
+                        "or new.requested_actor_kind is distinct from old.requested_actor_kind "
+                        "or new.requested_at is distinct from old.requested_at "
+                        "or new.decision_contract_version is distinct from old.decision_contract_version "
+                        "then raise exception using errcode = '55000', "
+                        "message = 'approval proposal and evidence are immutable'; end if; "
+                        "if old.decision_contract_version <> 2 then raise exception using "
+                        "errcode = '55000', message = 'legacy approval must be reissued under decision contract v2'; "
+                        "end if; if old.status <> 'pending' or new.status not in ('approved', 'declined') "
+                        "then raise exception using errcode = '55000', "
+                        "message = 'approval transition must be pending to approved or declined'; end if; "
+                        "if new.version <> old.version + 1 or new.decided_by is null "
+                        "or new.decided_by <> btrim(new.decided_by) or new.decided_by = '' "
+                        "or new.decided_actor_kind <> 'human' or new.decided_at is null "
+                        "or new.decision_note <> btrim(new.decision_note) "
+                        "or char_length(new.decision_note) not between 1 and 500 then "
+                        "raise exception using errcode = '55000', "
+                        "message = 'approval decision requires a named human and nonblank note'; "
+                        "end if; return new; end"
+                    ),
+                }
                 INDEXES = [
                     "trial_schema_meta_pkey",
                     "workspace_memberships_pkey",
@@ -587,18 +638,34 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                                 ("app.workspace_id", "app.actor_id", "app.actor_kind", "workspace_memberships", "approvals.decide", "human"),
                             ),
                         }
-                        return [
-                            _snapshot(
+                        rows = []
+                        for name in _snapshot()["policies"]:
+                            qual = " ".join(contracts[name][2]) if contracts[name][2] else None
+                            with_check = " ".join(contracts[name][3]) if contracts[name][3] else None
+                            if scenario == "inverted_policy" and name == "workspace_memberships_self_read":
+                                qual = (
+                                    "workspace_id <> current_setting('app.workspace_id', true) "
+                                    "and actor_id <> current_setting('app.actor_id', true) "
+                                    "and actor_kind <> current_setting('app.actor_kind', true) "
+                                    "and status <> 'active'"
+                                )
+                            if scenario == "swapped_policy_identity" and name == "workspace_memberships_self_read":
+                                qual = (
+                                    "workspace_id = current_setting('app.actor_id', true) "
+                                    "and actor_id = current_setting('app.workspace_id', true) "
+                                    "and actor_kind = current_setting('app.actor_kind', true) "
+                                    "and status = 'active'"
+                                )
+                            rows.append(_snapshot(
                                 table_name=contracts[name][0],
                                 policy_name=name,
                                 permissive="PERMISSIVE",
                                 roles=["supermega_trial_backend"],
                                 command=contracts[name][1],
-                                qual=" ".join(contracts[name][2]) if contracts[name][2] else None,
-                                with_check=" ".join(contracts[name][3]) if contracts[name][3] else None,
-                            )
-                            for name in _snapshot()["policies"]
-                        ]
+                                qual=qual,
+                                with_check=with_check,
+                            ))
+                        return rows
                     if "pg_trigger" in q or "information_schema.triggers" in q:
                         contracts = {
                             "workspace_events_immutable": (
@@ -614,16 +681,28 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                                 "guard_approval_mutation",
                             ),
                         }
-                        return [
-                            _snapshot(
+                        rows = []
+                        for name in _snapshot()["triggers"]:
+                            function_name = contracts[name][1]
+                            trigger_type = TRIGGER_TYPES[name]
+                            function_source = FUNCTION_SOURCES[function_name]
+                            if scenario == "wrong_trigger_event" and name == "workspace_events_immutable":
+                                trigger_type = 7
+                            if scenario == "mutated_trigger_function" and name == "workspace_events_immutable":
+                                function_source = "begin return old; end"
+                            rows.append(_snapshot(
                                 table_name=contracts[name][0],
                                 trigger_name=name,
-                                function_name=contracts[name][1],
+                                function_name=function_name,
                                 enabled="O",
+                                trigger_type=trigger_type,
                                 definition=f"CREATE TRIGGER {name} BEFORE UPDATE ON app_private.{contracts[name][0]}",
-                            )
-                            for name in _snapshot()["triggers"]
-                        ]
+                                function_source=function_source,
+                                security_definer=scenario == "security_definer_trigger",
+                                function_config=["search_path=pg_catalog, app_private"],
+                                function_language="plpgsql",
+                            ))
+                        return rows
                     if "pg_indexes" in q or "pg_index" in q:
                         return [
                             _snapshot(
@@ -951,7 +1030,12 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
             "missing_rls",
             "forbidden_grant",
             "missing_policy",
+            "inverted_policy",
+            "swapped_policy_identity",
             "missing_trigger",
+            "wrong_trigger_event",
+            "mutated_trigger_function",
+            "security_definer_trigger",
             "missing_index",
         )
         for scenario in scenarios:

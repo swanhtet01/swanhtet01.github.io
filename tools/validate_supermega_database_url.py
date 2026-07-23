@@ -47,10 +47,78 @@ EXPECTED_INDEXES = frozenset(
         "approval_requests_queue_idx",
     }
 )
-EXPECTED_TRIGGERS = {
-    "workspace_events_immutable": ("workspace_events", "reject_workspace_event_mutation"),
-    "workspace_state_version_guard": ("workspace_state", "guard_workspace_state_update"),
-    "approval_requests_controlled_mutation": ("approval_requests", "guard_approval_mutation"),
+EXPECTED_TRIGGERS: dict[str, dict[str, Any]] = {
+    "workspace_events_immutable": {
+        "table": "workspace_events",
+        "function": "reject_workspace_event_mutation",
+        "trigger_type": 27,  # ROW | BEFORE | DELETE | UPDATE
+        "function_source": """
+            begin
+              raise exception using
+                errcode = '55000',
+                message = 'workspace events are immutable';
+            end
+        """,
+    },
+    "workspace_state_version_guard": {
+        "table": "workspace_state",
+        "function": "guard_workspace_state_update",
+        "trigger_type": 19,  # ROW | BEFORE | UPDATE
+        "function_source": """
+            begin
+              if new.workspace_id is distinct from old.workspace_id
+                 or new.surface is distinct from old.surface then
+                raise exception using errcode = '55000', message = 'workspace state identity is immutable';
+              end if;
+              if new.version <> old.version + 1 then
+                raise exception using errcode = '40001', message = 'workspace state version must increment by one';
+              end if;
+              return new;
+            end
+        """,
+    },
+    "approval_requests_controlled_mutation": {
+        "table": "approval_requests",
+        "function": "guard_approval_mutation",
+        "trigger_type": 27,  # ROW | BEFORE | DELETE | UPDATE
+        "function_source": """
+            begin
+              if tg_op = 'DELETE' then
+                raise exception using errcode = '55000', message = 'approval records cannot be deleted';
+              end if;
+              if new.approval_id is distinct from old.approval_id
+                 or new.workspace_id is distinct from old.workspace_id
+                 or new.command_id is distinct from old.command_id
+                 or new.command_fingerprint is distinct from old.command_fingerprint
+                 or new.title is distinct from old.title
+                 or new.proposal_json is distinct from old.proposal_json
+                 or new.evidence_refs_json is distinct from old.evidence_refs_json
+                 or new.requested_by is distinct from old.requested_by
+                 or new.requested_actor_kind is distinct from old.requested_actor_kind
+                 or new.requested_at is distinct from old.requested_at
+                 or new.decision_contract_version is distinct from old.decision_contract_version then
+                raise exception using errcode = '55000', message = 'approval proposal and evidence are immutable';
+              end if;
+              if old.decision_contract_version <> 2 then
+                raise exception using errcode = '55000', message = 'legacy approval must be reissued under decision contract v2';
+              end if;
+              if old.status <> 'pending' or new.status not in ('approved', 'declined') then
+                raise exception using errcode = '55000', message = 'approval transition must be pending to approved or declined';
+              end if;
+              if new.version <> old.version + 1
+                 or new.decided_by is null
+                 or new.decided_by <> btrim(new.decided_by)
+                 or new.decided_by = ''
+                 or new.decided_actor_kind <> 'human'
+                 or new.decided_at is null
+                 or new.decision_note <> btrim(new.decision_note)
+                 or char_length(new.decision_note) not between 1 and 500 then
+                raise exception using errcode = '55000', message = 'approval decision requires a named human and nonblank note';
+              end if;
+              return new;
+            end
+        """,
+    },
 }
 EXPECTED_POLICIES: dict[str, dict[str, Any]] = {
     "workspace_memberships_self_read": {
@@ -198,6 +266,20 @@ _APPROVAL_HUMAN_OR_TOKENS = (
     "=",
     "'human'",
 )
+_IDENTITY_BINDING_RE = re.compile(
+    r"\b(?:[a-z_][a-z0-9_]*\.)?"
+    r"(?P<field>workspace_id|actor_id|actor_kind|updated_by|requested_by|"
+    r"requested_actor_kind|decided_by|decided_actor_kind)"
+    r"\s*(?P<operator>=|<>)\s*"
+    r"current_setting\s*\(\s*'(?P<setting>app\.(?:workspace_id|actor_id|actor_kind))'"
+    r"\s*,\s*true\s*\)",
+    re.IGNORECASE,
+)
+_IDENTITY_FIELDS_BY_SETTING = {
+    "app.workspace_id": frozenset({"workspace_id"}),
+    "app.actor_id": frozenset({"actor_id", "updated_by", "requested_by", "decided_by"}),
+    "app.actor_kind": frozenset({"actor_kind", "requested_actor_kind", "decided_actor_kind"}),
+}
 
 
 def _policy_tokens(expression: Any) -> list[str]:
@@ -262,7 +344,45 @@ def _dangerous_policy_expression(expression: str, tokens: Sequence[str]) -> bool
     for match in re.finditer(r"('(?:''|[^'])*')\s*=\s*('(?:''|[^'])*')", expression):
         if match.group(1) == match.group(2):
             return True
+    not_equal_count = sum(token == "<>" for token in tokens)
+    if not_equal_count and not (
+        not_equal_count == 1 and _has_exact_approval_human_or(tokens)
+    ):
+        return True
+    normalized = _POLICY_CAST_RE.sub("", expression)
+    for match in _IDENTITY_BINDING_RE.finditer(normalized):
+        setting = match.group("setting").lower()
+        field = match.group("field").lower()
+        if (
+            match.group("operator") != "="
+            or field not in _IDENTITY_FIELDS_BY_SETTING[setting]
+        ):
+            return True
     return "or" in tokens and not _has_exact_approval_human_or(tokens)
+
+
+def _required_identity_bindings_present(
+    expression: str,
+    required_tokens: Sequence[str],
+) -> bool:
+    required_settings = {
+        setting
+        for setting in _IDENTITY_FIELDS_BY_SETTING
+        if setting in {token.lower() for token in required_tokens}
+    }
+    if not required_settings:
+        return True
+    normalized = _POLICY_CAST_RE.sub("", expression)
+    observed: set[str] = set()
+    for match in _IDENTITY_BINDING_RE.finditer(normalized):
+        setting = match.group("setting").lower()
+        field = match.group("field").lower()
+        if (
+            match.group("operator") == "="
+            and field in _IDENTITY_FIELDS_BY_SETTING[setting]
+        ):
+            observed.add(setting)
+    return required_settings.issubset(observed)
 
 
 def _policy_expression_matches(
@@ -289,6 +409,8 @@ def _policy_expression_matches(
     if not structured:
         return True
     if _dangerous_policy_expression(value, tokens):
+        return False
+    if not _required_identity_bindings_present(value, required_tokens):
         return False
 
     or_count = sum(token == "or" for token in tokens)
@@ -333,6 +455,17 @@ def _run_policy_self_test() -> dict[str, Any]:
             f"({membership}) OR 1 = 1",
             membership_tokens,
         ),
+        "reject_inverted_identity_predicates": not _policy_expression_matches(
+            membership.replace(" = ", " <> "),
+            membership_tokens,
+        ),
+        "reject_swapped_identity_settings": not _policy_expression_matches(
+            membership
+            .replace("'app.workspace_id'", "'app.__swap__'", 1)
+            .replace("'app.actor_id'", "'app.workspace_id'", 1)
+            .replace("'app.__swap__'", "'app.actor_id'", 1),
+            membership_tokens,
+        ),
         "canonical_human_guard": _policy_expression_matches(
             event,
             event_tokens,
@@ -361,10 +494,24 @@ def _run_policy_self_test() -> dict[str, Any]:
         "mutation_statements_executed": 0,
         "secret_values_exposed": False,
     }
-    if not tokens:
-        return expression in (None, "")
-    value = str(expression or "").lower()
-    return all(token.lower() in value for token in tokens)
+
+
+def _normalized_function_source(value: Any) -> str:
+    return re.sub(r"\s+", " ", str(value or "")).strip().lower()
+
+
+def _function_settings(value: Any) -> frozenset[str]:
+    if value is None:
+        return frozenset()
+    if isinstance(value, str):
+        return frozenset(
+            part.strip().strip('"')
+            for part in value.strip("{}").split(",")
+            if part.strip().strip('"')
+        )
+    if isinstance(value, Sequence):
+        return frozenset(str(part).strip() for part in value if str(part).strip())
+    return frozenset()
 
 
 def validate_database_url(database_url: str) -> None:
@@ -530,11 +677,17 @@ def collect_snapshot(connection: Any) -> dict[str, Any]:
             """
             select c.relname as table_name, t.tgname as trigger_name,
                    p.proname as function_name, t.tgenabled as enabled,
-                   pg_get_triggerdef(t.oid, true) as definition
+                   t.tgtype::integer as trigger_type,
+                   pg_get_triggerdef(t.oid, true) as definition,
+                   p.prosrc as function_source,
+                   p.prosecdef as security_definer,
+                   p.proconfig as function_config,
+                   language_record.lanname as function_language
             from pg_trigger t
             join pg_class c on c.oid = t.tgrelid
             join pg_namespace n on n.oid = c.relnamespace
             join pg_proc p on p.oid = t.tgfoid
+            join pg_language language_record on language_record.oid = p.prolang
             where n.nspname = 'app_private' and not t.tgisinternal
             order by c.relname, t.tgname
             """,
@@ -690,13 +843,19 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
     triggers = {str(row.get("trigger_name")): row for row in trigger_rows}
     trigger_contract = frozenset(triggers) == frozenset(EXPECTED_TRIGGERS)
     if trigger_contract:
-        for name, (table_name, function_name) in EXPECTED_TRIGGERS.items():
+        for name, expected in EXPECTED_TRIGGERS.items():
             row = triggers[name]
             trigger_contract = trigger_contract and (
-                str(row.get("table_name")) == table_name
-                and str(row.get("function_name")) == function_name
+                str(row.get("table_name")) == expected["table"]
+                and str(row.get("function_name")) == expected["function"]
                 and str(row.get("enabled")) in {"O", "A"}
-                and "before" in str(row.get("definition", "")).lower()
+                and int(row.get("trigger_type", -1)) == expected["trigger_type"]
+                and str(row.get("function_language", "")).lower() == "plpgsql"
+                and row.get("security_definer") is False
+                and _function_settings(row.get("function_config"))
+                == {"search_path=pg_catalog, app_private"}
+                and _normalized_function_source(row.get("function_source"))
+                == _normalized_function_source(expected["function_source"])
             )
             if not trigger_contract:
                 break
