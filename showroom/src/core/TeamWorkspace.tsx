@@ -312,13 +312,15 @@ export function TeamsPage() {
         {activeView === 'work' && !intakeOpen ? <div className="split-workspace team-board-view">
           <section className="core-panel queue-panel">
             <div className="panel-head"><div><span className="core-eyebrow">Owned work</span><h2>{openItems.length} open</h2></div></div>
-            {teamItems.length ? <div className="record-list" role="list">{teamItems.map((item) => (
-              <button aria-current={selectedItem?.id === item.id ? 'true' : undefined} className="record-row" key={item.id} onClick={() => navigate(activeTeam, 'work', item.id)} type="button">
-                <span className={`record-status ${item.status}`} />
-                <span><strong>{item.title}</strong><small>{item.id} / {item.owner}</small></span>
-                <span><b>{item.priority}</b><small>{statusLabel(item.status)}</small></span>
-              </button>
-            ))}</div> : <Empty>No work is recorded for this team.</Empty>}
+            {teamItems.length ? <ul className="record-list">{teamItems.map((item) => (
+              <li key={item.id}>
+                <button aria-current={selectedItem?.id === item.id ? 'true' : undefined} className="record-row" onClick={() => navigate(activeTeam, 'work', item.id)} type="button">
+                  <span className={`record-status ${item.status}`} />
+                  <span><strong>{item.title}</strong><small>{item.id} / {item.owner}</small></span>
+                  <span><b>{item.priority}</b><small>{statusLabel(item.status)}</small></span>
+                </button>
+              </li>
+            ))}</ul> : <Empty>No work is recorded for this team.</Empty>}
           </section>
           <section className="core-panel record-detail-panel">
             {selectedItem ? <>

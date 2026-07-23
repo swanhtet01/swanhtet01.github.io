@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from 'react'
+import { type FormEvent, useRef, useState } from 'react'
 
 import {
   evidenceRequirements,
@@ -7,6 +7,7 @@ import {
   type ReadinessCheck,
   type WebsiteWorkspace,
 } from './website-model'
+import './publish-workspace.css'
 
 type EvidenceInput = {
   kind: EvidenceKind
@@ -40,6 +41,15 @@ type PublishWorkspaceProps = {
   onRecordPublish: () => Promise<void>
 }
 
+type PublishStep = 'checks' | 'evidence' | 'approval' | 'snapshot'
+
+const publishSteps: Array<{ id: PublishStep; label: string }> = [
+  { id: 'checks', label: 'Checks' },
+  { id: 'evidence', label: 'Evidence' },
+  { id: 'approval', label: 'Approval' },
+  { id: 'snapshot', label: 'Snapshot & handoff' },
+]
+
 export function PublishWorkspace({
   approvalIsCurrent,
   checks,
@@ -64,12 +74,51 @@ export function PublishWorkspace({
   const [handoffSku, setHandoffSku] = useState('')
   const [handoffQuantity, setHandoffQuantity] = useState(1)
   const [submitting, setSubmitting] = useState<'evidence' | 'approval' | 'snapshot' | 'handoff' | ''>('')
+  const bodyRef = useRef<HTMLDivElement>(null)
   const passedCount = checks.filter((check) => check.passed).length
   const allChecksPass = passedCount === checks.length
   const latestApproval = workspace.approvals[0]
   const staleEvidenceCount = workspace.evidence.filter((entry) => (
     entry.fingerprint !== fingerprint || entry.source.contentRevision !== workspace.contentRevision
   )).length
+  const currentEvidenceByKind = new Map(
+    evidenceRequirements.map((requirement) => [
+      requirement.id,
+      workspace.evidence.find((entry) => (
+        entry.kind === requirement.id
+        && entry.fingerprint === fingerprint
+        && entry.source.contentRevision === workspace.contentRevision
+      )),
+    ]),
+  )
+  const currentEvidenceCount = [...currentEvidenceByKind.values()].filter(Boolean).length
+  const contentChecks = checks.filter((check) => !check.id.startsWith('evidence-'))
+  const passedContentCheckCount = contentChecks.filter((check) => check.passed).length
+  const contentChecksPass = passedContentCheckCount === contentChecks.length
+  const evidenceIsCurrent = currentEvidenceCount === evidenceRequirements.length
+  const initialStep: PublishStep = !contentChecksPass
+    ? 'checks'
+    : !evidenceIsCurrent
+      ? 'evidence'
+      : !approvalIsCurrent
+        ? 'approval'
+        : 'snapshot'
+  const [activeStep, setActiveStep] = useState<PublishStep>(initialStep)
+  const workflowStatus = publishIsCurrent
+    ? 'Snapshot recorded'
+    : approvalIsCurrent
+      ? 'Ready to record'
+      : evidenceIsCurrent && contentChecksPass
+        ? 'Needs approval'
+        : contentChecksPass
+          ? 'Needs evidence'
+          : 'Needs fixes'
+  const stepStatus: Record<PublishStep, string> = {
+    checks: `${passedContentCheckCount}/${contentChecks.length}`,
+    evidence: `${currentEvidenceCount}/${evidenceRequirements.length}`,
+    approval: approvalIsCurrent ? 'Approved' : 'Required',
+    snapshot: publishIsCurrent ? 'Recorded' : 'Not recorded',
+  }
 
   async function prepareCommerceHandoff() {
     const sku = handoffSku.trim().toUpperCase()
@@ -113,267 +162,397 @@ export function PublishWorkspace({
     setSubmitting('')
   }
 
+  function selectStep(step: PublishStep) {
+    if (bodyRef.current) bodyRef.current.scrollTop = 0
+    setActiveStep(step)
+  }
+
   return (
-    <section className="website-editor-panel website-publish-panel" aria-labelledby="publish-editor-title">
-      <header className="website-panel-head">
+    <section
+      className="website-editor-panel website-publish-panel website-publish-workspace"
+      aria-labelledby="publish-editor-title"
+    >
+      <header className="website-panel-head publish-flow-header">
         <div>
-          <span className="website-eyebrow">Publish control</span>
-          <h2 id="publish-editor-title">Readiness and approval</h2>
-          <p>Checks use only the current workspace revision.</p>
+          <span className="website-eyebrow">Safe publish workflow</span>
+          <h2 id="publish-editor-title">Review and record this revision</h2>
+          <p>Work through one step at a time. Nothing here deploys a website or changes a domain.</p>
         </div>
-        <span className={'website-status ' + (allChecksPass ? 'is-ready' : 'is-pending')}>
-          {passedCount}/{checks.length} passed
+        <span className={'website-status ' + (publishIsCurrent ? 'is-ready' : 'is-pending')}>
+          {workflowStatus}
         </span>
       </header>
 
-      <div className="website-editor-scroll">
-        <section className="website-publish-section" aria-labelledby="readiness-title">
-          <header>
-            <div>
-              <span className="website-step">01</span>
-              <div>
-                <h3 id="readiness-title">Publish-readiness checks</h3>
-                <p>Content checks are derived; evidence is explicitly recorded.</p>
-              </div>
-            </div>
-            <code>{fingerprint}</code>
-          </header>
-          <div className="website-check-list">
-            {checks.map((check) => (
-              <article className={check.passed ? 'is-passed' : 'is-blocked'} key={check.id}>
-                <span aria-hidden="true">{check.passed ? '✓' : '!'}</span>
-                <div>
-                  <strong>{check.label}</strong>
-                  <p>{check.detail}</p>
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section className="website-publish-section" aria-labelledby="evidence-title">
-          <header>
-            <div>
-              <span className="website-step">02</span>
-              <div>
-                <h3 id="evidence-title">Verified evidence</h3>
-                <p>Recording evidence is an accountable claim. Managed mode binds it to the signed-in actor.</p>
-              </div>
-            </div>
-            {staleEvidenceCount ? <small>{staleEvidenceCount} stale record{staleEvidenceCount === 1 ? '' : 's'}</small> : null}
-          </header>
-
-          <div className="website-evidence-status">
-            {evidenceRequirements.map((requirement) => {
-              const evidence = workspace.evidence.find((entry) => (
-                entry.kind === requirement.id
-                && entry.fingerprint === fingerprint
-                && entry.source.contentRevision === workspace.contentRevision
-              ))
-              return (
-                <article className={evidence ? 'is-current' : ''} key={requirement.id}>
-                  <span>{evidence ? 'verified' : 'required'}</span>
-                  <strong>{requirement.label}</strong>
-                  {evidence ? (
-                    <>
-                      <p>{evidence.finding}</p>
-                      <small>{evidence.reference} · {evidence.verifiedBy} · {formatTimestamp(evidence.verifiedAt)}</small>
-                    </>
-                  ) : (
-                    <p>{requirement.detail}</p>
-                  )}
-                </article>
-              )
-            })}
-          </div>
-
-          <form className="website-evidence-form" onSubmit={submitEvidence}>
-            <label>
-              <span>Requirement</span>
-              <select value={evidenceKind} onChange={(event) => setEvidenceKind(event.target.value as EvidenceKind)}>
-                {evidenceRequirements.map((requirement) => (
-                  <option key={requirement.id} value={requirement.id}>{requirement.label}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>Finding</span>
-              <input
-                maxLength={180}
-                onChange={(event) => setEvidenceFinding(event.target.value)}
-                placeholder="What the review established"
-                required
-                value={evidenceFinding}
-              />
-            </label>
-            <label>
-              <span>Source or reference</span>
-              <input
-                maxLength={220}
-                onChange={(event) => setEvidenceReference(event.target.value)}
-                placeholder="File, test result, URL, or review record"
-                required
-                value={evidenceReference}
-              />
-            </label>
-            <label>
-              <span>{managedActorId ? 'Signed-in actor' : 'Verified by'}</span>
-              <input
-                disabled={Boolean(managedActorId)}
-                maxLength={80}
-                onChange={(event) => setEvidenceVerifier(event.target.value)}
-                placeholder={managedActorId ? 'Authenticated identity' : 'Accountable person or role'}
-                required
-                value={managedActorId || evidenceVerifier}
-              />
-            </label>
-            <button className="website-button is-secondary" disabled={Boolean(submitting)} type="submit">
-              {submitting === 'evidence' ? 'Saving…' : 'Record evidence'}
-            </button>
-          </form>
-        </section>
-
-        <section className="website-publish-section" aria-labelledby="approval-title">
-          <header>
-            <div>
-              <span className="website-step">03</span>
-              <div>
-                <h3 id="approval-title">Human approval</h3>
-                <p>Approval applies only to the exact fingerprint; managed mode binds the signed-in actor.</p>
-              </div>
-            </div>
-            <span className={'website-status ' + (approvalIsCurrent ? 'is-ready' : 'is-pending')}>
-              {approvalIsCurrent ? 'approved' : latestApproval ? 'stale' : 'required'}
-            </span>
-          </header>
-
-          {latestApproval ? (
-            <div className={'website-approval-record ' + (approvalIsCurrent ? 'is-current' : 'is-stale')}>
-              <strong>{approvalIsCurrent ? 'Current approval' : latestApproval.migratedFromV1 ? 'Historical v1 approval' : 'Superseded by workspace changes'}</strong>
-              <p>{latestApproval.note}</p>
-              <small>{latestApproval.reviewer} · {formatTimestamp(latestApproval.approvedAt)} · content r{latestApproval.source.contentRevision}</small>
-            </div>
-          ) : null}
-
-          <form className="website-approval-form" onSubmit={submitApproval}>
-            <div className="website-form-grid two-columns">
-              <label>
-                <span>Human reviewer</span>
-                <input
-                  disabled={Boolean(managedActorId) || !allChecksPass || approvalIsCurrent}
-                  maxLength={80}
-                  onChange={(event) => setReviewer(event.target.value)}
-                  placeholder={managedActorId ? 'Authenticated identity' : 'Name or accountable role'}
-                  required
-                  value={managedActorId || reviewer}
-                />
-              </label>
-              <label>
-                <span>Decision note</span>
-                <input
-                  disabled={!allChecksPass || approvalIsCurrent}
-                  maxLength={240}
-                  onChange={(event) => setApprovalNote(event.target.value)}
-                  placeholder="Why this revision is approved"
-                  required
-                  value={approvalNote}
-                />
-              </label>
-            </div>
-            <label className="website-confirmation">
-              <input
-                checked={approvalConfirmed}
-                disabled={!allChecksPass || approvalIsCurrent}
-                onChange={(event) => setApprovalConfirmed(event.target.checked)}
-                type="checkbox"
-              />
-              <span>I reviewed this exact content revision and accept the recorded evidence.</span>
-            </label>
-            <div className="website-gate-actions">
-              <small>{approvalIsCurrent
-                ? 'This exact evidence set already has a current human approval.'
-                : allChecksPass ? 'Ready for a named human decision.' : 'Complete all readiness checks to unlock approval.'}</small>
+      <nav className="publish-flow-nav" aria-label="Publish steps">
+        <ol>
+          {publishSteps.map((step, index) => (
+            <li key={step.id}>
               <button
-                className="website-button is-primary"
-                disabled={!allChecksPass || !approvalConfirmed || approvalIsCurrent || Boolean(submitting)}
-                type="submit"
-              >
-                {approvalIsCurrent ? 'Current revision approved' : submitting === 'approval' ? 'Saving…' : 'Record approval'}
-              </button>
-            </div>
-          </form>
-        </section>
-
-        <section className="website-publish-section website-local-publish" aria-labelledby="local-publish-title">
-          <header>
-            <div>
-              <span className="website-step">04</span>
-              <div>
-                <h3 id="local-publish-title">Approved snapshot</h3>
-                <p>No deployment target, domain write, or external connection exists in this prototype.</p>
-              </div>
-            </div>
-            <span className={'website-status ' + (publishIsCurrent ? 'is-ready' : 'is-local')}>
-              {publishIsCurrent ? 'recorded' : 'not recorded'}
-            </span>
-          </header>
-
-          <div className="website-local-publish-action">
-            <div>
-              <strong>{approvalIsCurrent ? 'Approval matches the current revision.' : 'A current approval is required.'}</strong>
-              <p>The action saves an evidence-bound approved snapshot. It does not publish a website.</p>
-            </div>
-            <button
-              className="website-button is-primary"
-              disabled={!approvalIsCurrent || publishIsCurrent || Boolean(submitting)}
-              onClick={recordSnapshot}
-              type="button"
-            >
-              {publishIsCurrent ? 'Current revision recorded' : submitting === 'snapshot' ? 'Saving…' : 'Record approved snapshot'}
-            </button>
-          </div>
-
-          <div className="website-handoff-action">
-            <div>
-              <strong>Website → Commerce intake</strong>
-              <p>Send one catalog SKU and quantity from this approved revision into Commerce. No stock, payment, customer message, or order changes until a human confirms it there.</p>
-            </div>
-            <div className="website-handoff-controls">
-              <label>Commerce SKU<input autoComplete="off" maxLength={80} onChange={(event) => setHandoffSku(event.target.value.toUpperCase())} placeholder="SKU-001" value={handoffSku} /></label>
-              <label>Qty<input max="99" min="1" onChange={(event) => setHandoffQuantity(Number(event.target.value))} step="1" type="number" value={handoffQuantity} /></label>
-              <button
-                className="website-button is-secondary"
-                disabled={!publishIsCurrent || !handoffAvailable || handoffIsCurrent || !handoffSku.trim() || Boolean(submitting)}
-                onClick={() => void prepareCommerceHandoff()}
+                aria-current={activeStep === step.id ? 'step' : undefined}
+                onClick={() => selectStep(step.id)}
                 type="button"
               >
-                {handoffIsCurrent ? 'Intake sent' : submitting === 'handoff' ? 'Sending…' : 'Send intake'}
+                <span className="publish-flow-step-number" aria-hidden="true">{index + 1}</span>
+                <span className="publish-flow-step-label">
+                  <strong>{step.label}</strong>
+                  <small>{stepStatus[step.id]}</small>
+                </span>
               </button>
-              {handoffIsCurrent ? <a className="website-button is-primary" href="/operations/commerce/?tab=orders">Review in Commerce</a> : null}
-            </div>
-          </div>
+            </li>
+          ))}
+        </ol>
+      </nav>
 
-          {workspace.localPublishes.length ? (
-            <div className="website-publish-history">
-              <small>Showing {Math.min(3, workspace.localPublishes.length)} of {workspace.localPublishes.length} retained snapshots</small>
-              {workspace.localPublishes.slice(0, 3).map((record) => (
-                <article key={record.id}>
-                  <span aria-hidden="true">&gt;_</span>
+      <div className="publish-flow-boundary" role="note">
+        <strong>Local record only</strong>
+        <span>No deployment, domain write, payment, stock, customer message, or order change happens here.</span>
+      </div>
+
+      <div className="website-editor-scroll publish-flow-body" ref={bodyRef}>
+        {activeStep === 'checks' ? (
+          <section
+            className="website-publish-section publish-flow-card"
+            id="publish-step-checks"
+            aria-labelledby="readiness-title"
+          >
+            <header>
+              <div>
+                <span className="website-step" aria-hidden="true">1</span>
+                <div>
+                  <h3 id="readiness-title">Check the website</h3>
+                  <p>These checks come from the current content and navigation.</p>
+                </div>
+              </div>
+              <span className={'website-status ' + (contentChecksPass ? 'is-ready' : 'is-pending')}>
+                {passedContentCheckCount}/{contentChecks.length} passed
+              </span>
+            </header>
+
+            <div className="publish-flow-revision">
+              <span>Current revision</span>
+              <code>{fingerprint}</code>
+            </div>
+
+            <div className="website-check-list">
+              {contentChecks.map((check) => (
+                <article className={check.passed ? 'is-passed' : 'is-blocked'} key={check.id}>
+                  <span className="publish-flow-check-state">{check.passed ? 'Pass' : 'Fix'}</span>
                   <div>
-                    <strong>{record.id}</strong>
-                    <small>{record.readyPageIds.length} ready page{record.readyPageIds.length === 1 ? '' : 's'} · {record.recordedBy} · {formatTimestamp(record.recordedAt)}</small>
+                    <strong>{check.label}</strong>
+                    <p>{check.detail}</p>
                   </div>
-                  <code>{record.fingerprint}</code>
                 </article>
               ))}
             </div>
-          ) : (
-            <div className="website-empty compact">
-              <span aria-hidden="true">&gt;_</span>
-              <p>No approved snapshots yet.</p>
+
+            <footer className="publish-flow-actions">
+              <p>{contentChecksPass
+                ? 'Website checks are clear. Add the three review records next.'
+                : 'Fix blocked items in Content or Navigation, then return here.'}</p>
+              <button className="website-button is-primary" onClick={() => selectStep('evidence')} type="button">
+                Review evidence
+              </button>
+            </footer>
+          </section>
+        ) : null}
+
+        {activeStep === 'evidence' ? (
+          <section
+            className="website-publish-section publish-flow-card"
+            id="publish-step-evidence"
+            aria-labelledby="evidence-title"
+          >
+            <header>
+              <div>
+                <span className="website-step" aria-hidden="true">2</span>
+                <div>
+                  <h3 id="evidence-title">Record review evidence</h3>
+                  <p>Each record is an accountable claim for this exact revision.</p>
+                </div>
+              </div>
+              <span className={'website-status ' + (evidenceIsCurrent ? 'is-ready' : 'is-pending')}>
+                {currentEvidenceCount}/{evidenceRequirements.length} current
+              </span>
+            </header>
+
+            {staleEvidenceCount ? (
+              <p className="publish-flow-stale-note">
+                {staleEvidenceCount} older record{staleEvidenceCount === 1 ? '' : 's'} remain in history but do not approve this revision.
+              </p>
+            ) : null}
+
+            <div className="website-evidence-status">
+              {evidenceRequirements.map((requirement) => {
+                const evidence = currentEvidenceByKind.get(requirement.id)
+                return (
+                  <article className={evidence ? 'is-current' : ''} key={requirement.id}>
+                    <span>{evidence ? 'Verified' : 'Required'}</span>
+                    <strong>{requirement.label}</strong>
+                    {evidence ? (
+                      <>
+                        <p>{evidence.finding}</p>
+                        <small>{evidence.reference} · {evidence.verifiedBy} · {formatTimestamp(evidence.verifiedAt)}</small>
+                      </>
+                    ) : (
+                      <p>{requirement.detail}</p>
+                    )}
+                  </article>
+                )
+              })}
             </div>
-          )}
-        </section>
+
+            <form className="website-evidence-form" onSubmit={submitEvidence}>
+              <label>
+                <span>Requirement</span>
+                <select value={evidenceKind} onChange={(event) => setEvidenceKind(event.target.value as EvidenceKind)}>
+                  {evidenceRequirements.map((requirement) => (
+                    <option key={requirement.id} value={requirement.id}>{requirement.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Finding</span>
+                <input
+                  maxLength={180}
+                  onChange={(event) => setEvidenceFinding(event.target.value)}
+                  placeholder="What the review established"
+                  required
+                  value={evidenceFinding}
+                />
+              </label>
+              <label>
+                <span>Source or reference</span>
+                <input
+                  maxLength={220}
+                  onChange={(event) => setEvidenceReference(event.target.value)}
+                  placeholder="File, test result, URL, or review record"
+                  required
+                  value={evidenceReference}
+                />
+              </label>
+              <label>
+                <span>{managedActorId ? 'Signed-in actor' : 'Verified by'}</span>
+                <input
+                  disabled={Boolean(managedActorId)}
+                  maxLength={80}
+                  onChange={(event) => setEvidenceVerifier(event.target.value)}
+                  placeholder={managedActorId ? 'Authenticated identity' : 'Accountable person or role'}
+                  required
+                  value={managedActorId || evidenceVerifier}
+                />
+              </label>
+              <button className="website-button is-secondary" disabled={Boolean(submitting)} type="submit">
+                {submitting === 'evidence' ? 'Saving…' : 'Record evidence'}
+              </button>
+            </form>
+
+            <footer className="publish-flow-actions">
+              <button className="website-button is-secondary" onClick={() => selectStep('checks')} type="button">
+                Back to checks
+              </button>
+              <button className="website-button is-primary" onClick={() => selectStep('approval')} type="button">
+                Review approval
+              </button>
+            </footer>
+          </section>
+        ) : null}
+
+        {activeStep === 'approval' ? (
+          <section
+            className="website-publish-section publish-flow-card"
+            id="publish-step-approval"
+            aria-labelledby="approval-title"
+          >
+            <header>
+              <div>
+                <span className="website-step" aria-hidden="true">3</span>
+                <div>
+                  <h3 id="approval-title">Human approval</h3>
+                  <p>Approval is bound to this revision and its current evidence.</p>
+                </div>
+              </div>
+              <span className={'website-status ' + (approvalIsCurrent ? 'is-ready' : 'is-pending')}>
+                {approvalIsCurrent ? 'Approved' : latestApproval ? 'Stale' : 'Required'}
+              </span>
+            </header>
+
+            {!allChecksPass ? (
+              <div className="publish-flow-gate-note" role="status">
+                <strong>Approval is locked</strong>
+                <p>{passedCount}/{checks.length} readiness checks pass. Complete the blocked website checks and evidence first.</p>
+              </div>
+            ) : null}
+
+            {latestApproval ? (
+              <div className={'website-approval-record ' + (approvalIsCurrent ? 'is-current' : 'is-stale')}>
+                <strong>{approvalIsCurrent ? 'Current approval' : latestApproval.migratedFromV1 ? 'Historical v1 approval' : 'Superseded by workspace changes'}</strong>
+                <p>{latestApproval.note}</p>
+                <small>{latestApproval.reviewer} · {formatTimestamp(latestApproval.approvedAt)} · content r{latestApproval.source.contentRevision}</small>
+              </div>
+            ) : null}
+
+            <form className="website-approval-form" onSubmit={submitApproval}>
+              <div className="website-form-grid two-columns">
+                <label>
+                  <span>Human reviewer</span>
+                  <input
+                    disabled={Boolean(managedActorId) || !allChecksPass || approvalIsCurrent}
+                    maxLength={80}
+                    onChange={(event) => setReviewer(event.target.value)}
+                    placeholder={managedActorId ? 'Authenticated identity' : 'Name or accountable role'}
+                    required
+                    value={managedActorId || reviewer}
+                  />
+                </label>
+                <label>
+                  <span>Decision note</span>
+                  <input
+                    disabled={!allChecksPass || approvalIsCurrent}
+                    maxLength={240}
+                    onChange={(event) => setApprovalNote(event.target.value)}
+                    placeholder="Why this revision is approved"
+                    required
+                    value={approvalNote}
+                  />
+                </label>
+              </div>
+              <label className="website-confirmation">
+                <input
+                  checked={approvalConfirmed}
+                  disabled={!allChecksPass || approvalIsCurrent}
+                  onChange={(event) => setApprovalConfirmed(event.target.checked)}
+                  type="checkbox"
+                />
+                <span>I reviewed this exact content revision and accept the recorded evidence.</span>
+              </label>
+              <div className="website-gate-actions">
+                <small>{approvalIsCurrent
+                  ? 'This exact evidence set already has a current human approval.'
+                  : allChecksPass ? 'Ready for a named human decision.' : 'Complete all readiness checks to unlock approval.'}</small>
+                <button
+                  className="website-button is-primary"
+                  disabled={!allChecksPass || !approvalConfirmed || approvalIsCurrent || Boolean(submitting)}
+                  type="submit"
+                >
+                  {approvalIsCurrent ? 'Current revision approved' : submitting === 'approval' ? 'Saving…' : 'Record approval'}
+                </button>
+              </div>
+            </form>
+
+            <footer className="publish-flow-actions">
+              <button className="website-button is-secondary" onClick={() => selectStep('evidence')} type="button">
+                Back to evidence
+              </button>
+              <button className="website-button is-primary" onClick={() => selectStep('snapshot')} type="button">
+                Review snapshot
+              </button>
+            </footer>
+          </section>
+        ) : null}
+
+        {activeStep === 'snapshot' ? (
+          <section
+            className="website-publish-section website-local-publish publish-flow-card"
+            id="publish-step-snapshot"
+            aria-labelledby="local-publish-title"
+          >
+            <header>
+              <div>
+                <span className="website-step" aria-hidden="true">4</span>
+                <div>
+                  <h3 id="local-publish-title">Snapshot and Commerce handoff</h3>
+                  <p>Record an approved snapshot, then optionally prepare one Commerce intake.</p>
+                </div>
+              </div>
+              <span className={'website-status ' + (publishIsCurrent ? 'is-ready' : 'is-local')}>
+                {publishIsCurrent ? 'Recorded' : 'Not recorded'}
+              </span>
+            </header>
+
+            <div className="website-local-publish-action">
+              <div>
+                <strong>{approvalIsCurrent ? 'Approval matches the current revision.' : 'A current approval is required.'}</strong>
+                <p>This saves an evidence-bound local snapshot. It does not publish a website.</p>
+              </div>
+              <button
+                className="website-button is-primary"
+                disabled={!approvalIsCurrent || publishIsCurrent || Boolean(submitting)}
+                onClick={recordSnapshot}
+                type="button"
+              >
+                {publishIsCurrent ? 'Current revision recorded' : submitting === 'snapshot' ? 'Saving…' : 'Record approved snapshot'}
+              </button>
+            </div>
+
+            <div className="website-handoff-action">
+              <div>
+                <strong>Website → Commerce intake</strong>
+                <p>Send one catalog SKU and quantity from this approved revision into Commerce. A human must still confirm any stock, payment, message, or order change there.</p>
+              </div>
+              <div className="website-handoff-controls">
+                <label>
+                  <span>Commerce SKU</span>
+                  <input
+                    autoComplete="off"
+                    maxLength={80}
+                    onChange={(event) => setHandoffSku(event.target.value.toUpperCase())}
+                    placeholder="SKU-001"
+                    value={handoffSku}
+                  />
+                </label>
+                <label>
+                  <span>Quantity</span>
+                  <input
+                    max="99"
+                    min="1"
+                    onChange={(event) => setHandoffQuantity(Number(event.target.value))}
+                    step="1"
+                    type="number"
+                    value={handoffQuantity}
+                  />
+                </label>
+                <button
+                  className="website-button is-secondary"
+                  disabled={!publishIsCurrent || !handoffAvailable || handoffIsCurrent || !handoffSku.trim() || Boolean(submitting)}
+                  onClick={() => void prepareCommerceHandoff()}
+                  type="button"
+                >
+                  {handoffIsCurrent ? 'Intake sent' : submitting === 'handoff' ? 'Sending…' : 'Send intake'}
+                </button>
+                {handoffIsCurrent ? (
+                  <a className="website-button is-primary" href="/operations/commerce/?tab=orders">Review in Commerce</a>
+                ) : null}
+              </div>
+            </div>
+
+            {workspace.localPublishes.length ? (
+              <div className="website-publish-history">
+                <small>Showing {Math.min(3, workspace.localPublishes.length)} of {workspace.localPublishes.length} retained snapshots</small>
+                {workspace.localPublishes.slice(0, 3).map((record) => (
+                  <article key={record.id}>
+                    <span aria-hidden="true">&gt;_</span>
+                    <div>
+                      <strong>{record.id}</strong>
+                      <small>{record.readyPageIds.length} ready page{record.readyPageIds.length === 1 ? '' : 's'} · {record.recordedBy} · {formatTimestamp(record.recordedAt)}</small>
+                    </div>
+                    <code>{record.fingerprint}</code>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="website-empty compact">
+                <span aria-hidden="true">&gt;_</span>
+                <p>No approved snapshots yet.</p>
+              </div>
+            )}
+
+            <footer className="publish-flow-actions">
+              <button className="website-button is-secondary" onClick={() => selectStep('approval')} type="button">
+                Back to approval
+              </button>
+            </footer>
+          </section>
+        ) : null}
       </div>
     </section>
   )

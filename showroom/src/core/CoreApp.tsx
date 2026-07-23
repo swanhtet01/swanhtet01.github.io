@@ -47,6 +47,18 @@ import {
   type CommerceWebsiteOrderInput,
 } from './commerce-workspace'
 import {
+  CHANNEL_ORDER_MESSAGE_MAX,
+  CHANNEL_ORDER_QUOTE_MAX,
+  buildChannelOrderDraft,
+  channelOrderChannels,
+  channelOrderDraftIsReady,
+  channelOrderFields,
+  channelOrderPayments,
+  type ChannelOrderAttributionInput,
+  type ChannelOrderDraft,
+  type ChannelOrderField,
+} from './channel-order-intake'
+import {
   LEGACY_PRODUCTION_KEYS,
   PRODUCTION_KEY,
   advanceProductionMachineState,
@@ -161,6 +173,8 @@ type AccountableAction = {
 type PendingAccountableAction = Omit<AccountableAction, 'capturedAt' | 'actorKind' | 'actor' | 'reason' | 'evidenceReference'> & {
   apply: (record: AccountableAction) => void | Promise<void>
   confirmation?: AccountableAction
+  evidenceReferenceLocked?: boolean
+  evidenceReferenceSuggestion?: string
 }
 
 type ActionDetails = Pick<AccountableAction, 'actor' | 'reason' | 'evidenceReference'>
@@ -292,21 +306,21 @@ const checkingRuntime: RuntimeHealth = {
 }
 
 const navigation = [
-  { to: '/', label: 'Today', end: true },
-  { to: '/work/', label: 'Teams', end: false },
-  { to: '/operations/', label: 'Operations', end: false },
+  { to: '/', label: 'Home', end: true },
+  { to: '/work/', label: 'Work', end: false },
+  { to: '/operations/', label: 'Products', end: false },
 ] as const
 
 const commerceTabs: Array<{ id: CommerceTab; label: string }> = [
   { id: 'today', label: 'Today' },
   { id: 'orders', label: 'Orders' },
-  { id: 'inventory', label: 'Inventory' },
+  { id: 'inventory', label: 'Stock' },
 ]
 
 const productionTabs: Array<{ id: ProductionTab; label: string }> = [
   { id: 'today', label: 'Today' },
-  { id: 'production', label: 'Production' },
-  { id: 'control', label: 'Issues & equipment' },
+  { id: 'production', label: 'Jobs' },
+  { id: 'control', label: 'Problems' },
 ]
 
 const productionMachineActionLabels: Record<ProductionMachineState, string> = {
@@ -800,28 +814,38 @@ function formatMoney(value: number) {
   return `${new Intl.NumberFormat('en-US').format(value)} MMK`
 }
 
-function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm }: {
+function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm, returnFocus }: {
   action: PendingAccountableAction | null
   authenticatedActor?: { id: string; label: string }
   onCancel: () => void
   onConfirm: (details: ActionDetails) => void | Promise<void>
+  returnFocus?: HTMLElement | null
 }) {
   const [actor, setActor] = useState('')
   const [reason, setReason] = useState('')
-  const [evidenceReference, setEvidenceReference] = useState('')
+  const [evidenceReference, setEvidenceReference] = useState(action?.evidenceReferenceSuggestion ?? '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const dialogRef = useRef<HTMLDialogElement>(null)
   const headingRef = useRef<HTMLHeadingElement>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
     if (!action) return undefined
-    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const dialog = dialogRef.current
+    previousFocusRef.current = returnFocus?.isConnected
+      ? returnFocus
+      : document.activeElement instanceof HTMLElement ? document.activeElement : null
+    if (dialog && !dialog.open) dialog.showModal()
     headingRef.current?.focus()
     return () => {
-      if (previousFocusRef.current?.isConnected) previousFocusRef.current.focus()
+      if (dialog?.open) dialog.close()
+      const previousFocus = previousFocusRef.current
+      requestAnimationFrame(() => {
+        if (previousFocus?.isConnected) previousFocus.focus()
+      })
     }
-  }, [action])
+  }, [action, returnFocus])
 
   if (!action) return null
 
@@ -830,7 +854,8 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
     if (!action) return
     const responsibleActor = action.confirmation?.actor ?? authenticatedActor?.id ?? actor.trim()
     const confirmedReason = action.confirmation?.reason ?? reason.trim()
-    const confirmedEvidence = action.confirmation?.evidenceReference ?? evidenceReference.trim()
+    const confirmedEvidence = action.confirmation?.evidenceReference
+      ?? (action.evidenceReferenceLocked ? action.evidenceReferenceSuggestion?.trim() ?? '' : evidenceReference.trim())
     if (!responsibleActor || !confirmedReason || !confirmedEvidence) return
     setBusy(true)
     setError('')
@@ -842,18 +867,18 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
     }
   }
 
-  return <section className="core-panel accountable-action-gate" aria-label="Human action confirmation">
-    <div className="action-change"><span className="core-eyebrow">Human confirmation</span><h2 ref={headingRef} tabIndex={-1}>{action.summary}</h2><p><strong>{action.before}</strong><span>→</span><strong>{action.after}</strong></p></div>
+  return <dialog aria-labelledby="action-confirm-title" className="accountable-action-gate" onCancel={(event) => { event.preventDefault(); if (!busy && !action.confirmation) onCancel() }} ref={dialogRef}>
+    <div className="action-change"><span className="core-eyebrow">Confirm change</span><h2 id="action-confirm-title" ref={headingRef} tabIndex={-1}>{action.summary}</h2><p><strong>{action.before}</strong><span>→</span><strong>{action.after}</strong></p></div>
     <form className="core-form action-confirm-form" onSubmit={(event) => void submit(event)}>
       {authenticatedActor
-        ? <label>Authenticated operator<input readOnly value={authenticatedActor.label} /></label>
-        : <label>Responsible operator<input maxLength={80} readOnly={Boolean(action.confirmation)} required value={action.confirmation?.actor ?? actor} onChange={(event) => setActor(event.target.value)} placeholder="Name or accountable role" /></label>}
+        ? <label>Your account<input readOnly value={authenticatedActor.label} /></label>
+        : <label>Your name<input maxLength={80} readOnly={Boolean(action.confirmation)} required value={action.confirmation?.actor ?? actor} onChange={(event) => setActor(event.target.value)} placeholder="Name or responsible role" /></label>}
       <label>Reason<input maxLength={180} readOnly={Boolean(action.confirmation)} required value={action.confirmation?.reason ?? reason} onChange={(event) => setReason(event.target.value)} placeholder="Why this change is correct now" /></label>
-      <label>Evidence source or reference<input maxLength={180} readOnly={Boolean(action.confirmation)} required value={action.confirmation?.evidenceReference ?? evidenceReference} onChange={(event) => setEvidenceReference(event.target.value)} placeholder="Message ID, receipt, count sheet, or observation" /></label>
-      <div className="form-actions"><button className="text-link" disabled={busy || Boolean(action.confirmation)} onClick={onCancel} type="button">Cancel</button><button className="core-button primary compact" disabled={busy} type="submit">{busy ? 'Applying…' : action.confirmation ? 'Retry same confirmation' : 'Confirm and record'}</button></div>
+      <label>Reference<input maxLength={180} readOnly={Boolean(action.confirmation) || action.evidenceReferenceLocked} required value={action.confirmation?.evidenceReference ?? (action.evidenceReferenceLocked ? action.evidenceReferenceSuggestion ?? '' : evidenceReference)} onChange={(event) => setEvidenceReference(event.target.value)} placeholder="Message ID, receipt, count sheet, or observation" /></label>
+      <div className="form-actions"><button className="core-button" disabled={busy || Boolean(action.confirmation)} onClick={onCancel} type="button">Cancel</button><button className="core-button primary" disabled={busy} type="submit">{busy ? 'Applying…' : action.confirmation ? 'Retry same confirmation' : 'Confirm change'}</button></div>
       {error || action.confirmation ? <p className="form-notice" role="status">{error || 'This command proof is frozen. Any retry reuses the same command and evidence; reload can reconcile managed state.'}</p> : null}
     </form>
-  </section>
+  </dialog>
 }
 
 function ActionHistory({ actions, domain }: { actions: AccountableAction[]; domain: ActionDomain }) {
@@ -928,7 +953,7 @@ export function CoreLayout() {
   const runtime = useRuntimeHealth()
   const routeName = location.pathname.startsWith('/settings/')
     ? 'Settings'
-    : navigation.find((item) => item.to !== '/' && location.pathname.startsWith(item.to))?.label ?? 'Today'
+    : navigation.find((item) => item.to !== '/' && location.pathname.startsWith(item.to))?.label ?? 'Home'
 
   useEffect(() => {
     document.title = `${routeName} | SuperMega`
@@ -1026,6 +1051,7 @@ export function OverviewPage() {
   const activeWork = workspace.items.filter((item) => ['in_progress', 'review'].includes(item.status))
   const blockedWork = workspace.items.filter((item) => item.status === 'blocked')
   const visibleWork = workspace.items.filter((item) => ['in_progress', 'review', 'blocked'].includes(item.status))
+  const homeWork = visibleWork.slice(0, 3)
   const pendingApprovals = approvals.filter((item) => item.status === 'pending')
   const lowStock = commerce.items.filter((item) => item.onHand <= item.reorderAt)
   const openProductionIssues = production.issues.filter((issue) => issue.status === 'open')
@@ -1037,6 +1063,19 @@ export function OverviewPage() {
   const operatingExceptions = lowStock.length + openProductionIssues.length
   const ownerAttention = blockedWork.length + pendingApprovals.length + agentHandoffs.length + operatingExceptions + (isPilotReady ? 0 : 1)
   const selectedApproval = pendingApprovals.find((approval) => approval.id === selectedApprovalId)
+  const nextPriority: { label: string; title: string; detail: string; action: string; href?: string; approvalId?: string } = pendingApprovals[0]
+    ? { label: 'Approval', title: pendingApprovals[0].title, detail: `${pendingApprovals[0].packet.claims.length} claims are ready for a human decision.`, action: 'Review now', approvalId: pendingApprovals[0].id }
+    : blockedWork[0]
+      ? { label: 'Blocked work', title: blockedWork[0].title, detail: `${blockedWork[0].owner} needs a decision to continue.`, action: 'Review work', href: `/work/?team=${blockedWork[0].team}&view=work&item=${blockedWork[0].id}` }
+      : agentHandoffs[0]
+        ? { label: 'Team handoff', title: `${agentHandoffs[0].name} needs review`, detail: `${agentHandoffs[0].humanOwner} owns the next decision.`, action: 'Review handoff', href: `/work/?team=${agentHandoffs[0].team}&view=agents&agent=${agentHandoffs[0].id}` }
+        : lowStock[0]
+          ? { label: 'Stock', title: `Reorder ${lowStock[0].name}`, detail: `${lowStock[0].onHand} on hand; boundary is ${lowStock[0].reorderAt}.`, action: 'Open stock', href: '/operations/commerce/?tab=inventory' }
+          : openProductionIssues[0]
+            ? { label: 'Production problem', title: openProductionIssues[0].summary, detail: `${openProductionIssues[0].area} needs review.`, action: 'Review problem', href: '/operations/production/?tab=control' }
+            : !isPilotReady
+              ? { label: 'Setup', title: 'Define the measurable workflow', detail: `${pilotProgress(setup)}% complete; add the baseline and acceptance evidence.`, action: 'Finish setup', href: '/settings/' }
+              : { label: 'Ready', title: openOrders[0] ? `Continue ${openOrders[0].id}` : 'Start with Commerce', detail: openOrders[0] ? 'Move the next open order forward.' : 'No owner decision is waiting.', action: openOrders[0] ? 'Open orders' : 'Open Commerce', href: '/operations/commerce/?tab=orders' }
 
   useEffect(() => {
     if (!managedIdentity) return undefined
@@ -1149,15 +1188,36 @@ export function OverviewPage() {
 
   return (
     <div className="workspace-screen command-screen">
-      <PageHeading eyebrow="Today" title="Decide what moves next." copy="Active work and owner attention, without another dashboard." />
-      <section className="summary-strip compact-summary" aria-label="Workspace summary"><span><small>In progress</small><strong>{activeWork.length}</strong></span><span><small>Needs owner</small><strong>{ownerAttention}</strong></span><span><small>Operating exceptions</small><strong>{operatingExceptions}</strong></span></section>
-      <div className="command-grid">
+      <PageHeading copy="One clear next action, then the rest when you need it." eyebrow="Home" title="Today" />
+      <section className="core-panel next-task-card">
+        <div><span className="core-eyebrow">{nextPriority.label}</span><h2>{nextPriority.title}</h2><p>{nextPriority.detail}</p></div>
+        {nextPriority.approvalId
+          ? <button className="core-button primary" onClick={() => setSelectedApprovalId(nextPriority.approvalId ?? '')} type="button">{nextPriority.action}</button>
+          : <Link className="core-button primary" to={nextPriority.href ?? '/'}>{nextPriority.action}</Link>}
+      </section>
+      <nav aria-label="Products" className="product-launcher">
+        <Link to="/operations/commerce/?tab=today">
+          <span><strong>Commerce</strong><small>Orders, stock and payments</small></span>
+          <b>{openOrders.length ? `${openOrders.length} open` : 'Ready'}</b>
+        </Link>
+        <Link to="/operations/production/?tab=today">
+          <span><strong>Production</strong><small>Jobs, output and equipment</small></span>
+          <b>{openProductionIssues.length ? `${openProductionIssues.length} issue` : 'Ready'}</b>
+        </Link>
+        <Link to="/products/website/">
+          <span><strong>Website</strong><small>Pages and order handoff</small></span>
+          <b>Open</b>
+        </Link>
+      </nav>
+      <details className="home-more">
+        <summary><span>More activity</span><small>{visibleWork.length} active work · {ownerAttention} priorities</small></summary>
+        <div className="command-grid">
         <section className="core-panel command-queue-panel">
-          <div className="panel-head"><div><span className="core-eyebrow">Company queue</span><h2>Work in motion</h2></div><Link className="text-link" to="/work/?team=product&view=work">Open Teams</Link></div>
-          <div className="record-list">{visibleWork.map((item) => { const team = teamDefinitions.find((definition) => definition.id === item.team); return <Link className="record-row" key={item.id} to={`/work/?team=${item.team}&view=work&item=${item.id}`}><span className={`record-status ${item.status}`} /><span><strong>{item.title}</strong><small>{team?.label ?? item.team} / {item.owner} / {item.evidence.length} evidence</small></span><span><b>{item.priority}</b><small>{item.status.replace('_', ' ')}</small></span></Link> })}</div>
+          <div className="panel-head"><div><span className="core-eyebrow">Active work</span><h2>{visibleWork.length} items in motion</h2></div><Link className="text-link" to="/work/?team=product&view=work">View all work</Link></div>
+          <div className="record-list">{homeWork.map((item) => { const team = teamDefinitions.find((definition) => definition.id === item.team); return <Link className="record-row" key={item.id} to={`/work/?team=${item.team}&view=work&item=${item.id}`}><span className={`record-status ${item.status}`} /><span><strong>{item.title}</strong><small>{team?.label ?? item.team} / {item.owner} / {item.evidence.length} evidence</small></span><span><b>{item.priority}</b><small>{item.status.replace('_', ' ')}</small></span></Link> })}</div>
         </section>
-        <section className="core-panel attention-panel">
-          <div className="panel-head"><div><span className="core-eyebrow">Needs owner</span><h2>{ownerAttention} decisions</h2></div></div>
+        <section className="core-panel attention-panel" id="owner-priorities">
+          <div className="panel-head"><div><span className="core-eyebrow">Needs you</span><h2>{ownerAttention} {ownerAttention === 1 ? 'priority' : 'priorities'}</h2></div></div>
           <div className="attention-list">
             {!isPilotReady ? <Link to="/settings/"><span>Pilot</span><strong>Define the measurable workflow</strong><small>{pilotProgress(setup)}% complete · baseline and acceptance required</small></Link> : null}
             {blockedWork.map((item) => <Link key={item.id} to={`/work/?team=${item.team}&view=work&item=${item.id}`}><span>Work</span><strong>{item.title}</strong><small>{item.owner}</small></Link>)}
@@ -1175,6 +1235,7 @@ export function OverviewPage() {
           <details className="company-brief-disclosure"><summary>Company brief</summary><button className="text-link" onClick={prepareCompanyBrief} type="button">Prepare brief</button>{brief.length ? <div className="brief-output compact">{brief.map((line) => <p key={line}>{line}</p>)}<button className="core-button compact" disabled={briefBusy} onClick={() => void requestBriefApproval()} type="button">{briefBusy ? 'Recording…' : 'Request owner review'}</button></div> : <p className="panel-copy">Prepared locally from visible work and operating records.</p>}{briefNotice ? <p className="form-notice" role="status">{briefNotice}</p> : null}</details>
         </section>
       </div>
+      </details>
       {selectedApproval ? <ApprovalReviewDialog approval={selectedApproval} onClose={() => setSelectedApprovalId('')} onDecision={(status, reviewer, note) => setApprovalStatus(selectedApproval.id, status, reviewer, note)} /> : null}
     </div>
   )
@@ -1185,47 +1246,243 @@ export function OperationsPage() {
   const location = useLocation()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const [setup] = useSetupWorkspace()
   const [managedIdentity] = useManagedIdentity(runtime.status === 'enterprise')
   const routeModule = location.pathname.split('/').filter(Boolean)[1]
   const requestedView = searchParams.get('view')
+  const isProductRoute = routeModule === 'commerce' || routeModule === 'production'
   const view: ProductId = routeModule === 'production' || requestedView === 'production' || requestedView === 'plant' ? 'production' : 'commerce'
   const commerceTab = commerceTabs.some((tab) => tab.id === searchParams.get('tab')) ? searchParams.get('tab') as CommerceTab : 'today'
   const productionTab = productionTabs.some((tab) => tab.id === searchParams.get('tab')) ? searchParams.get('tab') as ProductionTab : 'today'
   const activeTab = view === 'commerce' ? commerceTab : productionTab
-  const activeTemplate = templateFor(view, setup.product === view ? setup.template : '')
-  const configuredProfile = setup.product === view && Boolean(setup.savedAt)
-  const profileLabel = configuredProfile && setup.workspace.trim() ? setup.workspace : 'Template profile'
-  const profileMeasure = configuredProfile && setup.targetOutcome.trim() ? setup.targetOutcome : activeTemplate.metric
-  const operationsCopy = view === 'commerce'
-    ? 'Orders from the channels customers use, then stock, fulfilment, payment, and close.'
-    : 'Plan, output, equipment, quality, maintenance, and shift exceptions in one operating record.'
 
   useEffect(() => {
+    if (!isProductRoute && !requestedView) return
     const canonicalPath = `/operations/${view}/`
     if (location.pathname !== canonicalPath || requestedView) navigate(`${canonicalPath}?tab=${activeTab}`, { replace: true })
-  }, [activeTab, location.pathname, navigate, requestedView, view])
-
-  function setMode(nextView: ProductId) {
-    navigate(`/operations/${nextView}/?tab=today`)
-  }
+  }, [activeTab, isProductRoute, location.pathname, navigate, requestedView, view])
 
   function setTab(tab: CommerceTab | ProductionTab) {
     navigate(`/operations/${view}/?tab=${tab}`, { replace: true })
   }
 
   const tabs = view === 'commerce' ? commerceTabs : productionTabs
+  const productCopy = view === 'commerce'
+    ? 'Orders, payments, and stock in one place.'
+    : 'Jobs, output, equipment, and problems in one place.'
+
+  if (!isProductRoute && !requestedView) {
+    return <div className="workspace-screen product-catalog-screen">
+      <PageHeading eyebrow="Products" title="Apps" copy="Choose the workspace for the job you need to do." />
+      <nav aria-label="SuperMega apps" className="product-launcher product-catalog">
+        <Link to="/operations/commerce/?tab=today"><span><strong>Commerce</strong><small>Orders, payments, and stock</small></span><b>Open</b></Link>
+        <Link to="/operations/production/?tab=today"><span><strong>Production</strong><small>Jobs, output, and problems</small></span><b>Open</b></Link>
+        <Link to="/products/website/"><span><strong>Website</strong><small>Edit, preview, and prepare to publish</small></span><b>Open</b></Link>
+      </nav>
+    </div>
+  }
 
   return (
     <div className="workspace-screen operations-screen">
-      <PageHeading eyebrow="Operations" title={view === 'commerce' ? 'Commerce' : 'Production'} copy={`${operationsCopy} Measure: ${profileMeasure}.`} actions={<div className="operations-profile"><span>{profileLabel}</span><strong>{activeTemplate.name}</strong><Link className="text-link" to="/settings/">Configure</Link></div>} />
-      <div className="workspace-toolbar operations-toolbar">
-        <div className="segmented-control" role="group" aria-label="Operating workspace"><button aria-pressed={view === 'commerce'} onClick={() => setMode('commerce')} type="button">Commerce</button><button aria-pressed={view === 'production'} onClick={() => setMode('production')} type="button">Production</button></div>
-        <div className="operations-toolbar-actions"><nav className="view-tabs" aria-label="Module views">{tabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{tab.label}</button>)}</nav></div>
-      </div>
+      <PageHeading eyebrow={view === 'commerce' ? 'Commerce' : 'Production'} title={view === 'commerce' ? 'Commerce' : 'Production'} copy={productCopy} actions={<Link className="text-link all-apps-link" to="/operations/">All apps</Link>} />
+      <nav className="workspace-toolbar view-tabs product-task-tabs" aria-label={`${view === 'commerce' ? 'Commerce' : 'Production'} tasks`}>{tabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{tab.label}</button>)}</nav>
       <div className="workspace-view">{view === 'commerce' ? <CommercePage managedIdentity={managedIdentity} tab={commerceTab} /> : <ProductionPage tab={productionTab} />}</div>
     </div>
   )
+}
+
+type ChannelAttributionDraft = { kind: ChannelOrderAttributionInput['kind']; quote: string }
+
+const channelFieldLabels: Record<ChannelOrderField, string> = {
+  customer: 'Customer',
+  sku: 'Item',
+  quantity: 'Quantity',
+  payment: 'Payment',
+}
+
+function emptyChannelAttributions(): Record<ChannelOrderField, ChannelAttributionDraft> {
+  return {
+    customer: { kind: 'quote', quote: '' },
+    sku: { kind: 'quote', quote: '' },
+    quantity: { kind: 'quote', quote: '' },
+    payment: { kind: 'quote', quote: '' },
+  }
+}
+
+function channelDraftBlockerLabel(blocker: string) {
+  const field = channelOrderFields.find((candidate) => blocker.startsWith(`${candidate}_`))
+  const fieldLabel = field ? channelFieldLabels[field] : ''
+  if (blocker === 'source_label_required') return 'Add a message ID or approved sample label.'
+  if (blocker === 'source_message_required') return 'Paste one approved or synthetic message.'
+  if (blocker === 'source_message_too_long') return `Keep the single message under ${CHANNEL_ORDER_MESSAGE_MAX.toLocaleString()} characters.`
+  if (blocker === 'channel_invalid') return 'Choose Messenger, Viber, or Phone.'
+  if (blocker === 'customer_required') return 'Add a customer reference.'
+  if (blocker === 'sku_required') return 'Choose a catalog item.'
+  if (blocker === 'sku_unknown') return 'The selected item is not in the current catalog.'
+  if (blocker === 'quantity_invalid') return 'Enter a whole quantity from 1 to 9,999.'
+  if (blocker === 'payment_invalid') return 'Choose a supported payment intent.'
+  if (blocker === 'source_quote_required') return 'Map at least one field to exact words from the message.'
+  if (blocker.endsWith('_attribution_required')) return `${fieldLabel} needs an exact quote or Operator supplied.`
+  if (blocker.endsWith('_quote_required')) return `Add the exact ${fieldLabel.toLowerCase()} words from the message.`
+  if (blocker.endsWith('_quote_must_be_excerpt')) return `Use a short ${fieldLabel.toLowerCase()} excerpt, not the full message.`
+  if (blocker.endsWith('_quote_not_found')) return `The ${fieldLabel.toLowerCase()} quote is not in this message.`
+  if (blocker.endsWith('_quote_ambiguous')) return `Use a longer, unique ${fieldLabel.toLowerCase()} quote.`
+  return blocker.replaceAll('_', ' ')
+}
+
+function ChannelOrderIntake({ disabled, items, onAcceptedFocus, onUse }: {
+  disabled: boolean
+  items: CommerceItem[]
+  onAcceptedFocus: () => void
+  onUse: (draft: ChannelOrderDraft) => void
+}) {
+  const [sourceLabel, setSourceLabel] = useState('')
+  const [message, setMessage] = useState('')
+  const [channel, setChannel] = useState('Messenger')
+  const [customer, setCustomer] = useState('')
+  const [sku, setSku] = useState(items[0]?.sku ?? '')
+  const [quantity, setQuantity] = useState('1')
+  const [payment, setPayment] = useState('KBZPay')
+  const [attributions, setAttributions] = useState(emptyChannelAttributions)
+  const [reviewedDraft, setReviewedDraft] = useState<ChannelOrderDraft | null>(null)
+  const [mappingField, setMappingField] = useState<ChannelOrderField>('customer')
+  const selectedSku = items.some((item) => item.sku === sku) ? sku : items[0]?.sku ?? ''
+  const mappingFieldIndex = channelOrderFields.indexOf(mappingField)
+  const previousMappingField = mappingFieldIndex > 0 ? channelOrderFields[mappingFieldIndex - 1] : undefined
+  const nextMappingField = channelOrderFields[mappingFieldIndex + 1]
+
+  function attributionIsComplete(field: ChannelOrderField) {
+    const attribution = attributions[field]
+    const valueIsComplete = field === 'customer'
+      ? Boolean(customer.trim())
+      : field === 'sku'
+        ? Boolean(selectedSku)
+        : field === 'quantity'
+          ? Number.isInteger(Number(quantity)) && Number(quantity) > 0
+          : Boolean(payment)
+    return valueIsComplete && (attribution.kind === 'operator_supplied' || Boolean(attribution.quote.trim()))
+  }
+
+  function invalidateReview() {
+    if (reviewedDraft) setReviewedDraft(null)
+  }
+
+  function updateAttribution(field: ChannelOrderField, patch: Partial<ChannelAttributionDraft>) {
+    setAttributions((current) => ({ ...current, [field]: { ...current[field], ...patch } }))
+    invalidateReview()
+  }
+
+  function reviewMessage(event: FormEvent) {
+    event.preventDefault()
+    const normalizedAttributions = Object.fromEntries(channelOrderFields.map((field) => {
+      const attribution = attributions[field]
+      const value: ChannelOrderAttributionInput = attribution.kind === 'operator_supplied'
+        ? { kind: 'operator_supplied' }
+        : { kind: 'quote', quote: attribution.quote }
+      return [field, value]
+    })) as Record<ChannelOrderField, ChannelOrderAttributionInput>
+    const draft = buildChannelOrderDraft({
+      sourceLabel,
+      message,
+      channel,
+      customer,
+      sku: selectedSku,
+      quantity: Number(quantity),
+      payment,
+      catalogSkus: items.map((item) => item.sku),
+      attributions: normalizedAttributions,
+    })
+    setReviewedDraft(draft)
+    if (!channelOrderDraftIsReady(draft)) {
+      const blockedField = channelOrderFields.find((field) => (
+        draft.blockers.some((blocker) => blocker.startsWith(`${field}_`))
+      ))
+      if (blockedField) setMappingField(blockedField)
+    }
+  }
+
+  function useReviewedDraft() {
+    if (!reviewedDraft || !channelOrderDraftIsReady(reviewedDraft)) return
+    onUse(reviewedDraft)
+    setSourceLabel('')
+    setMessage('')
+    setCustomer('')
+    setQuantity('1')
+    setAttributions(emptyChannelAttributions())
+    setMappingField('customer')
+    setReviewedDraft(null)
+    onAcceptedFocus()
+  }
+
+  return <section className="channel-intake-panel">
+    <div className="channel-intake-heading"><span className="core-eyebrow">Human-mapped intake</span><h3>Start from a channel message</h3><p>Use one approved or synthetic message, not a full conversation. Map one exact excerpt; nothing is sent, and AI is not connected.</p></div>
+    <form className="core-form channel-intake-form" onSubmit={reviewMessage}>
+      <div className="form-row">
+        <label>Message reference<input disabled={disabled} maxLength={120} onChange={(event) => { setSourceLabel(event.target.value); invalidateReview() }} placeholder="Message ID or approved sample" required value={sourceLabel} /></label>
+        <label>Channel<select disabled={disabled} onChange={(event) => { setChannel(event.target.value); invalidateReview() }} value={channel}>{channelOrderChannels.map((entry) => <option key={entry}>{entry}</option>)}</select></label>
+      </div>
+      <label>Single message<textarea disabled={disabled} maxLength={CHANNEL_ORDER_MESSAGE_MAX} onChange={(event) => { setMessage(event.target.value); invalidateReview() }} placeholder="Paste only the message needed to prepare this order." required value={message} /></label>
+      <details className="channel-intake-disclosure">
+        <summary><span>Map order details</span><small>4 fields · exact evidence</small></summary>
+        <nav aria-label="Message field mapping" className="channel-field-nav">
+          {channelOrderFields.map((field) => (
+            <button
+              aria-current={mappingField === field ? 'step' : undefined}
+              className={attributionIsComplete(field) ? 'is-complete' : ''}
+              key={field}
+              onClick={() => setMappingField(field)}
+              type="button"
+            >
+              {channelFieldLabels[field]}
+            </button>
+          ))}
+        </nav>
+        <div className="channel-mapping-list">
+          {mappingField === 'customer' ? <div className="channel-mapping-row">
+            <label>Customer reference<input disabled={disabled} maxLength={80} onChange={(event) => { setCustomer(event.target.value); invalidateReview() }} placeholder="Name or internal reference" required value={customer} /></label>
+            <ChannelAttributionControl attribution={attributions.customer} disabled={disabled} field="customer" onChange={updateAttribution} />
+          </div> : null}
+          {mappingField === 'sku' ? <div className="channel-mapping-row">
+            <label>Catalog item<select disabled={disabled} onChange={(event) => { setSku(event.target.value); invalidateReview() }} value={selectedSku}>{items.map((item) => <option key={item.sku} value={item.sku}>{item.name} / {item.sku}</option>)}</select></label>
+            <ChannelAttributionControl attribution={attributions.sku} disabled={disabled} field="sku" onChange={updateAttribution} />
+          </div> : null}
+          {mappingField === 'quantity' ? <div className="channel-mapping-row">
+            <label>Quantity<input disabled={disabled} max="9999" min="1" onChange={(event) => { setQuantity(event.target.value); invalidateReview() }} required step="1" type="number" value={quantity} /></label>
+            <ChannelAttributionControl attribution={attributions.quantity} disabled={disabled} field="quantity" onChange={updateAttribution} />
+          </div> : null}
+          {mappingField === 'payment' ? <div className="channel-mapping-row">
+            <label>Payment intent<select disabled={disabled} onChange={(event) => { setPayment(event.target.value); invalidateReview() }} value={payment}>{channelOrderPayments.map((entry) => <option key={entry}>{entry}</option>)}</select></label>
+            <ChannelAttributionControl attribution={attributions.payment} disabled={disabled} field="payment" onChange={updateAttribution} />
+          </div> : null}
+        </div>
+        <div className="channel-mapping-actions">
+          {previousMappingField ? <button className="text-link" onClick={() => setMappingField(previousMappingField)} type="button">Back</button> : <span />}
+          {nextMappingField
+            ? <button className="core-button compact" onClick={() => setMappingField(nextMappingField)} type="button">Next: {channelFieldLabels[nextMappingField]}</button>
+            : <button className="core-button primary compact" disabled={disabled} type="submit">Review mapping</button>}
+        </div>
+      </details>
+    </form>
+    {reviewedDraft ? <div aria-live="polite" className={`channel-draft-result ${channelOrderDraftIsReady(reviewedDraft) ? 'ready' : 'review'}`}>
+      <div><span className="core-eyebrow">Ephemeral draft</span><strong>{channelOrderDraftIsReady(reviewedDraft) ? 'Ready for accountable confirmation' : 'Needs review'}</strong></div>
+      {channelOrderDraftIsReady(reviewedDraft) ? <>
+        <p>{reviewedDraft.sourceRecordId} / {reviewedDraft.provenance.filter((entry) => entry.kind === 'quote').length} exact source mappings</p>
+        <button className="core-button primary compact" disabled={disabled} onClick={useReviewedDraft} type="button">Use reviewed draft</button>
+      </> : <ul>{reviewedDraft.blockers.slice(0, 4).map((blocker) => <li key={blocker}>{channelDraftBlockerLabel(blocker)}</li>)}</ul>}
+      <small>The full message is not part of the order record.</small>
+    </div> : null}
+  </section>
+}
+
+function ChannelAttributionControl({ attribution, disabled, field, onChange }: {
+  attribution: ChannelAttributionDraft
+  disabled: boolean
+  field: ChannelOrderField
+  onChange: (field: ChannelOrderField, patch: Partial<ChannelAttributionDraft>) => void
+}) {
+  return <div className="channel-attribution">
+    <label className="channel-operator-check"><input aria-label={`${channelFieldLabels[field]} is operator supplied`} checked={attribution.kind === 'operator_supplied'} disabled={disabled} onChange={(event) => onChange(field, { kind: event.target.checked ? 'operator_supplied' : 'quote' })} type="checkbox" /><span>Operator supplied</span></label>
+    {attribution.kind === 'quote' ? <label>Exact words<input aria-label={`${channelFieldLabels[field]} exact source words`} disabled={disabled} maxLength={CHANNEL_ORDER_QUOTE_MAX} onChange={(event) => onChange(field, { quote: event.target.value })} placeholder="Copy a short, unique excerpt" required value={attribution.quote} /></label> : <small>Human-entered; no source quote claimed.</small>}
+  </div>
 }
 
 function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdentity | null; tab: CommerceTab }) {
@@ -1237,6 +1494,10 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
   const [customer, setCustomer] = useState('')
   const [channel, setChannel] = useState('Messenger')
   const [payment, setPayment] = useState('KBZPay')
+  const [preparedChannelDraft, setPreparedChannelDraft] = useState<ChannelOrderDraft | null>(null)
+  const [orderEntryMode, setOrderEntryMode] = useState<'manual' | 'message' | 'website'>('manual')
+  const preparedChannelRef = useRef<HTMLDivElement>(null)
+  const [actionTrigger, setActionTrigger] = useState<HTMLElement | null>(null)
   const [notice, setNotice] = useState('')
   const [catalogDraft, setCatalogDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '', price: '', reason: '', evidenceReference: '' })
   const [itemDraft, setItemDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '', price: '' })
@@ -1319,6 +1580,7 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
       setNotice(`Finish or cancel ${pendingAction.id} before reviewing another change.`)
       return false
     }
+    setActionTrigger(document.activeElement instanceof HTMLElement ? document.activeElement : null)
     setPendingAction({ ...action, id: uid('ACT'), commandId: commandUuid(), domain: 'commerce' })
     setNotice('Review the change, accountable operator, and evidence before it is applied.')
     return true
@@ -1360,6 +1622,10 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
 
   async function confirmAction(details: ActionDetails) {
     if (!pendingAction) return
+    if (pendingAction.evidenceReferenceLocked
+      && details.evidenceReference.trim() !== pendingAction.evidenceReferenceSuggestion) {
+      throw new Error('Source-backed evidence is fixed to the reviewed message mapping. Cancel and review the source again to change it.')
+    }
     const record = confirmAccountableAction(
       pendingAction,
       managedIdentity ? { ...details, actor: managedIdentity.userId } : details,
@@ -1375,25 +1641,72 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
     setPendingAction(null)
   }
 
+  function useChannelDraft(draft: ChannelOrderDraft) {
+    if (pendingAction || !channelOrderDraftIsReady(draft)) {
+      setNotice('Finish the current accountable action before using another channel draft.')
+      return
+    }
+    setCustomer(draft.customer)
+    setChannel(draft.channel)
+    setSku(draft.sku)
+    setQuantity(draft.quantity)
+    setPayment(draft.payment)
+    setPreparedChannelDraft(draft)
+    setOrderEntryMode('manual')
+    setNotice(`${draft.sourceRecordId} mapped locally. Review the structured order before any stock changes.`)
+  }
+
   function recordOrder(event: FormEvent) {
     event.preventDefault()
     if (!selected || quantity < 1 || selected.onHand < quantity) {
       setNotice('Quantity is not available. Review stock before confirming the order.')
       return
     }
-    const order: CommerceOrder = { id: uid('ORD'), createdAt: new Date().toISOString(), customer: customer.trim() || 'Guest', channel, item: selected.name, itemSku: selected.sku, quantity, payment, paymentStatus: 'pending', refundStatus: 'none', total: selected.price * quantity, status: 'confirmed' }
+    const sourceDraft = preparedChannelDraft && channelOrderDraftIsReady(preparedChannelDraft) ? preparedChannelDraft : null
+    if (sourceDraft && (customer.trim() !== sourceDraft.customer
+      || channel !== sourceDraft.channel
+      || selected.sku !== sourceDraft.sku
+      || quantity !== sourceDraft.quantity
+      || payment !== sourceDraft.payment)) {
+      setPreparedChannelDraft(null)
+      setNotice('The structured order changed after source review. Review the channel mapping again or continue as a manual order.')
+      return
+    }
+    if (sourceDraft && commerce.orders.some((candidate) => candidate.sourceRecordId === sourceDraft.sourceRecordId)) {
+      setNotice(`${sourceDraft.sourceRecordId} is already linked to an order. No duplicate was queued.`)
+      return
+    }
+    const order: CommerceOrder = {
+      id: uid('ORD'),
+      createdAt: new Date().toISOString(),
+      customer: customer.trim() || 'Guest',
+      channel,
+      item: selected.name,
+      itemSku: selected.sku,
+      quantity,
+      payment,
+      paymentStatus: 'pending',
+      refundStatus: 'none',
+      sourceRecordId: sourceDraft?.sourceRecordId,
+      evidenceReference: sourceDraft?.evidenceReference,
+      total: selected.price * quantity,
+      status: 'confirmed',
+    }
     const itemSku = selected.sku
     const beforeStock = selected.onHand
     queueAction({
       kind: 'order_create',
       subjectId: order.id,
-      summary: `Confirm ${order.id} from ${channel}`,
-      before: `${itemSku} · ${beforeStock} on hand`,
+      summary: `Confirm ${order.id} from ${sourceDraft ? `${channel} source ${sourceDraft.sourceRecordId}` : channel}`,
+      before: `${itemSku} · ${beforeStock} on hand${sourceDraft ? ` · ${sourceDraft.sourceRecordId} reviewed` : ''}`,
       after: `${order.status} · ${beforeStock - quantity} on hand`,
+      evidenceReferenceSuggestion: sourceDraft?.evidenceReference,
+      evidenceReferenceLocked: Boolean(sourceDraft),
       apply: async (action) => {
         await mutateCommerce('commerce.order.created', action.commandId, commerceActionProof(action), (current) => reserveCommerceOrder(current, order, commerceActionProof(action)))
         setQuantity(1)
         setCustomer('')
+        setPreparedChannelDraft(null)
       },
     })
   }
@@ -1521,34 +1834,47 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
     queueAction({ kind: 'daily_close', subjectId: close.id, summary: `Save ${close.id} daily close`, before: `${commerce.closes.length} snapshots`, after: `${commerce.closes.length + 1} snapshots · ${formatMoney(close.total)}`, apply: (action) => mutateCommerce('commerce.close.saved', action.commandId, commerceActionProof(action), (current) => current.closes.some((candidate) => candidate.id === close.id) ? current : { ...current, closes: [close, ...current.closes] }) })
   }
 
-  const actionControls = <><AccountableActionGate authenticatedActor={managedIdentity ? { id: managedIdentity.userId, label: managedIdentity.email } : undefined} key={pendingAction?.id ?? 'commerce-idle'} action={pendingAction} onCancel={() => setPendingAction(null)} onConfirm={confirmAction} />{managedIdentity ? null : <ActionHistory actions={actions} domain="commerce" />}</>
+  const actionControls = <><AccountableActionGate authenticatedActor={managedIdentity ? { id: managedIdentity.userId, label: managedIdentity.email } : undefined} key={pendingAction?.id ?? 'commerce-idle'} action={pendingAction} onCancel={() => setPendingAction(null)} onConfirm={confirmAction} returnFocus={actionTrigger} />{managedIdentity ? null : <ActionHistory actions={actions} domain="commerce" />}</>
 
-  if (tab === 'orders') return <div className="operation-module">{sourceNotice}<WebsiteCommerceIntake catalog={commerce.items} importedSourceIds={importedWebsiteOrderIds} key={`${managedIdentity ? 'managed' : 'local'}:${websiteIntakes.find((intake) => intake.status === 'pending_confirmation')?.id ?? 'none'}`} managedIntakes={websiteIntakes} mode={managedIdentity ? 'managed' : 'local'} onQueueManagedIntake={queueManagedWebsiteIntake} onQueueReadyOrder={queueWebsiteOrder} /><div className="split-workspace order-view">
+  if (tab === 'orders') return <div className="operation-module"><div className="split-workspace order-view">
     <section className="core-panel order-form-panel">
-      <div className="panel-head"><div><span className="core-eyebrow">Channel order</span><h2>Enter an order</h2></div><span className="status-pill ready">Stock checked</span></div>
-      <form className="core-form compact-form" onSubmit={recordOrder}>
-        <div className="form-row">
-          <label>Customer<input maxLength={80} value={customer} onChange={(event) => setCustomer(event.target.value)} placeholder="Name or reference" /></label>
-          <label>Channel<select value={channel} onChange={(event) => setChannel(event.target.value)}><option>Messenger</option><option>Viber</option><option>Phone</option><option>Website</option><option>Walk-in</option></select></label>
-        </div>
-        <label>Item<select value={selectedSku} onChange={(event) => setSku(event.target.value)}>{commerce.items.map((item) => <option key={item.sku} value={item.sku}>{item.name} · {item.onHand} available</option>)}</select></label>
-        <div className="form-row">
-          <label>Quantity<input min="1" max={selected?.onHand ?? 1} type="number" value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} /></label>
-          <label>Payment<select value={payment} onChange={(event) => setPayment(event.target.value)}><option>KBZPay</option><option>WavePay</option><option>Cash on delivery</option><option>Cash</option><option>Card</option></select></label>
-        </div>
-        <div className="order-total"><span>Order total</span><strong>{formatMoney((selected?.price ?? 0) * Math.max(quantity, 0))}</strong></div>
-        <button className="core-button primary" type="submit">Review order</button>
-        <p className="form-notice" aria-live="polite">{notice || commerceStorageError || 'A responsible operator confirms the change before stock moves. No customer message is sent.'}</p>
-      </form>
+      <div className="panel-head"><div><span className="core-eyebrow">New order</span><h2>How did this order arrive?</h2></div><span className="status-pill ready">Stock checked</span></div>
+      <div aria-label="Order source" className="order-entry-methods" role="tablist">
+        <button aria-selected={orderEntryMode === 'manual'} disabled={Boolean(pendingAction)} onClick={() => setOrderEntryMode('manual')} role="tab" type="button">Manual</button>
+        <button aria-selected={orderEntryMode === 'message'} disabled={Boolean(pendingAction)} onClick={() => setOrderEntryMode('message')} role="tab" type="button">Message</button>
+        <button aria-selected={orderEntryMode === 'website'} disabled={Boolean(pendingAction)} onClick={() => setOrderEntryMode('website')} role="tab" type="button">Website</button>
+      </div>
+      {orderEntryMode === 'website' ? <div className="order-entry-panel" role="tabpanel"><WebsiteCommerceIntake catalog={commerce.items} importedSourceIds={importedWebsiteOrderIds} key={`${managedIdentity ? 'managed' : 'local'}:${websiteIntakes.find((intake) => intake.status === 'pending_confirmation')?.id ?? 'none'}`} managedIntakes={websiteIntakes} mode={managedIdentity ? 'managed' : 'local'} onQueueManagedIntake={queueManagedWebsiteIntake} onQueueReadyOrder={queueWebsiteOrder} /></div> : null}
+      {orderEntryMode === 'message' ? <div className="order-entry-panel" role="tabpanel"><ChannelOrderIntake disabled={Boolean(pendingAction)} items={commerce.items} onAcceptedFocus={() => requestAnimationFrame(() => preparedChannelRef.current?.focus())} onUse={useChannelDraft} /></div> : null}
+      {orderEntryMode === 'manual' ? <div className="order-entry-panel" role="tabpanel">
+        {preparedChannelDraft && channelOrderDraftIsReady(preparedChannelDraft) ? <div className="channel-source-ready" ref={preparedChannelRef} tabIndex={-1}>
+          <div><span className="core-eyebrow">Mapped source</span><strong>{preparedChannelDraft.sourceRecordId}</strong><small>Exact excerpts reviewed; the full message was discarded.</small></div>
+          <button className="text-link" disabled={Boolean(pendingAction)} onClick={() => { setPreparedChannelDraft(null); setNotice('Source link removed. The structured fields remain as a manual order draft.') }} type="button">Remove source link</button>
+        </div> : null}
+        <form className="core-form compact-form" onSubmit={recordOrder}>
+          <div className="form-row">
+            <label>Customer<input disabled={Boolean(pendingAction)} maxLength={80} value={customer} onChange={(event) => { setCustomer(event.target.value); setPreparedChannelDraft(null) }} placeholder="Name or reference" /></label>
+            <label>Channel<select disabled={Boolean(pendingAction)} value={channel} onChange={(event) => { setChannel(event.target.value); setPreparedChannelDraft(null) }}><option>Messenger</option><option>Viber</option><option>Phone</option><option>Website</option><option>Walk-in</option></select></label>
+          </div>
+          <label>Item<select disabled={Boolean(pendingAction)} value={selectedSku} onChange={(event) => { setSku(event.target.value); setPreparedChannelDraft(null) }}>{commerce.items.map((item) => <option key={item.sku} value={item.sku}>{item.name} · {item.onHand} available</option>)}</select></label>
+          <div className="form-row">
+            <label>Quantity<input disabled={Boolean(pendingAction)} min="1" max={selected?.onHand ?? 1} type="number" value={quantity} onChange={(event) => { setQuantity(Number(event.target.value)); setPreparedChannelDraft(null) }} /></label>
+            <label>Payment<select disabled={Boolean(pendingAction)} value={payment} onChange={(event) => { setPayment(event.target.value); setPreparedChannelDraft(null) }}><option>KBZPay</option><option>WavePay</option><option>Cash on delivery</option><option>Cash</option><option>Card</option></select></label>
+          </div>
+          <div className="order-total"><span>Order total</span><strong>{formatMoney((selected?.price ?? 0) * Math.max(quantity, 0))}</strong></div>
+          <button className="core-button primary" disabled={Boolean(pendingAction)} type="submit">Review order</button>
+          <p className="form-notice" aria-live="polite">{notice || commerceStorageError || 'A responsible operator confirms the change before stock moves. No customer message is sent.'}</p>
+        </form>
+      </div> : null}
     </section>
     <section className="core-panel order-queue-panel"><div className="panel-head"><div><span className="core-eyebrow">Fulfilment</span><h2>{openOrders.length} open orders</h2></div><span className="panel-note">{paymentReview.length} payment review</span></div><OrderList canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} orders={commerce.orders} /></section>
-  </div>{actionControls}</div>
+  </div>{sourceNotice}{actionControls}</div>
 
   if (tab === 'inventory') return <div className="operation-module">
     {sourceNotice}
     <section className="core-panel inventory-panel">
       <div className="panel-head"><div><span className="core-eyebrow">Stock control</span><h2>Inventory and reorder boundaries</h2></div><span className="panel-note">{lowStock.length} at boundary</span></div>
-      <div className="data-table" role="table" aria-label="Commerce inventory"><div className="data-row table-head" role="row"><span>Item</span><span>On hand</span><span>Reorder</span><span>Price</span><span>Action</span></div>{commerce.items.map((item) => <div className="data-row" role="row" key={item.sku}><span><strong>{item.name}</strong><small>{item.sku}</small></span><span className={item.onHand <= item.reorderAt ? 'warning-text' : ''}>{item.onHand}</span><span>{item.reorderAt}</span><span>{formatMoney(item.price)}</span><span><button className="text-link" type="button" onClick={() => restock(item.sku)}>Receive +10</button></span></div>)}</div>
+      <div className="data-table" role="table" aria-label="Commerce inventory"><div className="data-row table-head" role="row"><span role="columnheader">Item</span><span role="columnheader">On hand</span><span role="columnheader">Reorder</span><span role="columnheader">Price</span><span role="columnheader">Action</span></div>{commerce.items.map((item) => <div className="data-row" role="row" key={item.sku}><span role="rowheader"><strong>{item.name}</strong><small>{item.sku}</small></span><span className={item.onHand <= item.reorderAt ? 'warning-text' : ''} role="cell">{item.onHand}</span><span role="cell">{item.reorderAt}</span><span role="cell">{formatMoney(item.price)}</span><span role="cell"><button className="text-link" type="button" onClick={() => restock(item.sku)}>Receive +10</button></span></div>)}</div>
       <details className="compact-disclosure catalog-disclosure">
         <summary>Add catalog item</summary>
         <form className="core-form compact-form catalog-create-form" onSubmit={queueCatalogItem}>
@@ -1565,7 +1891,13 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
     {actionControls}
   </div>
 
-  return <div className="operation-module">{sourceNotice}<div className="module-today"><section className="summary-strip"><span><small>Order value</small><strong>{formatMoney(orderValue)}</strong></span><span><small>Open orders</small><strong>{openOrders.length}</strong></span><span><small>Payment review</small><strong>{paymentReview.length}</strong></span><span><small>Low stock</small><strong>{lowStock.length}</strong></span></section><div className="split-workspace ops-today-grid"><section className="core-panel"><div className="panel-head"><div><span className="core-eyebrow">Order flow</span><h2>Latest channel orders</h2></div><Link className="text-link" to="/operations/commerce/?tab=orders">Open orders</Link></div><OrderList canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} orders={commerce.orders.slice(0, 5)} /></section><section className="core-panel"><div className="panel-head"><div><span className="core-eyebrow">Daily control</span><h2>Exceptions and close</h2></div><span className="panel-note">{commerce.closes.length} snapshots</span></div><div className="exception-summary"><span><strong>{paymentReview.length}</strong><small>payment review</small></span><span><strong>{lowStock.length}</strong><small>reorder boundaries</small></span></div><div className="boundary-list">{lowStock.map((item) => <Link key={item.sku} to="/operations/commerce/?tab=inventory"><strong>{item.name}</strong><small>{item.onHand} on hand</small></Link>)}</div><button className="core-button" onClick={closeDay} type="button">Save daily close</button><p className="form-notice" aria-live="polite">{notice || commerceStorageError || `${closableOrders.length} completed, reconciled orders · ${formatMoney(reconciledValue)} ready to close.`}</p></section></div></div>{actionControls}</div>
+  return <div className="operation-module">{sourceNotice}<div className="module-today">
+    <section className="summary-strip compact-summary"><span><small>Open orders</small><strong>{openOrders.length}</strong></span><span><small>Order value</small><strong>{formatMoney(orderValue)}</strong></span></section>
+    <div className="ops-today-grid task-first-grid">
+      <section className="core-panel"><div className="panel-head"><div><span className="core-eyebrow">Next work</span><h2>Open orders</h2></div><Link className="core-button primary compact" to="/operations/commerce/?tab=orders">Handle orders</Link></div><OrderList canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} orders={openOrders.slice(0, 3)} /></section>
+      <details className="core-panel today-more"><summary><span>Daily controls</span><small>{paymentReview.length + lowStock.length} items need attention</small></summary><div className="today-more-content"><div className="exception-summary"><span><strong>{paymentReview.length}</strong><small>payment review</small></span><span><strong>{lowStock.length}</strong><small>reorder boundaries</small></span></div><div className="boundary-list">{lowStock.map((item) => <Link key={item.sku} to="/operations/commerce/?tab=inventory"><strong>{item.name}</strong><small>{item.onHand} on hand</small></Link>)}</div><button className="core-button" onClick={closeDay} type="button">Save daily close</button><p className="form-notice" aria-live="polite">{notice || commerceStorageError || `${closableOrders.length} completed, reconciled orders · ${formatMoney(reconciledValue)} ready to close.`}</p></div></details>
+    </div>
+  </div>{actionControls}</div>
 }
 
 function OrderList({
@@ -1656,6 +1988,7 @@ function ProductionPage({ tab }: { tab: ProductionTab }) {
   const [kind, setKind] = useState<ProductionIssue['kind']>('quality')
   const [summary, setSummary] = useState('')
   const [notice, setNotice] = useState('')
+  const [actionTrigger, setActionTrigger] = useState<HTMLElement | null>(null)
   const output = production.jobs.reduce((total, job) => total + job.output, 0)
   const target = production.jobs.reduce((total, job) => total + job.target, 0)
   const openIssues = production.issues.filter((issue) => issue.status === 'open')
@@ -1668,6 +2001,7 @@ function ProductionPage({ tab }: { tab: ProductionTab }) {
       setNotice(`Finish or cancel ${pendingAction.id} before reviewing another change.`)
       return
     }
+    setActionTrigger(document.activeElement instanceof HTMLElement ? document.activeElement : null)
     setPendingAction({ ...action, id: uid('ACT'), commandId: commandUuid(), domain: 'production' })
     setNotice('Review the change, accountable operator, and evidence before it is applied.')
   }
@@ -1758,7 +2092,7 @@ function ProductionPage({ tab }: { tab: ProductionTab }) {
 
   const actionControls = <>
     <p className="form-notice" aria-live="polite">{productionStorageError || notice}</p>
-    <AccountableActionGate key={pendingAction?.id ?? 'production-idle'} action={pendingAction} onCancel={() => { setPendingAction(null); setNotice('Change cancelled. Production data was not modified.') }} onConfirm={confirmAction} />
+    <AccountableActionGate key={pendingAction?.id ?? 'production-idle'} action={pendingAction} onCancel={() => { setPendingAction(null); setNotice('Change cancelled. Production data was not modified.') }} onConfirm={confirmAction} returnFocus={actionTrigger} />
     <ProductionEventHistory events={production.events} />
   </>
 
@@ -1805,10 +2139,10 @@ function ProductionPage({ tab }: { tab: ProductionTab }) {
 
   return <div className="operation-module">
     <div className="module-today">
-      <section className="summary-strip"><span><small>Output</small><strong>{output.toLocaleString()}</strong></span><span><small>Target</small><strong>{target.toLocaleString()}</strong></span><span><small>Completion</small><strong>{completion}%</strong></span><span><small>Open issues</small><strong>{openIssues.length}</strong></span><span><small>Machines running</small><strong>{production.machines.filter((item) => item.state === 'running').length}/{production.machines.length}</strong></span></section>
-      <div className="split-workspace ops-today-grid">
-        <section className="core-panel"><div className="panel-head"><div><span className="core-eyebrow">Plan vs actual</span><h2>Active production</h2></div><Link className="text-link" to="/operations/production/?tab=production">Record output</Link></div><JobList jobs={production.jobs} /></section>
-        <section className="core-panel"><div className="panel-head"><div><span className="core-eyebrow">Exceptions</span><h2>Quality and equipment</h2></div><Link className="text-link" to="/operations/production/?tab=control">Open controls</Link></div><IssueList issues={openIssues} onResolve={resolveIssue} /></section>
+      <section className="summary-strip compact-summary"><span><small>Completion</small><strong>{completion}%</strong></span><span><small>Open problems</small><strong>{openIssues.length}</strong></span></section>
+      <div className="ops-today-grid task-first-grid">
+        <section className="core-panel"><div className="panel-head"><div><span className="core-eyebrow">Current jobs</span><h2>Production progress</h2></div><Link className="core-button primary compact" to="/operations/production/?tab=production">Record output</Link></div><JobList jobs={production.jobs} /><p className="form-notice">{output.toLocaleString()} of {target.toLocaleString()} good units recorded.</p></section>
+        <details className="core-panel today-more"><summary><span>Problems and equipment</span><small>{openIssues.length} open</small></summary><div className="today-more-content"><IssueList issues={openIssues} onResolve={resolveIssue} /><Link className="core-button" to="/operations/production/?tab=control">Open problems</Link></div></details>
       </div>
     </div>
     {actionControls}
@@ -1834,6 +2168,8 @@ function IssueList({ issues, onResolve }: { issues: ProductionIssue[]; onResolve
 
 export function SettingsPage() {
   const runtime = useOutletContext<RuntimeHealth>()
+  const location = useLocation()
+  const navigate = useNavigate()
   const [setup, setSetup] = useSetupWorkspace()
   const [commerce] = useCommerceWorkspace()
   const [production] = useProductionWorkspace()
@@ -1842,6 +2178,7 @@ export function SettingsPage() {
   const [teamWorkspace] = useTeamWorkspace()
   const [notice, setNotice] = useState('')
   const [resetArmed, setResetArmed] = useState(false)
+  const [settingsStepState, setSettingsStepState] = useState<'workflow' | 'success' | 'system'>('workflow')
   const [managedIdentity, setManagedIdentity] = useManagedIdentity(runtime.status === 'enterprise')
   const [managedEmail, setManagedEmail] = useState('')
   const [managedPassword, setManagedPassword] = useState('')
@@ -1850,6 +2187,8 @@ export function SettingsPage() {
   const [managedBusy, setManagedBusy] = useState(false)
   const completion = pilotProgress(setup)
   const isPilotReady = pilotReady(setup)
+  const workflowReady = Boolean(setup.workspace.trim() && setup.owner.trim() && setup.entryPoint.trim())
+  const settingsStep = location.hash === '#controls' ? 'system' : settingsStepState
   const selectedTemplate = templateFor(setup.product, setup.template)
   const evidenceDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Yangon' }).format(new Date())
   const evidenceFilename = `supermega-trial-evidence-${evidenceDate}.json`
@@ -1858,6 +2197,11 @@ export function SettingsPage() {
 
   function updateSetup(patch: Partial<SetupState>) {
     setSetup((current) => ({ ...current, ...patch, savedAt: undefined }))
+  }
+
+  function chooseSettingsStep(step: 'workflow' | 'success' | 'system') {
+    setSettingsStepState(step)
+    if (location.hash) navigate('/settings/', { replace: true })
   }
 
   function changeProduct(product: SetupState['product']) {
@@ -1873,8 +2217,14 @@ export function SettingsPage() {
 
   function save(event: FormEvent) {
     event.preventDefault()
+    if (!workflowReady) {
+      setNotice('Complete the workflow name and responsible owner first.')
+      chooseSettingsStep('workflow')
+      return
+    }
     setSetup((current) => ({ ...current, savedAt: new Date().toISOString() }))
     setNotice('Pilot definition saved in this browser. No source, account, or external action was connected.')
+    chooseSettingsStep('system')
   }
 
   function resetDemoWorkspace() {
@@ -1915,31 +2265,42 @@ export function SettingsPage() {
 
   return (
     <div className="workspace-screen settings-screen">
-      <PageHeading eyebrow="Settings" title="Pilot and system boundary" copy="Define one measurable workflow, export its evidence, and see exactly what still blocks managed activation." />
-      <div className="settings-grid">
-        <form className="core-panel setup-form" onSubmit={save}>
-          <div className="panel-head"><div><span className="core-eyebrow">Pilot definition</span><h2>Start with one real workflow.</h2></div><span className={`status-pill ${isPilotReady ? 'approved' : 'bounded'}`}>{isPilotReady ? 'ready' : `${completion}%`}</span></div>
-          <div className="pilot-progress"><div className="progress-track"><i style={{ width: `${completion}%` }} /></div><small>Channel or entry point · current record · baseline · target · authority · evidence</small></div>
+      <PageHeading eyebrow="Settings" title="Set up one real workflow" copy="Choose the work, define success, then review what is safe to activate." />
+      <nav aria-label="Setup steps" className="settings-step-nav">
+        <button aria-current={settingsStep === 'workflow' ? 'step' : undefined} onClick={() => chooseSettingsStep('workflow')} type="button"><span>1</span>Workflow</button>
+        <button aria-current={settingsStep === 'success' ? 'step' : undefined} onClick={() => chooseSettingsStep('success')} type="button"><span>2</span>Success</button>
+        <button aria-current={settingsStep === 'system' ? 'step' : undefined} onClick={() => chooseSettingsStep('system')} type="button"><span>3</span>System</button>
+      </nav>
+      <div className="settings-grid settings-step-content">
+        {settingsStep !== 'system' ? <form className="core-panel setup-form" onSubmit={save}>
+          <div className="panel-head"><div><span className="core-eyebrow">Pilot definition</span><h2>{settingsStep === 'workflow' ? 'Choose the workflow' : 'Define success and authority'}</h2></div><span className={`status-pill ${isPilotReady ? 'approved' : 'bounded'}`}>{isPilotReady ? 'ready' : `${completion}%`}</span></div>
+          <div className="pilot-progress"><div className="progress-track"><i style={{ width: `${completion}%` }} /></div><small>{settingsStep === 'workflow' ? 'Product · template · entry point · owner' : 'Current record · baseline · target · authority · evidence'}</small></div>
+          <fieldset className="settings-step-fields" disabled={settingsStep !== 'workflow'} hidden={settingsStep !== 'workflow'}>
           <div className="segmented-control wide"><button aria-pressed={setup.product === 'commerce'} type="button" onClick={() => changeProduct('commerce')}>Commerce</button><button aria-pressed={setup.product === 'production'} type="button" onClick={() => changeProduct('production')}>Production</button></div>
           <div className="form-row"><label>Starting template<select value={setup.template} onChange={(event) => changeTemplate(event.target.value)}>{templatesFor(setup.product).map((template) => <option key={template.id} value={template.name}>{template.name}</option>)}</select></label><label>Entry point<select value={setup.entryPoint} onChange={(event) => updateSetup({ entryPoint: event.target.value })}>{selectedTemplate.entryPoints.map((entryPoint) => <option key={entryPoint}>{entryPoint}</option>)}</select></label></div>
           <div className="template-contract"><span>Workflow</span><strong>{selectedTemplate.workflow.join(' → ')}</strong><small>Measure · {selectedTemplate.metric}</small></div>
           <div className="form-row"><label>Workspace name<input maxLength={80} required value={setup.workspace} onChange={(event) => updateSetup({ workspace: event.target.value })} placeholder={setup.product === 'commerce' ? 'Example: Social sales team' : 'Example: Main production site'} /></label><label>Responsible owner<input maxLength={80} required value={setup.owner} onChange={(event) => updateSetup({ owner: event.target.value })} placeholder="Name or role" /></label></div>
+          <div className="settings-step-actions"><span>Step 1 of 3</span><button className="core-button primary" disabled={!workflowReady} onClick={() => chooseSettingsStep('success')} type="button">Continue to success</button></div>
+          </fieldset>
+          <fieldset className="settings-step-fields" disabled={settingsStep !== 'success'} hidden={settingsStep !== 'success'}>
+          <div className="template-contract settings-workflow-summary"><span>{setup.product}</span><strong>{setup.workspace || 'Unnamed workspace'}</strong><small>{selectedTemplate.name} · {setup.owner || 'Owner needed'}</small></div>
           <label>Current record<input maxLength={180} required value={setup.currentRecord} onChange={(event) => updateSetup({ currentRecord: event.target.value })} placeholder="What is used today: chat, paper, spreadsheet, system, or machine log?" /></label>
           <div className="form-row pilot-text-row"><label>Baseline<textarea maxLength={240} required value={setup.baseline} onChange={(event) => updateSetup({ baseline: event.target.value })} placeholder="Current time, error rate, backlog, or output." /></label><label>Target outcome<textarea maxLength={240} required value={setup.targetOutcome} onChange={(event) => updateSetup({ targetOutcome: event.target.value })} placeholder={`Set a target for ${selectedTemplate.metric.toLowerCase()}.`} /></label></div>
           <div className="form-row pilot-text-row"><label>Human authority boundary<textarea maxLength={240} required value={setup.authorityBoundary} onChange={(event) => updateSetup({ authorityBoundary: event.target.value })} placeholder="Which sends, payments, approvals, or production changes require an owner?" /></label><label>Acceptance evidence<textarea maxLength={240} required value={setup.acceptanceEvidence} onChange={(event) => updateSetup({ acceptanceEvidence: event.target.value })} placeholder="What record or result proves the pilot works?" /></label></div>
-          <button className="core-button primary" type="submit">Save pilot definition</button>
+          <div className="settings-step-actions"><button className="text-link" onClick={() => chooseSettingsStep('workflow')} type="button">Back</button><button className="core-button primary" type="submit">Save and review system</button></div>
+          </fieldset>
           <p className="form-notice" aria-live="polite">{notice || (setup.savedAt ? `Last saved ${formatTime(setup.savedAt)}` : 'The draft stays in this browser until exported or managed mode is activated.')}</p>
-        </form>
-        <section className="core-panel system-boundary-panel" id="controls">
+        </form> : null}
+        {settingsStep === 'system' ? <section className="core-panel system-boundary-panel" id="controls">
           <div className="panel-head"><div><span className="core-eyebrow">System boundary</span><h2>{runtime.status === 'enterprise' ? 'Managed mode ready' : 'Managed mode locked'}</h2></div><RuntimeBadge status={runtime.status} /></div>
           {runtime.status === 'enterprise' && managedTrialAuthConfigured() ? managedIdentity ? <div className="template-contract"><span>Managed account</span><strong>{managedIdentity.email}</strong><small>{managedIdentity.workspaceId} · membership and capabilities are checked by the API</small><button className="text-link" disabled={managedBusy} onClick={() => void disconnectManagedWorkspace()} type="button">Disconnect</button></div> : <form className="core-form compact-form" onSubmit={(event) => void connectManagedWorkspace(event)}><span className="core-eyebrow">Managed workspace</span><div className="form-row"><label>Email<input autoComplete="username" maxLength={160} onChange={(event) => setManagedEmail(event.target.value)} required type="email" value={managedEmail} /></label><label>Password<input autoComplete="current-password" minLength={8} onChange={(event) => setManagedPassword(event.target.value)} required type="password" value={managedPassword} /></label></div><label>Workspace ID<input maxLength={128} onChange={(event) => setManagedWorkspace(event.target.value)} placeholder="Your provisioned workspace" required value={managedWorkspace} /></label><button className="core-button primary" disabled={managedBusy} type="submit">{managedBusy ? 'Checking…' : 'Connect workspace'}</button></form> : null}
           {managedNotice ? <p className="form-notice" role="status">{managedNotice}</p> : null}
           <div className="readiness-list"><span><small>Pilot definition</small><strong>{isPilotReady ? 'Ready' : `${completion}% complete`}</strong></span><span><small>Runtime</small><strong>{runtime.serviceStatus}</strong></span><span><small>Operating mode</small><strong>{runtime.operatingMode.replace('_', ' ')}</strong></span><span><small>Managed data</small><strong>{runtime.enterpriseDbReady ? 'Ready' : 'Not connected'}</strong></span><span><small>Security</small><strong>{runtime.securityReady ? 'Ready' : 'Not ready'}</strong></span><span><small>Write path</small><strong>{runtime.writesReady ? 'Enabled' : 'Locked'}</strong></span><span><small>Source coverage</small><strong>{runtime.coverageScore}%</strong></span><span><small>External action</small><strong>Owner controlled</strong></span></div>
           {runtime.status !== 'enterprise' ? <ul className="requirement-list">{(runtime.requirements.length ? runtime.requirements : ['Configure managed tenant persistence.', 'Verify production identity and source coverage.']).map((requirement) => <li key={requirement}>{requirement}</li>)}</ul> : null}
           <p className="authority-note">External sends, payments, publishing, access changes, and production writes remain owner-approved and auditable.</p>
-        </section>
+        </section> : null}
       </div>
-      <section className="core-panel trial-control-panel"><div><span className="core-eyebrow">Local evidence</span><h2>Export or reset deliberately.</h2><p>Export the pilot definition and full browser workspace for review. Reset only after the evidence is no longer needed.</p></div><div className="trial-actions"><a className="core-button" download={evidenceFilename} href={evidenceHref}>Export evidence</a>{resetArmed ? <><button className="text-link" onClick={() => setResetArmed(false)} type="button">Cancel</button><button className="core-button danger" onClick={resetDemoWorkspace} type="button">Confirm reset</button></> : <button className="text-link danger-text" onClick={() => setResetArmed(true)} type="button">Reset local trial</button>}</div></section>
+      {settingsStep === 'system' ? <section className="core-panel trial-control-panel"><div><span className="core-eyebrow">Local evidence</span><h2>Export or reset deliberately.</h2><p>Export the pilot definition and full browser workspace for review. Reset only after the evidence is no longer needed.</p></div><div className="trial-actions"><a className="core-button" download={evidenceFilename} href={evidenceHref}>Export evidence</a>{resetArmed ? <><button className="text-link" onClick={() => setResetArmed(false)} type="button">Cancel</button><button className="core-button danger" onClick={resetDemoWorkspace} type="button">Confirm reset</button></> : <button className="text-link danger-text" onClick={() => setResetArmed(true)} type="button">Reset local trial</button>}</div></section> : null}
     </div>
   )
 }
