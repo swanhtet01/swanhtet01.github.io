@@ -673,9 +673,46 @@ def _verify_upgrade_and_role_boundaries(
 
         with runtime.transaction():
             with runtime.cursor() as cursor:
+                cursor.execute(
+                    """
+                    select
+                      current_setting('app.workspace_id', true),
+                      current_setting('app.actor_id', true),
+                      current_setting('app.actor_kind', true)
+                    """
+                )
+                if any(str(value or "") for value in cursor.fetchone()):
+                    raise RehearsalFailure("identity_leaked_across_transaction")
                 cursor.execute("select count(*) from app_private.workspace_memberships")
                 if int(cursor.fetchone()[0]) != 0:
-                    raise RehearsalFailure("identity_leaked_across_transaction")
+                    raise RehearsalFailure("identity_authorized_without_context")
+
+        class IntentionalRollback(RuntimeError):
+            pass
+
+        try:
+            with runtime.transaction():
+                with runtime.cursor() as cursor:
+                    _set_identity(cursor)
+                    raise IntentionalRollback("exercise rollback")
+        except IntentionalRollback:
+            pass
+
+        with runtime.transaction():
+            with runtime.cursor() as cursor:
+                cursor.execute(
+                    """
+                    select
+                      current_setting('app.workspace_id', true),
+                      current_setting('app.actor_id', true),
+                      current_setting('app.actor_kind', true)
+                    """
+                )
+                if any(str(value or "") for value in cursor.fetchone()):
+                    raise RehearsalFailure("identity_leaked_after_rollback")
+                cursor.execute("select count(*) from app_private.workspace_memberships")
+                if int(cursor.fetchone()[0]) != 0:
+                    raise RehearsalFailure("rollback_identity_authorized")
                 checks["identity_transaction_local"] = True
 
         with runtime.transaction():

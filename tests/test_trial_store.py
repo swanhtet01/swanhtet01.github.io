@@ -337,6 +337,93 @@ class TrialStoreTests(unittest.TestCase):
                     PostgresTrialStore._assert_runtime_role(cursor)
                 self.assertEqual(error.exception.reasons, ("role_ready",))
 
+    def test_postgres_guarded_cursor_rolls_back_and_closes_on_failure(self) -> None:
+        events: list[str] = []
+
+        class SentinelFailure(RuntimeError):
+            pass
+
+        class Cursor:
+            def __enter__(self):
+                events.append("cursor_enter")
+                return self
+
+            def __exit__(self, exc_type, _exc, _traceback):
+                events.append(f"cursor_exit:{exc_type.__name__ if exc_type else 'none'}")
+                return False
+
+        class Transaction:
+            def __enter__(self):
+                events.append("transaction_enter")
+                return self
+
+            def __exit__(self, exc_type, _exc, _traceback):
+                outcome = "rollback" if exc_type else "commit"
+                events.append(f"transaction_{outcome}")
+                return False
+
+        class Connection:
+            def __init__(self):
+                self.closed = False
+
+            def __enter__(self):
+                events.append("connection_enter")
+                return self
+
+            def __exit__(self, exc_type, _exc, _traceback):
+                self.closed = True
+                events.append(f"connection_close:{exc_type.__name__ if exc_type else 'none'}")
+                return False
+
+            def transaction(self):
+                return Transaction()
+
+            def cursor(self):
+                return Cursor()
+
+        connection = Connection()
+
+        class GuardedStore(PostgresTrialStore):
+            def _connect(self):
+                return connection
+
+            def _assert_runtime_role(self, _cursor) -> None:
+                events.append("role_checked")
+
+            def _assert_schema(self, _cursor) -> None:
+                events.append("schema_checked")
+
+            def _set_context(self, _cursor, _principal) -> None:
+                events.append("identity_set")
+
+            def _load_membership(self, _cursor, _principal) -> frozenset[str]:
+                events.append("membership_checked")
+                return frozenset()
+
+        store = GuardedStore("postgresql://runtime.invalid/db", reducer=self.reducer)
+        with self.assertRaises(SentinelFailure):
+            with store._guarded_cursor(self.operator, write=False):
+                events.append("operation")
+                raise SentinelFailure("force rollback")
+
+        self.assertTrue(connection.closed)
+        self.assertEqual(
+            events,
+            [
+                "connection_enter",
+                "transaction_enter",
+                "cursor_enter",
+                "role_checked",
+                "schema_checked",
+                "identity_set",
+                "membership_checked",
+                "operation",
+                "cursor_exit:SentinelFailure",
+                "transaction_rollback",
+                "connection_close:SentinelFailure",
+            ],
+        )
+
     def test_postgres_schema_probe_requires_version_4_and_hardening_controls(self) -> None:
         def canonical_trigger_rows() -> list[dict[str, object]]:
             return [
