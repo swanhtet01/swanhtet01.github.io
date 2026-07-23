@@ -646,9 +646,11 @@ function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = null) {
   async function mutate(
     eventType: ManagedCommerceEvent,
     commandId: string,
+    evidence: CommerceActionProof,
     transition: (state: CommerceState) => CommerceState | null,
   ) {
     if (!managedIdentity) {
+      if (eventType === 'commerce.workspace.initialized') throw new Error('Browser demo Commerce is already initialized.')
       const result = await mutateCommerceWorkspace(transition)
       if (!result.ok) {
         const rejected = { ...snapshotRef.current, error: result.error }
@@ -664,7 +666,9 @@ function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = null) {
 
     const workspaceId = managedIdentity.workspaceId
     const current = snapshotRef.current
-    if (current.mode !== 'managed-ready' || current.workspaceId !== workspaceId || current.version === null) {
+    const initializing = eventType === 'commerce.workspace.initialized'
+    const modeReady = initializing ? current.mode === 'managed-unprovisioned' && current.version === 0 : current.mode === 'managed-ready' && current.version !== null
+    if (!modeReady || current.workspaceId !== workspaceId || current.version === null) {
       throw new Error(current.error || 'Managed Commerce is not ready for writes.')
     }
     const next = transition(current.state)
@@ -675,6 +679,7 @@ function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = null) {
     try {
       const result = await saveManagedCommerceCommand({
         commandId,
+        evidence,
         eventType,
         expectedVersion: current.version,
         state: candidate as unknown as Record<string, unknown>,
@@ -1209,6 +1214,9 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
   const [channel, setChannel] = useState('Messenger')
   const [payment, setPayment] = useState('KBZPay')
   const [notice, setNotice] = useState('')
+  const [catalogDraft, setCatalogDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '', price: '', reason: '', evidenceReference: '' })
+  const [catalogBusy, setCatalogBusy] = useState(false)
+  const [catalogError, setCatalogError] = useState('')
   const selectedSku = commerce.items.some((item) => item.sku === sku) ? sku : commerce.items[0]?.sku ?? ''
   const selected = commerce.items.find((item) => item.sku === selectedSku)
   const orderValue = commerce.orders.filter((order) => order.status !== 'cancelled').reduce((total, order) => total + order.total, 0)
@@ -1219,12 +1227,61 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
   const paymentReview = commerce.orders.filter((order) => order.refundStatus === 'due' || (order.status !== 'cancelled' && order.paymentStatus === 'pending'))
   const importedWebsiteOrderIds = commerce.orders.flatMap((order) => order.sourceRecordId ? [order.sourceRecordId] : [])
 
+  async function initializeManagedCatalog(event: FormEvent) {
+    event.preventDefault()
+    if (!managedIdentity) return
+    const skuValue = catalogDraft.sku.trim().toUpperCase()
+    const name = catalogDraft.name.trim()
+    const onHand = Number(catalogDraft.onHand)
+    const reorderAt = Number(catalogDraft.reorderAt)
+    const price = Number(catalogDraft.price)
+    const reason = catalogDraft.reason.trim()
+    const evidenceReference = catalogDraft.evidenceReference.trim()
+    if (!skuValue || !name || !reason || !evidenceReference || ![onHand, reorderAt, price].every(Number.isSafeInteger) || onHand < 0 || reorderAt < 0 || price < 1) {
+      setCatalogError('Enter a valid item, whole-number stock boundaries, price, reason, and evidence reference.')
+      return
+    }
+    const proof: CommerceActionProof = {
+      actionId: uid('ACT'),
+      capturedAt: new Date().toISOString(),
+      actor: managedIdentity.email,
+      reason,
+      evidenceReference,
+    }
+    setCatalogBusy(true)
+    setCatalogError('')
+    try {
+      await mutateCommerce('commerce.workspace.initialized', commandUuid(), proof, (current) => current.items.length || current.orders.length || current.movements.length || current.closes.length ? null : validateCommerceState({
+        ...current,
+        items: [{ sku: skuValue, name, onHand, reorderAt, price }],
+      }))
+      setNotice(`Managed catalog initialized with ${skuValue}.`)
+    } catch (error) {
+      setCatalogError(error instanceof Error ? error.message : 'The managed catalog was not initialized.')
+    } finally {
+      setCatalogBusy(false)
+    }
+  }
+
   const effectiveMode = managedIdentity && (workspaceMode === 'local' || managedWorkspaceId !== managedIdentity.workspaceId) ? 'managed-loading' : workspaceMode
   if (managedIdentity && effectiveMode !== 'managed-ready') {
     const unprovisioned = effectiveMode === 'managed-unprovisioned'
+    if (unprovisioned) return <section className="core-panel managed-commerce-boundary">
+      <div className="panel-head"><div><span className="core-eyebrow">Managed Commerce setup</span><h2>Create the real catalog</h2></div><span className="status-pill pending">Not provisioned</span></div>
+      <p className="panel-copy">Start with the first real inventory item. No browser demo orders, customers, or stock records are copied into this workspace.</p>
+      <form className="core-form compact-form" onSubmit={(formEvent) => void initializeManagedCatalog(formEvent)}>
+        <div className="form-row"><label>SKU<input maxLength={80} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, sku: inputEvent.target.value }))} placeholder="SKU-001" required value={catalogDraft.sku} /></label><label>Item name<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, name: inputEvent.target.value }))} placeholder="Real item name" required value={catalogDraft.name} /></label></div>
+        <div className="form-row"><label>Opening stock<input min="0" onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, onHand: inputEvent.target.value }))} required step="1" type="number" value={catalogDraft.onHand} /></label><label>Reorder at<input min="0" onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, reorderAt: inputEvent.target.value }))} required step="1" type="number" value={catalogDraft.reorderAt} /></label></div>
+        <label>Price (MMK)<input min="1" onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, price: inputEvent.target.value }))} required step="1" type="number" value={catalogDraft.price} /></label>
+        <label>Opening balance reason<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, reason: inputEvent.target.value }))} placeholder="How the opening count was verified" required value={catalogDraft.reason} /></label>
+        <label>Evidence reference<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, evidenceReference: inputEvent.target.value }))} placeholder="Count sheet, stocktake, or source record" required value={catalogDraft.evidenceReference} /></label>
+        <div className="form-actions"><Link className="text-link" to="/settings/">Workspace settings</Link><button className="core-button primary" disabled={catalogBusy} type="submit">{catalogBusy ? 'Creating…' : 'Create managed catalog'}</button></div>
+        <p className="form-notice" role="status">{catalogError || commerceStorageError || `Authenticated as ${managedIdentity.email}. The tenant API records this initialization.`}</p>
+      </form>
+    </section>
     return <section className="core-panel managed-commerce-boundary">
-      <div className="panel-head"><div><span className="core-eyebrow">Managed Commerce</span><h2>{unprovisioned ? 'Catalog setup required' : effectiveMode === 'managed-error' ? 'Managed workspace unavailable' : 'Loading authenticated workspace'}</h2></div><span className={`status-pill ${unprovisioned ? 'pending' : 'bounded'}`}>{unprovisioned ? 'Not provisioned' : effectiveMode === 'managed-error' ? 'Blocked' : 'Checking'}</span></div>
-      <p className="panel-copy">{commerceStorageError || (unprovisioned ? 'Add the real catalog before taking orders. Demo records are never copied into a managed workspace.' : 'Commerce remains read-only until the authenticated tenant state is confirmed.')}</p>
+      <div className="panel-head"><div><span className="core-eyebrow">Managed Commerce</span><h2>{effectiveMode === 'managed-error' ? 'Managed workspace unavailable' : 'Loading authenticated workspace'}</h2></div><span className="status-pill bounded">{effectiveMode === 'managed-error' ? 'Blocked' : 'Checking'}</span></div>
+      <p className="panel-copy">{commerceStorageError || 'Commerce remains read-only until the authenticated tenant state is confirmed.'}</p>
       <div className="form-actions"><Link className="core-button" to="/settings/">Open workspace settings</Link></div>
     </section>
   }
@@ -1265,7 +1322,7 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
       before: `${itemSku} · ${beforeStock} on hand`,
       after: `${order.status} · ${beforeStock - quantity} on hand`,
       apply: async (action) => {
-        await mutateCommerce('commerce.order.created', action.commandId, (current) => reserveCommerceOrder(current, order, commerceActionProof(action)))
+        await mutateCommerce('commerce.order.created', action.commandId, commerceActionProof(action), (current) => reserveCommerceOrder(current, order, commerceActionProof(action)))
         setQuantity(1)
         setCustomer('')
       },
@@ -1316,7 +1373,7 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
       summary: `Confirm ${record.id} from Website`,
       before: `ready for confirmation · ${item.sku} · ${beforeStock} on hand`,
       after: `confirmed · ${fulfilmentLabel} · ${beforeStock - line.quantity} on hand`,
-      apply: (action) => mutateCommerce('commerce.order.created', action.commandId, (current) => reserveCommerceOrder(current, order, commerceActionProof(action))),
+      apply: (action) => mutateCommerce('commerce.order.created', action.commandId, commerceActionProof(action), (current) => reserveCommerceOrder(current, order, commerceActionProof(action))),
     })
   }
 
@@ -1329,7 +1386,7 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
     }
     const next: Record<'confirmed' | 'preparing' | 'ready', CommerceOrderStatus> = { confirmed: 'preparing', preparing: 'ready', ready: 'completed' }
     const nextStatus = next[order.status]
-    queueAction({ kind: 'order_status', subjectId: orderId, summary: `Advance ${orderId} fulfilment`, before: order.status, after: nextStatus, apply: (action) => mutateCommerce('commerce.order.advanced', action.commandId, (current) => advanceCommerceOrder(current, orderId, order.status)) })
+    queueAction({ kind: 'order_status', subjectId: orderId, summary: `Advance ${orderId} fulfilment`, before: order.status, after: nextStatus, apply: (action) => mutateCommerce('commerce.order.advanced', action.commandId, commerceActionProof(action), (current) => advanceCommerceOrder(current, orderId, order.status)) })
   }
 
   function reconcilePayment(orderId: string) {
@@ -1339,7 +1396,7 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
       setNotice(`${order.id} payment is already reconciled.`)
       return
     }
-    queueAction({ kind: 'payment_reconcile', subjectId: orderId, summary: `Reconcile ${order.id} payment`, before: `${order.payment} · ${order.paymentStatus}`, after: `${order.payment} · reconciled`, apply: (action) => mutateCommerce('commerce.payment.reconciled', action.commandId, (current) => reconcileCommercePayment(current, orderId, commerceActionProof(action))) })
+    queueAction({ kind: 'payment_reconcile', subjectId: orderId, summary: `Reconcile ${order.id} payment`, before: `${order.payment} · ${order.paymentStatus}`, after: `${order.payment} · reconciled`, apply: (action) => mutateCommerce('commerce.payment.reconciled', action.commandId, commerceActionProof(action), (current) => reconcileCommercePayment(current, orderId, commerceActionProof(action))) })
   }
 
   function cancelOrder(orderId: string) {
@@ -1353,18 +1410,18 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
       return
     }
     const paymentAfter = order.paymentStatus === 'reconciled' ? 'reconciled · refund due' : 'pending'
-    queueAction({ kind: 'order_cancel', subjectId: orderId, summary: `Cancel ${order.id} and release stock`, before: `${order.status} · ${item.onHand} on hand · ${order.paymentStatus}`, after: `cancelled · ${item.onHand + order.quantity} on hand · ${paymentAfter}`, apply: (action) => mutateCommerce('commerce.order.cancelled', action.commandId, (current) => cancelCommerceOrder(current, orderId, commerceActionProof(action))) })
+    queueAction({ kind: 'order_cancel', subjectId: orderId, summary: `Cancel ${order.id} and release stock`, before: `${order.status} · ${item.onHand} on hand · ${order.paymentStatus}`, after: `cancelled · ${item.onHand + order.quantity} on hand · ${paymentAfter}`, apply: (action) => mutateCommerce('commerce.order.cancelled', action.commandId, commerceActionProof(action), (current) => cancelCommerceOrder(current, orderId, commerceActionProof(action))) })
   }
 
   function restock(itemSku: string) {
     const item = commerce.items.find((candidate) => candidate.sku === itemSku)
     if (!item) return
-    queueAction({ kind: 'inventory_receipt', subjectId: itemSku, summary: `Receive 10 units of ${item.name}`, before: `${item.onHand} on hand`, after: `${item.onHand + 10} on hand`, apply: (action) => mutateCommerce('commerce.stock.received', action.commandId, (current) => receiveCommerceStock(current, itemSku, 10, commerceActionProof(action))) })
+    queueAction({ kind: 'inventory_receipt', subjectId: itemSku, summary: `Receive 10 units of ${item.name}`, before: `${item.onHand} on hand`, after: `${item.onHand + 10} on hand`, apply: (action) => mutateCommerce('commerce.stock.received', action.commandId, commerceActionProof(action), (current) => receiveCommerceStock(current, itemSku, 10, commerceActionProof(action))) })
   }
 
   function closeDay() {
     const close = { id: uid('CLOSE'), createdAt: new Date().toISOString(), total: reconciledValue, orders: closableOrders.length }
-    queueAction({ kind: 'daily_close', subjectId: close.id, summary: `Save ${close.id} daily close`, before: `${commerce.closes.length} snapshots`, after: `${commerce.closes.length + 1} snapshots · ${formatMoney(close.total)}`, apply: (action) => mutateCommerce('commerce.close.saved', action.commandId, (current) => current.closes.some((candidate) => candidate.id === close.id) ? current : { ...current, closes: [close, ...current.closes] }) })
+    queueAction({ kind: 'daily_close', subjectId: close.id, summary: `Save ${close.id} daily close`, before: `${commerce.closes.length} snapshots`, after: `${commerce.closes.length + 1} snapshots · ${formatMoney(close.total)}`, apply: (action) => mutateCommerce('commerce.close.saved', action.commandId, commerceActionProof(action), (current) => current.closes.some((candidate) => candidate.id === close.id) ? current : { ...current, closes: [close, ...current.closes] }) })
   }
 
   const actionControls = <><AccountableActionGate key={pendingAction?.id ?? 'commerce-idle'} action={pendingAction} onCancel={() => setPendingAction(null)} onConfirm={confirmAction} />{managedIdentity ? null : <ActionHistory actions={actions} domain="commerce" />}</>

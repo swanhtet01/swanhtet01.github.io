@@ -72,6 +72,7 @@ _MOVEMENT_FIELDS = frozenset(
     {"id", "actionId", "createdAt", "actor", "reason", "evidenceReference", "kind", "sku", "quantityDelta", "orderId"}
 )
 _CLOSE_FIELDS = frozenset({"id", "createdAt", "total", "orders"})
+_EVIDENCE_FIELDS = frozenset({"actionId", "capturedAt", "actor", "reason", "evidenceReference"})
 
 
 def _object(value: object, field: str) -> dict[str, Any]:
@@ -286,10 +287,56 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     return deepcopy(state)
 
 
-def _payload_state(payload: Mapping[str, Any]) -> dict[str, Any]:
-    if set(payload) != {"state"}:
-        raise TrialValidationError("payload must contain exactly one object field named state.")
-    return validate_commerce_state(payload.get("state"))
+def _payload(payload: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, str]]:
+    if set(payload) != {"state", "evidence"}:
+        raise TrialValidationError("Commerce payload must contain exactly state and evidence objects.")
+    evidence = _object(payload.get("evidence"), "evidence")
+    _exact_fields(evidence, "evidence", required=_EVIDENCE_FIELDS)
+    validated_evidence = {
+        "actionId": _text(evidence["actionId"], "evidence.actionId", maximum=160),
+        "capturedAt": _timestamp(evidence["capturedAt"], "evidence.capturedAt"),
+        "actor": _text(evidence["actor"], "evidence.actor"),
+        "reason": _text(evidence["reason"], "evidence.reason"),
+        "evidenceReference": _text(evidence["evidenceReference"], "evidence.evidenceReference"),
+    }
+    return validate_commerce_state(payload.get("state")), validated_evidence
+
+
+def _validate_event_evidence(event_type: str, next_state: Mapping[str, Any], evidence: Mapping[str, str]) -> None:
+    movement_kind = {
+        "commerce.order.created": "reserve",
+        "commerce.order.cancelled": "release",
+        "commerce.stock.received": "receipt",
+    }.get(event_type)
+    if movement_kind:
+        movement = next_state["movements"][0]
+        if movement.get("kind") != movement_kind or any(
+            movement.get(movement_field) != evidence[evidence_field]
+            for movement_field, evidence_field in (
+                ("actionId", "actionId"),
+                ("createdAt", "capturedAt"),
+                ("actor", "actor"),
+                ("reason", "reason"),
+                ("evidenceReference", "evidenceReference"),
+            )
+        ):
+            raise TrialValidationError("command evidence must match the attributable stock movement.")
+    elif event_type == "commerce.payment.reconciled":
+        matches = [
+            order
+            for order in next_state["orders"]
+            if order.get("paymentReconciliationActionId") == evidence["actionId"]
+        ]
+        if len(matches) != 1:
+            raise TrialValidationError("command evidence must identify the reconciled payment.")
+        order = matches[0]
+        if (
+            order.get("paymentReconciledAt") != evidence["capturedAt"]
+            or order.get("paymentReconciledBy") != evidence["actor"]
+            or order.get("paymentReconciliationReason") != evidence["reason"]
+            or order.get("paymentEvidenceReference") != evidence["evidenceReference"]
+        ):
+            raise TrialValidationError("command evidence must match the payment reconciliation evidence.")
 
 
 def _one_changed(current: list[Any], next_values: list[Any], field: str) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -435,7 +482,7 @@ def reduce_commerce_state(
 
     if event_type not in COMMERCE_EVENTS:
         raise TrialValidationError("event_type must be a supported Commerce lifecycle event.")
-    next_state = _payload_state(payload)
+    next_state, evidence = _payload(payload)
     if event_type == "commerce.workspace.initialized":
         if dict(current):
             raise TrialValidationError("managed Commerce is already initialized.")
@@ -445,6 +492,7 @@ def reduce_commerce_state(
 
     current_state = validate_commerce_state(current)
     _TRANSITION_VALIDATORS[event_type](current_state, next_state)
+    _validate_event_evidence(event_type, next_state, evidence)
     return next_state
 
 

@@ -40,6 +40,7 @@ export type ManagedStateRecord = {
 }
 
 export type ManagedCommerceEvent =
+  | 'commerce.workspace.initialized'
   | 'commerce.order.created'
   | 'commerce.order.advanced'
   | 'commerce.order.cancelled'
@@ -54,6 +55,14 @@ export type ManagedCommandResult = {
   version: number
   state: Record<string, unknown>
   idempotent_replay: boolean
+}
+
+export type ManagedCommandEvidence = {
+  actionId: string
+  capturedAt: string
+  actor: string
+  reason: string
+  evidenceReference: string
 }
 
 export type ManagedBootstrap = {
@@ -270,6 +279,7 @@ export function loadManagedBootstrap() {
 
 export async function saveManagedCommerceCommand(request: {
   commandId: string
+  evidence: ManagedCommandEvidence
   eventType: ManagedCommerceEvent
   expectedVersion: number
   state: Record<string, unknown>
@@ -281,7 +291,7 @@ export async function saveManagedCommerceCommand(request: {
       surface: 'commerce',
       event_type: request.eventType,
       expected_version: request.expectedVersion,
-      payload: { state: request.state },
+      payload: { state: request.state, evidence: request.evidence },
     }),
   })
   return response.result

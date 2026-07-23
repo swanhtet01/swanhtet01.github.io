@@ -64,6 +64,16 @@ def movement(kind: str, action_id: str, quantity: int, *, order_id: str | None =
     return record
 
 
+def action_evidence(action_id: str = "ACT-LIFECYCLE") -> dict[str, str]:
+    return {
+        "actionId": action_id,
+        "capturedAt": NOW,
+        "actor": "Accountable operator",
+        "reason": "Verified against the source record.",
+        "evidenceReference": f"EV-{action_id}",
+    }
+
+
 def created_state(order_id: str = "ORD-1") -> dict[str, object]:
     state = catalog_state()
     state["items"] = [{**state["items"][0], "onHand": 8}]  # type: ignore[index]
@@ -72,8 +82,35 @@ def created_state(order_id: str = "ORD-1") -> dict[str, object]:
     return state
 
 
-def apply_event(current: dict[str, object], event_type: str, next_state: dict[str, object]) -> dict[str, object]:
-    return dict(reduce_trial_state("commerce", event_type, current, {"state": next_state}))
+def evidence_for(event_type: str, next_state: dict[str, object]) -> dict[str, str]:
+    if event_type in {"commerce.order.created", "commerce.order.cancelled", "commerce.stock.received"}:
+        movement_record = next_state["movements"][0]  # type: ignore[index]
+        return {
+            "actionId": movement_record["actionId"],
+            "capturedAt": movement_record["createdAt"],
+            "actor": movement_record["actor"],
+            "reason": movement_record["reason"],
+            "evidenceReference": movement_record["evidenceReference"],
+        }
+    if event_type == "commerce.payment.reconciled":
+        order = next_state["orders"][0]  # type: ignore[index]
+        return {
+            "actionId": order["paymentReconciliationActionId"],
+            "capturedAt": order["paymentReconciledAt"],
+            "actor": order["paymentReconciledBy"],
+            "reason": order["paymentReconciliationReason"],
+            "evidenceReference": order["paymentEvidenceReference"],
+        }
+    return action_evidence()
+
+
+def apply_event(
+    current: dict[str, object],
+    event_type: str,
+    next_state: dict[str, object],
+    evidence: dict[str, str] | None = None,
+) -> dict[str, object]:
+    return dict(reduce_trial_state("commerce", event_type, current, {"state": next_state, "evidence": evidence or evidence_for(event_type, next_state)}))
 
 
 class CommerceRuntimeTests(unittest.TestCase):
@@ -94,13 +131,17 @@ class CommerceRuntimeTests(unittest.TestCase):
         arbitrary_stock = deepcopy(current)
         arbitrary_stock["items"][0]["onHand"] = 9  # type: ignore[index]
         with self.assertRaises(TrialValidationError):
-            apply_event(current, "commerce.order.created", arbitrary_stock)
+            apply_event(current, "commerce.order.created", arbitrary_stock, action_evidence())
 
         received = deepcopy(current)
         received["items"][0]["onHand"] = 15  # type: ignore[index]
         received["movements"] = [movement("receipt", "ACT-RECEIVE", 5)]
         accepted_receipt = apply_event(current, "commerce.stock.received", received)
         self.assertEqual(accepted_receipt["movements"][0]["kind"], "receipt")  # type: ignore[index]
+
+        wrong_evidence = action_evidence("ACT-WRONG")
+        with self.assertRaises(TrialValidationError):
+            apply_event(current, "commerce.stock.received", received, wrong_evidence)
 
     def test_order_progress_payment_and_close_are_server_checked(self) -> None:
         current = created_state()
@@ -188,7 +229,7 @@ class CommerceRuntimeTests(unittest.TestCase):
             surface="commerce",
             event_type="commerce.workspace.initialized",
             expected_version=0,
-            payload={"state": catalog_state()},
+            payload={"state": catalog_state(), "evidence": action_evidence("ACT-INITIALIZE")},
         )
         replay = store.apply_command(
             principal,
@@ -196,7 +237,7 @@ class CommerceRuntimeTests(unittest.TestCase):
             surface="commerce",
             event_type="commerce.workspace.initialized",
             expected_version=0,
-            payload={"state": catalog_state()},
+            payload={"state": catalog_state(), "evidence": action_evidence("ACT-INITIALIZE")},
         )
         created = store.apply_command(
             principal,
@@ -204,7 +245,7 @@ class CommerceRuntimeTests(unittest.TestCase):
             surface="commerce",
             event_type="commerce.order.created",
             expected_version=initialized.version,
-            payload={"state": created_state()},
+            payload={"state": created_state(), "evidence": evidence_for("commerce.order.created", created_state())},
         )
 
         self.assertEqual(initialized.version, 1)
