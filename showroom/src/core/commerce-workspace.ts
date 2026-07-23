@@ -783,6 +783,8 @@ export function registerCommerceItem(state: CommerceState, item: CommerceItem, p
 
 export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder, proof: CommerceActionProof) {
   if (!validProof(proof) || order.status !== 'confirmed' || !order.itemSku || order.quantity < 1 || order.paymentStatus !== 'pending' || order.refundStatus !== 'none') return null
+  if (Boolean(order.sourceRecordId) !== Boolean(order.evidenceReference)
+    || (order.evidenceReference && order.evidenceReference !== proof.evidenceReference)) return null
   const proofMovement = state.movements.find((movement) => movement.actionId === proof.actionId)
   if (proofMovement) {
     const storedOrder = state.orders.find((candidate) => candidate.id === order.id)
