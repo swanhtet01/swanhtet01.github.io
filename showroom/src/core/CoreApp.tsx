@@ -14,11 +14,13 @@ import {
   ManagedTrialError,
   managedTrialAuthConfigured,
   saveManagedCommerceCommand,
+  saveManagedProductionCommand,
   signInManagedTrial,
   signOutManagedTrial,
   type ManagedApprovalRecord,
   type ManagedCommerceEvent,
   type ManagedIdentity,
+  type ManagedProductionEvent,
   type ManagedStateRecord,
 } from './managed-trial'
 import { LEGACY_TEAM_WORK_KEYS, TEAM_WORK_KEY, formatTime, teamDefinitions, useTeamWorkspace } from './team-work'
@@ -62,12 +64,15 @@ import {
   LEGACY_PRODUCTION_KEYS,
   PRODUCTION_KEY,
   advanceProductionMachineState,
+  createEmptyProduction,
   loadProductionWorkspace,
   mutateProductionWorkspace,
   openProductionIssue,
   productionMachineTransitions,
   recordProductionOutput,
+  registerProductionJob,
   resolveProductionIssue,
+  validateProductionState,
   type ProductionActionProof,
   type ProductionEvent,
   type ProductionIssue,
@@ -149,6 +154,7 @@ type ActionKind =
   | 'catalog_item_create'
   | 'inventory_receipt'
   | 'daily_close'
+  | 'production_job'
   | 'production_output'
   | 'issue_create'
   | 'issue_resolution'
@@ -755,32 +761,169 @@ function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = null) {
   return [visible.state, mutate, visible.error, visible.mode, visible.version, visible.workspaceId] as const
 }
 
-function useProductionWorkspace() {
-  const [snapshot, setSnapshot] = useState(() => loadProductionWorkspace())
+type ProductionWorkspaceMode = 'local' | 'managed-loading' | 'managed-ready' | 'managed-unprovisioned' | 'managed-error'
+
+type ProductionWorkspaceView = {
+  state: ProductionState
+  mode: ProductionWorkspaceMode
+  workspaceId: string
+  version: number | null
+  error: string
+}
+
+function managedProductionView(record: ManagedStateRecord, workspaceId: string): ProductionWorkspaceView {
+  if (record.surface !== 'production' || !Number.isSafeInteger(record.version) || record.version < 0) throw new Error('Managed Production returned an invalid state envelope.')
+  if (record.version === 0) {
+    if (Object.keys(record.state).length) throw new Error('Managed Production has state without a valid revision.')
+    return { state: createEmptyProduction(), mode: 'managed-unprovisioned', workspaceId, version: 0, error: 'This managed workspace has no Production plan yet.' }
+  }
+  return { state: validateProductionState(record.state), mode: 'managed-ready', workspaceId, version: record.version, error: '' }
+}
+
+function useProductionWorkspace(managedIdentity: ManagedIdentity | null = null) {
+  const [localSnapshot, setLocalSnapshot] = useState<ProductionWorkspaceView>(() => {
+    const local = loadProductionWorkspace()
+    return { state: local.state, mode: 'local', workspaceId: '', version: null, error: local.error }
+  })
+  const [managedSnapshot, setManagedSnapshot] = useState<ProductionWorkspaceView>(() => ({
+    state: createEmptyProduction(), mode: 'managed-loading', workspaceId: '', version: null, error: '',
+  }))
+  const snapshotRef = useRef(localSnapshot)
+  const identityRef = useRef(managedIdentity)
 
   useEffect(() => {
+    identityRef.current = managedIdentity
+    snapshotRef.current = managedIdentity ? managedSnapshot : localSnapshot
+  }, [localSnapshot, managedIdentity, managedSnapshot])
+
+  useEffect(() => {
+    if (managedIdentity) return undefined
     function refreshFromStorage(event: StorageEvent) {
-      if (event.key === PRODUCTION_KEY) setSnapshot(loadProductionWorkspace())
+      if (event.key !== PRODUCTION_KEY) return
+      const local = loadProductionWorkspace()
+      const next = { state: local.state, mode: 'local' as const, workspaceId: '', version: null, error: local.error }
+      snapshotRef.current = next
+      setLocalSnapshot(next)
     }
     window.addEventListener('storage', refreshFromStorage)
     return () => window.removeEventListener('storage', refreshFromStorage)
-  }, [])
+  }, [managedIdentity])
 
-  async function mutate(transition: (state: ProductionState) => ProductionState | null) {
-    const result = await mutateProductionWorkspace(transition)
-    if (!result.ok) {
-      const refreshed = loadProductionWorkspace()
-      setSnapshot((current) => ({
-        state: refreshed.error ? current.state : refreshed.state,
-        source: refreshed.error ? current.source : refreshed.source,
-        error: result.error,
-      }))
-      throw new Error(result.error)
+  useEffect(() => {
+    if (!managedIdentity) return undefined
+
+    let active = true
+    loadManagedBootstrap()
+      .then((bootstrap) => {
+        if (!active || identityRef.current?.workspaceId !== managedIdentity.workspaceId) return
+        const next = managedProductionView(bootstrap.states.production, managedIdentity.workspaceId)
+        snapshotRef.current = next
+        setManagedSnapshot(next)
+      })
+      .catch((error) => {
+        if (!active || identityRef.current?.workspaceId !== managedIdentity.workspaceId) return
+        const next = { state: createEmptyProduction(), mode: 'managed-error' as const, workspaceId: managedIdentity.workspaceId, version: null, error: error instanceof Error ? error.message : 'Managed Production could not be loaded.' }
+        snapshotRef.current = next
+        setManagedSnapshot(next)
+      })
+    return () => { active = false }
+  }, [managedIdentity])
+
+  async function mutate(
+    eventType: ManagedProductionEvent,
+    commandId: string,
+    evidence: ProductionActionProof,
+    transition: (state: ProductionState) => ProductionState | null,
+  ) {
+    if (!managedIdentity) {
+      if (eventType === 'production.workspace.initialized') throw new Error('Browser demo Production is already initialized.')
+      const result = await mutateProductionWorkspace(transition)
+      if (!result.ok) {
+        const refreshed = loadProductionWorkspace()
+        const rejected = {
+          state: refreshed.error ? snapshotRef.current.state : refreshed.state,
+          mode: 'local' as const,
+          workspaceId: '',
+          version: null,
+          error: result.error,
+        }
+        snapshotRef.current = rejected
+        setLocalSnapshot(rejected)
+        throw new Error(result.error)
+      }
+      const accepted = { state: result.state, mode: 'local' as const, workspaceId: '', version: null, error: '' }
+      snapshotRef.current = accepted
+      setLocalSnapshot(accepted)
+      return
     }
-    setSnapshot({ state: result.state, source: 'current', error: '' })
+
+    const workspaceId = managedIdentity.workspaceId
+    const current = snapshotRef.current
+    const initializing = eventType === 'production.workspace.initialized'
+    const modeReady = initializing ? current.mode === 'managed-unprovisioned' && current.version === 0 : current.mode === 'managed-ready' && current.version !== null
+    if (!modeReady || current.workspaceId !== workspaceId || current.version === null) {
+      throw new Error(current.error || 'Managed Production is not ready for writes.')
+    }
+    const next = transition(current.state)
+    if (!next) throw new Error('The Production state changed or this lifecycle step is no longer valid. Nothing was written.')
+    if (next === current.state) return
+    const candidate = validateProductionState(next)
+
+    try {
+      const result = await saveManagedProductionCommand({
+        commandId,
+        evidence,
+        eventType,
+        expectedVersion: current.version,
+        state: candidate as unknown as Record<string, unknown>,
+      })
+      if (identityRef.current?.workspaceId !== workspaceId) throw new Error('The managed workspace changed before the write was confirmed.')
+      if (result.surface !== 'production' || result.event_type !== eventType || result.version !== current.version + 1) {
+        throw new Error('Managed Production returned an invalid command result.')
+      }
+      const accepted = validateProductionState(result.state)
+      let nextSnapshot: ProductionWorkspaceView = { state: accepted, mode: 'managed-ready', workspaceId, version: result.version, error: '' }
+      if (result.idempotent_replay) {
+        const bootstrap = await loadManagedBootstrap()
+        if (identityRef.current?.workspaceId !== workspaceId) throw new Error('The managed workspace changed before the replay could be reconciled.')
+        const refreshed = managedProductionView(bootstrap.states.production, workspaceId)
+        if (refreshed.mode !== 'managed-ready' || refreshed.version === null || refreshed.version < result.version) {
+          throw new Error('Managed Production could not reconcile the committed command with current state.')
+        }
+        nextSnapshot = { ...refreshed, error: '' }
+      }
+      snapshotRef.current = nextSnapshot
+      setManagedSnapshot(nextSnapshot)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'The managed Production write was not confirmed.'
+      if (error instanceof ManagedTrialError && error.code === 'trial_version_conflict') {
+        try {
+          const bootstrap = await loadManagedBootstrap()
+          if (identityRef.current?.workspaceId !== workspaceId) throw new Error('The managed workspace changed before Production could refresh.')
+          const refreshed = managedProductionView(bootstrap.states.production, workspaceId)
+          const conflict = { ...refreshed, error: 'Production changed in another session. The latest revision is loaded; review and confirm the action again.' }
+          snapshotRef.current = conflict
+          setManagedSnapshot(conflict)
+        } catch (refreshError) {
+          const refreshMessage = refreshError instanceof Error ? refreshError.message : 'Production changed and the latest revision could not be loaded.'
+          const rejected = { ...snapshotRef.current, error: refreshMessage }
+          snapshotRef.current = rejected
+          setManagedSnapshot(rejected)
+          throw refreshError
+        }
+        throw new Error('Production changed in another session. The latest revision is loaded; review and confirm the action again.')
+      }
+      if (identityRef.current?.workspaceId === workspaceId) {
+        const rejected = { ...snapshotRef.current, error: message }
+        snapshotRef.current = rejected
+        setManagedSnapshot(rejected)
+      }
+      throw error
+    }
   }
 
-  return [snapshot.state, mutate, snapshot.error] as const
+  const visible = managedIdentity ? managedSnapshot : localSnapshot
+  return [visible.state, mutate, visible.error, visible.mode, visible.version, visible.workspaceId] as const
 }
 
 function useApprovalWorkspace() {
@@ -1289,7 +1432,7 @@ export function OperationsPage() {
     <div className="workspace-screen operations-screen">
       <PageHeading eyebrow={view === 'commerce' ? 'Commerce' : 'Production'} title={view === 'commerce' ? 'Commerce' : 'Production'} copy={productCopy} actions={<Link className="text-link all-apps-link" to="/operations/">All apps</Link>} />
       <nav className="workspace-toolbar view-tabs product-task-tabs" aria-label={`${view === 'commerce' ? 'Commerce' : 'Production'} tasks`}>{tabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{tab.label}</button>)}</nav>
-      <div className="workspace-view">{view === 'commerce' ? <CommercePage managedIdentity={managedIdentity} tab={commerceTab} /> : <ProductionPage tab={productionTab} />}</div>
+      <div className="workspace-view">{view === 'commerce' ? <CommercePage managedIdentity={managedIdentity} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
     </div>
   )
 }
@@ -1959,6 +2102,7 @@ function StockMovementHistory({ movements }: { movements: CommerceStockMovement[
 }
 
 const productionEventLabels: Record<ProductionEvent['kind'], string> = {
+  job_created: 'Job created',
   output_recorded: 'Output recorded',
   issue_opened: 'Issue opened',
   issue_resolved: 'Issue resolved',
@@ -1982,8 +2126,8 @@ function ProductionEventHistory({ events }: { events: ProductionEvent[] }) {
   </details>
 }
 
-function ProductionPage({ tab }: { tab: ProductionTab }) {
-  const [production, mutateProduction, productionStorageError] = useProductionWorkspace()
+function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIdentity | null; tab: ProductionTab }) {
+  const [production, mutateProduction, productionStorageError, workspaceMode, managedVersion, managedWorkspaceId] = useProductionWorkspace(managedIdentity)
   const [, setActions] = useStoredState<AccountableAction[]>(ACTION_KEY, [], normalizeActions)
   const [pendingAction, setPendingAction] = useState<PendingAccountableAction | null>(null)
   const [jobId, setJobId] = useState(production.jobs[0]?.id ?? '')
@@ -1991,14 +2135,81 @@ function ProductionPage({ tab }: { tab: ProductionTab }) {
   const [area, setArea] = useState('Line 01')
   const [kind, setKind] = useState<ProductionIssue['kind']>('quality')
   const [summary, setSummary] = useState('')
+  const [jobDraft, setJobDraft] = useState({ id: '', line: '', product: '', target: '' })
   const [notice, setNotice] = useState('')
   const [actionTrigger, setActionTrigger] = useState<HTMLElement | null>(null)
+  const [planDraft, setPlanDraft] = useState({ jobId: '', line: '', product: '', target: '', machineId: '', machineName: '', reason: '', evidenceReference: '' })
+  const [planBusy, setPlanBusy] = useState(false)
+  const [planError, setPlanError] = useState('')
   const output = production.jobs.reduce((total, job) => total + job.output, 0)
   const target = production.jobs.reduce((total, job) => total + job.target, 0)
   const openIssues = production.issues.filter((issue) => issue.status === 'open')
-  const selectedJob = production.jobs.find((job) => job.id === jobId)
+  const selectedJobId = production.jobs.some((job) => job.id === jobId) ? jobId : production.jobs[0]?.id ?? ''
+  const selectedJob = production.jobs.find((job) => job.id === selectedJobId)
   const selectedRemaining = selectedJob ? selectedJob.target - selectedJob.output : 0
   const completion = target > 0 ? Math.round((output / target) * 100) : 0
+
+  async function initializeManagedProduction(event: FormEvent) {
+    event.preventDefault()
+    if (!managedIdentity) return
+    const firstJobId = planDraft.jobId.trim().toUpperCase()
+    const line = planDraft.line.trim()
+    const product = planDraft.product.trim()
+    const jobTarget = Number(planDraft.target)
+    const machineId = planDraft.machineId.trim().toUpperCase()
+    const machineName = planDraft.machineName.trim()
+    const reason = planDraft.reason.trim()
+    const evidenceReference = planDraft.evidenceReference.trim()
+    if (!firstJobId || !line || !product || !machineId || !machineName || !reason || !evidenceReference || !Number.isSafeInteger(jobTarget) || jobTarget < 1) {
+      setPlanError('Enter one real job, one machine, a whole-number target, reason, and evidence reference.')
+      return
+    }
+    const proof: ProductionActionProof = {
+      actionId: uid('ACT'),
+      capturedAt: new Date().toISOString(),
+      actor: managedIdentity.userId,
+      reason,
+      evidenceReference,
+    }
+    setPlanBusy(true)
+    setPlanError('')
+    try {
+      await mutateProduction('production.workspace.initialized', commandUuid(), proof, (current) => current.jobs.length || current.issues.length || current.machines.length || current.events.length ? null : validateProductionState({
+        ...current,
+        jobs: [{ id: firstJobId, line, product, target: jobTarget, output: 0 }],
+        machines: [{ id: machineId, name: machineName, state: 'running' }],
+      }))
+      setJobId(firstJobId)
+      setNotice(`Managed Production initialized with ${firstJobId}.`)
+    } catch (error) {
+      setPlanError(error instanceof Error ? error.message : 'The managed Production plan was not initialized.')
+    } finally {
+      setPlanBusy(false)
+    }
+  }
+
+  const effectiveMode = managedIdentity && (workspaceMode === 'local' || managedWorkspaceId !== managedIdentity.workspaceId) ? 'managed-loading' : workspaceMode
+  if (managedIdentity && effectiveMode !== 'managed-ready') {
+    const unprovisioned = effectiveMode === 'managed-unprovisioned'
+    if (unprovisioned) return <section className="core-panel managed-commerce-boundary">
+      <div className="panel-head"><div><span className="core-eyebrow">Managed Production setup</span><h2>Create the real operating plan</h2></div><span className="status-pill pending">Not provisioned</span></div>
+      <p className="panel-copy">Start with one real job and one machine. No browser demo jobs, issues, equipment, or output are copied into this workspace.</p>
+      <form className="core-form compact-form" onSubmit={(formEvent) => void initializeManagedProduction(formEvent)}>
+        <div className="form-row"><label>Job ID<input maxLength={80} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, jobId: inputEvent.target.value }))} placeholder="JOB-001" required value={planDraft.jobId} /></label><label>Line or team<input maxLength={120} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, line: inputEvent.target.value }))} placeholder="Line 01" required value={planDraft.line} /></label></div>
+        <div className="form-row"><label>Product or batch<input maxLength={180} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, product: inputEvent.target.value }))} placeholder="Product name" required value={planDraft.product} /></label><label>Target units<input min="1" onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, target: inputEvent.target.value }))} required step="1" type="number" value={planDraft.target} /></label></div>
+        <div className="form-row"><label>Machine ID<input maxLength={80} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, machineId: inputEvent.target.value }))} placeholder="MC-01" required value={planDraft.machineId} /></label><label>Machine name<input maxLength={180} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, machineName: inputEvent.target.value }))} placeholder="Mixer 01" required value={planDraft.machineName} /></label></div>
+        <label>Opening plan reason<input maxLength={180} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, reason: inputEvent.target.value }))} placeholder="How this job and target were confirmed" required value={planDraft.reason} /></label>
+        <label>Evidence reference<input maxLength={180} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, evidenceReference: inputEvent.target.value }))} placeholder="Shift plan, work order, or count sheet" required value={planDraft.evidenceReference} /></label>
+        <div className="form-actions"><Link className="text-link" to="/settings/">Workspace settings</Link><button className="core-button primary" disabled={planBusy} type="submit">{planBusy ? 'Creating…' : 'Create managed plan'}</button></div>
+        <p className="form-notice" role="status">{planError || productionStorageError || `Authenticated as ${managedIdentity.email}. The tenant API records this initialization.`}</p>
+      </form>
+    </section>
+    return <section className="core-panel managed-commerce-boundary">
+      <div className="panel-head"><div><span className="core-eyebrow">Managed Production</span><h2>{effectiveMode === 'managed-error' ? 'Managed workspace unavailable' : 'Loading authenticated workspace'}</h2></div><span className="status-pill bounded">{effectiveMode === 'managed-error' ? 'Blocked' : 'Checking'}</span></div>
+      <p className="panel-copy">{productionStorageError || 'Production remains read-only until the authenticated tenant state is confirmed.'}</p>
+      <div className="form-actions"><Link className="core-button" to="/settings/">Open workspace settings</Link></div>
+    </section>
+  }
 
   function queueAction(action: Omit<PendingAccountableAction, 'id' | 'commandId' | 'domain'>) {
     if (pendingAction) {
@@ -2020,8 +2231,8 @@ function ProductionPage({ tab }: { tab: ProductionTab }) {
         : current)
     }
     await action.apply(record)
-    setActions((current) => [record, ...current])
-    setNotice(`${record.id} persisted with attributed Production evidence.`)
+    if (!managedIdentity) setActions((current) => [record, ...current])
+    setNotice(managedIdentity ? `${record.id} confirmed by the managed Production API.` : `${record.id} persisted with attributed Production evidence.`)
     setPendingAction(null)
   }
 
@@ -2040,7 +2251,32 @@ function ProductionPage({ tab }: { tab: ProductionTab }) {
       before: `${selectedJob.output} / ${selectedJob.target}`,
       after: `${selectedJob.output + recordedQuantity} / ${selectedJob.target}`,
       apply: async (record) => {
-        await mutateProduction((current) => recordProductionOutput(current, recordedJobId, recordedQuantity, productionActionProof(record)))
+        await mutateProduction('production.output.recorded', record.commandId, productionActionProof(record), (current) => recordProductionOutput(current, recordedJobId, recordedQuantity, productionActionProof(record)))
+      },
+    })
+  }
+
+  function createJob(event: FormEvent) {
+    event.preventDefault()
+    const id = jobDraft.id.trim().toUpperCase()
+    const line = jobDraft.line.trim()
+    const product = jobDraft.product.trim()
+    const jobTarget = Number(jobDraft.target)
+    if (!id || !line || !product || !Number.isSafeInteger(jobTarget) || jobTarget < 1) {
+      setNotice('Enter a unique job ID, line or team, product or batch, and whole-number target.')
+      return
+    }
+    const job: ProductionJob = { id, line, product, target: jobTarget, output: 0 }
+    queueAction({
+      kind: 'production_job',
+      subjectId: id,
+      summary: `Create ${id} for ${product}`,
+      before: 'No production job',
+      after: `${line} · target ${jobTarget.toLocaleString()}`,
+      apply: async (record) => {
+        await mutateProduction('production.job.created', record.commandId, productionActionProof(record), (current) => registerProductionJob(current, job, productionActionProof(record)))
+        setJobId(id)
+        setJobDraft({ id: '', line: '', product: '', target: '' })
       },
     })
   }
@@ -2056,7 +2292,7 @@ function ProductionPage({ tab }: { tab: ProductionTab }) {
       before: 'No issue record',
       after: `${issue.id} - open`,
       apply: async (record) => {
-        await mutateProduction((current) => openProductionIssue(current, issue, productionActionProof(record)))
+        await mutateProduction('production.issue.opened', record.commandId, productionActionProof(record), (current) => openProductionIssue(current, issue, productionActionProof(record)))
         setSummary('')
       },
     })
@@ -2072,7 +2308,7 @@ function ProductionPage({ tab }: { tab: ProductionTab }) {
       before: issue.status,
       after: 'resolved with operator evidence',
       apply: async (record) => {
-        await mutateProduction((current) => resolveProductionIssue(current, issueId, productionActionProof(record)))
+        await mutateProduction('production.issue.resolved', record.commandId, productionActionProof(record), (current) => resolveProductionIssue(current, issueId, productionActionProof(record)))
       },
     })
   }
@@ -2089,14 +2325,14 @@ function ProductionPage({ tab }: { tab: ProductionTab }) {
       before: expectedState,
       after: nextState,
       apply: async (record) => {
-        await mutateProduction((current) => advanceProductionMachineState(current, machineId, expectedState, productionActionProof(record)))
+        await mutateProduction('production.machine_state.changed', record.commandId, productionActionProof(record), (current) => advanceProductionMachineState(current, machineId, expectedState, productionActionProof(record)))
       },
     })
   }
 
   const actionControls = <>
-    <p className="form-notice" aria-live="polite">{productionStorageError || notice}</p>
-    <AccountableActionGate key={pendingAction?.id ?? 'production-idle'} action={pendingAction} onCancel={() => { setPendingAction(null); setNotice('Change cancelled. Production data was not modified.') }} onConfirm={confirmAction} returnFocus={actionTrigger} />
+    <p className="form-notice" aria-live="polite">{productionStorageError || notice || (managedIdentity ? `Managed workspace ${managedIdentity.workspaceId} · revision ${managedVersion ?? 0} · writes are confirmed by the tenant API.` : 'Browser demo · data stays on this device and is not a managed business record.')}</p>
+    <AccountableActionGate authenticatedActor={managedIdentity ? { id: managedIdentity.userId, label: managedIdentity.email } : undefined} key={pendingAction?.id ?? 'production-idle'} action={pendingAction} onCancel={() => { setPendingAction(null); setNotice('Change cancelled. Production data was not modified.') }} onConfirm={confirmAction} returnFocus={actionTrigger} />
     <ProductionEventHistory events={production.events} />
   </>
 
@@ -2105,11 +2341,20 @@ function ProductionPage({ tab }: { tab: ProductionTab }) {
       <section className="core-panel job-panel">
         <div className="panel-head"><div><span className="core-eyebrow">Production plan</span><h2>Active jobs</h2></div><span className="panel-note">Target is a hard limit</span></div>
         <JobList jobs={production.jobs} />
+        <details className="compact-disclosure catalog-disclosure">
+          <summary>Add job</summary>
+          <form className="core-form compact-form" onSubmit={createJob}>
+            <div className="form-row"><label>Job ID<input disabled={Boolean(pendingAction)} maxLength={80} onChange={(event) => setJobDraft((current) => ({ ...current, id: event.target.value }))} placeholder="JOB-002" required value={jobDraft.id} /></label><label>Line or team<input disabled={Boolean(pendingAction)} maxLength={120} onChange={(event) => setJobDraft((current) => ({ ...current, line: event.target.value }))} placeholder="Line 02" required value={jobDraft.line} /></label></div>
+            <div className="form-row"><label>Product or batch<input disabled={Boolean(pendingAction)} maxLength={180} onChange={(event) => setJobDraft((current) => ({ ...current, product: event.target.value }))} placeholder="Product name" required value={jobDraft.product} /></label><label>Target units<input disabled={Boolean(pendingAction)} min="1" onChange={(event) => setJobDraft((current) => ({ ...current, target: event.target.value }))} required step="1" type="number" value={jobDraft.target} /></label></div>
+            <button className="core-button" disabled={Boolean(pendingAction)} type="submit">Review job</button>
+            <p className="panel-copy">The accountable operator, reason, and source record are confirmed in the next step.</p>
+          </form>
+        </details>
       </section>
       <section className="core-panel output-panel">
         <span className="core-eyebrow">Good output</span><h2>Confirm production</h2>
         <form className="core-form compact-form" onSubmit={recordOutput}>
-          <label>Job<select value={jobId} onChange={(event) => setJobId(event.target.value)}>{production.jobs.map((job) => <option key={job.id} value={job.id}>{job.id}</option>)}</select></label>
+          <label>Job<select value={selectedJobId} onChange={(event) => setJobId(event.target.value)}>{production.jobs.map((job) => <option key={job.id} value={job.id}>{job.id}</option>)}</select></label>
           <label>Quantity<input min="1" step="1" type="number" value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} /></label>
           <button className="core-button primary" disabled={!selectedJob || selectedRemaining < 1} type="submit">Record output</button>
           <p className="panel-copy">{selectedJob ? `${selectedRemaining.toLocaleString()} units remain for ${selectedJob.id}.` : 'Choose an active job.'} Every change requires an operator, reason, and evidence.</p>
@@ -2125,7 +2370,7 @@ function ProductionPage({ tab }: { tab: ProductionTab }) {
         <section className="core-panel">
           <div className="panel-head"><div><span className="core-eyebrow">Equipment</span><h2>Machine state</h2></div></div>
           <div className="machine-list">{production.machines.map((machine) => <button aria-label={`${productionMachineActionLabels[machine.state]} for ${machine.name}; current state ${machine.state}`} key={machine.id} type="button" onClick={() => cycleMachine(machine.id)}><span className={`machine-dot ${machine.state}`} /><span><strong>{machine.name}</strong><small>{machine.id} - Current: {machine.state}</small></span><b>{productionMachineActionLabels[machine.state]}</b></button>)}</div>
-          <p className="panel-copy">Local operating record only. No telemetry or machine control is connected.</p>
+          <p className="panel-copy">{managedIdentity ? 'Tenant operating record.' : 'Browser-local operating record.'} No telemetry or machine control is connected.</p>
         </section>
         <section className="core-panel">
           <span className="core-eyebrow">Exception</span><h2>Open an issue</h2>

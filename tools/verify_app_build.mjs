@@ -11,7 +11,7 @@ let websiteRuntimeChecks = 0
 let commerceRuntimeChecks = 0
 let productionRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
-const [manifestText, appPackageText, appSource, coreSource, commerceSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteWorkspaceSource, websiteCssSource, commerceIntakeSource, handoffSource, coreCssSource] = await Promise.all([
+const [manifestText, appPackageText, appSource, coreSource, commerceSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteWorkspaceSource, websiteCssSource, commerceIntakeSource, handoffSource, coreCssSource] = await Promise.all([
   readFile(resolve(root, 'site-manifest.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'package.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'App.tsx'), 'utf8'),
@@ -20,6 +20,7 @@ const [manifestText, appPackageText, appSource, coreSource, commerceSource, chan
   readFile(resolve(root, 'showroom', 'src', 'core', 'channel-order-intake.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'managed-trial.ts'), 'utf8'),
   readFile(resolve(root, 'supermega_runtime', 'commerce_runtime.py'), 'utf8'),
+  readFile(resolve(root, 'supermega_runtime', 'production_runtime.py'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'production-workspace.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'TeamWorkspace.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'AgentTeamsPanel.tsx'), 'utf8'),
@@ -238,8 +239,27 @@ if (!managedCommerceRuntime.includes('commerce.workspace.initialized') || manage
 if (!commerceSource.includes('registerCommerceItem') || !coreSource.includes('Add catalog item') || !coreSource.includes('Review catalog item') || !coreSource.includes('The opening balance may be zero.') || !managedCommerceRuntime.includes('one exact attributable opening balance')) fail('commerce_catalog_creation_contract_missing')
 if (!coreSource.includes("const commerceTabs") || !coreSource.includes("{ id: 'today', label: 'Today' }") || !coreSource.includes("{ id: 'orders', label: 'Orders' }") || !coreSource.includes("{ id: 'inventory', label: 'Stock' }") || coreSource.includes("{ id: 'payments'")) fail('commerce_three_tab_contract_changed')
 if (!productionSource.includes("supermega.production.workspace.v2") || !productionSource.includes('mutateProductionWorkspace') || !productionSource.includes('lockManager.request') || !productionSource.includes('next.revision !== current.revision + 1')) fail('production_v2_locked_store_missing')
-if (!productionSource.includes("'output_recorded' | 'issue_opened' | 'issue_resolved' | 'machine_state_changed'") || !productionSource.includes('events: [event, ...state.events]') || !productionSource.includes('Production revision must equal the append-only event count.')) fail('production_append_only_record_missing')
+if (!productionSource.includes("'job_created' | 'output_recorded' | 'issue_opened' | 'issue_resolved' | 'machine_state_changed'") || !productionSource.includes('events: [event, ...state.events]') || !productionSource.includes('Production revision must equal the append-only event count.')) fail('production_append_only_record_missing')
+if (!productionSource.includes('registerProductionJob') || !coreSource.includes('production.job.created') || !coreSource.includes('<summary>Add job</summary>') || !coreSource.includes('Review job')) fail('production_recurring_job_workflow_missing')
 if (!productionSource.includes('currentRaw !== null') || !productionSource.includes('Migration failed closed') || !productionSource.includes('events: []')) fail('production_migration_fail_closed_contract_missing')
+if (!managedTrialSource.includes('saveManagedProductionCommand') || !managedTrialSource.includes("surface: 'production'") || !managedTrialSource.includes('eventType: ManagedProductionEvent') || !managedTrialSource.includes('payload: { state: request.state, evidence: request.evidence }')) fail('managed_production_command_client_missing')
+for (const eventType of ['production.workspace.initialized', 'production.job.created', 'production.output.recorded', 'production.issue.opened', 'production.issue.resolved', 'production.machine_state.changed']) {
+  if (!coreSource.includes(eventType) || !managedProductionRuntime.includes(eventType)) fail(`managed_production_event_missing:${eventType}`)
+}
+if (managedProductionRuntime.includes('production.snapshot.saved')
+  || !managedProductionRuntime.includes('PRODUCTION_HUMAN_EVENTS = PRODUCTION_EVENTS')
+  || !managedProductionRuntime.includes('_validate_job_created')
+  || !managedProductionRuntime.includes('_validate_output_recorded')
+  || !managedProductionRuntime.includes('_validate_issue_resolved')
+  || !managedProductionRuntime.includes('_validate_machine_state_changed')
+  || !managedProductionRuntime.includes('Production event must prepend exactly one record and preserve history.')) fail('managed_production_server_transition_contract_missing')
+if (!coreSource.includes("mode: 'managed-unprovisioned'")
+  || !coreSource.includes('No browser demo jobs, issues, equipment, or output are copied')
+  || !coreSource.includes('Create managed plan')
+  || !coreSource.includes("result.surface !== 'production'")
+  || !coreSource.includes('validateProductionState(result.state)')
+  || !coreSource.includes("error.code === 'trial_version_conflict'")
+  || !coreSource.includes('managedIdentity ? `${record.id} confirmed by the managed Production API.')) fail('managed_production_ui_not_fail_closed')
 const productionTabsContract = coreSource.slice(coreSource.indexOf('const productionTabs'), coreSource.indexOf('function uid'))
 if (!productionTabsContract.includes("{ id: 'today', label: 'Today' }") || !productionTabsContract.includes("{ id: 'production', label: 'Jobs' }") || !productionTabsContract.includes("{ id: 'control', label: 'Problems' }") || (productionTabsContract.match(/^\s*\{ id:/gm) || []).length !== 3) fail('production_three_tab_contract_changed')
 const productionPageContract = coreSource.slice(coreSource.indexOf('function ProductionPage'), coreSource.indexOf('function JobList'))
@@ -247,6 +267,7 @@ if (coreSource.includes('Math.min(quantity') || !productionPageContract.includes
 if (!productionPageContract.includes('persisted with attributed Production evidence.') || productionPageContract.includes('<ActionHistory actions={actions} domain="production"')) fail('production_confirmation_record_not_domain_specific')
 if (!coreSource.includes("addEventListener('storage', refreshFromStorage)") || !coreSource.includes("removeEventListener('storage', refreshFromStorage)")) fail('production_cross_tab_refresh_missing')
 if (!coreSource.includes('headingRef.current?.focus()') || !coreSource.includes('returnFocus?.isConnected') || !coreSource.includes('previousFocus.focus()') || !coreSource.includes('aria-live="polite"') || !coreSource.includes('current state ${machine.state}')) fail('production_confirmation_accessibility_missing')
+if (!coreCssSource.includes('.action-history summary { min-height: 44px; }')) fail('production_mobile_history_touch_target_missing')
 let workflowProfiles = 0
 for (const product of manifest.products || []) {
   if (product.templates?.length !== 3) fail(`wrong_template_count:${product.id}`)
@@ -1198,6 +1219,20 @@ async function verifyProductionRuntime() {
       jobs: [{ id: 'JOB-1', line: 'Line 01', product: 'Test batch', target: 100, output: 90 }],
       machines: [{ id: 'MC-1', name: 'Test machine', state: 'running' }],
     }
+    const newJob = { id: 'JOB-2', line: 'Line 02', product: 'Second batch', target: 250, output: 0 }
+    const jobProof = proof('ACT-JOB-CREATE')
+    const withJob = model.registerProductionJob(base, newJob, jobProof)
+    assert(withJob?.jobs[0].id === newJob.id && withJob.jobs[0].output === 0 && withJob.revision === 1 && withJob.events[0].kind === 'job_created', 'production_job_not_created_once')
+    assert(model.registerProductionJob(withJob, newJob, jobProof) === withJob, 'production_job_retry_not_idempotent')
+    assert(model.registerProductionJob(withJob, { ...newJob, target: 251 }, jobProof) === null, 'production_job_conflicting_retry_succeeded')
+    assert(model.registerProductionJob(withJob, newJob, proof('ACT-JOB-DUPLICATE')) === null, 'production_duplicate_job_id_succeeded')
+    assert(model.registerProductionJob(withJob, { ...newJob, id: 'JOB-3' }, jobProof) === null, 'production_job_reused_action_id_succeeded')
+    assert([
+      { ...newJob, id: '', target: 1 },
+      { ...newJob, id: 'JOB-BAD-0', target: 0 },
+      { ...newJob, id: 'JOB-BAD-FLOAT', target: 1.5 },
+      { ...newJob, id: 'JOB-BAD-OUTPUT', output: 1 },
+    ].every((job, index) => model.registerProductionJob(base, job, proof(`ACT-JOB-BAD-${index}`)) === null), 'production_invalid_job_succeeded')
     const outputProof = proof('ACT-OUTPUT')
     const outputState = model.recordProductionOutput(base, 'JOB-1', 10, outputProof)
     assert(outputState?.jobs[0].output === 100 && outputState.revision === 1 && outputState.events[0].quantity === 10 && outputState.events[0].actor === outputProof.actor, 'production_output_not_recorded_once')
@@ -1259,6 +1294,16 @@ async function verifyProductionRuntime() {
     values.set(model.LEGACY_PRODUCTION_KEYS[1], JSON.stringify(legacy))
     const staleLegacyFallback = model.loadProductionWorkspace(storage)
     assert(staleLegacyFallback.source === 'recovery' && !values.has(model.PRODUCTION_KEY), 'production_malformed_newer_legacy_restored_stale_data')
+
+    values.clear()
+    values.set(model.PRODUCTION_KEY, JSON.stringify(base))
+    lockRequests = 0
+    const concurrentJobs = await Promise.all([
+      model.mutateProductionWorkspace((state) => model.registerProductionJob(state, { id: 'JOB-2', line: 'Line 02', product: 'Second batch', target: 250, output: 0 }, proof('ACT-CONCURRENT-JOB-2')), storage, locks),
+      model.mutateProductionWorkspace((state) => model.registerProductionJob(state, { id: 'JOB-3', line: 'Line 03', product: 'Third batch', target: 300, output: 0 }, proof('ACT-CONCURRENT-JOB-3')), storage, locks),
+    ])
+    const concurrentJobState = JSON.parse(values.get(model.PRODUCTION_KEY))
+    assert(concurrentJobs.every((result) => result.ok) && concurrentJobState.jobs.length === 3 && concurrentJobState.events.length === 2 && concurrentJobState.revision === 2, 'production_concurrent_jobs_did_not_both_survive')
 
     values.clear()
     values.set(model.PRODUCTION_KEY, JSON.stringify(base))

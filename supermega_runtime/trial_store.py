@@ -29,6 +29,12 @@ HUMAN_COMMAND_EVENTS = frozenset(
         "commerce.stock.received",
         "commerce.close.saved",
         "commerce.website_intake.converted",
+        "production.workspace.initialized",
+        "production.job.created",
+        "production.output.recorded",
+        "production.issue.opened",
+        "production.issue.resolved",
+        "production.machine_state.changed",
     }
 )
 SURFACE_WRITE_CAPABILITIES = {

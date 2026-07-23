@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from supermega_runtime.commerce_runtime import COMMERCE_HUMAN_EVENTS
+from supermega_runtime.production_runtime import PRODUCTION_HUMAN_EVENTS
 from supermega_runtime.trial_store import (
     APPROVAL_DECIDE_CAPABILITY,
     APPROVAL_REQUEST_CAPABILITY,
@@ -327,6 +328,12 @@ def create_trial_router(*, store: TrialStore, resolve_principal: PrincipalResolv
             if not isinstance(evidence, Mapping) or evidence.get("actor") != principal.actor_id:
                 raise _error(422, "commerce_actor_evidence_required")
             if body.event_type in COMMERCE_HUMAN_EVENTS and principal.actor_kind != "human":
+                raise _error(403, "trial_human_approval_required")
+        if body.surface == "production":
+            evidence = body.payload.get("evidence")
+            if not isinstance(evidence, Mapping) or evidence.get("actor") != principal.actor_id:
+                raise _error(422, "production_actor_evidence_required")
+            if body.event_type in PRODUCTION_HUMAN_EVENTS and principal.actor_kind != "human":
                 raise _error(403, "trial_human_approval_required")
         if body.surface == "website":
             evidence = body.payload.get("evidence")

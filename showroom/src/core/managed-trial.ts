@@ -61,6 +61,14 @@ export type ManagedWebsiteEvent =
   | 'website.revision.approved'
   | 'website.snapshot.recorded'
 
+export type ManagedProductionEvent =
+  | 'production.workspace.initialized'
+  | 'production.job.created'
+  | 'production.output.recorded'
+  | 'production.issue.opened'
+  | 'production.issue.resolved'
+  | 'production.machine_state.changed'
+
 export type ManagedCommandResult = {
   command_id: string
   surface: 'commerce'
@@ -74,6 +82,15 @@ export type ManagedWebsiteCommandResult = {
   command_id: string
   surface: 'website'
   event_type: ManagedWebsiteEvent
+  version: number
+  state: Record<string, unknown>
+  idempotent_replay: boolean
+}
+
+export type ManagedProductionCommandResult = {
+  command_id: string
+  surface: 'production'
+  event_type: ManagedProductionEvent
   version: number
   state: Record<string, unknown>
   idempotent_replay: boolean
@@ -311,6 +328,26 @@ export async function saveManagedCommerceCommand(request: {
     body: JSON.stringify({
       command_id: request.commandId,
       surface: 'commerce',
+      event_type: request.eventType,
+      expected_version: request.expectedVersion,
+      payload: { state: request.state, evidence: request.evidence },
+    }),
+  })
+  return response.result
+}
+
+export async function saveManagedProductionCommand(request: {
+  commandId: string
+  evidence: ManagedCommandEvidence
+  eventType: ManagedProductionEvent
+  expectedVersion: number
+  state: Record<string, unknown>
+}) {
+  const response = await authorizedRequest<{ result: ManagedProductionCommandResult }>('/api/trial/v1/commands', {
+    method: 'POST',
+    body: JSON.stringify({
+      command_id: request.commandId,
+      surface: 'production',
       event_type: request.eventType,
       expected_version: request.expectedVersion,
       payload: { state: request.state, evidence: request.evidence },

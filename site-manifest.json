@@ -1,7 +1,7 @@
 {
   "schemaVersion": "supermega.site-context.v1",
-  "contextVersion": "2026-07-24.2",
-  "catalogVersion": "2026-07-24.2",
+  "contextVersion": "2026-07-24.3",
+  "catalogVersion": "2026-07-24.3",
   "brand": {
     "name": "SuperMega",
     "domain": "supermega.dev",
@@ -79,7 +79,7 @@
       "status": "available-in-app",
       "eyebrow": "Production operations",
       "headline": "Give the production floor one operational memory.",
-      "description": "Preview browser-local plans, output, machine state, quality, maintenance, exceptions, and shift handoffs. No machine telemetry, production control, access change, or external write is connected.",
+      "description": "Preview recurring jobs, output, machine state, quality, maintenance, exceptions, and shift handoffs in a clearly labelled local demo. Authenticated tenant writes stay locked until managed activation gates pass. No machine telemetry, machine control, access change, or external write is connected.",
       "primaryCta": {
         "label": "Preview local Production demo",
         "url": "https://app.supermega.dev/operations/production/?tab=today"
@@ -89,7 +89,7 @@
         "url": "/contact/?product=production"
       },
       "modules": [
-        "Planning and output records",
+        "Recurring jobs and output records",
         "Material availability and exceptions",
         "Quality and traceability",
         "Equipment and maintenance",

@@ -38,7 +38,7 @@ export type ProductionMachine = {
   state: ProductionMachineState
 }
 
-export type ProductionEventKind = 'output_recorded' | 'issue_opened' | 'issue_resolved' | 'machine_state_changed'
+export type ProductionEventKind = 'job_created' | 'output_recorded' | 'issue_opened' | 'issue_resolved' | 'machine_state_changed'
 
 export type ProductionEvent = {
   id: string
@@ -93,7 +93,7 @@ export type ProductionMutationResult =
 
 const issueKinds: ProductionIssueKind[] = ['quality', 'maintenance', 'materials', 'operations']
 const machineStates: ProductionMachineState[] = ['running', 'attention', 'stopped']
-const eventKinds: ProductionEventKind[] = ['output_recorded', 'issue_opened', 'issue_resolved', 'machine_state_changed']
+const eventKinds: ProductionEventKind[] = ['job_created', 'output_recorded', 'issue_opened', 'issue_resolved', 'machine_state_changed']
 const deterministicSeedNow = Date.parse('2026-07-23T08:00:00.000Z')
 
 export const productionMachineTransitions: Record<ProductionMachineState, ProductionMachineState> = {
@@ -111,12 +111,21 @@ function requiredText(value: unknown, field: string) {
   return value.trim()
 }
 
-function optionalText(value: unknown) {
-  return typeof value === 'string' && value.trim() ? value.trim() : undefined
+function canonicalText(value: unknown, field: string, maximum = 180) {
+  const text = requiredText(value, field)
+  if (value !== text || text.length > maximum) throw new Error(`${field} must be canonical text of at most ${maximum} characters.`)
+  return text
+}
+
+function validCanonicalText(value: unknown, maximum = 180) {
+  return typeof value === 'string' && value === value.trim() && value.length > 0 && value.length <= maximum
 }
 
 function validTimestamp(value: unknown) {
-  return typeof value === 'string' && Number.isFinite(Date.parse(value))
+  return typeof value === 'string'
+    && value === value.trim()
+    && /(?:Z|[+-]\d{2}:\d{2})$/.test(value)
+    && Number.isFinite(Date.parse(value))
 }
 
 function assertSafeInteger(value: unknown, field: string, minimum = 0) {
@@ -130,10 +139,22 @@ function assertUnique(values: string[], field: string) {
 function validProof(proof: unknown): proof is ProductionActionProof {
   if (!isRecord(proof)) return false
   return Boolean(
-    optionalText(proof.actionId)
-    && optionalText(proof.actor)
-    && optionalText(proof.reason)
-    && optionalText(proof.evidenceReference)
+    typeof proof.actionId === 'string'
+    && proof.actionId === proof.actionId.trim()
+    && proof.actionId.length > 0
+    && proof.actionId.length <= 160
+    && typeof proof.actor === 'string'
+    && proof.actor === proof.actor.trim()
+    && proof.actor.length > 0
+    && proof.actor.length <= 180
+    && typeof proof.reason === 'string'
+    && proof.reason === proof.reason.trim()
+    && proof.reason.length > 0
+    && proof.reason.length <= 180
+    && typeof proof.evidenceReference === 'string'
+    && proof.evidenceReference === proof.evidenceReference.trim()
+    && proof.evidenceReference.length > 0
+    && proof.evidenceReference.length <= 180
     && validTimestamp(proof.capturedAt),
   )
 }
@@ -203,9 +224,9 @@ export function validateProductionState(value: unknown): ProductionState {
 
   for (const [index, candidate] of jobs.entries()) {
     if (!isRecord(candidate)) throw new Error(`jobs[${index}] is invalid.`)
-    jobIds.push(requiredText(candidate.id, `jobs[${index}].id`))
-    requiredText(candidate.line, `jobs[${index}].line`)
-    requiredText(candidate.product, `jobs[${index}].product`)
+    jobIds.push(canonicalText(candidate.id, `jobs[${index}].id`, 80))
+    canonicalText(candidate.line, `jobs[${index}].line`, 120)
+    canonicalText(candidate.product, `jobs[${index}].product`)
     assertSafeInteger(candidate.target, `jobs[${index}].target`, 1)
     assertSafeInteger(candidate.output, `jobs[${index}].output`)
     if (Number(candidate.output) > Number(candidate.target)) throw new Error(`jobs[${index}].output exceeds target.`)
@@ -214,44 +235,49 @@ export function validateProductionState(value: unknown): ProductionState {
 
   for (const [index, candidate] of issues.entries()) {
     if (!isRecord(candidate)) throw new Error(`issues[${index}] is invalid.`)
-    issueIds.push(requiredText(candidate.id, `issues[${index}].id`))
+    issueIds.push(canonicalText(candidate.id, `issues[${index}].id`, 80))
     if (!validTimestamp(candidate.createdAt)) throw new Error(`issues[${index}].createdAt is invalid.`)
-    requiredText(candidate.area, `issues[${index}].area`)
-    requiredText(candidate.summary, `issues[${index}].summary`)
+    canonicalText(candidate.area, `issues[${index}].area`, 120)
+    canonicalText(candidate.summary, `issues[${index}].summary`, 240)
     if (!issueKinds.includes(candidate.kind as ProductionIssueKind)) throw new Error(`issues[${index}].kind is invalid.`)
     if (candidate.status !== 'open' && candidate.status !== 'resolved') throw new Error(`issues[${index}].status is invalid.`)
     if (candidate.status === 'open' && candidate.resolution !== undefined) throw new Error(`issues[${index}] is open but has resolution evidence.`)
     if (candidate.resolution !== undefined) {
       if (!isRecord(candidate.resolution)) throw new Error(`issues[${index}].resolution is invalid.`)
       const resolution = candidate.resolution
-      requiredText(resolution.actionId, `issues[${index}].resolution.actionId`)
+      canonicalText(resolution.actionId, `issues[${index}].resolution.actionId`, 160)
       if (!validTimestamp(resolution.resolvedAt)) throw new Error(`issues[${index}].resolution.resolvedAt is invalid.`)
-      requiredText(resolution.resolvedBy, `issues[${index}].resolution.resolvedBy`)
-      requiredText(resolution.reason, `issues[${index}].resolution.reason`)
-      requiredText(resolution.evidenceReference, `issues[${index}].resolution.evidenceReference`)
+      canonicalText(resolution.resolvedBy, `issues[${index}].resolution.resolvedBy`)
+      canonicalText(resolution.reason, `issues[${index}].resolution.reason`)
+      canonicalText(resolution.evidenceReference, `issues[${index}].resolution.evidenceReference`)
     }
   }
   assertUnique(issueIds, 'Production issue ID')
 
   for (const [index, candidate] of machines.entries()) {
     if (!isRecord(candidate)) throw new Error(`machines[${index}] is invalid.`)
-    machineIds.push(requiredText(candidate.id, `machines[${index}].id`))
-    requiredText(candidate.name, `machines[${index}].name`)
+    machineIds.push(canonicalText(candidate.id, `machines[${index}].id`, 80))
+    canonicalText(candidate.name, `machines[${index}].name`)
     if (!machineStates.includes(candidate.state as ProductionMachineState)) throw new Error(`machines[${index}].state is invalid.`)
   }
   assertUnique(machineIds, 'Production machine ID')
 
   for (const [index, candidate] of events.entries()) {
     if (!isRecord(candidate)) throw new Error(`events[${index}] is invalid.`)
-    const eventId = requiredText(candidate.id, `events[${index}].id`)
-    const actionId = requiredText(candidate.actionId, `events[${index}].actionId`)
+    const eventId = canonicalText(candidate.id, `events[${index}].id`, 164)
+    const actionId = canonicalText(candidate.actionId, `events[${index}].actionId`, 160)
     eventIds.push(eventId)
     actionIds.push(actionId)
     if (eventId !== `EVT-${actionId}`) throw new Error(`events[${index}].id does not match its action.`)
     if (!validTimestamp(candidate.createdAt)) throw new Error(`events[${index}].createdAt is invalid.`)
-    for (const field of ['actor', 'reason', 'evidenceReference', 'subjectId', 'summary'] as const) requiredText(candidate[field], `events[${index}].${field}`)
+    for (const field of ['actor', 'reason', 'evidenceReference'] as const) canonicalText(candidate[field], `events[${index}].${field}`)
+    canonicalText(candidate.subjectId, `events[${index}].subjectId`, 80)
+    canonicalText(candidate.summary, `events[${index}].summary`, 360)
     if (!eventKinds.includes(candidate.kind as ProductionEventKind)) throw new Error(`events[${index}].kind is invalid.`)
-    if (candidate.kind === 'output_recorded') {
+    if (candidate.kind === 'job_created') {
+      if (!jobIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown job.`)
+      if (candidate.quantity !== undefined || candidate.fromState !== undefined || candidate.toState !== undefined) throw new Error(`events[${index}] job event has unrelated fields.`)
+    } else if (candidate.kind === 'output_recorded') {
       if (!jobIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown job.`)
       assertSafeInteger(candidate.quantity, `events[${index}].quantity`, 1)
       if (candidate.fromState !== undefined || candidate.toState !== undefined) throw new Error(`events[${index}] output event has machine state fields.`)
@@ -427,6 +453,33 @@ function actionIdIsUsed(state: ProductionState, actionId: string) {
   return state.events.some((event) => event.actionId === actionId)
 }
 
+export function registerProductionJob(state: ProductionState, job: ProductionJob, proof: ProductionActionProof) {
+  if (!validProof(proof)
+    || !isRecord(job)
+    || !validCanonicalText(job.id, 80)
+    || !validCanonicalText(job.line, 120)
+    || !validCanonicalText(job.product)
+    || !Number.isSafeInteger(job.target)
+    || job.target < 1
+    || job.output !== 0) return null
+  const existing = state.events.find((event) => event.actionId === proof.actionId)
+  if (existing) {
+    const storedJob = state.jobs.find((candidate) => candidate.id === job.id)
+    return existing.kind === 'job_created'
+      && existing.subjectId === job.id
+      && sameProof(existing, proof)
+      && JSON.stringify(storedJob) === JSON.stringify(job) ? state : null
+  }
+  if (actionIdIsUsed(state, proof.actionId) || state.jobs.some((candidate) => candidate.id === job.id) || state.revision >= Number.MAX_SAFE_INTEGER) return null
+  const event = eventFor(proof, { kind: 'job_created', subjectId: job.id, summary: `Created ${job.product} job for ${job.line}` })
+  return validateProductionState({
+    ...state,
+    revision: state.revision + 1,
+    jobs: [job, ...state.jobs],
+    events: [event, ...state.events],
+  })
+}
+
 export function recordProductionOutput(state: ProductionState, jobId: string, quantity: number, proof: ProductionActionProof) {
   if (!validProof(proof) || !Number.isSafeInteger(quantity) || quantity < 1) return null
   const existing = state.events.find((event) => event.actionId === proof.actionId)
@@ -452,9 +505,9 @@ export function openProductionIssue(state: ProductionState, issue: ProductionIss
     || issue.status !== 'open'
     || issue.resolution
     || !validTimestamp(issue.createdAt)
-    || !optionalText(issue.id)
-    || !optionalText(issue.area)
-    || !optionalText(issue.summary)
+    || !validCanonicalText(issue.id, 80)
+    || !validCanonicalText(issue.area, 120)
+    || !validCanonicalText(issue.summary, 240)
     || !issueKinds.includes(issue.kind)) return null
   const existing = state.events.find((event) => event.actionId === proof.actionId)
   if (existing) {

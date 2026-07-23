@@ -679,6 +679,7 @@ textarea { min-height: 72px; resize: vertical; }
   .agent-control-grid { grid-template-columns: 1fr; }
   .agent-create-form { position: static; width: min(100%,300px); margin-top: 8px; }
   .agent-roster-panel .panel-head { align-items: flex-start; }
+  .action-history summary { min-height: 44px; }
   .compact-disclosure > summary { min-height: 44px; }
   .core-button, .core-button.compact, .text-link, .core-topbar .mobile-brand .core-brand, .topbar-meta > a, .segmented-control button, .segmented-control a, .view-tabs button, .mobile-nav a { min-height: 44px; }
   input, select, textarea { font-size: 16px; }

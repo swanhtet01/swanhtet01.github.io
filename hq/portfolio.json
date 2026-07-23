@@ -37,10 +37,10 @@
       "name": "Production",
       "status": "release-candidate-local",
       "path": "/operations/production/",
-      "job": "Connect plan, output, quality, materials, equipment, maintenance, and shift exceptions in one production record.",
+      "job": "Connect recurring jobs, output, quality, materials, equipment, maintenance, and shift exceptions in one production record.",
       "surfaces": ["Today", "Jobs", "Problems"],
       "templateContract": { "file": "../site-manifest.json", "productId": "production" },
-      "nextGate": "Validate one line, maintenance, or quality workflow with operator evidence and owner review."
+      "nextGate": "Rehearse the managed job-create to output flow on isolated PostgreSQL, then validate one line, maintenance, or quality workflow with operator evidence and owner review."
     }
   ],
   "researchGates": [
