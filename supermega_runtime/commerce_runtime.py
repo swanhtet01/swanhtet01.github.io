@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from datetime import datetime
@@ -20,14 +21,20 @@ COMMERCE_EVENTS = frozenset(
         "commerce.payment.reconciled",
         "commerce.stock.received",
         "commerce.close.saved",
+        "commerce.website_intake.created",
+        "commerce.website_intake.converted",
     }
 )
+COMMERCE_HUMAN_EVENTS = frozenset({"commerce.website_intake.converted"})
 _ORDER_STATUSES = ("confirmed", "preparing", "ready", "completed", "cancelled")
 _NEXT_ORDER_STATUS = {"confirmed": "preparing", "preparing": "ready", "ready": "completed"}
 _PAYMENT_STATUSES = ("pending", "reconciled")
 _REFUND_STATUSES = ("none", "due")
 _MOVEMENT_KINDS = ("reserve", "release", "receipt")
+_WEBSITE_INTAKE_STATUSES = ("pending_confirmation", "converted")
 _MAX_SAFE_INTEGER = 9_007_199_254_740_991
+_WEBSITE_FINGERPRINT_PATTERN = re.compile(r"web-[a-f0-9]{8}")
+_WEBSITE_INTAKE_ID_PATTERN = re.compile(r"WINT-[A-Z0-9-]{8,80}")
 
 _STATE_FIELDS = frozenset({"schema", "items", "orders", "movements", "closes"})
 _ITEM_FIELDS = frozenset({"sku", "name", "variant", "onHand", "reorderAt", "price"})
@@ -73,6 +80,12 @@ _MOVEMENT_FIELDS = frozenset(
 )
 _CLOSE_FIELDS = frozenset({"id", "createdAt", "total", "orders"})
 _EVIDENCE_FIELDS = frozenset({"actionId", "capturedAt", "actor", "reason", "evidenceReference"})
+_WEBSITE_SOURCE_FIELDS = frozenset({"fingerprint", "approvalId", "snapshotId", "pageId", "siteName", "pagePath"})
+_WEBSITE_INTAKE_REQUIRED_FIELDS = frozenset(
+    {"id", "createdAt", "status", "source", "sku", "quantity", "itemName", "unitPrice", "total", "creation"}
+)
+_WEBSITE_INTAKE_OPTIONAL_FIELDS = frozenset({"itemVariant", "conversion"})
+_WEBSITE_CONVERSION_FIELDS = _EVIDENCE_FIELDS | {"orderId"}
 
 
 def _object(value: object, field: str) -> dict[str, Any]:
@@ -133,11 +146,24 @@ def _unique(values: Sequence[str], field: str) -> None:
         raise TrialValidationError(f"{field} values must be unique.")
 
 
+def _action_proof(value: object, field: str, *, with_order_id: bool = False) -> dict[str, Any]:
+    proof = _object(value, field)
+    required = _WEBSITE_CONVERSION_FIELDS if with_order_id else _EVIDENCE_FIELDS
+    _exact_fields(proof, field, required=required)
+    _text(proof["actionId"], f"{field}.actionId", maximum=160)
+    _timestamp(proof["capturedAt"], f"{field}.capturedAt")
+    for key in ("actor", "reason", "evidenceReference"):
+        _text(proof[key], f"{field}.{key}")
+    if with_order_id:
+        _text(proof["orderId"], f"{field}.orderId", maximum=160)
+    return proof
+
+
 def validate_commerce_state(value: object) -> dict[str, Any]:
     """Validate the complete managed Commerce snapshot without repairing it."""
 
     state = _object(value, "commerce state")
-    _exact_fields(state, "commerce state", required=_STATE_FIELDS)
+    _exact_fields(state, "commerce state", required=_STATE_FIELDS, optional=frozenset({"websiteIntakes"}))
     if state.get("schema") != COMMERCE_SCHEMA:
         raise TrialValidationError(f"commerce state schema must be {COMMERCE_SCHEMA}.")
 
@@ -145,6 +171,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     orders = _list(state["orders"], "commerce state.orders")
     movements = _list(state["movements"], "commerce state.movements")
     closes = _list(state["closes"], "commerce state.closes")
+    website_intakes = _list(state.get("websiteIntakes", []), "commerce state.websiteIntakes")
 
     item_skus: list[str] = []
     item_by_sku: dict[str, dict[str, Any]] = {}
@@ -226,6 +253,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     movement_action_ids: list[str] = []
     reserve_by_order: dict[str, int] = {}
     release_by_order: dict[str, int] = {}
+    reserve_movement_by_order: dict[str, dict[str, Any]] = {}
     for index, candidate in enumerate(movements):
         movement = _object(candidate, f"movements[{index}]")
         _exact_fields(
@@ -261,13 +289,14 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 raise TrialValidationError(f"movements[{index}] does not match its order reservation.")
             counter = reserve_by_order if kind == "reserve" else release_by_order
             counter[order_id] = counter.get(order_id, 0) + 1
+            if kind == "reserve":
+                reserve_movement_by_order[order_id] = movement
             if kind == "release" and order["status"] != "cancelled":
                 raise TrialValidationError(f"movements[{index}] release requires a cancelled order.")
         movement_ids.append(movement_id)
         movement_action_ids.append(action_id)
     _unique(movement_ids, "Stock movement ID")
     _unique(movement_action_ids, "Stock movement action ID")
-    _unique([*movement_action_ids, *reconciliation_action_ids], "Commerce action ID")
     for order_id, count in reserve_by_order.items():
         if count != 1:
             raise TrialValidationError(f"{order_id} has more than one reservation.")
@@ -284,6 +313,115 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         _integer(close["total"], f"closes[{index}].total")
         _integer(close["orders"], f"closes[{index}].orders")
     _unique(close_ids, "Daily close ID")
+
+    intake_ids: list[str] = []
+    intake_sources: list[str] = []
+    intake_action_ids: list[str] = []
+    conversion_action_ids: list[str] = []
+    for index, candidate in enumerate(website_intakes):
+        field = f"websiteIntakes[{index}]"
+        intake = _object(candidate, field)
+        _exact_fields(
+            intake,
+            field,
+            required=_WEBSITE_INTAKE_REQUIRED_FIELDS,
+            optional=_WEBSITE_INTAKE_OPTIONAL_FIELDS,
+        )
+        intake_id = _text(intake["id"], f"{field}.id", maximum=85)
+        if _WEBSITE_INTAKE_ID_PATTERN.fullmatch(intake_id) is None:
+            raise TrialValidationError(f"{field}.id is invalid.")
+        created_at = _timestamp(intake["createdAt"], f"{field}.createdAt")
+        if intake["status"] not in _WEBSITE_INTAKE_STATUSES:
+            raise TrialValidationError(f"{field}.status is invalid.")
+
+        source = _object(intake["source"], f"{field}.source")
+        _exact_fields(source, f"{field}.source", required=_WEBSITE_SOURCE_FIELDS)
+        fingerprint = _text(source["fingerprint"], f"{field}.source.fingerprint", maximum=12)
+        if _WEBSITE_FINGERPRINT_PATTERN.fullmatch(fingerprint) is None:
+            raise TrialValidationError(f"{field}.source.fingerprint must match web-[a-f0-9]{{8}}.")
+        approval_id = _text(source["approvalId"], f"{field}.source.approvalId", maximum=160)
+        snapshot_id = _text(source["snapshotId"], f"{field}.source.snapshotId", maximum=160)
+        page_id = _text(source["pageId"], f"{field}.source.pageId", maximum=160)
+        _text(source["siteName"], f"{field}.source.siteName", maximum=160)
+        page_path = _text(source["pagePath"], f"{field}.source.pagePath", maximum=160)
+        if not page_path.startswith("/"):
+            raise TrialValidationError(f"{field}.source.pagePath must be absolute.")
+
+        sku = _text(intake["sku"], f"{field}.sku", maximum=80)
+        quantity = _integer(intake["quantity"], f"{field}.quantity", minimum=1)
+        item = item_by_sku.get(sku)
+        if item is None:
+            raise TrialValidationError(f"{field}.sku is unknown.")
+        item_name = _text(intake["itemName"], f"{field}.itemName")
+        item_variant = _text(intake["itemVariant"], f"{field}.itemVariant") if "itemVariant" in intake else None
+        unit_price = _integer(intake["unitPrice"], f"{field}.unitPrice", minimum=1)
+        total = _integer(intake["total"], f"{field}.total", minimum=1)
+        if (
+            item_name != item["name"]
+            or item_variant != item.get("variant")
+            or unit_price != item["price"]
+            or total != quantity * unit_price
+        ):
+            raise TrialValidationError(f"{field} does not match its Commerce catalog record.")
+
+        creation = _action_proof(intake["creation"], f"{field}.creation")
+        if creation["capturedAt"] != created_at:
+            raise TrialValidationError(f"{field}.creation must be captured when the intake was created.")
+        intake_action_ids.append(creation["actionId"])
+
+        matching_source_orders = [
+            order for order in order_by_id.values() if order.get("sourceRecordId") == intake_id
+        ]
+        if intake["status"] == "pending_confirmation":
+            if "conversion" in intake or matching_source_orders:
+                raise TrialValidationError(f"{field} pending intake cannot have conversion history.")
+        else:
+            if "conversion" not in intake:
+                raise TrialValidationError(f"{field}.conversion is required after conversion.")
+            conversion = _action_proof(intake["conversion"], f"{field}.conversion", with_order_id=True)
+            order = order_by_id.get(conversion["orderId"])
+            reserve = reserve_movement_by_order.get(conversion["orderId"])
+            if (
+                len(matching_source_orders) != 1
+                or order is None
+                or matching_source_orders[0].get("id") != order["id"]
+                or order["createdAt"] != conversion["capturedAt"]
+                or order["channel"] != "Website"
+                or order["item"] != item_name
+                or order.get("itemSku") != sku
+                or order["quantity"] != quantity
+                or order["total"] != total
+                or order.get("evidenceReference") != conversion["evidenceReference"]
+                or reserve is None
+                or any(
+                    reserve.get(movement_field) != conversion[proof_field]
+                    for movement_field, proof_field in (
+                        ("actionId", "actionId"),
+                        ("createdAt", "capturedAt"),
+                        ("actor", "actor"),
+                        ("reason", "reason"),
+                        ("evidenceReference", "evidenceReference"),
+                    )
+                )
+            ):
+                raise TrialValidationError(f"{field} does not match its converted Website order.")
+            intake_action_ids.append(conversion["actionId"])
+            conversion_action_ids.append(conversion["actionId"])
+
+        intake_ids.append(intake_id)
+        intake_sources.append("|".join((fingerprint, approval_id, snapshot_id, page_id)))
+
+    _unique(intake_ids, "Website intake ID")
+    _unique(intake_sources, "Website intake source")
+    _unique(intake_action_ids, "Website intake action ID")
+    _unique(
+        [
+            *(action_id for action_id in movement_action_ids if action_id not in conversion_action_ids),
+            *reconciliation_action_ids,
+            *intake_action_ids,
+        ],
+        "Commerce action ID",
+    )
     return deepcopy(state)
 
 
@@ -302,11 +440,38 @@ def _payload(payload: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, str]
     return validate_commerce_state(payload.get("state")), validated_evidence
 
 
+def _proof_matches_evidence(proof: Mapping[str, Any], evidence: Mapping[str, str]) -> bool:
+    return all(
+        proof.get(proof_field) == evidence[evidence_field]
+        for proof_field, evidence_field in (
+            ("actionId", "actionId"),
+            ("capturedAt", "capturedAt"),
+            ("actor", "actor"),
+            ("reason", "reason"),
+            ("evidenceReference", "evidenceReference"),
+        )
+    )
+
+
 def _validate_event_evidence(event_type: str, next_state: Mapping[str, Any], evidence: Mapping[str, str]) -> None:
+    if event_type == "commerce.website_intake.created":
+        creation = next_state["websiteIntakes"][0]["creation"]
+        if not _proof_matches_evidence(creation, evidence):
+            raise TrialValidationError("command evidence must match the Website intake creation proof.")
+    elif event_type == "commerce.website_intake.converted":
+        conversions = [
+            intake["conversion"]
+            for intake in next_state["websiteIntakes"]
+            if intake.get("conversion", {}).get("actionId") == evidence["actionId"]
+        ]
+        if len(conversions) != 1 or not _proof_matches_evidence(conversions[0], evidence):
+            raise TrialValidationError("command evidence must match the Website intake conversion proof.")
+
     movement_kind = {
         "commerce.order.created": "reserve",
         "commerce.order.cancelled": "release",
         "commerce.stock.received": "receipt",
+        "commerce.website_intake.converted": "reserve",
     }.get(event_type)
     if movement_kind:
         movement = next_state["movements"][0]
@@ -364,11 +529,25 @@ def _require_unchanged(current: Mapping[str, Any], next_state: Mapping[str, Any]
         raise TrialValidationError(f"event cannot change: {', '.join(changed)}.")
 
 
-def _validate_created(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
+def _website_intakes(state: Mapping[str, Any]) -> list[Any]:
+    return state.get("websiteIntakes", [])
+
+
+def _require_website_intakes_unchanged(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
+    if _website_intakes(current) != _website_intakes(next_state):
+        raise TrialValidationError("event cannot change: websiteIntakes.")
+
+
+def _validate_new_order_and_reservation(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+    *,
+    event_type: str,
+) -> None:
     if len(next_state["orders"]) != len(current["orders"]) + 1 or next_state["orders"][1:] != current["orders"]:
-        raise TrialValidationError("commerce.order.created must prepend exactly one order.")
+        raise TrialValidationError(f"{event_type} must prepend exactly one order.")
     if len(next_state["movements"]) != len(current["movements"]) + 1 or next_state["movements"][1:] != current["movements"]:
-        raise TrialValidationError("commerce.order.created must prepend exactly one stock reservation.")
+        raise TrialValidationError(f"{event_type} must prepend exactly one stock reservation.")
     _require_unchanged(current, next_state, "closes")
     before_item, after_item = _one_changed(current["items"], next_state["items"], "items")
     order = next_state["orders"][0]
@@ -391,8 +570,14 @@ def _validate_created(current: Mapping[str, Any], next_state: Mapping[str, Any])
         raise TrialValidationError("a new order requires one attributable stock reservation.")
 
 
+def _validate_created(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
+    _validate_new_order_and_reservation(current, next_state, event_type="commerce.order.created")
+    _require_website_intakes_unchanged(current, next_state)
+
+
 def _validate_advanced(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
     _require_unchanged(current, next_state, "items", "movements", "closes")
+    _require_website_intakes_unchanged(current, next_state)
     before, after = _one_changed(current["orders"], next_state["orders"], "orders")
     if _without(before, frozenset({"status"})) != _without(after, frozenset({"status"})):
         raise TrialValidationError("order advancement may change only status.")
@@ -404,6 +589,7 @@ def _validate_advanced(current: Mapping[str, Any], next_state: Mapping[str, Any]
 
 def _validate_cancelled(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
     _require_unchanged(current, next_state, "closes")
+    _require_website_intakes_unchanged(current, next_state)
     before_order, after_order = _one_changed(current["orders"], next_state["orders"], "orders")
     before_item, after_item = _one_changed(current["items"], next_state["items"], "items")
     if len(next_state["movements"]) != len(current["movements"]) + 1 or next_state["movements"][1:] != current["movements"]:
@@ -428,6 +614,7 @@ def _validate_cancelled(current: Mapping[str, Any], next_state: Mapping[str, Any
 
 def _validate_reconciled(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
     _require_unchanged(current, next_state, "items", "movements", "closes")
+    _require_website_intakes_unchanged(current, next_state)
     before, after = _one_changed(current["orders"], next_state["orders"], "orders")
     if before["status"] == "cancelled" or before["paymentStatus"] != "pending":
         raise TrialValidationError("only a pending payment on an active order can be reconciled.")
@@ -439,6 +626,7 @@ def _validate_reconciled(current: Mapping[str, Any], next_state: Mapping[str, An
 
 def _validate_received(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
     _require_unchanged(current, next_state, "orders", "closes")
+    _require_website_intakes_unchanged(current, next_state)
     before_item, after_item = _one_changed(current["items"], next_state["items"], "items")
     if len(next_state["movements"]) != len(current["movements"]) + 1 or next_state["movements"][1:] != current["movements"]:
         raise TrialValidationError("commerce.stock.received must prepend exactly one receipt.")
@@ -451,6 +639,7 @@ def _validate_received(current: Mapping[str, Any], next_state: Mapping[str, Any]
 
 def _validate_close(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
     _require_unchanged(current, next_state, "items", "orders", "movements")
+    _require_website_intakes_unchanged(current, next_state)
     if len(next_state["closes"]) != len(current["closes"]) + 1 or next_state["closes"][1:] != current["closes"]:
         raise TrialValidationError("commerce.close.saved must prepend exactly one close snapshot.")
     eligible = [
@@ -463,6 +652,39 @@ def _validate_close(current: Mapping[str, Any], next_state: Mapping[str, Any]) -
         raise TrialValidationError("daily close totals must match completed, reconciled orders.")
 
 
+def _validate_website_intake_created(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
+    _require_unchanged(current, next_state, "items", "orders", "movements", "closes")
+    current_intakes = _website_intakes(current)
+    next_intakes = _website_intakes(next_state)
+    if len(next_intakes) != len(current_intakes) + 1 or next_intakes[1:] != current_intakes:
+        raise TrialValidationError("commerce.website_intake.created must prepend exactly one Website intake.")
+    if next_intakes[0]["status"] != "pending_confirmation":
+        raise TrialValidationError("a new Website intake must await human confirmation.")
+
+
+def _validate_website_intake_converted(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
+    _validate_new_order_and_reservation(
+        current,
+        next_state,
+        event_type="commerce.website_intake.converted",
+    )
+    before, after = _one_changed(
+        _website_intakes(current),
+        _website_intakes(next_state),
+        "websiteIntakes",
+    )
+    if before["status"] != "pending_confirmation" or after["status"] != "converted":
+        raise TrialValidationError("only a pending Website intake can be converted.")
+    if "conversion" not in after or _without(before, frozenset({"status"})) != _without(
+        after,
+        frozenset({"status", "conversion"}),
+    ):
+        raise TrialValidationError("Website intake conversion may change only status and conversion proof.")
+    order = next_state["orders"][0]
+    if order.get("sourceRecordId") != after["id"] or after["conversion"]["orderId"] != order["id"]:
+        raise TrialValidationError("Website intake conversion must create its attributable order.")
+
+
 _TRANSITION_VALIDATORS = {
     "commerce.order.created": _validate_created,
     "commerce.order.advanced": _validate_advanced,
@@ -470,6 +692,8 @@ _TRANSITION_VALIDATORS = {
     "commerce.payment.reconciled": _validate_reconciled,
     "commerce.stock.received": _validate_received,
     "commerce.close.saved": _validate_close,
+    "commerce.website_intake.created": _validate_website_intake_created,
+    "commerce.website_intake.converted": _validate_website_intake_converted,
 }
 
 
@@ -486,7 +710,13 @@ def reduce_commerce_state(
     if event_type == "commerce.workspace.initialized":
         if dict(current):
             raise TrialValidationError("managed Commerce is already initialized.")
-        if not next_state["items"] or next_state["orders"] or next_state["movements"] or next_state["closes"]:
+        if (
+            not next_state["items"]
+            or next_state["orders"]
+            or next_state["movements"]
+            or next_state["closes"]
+            or _website_intakes(next_state)
+        ):
             raise TrialValidationError("Commerce initialization requires a non-empty catalog and no operating history.")
         return next_state
 
@@ -496,4 +726,10 @@ def reduce_commerce_state(
     return next_state
 
 
-__all__ = ["COMMERCE_EVENTS", "COMMERCE_SCHEMA", "reduce_commerce_state", "validate_commerce_state"]
+__all__ = [
+    "COMMERCE_EVENTS",
+    "COMMERCE_HUMAN_EVENTS",
+    "COMMERCE_SCHEMA",
+    "reduce_commerce_state",
+    "validate_commerce_state",
+]

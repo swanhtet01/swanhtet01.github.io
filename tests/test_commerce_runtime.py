@@ -4,11 +4,14 @@ from copy import deepcopy
 import unittest
 from uuid import uuid4
 
+from supermega_runtime.commerce_runtime import COMMERCE_HUMAN_EVENTS
 from supermega_runtime.runtime import reduce_trial_state
 from supermega_runtime.trial_store import InMemoryTrialStore, TrialPrincipal, TrialValidationError
 
 
 NOW = "2026-07-23T09:00:00.000Z"
+CONVERTED_AT = "2026-07-23T09:15:00.000Z"
+WEBSITE_INTAKE_ID = "WINT-12345678"
 
 
 def catalog_state() -> dict[str, object]:
@@ -47,11 +50,18 @@ def order_record(order_id: str = "ORD-1") -> dict[str, object]:
     }
 
 
-def movement(kind: str, action_id: str, quantity: int, *, order_id: str | None = None) -> dict[str, object]:
+def movement(
+    kind: str,
+    action_id: str,
+    quantity: int,
+    *,
+    order_id: str | None = None,
+    created_at: str = NOW,
+) -> dict[str, object]:
     record: dict[str, object] = {
         "id": f"MOV-{action_id}",
         "actionId": action_id,
-        "createdAt": NOW,
+        "createdAt": created_at,
         "actor": "Accountable operator",
         "reason": "Verified against the source record.",
         "evidenceReference": f"EV-{action_id}",
@@ -64,14 +74,88 @@ def movement(kind: str, action_id: str, quantity: int, *, order_id: str | None =
     return record
 
 
-def action_evidence(action_id: str = "ACT-LIFECYCLE") -> dict[str, str]:
+def action_evidence(action_id: str = "ACT-LIFECYCLE", *, captured_at: str = NOW) -> dict[str, str]:
     return {
         "actionId": action_id,
-        "capturedAt": NOW,
+        "capturedAt": captured_at,
         "actor": "Accountable operator",
         "reason": "Verified against the source record.",
         "evidenceReference": f"EV-{action_id}",
     }
+
+
+def website_source(*, page_id: str = "page-shop", page_path: str = "/shop") -> dict[str, str]:
+    return {
+        "fingerprint": "web-1234abcd",
+        "approvalId": "approval-website-1",
+        "snapshotId": "snapshot-website-1",
+        "pageId": page_id,
+        "siteName": "SuperMega",
+        "pagePath": page_path,
+    }
+
+
+def website_intake(
+    *,
+    intake_id: str = WEBSITE_INTAKE_ID,
+    action_id: str = "ACT-WEB-INTAKE",
+    source: dict[str, str] | None = None,
+) -> dict[str, object]:
+    return {
+        "id": intake_id,
+        "createdAt": NOW,
+        "status": "pending_confirmation",
+        "source": source or website_source(),
+        "sku": "SKU-1",
+        "quantity": 2,
+        "itemName": "Test item",
+        "unitPrice": 100,
+        "total": 200,
+        "creation": action_evidence(action_id),
+    }
+
+
+def pending_intake_state() -> dict[str, object]:
+    state = catalog_state()
+    state["websiteIntakes"] = [website_intake()]
+    return state
+
+
+def converted_intake_state(
+    current: dict[str, object] | None = None,
+    *,
+    conversion_action_id: str = "ACT-WEB-CONVERT",
+    order_id: str = "ORD-WEB-1",
+) -> dict[str, object]:
+    state = deepcopy(current or pending_intake_state())
+    conversion = {
+        **action_evidence(conversion_action_id, captured_at=CONVERTED_AT),
+        "orderId": order_id,
+    }
+    state["websiteIntakes"][0].update(  # type: ignore[index]
+        {"status": "converted", "conversion": conversion}
+    )
+    state["items"][0]["onHand"] = 8  # type: ignore[index]
+    order = order_record(order_id)
+    order.update(
+        {
+            "createdAt": CONVERTED_AT,
+            "channel": "Website",
+            "sourceRecordId": WEBSITE_INTAKE_ID,
+            "evidenceReference": conversion["evidenceReference"],
+        }
+    )
+    state["orders"] = [order]
+    state["movements"] = [
+        movement(
+            "reserve",
+            conversion_action_id,
+            -2,
+            order_id=order_id,
+            created_at=CONVERTED_AT,
+        )
+    ]
+    return state
 
 
 def created_state(order_id: str = "ORD-1") -> dict[str, object]:
@@ -83,6 +167,12 @@ def created_state(order_id: str = "ORD-1") -> dict[str, object]:
 
 
 def evidence_for(event_type: str, next_state: dict[str, object]) -> dict[str, str]:
+    if event_type == "commerce.website_intake.created":
+        return dict(next_state["websiteIntakes"][0]["creation"])  # type: ignore[index, arg-type]
+    if event_type == "commerce.website_intake.converted":
+        conversion = dict(next_state["websiteIntakes"][0]["conversion"])  # type: ignore[index, arg-type]
+        conversion.pop("orderId")
+        return conversion  # type: ignore[return-value]
     if event_type in {"commerce.order.created", "commerce.order.cancelled", "commerce.stock.received"}:
         movement_record = next_state["movements"][0]  # type: ignore[index]
         return {
@@ -122,6 +212,188 @@ class CommerceRuntimeTests(unittest.TestCase):
             apply_event({}, "commerce.workspace.initialized", created_state())
         with self.assertRaises(TrialValidationError):
             apply_event(catalog_state(), "commerce.workspace.initialized", catalog_state())
+
+    def test_legacy_v2_state_and_empty_intake_collection_are_backward_compatible(self) -> None:
+        legacy = catalog_state()
+        self.assertNotIn("websiteIntakes", legacy)
+        self.assertEqual(apply_event({}, "commerce.workspace.initialized", legacy), legacy)
+
+        explicit_empty = catalog_state()
+        explicit_empty["websiteIntakes"] = []
+        self.assertEqual(
+            apply_event({}, "commerce.workspace.initialized", explicit_empty),
+            explicit_empty,
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event({}, "commerce.workspace.initialized", pending_intake_state())
+
+        self.assertEqual(
+            COMMERCE_HUMAN_EVENTS,
+            frozenset({"commerce.website_intake.converted"}),
+        )
+
+    def test_website_intake_creation_records_no_order_or_stock_movement(self) -> None:
+        current = catalog_state()
+        created = apply_event(
+            current,
+            "commerce.website_intake.created",
+            pending_intake_state(),
+        )
+
+        self.assertEqual(created["websiteIntakes"][0]["status"], "pending_confirmation")  # type: ignore[index]
+        for collection in ("items", "orders", "movements", "closes"):
+            self.assertEqual(created[collection], current[collection])
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "commerce.website_intake.created",
+                pending_intake_state(),
+                action_evidence("ACT-SPOOFED-CREATION"),
+            )
+
+    def test_website_intake_conversion_creates_one_attributable_order_and_reservation(self) -> None:
+        current = apply_event(
+            catalog_state(),
+            "commerce.website_intake.created",
+            pending_intake_state(),
+        )
+        converted = apply_event(
+            current,
+            "commerce.website_intake.converted",
+            converted_intake_state(current),
+        )
+
+        intake = converted["websiteIntakes"][0]  # type: ignore[index]
+        order = converted["orders"][0]  # type: ignore[index]
+        stock_movement = converted["movements"][0]  # type: ignore[index]
+        self.assertEqual(intake["status"], "converted")
+        self.assertEqual(intake["conversion"]["orderId"], order["id"])  # type: ignore[index]
+        self.assertEqual(order["sourceRecordId"], intake["id"])  # type: ignore[index]
+        self.assertEqual(converted["items"][0]["onHand"], 8)  # type: ignore[index]
+        self.assertEqual(stock_movement["kind"], "reserve")
+        self.assertEqual(stock_movement["actionId"], intake["conversion"]["actionId"])  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "commerce.website_intake.converted",
+                converted_intake_state(current),
+                action_evidence("ACT-SPOOFED-CONVERSION", captured_at=CONVERTED_AT),
+            )
+
+    def test_intake_events_reject_spoofed_collection_and_record_diffs(self) -> None:
+        spoofed_creation = pending_intake_state()
+        spoofed_creation["items"][0]["onHand"] = 9  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                catalog_state(),
+                "commerce.website_intake.created",
+                spoofed_creation,
+            )
+
+        current = apply_event(
+            catalog_state(),
+            "commerce.website_intake.created",
+            pending_intake_state(),
+        )
+        spoofed_conversion = converted_intake_state(current)
+        spoofed_conversion["websiteIntakes"][0]["source"]["siteName"] = "Spoofed site"  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "commerce.website_intake.converted",
+                spoofed_conversion,
+            )
+
+        dropped_intakes = deepcopy(current)
+        dropped_intakes.pop("websiteIntakes")
+        dropped_intakes["items"][0]["onHand"] = 15  # type: ignore[index]
+        dropped_intakes["movements"] = [movement("receipt", "ACT-RECEIVE-WITH-INTAKE", 5)]
+        with self.assertRaises(TrialValidationError):
+            apply_event(current, "commerce.stock.received", dropped_intakes)
+
+    def test_intake_source_and_logical_action_ids_must_be_unique(self) -> None:
+        current = pending_intake_state()
+
+        duplicate_source = deepcopy(current)
+        duplicate_source["websiteIntakes"] = [  # type: ignore[index]
+            website_intake(
+                intake_id="WINT-87654321",
+                action_id="ACT-WEB-INTAKE-2",
+            ),
+            *current["websiteIntakes"],  # type: ignore[misc]
+        ]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "commerce.website_intake.created",
+                duplicate_source,
+            )
+
+        duplicate_action = deepcopy(current)
+        duplicate_action["websiteIntakes"] = [  # type: ignore[index]
+            website_intake(
+                intake_id="WINT-87654321",
+                action_id="ACT-WEB-INTAKE",
+                source=website_source(page_id="page-product", page_path="/product"),
+            ),
+            *current["websiteIntakes"],  # type: ignore[misc]
+        ]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "commerce.website_intake.created",
+                duplicate_action,
+            )
+
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "commerce.website_intake.converted",
+                converted_intake_state(
+                    current,
+                    conversion_action_id="ACT-WEB-INTAKE",
+                ),
+                action_evidence("ACT-WEB-INTAKE", captured_at=CONVERTED_AT),
+            )
+
+    def test_converted_intake_order_and_reservation_invariants_fail_closed(self) -> None:
+        current = pending_intake_state()
+        evidence = action_evidence("ACT-WEB-CONVERT", captured_at=CONVERTED_AT)
+        invalid_states: list[tuple[str, dict[str, object]]] = []
+
+        missing_conversion = converted_intake_state(current)
+        missing_conversion["websiteIntakes"][0].pop("conversion")  # type: ignore[index]
+        invalid_states.append(("missing conversion proof", missing_conversion))
+
+        pending_with_order = converted_intake_state(current)
+        pending_with_order["websiteIntakes"][0]["status"] = "pending_confirmation"  # type: ignore[index]
+        pending_with_order["websiteIntakes"][0].pop("conversion")  # type: ignore[index]
+        invalid_states.append(("pending intake with matching order", pending_with_order))
+
+        wrong_order_time = converted_intake_state(current)
+        wrong_order_time["orders"][0]["createdAt"] = NOW  # type: ignore[index]
+        invalid_states.append(("order timestamp mismatch", wrong_order_time))
+
+        wrong_order_evidence = converted_intake_state(current)
+        wrong_order_evidence["orders"][0]["evidenceReference"] = "EV-SPOOFED"  # type: ignore[index]
+        invalid_states.append(("order evidence mismatch", wrong_order_evidence))
+
+        missing_reservation = converted_intake_state(current)
+        missing_reservation["movements"] = []
+        invalid_states.append(("missing reserve movement", missing_reservation))
+
+        unchanged_stock = converted_intake_state(current)
+        unchanged_stock["items"][0]["onHand"] = 10  # type: ignore[index]
+        invalid_states.append(("missing stock decrement", unchanged_stock))
+
+        for label, invalid_state in invalid_states:
+            with self.subTest(label=label), self.assertRaises(TrialValidationError):
+                apply_event(
+                    current,
+                    "commerce.website_intake.converted",
+                    invalid_state,
+                    evidence,
+                )
 
     def test_order_create_and_stock_receipt_allow_only_the_declared_diff(self) -> None:
         current = catalog_state()
