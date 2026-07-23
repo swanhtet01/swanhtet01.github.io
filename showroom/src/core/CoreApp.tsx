@@ -33,9 +33,11 @@ import {
   mutateCommerceWorkspace,
   receiveCommerceStock,
   reconcileCommercePayment,
+  registerCommerceItem,
   reserveCommerceOrder,
   validateCommerceState,
   type CommerceActionProof,
+  type CommerceItem,
   type CommerceOrder,
   type CommerceOrderStatus,
   type CommerceState,
@@ -129,6 +131,7 @@ type ActionKind =
   | 'order_status'
   | 'order_cancel'
   | 'payment_reconcile'
+  | 'catalog_item_create'
   | 'inventory_receipt'
   | 'daily_close'
   | 'production_output'
@@ -1215,6 +1218,7 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
   const [payment, setPayment] = useState('KBZPay')
   const [notice, setNotice] = useState('')
   const [catalogDraft, setCatalogDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '', price: '', reason: '', evidenceReference: '' })
+  const [itemDraft, setItemDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '', price: '' })
   const [catalogBusy, setCatalogBusy] = useState(false)
   const [catalogError, setCatalogError] = useState('')
   const selectedSku = commerce.items.some((item) => item.sku === sku) ? sku : commerce.items[0]?.sku ?? ''
@@ -1295,6 +1299,40 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
     }
     setPendingAction({ ...action, id: uid('ACT'), commandId: commandUuid(), domain: 'commerce' })
     setNotice('Review the change, accountable operator, and evidence before it is applied.')
+  }
+
+  function queueCatalogItem(event: FormEvent) {
+    event.preventDefault()
+    const itemSku = itemDraft.sku.trim().toUpperCase()
+    const name = itemDraft.name.trim()
+    const onHand = Number(itemDraft.onHand)
+    const reorderAt = Number(itemDraft.reorderAt)
+    const price = Number(itemDraft.price)
+    if (!itemSku || !name
+      || !Number.isSafeInteger(onHand) || onHand < 0
+      || !Number.isSafeInteger(reorderAt) || reorderAt < 0
+      || !Number.isSafeInteger(price) || price < 1) {
+      setNotice('Enter a SKU, item name, non-negative opening and reorder quantities, and a whole-MMK price.')
+      return
+    }
+    if (commerce.items.some((item) => item.sku === itemSku)) {
+      setNotice(`${itemSku} already exists. No catalog item was queued.`)
+      return
+    }
+    const item: CommerceItem = { sku: itemSku, name, onHand, reorderAt, price }
+    queueAction({
+      kind: 'catalog_item_create',
+      subjectId: item.sku,
+      summary: `Add ${item.sku} to the catalog`,
+      before: 'No catalog item',
+      after: `${item.name} · ${item.onHand.toLocaleString()} opening units`,
+      apply: async (action) => {
+        const proof = commerceActionProof(action)
+        await mutateCommerce('commerce.item.created', action.commandId, proof, (current) => registerCommerceItem(current, item, proof))
+        setItemDraft({ sku: '', name: '', onHand: '', reorderAt: '', price: '' })
+        setSku(item.sku)
+      },
+    })
   }
 
   async function confirmAction(details: ActionDetails) {
@@ -1447,7 +1485,26 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
     <section className="core-panel order-queue-panel"><div className="panel-head"><div><span className="core-eyebrow">Fulfilment</span><h2>{openOrders.length} open orders</h2></div><span className="panel-note">{paymentReview.length} payment review</span></div><OrderList canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} orders={commerce.orders} /></section>
   </div>{actionControls}</div>
 
-  if (tab === 'inventory') return <div className="operation-module">{sourceNotice}<section className="core-panel inventory-panel"><div className="panel-head"><div><span className="core-eyebrow">Stock control</span><h2>Inventory and reorder boundaries</h2></div><span className="panel-note">{lowStock.length} at boundary</span></div><div className="data-table" role="table" aria-label="Commerce inventory"><div className="data-row table-head" role="row"><span>Item</span><span>On hand</span><span>Reorder</span><span>Price</span><span>Action</span></div>{commerce.items.map((item) => <div className="data-row" role="row" key={item.sku}><span><strong>{item.name}</strong><small>{item.sku}</small></span><span className={item.onHand <= item.reorderAt ? 'warning-text' : ''}>{item.onHand}</span><span>{item.reorderAt}</span><span>{formatMoney(item.price)}</span><span><button className="text-link" type="button" onClick={() => restock(item.sku)}>Receive +10</button></span></div>)}</div><p className="form-notice" aria-live="polite">{notice || commerceStorageError || 'Receipts require attributable confirmation and append one stock movement.'}</p></section><StockMovementHistory movements={commerce.movements} />{actionControls}</div>
+  if (tab === 'inventory') return <div className="operation-module">
+    {sourceNotice}
+    <section className="core-panel inventory-panel">
+      <div className="panel-head"><div><span className="core-eyebrow">Stock control</span><h2>Inventory and reorder boundaries</h2></div><span className="panel-note">{lowStock.length} at boundary</span></div>
+      <div className="data-table" role="table" aria-label="Commerce inventory"><div className="data-row table-head" role="row"><span>Item</span><span>On hand</span><span>Reorder</span><span>Price</span><span>Action</span></div>{commerce.items.map((item) => <div className="data-row" role="row" key={item.sku}><span><strong>{item.name}</strong><small>{item.sku}</small></span><span className={item.onHand <= item.reorderAt ? 'warning-text' : ''}>{item.onHand}</span><span>{item.reorderAt}</span><span>{formatMoney(item.price)}</span><span><button className="text-link" type="button" onClick={() => restock(item.sku)}>Receive +10</button></span></div>)}</div>
+      <details className="compact-disclosure catalog-disclosure">
+        <summary>Add catalog item</summary>
+        <form className="core-form compact-form catalog-create-form" onSubmit={queueCatalogItem}>
+          <div className="form-row"><label>SKU<input maxLength={80} onChange={(event) => setItemDraft((current) => ({ ...current, sku: event.target.value }))} placeholder="SKU-002" required value={itemDraft.sku} /></label><label>Item name<input maxLength={180} onChange={(event) => setItemDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Real item name" required value={itemDraft.name} /></label></div>
+          <div className="form-row"><label>Opening stock<input min="0" onChange={(event) => setItemDraft((current) => ({ ...current, onHand: event.target.value }))} required step="1" type="number" value={itemDraft.onHand} /></label><label>Reorder at<input min="0" onChange={(event) => setItemDraft((current) => ({ ...current, reorderAt: event.target.value }))} required step="1" type="number" value={itemDraft.reorderAt} /></label></div>
+          <label>Price (MMK)<input min="1" onChange={(event) => setItemDraft((current) => ({ ...current, price: event.target.value }))} required step="1" type="number" value={itemDraft.price} /></label>
+          <div className="form-actions"><button className="core-button primary compact" disabled={Boolean(pendingAction)} type="submit">Review catalog item</button></div>
+          <p className="panel-copy">The opening balance may be zero. A named operator, reason, and evidence are required before the SKU is recorded.</p>
+        </form>
+      </details>
+      <p className="form-notice" aria-live="polite">{notice || commerceStorageError || 'Catalog openings and receipts require attributable confirmation and append one stock movement.'}</p>
+    </section>
+    <StockMovementHistory movements={commerce.movements} />
+    {actionControls}
+  </div>
 
   return <div className="operation-module">{sourceNotice}<div className="module-today"><section className="summary-strip"><span><small>Order value</small><strong>{formatMoney(orderValue)}</strong></span><span><small>Open orders</small><strong>{openOrders.length}</strong></span><span><small>Payment review</small><strong>{paymentReview.length}</strong></span><span><small>Low stock</small><strong>{lowStock.length}</strong></span></section><div className="split-workspace ops-today-grid"><section className="core-panel"><div className="panel-head"><div><span className="core-eyebrow">Order flow</span><h2>Latest channel orders</h2></div><Link className="text-link" to="/operations/commerce/?tab=orders">Open orders</Link></div><OrderList canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} orders={commerce.orders.slice(0, 5)} /></section><section className="core-panel"><div className="panel-head"><div><span className="core-eyebrow">Daily control</span><h2>Exceptions and close</h2></div><span className="panel-note">{commerce.closes.length} snapshots</span></div><div className="exception-summary"><span><strong>{paymentReview.length}</strong><small>payment review</small></span><span><strong>{lowStock.length}</strong><small>reorder boundaries</small></span></div><div className="boundary-list">{lowStock.map((item) => <Link key={item.sku} to="/operations/commerce/?tab=inventory"><strong>{item.name}</strong><small>{item.onHand} on hand</small></Link>)}</div><button className="core-button" onClick={closeDay} type="button">Save daily close</button><p className="form-notice" aria-live="polite">{notice || commerceStorageError || `${closableOrders.length} completed, reconciled orders · ${formatMoney(reconciledValue)} ready to close.`}</p></section></div></div>{actionControls}</div>
 }

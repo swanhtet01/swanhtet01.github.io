@@ -47,7 +47,7 @@ def order_record(order_id: str = "ORD-1") -> dict[str, object]:
     }
 
 
-def movement(kind: str, action_id: str, quantity: int, *, order_id: str | None = None) -> dict[str, object]:
+def movement(kind: str, action_id: str, quantity: int, *, order_id: str | None = None, sku: str = "SKU-1") -> dict[str, object]:
     record: dict[str, object] = {
         "id": f"MOV-{action_id}",
         "actionId": action_id,
@@ -56,7 +56,7 @@ def movement(kind: str, action_id: str, quantity: int, *, order_id: str | None =
         "reason": "Verified against the source record.",
         "evidenceReference": f"EV-{action_id}",
         "kind": kind,
-        "sku": "SKU-1",
+        "sku": sku,
         "quantityDelta": quantity,
     }
     if order_id:
@@ -83,7 +83,7 @@ def created_state(order_id: str = "ORD-1") -> dict[str, object]:
 
 
 def evidence_for(event_type: str, next_state: dict[str, object]) -> dict[str, str]:
-    if event_type in {"commerce.order.created", "commerce.order.cancelled", "commerce.stock.received"}:
+    if event_type in {"commerce.item.created", "commerce.order.created", "commerce.order.cancelled", "commerce.stock.received"}:
         movement_record = next_state["movements"][0]  # type: ignore[index]
         return {
             "actionId": movement_record["actionId"],
@@ -122,6 +122,26 @@ class CommerceRuntimeTests(unittest.TestCase):
             apply_event({}, "commerce.workspace.initialized", created_state())
         with self.assertRaises(TrialValidationError):
             apply_event(catalog_state(), "commerce.workspace.initialized", catalog_state())
+
+    def test_item_creation_records_an_exact_attributed_opening_balance(self) -> None:
+        current = catalog_state()
+        new_item = {"sku": "SKU-2", "name": "Second item", "onHand": 0, "reorderAt": 3, "price": 250}
+        created = deepcopy(current)
+        created["items"] = [new_item, *current["items"]]  # type: ignore[misc]
+        created["movements"] = [movement("opening", "ACT-ITEM", 0, sku="SKU-2")]
+        accepted = apply_event(current, "commerce.item.created", created)
+        self.assertEqual(accepted["items"][0], new_item)  # type: ignore[index]
+        self.assertEqual(accepted["movements"][0]["kind"], "opening")  # type: ignore[index]
+
+        wrong_balance = deepcopy(created)
+        wrong_balance["movements"][0]["quantityDelta"] = 1  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(current, "commerce.item.created", wrong_balance)
+
+        changed_existing = deepcopy(created)
+        changed_existing["items"][1]["name"] = "Rewritten item"  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(current, "commerce.item.created", changed_existing)
 
     def test_order_create_and_stock_receipt_allow_only_the_declared_diff(self) -> None:
         current = catalog_state()

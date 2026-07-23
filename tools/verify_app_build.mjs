@@ -107,14 +107,15 @@ if (!commerceIntakeSource.includes('await completeWebsiteOrderDraft') || !commer
 if (!coreSource.includes('function queueWebsiteOrder') || !coreSource.includes('sourceRecordId') || !coreSource.includes('item.price !== line.unitPriceMmk') || !coreSource.includes('Website order confirmation failed closed') || !coreSource.includes('Confirm ${record.id} from Website')) fail('website_order_not_integrated_with_commerce')
 if (!commerceSource.includes("supermega.commerce.workspace.v2") || !commerceSource.includes('loadCommerceWorkspace') || !commerceSource.includes('mutateCommerceWorkspace') || !commerceSource.includes('lockManager.request')) fail('commerce_v2_locked_store_missing')
 if (!commerceSource.includes("CommercePaymentStatus = 'pending' | 'reconciled'") || !commerceSource.includes("CommerceRefundStatus = 'none' | 'due'") || commerceSource.includes("'unrecorded'") || commerceSource.includes("'refund_due'")) fail('commerce_payment_or_refund_contract_invalid')
-if (!commerceSource.includes('commerceOrderHasReleasableReservation') || !commerceSource.includes("movement.kind === 'reserve'") || !commerceSource.includes("movement.kind === 'release'") || !commerceSource.includes("kind: 'receipt'")) fail('commerce_stock_ledger_contract_missing')
+if (!commerceSource.includes('commerceOrderHasReleasableReservation') || !commerceSource.includes("movement.kind === 'reserve'") || !commerceSource.includes("movement.kind === 'release'") || !commerceSource.includes("kind: 'receipt'") || !commerceSource.includes("kind: 'opening'")) fail('commerce_stock_ledger_contract_missing')
 if (!commerceSource.includes('Recovery failed closed') || !commerceSource.includes('currentRaw !== null') || !commerceSource.includes("movements: []")) fail('commerce_migration_fail_closed_contract_missing')
 if (!managedTrialSource.includes('saveManagedCommerceCommand') || !managedTrialSource.includes('expected_version: request.expectedVersion') || !managedTrialSource.includes("surface: 'commerce'") || !managedTrialSource.includes('payload: { state: request.state, evidence: request.evidence }')) fail('managed_commerce_command_client_missing')
-for (const eventType of ['commerce.workspace.initialized', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.payment.reconciled', 'commerce.stock.received', 'commerce.close.saved']) {
+for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.payment.reconciled', 'commerce.stock.received', 'commerce.close.saved']) {
   if (!coreSource.includes(eventType) || !managedCommerceRuntime.includes(eventType)) fail(`managed_commerce_event_missing:${eventType}`)
 }
 if (!coreSource.includes("mode: 'managed-unprovisioned'") || !coreSource.includes('No browser demo orders, customers, or stock records are copied') || !coreSource.includes('Create managed catalog') || !coreSource.includes('Opening balance reason') || !coreSource.includes('result.version !== current.version + 1') || !coreSource.includes('validateCommerceState(result.state)') || !coreSource.includes("error.code === 'trial_version_conflict'") || !coreSource.includes('managedIdentity ? null : <ActionHistory')) fail('managed_commerce_ui_not_fail_closed')
 if (!managedCommerceRuntime.includes('commerce.workspace.initialized') || managedCommerceRuntime.includes('commerce.snapshot.saved') || !managedCommerceRuntime.includes('_one_changed') || !managedCommerceRuntime.includes('_validate_event_evidence') || !managedCommerceRuntime.includes('daily close totals must match completed, reconciled orders')) fail('managed_commerce_server_transition_contract_missing')
+if (!commerceSource.includes('registerCommerceItem') || !coreSource.includes('Add catalog item') || !coreSource.includes('Review catalog item') || !coreSource.includes('The opening balance may be zero.') || !managedCommerceRuntime.includes('one exact attributable opening balance')) fail('commerce_catalog_creation_contract_missing')
 if (!coreSource.includes("const commerceTabs") || !coreSource.includes("{ id: 'today', label: 'Today' }") || !coreSource.includes("{ id: 'orders', label: 'Orders' }") || !coreSource.includes("{ id: 'inventory', label: 'Inventory' }") || coreSource.includes("{ id: 'payments'")) fail('commerce_three_tab_contract_changed')
 if (!productionSource.includes("supermega.production.workspace.v2") || !productionSource.includes('mutateProductionWorkspace') || !productionSource.includes('lockManager.request') || !productionSource.includes('next.revision !== current.revision + 1')) fail('production_v2_locked_store_missing')
 if (!productionSource.includes("'output_recorded' | 'issue_opened' | 'issue_resolved' | 'machine_state_changed'") || !productionSource.includes('events: [event, ...state.events]') || !productionSource.includes('Production revision must equal the append-only event count.')) fail('production_append_only_record_missing')
@@ -337,6 +338,13 @@ async function verifyCommerceRuntime() {
       ...model.createEmptyCommerce(),
       items: [{ sku: 'SKU-1', name: 'Test item', onHand: 10, reorderAt: 2, price: 100 }],
     }
+    const newItem = { sku: 'SKU-2', name: 'Second item', onHand: 0, reorderAt: 3, price: 250 }
+    const openingProof = proof('ACT-ITEM-CREATE')
+    const withItem = model.registerCommerceItem(base, newItem, openingProof)
+    assert(withItem?.items[0].sku === newItem.sku && withItem.movements[0].kind === 'opening' && withItem.movements[0].quantityDelta === 0, 'catalog_item_opening_not_recorded')
+    assert(model.registerCommerceItem(withItem, newItem, openingProof) === withItem, 'catalog_item_retry_not_idempotent')
+    assert(model.registerCommerceItem(withItem, { ...newItem, price: 251 }, openingProof) === null, 'catalog_item_conflicting_retry_succeeded')
+    assert(model.registerCommerceItem(withItem, newItem, proof('ACT-ITEM-DUPLICATE')) === null, 'duplicate_catalog_sku_succeeded')
     const order = {
       id: 'ORD-1',
       createdAt: '2026-07-23T09:00:00.000Z',
