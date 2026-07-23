@@ -2,10 +2,10 @@
   "schemaVersion": "supermega.hq.database-rehearsal.v1",
   "recordedAt": "2026-07-24",
   "runner": "tools/rehearse_supermega_postgres17.py",
-  "implementationCommit": "81a609ee2a6ca00601eecf1f4401a9a12a0a116d",
+  "implementationCommit": "4358e1a31d033f1e79f9d352c29d380e19352eb1",
   "githubCi": {
     "workflow": "SuperMega App CI",
-    "run": 160,
+    "run": 162,
     "conclusion": "success"
   },
   "engine": {

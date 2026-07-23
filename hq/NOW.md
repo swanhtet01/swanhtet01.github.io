@@ -31,8 +31,8 @@ Prove one real workflow in which SuperMega keeps the operating record, a respons
 
 ## Latest verification
 
-- Draft release candidate: GitHub PR `#258` on branch `agent/supermega-release-candidate`; its validated implementation head is `81a609ee2a6ca00601eecf1f4401a9a12a0a116d`.
-- GitHub `SuperMega App CI` run `160` passed every validation job for pushed head `81a609ee2a6ca00601eecf1f4401a9a12a0a116d`.
+- Draft release candidate: GitHub PR `#258` on branch `agent/supermega-release-candidate`; its validated implementation head is `4358e1a31d033f1e79f9d352c29d380e19352eb1`.
+- GitHub `SuperMega App CI` run `162` passed every validation job for pushed head `4358e1a31d033f1e79f9d352c29d380e19352eb1`.
 - Candidate lint and build pass with 178 product/runtime checks, 51 coordinated-release checks, 44 security checks, 10 migration-chain checks, 11 Vercel environment/domain checks, and 101 Python tests.
 - The PostgreSQL 17.10 evidence records 20 passing migration, authority, isolation, revocation, recovery, and validator checks across two clean TLS clusters. Cleanup passed; external systems were unchanged.
 - Desktop and 375px audits put Website page, Preview, Site settings, and the first Hero field in the initial phone viewport while retaining desktop Split. Commerce, Production, and Website show no overflow, undersized controls, or console errors.

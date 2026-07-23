@@ -42,8 +42,8 @@ requireContract('application navigation is current', portfolio.portfolio?.[0]?.s
   && current.includes('Home, Work, and Products are the only primary navigation'))
 requireContract('release evidence is current', now.includes('PR `#258`')
   && now.includes('its validated implementation head is')
-  && now.includes('81a609ee2a6ca00601eecf1f4401a9a12a0a116d')
-  && now.includes('run `160` passed every validation job')
+  && now.includes('4358e1a31d033f1e79f9d352c29d380e19352eb1')
+  && now.includes('run `162` passed every validation job')
   && now.includes('178 product/runtime checks')
   && now.includes('101 Python tests'))
 requireContract('hosted database readiness remains truthful', now.includes('PostgreSQL 17.6.1')
@@ -55,8 +55,8 @@ requireContract('local PostgreSQL 17 rehearsal is real but bounded',
   && databaseRehearsal.engine?.major === 17
   && databaseRehearsal.engine?.tlsActive === true
   && databaseRehearsal.engine?.loopbackOnly === true
-  && databaseRehearsal.implementationCommit === '81a609ee2a6ca00601eecf1f4401a9a12a0a116d'
-  && databaseRehearsal.githubCi?.run === 160
+  && databaseRehearsal.implementationCommit === '4358e1a31d033f1e79f9d352c29d380e19352eb1'
+  && databaseRehearsal.githubCi?.run === 162
   && databaseRehearsal.githubCi?.conclusion === 'success'
   && Object.keys(databaseRehearsal.checks || {}).length === 20
   && Object.values(databaseRehearsal.checks || {}).every((value) => value === true)
