@@ -292,9 +292,9 @@ const checkingRuntime: RuntimeHealth = {
 }
 
 const navigation = [
-  { to: '/', label: 'Today', end: true },
-  { to: '/work/', label: 'Teams', end: false },
-  { to: '/operations/', label: 'Operations', end: false },
+  { to: '/', label: 'Home', end: true },
+  { to: '/work/', label: 'Work', end: false },
+  { to: '/operations/', label: 'Products', end: false },
 ] as const
 
 const commerceTabs: Array<{ id: CommerceTab; label: string }> = [
@@ -928,7 +928,7 @@ export function CoreLayout() {
   const runtime = useRuntimeHealth()
   const routeName = location.pathname.startsWith('/settings/')
     ? 'Settings'
-    : navigation.find((item) => item.to !== '/' && location.pathname.startsWith(item.to))?.label ?? 'Today'
+    : navigation.find((item) => item.to !== '/' && location.pathname.startsWith(item.to))?.label ?? 'Home'
 
   useEffect(() => {
     document.title = `${routeName} | SuperMega`
@@ -1026,6 +1026,7 @@ export function OverviewPage() {
   const activeWork = workspace.items.filter((item) => ['in_progress', 'review'].includes(item.status))
   const blockedWork = workspace.items.filter((item) => item.status === 'blocked')
   const visibleWork = workspace.items.filter((item) => ['in_progress', 'review', 'blocked'].includes(item.status))
+  const homeWork = visibleWork.slice(0, 3)
   const pendingApprovals = approvals.filter((item) => item.status === 'pending')
   const lowStock = commerce.items.filter((item) => item.onHand <= item.reorderAt)
   const openProductionIssues = production.issues.filter((issue) => issue.status === 'open')
@@ -1149,15 +1150,35 @@ export function OverviewPage() {
 
   return (
     <div className="workspace-screen command-screen">
-      <PageHeading eyebrow="Today" title="Decide what moves next." copy="Active work and owner attention, without another dashboard." />
-      <section className="summary-strip compact-summary" aria-label="Workspace summary"><span><small>In progress</small><strong>{activeWork.length}</strong></span><span><small>Needs owner</small><strong>{ownerAttention}</strong></span><span><small>Operating exceptions</small><strong>{operatingExceptions}</strong></span></section>
+      <PageHeading
+        actions={ownerAttention
+          ? <a className="core-button primary" href="#owner-priorities">Review {ownerAttention} {ownerAttention === 1 ? 'priority' : 'priorities'}</a>
+          : <Link className="core-button primary" to="/operations/commerce/?tab=today">Open Commerce</Link>}
+        copy="Open a product to do the work, or review the few items that need your decision."
+        eyebrow="Home"
+        title="Run what matters today."
+      />
+      <nav aria-label="Products" className="product-launcher">
+        <Link to="/operations/commerce/?tab=today">
+          <span><strong>Commerce</strong><small>Orders, stock and payments</small></span>
+          <b>{openOrders.length ? `${openOrders.length} open` : 'Ready'}</b>
+        </Link>
+        <Link to="/operations/production/?tab=today">
+          <span><strong>Production</strong><small>Jobs, output and equipment</small></span>
+          <b>{openProductionIssues.length ? `${openProductionIssues.length} issue` : 'Ready'}</b>
+        </Link>
+        <Link to="/products/website/">
+          <span><strong>Website</strong><small>Pages and order handoff</small></span>
+          <b>Open</b>
+        </Link>
+      </nav>
       <div className="command-grid">
         <section className="core-panel command-queue-panel">
-          <div className="panel-head"><div><span className="core-eyebrow">Company queue</span><h2>Work in motion</h2></div><Link className="text-link" to="/work/?team=product&view=work">Open Teams</Link></div>
-          <div className="record-list">{visibleWork.map((item) => { const team = teamDefinitions.find((definition) => definition.id === item.team); return <Link className="record-row" key={item.id} to={`/work/?team=${item.team}&view=work&item=${item.id}`}><span className={`record-status ${item.status}`} /><span><strong>{item.title}</strong><small>{team?.label ?? item.team} / {item.owner} / {item.evidence.length} evidence</small></span><span><b>{item.priority}</b><small>{item.status.replace('_', ' ')}</small></span></Link> })}</div>
+          <div className="panel-head"><div><span className="core-eyebrow">Active work</span><h2>{visibleWork.length} items in motion</h2></div><Link className="text-link" to="/work/?team=product&view=work">View all work</Link></div>
+          <div className="record-list">{homeWork.map((item) => { const team = teamDefinitions.find((definition) => definition.id === item.team); return <Link className="record-row" key={item.id} to={`/work/?team=${item.team}&view=work&item=${item.id}`}><span className={`record-status ${item.status}`} /><span><strong>{item.title}</strong><small>{team?.label ?? item.team} / {item.owner} / {item.evidence.length} evidence</small></span><span><b>{item.priority}</b><small>{item.status.replace('_', ' ')}</small></span></Link> })}</div>
         </section>
-        <section className="core-panel attention-panel">
-          <div className="panel-head"><div><span className="core-eyebrow">Needs owner</span><h2>{ownerAttention} decisions</h2></div></div>
+        <section className="core-panel attention-panel" id="owner-priorities">
+          <div className="panel-head"><div><span className="core-eyebrow">Needs you</span><h2>{ownerAttention} {ownerAttention === 1 ? 'priority' : 'priorities'}</h2></div></div>
           <div className="attention-list">
             {!isPilotReady ? <Link to="/settings/"><span>Pilot</span><strong>Define the measurable workflow</strong><small>{pilotProgress(setup)}% complete · baseline and acceptance required</small></Link> : null}
             {blockedWork.map((item) => <Link key={item.id} to={`/work/?team=${item.team}&view=work&item=${item.id}`}><span>Work</span><strong>{item.title}</strong><small>{item.owner}</small></Link>)}
@@ -1218,7 +1239,7 @@ export function OperationsPage() {
 
   return (
     <div className="workspace-screen operations-screen">
-      <PageHeading eyebrow="Operations" title={view === 'commerce' ? 'Commerce' : 'Production'} copy={`${operationsCopy} Measure: ${profileMeasure}.`} actions={<div className="operations-profile"><span>{profileLabel}</span><strong>{activeTemplate.name}</strong><Link className="text-link" to="/settings/">Configure</Link></div>} />
+      <PageHeading eyebrow="Products" title={view === 'commerce' ? 'Commerce' : 'Production'} copy={`${operationsCopy} Measure: ${profileMeasure}.`} actions={<div className="operations-profile"><span>{profileLabel}</span><strong>{activeTemplate.name}</strong><Link className="text-link" to="/settings/">Configure</Link></div>} />
       <div className="workspace-toolbar operations-toolbar">
         <div className="segmented-control" role="group" aria-label="Operating workspace"><button aria-pressed={view === 'commerce'} onClick={() => setMode('commerce')} type="button">Commerce</button><button aria-pressed={view === 'production'} onClick={() => setMode('production')} type="button">Production</button></div>
         <div className="operations-toolbar-actions"><nav className="view-tabs" aria-label="Module views">{tabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{tab.label}</button>)}</nav></div>
