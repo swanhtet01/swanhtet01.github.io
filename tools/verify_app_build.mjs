@@ -7,7 +7,7 @@ const dist = resolve(root, 'showroom', 'dist')
 const failures = []
 let orderCompletionRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
-const [manifestText, appPackageText, appSource, coreSource, teamSource, agentTeamsSource, teamModel, websiteSource, publishSource, ecommerceSource, ecommerceWorkspacesSource, ecommerceModel, handoffSource] = await Promise.all([
+const [manifestText, appPackageText, appSource, coreSource, teamSource, agentTeamsSource, teamModel, websiteSource, publishSource, commerceIntakeSource, handoffSource] = await Promise.all([
   readFile(resolve(root, 'site-manifest.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'package.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'App.tsx'), 'utf8'),
@@ -17,9 +17,7 @@ const [manifestText, appPackageText, appSource, coreSource, teamSource, agentTea
   readFile(resolve(root, 'showroom', 'src', 'core', 'team-work.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'WebsiteProduct.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'PublishWorkspace.tsx'), 'utf8'),
-  readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'EcommerceOrdersProduct.tsx'), 'utf8'),
-  readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'CommerceWorkspaces.tsx'), 'utf8'),
-  readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'ecommerce-model.ts'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'products', 'WebsiteCommerceIntake.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'product-handoff.ts'), 'utf8'),
 ])
 const manifest = JSON.parse(manifestText)
@@ -86,10 +84,11 @@ if (!teamSource.includes("verifiedActorKind: 'human'") || !teamModel.includes("c
 if (!teamModel.includes("supermega.team.workspace.v3") || !teamModel.includes("supermega.team.workspace.v2") || !teamModel.includes('hasValidAssignment')) fail('agent_team_migration_or_integrity_missing')
 if (!agentTeamsSource.includes('No agent can send, pay, publish, merge, deploy, or write to production') || !agentTeamsSource.includes('humanOwner') || !agentTeamsSource.includes('approvalBoundary') || agentTeamsSource.includes('>Run<')) fail('agent_authority_boundary_missing')
 if (!coreSource.includes('view=work&item=${item.id}') || !coreSource.includes('view=agents&agent=${agent.id}') || !teamSource.includes("const requestedItemId = searchParams.get('item')") || !teamSource.includes("const requestedAgentId = searchParams.get('agent')") || !teamSource.includes("if (view === 'work' && selectedId) next.item = selectedId") || !teamSource.includes("if (view === 'agents' && selectedId) next.agent = selectedId") || !agentTeamsSource.includes('onSelectAgent: (agentId: string) => void') || agentTeamsSource.includes('const [selectedAgentId')) fail('team_record_deep_links_missing')
-if (!appSource.includes("lazy(() => import('./products/website/WebsiteProduct')") || !appSource.includes("lazy(() => import('./products/ecommerce/EcommerceOrdersProduct')") || !appSource.includes('Suspense')) fail('prototype_routes_not_lazy_loaded')
+if (!appSource.includes("lazy(() => import('./products/website/WebsiteProduct')") || !appSource.includes('Suspense') || appSource.includes("import('./products/ecommerce/EcommerceOrdersProduct')")) fail('website_prototype_route_not_isolated')
+if (!appSource.includes('<Navigate replace to="/operations/commerce/?tab=orders" />') || !appSource.includes('path="products/ecommerce/*"')) fail('legacy_ecommerce_route_not_redirected')
 if (!appPackage.scripts?.lint?.includes('src/products')) fail('prototype_sources_not_linted')
 if (!websiteSource.includes('No website has been deployed.') || !websiteSource.includes('No deployment or external write occurred.')) fail('website_prototype_boundary_missing')
-if (!ecommerceSource.includes('No integrations are connected.') || !ecommerceSource.includes('Customer sends, checkout, payments, delivery, and production writes are not connected.')) fail('ecommerce_prototype_boundary_missing')
+if (!commerceIntakeSource.includes('Browser-local evidence only.') || !commerceIntakeSource.includes('No customer message, payment, delivery request, or external write occurs.')) fail('commerce_intake_boundary_missing')
 if (!handoffSource.includes("schema: 'website_ecommerce_handoff.v1'") || !handoffSource.includes("state: 'pending_acceptance'") || !handoffSource.includes('hasExactKeys') || !handoffSource.includes('validateAgainstWorkspace') || !handoffSource.includes('readinessChecks(workspace, fingerprint).every') || !handoffSource.includes('acceptWebsiteEcommerceHandoff')) fail('website_ecommerce_handoff_contract_missing')
 const handoffIntakeSource = handoffSource.slice(handoffSource.indexOf('type HandoffIntake'), handoffSource.indexOf('type PendingHandoff'))
 if (!handoffIntakeSource.includes('sku: string') || !handoffIntakeSource.includes('quantity: number') || ['customer', 'phone', 'township', 'payment', 'delivery', 'fulfilment'].some((field) => handoffIntakeSource.toLowerCase().includes(field))) fail('website_handoff_contains_pii_shaped_fields')
@@ -97,12 +96,9 @@ if (!handoffSource.includes("actorKind: 'human'") || !handoffSource.includes("ac
 if (!handoffSource.includes("schema: 'ecommerce_order_draft.v1'") || !handoffSource.includes("mode: 'browser-local'") || !handoffSource.includes("schema: 'website_ecommerce_handoff_store.v2'") || !handoffSource.includes('createWebsiteOrderDraft') || !handoffSource.includes('idempotencyKey: current.handoff.id') || !handoffSource.includes("missingFields: ['customer_reference', 'fulfilment_method', 'payment_method']") || !handoffSource.includes('current.draft.idempotencyKey === handoffId') || !handoffSource.includes('if (!current.display) return null')) fail('ecommerce_order_draft_contract_missing')
 if (!handoffSource.includes("schema: 'ecommerce_order_record.v1'") || !handoffSource.includes("schema: 'website_ecommerce_handoff_store.v3'") || !handoffSource.includes("state: 'ready_for_confirmation'") || !handoffSource.includes("action: 'complete_website_order'") || !handoffSource.includes('customerReferenceFor(current.handoff.id)') || !handoffSource.includes('websiteEvidenceReference: current.handoff.source.localPublishId') || !handoffSource.includes('completionMatches(current.order, input)') || !handoffSource.includes('globalThis.navigator.locks.request') || !handoffSource.includes('if (!isHandoffStore(store)) return null')) fail('ecommerce_order_completion_contract_missing')
 if (!websiteSource.includes('approvalIsCurrent || !publishIsCurrent') || !websiteSource.includes('checks.every((check) => check.passed)') || !websiteSource.includes('writeWebsiteEcommerceHandoff(handoff, workspace)') || !publishSource.includes('fingerprint is a revision marker, not a signature')) fail('website_handoff_gate_missing')
-if (!ecommerceModel.includes("'accept_website_handoff'") || !ecommerceModel.includes('isValidApprovalDetails(action.approval)') || !ecommerceSource.includes('waiting for attributable human approval') || !ecommerceSource.includes('Responsible operator ID') || !ecommerceSource.includes('matchingItems.length !== 1') || !ecommerceSource.includes('createWebsiteOrderDraft(current.handoff.id') || !ecommerceSource.includes('It does not create an order, contact a customer, reserve stock, collect payment, or write to Commerce.')) fail('ecommerce_intake_approval_contract_missing')
-if (!ecommerceModel.includes("'complete_website_order'") || !ecommerceSource.includes('Generated non-PII customer reference') || !ecommerceSource.includes('await completeWebsiteOrderDraft') || !ecommerceSource.includes('It does not insert into the scenario queue, reserve stock, confirm a customer, collect payment, send a message, or write externally.') || !ecommerceSource.includes('Website handoff and completion evidence persists only in this browser') || !ecommerceWorkspacesSource.includes('Ready for confirmation') || !ecommerceWorkspacesSource.includes('no confirmation, reservation, payment, or send')) fail('ecommerce_order_completion_ui_missing')
-const requestWebsiteIntakeSource = ecommerceSource.slice(ecommerceSource.indexOf('function requestWebsiteIntake'), ecommerceSource.indexOf('function approveWebsiteIntake'))
-if (requestWebsiteIntakeSource.indexOf('if (current.draft)') < 0 || requestWebsiteIntakeSource.indexOf('if (current.draft)') > requestWebsiteIntakeSource.indexOf('const matchingItems = workspace.catalog.filter')) fail('immutable_draft_blocked_by_current_catalog')
-const proposalKindSource = ecommerceModel.slice(ecommerceModel.indexOf('export type ProposedActionKind'), ecommerceModel.indexOf('type FulfillmentChange'))
-if (proposalKindSource.includes('accept_website_handoff') || proposalKindSource.includes('complete_website_order')) fail('audit_action_leaked_into_proposal_kind')
+if (!commerceIntakeSource.includes('acceptWebsiteEcommerceHandoff') || !commerceIntakeSource.includes('matches.length === 1') || !commerceIntakeSource.includes('createWebsiteOrderDraft(context.handoff.id') || !commerceIntakeSource.includes('I reviewed this SKU, quantity, and Website evidence.')) fail('commerce_intake_approval_contract_missing')
+if (!commerceIntakeSource.includes('await completeWebsiteOrderDraft') || !commerceIntakeSource.includes('opaque customer reference generated on completion') || !commerceIntakeSource.includes('Create ready order') || !commerceIntakeSource.includes('Confirm into orders')) fail('commerce_order_completion_ui_missing')
+if (!coreSource.includes('function queueWebsiteOrder') || !coreSource.includes('sourceRecordId') || !coreSource.includes('item.price !== line.unitPriceMmk') || !coreSource.includes('Website order confirmation failed closed') || !coreSource.includes('Confirm ${record.id} from Website')) fail('website_order_not_integrated_with_commerce')
 let workflowProfiles = 0
 for (const product of manifest.products || []) {
   if (product.templates?.length !== 3) fail(`wrong_template_count:${product.id}`)
@@ -114,7 +110,7 @@ for (const product of manifest.products || []) {
     }
   }
 }
-for (const route of ['/operations/commerce/', '/operations/production/', '/products/website/', '/products/ecommerce/']) {
+for (const route of ['/operations/commerce/', '/operations/production/', '/products/website/']) {
   if (!corpus.includes(route)) fail(`missing_canonical_module_route:${route}`)
 }
 for (const forbidden of ['pos.supermega.dev', 'ytf.supermega.dev', 'Yangon Tyre', 'ytf-plant-a', 'Company Systems That Replace Tool Sprawl', 'Workspace draft', 'Service bookings', 'Material receiving']) {
@@ -253,4 +249,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', primaryRoutes: 4, operatingModules: 2, prototypeRoutes: 2, workflowProfiles, orderCompletionRuntimeChecks, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', primaryRoutes: 4, operatingModules: 2, prototypeRoutes: 1, compatibilityRedirects: 1, workflowProfiles, orderCompletionRuntimeChecks, bytes }, null, 2))

@@ -23,23 +23,14 @@
       "nextGate": "Validate one named business brief and accepted local preview before connecting a customer domain or publish authority."
     },
     {
-      "id": "ecommerce",
-      "name": "Ecommerce & Orders",
-      "status": "prototype-local",
-      "path": "/products/ecommerce/",
-      "job": "Convert website or channel demand into controlled order, catalogue, stock, fulfilment, payment-status, and audit records.",
-      "surfaces": ["Orders", "Catalog", "Fulfilment", "Payments"],
-      "nextGate": "Repeat the non-PII Website intake, idempotent draft, and controlled ready record with one named user, then prove reservation, reconciliation, and close."
-    },
-    {
       "id": "commerce",
       "name": "Commerce",
       "status": "pilot-ready-local",
       "path": "/operations/commerce/",
-      "job": "Convert orders from trusted customer channels into controlled stock, fulfilment, payment, follow-up, and close.",
+      "job": "Convert Website and trusted-channel demand into controlled orders, stock, fulfilment, payment status, follow-up, and close.",
       "surfaces": ["Today", "Orders", "Inventory"],
       "templateContract": { "file": "../site-manifest.json", "productId": "commerce" },
-      "nextGate": "Connect one approved channel and measure order-handling time, exceptions, and completion."
+      "nextGate": "Repeat the non-PII Website intake through accountable Commerce confirmation with one named user, then measure handling time, exceptions, and completion."
     },
     {
       "id": "production",

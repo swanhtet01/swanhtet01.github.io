@@ -9,13 +9,12 @@ SuperMega is operating software for real company work. It connects accountable c
 
 SuperMega competes on implementation readiness, local operating context, evidence, and controlled execution—not on the size of a tool catalogue.
 
-The portfolio has three operating products and two local product prototypes inside one application:
+The portfolio has three operating products and one local product prototype inside one application:
 
 1. **Company system** — Today plus Product, Engineering, Growth, and Finance team workspaces, including an internal bounded-agent roster and handoff view.
 2. **Website** — finite page/content workflow, responsive preview, evidence, and explicit publish approval; currently local prototype only.
-3. **Ecommerce & Orders** — website/channel intake, catalogue, stock, fulfilment, payment status, and audit; currently local prototype only.
-4. **Commerce** — customer channel, order, stock, fulfilment, payment, follow-up, and close.
-5. **Production** — plan, output, materials, quality, equipment, maintenance, exceptions, and shift handoff.
+3. **Commerce** — Website and customer-channel intake, order confirmation, stock, fulfilment, payment status, follow-up, and close.
+4. **Production** — plan, output, materials, quality, equipment, maintenance, exceptions, and shift handoff.
 
 AI is an embedded execution capability. It may inspect approved records, organize, summarize, draft, and escalate. It is not a separate public product, fake employee page, or substitute system of record.
 
@@ -24,7 +23,7 @@ AI is an embedded execution capability. It may inspect approved records, organiz
 - `supermega.dev` is one compact product page.
 - The only support pages are `/contact/` and `/privacy/`.
 - The page explains the company system, Product lifecycle, Commerce, Production, configurable templates, and authority boundary without a long catalogue or public pricing theatre.
-- The brand is SuperMega with the green `>_` terminal mark on a dark, dense operating interface.
+- The brand is SuperMega with the jade `>_` terminal mark on a warm, light operating interface with ink text and restrained status color.
 - Historical product, demo, trust, agent, catalogue, and case-specific routes redirect to the relevant section or canonical application.
 
 ## Canonical application
@@ -35,12 +34,11 @@ Canonical host: `app.supermega.dev`
 - `/work/?team=product&view=work` — **Teams**: accountable work for Product, Engineering, Growth, and Finance.
 - `/work/?team=engineering&view=agents` — **Agent Teams**: internal role, capability, assignment, evidence, human-owner, and approval-boundary records inside Teams; not another product or public route.
 - `/products/website/` — **Website**: lazy-loaded local content, navigation, preview, readiness, and approval prototype.
-- `/products/ecommerce/` — **Ecommerce & Orders**: lazy-loaded local order, catalogue, fulfilment, payment-status, and guided-demo prototype.
-- `/operations/commerce/?tab=today` — **Commerce**: channel orders, fulfilment, stock, local payment, and daily close.
+- `/operations/commerce/?tab=today` — **Commerce**: Website and channel orders, fulfilment, stock, local payment status, and daily close. The retired `/products/ecommerce/` path redirects to Commerce Orders.
 - `/operations/production/?tab=today` — **Production**: plan versus actual, output, quality, maintenance, equipment, and issues.
 - `/settings/` — pilot definition, evidence export, reset, and managed-readiness status.
 
-Settings is a utility, not a primary product area. Today, Teams, and Operations remain the only primary navigation; the two `/products/` routes are addressable prototype workspaces linked from Operations and loaded only when opened. Deeper capability stays in internal tabs and bounded panels. Desktop workspaces fit the available viewport and use panel scrolling. Mobile layouts use a short linear flow.
+Settings is a utility, not a primary product area. Today, Teams, and Operations remain the only primary navigation; Website is the only addressable `/products/` prototype and is linked from the Commerce order intake. Deeper capability stays in internal tabs and bounded panels. Desktop workspaces fit the available viewport and use panel scrolling. Mobile layouts use a short linear flow.
 
 Before activation, the pilot definition captures the entry point, current record, baseline, target outcome, responsible owner, human authority boundary, and acceptance evidence. An incomplete pilot remains visible as an owner exception on Today.
 
@@ -70,8 +68,8 @@ Templates configure the starting records and workflow while preserving the share
 ## Data and authority boundary
 
 - The default application remains an isolated browser-local trial, not a customer system of record.
-- Team, bounded-agent, Website, Ecommerce, Commerce, Production, approval, and setup records can be exercised locally. Website and Ecommerce explicitly remain browser-local prototypes; core evidence export v9 includes the team roster and operating records while preserving the isolated-demo boundary.
-- The Website-to-Ecommerce handoff carries only an approved local revision reference, SKU, and quantity. Ecommerce revalidates the source, requires a bounded human operator ID, and atomically records one accepted local intake plus its audit event. A separate explicit step creates one deterministic browser-local `ecommerce_order_draft.v1` with an immutable MMK catalogue snapshot and visible missing customer, fulfilment, and payment fields. A locked, attributable completion can migrate that valid draft to one `ecommerce_order_record.v1` in `ready_for_confirmation`, using a system-generated opaque customer reference, bounded fulfilment/payment methods, exact-retry idempotency, conflict rejection, and a second audit event. It does not insert into Commerce, confirm a customer, reserve stock, start payment, send a message, or write externally.
+- Team, bounded-agent, Website, Commerce, Production, approval, and setup records can be exercised locally. Website explicitly remains a browser-local prototype; core evidence export v9 includes the team roster and operating records while preserving the isolated-demo boundary.
+- The Website-to-Commerce handoff carries only an approved local revision reference, SKU, and quantity. Commerce revalidates the source, requires a bounded human operator ID, and atomically records one accepted local intake plus its audit event. It then creates one deterministic browser-local `ecommerce_order_draft.v1` with an immutable MMK catalogue snapshot and visible missing customer, fulfilment, and payment fields. A locked, attributable completion migrates that valid draft to one `ecommerce_order_record.v1` in `ready_for_confirmation`, using a system-generated opaque customer reference, bounded fulfilment/payment methods, exact-retry idempotency, conflict rejection, and a second audit event. A separate accountable Commerce confirmation rechecks the item, immutable price, quantity, and stock before inserting the order and reserving local stock once. No customer confirmation, payment initiation, delivery request, message, or external write occurs.
 - Managed readiness must not be implied until tenant persistence, identity, workspace isolation, source coverage, backup, recovery, audit, and runtime-role checks pass.
 - External sends, payments, publishing, access changes, and production writes remain owner-approved and auditable.
 - The managed trial contract is `/api/trial/v1`; it fails closed until additive private schema v2, a high-entropy v2 signed actor identity, matching typed membership, audit, capability, and write gates pass. Approval proposals must use `decision_packet.v1` with a versioned subject, fact-or-analysis claims, source and capture provenance, verification state, uncertainty, visibility, baseline, target, current result, acceptance rule, and artifact reference. Verified claims require a digest; terminal decisions require a named human and a trimmed nonblank note; agent, service, unknown, and legacy identities cannot make them.

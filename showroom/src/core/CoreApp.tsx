@@ -3,6 +3,8 @@ import { Link, NavLink, Outlet, useLocation, useNavigate, useOutletContext, useS
 
 import siteManifest from '../../../site-manifest.json'
 import './core-app.css'
+import { WebsiteCommerceIntake } from '../products/WebsiteCommerceIntake'
+import type { WebsiteOrderRecord } from '../products/product-handoff'
 import {
   createManagedApproval,
   currentManagedIdentity,
@@ -20,6 +22,7 @@ import { LEGACY_TEAM_WORK_KEYS, TEAM_WORK_KEY, formatTime, teamDefinitions, useT
 type CommerceItem = {
   sku: string
   name: string
+  variant?: string
   onHand: number
   reorderAt: number
   price: number
@@ -35,6 +38,9 @@ type CommerceOrder = {
   item: string
   quantity: number
   payment: string
+  fulfilment?: string
+  sourceRecordId?: string
+  evidenceReference?: string
   total: number
   status: CommerceOrderStatus
 }
@@ -289,6 +295,7 @@ const seedCommerce: CommerceState = {
     { sku: 'SM-1002', name: 'Cold drink pack', onHand: 8, reorderAt: 12, price: 6500 },
     { sku: 'SM-1003', name: 'Household refill', onHand: 21, reorderAt: 8, price: 12000 },
     { sku: 'SM-1004', name: 'Personal care set', onHand: 13, reorderAt: 6, price: 22500 },
+    { sku: 'SM-CARE-01', name: 'Family care set', variant: 'Standard bundle', onHand: 14, reorderAt: 6, price: 31000 },
   ],
   orders: [
     { id: 'ORD-1042', createdAt: new Date(Date.now() - 54 * 60 * 1000).toISOString(), customer: 'May', channel: 'Messenger', item: 'Daily essentials basket', quantity: 2, payment: 'KBZPay', total: 37000, status: 'preparing' },
@@ -317,7 +324,11 @@ function normalizeCommerce(value: CommerceState) {
   const source = (value && typeof value === 'object' ? value : seedCommerce) as CommerceState & { sales?: Array<Record<string, unknown>> }
   const items = Array.isArray(source.items) ? source.items : seedCommerce.items
   const orders = Array.isArray(source.orders)
-    ? source.orders
+    ? source.orders.map((order) => ({
+        ...order,
+        customer: order.customer === 'Legacy customer unavailable' ? 'Walk-in customer' : order.customer,
+        channel: order.channel === 'Legacy local sale' ? 'Imported sale' : order.channel,
+      }))
     : Array.isArray(source.sales)
       ? source.sales.map((sale, index): CommerceOrder => ({
           id: String(sale.id || `ORD-LEGACY-${index + 1}`),
@@ -1074,7 +1085,7 @@ export function OperationsPage() {
       <PageHeading eyebrow="Operations" title={view === 'commerce' ? 'Commerce' : 'Production'} copy={`${operationsCopy} Measure: ${profileMeasure}.`} actions={<div className="operations-profile"><span>{profileLabel}</span><strong>{activeTemplate.name}</strong><Link className="text-link" to="/settings/">Configure</Link></div>} />
       <div className="workspace-toolbar operations-toolbar">
         <div className="segmented-control" role="group" aria-label="Operating workspace"><button aria-pressed={view === 'commerce'} onClick={() => setMode('commerce')} type="button">Commerce</button><button aria-pressed={view === 'production'} onClick={() => setMode('production')} type="button">Production</button></div>
-        <div className="operations-toolbar-actions"><nav className="view-tabs" aria-label="Module views">{tabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{tab.label}</button>)}</nav><details className="product-app-launcher"><summary>Product apps</summary><div><Link to="/products/website/">Website</Link><Link to="/products/ecommerce/">Ecommerce</Link></div></details></div>
+        <div className="operations-toolbar-actions"><nav className="view-tabs" aria-label="Module views">{tabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{tab.label}</button>)}</nav></div>
       </div>
       <div className="workspace-view">{view === 'commerce' ? <CommercePage tab={commerceTab} /> : <ProductionPage tab={productionTab} />}</div>
     </div>
@@ -1095,6 +1106,7 @@ function CommercePage({ tab }: { tab: CommerceTab }) {
   const revenue = commerce.orders.reduce((total, order) => total + order.total, 0)
   const lowStock = commerce.items.filter((item) => item.onHand <= item.reorderAt)
   const openOrders = commerce.orders.filter((order) => order.status !== 'completed')
+  const importedWebsiteOrderIds = commerce.orders.flatMap((order) => order.sourceRecordId ? [order.sourceRecordId] : [])
 
   function queueAction(action: Omit<PendingAccountableAction, 'id' | 'domain'>) {
     setPendingAction({ ...action, id: uid('ACT'), domain: 'commerce' })
@@ -1133,6 +1145,60 @@ function CommercePage({ tab }: { tab: CommerceTab }) {
     })
   }
 
+  function queueWebsiteOrder(record: WebsiteOrderRecord) {
+    if (commerce.orders.some((order) => order.id === record.id || order.sourceRecordId === record.id)) {
+      setNotice(`${record.id} is already in the Commerce order queue.`)
+      return
+    }
+    if (pendingAction?.kind === 'order_create' && pendingAction.subjectId === record.id) {
+      setNotice(`${record.id} is already waiting for accountable confirmation.`)
+      return
+    }
+
+    const line = record.lines.length === 1 ? record.lines[0] : null
+    const matchingItems = line ? commerce.items.filter((item) => item.sku === line.sku) : []
+    const item = matchingItems.length === 1 ? matchingItems[0] : null
+    if (!line || !item || line.quantity < 1 || item.onHand < line.quantity || item.price !== line.unitPriceMmk || record.totalMmk !== line.quantity * line.unitPriceMmk) {
+      setNotice('Website order confirmation failed closed. Recheck the item, immutable price, quantity, and available stock.')
+      return
+    }
+
+    const paymentLabel = record.paymentMethod === 'cash_on_delivery' ? 'Cash on delivery' : record.paymentMethod === 'manual_qr' ? 'Manual QR review' : 'Manual bank transfer'
+    const fulfilmentLabel = record.fulfilmentMethod === 'pickup' ? 'Customer pickup' : 'Local delivery'
+    const order: CommerceOrder = {
+      id: record.id,
+      createdAt: record.createdAt,
+      customer: record.customerReference,
+      channel: 'Website',
+      item: line.itemName,
+      quantity: line.quantity,
+      payment: paymentLabel,
+      fulfilment: fulfilmentLabel,
+      sourceRecordId: record.id,
+      evidenceReference: record.completion.evidenceReference,
+      total: record.totalMmk,
+      status: 'confirmed',
+    }
+    const beforeStock = item.onHand
+    queueAction({
+      kind: 'order_create',
+      subjectId: record.id,
+      summary: `Confirm ${record.id} from Website`,
+      before: `ready for confirmation · ${item.sku} · ${beforeStock} on hand`,
+      after: `confirmed · ${fulfilmentLabel} · ${beforeStock - line.quantity} on hand`,
+      apply: () => setCommerce((current) => {
+        if (current.orders.some((candidate) => candidate.id === record.id || candidate.sourceRecordId === record.id)) return current
+        const currentItem = current.items.find((candidate) => candidate.sku === item.sku)
+        if (!currentItem || currentItem.onHand < line.quantity || currentItem.price !== line.unitPriceMmk) return current
+        return {
+          ...current,
+          items: current.items.map((candidate) => candidate.sku === item.sku ? { ...candidate, onHand: candidate.onHand - line.quantity } : candidate),
+          orders: [order, ...current.orders],
+        }
+      }),
+    })
+  }
+
   function advanceOrder(orderId: string) {
     const next: Record<CommerceOrderStatus, CommerceOrderStatus> = { confirmed: 'preparing', preparing: 'ready', ready: 'completed', completed: 'completed' }
     const order = commerce.orders.find((candidate) => candidate.id === orderId)
@@ -1154,8 +1220,24 @@ function CommercePage({ tab }: { tab: CommerceTab }) {
 
   const actionControls = <><AccountableActionGate key={pendingAction?.id ?? 'commerce-idle'} action={pendingAction} onCancel={() => setPendingAction(null)} onConfirm={confirmAction} /><ActionHistory actions={actions} domain="commerce" /></>
 
-  if (tab === 'orders') return <div className="operation-module"><div className="split-workspace order-view">
-    <section className="core-panel order-form-panel"><div className="panel-head"><div><span className="core-eyebrow">Channel to order</span><h2>Confirm an order</h2></div><span className="status-pill ready">Stock checked</span></div><form className="core-form compact-form" onSubmit={recordOrder}><div className="form-row"><label>Customer<input maxLength={80} value={customer} onChange={(event) => setCustomer(event.target.value)} placeholder="Name or reference" /></label><label>Channel<select value={channel} onChange={(event) => setChannel(event.target.value)}><option>Messenger</option><option>Viber</option><option>Phone</option><option>Website</option><option>Walk-in</option></select></label></div><label>Item<select value={sku} onChange={(event) => setSku(event.target.value)}>{commerce.items.map((item) => <option key={item.sku} value={item.sku}>{item.name} · {item.onHand} available</option>)}</select></label><div className="form-row"><label>Quantity<input min="1" max={selected?.onHand ?? 1} type="number" value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} /></label><label>Payment<select value={payment} onChange={(event) => setPayment(event.target.value)}><option>KBZPay</option><option>WavePay</option><option>Cash on delivery</option><option>Cash</option><option>Card</option></select></label></div><div className="order-total"><span>Order total</span><strong>{formatMoney((selected?.price ?? 0) * Math.max(quantity, 0))}</strong></div><button className="core-button primary" type="submit">Confirm order</button><p className="form-notice" aria-live="polite">{notice || 'The channel is recorded; no message is sent from this trial.'}</p></form></section>
+  if (tab === 'orders') return <div className="operation-module"><WebsiteCommerceIntake catalog={commerce.items} importedSourceIds={importedWebsiteOrderIds} onQueueReadyOrder={queueWebsiteOrder} /><div className="split-workspace order-view">
+    <section className="core-panel order-form-panel">
+      <div className="panel-head"><div><span className="core-eyebrow">Channel order</span><h2>Enter an order</h2></div><span className="status-pill ready">Stock checked</span></div>
+      <form className="core-form compact-form" onSubmit={recordOrder}>
+        <div className="form-row">
+          <label>Customer<input maxLength={80} value={customer} onChange={(event) => setCustomer(event.target.value)} placeholder="Name or reference" /></label>
+          <label>Channel<select value={channel} onChange={(event) => setChannel(event.target.value)}><option>Messenger</option><option>Viber</option><option>Phone</option><option>Website</option><option>Walk-in</option></select></label>
+        </div>
+        <label>Item<select value={sku} onChange={(event) => setSku(event.target.value)}>{commerce.items.map((item) => <option key={item.sku} value={item.sku}>{item.name} · {item.onHand} available</option>)}</select></label>
+        <div className="form-row">
+          <label>Quantity<input min="1" max={selected?.onHand ?? 1} type="number" value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} /></label>
+          <label>Payment<select value={payment} onChange={(event) => setPayment(event.target.value)}><option>KBZPay</option><option>WavePay</option><option>Cash on delivery</option><option>Cash</option><option>Card</option></select></label>
+        </div>
+        <div className="order-total"><span>Order total</span><strong>{formatMoney((selected?.price ?? 0) * Math.max(quantity, 0))}</strong></div>
+        <button className="core-button primary" type="submit">Review order</button>
+        <p className="form-notice" aria-live="polite">{notice || 'A responsible operator confirms the change before stock moves. No customer message is sent.'}</p>
+      </form>
+    </section>
     <section className="core-panel order-queue-panel"><div className="panel-head"><div><span className="core-eyebrow">Fulfilment</span><h2>{openOrders.length} open orders</h2></div></div><OrderList orders={commerce.orders} onAdvance={advanceOrder} /></section>
   </div>{actionControls}</div>
 
@@ -1166,7 +1248,8 @@ function CommercePage({ tab }: { tab: CommerceTab }) {
 
 function OrderList({ orders, onAdvance }: { orders: CommerceOrder[]; onAdvance: (id: string) => void }) {
   if (!orders.length) return <Empty>No orders recorded.</Empty>
-  return <div className="order-list">{orders.map((order) => <article key={order.id}><div><span className={`status-pill ${order.status === 'completed' ? 'approved' : 'bounded'}`}>{order.status}</span><strong>{order.customer} · {order.item} × {order.quantity}</strong><small>{order.id} · {order.channel} · {order.payment} · {formatTime(order.createdAt)}</small></div><div><b>{formatMoney(order.total)}</b>{order.status !== 'completed' ? <button className="text-link" onClick={() => onAdvance(order.id)} type="button">Advance</button> : null}</div></article>)}</div>
+  const nextAction: Record<CommerceOrderStatus, string> = { confirmed: 'Start preparing', preparing: 'Mark ready', ready: 'Complete', completed: 'Complete' }
+  return <div className="order-list">{orders.map((order) => <article key={order.id}><div><span className={`status-pill ${order.status === 'completed' ? 'approved' : 'bounded'}`}>{order.status}</span><strong>{order.customer} · {order.item} × {order.quantity}</strong><small>{order.id} · {order.channel} · {order.payment}{order.fulfilment ? ` · ${order.fulfilment}` : ''} · {formatTime(order.createdAt)}</small></div><div><b>{formatMoney(order.total)}</b>{order.status !== 'completed' ? <button className="text-link" onClick={() => onAdvance(order.id)} type="button">{nextAction[order.status]}</button> : null}</div></article>)}</div>
 }
 
 function ProductionPage({ tab }: { tab: ProductionTab }) {

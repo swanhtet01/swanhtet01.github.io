@@ -30,7 +30,7 @@ type PublishWorkspaceProps = {
   workspace: WebsiteWorkspace
   onAddEvidence: (input: EvidenceInput) => void
   onApprove: (input: ApprovalInput) => void
-  onPrepareEcommerceHandoff: () => void
+  onPrepareCommerceHandoff: () => void
   onRecordPublish: () => void
 }
 
@@ -44,7 +44,7 @@ export function PublishWorkspace({
   workspace,
   onAddEvidence,
   onApprove,
-  onPrepareEcommerceHandoff,
+  onPrepareCommerceHandoff,
   onRecordPublish,
 }: PublishWorkspaceProps) {
   const [evidenceKind, setEvidenceKind] = useState<EvidenceKind>('content')
@@ -292,19 +292,19 @@ export function PublishWorkspace({
 
           <div className="website-handoff-action">
             <div>
-              <strong>Website → Ecommerce intake</strong>
+              <strong>Website → Commerce intake</strong>
               <p>Prepare one non-PII SKU/quantity fixture from this approved local revision. The fingerprint is a revision marker, not a signature; no customer is contacted and no order is created.</p>
             </div>
             <div>
               <button
                 className="website-button is-secondary"
                 disabled={!publishIsCurrent || !handoffAvailable || handoffIsCurrent}
-                onClick={onPrepareEcommerceHandoff}
+                onClick={onPrepareCommerceHandoff}
                 type="button"
               >
                 {handoffIsCurrent ? 'Handoff ready' : 'Prepare intake'}
               </button>
-              {handoffIsCurrent ? <a className="website-button is-primary" href="/products/ecommerce/">Review in Ecommerce</a> : null}
+              {handoffIsCurrent ? <a className="website-button is-primary" href="/operations/commerce/?tab=orders">Review in Commerce</a> : null}
             </div>
           </div>
 

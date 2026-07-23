@@ -219,7 +219,7 @@ export function WebsiteProduct() {
     setNotice('Local publish snapshot recorded. No deployment or external write occurred.')
   }
 
-  function prepareEcommerceHandoff() {
+  function prepareCommerceHandoff() {
     const existingHandoff = readWebsiteEcommerceHandoff()
     const approval = workspace.approval
     const publish = workspace.localPublishes[0]
@@ -277,7 +277,7 @@ export function WebsiteProduct() {
     }
 
     setPreparedHandoffSource(handoffSourceKey(restored))
-    setNotice('Versioned Website intake fixture prepared locally. Review it in Ecommerce & Orders.')
+    setNotice('Versioned Website intake prepared locally. Review it in Commerce Orders.')
   }
 
   return (
@@ -408,7 +408,7 @@ export function WebsiteProduct() {
                 handoffIsCurrent={handoffIsCurrent}
                 onAddEvidence={addEvidence}
                 onApprove={approveCurrentRevision}
-                onPrepareEcommerceHandoff={prepareEcommerceHandoff}
+                onPrepareCommerceHandoff={prepareCommerceHandoff}
                 onRecordPublish={recordLocalPublish}
                 publishIsCurrent={publishIsCurrent}
                 workspace={workspace}

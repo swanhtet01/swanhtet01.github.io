@@ -341,7 +341,7 @@ textarea { min-height: 72px; resize: vertical; }
 
 .evidence-disclosure { margin-top: 14px; border-top: 1px solid var(--core-line); }
 .evidence-disclosure > summary, .decision-workspace-disclosure > summary, .company-brief-disclosure > summary { min-height: 42px; display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--core-muted); font-size: 11px; cursor: pointer; list-style: none; }
-.evidence-disclosure > summary::-webkit-details-marker, .decision-workspace-disclosure > summary::-webkit-details-marker, .company-brief-disclosure > summary::-webkit-details-marker, .compact-disclosure > summary::-webkit-details-marker, .product-app-launcher > summary::-webkit-details-marker { display: none; }
+.evidence-disclosure > summary::-webkit-details-marker, .decision-workspace-disclosure > summary::-webkit-details-marker, .company-brief-disclosure > summary::-webkit-details-marker, .compact-disclosure > summary::-webkit-details-marker { display: none; }
 .evidence-disclosure > summary::before, .decision-workspace-disclosure > summary::before, .company-brief-disclosure > summary::before { color: var(--core-green); font-family: var(--core-mono); content: ">_"; }
 .evidence-disclosure > summary span, .decision-workspace-disclosure > summary span { margin-right: auto; color: var(--core-ink); font-weight: 760; }
 .evidence-disclosure > summary strong, .decision-workspace-disclosure > summary strong { color: var(--core-quiet); font-family: var(--core-mono); font-size: 10px; }
@@ -410,12 +410,23 @@ textarea { min-height: 72px; resize: vertical; }
 .company-brief-disclosure > .text-link { min-height: 30px; }
 
 .operations-toolbar-actions { display: flex; align-items: center; gap: 10px; }
-.product-app-launcher { position: relative; }
-.product-app-launcher > summary { min-height: 36px; display: inline-flex; align-items: center; border: 1px solid var(--core-line); border-radius: 5px; padding: 0 10px; color: var(--core-muted); font-size: 10px; font-weight: 720; cursor: pointer; list-style: none; }
-.product-app-launcher[open] > summary { border-color: rgba(11,116,94,.24); color: var(--core-ink); }
-.product-app-launcher > div { position: absolute; z-index: 10; top: 42px; right: 0; width: 170px; display: grid; border: 1px solid var(--core-line-strong); border-radius: 12px; padding: 6px; background: #fff; box-shadow: 0 16px 45px rgba(25,54,42,.16); }
-.product-app-launcher a { min-height: 40px; display: flex; align-items: center; border-radius: 5px; padding: 0 10px; color: var(--core-muted); font-size: 11px; text-decoration: none; }
-.product-app-launcher a:hover { background: var(--core-green-soft); color: var(--core-ink); }
+
+.website-intake { flex: 0 0 auto; display: grid; gap: 10px; border: 1px solid rgba(11,116,94,.2); border-radius: var(--core-radius); padding: 12px 14px; background: linear-gradient(110deg, rgba(11,116,94,.075), #fff 48%); box-shadow: 0 8px 24px rgba(25,54,42,.04); }
+.website-intake-head, .website-intake-head > div, .website-intake-ready { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.website-intake-head > div:first-child { display: grid; justify-content: start; gap: 3px; }
+.website-intake-head > div:last-child { justify-content: flex-end; }
+.website-intake-head strong { font-size: 13px; }
+.website-intake-form { display: grid; grid-template-columns: minmax(180px,1.2fr) minmax(130px,.65fr) minmax(190px,1fr) auto; gap: 8px; align-items: end; }
+.website-intake-record, .website-intake-ready > div { min-width: 0; display: grid; gap: 4px; }
+.website-intake-record strong, .website-intake-ready strong { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.website-intake-record small, .website-intake-ready small { overflow: hidden; color: var(--core-quiet); font-family: var(--core-mono); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.website-intake-confirm { min-height: 44px; display: flex; align-items: center; gap: 8px; border: 1px solid var(--core-line); border-radius: 9px; padding: 7px 9px; background: #fff; font-size: 9px; line-height: 1.35; }
+.website-intake-confirm input { width: 16px; min-height: 16px; margin: 0; }
+.website-intake-completion { display: grid; gap: 8px; }
+.website-intake-completion > .core-button { justify-self: start; }
+.website-intake-ready { min-width: 0; }
+.website-intake-ready > div { flex: 1; }
+.website-intake-ready > .core-button { flex: 0 0 auto; }
 
 :focus-visible { outline: 3px solid rgba(11,116,94,.32); outline-offset: 2px; }
 
@@ -504,7 +515,6 @@ textarea { min-height: 72px; resize: vertical; }
   .simple-toolbar .view-tabs button { justify-content: center; }
   .operations-toolbar-actions { min-width: 0; align-items: center; justify-content: space-between; overflow: visible; }
   .operations-toolbar-actions .view-tabs { min-width: 0; overflow-x: auto; }
-  .product-app-launcher { flex: 0 0 auto; }
   .form-row, .record-controls { grid-template-columns: 1fr; }
   .decision-dialog { inset: auto 0 0; width: 100%; max-height: 92svh; margin: 0 auto; border-radius: 10px 10px 0 0; padding: 15px; }
   .decision-packet-meta, .decision-outcomes, .decision-fields { grid-template-columns: 1fr; }
@@ -543,8 +553,20 @@ textarea { min-height: 72px; resize: vertical; }
   .agent-control-grid { grid-template-columns: 1fr; }
   .agent-create-form { position: static; width: min(100%,300px); margin-top: 8px; }
   .agent-roster-panel .panel-head { align-items: flex-start; }
-  .compact-disclosure > summary, .product-app-launcher > summary { min-height: 44px; }
+  .compact-disclosure > summary { min-height: 44px; }
   .core-button, .core-button.compact, .segmented-control button, .segmented-control a, .view-tabs button, .mobile-nav a { min-height: 44px; }
+}
+
+@media (max-width: 720px) {
+  .website-intake-form { grid-template-columns: 1fr; }
+  .website-intake-ready { align-items: flex-start; }
+}
+
+@media (max-width: 480px) {
+  .website-intake-head, .website-intake-ready { align-items: flex-start; }
+  .website-intake-head { display: grid; }
+  .website-intake-head > div:last-child { justify-content: flex-start; }
+  .website-intake-ready { display: grid; }
 }
 
 @media (prefers-reduced-motion: reduce) {

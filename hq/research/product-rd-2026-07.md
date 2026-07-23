@@ -1,6 +1,6 @@
 # SuperMega product R&D brief — July 2026
 
-Status: founder direction accepted; local prototypes, the guarded non-PII handoff, and its idempotent local order draft pass current offline gates
+Status: founder direction accepted; Website remains the local prototype, while the guarded non-PII handoff and accountable order confirmation now live in canonical Commerce
 
 Evidence basis: released `7bb2c72973473d5cc10d9a89849065b22b9f18fa`, repository authority, and the shared “Curating Dev Resources” conversation
 
@@ -13,7 +13,7 @@ Decision owner: founder / product lead
 Build depth in this order:
 
 1. **Website product** — prove a repeatable, evidence-backed website-delivery workflow before advertising the local prototype as a launched or customer-proven product.
-2. **Ecommerce & Orders** — let an approved website or existing customer channel create a structured order draft that feeds the canonical Commerce module.
+2. **Ecommerce and orders capability** — let an approved website or existing customer channel create a structured order draft inside canonical Commerce.
 3. **Shop and Plant improvements** — deepen Commerce and Production under their current routes; treat Shop and Plant only as familiar legacy labels.
 4. **Easy-demo AI assistance** — ship three bounded draft-and-review experiences inside the products, not an agent catalogue, marketplace, or autonomous workforce.
 
@@ -22,8 +22,8 @@ This order preserves the current compact topology:
 | Concern | Keep | Do not add now |
 | --- | --- | --- |
 | Public surface | `supermega.dev`: `/`, `/contact/`, `/privacy/` | A page per feature, public agent pages, public pricing theatre |
-| Product app | Today, Teams, Operations, Settings; lazy `/products/website/` and `/products/ecommerce/` prototype routes | A new primary-navigation area, separate domain, separate deployment authority, separate Shop/Plant apps |
-| Product authority | Company system, Commerce, and Production as operating entries; Website and Ecommerce as local prototypes | Claims that a prototype is launched, managed, integrated, or customer-proven |
+| Product app | Today, Teams, Operations, Settings; lazy `/products/website/` prototype; legacy Ecommerce path redirects to Commerce Orders | A new primary-navigation area, separate domain, separate deployment authority, separate Shop/Plant apps |
+| Product authority | Company system, Commerce, and Production as operating entries; Website as the local prototype | Claims that a prototype is launched, managed, integrated, or customer-proven |
 | Data | Browser-local truthful demos; gated `/api/trial/v1`; private Postgres/Supabase state, events, approvals | A second CRM, database, queue, or direct browser-to-privileged database path |
 | Release | The paired public/app candidate, promotion, verification, and rollback workflow | Local production deploys, a third Vercel project, agent-owned promotion |
 | AI | Approved inputs, structured drafts, provenance, named human decisions | External sends, payments, publishing, access changes, machine control, production writes |
@@ -75,7 +75,7 @@ These are product opportunities only when the demo and claims continue to state 
 | Priority | R&D product slice | Existing owner surface | First truthful demo | Graduation evidence |
 | --- | --- | --- | --- | --- |
 | 1 | Website delivery | `/products/website/` plus the existing Product lifecycle | Approved sample brief → finite local preview → QA/release packet | One named user accepts the workflow and a real preview against explicit criteria |
-| 2 | Ecommerce & Orders | `/products/ecommerce/` feeding the canonical Commerce boundary | Approved website/chat order intent → operator-confirmed order → reserved stock → fulfilment close | Idempotent, transactional managed pilot with measured handling time and completion |
+| 2 | Ecommerce and orders capability | `/operations/commerce/?tab=orders` | Approved website/chat order intent → operator-confirmed order → reserved stock → fulfilment close | Idempotent, transactional managed pilot with measured handling time and completion |
 | 3a | Shop depth (Commerce) | Existing Commerce tabs | Cancellation/release, reconciliation, exception, and daily-close evidence | One operator runs a full day with zero unexplained stock variance |
 | 3b | Plant depth (Production) | Existing Production tabs | Shift output, issue ownership, machine observation, and evidence-backed handoff | One shift closes with traceable output and all exceptions owned |
 | 4 | Embedded AI demos | Product, Commerce, and Production panels | Website Brief, Order Intake, and Shift Handoff drafts | Golden-set quality, provenance, zero side effects, and named user usefulness |

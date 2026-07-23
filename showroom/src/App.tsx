@@ -10,7 +10,6 @@ import {
 import { TeamsPage } from './core/TeamWorkspace'
 
 const WebsiteProduct = lazy(() => import('./products/website/WebsiteProduct').then((module) => ({ default: module.WebsiteProduct })))
-const EcommerceOrdersProduct = lazy(() => import('./products/ecommerce/EcommerceOrdersProduct').then((module) => ({ default: module.EcommerceOrdersProduct })))
 
 function ProductLoading({ name }: { name: string }) {
   return <main className="product-route-loading"><span>&gt;_</span><p>Loading {name} workspace…</p></main>
@@ -31,7 +30,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route element={<Suspense fallback={<ProductLoading name="Website" />}><WebsiteProduct /></Suspense>} path="products/website/*" />
-        <Route element={<Suspense fallback={<ProductLoading name="Ecommerce" />}><EcommerceOrdersProduct /></Suspense>} path="products/ecommerce/*" />
+        <Route element={<Navigate replace to="/operations/commerce/?tab=orders" />} path="products/ecommerce/*" />
         <Route element={<CoreLayout />}>
           <Route element={<OverviewPage />} index />
           <Route element={<TeamsPage />} path="work/*" />
