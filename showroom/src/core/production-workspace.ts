@@ -38,7 +38,7 @@ export type ProductionMachine = {
   state: ProductionMachineState
 }
 
-export type ProductionEventKind = 'output_recorded' | 'issue_opened' | 'issue_resolved' | 'machine_state_changed'
+export type ProductionEventKind = 'job_created' | 'output_recorded' | 'issue_opened' | 'issue_resolved' | 'machine_registered' | 'machine_state_changed'
 
 export type ProductionEvent = {
   id: string
@@ -93,7 +93,7 @@ export type ProductionMutationResult =
 
 const issueKinds: ProductionIssueKind[] = ['quality', 'maintenance', 'materials', 'operations']
 const machineStates: ProductionMachineState[] = ['running', 'attention', 'stopped']
-const eventKinds: ProductionEventKind[] = ['output_recorded', 'issue_opened', 'issue_resolved', 'machine_state_changed']
+const eventKinds: ProductionEventKind[] = ['job_created', 'output_recorded', 'issue_opened', 'issue_resolved', 'machine_registered', 'machine_state_changed']
 const deterministicSeedNow = Date.parse('2026-07-23T08:00:00.000Z')
 
 export const productionMachineTransitions: Record<ProductionMachineState, ProductionMachineState> = {
@@ -251,10 +251,16 @@ export function validateProductionState(value: unknown): ProductionState {
     if (!validTimestamp(candidate.createdAt)) throw new Error(`events[${index}].createdAt is invalid.`)
     for (const field of ['actor', 'reason', 'evidenceReference', 'subjectId', 'summary'] as const) requiredText(candidate[field], `events[${index}].${field}`)
     if (!eventKinds.includes(candidate.kind as ProductionEventKind)) throw new Error(`events[${index}].kind is invalid.`)
-    if (candidate.kind === 'output_recorded') {
+    if (candidate.kind === 'job_created') {
+      if (!jobIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown job.`)
+      if (candidate.quantity !== undefined || candidate.fromState !== undefined || candidate.toState !== undefined) throw new Error(`events[${index}] job event has unrelated fields.`)
+    } else if (candidate.kind === 'output_recorded') {
       if (!jobIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown job.`)
       assertSafeInteger(candidate.quantity, `events[${index}].quantity`, 1)
       if (candidate.fromState !== undefined || candidate.toState !== undefined) throw new Error(`events[${index}] output event has machine state fields.`)
+    } else if (candidate.kind === 'machine_registered') {
+      if (!machineIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown machine.`)
+      if (candidate.quantity !== undefined || candidate.fromState !== undefined || candidate.toState !== undefined) throw new Error(`events[${index}] equipment event has unrelated fields.`)
     } else if (candidate.kind === 'machine_state_changed') {
       if (!machineIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown machine.`)
       if (!machineStates.includes(candidate.fromState as ProductionMachineState) || !machineStates.includes(candidate.toState as ProductionMachineState)) throw new Error(`events[${index}] has invalid machine states.`)
@@ -427,6 +433,29 @@ function actionIdIsUsed(state: ProductionState, actionId: string) {
   return state.events.some((event) => event.actionId === actionId)
 }
 
+export function createProductionJob(state: ProductionState, job: ProductionJob, proof: ProductionActionProof) {
+  const jobId = optionalText(job.id)
+  const line = optionalText(job.line)
+  const product = optionalText(job.product)
+  if (!validProof(proof)
+    || !jobId || jobId !== job.id
+    || !line || line !== job.line
+    || !product || product !== job.product
+    || !Number.isSafeInteger(job.target) || job.target < 1
+    || job.output !== 0) return null
+  const existing = state.events.find((event) => event.actionId === proof.actionId)
+  if (existing) {
+    const storedJob = state.jobs.find((candidate) => candidate.id === job.id)
+    return existing.kind === 'job_created'
+      && existing.subjectId === job.id
+      && sameProof(existing, proof)
+      && JSON.stringify(storedJob) === JSON.stringify(job) ? state : null
+  }
+  if (actionIdIsUsed(state, proof.actionId) || state.jobs.some((candidate) => candidate.id === job.id) || state.revision >= Number.MAX_SAFE_INTEGER) return null
+  const event = eventFor(proof, { kind: 'job_created', subjectId: job.id, summary: `Created ${job.id} for ${job.line}` })
+  return validateProductionState({ ...state, revision: state.revision + 1, jobs: [job, ...state.jobs], events: [event, ...state.events] })
+}
+
 export function recordProductionOutput(state: ProductionState, jobId: string, quantity: number, proof: ProductionActionProof) {
   if (!validProof(proof) || !Number.isSafeInteger(quantity) || quantity < 1) return null
   const existing = state.events.find((event) => event.actionId === proof.actionId)
@@ -521,4 +550,24 @@ export function advanceProductionMachineState(
     machines: state.machines.map((candidate) => candidate.id === machineId ? { ...candidate, state: toState } : candidate),
     events: [event, ...state.events],
   })
+}
+
+export function registerProductionMachine(state: ProductionState, machine: ProductionMachine, proof: ProductionActionProof) {
+  const machineId = optionalText(machine.id)
+  const name = optionalText(machine.name)
+  if (!validProof(proof)
+    || !machineId || machineId !== machine.id
+    || !name || name !== machine.name
+    || !machineStates.includes(machine.state)) return null
+  const existing = state.events.find((event) => event.actionId === proof.actionId)
+  if (existing) {
+    const storedMachine = state.machines.find((candidate) => candidate.id === machine.id)
+    return existing.kind === 'machine_registered'
+      && existing.subjectId === machine.id
+      && sameProof(existing, proof)
+      && JSON.stringify(storedMachine) === JSON.stringify(machine) ? state : null
+  }
+  if (actionIdIsUsed(state, proof.actionId) || state.machines.some((candidate) => candidate.id === machine.id) || state.revision >= Number.MAX_SAFE_INTEGER) return null
+  const event = eventFor(proof, { kind: 'machine_registered', subjectId: machine.id, summary: `Registered ${machine.name} in ${machine.state} state` })
+  return validateProductionState({ ...state, revision: state.revision + 1, machines: [machine, ...state.machines], events: [event, ...state.events] })
 }

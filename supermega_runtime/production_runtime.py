@@ -14,16 +14,25 @@ PRODUCTION_SCHEMA = "supermega.production.workspace.v2"
 PRODUCTION_EVENTS = frozenset(
     {
         "production.workspace.initialized",
+        "production.job.created",
         "production.output.recorded",
         "production.issue.opened",
         "production.issue.resolved",
+        "production.machine.registered",
         "production.machine.state_changed",
     }
 )
 _ISSUE_KINDS = ("quality", "maintenance", "materials", "operations")
 _MACHINE_STATES = ("running", "attention", "stopped")
 _MACHINE_TRANSITIONS = {"running": "attention", "attention": "stopped", "stopped": "running"}
-_EVENT_KINDS = ("output_recorded", "issue_opened", "issue_resolved", "machine_state_changed")
+_EVENT_KINDS = (
+    "job_created",
+    "output_recorded",
+    "issue_opened",
+    "issue_resolved",
+    "machine_registered",
+    "machine_state_changed",
+)
 _MAX_SAFE_INTEGER = 9_007_199_254_740_991
 
 _STATE_FIELDS = frozenset({"schema", "revision", "jobs", "issues", "machines", "events"})
@@ -192,12 +201,22 @@ def validate_production_state(value: object) -> dict[str, Any]:
         kind = event["kind"]
         if kind not in _EVENT_KINDS:
             raise TrialValidationError(f"events[{index}].kind is invalid.")
-        if kind == "output_recorded":
+        if kind == "job_created":
+            if event["subjectId"] not in job_by_id:
+                raise TrialValidationError(f"events[{index}] references an unknown job.")
+            if any(field in event for field in ("quantity", "fromState", "toState")):
+                raise TrialValidationError(f"events[{index}] job event has unrelated fields.")
+        elif kind == "output_recorded":
             if event["subjectId"] not in job_by_id:
                 raise TrialValidationError(f"events[{index}] references an unknown job.")
             _integer(event.get("quantity"), f"events[{index}].quantity", minimum=1)
             if "fromState" in event or "toState" in event:
                 raise TrialValidationError(f"events[{index}] output event has machine state fields.")
+        elif kind == "machine_registered":
+            if event["subjectId"] not in machine_by_id:
+                raise TrialValidationError(f"events[{index}] references an unknown machine.")
+            if any(field in event for field in ("quantity", "fromState", "toState")):
+                raise TrialValidationError(f"events[{index}] equipment event has unrelated fields.")
         elif kind == "machine_state_changed":
             if event["subjectId"] not in machine_by_id:
                 raise TrialValidationError(f"events[{index}] references an unknown machine.")
@@ -322,6 +341,18 @@ def _new_event(
     return event
 
 
+def _validate_job_created(current: Mapping[str, Any], next_state: Mapping[str, Any], evidence: Mapping[str, str]) -> None:
+    event = _new_event(current, next_state, evidence, "job_created")
+    _require_unchanged(current, next_state, "issues", "machines")
+    if len(next_state["jobs"]) != len(current["jobs"]) + 1 or next_state["jobs"][1:] != current["jobs"]:
+        raise TrialValidationError("production.job.created must prepend exactly one job.")
+    job = next_state["jobs"][0]
+    if job["output"] != 0:
+        raise TrialValidationError("a new Production job must start with zero output.")
+    if event["subjectId"] != job["id"] or event["summary"] != f"Created {job['id']} for {job['line']}":
+        raise TrialValidationError("job-created event must match the new Production job.")
+
+
 def _validate_output(current: Mapping[str, Any], next_state: Mapping[str, Any], evidence: Mapping[str, str]) -> None:
     event = _new_event(current, next_state, evidence, "output_recorded")
     _require_unchanged(current, next_state, "issues", "machines")
@@ -383,10 +414,22 @@ def _validate_machine(current: Mapping[str, Any], next_state: Mapping[str, Any],
         raise TrialValidationError("machine event must match the exact recorded state change.")
 
 
+def _validate_machine_registered(current: Mapping[str, Any], next_state: Mapping[str, Any], evidence: Mapping[str, str]) -> None:
+    event = _new_event(current, next_state, evidence, "machine_registered")
+    _require_unchanged(current, next_state, "jobs", "issues")
+    if len(next_state["machines"]) != len(current["machines"]) + 1 or next_state["machines"][1:] != current["machines"]:
+        raise TrialValidationError("production.machine.registered must prepend exactly one equipment record.")
+    machine = next_state["machines"][0]
+    if event["subjectId"] != machine["id"] or event["summary"] != f"Registered {machine['name']} in {machine['state']} state":
+        raise TrialValidationError("machine-registered event must match the new equipment record.")
+
+
 _TRANSITION_VALIDATORS = {
+    "production.job.created": _validate_job_created,
     "production.output.recorded": _validate_output,
     "production.issue.opened": _validate_issue_opened,
     "production.issue.resolved": _validate_issue_resolved,
+    "production.machine.registered": _validate_machine_registered,
     "production.machine.state_changed": _validate_machine,
 }
 

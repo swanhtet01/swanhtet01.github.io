@@ -118,14 +118,15 @@ if (!coreSource.includes("mode: 'managed-unprovisioned'") || !coreSource.include
 if (!managedCommerceRuntime.includes('commerce.workspace.initialized') || managedCommerceRuntime.includes('commerce.snapshot.saved') || !managedCommerceRuntime.includes('_one_changed') || !managedCommerceRuntime.includes('_validate_event_evidence') || !managedCommerceRuntime.includes('daily close totals must match completed, reconciled orders')) fail('managed_commerce_server_transition_contract_missing')
 if (!coreSource.includes("const commerceTabs") || !coreSource.includes("{ id: 'today', label: 'Today' }") || !coreSource.includes("{ id: 'orders', label: 'Orders' }") || !coreSource.includes("{ id: 'inventory', label: 'Inventory' }") || coreSource.includes("{ id: 'payments'")) fail('commerce_three_tab_contract_changed')
 if (!productionSource.includes("supermega.production.workspace.v2") || !productionSource.includes('mutateProductionWorkspace') || !productionSource.includes('lockManager.request') || !productionSource.includes('next.revision !== current.revision + 1')) fail('production_v2_locked_store_missing')
-if (!productionSource.includes("'output_recorded' | 'issue_opened' | 'issue_resolved' | 'machine_state_changed'") || !productionSource.includes('events: [event, ...state.events]') || !productionSource.includes('Production revision must equal the append-only event count.')) fail('production_append_only_record_missing')
+if (!productionSource.includes("'job_created' | 'output_recorded' | 'issue_opened' | 'issue_resolved' | 'machine_registered' | 'machine_state_changed'") || !productionSource.includes('events: [event, ...state.events]') || !productionSource.includes('Production revision must equal the append-only event count.')) fail('production_append_only_record_missing')
 if (!productionSource.includes('currentRaw !== null') || !productionSource.includes('Migration failed closed') || !productionSource.includes('events: []')) fail('production_migration_fail_closed_contract_missing')
 if (!managedTrialSource.includes('saveManagedProductionCommand') || !managedTrialSource.includes("surface: 'production'") || !managedTrialSource.includes("'production.workspace.initialized'") || !managedTrialSource.includes('ManagedProductionEvent')) fail('managed_production_command_client_missing')
-for (const eventType of ['production.workspace.initialized', 'production.output.recorded', 'production.issue.opened', 'production.issue.resolved', 'production.machine.state_changed']) {
+for (const eventType of ['production.workspace.initialized', 'production.job.created', 'production.output.recorded', 'production.issue.opened', 'production.issue.resolved', 'production.machine.registered', 'production.machine.state_changed']) {
   if (!coreSource.includes(eventType) || !managedProductionRuntime.includes(eventType)) fail(`managed_production_event_missing:${eventType}`)
 }
 if (!coreSource.includes('Create managed Production') || !coreSource.includes('No browser demo output, issues, or machine history is copied') || !coreSource.includes('This records state; it does not control equipment.') || !coreSource.includes("error.code === 'trial_version_conflict'") || !coreSource.includes("result.surface !== 'production'")) fail('managed_production_ui_not_fail_closed')
 if (managedProductionRuntime.includes('production.snapshot.saved') || !managedProductionRuntime.includes('_new_event') || !managedProductionRuntime.includes('command evidence must match the appended Production event.') || !managedProductionRuntime.includes('Production initialization requires jobs and machines with no output or operating history.')) fail('managed_production_server_transition_contract_missing')
+if (!productionSource.includes('createProductionJob') || !productionSource.includes('registerProductionMachine') || !coreSource.includes('Add a job') || !coreSource.includes('Register equipment') || !coreSource.includes('The job starts at zero output.') || !coreSource.includes('It does not connect to or control equipment.')) fail('production_planning_controls_missing')
 const productionTabsContract = coreSource.slice(coreSource.indexOf('const productionTabs'), coreSource.indexOf('function uid'))
 if (!productionTabsContract.includes("{ id: 'today', label: 'Today' }") || !productionTabsContract.includes("{ id: 'production', label: 'Production' }") || !productionTabsContract.includes("{ id: 'control', label: 'Issues & equipment' }") || (productionTabsContract.match(/^\s*\{ id:/gm) || []).length !== 3) fail('production_three_tab_contract_changed')
 const productionPageContract = coreSource.slice(coreSource.indexOf('function ProductionPage'), coreSource.indexOf('function JobList'))
@@ -522,6 +523,20 @@ async function verifyProductionRuntime() {
       jobs: [{ id: 'JOB-1', line: 'Line 01', product: 'Test batch', target: 100, output: 90 }],
       machines: [{ id: 'MC-1', name: 'Test machine', state: 'running' }],
     }
+    const newJob = { id: 'JOB-2', line: 'Line 02', product: 'Next batch', target: 80, output: 0 }
+    const jobProof = proof('ACT-JOB-CREATE')
+    const createdJob = model.createProductionJob(base, newJob, jobProof)
+    assert(createdJob?.jobs[0].id === newJob.id && createdJob.revision === 1 && createdJob.events[0].kind === 'job_created', 'production_job_not_created_once')
+    assert(model.createProductionJob(createdJob, newJob, jobProof) === createdJob, 'production_job_retry_not_idempotent')
+    assert(model.createProductionJob(createdJob, { ...newJob, target: 81 }, jobProof) === null, 'production_job_conflicting_retry_succeeded')
+    assert(model.createProductionJob(createdJob, newJob, proof('ACT-JOB-DUPLICATE')) === null, 'production_duplicate_job_id_succeeded')
+    const newMachine = { id: 'MC-2', name: 'Second machine', state: 'stopped' }
+    const registerProof = proof('ACT-MACHINE-REGISTER')
+    const registeredMachine = model.registerProductionMachine(createdJob, newMachine, registerProof)
+    assert(registeredMachine?.machines[0].id === newMachine.id && registeredMachine.revision === 2 && registeredMachine.events[0].kind === 'machine_registered', 'production_machine_not_registered_once')
+    assert(model.registerProductionMachine(registeredMachine, newMachine, registerProof) === registeredMachine, 'production_machine_registration_retry_not_idempotent')
+    assert(model.registerProductionMachine(registeredMachine, { ...newMachine, name: 'Changed' }, registerProof) === null, 'production_machine_registration_conflicting_retry_succeeded')
+    assert(model.registerProductionMachine(registeredMachine, newMachine, proof('ACT-MACHINE-DUPLICATE')) === null, 'production_duplicate_machine_id_succeeded')
     const outputProof = proof('ACT-OUTPUT')
     const outputState = model.recordProductionOutput(base, 'JOB-1', 10, outputProof)
     assert(outputState?.jobs[0].output === 100 && outputState.revision === 1 && outputState.events[0].quantity === 10 && outputState.events[0].actor === outputProof.actor, 'production_output_not_recorded_once')

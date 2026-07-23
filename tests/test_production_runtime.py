@@ -100,6 +100,42 @@ class ProductionRuntimeTests(unittest.TestCase):
         with self.assertRaises(TrialValidationError):
             apply_event(current, "production.output.recorded", output_state(current), "ACT-WRONG")
 
+    def test_job_and_machine_registration_prepend_one_attributed_record(self) -> None:
+        current = production_state()
+        new_job = {"id": "JOB-2", "line": "Line 02", "product": "Product B", "target": 80, "output": 0}
+        with_job = deepcopy(current)
+        with_job["revision"] = 1
+        with_job["jobs"] = [new_job, *current["jobs"]]  # type: ignore[misc]
+        with_job["events"] = [production_event("ACT-JOB", "job_created", "JOB-2", "Created JOB-2 for Line 02")]
+        accepted_job = apply_event(current, "production.job.created", with_job, "ACT-JOB")
+        self.assertEqual(accepted_job["jobs"][0], new_job)  # type: ignore[index]
+
+        invented_output = deepcopy(with_job)
+        invented_output["jobs"][0]["output"] = 1  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(current, "production.job.created", invented_output, "ACT-JOB")
+
+        new_machine = {"id": "MC-2", "name": "Machine 02", "state": "stopped"}
+        with_machine = deepcopy(accepted_job)
+        with_machine["revision"] = 2
+        with_machine["machines"] = [new_machine, *accepted_job["machines"]]  # type: ignore[misc]
+        with_machine["events"] = [
+            production_event("ACT-REGISTER", "machine_registered", "MC-2", "Registered Machine 02 in stopped state"),
+            *accepted_job["events"],  # type: ignore[misc]
+        ]
+        accepted_machine = apply_event(
+            accepted_job,
+            "production.machine.registered",
+            with_machine,
+            "ACT-REGISTER",
+        )
+        self.assertEqual(accepted_machine["machines"][0], new_machine)  # type: ignore[index]
+
+        changed_existing = deepcopy(with_machine)
+        changed_existing["machines"][1]["name"] = "Rewritten machine"  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(accepted_job, "production.machine.registered", changed_existing, "ACT-REGISTER")
+
     def test_issue_open_and_resolution_preserve_attributed_terminal_evidence(self) -> None:
         current = output_state(production_state())
         issue = {

@@ -48,17 +48,20 @@ import {
   PRODUCTION_KEY,
   advanceProductionMachineState,
   createEmptyProduction,
+  createProductionJob,
   loadProductionWorkspace,
   mutateProductionWorkspace,
   openProductionIssue,
   productionMachineTransitions,
   recordProductionOutput,
+  registerProductionMachine,
   resolveProductionIssue,
   validateProductionState,
   type ProductionActionProof,
   type ProductionEvent,
   type ProductionIssue,
   type ProductionJob,
+  type ProductionMachine,
   type ProductionMachineState,
   type ProductionState,
 } from './production-workspace'
@@ -135,9 +138,11 @@ type ActionKind =
   | 'payment_reconcile'
   | 'inventory_receipt'
   | 'daily_close'
+  | 'job_create'
   | 'production_output'
   | 'issue_create'
   | 'issue_resolution'
+  | 'machine_register'
   | 'machine_state'
 
 type AccountableAction = {
@@ -1632,9 +1637,11 @@ function StockMovementHistory({ movements }: { movements: CommerceStockMovement[
 }
 
 const productionEventLabels: Record<ProductionEvent['kind'], string> = {
+  job_created: 'Job created',
   output_recorded: 'Output recorded',
   issue_opened: 'Issue opened',
   issue_resolved: 'Issue resolved',
+  machine_registered: 'Equipment registered',
   machine_state_changed: 'Machine state changed',
 }
 
@@ -1665,6 +1672,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const [summary, setSummary] = useState('')
   const [notice, setNotice] = useState('')
   const [setupDraft, setSetupDraft] = useState({ jobId: '', line: '', product: '', target: '', machineId: '', machineName: '', machineState: 'stopped' as ProductionMachineState, reason: '', evidenceReference: '' })
+  const [jobDraft, setJobDraft] = useState({ id: '', line: '', product: '', target: '' })
+  const [machineDraft, setMachineDraft] = useState({ id: '', name: '', state: 'stopped' as ProductionMachineState })
   const [setupBusy, setSetupBusy] = useState(false)
   const [setupError, setSetupError] = useState('')
   const output = production.jobs.reduce((total, job) => total + job.output, 0)
@@ -1746,6 +1755,63 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     }
     setPendingAction({ ...action, id: uid('ACT'), commandId: commandUuid(), domain: 'production' })
     setNotice('Review the change, accountable operator, and evidence before it is applied.')
+  }
+
+  function queueNewJob(event: FormEvent) {
+    event.preventDefault()
+    const id = jobDraft.id.trim().toUpperCase()
+    const line = jobDraft.line.trim()
+    const product = jobDraft.product.trim()
+    const jobTarget = Number(jobDraft.target)
+    if (!id || !line || !product || !Number.isSafeInteger(jobTarget) || jobTarget < 1) {
+      setNotice('Enter a job ID, line, product or batch, and a whole-unit target of at least 1.')
+      return
+    }
+    if (production.jobs.some((job) => job.id === id)) {
+      setNotice(`${id} already exists. No job was queued.`)
+      return
+    }
+    const job: ProductionJob = { id, line, product, target: jobTarget, output: 0 }
+    queueAction({
+      kind: 'job_create',
+      subjectId: job.id,
+      summary: `Create ${job.id} for ${job.line}`,
+      before: 'No job record',
+      after: `${job.product} · ${job.target.toLocaleString()} target units`,
+      apply: async (record) => {
+        const proof = productionActionProof(record)
+        await mutateProduction('production.job.created', record.commandId, proof, (current) => createProductionJob(current, job, proof))
+        setJobDraft({ id: '', line: '', product: '', target: '' })
+        setJobId(job.id)
+      },
+    })
+  }
+
+  function queueNewMachine(event: FormEvent) {
+    event.preventDefault()
+    const id = machineDraft.id.trim().toUpperCase()
+    const name = machineDraft.name.trim()
+    if (!id || !name) {
+      setNotice('Enter an equipment ID and name.')
+      return
+    }
+    if (production.machines.some((machine) => machine.id === id)) {
+      setNotice(`${id} already exists. No equipment record was queued.`)
+      return
+    }
+    const machine: ProductionMachine = { id, name, state: machineDraft.state }
+    queueAction({
+      kind: 'machine_register',
+      subjectId: machine.id,
+      summary: `Register ${machine.name}`,
+      before: 'No equipment record',
+      after: `${machine.id} · recorded as ${machine.state}`,
+      apply: async (record) => {
+        const proof = productionActionProof(record)
+        await mutateProduction('production.machine.registered', record.commandId, proof, (current) => registerProductionMachine(current, machine, proof))
+        setMachineDraft({ id: '', name: '', state: 'stopped' })
+      },
+    })
   }
 
   async function confirmAction(details: ActionDetails) {
@@ -1839,6 +1905,15 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       <section className="core-panel job-panel">
         <div className="panel-head"><div><span className="core-eyebrow">Production plan</span><h2>Active jobs</h2></div><span className="panel-note">Target is a hard limit</span></div>
         <JobList jobs={production.jobs} />
+        <details className="compact-disclosure planning-disclosure">
+          <summary>Add a job</summary>
+          <form className="core-form compact-form planning-form" onSubmit={queueNewJob}>
+            <div className="form-row"><label>Job ID<input maxLength={80} onChange={(event) => setJobDraft((current) => ({ ...current, id: event.target.value }))} placeholder="JOB-002" required value={jobDraft.id} /></label><label>Line or area<input maxLength={160} onChange={(event) => setJobDraft((current) => ({ ...current, line: event.target.value }))} placeholder="Line 02" required value={jobDraft.line} /></label></div>
+            <div className="form-row"><label>Product or batch<input maxLength={180} onChange={(event) => setJobDraft((current) => ({ ...current, product: event.target.value }))} placeholder="Product name" required value={jobDraft.product} /></label><label>Target units<input min="1" onChange={(event) => setJobDraft((current) => ({ ...current, target: event.target.value }))} required step="1" type="number" value={jobDraft.target} /></label></div>
+            <div className="form-actions"><button className="core-button primary compact" disabled={Boolean(pendingAction)} type="submit">Review new job</button></div>
+            <p className="panel-copy">The job starts at zero output. A named operator, reason, and evidence are required before it is recorded.</p>
+          </form>
+        </details>
       </section>
       <section className="core-panel output-panel">
         <span className="core-eyebrow">Good output</span><h2>Confirm production</h2>
@@ -1857,10 +1932,19 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     {sourceBanner}
     <div className="control-workspace">
       <div className="split-workspace">
-        <section className="core-panel">
+        <section className="core-panel equipment-panel">
           <div className="panel-head"><div><span className="core-eyebrow">Equipment</span><h2>Machine state</h2></div></div>
           <div className="machine-list">{production.machines.map((machine) => <button aria-label={`${productionMachineActionLabels[machine.state]} for ${machine.name}; current state ${machine.state}`} key={machine.id} type="button" onClick={() => cycleMachine(machine.id)}><span className={`machine-dot ${machine.state}`} /><span><strong>{machine.name}</strong><small>{machine.id} - Current: {machine.state}</small></span><b>{productionMachineActionLabels[machine.state]}</b></button>)}</div>
           <p className="panel-copy">{managedIdentity ? 'Managed operating record.' : 'Browser-local operating record.'} No telemetry or machine control is connected.</p>
+          <details className="compact-disclosure planning-disclosure">
+            <summary>Register equipment</summary>
+            <form className="core-form compact-form planning-form" onSubmit={queueNewMachine}>
+              <div className="form-row"><label>Equipment ID<input maxLength={80} onChange={(event) => setMachineDraft((current) => ({ ...current, id: event.target.value }))} placeholder="MC-02" required value={machineDraft.id} /></label><label>Equipment name<input maxLength={180} onChange={(event) => setMachineDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Equipment name" required value={machineDraft.name} /></label></div>
+              <label>Current recorded state<select onChange={(event) => setMachineDraft((current) => ({ ...current, state: event.target.value as ProductionMachineState }))} value={machineDraft.state}><option value="stopped">Stopped</option><option value="running">Running</option><option value="attention">Needs attention</option></select></label>
+              <div className="form-actions"><button className="core-button primary compact" disabled={Boolean(pendingAction)} type="submit">Review equipment</button></div>
+              <p className="panel-copy">This adds an attributed operating record only. It does not connect to or control equipment.</p>
+            </form>
+          </details>
         </section>
         <section className="core-panel">
           <span className="core-eyebrow">Exception</span><h2>Open an issue</h2>

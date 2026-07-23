@@ -50,9 +50,11 @@ export type ManagedCommerceEvent =
 
 export type ManagedProductionEvent =
   | 'production.workspace.initialized'
+  | 'production.job.created'
   | 'production.output.recorded'
   | 'production.issue.opened'
   | 'production.issue.resolved'
+  | 'production.machine.registered'
   | 'production.machine.state_changed'
 
 type ManagedCommandResult<Surface extends 'commerce' | 'production', Event extends string> = {
