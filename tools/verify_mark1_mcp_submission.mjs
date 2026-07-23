@@ -116,11 +116,11 @@ const internalTools = describeTools({ SUPERMEGA_ENABLE_LOCAL_TOOLS: 'true' });
 const redactedLeadFixture = redactLeadFixture();
 const protocol = await listToolsThroughProtocol();
 const expectedDefaultHints = {
-  mark1_status: [true, false, false],
-  mark1_insights: [true, false, false],
-  mark1_exceptions: [true, false, false],
-  mark1_approvals: [false, false, false],
-  mark1_leads: [true, false, false],
+  mark1_get_operating_brief: [true, false, false],
+  mark1_list_exceptions: [true, false, false],
+  mark1_list_approvals: [true, false, false],
+  mark1_create_approval: [false, false, false],
+  mark1_list_leads: [true, false, false],
 };
 const expectedInternalHints = {
   mark1_files: [true, false, false],
@@ -147,8 +147,16 @@ for (const tool of internalTools) {
       && tool.annotations.openWorldHint === expected[1]
       && tool.annotations.destructiveHint === expected[2], `wrong_hints:${tool.name}`);
   }
-  assert(typeof tool.description === 'string' && tool.description.trim().length > 20, `weak_description:${tool.name}`);
+  assert(typeof tool.title === 'string' && tool.title.trim().length > 4, `missing_title:${tool.name}`);
+  assert(typeof tool.description === 'string' && tool.description.startsWith('Use this when'), `weak_description:${tool.name}`);
+  assert(Boolean(tool.outputSchema?.properties?.data), `untyped_output_data:${tool.name}`);
 }
+
+const createApproval = defaultTools.find((tool) => tool.name === 'mark1_create_approval');
+const listApprovals = defaultTools.find((tool) => tool.name === 'mark1_list_approvals');
+assert(JSON.stringify(createApproval?.inputSchema?.required) === JSON.stringify(['title', 'owner']), 'create_approval_required_fields');
+assert(!Object.hasOwn(createApproval?.inputSchema?.properties || {}, 'action'), 'create_approval_mixed_action');
+assert(!Object.hasOwn(listApprovals?.inputSchema?.properties || {}, 'action'), 'list_approval_mixed_action');
 
 assert(submission.$schema === 'https://developers.openai.com/apps-sdk/schemas/chatgpt-app-submission.v1.json', 'wrong_submission_schema');
 assert(submission.schema_version === 1, 'wrong_submission_version');
@@ -166,6 +174,8 @@ for (const tool of defaultTools) {
 assert(submission.test_cases?.length === 5, 'positive_test_count');
 assert(submission.negative_test_cases?.length === 3, 'negative_test_count');
 assert(submission.test_cases.every((test) => Object.hasOwn(submission.tools, test.tools_triggered)), 'positive_test_unknown_tool');
+assert(JSON.stringify(submission.test_cases.map((test) => test.tools_triggered).sort())
+  === JSON.stringify(defaultTools.map((tool) => tool.name).sort()), 'positive_tests_do_not_cover_default_surface');
 assert(submission.negative_test_cases.every((test) => test.tools_triggered === null), 'negative_test_should_not_trigger');
 assert(!serverSource.includes('supermega-demo') && !serverSource.includes('C:\\Users\\swann'), 'stale_secret_or_machine_path');
 assert(serverSource.includes("SUPERMEGA_ENABLE_LOCAL_TOOLS === 'true'") && serverSource.includes('This local-only tool is disabled.'), 'local_tool_gate_missing');

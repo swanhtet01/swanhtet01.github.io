@@ -151,32 +151,54 @@ function redactLeadPipeline(payload) {
   return { ...payload, rows };
 }
 
-const TOOL_OUTPUT_SCHEMA = {
+function dataOutputSchema(data) {
+  return {
+    type: 'object',
+    properties: { data },
+    required: ['data'],
+    additionalProperties: false,
+  };
+}
+
+const OBJECT_DATA_OUTPUT_SCHEMA = dataOutputSchema({ type: 'object' });
+const OPERATING_BRIEF_OUTPUT_SCHEMA = dataOutputSchema({
   type: 'object',
-  properties: { data: {} },
-  required: ['data'],
+  properties: {
+    health: { type: 'object' },
+    summary: { type: 'object' },
+    insights: { type: 'object' },
+  },
+  required: ['health', 'summary', 'insights'],
   additionalProperties: false,
-};
+});
+const LOCAL_FILES_OUTPUT_SCHEMA = dataOutputSchema({
+  type: 'array',
+  items: {
+    type: 'object',
+    properties: {
+      name: { type: 'string' },
+      type: { type: 'string', enum: ['dir', 'file'] },
+    },
+    required: ['name', 'type'],
+    additionalProperties: false,
+  },
+});
+const TEXT_OUTPUT_SCHEMA = dataOutputSchema({ type: 'string' });
 
 function buildTools() {
   const tools = [
     {
-      name: 'mark1_status',
-      description: 'Read health and operating-summary data from the configured private SuperMega workspace.',
+      name: 'mark1_get_operating_brief',
+      title: 'Get operating brief',
+      description: 'Use this when you need one current operating brief for the authorized private SuperMega workspace; it reads health, summary, and recommended actions without changing state.',
       inputSchema: { type: 'object', properties: {}, required: [], additionalProperties: false },
-      outputSchema: TOOL_OUTPUT_SCHEMA,
+      outputSchema: OPERATING_BRIEF_OUTPUT_SCHEMA,
       annotations: { readOnlyHint: true, openWorldHint: false, destructiveHint: false },
     },
     {
-      name: 'mark1_insights',
-      description: 'Read the current private operating brief and its recommended actions without changing workspace state.',
-      inputSchema: { type: 'object', properties: {}, required: [], additionalProperties: false },
-      outputSchema: TOOL_OUTPUT_SCHEMA,
-      annotations: { readOnlyHint: true, openWorldHint: false, destructiveHint: false },
-    },
-    {
-      name: 'mark1_exceptions',
-      description: 'Read a bounded page of current exceptions from the configured private SuperMega workspace.',
+      name: 'mark1_list_exceptions',
+      title: 'List current exceptions',
+      description: 'Use this when you need a bounded list of current exceptions from the authorized private SuperMega workspace without resolving or changing them.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -185,50 +207,67 @@ function buildTools() {
         required: [],
         additionalProperties: false,
       },
-      outputSchema: TOOL_OUTPUT_SCHEMA,
+      outputSchema: OBJECT_DATA_OUTPUT_SCHEMA,
       annotations: { readOnlyHint: true, openWorldHint: false, destructiveHint: false },
     },
     {
-      name: 'mark1_approvals',
-      description: 'List private approval items, or create one pending private approval when action is create.',
+      name: 'mark1_list_approvals',
+      title: 'List pending approvals',
+      description: 'Use this when you need a bounded list of private approval items without creating, deciding, or changing an approval.',
       inputSchema: {
         type: 'object',
         properties: {
-          action: { type: 'string', enum: ['list', 'create'], description: 'Approval action' },
-          limit: { type: 'integer', minimum: 1, maximum: 50, description: 'Maximum approval records to return for list' },
-          title: { type: 'string', maxLength: 120 },
+          limit: { type: 'integer', minimum: 1, maximum: 50, description: 'Maximum approval records to return' },
+        },
+        required: [],
+        additionalProperties: false,
+      },
+      outputSchema: OBJECT_DATA_OUTPUT_SCHEMA,
+      annotations: { readOnlyHint: true, openWorldHint: false, destructiveHint: false },
+    },
+    {
+      name: 'mark1_create_approval',
+      title: 'Create pending approval',
+      description: 'Use this when an authorized operator explicitly asks to create one pending private approval for later human review; it never makes the final decision.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          title: { type: 'string', minLength: 1, maxLength: 120 },
           summary: { type: 'string', maxLength: 1000 },
           approval_gate: { type: 'string', maxLength: 80 },
           requested_by: { type: 'string', maxLength: 80 },
-          owner: { type: 'string', maxLength: 80 },
+          owner: { type: 'string', minLength: 1, maxLength: 80 },
           due: { type: 'string', maxLength: 40 },
           related_route: { type: 'string', maxLength: 200 },
           related_entity: { type: 'string', maxLength: 120 },
         },
-        required: ['action'],
+        required: ['title', 'owner'],
         additionalProperties: false,
       },
-      outputSchema: TOOL_OUTPUT_SCHEMA,
+      outputSchema: OBJECT_DATA_OUTPUT_SCHEMA,
       annotations: { readOnlyHint: false, openWorldHint: false, destructiveHint: false },
     },
     {
-      name: 'mark1_leads',
-      description: 'Read a redacted private lead pipeline without contact details, outreach messages, discovery notes, or free-form notes.',
+      name: 'mark1_list_leads',
+      title: 'List saved leads',
+      description: 'Use this when you need the saved private lead pipeline without contact details, outreach messages, discovery questions, free-form notes, or any state change.',
       inputSchema: { type: 'object', properties: {}, required: [], additionalProperties: false },
-      outputSchema: TOOL_OUTPUT_SCHEMA,
+      outputSchema: OBJECT_DATA_OUTPUT_SCHEMA,
       annotations: { readOnlyHint: true, openWorldHint: false, destructiveHint: false },
     },
   ];
 
   if (ENABLE_LOCAL_TOOLS) tools.push({
       name: 'mark1_files',
-      description: 'List top-level names and types in the configured local SuperMega repository; available only in explicit internal-local mode.',
+      title: 'List local repository files',
+      description: 'Use this when operating in an approved internal-local environment to list top-level names and types in the configured SuperMega repository.',
       inputSchema: { type: 'object', properties: {}, required: [], additionalProperties: false },
-      outputSchema: TOOL_OUTPUT_SCHEMA,
+      outputSchema: LOCAL_FILES_OUTPUT_SCHEMA,
       annotations: { readOnlyHint: true, openWorldHint: false, destructiveHint: false },
     }, {
       name: 'mark1_execute',
-      description: 'Run an arbitrary local shell command in the configured SuperMega repository; may change files, external systems, or public state and is available only in explicit internal-local mode.',
+      title: 'Run local repository command',
+      description: 'Use this when operating in an approved internal-local environment to run an arbitrary shell command that may change files, external systems, or public state.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -238,7 +277,7 @@ function buildTools() {
         required: ['command'],
         additionalProperties: false,
       },
-      outputSchema: TOOL_OUTPUT_SCHEMA,
+      outputSchema: TEXT_OUTPUT_SCHEMA,
       annotations: { readOnlyHint: false, openWorldHint: true, destructiveHint: true },
     });
 
@@ -272,47 +311,46 @@ async function callTool(name, args = {}) {
     throw new Error('This local-only tool is disabled. Set SUPERMEGA_ENABLE_LOCAL_TOOLS=true only in an approved internal environment.');
   }
   switch (name) {
-    case 'mark1_status': {
-      const [health, summary] = await Promise.all([
+    case 'mark1_get_operating_brief': {
+      const [health, summary, insights] = await Promise.all([
         apiRequest('/api/health'),
         apiRequest('/api/summary'),
+        apiRequest('/api/insights'),
       ]);
-      return toolData({ health, summary });
+      return toolData({ health, summary, insights });
     }
-    case 'mark1_insights': {
-      const payload = await apiRequest('/api/insights');
-      return toolData(payload);
-    }
-    case 'mark1_exceptions': {
+    case 'mark1_list_exceptions': {
       const limit = boundedInteger(args.limit, 10, 1, 50);
       const payload = await apiRequest(`/api/exceptions?limit=${limit}`);
       return toolData(payload);
     }
-    case 'mark1_approvals': {
-      if (args.action !== 'list' && args.action !== 'create') throw new Error('Approval action must be list or create.');
-      if (args.action === 'create') {
-        const payload = await apiRequest('/api/approvals', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            title: String(args.title || 'Untitled approval').trim(),
-            summary: String(args.summary || '').trim(),
-            approval_gate: String(args.approval_gate || 'general').trim(),
-            requested_by: String(args.requested_by || 'MCP client').trim(),
-            owner: String(args.owner || 'Management').trim(),
-            due: String(args.due || '').trim(),
-            related_route: String(args.related_route || '/app').trim(),
-            related_entity: String(args.related_entity || '').trim(),
-            status: 'pending',
-          }),
-        });
-        return toolData(payload);
-      }
+    case 'mark1_list_approvals': {
       const limit = boundedInteger(args.limit, 10, 1, 50);
       const payload = await apiRequest(`/api/approvals?limit=${limit}`);
       return toolData(payload);
     }
-    case 'mark1_leads': {
+    case 'mark1_create_approval': {
+      const title = String(args.title || '').trim();
+      const owner = String(args.owner || '').trim();
+      if (!title || !owner) throw new Error('Approval title and owner are required.');
+      const payload = await apiRequest('/api/approvals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title,
+          summary: String(args.summary || '').trim(),
+          approval_gate: String(args.approval_gate || 'general').trim(),
+          requested_by: String(args.requested_by || 'MCP client').trim(),
+          owner,
+          due: String(args.due || '').trim(),
+          related_route: String(args.related_route || '/app').trim(),
+          related_entity: String(args.related_entity || '').trim(),
+          status: 'pending',
+        }),
+      });
+      return toolData(payload);
+    }
+    case 'mark1_list_leads': {
       const payload = await apiRequest('/api/lead-pipeline');
       return toolData(redactLeadPipeline(payload));
     }
@@ -347,7 +385,7 @@ async function handleMessage(message) {
       result: {
         protocolVersion: '2024-11-05',
         capabilities: { tools: {} },
-          serverInfo: { name: 'supermega-mark1', version: '2.1.0' },
+          serverInfo: { name: 'supermega-mark1', version: '2.2.0' },
       },
     });
     return;

@@ -4,35 +4,23 @@
   "app_info": {
     "display_name": "SuperMega Mark 1",
     "subtitle": "Review private operations",
-    "description": "SuperMega Mark 1 helps authorized operators review a private workspace, inspect exceptions and a contact-redacted lead pipeline, read the current operating brief, and create a pending approval item for human review.",
+    "description": "SuperMega Mark 1 helps authorized operators review one private operating brief, inspect exceptions, pending approvals, and a contact-redacted lead pipeline, and create a pending approval item for human review.",
     "category": "BUSINESS"
   },
   "tools": {
-    "mark1_status": {
+    "mark1_get_operating_brief": {
       "annotations": {
         "readOnlyHint": true,
         "openWorldHint": false,
         "destructiveHint": false
       },
       "justifications": {
-        "read_only_justification": "Retrieves health and operating-summary data without creating or changing workspace records.",
+        "read_only_justification": "Retrieves health, operating-summary, and recommended-action data without creating or changing workspace records.",
         "open_world_justification": "Reads only the configured private SuperMega workspace and does not change public or third-party state.",
         "destructive_justification": "Does not delete, overwrite, revoke, send, or perform an irreversible action."
       }
     },
-    "mark1_insights": {
-      "annotations": {
-        "readOnlyHint": true,
-        "openWorldHint": false,
-        "destructiveHint": false
-      },
-      "justifications": {
-        "read_only_justification": "Retrieves the current operating brief and recommended actions without modifying workspace data.",
-        "open_world_justification": "Reads only private SuperMega operating data and does not publish or write to an external system.",
-        "destructive_justification": "Cannot delete, overwrite, revoke, send, or commit an irreversible operation."
-      }
-    },
-    "mark1_exceptions": {
+    "mark1_list_exceptions": {
       "annotations": {
         "readOnlyHint": true,
         "openWorldHint": false,
@@ -44,7 +32,19 @@
         "destructive_justification": "Does not resolve, delete, overwrite, or otherwise irreversibly change an exception."
       }
     },
-    "mark1_approvals": {
+    "mark1_list_approvals": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Retrieves a bounded list of private approval items without creating, deciding, or changing them.",
+        "open_world_justification": "Reads only configured private workspace records and does not publish, message, submit, or write to a third-party system.",
+        "destructive_justification": "Does not delete, overwrite, revoke, decide, or execute an irreversible approval action."
+      }
+    },
+    "mark1_create_approval": {
       "annotations": {
         "readOnlyHint": false,
         "openWorldHint": false,
@@ -56,7 +56,7 @@
         "destructive_justification": "Creates a reviewable pending item and does not delete, overwrite, revoke, or execute an irreversible approval decision."
       }
     },
-    "mark1_leads": {
+    "mark1_list_leads": {
       "annotations": {
         "readOnlyHint": true,
         "openWorldHint": false,
@@ -71,26 +71,26 @@
   },
   "test_cases": [
     {
-      "description": "Review current workspace health and summary.",
-      "user_prompt": "Show me the current SuperMega workspace status and operating summary.",
+      "description": "Review one current private operating brief.",
+      "user_prompt": "Show me the current SuperMega operating brief, including health, summary, and recommended actions.",
       "file_attachment_urls": null,
-      "tools_triggered": "mark1_status",
-      "expected_output": "Returns the private workspace health and current operating summary with no state change.",
+      "tools_triggered": "mark1_get_operating_brief",
+      "expected_output": "Returns the private workspace health, operating summary, and recommended actions with no state change.",
       "expected_output_url": null
     },
     {
-      "description": "Read the current operating brief.",
-      "user_prompt": "What does the current SuperMega operating brief recommend next?",
+      "description": "List pending private approvals.",
+      "user_prompt": "Show the pending approval items in my SuperMega workspace without changing them.",
       "file_attachment_urls": null,
-      "tools_triggered": "mark1_insights",
-      "expected_output": "Summarizes the current private operating brief and recommended actions.",
+      "tools_triggered": "mark1_list_approvals",
+      "expected_output": "Returns a bounded list of private approval items without creating, deciding, or changing one.",
       "expected_output_url": null
     },
     {
       "description": "Return a bounded exception queue.",
       "user_prompt": "Show the five most relevant current SuperMega exceptions.",
       "file_attachment_urls": null,
-      "tools_triggered": "mark1_exceptions",
+      "tools_triggered": "mark1_list_exceptions",
       "expected_output": "Returns no more than five current private exception records with enough context for review.",
       "expected_output_url": null
     },
@@ -98,7 +98,7 @@
       "description": "Create a pending private approval item.",
       "user_prompt": "Create a pending approval titled Release evidence review, owned by Product, for a human to review this week.",
       "file_attachment_urls": null,
-      "tools_triggered": "mark1_approvals",
+      "tools_triggered": "mark1_create_approval",
       "expected_output": "Creates one pending private approval item and returns the resulting review record without making the final decision.",
       "expected_output_url": null
     },
@@ -106,7 +106,7 @@
       "description": "Review the saved lead pipeline without outreach.",
       "user_prompt": "List the leads currently saved in the SuperMega workspace; do not contact anyone.",
       "file_attachment_urls": null,
-      "tools_triggered": "mark1_leads",
+      "tools_triggered": "mark1_list_leads",
       "expected_output": "Returns saved private lead records without contact details, outreach drafts, free-form notes, messages, or state changes.",
       "expected_output_url": null
     }
