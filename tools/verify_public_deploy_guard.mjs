@@ -38,6 +38,15 @@ for (const path of retiredReleasePaths) {
   if (!releaseWorkflow.includes(`- ${path}`) || !ciWorkflow.includes(`- '${path}'`)) failures.push(`legacy_release_path_not_watched:${path}`)
 }
 if (!releaseWorkflow.includes('- tools/serve_solution.py') || !ciWorkflow.includes("- 'tools/serve_solution.py'")) failures.push('local_control_server_not_watched')
+for (const path of [
+  'tools/create_public_vercel_output.mjs',
+  'tools/verify_public_vercel_artifact_budget.mjs',
+  'tools/verify_public_vercel_output.mjs',
+  'tools/test_public_contact_function.mjs',
+]) {
+  if (!ciWorkflow.includes(`- '${path}'`)) failures.push(`public_ci_path_not_watched:${path}`)
+}
+if (!ciWorkflow.includes('run: npm run public:prebuilt')) failures.push('public_ci_validation_missing')
 if (localControlServer.includes('/api/cloud/deployments/production') || localControlServer.includes('_run_production_deploy') || localControlServer.includes('command.append("--prod")') || localControlServer.includes('vercel deploy --prebuilt --prod')) failures.push('local_production_deploy_endpoint_present')
 if (vercelConfig.git?.deploymentEnabled !== false) failures.push('native_git_deployments_not_disabled')
 if (!previewVerifier.includes('preview_contact_not_accepting')) failures.push('preview_contact_readiness_not_verified')

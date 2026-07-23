@@ -25,6 +25,10 @@ on:
       - 'tools/deploy_showroom_cloud_run.ps1'
       - 'tools/cloudrun_preflight.ps1'
       - 'tools/verify_public_release_live.mjs'
+      - 'tools/create_public_vercel_output.mjs'
+      - 'tools/verify_public_vercel_artifact_budget.mjs'
+      - 'tools/verify_public_vercel_output.mjs'
+      - 'tools/test_public_contact_function.mjs'
       - 'tools/verify_hq_contract.mjs'
       - 'tools/verify_vercel_environment_state.mjs'
       - 'tools/test_vercel_environment_state.mjs'
@@ -93,3 +97,8 @@ jobs:
         env:
           SUPERMEGA_RELEASE_COMMIT: ${{ github.sha }}
         run: npm run app:build
+
+      - name: Build and verify public site
+        env:
+          SUPERMEGA_RELEASE_COMMIT: ${{ github.sha }}
+        run: npm run public:prebuilt
