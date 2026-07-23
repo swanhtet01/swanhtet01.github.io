@@ -10,7 +10,7 @@ let websiteRuntimeChecks = 0
 let commerceRuntimeChecks = 0
 let productionRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
-const [manifestText, appPackageText, appSource, coreSource, commerceSource, managedTrialSource, managedCommerceRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, sitePreviewSource, websiteModelSource, websiteWorkspaceSource, websiteCssSource, commerceIntakeSource, handoffSource] = await Promise.all([
+const [manifestText, appPackageText, appSource, coreSource, commerceSource, managedTrialSource, managedCommerceRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteWorkspaceSource, websiteCssSource, commerceIntakeSource, handoffSource] = await Promise.all([
   readFile(resolve(root, 'site-manifest.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'package.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'App.tsx'), 'utf8'),
@@ -25,6 +25,7 @@ const [manifestText, appPackageText, appSource, coreSource, commerceSource, mana
   readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'WebsiteProduct.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'ContentWorkspace.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'PublishWorkspace.tsx'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'publish-workspace.css'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'SitePreview.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-model.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'useWebsiteWorkspace.ts'), 'utf8'),
@@ -101,7 +102,7 @@ if (!appSource.includes('<Navigate replace to="/operations/commerce/?tab=orders"
 if (!appPackage.scripts?.lint?.includes('src/products')) fail('prototype_sources_not_linted')
 if (!websiteSource.includes('No website has been deployed.')
   || !websiteSource.includes('No deployment occurred.')
-  || !publishSource.includes('No deployment target, domain write, or external connection exists in this prototype.')
+  || !publishSource.includes('No deployment, domain write, payment, stock, customer message, or order change happens here.')
   || !publishSource.includes('It does not publish a website.')) fail('website_deployment_boundary_missing')
 if (!websiteModelSource.includes("supermega.website.workspace.v2") || !websiteModelSource.includes('LEGACY_WEBSITE_STORAGE_KEY') || !websiteModelSource.includes('mutateWebsiteWorkspace') || !websiteModelSource.includes('WEBSITE_MUTATION_LOCK') || !websiteModelSource.includes('preservesAppendOnlyHistory') || !websiteModelSource.includes('canonicalJson')) fail('website_v2_locked_store_missing')
 if (!websiteModelSource.includes('contentRevision') || !websiteModelSource.includes('evidenceIds') || !websiteModelSource.includes('migratedFromV1') || !websiteModelSource.includes('getCurrentApproval') || !websiteModelSource.includes('getCurrentPublish')) fail('website_release_provenance_missing')
@@ -130,6 +131,19 @@ if (!contentSource.includes("type EditorSection = 'page' | 'hero' | 'sections' |
   || !contentSource.includes('aria-label="Page section to edit"')
   || !contentSource.includes('data-editor-section={editorSection}')
   || !websiteCssSource.includes('.website-editor-scroll[data-editor-section] > [data-content-section]')) fail('website_content_focus_contract_missing')
+if (!publishSource.includes("type PublishStep = 'checks' | 'evidence' | 'approval' | 'snapshot'")
+  || !publishSource.includes("{ id: 'checks', label: 'Checks' }")
+  || !publishSource.includes("{ id: 'evidence', label: 'Evidence' }")
+  || !publishSource.includes("{ id: 'approval', label: 'Approval' }")
+  || !publishSource.includes("{ id: 'snapshot', label: 'Snapshot & handoff' }")
+  || !publishSource.includes('aria-current={activeStep === step.id')
+  || !publishSource.includes("activeStep === 'checks'")
+  || !publishSource.includes("activeStep === 'evidence'")
+  || !publishSource.includes("activeStep === 'approval'")
+  || !publishSource.includes("activeStep === 'snapshot'")
+  || !publishCssSource.includes('grid-template-columns: repeat(4, minmax(0, 1fr))')
+  || !publishCssSource.includes('grid-template-columns: repeat(2, minmax(0, 1fr))')
+  || !publishCssSource.includes('font-size: 16px')) fail('website_publish_task_flow_missing')
 const websiteMobileCss = websiteCssSource.slice(websiteCssSource.indexOf('@media (max-width: 640px)'), websiteCssSource.indexOf('@media (prefers-reduced-motion'))
 const websitePreviewControlsHiddenUnconditionally = /(?:^|\n)\s*\.website-preview-controls\s*\{\s*display:\s*none/.test(websiteMobileCss)
 if (!websiteMobileCss.includes('.website-preview-controls') || !websiteMobileCss.includes('display: flex') || websitePreviewControlsHiddenUnconditionally) fail('website_mobile_review_controls_hidden')
@@ -146,7 +160,7 @@ if (!websiteSource.includes('approvalIsCurrent || !publishIsCurrent')
   || !websiteSource.includes('writeWebsiteEcommerceHandoff(handoff, workspace)')
   || !websiteSource.includes('createCommerceWebsiteIntake(current')
   || !websiteSource.includes("storageMode === 'managed' ? 'managed' : 'local'")
-  || !publishSource.includes('No stock, payment, customer message, or order changes')) fail('website_handoff_gate_missing')
+  || !publishSource.includes('No deployment, domain write, payment, stock, customer message, or order change happens here.')) fail('website_handoff_gate_missing')
 if (!commerceIntakeSource.includes('acceptWebsiteEcommerceHandoff') || !commerceIntakeSource.includes('matches.length === 1') || !commerceIntakeSource.includes('createWebsiteOrderDraft(context.handoff.id') || !commerceIntakeSource.includes('I reviewed this SKU, quantity, and Website evidence.')) fail('commerce_intake_approval_contract_missing')
 if (!commerceIntakeSource.includes('await completeWebsiteOrderDraft') || !commerceIntakeSource.includes('opaque customer reference generated on completion') || !commerceIntakeSource.includes('Create ready order') || !commerceIntakeSource.includes('Confirm into orders')) fail('commerce_order_completion_ui_missing')
 if (!coreSource.includes('function queueWebsiteOrder') || !coreSource.includes('sourceRecordId') || !coreSource.includes('item.price !== line.unitPriceMmk') || !coreSource.includes('Website order confirmation failed closed') || !coreSource.includes('Confirm ${record.id} from Website')) fail('website_order_not_integrated_with_commerce')
