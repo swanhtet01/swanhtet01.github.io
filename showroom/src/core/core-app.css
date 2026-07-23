@@ -310,6 +310,15 @@ textarea { min-height: 72px; resize: vertical; }
 .order-entry-panel { min-width: 0; min-height: 0; flex: 1; overflow: auto; }
 .order-submit-bar { flex: 0 0 auto; border-top: 1px solid var(--core-line); padding-top: 11px; background: var(--core-panel); }
 .order-submit-bar .core-button { width: 100%; }
+.order-options { overflow: hidden; border: 1px solid var(--core-line); border-radius: 10px; background: var(--core-panel-raised); }
+.order-options > summary { min-height: 44px; display: flex; align-items: center; gap: 10px; padding: 0 12px; color: var(--core-ink); cursor: pointer; list-style: none; }
+.order-options > summary::-webkit-details-marker { display: none; }
+.order-options > summary > span { font-size: 13px; font-weight: 760; }
+.order-options > summary > small { margin-left: auto; overflow: hidden; color: var(--core-muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.order-options > summary::after { color: var(--core-green); font-size: 18px; content: "+"; }
+.order-options[open] > summary { border-bottom: 1px solid var(--core-line); }
+.order-options[open] > summary::after { content: "−"; }
+.order-options-fields { padding: 11px 12px 12px; }
 .order-entry-panel > .website-intake { border-color: var(--core-line); box-shadow: none; }
 .channel-intake-panel { display: grid; gap: 12px; }
 .channel-intake-heading { display: grid; gap: 4px; border-bottom: 1px solid var(--core-line); padding-bottom: 11px; }

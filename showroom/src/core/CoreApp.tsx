@@ -2009,17 +2009,18 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
           <button className="text-link" disabled={Boolean(pendingAction)} onClick={() => { setPreparedChannelDraft(null); setNotice('Source link removed. The structured fields remain as a manual order draft.') }} type="button">Remove source link</button>
         </div> : null}
         <form className="core-form compact-form" id="commerce-manual-order-form" onSubmit={recordOrder}>
-          <div className="form-row">
-            <label>Customer<input disabled={Boolean(pendingAction)} maxLength={80} value={customer} onChange={(event) => { setCustomer(event.target.value); setPreparedChannelDraft(null) }} placeholder="Name or reference" /></label>
-            <label>Channel<select disabled={Boolean(pendingAction)} value={channel} onChange={(event) => { setChannel(event.target.value); setPreparedChannelDraft(null) }}><option>Messenger</option><option>Viber</option><option>Phone</option><option>Website</option><option>Walk-in</option></select></label>
-          </div>
+          <label>Customer<input disabled={Boolean(pendingAction)} maxLength={80} value={customer} onChange={(event) => { setCustomer(event.target.value); setPreparedChannelDraft(null) }} placeholder="Name or reference" /></label>
           <label>Item<select disabled={Boolean(pendingAction)} value={selectedSku} onChange={(event) => { setSku(event.target.value); setPreparedChannelDraft(null) }}>{commerce.items.map((item) => <option key={item.sku} value={item.sku}>{item.name} · {item.onHand} available</option>)}</select></label>
-          <div className="form-row">
-            <label>Quantity<input disabled={Boolean(pendingAction)} min="1" max={selected?.onHand ?? 1} type="number" value={quantity} onChange={(event) => { setQuantity(Number(event.target.value)); setPreparedChannelDraft(null) }} /></label>
-            <label>Payment<select disabled={Boolean(pendingAction)} value={payment} onChange={(event) => { setPayment(event.target.value); setPreparedChannelDraft(null) }}><option>KBZPay</option><option>WavePay</option><option>Cash on delivery</option><option>Cash</option><option>Card</option></select></label>
-          </div>
+          <label>Quantity<input disabled={Boolean(pendingAction)} min="1" max={selected?.onHand ?? 1} type="number" value={quantity} onChange={(event) => { setQuantity(Number(event.target.value)); setPreparedChannelDraft(null) }} /></label>
+          <details className="order-options">
+            <summary><span>Channel and payment</span><small>{channel} · {payment}</small></summary>
+            <div className="form-row order-options-fields">
+              <label>Channel<select disabled={Boolean(pendingAction)} value={channel} onChange={(event) => { setChannel(event.target.value); setPreparedChannelDraft(null) }}><option>Messenger</option><option>Viber</option><option>Phone</option><option>Website</option><option>Walk-in</option></select></label>
+              <label>Payment<select disabled={Boolean(pendingAction)} value={payment} onChange={(event) => { setPayment(event.target.value); setPreparedChannelDraft(null) }}><option>KBZPay</option><option>WavePay</option><option>Cash on delivery</option><option>Cash</option><option>Card</option></select></label>
+            </div>
+          </details>
           <div className="order-total"><span>Order total</span><strong>{formatMoney((selected?.price ?? 0) * Math.max(quantity, 0))}</strong></div>
-          <p className="form-notice" aria-live="polite">{notice || commerceStorageError || 'A responsible operator confirms the change before stock moves. No customer message is sent.'}</p>
+          <p className="form-notice" aria-live="polite">{notice || commerceStorageError || 'Review before stock moves. No customer message is sent.'}</p>
         </form>
         </div>
         <div className="order-submit-bar"><button className="core-button primary" disabled={Boolean(pendingAction)} form="commerce-manual-order-form" type="submit">Review order</button></div>
