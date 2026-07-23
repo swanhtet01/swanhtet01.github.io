@@ -12,7 +12,7 @@ import { TeamsPage } from './core/TeamWorkspace'
 const WebsiteProduct = lazy(() => import('./products/website/WebsiteProduct').then((module) => ({ default: module.WebsiteProduct })))
 
 function ProductLoading({ name }: { name: string }) {
-  return <main className="product-route-loading"><span>&gt;_</span><p>Loading {name} workspace…</p></main>
+  return <div aria-live="polite" className="product-route-loading" role="status"><span>&gt;_</span><p>Loading {name} workspace…</p></div>
 }
 
 function LegacyEntryRedirect() {
@@ -29,12 +29,12 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route element={<Suspense fallback={<ProductLoading name="Website" />}><WebsiteProduct /></Suspense>} path="products/website/*" />
         <Route element={<Navigate replace to="/operations/commerce/?tab=orders" />} path="products/ecommerce/*" />
         <Route element={<CoreLayout />}>
           <Route element={<OverviewPage />} index />
           <Route element={<TeamsPage />} path="work/*" />
           <Route element={<OperationsPage />} path="operations/*" />
+          <Route element={<Suspense fallback={<ProductLoading name="Website" />}><WebsiteProduct /></Suspense>} path="products/website/*" />
           <Route element={<SettingsPage />} path="settings/*" />
           <Route element={<LegacyEntryRedirect />} path="legacy-entry" />
           <Route element={<Navigate replace to="/operations/commerce/" />} path="shop/*" />

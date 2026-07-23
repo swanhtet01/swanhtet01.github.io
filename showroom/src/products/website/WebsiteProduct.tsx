@@ -115,7 +115,12 @@ export function WebsiteProduct() {
     && publishIsCurrent
     && checks.every((check) => check.passed))
   const activeViewCopy = viewCopy[view]
-  const statusNotice = storageIssue || notice
+  const savedStateNotice = storageMode === 'managed'
+    ? 'Changes are saved to this managed workspace. Nothing has been deployed.'
+    : storageMode === 'browser-local'
+      ? 'Changes are saved on this device. Nothing has been deployed.'
+      : 'Changes last for this session only. Nothing has been deployed.'
+  const statusNotice = storageIssue || (notice === DEFAULT_NOTICE ? savedStateNotice : notice)
   const noticePriority = storageIssue ? 'error' : notice === DEFAULT_NOTICE ? 'routine' : 'update'
 
   useEffect(() => {
@@ -464,30 +469,8 @@ export function WebsiteProduct() {
 
   return (
     <div className="website-product">
-      <a className="website-skip" href="#website-workspace">Skip to website task</a>
-
-      <header className="website-topbar">
-        <a aria-label="Back to SuperMega operations" className="website-brand" href="/operations/">
-          <span aria-hidden="true">&gt;_</span>
-          <strong>SUPERMEGA</strong>
-          <b>Website</b>
-        </a>
-        <div className="website-site-summary">
-          <strong><span className="website-product-label">Website</span><span className="website-site-label">{workspace.siteName || 'Untitled site'}</span></strong>
-          <small>{workspace.pages.length} of {MAX_WEBSITE_PAGES} pages</small>
-        </div>
-        <div className="website-runtime">
-          <span className="website-local-badge"><i /><span className="website-runtime-label">{storageMode === 'managed' ? 'Managed workspace' : storageMode === 'browser-local' ? 'Local workspace' : 'Session only'}</span><span className="website-runtime-label-short">{storageMode === 'managed' ? 'Managed' : storageMode === 'browser-local' ? 'Local' : 'Session'}</span></span>
-          <small>{storageMode === 'managed'
-            ? 'synced · content r' + String(workspace.contentRevision)
-            : storageMode === 'browser-local'
-              ? 'saved · content r' + String(workspace.contentRevision)
-              : 'writes paused'}</small>
-        </div>
-      </header>
-
       <div className="website-shell">
-        <main id="website-workspace" className="website-main">
+        <div id="website-workspace" className="website-main">
           <nav className="website-workspace-nav website-desktop-workspace-nav" aria-label="Website workspace" role="tablist">
             {workspaceViews.map((item, index) => (
               <button
@@ -786,7 +769,7 @@ export function WebsiteProduct() {
               />
             </div>
           </div>
-        </main>
+        </div>
       </div>
     </div>
   )

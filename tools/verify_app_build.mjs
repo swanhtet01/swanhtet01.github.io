@@ -138,6 +138,22 @@ if (!teamSource.includes("activeView === 'agents'")
   || !teamSource.includes("actions={activeView === 'work' && !intakeOpen")
   || teamSource.includes('actions={<button className="core-button primary" onClick={openNewWork}')) fail('team_view_context_missing')
 if (!appSource.includes("lazy(() => import('./products/website/WebsiteProduct')") || !appSource.includes('Suspense') || appSource.includes("import('./products/ecommerce/EcommerceOrdersProduct')")) fail('website_prototype_route_not_isolated')
+const coreLayoutRouteStart = appSource.indexOf('<Route element={<CoreLayout />}>')
+const coreLayoutRouteEnd = appSource.indexOf('</Route>', coreLayoutRouteStart)
+const websiteRoute = appSource.indexOf('path="products/website/*"')
+const embeddedWebsiteCss = websiteCssSource.slice(websiteCssSource.indexOf('/* Website runs inside the shared SuperMega shell. */'))
+if (coreLayoutRouteStart < 0
+  || coreLayoutRouteEnd < 0
+  || websiteRoute < coreLayoutRouteStart
+  || websiteRoute > coreLayoutRouteEnd
+  || !coreSource.includes("location.pathname.startsWith('/products/website/')")
+  || !coreSource.includes("to === '/operations/' && location.pathname.startsWith('/products/')")
+  || websiteSource.includes('className="website-topbar"')
+  || websiteSource.includes('className="website-brand"')
+  || websiteSource.includes('<main id="website-workspace"')
+  || !embeddedWebsiteCss.includes('.website-product {')
+  || !embeddedWebsiteCss.includes('overflow: visible;')
+  || !embeddedWebsiteCss.includes('.website-shell {\n    height: auto;')) fail('website_shared_app_shell_missing')
 if (!appSource.includes('<Navigate replace to="/operations/commerce/?tab=orders" />') || !appSource.includes('path="products/ecommerce/*"')) fail('legacy_ecommerce_route_not_redirected')
 if (!appPackage.scripts?.lint?.includes('src/products')) fail('prototype_sources_not_linted')
 if (!websiteSource.includes('No website has been deployed.')
