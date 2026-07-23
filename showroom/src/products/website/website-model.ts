@@ -729,14 +729,14 @@ export function loadWebsiteWorkspace(storage: Pick<WebsiteStorage, 'getItem'>): 
       const current = parseStoredWorkspace(currentRaw)
       return current
         ? { ok: true, source: 'v2', workspace: current }
-        : { ok: false, error: 'Stored Website v2 data is invalid. The original record was preserved and writes are disabled.' }
+        : { ok: false, error: 'Saved Website data is invalid. It was kept unchanged. Draft edits are session-only until you export or reset local data in Settings.' }
     }
     const legacyRaw = storage.getItem(LEGACY_WEBSITE_STORAGE_KEY)
     if (legacyRaw !== null) {
       const legacy = parseLegacyWorkspace(legacyRaw)
       return legacy
         ? { ok: true, source: 'v1', workspace: migrateLegacyWorkspace(legacy) }
-        : { ok: false, error: 'Stored Website v1 data is invalid. The original record was preserved and was not replaced with demo data.' }
+        : { ok: false, error: 'Old Website data is invalid. It was kept unchanged and was not replaced with demo data. Use Settings to export or reset local data.' }
     }
     return { ok: true, source: 'seed', workspace: createInitialWorkspace() }
   } catch (error) {

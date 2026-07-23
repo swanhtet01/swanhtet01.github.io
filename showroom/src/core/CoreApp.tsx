@@ -4,7 +4,12 @@ import { Link, NavLink, Outlet, useLocation, useNavigate, useOutletContext, useS
 import siteManifest from '../../../site-manifest.json'
 import './core-app.css'
 import { WebsiteCommerceIntake } from '../products/WebsiteCommerceIntake'
-import type { WebsiteOrderRecord } from '../products/product-handoff'
+import {
+  LEGACY_WEBSITE_STORAGE_KEY,
+  WEBSITE_ECOMMERCE_HANDOFF_KEY,
+  WEBSITE_STORAGE_KEY,
+  type WebsiteOrderRecord,
+} from '../products/product-handoff'
 import {
   createManagedApproval,
   currentManagedIdentity,
@@ -2473,7 +2478,22 @@ export function SettingsPage() {
   }
 
   function resetDemoWorkspace() {
-    ;[COMMERCE_KEY, PRODUCTION_KEY, APPROVAL_KEY, SETUP_KEY, ACTION_KEY, TEAM_WORK_KEY, ...LEGACY_TEAM_WORK_KEYS, ...LEGACY_COMMERCE_KEYS, ...LEGACY_PRODUCTION_KEYS, ...LEGACY_APPROVAL_KEYS, ...LEGACY_SETUP_KEYS].forEach((key) => window.localStorage.removeItem(key))
+    ;[
+      COMMERCE_KEY,
+      PRODUCTION_KEY,
+      APPROVAL_KEY,
+      SETUP_KEY,
+      ACTION_KEY,
+      TEAM_WORK_KEY,
+      WEBSITE_STORAGE_KEY,
+      LEGACY_WEBSITE_STORAGE_KEY,
+      WEBSITE_ECOMMERCE_HANDOFF_KEY,
+      ...LEGACY_TEAM_WORK_KEYS,
+      ...LEGACY_COMMERCE_KEYS,
+      ...LEGACY_PRODUCTION_KEYS,
+      ...LEGACY_APPROVAL_KEYS,
+      ...LEGACY_SETUP_KEYS,
+    ].forEach((key) => window.localStorage.removeItem(key))
     window.location.assign('/')
   }
 
@@ -2545,7 +2565,7 @@ export function SettingsPage() {
           <p className="authority-note">External sends, payments, publishing, access changes, and production writes remain owner-approved and auditable.</p>
         </section> : null}
       </div>
-      {settingsStep === 'system' ? <section className="core-panel trial-control-panel"><div><span className="core-eyebrow">Local evidence</span><h2>Export or reset deliberately.</h2><p>Export the pilot definition and full browser workspace for review. Reset only after the evidence is no longer needed.</p></div><div className="trial-actions"><a className="core-button" download={evidenceFilename} href={evidenceHref}>Export evidence</a>{resetArmed ? <><button className="text-link" onClick={() => setResetArmed(false)} type="button">Cancel</button><button className="core-button danger" onClick={resetDemoWorkspace} type="button">Confirm reset</button></> : <button className="text-link danger-text" onClick={() => setResetArmed(true)} type="button">Reset local trial</button>}</div></section> : null}
+      {settingsStep === 'system' ? <section className="core-panel trial-control-panel"><div><span className="core-eyebrow">Local evidence</span><h2>Export or reset deliberately.</h2><p>Export the pilot definition and full browser workspace for review. Reset clears Company, Commerce, Production, Website, and handoff records only after confirmation.</p></div><div className="trial-actions"><a className="core-button" download={evidenceFilename} href={evidenceHref}>Export evidence</a>{resetArmed ? <><button className="text-link" onClick={() => setResetArmed(false)} type="button">Cancel</button><button className="core-button danger" onClick={resetDemoWorkspace} type="button">Confirm reset</button></> : <button className="text-link danger-text" onClick={() => setResetArmed(true)} type="button">Reset local trial</button>}</div></section> : null}
     </div>
   )
 }

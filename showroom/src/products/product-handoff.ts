@@ -1,4 +1,5 @@
 import {
+  LEGACY_WEBSITE_STORAGE_KEY,
   WEBSITE_STORAGE_KEY,
   getCurrentApproval,
   getCurrentPublish,
@@ -8,6 +9,7 @@ import {
   type WebsiteWorkspace,
 } from './website/website-model.ts'
 
+export { LEGACY_WEBSITE_STORAGE_KEY, WEBSITE_STORAGE_KEY }
 export const WEBSITE_ECOMMERCE_HANDOFF_KEY = 'supermega.website-ecommerce-handoff.v1'
 
 type HandoffSource = {

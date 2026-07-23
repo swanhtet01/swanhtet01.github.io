@@ -523,7 +523,10 @@ export function WebsiteProduct() {
           </nav>
 
           <div className="website-notice" aria-live="polite" data-priority={noticePriority} role="status">
-            {statusNotice}
+            <p>{statusNotice}</p>
+            {storageIssue && storageMode === 'session-only' ? (
+              <a className="website-notice-action" href="/settings/#controls">Recovery settings</a>
+            ) : null}
           </div>
 
           {view === 'content' ? (
