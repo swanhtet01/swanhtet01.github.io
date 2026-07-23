@@ -7,6 +7,7 @@ import {
   createTeamId,
   evidenceKinds,
   formatTime,
+  productWorkflowExercised,
   productStages,
   teamDefinitions,
   type EvidenceKind,
@@ -98,7 +99,8 @@ export function TeamsPage() {
   const blockedItems = teamItems.filter((item) => item.status === 'blocked')
   const evidenceCount = teamItems.reduce((total, item) => total + item.evidence.length, 0)
   const verifiedEvidenceCount = teamItems.reduce((total, item) => total + item.evidence.filter((entry) => entry.status === 'verified').length, 0)
-  const releaseComplete = workspace.release.checks.filter((check) => check.complete).length
+  const workflowExercised = productWorkflowExercised(workspace)
+  const releaseComplete = workspace.release.checks.filter((check) => check.id === 'workflow' ? workflowExercised : check.complete).length
   const releasePercent = Math.round((releaseComplete / workspace.release.checks.length) * 100)
   const reviewDecision = workspace.decisions.find((decision) => decision.id === reviewDecisionId && decision.status === 'proposed')
 
@@ -260,6 +262,12 @@ export function TeamsPage() {
   }
 
   function toggleReleaseCheck(checkId: string) {
+    if (checkId === 'workflow') {
+      setNotice(workflowExercised
+        ? 'Product workflow evidence is complete and stays linked to the accepted handoff.'
+        : 'Complete one Product item with an accepted agent handoff to satisfy this check.')
+      return
+    }
     const check = workspace.release.checks.find((candidate) => candidate.id === checkId)
     if (check && !check.complete && verifiedEvidenceCount === 0) {
       setNotice('Verify at least one Product evidence record before completing a release check.')
@@ -339,13 +347,16 @@ export function TeamsPage() {
           </section>
         </div> : null}
 
-        {activeView === 'agents' ? <AgentTeamsPanel activeTeam={activeTeam} onSelectAgent={(agentId) => navigate(activeTeam, 'agents', agentId)} selectedAgentId={requestedAgentId ?? ''} setWorkspace={setWorkspace} workspace={workspace} /> : null}
+        {activeView === 'agents' ? <AgentTeamsPanel activeTeam={activeTeam} onSelectAgent={(agentId) => navigate(activeTeam, 'agents', agentId)} onSelectWork={(workItemId) => navigate(activeTeam, 'work', workItemId)} selectedAgentId={requestedAgentId ?? ''} setWorkspace={setWorkspace} workspace={workspace} /> : null}
 
         {activeView === 'review' ? <div className="review-workspace simplified-review">
           <div className="split-workspace review-grid">
             <section className="core-panel release-panel">
               <div className="panel-head"><div><span className="core-eyebrow">{activeTeam === 'product' ? 'Release control' : 'Evidence review'}</span><h2>{activeTeam === 'product' ? workspace.release.name : activeDefinition.label}</h2></div>{activeTeam === 'product' ? <span className="status-pill bounded">{releasePercent}% ready</span> : null}</div>
-              {activeTeam === 'product' ? <div className="release-checks">{workspace.release.checks.map((check) => <label key={check.id}><input checked={check.complete} onChange={() => toggleReleaseCheck(check.id)} type="checkbox" /><span>{check.label}</span></label>)}</div> : <div className="evidence-summary"><strong>{verifiedEvidenceCount}/{evidenceCount}</strong><p>Verified evidence across {teamItems.length} work records.</p></div>}
+              {activeTeam === 'product' ? <div className="release-checks">{workspace.release.checks.map((check) => {
+                const isWorkflowCheck = check.id === 'workflow'
+                return <label key={check.id} title={isWorkflowCheck ? 'Completed automatically after an accepted agent handoff is linked to a done Product item.' : undefined}><input checked={isWorkflowCheck ? workflowExercised : check.complete} disabled={isWorkflowCheck} onChange={() => toggleReleaseCheck(check.id)} type="checkbox" /><span>{check.label}{isWorkflowCheck ? ' (automatic)' : ''}</span></label>
+              })}</div> : <div className="evidence-summary"><strong>{verifiedEvidenceCount}/{evidenceCount}</strong><p>Verified evidence across {teamItems.length} work records.</p></div>}
             </section>
             <section className="core-panel brief-panel">
               <div className="panel-head"><div><span className="core-eyebrow">Team brief</span><h2>Review recorded facts.</h2></div><button className="core-button compact" onClick={prepareBrief} type="button">Prepare</button></div>

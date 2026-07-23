@@ -386,6 +386,17 @@ textarea { min-height: 72px; resize: vertical; }
 .agent-evidence-card > div { display: flex; align-items: center; justify-content: space-between; color: var(--core-muted); font-size: 10px; }
 .agent-evidence-card > strong { font-size: 11px; }
 .agent-evidence-card > small, .agent-evidence-card > p { margin: 0; color: var(--core-quiet); font-size: 9px; }
+.agent-handoff-card { display: grid; gap: 10px; margin-top: 12px; border: 1px solid rgba(11,116,94,.24); border-radius: var(--core-radius); padding: 12px; background: rgba(11,116,94,.055); }
+.agent-handoff-card.compact { border-color: var(--core-line); background: var(--core-panel-soft); }
+.agent-handoff-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.agent-handoff-head > div { min-width: 0; display: grid; gap: 3px; }
+.agent-handoff-head h3 { overflow: hidden; margin: 0; font-family: var(--core-mono); font-size: 11px; text-overflow: ellipsis; }
+.agent-handoff-evidence { min-width: 0; display: grid; gap: 4px; border-left: 2px solid var(--core-green); padding-left: 10px; }
+.agent-handoff-evidence strong { font-size: 11px; }
+.agent-handoff-evidence small { overflow: hidden; color: var(--core-quiet); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.agent-handoff-form { display: grid; grid-template-columns: minmax(0,.7fr) minmax(0,1.3fr); gap: 8px; }
+.agent-handoff-form .form-actions { grid-column: 1/-1; }
+.agent-handoff-card > p { margin: 0; color: var(--core-muted); font-size: 9px; line-height: 1.45; }
 .compact-disclosure { position: relative; }
 .compact-disclosure > summary { min-height: 34px; display: inline-flex; align-items: center; border: 1px solid var(--core-line-strong); border-radius: 5px; padding: 0 10px; color: var(--core-muted); font-size: 10px; font-weight: 760; cursor: pointer; list-style: none; }
 .compact-disclosure[open] > summary { border-color: var(--core-green); color: var(--core-ink); }
@@ -560,6 +571,8 @@ textarea { min-height: 72px; resize: vertical; }
   .agent-summary span:nth-child(2n) { border-right: 0; }
   .agent-summary span:nth-last-child(-n+2) { border-bottom: 0; }
   .agent-control-grid { grid-template-columns: 1fr; }
+  .agent-handoff-form { grid-template-columns: 1fr; }
+  .agent-handoff-form .form-actions { grid-column: auto; }
   .agent-create-form { position: static; width: min(100%,300px); margin-top: 8px; }
   .agent-roster-panel .panel-head { align-items: flex-start; }
   .compact-disclosure > summary { min-height: 44px; }

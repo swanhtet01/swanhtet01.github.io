@@ -9,6 +9,7 @@ let orderCompletionRuntimeChecks = 0
 let websiteRuntimeChecks = 0
 let commerceRuntimeChecks = 0
 let productionRuntimeChecks = 0
+let agentHandoffRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
 const [manifestText, appPackageText, appSource, coreSource, commerceSource, managedTrialSource, managedCommerceRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, publishSource, sitePreviewSource, websiteModelSource, websiteWorkspaceSource, websiteCssSource, commerceIntakeSource, handoffSource] = await Promise.all([
   readFile(resolve(root, 'site-manifest.json'), 'utf8'),
@@ -77,7 +78,7 @@ else {
 const files = await walk(dist)
 const textFiles = files.filter((path) => /\.(?:html|js|css|json|svg)$/.test(path))
 const corpus = (await Promise.all(textFiles.map((path) => readFile(path, 'utf8')))).join('\n')
-for (const required of ['SUPERMEGA', 'Teams', 'Product', 'Acceptance outcome', 'Prepare brief', 'Evidence register', 'Record evidence', 'Verified evidence', 'verifiedAt', 'Operations', 'Human confirmation', 'Confirm and record', 'Action history', 'actorKind', 'evidenceReference', 'accountableActions', 'decision_packet.v1', 'Claims and provenance', 'claimType', 'claim_type', 'source_reference', 'artifact_reference', 'managedApprovalRequests', 'packetFingerprint', 'uncertainty', 'visibility', 'artifactReference', 'Human reviewer', 'Decision note', 'Approve and record', 'Local trial', 'Delegation control', 'Pilot definition', 'Template profile', 'Workflow', 'workflowProfile', 'Current record', 'Baseline', 'Target outcome', 'Human authority boundary', 'Acceptance evidence', 'Operating mode', 'Write path', manifest.brand.colors.accent, manifest.brand.colors.ink]) {
+for (const required of ['SUPERMEGA', 'Teams', 'Product', 'Acceptance outcome', 'Prepare brief', 'Evidence register', 'Record evidence', 'Verified evidence', 'verifiedAt', 'Submit for review', 'Return for revision', 'Accept into work', 'Operations', 'Human confirmation', 'Confirm and record', 'Action history', 'actorKind', 'evidenceReference', 'accountableActions', 'decision_packet.v1', 'Claims and provenance', 'claimType', 'claim_type', 'source_reference', 'artifact_reference', 'managedApprovalRequests', 'packetFingerprint', 'uncertainty', 'visibility', 'artifactReference', 'Human reviewer', 'Decision note', 'Approve and record', 'Local trial', 'Delegation control', 'Pilot definition', 'Template profile', 'Workflow', 'workflowProfile', 'Current record', 'Baseline', 'Target outcome', 'Human authority boundary', 'Acceptance evidence', 'Operating mode', 'Write path', manifest.brand.colors.accent, manifest.brand.colors.ink]) {
   if (!corpus.includes(required)) fail(`missing_context:${required}`)
 }
 if (!coreSource.includes("import siteManifest from '../../../site-manifest.json'")) fail('workflow_contract_not_shared')
@@ -92,8 +93,11 @@ if (!coreSource.includes('toManagedDecisionPacket') || !coreSource.includes('man
 if (!teamSource.includes('Accept and record') || !teamSource.includes("acceptedActorKind: 'human'") || !teamModel.includes('acceptanceEvidenceReference')) fail('product_decision_not_human_attributed')
 if (!teamModel.includes("status: 'proposed'") || !teamModel.includes('isAttributedHumanAcceptance')) fail('legacy_product_acceptance_not_reopened')
 if (!teamSource.includes("verifiedActorKind: 'human'") || !teamModel.includes("candidate.verifiedActorKind === 'human'") || !teamModel.includes('verifiedBy')) fail('team_evidence_not_human_attributed')
-if (!teamModel.includes("supermega.team.workspace.v3") || !teamModel.includes("supermega.team.workspace.v2") || !teamModel.includes('hasValidAssignment')) fail('agent_team_migration_or_integrity_missing')
+if (!teamModel.includes("supermega.team.workspace.v4") || !teamModel.includes("supermega.team.workspace.v3") || !teamModel.includes("supermega.team.workspace.v2") || !teamModel.includes('hasValidAssignment') || !teamModel.includes('normalizeTeamWorkspace')) fail('agent_team_migration_or_integrity_missing')
 if (!agentTeamsSource.includes('No agent can send, pay, publish, merge, deploy, or write to production') || !agentTeamsSource.includes('humanOwner') || !agentTeamsSource.includes('approvalBoundary') || agentTeamsSource.includes('>Run<')) fail('agent_authority_boundary_missing')
+if (!teamModel.includes('submitAgentHandoff') || !teamModel.includes('reviewAgentHandoff') || !teamModel.includes("kind: 'handoff'") || !teamModel.includes("verifiedActorKind: 'human'") || !teamModel.includes('productWorkflowExercised') || !teamModel.includes('syncProductWorkflowCheck')) fail('agent_handoff_model_missing')
+if (!agentTeamsSource.includes('Submit for review') || !agentTeamsSource.includes('Return for revision') || !agentTeamsSource.includes('Accept into work') || !agentTeamsSource.includes('The handoff review failed closed') || !agentTeamsSource.includes('onSelectWork(latestHandoff.workItemId)')) fail('agent_handoff_review_ui_missing')
+if (!teamSource.includes("check.id === 'workflow' ? workflowExercised : check.complete") || !teamSource.includes('disabled={isWorkflowCheck}') || !teamSource.includes("' (automatic)'") || !teamSource.includes('Complete one Product item with an accepted agent handoff')) fail('product_workflow_gate_not_derived')
 if (!coreSource.includes('view=work&item=${item.id}') || !coreSource.includes('view=agents&agent=${agent.id}') || !teamSource.includes("const requestedItemId = searchParams.get('item')") || !teamSource.includes("const requestedAgentId = searchParams.get('agent')") || !teamSource.includes("if (view === 'work' && selectedId) next.item = selectedId") || !teamSource.includes("if (view === 'agents' && selectedId) next.agent = selectedId") || !agentTeamsSource.includes('onSelectAgent: (agentId: string) => void') || agentTeamsSource.includes('const [selectedAgentId')) fail('team_record_deep_links_missing')
 if (!appSource.includes("lazy(() => import('./products/website/WebsiteProduct')") || !appSource.includes('Suspense') || appSource.includes("import('./products/ecommerce/EcommerceOrdersProduct')")) fail('website_prototype_route_not_isolated')
 if (!appSource.includes('<Navigate replace to="/operations/commerce/?tab=orders" />') || !appSource.includes('path="products/ecommerce/*"')) fail('legacy_ecommerce_route_not_redirected')
@@ -173,6 +177,106 @@ for (const forbidden of ['pos.supermega.dev', 'ytf.supermega.dev', 'Yangon Tyre'
 }
 for (const marker of ['\uFFFD', '\u00e2\u20ac\u201d', '\u00e2\u20ac\u201c', '\u00c2', '\u00f0\u0178']) {
   if (corpus.includes(marker)) fail('app_copy_encoding_corrupt')
+}
+
+async function verifyAgentHandoffRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    agentHandoffRuntimeChecks += 1
+  }
+  try {
+    const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'team-work.ts')).href}?agent-handoff-verify=${Date.now()}`)
+    const seed = structuredClone(model.seedTeamWorkspace)
+    const { handoffs: _legacyHandoffs, ...legacySeed } = seed
+    const migrated = model.normalizeTeamWorkspace(legacySeed)
+    assert(migrated.handoffs.some((handoff) => handoff.agentId === 'AGT-ENG-01' && handoff.status === 'pending_review'), 'agent_v3_pending_handoff_not_migrated')
+
+    const firstSubmitted = model.submitAgentHandoff(seed, {
+      agentId: 'AGT-PROD-01',
+      summary: 'One Product workflow fixture passed its local acceptance checks.',
+      reference: 'local://verification/product-workflow-1',
+      submittedAt: '2026-07-23T08:00:00.000Z',
+      handoffId: 'HND-RUNTIME-1',
+    })
+    assert(firstSubmitted?.agents.find((agent) => agent.id === 'AGT-PROD-01')?.state === 'waiting_review', 'agent_handoff_did_not_enter_review')
+    assert(firstSubmitted?.handoffs[0].workItemId === 'PROD-102' && firstSubmitted.handoffs[0].humanOwner === 'Product lead', 'agent_handoff_provenance_missing')
+    assert(seed.agents.find((agent) => agent.id === 'AGT-PROD-01')?.lastEvidence === undefined, 'agent_handoff_mutated_source_state')
+    assert(model.submitAgentHandoff(firstSubmitted, {
+      agentId: 'AGT-PROD-01',
+      summary: 'Duplicate',
+      reference: 'local://duplicate',
+      handoffId: 'HND-RUNTIME-DUPLICATE',
+    }) === null, 'agent_parallel_pending_handoff_succeeded')
+
+    const returned = model.reviewAgentHandoff(firstSubmitted, {
+      handoffId: 'HND-RUNTIME-1',
+      decision: 'returned',
+      reviewer: 'Product lead',
+      note: 'Add the source fixture identity.',
+      reviewedAt: '2026-07-23T08:05:00.000Z',
+    })
+    const returnedItem = returned?.items.find((item) => item.id === 'PROD-102')
+    assert(returned?.handoffs[0].status === 'returned' && returned.agents.find((agent) => agent.id === 'AGT-PROD-01')?.state === 'assigned', 'agent_return_transition_invalid')
+    assert(returnedItem?.evidence.length === 0, 'agent_return_created_verified_evidence')
+
+    const resubmitted = model.submitAgentHandoff(returned, {
+      agentId: 'AGT-PROD-01',
+      summary: 'Fixture SM-PRODUCT-01 passed with source identity retained.',
+      reference: 'local://verification/product-workflow-1/source-fixture',
+      submittedAt: '2026-07-23T08:10:00.000Z',
+      handoffId: 'HND-RUNTIME-2',
+    })
+    assert(resubmitted?.handoffs.filter((handoff) => handoff.agentId === 'AGT-PROD-01').length === 2, 'agent_resubmission_lost_audit_history')
+    const accepted = model.reviewAgentHandoff(resubmitted, {
+      handoffId: 'HND-RUNTIME-2',
+      decision: 'accepted',
+      reviewer: 'Product lead',
+      note: 'Accepted against the named fixture and outcome.',
+      reviewedAt: '2026-07-23T08:15:00.000Z',
+      evidenceId: 'EVD-HANDOFF-RUNTIME',
+    })
+    const acceptedAgent = accepted?.agents.find((agent) => agent.id === 'AGT-PROD-01')
+    const acceptedItem = accepted?.items.find((item) => item.id === 'PROD-102')
+    const acceptedEvidence = acceptedItem?.evidence.find((evidence) => evidence.id === 'EVD-HANDOFF-RUNTIME')
+    assert(acceptedAgent?.state === 'available' && !acceptedAgent.assignedWorkItemId, 'agent_acceptance_did_not_close_assignment')
+    assert(acceptedItem?.status === 'review' && acceptedEvidence?.kind === 'handoff', 'agent_acceptance_did_not_move_work_to_review')
+    assert(acceptedEvidence?.status === 'verified' && acceptedEvidence.verifiedBy === 'Product lead' && acceptedEvidence.verifiedActorKind === 'human', 'agent_acceptance_not_human_attributed')
+    assert(accepted?.handoffs[0].workEvidenceId === acceptedEvidence.id && accepted.handoffs[0].status === 'accepted', 'agent_acceptance_not_linked_to_work_evidence')
+    const exactRetry = model.reviewAgentHandoff(accepted, {
+      handoffId: 'HND-RUNTIME-2',
+      decision: 'accepted',
+      reviewer: 'Product lead',
+      note: 'Accepted against the named fixture and outcome.',
+      evidenceId: 'EVD-HANDOFF-RUNTIME',
+    })
+    assert(exactRetry === accepted && acceptedItem?.evidence.length === 1, 'agent_acceptance_retry_duplicated_evidence')
+    assert(model.reviewAgentHandoff(accepted, {
+      handoffId: 'HND-RUNTIME-2',
+      decision: 'returned',
+      reviewer: 'Product lead',
+      note: 'Conflicting retry.',
+    }) === null, 'agent_conflicting_review_retry_succeeded')
+    assert(!model.productWorkflowExercised(accepted), 'product_workflow_gate_completed_before_done')
+    const completed = {
+      ...accepted,
+      items: accepted.items.map((item) => item.id === 'PROD-102' ? { ...item, status: 'done' } : item),
+    }
+    assert(model.productWorkflowExercised(completed), 'product_workflow_gate_not_linked_to_completed_handoff')
+    const synchronized = model.syncProductWorkflowCheck(completed)
+    assert(synchronized.release.checks.find((check) => check.id === 'workflow')?.complete === true, 'product_workflow_gate_not_synchronized_for_other_routes')
+    assert(model.normalizeTeamWorkspace(completed).release.checks.find((check) => check.id === 'workflow')?.complete === true, 'product_workflow_gate_not_synchronized_after_reload')
+    const tampered = {
+      ...synchronized,
+      items: synchronized.items.map((item) => item.id === 'PROD-102'
+        ? { ...item, evidence: item.evidence.map((evidence) => evidence.id === 'EVD-HANDOFF-RUNTIME' ? { ...evidence, finding: 'Changed finding' } : evidence) }
+        : item),
+    }
+    assert(!model.productWorkflowExercised(tampered), 'product_workflow_gate_accepted_tampered_evidence')
+    assert(model.syncProductWorkflowCheck(tampered).release.checks.find((check) => check.id === 'workflow')?.complete === false, 'product_workflow_gate_did_not_fail_closed_after_tamper')
+    assert(!model.normalizeTeamWorkspace(tampered).handoffs.some((handoff) => handoff.id === 'HND-RUNTIME-2'), 'agent_handoff_normalizer_retained_tampered_acceptance')
+  } catch (error) {
+    fail(`agent_handoff_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
 }
 
 async function verifyWebsiteRuntime() {
@@ -1013,6 +1117,7 @@ async function verifyProductionRuntime() {
   }
 }
 
+await verifyAgentHandoffRuntime()
 await verifyWebsiteRuntime()
 await verifyWebsiteOrderCompletionRuntime()
 await verifyCommerceRuntime()
@@ -1025,4 +1130,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', primaryRoutes: 4, operatingModules: 2, prototypeRoutes: 1, compatibilityRedirects: 1, workflowProfiles, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', primaryRoutes: 4, operatingModules: 2, prototypeRoutes: 1, compatibilityRedirects: 1, workflowProfiles, agentHandoffRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, bytes }, null, 2))

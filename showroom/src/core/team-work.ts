@@ -1,14 +1,16 @@
-import { useEffect, useState } from 'react'
+import { type Dispatch, type SetStateAction, useEffect, useState } from 'react'
 
 export type TeamId = 'product' | 'engineering' | 'growth' | 'finance'
 export type WorkPriority = 'P0' | 'P1' | 'P2'
 export type WorkStatus = 'backlog' | 'in_progress' | 'blocked' | 'review' | 'done'
 export type ProductStage = 'discover' | 'define' | 'build' | 'release' | 'learn'
-export type EvidenceKind = 'customer' | 'metric' | 'test' | 'release' | 'decision' | 'source'
+export type EvidenceKind = 'customer' | 'metric' | 'test' | 'release' | 'decision' | 'source' | 'handoff'
 export type EvidenceStatus = 'observed' | 'verified'
 export type AgentState = 'available' | 'assigned' | 'waiting_review' | 'blocked'
 export type AgentCapability = 'research' | 'planning' | 'implementation' | 'verification' | 'analysis' | 'drafting'
 export type AgentApprovalBoundary = 'prepare_only' | 'local_change_review'
+export type AgentHandoffDecision = 'accepted' | 'returned'
+export type AgentHandoffStatus = 'pending_review' | AgentHandoffDecision
 
 export type EvidenceRecord = {
   id: string
@@ -77,15 +79,35 @@ export type DelegatedAgent = {
   lastEvidence?: AgentEvidence
 }
 
+export type AgentHandoffRecord = {
+  id: string
+  createdAt: string
+  agentId: string
+  workItemId: string
+  team: TeamId
+  agentName: string
+  humanOwner: string
+  approvalBoundary: AgentApprovalBoundary
+  capabilities: AgentCapability[]
+  evidence: AgentEvidence
+  status: AgentHandoffStatus
+  reviewedAt?: string
+  reviewedBy?: string
+  reviewedActorKind?: 'human'
+  reviewNote?: string
+  workEvidenceId?: string
+}
+
 export type TeamWorkspaceState = {
   items: TeamWorkItem[]
   agents: DelegatedAgent[]
+  handoffs: AgentHandoffRecord[]
   decisions: ProductDecision[]
   release: ProductRelease
 }
 
-export const TEAM_WORK_KEY = 'supermega.team.workspace.v3'
-export const LEGACY_TEAM_WORK_KEYS = ['supermega.team.workspace.v2'] as const
+export const TEAM_WORK_KEY = 'supermega.team.workspace.v4'
+export const LEGACY_TEAM_WORK_KEYS = ['supermega.team.workspace.v3', 'supermega.team.workspace.v2'] as const
 
 export const teamDefinitions = [
   { id: 'product', label: 'Product', purpose: 'Outcomes, backlog, acceptance, decisions, and release readiness.' },
@@ -109,6 +131,7 @@ export const evidenceKinds = [
   { id: 'release', label: 'Release' },
   { id: 'decision', label: 'Decision' },
   { id: 'source', label: 'Source' },
+  { id: 'handoff', label: 'Agent handoff' },
 ] as const satisfies ReadonlyArray<{ id: EvidenceKind; label: string }>
 
 export const agentStates = [
@@ -152,6 +175,12 @@ const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60 * 100
 function seedEvidence(id: string, minutes: number, kind: EvidenceKind, finding: string, reference: string): EvidenceRecord {
   const timestamp = minutesAgo(minutes)
   return { id, createdAt: timestamp, kind, finding, reference, status: 'verified', verifiedAt: timestamp, verifiedBy: 'Workspace owner', verifiedActorKind: 'human' }
+}
+
+const seedEngineeringAgentEvidence: AgentEvidence = {
+  capturedAt: minutesAgo(27),
+  summary: 'Canonical application build and release checks passed locally.',
+  reference: 'local://verification/app-build-contract',
 }
 
 export const seedTeamWorkspace: TeamWorkspaceState = {
@@ -267,11 +296,7 @@ export const seedTeamWorkspace: TeamWorkspaceState = {
       capabilities: [...defaultAgentCapabilities.engineering],
       approvalBoundary: 'local_change_review',
       assignedWorkItemId: 'ENG-201',
-      lastEvidence: {
-        capturedAt: minutesAgo(27),
-        summary: 'Canonical application build and release checks passed locally.',
-        reference: 'local://verification/app-build-contract',
-      },
+      lastEvidence: { ...seedEngineeringAgentEvidence },
     },
     {
       id: 'AGT-GROW-01',
@@ -298,6 +323,21 @@ export const seedTeamWorkspace: TeamWorkspaceState = {
       capabilities: [...defaultAgentCapabilities.finance],
       approvalBoundary: 'prepare_only',
       assignedWorkItemId: 'FIN-401',
+    },
+  ],
+  handoffs: [
+    {
+      id: 'HND-ENG-201',
+      createdAt: seedEngineeringAgentEvidence.capturedAt,
+      agentId: 'AGT-ENG-01',
+      workItemId: 'ENG-201',
+      team: 'engineering',
+      agentName: 'Build engineer',
+      humanOwner: 'Engineering lead',
+      approvalBoundary: 'local_change_review',
+      capabilities: [...defaultAgentCapabilities.engineering],
+      evidence: { ...seedEngineeringAgentEvidence },
+      status: 'pending_review',
     },
   ],
   decisions: [
@@ -452,21 +492,263 @@ function normalizeAgent(value: DelegatedAgent, index: number): DelegatedAgent | 
   }
 }
 
-function normalizeWorkspace(value: Partial<TeamWorkspaceState>): TeamWorkspaceState {
+function sameAgentEvidence(left: AgentEvidence | undefined, right: AgentEvidence | undefined) {
+  return Boolean(left && right
+    && left.capturedAt === right.capturedAt
+    && left.summary === right.summary
+    && left.reference === right.reference)
+}
+
+const handoffIdPattern = /^HND-[A-Z0-9-]{4,80}$/i
+const evidenceIdPattern = /^EVD-[A-Z0-9-]{4,80}$/i
+
+function normalizeHandoff(value: AgentHandoffRecord, index: number, items: TeamWorkItem[], agents: DelegatedAgent[]): AgentHandoffRecord | null {
+  if (!value || typeof value !== 'object') return null
+  const candidate = value as Partial<AgentHandoffRecord>
+  const agent = agents.find((entry) => entry.id === candidate.agentId)
+  const item = items.find((entry) => entry.id === candidate.workItemId)
+  if (!agent || !item || agent.team !== item.team || candidate.team !== item.team) return null
+
+  const summary = String(candidate.evidence?.summary || '').trim()
+  const reference = String(candidate.evidence?.reference || '').trim()
+  const capturedAt = String(candidate.evidence?.capturedAt || candidate.createdAt || '')
+  if (!summary || !reference || !Number.isFinite(Date.parse(capturedAt))) return null
+  const evidence = { capturedAt, summary, reference }
+  const agentName = String(candidate.agentName || agent.name).trim()
+  const humanOwner = String(candidate.humanOwner || agent.humanOwner).trim()
+  const approvalBoundary = agentApprovalBoundaries.some((entry) => entry.id === candidate.approvalBoundary)
+    ? candidate.approvalBoundary as AgentApprovalBoundary
+    : agent.approvalBoundary
+  const capabilities = Array.isArray(candidate.capabilities)
+    ? candidate.capabilities.filter((capability): capability is AgentCapability => agentCapabilities.some((entry) => entry.id === capability))
+    : [...agent.capabilities]
+  if (!agentName || !humanOwner || capabilities.length === 0) return null
+  const status = candidate.status
+  if (status !== 'pending_review' && status !== 'accepted' && status !== 'returned') return null
+
+  const id = String(candidate.id || `HND-MIGRATED-${index + 1}`)
+  if (!handoffIdPattern.test(id)) return null
+  const base: AgentHandoffRecord = {
+    id,
+    createdAt: Number.isFinite(Date.parse(String(candidate.createdAt))) ? String(candidate.createdAt) : capturedAt,
+    agentId: agent.id,
+    workItemId: item.id,
+    team: item.team,
+    agentName,
+    humanOwner,
+    approvalBoundary,
+    capabilities: [...new Set(capabilities)],
+    evidence,
+    status,
+  }
+  if (status === 'pending_review') {
+    if (agent.state !== 'waiting_review' || agent.assignedWorkItemId !== item.id || !sameAgentEvidence(agent.lastEvidence, evidence)) return null
+    return base
+  }
+
+  const reviewedBy = String(candidate.reviewedBy || '').trim()
+  const reviewNote = String(candidate.reviewNote || '').trim()
+  const reviewedAt = String(candidate.reviewedAt || '')
+  if (candidate.reviewedActorKind !== 'human' || !reviewedBy || !reviewNote || !Number.isFinite(Date.parse(reviewedAt))) return null
+  if (status === 'returned') return { ...base, reviewedAt, reviewedBy, reviewedActorKind: 'human', reviewNote }
+
+  const workEvidenceId = String(candidate.workEvidenceId || '').trim()
+  const linkedEvidence = item.evidence.find((entry) => entry.id === workEvidenceId)
+  if (!evidenceIdPattern.test(workEvidenceId)
+    || linkedEvidence?.kind !== 'handoff'
+    || linkedEvidence.status !== 'verified'
+    || linkedEvidence.verifiedActorKind !== 'human'
+    || linkedEvidence.verifiedBy !== reviewedBy
+    || linkedEvidence.finding !== evidence.summary
+    || linkedEvidence.reference !== evidence.reference
+    || linkedEvidence.verifiedAt !== reviewedAt) return null
+  return { ...base, reviewedAt, reviewedBy, reviewedActorKind: 'human', reviewNote, workEvidenceId }
+}
+
+export function normalizeTeamWorkspace(value: Partial<TeamWorkspaceState>): TeamWorkspaceState {
   const items = Array.isArray(value.items) ? value.items.map(normalizeWorkItem) : seedTeamWorkspace.items
   const agents = (Array.isArray(value.agents) ? value.agents.map(normalizeAgent).filter((agent): agent is DelegatedAgent => Boolean(agent)) : [])
     .map((agent) => {
       const assignedItem = items.find((item) => item.id === agent.assignedWorkItemId)
-      const hasValidAssignment = !agent.assignedWorkItemId || assignedItem?.team === agent.team
+      const hasValidAssignment = !agent.assignedWorkItemId || (assignedItem?.team === agent.team && assignedItem.status !== 'done')
       if (!hasValidAssignment) return { ...agent, assignedWorkItemId: undefined, state: 'blocked' as const }
       if (agent.state === 'waiting_review' && !agent.lastEvidence) return { ...agent, state: 'blocked' as const }
       return agent
     })
-  return {
+  const handoffs: AgentHandoffRecord[] = []
+  const handoffIds = new Set<string>()
+  const pendingAgents = new Set<string>()
+  for (const [index, valueHandoff] of (Array.isArray(value.handoffs) ? value.handoffs : []).entries()) {
+    const handoff = normalizeHandoff(valueHandoff, index, items, agents)
+    if (!handoff || handoffIds.has(handoff.id) || (handoff.status === 'pending_review' && pendingAgents.has(handoff.agentId))) continue
+    handoffs.push(handoff)
+    handoffIds.add(handoff.id)
+    if (handoff.status === 'pending_review') pendingAgents.add(handoff.agentId)
+  }
+  for (const agent of agents) {
+    if (agent.state !== 'waiting_review' || !agent.assignedWorkItemId || !agent.lastEvidence || pendingAgents.has(agent.id)) continue
+    const item = items.find((entry) => entry.id === agent.assignedWorkItemId && entry.team === agent.team && entry.status !== 'done')
+    if (!item) continue
+    const baseId = `HND-MIGRATED-${agent.id}`
+    const id = handoffIds.has(baseId) ? `${baseId}-${handoffs.length + 1}` : baseId
+    handoffs.push({
+      id,
+      createdAt: agent.lastEvidence.capturedAt,
+      agentId: agent.id,
+      workItemId: item.id,
+      team: item.team,
+      agentName: agent.name,
+      humanOwner: agent.humanOwner,
+      approvalBoundary: agent.approvalBoundary,
+      capabilities: [...agent.capabilities],
+      evidence: { ...agent.lastEvidence },
+      status: 'pending_review',
+    })
+    handoffIds.add(id)
+    pendingAgents.add(agent.id)
+  }
+  return syncProductWorkflowCheck({
     items,
     agents,
+    handoffs,
     decisions: Array.isArray(value.decisions) ? value.decisions.map(normalizeDecision) : seedTeamWorkspace.decisions,
     release: value.release && Array.isArray(value.release.checks) ? value.release : seedTeamWorkspace.release,
+  })
+}
+
+type SubmitAgentHandoffInput = {
+  agentId: string
+  summary: string
+  reference: string
+  submittedAt?: string
+  handoffId?: string
+}
+
+type ReviewAgentHandoffInput = {
+  handoffId: string
+  decision: AgentHandoffDecision
+  reviewer: string
+  note: string
+  reviewedAt?: string
+  evidenceId?: string
+}
+
+export function submitAgentHandoff(state: TeamWorkspaceState, input: SubmitAgentHandoffInput): TeamWorkspaceState | null {
+  const agent = state.agents.find((entry) => entry.id === input.agentId)
+  const item = state.items.find((entry) => entry.id === agent?.assignedWorkItemId)
+  const summary = input.summary.trim()
+  const reference = input.reference.trim()
+  const submittedAt = input.submittedAt ?? new Date().toISOString()
+  const handoffId = input.handoffId?.trim() || createTeamId('HND')
+  if (!agent || agent.state !== 'assigned' || !item || item.team !== agent.team || item.status === 'done') return null
+  if (!summary || !reference || !Number.isFinite(Date.parse(submittedAt)) || !handoffIdPattern.test(handoffId)) return null
+  if (state.handoffs.some((handoff) => handoff.id === handoffId || (handoff.agentId === agent.id && handoff.status === 'pending_review'))) return null
+
+  const evidence: AgentEvidence = { capturedAt: submittedAt, summary, reference }
+  const handoff: AgentHandoffRecord = {
+    id: handoffId,
+    createdAt: submittedAt,
+    agentId: agent.id,
+    workItemId: item.id,
+    team: item.team,
+    agentName: agent.name,
+    humanOwner: agent.humanOwner,
+    approvalBoundary: agent.approvalBoundary,
+    capabilities: [...agent.capabilities],
+    evidence,
+    status: 'pending_review',
+  }
+  return {
+    ...state,
+    agents: state.agents.map((entry) => entry.id === agent.id
+      ? { ...entry, state: 'waiting_review', updatedAt: submittedAt, lastEvidence: { ...evidence } }
+      : entry),
+    handoffs: [handoff, ...state.handoffs],
+  }
+}
+
+export function reviewAgentHandoff(state: TeamWorkspaceState, input: ReviewAgentHandoffInput): TeamWorkspaceState | null {
+  const handoff = state.handoffs.find((entry) => entry.id === input.handoffId)
+  const reviewer = input.reviewer.trim()
+  const note = input.note.trim()
+  if (!handoff || !reviewer || !note || (input.decision !== 'accepted' && input.decision !== 'returned')) return null
+  if (handoff.status !== 'pending_review') {
+    const sameDecision = handoff.status === input.decision
+      && handoff.reviewedBy === reviewer
+      && handoff.reviewNote === note
+      && (!input.evidenceId || handoff.workEvidenceId === input.evidenceId)
+    return sameDecision ? state : null
+  }
+
+  const agent = state.agents.find((entry) => entry.id === handoff.agentId)
+  const item = state.items.find((entry) => entry.id === handoff.workItemId)
+  const reviewedAt = input.reviewedAt ?? new Date().toISOString()
+  if (!agent || agent.state !== 'waiting_review' || agent.assignedWorkItemId !== handoff.workItemId || !sameAgentEvidence(agent.lastEvidence, handoff.evidence)) return null
+  if (!item || item.team !== agent.team || item.status === 'done' || !Number.isFinite(Date.parse(reviewedAt)) || Date.parse(reviewedAt) < Date.parse(handoff.createdAt)) return null
+
+  const reviewedHandoff = {
+    ...handoff,
+    status: input.decision,
+    reviewedAt,
+    reviewedBy: reviewer,
+    reviewedActorKind: 'human' as const,
+    reviewNote: note,
+  }
+  if (input.decision === 'returned') {
+    return {
+      ...state,
+      agents: state.agents.map((entry) => entry.id === agent.id ? { ...entry, state: 'assigned', updatedAt: reviewedAt } : entry),
+      handoffs: state.handoffs.map((entry) => entry.id === handoff.id ? reviewedHandoff : entry),
+    }
+  }
+
+  const evidenceId = input.evidenceId?.trim() || createTeamId('EVD')
+  if (!evidenceIdPattern.test(evidenceId) || state.items.some((entry) => entry.evidence.some((evidence) => evidence.id === evidenceId))) return null
+  const workEvidence: EvidenceRecord = {
+    id: evidenceId,
+    createdAt: reviewedAt,
+    kind: 'handoff',
+    finding: handoff.evidence.summary,
+    reference: handoff.evidence.reference,
+    status: 'verified',
+    verifiedAt: reviewedAt,
+    verifiedBy: reviewer,
+    verifiedActorKind: 'human',
+  }
+  return {
+    ...state,
+    items: state.items.map((entry) => entry.id === item.id ? { ...entry, status: 'review', evidence: [...entry.evidence, workEvidence] } : entry),
+    agents: state.agents.map((entry) => entry.id === agent.id
+      ? { ...entry, state: 'available', assignedWorkItemId: undefined, updatedAt: reviewedAt }
+      : entry),
+    handoffs: state.handoffs.map((entry) => entry.id === handoff.id ? { ...reviewedHandoff, workEvidenceId: evidenceId } : entry),
+  }
+}
+
+export function productWorkflowExercised(state: TeamWorkspaceState) {
+  return state.handoffs.some((handoff) => {
+    if (handoff.team !== 'product' || handoff.status !== 'accepted' || !handoff.workEvidenceId) return false
+    const item = state.items.find((entry) => entry.id === handoff.workItemId && entry.team === 'product' && entry.status === 'done')
+    const evidence = item?.evidence.find((entry) => entry.id === handoff.workEvidenceId)
+    return evidence?.kind === 'handoff'
+      && evidence.status === 'verified'
+      && evidence.verifiedActorKind === 'human'
+      && evidence.verifiedBy === handoff.reviewedBy
+      && evidence.finding === handoff.evidence.summary
+      && evidence.reference === handoff.evidence.reference
+  })
+}
+
+export function syncProductWorkflowCheck(state: TeamWorkspaceState) {
+  const complete = productWorkflowExercised(state)
+  const workflowCheck = state.release.checks.find((check) => check.id === 'workflow')
+  if (!workflowCheck || workflowCheck.complete === complete) return state
+  return {
+    ...state,
+    release: {
+      ...state.release,
+      checks: state.release.checks.map((check) => check.id === 'workflow' ? { ...check, complete } : check),
+    },
   }
 }
 
@@ -475,13 +757,17 @@ export function useTeamWorkspace() {
     for (const storageKey of [TEAM_WORK_KEY, ...LEGACY_TEAM_WORK_KEYS]) {
       try {
         const stored = window.localStorage.getItem(storageKey)
-        if (stored) return normalizeWorkspace(JSON.parse(stored) as Partial<TeamWorkspaceState>)
+        if (stored) return normalizeTeamWorkspace(JSON.parse(stored) as Partial<TeamWorkspaceState>)
       } catch {
         // Continue to a valid legacy record before falling back to the seed.
       }
     }
-    return seedTeamWorkspace
+    return syncProductWorkflowCheck(seedTeamWorkspace)
   })
+
+  const setWorkspace: Dispatch<SetStateAction<TeamWorkspaceState>> = (next) => {
+    setState((current) => syncProductWorkflowCheck(typeof next === 'function' ? next(current) : next))
+  }
 
   useEffect(() => {
     try {
@@ -491,7 +777,7 @@ export function useTeamWorkspace() {
     }
   }, [state])
 
-  return [state, setState] as const
+  return [state, setWorkspace] as const
 }
 
 export function createTeamId(prefix: string) {
