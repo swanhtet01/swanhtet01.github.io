@@ -13,6 +13,7 @@ const generator = await readFile(resolve(root, 'tools/write_app_vercel_config.mj
 const appVerifier = await readFile(resolve(root, 'tools/verify_app_release_live.mjs'), 'utf8')
 const releaseBarrier = await readFile(resolve(root, 'tools/verify_coordinated_release_live.mjs'), 'utf8')
 const databaseValidator = await readFile(resolve(root, 'tools/validate_supermega_database_url.py'), 'utf8')
+const migrationVerifier = await readFile(resolve(root, 'tools/verify_private_trial_migrations.mjs'), 'utf8')
 const rollbackResolver = await readFile(resolve(root, 'tools/resolve_vercel_rollback_target.mjs'), 'utf8')
 const config = JSON.parse(await readFile(resolve(root, 'vercel.json'), 'utf8'))
 const failures = []
@@ -76,6 +77,18 @@ requireContract('app and public changes trigger one release authority', workflow
 requireContract('all API tests trigger and execute', workflow.includes("- 'tests/**'") && workflow.includes("python -m unittest discover -s tests -p 'test_*.py' -v"))
 requireContract('runtime package changes trigger release', workflow.includes("- 'supermega_runtime/**'"))
 requireContract('database activation controls trigger release', workflow.includes('tools/validate_supermega_database_url.py') && workflow.includes('tools/activate_supermega_database.ps1'))
+requireContract('migration proof changes trigger every database-aware workflow',
+  [workflow, ciWorkflow, appWorkflow].every((source) => source.includes('tools/verify_private_trial_migrations.mjs') && source.includes('package-lock.json')))
+requireContract('real migration proof precedes every production candidate',
+  workflow.includes('npm ci --ignore-scripts')
+  && workflow.includes('node tools/verify_private_trial_migrations.mjs')
+  && workflow.indexOf('node tools/verify_private_trial_migrations.mjs') < workflow.indexOf('Deploy isolated app production candidate')
+  && workflow.indexOf('node tools/verify_private_trial_migrations.mjs') < workflow.indexOf('Deploy isolated production candidate')
+  && ciWorkflow.includes('node tools/verify_private_trial_migrations.mjs')
+  && appWorkflow.includes('node tools/verify_private_trial_migrations.mjs')
+  && migrationVerifier.includes("from '@electric-sql/pglite'")
+  && migrationVerifier.includes('unsafe role rejected before foundation grants')
+  && migrationVerifier.includes('hosted_postgres_17_proof_required: true'))
 requireContract('app guard remains non-mutating but runs API tests', appWorkflow.includes("- 'supermega_runtime/**'") && appWorkflow.includes("python -m unittest discover -s tests -p 'test_*.py' -v") && !/vercel@56\.1\.0\s+(?:deploy|promote|rollback)\b/.test(appWorkflow) && !appWorkflow.includes('VERCEL_TOKEN') && !/environment:\s*production/.test(appWorkflow))
 requireContract('protected app candidate verification', workflow.includes("VERCEL_PROTECTED_PREVIEW: '1'") && appVerifier.includes("'curl', path, '--deployment'") && appVerifier.includes('deploymentFunctions') && appVerifier.includes("JSON.stringify(['api/app'])") && appVerifier.includes('hosted_agent_runtime_contract_wrong'))
 requireContract('app live identity validates brand context and catalog', appVerifier.includes('release.brandVersion !== manifest.brand.version') && appVerifier.includes('release.contextVersion !== manifest.contextVersion') && appVerifier.includes('release.catalogVersion !== manifest.catalogVersion'))
