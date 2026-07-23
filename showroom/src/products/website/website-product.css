@@ -2846,6 +2846,12 @@
   font-size: 12px;
 }
 
+.website-mobile-mode-nav,
+.website-mobile-page-bar,
+.website-mobile-site-settings {
+  display: none;
+}
+
 @media (max-width: 900px) {
   .website-product {
     height: auto;
@@ -2913,17 +2919,36 @@
     padding: 12px 14px 32px;
   }
 
-  .website-workspace-nav {
+  .website-desktop-workspace-nav,
+  .website-page-switcher,
+  .website-heading {
+    display: none;
+  }
+
+  .website-mobile-mode-nav {
     width: 100%;
     min-height: 46px;
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    border-bottom: 1px solid var(--website-line);
   }
 
-  .website-workspace-nav > button {
+  .website-mobile-mode-nav > button {
     min-width: 0;
     min-height: 46px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
     padding: 0 8px;
+    background: transparent;
+    color: var(--website-muted);
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .website-mobile-mode-nav > button[aria-selected="true"] {
+    border-bottom-color: var(--website-green);
+    color: var(--website-green);
   }
 
   .website-notice {
@@ -2932,48 +2957,119 @@
     font-size: 13px;
   }
 
-  .website-page-switcher {
+  .website-notice[data-priority="routine"] {
+    display: none;
+  }
+
+  .website-mobile-page-bar {
     width: 100%;
+    min-height: 48px;
+    display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    align-self: stretch;
     gap: 7px;
   }
 
-  .website-page-switcher > label {
+  .website-mobile-page-bar > select {
+    min-width: 0;
+    min-height: 48px;
+    font-size: 16px;
+  }
+
+  .website-mobile-page-bar > button {
+    min-width: 82px;
+    min-height: 48px;
+    padding-inline: 12px;
+  }
+
+  .website-mobile-site-settings {
+    display: block;
+    overflow: hidden;
+    border: 1px solid var(--website-line);
+    border-radius: 10px;
+    background: var(--website-panel);
+  }
+
+  .website-mobile-site-settings > summary,
+  .website-mobile-seo-settings > summary {
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 0 14px;
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .website-mobile-site-settings > summary::-webkit-details-marker,
+  .website-mobile-seo-settings > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .website-mobile-site-settings > summary::after,
+  .website-mobile-seo-settings > summary::after {
+    color: var(--website-green);
+    font-size: 18px;
+    content: "+";
+  }
+
+  .website-mobile-site-settings[open] > summary::after,
+  .website-mobile-seo-settings[open] > summary::after {
+    content: "−";
+  }
+
+  .website-mobile-site-settings > summary > span,
+  .website-mobile-seo-settings > summary > span {
+    margin-right: auto;
+    font-size: 14px;
+    font-weight: 750;
+  }
+
+  .website-mobile-site-settings > summary > small,
+  .website-mobile-seo-settings > summary > small {
+    color: var(--website-muted);
+    font-size: 12px;
+  }
+
+  .website-mobile-site-settings[open] > summary,
+  .website-mobile-seo-settings[open] > summary {
+    border-bottom: 1px solid var(--website-line);
+  }
+
+  .website-mobile-site-settings-content {
+    display: grid;
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .website-mobile-page-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .website-mobile-page-actions > button:last-child:nth-child(3) {
     grid-column: 1 / -1;
   }
 
-  .website-page-switcher > select {
-    min-width: 0;
+  .website-mobile-seo-settings {
+    overflow: hidden;
+    border: 1px solid var(--website-line);
+    border-radius: 9px;
   }
 
-  .website-heading {
-    min-height: 0;
-    align-items: stretch;
-    flex-direction: column;
-    gap: 12px;
-    padding: 4px 0 0;
+  .website-mobile-seo-settings > .website-form-grid {
+    padding: 12px;
   }
 
-  .website-heading h1 {
-    font-size: 25px;
+  .website-mobile-site-settings-content > .website-editor-panel {
+    height: auto;
+    overflow: visible;
+    border-radius: 9px;
   }
 
-  .website-heading p {
-    font-size: 14px;
-  }
-
-  .website-heading-actions,
-  .website-surface-controls {
-    width: 100%;
-  }
-
-  .website-surface-controls {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .website-surface-controls > button {
-    min-height: 44px;
+  .website-mobile-site-settings-content > .website-editor-panel > .website-editor-scroll {
+    overflow: visible;
   }
 
   .website-split-control {
@@ -3022,6 +3118,14 @@
 
   .website-editor-panel {
     display: block;
+  }
+
+  .website-workspace-grid.view-content .website-work-surface > .website-editor-panel > .website-panel-head {
+    display: none;
+  }
+
+  .website-workspace-grid.view-content .website-panel-actions > div:first-child {
+    display: none;
   }
 
   .website-panel-actions {

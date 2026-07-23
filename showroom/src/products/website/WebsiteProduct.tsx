@@ -49,6 +49,13 @@ const workspaceViews: Array<{ id: WorkspaceView; label: string }> = [
   { id: 'publish', label: 'Publish' },
 ]
 
+const mobileWorkspaceViews: Array<{ id: WorkspaceView; label: string }> = [
+  { id: 'content', label: 'Edit' },
+  { id: 'publish', label: 'Publish' },
+]
+
+const DEFAULT_NOTICE = 'Website workspace loaded. No website has been deployed.'
+
 const viewCopy: Record<WorkspaceView, { title: string; copy: string }> = {
   content: {
     title: 'Edit page',
@@ -87,7 +94,7 @@ export function WebsiteProduct() {
   const [device, setDevice] = useState<PreviewDevice>(() => (
     typeof window !== 'undefined' && window.matchMedia('(max-width: 900px)').matches ? 'mobile' : 'desktop'
   ))
-  const [notice, setNotice] = useState('Website workspace loaded. No website has been deployed.')
+  const [notice, setNotice] = useState(DEFAULT_NOTICE)
   const [deleteCandidateId, setDeleteCandidateId] = useState('')
   const [preparedHandoffSource, setPreparedHandoffSource] = useState(() => handoffSourceKey(readWebsiteEcommerceHandoff()))
   const selectedPage = workspace.pages.find((page) => page.id === workspace.selectedPageId) ?? workspace.pages[0]
@@ -108,6 +115,8 @@ export function WebsiteProduct() {
     && publishIsCurrent
     && checks.every((check) => check.passed))
   const activeViewCopy = viewCopy[view]
+  const statusNotice = storageIssue || notice
+  const noticePriority = storageIssue ? 'error' : notice === DEFAULT_NOTICE ? 'routine' : 'update'
 
   useEffect(() => {
     document.title = 'Website | SuperMega'
@@ -117,7 +126,9 @@ export function WebsiteProduct() {
   useEffect(() => {
     const compactViewport = window.matchMedia('(max-width: 900px)')
     const collapseSplitView = (event: MediaQueryListEvent) => {
-      if (event.matches) setSplitPreview(false)
+      if (!event.matches) return
+      setSplitPreview(false)
+      setView((current) => current === 'navigation' ? 'content' : current)
     }
     compactViewport.addEventListener('change', collapseSplitView)
     return () => compactViewport.removeEventListener('change', collapseSplitView)
@@ -139,7 +150,11 @@ export function WebsiteProduct() {
     return result
   }
 
-  function moveWorkspaceTabFocus(event: KeyboardEvent<HTMLButtonElement>, currentIndex: number) {
+  function moveWorkspaceTabFocus(
+    event: KeyboardEvent<HTMLButtonElement>,
+    currentIndex: number,
+    views = workspaceViews,
+  ) {
     const tabs = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')
     if (!tabs?.length) return
     let nextIndex = currentIndex
@@ -150,7 +165,7 @@ export function WebsiteProduct() {
     else return
     event.preventDefault()
     tabs[nextIndex]?.focus()
-    openWorkspaceView(workspaceViews[nextIndex].id)
+    openWorkspaceView(views[nextIndex].id)
   }
 
   async function selectPage(pageId: string) {
@@ -473,7 +488,7 @@ export function WebsiteProduct() {
 
       <div className="website-shell">
         <main id="website-workspace" className="website-main">
-          <nav className="website-workspace-nav" aria-label="Website workspace" role="tablist">
+          <nav className="website-workspace-nav website-desktop-workspace-nav" aria-label="Website workspace" role="tablist">
             {workspaceViews.map((item, index) => (
               <button
                 aria-controls="website-active-panel"
@@ -490,8 +505,25 @@ export function WebsiteProduct() {
             ))}
           </nav>
 
-          <div className="website-notice" aria-live="polite" role="status">
-            {storageIssue || notice}
+          <nav className="website-mobile-mode-nav" aria-label="Website mode" role="tablist">
+            {mobileWorkspaceViews.map((item, index) => (
+              <button
+                aria-controls="website-active-panel"
+                aria-selected={view === item.id}
+                key={item.id}
+                onKeyDown={(event) => moveWorkspaceTabFocus(event, index, mobileWorkspaceViews)}
+                onClick={() => openWorkspaceView(item.id)}
+                role="tab"
+                tabIndex={view === item.id ? 0 : -1}
+                type="button"
+              >
+                {item.label}
+              </button>
+            ))}
+          </nav>
+
+          <div className="website-notice" aria-live="polite" data-priority={noticePriority} role="status">
+            {statusNotice}
           </div>
 
           {view === 'content' ? (
@@ -518,6 +550,117 @@ export function WebsiteProduct() {
                 New page
               </button>
             </section>
+          ) : null}
+
+          <section className="website-mobile-page-bar" aria-label="Selected page and preview">
+            <label className="sr-only" htmlFor="website-mobile-page-select">Selected page</label>
+            <select
+              aria-label="Selected page"
+              id="website-mobile-page-select"
+              onChange={(event) => void selectPage(event.currentTarget.value)}
+              value={selectedPage.id}
+            >
+              {workspace.pages.map((page) => (
+                <option key={page.id} value={page.id}>
+                  {page.internalName || 'Untitled page'} · {page.stage}
+                </option>
+              ))}
+            </select>
+            <button
+              aria-pressed={surface === 'preview'}
+              className="website-button is-secondary"
+              onClick={() => {
+                setSurface((current) => current === 'preview' ? 'work' : 'preview')
+                setSplitPreview(false)
+              }}
+              type="button"
+            >
+              {surface === 'preview' ? (view === 'publish' ? 'Back to publish' : 'Back to edit') : 'Preview'}
+            </button>
+          </section>
+
+          {view === 'content' && surface === 'work' ? (
+            <details className="website-mobile-site-settings">
+              <summary>
+                <span>Site settings</span>
+                <small>Pages, navigation, and search</small>
+              </summary>
+              <div className="website-mobile-site-settings-content">
+                <div className="website-mobile-page-actions">
+                  <button
+                    className="website-button is-secondary"
+                    disabled={workspace.pages.length >= MAX_WEBSITE_PAGES}
+                    onClick={addPage}
+                    title={workspace.pages.length >= MAX_WEBSITE_PAGES ? 'The four-page prototype limit is reached' : 'Add page'}
+                    type="button"
+                  >
+                    New page
+                  </button>
+                  <button
+                    className="website-button is-secondary"
+                    disabled={workspace.pages.length >= MAX_WEBSITE_PAGES}
+                    onClick={copySelectedPage}
+                    title={workspace.pages.length < MAX_WEBSITE_PAGES ? 'Duplicate this page' : 'The four-page prototype limit is reached'}
+                    type="button"
+                  >
+                    Duplicate
+                  </button>
+                  {selectedPage.slug !== '/' && selectedPage.stage === 'draft' ? (
+                    <button
+                      className={'website-button is-quiet ' + (deleteCandidateId === selectedPage.id ? 'is-danger' : '')}
+                      onClick={requestDeletePage}
+                      type="button"
+                    >
+                      {deleteCandidateId === selectedPage.id ? 'Confirm remove' : 'Remove draft'}
+                    </button>
+                  ) : null}
+                </div>
+
+                <details className="website-mobile-seo-settings">
+                  <summary>
+                    <span>Search metadata</span>
+                    <small>{selectedPage.seo.title && selectedPage.seo.description ? 'Complete' : 'Needs copy'}</small>
+                  </summary>
+                  <div className="website-form-grid">
+                    <label>
+                      <span>SEO title</span>
+                      <input
+                        maxLength={70}
+                        onChange={(event) => void updatePage(selectedPage.id, (current) => ({
+                          ...current,
+                          stage: 'draft',
+                          seo: { ...current.seo, title: event.target.value },
+                        }))}
+                        value={selectedPage.seo.title}
+                      />
+                    </label>
+                    <label>
+                      <span>SEO description</span>
+                      <textarea
+                        maxLength={160}
+                        onChange={(event) => void updatePage(selectedPage.id, (current) => ({
+                          ...current,
+                          stage: 'draft',
+                          seo: { ...current.seo, description: event.target.value },
+                        }))}
+                        rows={3}
+                        value={selectedPage.seo.description}
+                      />
+                    </label>
+                  </div>
+                </details>
+
+                <NavigationWorkspace
+                  onMovePage={movePage}
+                  onSelectPage={selectPage}
+                  onSiteNameChange={(siteName) => {
+                    void commitWorkspace((current) => ({ ...current, siteName }), 'Site identity updated.')
+                  }}
+                  onUpdatePage={updatePage}
+                  workspace={workspace}
+                />
+              </div>
+            </details>
           ) : null}
 
           <header className="website-heading">

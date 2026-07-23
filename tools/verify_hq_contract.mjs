@@ -23,6 +23,9 @@ requireContract('Website remains a truthful local release candidate', portfolio.
   && portfolio.portfolio?.find((entry) => entry.id === 'website')?.surfaces?.join(',') === 'Pages,Navigation,Publish'
   && portfolio.portfolio?.find((entry) => entry.id === 'website')?.nextGate?.includes('managed site artifact')
   && now.includes('without deploying a site or changing a domain'))
+requireContract('Website mobile shell is task first', current.includes('mobile opens one task-first editor with Edit and Publish')
+  && current.includes('page, navigation, or search controls inside Site settings')
+  && now.includes('mobile reduces the primary choice to Edit or Publish'))
 requireContract('Commerce owns Website order intake', portfolio.portfolio?.find((entry) => entry.id === 'commerce')?.job.includes('Website') && !portfolio.portfolio?.some((entry) => entry.id === 'ecommerce'))
 requireContract('Commerce managed intake remains adoption-gated', portfolio.portfolio?.find((entry) => entry.id === 'commerce')?.status === 'release-candidate-local'
   && portfolio.portfolio?.find((entry) => entry.id === 'commerce')?.nextGate?.includes('authenticated human Commerce confirmation'))
