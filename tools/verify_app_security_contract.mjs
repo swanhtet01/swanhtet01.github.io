@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 
 const root = resolve(import.meta.dirname, '..')
 const read = (path) => readFile(resolve(root, path), 'utf8')
-const [runtime, supabaseAuth, cloudRuntime, vercelEntry, portableEntry, trialRuntime, trialStore, commerceRuntime, websiteRuntime, managedTrialClient, coreApp, foundationMigration, decisionMigration, websiteMigration, databaseValidator, databaseActivator, liveVerifier, workflow, requirements, dockerfile, appEnvironment] = await Promise.all([
+const [runtime, supabaseAuth, cloudRuntime, vercelEntry, portableEntry, trialRuntime, trialStore, commerceRuntime, websiteRuntime, managedTrialClient, coreApp, rolePreflight, foundationMigration, decisionMigration, websiteMigration, hardeningMigration, databaseValidator, databaseActivator, liveVerifier, workflow, requirements, dockerfile, appEnvironment] = await Promise.all([
   read('supermega_runtime/runtime.py'),
   read('supermega_runtime/supabase_auth.py'),
   read('supermega_runtime/cloud_runtime.py'),
@@ -15,9 +15,11 @@ const [runtime, supabaseAuth, cloudRuntime, vercelEntry, portableEntry, trialRun
   read('supermega_runtime/website_runtime.py'),
   read('showroom/src/core/managed-trial.ts'),
   read('showroom/src/core/CoreApp.tsx'),
+  read('supabase/migrations/20260722004500_private_trial_backend_role_preflight.sql'),
   read('supabase/migrations/20260722005134_private_trial_backend_foundation.sql'),
   read('supabase/migrations/20260722142801_private_trial_backend_v2.sql'),
   read('supabase/migrations/20260723094500_private_trial_backend_v3_website.sql'),
+  read('supabase/migrations/20260723144500_private_trial_backend_v4_hardening.sql'),
   read('tools/validate_supermega_database_url.py'),
   read('tools/activate_supermega_database.ps1'),
   read('tools/verify_app_release_live.mjs'),
@@ -26,7 +28,7 @@ const [runtime, supabaseAuth, cloudRuntime, vercelEntry, portableEntry, trialRun
   read('Dockerfile'),
   read('.env.app.example'),
 ])
-const migration = `${foundationMigration}\n${decisionMigration}\n${websiteMigration}`
+const migration = `${rolePreflight}\n${foundationMigration}\n${decisionMigration}\n${websiteMigration}\n${hardeningMigration}`
 const apiSourceEntries = (await readdir(resolve(root, 'api'), { withFileTypes: true }))
   .filter((entry) => entry.isFile() && /\.(?:py|js|mjs|cjs)$/.test(entry.name))
   .map((entry) => entry.name)
@@ -90,8 +92,9 @@ requireContract('approval transitions are controlled', /pending to approved or d
 requireContract('approval decisions require trusted human identity', /x-supermega-actor-kind/.test(runtime) && /v2\\n/.test(runtime) && /TrialHumanApprovalRequired/.test(trialStore) && /decided_actor_kind = 'human'/.test(migration) && /app\.actor_kind/.test(migration))
 requireContract('approvals require a typed decision packet', /TrialDecisionPacket/.test(trialRuntime) && /TrialDecisionClaim/.test(trialRuntime) && /claim_type: Literal\["fact", "analysis"\]/.test(trialRuntime) && /status == "verified" and not digest/.test(trialStore) && /Every decision claim source_reference must be present in evidence_refs/.test(trialStore) && /DECISION_PACKET_CONTRACT = "decision_packet\.v1"/.test(trialStore) && /proposal_json ->> 'contract' = 'decision_packet\.v1'/.test(migration))
 requireContract('approval decisions require a trimmed nonblank note', /note: str = Field\(min_length=1, max_length=500\)/.test(trialRuntime) && /decision note must not be blank/.test(trialRuntime) && /1 <= len\(note_value\) <= 500/.test(trialStore) && /decision_note = btrim\(decision_note\)/.test(decisionMigration) && /char_length\(decision_note\) between 1 and 500/.test(decisionMigration))
-requireContract('managed schema contract advances through additive v2 and v3 migrations', /TRIAL_SCHEMA_VERSION = 3/.test(trialStore) && /set schema_version = 2/.test(decisionMigration) && /schema_version = 1/.test(decisionMigration) && /set schema_version = 3/.test(websiteMigration) && /schema_version = 2/.test(websiteMigration) && /schema_version = 3/.test(websiteMigration))
-requireContract('managed database readiness validator targets schema v3', /CONTRACT = "supermega_private_trial_database_v3"/.test(databaseValidator) && /SCHEMA_VERSION = 3/.test(databaseValidator) && /complete v3 schema contract/.test(databaseValidator))
+requireContract('managed schema contract advances through additive v2, v3, and v4 migrations', /TRIAL_SCHEMA_VERSION = 4/.test(trialStore) && /set schema_version = 2/.test(decisionMigration) && /schema_version = 1/.test(decisionMigration) && /set schema_version = 3/.test(websiteMigration) && /schema_version = 2/.test(websiteMigration) && /set schema_version = 4/.test(hardeningMigration) && /schema version 3/.test(hardeningMigration))
+requireContract('managed database role collision is rejected before foundation grants', /pre-existing supermega trial backend role attributes are unsafe/.test(rolePreflight) && /dependency\.refclassid = 'pg_authid'::regclass/.test(rolePreflight) && migration.indexOf('backend_role_preflight') < migration.indexOf('create schema if not exists app_private'))
+requireContract('managed database readiness validator targets exact schema v4', /CONTRACT = "supermega_private_trial_database_v4"/.test(databaseValidator) && /SCHEMA_VERSION = 4/.test(databaseValidator) && /complete v4 schema contract/.test(databaseValidator) && /EXPECTED_POLICY_FINGERPRINTS/.test(databaseValidator) && /security_constraints_exact/.test(databaseValidator))
 requireContract('Python runtime dependencies are minimal', !/beautifulsoup|google-cloud|sentry|sqlmodel|python-dotenv/i.test(requirements))
 requireContract('Cloud Run uses the canonical ASGI entrypoint', /uvicorn api_app:app/.test(dockerfile) && /COPY supermega_runtime \/app\/supermega_runtime/.test(dockerfile) && !/serve_solution/.test(dockerfile))
 requireContract('release CI executes every API test', workflow.includes("python -m unittest discover -s tests -p 'test_*.py' -v") && workflow.includes("- 'supermega_runtime/**'"))

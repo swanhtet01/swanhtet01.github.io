@@ -16,6 +16,12 @@ ROOT = Path(__file__).resolve().parents[1]
 VALIDATOR = ROOT / "tools" / "validate_supermega_database_url.py"
 ACTIVATOR = ROOT / "tools" / "activate_supermega_database.ps1"
 TRIAL_STORE = ROOT / "supermega_runtime" / "trial_store.py"
+MIGRATION_PREFLIGHT = (
+    ROOT
+    / "supabase"
+    / "migrations"
+    / "20260722004500_private_trial_backend_role_preflight.sql"
+)
 MIGRATION_V1 = (
     ROOT
     / "supabase"
@@ -40,7 +46,13 @@ MIGRATION_V4 = (
     / "migrations"
     / "20260723144500_private_trial_backend_v4_hardening.sql"
 )
-MIGRATIONS = (MIGRATION_V1, MIGRATION_V2, MIGRATION_V3, MIGRATION_V4)
+MIGRATIONS = (
+    MIGRATION_PREFLIGHT,
+    MIGRATION_V1,
+    MIGRATION_V2,
+    MIGRATION_V3,
+    MIGRATION_V4,
+)
 
 PRIVATE_SCHEMA = "app_private"
 BACKEND_ROLE = "supermega_trial_backend"
@@ -129,10 +141,15 @@ def _first_sql_token(statement: str) -> str:
 
 class MigrationSecurityEvidenceTests(unittest.TestCase):
     def test_historical_migrations_are_unchanged_and_v4_is_additive(self) -> None:
+        preflight = _normalized_sql(MIGRATION_PREFLIGHT)
         v1 = _normalized_sql(MIGRATION_V1)
         v2 = _normalized_sql(MIGRATION_V2)
         v3 = _normalized_sql(MIGRATION_V3)
         v4 = _normalized_sql(MIGRATION_V4)
+        self.assertIn("pre-existing supermega trial backend role attributes are unsafe", preflight)
+        self.assertIn("membership.roleid = backend_record.oid", preflight)
+        self.assertIn("dependency.refclassid = 'pg_authid'::regclass", preflight)
+        self.assertIn("role_setting.setrole = backend_record.oid", preflight)
         self.assertIn("values ('private_trial_backend', 1)", v1)
         self.assertIn("surface in ('command', 'shop', 'plant', 'setup')", v1)
         self.assertNotIn("decision_contract_version", v1)
