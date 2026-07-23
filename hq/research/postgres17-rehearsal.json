@@ -2,6 +2,12 @@
   "schemaVersion": "supermega.hq.database-rehearsal.v1",
   "recordedAt": "2026-07-24",
   "runner": "tools/rehearse_supermega_postgres17.py",
+  "implementationCommit": "81a609ee2a6ca00601eecf1f4401a9a12a0a116d",
+  "githubCi": {
+    "workflow": "SuperMega App CI",
+    "run": 160,
+    "conclusion": "success"
+  },
   "engine": {
     "distribution": "EDB PostgreSQL Windows x86-64 binaries",
     "version": "17.10",
