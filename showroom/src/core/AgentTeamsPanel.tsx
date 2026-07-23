@@ -152,7 +152,7 @@ export function AgentTeamsPanel({ activeTeam, selectedAgentId, onSelectAgent, wo
               </form>
             </details>
           </div>
-          <div className="agent-roster" role="list">
+          <div className="agent-roster">
             {teamAgents.map((agent) => (
               <button aria-current={selectedAgent?.id === agent.id ? 'true' : undefined} key={agent.id} onClick={() => onSelectAgent(agent.id)} type="button">
                 <span className={`record-status ${agent.state === 'waiting_review' ? 'review' : agent.state === 'assigned' ? 'in_progress' : agent.state}`} />

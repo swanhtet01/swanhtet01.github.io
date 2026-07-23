@@ -1344,7 +1344,23 @@ function ChannelOrderIntake({ disabled, items, onAcceptedFocus, onUse }: {
   const [payment, setPayment] = useState('KBZPay')
   const [attributions, setAttributions] = useState(emptyChannelAttributions)
   const [reviewedDraft, setReviewedDraft] = useState<ChannelOrderDraft | null>(null)
+  const [mappingField, setMappingField] = useState<ChannelOrderField>('customer')
   const selectedSku = items.some((item) => item.sku === sku) ? sku : items[0]?.sku ?? ''
+  const mappingFieldIndex = channelOrderFields.indexOf(mappingField)
+  const previousMappingField = mappingFieldIndex > 0 ? channelOrderFields[mappingFieldIndex - 1] : undefined
+  const nextMappingField = channelOrderFields[mappingFieldIndex + 1]
+
+  function attributionIsComplete(field: ChannelOrderField) {
+    const attribution = attributions[field]
+    const valueIsComplete = field === 'customer'
+      ? Boolean(customer.trim())
+      : field === 'sku'
+        ? Boolean(selectedSku)
+        : field === 'quantity'
+          ? Number.isInteger(Number(quantity)) && Number(quantity) > 0
+          : Boolean(payment)
+    return valueIsComplete && (attribution.kind === 'operator_supplied' || Boolean(attribution.quote.trim()))
+  }
 
   function invalidateReview() {
     if (reviewedDraft) setReviewedDraft(null)
@@ -1364,7 +1380,7 @@ function ChannelOrderIntake({ disabled, items, onAcceptedFocus, onUse }: {
         : { kind: 'quote', quote: attribution.quote }
       return [field, value]
     })) as Record<ChannelOrderField, ChannelOrderAttributionInput>
-    setReviewedDraft(buildChannelOrderDraft({
+    const draft = buildChannelOrderDraft({
       sourceLabel,
       message,
       channel,
@@ -1374,7 +1390,14 @@ function ChannelOrderIntake({ disabled, items, onAcceptedFocus, onUse }: {
       payment,
       catalogSkus: items.map((item) => item.sku),
       attributions: normalizedAttributions,
-    }))
+    })
+    setReviewedDraft(draft)
+    if (!channelOrderDraftIsReady(draft)) {
+      const blockedField = channelOrderFields.find((field) => (
+        draft.blockers.some((blocker) => blocker.startsWith(`${field}_`))
+      ))
+      if (blockedField) setMappingField(blockedField)
+    }
   }
 
   function useReviewedDraft() {
@@ -1385,38 +1408,59 @@ function ChannelOrderIntake({ disabled, items, onAcceptedFocus, onUse }: {
     setCustomer('')
     setQuantity('1')
     setAttributions(emptyChannelAttributions())
+    setMappingField('customer')
     setReviewedDraft(null)
     onAcceptedFocus()
   }
 
   return <section className="channel-intake-panel">
-    <div className="channel-intake-heading"><span className="core-eyebrow">Human-mapped intake</span><h3>Start from a channel message</h3><p>Paste one approved or synthetic message. Nothing is sent, and AI is not connected.</p></div>
+    <div className="channel-intake-heading"><span className="core-eyebrow">Human-mapped intake</span><h3>Start from a channel message</h3><p>Use one approved or synthetic message, not a full conversation. Map one exact excerpt; nothing is sent, and AI is not connected.</p></div>
     <form className="core-form channel-intake-form" onSubmit={reviewMessage}>
-      <div className="channel-intake-boundary"><p>Use one message, not a full conversation history. Map at least one exact excerpt.</p></div>
       <div className="form-row">
         <label>Message reference<input disabled={disabled} maxLength={120} onChange={(event) => { setSourceLabel(event.target.value); invalidateReview() }} placeholder="Message ID or approved sample" required value={sourceLabel} /></label>
         <label>Channel<select disabled={disabled} onChange={(event) => { setChannel(event.target.value); invalidateReview() }} value={channel}>{channelOrderChannels.map((entry) => <option key={entry}>{entry}</option>)}</select></label>
       </div>
       <label>Single message<textarea disabled={disabled} maxLength={CHANNEL_ORDER_MESSAGE_MAX} onChange={(event) => { setMessage(event.target.value); invalidateReview() }} placeholder="Paste only the message needed to prepare this order." required value={message} /></label>
-      <div className="channel-mapping-list">
-        <div className="channel-mapping-row">
-          <label>Customer reference<input disabled={disabled} maxLength={80} onChange={(event) => { setCustomer(event.target.value); invalidateReview() }} placeholder="Name or internal reference" required value={customer} /></label>
-          <ChannelAttributionControl attribution={attributions.customer} disabled={disabled} field="customer" onChange={updateAttribution} />
+      <details className="channel-intake-disclosure">
+        <summary><span>Map order details</span><small>4 fields · exact evidence</small></summary>
+        <nav aria-label="Message field mapping" className="channel-field-nav">
+          {channelOrderFields.map((field) => (
+            <button
+              aria-current={mappingField === field ? 'step' : undefined}
+              className={attributionIsComplete(field) ? 'is-complete' : ''}
+              key={field}
+              onClick={() => setMappingField(field)}
+              type="button"
+            >
+              {channelFieldLabels[field]}
+            </button>
+          ))}
+        </nav>
+        <div className="channel-mapping-list">
+          {mappingField === 'customer' ? <div className="channel-mapping-row">
+            <label>Customer reference<input disabled={disabled} maxLength={80} onChange={(event) => { setCustomer(event.target.value); invalidateReview() }} placeholder="Name or internal reference" required value={customer} /></label>
+            <ChannelAttributionControl attribution={attributions.customer} disabled={disabled} field="customer" onChange={updateAttribution} />
+          </div> : null}
+          {mappingField === 'sku' ? <div className="channel-mapping-row">
+            <label>Catalog item<select disabled={disabled} onChange={(event) => { setSku(event.target.value); invalidateReview() }} value={selectedSku}>{items.map((item) => <option key={item.sku} value={item.sku}>{item.name} / {item.sku}</option>)}</select></label>
+            <ChannelAttributionControl attribution={attributions.sku} disabled={disabled} field="sku" onChange={updateAttribution} />
+          </div> : null}
+          {mappingField === 'quantity' ? <div className="channel-mapping-row">
+            <label>Quantity<input disabled={disabled} max="9999" min="1" onChange={(event) => { setQuantity(event.target.value); invalidateReview() }} required step="1" type="number" value={quantity} /></label>
+            <ChannelAttributionControl attribution={attributions.quantity} disabled={disabled} field="quantity" onChange={updateAttribution} />
+          </div> : null}
+          {mappingField === 'payment' ? <div className="channel-mapping-row">
+            <label>Payment intent<select disabled={disabled} onChange={(event) => { setPayment(event.target.value); invalidateReview() }} value={payment}>{channelOrderPayments.map((entry) => <option key={entry}>{entry}</option>)}</select></label>
+            <ChannelAttributionControl attribution={attributions.payment} disabled={disabled} field="payment" onChange={updateAttribution} />
+          </div> : null}
         </div>
-        <div className="channel-mapping-row">
-          <label>Catalog item<select disabled={disabled} onChange={(event) => { setSku(event.target.value); invalidateReview() }} value={selectedSku}>{items.map((item) => <option key={item.sku} value={item.sku}>{item.name} / {item.sku}</option>)}</select></label>
-          <ChannelAttributionControl attribution={attributions.sku} disabled={disabled} field="sku" onChange={updateAttribution} />
+        <div className="channel-mapping-actions">
+          {previousMappingField ? <button className="text-link" onClick={() => setMappingField(previousMappingField)} type="button">Back</button> : <span />}
+          {nextMappingField
+            ? <button className="core-button compact" onClick={() => setMappingField(nextMappingField)} type="button">Next: {channelFieldLabels[nextMappingField]}</button>
+            : <button className="core-button primary compact" disabled={disabled} type="submit">Review mapping</button>}
         </div>
-        <div className="channel-mapping-row">
-          <label>Quantity<input disabled={disabled} max="9999" min="1" onChange={(event) => { setQuantity(event.target.value); invalidateReview() }} required step="1" type="number" value={quantity} /></label>
-          <ChannelAttributionControl attribution={attributions.quantity} disabled={disabled} field="quantity" onChange={updateAttribution} />
-        </div>
-        <div className="channel-mapping-row">
-          <label>Payment intent<select disabled={disabled} onChange={(event) => { setPayment(event.target.value); invalidateReview() }} value={payment}>{channelOrderPayments.map((entry) => <option key={entry}>{entry}</option>)}</select></label>
-          <ChannelAttributionControl attribution={attributions.payment} disabled={disabled} field="payment" onChange={updateAttribution} />
-        </div>
-      </div>
-      <button className="core-button compact" disabled={disabled} type="submit">Review field mapping</button>
+      </details>
     </form>
     {reviewedDraft ? <div aria-live="polite" className={`channel-draft-result ${channelOrderDraftIsReady(reviewedDraft) ? 'ready' : 'review'}`}>
       <div><span className="core-eyebrow">Ephemeral draft</span><strong>{channelOrderDraftIsReady(reviewedDraft) ? 'Ready for accountable confirmation' : 'Needs review'}</strong></div>
@@ -1830,7 +1874,7 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
     {sourceNotice}
     <section className="core-panel inventory-panel">
       <div className="panel-head"><div><span className="core-eyebrow">Stock control</span><h2>Inventory and reorder boundaries</h2></div><span className="panel-note">{lowStock.length} at boundary</span></div>
-      <div className="data-table" role="table" aria-label="Commerce inventory"><div className="data-row table-head" role="row"><span>Item</span><span>On hand</span><span>Reorder</span><span>Price</span><span>Action</span></div>{commerce.items.map((item) => <div className="data-row" role="row" key={item.sku}><span><strong>{item.name}</strong><small>{item.sku}</small></span><span className={item.onHand <= item.reorderAt ? 'warning-text' : ''}>{item.onHand}</span><span>{item.reorderAt}</span><span>{formatMoney(item.price)}</span><span><button className="text-link" type="button" onClick={() => restock(item.sku)}>Receive +10</button></span></div>)}</div>
+      <div className="data-table" role="table" aria-label="Commerce inventory"><div className="data-row table-head" role="row"><span role="columnheader">Item</span><span role="columnheader">On hand</span><span role="columnheader">Reorder</span><span role="columnheader">Price</span><span role="columnheader">Action</span></div>{commerce.items.map((item) => <div className="data-row" role="row" key={item.sku}><span role="rowheader"><strong>{item.name}</strong><small>{item.sku}</small></span><span className={item.onHand <= item.reorderAt ? 'warning-text' : ''} role="cell">{item.onHand}</span><span role="cell">{item.reorderAt}</span><span role="cell">{formatMoney(item.price)}</span><span role="cell"><button className="text-link" type="button" onClick={() => restock(item.sku)}>Receive +10</button></span></div>)}</div>
       <details className="compact-disclosure catalog-disclosure">
         <summary>Add catalog item</summary>
         <form className="core-form compact-form catalog-create-form" onSubmit={queueCatalogItem}>
@@ -2124,6 +2168,8 @@ function IssueList({ issues, onResolve }: { issues: ProductionIssue[]; onResolve
 
 export function SettingsPage() {
   const runtime = useOutletContext<RuntimeHealth>()
+  const location = useLocation()
+  const navigate = useNavigate()
   const [setup, setSetup] = useSetupWorkspace()
   const [commerce] = useCommerceWorkspace()
   const [production] = useProductionWorkspace()
@@ -2132,6 +2178,7 @@ export function SettingsPage() {
   const [teamWorkspace] = useTeamWorkspace()
   const [notice, setNotice] = useState('')
   const [resetArmed, setResetArmed] = useState(false)
+  const [settingsStepState, setSettingsStepState] = useState<'workflow' | 'success' | 'system'>('workflow')
   const [managedIdentity, setManagedIdentity] = useManagedIdentity(runtime.status === 'enterprise')
   const [managedEmail, setManagedEmail] = useState('')
   const [managedPassword, setManagedPassword] = useState('')
@@ -2140,6 +2187,8 @@ export function SettingsPage() {
   const [managedBusy, setManagedBusy] = useState(false)
   const completion = pilotProgress(setup)
   const isPilotReady = pilotReady(setup)
+  const workflowReady = Boolean(setup.workspace.trim() && setup.owner.trim() && setup.entryPoint.trim())
+  const settingsStep = location.hash === '#controls' ? 'system' : settingsStepState
   const selectedTemplate = templateFor(setup.product, setup.template)
   const evidenceDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Yangon' }).format(new Date())
   const evidenceFilename = `supermega-trial-evidence-${evidenceDate}.json`
@@ -2148,6 +2197,11 @@ export function SettingsPage() {
 
   function updateSetup(patch: Partial<SetupState>) {
     setSetup((current) => ({ ...current, ...patch, savedAt: undefined }))
+  }
+
+  function chooseSettingsStep(step: 'workflow' | 'success' | 'system') {
+    setSettingsStepState(step)
+    if (location.hash) navigate('/settings/', { replace: true })
   }
 
   function changeProduct(product: SetupState['product']) {
@@ -2163,8 +2217,14 @@ export function SettingsPage() {
 
   function save(event: FormEvent) {
     event.preventDefault()
+    if (!workflowReady) {
+      setNotice('Complete the workflow name and responsible owner first.')
+      chooseSettingsStep('workflow')
+      return
+    }
     setSetup((current) => ({ ...current, savedAt: new Date().toISOString() }))
     setNotice('Pilot definition saved in this browser. No source, account, or external action was connected.')
+    chooseSettingsStep('system')
   }
 
   function resetDemoWorkspace() {
@@ -2205,31 +2265,42 @@ export function SettingsPage() {
 
   return (
     <div className="workspace-screen settings-screen">
-      <PageHeading eyebrow="Settings" title="Pilot and system boundary" copy="Define one measurable workflow, export its evidence, and see exactly what still blocks managed activation." />
-      <div className="settings-grid">
-        <form className="core-panel setup-form" onSubmit={save}>
-          <div className="panel-head"><div><span className="core-eyebrow">Pilot definition</span><h2>Start with one real workflow.</h2></div><span className={`status-pill ${isPilotReady ? 'approved' : 'bounded'}`}>{isPilotReady ? 'ready' : `${completion}%`}</span></div>
-          <div className="pilot-progress"><div className="progress-track"><i style={{ width: `${completion}%` }} /></div><small>Channel or entry point · current record · baseline · target · authority · evidence</small></div>
+      <PageHeading eyebrow="Settings" title="Set up one real workflow" copy="Choose the work, define success, then review what is safe to activate." />
+      <nav aria-label="Setup steps" className="settings-step-nav">
+        <button aria-current={settingsStep === 'workflow' ? 'step' : undefined} onClick={() => chooseSettingsStep('workflow')} type="button"><span>1</span>Workflow</button>
+        <button aria-current={settingsStep === 'success' ? 'step' : undefined} onClick={() => chooseSettingsStep('success')} type="button"><span>2</span>Success</button>
+        <button aria-current={settingsStep === 'system' ? 'step' : undefined} onClick={() => chooseSettingsStep('system')} type="button"><span>3</span>System</button>
+      </nav>
+      <div className="settings-grid settings-step-content">
+        {settingsStep !== 'system' ? <form className="core-panel setup-form" onSubmit={save}>
+          <div className="panel-head"><div><span className="core-eyebrow">Pilot definition</span><h2>{settingsStep === 'workflow' ? 'Choose the workflow' : 'Define success and authority'}</h2></div><span className={`status-pill ${isPilotReady ? 'approved' : 'bounded'}`}>{isPilotReady ? 'ready' : `${completion}%`}</span></div>
+          <div className="pilot-progress"><div className="progress-track"><i style={{ width: `${completion}%` }} /></div><small>{settingsStep === 'workflow' ? 'Product · template · entry point · owner' : 'Current record · baseline · target · authority · evidence'}</small></div>
+          <fieldset className="settings-step-fields" disabled={settingsStep !== 'workflow'} hidden={settingsStep !== 'workflow'}>
           <div className="segmented-control wide"><button aria-pressed={setup.product === 'commerce'} type="button" onClick={() => changeProduct('commerce')}>Commerce</button><button aria-pressed={setup.product === 'production'} type="button" onClick={() => changeProduct('production')}>Production</button></div>
           <div className="form-row"><label>Starting template<select value={setup.template} onChange={(event) => changeTemplate(event.target.value)}>{templatesFor(setup.product).map((template) => <option key={template.id} value={template.name}>{template.name}</option>)}</select></label><label>Entry point<select value={setup.entryPoint} onChange={(event) => updateSetup({ entryPoint: event.target.value })}>{selectedTemplate.entryPoints.map((entryPoint) => <option key={entryPoint}>{entryPoint}</option>)}</select></label></div>
           <div className="template-contract"><span>Workflow</span><strong>{selectedTemplate.workflow.join(' → ')}</strong><small>Measure · {selectedTemplate.metric}</small></div>
           <div className="form-row"><label>Workspace name<input maxLength={80} required value={setup.workspace} onChange={(event) => updateSetup({ workspace: event.target.value })} placeholder={setup.product === 'commerce' ? 'Example: Social sales team' : 'Example: Main production site'} /></label><label>Responsible owner<input maxLength={80} required value={setup.owner} onChange={(event) => updateSetup({ owner: event.target.value })} placeholder="Name or role" /></label></div>
+          <div className="settings-step-actions"><span>Step 1 of 3</span><button className="core-button primary" disabled={!workflowReady} onClick={() => chooseSettingsStep('success')} type="button">Continue to success</button></div>
+          </fieldset>
+          <fieldset className="settings-step-fields" disabled={settingsStep !== 'success'} hidden={settingsStep !== 'success'}>
+          <div className="template-contract settings-workflow-summary"><span>{setup.product}</span><strong>{setup.workspace || 'Unnamed workspace'}</strong><small>{selectedTemplate.name} · {setup.owner || 'Owner needed'}</small></div>
           <label>Current record<input maxLength={180} required value={setup.currentRecord} onChange={(event) => updateSetup({ currentRecord: event.target.value })} placeholder="What is used today: chat, paper, spreadsheet, system, or machine log?" /></label>
           <div className="form-row pilot-text-row"><label>Baseline<textarea maxLength={240} required value={setup.baseline} onChange={(event) => updateSetup({ baseline: event.target.value })} placeholder="Current time, error rate, backlog, or output." /></label><label>Target outcome<textarea maxLength={240} required value={setup.targetOutcome} onChange={(event) => updateSetup({ targetOutcome: event.target.value })} placeholder={`Set a target for ${selectedTemplate.metric.toLowerCase()}.`} /></label></div>
           <div className="form-row pilot-text-row"><label>Human authority boundary<textarea maxLength={240} required value={setup.authorityBoundary} onChange={(event) => updateSetup({ authorityBoundary: event.target.value })} placeholder="Which sends, payments, approvals, or production changes require an owner?" /></label><label>Acceptance evidence<textarea maxLength={240} required value={setup.acceptanceEvidence} onChange={(event) => updateSetup({ acceptanceEvidence: event.target.value })} placeholder="What record or result proves the pilot works?" /></label></div>
-          <button className="core-button primary" type="submit">Save pilot definition</button>
+          <div className="settings-step-actions"><button className="text-link" onClick={() => chooseSettingsStep('workflow')} type="button">Back</button><button className="core-button primary" type="submit">Save and review system</button></div>
+          </fieldset>
           <p className="form-notice" aria-live="polite">{notice || (setup.savedAt ? `Last saved ${formatTime(setup.savedAt)}` : 'The draft stays in this browser until exported or managed mode is activated.')}</p>
-        </form>
-        <section className="core-panel system-boundary-panel" id="controls">
+        </form> : null}
+        {settingsStep === 'system' ? <section className="core-panel system-boundary-panel" id="controls">
           <div className="panel-head"><div><span className="core-eyebrow">System boundary</span><h2>{runtime.status === 'enterprise' ? 'Managed mode ready' : 'Managed mode locked'}</h2></div><RuntimeBadge status={runtime.status} /></div>
           {runtime.status === 'enterprise' && managedTrialAuthConfigured() ? managedIdentity ? <div className="template-contract"><span>Managed account</span><strong>{managedIdentity.email}</strong><small>{managedIdentity.workspaceId} · membership and capabilities are checked by the API</small><button className="text-link" disabled={managedBusy} onClick={() => void disconnectManagedWorkspace()} type="button">Disconnect</button></div> : <form className="core-form compact-form" onSubmit={(event) => void connectManagedWorkspace(event)}><span className="core-eyebrow">Managed workspace</span><div className="form-row"><label>Email<input autoComplete="username" maxLength={160} onChange={(event) => setManagedEmail(event.target.value)} required type="email" value={managedEmail} /></label><label>Password<input autoComplete="current-password" minLength={8} onChange={(event) => setManagedPassword(event.target.value)} required type="password" value={managedPassword} /></label></div><label>Workspace ID<input maxLength={128} onChange={(event) => setManagedWorkspace(event.target.value)} placeholder="Your provisioned workspace" required value={managedWorkspace} /></label><button className="core-button primary" disabled={managedBusy} type="submit">{managedBusy ? 'Checking…' : 'Connect workspace'}</button></form> : null}
           {managedNotice ? <p className="form-notice" role="status">{managedNotice}</p> : null}
           <div className="readiness-list"><span><small>Pilot definition</small><strong>{isPilotReady ? 'Ready' : `${completion}% complete`}</strong></span><span><small>Runtime</small><strong>{runtime.serviceStatus}</strong></span><span><small>Operating mode</small><strong>{runtime.operatingMode.replace('_', ' ')}</strong></span><span><small>Managed data</small><strong>{runtime.enterpriseDbReady ? 'Ready' : 'Not connected'}</strong></span><span><small>Security</small><strong>{runtime.securityReady ? 'Ready' : 'Not ready'}</strong></span><span><small>Write path</small><strong>{runtime.writesReady ? 'Enabled' : 'Locked'}</strong></span><span><small>Source coverage</small><strong>{runtime.coverageScore}%</strong></span><span><small>External action</small><strong>Owner controlled</strong></span></div>
           {runtime.status !== 'enterprise' ? <ul className="requirement-list">{(runtime.requirements.length ? runtime.requirements : ['Configure managed tenant persistence.', 'Verify production identity and source coverage.']).map((requirement) => <li key={requirement}>{requirement}</li>)}</ul> : null}
           <p className="authority-note">External sends, payments, publishing, access changes, and production writes remain owner-approved and auditable.</p>
-        </section>
+        </section> : null}
       </div>
-      <section className="core-panel trial-control-panel"><div><span className="core-eyebrow">Local evidence</span><h2>Export or reset deliberately.</h2><p>Export the pilot definition and full browser workspace for review. Reset only after the evidence is no longer needed.</p></div><div className="trial-actions"><a className="core-button" download={evidenceFilename} href={evidenceHref}>Export evidence</a>{resetArmed ? <><button className="text-link" onClick={() => setResetArmed(false)} type="button">Cancel</button><button className="core-button danger" onClick={resetDemoWorkspace} type="button">Confirm reset</button></> : <button className="text-link danger-text" onClick={() => setResetArmed(true)} type="button">Reset local trial</button>}</div></section>
+      {settingsStep === 'system' ? <section className="core-panel trial-control-panel"><div><span className="core-eyebrow">Local evidence</span><h2>Export or reset deliberately.</h2><p>Export the pilot definition and full browser workspace for review. Reset only after the evidence is no longer needed.</p></div><div className="trial-actions"><a className="core-button" download={evidenceFilename} href={evidenceHref}>Export evidence</a>{resetArmed ? <><button className="text-link" onClick={() => setResetArmed(false)} type="button">Cancel</button><button className="core-button danger" onClick={resetDemoWorkspace} type="button">Confirm reset</button></> : <button className="text-link danger-text" onClick={() => setResetArmed(true)} type="button">Reset local trial</button>}</div></section> : null}
     </div>
   )
 }
