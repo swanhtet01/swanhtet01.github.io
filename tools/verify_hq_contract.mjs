@@ -40,12 +40,12 @@ requireContract('product workspaces open on real work', portfolio.portfolio?.fin
 requireContract('application navigation is current', portfolio.portfolio?.[0]?.surfaces?.join(',') === 'Home,Work,Products,Settings (utility),Agent teams (internal)'
   && now.includes('Home, Work, and Products are the only primary destinations')
   && current.includes('Home, Work, and Products are the only primary navigation'))
-requireContract('release evidence is current', now.includes('PR `#258`')
-  && now.includes('its validated product implementation head is')
-  && now.includes('e48d15b35ce0e4122cdae4eb2ab0541d5bcba84f')
-  && now.includes('run `173` passed every validation job')
-  && now.includes('178 product/runtime checks')
-  && now.includes('102 Python tests'))
+requireContract('release evidence is current', now.includes('Draft PR `#258` remains')
+  && now.includes('its validated implementation head is')
+  && now.includes('a88dc7b1349810beb93dbd5450d6c499e627e0e7')
+  && now.includes('run `175` passed every validation job')
+  && now.includes('178 product/runtime')
+  && now.includes('103 Python checks'))
 requireContract('Commerce primary action stays visible', current.includes('Review order remains visible below the bounded field scroller')
   && current.includes('mobile retains normal page flow')
   && now.includes('Review order stays at 562-606px inside its 219-625px panel')
@@ -73,22 +73,26 @@ requireContract('local PostgreSQL 17 rehearsal is real but bounded',
   && databaseRehearsal.engine?.major === 17
   && databaseRehearsal.engine?.tlsActive === true
   && databaseRehearsal.engine?.loopbackOnly === true
-  && databaseRehearsal.implementationCommit === '71e9e6e84165d72aef741506e240e91d284c1303'
-  && databaseRehearsal.githubCi?.run === 165
+  && databaseRehearsal.implementationCommit === 'a88dc7b1349810beb93dbd5450d6c499e627e0e7'
+  && databaseRehearsal.githubCi?.run === 175
   && databaseRehearsal.githubCi?.conclusion === 'success'
   && databaseRehearsal.runtime?.adapter === 'PostgresTrialStore'
   && databaseRehearsal.runtime?.autocommit === false
   && databaseRehearsal.runtime?.explicitTransaction === true
   && databaseRehearsal.runtime?.transactionLocalIdentity === true
-  && Object.keys(databaseRehearsal.checks || {}).length === 20
+  && Object.keys(databaseRehearsal.checks || {}).length === 24
   && Object.values(databaseRehearsal.checks || {}).every((value) => value === true)
+  && databaseRehearsal.checks?.managedWebsiteToCommerceJourney === true
+  && databaseRehearsal.checks?.managedProductionJobToOutput === true
+  && databaseRehearsal.checks?.managedHumanAttribution === true
+  && databaseRehearsal.checks?.managedExactRetry === true
   && databaseRehearsal.safety?.cleanupComplete === true
   && databaseRehearsal.safety?.secretValuesExposed === false
   && databaseRehearsal.safety?.productionMutated === false
   && databaseRehearsal.safety?.supabaseMutated === false
   && databaseRehearsal.safety?.vercelMutated === false
   && databaseRehearsal.remainingHostedGates?.length === 4
-  && now.includes('does not make hosted Supabase ready'))
+  && now.includes('hosted Supabase remains separate'))
 requireContract('product lifecycle is explicit', portfolio.portfolio?.[0]?.lifecycle?.join(',') === 'discover,define,build,release,learn')
 requireContract('manifest aligns to operating modules', manifest.products?.map((entry) => `${entry.id}:${entry.name}`).join(',') === 'commerce:Commerce,production:Production')
 const expectedTemplateIds = {

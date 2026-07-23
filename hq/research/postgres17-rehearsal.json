@@ -2,10 +2,10 @@
   "schemaVersion": "supermega.hq.database-rehearsal.v1",
   "recordedAt": "2026-07-24",
   "runner": "tools/rehearse_supermega_postgres17.py",
-  "implementationCommit": "71e9e6e84165d72aef741506e240e91d284c1303",
+  "implementationCommit": "a88dc7b1349810beb93dbd5450d6c499e627e0e7",
   "githubCi": {
     "workflow": "SuperMega App CI",
-    "run": 165,
+    "run": 175,
     "conclusion": "success"
   },
   "engine": {
@@ -43,6 +43,10 @@
     "mismatchedIdentityDenied": true,
     "capabilityDenial": true,
     "invalidInitialVersionDenied": true,
+    "managedWebsiteToCommerceJourney": true,
+    "managedProductionJobToOutput": true,
+    "managedHumanAttribution": true,
+    "managedExactRetry": true,
     "optimisticConcurrency": true,
     "eventImmutability": true,
     "serverTimestamps": true,
@@ -60,7 +64,7 @@
     "vercelMutated": false
   },
   "remainingHostedGates": [
-    "Apply and validate on an isolated Supabase non-production target.",
+    "Repeat the complete migration and product-journey rehearsal on an isolated Supabase non-production target.",
     "Run Supabase Security Advisor and resolve applicable findings.",
     "Exercise the provider transaction-mode pooler and hosted backup/restore process.",
     "Keep production writes disabled until founder approval."
