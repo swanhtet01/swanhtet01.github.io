@@ -645,6 +645,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                         current_user="supermega_trial_login",
                         runtime_role="supermega_trial_login",
                         backend_role="supermega_trial_backend",
+                        server_version_num=160000 if scenario == "wrong_postgres_major" else 170010,
                         role_member=True,
                         is_backend_role_member=True,
                         rolsuper=scenario == "unsafe_role",
@@ -691,6 +692,14 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                     q = " ".join(str(query).lower().split())
                     scenario = _scenario()
                     unsafe_role = scenario == "unsafe_role"
+                    if "server_version_num" in q:
+                        return [
+                            _snapshot(
+                                server_version_num=(
+                                    160000 if scenario == "wrong_postgres_major" else 170010
+                                )
+                            )
+                        ]
                     if "transaction_read_only" in q and "dedicated_login" in q:
                         return [
                             _snapshot(
@@ -1117,6 +1126,22 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                                 )
                             )
                         return rows
+                    if "from pg_db_role_setting setting" in q:
+                        if scenario == "runtime_role_setting":
+                            return [
+                                _snapshot(
+                                    role_name="supermega_trial_login",
+                                    setting_count=1,
+                                )
+                            ]
+                        if scenario == "backend_role_setting":
+                            return [
+                                _snapshot(
+                                    role_name="supermega_trial_backend",
+                                    setting_count=1,
+                                )
+                            ]
+                        return []
                     return [_snapshot()]
 
                 class Cursor:
@@ -1247,6 +1272,8 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
             "rolsuper",
             "rolbypassrls",
             "pg_shdepend",
+            "pg_db_role_setting",
+            "server_version_num",
             "relrowsecurity",
             "relforcerowsecurity",
             "pg_policies",
@@ -1328,6 +1355,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
         self.assertIsInstance(checks, dict)
         assert isinstance(checks, dict)
         expected_checks = {
+            "postgres_major_supported",
             "read_only_encrypted_connection",
             "dedicated_runtime_role",
             "backend_group_role_safe",
@@ -1339,6 +1367,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
             "trusted_private_object_ownership",
             "runtime_role_membership_exact",
             "backend_membership_exact",
+            "runtime_and_backend_role_settings_empty",
             "policy_contract_exact",
             "security_constraints_exact",
             "immutable_and_version_triggers_exact",
@@ -1353,6 +1382,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
         evidence = payload.get("evidence")
         self.assertIsInstance(evidence, dict)
         assert isinstance(evidence, dict)
+        self.assertEqual(evidence.get("engine"), {"postgres_major": 17})
         self.assertEqual(
             evidence.get("schema"),
             {
@@ -1366,6 +1396,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
             {
                 "backend_group": BACKEND_ROLE,
                 "dedicated_login_verified": True,
+                "settings_entries": 0,
             },
         )
         self.assertEqual(evidence.get("tables"), sorted(EXPECTED_TABLES))
@@ -1429,6 +1460,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
 
     def test_every_missing_security_evidence_fails_closed(self) -> None:
         scenarios = (
+            "wrong_postgres_major",
             "unsafe_role",
             "backend_parent_membership",
             "backend_object_owner",
@@ -1442,6 +1474,8 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
             "runtime_extra_parent",
             "backend_extra_member",
             "settable_membership",
+            "runtime_role_setting",
+            "backend_role_setting",
             "missing_schema",
             "wrong_version",
             "missing_table",

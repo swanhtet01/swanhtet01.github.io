@@ -25,6 +25,7 @@ BACKEND_ROLE = "supermega_trial_backend"
 TRUSTED_OWNER = "postgres"
 SCHEMA_COMPONENT = "private_trial_backend"
 SCHEMA_VERSION = 4
+EXPECTED_POSTGRES_MAJOR = 17
 EXPECTED_TABLES = frozenset(
     {
         "trial_schema_meta",
@@ -580,6 +581,13 @@ def collect_snapshot(connection: Any) -> dict[str, Any]:
 
         cursor.execute(
             """
+            select current_setting('server_version_num')::integer as server_version_num
+            """
+        )
+        engine = _mapping(cursor.fetchone())
+
+        cursor.execute(
+            """
             with current_login as (
               select * from pg_roles where rolname = current_user
             ), backend as (
@@ -985,8 +993,21 @@ def collect_snapshot(connection: Any) -> dict[str, Any]:
             order by member_role.rolname
             """,
         )
+        role_settings = _execute_rows(
+            cursor,
+            """
+            select role_record.rolname as role_name,
+                   count(*)::integer as setting_count
+            from pg_db_role_setting setting
+            join pg_roles role_record on role_record.oid = setting.setrole
+            where role_record.rolname in (current_user, 'supermega_trial_backend')
+            group by role_record.rolname
+            order by role_record.rolname
+            """,
+        )
 
     return {
+        "engine": engine,
         "identity": identity,
         "backend_role": backend_role,
         "backend_acl_dependencies": backend_acl_dependencies,
@@ -1003,10 +1024,12 @@ def collect_snapshot(connection: Any) -> dict[str, Any]:
         "browser_roles": browser_roles,
         "runtime_parent_memberships": runtime_parent_memberships,
         "backend_members": backend_members,
+        "role_settings": role_settings,
     }
 
 
 def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
+    engine = _mapping(snapshot.get("engine", {}))
     identity = _mapping(snapshot.get("identity", {}))
     backend = _mapping(snapshot.get("backend_role", {}))
     backend_acl_dependency_rows = [
@@ -1028,6 +1051,19 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
         _mapping(row) for row in snapshot.get("runtime_parent_memberships", [])
     ]
     backend_member_rows = [_mapping(row) for row in snapshot.get("backend_members", [])]
+    role_setting_rows = [_mapping(row) for row in snapshot.get("role_settings", [])]
+
+    try:
+        server_version_num = int(engine.get("server_version_num", 0))
+    except (TypeError, ValueError):
+        server_version_num = 0
+    postgres_major = server_version_num // 10_000 if server_version_num > 0 else 0
+    try:
+        role_setting_count = sum(
+            max(0, int(row.get("setting_count", 0))) for row in role_setting_rows
+        )
+    except (TypeError, ValueError):
+        role_setting_count = -1
 
     connection_keys = (
         "transaction_read_only",
@@ -1238,6 +1274,7 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
     )
 
     checks = {
+        "postgres_major_supported": postgres_major == EXPECTED_POSTGRES_MAJOR,
         "read_only_encrypted_connection": all(
             _bool(identity.get(key)) for key in ("transaction_read_only", "tls_active")
         ),
@@ -1250,6 +1287,9 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
         "trusted_private_object_ownership": trusted_private_ownership,
         "runtime_role_membership_exact": runtime_membership_exact,
         "backend_membership_exact": backend_membership_exact,
+        "runtime_and_backend_role_settings_empty": (
+            not role_setting_rows and role_setting_count == 0
+        ),
         "policy_contract_exact": policy_contract,
         "security_constraints_exact": security_constraints_exact,
         "immutable_and_version_triggers_exact": trigger_contract,
@@ -1268,6 +1308,9 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
         "checks": checks,
         "failed_checks": failed,
         "evidence": {
+            "engine": {
+                "postgres_major": postgres_major,
+            },
             "schema": {
                 "name": SCHEMA,
                 "component": SCHEMA_COMPONENT,
@@ -1276,6 +1319,7 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
             "role": {
                 "backend_group": BACKEND_ROLE,
                 "dedicated_login_verified": checks["dedicated_runtime_role"],
+                "settings_entries": role_setting_count,
             },
             "tables": sorted(EXPECTED_TABLES),
             "rls": {
