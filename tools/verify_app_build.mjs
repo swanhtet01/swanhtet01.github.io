@@ -11,7 +11,7 @@ let websiteRuntimeChecks = 0
 let commerceRuntimeChecks = 0
 let productionRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
-const [manifestText, appPackageText, appSource, coreSource, commerceSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteWorkspaceSource, websiteCssSource, commerceIntakeSource, handoffSource] = await Promise.all([
+const [manifestText, appPackageText, appSource, coreSource, commerceSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteWorkspaceSource, websiteCssSource, commerceIntakeSource, handoffSource, coreCssSource] = await Promise.all([
   readFile(resolve(root, 'site-manifest.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'package.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'App.tsx'), 'utf8'),
@@ -34,6 +34,7 @@ const [manifestText, appPackageText, appSource, coreSource, commerceSource, chan
   readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-product.css'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'WebsiteCommerceIntake.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'product-handoff.ts'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'core', 'core-app.css'), 'utf8'),
 ])
 const manifest = JSON.parse(manifestText)
 const appPackage = JSON.parse(appPackageText)
@@ -110,7 +111,17 @@ if (!agentTeamsSource.includes('No agent can send, pay, publish, merge, deploy, 
   || !agentTeamsSource.includes('approvalBoundary')
   || agentTeamsSource.includes('className="agent-roster" role="list"')
   || agentTeamsSource.includes('>Run<')) fail('agent_authority_boundary_missing')
+if (!agentTeamsSource.includes('const mobileDetailOpen = Boolean(selectedAgentId && selectedAgent)')
+  || !agentTeamsSource.includes("mobileDetailOpen ? 'mobile-detail-open' : 'mobile-list-open'")
+  || !agentTeamsSource.includes('>Back to roles</button>')
+  || !coreCssSource.includes('.agent-team-view.mobile-list-open .agent-detail-panel { display: none; }')
+  || !coreCssSource.includes('.agent-team-view.mobile-detail-open .agent-roster-panel { display: none; }')) fail('agent_mobile_master_detail_missing')
 if (!coreSource.includes('view=work&item=${item.id}') || !coreSource.includes('view=agents&agent=${agent.id}') || !teamSource.includes("const requestedItemId = searchParams.get('item')") || !teamSource.includes("const requestedAgentId = searchParams.get('agent')") || !teamSource.includes("if (view === 'work' && selectedId) next.item = selectedId") || !teamSource.includes("if (view === 'agents' && selectedId) next.agent = selectedId") || !agentTeamsSource.includes('onSelectAgent: (agentId: string) => void') || agentTeamsSource.includes('const [selectedAgentId')) fail('team_record_deep_links_missing')
+if (!teamSource.includes('const mobileDetailOpen = Boolean(requestedItemId && selectedItem)')
+  || !teamSource.includes("mobileDetailOpen ? 'mobile-detail-open' : 'mobile-list-open'")
+  || !teamSource.includes('>Back to work</button>')
+  || !coreCssSource.includes('.team-board-view.mobile-list-open .record-detail-panel { display: none; }')
+  || !coreCssSource.includes('.team-board-view.mobile-detail-open .queue-panel { display: none; }')) fail('team_mobile_master_detail_missing')
 if (!appSource.includes("lazy(() => import('./products/website/WebsiteProduct')") || !appSource.includes('Suspense') || appSource.includes("import('./products/ecommerce/EcommerceOrdersProduct')")) fail('website_prototype_route_not_isolated')
 if (!appSource.includes('<Navigate replace to="/operations/commerce/?tab=orders" />') || !appSource.includes('path="products/ecommerce/*"')) fail('legacy_ecommerce_route_not_redirected')
 if (!appPackage.scripts?.lint?.includes('src/products')) fail('prototype_sources_not_linted')

@@ -93,6 +93,7 @@ export function TeamsPage() {
 
   const intakeOpen = showIntake || requestedView === 'intake'
   const selectedItem = requestedItemId ? teamItems.find((item) => item.id === requestedItemId) : teamItems[0]
+  const mobileDetailOpen = Boolean(requestedItemId && selectedItem)
   const openItems = teamItems.filter((item) => item.status !== 'done')
   const activeItems = teamItems.filter((item) => ['in_progress', 'review'].includes(item.status))
   const blockedItems = teamItems.filter((item) => item.status === 'blocked')
@@ -309,7 +310,7 @@ export function TeamsPage() {
           <aside className="core-panel guidance-panel"><span className="core-eyebrow">Definition of ready</span><h2>Outcome, owner, evidence, boundary.</h2><ol><li>Name the observable result.</li><li>Assign one accountable human.</li><li>State what evidence proves it.</li><li>Keep consequential authority human.</li></ol></aside>
         </div> : null}
 
-        {activeView === 'work' && !intakeOpen ? <div className="split-workspace team-board-view">
+        {activeView === 'work' && !intakeOpen ? <div className={`split-workspace team-board-view ${mobileDetailOpen ? 'mobile-detail-open' : 'mobile-list-open'}`}>
           <section className="core-panel queue-panel">
             <div className="panel-head"><div><span className="core-eyebrow">Owned work</span><h2>{openItems.length} open</h2></div></div>
             {teamItems.length ? <ul className="record-list">{teamItems.map((item) => (
@@ -324,6 +325,7 @@ export function TeamsPage() {
           </section>
           <section className="core-panel record-detail-panel">
             {selectedItem ? <>
+              <button className="team-mobile-back text-link" onClick={() => navigate(activeTeam, 'work')} type="button">Back to work</button>
               <div className="record-detail-head"><div><span className="core-eyebrow">{selectedItem.id}</span><h2>{selectedItem.title}</h2><p>{selectedItem.outcome}</p></div><span className={`status-pill ${selectedItem.status === 'done' ? 'approved' : selectedItem.status === 'blocked' ? 'pending' : 'bounded'}`}>{statusLabel(selectedItem.status)}</span></div>
               <div className="record-controls">
                 <label>Owner<input aria-label={`Owner for ${selectedItem.title}`} maxLength={80} value={selectedItem.owner} onChange={(event) => updateWork(selectedItem.id, { owner: event.target.value })} /></label>

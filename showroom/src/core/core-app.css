@@ -434,6 +434,7 @@ textarea { min-height: 72px; resize: vertical; }
 .team-picker > span { color: var(--core-quiet); font-family: var(--core-mono); font-size: 10px; font-weight: 760; text-transform: uppercase; }
 .team-picker select { min-height: 38px; padding-block: 0; }
 .simple-toolbar .view-tabs { margin-left: auto; }
+.team-mobile-back, .agent-mobile-back { display: none; }
 
 .evidence-disclosure { margin-top: 14px; border-top: 1px solid var(--core-line); }
 .evidence-disclosure > summary, .decision-workspace-disclosure > summary, .company-brief-disclosure > summary { min-height: 42px; display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--core-muted); font-size: 11px; cursor: pointer; list-style: none; }
@@ -589,6 +590,12 @@ textarea { min-height: 72px; resize: vertical; }
   .settings-grid { min-height: 0; }
   .trial-control-panel { align-items: flex-start; }
   .agent-team-workspace { height: auto; }
+  .team-board-view.mobile-list-open .record-detail-panel { display: none; }
+  .team-board-view.mobile-detail-open .queue-panel { display: none; }
+  .team-board-view .team-mobile-back { min-height: 44px; display: inline-flex; align-items: center; margin-bottom: 8px; }
+  .agent-team-view.mobile-list-open .agent-detail-panel { display: none; }
+  .agent-team-view.mobile-detail-open .agent-roster-panel { display: none; }
+  .agent-team-view .agent-mobile-back { min-height: 44px; display: inline-flex; align-items: center; margin-bottom: 8px; }
   .agent-team-view { flex: none; }
   .agent-roster { max-height: 360px; }
   .agent-boundary-banner { align-items: flex-start; }

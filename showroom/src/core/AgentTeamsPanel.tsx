@@ -37,6 +37,7 @@ export function AgentTeamsPanel({ activeTeam, selectedAgentId, onSelectAgent, wo
   const [evidenceReference, setEvidenceReference] = useState('')
   const [notice, setNotice] = useState('')
   const selectedAgent = selectedAgentId ? teamAgents.find((agent) => agent.id === selectedAgentId) : teamAgents[0]
+  const mobileDetailOpen = Boolean(selectedAgentId && selectedAgent)
 
   function updateAgent(agentId: string, patch: Partial<DelegatedAgent>) {
     const updatedAt = new Date().toISOString()
@@ -138,7 +139,7 @@ export function AgentTeamsPanel({ activeTeam, selectedAgentId, onSelectAgent, wo
         <span><small>Needs review</small><strong>{reviewCount}</strong></span>
         <span><small>Blocked</small><strong>{blockedCount}</strong></span>
       </section>
-      <div className="split-workspace agent-team-view">
+      <div className={`split-workspace agent-team-view ${mobileDetailOpen ? 'mobile-detail-open' : 'mobile-list-open'}`}>
         <section className="core-panel agent-roster-panel">
           <div className="panel-head">
             <div><span className="core-eyebrow">Team roster</span><h2>Delegated roles</h2></div>
@@ -165,6 +166,7 @@ export function AgentTeamsPanel({ activeTeam, selectedAgentId, onSelectAgent, wo
         </section>
         <section className="core-panel agent-detail-panel">
           {selectedAgent ? <>
+            <button className="agent-mobile-back text-link" onClick={() => onSelectAgent('')} type="button">Back to roles</button>
             <div className="record-detail-head">
               <div><span className="core-eyebrow">{selectedAgent.id}</span><h2>{selectedAgent.name}</h2><p>{selectedAgent.role}</p></div>
               <span className={`status-pill ${selectedAgent.state === 'waiting_review' ? 'pending' : selectedAgent.state === 'blocked' ? 'pending' : 'bounded'}`}>{agentStateLabel(selectedAgent.state)}</span>
