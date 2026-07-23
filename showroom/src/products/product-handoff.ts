@@ -1,5 +1,7 @@
 import {
   WEBSITE_STORAGE_KEY,
+  getCurrentApproval,
+  getCurrentPublish,
   readinessChecks,
   restoreWorkspace,
   workspaceFingerprint,
@@ -424,15 +426,16 @@ function isHandoffStore(value: unknown): value is HandoffStore {
 
 function validateAgainstWorkspace(handoff: WebsiteEcommerceHandoff, workspace: WebsiteWorkspace) {
   const fingerprint = workspaceFingerprint(workspace)
-  const approval = workspace.approval
-  const publish = workspace.localPublishes[0]
+  const approval = getCurrentApproval(workspace)
+  const publish = getCurrentPublish(workspace)
   const readyPageIds = workspace.pages.filter((page) => page.stage === 'ready').map((page) => page.id)
   const page = workspace.pages.find((candidate) => candidate.id === handoff.source.pageId)
 
   if (fingerprint !== handoff.source.fingerprint || !readinessChecks(workspace, fingerprint).every((check) => check.passed)) return null
   if (!approval || approval.id !== handoff.source.approvalId || approval.fingerprint !== fingerprint) return null
   if (!isTrimmedText(approval.reviewer, 80) || !isTrimmedText(approval.note, 240) || !isIsoTimestamp(approval.approvedAt)) return null
-  if (!publish || publish.id !== handoff.source.localPublishId || publish.fingerprint !== fingerprint) return null
+  if (!publish || publish.id !== handoff.source.localPublishId || publish.fingerprint !== fingerprint || publish.approvalId !== approval.id) return null
+  if (!sameStringSet(publish.evidenceIds, approval.evidenceIds)) return null
   if (!isIsoTimestamp(publish.recordedAt) || Date.parse(publish.recordedAt) < Date.parse(approval.approvedAt)) return null
   if (publish.recordedBy !== approval.reviewer || !sameStringSet(publish.readyPageIds, readyPageIds)) return null
   if (!page || page.stage !== 'ready' || !publish.readyPageIds.includes(page.id)) return null

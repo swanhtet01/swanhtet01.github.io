@@ -6,10 +6,11 @@ const root = resolve(import.meta.dirname, '..')
 const dist = resolve(root, 'showroom', 'dist')
 const failures = []
 let orderCompletionRuntimeChecks = 0
+let websiteRuntimeChecks = 0
 let commerceRuntimeChecks = 0
 let productionRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
-const [manifestText, appPackageText, appSource, coreSource, commerceSource, managedTrialSource, managedCommerceRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, publishSource, commerceIntakeSource, handoffSource] = await Promise.all([
+const [manifestText, appPackageText, appSource, coreSource, commerceSource, managedTrialSource, managedCommerceRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, publishSource, sitePreviewSource, websiteModelSource, websiteWorkspaceSource, websiteCssSource, commerceIntakeSource, handoffSource] = await Promise.all([
   readFile(resolve(root, 'site-manifest.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'package.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'App.tsx'), 'utf8'),
@@ -23,6 +24,10 @@ const [manifestText, appPackageText, appSource, coreSource, commerceSource, mana
   readFile(resolve(root, 'showroom', 'src', 'core', 'team-work.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'WebsiteProduct.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'PublishWorkspace.tsx'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'SitePreview.tsx'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-model.ts'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'useWebsiteWorkspace.ts'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-product.css'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'WebsiteCommerceIntake.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'product-handoff.ts'), 'utf8'),
 ])
@@ -94,6 +99,14 @@ if (!appSource.includes("lazy(() => import('./products/website/WebsiteProduct')"
 if (!appSource.includes('<Navigate replace to="/operations/commerce/?tab=orders" />') || !appSource.includes('path="products/ecommerce/*"')) fail('legacy_ecommerce_route_not_redirected')
 if (!appPackage.scripts?.lint?.includes('src/products')) fail('prototype_sources_not_linted')
 if (!websiteSource.includes('No website has been deployed.') || !websiteSource.includes('No deployment or external write occurred.')) fail('website_prototype_boundary_missing')
+if (!websiteModelSource.includes("supermega.website.workspace.v2") || !websiteModelSource.includes('LEGACY_WEBSITE_STORAGE_KEY') || !websiteModelSource.includes('mutateWebsiteWorkspace') || !websiteModelSource.includes('WEBSITE_MUTATION_LOCK') || !websiteModelSource.includes('preservesAppendOnlyHistory')) fail('website_v2_locked_store_missing')
+if (!websiteModelSource.includes('contentRevision') || !websiteModelSource.includes('evidenceIds') || !websiteModelSource.includes('migratedFromV1') || !websiteModelSource.includes('getCurrentApproval') || !websiteModelSource.includes('getCurrentPublish')) fail('website_release_provenance_missing')
+if (!sitePreviewSource.includes("ctaHref.startsWith('https://')") || !sitePreviewSource.includes("ctaHref.startsWith('#')") || !sitePreviewSource.includes('aria-disabled="true"')) fail('website_preview_destination_guard_missing')
+if (!websiteWorkspaceSource.includes("addEventListener('storage', refreshFromStorage)") || !websiteWorkspaceSource.includes("removeEventListener('storage', refreshFromStorage)") || !websiteWorkspaceSource.includes('mutateWebsiteWorkspace(update, current.revision, current.contentRevision') || websiteWorkspaceSource.includes('localStorage.setItem(WEBSITE_STORAGE_KEY, JSON.stringify(workspace))')) fail('website_confirmed_write_or_cross_tab_refresh_missing')
+const websiteTabsContract = websiteSource.slice(websiteSource.indexOf('const workspaceViews'), websiteSource.indexOf('const viewCopy'))
+if ((websiteTabsContract.match(/^\s*\{ id:/gm) || []).length !== 3 || !websiteTabsContract.includes("label: 'Content'") || !websiteTabsContract.includes("label: 'Navigation'") || !websiteTabsContract.includes("label: 'Publish'") || !websiteSource.includes('role="tablist"') || !websiteSource.includes('role="tabpanel"') || !websiteSource.includes("event.key === 'ArrowRight'") || !websiteSource.includes('tabIndex={view === item.id ? 0 : -1}')) fail('website_three_view_accessibility_contract_changed')
+const websiteMobileCss = websiteCssSource.slice(websiteCssSource.indexOf('@media (max-width: 640px)'), websiteCssSource.indexOf('@media (prefers-reduced-motion'))
+if (!websiteMobileCss.includes('.website-preview-controls') || !websiteMobileCss.includes('display: flex') || websiteMobileCss.includes('.website-preview-controls {\n    display: none')) fail('website_mobile_review_controls_hidden')
 if (!commerceIntakeSource.includes('Browser-local evidence only.') || !commerceIntakeSource.includes('No customer message, payment, delivery request, or external write occurs.')) fail('commerce_intake_boundary_missing')
 if (!handoffSource.includes("schema: 'website_ecommerce_handoff.v1'") || !handoffSource.includes("state: 'pending_acceptance'") || !handoffSource.includes('hasExactKeys') || !handoffSource.includes('validateAgainstWorkspace') || !handoffSource.includes('readinessChecks(workspace, fingerprint).every') || !handoffSource.includes('acceptWebsiteEcommerceHandoff')) fail('website_ecommerce_handoff_contract_missing')
 const handoffIntakeSource = handoffSource.slice(handoffSource.indexOf('type HandoffIntake'), handoffSource.indexOf('type PendingHandoff'))
@@ -147,6 +160,298 @@ for (const marker of ['\uFFFD', '\u00e2\u20ac\u201d', '\u00e2\u20ac\u201c', '\u0
   if (corpus.includes(marker)) fail('app_copy_encoding_corrupt')
 }
 
+async function verifyWebsiteRuntime() {
+  const values = new Map()
+  let lockRequests = 0
+  let lockTail = Promise.resolve()
+  const storage = {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, String(value)),
+  }
+  const locks = {
+    request: async (_name, _options, callback) => {
+      const previous = lockTail
+      let release
+      lockTail = new Promise((resolveLock) => { release = resolveLock })
+      await previous
+      lockRequests += 1
+      try { return await callback() } finally { release() }
+    },
+  }
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    websiteRuntimeChecks += 1
+  }
+  const at = (offset) => new Date(Date.UTC(2026, 6, 23, 0, 0, 0) + offset).toISOString()
+
+  try {
+    const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-model.ts')).href}?website-verify=${Date.now()}`)
+    const seed = model.createInitialWorkspace()
+    const fingerprint = model.workspaceFingerprint(seed)
+    const legacyEvidence = ['content', 'responsive', 'links'].map((kind, index) => ({
+      id: `legacy-evidence-${kind}`,
+      kind,
+      finding: `${kind} legacy review`,
+      reference: `LEGACY-${kind.toUpperCase()}`,
+      verifiedBy: 'OP-LEGACY',
+      verifiedAt: at(index),
+      fingerprint,
+    }))
+    const legacy = {
+      version: 1,
+      siteName: seed.siteName,
+      pages: seed.pages,
+      selectedPageId: seed.selectedPageId,
+      evidence: legacyEvidence,
+      approval: {
+        id: 'legacy-approval',
+        reviewer: 'OP-LEGACY',
+        note: 'Legacy approval retained for history',
+        approvedAt: at(10),
+        fingerprint,
+      },
+      localPublishes: [{
+        id: 'legacy-publish',
+        recordedAt: at(20),
+        recordedBy: 'OP-LEGACY',
+        fingerprint,
+        readyPageIds: seed.pages.filter((page) => page.stage === 'ready').map((page) => page.id),
+      }],
+    }
+
+    values.set(model.LEGACY_WEBSITE_STORAGE_KEY, JSON.stringify(legacy))
+    const migratedOnce = model.loadWebsiteWorkspace(storage)
+    const migratedTwice = model.loadWebsiteWorkspace(storage)
+    assert(migratedOnce.ok && migratedTwice.ok && migratedOnce.source === 'v1' && JSON.stringify(migratedOnce.workspace) === JSON.stringify(migratedTwice.workspace), 'website_v1_migration_not_deterministic')
+    assert(migratedOnce.ok && migratedOnce.workspace.evidence.length === 3 && migratedOnce.workspace.approvals.length === 1 && migratedOnce.workspace.localPublishes.length === 1 && migratedOnce.workspace.events.length === 0, 'website_v1_records_not_preserved')
+    assert(migratedOnce.ok && migratedOnce.workspace.approvals[0].migratedFromV1 && model.getCurrentApproval(migratedOnce.workspace) === null && model.getCurrentPublish(migratedOnce.workspace) === null, 'website_v1_release_claim_not_reopened')
+
+    values.set(model.WEBSITE_STORAGE_KEY, JSON.stringify(seed))
+    const v2Precedence = model.loadWebsiteWorkspace(storage)
+    assert(v2Precedence.ok && v2Precedence.source === 'v2' && v2Precedence.workspace.approvals.length === 0, 'website_v2_did_not_take_precedence')
+    const malformed = '{broken'
+    values.set(model.WEBSITE_STORAGE_KEY, malformed)
+    const malformedLoad = model.loadWebsiteWorkspace(storage)
+    assert(!malformedLoad.ok && values.get(model.WEBSITE_STORAGE_KEY) === malformed, 'website_malformed_v2_fell_back_or_was_replaced')
+
+    values.clear()
+    assert(model.restoreWorkspace({ ...seed, unexpected: true }) === null, 'website_extra_key_was_accepted')
+    assert(model.restoreWorkspace({ ...seed, pages: [seed.pages[0], { ...seed.pages[0] }] }) === null, 'website_duplicate_page_id_was_accepted')
+    const retainedHistory = {
+      ...seed,
+      revision: 501,
+      events: Array.from({ length: 501 }, (_, index) => ({
+        id: `event-retained-${index}`,
+        createdAt: at(index),
+        actorKind: 'human',
+        actor: 'OP-HISTORY',
+        action: 'publish_evidence_recorded',
+        subjectId: `history-${index}`,
+        reason: 'Retained Website history',
+        evidenceReference: `HISTORY-${index}`,
+        source: { contentRevision: 0, digest: fingerprint },
+      })),
+    }
+    assert(model.restoreWorkspace(retainedHistory)?.events.length === 501, 'website_history_was_truncated')
+
+    const firstInput = {
+      actionId: 'evidence-content-runtime',
+      capturedAt: at(1000),
+      kind: 'content',
+      finding: 'Content owner verified the current copy',
+      reference: 'CONTENT-REVIEW-1',
+      verifiedBy: 'OP-OWNER',
+    }
+    const first = await model.mutateWebsiteWorkspace(
+      (current) => model.recordWebsiteEvidence(current, firstInput),
+      0,
+      0,
+      storage,
+      locks,
+    )
+    assert(first.ok && first.changed && first.workspace.revision === 1 && first.workspace.contentRevision === 0 && first.workspace.events.length === 1, 'website_evidence_not_confirmed_atomically')
+    const firstRaw = values.get(model.WEBSITE_STORAGE_KEY)
+    const exactEvidence = await model.mutateWebsiteWorkspace(
+      (current) => model.recordWebsiteEvidence(current, firstInput),
+      1,
+      0,
+      storage,
+      locks,
+    )
+    assert(exactEvidence.ok && !exactEvidence.changed && values.get(model.WEBSITE_STORAGE_KEY) === firstRaw, 'website_evidence_exact_retry_changed_state')
+    const conflictingEvidence = await model.mutateWebsiteWorkspace(
+      (current) => model.recordWebsiteEvidence(current, { ...firstInput, finding: 'Conflicting reuse' }),
+      1,
+      0,
+      storage,
+      locks,
+    )
+    assert(!conflictingEvidence.ok && values.get(model.WEBSITE_STORAGE_KEY) === firstRaw, 'website_evidence_conflict_overwrote_state')
+
+    const [responsiveResult, linksResult] = await Promise.all([
+      model.mutateWebsiteWorkspace(
+        (current) => model.recordWebsiteEvidence(current, {
+          actionId: 'evidence-responsive-runtime',
+          capturedAt: at(1010),
+          kind: 'responsive',
+          finding: 'Desktop, tablet, and mobile previews verified',
+          reference: 'RESPONSIVE-REVIEW-1',
+          verifiedBy: 'OP-OWNER',
+        }),
+        1,
+        0,
+        storage,
+        locks,
+      ),
+      model.mutateWebsiteWorkspace(
+        (current) => model.recordWebsiteEvidence(current, {
+          actionId: 'evidence-links-runtime',
+          capturedAt: at(1020),
+          kind: 'links',
+          finding: 'Navigation and CTA destinations verified',
+          reference: 'LINK-REVIEW-1',
+          verifiedBy: 'OP-OWNER',
+        }),
+        1,
+        0,
+        storage,
+        locks,
+      ),
+    ])
+    const afterConcurrentEvidence = model.loadWebsiteWorkspace(storage)
+    assert(responsiveResult.ok && linksResult.ok && afterConcurrentEvidence.ok && afterConcurrentEvidence.workspace.evidence.length === 3 && afterConcurrentEvidence.workspace.events.length === 3, 'website_concurrent_evidence_writes_did_not_both_survive')
+
+    const readyForApproval = afterConcurrentEvidence.workspace
+    const approvalInput = {
+      actionId: 'approval-runtime-v2',
+      capturedAt: at(2000),
+      reviewer: 'OP-OWNER',
+      note: 'All current evidence reviewed and accepted',
+    }
+    const approved = await model.mutateWebsiteWorkspace(
+      (current) => model.approveWebsiteRevision(current, approvalInput),
+      readyForApproval.revision,
+      readyForApproval.contentRevision,
+      storage,
+      locks,
+    )
+    assert(approved.ok && approved.changed && model.getCurrentApproval(approved.workspace)?.evidenceIds.length === 3 && approved.workspace.events.length === 4, 'website_approval_not_bound_to_evidence')
+    const approvalRaw = values.get(model.WEBSITE_STORAGE_KEY)
+    const exactApproval = await model.mutateWebsiteWorkspace(
+      (current) => model.approveWebsiteRevision(current, approvalInput),
+      approved.workspace.revision,
+      approved.workspace.contentRevision,
+      storage,
+      locks,
+    )
+    assert(exactApproval.ok && !exactApproval.changed && values.get(model.WEBSITE_STORAGE_KEY) === approvalRaw, 'website_approval_exact_retry_changed_state')
+
+    const refreshedEvidence = await model.mutateWebsiteWorkspace(
+      (current) => model.recordWebsiteEvidence(current, {
+        actionId: 'evidence-links-runtime-2',
+        capturedAt: at(2100),
+        kind: 'links',
+        finding: 'Destinations rechecked after approval',
+        reference: 'LINK-REVIEW-2',
+        verifiedBy: 'OP-OWNER',
+      }),
+      approved.workspace.revision,
+      approved.workspace.contentRevision,
+      storage,
+      locks,
+    )
+    assert(refreshedEvidence.ok && model.getCurrentApproval(refreshedEvidence.workspace) === null, 'website_new_evidence_did_not_stale_approval')
+    const reapproved = await model.mutateWebsiteWorkspace(
+      (current) => model.approveWebsiteRevision(current, {
+        actionId: 'approval-runtime-v2-2',
+        capturedAt: at(2200),
+        reviewer: 'OP-OWNER',
+        note: 'Updated destination evidence reviewed and accepted',
+      }),
+      refreshedEvidence.workspace.revision,
+      refreshedEvidence.workspace.contentRevision,
+      storage,
+      locks,
+    )
+    const snapshotInput = { actionId: 'local-snapshot-runtime-v2', capturedAt: at(2300) }
+    const snapshotted = await model.mutateWebsiteWorkspace(
+      (current) => model.recordWebsiteSnapshot(current, snapshotInput),
+      reapproved.workspace.revision,
+      reapproved.workspace.contentRevision,
+      storage,
+      locks,
+    )
+    assert(snapshotted.ok && snapshotted.changed && model.getCurrentPublish(snapshotted.workspace)?.approvalId === model.getCurrentApproval(snapshotted.workspace)?.id, 'website_snapshot_not_bound_to_current_approval')
+    const snapshotRaw = values.get(model.WEBSITE_STORAGE_KEY)
+    const exactSnapshot = await model.mutateWebsiteWorkspace(
+      (current) => model.recordWebsiteSnapshot(current, snapshotInput),
+      snapshotted.workspace.revision,
+      snapshotted.workspace.contentRevision,
+      storage,
+      locks,
+    )
+    assert(exactSnapshot.ok && !exactSnapshot.changed && values.get(model.WEBSITE_STORAGE_KEY) === snapshotRaw, 'website_snapshot_exact_retry_changed_state')
+
+    const beforeContentRace = snapshotted.workspace
+    const [firstContentEdit, staleContentEdit] = await Promise.all([
+      model.mutateWebsiteWorkspace(
+        (current) => ({ ...current, siteName: 'First tab edit' }),
+        beforeContentRace.revision,
+        beforeContentRace.contentRevision,
+        storage,
+        locks,
+      ),
+      model.mutateWebsiteWorkspace(
+        (current) => ({ ...current, siteName: 'Stale tab edit' }),
+        beforeContentRace.revision,
+        beforeContentRace.contentRevision,
+        storage,
+        locks,
+      ),
+    ])
+    const afterContentRace = model.loadWebsiteWorkspace(storage)
+    assert(firstContentEdit.ok && !staleContentEdit.ok && afterContentRace.ok && afterContentRace.workspace.siteName === 'First tab edit', 'website_stale_content_edit_overwrote_current_state')
+    assert(afterContentRace.ok && model.getCurrentApproval(afterContentRace.workspace) === null && model.getCurrentPublish(afterContentRace.workspace) === null, 'website_content_change_did_not_stale_release')
+
+    const beforeFailure = values.get(model.WEBSITE_STORAGE_KEY)
+    const failingStorage = { getItem: storage.getItem, setItem: () => { throw new Error('quota') } }
+    const failedWrite = await model.mutateWebsiteWorkspace(
+      (current) => ({ ...current, siteName: 'Should not persist' }),
+      afterContentRace.workspace.revision,
+      afterContentRace.workspace.contentRevision,
+      failingStorage,
+      locks,
+    )
+    assert(!failedWrite.ok && values.get(model.WEBSITE_STORAGE_KEY) === beforeFailure, 'website_storage_failure_advanced_state')
+    const blankEvidence = await model.mutateWebsiteWorkspace(
+      (current) => model.recordWebsiteEvidence(current, {
+        actionId: 'evidence-blank-runtime',
+        capturedAt: at(3000),
+        kind: 'content',
+        finding: ' ',
+        reference: ' ',
+        verifiedBy: ' ',
+      }),
+      afterContentRace.workspace.revision,
+      afterContentRace.workspace.contentRevision,
+      storage,
+      locks,
+    )
+    assert(!blankEvidence.ok && values.get(model.WEBSITE_STORAGE_KEY) === beforeFailure, 'website_blank_evidence_was_accepted')
+    const unlocked = await model.mutateWebsiteWorkspace(
+      (current) => ({ ...current, selectedPageId: 'page-products' }),
+      afterContentRace.workspace.revision,
+      afterContentRace.workspace.contentRevision,
+      storage,
+      {},
+    )
+    assert(!unlocked.ok && values.get(model.WEBSITE_STORAGE_KEY) === beforeFailure, 'website_unlocked_write_succeeded')
+    assert(lockRequests >= 14, 'website_mutations_did_not_use_web_lock')
+  } catch (error) {
+    fail(`website_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
 async function verifyWebsiteOrderCompletionRuntime() {
   const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator')
   const originalLocalStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
@@ -181,38 +486,43 @@ async function verifyWebsiteOrderCompletionRuntime() {
 
     const websiteModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-model.ts')).href}?verify=${Date.now()}`)
     const handoffContract = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'product-handoff.ts')).href}?verify=${Date.now()}`)
-    const workspace = websiteModel.createInitialWorkspace()
-    const fingerprint = websiteModel.workspaceFingerprint(workspace)
+    let workspace = websiteModel.createInitialWorkspace()
     const at = (offset) => new Date(Date.now() + offset).toISOString()
-    workspace.evidence = ['content', 'responsive', 'links'].map((kind, index) => ({
-      id: `evidence-${kind}`,
-      kind,
-      finding: `${kind} verified`,
-      reference: `REF-${kind.toUpperCase()}`,
-      verifiedBy: 'OP-OWNER',
-      verifiedAt: at(-5_000 + index),
-      fingerprint,
-    }))
-    workspace.approval = {
-      id: 'approval-runtime',
+    const applyWebsite = (update) => {
+      const result = websiteModel.applyWebsiteWorkspaceUpdate(workspace, update)
+      if (!result.ok) throw new Error(result.error)
+      workspace = result.workspace
+    }
+    for (const [index, kind] of ['content', 'responsive', 'links'].entries()) {
+      applyWebsite((current) => websiteModel.recordWebsiteEvidence(current, {
+        actionId: `evidence-${kind}`,
+        capturedAt: at(-5_000 + index),
+        kind,
+        finding: `${kind} verified`,
+        reference: `REF-${kind.toUpperCase()}`,
+        verifiedBy: 'OP-OWNER',
+      }))
+    }
+    applyWebsite((current) => websiteModel.approveWebsiteRevision(current, {
+      actionId: 'approval-runtime',
+      capturedAt: at(-4_000),
       reviewer: 'OP-OWNER',
       note: 'Approved for runtime contract verification',
-      approvedAt: at(-4_000),
-      fingerprint,
-    }
-    workspace.localPublishes = [{
-      id: 'local-publish-runtime',
-      recordedAt: at(-3_000),
-      recordedBy: 'OP-OWNER',
-      fingerprint,
-      readyPageIds: workspace.pages.filter((page) => page.stage === 'ready').map((page) => page.id),
-    }]
+    }))
+    applyWebsite((current) => websiteModel.recordWebsiteSnapshot(current, {
+      actionId: 'local-publish-runtime',
+      capturedAt: at(-3_000),
+    }))
+    const fingerprint = websiteModel.workspaceFingerprint(workspace)
+    const currentApproval = websiteModel.getCurrentApproval(workspace)
+    const currentPublish = websiteModel.getCurrentPublish(workspace)
+    if (!currentApproval || !currentPublish) throw new Error('runtime_website_release_setup_invalid')
     localStorage.setItem(websiteModel.WEBSITE_STORAGE_KEY, JSON.stringify(workspace))
 
     const pendingHandoff = handoffContract.createWebsiteEcommerceHandoff({
       fingerprint,
-      approvalId: workspace.approval.id,
-      localPublishId: workspace.localPublishes[0].id,
+      approvalId: currentApproval.id,
+      localPublishId: currentPublish.id,
       pageId: 'page-products',
       sku: 'SM-CARE-01',
       quantity: 1,
@@ -239,7 +549,7 @@ async function verifyWebsiteOrderCompletionRuntime() {
     const completed = await handoffContract.completeWebsiteOrderDraft(drafted.draft.id, input)
     assert(completed?.schema === 'website_ecommerce_handoff_store.v3' && completed.order?.state === 'ready_for_confirmation' && completed.audit.length === 2, 'runtime_v3_completion_invalid')
     assert(/^CREF-[A-HJ-NP-Z2-9]{12}$/.test(completed.order.customerReference), 'runtime_customer_reference_not_opaque')
-    assert(completed.order.idempotencyKey === drafted.draft.id && completed.order.source.websiteEvidenceReference === workspace.localPublishes[0].id, 'runtime_source_identity_invalid')
+    assert(completed.order.idempotencyKey === drafted.draft.id && completed.order.source.websiteEvidenceReference === currentPublish.id, 'runtime_source_identity_invalid')
     assert(JSON.stringify(completed.order.lines) === JSON.stringify(drafted.draft.lines) && completed.order.totalMmk === drafted.draft.totalMmk, 'runtime_price_snapshot_changed')
     const v3Raw = localStorage.getItem(handoffContract.WEBSITE_ECOMMERCE_HANDOFF_KEY)
     const exactRetry = await handoffContract.completeWebsiteOrderDraft(drafted.draft.id, input)
@@ -249,7 +559,9 @@ async function verifyWebsiteOrderCompletionRuntime() {
     assert(lockRequests === 3, 'runtime_completion_lock_missing')
 
     localStorage.setItem(handoffContract.WEBSITE_ECOMMERCE_HANDOFF_KEY, v2Raw)
-    localStorage.setItem(websiteModel.WEBSITE_STORAGE_KEY, JSON.stringify({ ...workspace, siteName: 'Changed Website source' }))
+    const changedSource = websiteModel.applyWebsiteWorkspaceUpdate(workspace, (current) => ({ ...current, siteName: 'Changed Website source' }))
+    if (!changedSource.ok) throw new Error(changedSource.error)
+    localStorage.setItem(websiteModel.WEBSITE_STORAGE_KEY, JSON.stringify(changedSource.workspace))
     const staleAttempt = await handoffContract.completeWebsiteOrderDraft(drafted.draft.id, input)
     assert(staleAttempt === null && localStorage.getItem(handoffContract.WEBSITE_ECOMMERCE_HANDOFF_KEY) === v2Raw, 'runtime_stale_source_did_not_fail_closed')
 
@@ -617,6 +929,7 @@ async function verifyProductionRuntime() {
   }
 }
 
+await verifyWebsiteRuntime()
 await verifyWebsiteOrderCompletionRuntime()
 await verifyCommerceRuntime()
 await verifyProductionRuntime()
@@ -628,4 +941,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', primaryRoutes: 4, operatingModules: 2, prototypeRoutes: 1, compatibilityRedirects: 1, workflowProfiles, orderCompletionRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', primaryRoutes: 4, operatingModules: 2, prototypeRoutes: 1, compatibilityRedirects: 1, workflowProfiles, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, bytes }, null, 2))

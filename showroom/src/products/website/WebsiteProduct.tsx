@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { type KeyboardEvent, useEffect, useState } from 'react'
 
 import { ContentWorkspace } from './ContentWorkspace'
 import { NavigationWorkspace } from './NavigationWorkspace'
@@ -11,18 +11,22 @@ import {
   writeWebsiteEcommerceHandoff,
 } from '../product-handoff'
 import {
+  approveWebsiteRevision,
   createBlankPage,
   createId,
   duplicatePage,
-  isCurrentApproval,
-  isCurrentPublish,
+  getCurrentApproval,
+  getCurrentPublish,
   MAX_WEBSITE_PAGES,
   previewDevices,
   readinessChecks,
+  recordWebsiteEvidence,
+  recordWebsiteSnapshot,
   workspaceFingerprint,
   type EvidenceKind,
   type PreviewDevice,
   type WebsitePage,
+  type WebsiteWorkspaceUpdate,
   type WorkspaceView,
 } from './website-model'
 import './website-product.css'
@@ -58,7 +62,7 @@ function handoffSourceKey(context: ReturnType<typeof readWebsiteEcommerceHandoff
 }
 
 export function WebsiteProduct() {
-  const { workspace, setWorkspace, storageMode } = useWebsiteWorkspace()
+  const { workspace, mutateWorkspace, storageMode, storageIssue } = useWebsiteWorkspace()
   const [view, setView] = useState<WorkspaceView>('content')
   const [device, setDevice] = useState<PreviewDevice>('desktop')
   const [notice, setNotice] = useState('Local demo loaded. No website has been deployed.')
@@ -67,12 +71,14 @@ export function WebsiteProduct() {
   const selectedPage = workspace.pages.find((page) => page.id === workspace.selectedPageId) ?? workspace.pages[0]
   const fingerprint = workspaceFingerprint(workspace)
   const checks = readinessChecks(workspace, fingerprint)
-  const approvalIsCurrent = isCurrentApproval(workspace.approval, fingerprint)
-  const publishIsCurrent = isCurrentPublish(workspace.localPublishes[0], fingerprint)
+  const approval = getCurrentApproval(workspace)
+  const publish = getCurrentPublish(workspace)
+  const approvalIsCurrent = Boolean(approval)
+  const publishIsCurrent = Boolean(publish)
   const handoffSourcePage = workspace.pages.find((page) => page.stage === 'ready' && page.slug === '/products')
     ?? workspace.pages.find((page) => page.stage === 'ready')
-  const currentHandoffSource = workspace.approval && workspace.localPublishes[0] && handoffSourcePage
-    ? [fingerprint, workspace.approval.id, workspace.localPublishes[0].id, handoffSourcePage.id].join('|')
+  const currentHandoffSource = approval && publish && handoffSourcePage
+    ? [fingerprint, approval.id, publish.id, handoffSourcePage.id].join('|')
     : ''
   const handoffIsCurrent = Boolean(preparedHandoffSource
     && preparedHandoffSource === currentHandoffSource
@@ -86,14 +92,40 @@ export function WebsiteProduct() {
     window.scrollTo({ top: 0, behavior: 'instant' })
   }, [])
 
-  function selectPage(pageId: string) {
-    setWorkspace((current) => ({ ...current, selectedPageId: pageId }))
+  async function commitWorkspace(update: WebsiteWorkspaceUpdate, success = '', durable = false) {
+    const result = await mutateWorkspace(update, { durable })
+    if (!result.ok) {
+      setNotice(result.error)
+      return result
+    }
+    if (result.changed && success) setNotice(success)
+    return result
+  }
+
+  function moveWorkspaceTabFocus(event: KeyboardEvent<HTMLButtonElement>, currentIndex: number) {
+    const tabs = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')
+    if (!tabs?.length) return
+    let nextIndex = currentIndex
+    if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % tabs.length
+    else if (event.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + tabs.length) % tabs.length
+    else if (event.key === 'Home') nextIndex = 0
+    else if (event.key === 'End') nextIndex = tabs.length - 1
+    else return
+    event.preventDefault()
+    tabs[nextIndex]?.focus()
+    setView(workspaceViews[nextIndex].id)
+  }
+
+  async function selectPage(pageId: string) {
+    await commitWorkspace((current) => current.pages.some((page) => page.id === pageId)
+      ? { ...current, selectedPageId: pageId }
+      : current)
     setDeleteCandidateId('')
     setNotice('Previewing the selected browser-local page.')
   }
 
-  function updatePage(pageId: string, update: (page: WebsitePage) => WebsitePage) {
-    setWorkspace((current) => ({
+  async function updatePage(pageId: string, update: (page: WebsitePage) => WebsitePage) {
+    await commitWorkspace((current) => ({
       ...current,
       pages: current.pages.map((page) => page.id === pageId
         ? { ...update(page), updatedAt: new Date().toISOString() }
@@ -102,39 +134,40 @@ export function WebsiteProduct() {
     setDeleteCandidateId('')
   }
 
-  function addPage() {
+  async function addPage() {
     if (workspace.pages.length >= MAX_WEBSITE_PAGES) {
       setNotice('This prototype is capped at four pages. Remove a draft before adding another.')
       return
     }
-    const page = createBlankPage(workspace.pages.length + 1)
-    setWorkspace((current) => ({
-      ...current,
-      pages: [...current.pages, page],
-      selectedPageId: page.id,
-    }))
-    setView('content')
-    setDeleteCandidateId('')
-    setNotice('Draft page added. Complete its content before marking it ready.')
+    const result = await commitWorkspace((current) => {
+      if (current.pages.length >= MAX_WEBSITE_PAGES) return current
+      const page = createBlankPage(current.pages.length + 1)
+      return { ...current, pages: [...current.pages, page], selectedPageId: page.id }
+    }, 'Draft page added. Complete its content before marking it ready.')
+    if (result.ok && result.changed) {
+      setView('content')
+      setDeleteCandidateId('')
+    }
   }
 
-  function copySelectedPage() {
+  async function copySelectedPage() {
     if (workspace.pages.length >= MAX_WEBSITE_PAGES) {
       setNotice('This prototype is capped at four pages. Remove a draft before duplicating.')
       return
     }
-    const page = duplicatePage(selectedPage, workspace.pages.length + 1)
-    setWorkspace((current) => ({
-      ...current,
-      pages: [...current.pages, page],
-      selectedPageId: page.id,
-    }))
-    setView('content')
-    setDeleteCandidateId('')
-    setNotice('Draft copy added with navigation hidden.')
+    const result = await commitWorkspace((current) => {
+      if (current.pages.length >= MAX_WEBSITE_PAGES) return current
+      const sourcePage = current.pages.find((page) => page.id === current.selectedPageId) ?? current.pages[0]
+      const page = duplicatePage(sourcePage, current.pages.length + 1)
+      return { ...current, pages: [...current.pages, page], selectedPageId: page.id }
+    }, 'Draft copy added with navigation hidden.')
+    if (result.ok && result.changed) {
+      setView('content')
+      setDeleteCandidateId('')
+    }
   }
 
-  function requestDeletePage() {
+  async function requestDeletePage() {
     if (selectedPage.slug === '/' || selectedPage.stage !== 'draft') return
     if (deleteCandidateId !== selectedPage.id) {
       setDeleteCandidateId(selectedPage.id)
@@ -142,20 +175,21 @@ export function WebsiteProduct() {
       return
     }
 
-    setWorkspace((current) => {
-      const pages = current.pages.filter((page) => page.id !== selectedPage.id)
+    const result = await commitWorkspace((current) => {
+      const target = current.pages.find((page) => page.id === selectedPage.id)
+      if (!target || target.slug === '/' || target.stage !== 'draft') return current
+      const pages = current.pages.filter((page) => page.id !== target.id)
       return {
         ...current,
         pages,
         selectedPageId: pages[0]?.id ?? '',
       }
-    })
-    setDeleteCandidateId('')
-    setNotice('Browser-local draft removed.')
+    }, 'Browser-local draft removed.')
+    if (result.ok && result.changed) setDeleteCandidateId('')
   }
 
-  function movePage(pageId: string, direction: -1 | 1) {
-    setWorkspace((current) => {
+  async function movePage(pageId: string, direction: -1 | 1) {
+    await commitWorkspace((current) => {
       const currentIndex = current.pages.findIndex((page) => page.id === pageId)
       const nextIndex = currentIndex + direction
       if (currentIndex < 0 || nextIndex < 0 || nextIndex >= current.pages.length) return current
@@ -163,66 +197,50 @@ export function WebsiteProduct() {
       const [page] = pages.splice(currentIndex, 1)
       pages.splice(nextIndex, 0, page)
       return { ...current, pages }
-    })
-    setNotice('Navigation order updated locally.')
+    }, 'Navigation order updated locally.')
   }
 
-  function addEvidence(input: {
+  async function addEvidence(input: {
     kind: EvidenceKind
     finding: string
     reference: string
     verifiedBy: string
   }) {
-    const evidence = {
-      ...input,
-      id: createId('evidence'),
-      verifiedAt: new Date().toISOString(),
-      fingerprint,
-    }
-    setWorkspace((current) => ({
-      ...current,
-      evidence: [
-        evidence,
-        ...current.evidence.filter((entry) => entry.kind !== input.kind || entry.fingerprint !== fingerprint),
-      ].slice(0, 24),
-    }))
-    setNotice('Verified evidence recorded for ' + fingerprint + '.')
+    const actionId = createId('evidence')
+    const capturedAt = new Date().toISOString()
+    const result = await commitWorkspace(
+      (current) => recordWebsiteEvidence(current, { ...input, actionId, capturedAt }),
+      'Verified evidence was saved and confirmed for the current content revision.',
+      true,
+    )
+    return result.ok && result.changed
   }
 
-  function approveCurrentRevision(input: { reviewer: string; note: string }) {
-    setWorkspace((current) => ({
-      ...current,
-      approval: {
-        id: createId('approval'),
-        reviewer: input.reviewer,
-        note: input.note,
-        approvedAt: new Date().toISOString(),
-        fingerprint,
-      },
-    }))
-    setNotice('Human approval recorded for the current local fingerprint.')
+  async function approveCurrentRevision(input: { reviewer: string; note: string }) {
+    const actionId = createId('approval')
+    const capturedAt = new Date().toISOString()
+    const result = await commitWorkspace(
+      (current) => approveWebsiteRevision(current, { ...input, actionId, capturedAt }),
+      'Evidence-bound human approval was saved and confirmed for this content revision.',
+      true,
+    )
+    return result.ok && result.changed
   }
 
-  function recordLocalPublish() {
-    if (!approvalIsCurrent || publishIsCurrent || !workspace.approval) return
-    const record = {
-      id: createId('local-publish'),
-      recordedAt: new Date().toISOString(),
-      recordedBy: workspace.approval.reviewer,
-      fingerprint,
-      readyPageIds: workspace.pages.filter((page) => page.stage === 'ready').map((page) => page.id),
-    }
-    setWorkspace((current) => ({
-      ...current,
-      localPublishes: [record, ...current.localPublishes].slice(0, 5),
-    }))
-    setNotice('Local publish snapshot recorded. No deployment or external write occurred.')
+  async function recordLocalPublish() {
+    if (!approvalIsCurrent || publishIsCurrent) return
+    await commitWorkspace(
+      (current) => recordWebsiteSnapshot(current, {
+        actionId: createId('local-snapshot'),
+        capturedAt: new Date().toISOString(),
+      }),
+      'Approved snapshot saved and confirmed. No deployment or external write occurred.',
+      true,
+    )
   }
 
   function prepareCommerceHandoff() {
     const existingHandoff = readWebsiteEcommerceHandoff()
-    const approval = workspace.approval
-    const publish = workspace.localPublishes[0]
     const sourcePage = handoffSourcePage
 
     if (existingHandoff?.handoff.state === 'accepted') {
@@ -293,7 +311,9 @@ export function WebsiteProduct() {
         </a>
         <div className="website-runtime">
           <span className="website-local-badge"><i />Local demo</span>
-          <small>{storageMode === 'browser-local' ? 'saved in this browser' : 'session only'}</small>
+          <small>{storageMode === 'browser-local'
+            ? 'saved · content r' + String(workspace.contentRevision)
+            : 'session only'}</small>
           <button className="website-button is-primary is-compact" onClick={() => setView('publish')} type="button">
             Review publish
           </button>
@@ -308,12 +328,16 @@ export function WebsiteProduct() {
             <small>{workspace.pages.length} / {MAX_WEBSITE_PAGES} pages · local draft</small>
           </div>
 
-          <nav className="website-workspace-nav" aria-label="Website workspace">
-            {workspaceViews.map((item) => (
+          <nav className="website-workspace-nav" aria-label="Website workspace" role="tablist">
+            {workspaceViews.map((item, index) => (
               <button
-                aria-current={view === item.id ? 'page' : undefined}
+                aria-controls="website-active-panel"
+                aria-selected={view === item.id}
                 key={item.id}
+                onKeyDown={(event) => moveWorkspaceTabFocus(event, index)}
                 onClick={() => setView(item.id)}
+                role="tab"
+                tabIndex={view === item.id ? 0 : -1}
                 type="button"
               >
                 <span>{item.index}</span>{item.label}
@@ -374,7 +398,12 @@ export function WebsiteProduct() {
             </div>
           </header>
 
-          <div className={'website-workspace-grid view-' + view}>
+          <div
+            aria-label={workspaceViews.find((item) => item.id === view)?.label}
+            className={'website-workspace-grid view-' + view}
+            id="website-active-panel"
+            role="tabpanel"
+          >
             {view === 'content' ? (
               <ContentWorkspace
                 canDuplicate={workspace.pages.length < MAX_WEBSITE_PAGES}
@@ -391,8 +420,7 @@ export function WebsiteProduct() {
                 onMovePage={movePage}
                 onSelectPage={selectPage}
                 onSiteNameChange={(siteName) => {
-                  setWorkspace((current) => ({ ...current, siteName }))
-                  setNotice('Site identity updated locally.')
+                  void commitWorkspace((current) => ({ ...current, siteName }), 'Site identity updated locally.')
                 }}
                 onUpdatePage={updatePage}
                 workspace={workspace}
@@ -417,6 +445,7 @@ export function WebsiteProduct() {
 
             <SitePreview
               device={device}
+              onSelectPage={selectPage}
               page={selectedPage}
               pages={workspace.pages}
               siteName={workspace.siteName}
@@ -426,7 +455,7 @@ export function WebsiteProduct() {
       </div>
 
       <div className="website-notice" aria-live="polite" role="status">
-        <span aria-hidden="true">&gt;_</span>{notice}
+        <span aria-hidden="true">&gt;_</span>{storageIssue || notice}
       </div>
     </div>
   )
