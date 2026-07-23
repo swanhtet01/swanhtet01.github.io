@@ -5,6 +5,7 @@ import { NavigationWorkspace } from './NavigationWorkspace'
 import { PublishWorkspace } from './PublishWorkspace'
 import { SitePreview } from './SitePreview'
 import { useWebsiteWorkspace } from './useWebsiteWorkspace'
+import { createWebsiteHtmlDownload } from './website-export'
 import {
   commerceWebsiteIntakes,
   createCommerceWebsiteIntake,
@@ -58,8 +59,8 @@ const viewCopy: Record<WorkspaceView, { title: string; copy: string }> = {
     copy: 'Choose what visitors can see and put pages in the right order.',
   },
   publish: {
-    title: 'Review and publish',
-    copy: 'Check readiness, record evidence, and approve the current revision.',
+    title: 'Review and save',
+    copy: 'Check the revision once, approve it, then download the site file.',
   },
 }
 
@@ -270,9 +271,32 @@ export function WebsiteProduct() {
         actionId: createId('local-snapshot'),
         capturedAt: new Date().toISOString(),
       }),
-      'Approved snapshot saved and confirmed. No deployment occurred.',
+      'Approved site file saved and confirmed. No deployment occurred.',
       true,
     )
+  }
+
+  function downloadPublishedSite(recordId: string) {
+    const record = workspace.localPublishes.find((entry) => entry.id === recordId)
+    if (!record?.artifact) {
+      setNotice('This older site record has no retained file. Approve the current revision and create a new site file.')
+      return
+    }
+    try {
+      const download = createWebsiteHtmlDownload(record.artifact)
+      const url = URL.createObjectURL(new Blob([download.content], { type: download.mimeType }))
+      const link = document.createElement('a')
+      link.href = url
+      link.download = download.filename
+      link.hidden = true
+      document.body.append(link)
+      link.click()
+      link.remove()
+      window.setTimeout(() => URL.revokeObjectURL(url), 0)
+      setNotice(`${download.filename} downloaded. No deployment or domain change occurred.`)
+    } catch (error) {
+      setNotice('The retained site file failed closed: ' + (error instanceof Error ? error.message : 'unknown export error'))
+    }
   }
 
   async function prepareCommerceHandoff(input: { sku: string; quantity: number }) {
@@ -571,12 +595,14 @@ export function WebsiteProduct() {
                 <PublishWorkspace
                   approvalIsCurrent={approvalIsCurrent}
                   checks={checks}
+                  currentPublishId={publish?.id ?? ''}
                   fingerprint={fingerprint}
                   handoffAvailable={storageMode !== 'session-only'}
                   handoffIsCurrent={handoffIsCurrent}
                   managedActorId={managedActorId}
                   onAddEvidence={addEvidence}
                   onApprove={approveCurrentRevision}
+                  onDownloadPublish={downloadPublishedSite}
                   onPrepareCommerceHandoff={prepareCommerceHandoff}
                   onRecordPublish={recordLocalPublish}
                   publishIsCurrent={publishIsCurrent}

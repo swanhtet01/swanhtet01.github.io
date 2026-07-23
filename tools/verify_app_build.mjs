@@ -11,7 +11,7 @@ let websiteRuntimeChecks = 0
 let commerceRuntimeChecks = 0
 let productionRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
-const [manifestText, appPackageText, appSource, coreSource, commerceSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteWorkspaceSource, websiteCssSource, commerceIntakeSource, handoffSource, coreCssSource] = await Promise.all([
+const [manifestText, appPackageText, appSource, coreSource, commerceSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, websiteCssSource, commerceIntakeSource, handoffSource, coreCssSource] = await Promise.all([
   readFile(resolve(root, 'site-manifest.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'package.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'App.tsx'), 'utf8'),
@@ -31,6 +31,7 @@ const [manifestText, appPackageText, appSource, coreSource, commerceSource, chan
   readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'publish-workspace.css'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'SitePreview.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-model.ts'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-export.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'useWebsiteWorkspace.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-product.css'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'WebsiteCommerceIntake.tsx'), 'utf8'),
@@ -129,9 +130,20 @@ if (!appPackage.scripts?.lint?.includes('src/products')) fail('prototype_sources
 if (!websiteSource.includes('No website has been deployed.')
   || !websiteSource.includes('No deployment occurred.')
   || !publishSource.includes('No deployment, domain write, payment, stock, customer message, or order change happens here.')
-  || !publishSource.includes('It does not publish a website.')) fail('website_deployment_boundary_missing')
+  || !publishSource.includes('It does not deploy or change a domain.')) fail('website_deployment_boundary_missing')
 if (!websiteModelSource.includes("supermega.website.workspace.v2") || !websiteModelSource.includes('LEGACY_WEBSITE_STORAGE_KEY') || !websiteModelSource.includes('mutateWebsiteWorkspace') || !websiteModelSource.includes('WEBSITE_MUTATION_LOCK') || !websiteModelSource.includes('preservesAppendOnlyHistory') || !websiteModelSource.includes('canonicalJson')) fail('website_v2_locked_store_missing')
 if (!websiteModelSource.includes('contentRevision') || !websiteModelSource.includes('evidenceIds') || !websiteModelSource.includes('migratedFromV1') || !websiteModelSource.includes('getCurrentApproval') || !websiteModelSource.includes('getCurrentPublish')) fail('website_release_provenance_missing')
+if (!websiteModelSource.includes("supermega.website.artifact.v1")
+  || !websiteModelSource.includes('createWebsiteArtifact')
+  || !websiteModelSource.includes('artifact: createWebsiteArtifact(workspace)')
+  || !websiteModelSource.includes('isMetadataOnlyPublishRecord')) fail('website_approved_artifact_persistence_missing')
+if (!websiteExportSource.includes('buildWebsiteHtml')
+  || !websiteExportSource.includes('Content-Security-Policy')
+  || !websiteExportSource.includes('createWebsiteHtmlDownload')
+  || !websiteExportSource.includes('escapeHtml')
+  || ['fetch(', 'localStorage', 'sessionStorage', 'XMLHttpRequest'].some((marker) => websiteExportSource.includes(marker))
+  || !websiteSource.includes('downloadPublishedSite')
+  || !publishSource.includes('Download site')) fail('website_static_artifact_export_missing_or_side_effectful')
 if (!sitePreviewSource.includes("ctaHref.startsWith('https://')") || !sitePreviewSource.includes("ctaHref.startsWith('#')") || !sitePreviewSource.includes('aria-disabled="true"')) fail('website_preview_destination_guard_missing')
 if (!websiteWorkspaceSource.includes("addEventListener('storage', refreshFromStorage)") || !websiteWorkspaceSource.includes("removeEventListener('storage', refreshFromStorage)") || !websiteWorkspaceSource.includes('mutateWebsiteWorkspace(update, current.revision, current.contentRevision') || websiteWorkspaceSource.includes('localStorage.setItem(WEBSITE_STORAGE_KEY, JSON.stringify(workspace))')) fail('website_confirmed_write_or_cross_tab_refresh_missing')
 if (!managedTrialSource.includes('saveManagedWebsiteCommand') || !managedTrialSource.includes("surface: 'website'") || !websiteWorkspaceSource.includes('loadManagedBootstrap()') || !websiteWorkspaceSource.includes("storageModeRef.current = 'managed'") || !websiteWorkspaceSource.includes('actor: managedActorRef.current') || !websiteWorkspaceSource.includes("error.code === 'trial_version_conflict'")) fail('managed_website_command_client_missing')
@@ -161,7 +173,7 @@ if (!publishSource.includes("type PublishStep = 'checks' | 'evidence' | 'approva
   || !publishSource.includes("{ id: 'checks', label: 'Checks' }")
   || !publishSource.includes("{ id: 'evidence', label: 'Evidence' }")
   || !publishSource.includes("{ id: 'approval', label: 'Approval' }")
-  || !publishSource.includes("{ id: 'snapshot', label: 'Snapshot & handoff' }")
+  || !publishSource.includes("{ id: 'snapshot', label: 'Site file' }")
   || !publishSource.includes('aria-current={activeStep === step.id')
   || !publishSource.includes("activeStep === 'checks'")
   || !publishSource.includes("activeStep === 'evidence'")
@@ -170,6 +182,9 @@ if (!publishSource.includes("type PublishStep = 'checks' | 'evidence' | 'approva
   || !publishCssSource.includes('grid-template-columns: repeat(4, minmax(0, 1fr))')
   || !publishCssSource.includes('grid-template-columns: repeat(2, minmax(0, 1fr))')
   || !publishCssSource.includes('font-size: 16px')) fail('website_publish_task_flow_missing')
+if (!publishSource.includes('<details className="website-disclosure website-commerce-handoff">')
+  || !publishSource.includes('Optional Commerce handoff')
+  || !publishSource.includes('Create site file')) fail('website_publish_secondary_actions_not_progressively_disclosed')
 const websiteMobileCss = websiteCssSource.slice(websiteCssSource.indexOf('@media (max-width: 640px)'), websiteCssSource.indexOf('@media (prefers-reduced-motion'))
 const websitePreviewControlsHiddenUnconditionally = /(?:^|\n)\s*\.website-preview-controls\s*\{\s*display:\s*none/.test(websiteMobileCss)
 if (!websiteMobileCss.includes('.website-preview-controls') || !websiteMobileCss.includes('display: flex') || websitePreviewControlsHiddenUnconditionally) fail('website_mobile_review_controls_hidden')
@@ -504,6 +519,7 @@ async function verifyWebsiteRuntime() {
 
   try {
     const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-model.ts')).href}?website-verify=${Date.now()}`)
+    const exporter = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-export.ts')).href}?website-export-verify=${Date.now()}`)
     const seed = model.createInitialWorkspace()
     const fingerprint = model.workspaceFingerprint(seed)
     const reverseObjectKeys = (value) => Array.isArray(value)
@@ -548,7 +564,7 @@ async function verifyWebsiteRuntime() {
     const migratedTwice = model.loadWebsiteWorkspace(storage)
     assert(migratedOnce.ok && migratedTwice.ok && migratedOnce.source === 'v1' && JSON.stringify(migratedOnce.workspace) === JSON.stringify(migratedTwice.workspace), 'website_v1_migration_not_deterministic')
     assert(migratedOnce.ok && migratedOnce.workspace.evidence.length === 3 && migratedOnce.workspace.approvals.length === 1 && migratedOnce.workspace.localPublishes.length === 1 && migratedOnce.workspace.events.length === 0, 'website_v1_records_not_preserved')
-    assert(migratedOnce.ok && migratedOnce.workspace.approvals[0].migratedFromV1 && model.getCurrentApproval(migratedOnce.workspace) === null && model.getCurrentPublish(migratedOnce.workspace) === null, 'website_v1_release_claim_not_reopened')
+    assert(migratedOnce.ok && migratedOnce.workspace.approvals[0].migratedFromV1 && migratedOnce.workspace.localPublishes[0].artifact === null && model.getCurrentApproval(migratedOnce.workspace) === null && model.getCurrentPublish(migratedOnce.workspace) === null, 'website_v1_release_claim_not_reopened')
 
     values.set(model.WEBSITE_STORAGE_KEY, JSON.stringify(seed))
     const v2Precedence = model.loadWebsiteWorkspace(storage)
@@ -706,7 +722,27 @@ async function verifyWebsiteRuntime() {
       locks,
     )
     assert(snapshotted.ok && snapshotted.changed && model.getCurrentPublish(snapshotted.workspace)?.approvalId === model.getCurrentApproval(snapshotted.workspace)?.id, 'website_snapshot_not_bound_to_current_approval')
+    const retainedArtifact = model.getCurrentPublish(snapshotted.workspace)?.artifact
+    assert(retainedArtifact?.schema === 'supermega.website.artifact.v1' && /^site-[a-f0-9]{8}$/.test(retainedArtifact.contentDigest) && retainedArtifact.pages.length === seed.pages.filter((page) => page.stage === 'ready').length, 'website_approved_artifact_not_retained')
+    assert(retainedArtifact && retainedArtifact.pages.every((page) => !('stage' in page) && !('updatedAt' in page) && !('internalName' in page)), 'website_artifact_contains_draft_metadata')
+    const firstDownload = exporter.createWebsiteHtmlDownload(retainedArtifact)
+    const secondDownload = exporter.createWebsiteHtmlDownload(retainedArtifact)
+    assert(JSON.stringify(firstDownload) === JSON.stringify(secondDownload) && firstDownload.filename.endsWith('.html'), 'website_artifact_export_not_deterministic')
+    assert(firstDownload.content.includes('Content-Security-Policy') && firstDownload.content.includes('href="#products"') && firstDownload.content.includes('https://supermega.dev/'), 'website_artifact_links_or_security_boundary_missing')
+    assert(![fingerprint, approvalInput.actionId, firstInput.actionId, 'OP-OWNER', 'page-home'].some((value) => firstDownload.content.includes(value)), 'website_artifact_export_leaked_governance_metadata')
+    const unsafeArtifact = structuredClone(retainedArtifact)
+    unsafeArtifact.pages[0].hero.ctaHref = 'javascript:alert(1)'
+    assert(exporter.validateWebsiteArtifactForExport(unsafeArtifact).some((issue) => issue.path.endsWith('ctaHref')), 'website_artifact_unsafe_link_not_rejected')
     const snapshotRaw = values.get(model.WEBSITE_STORAGE_KEY)
+    const reloadedSnapshot = model.loadWebsiteWorkspace(storage)
+    assert(reloadedSnapshot.ok && reloadedSnapshot.workspace.localPublishes[0].artifact?.contentDigest === retainedArtifact.contentDigest, 'website_artifact_not_persistent_after_reload')
+    const metadataOnly = JSON.parse(snapshotRaw)
+    delete metadataOnly.localPublishes[0].artifact
+    const migratedMetadataOnly = model.restoreWorkspace(metadataOnly)
+    assert(migratedMetadataOnly?.localPublishes[0].artifact === null && model.getCurrentPublish(migratedMetadataOnly) === null, 'website_metadata_only_snapshot_not_migrated_unavailable')
+    const tamperedArtifact = JSON.parse(snapshotRaw)
+    tamperedArtifact.localPublishes[0].artifact.pages[0].hero.headline = 'Tampered headline'
+    assert(model.restoreWorkspace(tamperedArtifact) === null, 'website_tampered_artifact_was_accepted')
     const exactSnapshot = await model.mutateWebsiteWorkspace(
       (current) => model.recordWebsiteSnapshot(current, snapshotInput),
       snapshotted.workspace.revision,

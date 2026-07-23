@@ -18,9 +18,9 @@
       "name": "Website",
       "status": "release-candidate-local",
       "path": "/products/website/",
-      "job": "Turn an approved business brief into a finite, reviewable website candidate with content, navigation, evidence, and human publish approval.",
+      "job": "Turn an approved business brief into a finite, reviewable website and one deterministic downloadable site file.",
       "surfaces": ["Pages", "Navigation", "Publish"],
-      "nextGate": "Rehearse one approved managed snapshot into a retained Commerce intake before connecting a customer domain or publish authority."
+      "nextGate": "Rehearse one approved managed site artifact into a retained Commerce intake before connecting a customer domain or publish authority."
     },
     {
       "id": "commerce",

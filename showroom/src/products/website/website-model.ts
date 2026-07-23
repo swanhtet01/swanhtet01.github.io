@@ -73,6 +73,24 @@ export type WebsiteSourceRef = {
   digest: string
 }
 
+export type WebsiteArtifactPage = {
+  id: string
+  slug: string
+  navigation: WebsitePage['navigation']
+  hero: WebsitePage['hero']
+  sections: PageSection[]
+  seo: WebsitePage['seo']
+}
+
+export type WebsiteArtifact = {
+  schema: 'supermega.website.artifact.v1'
+  siteName: string
+  fingerprint: string
+  contentDigest: string
+  source: WebsiteSourceRef
+  pages: WebsiteArtifactPage[]
+}
+
 export type PublishEvidence = {
   id: string
   kind: EvidenceKind
@@ -106,6 +124,7 @@ export type LocalPublishRecord = {
   evidenceIds: string[]
   source: WebsiteSourceRef
   migratedFromV1: boolean
+  artifact: WebsiteArtifact | null
 }
 
 export type WebsiteWorkflowEvent = {
@@ -143,7 +162,7 @@ export type ReadinessCheck = {
 
 type LegacyPublishEvidence = Omit<PublishEvidence, 'source' | 'migratedFromV1'>
 type LegacyPublishApproval = Omit<PublishApproval, 'evidenceIds' | 'source' | 'migratedFromV1'>
-type LegacyLocalPublishRecord = Omit<LocalPublishRecord, 'approvalId' | 'evidenceIds' | 'source' | 'migratedFromV1'>
+type LegacyLocalPublishRecord = Omit<LocalPublishRecord, 'approvalId' | 'evidenceIds' | 'source' | 'migratedFromV1' | 'artifact'>
 
 type LegacyWebsiteWorkspace = {
   version: 1
@@ -353,13 +372,17 @@ export function workspaceFingerprint(workspace: WebsiteWorkspace) {
       seo: page.seo,
     })),
   }
-  const source = canonicalJson(publishableState)
+  return 'web-' + canonicalDigest(publishableState)
+}
+
+function canonicalDigest(value: unknown) {
+  const source = canonicalJson(value)
   let hash = 2166136261
   for (let index = 0; index < source.length; index += 1) {
     hash ^= source.charCodeAt(index)
     hash = Math.imul(hash, 16777619)
   }
-  return 'web-' + (hash >>> 0).toString(16).padStart(8, '0')
+  return (hash >>> 0).toString(16).padStart(8, '0')
 }
 
 function canonicalJson(value: unknown): string {
@@ -380,6 +403,32 @@ export function websiteSource(workspace: WebsiteWorkspace): WebsiteSourceRef {
   return { contentRevision: workspace.contentRevision, digest: workspaceFingerprint(workspace) }
 }
 
+export function createWebsiteArtifact(workspace: WebsiteWorkspace): WebsiteArtifact {
+  const source = websiteSource(workspace)
+  const content: Omit<WebsiteArtifact, 'contentDigest'> = {
+    schema: 'supermega.website.artifact.v1',
+    siteName: workspace.siteName,
+    fingerprint: source.digest,
+    source,
+    pages: workspace.pages
+      .filter((page) => page.stage === 'ready')
+      .map((page) => ({
+        id: page.id,
+        slug: normalizeSlug(page.slug),
+        navigation: { ...page.navigation },
+        hero: { ...page.hero },
+        sections: page.sections.map((section) => ({ ...section })),
+        seo: { ...page.seo },
+      })),
+  }
+  const artifact: WebsiteArtifact = {
+    ...content,
+    contentDigest: 'site-' + canonicalDigest(content),
+  }
+  if (!isWebsiteArtifact(artifact)) throw new Error('Approved Website content could not be retained safely.')
+  return artifact
+}
+
 function sameSource(left: WebsiteSourceRef, right: WebsiteSourceRef) {
   return left.contentRevision === right.contentRevision && left.digest === right.digest
 }
@@ -395,8 +444,17 @@ export function readinessChecks(workspace: WebsiteWorkspace, fingerprint = works
   const readyPages = workspace.pages.filter((page) => page.stage === 'ready')
   const normalizedSlugs = readyPages.map((page) => normalizeSlug(page.slug))
   const uniqueSlugs = new Set(normalizedSlugs)
+  const readyPaths = new Set(normalizedSlugs)
+  const readyAnchors = new Set(normalizedSlugs.map(pageAnchorForSlug))
   const visibleNavigation = workspace.pages.filter((page) => page.navigation.visible)
   const completePages = readyPages.filter((page) => pageIssues(page).length === 0)
+  const destinationsAreSafe = readyPages.every((page) => {
+    const destination = page.hero.ctaHref.trim()
+    return !destination
+      || (destination.startsWith('#') && readyAnchors.has(destination.slice(1)))
+      || isSafeHttpsDestination(destination)
+      || (destination.startsWith('/') && readyPaths.has(normalizeSlug(destination)))
+  })
   const currentSource = websiteSource(workspace)
   const currentEvidenceKinds = new Set(
     workspace.evidence
@@ -440,6 +498,14 @@ export function readinessChecks(workspace: WebsiteWorkspace, fingerprint = works
       passed: visibleNavigation.length > 0
         && visibleNavigation.every((page) => page.stage === 'ready' && Boolean(page.navigation.label.trim())),
     },
+    {
+      id: 'destinations',
+      label: 'Buttons use safe destinations',
+      detail: destinationsAreSafe
+        ? 'Every ready-page button uses a ready page, on-page anchor, or HTTPS destination.'
+        : 'Point each ready-page button to another ready page, an on-page anchor, or an HTTPS destination.',
+      passed: destinationsAreSafe,
+    },
     ...evidenceRequirements.map((requirement) => ({
       id: 'evidence-' + requirement.id,
       label: requirement.label,
@@ -462,14 +528,15 @@ export function getCurrentApproval(workspace: WebsiteWorkspace) {
 }
 
 export function isCurrentPublish(record: LocalPublishRecord | undefined, workspace: WebsiteWorkspace) {
-  if (!record || record.migratedFromV1 || !sameSource(record.source, websiteSource(workspace))) return false
+  if (!record || record.migratedFromV1 || !record.artifact || !sameSource(record.source, websiteSource(workspace))) return false
   const approval = getCurrentApproval(workspace)
   const readyPageIds = workspace.pages.filter((page) => page.stage === 'ready').map((page) => page.id)
   return Boolean(approval
     && record.approvalId === approval.id
     && record.recordedBy === approval.reviewer
     && sameStringSet(record.evidenceIds, approval.evidenceIds)
-    && sameStringSet(record.readyPageIds, readyPageIds))
+    && sameStringSet(record.readyPageIds, readyPageIds)
+    && serialize(record.artifact) === serialize(createWebsiteArtifact(workspace)))
 }
 
 export function getCurrentPublish(workspace: WebsiteWorkspace) {
@@ -576,6 +643,7 @@ export function recordWebsiteSnapshot(workspace: WebsiteWorkspace, input: {
     evidenceIds: [...approval.evidenceIds],
     source,
     migratedFromV1: false,
+    artifact: createWebsiteArtifact(workspace),
   }
   const existing = workspace.localPublishes.find((entry) => entry.id === input.actionId)
   if (existing) {
@@ -678,6 +746,8 @@ export function loadWebsiteWorkspace(storage: Pick<WebsiteStorage, 'getItem'>): 
 
 export function restoreWorkspace(value: unknown): WebsiteWorkspace | null {
   if (isWebsiteWorkspace(value)) return value
+  const restoredV2 = restoreV2(value)
+  if (restoredV2) return restoredV2
   if (isLegacyWorkspace(value)) return migrateLegacyWorkspace(value)
   return null
 }
@@ -686,6 +756,11 @@ export function normalizeSlug(value: string) {
   const trimmed = value.trim()
   if (trimmed === '/') return '/'
   return trimmed.endsWith('/') ? trimmed.slice(0, -1) : trimmed
+}
+
+function pageAnchorForSlug(value: string) {
+  const normalized = normalizeSlug(value)
+  return normalized === '/' ? 'home' : normalized.slice(1).replaceAll('/', '-')
 }
 
 export function formatTimestamp(value: string) {
@@ -715,6 +790,7 @@ function migrateLegacyWorkspace(legacy: LegacyWebsiteWorkspace): WebsiteWorkspac
     evidenceIds: evidence.filter((entry) => entry.fingerprint === record.fingerprint).map((entry) => entry.id),
     source: sourceForDigest(record.fingerprint),
     migratedFromV1: true,
+    artifact: null,
   }))
   return {
     schema: WEBSITE_SCHEMA,
@@ -743,7 +819,13 @@ function parseLegacyWorkspace(raw: string) {
 }
 
 function restoreV2(value: unknown) {
-  return isWebsiteWorkspace(value) ? value : null
+  if (isWebsiteWorkspace(value)) return value
+  if (!isRecord(value) || !Array.isArray(value.localPublishes)) return null
+  const localPublishes = value.localPublishes.map((record) => (
+    isMetadataOnlyPublishRecord(record) ? { ...record, artifact: null } : record
+  ))
+  const migrated = { ...value, localPublishes }
+  return isWebsiteWorkspace(migrated) ? migrated : null
 }
 
 function isWebsiteWorkspace(value: unknown): value is WebsiteWorkspace {
@@ -929,9 +1011,74 @@ function isLegacyApproval(value: unknown): value is LegacyPublishApproval {
     && fingerprintPattern.test(value.fingerprint)
 }
 
+function isWebsiteArtifact(value: unknown): value is WebsiteArtifact {
+  if (!isRecord(value)
+    || !hasExactKeys(value, ['schema', 'siteName', 'fingerprint', 'contentDigest', 'source', 'pages'])
+    || value.schema !== 'supermega.website.artifact.v1'
+    || !isText(value.siteName, 60)
+    || typeof value.fingerprint !== 'string'
+    || !fingerprintPattern.test(value.fingerprint)
+    || typeof value.contentDigest !== 'string'
+    || !/^site-[a-f0-9]{8}$/.test(value.contentDigest)
+    || !isSource(value.source)
+    || value.fingerprint !== value.source.digest
+    || !Array.isArray(value.pages)
+    || value.pages.length < 1
+    || value.pages.length > MAX_WEBSITE_PAGES
+    || !value.pages.every(isWebsiteArtifactPage)
+    || !hasUniqueIds(value.pages)
+    || !hasUniqueSectionIds(value.pages)) return false
+  const { contentDigest, ...content } = value
+  if (contentDigest !== 'site-' + canonicalDigest(content)) return false
+  const slugs = value.pages.map((page) => page.slug)
+  if (!hasUniqueStrings(slugs) || slugs.filter((slug) => slug === '/').length !== 1) return false
+  const readyPaths = new Set(slugs)
+  const readyAnchors = new Set(slugs.map(pageAnchorForSlug))
+  return value.pages
+    .filter((page) => page.navigation.visible)
+    .length > 0
+    && value.pages.every((page) => {
+      const destination = page.hero.ctaHref.trim()
+      return !destination
+        || (destination.startsWith('#') && readyAnchors.has(destination.slice(1)))
+        || isSafeHttpsDestination(destination)
+        || (destination.startsWith('/') && readyPaths.has(normalizeSlug(destination)))
+    })
+}
+
+function isWebsiteArtifactPage(value: unknown): value is WebsiteArtifactPage {
+  if (!isRecord(value) || !hasExactKeys(value, ['id', 'slug', 'navigation', 'hero', 'sections', 'seo'])) return false
+  if (!isRecord(value.navigation) || !hasExactKeys(value.navigation, ['label', 'visible'])) return false
+  if (!isRecord(value.hero) || !hasExactKeys(value.hero, ['eyebrow', 'headline', 'summary', 'ctaLabel', 'ctaHref'])) return false
+  if (!isRecord(value.seo) || !hasExactKeys(value.seo, ['title', 'description'])) return false
+  const hasCtaLabel = typeof value.hero.ctaLabel === 'string' && Boolean(value.hero.ctaLabel.trim())
+  const hasCtaHref = typeof value.hero.ctaHref === 'string' && Boolean(value.hero.ctaHref.trim())
+  return isText(value.id, 80)
+    && isText(value.slug, 100)
+    && isValidSlug(value.slug)
+    && normalizeSlug(value.slug) === value.slug
+    && isText(value.navigation.label, 40, true)
+    && typeof value.navigation.visible === 'boolean'
+    && isText(value.hero.eyebrow, 80, true)
+    && isText(value.hero.headline, 140)
+    && isText(value.hero.summary, 280)
+    && isText(value.hero.ctaLabel, 40, true)
+    && isText(value.hero.ctaHref, 160, true)
+    && hasCtaLabel === hasCtaHref
+    && (!hasCtaHref || isValidDestination(value.hero.ctaHref))
+    && Array.isArray(value.sections)
+    && value.sections.length > 0
+    && value.sections.length <= MAX_WEBSITE_SECTIONS
+    && value.sections.every((section) => isPageSection(section)
+      && Boolean(section.title.trim())
+      && Boolean(section.body.trim()))
+    && isText(value.seo.title, 70)
+    && isText(value.seo.description, 160)
+}
+
 function isLocalPublishRecord(value: unknown): value is LocalPublishRecord {
   return isRecord(value)
-    && hasExactKeys(value, ['id', 'recordedAt', 'recordedBy', 'fingerprint', 'readyPageIds', 'approvalId', 'evidenceIds', 'source', 'migratedFromV1'])
+    && hasExactKeys(value, ['id', 'recordedAt', 'recordedBy', 'fingerprint', 'readyPageIds', 'approvalId', 'evidenceIds', 'source', 'migratedFromV1', 'artifact'])
     && isText(value.id, 100)
     && isIsoTimestamp(value.recordedAt)
     && isText(value.recordedBy, 80)
@@ -947,6 +1094,16 @@ function isLocalPublishRecord(value: unknown): value is LocalPublishRecord {
     && isSource(value.source)
     && value.fingerprint === value.source.digest
     && typeof value.migratedFromV1 === 'boolean'
+    && (value.artifact === null
+      || (isWebsiteArtifact(value.artifact)
+        && value.artifact.fingerprint === value.fingerprint
+        && sameSource(value.artifact.source, value.source)
+        && sameStringSet(value.artifact.pages.map((page) => page.id), value.readyPageIds)))
+}
+
+function isMetadataOnlyPublishRecord(value: unknown) {
+  return isRecord(value)
+    && hasExactKeys(value, ['id', 'recordedAt', 'recordedBy', 'fingerprint', 'readyPageIds', 'approvalId', 'evidenceIds', 'source', 'migratedFromV1'])
 }
 
 function isLegacyPublish(value: unknown): value is LegacyLocalPublishRecord {
@@ -1021,7 +1178,7 @@ function hasUniqueIds(values: Array<{ id: string }>) {
   return hasUniqueStrings(values.map((value) => value.id))
 }
 
-function hasUniqueSectionIds(pages: WebsitePage[]) {
+function hasUniqueSectionIds(pages: Array<{ sections: Array<{ id: string }> }>) {
   return hasUniqueStrings(pages.flatMap((page) => page.sections.map((section) => section.id)))
 }
 
@@ -1063,7 +1220,16 @@ function isValidSlug(value: string) {
 
 function isValidDestination(value: string) {
   const destination = value.trim()
-  return destination.startsWith('/') || destination.startsWith('#') || destination.startsWith('https://')
+  return destination.startsWith('/') || destination.startsWith('#') || isSafeHttpsDestination(destination)
+}
+
+function isSafeHttpsDestination(value: string) {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' && Boolean(url.hostname) && !url.username && !url.password
+  } catch {
+    return false
+  }
 }
 
 function serialize(value: unknown) {

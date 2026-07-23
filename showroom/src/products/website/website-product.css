@@ -864,7 +864,7 @@
 }
 
 .website-button {
-  min-height: 40px;
+  min-height: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2428,7 +2428,7 @@
 }
 
 .website-surface-controls > button {
-  min-height: 38px;
+  min-height: 44px;
   border: 0;
   border-radius: 6px;
   padding: 0 14px;
@@ -2627,20 +2627,20 @@
 }
 
 .website-button {
-  min-height: 40px;
+  min-height: 44px;
   border-radius: 8px;
   font-size: 14px;
 }
 
 .website-button.is-compact {
-  min-height: 36px;
+  min-height: 44px;
   font-size: 13px;
 }
 
 .website-inline-actions > button,
 .website-navigation-actions > button,
 .website-text-button {
-  min-height: 36px;
+  min-height: 44px;
   border-radius: 7px;
   font-family: inherit;
   font-size: 13px;
@@ -3157,7 +3157,7 @@
 }
 
 .website-editor-section-picker > select {
-  min-height: 42px;
+  min-height: 44px;
   border-radius: 8px;
 }
 

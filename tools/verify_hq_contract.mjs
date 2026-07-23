@@ -21,7 +21,7 @@ requireContract('portfolio is narrow', portfolio.portfolio?.map((entry) => entry
 requireContract('portfolio paths are canonical', portfolio.portfolio?.map((entry) => entry.path).join(',') === '/,/products/website/,/operations/commerce/,/operations/production/')
 requireContract('Website remains a truthful local release candidate', portfolio.portfolio?.find((entry) => entry.id === 'website')?.status === 'release-candidate-local'
   && portfolio.portfolio?.find((entry) => entry.id === 'website')?.surfaces?.join(',') === 'Pages,Navigation,Publish'
-  && portfolio.portfolio?.find((entry) => entry.id === 'website')?.nextGate?.includes('managed snapshot')
+  && portfolio.portfolio?.find((entry) => entry.id === 'website')?.nextGate?.includes('managed site artifact')
   && now.includes('without deploying a site or changing a domain'))
 requireContract('Commerce owns Website order intake', portfolio.portfolio?.find((entry) => entry.id === 'commerce')?.job.includes('Website') && !portfolio.portfolio?.some((entry) => entry.id === 'ecommerce'))
 requireContract('Commerce managed intake remains adoption-gated', portfolio.portfolio?.find((entry) => entry.id === 'commerce')?.status === 'release-candidate-local'

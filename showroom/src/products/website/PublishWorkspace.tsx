@@ -33,10 +33,12 @@ type PublishWorkspaceProps = {
   handoffAvailable: boolean
   handoffIsCurrent: boolean
   managedActorId: string
+  currentPublishId: string
   publishIsCurrent: boolean
   workspace: WebsiteWorkspace
   onAddEvidence: (input: EvidenceInput) => Promise<boolean>
   onApprove: (input: ApprovalInput) => Promise<boolean>
+  onDownloadPublish: (recordId: string) => void
   onPrepareCommerceHandoff: (input: CommerceHandoffInput) => Promise<void>
   onRecordPublish: () => Promise<void>
 }
@@ -47,7 +49,7 @@ const publishSteps: Array<{ id: PublishStep; label: string }> = [
   { id: 'checks', label: 'Checks' },
   { id: 'evidence', label: 'Evidence' },
   { id: 'approval', label: 'Approval' },
-  { id: 'snapshot', label: 'Snapshot & handoff' },
+  { id: 'snapshot', label: 'Site file' },
 ]
 
 export function PublishWorkspace({
@@ -57,10 +59,12 @@ export function PublishWorkspace({
   handoffAvailable,
   handoffIsCurrent,
   managedActorId,
+  currentPublishId,
   publishIsCurrent,
   workspace,
   onAddEvidence,
   onApprove,
+  onDownloadPublish,
   onPrepareCommerceHandoff,
   onRecordPublish,
 }: PublishWorkspaceProps) {
@@ -105,7 +109,7 @@ export function PublishWorkspace({
         : 'snapshot'
   const [activeStep, setActiveStep] = useState<PublishStep>(initialStep)
   const workflowStatus = publishIsCurrent
-    ? 'Snapshot recorded'
+    ? 'Site file ready'
     : approvalIsCurrent
       ? 'Ready to record'
       : evidenceIsCurrent && contentChecksPass
@@ -117,7 +121,7 @@ export function PublishWorkspace({
     checks: `${passedContentCheckCount}/${contentChecks.length}`,
     evidence: `${currentEvidenceCount}/${evidenceRequirements.length}`,
     approval: approvalIsCurrent ? 'Approved' : 'Required',
-    snapshot: publishIsCurrent ? 'Recorded' : 'Not recorded',
+    snapshot: publishIsCurrent ? 'Ready' : 'Not ready',
   }
 
   async function prepareCommerceHandoff() {
@@ -175,8 +179,8 @@ export function PublishWorkspace({
       <header className="website-panel-head publish-flow-header">
         <div>
           <span className="website-eyebrow">Safe publish workflow</span>
-          <h2 id="publish-editor-title">Review and record this revision</h2>
-          <p>Work through one step at a time. Nothing here deploys a website or changes a domain.</p>
+          <h2 id="publish-editor-title">Review and save the site</h2>
+          <p>Finish the checks once, approve the revision, then download the site file.</p>
         </div>
         <span className={'website-status ' + (publishIsCurrent ? 'is-ready' : 'is-pending')}>
           {workflowStatus}
@@ -444,7 +448,7 @@ export function PublishWorkspace({
                 Back to evidence
               </button>
               <button className="website-button is-primary" onClick={() => selectStep('snapshot')} type="button">
-                Review snapshot
+                Create site file
               </button>
             </footer>
           </section>
@@ -460,36 +464,57 @@ export function PublishWorkspace({
               <div>
                 <span className="website-step" aria-hidden="true">4</span>
                 <div>
-                  <h3 id="local-publish-title">Snapshot and Commerce handoff</h3>
-                  <p>Record an approved snapshot, then optionally prepare one Commerce intake.</p>
+                  <h3 id="local-publish-title">Save the approved site</h3>
+                  <p>Create one portable site file. Deployment and domains remain separate.</p>
                 </div>
               </div>
               <span className={'website-status ' + (publishIsCurrent ? 'is-ready' : 'is-local')}>
-                {publishIsCurrent ? 'Recorded' : 'Not recorded'}
+                {publishIsCurrent ? 'File ready' : 'Not ready'}
               </span>
             </header>
 
             <div className="website-local-publish-action">
               <div>
-                <strong>{approvalIsCurrent ? 'Approval matches the current revision.' : 'A current approval is required.'}</strong>
-                <p>This saves an evidence-bound local snapshot. It does not publish a website.</p>
+                <strong>{publishIsCurrent
+                  ? 'The approved site is retained and ready to download.'
+                  : approvalIsCurrent
+                    ? 'Approval matches. Create the site file.'
+                    : 'A current approval is required.'}</strong>
+                <p>The file contains only ready pages and public site content. It does not deploy or change a domain.</p>
               </div>
-              <button
-                className="website-button is-primary"
-                disabled={!approvalIsCurrent || publishIsCurrent || Boolean(submitting)}
-                onClick={recordSnapshot}
-                type="button"
-              >
-                {publishIsCurrent ? 'Current revision recorded' : submitting === 'snapshot' ? 'Saving…' : 'Record approved snapshot'}
-              </button>
+              <div className="website-local-publish-controls">
+                {!publishIsCurrent ? (
+                  <button
+                    className="website-button is-primary"
+                    disabled={!approvalIsCurrent || Boolean(submitting)}
+                    onClick={recordSnapshot}
+                    type="button"
+                  >
+                    {submitting === 'snapshot' ? 'Creating…' : 'Create site file'}
+                  </button>
+                ) : null}
+                <button
+                  className="website-button is-primary"
+                  disabled={!publishIsCurrent || !currentPublishId || Boolean(submitting)}
+                  onClick={() => onDownloadPublish(currentPublishId)}
+                  type="button"
+                >
+                  Download site
+                </button>
+              </div>
             </div>
 
-            <div className="website-handoff-action">
-              <div>
-                <strong>Website → Commerce intake</strong>
-                <p>Send one catalog SKU and quantity from this approved revision into Commerce. A human must still confirm any stock, payment, message, or order change there.</p>
-              </div>
-              <div className="website-handoff-controls">
+            <details className="website-disclosure website-commerce-handoff">
+              <summary>
+                <span>Optional Commerce handoff</span>
+                <small>Send one approved product request</small>
+              </summary>
+              <div className="website-handoff-action">
+                <div>
+                  <strong>Website → Commerce intake</strong>
+                  <p>Send one catalog SKU and quantity. Commerce still requires a human to confirm any order, stock, payment, or message change.</p>
+                </div>
+                <div className="website-handoff-controls">
                 <label>
                   <span>Commerce SKU</span>
                   <input
@@ -522,27 +547,36 @@ export function PublishWorkspace({
                 {handoffIsCurrent ? (
                   <a className="website-button is-primary" href="/operations/commerce/?tab=orders">Review in Commerce</a>
                 ) : null}
+                </div>
               </div>
-            </div>
+            </details>
 
             {workspace.localPublishes.length ? (
               <div className="website-publish-history">
-                <small>Showing {Math.min(3, workspace.localPublishes.length)} of {workspace.localPublishes.length} retained snapshots</small>
+                <small>Showing {Math.min(3, workspace.localPublishes.length)} of {workspace.localPublishes.length} retained site records</small>
                 {workspace.localPublishes.slice(0, 3).map((record) => (
                   <article key={record.id}>
                     <span aria-hidden="true">&gt;_</span>
                     <div>
                       <strong>{record.id}</strong>
-                      <small>{record.readyPageIds.length} ready page{record.readyPageIds.length === 1 ? '' : 's'} · {record.recordedBy} · {formatTimestamp(record.recordedAt)}</small>
+                      <small>{record.readyPageIds.length} page{record.readyPageIds.length === 1 ? '' : 's'} · {record.recordedBy} · {formatTimestamp(record.recordedAt)}</small>
                     </div>
-                    <code>{record.fingerprint}</code>
+                    {record.artifact ? (
+                      <button
+                        className="website-button is-secondary is-compact website-history-download"
+                        onClick={() => onDownloadPublish(record.id)}
+                        type="button"
+                      >
+                        Download
+                      </button>
+                    ) : <code>File unavailable</code>}
                   </article>
                 ))}
               </div>
             ) : (
               <div className="website-empty compact">
                 <span aria-hidden="true">&gt;_</span>
-                <p>No approved snapshots yet.</p>
+                <p>No approved site files yet.</p>
               </div>
             )}
 

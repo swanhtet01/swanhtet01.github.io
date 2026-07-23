@@ -5,6 +5,7 @@ import unittest
 
 from supermega_runtime.trial_store import TrialValidationError
 from supermega_runtime.website_runtime import (
+    _website_artifact,
     _website_fingerprint,
     reduce_website_state,
     validate_website_snapshot_source,
@@ -27,7 +28,7 @@ def _page(page_id: str = "page-home", slug: str = "/") -> dict[str, object]:
             "headline": "Run the website with evidence.",
             "summary": "A bounded Website workspace for accountable content and release records.",
             "ctaLabel": "Start",
-            "ctaHref": "/start",
+            "ctaHref": "/",
         },
         "sections": [
             {
@@ -122,7 +123,7 @@ class WebsiteRuntimeTests(unittest.TestCase):
     def test_fingerprint_matches_browser_utf16_hashing(self) -> None:
         state = _state()
         state["siteName"] = "စူပါမီဂါ 🚀"
-        self.assertEqual(_website_fingerprint(state), "web-82a070b9")
+        self.assertEqual(_website_fingerprint(state), "web-d3f36a73")
         reordered = _reverse_object_keys(state)
         assert isinstance(reordered, dict)
         self.assertEqual(_website_fingerprint(state), _website_fingerprint(reordered))
@@ -238,6 +239,7 @@ class WebsiteRuntimeTests(unittest.TestCase):
             "evidenceIds": evidence_ids,
             "source": source,
             "migratedFromV1": False,
+            "artifact": _website_artifact(current),
         }
         publish_event = {
             "id": "event-snapshot-1",
@@ -273,6 +275,19 @@ class WebsiteRuntimeTests(unittest.TestCase):
                 current,
                 _command(
                     draft_included,
+                    action_id="snapshot-1",
+                    reason="Approved browser-local snapshot recorded",
+                    reference="approval-1",
+                ),
+            )
+        tampered_artifact = deepcopy(snapshotted)
+        tampered_artifact["localPublishes"][0]["artifact"]["pages"][0]["hero"]["headline"] = "Changed after approval"
+        with self.assertRaises(TrialValidationError):
+            reduce_website_state(
+                "website.snapshot.recorded",
+                current,
+                _command(
+                    tampered_artifact,
                     action_id="snapshot-1",
                     reason="Approved browser-local snapshot recorded",
                     reference="approval-1",
