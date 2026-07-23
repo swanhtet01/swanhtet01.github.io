@@ -2,10 +2,10 @@
   "schemaVersion": "supermega.hq.database-rehearsal.v1",
   "recordedAt": "2026-07-24",
   "runner": "tools/rehearse_supermega_postgres17.py",
-  "implementationCommit": "4358e1a31d033f1e79f9d352c29d380e19352eb1",
+  "implementationCommit": "71e9e6e84165d72aef741506e240e91d284c1303",
   "githubCi": {
     "workflow": "SuperMega App CI",
-    "run": 162,
+    "run": 165,
     "conclusion": "success"
   },
   "engine": {
@@ -23,6 +23,12 @@
     "count": 5,
     "schemaVersion": 4,
     "productionValidatorReady": true
+  },
+  "runtime": {
+    "adapter": "PostgresTrialStore",
+    "autocommit": false,
+    "explicitTransaction": true,
+    "transactionLocalIdentity": true
   },
   "checks": {
     "migrationChainApplied": true,

@@ -25,15 +25,15 @@ Prove one real workflow in which SuperMega keeps the operating record, a respons
 - Commerce, Production, and Website have authenticated tenant commands. Managed Production starts from real records and requires human-bound evidence.
 - Website is the only lazy-loaded product workspace. An approved record retains one deterministic site file without deploying a site or changing a domain.
 - The managed backend is the private `app_private` schema and dedicated runtime-role contract in Supabase Postgres. Browser code receives neither the database URL nor a service-role key.
-- The repeatable local PostgreSQL 17.10 gate passes migration, v1 upgrade, runtime role, TLS, RLS behavior, revocation, and fresh-cluster restore checks; it does not make hosted Supabase ready.
+- The repeatable local PostgreSQL 17.10 gate runs the real `PostgresTrialStore` with explicit non-autocommit transactions and passes migration, v1 upgrade, runtime role, TLS, transaction-local identity, RLS behavior, revocation, and fresh-cluster restore checks; it does not make hosted Supabase ready.
 - Sends, payments, publishing, merges, deployments, access changes, and production writes remain responsible-human actions.
 - Vercel canonical mappings remain `app.supermega.dev` → `megaos`, and `supermega.dev` plus `www.supermega.dev` → `supermega-public`.
 
 ## Latest verification
 
-- Draft release candidate: GitHub PR `#258` on branch `agent/supermega-release-candidate`; its validated implementation head is `4358e1a31d033f1e79f9d352c29d380e19352eb1`.
-- GitHub `SuperMega App CI` run `162` passed every validation job for pushed head `4358e1a31d033f1e79f9d352c29d380e19352eb1`.
-- Candidate lint and build pass with 178 product/runtime checks, 51 coordinated-release checks, 44 security checks, 10 migration-chain checks, 11 Vercel environment/domain checks, and 101 Python tests.
+- Draft release candidate: GitHub PR `#258` on branch `agent/supermega-release-candidate`; its validated implementation head is `71e9e6e84165d72aef741506e240e91d284c1303`.
+- GitHub `SuperMega App CI` run `165` passed every validation job for pushed head `71e9e6e84165d72aef741506e240e91d284c1303`.
+- Candidate lint and build pass with 178 product/runtime checks, 51 coordinated-release checks, 44 security checks, 10 migration-chain checks, 11 Vercel environment/domain checks, and 102 Python tests.
 - The PostgreSQL 17.10 evidence records 20 passing migration, authority, isolation, revocation, recovery, and validator checks across two clean TLS clusters. Cleanup passed; external systems were unchanged.
 - Desktop and 375px audits put Website page, Preview, Site settings, and the first Hero field in the initial phone viewport while retaining desktop Split. Commerce, Production, and Website show no overflow, undersized controls, or console errors.
 - No Vercel deployment was created by the release-candidate push. The latest `megaos` and `supermega-public` production deployments still reference `main` commit `6885c3201d523d42d176c3dcd91de28dc1e17f6f`.
