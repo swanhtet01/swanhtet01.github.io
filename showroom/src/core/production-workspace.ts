@@ -75,6 +75,7 @@ export type ProductionActionProof = {
 type ProductionStorage = {
   getItem: (key: string) => string | null
   setItem: (key: string, value: string) => void
+  removeItem: (key: string) => void
 }
 
 type ProductionLockManager = {
@@ -409,6 +410,27 @@ export function loadProductionWorkspace(storage = browserStorage()): ProductionW
     }
   }
   return persistInitialState(storage, createSeedProduction(), 'seed')
+}
+
+export function productionWorkspaceCanWrite(
+  storage = browserStorage(),
+  lockManager = globalThis.navigator?.locks as unknown as ProductionLockManager | undefined,
+) {
+  if (!storage || !lockManager?.request || !storage.removeItem) return false
+  const probeKey = `${PRODUCTION_KEY}.write-probe.${Date.now()}.${Math.random().toString(36).slice(2)}`
+  const probeValue = `${probeKey}.confirmed`
+  try {
+    const raw = storage.getItem(PRODUCTION_KEY)
+    if (raw === null) return false
+    validateProductionState(JSON.parse(raw))
+    storage.setItem(probeKey, probeValue)
+    const confirmed = storage.getItem(probeKey) === probeValue
+    storage.removeItem(probeKey)
+    return confirmed && storage.getItem(probeKey) === null
+  } catch {
+    try { storage.removeItem(probeKey) } catch { /* storage remains blocked */ }
+    return false
+  }
 }
 
 export async function mutateProductionWorkspace(

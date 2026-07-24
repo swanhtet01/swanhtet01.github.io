@@ -10,12 +10,16 @@ import {
   type ManagedWebsiteEvent,
 } from '../../core/managed-trial'
 import {
+  LEGACY_WEBSITE_STORAGE_KEY,
   WEBSITE_STORAGE_KEY,
   applyWebsiteWorkspaceUpdate,
   createInitialWorkspace,
   loadWebsiteWorkspace,
   mutateWebsiteWorkspace,
+  repairInvalidWebsiteWorkspace,
   restoreWorkspace,
+  type WebsiteInvalidLocalCandidate,
+  type WebsiteLocalRepairResult,
   type WebsiteMutationResult,
   type WebsiteWorkspace,
   type WebsiteWorkspaceUpdate,
@@ -27,6 +31,7 @@ type InitialWorkspace = {
   workspace: WebsiteWorkspace
   storageMode: StorageMode
   storageIssue: string
+  invalidCandidate: WebsiteInvalidLocalCandidate | null
 }
 
 type MutationOptions = {
@@ -40,7 +45,7 @@ type ManagedTransition = {
 
 function loadInitialWorkspace(): InitialWorkspace {
   if (typeof window === 'undefined') {
-    return { workspace: createInitialWorkspace(), storageMode: 'session-only', storageIssue: '' }
+    return { workspace: createInitialWorkspace(), storageMode: 'session-only', storageIssue: '', invalidCandidate: null }
   }
 
   try {
@@ -48,11 +53,19 @@ function loadInitialWorkspace(): InitialWorkspace {
     window.localStorage.setItem(probeKey, '1')
     window.localStorage.removeItem(probeKey)
     const loaded = loadWebsiteWorkspace(window.localStorage)
-    if (loaded.ok) return { workspace: loaded.workspace, storageMode: 'browser-local', storageIssue: '' }
+    if (loaded.ok) return { workspace: loaded.workspace, storageMode: 'browser-local', storageIssue: '', invalidCandidate: null }
+    const currentRaw = window.localStorage.getItem(WEBSITE_STORAGE_KEY)
+    const legacyRaw = currentRaw === null ? window.localStorage.getItem(LEGACY_WEBSITE_STORAGE_KEY) : null
+    const invalidCandidate: WebsiteInvalidLocalCandidate | null = currentRaw !== null
+      ? { source: 'v2', sourceKey: WEBSITE_STORAGE_KEY, expectedRaw: currentRaw, observedAt: new Date().toISOString() }
+      : legacyRaw !== null
+        ? { source: 'v1', sourceKey: LEGACY_WEBSITE_STORAGE_KEY, expectedRaw: legacyRaw, observedAt: new Date().toISOString() }
+        : null
     return {
       workspace: createInitialWorkspace(),
       storageMode: 'session-only',
       storageIssue: loaded.error,
+      invalidCandidate,
     }
   } catch (error) {
     return {
@@ -60,6 +73,7 @@ function loadInitialWorkspace(): InitialWorkspace {
       storageMode: 'session-only',
       storageIssue: 'Browser storage is unavailable. Draft edits remain in this session only: '
         + (error instanceof Error ? error.message : 'unknown storage error'),
+      invalidCandidate: null,
     }
   }
 }
@@ -172,6 +186,9 @@ function bindManagedActor(current: WebsiteWorkspace, next: WebsiteWorkspace, act
 export function useWebsiteWorkspace(): {
   workspace: WebsiteWorkspace
   mutateWorkspace: (update: WebsiteWorkspaceUpdate, options?: MutationOptions) => Promise<WebsiteMutationResult>
+  repairLocalWorkspace: () => Promise<WebsiteLocalRepairResult>
+  canRepairLocalStorage: boolean
+  repairCandidateRevision: number
   storageMode: StorageMode
   storageIssue: string
   managedActorId: string
@@ -181,12 +198,27 @@ export function useWebsiteWorkspace(): {
   const [storageMode, setStorageMode] = useState<StorageMode>(initialWorkspace.storageMode)
   const [storageIssue, setStorageIssue] = useState(initialWorkspace.storageIssue)
   const [managedActorId, setManagedActorId] = useState('')
+  const [repairAvailable, setRepairAvailable] = useState(Boolean(initialWorkspace.invalidCandidate))
+  const [repairCandidateRevision, setRepairCandidateRevision] = useState(initialWorkspace.invalidCandidate ? 1 : 0)
+  const invalidCandidateRef = useRef<WebsiteInvalidLocalCandidate | null>(initialWorkspace.invalidCandidate)
+  const repairCandidateRevisionRef = useRef(initialWorkspace.invalidCandidate ? 1 : 0)
   const workspaceRef = useRef(initialWorkspace.workspace)
   const storageModeRef = useRef(initialWorkspace.storageMode)
   const managedVersionRef = useRef(0)
   const managedActorRef = useRef('')
   const hydratedRef = useRef(false)
   const queueRef = useRef<Promise<void>>(Promise.resolve())
+  const updateRepairCandidate = useCallback((candidate: WebsiteInvalidLocalCandidate | null) => {
+    const current = invalidCandidateRef.current
+    const changed = current?.sourceKey !== candidate?.sourceKey
+      || current?.expectedRaw !== candidate?.expectedRaw
+    invalidCandidateRef.current = candidate
+    setRepairAvailable(Boolean(candidate))
+    if (changed) {
+      repairCandidateRevisionRef.current += 1
+      setRepairCandidateRevision(repairCandidateRevisionRef.current)
+    }
+  }, [])
 
   useEffect(() => {
     workspaceRef.current = workspace
@@ -252,6 +284,7 @@ export function useWebsiteWorkspace(): {
         setWorkspace(managedWorkspace)
         storageModeRef.current = 'managed'
         setStorageMode('managed')
+        updateRepairCandidate(null)
         setStorageIssue('')
       } catch (error) {
         if (!active) return
@@ -263,16 +296,17 @@ export function useWebsiteWorkspace(): {
       }
     })()
     return () => { active = false }
-  }, [])
+  }, [updateRepairCandidate])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
 
     function refreshFromStorage(event: StorageEvent) {
-      if (storageModeRef.current !== 'browser-local') return
+      if (storageModeRef.current !== 'browser-local' && invalidCandidateRef.current === null) return
       if (event.storageArea !== window.localStorage || event.key !== WEBSITE_STORAGE_KEY) return
       if (event.newValue === null) {
         setStorageIssue('Website storage was removed in another tab. The current screen was preserved and local writes are paused.')
+        updateRepairCandidate(null)
         storageModeRef.current = 'session-only'
         setStorageMode('session-only')
         return
@@ -281,21 +315,38 @@ export function useWebsiteWorkspace(): {
         const restored = restoreWorkspace(JSON.parse(event.newValue) as unknown)
         if (!restored || restored.schema !== 'supermega.website.workspace.v2') {
           setStorageIssue('Another tab supplied invalid Website data. The current valid screen was preserved.')
+          updateRepairCandidate({
+            source: 'v2',
+            sourceKey: WEBSITE_STORAGE_KEY,
+            expectedRaw: event.newValue,
+            observedAt: new Date().toISOString(),
+          })
+          storageModeRef.current = 'session-only'
+          setStorageMode('session-only')
           return
         }
         workspaceRef.current = restored
         setWorkspace(restored)
         storageModeRef.current = 'browser-local'
         setStorageMode('browser-local')
+        updateRepairCandidate(null)
         setStorageIssue('Website workspace refreshed from another tab.')
       } catch {
         setStorageIssue('Another tab supplied malformed Website data. The current valid screen was preserved.')
+        updateRepairCandidate({
+          source: 'v2',
+          sourceKey: WEBSITE_STORAGE_KEY,
+          expectedRaw: event.newValue,
+          observedAt: new Date().toISOString(),
+        })
+        storageModeRef.current = 'session-only'
+        setStorageMode('session-only')
       }
     }
 
     window.addEventListener('storage', refreshFromStorage)
     return () => window.removeEventListener('storage', refreshFromStorage)
-  }, [])
+  }, [updateRepairCandidate])
 
   const mutateWorkspace = useCallback((update: WebsiteWorkspaceUpdate, options: MutationOptions = {}) => (
     new Promise<WebsiteMutationResult>((resolve) => {
@@ -377,5 +428,79 @@ export function useWebsiteWorkspace(): {
     })
   ), [])
 
-  return { workspace, mutateWorkspace, storageMode, storageIssue, managedActorId }
+  const repairLocalWorkspace = useCallback(() => (
+    new Promise<WebsiteLocalRepairResult>((resolve) => {
+      queueRef.current = queueRef.current.then(async () => {
+        const fail = (
+          code: Extract<WebsiteLocalRepairResult, { ok: false }>['code'],
+          error: string,
+        ): WebsiteLocalRepairResult => ({
+          ok: false,
+          code,
+          error,
+          archiveConfirmed: false,
+          replacementConfirmed: false,
+        })
+        if (!hydratedRef.current) {
+          resolve(fail('stale_candidate', 'Website workspace is still loading. Nothing was replaced.'))
+          return
+        }
+        if (storageModeRef.current === 'managed') {
+          resolve(fail('stale_candidate', 'Managed Website data cannot be repaired through browser storage.'))
+          return
+        }
+        const candidate = invalidCandidateRef.current
+        if (!candidate) {
+          resolve(fail('not_invalid', 'No invalid local Website value is available to repair.'))
+          return
+        }
+        if (typeof window === 'undefined') {
+          resolve(fail('storage_unavailable', 'Browser storage is unavailable. Nothing was replaced.'))
+          return
+        }
+        const result = await repairInvalidWebsiteWorkspace(
+          candidate,
+          workspaceRef.current,
+          window.localStorage,
+          window.navigator.locks,
+        )
+        if (result.ok) {
+          workspaceRef.current = result.workspace
+          setWorkspace(result.workspace)
+          updateRepairCandidate(null)
+          storageModeRef.current = 'browser-local'
+          setStorageMode('browser-local')
+          setStorageIssue('')
+        } else {
+          storageModeRef.current = 'session-only'
+          setStorageMode('session-only')
+          setStorageIssue(result.error)
+        }
+        resolve(result)
+      }).catch((error: unknown) => {
+        const message = `Website repair queue failed: ${error instanceof Error ? error.message : 'unknown error'}`
+        storageModeRef.current = 'session-only'
+        setStorageMode('session-only')
+        setStorageIssue(message)
+        resolve({
+          ok: false,
+          code: 'storage_unavailable',
+          error: message,
+          archiveConfirmed: false,
+          replacementConfirmed: false,
+        })
+      })
+    })
+  ), [updateRepairCandidate])
+
+  return {
+    workspace,
+    mutateWorkspace,
+    repairLocalWorkspace,
+    canRepairLocalStorage: storageMode !== 'managed' && repairAvailable,
+    repairCandidateRevision,
+    storageMode,
+    storageIssue,
+    managedActorId,
+  }
 }

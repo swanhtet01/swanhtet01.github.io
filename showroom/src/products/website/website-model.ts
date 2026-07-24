@@ -1,10 +1,13 @@
 export const WEBSITE_SCHEMA = 'supermega.website.workspace.v2'
 export const WEBSITE_STORAGE_KEY = 'supermega.website.workspace.v2'
 export const LEGACY_WEBSITE_STORAGE_KEY = 'supermega.website.workspace.v1'
+export const WEBSITE_RECOVERY_INDEX_KEY = 'supermega.website.workspace.recovery.v1.index'
 export const MAX_WEBSITE_PAGES = 4
 export const MAX_WEBSITE_SECTIONS = 4
 
 const WEBSITE_MUTATION_LOCK = 'supermega.website.workspace.mutation.v2'
+const WEBSITE_RECOVERY_SCHEMA = 'supermega.website.workspace.recovery.v1'
+const WEBSITE_RECOVERY_KEY_PREFIX = `${WEBSITE_RECOVERY_SCHEMA}.`
 const INITIAL_CREATED_AT = '2026-07-23T00:00:00.000Z'
 const fingerprintPattern = /^web-[a-f0-9]{8}$/
 
@@ -175,6 +178,7 @@ type LegacyWebsiteWorkspace = {
 }
 
 export type WebsiteStorage = Pick<Storage, 'getItem' | 'setItem'>
+export type WebsiteRepairStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
 
 export type WebsiteLockManager = {
   request<T>(
@@ -192,6 +196,51 @@ export type WebsiteMutationResult =
 
 export type WebsiteLoadResult =
   | { ok: true; source: 'v2' | 'v1' | 'seed'; workspace: WebsiteWorkspace }
+  | { ok: false; error: string }
+
+export type WebsiteInvalidLocalCandidate = Readonly<{
+  source: 'v2' | 'v1'
+  sourceKey: typeof WEBSITE_STORAGE_KEY | typeof LEGACY_WEBSITE_STORAGE_KEY
+  expectedRaw: string
+  observedAt: string
+}>
+
+export type WebsiteRepairFailureCode =
+  | 'not_invalid'
+  | 'stale_candidate'
+  | 'storage_unavailable'
+  | 'lock_unavailable'
+  | 'archive_write_failed'
+  | 'archive_confirmation_failed'
+  | 'archive_index_failed'
+  | 'replacement_write_failed'
+  | 'replacement_confirmation_failed'
+
+export type WebsiteLocalRepairResult =
+  | {
+      ok: true
+      workspace: WebsiteWorkspace
+      archiveKey: string
+      archivedAt: string
+      legacyCleanup: 'not-needed' | 'removed' | 'retained'
+    }
+  | {
+      ok: false
+      code: WebsiteRepairFailureCode
+      error: string
+      archiveKey?: string
+      archiveConfirmed: boolean
+      replacementConfirmed: boolean
+    }
+
+export type WebsiteRecoveryArchiveSummary = Readonly<{
+  archiveKey: string
+  archivedAt: string
+  sourceKey: typeof WEBSITE_STORAGE_KEY | typeof LEGACY_WEBSITE_STORAGE_KEY
+}>
+
+export type WebsiteRecoveryDeleteResult =
+  | { ok: true; archives: WebsiteRecoveryArchiveSummary[] }
   | { ok: false; error: string }
 
 function now() {
@@ -741,6 +790,270 @@ export function loadWebsiteWorkspace(storage: Pick<WebsiteStorage, 'getItem'>): 
     return { ok: true, source: 'seed', workspace: createInitialWorkspace() }
   } catch (error) {
     return { ok: false, error: 'Website storage could not be read: ' + (error instanceof Error ? error.message : 'unknown storage error') }
+  }
+}
+
+function repairFailure(
+  code: WebsiteRepairFailureCode,
+  error: string,
+  state: { archiveKey?: string; archiveConfirmed?: boolean; replacementConfirmed?: boolean } = {},
+): WebsiteLocalRepairResult {
+  return {
+    ok: false,
+    code,
+    error,
+    archiveKey: state.archiveKey,
+    archiveConfirmed: state.archiveConfirmed ?? false,
+    replacementConfirmed: state.replacementConfirmed ?? false,
+  }
+}
+
+export async function repairInvalidWebsiteWorkspace(
+  candidate: WebsiteInvalidLocalCandidate,
+  replacement: WebsiteWorkspace,
+  storage: WebsiteRepairStorage | undefined = globalThis.localStorage,
+  locks: WebsiteLockManager | undefined = globalThis.navigator?.locks as WebsiteLockManager | undefined,
+): Promise<WebsiteLocalRepairResult> {
+  if (!storage) return repairFailure('storage_unavailable', 'Browser storage is unavailable, so the saved Website value was not changed.')
+  if (!locks?.request) return repairFailure('lock_unavailable', 'Safe browser locking is unavailable, so the saved Website value was not changed.')
+  if (!isWebsiteWorkspace(replacement)) return repairFailure('replacement_confirmation_failed', 'The current Website workspace is not valid enough to repair local storage.')
+  const sourceMatches = (candidate.source === 'v2' && candidate.sourceKey === WEBSITE_STORAGE_KEY)
+    || (candidate.source === 'v1' && candidate.sourceKey === LEGACY_WEBSITE_STORAGE_KEY)
+  if (!sourceMatches) return repairFailure('stale_candidate', 'The Website repair candidate does not match its storage source.')
+
+  const repairState: {
+    archiveKey?: string
+    archiveConfirmed: boolean
+    replacementConfirmed: boolean
+  } = {
+    archiveConfirmed: false,
+    replacementConfirmed: false,
+  }
+
+  try {
+    return await locks.request(WEBSITE_MUTATION_LOCK, { mode: 'exclusive' }, async () => {
+      const currentRaw = storage.getItem(candidate.sourceKey)
+      if (currentRaw !== candidate.expectedRaw) {
+        return repairFailure('stale_candidate', 'Saved Website data changed after repair was requested. Nothing was replaced.')
+      }
+      const isStillInvalid = candidate.source === 'v2'
+        ? parseStoredWorkspace(currentRaw) === null
+        : parseLegacyWorkspace(currentRaw) === null
+      if (!isStillInvalid) return repairFailure('not_invalid', 'Saved Website data is now valid. Nothing was replaced.')
+      if (candidate.source === 'v1' && storage.getItem(WEBSITE_STORAGE_KEY) !== null) {
+        return repairFailure('stale_candidate', 'A newer Website workspace now exists. The old value was not repaired or replaced.')
+      }
+
+      const archivedAt = new Date().toISOString()
+      const archiveId = createId('website-recovery')
+      const archiveKey = `${WEBSITE_RECOVERY_KEY_PREFIX}${archiveId}`
+      repairState.archiveKey = archiveKey
+      if (storage.getItem(archiveKey) !== null) {
+        return repairFailure('archive_write_failed', 'A Website recovery archive with this ID already exists. Nothing was replaced.', repairState)
+      }
+      const archiveRaw = serialize({
+        schema: WEBSITE_RECOVERY_SCHEMA,
+        archiveId,
+        archivedAt,
+        sourceKey: candidate.sourceKey,
+        rawValue: currentRaw,
+        replacementRevision: replacement.revision,
+        replacementContentRevision: replacement.contentRevision,
+      })
+      try {
+        storage.setItem(archiveKey, archiveRaw)
+      } catch (error) {
+        return repairFailure('archive_write_failed', `The invalid Website value could not be archived: ${error instanceof Error ? error.message : 'unknown storage error'}`, repairState)
+      }
+      if (storage.getItem(archiveKey) !== archiveRaw) {
+        return repairFailure('archive_confirmation_failed', 'The Website recovery archive could not be confirmed. The saved value was not replaced.', repairState)
+      }
+      repairState.archiveConfirmed = true
+
+      const currentIndexRaw = storage.getItem(WEBSITE_RECOVERY_INDEX_KEY)
+      const currentArchives = parseWebsiteRecoveryIndex(currentIndexRaw)
+      if (currentArchives === null) {
+        return repairFailure('archive_index_failed', 'The Website recovery index is invalid. The archive was retained, but the saved value was not replaced.', repairState)
+      }
+      const nextIndexRaw = serialize({
+        schema: WEBSITE_RECOVERY_SCHEMA,
+        archives: [...currentArchives, { archiveKey, archivedAt, sourceKey: candidate.sourceKey }],
+      })
+      try {
+        storage.setItem(WEBSITE_RECOVERY_INDEX_KEY, nextIndexRaw)
+      } catch (error) {
+        return repairFailure('archive_index_failed', `The Website recovery index could not be saved: ${error instanceof Error ? error.message : 'unknown storage error'}`, repairState)
+      }
+      if (storage.getItem(WEBSITE_RECOVERY_INDEX_KEY) !== nextIndexRaw) {
+        return repairFailure('archive_index_failed', 'The Website recovery index could not be confirmed. The archive was retained, but the saved value was not replaced.', repairState)
+      }
+
+      if (storage.getItem(candidate.sourceKey) !== currentRaw) {
+        return repairFailure('stale_candidate', 'Saved Website data changed while the recovery archive was being prepared. The archive was retained, but nothing was replaced.', repairState)
+      }
+      if (candidate.source === 'v1' && storage.getItem(WEBSITE_STORAGE_KEY) !== null) {
+        return repairFailure('stale_candidate', 'A newer Website workspace appeared while the old value was being archived. The archive was retained, but the newer workspace was not replaced.', repairState)
+      }
+      const replacementRaw = serialize(replacement)
+      try {
+        storage.setItem(WEBSITE_STORAGE_KEY, replacementRaw)
+      } catch (error) {
+        return repairFailure('replacement_write_failed', `The valid Website workspace could not be saved: ${error instanceof Error ? error.message : 'unknown storage error'}`, repairState)
+      }
+      const confirmedRaw = storage.getItem(WEBSITE_STORAGE_KEY)
+      const confirmed = confirmedRaw === replacementRaw ? parseStoredWorkspace(confirmedRaw) : null
+      if (!confirmed || serialize(confirmed) !== replacementRaw) {
+        return repairFailure('replacement_confirmation_failed', 'The repaired Website workspace could not be confirmed. The archive was retained and durable editing remains paused.', repairState)
+      }
+      repairState.replacementConfirmed = true
+
+      let legacyCleanup: 'not-needed' | 'removed' | 'retained' = 'not-needed'
+      if (candidate.source === 'v1') {
+        try {
+          storage.removeItem(LEGACY_WEBSITE_STORAGE_KEY)
+          legacyCleanup = storage.getItem(LEGACY_WEBSITE_STORAGE_KEY) === null ? 'removed' : 'retained'
+        } catch {
+          legacyCleanup = 'retained'
+        }
+      }
+      return { ok: true, workspace: confirmed, archiveKey, archivedAt, legacyCleanup }
+    })
+  } catch (error) {
+    return repairFailure('storage_unavailable', `Website repair stopped because browser storage could not be confirmed: ${error instanceof Error ? error.message : 'unknown storage error'}`, repairState)
+  }
+}
+
+function isWebsiteRecoverySourceKey(
+  value: unknown,
+): value is typeof WEBSITE_STORAGE_KEY | typeof LEGACY_WEBSITE_STORAGE_KEY {
+  return value === WEBSITE_STORAGE_KEY || value === LEGACY_WEBSITE_STORAGE_KEY
+}
+
+function parseWebsiteRecoveryIndex(raw: string | null): WebsiteRecoveryArchiveSummary[] | null {
+  if (raw === null) return []
+  try {
+    const candidate = JSON.parse(raw) as unknown
+    if (!isRecord(candidate)
+      || !hasExactKeys(candidate, ['schema', 'archives'])
+      || candidate.schema !== WEBSITE_RECOVERY_SCHEMA
+      || !Array.isArray(candidate.archives)) return null
+    const archives: WebsiteRecoveryArchiveSummary[] = []
+    const keys = new Set<string>()
+    for (const entry of candidate.archives) {
+      if (!isRecord(entry)
+        || !hasExactKeys(entry, ['archiveKey', 'archivedAt', 'sourceKey'])
+        || typeof entry.archiveKey !== 'string'
+        || !entry.archiveKey.startsWith(WEBSITE_RECOVERY_KEY_PREFIX)
+        || entry.archiveKey === WEBSITE_RECOVERY_INDEX_KEY
+        || typeof entry.archivedAt !== 'string'
+        || Number.isNaN(Date.parse(entry.archivedAt))
+        || !isWebsiteRecoverySourceKey(entry.sourceKey)
+        || keys.has(entry.archiveKey)) return null
+      keys.add(entry.archiveKey)
+      archives.push({
+        archiveKey: entry.archiveKey,
+        archivedAt: entry.archivedAt,
+        sourceKey: entry.sourceKey,
+      })
+    }
+    return archives
+  } catch {
+    return null
+  }
+}
+
+export function readWebsiteRecoveryArchive(
+  archiveKey: string,
+  storage: Pick<WebsiteRepairStorage, 'getItem'> | undefined = globalThis.localStorage,
+): string | null {
+  if (!storage || !archiveKey.startsWith(WEBSITE_RECOVERY_KEY_PREFIX) || archiveKey === WEBSITE_RECOVERY_INDEX_KEY) return null
+  const raw = storage.getItem(archiveKey)
+  if (raw === null) return null
+  try {
+    const candidate = JSON.parse(raw) as {
+      schema?: unknown
+      archiveId?: unknown
+      archivedAt?: unknown
+      sourceKey?: unknown
+      rawValue?: unknown
+      replacementRevision?: unknown
+      replacementContentRevision?: unknown
+    }
+    if (candidate.schema !== WEBSITE_RECOVERY_SCHEMA
+      || typeof candidate.archiveId !== 'string'
+      || archiveKey !== `${WEBSITE_RECOVERY_KEY_PREFIX}${candidate.archiveId}`
+      || typeof candidate.archivedAt !== 'string'
+      || !isWebsiteRecoverySourceKey(candidate.sourceKey)
+      || typeof candidate.rawValue !== 'string'
+      || !Number.isSafeInteger(candidate.replacementRevision)
+      || !Number.isSafeInteger(candidate.replacementContentRevision)) return null
+    return raw
+  } catch {
+    return null
+  }
+}
+
+export function listWebsiteRecoveryArchives(
+  storage: Pick<WebsiteRepairStorage, 'getItem'> | undefined = globalThis.localStorage,
+): WebsiteRecoveryArchiveSummary[] {
+  if (!storage) return []
+  try {
+    const index = parseWebsiteRecoveryIndex(storage.getItem(WEBSITE_RECOVERY_INDEX_KEY))
+    if (!index) return []
+    return index
+      .filter((entry) => readWebsiteRecoveryArchive(entry.archiveKey, storage) !== null)
+      .sort((left, right) => right.archivedAt.localeCompare(left.archivedAt))
+  } catch {
+    return []
+  }
+}
+
+export async function deleteWebsiteRecoveryArchive(
+  archiveKey: string,
+  storage: WebsiteRepairStorage | undefined = globalThis.localStorage,
+  locks: WebsiteLockManager | undefined = globalThis.navigator?.locks as WebsiteLockManager | undefined,
+): Promise<WebsiteRecoveryDeleteResult> {
+  if (!storage) return { ok: false, error: 'Browser storage is unavailable, so the recovery archive was not removed.' }
+  if (!locks?.request) return { ok: false, error: 'Safe browser locking is unavailable, so the recovery archive was not removed.' }
+  if (!archiveKey.startsWith(WEBSITE_RECOVERY_KEY_PREFIX) || archiveKey === WEBSITE_RECOVERY_INDEX_KEY) {
+    return { ok: false, error: 'The selected Website recovery archive is not valid.' }
+  }
+  try {
+    return await locks.request(WEBSITE_MUTATION_LOCK, { mode: 'exclusive' }, () => {
+      const currentIndexRaw = storage.getItem(WEBSITE_RECOVERY_INDEX_KEY)
+      const currentArchives = parseWebsiteRecoveryIndex(currentIndexRaw)
+      if (!currentArchives) return { ok: false, error: 'The Website recovery index is invalid, so nothing was removed.' }
+      if (!currentArchives.some((entry) => entry.archiveKey === archiveKey)
+        || readWebsiteRecoveryArchive(archiveKey, storage) === null) {
+        return { ok: false, error: 'The selected Website recovery archive no longer exists or failed validation.' }
+      }
+      const nextArchives = currentArchives.filter((entry) => entry.archiveKey !== archiveKey)
+      const nextIndexRaw = serialize({ schema: WEBSITE_RECOVERY_SCHEMA, archives: nextArchives })
+      storage.setItem(WEBSITE_RECOVERY_INDEX_KEY, nextIndexRaw)
+      if (storage.getItem(WEBSITE_RECOVERY_INDEX_KEY) !== nextIndexRaw) {
+        return { ok: false, error: 'The recovery index did not confirm the change, so the archive was retained.' }
+      }
+      try {
+        storage.removeItem(archiveKey)
+        if (storage.getItem(archiveKey) !== null) throw new Error('archive removal was not confirmed')
+      } catch (error) {
+        try {
+          storage.setItem(WEBSITE_RECOVERY_INDEX_KEY, currentIndexRaw ?? serialize({
+            schema: WEBSITE_RECOVERY_SCHEMA,
+            archives: currentArchives,
+          }))
+        } catch {
+          // The archive remains intact; a later reload will validate the index before showing it.
+        }
+        return {
+          ok: false,
+          error: `The recovery archive could not be removed: ${error instanceof Error ? error.message : 'unknown storage error'}`,
+        }
+      }
+      return { ok: true, archives: listWebsiteRecoveryArchives(storage) }
+    })
+  } catch (error) {
+    return { ok: false, error: `Website recovery archive removal failed: ${error instanceof Error ? error.message : 'unknown storage error'}` }
   }
 }
 

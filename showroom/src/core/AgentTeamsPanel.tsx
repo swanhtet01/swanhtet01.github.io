@@ -126,23 +126,26 @@ export function AgentTeamsPanel({ activeTeam, selectedAgentId, onSelectAgent, wo
   const assignedCount = teamAgents.filter((agent) => agent.state === 'assigned').length
   const reviewCount = teamAgents.filter((agent) => agent.state === 'waiting_review').length
   const blockedCount = teamAgents.filter((agent) => agent.state === 'blocked').length
+  const rosterSummary = [
+    `${teamAgents.length} ${teamAgents.length === 1 ? 'role' : 'roles'}`,
+    ...(assignedCount ? [`${assignedCount} assigned`] : []),
+    ...(reviewCount ? [`${reviewCount} waiting review`] : []),
+    ...(blockedCount ? [`${blockedCount} blocked`] : []),
+  ].join(' · ')
 
   return (
     <div className="agent-team-workspace">
-      <section className="agent-boundary-banner" aria-label="Agent delegation boundary">
-        <div><span className="core-eyebrow">Delegation control</span><strong>Roles prepare work; named humans keep authority.</strong></div>
-        <p>No agent can send, pay, publish, merge, deploy, or write to production from this local roster.</p>
-      </section>
-      <section className="agent-summary" aria-label="Agent team summary">
-        <span><small>Roles</small><strong>{teamAgents.length}</strong></span>
-        <span><small>Assigned</small><strong>{assignedCount}</strong></span>
-        <span><small>Needs review</small><strong>{reviewCount}</strong></span>
-        <span><small>Blocked</small><strong>{blockedCount}</strong></span>
-      </section>
       <div className={`split-workspace agent-team-view ${mobileDetailOpen ? 'mobile-detail-open' : 'mobile-list-open'}`}>
         <section className="core-panel agent-roster-panel">
           <div className="panel-head">
-            <div><span className="core-eyebrow">Team roster</span><h2>Delegated roles</h2></div>
+            <div>
+              <span className="core-eyebrow">Team roster</span>
+              <h2>Delegated roles</h2>
+              <p className="agent-roster-overview" aria-label="Agent team summary">
+                <span>{rosterSummary}</span>
+                <span>Agents prepare work; named humans approve consequential actions.</span>
+              </p>
+            </div>
             <details className="compact-disclosure">
               <summary>Add role</summary>
               <form className="core-form agent-create-form" onSubmit={addAgent}>

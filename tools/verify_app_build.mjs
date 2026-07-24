@@ -84,7 +84,7 @@ else {
 const files = await walk(dist)
 const textFiles = files.filter((path) => /\.(?:html|js|css|json|svg)$/.test(path))
 const corpus = (await Promise.all(textFiles.map((path) => readFile(path, 'utf8')))).join('\n')
-for (const required of ['SUPERMEGA', 'Teams', 'Product', 'Acceptance outcome', 'Prepare brief', 'Evidence register', 'Record evidence', 'Verified evidence', 'verifiedAt', 'Operations', 'Confirm change', 'Action history', 'actorKind', 'evidenceReference', 'accountableActions', 'decision_packet.v1', 'Claims and provenance', 'claimType', 'claim_type', 'source_reference', 'artifact_reference', 'managedApprovalRequests', 'packetFingerprint', 'uncertainty', 'visibility', 'artifactReference', 'Human reviewer', 'Decision note', 'Approve and record', 'Local trial', 'Delegation control', 'Pilot definition', 'Workflow', 'workflowProfile', 'Current record', 'Baseline', 'Target outcome', 'Human authority boundary', 'Acceptance evidence', 'Operating mode', 'Write path', manifest.brand.colors.accent, manifest.brand.colors.ink]) {
+for (const required of ['SUPERMEGA', 'Teams', 'Product', 'Acceptance outcome', 'Prepare brief', 'Evidence register', 'Record evidence', 'Verified evidence', 'verifiedAt', 'Operations', 'Confirm change', 'Action history', 'actorKind', 'evidenceReference', 'accountableActions', 'decision_packet.v1', 'Claims and provenance', 'claimType', 'claim_type', 'source_reference', 'artifact_reference', 'managedApprovalRequests', 'packetFingerprint', 'uncertainty', 'visibility', 'artifactReference', 'Human reviewer', 'Decision note', 'Approve and record', 'Local trial', 'Agents prepare work', 'Pilot definition', 'Workflow', 'workflowProfile', 'Current record', 'Baseline', 'Target outcome', 'Human authority boundary', 'Acceptance evidence', 'Operating mode', 'Write path', manifest.brand.colors.accent, manifest.brand.colors.ink]) {
   if (!corpus.includes(required)) fail(`missing_context:${required}`)
 }
 if (!coreSource.includes("import siteManifest from '../../../site-manifest.json'")) fail('workflow_contract_not_shared')
@@ -108,11 +108,17 @@ if (!teamSource.includes('Accept and record') || !teamSource.includes("acceptedA
 if (!teamModel.includes("status: 'proposed'") || !teamModel.includes('isAttributedHumanAcceptance')) fail('legacy_product_acceptance_not_reopened')
 if (!teamSource.includes("verifiedActorKind: 'human'") || !teamModel.includes("candidate.verifiedActorKind === 'human'") || !teamModel.includes('verifiedBy')) fail('team_evidence_not_human_attributed')
 if (!teamModel.includes("supermega.team.workspace.v3") || !teamModel.includes("supermega.team.workspace.v2") || !teamModel.includes('hasValidAssignment')) fail('agent_team_migration_or_integrity_missing')
-if (!agentTeamsSource.includes('No agent can send, pay, publish, merge, deploy, or write to production')
+if (!agentTeamsSource.includes('Agents prepare work; named humans approve consequential actions.')
   || !agentTeamsSource.includes('humanOwner')
   || !agentTeamsSource.includes('approvalBoundary')
   || agentTeamsSource.includes('className="agent-roster" role="list"')
   || agentTeamsSource.includes('>Run<')) fail('agent_authority_boundary_missing')
+if (!agentTeamsSource.includes('className="agent-roster-overview"')
+  || !agentTeamsSource.includes("...(reviewCount ? [`${reviewCount} waiting review`] : [])")
+  || agentTeamsSource.includes('className="agent-boundary-banner"')
+  || agentTeamsSource.includes('className="agent-summary"')
+  || coreCssSource.includes('.agent-boundary-banner')
+  || coreCssSource.includes('.agent-summary')) fail('agent_roster_not_action_first')
 if (!agentTeamsSource.includes('const mobileDetailOpen = Boolean(selectedAgentId && selectedAgent)')
   || !agentTeamsSource.includes("mobileDetailOpen ? 'mobile-detail-open' : 'mobile-list-open'")
   || !agentTeamsSource.includes('>Back to roles</button>')
@@ -128,9 +134,7 @@ if (!teamSource.includes('const mobileAgentDetailOpen = activeView')
   || !teamSource.includes("const mobileFocusOpen = intakeOpen || (activeView === 'work' && mobileDetailOpen) || mobileAgentDetailOpen")
   || !teamSource.includes("mobileFocusOpen ? 'mobile-focus-open' : ''")
   || !teamSource.includes("window.matchMedia('(max-width: 840px)').matches")
-  || !coreCssSource.includes('.team-screen.mobile-focus-open > .page-heading')
-  || !coreCssSource.includes('.team-screen.mobile-focus-open .agent-team-workspace > .agent-boundary-banner')
-  || !coreCssSource.includes('.team-screen.mobile-focus-open .agent-team-workspace > .agent-summary')) fail('team_mobile_focus_mode_missing')
+  || !coreCssSource.includes('.team-screen.mobile-focus-open > .page-heading')) fail('team_mobile_focus_mode_missing')
 if (!teamSource.includes("activeView === 'agents'")
   || !teamSource.includes('Assign bounded roles to work; named humans keep authority.')
   || !teamSource.includes('Check release evidence and decisions before approval.')
@@ -186,43 +190,77 @@ if (!websiteSource.includes('Recovery settings')
   || coreSource.includes("import('../products/product-handoff')")
   || coreSource.includes("from '../products/website/website-model'")
   || !websiteCssSource.includes('.website-notice-action')) fail('website_session_recovery_missing_or_eager')
+if (!websiteModelSource.includes('repairInvalidWebsiteWorkspace')
+  || !websiteModelSource.includes('readWebsiteRecoveryArchive')
+  || !websiteModelSource.includes('listWebsiteRecoveryArchives')
+  || !websiteModelSource.includes('deleteWebsiteRecoveryArchive')
+  || !websiteModelSource.includes('WEBSITE_RECOVERY_INDEX_KEY')
+  || !websiteModelSource.includes('WEBSITE_MUTATION_LOCK')
+  || !websiteModelSource.includes('currentRaw !== candidate.expectedRaw')
+  || !websiteModelSource.includes('storage.getItem(archiveKey) !== archiveRaw')
+  || !websiteModelSource.includes('storage.getItem(WEBSITE_STORAGE_KEY)')
+  || !websiteModelSource.includes("candidate.source === 'v1'")
+  || !websiteWorkspaceSource.includes('invalidCandidateRef')
+  || !websiteWorkspaceSource.includes('repairLocalWorkspace')
+  || !websiteWorkspaceSource.includes('repairCandidateRevision')
+  || !websiteSource.includes('repairConfirmationRevision === repairCandidateRevision')
+  || !websiteWorkspaceSource.includes("storageModeRef.current === 'managed'")
+  || !websiteWorkspaceSource.includes("storageModeRef.current = 'session-only'")
+  || !websiteSource.includes('Repair local data')
+  || !websiteSource.includes('Archive and repair')
+  || !websiteSource.includes('Download archive')
+  || !websiteSource.includes('Recovery archives')
+  || !websiteSource.includes('Confirm remove')
+  || !websiteSource.includes('Commerce, Production, managed data, domains, and deployments are not touched.')
+  || !websiteSource.includes('aria-busy={repairing}')) fail('website_targeted_repair_contract_missing')
 if (!managedTrialSource.includes('saveManagedWebsiteCommand') || !managedTrialSource.includes("surface: 'website'") || !websiteWorkspaceSource.includes('loadManagedBootstrap()') || !websiteWorkspaceSource.includes("storageModeRef.current = 'managed'") || !websiteWorkspaceSource.includes('actor: managedActorRef.current') || !websiteWorkspaceSource.includes("error.code === 'trial_version_conflict'")) fail('managed_website_command_client_missing')
 if (!websiteWorkspaceSource.includes('bindManagedActor') || !websiteWorkspaceSource.includes('verifiedBy: actor') || !websiteWorkspaceSource.includes('reviewer: actor') || !websiteWorkspaceSource.includes('recordedBy: actor')) fail('managed_website_actor_binding_missing')
 const websiteHydrationStart = websiteWorkspaceSource.indexOf('void (async () => {')
 const websiteHydrationEnd = websiteWorkspaceSource.indexOf('})()', websiteHydrationStart)
 const websiteHydration = websiteWorkspaceSource.slice(websiteHydrationStart, websiteHydrationEnd)
 if (websiteHydration.indexOf('try {') < 0 || websiteHydration.indexOf('try {') > websiteHydration.indexOf('currentManagedIdentity()') || websiteHydration.indexOf('finally') < websiteHydration.indexOf('currentManagedIdentity()')) fail('managed_website_identity_failure_can_stick_hydration')
-const websiteTabsContract = websiteSource.slice(websiteSource.indexOf('const workspaceViews'), websiteSource.indexOf('const mobileWorkspaceViews'))
-if ((websiteTabsContract.match(/^\s*\{ id:/gm) || []).length !== 3 || !websiteTabsContract.includes("label: 'Pages'") || !websiteTabsContract.includes("label: 'Navigation'") || !websiteTabsContract.includes("label: 'Publish'") || !websiteSource.includes('role="tablist"') || !websiteSource.includes('role="tabpanel"') || !websiteSource.includes("event.key === 'ArrowRight'") || !websiteSource.includes('tabIndex={view === item.id ? 0 : -1}')) fail('website_three_view_accessibility_contract_changed')
-const websiteMobileModesContract = websiteSource.slice(websiteSource.indexOf('const mobileWorkspaceViews'), websiteSource.indexOf('const DEFAULT_NOTICE'))
-const websiteTaskFirstMobileCss = websiteCssSource.slice(websiteCssSource.lastIndexOf('@media (max-width: 900px)'), websiteCssSource.lastIndexOf('@media (max-width: 640px)'))
-if ((websiteMobileModesContract.match(/^\s*\{ id:/gm) || []).length !== 2
-  || !websiteMobileModesContract.includes("label: 'Edit'")
-  || !websiteMobileModesContract.includes("label: 'Publish'")
-  || websiteMobileModesContract.includes("label: 'Navigation'")
-  || !websiteSource.includes('className="website-mobile-mode-nav"')
-  || !websiteSource.includes('className="website-mobile-page-bar"')
-  || !websiteSource.includes('className="website-mobile-site-settings"')
-  || !websiteSource.includes("view === 'content' && surface === 'work'")
-  || !websiteSource.includes('Pages, navigation, and search')
-  || !websiteSource.includes('className="website-mobile-seo-settings"')
-  || !websiteTaskFirstMobileCss.includes('.website-desktop-workspace-nav,')
-  || !websiteTaskFirstMobileCss.includes('.website-mobile-mode-nav')
-  || !websiteTaskFirstMobileCss.includes('grid-template-columns: repeat(2, minmax(0, 1fr))')
-  || !websiteTaskFirstMobileCss.includes('.website-mobile-site-settings {')
-  || !websiteTaskFirstMobileCss.includes('display: block')
-  || !websiteTaskFirstMobileCss.includes('.website-workspace-grid.view-content .website-work-surface > .website-editor-panel > .website-panel-head')
-  || !websiteTaskFirstMobileCss.includes('.website-workspace-grid.view-content .website-panel-actions > div:first-child')) fail('website_mobile_task_first_shell_missing')
+const websiteUnifiedCss = websiteCssSource.slice(websiteCssSource.lastIndexOf('/* Unified Website workflow'))
+if (!websiteSource.includes("type WebsiteView = 'content' | 'publish'")
+  || !websiteSource.includes('className="website-action-bar"')
+  || !websiteSource.includes('className="website-primary-actions"')
+  || !websiteSource.includes('className="website-site-settings"')
+  || !websiteSource.includes(">Site</summary>")
+  || !websiteSource.includes("openWorkspaceView('publish')")
+  || !websiteSource.includes('>Back to edit</button>')
+  || websiteSource.includes('workspaceViews')
+  || websiteSource.includes('mobileWorkspaceViews')
+  || websiteSource.includes('role="tablist"')
+  || websiteSource.includes('role="tabpanel"')
+  || websiteSource.includes('splitPreview')
+  || websiteSource.includes('className="website-mobile-seo-settings"')
+  || ['.website-workspace-nav', '.website-mobile-mode-nav', '.website-mobile-page-bar', '.website-mobile-site-settings', '.website-surface-controls', '.website-split-control', '[data-split='].some((selector) => websiteCssSource.includes(selector))) fail('website_unified_action_bar_missing')
+if (!websiteSource.includes('async function previewPage')
+  || !websiteSource.includes('onSelectPage={(pageId) => void previewPage(pageId)}')
+  || !websiteSource.includes("if (pageId !== selectedPage.id && !await selectPage(pageId)) return")
+  || !websiteSource.includes('result.workspace.selectedPageId !== pageId')
+  || !websiteSource.includes("openContentSurface('preview')")
+  || !websiteSource.includes('setSiteSettingsOpen(false)')
+  || websiteSource.includes("setNotice('Previewing the selected page.')")) fail('website_preview_action_does_not_open_preview')
+if (!websiteSource.includes('ref={headingRef} tabIndex={-1}')
+  || !websiteSource.includes('requestHeadingFocus()')
+  || !websiteSource.includes('recoveryPrimaryActionRef')
+  || /\.website-heading\[data-view="content"\]\s*\{[^}]*display:\s*none/s.test(websiteUnifiedCss)) fail('website_view_transition_focus_or_mobile_heading_missing')
+if (!websiteUnifiedCss.includes('.website-action-bar')
+  || !websiteUnifiedCss.includes('grid-template-columns: minmax(280px, 1fr) auto auto')
+  || !websiteUnifiedCss.includes('.website-site-settings-content')
+  || !websiteUnifiedCss.includes('max-height: min(620px, calc(100svh - 170px))')
+  || !websiteUnifiedCss.includes('@media screen and (max-width: 900px)')
+  || !websiteUnifiedCss.includes('@media screen and (max-width: 560px)')
+  || !websiteUnifiedCss.includes('grid-template-columns: repeat(3, minmax(0, 1fr))')
+  || !websiteUnifiedCss.includes('.website-heading[data-view="content"]')
+  || !websiteUnifiedCss.includes('display: none')) fail('website_unified_responsive_shell_missing')
 if (!websiteSource.includes("const [surface, setSurface] = useState<'work' | 'preview'>('work')")
-  || !websiteSource.includes('aria-label="Website workspace surface"')
   || !websiteSource.includes('data-surface={surface}')
   || !websiteSource.includes("setSurface('work')")
-  || !websiteSource.includes('data-split={splitPreview')
-  || !websiteSource.includes('setSplitPreview(false)')) fail('website_mobile_focus_mode_missing')
+  || !websiteSource.includes("surface === 'preview' ? 'Back' : 'Preview'")) fail('website_focus_mode_missing')
 if (!websiteCssSource.includes('.website-workspace-grid[data-surface="work"] > .website-preview-surface')
   || !websiteCssSource.includes('.website-workspace-grid[data-surface="preview"] > .website-work-surface')
   || !websiteCssSource.includes('.website-workspace-grid[data-surface="preview"] > .website-preview-surface')
-  || !websiteCssSource.includes('.website-split-control')
   || !websiteCssSource.includes('display: none')) fail('website_mobile_panels_not_bounded')
 if (!contentSource.includes("type EditorSection = 'page' | 'hero' | 'sections' | 'seo'")
   || !contentSource.includes('aria-label="Page section to edit"')
@@ -266,7 +304,8 @@ if (!coreSource.includes('className="core-panel next-task-card"')
   || !coreSource.includes('<details className="home-more">')
   || !coreSource.includes('className="product-launcher product-catalog"')
   || !coreSource.includes("useState<'manual' | 'message' | 'website'>('manual')")
-  || !coreSource.includes('aria-label="Order source" className="order-entry-methods" role="tablist"')
+  || !coreSource.includes('aria-label="Order source" className="order-entry-methods"')
+  || !coreSource.includes("aria-pressed={orderEntryMode === 'manual'}")
   || !coreSource.includes('<dialog aria-labelledby="action-confirm-title" className="accountable-action-gate"')
   || !coreSource.includes('<details className="core-panel today-more')
   || !coreSource.includes("useState<'workflow' | 'success' | 'system'>('workflow')")
@@ -279,10 +318,21 @@ if (!coreSource.includes('className="core-panel next-task-card"')
 if (!coreSource.includes('id="commerce-manual-order-form"')
   || !coreSource.includes('form="commerce-manual-order-form"')
   || !coreSource.includes('className="order-submit-bar"')
+  || !coreSource.includes('className="order-essential-fields"')
+  || !coreSource.includes('function ClosedOrderHistory')
+  || !coreSource.includes('orders={actionOrders}')
+  || !coreSource.includes('<ClosedOrderHistory orders={closedOrders} />')
+  || !coreSource.includes('className="production-mode-banner commerce-mode-banner"')
+  || !coreSource.includes("managedIdentity ? 'Managed records' : 'Sample data'")
+  || !coreSource.includes('const commerceControlsDisabled = !commerceCanWrite || Boolean(pendingAction)')
+  || !coreSource.includes('Refund due. Process it with the payment provider; this trial does not send or settle refunds.')
   || !coreSource.includes('<details className="order-options">')
   || !coreSource.includes('<summary><span>Channel and payment</span><small>{channel} · {payment}</small></summary>')
   || !coreCssSource.includes('.order-form-panel { display: flex; flex-direction: column; overflow: hidden; }')
   || !coreCssSource.includes('.order-entry-panel { min-width: 0; min-height: 0; flex: 1; overflow: auto; }')
+  || !coreCssSource.includes('.order-entry-panel[data-mode="manual"][data-notice="false"] { overflow: visible; }')
+  || !coreCssSource.includes('.order-essential-fields { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr);')
+  || !coreCssSource.includes('.order-archive-list { max-height: 240px; overflow: auto;')
   || !coreCssSource.includes('.order-submit-bar .core-button { width: 100%; }')
   || !coreCssSource.includes('.order-options > summary { min-height: 44px;')
   || !coreCssSource.includes('.order-form-panel { display: block; }')
@@ -307,9 +357,20 @@ if (!websiteSource.includes('approvalIsCurrent || !publishIsCurrent')
   || !websiteSource.includes("storageMode === 'managed' ? 'managed' : 'local'")
   || !publishSource.includes('No deployment, domain write, payment, stock, customer message, or order change happens here.')) fail('website_handoff_gate_missing')
 if (!commerceIntakeSource.includes('acceptWebsiteEcommerceHandoff') || !commerceIntakeSource.includes('matches.length === 1') || !commerceIntakeSource.includes('createWebsiteOrderDraft(context.handoff.id') || !commerceIntakeSource.includes('I reviewed this SKU, quantity, and Website evidence.')) fail('commerce_intake_approval_contract_missing')
-if (!commerceIntakeSource.includes('await completeWebsiteOrderDraft') || !commerceIntakeSource.includes('opaque customer reference generated on completion') || !commerceIntakeSource.includes('Create ready order') || !commerceIntakeSource.includes('Confirm into orders')) fail('commerce_order_completion_ui_missing')
+if (!commerceIntakeSource.includes('await completeWebsiteOrderDraft')
+  || !commerceIntakeSource.includes('opaque customer reference generated on completion')
+  || !commerceIntakeSource.includes('Create ready order')
+  || !commerceIntakeSource.includes('Confirm into orders')
+  || !commerceIntakeSource.includes('disabled?: boolean')
+  || !commerceIntakeSource.includes('if (disabled ||')) fail('commerce_order_completion_ui_missing')
 if (!coreSource.includes('function queueWebsiteOrder') || !coreSource.includes('sourceRecordId') || !coreSource.includes('item.price !== line.unitPriceMmk') || !coreSource.includes('Website order confirmation failed closed') || !coreSource.includes('Confirm ${record.id} from Website')) fail('website_order_not_integrated_with_commerce')
-if (!commerceSource.includes("supermega.commerce.workspace.v2") || !commerceSource.includes('loadCommerceWorkspace') || !commerceSource.includes('mutateCommerceWorkspace') || !commerceSource.includes('lockManager.request')) fail('commerce_v2_locked_store_missing')
+if (!commerceSource.includes("supermega.commerce.workspace.v2")
+  || !commerceSource.includes('loadCommerceWorkspace')
+  || !commerceSource.includes('mutateCommerceWorkspace')
+  || !commerceSource.includes('commerceWorkspaceCanWrite')
+  || !commerceSource.includes('commerceOrderNeedsAction')
+  || !commerceSource.includes('.write-probe.')
+  || !commerceSource.includes('lockManager.request')) fail('commerce_v2_locked_store_missing')
 if (!commerceSource.includes("CommercePaymentStatus = 'pending' | 'reconciled'") || !commerceSource.includes("CommerceRefundStatus = 'none' | 'due'") || commerceSource.includes("'unrecorded'") || commerceSource.includes("'refund_due'")) fail('commerce_payment_or_refund_contract_invalid')
 if (!commerceSource.includes('commerceOrderHasReleasableReservation') || !commerceSource.includes("movement.kind === 'reserve'") || !commerceSource.includes("movement.kind === 'release'") || !commerceSource.includes("kind: 'receipt'") || !commerceSource.includes("kind: 'opening'")) fail('commerce_stock_ledger_contract_missing')
 if (!commerceSource.includes('Recovery failed closed') || !commerceSource.includes('currentRaw !== null') || !commerceSource.includes("movements: []")) fail('commerce_migration_fail_closed_contract_missing')
@@ -327,7 +388,7 @@ if (commerceTabsContract.includes("{ id: 'today', label: 'Today' }") || !commerc
 const commercePageContract = coreSource.slice(coreSource.indexOf('function CommercePage'), coreSource.indexOf('function OrderList'))
 const commerceOrdersContract = commercePageContract.slice(commercePageContract.indexOf("if (tab === 'orders')"), commercePageContract.indexOf("if (tab === 'inventory')"))
 if (!commerceOrdersContract.includes('order-daily-controls') || !commerceOrdersContract.includes('Save daily close') || !commerceOrdersContract.includes('Close and exceptions')) fail('commerce_daily_controls_not_inside_orders')
-if (!productionSource.includes("supermega.production.workspace.v2") || !productionSource.includes('mutateProductionWorkspace') || !productionSource.includes('lockManager.request') || !productionSource.includes('next.revision !== current.revision + 1')) fail('production_v2_locked_store_missing')
+if (!productionSource.includes("supermega.production.workspace.v2") || !productionSource.includes('mutateProductionWorkspace') || !productionSource.includes('productionWorkspaceCanWrite') || !productionSource.includes('.write-probe.') || !productionSource.includes('lockManager.request') || !productionSource.includes('next.revision !== current.revision + 1')) fail('production_v2_locked_store_missing')
 if (!productionSource.includes("'job_created' | 'output_recorded' | 'issue_opened' | 'issue_resolved' | 'machine_state_changed'") || !productionSource.includes('events: [event, ...state.events]') || !productionSource.includes('Production revision must equal the append-only event count.')) fail('production_append_only_record_missing')
 if (!productionSource.includes('registerProductionJob') || !coreSource.includes('production.job.created') || !coreSource.includes('<summary>Add job</summary>') || !coreSource.includes('Review job')) fail('production_recurring_job_workflow_missing')
 if (!productionSource.includes('currentRaw !== null') || !productionSource.includes('Migration failed closed') || !productionSource.includes('events: []')) fail('production_migration_fail_closed_contract_missing')
@@ -353,13 +414,35 @@ const productionTabsContract = coreSource.slice(coreSource.indexOf('const produc
 if (productionTabsContract.includes("{ id: 'today', label: 'Today' }") || !productionTabsContract.includes("{ id: 'production', label: 'Jobs' }") || !productionTabsContract.includes("{ id: 'control', label: 'Problems' }") || (productionTabsContract.match(/^\s*\{ id:/gm) || []).length !== 2) fail('production_two_tab_contract_changed')
 const productionPageContract = coreSource.slice(coreSource.indexOf('function ProductionPage'), coreSource.indexOf('function JobList'))
 const productionJobsContract = productionPageContract.slice(productionPageContract.indexOf("if (tab === 'production')"), productionPageContract.indexOf("if (tab === 'control')"))
-if (!productionJobsContract.includes('className="summary-strip"') || !productionJobsContract.includes('Open problems') || !coreSource.includes('No jobs yet. Add the first job below to start recording output.')) fail('production_jobs_not_task_first')
-if (!coreCssSource.includes('.production-view > .output-panel { grid-row: 1; }')
-  || !coreCssSource.includes('.production-view > .job-panel { grid-row: 2; }')) fail('production_mobile_primary_action_not_first')
+if (!productionJobsContract.includes('Jobs to finish')
+  || !productionJobsContract.includes('<JobList jobs={activeJobs} />')
+  || !productionJobsContract.includes('<CompletedJobHistory jobs={completedJobs} />')
+  || !productionJobsContract.includes('Output is append-only in this trial')
+  || !productionJobsContract.includes('{job.id} · {job.product} · {job.line}')
+  || !coreSource.includes('No active jobs. Add a job below to start recording output.')) fail('production_jobs_not_task_first')
+if (coreCssSource.includes('.production-view > .output-panel { grid-row: 1; }')
+  || coreCssSource.includes('.production-view > .job-panel { grid-row: 2; }')) fail('production_mobile_job_context_order_regressed')
 if (coreSource.includes('Math.min(quantity') || !productionPageContract.includes('No output was recorded.') || !productionPageContract.includes('Number.isSafeInteger(quantity)') || productionPageContract.includes('max={selectedRemaining')) fail('production_output_silently_clamped')
 if (!productionPageContract.includes('persisted with attributed Production evidence.') || productionPageContract.includes('<ActionHistory actions={actions} domain="production"')) fail('production_confirmation_record_not_domain_specific')
 if (!coreSource.includes("addEventListener('storage', refreshFromStorage)") || !coreSource.includes("removeEventListener('storage', refreshFromStorage)")) fail('production_cross_tab_refresh_missing')
-if (!coreSource.includes('headingRef.current?.focus()') || !coreSource.includes('returnFocus?.isConnected') || !coreSource.includes('previousFocus.focus()') || !coreSource.includes('aria-live="polite"') || !coreSource.includes('current state ${machine.state}')) fail('production_confirmation_accessibility_missing')
+if (!coreSource.includes('headingRef.current?.focus()') || !coreSource.includes('returnFocus?.isConnected') || !coreSource.includes('previousFocus.focus()') || !coreSource.includes('aria-live="polite"') || !coreSource.includes('current recorded state ${machine.state}')) fail('production_confirmation_accessibility_missing')
+if (!productionPageContract.includes('className="production-mode-banner"')
+  || !productionPageContract.includes('data-write={productionCanWrite')
+  || !productionPageContract.includes('if (!productionCanWrite)')
+  || !productionPageContract.includes('Local sample')
+  || !productionPageContract.includes('they do not control equipment')
+  || !productionPageContract.includes('Records operator observations only.')
+  || !productionPageContract.includes('disabled={!productionCanWrite')
+  || !productionPageContract.includes('<IssueList disabled={!productionCanWrite')
+  || !productionPageContract.includes('<ResolvedIssueHistory issues={resolvedIssues} />')
+  || !productionPageContract.includes('className="production-issue-dialog"')
+  || !productionPageContract.includes("dialog.querySelector('textarea')?.focus()")
+  || !productionPageContract.includes('}, [issueDialogOpen, tab])')
+  || coreSource.includes("attention: 'Stop machine'")
+  || coreSource.includes("stopped: 'Return to service'")) fail('production_write_boundary_or_status_language_missing')
+if (!coreCssSource.includes('.production-mode-banner[data-write="blocked"]')
+  || !coreCssSource.includes('.production-history > .job-list, .production-history > .issue-list { max-height: 230px;')
+  || !coreCssSource.includes('-webkit-line-clamp: 2')) fail('production_bounded_history_or_issue_readability_missing')
 if (!coreCssSource.includes('.action-history summary { min-height: 44px; }')) fail('production_mobile_history_touch_target_missing')
 if (!coreSource.includes("const requestedTabIsCanonical = requestedTab === activeTab") || !coreSource.includes("!requestedTabIsCanonical") || !coreSource.includes(" : 'orders'") || !coreSource.includes(" : 'production'")) fail('legacy_product_tab_not_canonicalized')
 if (coreSource.includes('>All apps</Link>')
@@ -579,11 +662,19 @@ async function verifyChannelOrderRuntime() {
 
 async function verifyWebsiteRuntime() {
   const values = new Map()
+  const storageOperations = []
   let lockRequests = 0
   let lockTail = Promise.resolve()
   const storage = {
     getItem: (key) => values.get(key) ?? null,
-    setItem: (key, value) => values.set(key, String(value)),
+    setItem: (key, value) => {
+      storageOperations.push({ action: 'set', key })
+      values.set(key, String(value))
+    },
+    removeItem: (key) => {
+      storageOperations.push({ action: 'remove', key })
+      values.delete(key)
+    },
   }
   const locks = {
     request: async (_name, _options, callback) => {
@@ -657,6 +748,149 @@ async function verifyWebsiteRuntime() {
     values.set(model.WEBSITE_STORAGE_KEY, malformed)
     const malformedLoad = model.loadWebsiteWorkspace(storage)
     assert(!malformedLoad.ok && values.get(model.WEBSITE_STORAGE_KEY) === malformed, 'website_malformed_v2_fell_back_or_was_replaced')
+    const repairCandidate = {
+      source: 'v2',
+      sourceKey: model.WEBSITE_STORAGE_KEY,
+      expectedRaw: malformed,
+      observedAt: at(25),
+    }
+    storageOperations.length = 0
+    const locksBeforeRepair = lockRequests
+    const repaired = await model.repairInvalidWebsiteWorkspace(repairCandidate, seed, storage, locks)
+    const repairedLoad = model.loadWebsiteWorkspace(storage)
+    const repairArchive = repaired.ok ? JSON.parse(values.get(repaired.archiveKey)) : null
+    const repairIndex = JSON.parse(values.get(model.WEBSITE_RECOVERY_INDEX_KEY))
+    assert(repaired.ok && repairedLoad.ok && repairedLoad.source === 'v2' && lockRequests === locksBeforeRepair + 1, 'website_targeted_repair_not_locked_or_confirmed')
+    assert(repaired.ok && repairArchive.rawValue === malformed && repairArchive.sourceKey === model.WEBSITE_STORAGE_KEY && repairIndex.archives.some((entry) => entry.archiveKey === repaired.archiveKey) && model.readWebsiteRecoveryArchive(repaired.archiveKey, storage) === values.get(repaired.archiveKey), 'website_targeted_repair_did_not_archive_exact_raw_value')
+    const recoveryArchivesAfterReload = model.listWebsiteRecoveryArchives(storage)
+    assert(repaired.ok && recoveryArchivesAfterReload.length === 1 && recoveryArchivesAfterReload[0].archiveKey === repaired.archiveKey, 'website_recovery_archive_not_listed_after_reload')
+    const archiveWriteIndex = storageOperations.findIndex((operation) => operation.action === 'set' && operation.key === repaired.archiveKey)
+    const recoveryIndexWriteIndex = storageOperations.findIndex((operation) => operation.action === 'set' && operation.key === model.WEBSITE_RECOVERY_INDEX_KEY)
+    const replacementWriteIndex = storageOperations.findIndex((operation) => operation.action === 'set' && operation.key === model.WEBSITE_STORAGE_KEY)
+    assert(archiveWriteIndex >= 0 && archiveWriteIndex < recoveryIndexWriteIndex && recoveryIndexWriteIndex < replacementWriteIndex, 'website_repair_write_order_not_archive_first')
+    const staleRepairSize = values.size
+    const staleRepair = await model.repairInvalidWebsiteWorkspace(repairCandidate, seed, storage, locks)
+    assert(!staleRepair.ok && staleRepair.code === 'stale_candidate' && values.size === staleRepairSize, 'website_stale_repair_candidate_wrote_storage')
+    const deletedRecovery = repaired.ok ? await model.deleteWebsiteRecoveryArchive(repaired.archiveKey, storage, locks) : null
+    assert(deletedRecovery?.ok && deletedRecovery.archives.length === 0 && !values.has(repaired.archiveKey) && model.listWebsiteRecoveryArchives(storage).length === 0, 'website_recovery_archive_lifecycle_not_persistent_or_removable')
+
+    values.set(model.WEBSITE_STORAGE_KEY, malformed)
+    const noLockBefore = JSON.stringify([...values])
+    const noLockRepair = await model.repairInvalidWebsiteWorkspace(repairCandidate, seed, storage, null)
+    assert(!noLockRepair.ok && noLockRepair.code === 'lock_unavailable' && JSON.stringify([...values]) === noLockBefore, 'website_repair_without_lock_wrote_storage')
+
+    const archiveFailStorage = {
+      getItem: storage.getItem,
+      setItem: (key, value) => {
+        if (String(key).startsWith('supermega.website.workspace.recovery.v1.')) throw new Error('archive quota')
+        storage.setItem(key, value)
+      },
+      removeItem: storage.removeItem,
+    }
+    const archiveFailRepair = await model.repairInvalidWebsiteWorkspace(repairCandidate, seed, archiveFailStorage, locks)
+    assert(!archiveFailRepair.ok && archiveFailRepair.code === 'archive_write_failed' && values.get(model.WEBSITE_STORAGE_KEY) === malformed, 'website_archive_failure_replaced_invalid_value')
+
+    const replacementFailStorage = {
+      getItem: storage.getItem,
+      setItem: (key, value) => {
+        if (key === model.WEBSITE_STORAGE_KEY) throw new Error('replacement quota')
+        storage.setItem(key, value)
+      },
+      removeItem: storage.removeItem,
+    }
+    const replacementFailRepair = await model.repairInvalidWebsiteWorkspace(repairCandidate, seed, replacementFailStorage, locks)
+    assert(!replacementFailRepair.ok && replacementFailRepair.code === 'replacement_write_failed' && replacementFailRepair.archiveConfirmed && values.has(replacementFailRepair.archiveKey) && values.get(model.WEBSITE_STORAGE_KEY) === malformed, 'website_replacement_failure_lost_archive_or_changed_invalid_value')
+
+    values.set(model.WEBSITE_STORAGE_KEY, malformed)
+    let archiveConfirmationKey = ''
+    const archiveConfirmationReadFailStorage = {
+      getItem: (key) => {
+        if (key === archiveConfirmationKey) throw new Error('archive confirmation read')
+        return storage.getItem(key)
+      },
+      setItem: (key, value) => {
+        storage.setItem(key, value)
+        if (key !== model.WEBSITE_RECOVERY_INDEX_KEY && String(key).startsWith('supermega.website.workspace.recovery.v1.')) archiveConfirmationKey = key
+      },
+      removeItem: storage.removeItem,
+    }
+    const archiveConfirmationReadFail = await model.repairInvalidWebsiteWorkspace(repairCandidate, seed, archiveConfirmationReadFailStorage, locks)
+    assert(!archiveConfirmationReadFail.ok && archiveConfirmationReadFail.archiveKey === archiveConfirmationKey && !archiveConfirmationReadFail.archiveConfirmed && values.has(archiveConfirmationKey) && values.get(model.WEBSITE_STORAGE_KEY) === malformed, 'website_archive_post_write_read_failure_lost_transaction_state')
+
+    values.set(model.WEBSITE_STORAGE_KEY, malformed)
+    let indexWritten = false
+    const indexConfirmationReadFailStorage = {
+      getItem: (key) => {
+        if (indexWritten && key === model.WEBSITE_RECOVERY_INDEX_KEY) throw new Error('index confirmation read')
+        return storage.getItem(key)
+      },
+      setItem: (key, value) => {
+        storage.setItem(key, value)
+        if (key === model.WEBSITE_RECOVERY_INDEX_KEY) indexWritten = true
+      },
+      removeItem: storage.removeItem,
+    }
+    const indexConfirmationReadFail = await model.repairInvalidWebsiteWorkspace(repairCandidate, seed, indexConfirmationReadFailStorage, locks)
+    assert(!indexConfirmationReadFail.ok && indexConfirmationReadFail.archiveConfirmed && values.has(indexConfirmationReadFail.archiveKey) && values.get(model.WEBSITE_STORAGE_KEY) === malformed, 'website_index_post_write_read_failure_lost_confirmed_archive_state')
+
+    values.set(model.WEBSITE_STORAGE_KEY, malformed)
+    let replacementWritten = false
+    const replacementConfirmationReadFailStorage = {
+      getItem: (key) => {
+        if (replacementWritten && key === model.WEBSITE_STORAGE_KEY) throw new Error('replacement confirmation read')
+        return storage.getItem(key)
+      },
+      setItem: (key, value) => {
+        storage.setItem(key, value)
+        if (key === model.WEBSITE_STORAGE_KEY) replacementWritten = true
+      },
+      removeItem: storage.removeItem,
+    }
+    const replacementConfirmationReadFail = await model.repairInvalidWebsiteWorkspace(repairCandidate, seed, replacementConfirmationReadFailStorage, locks)
+    assert(!replacementConfirmationReadFail.ok && replacementConfirmationReadFail.archiveConfirmed && !replacementConfirmationReadFail.replacementConfirmed && values.has(replacementConfirmationReadFail.archiveKey), 'website_replacement_post_write_read_failure_lost_transaction_state')
+
+    values.set(model.WEBSITE_STORAGE_KEY, malformed)
+    const repairRaceCandidate = { ...repairCandidate, observedAt: at(26) }
+    const [repairRaceA, repairRaceB] = await Promise.all([
+      model.repairInvalidWebsiteWorkspace(repairRaceCandidate, seed, storage, locks),
+      model.repairInvalidWebsiteWorkspace(repairRaceCandidate, seed, storage, locks),
+    ])
+    assert(Number(repairRaceA.ok) + Number(repairRaceB.ok) === 1 && [repairRaceA, repairRaceB].some((result) => !result.ok && result.code === 'stale_candidate'), 'website_concurrent_repairs_did_not_fail_closed')
+
+    values.clear()
+    values.set(model.LEGACY_WEBSITE_STORAGE_KEY, malformed)
+    const competingWorkspace = { ...seed, revision: seed.revision + 10 }
+    const competingWorkspaceRaw = JSON.stringify(competingWorkspace)
+    let competingV2Reads = 0
+    const competingV2Storage = {
+      getItem: (key) => {
+        if (key === model.WEBSITE_STORAGE_KEY) {
+          competingV2Reads += 1
+          if (competingV2Reads === 2) values.set(model.WEBSITE_STORAGE_KEY, competingWorkspaceRaw)
+        }
+        return storage.getItem(key)
+      },
+      setItem: storage.setItem,
+      removeItem: storage.removeItem,
+    }
+    const competingV2Repair = await model.repairInvalidWebsiteWorkspace({
+      source: 'v1',
+      sourceKey: model.LEGACY_WEBSITE_STORAGE_KEY,
+      expectedRaw: malformed,
+      observedAt: at(27),
+    }, seed, competingV2Storage, locks)
+    assert(!competingV2Repair.ok && competingV2Repair.code === 'stale_candidate' && competingV2Repair.archiveConfirmed && values.get(model.WEBSITE_STORAGE_KEY) === competingWorkspaceRaw && values.get(model.LEGACY_WEBSITE_STORAGE_KEY) === malformed, 'website_legacy_repair_overwrote_competing_v2_workspace')
+
+    values.clear()
+    values.set(model.LEGACY_WEBSITE_STORAGE_KEY, malformed)
+    const legacyRepair = await model.repairInvalidWebsiteWorkspace({
+      source: 'v1',
+      sourceKey: model.LEGACY_WEBSITE_STORAGE_KEY,
+      expectedRaw: malformed,
+      observedAt: at(28),
+    }, seed, storage, locks)
+    const legacyRepairLoad = model.loadWebsiteWorkspace(storage)
+    assert(legacyRepair.ok && legacyRepair.legacyCleanup === 'removed' && values.get(model.LEGACY_WEBSITE_STORAGE_KEY) === undefined && legacyRepairLoad.ok && legacyRepairLoad.source === 'v2', 'website_legacy_repair_cleanup_order_invalid')
 
     values.clear()
     assert(model.restoreWorkspace({ ...seed, unexpected: true }) === null, 'website_extra_key_was_accepted')
@@ -1036,6 +1270,7 @@ async function verifyCommerceRuntime() {
   const storage = {
     getItem: (key) => values.get(key) ?? null,
     setItem: (key, value) => values.set(key, String(value)),
+    removeItem: (key) => values.delete(key),
   }
   let lockRequests = 0
   let lockQueue = Promise.resolve()
@@ -1207,6 +1442,10 @@ async function verifyCommerceRuntime() {
     const paid = model.reconcileCommercePayment(paidReserved, paidOrder.id, proof('ACT-PAY-PAID'))
     const paidCancelled = model.cancelCommerceOrder(paid, paidOrder.id, proof('ACT-CANCEL-PAID'))
     assert(paidCancelled?.orders[0].paymentStatus === 'reconciled' && paidCancelled.orders[0].refundStatus === 'due', 'paid_cancellation_erased_reconciliation_or_refund_exception')
+    assert(model.commerceOrderNeedsAction(paidCancelled.orders[0]), 'refund_due_order_hidden_from_action_queue')
+    assert(!model.commerceOrderNeedsAction(cancelled.orders[0]), 'closed_cancelled_order_left_in_action_queue')
+    assert(!model.commerceOrderNeedsAction(completed.orders[0]), 'completed_reconciled_order_left_in_action_queue')
+    assert(model.commerceOrderNeedsAction({ ...completed.orders[0], paymentStatus: 'pending' }), 'completed_pending_payment_hidden_from_action_queue')
     assert(model.reconcileCommercePayment(paidCancelled, paidOrder.id, proof('ACT-PAY-AFTER-CANCEL')) === null, 'cancelled_payment_reconciled_again')
 
     const receiptProof = proof('ACT-RECEIPT')
@@ -1220,11 +1459,21 @@ async function verifyCommerceRuntime() {
     const currentState = model.createSeedCommerce()
     values.set(model.COMMERCE_KEY, JSON.stringify(currentState))
     values.set(model.LEGACY_COMMERCE_KEYS[0], '{malformed')
+    assert(model.commerceWorkspaceCanWrite(storage, locks), 'commerce_valid_local_workspace_not_write_ready')
+    assert(![...values.keys()].some((key) => key.includes('.write-probe.')), 'commerce_write_probe_left_storage_residue')
+    assert(!model.commerceWorkspaceCanWrite(storage, null), 'commerce_workspace_without_locks_reported_write_ready')
+    const rejectingCommerceStorage = {
+      getItem: (key) => key === model.COMMERCE_KEY ? JSON.stringify(currentState) : null,
+      setItem: () => { throw new Error('read-only') },
+      removeItem: () => {},
+    }
+    assert(!model.commerceWorkspaceCanWrite(rejectingCommerceStorage, locks), 'commerce_read_only_storage_reported_write_ready')
     const currentSnapshot = model.loadCommerceWorkspace(storage)
     assert(currentSnapshot.source === 'current' && currentSnapshot.state.orders.length === currentState.orders.length, 'valid_v2_did_not_take_precedence')
     const malformed = '{broken'
     values.set(model.COMMERCE_KEY, malformed)
     values.set(model.LEGACY_COMMERCE_KEYS[0], JSON.stringify(legacy))
+    assert(!model.commerceWorkspaceCanWrite(storage, locks), 'commerce_malformed_workspace_reported_write_ready')
     const recoverySnapshot = model.loadCommerceWorkspace(storage)
     assert(recoverySnapshot.source === 'recovery' && recoverySnapshot.state.orders.length === 0 && values.get(model.COMMERCE_KEY) === malformed, 'malformed_v2_restored_or_replaced_legacy')
     values.clear()
@@ -1269,6 +1518,7 @@ async function verifyProductionRuntime() {
   const storage = {
     getItem: (key) => values.get(key) ?? null,
     setItem: (key, value) => values.set(key, String(value)),
+    removeItem: (key) => values.delete(key),
   }
   let lockRequests = 0
   let lockQueue = Promise.resolve()
@@ -1394,11 +1644,21 @@ async function verifyProductionRuntime() {
     const currentState = model.createSeedProduction()
     values.set(model.PRODUCTION_KEY, JSON.stringify(currentState))
     values.set(model.LEGACY_PRODUCTION_KEYS[0], '{malformed')
+    assert(model.productionWorkspaceCanWrite(storage, locks), 'production_valid_local_workspace_not_write_ready')
+    assert(![...values.keys()].some((key) => key.includes('.write-probe.')), 'production_write_probe_left_storage_residue')
+    assert(!model.productionWorkspaceCanWrite(storage, null), 'production_workspace_without_locks_reported_write_ready')
+    const rejectingProductionStorage = {
+      getItem: (key) => key === model.PRODUCTION_KEY ? JSON.stringify(currentState) : null,
+      setItem: () => { throw new Error('read-only') },
+      removeItem: () => {},
+    }
+    assert(!model.productionWorkspaceCanWrite(rejectingProductionStorage, locks), 'production_read_only_storage_reported_write_ready')
     const currentSnapshot = model.loadProductionWorkspace(storage)
     assert(currentSnapshot.source === 'current' && currentSnapshot.state.jobs.length === currentState.jobs.length, 'production_valid_v2_did_not_take_precedence')
     const malformed = '{broken'
     values.set(model.PRODUCTION_KEY, malformed)
     values.set(model.LEGACY_PRODUCTION_KEYS[0], JSON.stringify(legacy))
+    assert(!model.productionWorkspaceCanWrite(storage, locks), 'production_malformed_workspace_reported_write_ready')
     const recoverySnapshot = model.loadProductionWorkspace(storage)
     assert(recoverySnapshot.source === 'recovery' && recoverySnapshot.state.jobs.length === 0 && values.get(model.PRODUCTION_KEY) === malformed, 'production_malformed_v2_restored_or_replaced_legacy')
     values.clear()

@@ -113,6 +113,7 @@ export type CommerceWebsiteOrderInput = {
 type CommerceStorage = {
   getItem: (key: string) => string | null
   setItem: (key: string, value: string) => void
+  removeItem: (key: string) => void
 }
 
 type CommerceLockManager = {
@@ -509,7 +510,9 @@ function browserStorage() {
 
 function persistInitialState(storage: CommerceStorage, state: CommerceState, source: CommerceWorkspaceSnapshot['source']): CommerceWorkspaceSnapshot {
   try {
-    storage.setItem(COMMERCE_KEY, JSON.stringify(state))
+    const serialized = JSON.stringify(state)
+    storage.setItem(COMMERCE_KEY, serialized)
+    if (storage.getItem(COMMERCE_KEY) !== serialized) throw new Error('write_not_confirmed')
     return { state, source, error: '' }
   } catch {
     return { state, source, error: 'Commerce storage is unavailable. This workspace is read-only until browser storage is restored.' }
@@ -541,6 +544,27 @@ export function loadCommerceWorkspace(storage = browserStorage()): CommerceWorks
   }
   if (invalidLegacyFound) return { state: createEmptyCommerce(), source: 'recovery', error: 'Legacy Commerce data is malformed. Migration failed closed and did not create v2 data.' }
   return persistInitialState(storage, createSeedCommerce(), 'seed')
+}
+
+export function commerceWorkspaceCanWrite(
+  storage = browserStorage(),
+  lockManager = globalThis.navigator?.locks as unknown as CommerceLockManager | undefined,
+) {
+  if (!storage || !lockManager?.request || !storage.removeItem) return false
+  const probeKey = `${COMMERCE_KEY}.write-probe.${Date.now()}.${Math.random().toString(36).slice(2)}`
+  const probeValue = `${probeKey}.confirmed`
+  try {
+    const raw = storage.getItem(COMMERCE_KEY)
+    if (raw === null) return false
+    validateCommerceState(JSON.parse(raw))
+    storage.setItem(probeKey, probeValue)
+    const confirmed = storage.getItem(probeKey) === probeValue
+    storage.removeItem(probeKey)
+    return confirmed && storage.getItem(probeKey) === null
+  } catch {
+    try { storage.removeItem(probeKey) } catch { /* storage remains blocked */ }
+    return false
+  }
 }
 
 export async function mutateCommerceWorkspace(
@@ -618,6 +642,12 @@ function validWebsiteSource(source: CommerceWebsiteSource) {
 
 export function commerceWebsiteIntakes(state: CommerceState) {
   return state.websiteIntakes ?? []
+}
+
+export function commerceOrderNeedsAction(order: CommerceOrder) {
+  return order.refundStatus === 'due'
+    || (order.status !== 'completed' && order.status !== 'cancelled')
+    || (order.status === 'completed' && order.paymentStatus === 'pending')
 }
 
 export function createCommerceWebsiteIntake(

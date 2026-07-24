@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { ContentWorkspace } from './ContentWorkspace'
 import { NavigationWorkspace } from './NavigationWorkspace'
@@ -26,44 +26,35 @@ import {
   approveWebsiteRevision,
   createBlankPage,
   createId,
+  deleteWebsiteRecoveryArchive,
   duplicatePage,
   getCurrentApproval,
   getCurrentPublish,
+  LEGACY_WEBSITE_STORAGE_KEY,
+  listWebsiteRecoveryArchives,
   MAX_WEBSITE_PAGES,
   previewDevices,
   readinessChecks,
+  readWebsiteRecoveryArchive,
   recordWebsiteEvidence,
   recordWebsiteSnapshot,
   workspaceFingerprint,
   type EvidenceKind,
   type PreviewDevice,
   type WebsitePage,
+  type WebsiteRecoveryArchiveSummary,
   type WebsiteWorkspaceUpdate,
-  type WorkspaceView,
 } from './website-model'
 import './website-product.css'
 
-const workspaceViews: Array<{ id: WorkspaceView; label: string }> = [
-  { id: 'content', label: 'Pages' },
-  { id: 'navigation', label: 'Navigation' },
-  { id: 'publish', label: 'Publish' },
-]
-
-const mobileWorkspaceViews: Array<{ id: WorkspaceView; label: string }> = [
-  { id: 'content', label: 'Edit' },
-  { id: 'publish', label: 'Publish' },
-]
+type WebsiteView = 'content' | 'publish'
 
 const DEFAULT_NOTICE = 'Website workspace loaded. No website has been deployed.'
 
-const viewCopy: Record<WorkspaceView, { title: string; copy: string }> = {
+const viewCopy: Record<WebsiteView, { title: string; copy: string }> = {
   content: {
     title: 'Edit page',
-    copy: 'Update the selected page, then preview it when you are ready.',
-  },
-  navigation: {
-    title: 'Organize navigation',
-    copy: 'Choose what visitors can see and put pages in the right order.',
+    copy: 'Choose one section, make the change, then preview the page.',
   },
   publish: {
     title: 'Review and save',
@@ -86,11 +77,36 @@ function secureUuid() {
   return globalThis.crypto.randomUUID()
 }
 
+function formatRecoveryDate(value: string) {
+  const timestamp = Date.parse(value)
+  return Number.isNaN(timestamp) ? 'Saved recovery' : new Date(timestamp).toLocaleString()
+}
+
 export function WebsiteProduct() {
-  const { workspace, mutateWorkspace, storageMode, storageIssue, managedActorId } = useWebsiteWorkspace()
-  const [view, setView] = useState<WorkspaceView>('content')
+  const {
+    workspace,
+    mutateWorkspace,
+    repairLocalWorkspace,
+    canRepairLocalStorage,
+    repairCandidateRevision,
+    storageMode,
+    storageIssue,
+    managedActorId,
+  } = useWebsiteWorkspace()
+  const [view, setView] = useState<WebsiteView>('content')
   const [surface, setSurface] = useState<'work' | 'preview'>('work')
-  const [splitPreview, setSplitPreview] = useState(false)
+  const [siteSettingsOpen, setSiteSettingsOpen] = useState(false)
+  const [repairConfirmationRevision, setRepairConfirmationRevision] = useState<number | null>(null)
+  const [repairing, setRepairing] = useState(false)
+  const [repairArchiveKey, setRepairArchiveKey] = useState('')
+  const [recoveryArchives, setRecoveryArchives] = useState<WebsiteRecoveryArchiveSummary[]>(() => (
+    typeof window === 'undefined' ? [] : listWebsiteRecoveryArchives(window.localStorage)
+  ))
+  const [recoveryDeleteCandidate, setRecoveryDeleteCandidate] = useState('')
+  const [headingFocusRequest, setHeadingFocusRequest] = useState(0)
+  const [recoveryFocusRequest, setRecoveryFocusRequest] = useState(0)
+  const headingRef = useRef<HTMLHeadingElement>(null)
+  const recoveryPrimaryActionRef = useRef<HTMLButtonElement>(null)
   const [device, setDevice] = useState<PreviewDevice>(() => (
     typeof window !== 'undefined' && window.matchMedia('(max-width: 900px)').matches ? 'mobile' : 'desktop'
   ))
@@ -114,14 +130,25 @@ export function WebsiteProduct() {
     && approvalIsCurrent
     && publishIsCurrent
     && checks.every((check) => check.passed))
-  const activeViewCopy = viewCopy[view]
+  const activeViewCopy = view === 'content' && surface === 'preview'
+    ? { title: 'Preview page', copy: 'Check the selected page at desktop, tablet, or mobile size.' }
+    : viewCopy[view]
   const savedStateNotice = storageMode === 'managed'
     ? 'Changes are saved to this managed workspace. Nothing has been deployed.'
     : storageMode === 'browser-local'
       ? 'Changes are saved on this device. Nothing has been deployed.'
       : 'Changes last for this session only. Nothing has been deployed.'
+  const saveStateLabel = storageMode === 'managed'
+    ? 'Managed save'
+    : storageMode === 'browser-local'
+      ? 'Saved on this device'
+      : 'Session only'
+  const visiblePageCount = workspace.pages.filter((page) => page.navigation.visible).length
   const statusNotice = storageIssue || (notice === DEFAULT_NOTICE ? savedStateNotice : notice)
   const noticePriority = storageIssue ? 'error' : notice === DEFAULT_NOTICE ? 'routine' : 'update'
+  const repairArmed = canRepairLocalStorage
+    && repairCandidateRevision > 0
+    && repairConfirmationRevision === repairCandidateRevision
 
   useEffect(() => {
     document.title = 'Website | SuperMega'
@@ -129,20 +156,36 @@ export function WebsiteProduct() {
   }, [])
 
   useEffect(() => {
-    const compactViewport = window.matchMedia('(max-width: 900px)')
-    const collapseSplitView = (event: MediaQueryListEvent) => {
-      if (!event.matches) return
-      setSplitPreview(false)
-      setView((current) => current === 'navigation' ? 'content' : current)
-    }
-    compactViewport.addEventListener('change', collapseSplitView)
-    return () => compactViewport.removeEventListener('change', collapseSplitView)
-  }, [])
+    if (headingFocusRequest > 0) headingRef.current?.focus()
+  }, [headingFocusRequest])
 
-  function openWorkspaceView(nextView: WorkspaceView) {
+  useEffect(() => {
+    if (recoveryFocusRequest > 0) recoveryPrimaryActionRef.current?.focus()
+  }, [recoveryFocusRequest])
+
+  function requestHeadingFocus() {
+    setHeadingFocusRequest((current) => current + 1)
+  }
+
+  function requestRecoveryFocus() {
+    setRecoveryFocusRequest((current) => current + 1)
+  }
+
+  function refreshRecoveryArchives() {
+    setRecoveryArchives(listWebsiteRecoveryArchives(window.localStorage))
+  }
+
+  function openWorkspaceView(nextView: WebsiteView) {
     setView(nextView)
     setSurface('work')
-    setSplitPreview(false)
+    setSiteSettingsOpen(false)
+    requestHeadingFocus()
+  }
+
+  function openContentSurface(nextSurface: 'work' | 'preview') {
+    setSurface(nextSurface)
+    setSiteSettingsOpen(false)
+    requestHeadingFocus()
   }
 
   async function commitWorkspace(update: WebsiteWorkspaceUpdate, success = '', durable = false) {
@@ -155,30 +198,93 @@ export function WebsiteProduct() {
     return result
   }
 
-  function moveWorkspaceTabFocus(
-    event: KeyboardEvent<HTMLButtonElement>,
-    currentIndex: number,
-    views = workspaceViews,
-  ) {
-    const tabs = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')
-    if (!tabs?.length) return
-    let nextIndex = currentIndex
-    if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % tabs.length
-    else if (event.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + tabs.length) % tabs.length
-    else if (event.key === 'Home') nextIndex = 0
-    else if (event.key === 'End') nextIndex = tabs.length - 1
-    else return
-    event.preventDefault()
-    tabs[nextIndex]?.focus()
-    openWorkspaceView(views[nextIndex].id)
-  }
-
   async function selectPage(pageId: string) {
-    await commitWorkspace((current) => current.pages.some((page) => page.id === pageId)
+    const result = await commitWorkspace((current) => current.pages.some((page) => page.id === pageId)
       ? { ...current, selectedPageId: pageId }
       : current)
+    if (!result.ok || result.workspace.selectedPageId !== pageId) {
+      if (result.ok) setNotice('That page is no longer available. The current page was preserved.')
+      return false
+    }
     setDeleteCandidateId('')
-    setNotice('Previewing the selected page.')
+    setNotice(DEFAULT_NOTICE)
+    return true
+  }
+
+  async function previewPage(pageId = selectedPage.id) {
+    if (pageId !== selectedPage.id && !await selectPage(pageId)) return
+    openContentSurface('preview')
+  }
+
+  async function repairLocalData() {
+    setRepairing(true)
+    const result = await repairLocalWorkspace()
+    setRepairing(false)
+    setRepairConfirmationRevision(null)
+    if (result.ok) {
+      setRepairArchiveKey(result.archiveKey)
+      const cleanupNotice = result.legacyCleanup === 'retained'
+        ? ' The old Website storage key could not be removed; it remains on this device and should be reviewed in Recovery archives.'
+        : ''
+      setNotice(`Website data repaired and confirmed. The previous unreadable value is archived in this browser as ${result.archiveKey}.${cleanupNotice} No deployment occurred.`)
+    } else if (result.archiveConfirmed && result.archiveKey) {
+      setRepairArchiveKey(result.archiveKey)
+    }
+    refreshRecoveryArchives()
+    requestRecoveryFocus()
+  }
+
+  function armLocalRepair() {
+    setRepairConfirmationRevision(repairCandidateRevision)
+    requestRecoveryFocus()
+  }
+
+  function cancelLocalRepair() {
+    setRepairConfirmationRevision(null)
+    requestRecoveryFocus()
+  }
+
+  function downloadRepairArchive(archiveKey = repairArchiveKey) {
+    try {
+      const content = readWebsiteRecoveryArchive(archiveKey, window.localStorage)
+      if (!content) {
+        setNotice('The Website recovery archive could not be read or validated.')
+        return
+      }
+      const url = URL.createObjectURL(new Blob([content], { type: 'application/json' }))
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `supermega-website-recovery-${archiveKey.split('.').at(-1) ?? 'archive'}.json`
+      link.hidden = true
+      document.body.append(link)
+      link.click()
+      link.remove()
+      window.setTimeout(() => URL.revokeObjectURL(url), 0)
+      setNotice('Website recovery archive downloaded. No local data or deployment state changed.')
+    } catch (error) {
+      setNotice(`Website recovery archive download failed: ${error instanceof Error ? error.message : 'unknown error'}`)
+    }
+  }
+
+  async function removeRecoveryArchive(archiveKey: string) {
+    if (recoveryDeleteCandidate !== archiveKey) {
+      setRecoveryDeleteCandidate(archiveKey)
+      setNotice('Confirm removal only after downloading the recovery archive if you may need it later.')
+      return
+    }
+    const result = await deleteWebsiteRecoveryArchive(
+      archiveKey,
+      window.localStorage,
+      window.navigator.locks,
+    )
+    setRecoveryDeleteCandidate('')
+    if (!result.ok) {
+      setNotice(result.error)
+      return
+    }
+    setRecoveryArchives(result.archives)
+    if (repairArchiveKey === archiveKey) setRepairArchiveKey('')
+    setNotice('Website recovery archive removed from this browser. Website content and deployment state were unchanged.')
   }
 
   async function updatePage(pageId: string, update: (page: WebsitePage) => WebsitePage) {
@@ -471,230 +577,145 @@ export function WebsiteProduct() {
     <div className="website-product">
       <div className="website-shell">
         <div id="website-workspace" className="website-main">
-          <nav className="website-workspace-nav website-desktop-workspace-nav" aria-label="Website workspace" role="tablist">
-            {workspaceViews.map((item, index) => (
-              <button
-                aria-controls="website-active-panel"
-                aria-selected={view === item.id}
-                key={item.id}
-                onKeyDown={(event) => moveWorkspaceTabFocus(event, index)}
-                onClick={() => openWorkspaceView(item.id)}
-                role="tab"
-                tabIndex={view === item.id ? 0 : -1}
-                type="button"
-              >
-                {item.label}
-              </button>
-            ))}
-          </nav>
-
-          <nav className="website-mobile-mode-nav" aria-label="Website mode" role="tablist">
-            {mobileWorkspaceViews.map((item, index) => (
-              <button
-                aria-controls="website-active-panel"
-                aria-selected={view === item.id}
-                key={item.id}
-                onKeyDown={(event) => moveWorkspaceTabFocus(event, index, mobileWorkspaceViews)}
-                onClick={() => openWorkspaceView(item.id)}
-                role="tab"
-                tabIndex={view === item.id ? 0 : -1}
-                type="button"
-              >
-                {item.label}
-              </button>
-            ))}
-          </nav>
-
-          <div className="website-notice" aria-live="polite" data-priority={noticePriority} role="status">
-            <p>{statusNotice}</p>
-            {storageIssue && storageMode === 'session-only' ? (
-              <a className="website-notice-action" href="/settings/#controls">Recovery settings</a>
-            ) : null}
-          </div>
+          {noticePriority !== 'routine' ? (
+            <div className="website-notice" aria-busy={repairing} aria-live="polite" data-priority={noticePriority} role="status">
+              <p>{repairArmed
+                ? 'The unreadable Website value will be archived, then replaced with the valid workspace on screen. Commerce, Production, managed data, domains, and deployments are not touched.'
+                : repairing ? 'Archiving damaged Website data and confirming the replacement…' : statusNotice}</p>
+              {repairArchiveKey && !repairArmed ? (
+                <div className="website-notice-actions">
+                  <button ref={recoveryPrimaryActionRef} className="website-notice-action is-quiet" onClick={() => downloadRepairArchive()} type="button">Download archive</button>
+                  {canRepairLocalStorage ? <button className="website-notice-action" onClick={armLocalRepair} type="button">Retry repair</button> : null}
+                </div>
+              ) : canRepairLocalStorage ? repairArmed ? (
+                <div className="website-notice-actions">
+                  <button className="website-notice-action is-quiet" disabled={repairing} onClick={cancelLocalRepair} type="button">Cancel</button>
+                  <button ref={recoveryPrimaryActionRef} className="website-notice-action" disabled={repairing} onClick={() => void repairLocalData()} type="button">Archive and repair</button>
+                </div>
+              ) : (
+                <button ref={recoveryPrimaryActionRef} className="website-notice-action" onClick={armLocalRepair} type="button">Repair local data</button>
+              ) : storageIssue && storageMode === 'session-only' ? (
+                <a className="website-notice-action" href="/settings/#controls">Recovery settings</a>
+              ) : null}
+            </div>
+          ) : null}
 
           {view === 'content' ? (
-            <section className="website-page-switcher" aria-label="Selected page">
-              <label htmlFor="website-page-select">Page</label>
-              <select
-                id="website-page-select"
-                onChange={(event) => void selectPage(event.currentTarget.value)}
-                value={selectedPage.id}
-              >
-                {workspace.pages.map((page) => (
-                  <option key={page.id} value={page.id}>
-                    {page.internalName || 'Untitled page'} — {page.slug || 'No path'} ({page.stage})
-                  </option>
-                ))}
-              </select>
-              <button
-                className="website-button is-secondary"
-                disabled={workspace.pages.length >= MAX_WEBSITE_PAGES}
-                onClick={addPage}
-                title={workspace.pages.length >= MAX_WEBSITE_PAGES ? 'The four-page prototype limit is reached' : 'Add page'}
-                type="button"
-              >
-                New page
-              </button>
+            <section className="website-action-bar" aria-label="Website actions">
+              <div className="website-page-control">
+                <label htmlFor="website-page-select">Page</label>
+                <select
+                  id="website-page-select"
+                  onChange={(event) => void selectPage(event.currentTarget.value)}
+                  value={selectedPage.id}
+                >
+                  {workspace.pages.map((page) => (
+                    <option key={page.id} value={page.id}>
+                      {page.internalName || 'Untitled page'} — {page.slug || 'No path'} ({page.stage})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <span className="website-save-state" data-mode={storageMode}>{saveStateLabel}</span>
+              <div className="website-primary-actions">
+                <details
+                  className="website-site-settings"
+                  onKeyDown={(event) => {
+                    if (event.key !== 'Escape') return
+                    setSiteSettingsOpen(false)
+                    event.currentTarget.querySelector('summary')?.focus()
+                  }}
+                  onToggle={(event) => setSiteSettingsOpen(event.currentTarget.open)}
+                  open={siteSettingsOpen}
+                >
+                  <summary>Site</summary>
+                  <div className="website-site-settings-content">
+                    <div className="website-site-settings-actions">
+                      <span>{workspace.pages.length} pages · {visiblePageCount} in navigation</span>
+                      <button
+                        className="website-button is-secondary"
+                        disabled={workspace.pages.length >= MAX_WEBSITE_PAGES}
+                        onClick={addPage}
+                        title={workspace.pages.length >= MAX_WEBSITE_PAGES ? 'The four-page prototype limit is reached' : 'Add page'}
+                        type="button"
+                      >
+                        New page
+                      </button>
+                    </div>
+                    <NavigationWorkspace
+                      onMovePage={movePage}
+                      onSelectPage={(pageId) => void previewPage(pageId)}
+                      onSiteNameChange={(siteName) => {
+                        void commitWorkspace((current) => ({ ...current, siteName }), 'Site identity updated.')
+                      }}
+                      onUpdatePage={updatePage}
+                      workspace={workspace}
+                    />
+                    {recoveryArchives.length ? (
+                      <details className="website-recovery-manager">
+                        <summary>Recovery archives <span>{recoveryArchives.length}</span></summary>
+                        <div className="website-recovery-list">
+                          <p>Unreadable Website values kept on this device. Download before removing anything you may need.</p>
+                          {recoveryArchives.map((archive) => {
+                            const deleteArmed = recoveryDeleteCandidate === archive.archiveKey
+                            return (
+                              <div className="website-recovery-row" key={archive.archiveKey}>
+                                <div>
+                                  <strong>{formatRecoveryDate(archive.archivedAt)}</strong>
+                                  <span>{archive.sourceKey === LEGACY_WEBSITE_STORAGE_KEY ? 'Old Website data' : 'Website data'}</span>
+                                </div>
+                                <div className="website-recovery-actions">
+                                  <button onClick={() => downloadRepairArchive(archive.archiveKey)} type="button">Download</button>
+                                  {deleteArmed ? (
+                                    <>
+                                      <button className="is-quiet" onClick={() => setRecoveryDeleteCandidate('')} type="button">Cancel</button>
+                                      <button className="is-danger" onClick={() => void removeRecoveryArchive(archive.archiveKey)} type="button">Confirm remove</button>
+                                    </>
+                                  ) : (
+                                    <button className="is-quiet" onClick={() => void removeRecoveryArchive(archive.archiveKey)} type="button">Remove</button>
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </details>
+                    ) : null}
+                  </div>
+                </details>
+                <button
+                  aria-pressed={surface === 'preview'}
+                  className="website-button is-secondary"
+                  onClick={() => {
+                    if (surface === 'preview') openContentSurface('work')
+                    else void previewPage()
+                  }}
+                  type="button"
+                >
+                  {surface === 'preview' ? 'Back' : 'Preview'}
+                </button>
+                <button className="website-button is-primary" onClick={() => openWorkspaceView('publish')} type="button">
+                  Publish
+                </button>
+              </div>
             </section>
           ) : null}
 
-          <section className="website-mobile-page-bar" aria-label="Selected page and preview">
-            <label className="sr-only" htmlFor="website-mobile-page-select">Selected page</label>
-            <select
-              aria-label="Selected page"
-              id="website-mobile-page-select"
-              onChange={(event) => void selectPage(event.currentTarget.value)}
-              value={selectedPage.id}
-            >
-              {workspace.pages.map((page) => (
-                <option key={page.id} value={page.id}>
-                  {page.internalName || 'Untitled page'} · {page.stage}
-                </option>
-              ))}
-            </select>
-            <button
-              aria-pressed={surface === 'preview'}
-              className="website-button is-secondary"
-              onClick={() => {
-                setSurface((current) => current === 'preview' ? 'work' : 'preview')
-                setSplitPreview(false)
-              }}
-              type="button"
-            >
-              {surface === 'preview' ? (view === 'publish' ? 'Back to publish' : 'Back to edit') : 'Preview'}
-            </button>
-          </section>
-
-          {view === 'content' && surface === 'work' ? (
-            <details className="website-mobile-site-settings">
-              <summary>
-                <span>Site settings</span>
-                <small>Pages, navigation, and search</small>
-              </summary>
-              <div className="website-mobile-site-settings-content">
-                <div className="website-mobile-page-actions">
-                  <button
-                    className="website-button is-secondary"
-                    disabled={workspace.pages.length >= MAX_WEBSITE_PAGES}
-                    onClick={addPage}
-                    title={workspace.pages.length >= MAX_WEBSITE_PAGES ? 'The four-page prototype limit is reached' : 'Add page'}
-                    type="button"
-                  >
-                    New page
-                  </button>
-                  <button
-                    className="website-button is-secondary"
-                    disabled={workspace.pages.length >= MAX_WEBSITE_PAGES}
-                    onClick={copySelectedPage}
-                    title={workspace.pages.length < MAX_WEBSITE_PAGES ? 'Duplicate this page' : 'The four-page prototype limit is reached'}
-                    type="button"
-                  >
-                    Duplicate
-                  </button>
-                  {selectedPage.slug !== '/' && selectedPage.stage === 'draft' ? (
-                    <button
-                      className={'website-button is-quiet ' + (deleteCandidateId === selectedPage.id ? 'is-danger' : '')}
-                      onClick={requestDeletePage}
-                      type="button"
-                    >
-                      {deleteCandidateId === selectedPage.id ? 'Confirm remove' : 'Remove draft'}
-                    </button>
-                  ) : null}
-                </div>
-
-                <details className="website-mobile-seo-settings">
-                  <summary>
-                    <span>Search metadata</span>
-                    <small>{selectedPage.seo.title && selectedPage.seo.description ? 'Complete' : 'Needs copy'}</small>
-                  </summary>
-                  <div className="website-form-grid">
-                    <label>
-                      <span>SEO title</span>
-                      <input
-                        maxLength={70}
-                        onChange={(event) => void updatePage(selectedPage.id, (current) => ({
-                          ...current,
-                          stage: 'draft',
-                          seo: { ...current.seo, title: event.target.value },
-                        }))}
-                        value={selectedPage.seo.title}
-                      />
-                    </label>
-                    <label>
-                      <span>SEO description</span>
-                      <textarea
-                        maxLength={160}
-                        onChange={(event) => void updatePage(selectedPage.id, (current) => ({
-                          ...current,
-                          stage: 'draft',
-                          seo: { ...current.seo, description: event.target.value },
-                        }))}
-                        rows={3}
-                        value={selectedPage.seo.description}
-                      />
-                    </label>
-                  </div>
-                </details>
-
-                <NavigationWorkspace
-                  onMovePage={movePage}
-                  onSelectPage={selectPage}
-                  onSiteNameChange={(siteName) => {
-                    void commitWorkspace((current) => ({ ...current, siteName }), 'Site identity updated.')
-                  }}
-                  onUpdatePage={updatePage}
-                  workspace={workspace}
-                />
-              </div>
-            </details>
-          ) : null}
-
-          <header className="website-heading">
+          <header className="website-heading" data-view={view}>
             <div>
-              <h1>{activeViewCopy.title}</h1>
+              <h1 ref={headingRef} tabIndex={-1}>{activeViewCopy.title}</h1>
               <p>{activeViewCopy.copy}</p>
             </div>
-            <div className="website-heading-actions">
-              <div className="website-surface-controls" role="group" aria-label="Website workspace surface">
-                <button
-                  aria-pressed={surface === 'work' && !splitPreview}
-                  onClick={() => {
-                    setSurface('work')
-                    setSplitPreview(false)
-                  }}
-                  type="button"
-                >
-                  {view === 'content' ? 'Edit' : view === 'navigation' ? 'Organize' : 'Review'}
-                </button>
-                <button
-                  aria-pressed={surface === 'preview' && !splitPreview}
-                  onClick={() => {
-                    setSurface('preview')
-                    setSplitPreview(false)
-                  }}
-                  type="button"
-                >
-                  Preview
-                </button>
-                <button
-                  aria-pressed={splitPreview}
-                  className="website-split-control"
-                  onClick={() => setSplitPreview((current) => !current)}
-                  type="button"
-                >
-                  Split
-                </button>
-              </div>
-            </div>
+            {view === 'publish' ? (
+              <button className="website-button is-secondary" onClick={() => openWorkspaceView('content')} type="button">Back to edit</button>
+            ) : null}
           </header>
 
           <div
-            aria-label={workspaceViews.find((item) => item.id === view)?.label}
+            aria-label={view === 'content' ? 'Edit' : 'Publish'}
             className={'website-workspace-grid view-' + view}
-            data-split={splitPreview ? 'true' : 'false'}
             data-surface={surface}
             id="website-active-panel"
-            role="tabpanel"
           >
             <div className="website-work-surface">
               {view === 'content' ? (
@@ -705,18 +726,6 @@ export function WebsiteProduct() {
                   onRequestDelete={requestDeletePage}
                   onUpdatePage={(update) => updatePage(selectedPage.id, update)}
                   page={selectedPage}
-                />
-              ) : null}
-
-              {view === 'navigation' ? (
-                <NavigationWorkspace
-                  onMovePage={movePage}
-                  onSelectPage={selectPage}
-                  onSiteNameChange={(siteName) => {
-                    void commitWorkspace((current) => ({ ...current, siteName }), 'Site identity updated.')
-                  }}
-                  onUpdatePage={updatePage}
-                  workspace={workspace}
                 />
               ) : null}
 
