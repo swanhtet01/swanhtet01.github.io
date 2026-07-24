@@ -48,14 +48,14 @@ requireContract('Website remains truthful',
   product('website')?.status === 'release-candidate-local'
   && product('website')?.surfaces?.join(',') === 'Site,Preview,Publish'
   && product('website')?.nextGate?.includes('named-business brief'))
-requireContract('Ecommerce is separate and truthfully limited before Shop consequences',
+requireContract('Ecommerce is separate and truthfully limited before durable persistence and Shop consequences',
   product('ecommerce')?.status === 'release-candidate-local'
   && product('ecommerce')?.job?.includes('read-only Shop catalogue')
-  && product('ecommerce')?.surfaces?.join(',') === 'Storefront,Preview,Request receipt'
-  && product('ecommerce')?.nextGate?.includes('idempotent human-confirmed handoff')
-  && product('ecommerce')?.nextGate?.includes('reviewable Shop draft')
-  && product('ecommerce')?.nextGate?.includes('price')
-  && product('ecommerce')?.nextGate?.includes('availability'))
+  && product('ecommerce')?.surfaces?.join(',') === 'Storefront,Preview,Request receipt,Shop review'
+  && product('ecommerce')?.nextGate?.includes('source-locked Shop draft')
+  && product('ecommerce')?.nextGate?.includes('authenticated, revisioned, recoverable')
+  && product('ecommerce')?.nextGate?.includes('isolated non-production tenant')
+  && product('ecommerce')?.nextGate?.includes('payment'))
 requireContract('Agent Solutions starts with Order Intake',
   product('agents')?.status === 'prototype-planned'
   && product('agents')?.firstSolution === 'Order Intake Agent'

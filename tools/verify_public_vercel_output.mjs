@@ -37,10 +37,12 @@ if (manifest.products?.map((product) => product.id).join(',') !== 'commerce,prod
 if (manifest.products?.map((product) => `${product.publicId}:${product.name}`).join(',') !== 'shop:Shop,plant:Plant') fail('public_catalog_not_shop_and_plant')
 if (manifest.prototypeProducts?.map((product) => `${product.id}:${product.status}`).join(',') !== 'website:release-candidate-local,ecommerce:release-candidate-local') fail('maker_portfolio_drift')
 const ecommerce = manifest.prototypeProducts?.find((product) => product.id === 'ecommerce')
-if (ecommerce?.views?.join(',') !== 'Storefront,Preview,Request receipt'
+if (ecommerce?.views?.join(',') !== 'Storefront,Preview,Request receipt,Shop review'
   || !ecommerce?.proof?.includes('Idempotent in-memory receipt')
-  || !ecommerce?.boundaries?.includes('No durable request ledger')
-  || !ecommerce?.boundaries?.includes('No Shop order or stock reservation')) fail('ecommerce_request_receipt_contract_drift')
+  || !ecommerce?.proof?.includes('Exact retained-ledger membership')
+  || !ecommerce?.proof?.includes('Human-confirmed source-locked Shop draft')
+  || !ecommerce?.boundaries?.includes('No durable shared request inbox')
+  || !ecommerce?.boundaries?.includes('No Shop order or stock reservation before separate accountable confirmation')) fail('ecommerce_request_receipt_contract_drift')
 if (manifest.agentSolutions?.id !== 'agents' || manifest.agentSolutions?.status !== 'prototype-planned') fail('agent_solution_portfolio_drift')
 for (const product of manifest.products || []) {
   if (product.templates?.length !== 3) fail('public_template_count_wrong', { product: product.id })
@@ -155,7 +157,7 @@ for (const token of [
   'id="website"',
   'Available locally',
   'id="ecommerce"',
-  'Create a Shop-backed storefront and test customer order intent.',
+  'Create a Shop-backed storefront and hand customer intent to human review.',
   'https://app.supermega.dev/products/ecommerce/',
   'id="agents"',
   'Evaluation required',
