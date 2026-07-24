@@ -148,6 +148,10 @@ requireContract('core workflows use Node 24 action revisions',
   && !/(?:11d5960a326750d5838078e36cf38b85af677262|49933ea5288caeca8642d1e84afbd3f7d6820020|a26af69be951a213d495a4c3e4e4022e16d87065)/.test(coreWorkflowActions))
 requireContract('uv build tool is immutable', workflow.includes('astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9') && workflow.includes("version: '0.11.30'"))
 requireContract('stale Cloud Run release authority is retired', !existsSync(resolve(root, '.github/workflows/supermega-app-cloud-run.yml')))
+requireContract('orphan enterprise and free-mode gates are retired',
+  !existsSync(resolve(root, '.github/workflows/supermega-enterprise-gate.yml'))
+  && !existsSync(resolve(root, 'tools/smoke_free_mode_health.mjs'))
+  && ![workflow, appWorkflow, ciWorkflow].some((source) => source.includes('SuperMega App Build and Deploy')))
 
 const expectedCrons = ['/api/cron/supermega/agent-queue', '/api/cron/supermega/daily'].sort()
 const actualCrons = (config.crons || []).map((cron) => cron.path).sort()
