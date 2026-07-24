@@ -316,10 +316,10 @@ if (!websiteSource.includes("type WebsiteView = 'content' | 'publish'")
   || websiteSource.includes('splitPreview')
   || websiteSource.includes('className="website-mobile-seo-settings"')
   || ['.website-workspace-nav', '.website-mobile-mode-nav', '.website-mobile-page-bar', '.website-mobile-site-settings', '.website-surface-controls', '.website-split-control', '[data-split='].some((selector) => websiteCssSource.includes(selector))) fail('website_unified_action_bar_missing')
-if (!websiteSource.includes('async function previewPage')
-  || !websiteSource.includes('onSelectPage={(pageId) => void previewPage(pageId)}')
-  || !websiteSource.includes("if (pageId !== selectedPage.id && !await selectPage(pageId)) return")
-  || !websiteSource.includes('result.workspace.selectedPageId !== pageId')
+if (!websiteSource.includes('function previewPage')
+  || !websiteSource.includes('onSelectPage={previewPage}')
+  || !websiteSource.includes("if (pageId !== selectedPage.id && !selectPage(pageId)) return")
+  || !websiteSource.includes('setSelectedPageId(pageId)')
   || !websiteSource.includes("openContentSurface('preview')")
   || !websiteSource.includes('setSiteSettingsOpen(false)')
   || websiteSource.includes("setNotice('Previewing the selected page.')")) fail('website_preview_action_does_not_open_preview')
@@ -340,6 +340,19 @@ if (!websiteSource.includes("const [surface, setSurface] = useState<'work' | 'pr
   || !websiteSource.includes('data-surface={surface}')
   || !websiteSource.includes("setSurface('work')")
   || !websiteSource.includes("surface === 'preview' ? 'Back' : 'Preview'")) fail('website_focus_mode_missing')
+if (!websiteSource.includes('createWebsiteEditSession(workspace)')
+  || !websiteSource.includes('commitWebsiteEditSession(current, retained.session)')
+  || !websiteSource.includes('restoreWebsiteEditSession(raw)')
+  || !websiteSource.includes('data-editing={hasUnsavedChanges')
+  || !websiteSource.includes('Unsaved preview')
+  || !websiteSource.includes('function saveDraft()')
+  || !websiteSource.includes('function discardDraft()')
+  || !websiteSource.includes('disabled={editConflict || savingDraft}')
+  || !websiteModelSource.includes('updateWebsiteEditSession')
+  || !websiteModelSource.includes('websiteEditSessionMatches')
+  || !websiteModelSource.includes('sameReleaseHistory')
+  || !websiteCssSource.includes('.website-save-state[data-state="unsaved"]')
+  || !websiteCssSource.includes('.website-action-bar[data-editing="true"]')) fail('website_transactional_edit_session_missing')
 if (!websiteCssSource.includes('.website-workspace-grid[data-surface="work"] > .website-preview-surface')
   || !websiteCssSource.includes('.website-workspace-grid[data-surface="preview"] > .website-work-surface')
   || !websiteCssSource.includes('.website-workspace-grid[data-surface="preview"] > .website-preview-surface')
@@ -826,6 +839,57 @@ async function verifyWebsiteRuntime() {
     const exporter = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-export.ts')).href}?website-export-verify=${Date.now()}`)
     const seed = model.createInitialWorkspace()
     const fingerprint = model.workspaceFingerprint(seed)
+    let editSession = model.createWebsiteEditSession(seed)
+    for (let index = 0; index < 20; index += 1) {
+      const staged = model.updateWebsiteEditSession(editSession, (current) => ({
+        ...current,
+        pages: current.pages.map((page) => page.id === 'page-home'
+          ? {
+              ...page,
+              updatedAt: at(100 + index),
+              hero: { ...page.hero, headline: `Unsaved Website headline ${index + 1}` },
+            }
+          : page),
+      }))
+      assert(staged.ok && staged.changed, `website_edit_session_step_${index + 1}_failed`)
+      editSession = staged.session
+    }
+    assert(seed.revision === 0 && seed.contentRevision === 0 && editSession.workspace.revision === 0 && editSession.workspace.contentRevision === 0, 'website_typing_advanced_authoritative_revision')
+    const restoredEditSession = model.restoreWebsiteEditSession(JSON.stringify(editSession))
+    assert(restoredEditSession && model.websiteEditSessionMatches(restoredEditSession, seed), 'website_edit_session_did_not_resume_against_exact_base')
+    const savedEditSession = model.applyWebsiteWorkspaceUpdate(
+      seed,
+      (current) => model.commitWebsiteEditSession(current, restoredEditSession),
+    )
+    assert(savedEditSession.ok
+      && savedEditSession.changed
+      && savedEditSession.workspace.revision === 1
+      && savedEditSession.workspace.contentRevision === 1
+      && savedEditSession.workspace.pages[0].hero.headline === 'Unsaved Website headline 20', 'website_edit_session_did_not_commit_exactly_once')
+    const competingEdit = model.applyWebsiteWorkspaceUpdate(seed, (current) => ({ ...current, siteName: 'Competing Website edit' }))
+    assert(competingEdit.ok && !model.websiteEditSessionMatches(editSession, competingEdit.workspace), 'website_edit_session_did_not_detect_newer_base')
+    let staleEditRefused = false
+    try {
+      model.commitWebsiteEditSession(competingEdit.workspace, editSession)
+    } catch {
+      staleEditRefused = true
+    }
+    assert(staleEditRefused && competingEdit.workspace.siteName === 'Competing Website edit', 'website_stale_edit_session_overwrote_newer_workspace')
+    const stagedEvidence = model.updateWebsiteEditSession(editSession, (current) => ({
+      ...current,
+      evidence: [{
+        id: 'draft-evidence',
+        kind: 'content',
+        finding: 'Must not stage',
+        reference: 'DRAFT',
+        verifiedBy: 'OP-OWNER',
+        verifiedAt: at(200),
+        fingerprint,
+        source: { contentRevision: 0, digest: fingerprint },
+        migratedFromV1: false,
+      }, ...current.evidence],
+    }))
+    assert(!stagedEvidence.ok, 'website_edit_session_staged_release_evidence')
     const reverseObjectKeys = (value) => Array.isArray(value)
       ? value.map(reverseObjectKeys)
       : value && typeof value === 'object'

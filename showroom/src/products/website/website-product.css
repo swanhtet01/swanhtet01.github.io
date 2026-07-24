@@ -3081,6 +3081,28 @@
   background: var(--website-warn);
 }
 
+.website-save-state[data-state="unsaved"] {
+  color: var(--website-warn);
+  font-weight: 750;
+}
+
+.website-save-state[data-state="unsaved"]::before {
+  background: var(--website-warn);
+}
+
+.website-save-state[data-state="conflict"] {
+  color: var(--website-danger);
+  font-weight: 750;
+}
+
+.website-save-state[data-state="conflict"]::before {
+  background: var(--website-danger);
+}
+
+.website-action-bar[data-editing="true"] {
+  border-color: color-mix(in srgb, var(--website-warn) 48%, var(--website-line));
+}
+
 .website-notice-actions {
   display: flex;
   align-items: center;
@@ -3124,6 +3146,18 @@
   cursor: pointer;
   list-style: none;
   white-space: nowrap;
+}
+
+.website-primary-actions > .website-button.is-primary {
+  border-color: var(--website-green);
+  background: var(--website-green);
+  color: #fff;
+}
+
+.website-primary-actions > .website-button.is-primary:hover:not(:disabled) {
+  border-color: var(--website-green-dark);
+  background: var(--website-green-dark);
+  color: #fff;
 }
 
 .website-site-settings > summary::-webkit-details-marker {
@@ -3332,6 +3366,10 @@
     min-width: 78px;
     min-height: 46px;
     padding-inline: 11px;
+  }
+
+  .website-action-bar[data-editing="true"] .website-primary-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .website-site-settings-content {

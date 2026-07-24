@@ -2,11 +2,13 @@ export const WEBSITE_SCHEMA = 'supermega.website.workspace.v2'
 export const WEBSITE_STORAGE_KEY = 'supermega.website.workspace.v2'
 export const LEGACY_WEBSITE_STORAGE_KEY = 'supermega.website.workspace.v1'
 export const WEBSITE_RECOVERY_INDEX_KEY = 'supermega.website.workspace.recovery.v1.index'
+export const WEBSITE_EDIT_SESSION_KEY = 'supermega.website.edit-session.v1'
 export const MAX_WEBSITE_PAGES = 4
 export const MAX_WEBSITE_SECTIONS = 4
 
 const WEBSITE_MUTATION_LOCK = 'supermega.website.workspace.mutation.v2'
 const WEBSITE_RECOVERY_SCHEMA = 'supermega.website.workspace.recovery.v1'
+const WEBSITE_EDIT_SESSION_SCHEMA = 'supermega.website.edit-session.v1'
 const WEBSITE_RECOVERY_KEY_PREFIX = `${WEBSITE_RECOVERY_SCHEMA}.`
 const INITIAL_CREATED_AT = '2026-07-23T00:00:00.000Z'
 const fingerprintPattern = /^web-[a-f0-9]{8}$/
@@ -155,6 +157,18 @@ export type WebsiteWorkspace = {
   localPublishes: LocalPublishRecord[]
   events: WebsiteWorkflowEvent[]
 }
+
+export type WebsiteEditSession = {
+  schema: typeof WEBSITE_EDIT_SESSION_SCHEMA
+  baseRevision: number
+  baseContentRevision: number
+  baseFingerprint: string
+  workspace: WebsiteWorkspace
+}
+
+export type WebsiteEditSessionUpdateResult =
+  | { ok: true; changed: boolean; session: WebsiteEditSession }
+  | { ok: false; error: string }
 
 export type ReadinessCheck = {
   id: string
@@ -422,6 +436,97 @@ export function workspaceFingerprint(workspace: WebsiteWorkspace) {
     })),
   }
   return 'web-' + canonicalDigest(publishableState)
+}
+
+export function createWebsiteEditSession(workspace: WebsiteWorkspace): WebsiteEditSession {
+  return {
+    schema: WEBSITE_EDIT_SESSION_SCHEMA,
+    baseRevision: workspace.revision,
+    baseContentRevision: workspace.contentRevision,
+    baseFingerprint: workspaceFingerprint(workspace),
+    workspace,
+  }
+}
+
+export function updateWebsiteEditSession(
+  session: WebsiteEditSession,
+  update: WebsiteWorkspaceUpdate,
+): WebsiteEditSessionUpdateResult {
+  try {
+    const candidate = update(session.workspace)
+    if (!isWebsiteWorkspace(candidate)) {
+      return { ok: false, error: 'Website edit produced an invalid draft.' }
+    }
+    if (candidate.revision !== session.baseRevision || candidate.contentRevision !== session.baseContentRevision) {
+      return { ok: false, error: 'Website drafts cannot change saved revision metadata.' }
+    }
+    if (!sameReleaseHistory(candidate, session.workspace)) {
+      return { ok: false, error: 'Evidence, approval, and snapshot actions cannot be staged as draft edits.' }
+    }
+    if (serialize(candidate) === serialize(session.workspace)) {
+      return { ok: true, changed: false, session }
+    }
+    return { ok: true, changed: true, session: { ...session, workspace: candidate } }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Website draft edit failed.' }
+  }
+}
+
+export function websiteEditSessionMatches(
+  session: WebsiteEditSession,
+  workspace: WebsiteWorkspace,
+) {
+  return session.baseRevision === workspace.revision
+    && session.baseContentRevision === workspace.contentRevision
+    && session.baseFingerprint === workspaceFingerprint(workspace)
+}
+
+export function commitWebsiteEditSession(
+  current: WebsiteWorkspace,
+  session: WebsiteEditSession,
+): WebsiteWorkspace {
+  if (!websiteEditSessionMatches(session, current)) {
+    throw new Error('Website changed after this edit session started. The saved workspace was preserved; discard this preview and review the newer version.')
+  }
+  if (!sameReleaseHistory(session.workspace, current)) {
+    throw new Error('Website edit-session history no longer matches the saved workspace.')
+  }
+  return {
+    ...session.workspace,
+    revision: current.revision,
+    contentRevision: current.contentRevision,
+    evidence: current.evidence,
+    approvals: current.approvals,
+    localPublishes: current.localPublishes,
+    events: current.events,
+  }
+}
+
+export function restoreWebsiteEditSession(value: unknown): WebsiteEditSession | null {
+  try {
+    const candidate = typeof value === 'string' ? JSON.parse(value) as unknown : value
+    if (!isRecord(candidate)
+      || !hasExactKeys(candidate, ['schema', 'baseRevision', 'baseContentRevision', 'baseFingerprint', 'workspace'])
+      || candidate.schema !== WEBSITE_EDIT_SESSION_SCHEMA
+      || !isNonNegativeInteger(candidate.baseRevision)
+      || !isNonNegativeInteger(candidate.baseContentRevision)
+      || candidate.baseContentRevision > candidate.baseRevision
+      || typeof candidate.baseFingerprint !== 'string'
+      || !fingerprintPattern.test(candidate.baseFingerprint)) return null
+    const workspace = restoreWorkspace(candidate.workspace)
+    if (!workspace
+      || workspace.revision !== candidate.baseRevision
+      || workspace.contentRevision !== candidate.baseContentRevision) return null
+    return {
+      schema: WEBSITE_EDIT_SESSION_SCHEMA,
+      baseRevision: candidate.baseRevision,
+      baseContentRevision: candidate.baseContentRevision,
+      baseFingerprint: candidate.baseFingerprint,
+      workspace,
+    }
+  } catch {
+    return null
+  }
 }
 
 function canonicalDigest(value: unknown) {
@@ -1476,6 +1581,13 @@ function preservesAppendOnlyHistory(current: WebsiteWorkspace, next: WebsiteWork
   ].filter((entry): entry is string[] => Boolean(entry))
   return expected.every(([action, subjectId]) => next.events.slice(0, eventsAdded)
     .some((event) => event.action === action && event.subjectId === subjectId))
+}
+
+function sameReleaseHistory(left: WebsiteWorkspace, right: WebsiteWorkspace) {
+  return serialize(left.evidence) === serialize(right.evidence)
+    && serialize(left.approvals) === serialize(right.approvals)
+    && serialize(left.localPublishes) === serialize(right.localPublishes)
+    && serialize(left.events) === serialize(right.events)
 }
 
 function consequentialRecordCount(workspace: WebsiteWorkspace) {

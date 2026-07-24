@@ -24,7 +24,9 @@ import {
 } from '../product-handoff'
 import {
   approveWebsiteRevision,
+  commitWebsiteEditSession,
   createBlankPage,
+  createWebsiteEditSession,
   createId,
   deleteWebsiteRecoveryArchive,
   duplicatePage,
@@ -38,9 +40,14 @@ import {
   readWebsiteRecoveryArchive,
   recordWebsiteEvidence,
   recordWebsiteSnapshot,
+  restoreWebsiteEditSession,
+  updateWebsiteEditSession,
+  WEBSITE_EDIT_SESSION_KEY,
+  websiteEditSessionMatches,
   workspaceFingerprint,
   type EvidenceKind,
   type PreviewDevice,
+  type WebsiteEditSession,
   type WebsitePage,
   type WebsiteRecoveryArchiveSummary,
   type WebsiteWorkspaceUpdate,
@@ -48,6 +55,11 @@ import {
 import './website-product.css'
 
 type WebsiteView = 'content' | 'publish'
+
+type WebsiteEditSessionState = {
+  scope: string
+  session: WebsiteEditSession
+}
 
 const DEFAULT_NOTICE = 'Website workspace loaded. No website has been deployed.'
 
@@ -82,6 +94,10 @@ function formatRecoveryDate(value: string) {
   return Number.isNaN(timestamp) ? 'Saved recovery' : new Date(timestamp).toLocaleString()
 }
 
+function editSessionStorageKey(scope: string) {
+  return `${WEBSITE_EDIT_SESSION_KEY}.${encodeURIComponent(scope)}`
+}
+
 export function WebsiteProduct() {
   const {
     workspace,
@@ -95,7 +111,10 @@ export function WebsiteProduct() {
   } = useWebsiteWorkspace()
   const [view, setView] = useState<WebsiteView>('content')
   const [surface, setSurface] = useState<'work' | 'preview'>('work')
+  const [selectedPageId, setSelectedPageId] = useState(workspace.selectedPageId)
   const [siteSettingsOpen, setSiteSettingsOpen] = useState(false)
+  const [editSessionState, setEditSessionState] = useState<WebsiteEditSessionState | null>(null)
+  const [savingDraft, setSavingDraft] = useState(false)
   const [repairConfirmationRevision, setRepairConfirmationRevision] = useState<number | null>(null)
   const [repairing, setRepairing] = useState(false)
   const [repairArchiveKey, setRepairArchiveKey] = useState('')
@@ -107,13 +126,23 @@ export function WebsiteProduct() {
   const [recoveryFocusRequest, setRecoveryFocusRequest] = useState(0)
   const headingRef = useRef<HTMLHeadingElement>(null)
   const recoveryPrimaryActionRef = useRef<HTMLButtonElement>(null)
+  const editSessionRef = useRef<WebsiteEditSessionState | null>(null)
   const [device, setDevice] = useState<PreviewDevice>(() => (
     typeof window !== 'undefined' && window.matchMedia('(max-width: 900px)').matches ? 'mobile' : 'desktop'
   ))
   const [notice, setNotice] = useState(DEFAULT_NOTICE)
   const [deleteCandidateId, setDeleteCandidateId] = useState('')
   const [preparedHandoffSource, setPreparedHandoffSource] = useState(() => handoffSourceKey(readWebsiteEcommerceHandoff()))
-  const selectedPage = workspace.pages.find((page) => page.id === workspace.selectedPageId) ?? workspace.pages[0]
+  const editSessionScope = storageMode === 'managed'
+    ? managedActorId ? `managed:${managedActorId}` : ''
+    : storageMode
+  const activeEditSession = editSessionState?.scope === editSessionScope ? editSessionState.session : null
+  const editorWorkspace = activeEditSession?.workspace ?? workspace
+  const selectedPage = editorWorkspace.pages.find((page) => page.id === selectedPageId)
+    ?? editorWorkspace.pages.find((page) => page.id === editorWorkspace.selectedPageId)
+    ?? editorWorkspace.pages[0]
+  const hasUnsavedChanges = Boolean(activeEditSession)
+  const editConflict = Boolean(activeEditSession && !websiteEditSessionMatches(activeEditSession, workspace))
   const fingerprint = workspaceFingerprint(workspace)
   const checks = readinessChecks(workspace, fingerprint)
   const approval = getCurrentApproval(workspace)
@@ -131,21 +160,32 @@ export function WebsiteProduct() {
     && publishIsCurrent
     && checks.every((check) => check.passed))
   const activeViewCopy = view === 'content' && surface === 'preview'
-    ? { title: 'Preview page', copy: 'Check the selected page at desktop, tablet, or mobile size.' }
+    ? {
+        title: hasUnsavedChanges ? 'Preview unsaved changes' : 'Preview page',
+        copy: hasUnsavedChanges
+          ? 'This preview is not saved yet. Return to edit, then save or discard it.'
+          : 'Check the selected page at desktop, tablet, or mobile size.',
+      }
     : viewCopy[view]
   const savedStateNotice = storageMode === 'managed'
     ? 'Changes are saved to this managed workspace. Nothing has been deployed.'
     : storageMode === 'browser-local'
       ? 'Changes are saved on this device. Nothing has been deployed.'
       : 'Changes last for this session only. Nothing has been deployed.'
-  const saveStateLabel = storageMode === 'managed'
-    ? 'Managed save'
-    : storageMode === 'browser-local'
-      ? 'Saved on this device'
-      : 'Session only'
-  const visiblePageCount = workspace.pages.filter((page) => page.navigation.visible).length
-  const statusNotice = storageIssue || (notice === DEFAULT_NOTICE ? savedStateNotice : notice)
-  const noticePriority = storageIssue ? 'error' : notice === DEFAULT_NOTICE ? 'routine' : 'update'
+  const saveStateLabel = editConflict
+    ? 'Saved version changed'
+    : hasUnsavedChanges
+      ? 'Unsaved preview'
+      : storageMode === 'managed'
+        ? 'Saved to workspace'
+        : storageMode === 'browser-local'
+          ? 'Saved on this device'
+          : 'Session only'
+  const visiblePageCount = editorWorkspace.pages.filter((page) => page.navigation.visible).length
+  const statusNotice = editConflict
+    ? 'The saved Website changed after this edit session started. Your preview is preserved, but it cannot overwrite the newer version. Discard it and review the saved workspace.'
+    : storageIssue || (notice === DEFAULT_NOTICE ? savedStateNotice : notice)
+  const noticePriority = editConflict || storageIssue ? 'error' : notice === DEFAULT_NOTICE ? 'routine' : 'update'
   const repairArmed = canRepairLocalStorage
     && repairCandidateRevision > 0
     && repairConfirmationRevision === repairCandidateRevision
@@ -154,6 +194,27 @@ export function WebsiteProduct() {
     document.title = 'Website | SuperMega'
     window.scrollTo({ top: 0, behavior: 'instant' })
   }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !editSessionScope) return
+    if (editSessionRef.current?.scope === editSessionScope) return
+    const restoreTimer = window.setTimeout(() => {
+      if (editSessionRef.current?.scope === editSessionScope) return
+      const storageKey = editSessionStorageKey(editSessionScope)
+      try {
+        const raw = window.sessionStorage.getItem(storageKey)
+        const restored = raw ? restoreWebsiteEditSession(raw) : null
+        const next = restored ? { scope: editSessionScope, session: restored } : null
+        if (raw && !restored) window.sessionStorage.removeItem(storageKey)
+        editSessionRef.current = next
+        setEditSessionState(next)
+      } catch {
+        editSessionRef.current = null
+        setEditSessionState(null)
+      }
+    }, 0)
+    return () => window.clearTimeout(restoreTimer)
+  }, [editSessionScope])
 
   useEffect(() => {
     if (headingFocusRequest > 0) headingRef.current?.focus()
@@ -176,6 +237,10 @@ export function WebsiteProduct() {
   }
 
   function openWorkspaceView(nextView: WebsiteView) {
+    if (nextView === 'publish' && hasUnsavedChanges) {
+      setNotice('Save or discard the unsaved Website preview before reviewing release evidence.')
+      return
+    }
     setView(nextView)
     setSurface('work')
     setSiteSettingsOpen(false)
@@ -198,25 +263,112 @@ export function WebsiteProduct() {
     return result
   }
 
-  async function selectPage(pageId: string) {
-    const result = await commitWorkspace((current) => current.pages.some((page) => page.id === pageId)
-      ? { ...current, selectedPageId: pageId }
-      : current)
-    if (!result.ok || result.workspace.selectedPageId !== pageId) {
-      if (result.ok) setNotice('That page is no longer available. The current page was preserved.')
+  function replaceEditSession(next: WebsiteEditSessionState | null) {
+    editSessionRef.current = next
+    setEditSessionState(next)
+  }
+
+  function persistEditSession(next: WebsiteEditSessionState) {
+    try {
+      window.sessionStorage.setItem(editSessionStorageKey(next.scope), JSON.stringify(next.session))
+    } catch {
+      setNotice('The unsaved preview is held in this tab only. Browser draft recovery is unavailable, but Save and Discard still work.')
+    }
+  }
+
+  function clearEditSession(target = editSessionRef.current) {
+    if (target) {
+      try {
+        window.sessionStorage.removeItem(editSessionStorageKey(target.scope))
+      } catch {
+        // The in-memory edit session can still be cleared safely.
+      }
+    }
+    replaceEditSession(null)
+  }
+
+  function stageWorkspace(update: WebsiteWorkspaceUpdate) {
+    if (savingDraft) {
+      setNotice('Website Save is still being confirmed. Wait for it to finish before making another change.')
+      return null
+    }
+    if (!editSessionScope) {
+      setNotice('Website workspace is still loading. Try the edit again.')
+      return null
+    }
+    const retained = editSessionRef.current
+    if (retained && retained.scope !== editSessionScope) {
+      setNotice('Website workspace identity changed. Review the loaded workspace before editing.')
+      return null
+    }
+    const base = retained?.session ?? createWebsiteEditSession(workspace)
+    if (!websiteEditSessionMatches(base, workspace)) {
+      setNotice('The saved Website changed after this edit session started. Discard the preview before making more changes.')
+      return null
+    }
+    const result = updateWebsiteEditSession(base, update)
+    if (!result.ok) {
+      setNotice(result.error)
+      return null
+    }
+    if (!result.changed) return retained?.session ?? null
+    const next = { scope: editSessionScope, session: result.session }
+    replaceEditSession(next)
+    persistEditSession(next)
+    return result.session
+  }
+
+  async function saveDraft() {
+    const retained = editSessionRef.current
+    if (!retained || retained.scope !== editSessionScope) return
+    if (!websiteEditSessionMatches(retained.session, workspace)) {
+      setNotice('This preview started from an older saved version. Nothing was overwritten; discard it and review the newer Website.')
+      return
+    }
+    setSavingDraft(true)
+    const result = await commitWorkspace(
+      (current) => commitWebsiteEditSession(current, retained.session),
+      '',
+    )
+    setSavingDraft(false)
+    if (!result.ok) return
+    if (editSessionRef.current === retained) clearEditSession(retained)
+    setNotice(result.changed
+      ? `Website saved once as content revision ${result.workspace.contentRevision}. Nothing was deployed.`
+      : 'The preview already matched the saved Website. No revision was added.')
+  }
+
+  function discardDraft() {
+    if (!activeEditSession || savingDraft) return
+    clearEditSession()
+    setDeleteCandidateId('')
+    setNotice('Unsaved Website changes discarded. The saved workspace was not changed.')
+  }
+
+  function requireSavedWorkspace(action: string) {
+    if (!hasUnsavedChanges) return true
+    setNotice(`Save or discard the unsaved Website preview before ${action}.`)
+    return false
+  }
+
+  function selectPage(pageId: string) {
+    if (!editorWorkspace.pages.some((page) => page.id === pageId)) {
+      setNotice('That page is no longer available. The current page was preserved.')
       return false
     }
+    setSelectedPageId(pageId)
     setDeleteCandidateId('')
     setNotice(DEFAULT_NOTICE)
     return true
   }
 
-  async function previewPage(pageId = selectedPage.id) {
-    if (pageId !== selectedPage.id && !await selectPage(pageId)) return
+  function previewPage(pageId = selectedPage.id) {
+    if (pageId !== selectedPage.id && !selectPage(pageId)) return
     openContentSurface('preview')
   }
 
   async function repairLocalData() {
+    if (!requireSavedWorkspace('repairing local Website data')) return
     setRepairing(true)
     const result = await repairLocalWorkspace()
     setRepairing(false)
@@ -287,8 +439,8 @@ export function WebsiteProduct() {
     setNotice('Website recovery archive removed from this browser. Website content and deployment state were unchanged.')
   }
 
-  async function updatePage(pageId: string, update: (page: WebsitePage) => WebsitePage) {
-    await commitWorkspace((current) => ({
+  function updatePage(pageId: string, update: (page: WebsitePage) => WebsitePage) {
+    stageWorkspace((current) => ({
       ...current,
       pages: current.pages.map((page) => page.id === pageId
         ? { ...update(page), updatedAt: new Date().toISOString() }
@@ -297,40 +449,45 @@ export function WebsiteProduct() {
     setDeleteCandidateId('')
   }
 
-  async function addPage() {
-    if (workspace.pages.length >= MAX_WEBSITE_PAGES) {
+  function addPage() {
+    if (editorWorkspace.pages.length >= MAX_WEBSITE_PAGES) {
       setNotice('This prototype is capped at four pages. Remove a draft before adding another.')
       return
     }
-    const result = await commitWorkspace((current) => {
+    const staged = stageWorkspace((current) => {
       if (current.pages.length >= MAX_WEBSITE_PAGES) return current
       const page = createBlankPage(current.pages.length + 1)
       return { ...current, pages: [...current.pages, page], selectedPageId: page.id }
-    }, 'Draft page added. Complete its content before marking it ready.')
-    if (result.ok && result.changed) {
+    })
+    if (staged) {
+      setSelectedPageId(staged.workspace.selectedPageId)
       openWorkspaceView('content')
       setDeleteCandidateId('')
+      setNotice('New page added to the unsaved preview.')
     }
   }
 
-  async function copySelectedPage() {
-    if (workspace.pages.length >= MAX_WEBSITE_PAGES) {
+  function copySelectedPage() {
+    if (editorWorkspace.pages.length >= MAX_WEBSITE_PAGES) {
       setNotice('This prototype is capped at four pages. Remove a draft before duplicating.')
       return
     }
-    const result = await commitWorkspace((current) => {
+    const sourcePageId = selectedPage.id
+    const staged = stageWorkspace((current) => {
       if (current.pages.length >= MAX_WEBSITE_PAGES) return current
-      const sourcePage = current.pages.find((page) => page.id === current.selectedPageId) ?? current.pages[0]
+      const sourcePage = current.pages.find((page) => page.id === sourcePageId) ?? current.pages[0]
       const page = duplicatePage(sourcePage, current.pages.length + 1)
       return { ...current, pages: [...current.pages, page], selectedPageId: page.id }
-    }, 'Draft copy added with navigation hidden.')
-    if (result.ok && result.changed) {
+    })
+    if (staged) {
+      setSelectedPageId(staged.workspace.selectedPageId)
       openWorkspaceView('content')
       setDeleteCandidateId('')
+      setNotice('Page copy added to the unsaved preview with navigation hidden.')
     }
   }
 
-  async function requestDeletePage() {
+  function requestDeletePage() {
     if (selectedPage.slug === '/' || selectedPage.stage !== 'draft') return
     if (deleteCandidateId !== selectedPage.id) {
       setDeleteCandidateId(selectedPage.id)
@@ -338,7 +495,7 @@ export function WebsiteProduct() {
       return
     }
 
-    const result = await commitWorkspace((current) => {
+    const staged = stageWorkspace((current) => {
       const target = current.pages.find((page) => page.id === selectedPage.id)
       if (!target || target.slug === '/' || target.stage !== 'draft') return current
       const pages = current.pages.filter((page) => page.id !== target.id)
@@ -347,12 +504,16 @@ export function WebsiteProduct() {
         pages,
         selectedPageId: pages[0]?.id ?? '',
       }
-    }, 'Draft page removed.')
-    if (result.ok && result.changed) setDeleteCandidateId('')
+    })
+    if (staged) {
+      setSelectedPageId(staged.workspace.selectedPageId)
+      setDeleteCandidateId('')
+      setNotice('Draft page removed from the unsaved preview.')
+    }
   }
 
-  async function movePage(pageId: string, direction: -1 | 1) {
-    await commitWorkspace((current) => {
+  function movePage(pageId: string, direction: -1 | 1) {
+    const staged = stageWorkspace((current) => {
       const currentIndex = current.pages.findIndex((page) => page.id === pageId)
       const nextIndex = currentIndex + direction
       if (currentIndex < 0 || nextIndex < 0 || nextIndex >= current.pages.length) return current
@@ -360,7 +521,8 @@ export function WebsiteProduct() {
       const [page] = pages.splice(currentIndex, 1)
       pages.splice(nextIndex, 0, page)
       return { ...current, pages }
-    }, 'Navigation order updated.')
+    })
+    if (staged) setNotice('Navigation order changed in the unsaved preview.')
   }
 
   async function addEvidence(input: {
@@ -369,6 +531,7 @@ export function WebsiteProduct() {
     reference: string
     verifiedBy: string
   }) {
+    if (!requireSavedWorkspace('recording release evidence')) return false
     const actionId = createId('evidence')
     const capturedAt = new Date().toISOString()
     const result = await commitWorkspace(
@@ -380,6 +543,7 @@ export function WebsiteProduct() {
   }
 
   async function approveCurrentRevision(input: { reviewer: string; note: string }) {
+    if (!requireSavedWorkspace('approving a revision')) return false
     const actionId = createId('approval')
     const capturedAt = new Date().toISOString()
     const result = await commitWorkspace(
@@ -391,6 +555,7 @@ export function WebsiteProduct() {
   }
 
   async function recordLocalPublish() {
+    if (!requireSavedWorkspace('recording a site file')) return
     if (!approvalIsCurrent || publishIsCurrent) return
     await commitWorkspace(
       (current) => recordWebsiteSnapshot(current, {
@@ -426,6 +591,7 @@ export function WebsiteProduct() {
   }
 
   async function prepareCommerceHandoff(input: { sku: string; quantity: number }) {
+    if (!requireSavedWorkspace('preparing a Shop intake')) return
     const sku = input.sku.trim().toUpperCase()
     const sourcePage = handoffSourcePage
     if (!/^[A-Z0-9][A-Z0-9_-]{2,79}$/.test(sku)
@@ -601,22 +767,33 @@ export function WebsiteProduct() {
           ) : null}
 
           {view === 'content' ? (
-            <section className="website-action-bar" aria-label="Website actions">
+            <section
+              aria-label="Website actions"
+              className="website-action-bar"
+              data-editing={hasUnsavedChanges ? 'true' : 'false'}
+            >
               <div className="website-page-control">
                 <label htmlFor="website-page-select">Page</label>
                 <select
                   id="website-page-select"
-                  onChange={(event) => void selectPage(event.currentTarget.value)}
+                  onChange={(event) => selectPage(event.currentTarget.value)}
                   value={selectedPage.id}
                 >
-                  {workspace.pages.map((page) => (
+                  {editorWorkspace.pages.map((page) => (
                     <option key={page.id} value={page.id}>
                       {page.internalName || 'Untitled page'} — {page.slug || 'No path'} ({page.stage})
                     </option>
                   ))}
                 </select>
               </div>
-              <span className="website-save-state" data-mode={storageMode}>{saveStateLabel}</span>
+              <span
+                aria-live="polite"
+                className="website-save-state"
+                data-mode={storageMode}
+                data-state={editConflict ? 'conflict' : hasUnsavedChanges ? 'unsaved' : 'saved'}
+              >
+                {saveStateLabel}
+              </span>
               <div className="website-primary-actions">
                 <details
                   className="website-site-settings"
@@ -631,12 +808,12 @@ export function WebsiteProduct() {
                   <summary>Site</summary>
                   <div className="website-site-settings-content">
                     <div className="website-site-settings-actions">
-                      <span>{workspace.pages.length} pages · {visiblePageCount} in navigation</span>
+                      <span>{editorWorkspace.pages.length} pages · {visiblePageCount} in navigation</span>
                       <button
                         className="website-button is-secondary"
-                        disabled={workspace.pages.length >= MAX_WEBSITE_PAGES}
+                        disabled={editorWorkspace.pages.length >= MAX_WEBSITE_PAGES}
                         onClick={addPage}
-                        title={workspace.pages.length >= MAX_WEBSITE_PAGES ? 'The four-page prototype limit is reached' : 'Add page'}
+                        title={editorWorkspace.pages.length >= MAX_WEBSITE_PAGES ? 'The four-page prototype limit is reached' : 'Add page'}
                         type="button"
                       >
                         New page
@@ -644,12 +821,12 @@ export function WebsiteProduct() {
                     </div>
                     <NavigationWorkspace
                       onMovePage={movePage}
-                      onSelectPage={(pageId) => void previewPage(pageId)}
+                      onSelectPage={previewPage}
                       onSiteNameChange={(siteName) => {
-                        void commitWorkspace((current) => ({ ...current, siteName }), 'Site identity updated.')
+                        stageWorkspace((current) => ({ ...current, siteName }))
                       }}
                       onUpdatePage={updatePage}
-                      workspace={workspace}
+                      workspace={editorWorkspace}
                     />
                     {recoveryArchives.length ? (
                       <details className="website-recovery-manager">
@@ -688,15 +865,37 @@ export function WebsiteProduct() {
                   className="website-button is-secondary"
                   onClick={() => {
                     if (surface === 'preview') openContentSurface('work')
-                    else void previewPage()
+                    else previewPage()
                   }}
                   type="button"
                 >
                   {surface === 'preview' ? 'Back' : 'Preview'}
                 </button>
-                <button className="website-button is-primary" onClick={() => openWorkspaceView('publish')} type="button">
-                  Publish
-                </button>
+                {hasUnsavedChanges ? (
+                  <>
+                    <button
+                      className="website-button is-quiet"
+                      disabled={savingDraft}
+                      onClick={discardDraft}
+                      type="button"
+                    >
+                      Discard
+                    </button>
+                    <button
+                      className="website-button is-primary"
+                      disabled={editConflict || savingDraft}
+                      onClick={() => void saveDraft()}
+                      title={editConflict ? 'Discard this preview and review the newer saved version' : 'Save all preview changes as one revision'}
+                      type="button"
+                    >
+                      {savingDraft ? 'Saving…' : 'Save'}
+                    </button>
+                  </>
+                ) : (
+                  <button className="website-button is-primary" onClick={() => openWorkspaceView('publish')} type="button">
+                    Publish
+                  </button>
+                )}
               </div>
             </section>
           ) : null}
@@ -716,11 +915,12 @@ export function WebsiteProduct() {
             className={'website-workspace-grid view-' + view}
             data-surface={surface}
             id="website-active-panel"
+            role="region"
           >
             <div className="website-work-surface">
               {view === 'content' ? (
                 <ContentWorkspace
-                  canDuplicate={workspace.pages.length < MAX_WEBSITE_PAGES}
+                  canDuplicate={editorWorkspace.pages.length < MAX_WEBSITE_PAGES}
                   deleteArmed={deleteCandidateId === selectedPage.id}
                   onDuplicate={copySelectedPage}
                   onRequestDelete={requestDeletePage}
@@ -752,7 +952,7 @@ export function WebsiteProduct() {
             <div className="website-preview-surface">
               <header className="website-preview-surface-head">
                 <div>
-                  <strong>Preview</strong>
+                  <strong>{hasUnsavedChanges ? 'Unsaved preview' : 'Preview'}</strong>
                   <small>{selectedPage.internalName || 'Untitled page'}</small>
                 </div>
                 <div className="website-preview-controls" role="group" aria-label="Responsive preview size">
@@ -773,8 +973,8 @@ export function WebsiteProduct() {
                 device={device}
                 onSelectPage={selectPage}
                 page={selectedPage}
-                pages={workspace.pages}
-                siteName={workspace.siteName}
+                pages={editorWorkspace.pages}
+                siteName={editorWorkspace.siteName}
               />
             </div>
           </div>
