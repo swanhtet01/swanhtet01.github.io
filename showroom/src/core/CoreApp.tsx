@@ -1097,6 +1097,12 @@ function formatMoney(value: number) {
   return `${new Intl.NumberFormat('en-US').format(value)} MMK`
 }
 
+function fulfilmentLabel(value: string | undefined) {
+  if (value === 'pickup') return 'Pickup'
+  if (value === 'delivery') return 'Delivery'
+  return value ?? ''
+}
+
 function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm, returnFocus }: {
   action: PendingAccountableAction | null
   authenticatedActor?: { id: string; label: string }
@@ -1812,6 +1818,8 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
   const [customer, setCustomer] = useState('')
   const [channel, setChannel] = useState('Messenger')
   const [payment, setPayment] = useState('KBZPay')
+  const [fulfilment, setFulfilment] = useState<'' | 'pickup' | 'delivery'>('')
+  const [fulfilmentReference, setFulfilmentReference] = useState('')
   const [preparedChannelDraft, setPreparedChannelDraft] = useState<ChannelOrderDraft | null>(null)
   const [preparedEcommerceDraft, setPreparedEcommerceDraft] = useState<EcommerceShopDraft | null>(null)
   const [orderEntryMode, setOrderEntryMode] = useState<'manual' | 'message' | 'online'>('manual')
@@ -1891,6 +1899,8 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
         setQuantity(ecommerceNavigationDraft.line.quantity)
         setExtraOrderLines([])
         setPayment('')
+        setFulfilment(ecommerceNavigationDraft.fulfilment)
+        setFulfilmentReference(ecommerceNavigationDraft.sourceRequestId)
         setOrderEntryMode('manual')
         setNotice(`${ecommerceNavigationDraft.id} is ready for Shop review. Choose payment, then review the order.`)
         requestAnimationFrame(() => {
@@ -2085,6 +2095,8 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
     setQuantity(draft.quantity)
     setExtraOrderLines([])
     setPayment(draft.payment)
+    setFulfilment('')
+    setFulfilmentReference(draft.sourceRecordId)
     setPreparedChannelDraft(draft)
     setPreparedEcommerceDraft(null)
     setOrderEntryMode('manual')
@@ -2116,6 +2128,8 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
       setQuantity(draft.line.quantity)
       setExtraOrderLines([])
       setPayment('')
+      setFulfilment(draft.fulfilment)
+      setFulfilmentReference(draft.sourceRequestId)
       setOrderEntryMode('manual')
       setNotice(`${request.id} loaded from the authenticated inbox. Choose payment, then use the separate Shop action gate.`)
     } catch (error) {
@@ -2154,6 +2168,11 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
     event.preventDefault()
     if (!payment) {
       setNotice('Choose how payment will be reviewed before preparing this order.')
+      return
+    }
+    const handoffReference = fulfilmentReference.trim()
+    if (!fulfilment || !handoffReference) {
+      setNotice('Choose pickup or delivery and enter its handoff reference before reviewing this order.')
       return
     }
     const sourceDraft = preparedChannelDraft && channelOrderDraftIsReady(preparedChannelDraft) ? preparedChannelDraft : null
@@ -2218,6 +2237,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
     }
     if (ecommerceDraft && (customer.trim() !== ecommerceDraft.customerReference
       || channel !== 'Ecommerce'
+      || fulfilment !== ecommerceDraft.fulfilment
       || selectedLine.sku !== ecommerceDraft.line.sku
       || selectedLine.quantity !== ecommerceDraft.line.quantity
       || selectedLine.name !== ecommerceDraft.line.name
@@ -2234,9 +2254,6 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
       setNotice(`${sourceRecordId} is already linked to an order. No duplicate was queued.`)
       return
     }
-    const fulfilment = ecommerceDraft
-      ? ecommerceDraft.fulfilment === 'pickup' ? 'Customer pickup' : 'Local delivery request'
-      : undefined
     const sourceBacked = Boolean(sourceRecordId)
     const order: CommerceOrder = {
       id: uid('ORD'),
@@ -2249,7 +2266,8 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
       payment,
       paymentStatus: 'pending',
       refundStatus: 'none',
-      ...(fulfilment ? { fulfilment } : {}),
+      fulfilment,
+      fulfilmentReference: handoffReference,
       sourceRecordId,
       evidenceReference: sourceEvidence,
       ...(!sourceBacked ? { lines: orderLines } : {}),
@@ -2266,7 +2284,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
       subjectId: order.id,
       summary: `Confirm ${order.id} with ${orderLines.length} item ${orderLines.length === 1 ? 'line' : 'lines'}`,
       before: `${lineReview}${sourceRecordId ? ` · ${sourceRecordId} reviewed` : ''}`,
-      after: `${order.status} · ${reservationReview}`,
+      after: `${order.status} · ${fulfilmentLabel(order.fulfilment)} · ${order.fulfilmentReference} · ${reservationReview}`,
       evidenceReferenceSuggestion: sourceEvidence,
       evidenceReferenceLocked: Boolean(sourceRecordId),
       apply: async (action) => {
@@ -2275,6 +2293,8 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
         setQuantity(1)
         setExtraOrderLines([])
         setCustomer('')
+        setFulfilment('')
+        setFulfilmentReference('')
         setPreparedChannelDraft(null)
         setPreparedEcommerceDraft(null)
       },
@@ -2300,7 +2320,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
     }
 
     const paymentLabel = record.paymentMethod === 'cash_on_delivery' ? 'Cash on delivery' : record.paymentMethod === 'manual_qr' ? 'Manual QR review' : 'Manual bank transfer'
-    const fulfilmentLabel = record.fulfilmentMethod === 'pickup' ? 'Customer pickup' : 'Local delivery'
+    const orderFulfilment = record.fulfilmentMethod === 'pickup' ? 'pickup' : 'delivery'
     const order: CommerceOrder = {
       id: record.id,
       createdAt: record.createdAt,
@@ -2312,7 +2332,8 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
       payment: paymentLabel,
       paymentStatus: 'pending',
       refundStatus: 'none',
-      fulfilment: fulfilmentLabel,
+      fulfilment: orderFulfilment,
+      fulfilmentReference: record.id,
       sourceRecordId: record.id,
       evidenceReference: record.completion.evidenceReference,
       total: record.totalMmk,
@@ -2324,7 +2345,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
       subjectId: record.id,
       summary: `Confirm ${record.id} from Website`,
       before: `ready for confirmation · ${item.sku} · ${beforeStock} on hand`,
-      after: `confirmed · ${fulfilmentLabel} · ${beforeStock - line.quantity} on hand`,
+      after: `confirmed · ${fulfilmentLabel(orderFulfilment)} · ${record.id} · ${beforeStock - line.quantity} on hand`,
       apply: (action) => mutateCommerce('commerce.order.created', action.commandId, commerceActionProof(action), (current) => reserveCommerceOrder(current, order, commerceActionProof(action))),
     })
   }
@@ -2538,6 +2559,14 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
         <form className="core-form compact-form commerce-order-form" id="commerce-manual-order-form" onSubmit={recordOrder}>
           <div className="order-essential-fields">
             <label>Customer<input disabled={commerceControlsDisabled} maxLength={80} value={customer} onChange={(event) => { setCustomer(event.target.value); setPreparedChannelDraft(null); setPreparedEcommerceDraft(null) }} placeholder="Name or reference" /></label>
+            <label>Fulfilment<select disabled={commerceControlsDisabled} required value={fulfilment} onChange={(event) => {
+              setFulfilment(event.target.value as '' | 'pickup' | 'delivery')
+              if (preparedEcommerceDraft) {
+                setPreparedEcommerceDraft(null)
+                setNotice('Fulfilment changed. The Ecommerce source link was removed; review this as a manual order.')
+              }
+            }}><option value="">Choose pickup or delivery</option><option value="pickup">Pickup</option><option value="delivery">Delivery</option></select></label>
+            <label>Handoff reference<input disabled={commerceControlsDisabled} maxLength={160} onChange={(event) => setFulfilmentReference(event.target.value)} placeholder="Pickup ticket or delivery route" required value={fulfilmentReference} /></label>
             <label>{extraOrderLines.length ? 'Item 1' : 'Item'}<select disabled={commerceControlsDisabled} value={selectedSku} onChange={(event) => { setSku(event.target.value); setPreparedChannelDraft(null); setPreparedEcommerceDraft(null) }}>{commerce.items.map((item) => <option key={item.sku} value={item.sku}>{item.name} · {item.onHand} available</option>)}</select></label>
             <label>{extraOrderLines.length ? 'Quantity 1' : 'Quantity'}<input disabled={commerceControlsDisabled} min="1" max={selected?.onHand ?? 1} type="number" value={quantity} onChange={(event) => { setQuantity(Number(event.target.value)); setPreparedChannelDraft(null); setPreparedEcommerceDraft(null) }} /></label>
             <div className="order-total"><span>{manualOrderLineDrafts.length} {manualOrderLineDrafts.length === 1 ? 'item' : 'items'} · {manualOrderQuantity} units</span><strong>{formatMoney(manualOrderTotal)}</strong></div>
@@ -2664,7 +2693,7 @@ function OrderList({
             : `${order.lines.length} items · ${order.quantity} units`
           : `${order.item} × ${order.quantity}`}</strong>
         {order.lines ? <small>{order.lines.map((line) => `${line.name} × ${line.quantity} @ ${line.unitPriceMmk.toLocaleString()} MMK`).join(' · ')}</small> : null}
-        <small>{order.id} · {order.channel} · {order.payment}{order.fulfilment ? ` · ${order.fulfilment}` : ''} · {formatTime(order.createdAt)}</small>
+        <small>{order.id} · {order.channel} · {order.payment}{order.fulfilment ? ` · ${fulfilmentLabel(order.fulfilment)}` : ''}{order.fulfilmentReference ? ` · ${order.fulfilmentReference}` : ''} · {formatTime(order.createdAt)}</small>
         {order.refundStatus === 'due' ? <small role="note">Record a refund already completed with the external payment provider. This does not send money.</small> : null}
       </div>
       <div className="order-row-actions">
@@ -2691,7 +2720,7 @@ function ClosedOrderHistory({ orders }: { orders: CommerceOrder[] }) {
             : `${order.lines.length} items · ${order.quantity} units`
           : `${order.item} × ${order.quantity}`}</strong>
         {order.lines ? <small>{order.lines.map((line) => `${line.name} × ${line.quantity} @ ${line.unitPriceMmk.toLocaleString()} MMK`).join(' · ')}</small> : null}
-        <small>{order.id} · {order.status} · payment {order.paymentStatus}{order.refundStatus !== 'none' ? ` · refund ${order.refundStatus}` : ''} · {formatTime(order.createdAt)}</small>
+        <small>{order.id} · {order.status} · payment {order.paymentStatus}{order.refundStatus !== 'none' ? ` · refund ${order.refundStatus}` : ''}{order.fulfilment ? ` · ${fulfilmentLabel(order.fulfilment)}` : ''}{order.fulfilmentReference ? ` · ${order.fulfilmentReference}` : ''} · {formatTime(order.createdAt)}</small>
         {order.refundStatus === 'settled' && order.refundSettledAt && order.refundSettledBy && order.refundEvidenceReference ? <small role="note">{order.refundSettledBy} · {formatTime(order.refundSettledAt)} · evidence {order.refundEvidenceReference}</small> : null}
       </div>
       <b>{formatMoney(order.total)}</b>

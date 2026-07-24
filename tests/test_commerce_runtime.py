@@ -67,6 +67,8 @@ def order_record(order_id: str = "ORD-1") -> dict[str, object]:
         "payment": "Manual QR review",
         "paymentStatus": "pending",
         "refundStatus": "none",
+        "fulfilment": "pickup",
+        "fulfilmentReference": f"FUL-{order_id}",
         "sourceRecordId": f"WEB-{order_id}",
         "total": 200,
         "status": "confirmed",
@@ -260,6 +262,8 @@ def converted_intake_state(
         {
             "createdAt": CONVERTED_AT,
             "channel": "Website",
+            "fulfilment": "pickup",
+            "fulfilmentReference": WEBSITE_INTAKE_ID,
             "sourceRecordId": WEBSITE_INTAKE_ID,
             "evidenceReference": conversion["evidenceReference"],
         }
@@ -808,6 +812,12 @@ class CommerceRuntimeTests(unittest.TestCase):
         created = apply_event(current, "commerce.order.created", created_state())
         self.assertEqual(created["items"][0]["onHand"], 8)  # type: ignore[index]
 
+        for missing_field in ("fulfilment", "fulfilmentReference"):
+            without_handoff = created_state()
+            without_handoff["orders"][0].pop(missing_field)  # type: ignore[index]
+            with self.subTest(missing_order_handoff=missing_field), self.assertRaises(TrialValidationError):
+                apply_event(current, "commerce.order.created", without_handoff)
+
         arbitrary_stock = deepcopy(current)
         arbitrary_stock["items"][0]["onHand"] = 9  # type: ignore[index]
         with self.assertRaises(TrialValidationError):
@@ -845,6 +855,8 @@ class CommerceRuntimeTests(unittest.TestCase):
             "payment": "Cash",
             "paymentStatus": "pending",
             "refundStatus": "none",
+            "fulfilment": "pickup",
+            "fulfilmentReference": "COUNTER-A",
             "lines": [
                 {
                     "sku": "SKU-1",

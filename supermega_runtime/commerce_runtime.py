@@ -94,6 +94,7 @@ _ORDER_OPTIONAL_FIELDS = frozenset(
         "refundSettlementReason",
         "refundEvidenceReference",
         "fulfilment",
+        "fulfilmentReference",
         "sourceRecordId",
         "evidenceReference",
         "lines",
@@ -432,9 +433,13 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             raise TrialValidationError(f"orders[{index}].paymentStatus is invalid.")
         if order["refundStatus"] not in _REFUND_STATUSES:
             raise TrialValidationError(f"orders[{index}].refundStatus is invalid.")
-        for field in ("fulfilment", "sourceRecordId", "evidenceReference"):
+        for field in ("fulfilment", "fulfilmentReference", "sourceRecordId", "evidenceReference"):
             if field in order:
-                value_text = _text(order[field], f"orders[{index}].{field}")
+                value_text = (
+                    _text(order[field], f"orders[{index}].{field}", maximum=160)
+                    if field == "fulfilmentReference"
+                    else _text(order[field], f"orders[{index}].{field}")
+                )
                 if field == "sourceRecordId":
                     source_record_ids.append(value_text)
 
@@ -1022,6 +1027,9 @@ def _validate_new_order_and_reservation(
     order = next_state["orders"][0]
     if order.get("status") != "confirmed" or order.get("paymentStatus") != "pending" or order.get("refundStatus") != "none":
         raise TrialValidationError("a new order must start confirmed with pending payment and no refund exception.")
+    if order.get("fulfilment") not in {"pickup", "delivery"}:
+        raise TrialValidationError("a new order requires pickup or delivery fulfilment.")
+    _text(order.get("fulfilmentReference"), "new order.fulfilmentReference", maximum=160)
     lines = _reservation_lines(order)
     if not lines:
         raise TrialValidationError("a new order must reference at least one inventory item.")

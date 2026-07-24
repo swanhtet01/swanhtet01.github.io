@@ -507,6 +507,11 @@ if (!coreSource.includes('id="commerce-manual-order-form"')
   || !coreSource.includes('className="order-submit-bar"')
   || !coreSource.includes('className="form-notice order-entry-notice" aria-live="polite"')
   || !coreSource.includes('className="order-essential-fields"')
+  || !coreSource.includes('<label>Fulfilment<select')
+  || !coreSource.includes('Handoff reference<input')
+  || !coreSource.includes('fulfilmentReference: handoffReference')
+  || !commerceSource.includes('fulfilmentReference?: string')
+  || !managedCommerceRuntime.includes('"fulfilmentReference"')
   || !coreSource.includes('function ClosedOrderHistory')
   || !coreSource.includes('orders={actionOrders}')
   || !coreSource.includes('<ClosedOrderHistory orders={closedOrders} />')
@@ -990,6 +995,8 @@ async function verifyChannelOrderRuntime() {
       payment: drafts[0].payment,
       paymentStatus: 'pending',
       refundStatus: 'none',
+      fulfilment: 'pickup',
+      fulfilmentReference: drafts[0].sourceRecordId,
       sourceRecordId: drafts[0].sourceRecordId,
       evidenceReference: drafts[0].evidenceReference,
       total: item.price * drafts[0].quantity,
@@ -1871,6 +1878,8 @@ async function verifyCommerceRuntime() {
       payment: 'Manual QR review',
       paymentStatus: 'pending',
       refundStatus: 'none',
+      fulfilment: 'pickup',
+      fulfilmentReference: 'PICKUP-001',
       sourceRecordId: 'WEB-1',
       evidenceReference: reserveProof.evidenceReference,
       total: 200,
@@ -1878,6 +1887,8 @@ async function verifyCommerceRuntime() {
     }
     const reserved = model.reserveCommerceOrder(base, order, reserveProof)
     assert(reserved?.items[0].onHand === 8 && reserved.orders.length === 1 && reserved.movements.length === 1, 'reservation_did_not_apply_once')
+    assert(model.reserveCommerceOrder(base, { ...order, fulfilment: undefined }, reserveProof) === null, 'order_without_fulfilment_succeeded')
+    assert(model.reserveCommerceOrder(base, { ...order, fulfilmentReference: '' }, reserveProof) === null, 'order_without_fulfilment_reference_succeeded')
     assert(model.reserveCommerceOrder(reserved, order, reserveProof) === reserved, 'exact_reservation_retry_not_idempotent')
     assert(model.reserveCommerceOrder(reserved, { ...order, quantity: 3, total: 300 }, reserveProof) === null, 'conflicting_reservation_retry_succeeded')
     assert(model.reserveCommerceOrder(reserved, { ...order, id: 'ORD-2' }, proof('ACT-RESERVE-2')) === null, 'duplicate_source_order_succeeded')
@@ -1900,6 +1911,8 @@ async function verifyCommerceRuntime() {
       payment: 'Cash',
       paymentStatus: 'pending',
       refundStatus: 'none',
+      fulfilment: 'pickup',
+      fulfilmentReference: 'COUNTER-A',
       lines: [
         { sku: 'SKU-1', name: 'Test item', quantity: 2, unitPriceMmk: 100 },
         { sku: 'SKU-2', name: 'Second item', variant: 'Large', quantity: 1, unitPriceMmk: 250 },

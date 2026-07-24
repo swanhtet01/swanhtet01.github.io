@@ -46,6 +46,7 @@ export type CommerceOrder = {
   refundSettlementReason?: string
   refundEvidenceReference?: string
   fulfilment?: string
+  fulfilmentReference?: string
   sourceRecordId?: string
   evidenceReference?: string
   lines?: CommerceOrderLine[]
@@ -414,9 +415,11 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (!orderStatuses.includes(candidate.status as CommerceOrderStatus)) throw new Error(`orders[${index}].status is invalid.`)
     if (!paymentStatuses.includes(candidate.paymentStatus as CommercePaymentStatus)) throw new Error(`orders[${index}].paymentStatus is invalid.`)
     if (!refundStatuses.includes(candidate.refundStatus as CommerceRefundStatus)) throw new Error(`orders[${index}].refundStatus is invalid.`)
-    for (const field of ['fulfilment', 'sourceRecordId', 'evidenceReference'] as const) {
+    for (const field of ['fulfilment', 'fulfilmentReference', 'sourceRecordId', 'evidenceReference'] as const) {
       if (candidate[field] !== undefined) {
-        const fieldValue = requiredText(candidate[field], `orders[${index}].${field}`)
+        const fieldValue = field === 'fulfilmentReference'
+          ? canonicalText(candidate[field], `orders[${index}].${field}`, 160)
+          : requiredText(candidate[field], `orders[${index}].${field}`)
         if (field === 'sourceRecordId') sourceRecordIds.push(fieldValue)
       }
     }
@@ -1048,7 +1051,8 @@ export function convertCommerceWebsiteIntake(
     const order = current.orders.find((candidate) => candidate.id === intake.conversion?.orderId)
     return intake.conversion
       && order?.customer === input.customer
-      && order.fulfilment === (input.fulfilmentMethod === 'pickup' ? 'Customer pickup' : 'Local delivery')
+      && order.fulfilment === (input.fulfilmentMethod === 'pickup' ? 'pickup' : 'delivery')
+      && order.fulfilmentReference === intake.id
       && order.payment === (input.paymentMethod === 'cash_on_delivery' ? 'Cash on delivery' : input.paymentMethod === 'manual_qr' ? 'Manual QR review' : 'Manual bank transfer')
       && sameActionProof(intake.conversion, proof) ? current : null
   }
@@ -1063,7 +1067,7 @@ export function convertCommerceWebsiteIntake(
   if (nextBalance === null) return null
   const orderId = `ORD-WEB-${intake.id.slice(5)}`
   if (current.orders.some((order) => order.id === orderId || order.sourceRecordId === intake.id)) return null
-  const fulfilment = input.fulfilmentMethod === 'pickup' ? 'Customer pickup' : 'Local delivery'
+  const fulfilment = input.fulfilmentMethod === 'pickup' ? 'pickup' : 'delivery'
   const payment = input.paymentMethod === 'cash_on_delivery'
     ? 'Cash on delivery'
     : input.paymentMethod === 'manual_qr'
@@ -1081,6 +1085,7 @@ export function convertCommerceWebsiteIntake(
     paymentStatus: 'pending',
     refundStatus: 'none',
     fulfilment,
+    fulfilmentReference: intake.id,
     sourceRecordId: intake.id,
     evidenceReference: proof.evidenceReference,
     total: intake.total,
@@ -1163,6 +1168,11 @@ function validatedOrderLineSnapshots(order: CommerceOrder): CommerceOrderLine[] 
 export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder, proof: CommerceActionProof) {
   if (!validProof(proof)
     || order.status !== 'confirmed'
+    || !['pickup', 'delivery'].includes(order.fulfilment ?? '')
+    || typeof order.fulfilmentReference !== 'string'
+    || !order.fulfilmentReference.trim()
+    || order.fulfilmentReference !== order.fulfilmentReference.trim()
+    || order.fulfilmentReference.length > 160
     || !Number.isSafeInteger(order.quantity)
     || order.quantity < 1
     || !Number.isSafeInteger(order.total)
