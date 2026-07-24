@@ -318,7 +318,7 @@ textarea { min-height: 72px; resize: vertical; }
 .order-entry-methods button:disabled { cursor: not-allowed; opacity: .55; }
 .order-entry-panel { min-width: 0; min-height: 0; flex: 1; overflow: auto; }
 .order-submit-bar { flex: 0 0 auto; border-top: 1px solid var(--core-line); padding-top: 11px; background: var(--core-panel); }
-.order-submit-bar .form-notice { margin: 0 0 8px; }
+.order-entry-notice { flex: 0 0 auto; margin: 0; }
 .order-submit-bar .core-button { width: 100%; }
 .commerce-order-form { gap: 8px; }
 .order-essential-fields { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); align-items: end; gap: 8px; }
@@ -837,6 +837,7 @@ textarea { min-height: 72px; resize: vertical; }
   .channel-mapping-row { grid-template-columns: 1fr; }
   .channel-draft-result, .channel-source-ready { display: grid; align-items: start; }
   .order-list article { grid-template-columns: 1fr; }
+  .order-list strong, .order-list small { overflow: visible; text-overflow: clip; white-space: normal; overflow-wrap: anywhere; }
   .order-list article > div:last-child { justify-items: start; }
   .order-row-actions { justify-content: flex-start; }
   .production-mode-banner { grid-template-columns: auto minmax(0,1fr); }
