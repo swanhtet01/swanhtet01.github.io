@@ -184,7 +184,7 @@ if (home.includes('Commerce and Production carry real records and actions.')) fa
 if ((home.match(/<a\b/g) || []).length > 8) fail('homepage_link_surface_too_large')
 
 const contact = pages.get('/contact/')?.html || ''
-for (const token of ['data-contact-form', 'action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="product"', 'value="shop"', 'value="plant"', 'value="website"', 'value="ecommerce"', 'value="agents"', 'name="template"', 'name="goal"', 'name="idempotency_key"', 'x-idempotency-key', 'rate_limited', 'Describe one real workflow or recurring handoff, and note any screenshot or spreadsheet you can share.', '>Shop<', '>Plant<', '>Website<', '>Ecommerce<', '>AI Agent Solutions<', 'No account, data connection, automation, or external action begins from this form.', 'swanhtet@supermega.dev']) {
+for (const token of ['data-contact-form', 'action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="product"', 'value="shop"', 'value="plant"', 'value="website"', 'value="ecommerce"', 'value="agents"', 'name="template"', 'name="goal"', 'name="idempotency_key"', 'name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert', 'x-idempotency-key', 'rate_limited', 'Describe one real workflow or recurring handoff, and note any screenshot or spreadsheet you can share.', '>Shop<', '>Plant<', '>Website<', '>Ecommerce<', '>AI Agent Solutions<', 'No account, data connection, automation, or external action begins from this form.', 'swanhtet@supermega.dev']) {
   if (!contact.includes(token)) fail('contact_contract_missing', { token })
 }
 
