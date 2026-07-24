@@ -1,3 +1,4 @@
+import { commerceStorefrontRequestEquals } from '../../core/commerce-workspace.ts'
 import {
   storefrontPreviewDigest,
   validateStorefrontPreview,
@@ -14,6 +15,10 @@ export type StorefrontRequestInput = {
   quantity: number
   fulfilment: 'pickup' | 'delivery'
   createdAt: string
+  sourceStorefront?: {
+    revision: number
+    actionId: string
+  } | null
 }
 
 export type StorefrontOrderRequest = {
@@ -24,6 +29,8 @@ export type StorefrontOrderRequest = {
   idempotencyKey: string
   createdAt: string
   sourcePreviewDigest: string
+  sourceStorefrontRevision?: number | null
+  sourceStorefrontActionId?: string | null
   customerReference: string
   fulfilment: 'pickup' | 'delivery'
   currency: 'MMK'
@@ -77,13 +84,17 @@ function validTimestamp(value: unknown) {
 }
 
 function requestMatches(left: StorefrontOrderRequest, right: StorefrontOrderRequest) {
-  return JSON.stringify(left) === JSON.stringify(right)
+  return commerceStorefrontRequestEquals(left, right)
 }
 
 function parseStorefrontOrderRequest(value: unknown): StorefrontOrderRequest | null {
-  if (!isRecord(value)
-    || !hasExactKeys(value, ['schema', 'mode', 'state', 'id', 'idempotencyKey', 'createdAt', 'sourcePreviewDigest', 'customerReference', 'fulfilment', 'currency', 'line', 'totalMmk'])
-    || value.schema !== STOREFRONT_REQUEST_SCHEMA
+  if (!isRecord(value)) return null
+  const legacyFields = ['schema', 'mode', 'state', 'id', 'idempotencyKey', 'createdAt', 'sourcePreviewDigest', 'customerReference', 'fulfilment', 'currency', 'line', 'totalMmk']
+  const currentFields = [...legacyFields, 'sourceStorefrontRevision', 'sourceStorefrontActionId']
+  if (!hasExactKeys(value, legacyFields) && !hasExactKeys(value, currentFields)) return null
+  const hasStorefrontProvenance = 'sourceStorefrontRevision' in value
+    && 'sourceStorefrontActionId' in value
+  if (value.schema !== STOREFRONT_REQUEST_SCHEMA
     || value.mode !== 'browser-local-request'
     || value.state !== 'pending_shop_review'
     || typeof value.id !== 'string'
@@ -94,6 +105,13 @@ function parseStorefrontOrderRequest(value: unknown): StorefrontOrderRequest | n
     || !validTimestamp(value.createdAt)
     || typeof value.sourcePreviewDigest !== 'string'
     || !digestPattern.test(value.sourcePreviewDigest)
+    || (hasStorefrontProvenance
+      && (value.sourceStorefrontRevision === null) !== (value.sourceStorefrontActionId === null))
+    || (hasStorefrontProvenance
+      && value.sourceStorefrontRevision !== null
+      && (!Number.isSafeInteger(value.sourceStorefrontRevision)
+        || Number(value.sourceStorefrontRevision) < 1
+        || typeof value.sourceStorefrontActionId !== 'string'))
     || value.fulfilment !== 'pickup' && value.fulfilment !== 'delivery'
     || value.currency !== 'MMK'
     || !isRecord(value.line)
@@ -108,6 +126,9 @@ function parseStorefrontOrderRequest(value: unknown): StorefrontOrderRequest | n
     || Number(value.totalMmk) !== Number(value.line.quantity) * Number(value.line.unitPriceMmk)) return null
   try {
     canonicalText(value.customerReference, 'Customer reference', 80)
+    if (hasStorefrontProvenance && value.sourceStorefrontActionId !== null) {
+      canonicalText(value.sourceStorefrontActionId, 'Source storefront action ID', 160)
+    }
     canonicalText(value.line.sku, 'Requested SKU', 80)
     canonicalText(value.line.name, 'Requested item name', 180)
     if (value.line.variant !== null) canonicalText(value.line.variant, 'Requested item variant', 180)
@@ -162,6 +183,15 @@ export async function buildStorefrontOrderRequest(
   if (input.fulfilment !== 'pickup' && input.fulfilment !== 'delivery') {
     throw new Error('Request fulfilment is invalid.')
   }
+  const sourceStorefront = input.sourceStorefront ?? null
+  if (sourceStorefront
+    && (!Number.isSafeInteger(sourceStorefront.revision)
+      || sourceStorefront.revision < 1)) {
+    throw new Error('Source storefront revision is invalid.')
+  }
+  const sourceStorefrontActionId = sourceStorefront
+    ? canonicalText(sourceStorefront.actionId, 'Source storefront action ID', 160)
+    : null
   const matches = preview.items.filter((item) => item.sku === sku)
   if (matches.length !== 1) throw new Error('Requested SKU is not in this storefront preview.')
   const item = matches[0]
@@ -177,6 +207,8 @@ export async function buildStorefrontOrderRequest(
     idempotencyKey: input.idempotencyKey,
     createdAt: input.createdAt,
     sourcePreviewDigest,
+    sourceStorefrontRevision: sourceStorefront?.revision ?? null,
+    sourceStorefrontActionId,
     customerReference,
     fulfilment: input.fulfilment,
     currency: 'MMK',

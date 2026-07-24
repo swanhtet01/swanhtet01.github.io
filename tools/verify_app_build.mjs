@@ -338,6 +338,10 @@ if (directRequestStart < 0
   || !ecommerceCssSource.includes('@media (max-width: 560px)')) fail('ecommerce_direct_request_action_missing_or_consequential')
 if (!storefrontRequestSource.includes("supermega.ecommerce.order_request.v1")
   || !storefrontRequestSource.includes("state: 'pending_shop_review'")
+  || !storefrontRequestSource.includes('sourceStorefrontRevision')
+  || !storefrontRequestSource.includes('sourceStorefrontActionId')
+  || !storefrontRequestSource.includes('legacyFields')
+  || !storefrontRequestSource.includes('commerceStorefrontRequestEquals')
   || !storefrontRequestSource.includes('buildStorefrontOrderRequest')
   || !storefrontRequestSource.includes('recordStorefrontOrderRequest')
   || !storefrontRequestSource.includes('storefrontRequestLedgerContains')
@@ -362,13 +366,24 @@ if (!ecommerceConfirmSource.includes('storefrontRequestLedgerContains')
   || ['setItem(', 'removeItem(', 'localStorage', 'sessionStorage', 'fetch(', 'XMLHttpRequest', 'navigator.locks', 'convertCommerceWebsiteIntake', 'reserveCommerceOrder', 'mutateCommerceWorkspace'].some((marker) => ecommerceConfirmSource.includes(marker) || ecommerceHandoffSource.includes(marker))) fail('ecommerce_shop_handoff_contract_missing_or_mutating')
 if (!commerceSource.includes('recordCommerceStorefrontRequest')
   || !commerceSource.includes('storefrontRequests?: CommerceStorefrontRequest[]')
+  || !commerceSource.includes('commerceStorefrontPreviewDigest')
+  || !commerceSource.includes('configuration.selectedSkus.includes(validatedRequest.line.sku)')
+  || !commerceSource.includes('validatedRequest.sourceStorefrontRevision !== configuration.revision')
+  || !commerceSource.includes('commerceStorefrontRequestEquals')
+  || !commerceSource.includes('legacyFields')
+  || !commerceSource.includes('matches[0].onHand < 1')
   || !commerceSource.includes('ECOMMERCE:${validatedRequest.id}:${validatedRequest.sourcePreviewDigest}')
   || !managedTrialSource.includes('commerce.storefront_request.received')
   || !managedCommerceRuntime.includes('commerce.storefront_request.received')
   || !ecommerceSource.includes('saveManagedCommerceCommand')
+  || !ecommerceSource.includes('await recordCommerceStorefrontRequest')
   || !ecommerceSource.includes("eventType: 'commerce.storefront_request.received'")
   || !ecommerceSource.includes('Save to Shop inbox')
   || !ecommerceSource.includes('latestRequest.sourcePreviewDigest !== currentDigest')
+  || !ecommerceSource.includes('sourceStorefront: sourceConfiguration')
+  || !ecommerceSource.includes('expectedRequests = [latestRequest, ...commerceStorefrontRequests(currentState)]')
+  || !ecommerceSource.includes('catalogRebindRequired')
+  || !ecommerceSource.includes('Rebind storefront')
   || !ecommerceSource.includes('accepted.storefrontConfiguration ?? null')
   || !ecommerceSource.includes('identity.workspaceId !== managedIdentity.workspaceId')
   || !coreSource.includes('Ecommerce inbox')
@@ -1876,11 +1891,37 @@ async function verifyCommerceRuntime() {
     }
     const configuredBase = await model.saveCommerceStorefrontConfiguration(base, {
       storeName: 'Mingalar Shop',
-      summary: 'A configured storefront with a retained request inbox.',
+      summary: 'Clear prices and a small customer-ready catalog.',
       selectedSkus: ['SKU-1'],
       shopCatalogDigest: baseCatalogDigest,
     }, configurationProof)
     assert(configuredBase?.storefrontConfiguration?.revision === 1, 'storefront_request_configuration_fixture_failed')
+    const configuredPreviewDigest = await model.commerceStorefrontPreviewDigest(configuredBase)
+    assert(configuredPreviewDigest === 'sha256:5708a10fcffa1df487bd93f88809e1cfb678f92888cdf6f22a7deabbaf24c34d', 'storefront_preview_cross_runtime_digest_drifted')
+    const unicodePreviewBase = {
+      ...model.createEmptyCommerce(),
+      items: [
+        { sku: 'SM-😀', name: 'Emoji item', onHand: 4, reorderAt: 1, price: 400 },
+        { sku: 'SM-A', name: 'မြန်မာ လက်ဖက်ရည်', variant: 'သေး', onHand: 0, reorderAt: 1, price: 100 },
+      ],
+    }
+    const unicodeCatalogDigest = await model.commerceCatalogDigest(unicodePreviewBase)
+    const unicodeConfigurationProof = {
+      actionId: model.commerceStorefrontConfigurationActionId(1, unicodeCatalogDigest),
+      capturedAt: '2026-07-23T08:59:00.000Z',
+      actor: 'OP-OWNER',
+      reason: 'Save the Unicode storefront digest vector.',
+      evidenceReference: `ECOMMERCE-STOREFRONT:${unicodeCatalogDigest}:R1`,
+    }
+    const unicodeConfigured = await model.saveCommerceStorefrontConfiguration(unicodePreviewBase, {
+      storeName: 'မင်္ဂလာ ဆိုင်',
+      summary: 'ရွေးထားသော ပစ္စည်းများ။',
+      selectedSkus: ['SM-A', 'SM-😀'],
+      shopCatalogDigest: unicodeCatalogDigest,
+    }, unicodeConfigurationProof)
+    assert(unicodeConfigured
+      && await model.commerceStorefrontPreviewDigest(unicodeConfigured) === 'sha256:a755c68b02a8de75279f0bcda5bb8ed21078ee538a68f583eeb223ee8a43973c',
+    'storefront_preview_unicode_cross_runtime_digest_drifted')
     const storefrontRequestUuid = '00000000-0000-4000-8000-000000000010'
     const storefrontRequest = {
       schema: 'supermega.ecommerce.order_request.v1',
@@ -1889,7 +1930,9 @@ async function verifyCommerceRuntime() {
       id: `ECR-${storefrontRequestUuid}`,
       idempotencyKey: `ECI-${storefrontRequestUuid}`,
       createdAt: '2026-07-23T09:00:00.000Z',
-      sourcePreviewDigest: `sha256:${'a'.repeat(64)}`,
+      sourcePreviewDigest: configuredPreviewDigest,
+      sourceStorefrontRevision: configuredBase.storefrontConfiguration.revision,
+      sourceStorefrontActionId: configuredBase.storefrontConfiguration.saved.actionId,
       customerReference: 'Customer A',
       fulfilment: 'pickup',
       currency: 'MMK',
@@ -1899,7 +1942,7 @@ async function verifyCommerceRuntime() {
     const storefrontProof = proof(`ACT-${storefrontRequestUuid}`, 0, {
       evidenceReference: `ECOMMERCE:${storefrontRequest.id}:${storefrontRequest.sourcePreviewDigest}`,
     })
-    const withStorefrontRequest = model.recordCommerceStorefrontRequest(configuredBase, storefrontRequest, storefrontProof)
+    const withStorefrontRequest = await model.recordCommerceStorefrontRequest(configuredBase, storefrontRequest, storefrontProof)
     assert(withStorefrontRequest?.storefrontRequests?.length === 1, 'storefront_request_not_retained')
     assert(withStorefrontRequest.items === configuredBase.items
       && withStorefrontRequest.orders === configuredBase.orders
@@ -1907,15 +1950,133 @@ async function verifyCommerceRuntime() {
       && withStorefrontRequest.closes === configuredBase.closes
       && JSON.stringify(withStorefrontRequest.storefrontConfiguration) === JSON.stringify(configuredBase.storefrontConfiguration),
     'storefront_request_changed_shop_ledgers')
-    assert(model.recordCommerceStorefrontRequest(withStorefrontRequest, storefrontRequest, storefrontProof) === withStorefrontRequest, 'storefront_request_retry_not_idempotent')
-    assert(model.recordCommerceStorefrontRequest(withStorefrontRequest, {
+    assert(await model.recordCommerceStorefrontRequest(withStorefrontRequest, storefrontRequest, storefrontProof) === withStorefrontRequest, 'storefront_request_retry_not_idempotent')
+    const reorderedStorefrontRequest = {
+      totalMmk: storefrontRequest.totalMmk,
+      line: {
+        unitPriceMmk: storefrontRequest.line.unitPriceMmk,
+        quantity: storefrontRequest.line.quantity,
+        variant: storefrontRequest.line.variant,
+        name: storefrontRequest.line.name,
+        sku: storefrontRequest.line.sku,
+      },
+      currency: storefrontRequest.currency,
+      fulfilment: storefrontRequest.fulfilment,
+      customerReference: storefrontRequest.customerReference,
+      sourceStorefrontActionId: storefrontRequest.sourceStorefrontActionId,
+      sourceStorefrontRevision: storefrontRequest.sourceStorefrontRevision,
+      sourcePreviewDigest: storefrontRequest.sourcePreviewDigest,
+      createdAt: storefrontRequest.createdAt,
+      idempotencyKey: storefrontRequest.idempotencyKey,
+      id: storefrontRequest.id,
+      state: storefrontRequest.state,
+      mode: storefrontRequest.mode,
+      schema: storefrontRequest.schema,
+    }
+    assert(await model.recordCommerceStorefrontRequest(withStorefrontRequest, reorderedStorefrontRequest, storefrontProof) === withStorefrontRequest, 'storefront_request_reordered_retry_not_idempotent')
+    assert(await model.recordCommerceStorefrontRequest(withStorefrontRequest, {
       ...storefrontRequest,
       customerReference: 'Changed',
     }, storefrontProof) === null, 'storefront_request_identity_conflict_succeeded')
-    assert(model.recordCommerceStorefrontRequest(base, storefrontRequest, {
+    assert(await model.recordCommerceStorefrontRequest(base, storefrontRequest, {
       ...storefrontProof,
       evidenceReference: 'ECOMMERCE:wrong',
     }) === null, 'storefront_request_wrong_evidence_succeeded')
+    assert(await model.recordCommerceStorefrontRequest(base, storefrontRequest, storefrontProof) === null, 'storefront_request_without_saved_storefront_succeeded')
+    const legacyStorefrontRequest = { ...storefrontRequest }
+    delete legacyStorefrontRequest.sourceStorefrontRevision
+    delete legacyStorefrontRequest.sourceStorefrontActionId
+    const legacyStorefrontInbox = model.validateCommerceState({
+      ...base,
+      storefrontRequests: [legacyStorefrontRequest],
+    })
+    const legacyStockReceipt = model.receiveCommerceStock(
+      legacyStorefrontInbox,
+      'SKU-1',
+      1,
+      proof('ACT-LEGACY-STOREFRONT-STOCK'),
+    )
+    assert(legacyStockReceipt
+      && !('sourceStorefrontRevision' in legacyStockReceipt.storefrontRequests[0])
+      && legacyStockReceipt.storefrontRequests[0].id === legacyStorefrontRequest.id,
+    'legacy_storefront_request_without_provenance_became_unreadable')
+    assertThrows(() => model.validateCommerceState({
+      ...base,
+      storefrontRequests: [{ ...legacyStorefrontRequest, sourceStorefrontRevision: null }],
+    }), 'partial_legacy_storefront_provenance_succeeded')
+    assert(await model.recordCommerceStorefrontRequest(configuredBase, {
+      ...storefrontRequest,
+      sourceStorefrontRevision: null,
+      sourceStorefrontActionId: null,
+    }, storefrontProof) === null, 'storefront_request_without_revision_provenance_succeeded')
+    const preSaveStorefrontRequest = {
+      ...storefrontRequest,
+      createdAt: '2026-07-23T08:58:59.000Z',
+    }
+    const preSaveStorefrontProof = {
+      ...storefrontProof,
+      capturedAt: preSaveStorefrontRequest.createdAt,
+    }
+    assert(await model.recordCommerceStorefrontRequest(configuredBase, preSaveStorefrontRequest, preSaveStorefrontProof) === null, 'storefront_request_before_configuration_save_succeeded')
+    const unboundStorefrontRequest = {
+      ...storefrontRequest,
+      sourcePreviewDigest: `sha256:${'b'.repeat(64)}`,
+    }
+    const unboundStorefrontProof = {
+      ...storefrontProof,
+      evidenceReference: `ECOMMERCE:${unboundStorefrontRequest.id}:${unboundStorefrontRequest.sourcePreviewDigest}`,
+    }
+    assert(await model.recordCommerceStorefrontRequest(configuredBase, unboundStorefrontRequest, unboundStorefrontProof) === null, 'storefront_request_unbound_preview_digest_succeeded')
+    const staleConfiguredBase = model.validateCommerceState({
+      ...configuredBase,
+      items: [
+        ...configuredBase.items,
+        { sku: 'SKU-2', name: 'Second item', onHand: 2, reorderAt: 1, price: 50 },
+      ],
+    })
+    assert(await model.recordCommerceStorefrontRequest(staleConfiguredBase, storefrontRequest, storefrontProof) === null, 'storefront_request_stale_catalog_configuration_succeeded')
+    const twoItemBase = model.validateCommerceState({
+      ...base,
+      items: [
+        ...base.items,
+        { sku: 'SKU-2', name: 'Second item', onHand: 2, reorderAt: 1, price: 50 },
+      ],
+    })
+    const twoItemCatalogDigest = await model.commerceCatalogDigest(twoItemBase)
+    const twoItemConfigurationProof = {
+      ...configurationProof,
+      actionId: model.commerceStorefrontConfigurationActionId(1, twoItemCatalogDigest),
+      evidenceReference: `ECOMMERCE-STOREFRONT:${twoItemCatalogDigest}:R1`,
+    }
+    const configuredTwoItemBase = await model.saveCommerceStorefrontConfiguration(twoItemBase, {
+      storeName: 'Mingalar Shop',
+      summary: 'Clear prices and a small customer-ready catalog.',
+      selectedSkus: ['SKU-1'],
+      shopCatalogDigest: twoItemCatalogDigest,
+    }, twoItemConfigurationProof)
+    assert(configuredTwoItemBase, 'storefront_request_selection_fixture_failed')
+    const excludedStorefrontRequest = {
+      ...storefrontRequest,
+      sourceStorefrontRevision: configuredTwoItemBase.storefrontConfiguration.revision,
+      sourceStorefrontActionId: configuredTwoItemBase.storefrontConfiguration.saved.actionId,
+      line: { ...storefrontRequest.line, sku: 'SKU-2', name: 'Second item', unitPriceMmk: 50 },
+      totalMmk: 100,
+    }
+    assert(await model.recordCommerceStorefrontRequest(configuredTwoItemBase, excludedStorefrontRequest, storefrontProof) === null, 'storefront_request_excluded_sku_succeeded')
+    const soldOutConfiguredBase = model.validateCommerceState({
+      ...configuredBase,
+      items: configuredBase.items.map((item) => ({ ...item, onHand: 0 })),
+    })
+    const soldOutPreviewDigest = await model.commerceStorefrontPreviewDigest(soldOutConfiguredBase)
+    const soldOutStorefrontRequest = {
+      ...storefrontRequest,
+      sourcePreviewDigest: soldOutPreviewDigest,
+    }
+    const soldOutStorefrontProof = {
+      ...storefrontProof,
+      evidenceReference: `ECOMMERCE:${soldOutStorefrontRequest.id}:${soldOutStorefrontRequest.sourcePreviewDigest}`,
+    }
+    assert(await model.recordCommerceStorefrontRequest(soldOutConfiguredBase, soldOutStorefrontRequest, soldOutStorefrontProof) === null, 'storefront_request_sold_out_sku_succeeded')
     assertThrows(() => model.validateCommerceState({
       ...withStorefrontRequest,
       storefrontRequests: [storefrontRequest, storefrontRequest],
@@ -1933,7 +2094,7 @@ async function verifyCommerceRuntime() {
         return { ...storefrontRequest, id: `ECR-${requestUuid}`, idempotencyKey: `ECI-${requestUuid}` }
       }),
     })
-    assert(model.recordCommerceStorefrontRequest(fullStorefrontInbox, storefrontRequest, storefrontProof) === null, 'full_storefront_request_inbox_accepted')
+    assert(await model.recordCommerceStorefrontRequest(fullStorefrontInbox, storefrontRequest, storefrontProof) === null, 'full_storefront_request_inbox_accepted')
     assertThrows(() => model.validateCommerceState({
       ...fullStorefrontInbox,
       storefrontRequests: [...fullStorefrontInbox.storefrontRequests, storefrontRequest],
@@ -2503,6 +2664,23 @@ async function verifyStorefrontRuntime() {
     const firstDigest = await storefront.storefrontPreviewDigest(preview)
     const retryDigest = await storefront.storefrontPreviewDigest(reordered)
     assert(firstDigest === retryDigest && /^sha256:[a-f0-9]{64}$/.test(firstDigest), 'storefront_digest_not_deterministic_sha256')
+    const managedPreviewBase = { ...commerce.createEmptyCommerce(), items: catalog }
+    const managedPreviewCatalogDigest = await commerce.commerceCatalogDigest(managedPreviewBase)
+    const managedPreviewProof = {
+      actionId: commerce.commerceStorefrontConfigurationActionId(1, managedPreviewCatalogDigest),
+      capturedAt: '2026-07-24T08:59:00.000Z',
+      actor: 'OP-OWNER',
+      reason: 'Bind the customer preview parity vector.',
+      evidenceReference: `ECOMMERCE-STOREFRONT:${managedPreviewCatalogDigest}:R1`,
+    }
+    const managedPreviewState = await commerce.saveCommerceStorefrontConfiguration(
+      managedPreviewBase,
+      { ...input, shopCatalogDigest: managedPreviewCatalogDigest },
+      managedPreviewProof,
+    )
+    assert(managedPreviewState
+      && await commerce.commerceStorefrontPreviewDigest(managedPreviewState) === firstDigest,
+    'storefront_customer_and_managed_preview_digests_diverged')
     const changed = storefront.buildStorefrontPreview(catalog, { ...input, summary: 'Changed storefront copy.' })
     assert(await storefront.storefrontPreviewDigest(changed) !== firstDigest, 'storefront_digest_ignored_copy_change')
 
@@ -2551,9 +2729,20 @@ async function verifyStorefrontRuntime() {
     requestAssert(request.totalMmk === 37_000 && request.line.unitPriceMmk === 18_500 && request.line.quantity === 2, 'storefront_request_price_snapshot_invalid')
     requestAssert(!JSON.stringify(request).includes('onHand') && !JSON.stringify(request).includes('reorderAt'), 'storefront_request_leaked_shop_stock_fields')
     const emptyLedger = requestModel.createEmptyStorefrontRequestLedger()
+    const legacyLocalReceipt = { ...request }
+    delete legacyLocalReceipt.sourceStorefrontRevision
+    delete legacyLocalReceipt.sourceStorefrontActionId
+    const legacyLocalLedger = requestModel.recordStorefrontOrderRequest(emptyLedger, legacyLocalReceipt)
+    requestAssert(legacyLocalLedger
+      && requestModel.storefrontRequestLedgerContains(legacyLocalLedger, legacyLocalReceipt),
+    'legacy_local_storefront_receipt_became_unreadable')
     const recorded = requestModel.recordStorefrontOrderRequest(emptyLedger, request)
     requestAssert(recorded?.requests.length === 1 && recorded.requests[0].id === request.id, 'storefront_request_not_recorded')
     requestAssert(requestModel.recordStorefrontOrderRequest(recorded, request) === recorded, 'storefront_request_exact_retry_not_idempotent')
+    const reorderedReceipt = { totalMmk: request.totalMmk, ...request }
+    requestAssert(JSON.stringify(reorderedReceipt) !== JSON.stringify(request)
+      && requestModel.recordStorefrontOrderRequest(recorded, reorderedReceipt) === recorded,
+    'storefront_request_reordered_retry_not_idempotent')
     const conflicting = { ...request, totalMmk: request.totalMmk + request.line.unitPriceMmk, line: { ...request.line, quantity: 3 } }
     requestAssert(requestModel.recordStorefrontOrderRequest(recorded, conflicting) === null, 'storefront_request_conflicting_retry_succeeded')
     requestAssert(requestModel.recordStorefrontOrderRequest(recorded, { ...request, currency: 'USD' }) === null, 'storefront_request_tampered_currency_accepted')
@@ -2815,6 +3004,23 @@ async function verifyManagedStorefrontRuntime() {
       '2026-07-25T00:01:00.000Z',
     )
     assert(unchanged.status === 'unchanged' && unchanged.configuration.revision === 1, 'managed_storefront_exact_retry_advanced_revision')
+    const repricedAccepted = commerce.validateCommerceState({
+      ...accepted,
+      items: accepted.items.map((item, index) => (
+        index === 0 ? { ...item, price: item.price + 500 } : item
+      )),
+    })
+    const rebound = await model.prepareManagedStorefrontSave(
+      repricedAccepted,
+      input,
+      'OP-MANAGED',
+      '2026-07-25T00:01:30.000Z',
+    )
+    assert(rebound.status === 'ready'
+      && rebound.configuration.revision === 2
+      && rebound.configuration.shopCatalogSnapshotRevision === 2
+      && rebound.configuration.shopCatalogDigest !== plan.configuration.shopCatalogDigest,
+    'managed_storefront_stale_catalog_could_not_rebind')
     const changed = await model.prepareManagedStorefrontSave(
       accepted,
       { ...input, summary: 'Updated managed storefront copy.' },

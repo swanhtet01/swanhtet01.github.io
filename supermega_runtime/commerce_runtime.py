@@ -63,6 +63,7 @@ _STOREFRONT_IDEMPOTENCY_PATTERN = re.compile(
     r"ECI-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
 )
 _SHA256_DIGEST_PATTERN = re.compile(r"sha256:[a-f0-9]{64}")
+_STOREFRONT_PREVIEW_SCHEMA = "supermega.ecommerce.storefront_preview.v1"
 _MAX_STOREFRONT_REQUESTS = 100
 _MAX_ORDER_LINES = 20
 _MAX_MOVEMENT_ID_LENGTH = 2_000
@@ -169,6 +170,9 @@ _STOREFRONT_REQUEST_FIELDS = frozenset(
         "line",
         "totalMmk",
     }
+)
+_STOREFRONT_REQUEST_PROVENANCE_FIELDS = frozenset(
+    {"sourceStorefrontRevision", "sourceStorefrontActionId"}
 )
 _STOREFRONT_REQUEST_LINE_FIELDS = frozenset(
     {"sku", "name", "variant", "quantity", "unitPriceMmk"}
@@ -286,7 +290,12 @@ def _action_proof(value: object, field: str, *, with_order_id: bool = False) -> 
 
 def _storefront_request(value: object, field: str) -> dict[str, Any]:
     request = _object(value, field)
-    _exact_fields(request, field, required=_STOREFRONT_REQUEST_FIELDS)
+    _exact_fields(
+        request,
+        field,
+        required=_STOREFRONT_REQUEST_FIELDS,
+        optional=_STOREFRONT_REQUEST_PROVENANCE_FIELDS,
+    )
     if request["schema"] != "supermega.ecommerce.order_request.v1":
         raise TrialValidationError(f"{field}.schema is invalid.")
     if request["mode"] != "browser-local-request" or request["state"] != "pending_shop_review":
@@ -303,6 +312,17 @@ def _storefront_request(value: object, field: str) -> dict[str, Any]:
     digest = _text(request["sourcePreviewDigest"], f"{field}.sourcePreviewDigest", maximum=71)
     if _SHA256_DIGEST_PATTERN.fullmatch(digest) is None:
         raise TrialValidationError(f"{field}.sourcePreviewDigest is invalid.")
+    source_revision = request.get("sourceStorefrontRevision")
+    source_action_id = request.get("sourceStorefrontActionId")
+    if (
+        ("sourceStorefrontRevision" in request)
+        != ("sourceStorefrontActionId" in request)
+        or (source_revision is None) != (source_action_id is None)
+    ):
+        raise TrialValidationError(f"{field} storefront provenance is incomplete.")
+    if source_revision is not None:
+        _integer(source_revision, f"{field}.sourceStorefrontRevision", minimum=1)
+        _text(source_action_id, f"{field}.sourceStorefrontActionId", maximum=160)
     _text(request["customerReference"], f"{field}.customerReference", maximum=80)
     if request["fulfilment"] not in ("pickup", "delivery") or request["currency"] != "MMK":
         raise TrialValidationError(f"{field} fulfilment or currency is invalid.")
@@ -1145,6 +1165,55 @@ def commerce_catalog_digest(state: Mapping[str, Any]) -> str:
     return f"sha256:{sha256(encoded).hexdigest()}"
 
 
+def _configured_storefront_preview_digest(
+    state: Mapping[str, Any],
+    configuration: Mapping[str, Any],
+) -> str:
+    item_by_sku = {item["sku"]: item for item in state["items"]}
+    preview = {
+        "schema": _STOREFRONT_PREVIEW_SCHEMA,
+        "mode": "browser-local-preview",
+        "sourceCatalogSchema": COMMERCE_SCHEMA,
+        "storeName": configuration["storeName"],
+        "summary": configuration["summary"],
+        "currency": "MMK",
+        "items": [
+            {
+                "sku": item_by_sku[sku]["sku"],
+                "name": item_by_sku[sku]["name"],
+                "variant": item_by_sku[sku].get("variant"),
+                "unitPriceMmk": item_by_sku[sku]["price"],
+                "availability": (
+                    "available" if item_by_sku[sku]["onHand"] > 0 else "sold_out"
+                ),
+            }
+            for sku in configuration["selectedSkus"]
+        ],
+    }
+    encoded = json.dumps(
+        preview,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return f"sha256:{sha256(encoded).hexdigest()}"
+
+
+def commerce_storefront_preview_digest(state: Mapping[str, Any]) -> str:
+    """Return the digest of the saved storefront rendered from the current Shop state."""
+
+    current = validate_commerce_state(state)
+    configuration = _storefront_configuration(current)
+    if configuration is None:
+        raise TrialValidationError(
+            "a saved storefront configuration is required before its preview can be bound."
+        )
+    if configuration["shopCatalogDigest"] != commerce_catalog_digest(current):
+        raise TrialValidationError(
+            "the saved storefront configuration does not match the current Shop catalog."
+        )
+    return _configured_storefront_preview_digest(current, configuration)
+
+
 def _require_website_intakes_unchanged(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
     if _website_intakes(current) != _website_intakes(next_state):
         raise TrialValidationError("event cannot change: websiteIntakes.")
@@ -1501,12 +1570,44 @@ def _validate_storefront_request_received(current: Mapping[str, Any], next_state
         )
     request = next_requests[0]
     line = request["line"]
+    configuration = _storefront_configuration(current)
+    if configuration is None:
+        raise TrialValidationError(
+            "an Ecommerce request requires a saved storefront configuration."
+        )
+    if configuration["shopCatalogDigest"] != commerce_catalog_digest(current):
+        raise TrialValidationError(
+            "the Ecommerce request cannot use a storefront with a stale Shop catalog."
+        )
+    if line["sku"] not in configuration["selectedSkus"]:
+        raise TrialValidationError(
+            "the Ecommerce request SKU is not included in the saved storefront."
+        )
+    if (
+        request.get("sourceStorefrontRevision") != configuration["revision"]
+        or request.get("sourceStorefrontActionId") != configuration["saved"]["actionId"]
+        or datetime.fromisoformat(request["createdAt"].replace("Z", "+00:00"))
+        < datetime.fromisoformat(
+            configuration["saved"]["capturedAt"].replace("Z", "+00:00")
+        )
+    ):
+        raise TrialValidationError(
+            "the Ecommerce request does not reference the current saved storefront revision."
+        )
+    if request["sourcePreviewDigest"] != _configured_storefront_preview_digest(
+        current,
+        configuration,
+    ):
+        raise TrialValidationError(
+            "the Ecommerce request does not match the current saved storefront preview."
+        )
     matching_items = [item for item in current["items"] if item["sku"] == line["sku"]]
     if (
         len(matching_items) != 1
         or matching_items[0]["name"] != line["name"]
         or matching_items[0].get("variant") != line["variant"]
         or matching_items[0]["price"] != line["unitPriceMmk"]
+        or matching_items[0]["onHand"] < 1
         or any(order.get("sourceRecordId") == request["id"] for order in current["orders"])
     ):
         raise TrialValidationError(
@@ -1607,6 +1708,7 @@ __all__ = [
     "COMMERCE_HUMAN_EVENTS",
     "COMMERCE_SCHEMA",
     "commerce_catalog_digest",
+    "commerce_storefront_preview_digest",
     "reduce_commerce_state",
     "validate_commerce_state",
 ]

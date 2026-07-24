@@ -2,6 +2,10 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
 import {
+  commerceCatalogDigest,
+  commerceCatalogDigestSource,
+  commerceStorefrontConfiguration,
+  commerceStorefrontRequestEquals,
   commerceStorefrontRequests,
   recordCommerceStorefrontRequest,
   validateCommerceState,
@@ -153,6 +157,11 @@ export function EcommerceProduct() {
   const [device, setDevice] = useState<PreviewDevice>('phone')
   const [mobileWorkspace, setMobileWorkspace] = useState<'setup' | 'preview'>('setup')
   const [digestState, setDigestState] = useState({ previewJson: '', value: '', error: '' })
+  const [managedCatalogDigestState, setManagedCatalogDigestState] = useState({
+    source: '',
+    value: '',
+    error: '',
+  })
   const [requestLedger, setRequestLedger] = useState(createEmptyStorefrontRequestLedger)
   const [requestCustomer, setRequestCustomer] = useState('')
   const [requestSku, setRequestSku] = useState(initialState.selectedSkus[0] ?? '')
@@ -273,12 +282,34 @@ export function EcommerceProduct() {
     }
   }, [catalog.items, selectedSkus, storeName, summary])
   const previewJson = previewResult.preview ? JSON.stringify(previewResult.preview) : ''
-  const savedDraftIsCurrent = Boolean(savedDraft
+  const managedCatalogSource = managedInbox
+    ? commerceCatalogDigestSource(managedInbox.state)
+    : ''
+  const managedCatalogDigest = managedCatalogDigestState.source === managedCatalogSource
+    ? managedCatalogDigestState.value
+    : ''
+  const managedCatalogDigestError = managedCatalogDigestState.source === managedCatalogSource
+    ? managedCatalogDigestState.error
+    : ''
+  const managedCatalogDigestPending = Boolean(managedInbox
+    && !managedCatalogDigest
+    && !managedCatalogDigestError)
+  const savedFieldsAreCurrent = Boolean(savedDraft
     && savedDraft.storeName === storeName
     && savedDraft.summary === summary
     && savedDraft.selectedSkus.length === selectedSkus.length
     && savedDraft.selectedSkus.every((sku) => selectedSkus.includes(sku)))
+  const savedCatalogIsCurrent = !managedIdentity || Boolean(savedDraft?.shopCatalogDigest
+    && managedCatalogDigest
+    && savedDraft.shopCatalogDigest === managedCatalogDigest)
+  const savedDraftIsCurrent = savedFieldsAreCurrent && savedCatalogIsCurrent
   const hasUnsavedStorefront = !savedDraftIsCurrent
+  const hasUnsavedFieldChanges = !savedFieldsAreCurrent
+  const catalogRebindRequired = Boolean(managedIdentity
+    && savedDraft
+    && savedFieldsAreCurrent
+    && managedCatalogDigest
+    && !savedCatalogIsCurrent)
   const savedSelectionReconciliation = useMemo(
     () => savedDraft
       ? reconcileStorefrontSelection(savedDraft.selectedSkus, catalog.items.map((item) => item.sku))
@@ -302,6 +333,27 @@ export function EcommerceProduct() {
       })
     return () => { current = false }
   }, [previewJson, previewResult.preview])
+
+  useEffect(() => {
+    let current = true
+    if (!managedInbox) {
+      return () => { current = false }
+    }
+    void commerceCatalogDigest(managedInbox.state)
+      .then((value) => {
+        if (current) setManagedCatalogDigestState({ source: managedCatalogSource, value, error: '' })
+      })
+      .catch((error) => {
+        if (current) {
+          setManagedCatalogDigestState({
+            source: managedCatalogSource,
+            value: '',
+            error: error instanceof Error ? error.message : 'Shop catalog digest failed.',
+          })
+        }
+      })
+    return () => { current = false }
+  }, [managedCatalogSource, managedInbox])
 
   function toggleSku(sku: string) {
     setDraftNotice('')
@@ -423,7 +475,9 @@ export function EcommerceProduct() {
       || catalogHydrating
       || selectionReviewRequired
       || draftBusy
-      || draftStorageBlocked) return
+      || draftStorageBlocked
+      || managedCatalogDigestPending
+      || Boolean(managedCatalogDigestError)) return
     setDraftBusy(true)
     setDraftNotice('')
     try {
@@ -505,6 +559,10 @@ export function EcommerceProduct() {
   async function createRequestReceipt(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!previewResult.preview || !digest || catalogHydrating || requestBusy) return
+    if (managedIdentity && !savedDraftIsCurrent) {
+      setRequestNotice('Save this storefront against the current Shop catalog before creating a managed request receipt.')
+      return
+    }
     if (!globalThis.crypto?.randomUUID) {
       setRequestNotice('Secure request identity is unavailable. Nothing was recorded.')
       return
@@ -515,6 +573,12 @@ export function EcommerceProduct() {
       const selectedSku = previewResult.preview.items.some((item) => item.sku === requestSku)
         ? requestSku
         : previewResult.preview.items[0]?.sku ?? ''
+      const sourceConfiguration = managedIdentity && managedInbox
+        ? commerceStorefrontConfiguration(managedInbox.state)
+        : null
+      if (managedIdentity && !sourceConfiguration) {
+        throw new Error('The saved managed storefront revision is unavailable. Save the storefront again.')
+      }
       const request = await buildStorefrontOrderRequest(previewResult.preview, digest, {
         idempotencyKey: `ECI-${globalThis.crypto.randomUUID().toUpperCase()}`,
         customerReference: requestCustomer,
@@ -522,6 +586,12 @@ export function EcommerceProduct() {
         quantity: requestQuantity,
         fulfilment: requestFulfilment,
         createdAt: new Date().toISOString(),
+        sourceStorefront: sourceConfiguration
+          ? {
+              revision: sourceConfiguration.revision,
+              actionId: sourceConfiguration.saved.actionId,
+            }
+          : null,
       })
       const nextLedger = recordStorefrontOrderRequest(requestLedger, request)
       if (!nextLedger) throw new Error('The request receipt conflicted with the current local ledger.')
@@ -589,7 +659,7 @@ export function EcommerceProduct() {
         reason: 'Retain this customer request for human Shop review.',
         evidenceReference: `ECOMMERCE:${latestRequest.id}:${latestRequest.sourcePreviewDigest}`,
       }
-      const nextState = recordCommerceStorefrontRequest(currentState, latestRequest, proof)
+      const nextState = await recordCommerceStorefrontRequest(currentState, latestRequest, proof)
       if (!nextState) throw new Error('The Ecommerce request conflicts with the current managed Shop inbox.')
       if (nextState === currentState) {
         setManagedInbox({ identity, state: currentState, version: record.version })
@@ -620,8 +690,12 @@ export function EcommerceProduct() {
         throw new Error('The managed identity changed before the Ecommerce inbox receipt was confirmed.')
       }
       const accepted = validateCommerceState(result.state)
-      const retained = commerceStorefrontRequests(accepted).find((candidate) => candidate.id === latestRequest.id)
-      if (!retained || JSON.stringify(retained) !== JSON.stringify(latestRequest)
+      const acceptedRequests = commerceStorefrontRequests(accepted)
+      const expectedRequests = [latestRequest, ...commerceStorefrontRequests(currentState)]
+      if (acceptedRequests.length !== expectedRequests.length
+        || acceptedRequests.some((candidate, index) => (
+          !commerceStorefrontRequestEquals(candidate, expectedRequests[index])
+        ))
         || JSON.stringify(accepted.items) !== JSON.stringify(currentState.items)
         || JSON.stringify(accepted.orders) !== JSON.stringify(currentState.orders)
         || JSON.stringify(accepted.movements) !== JSON.stringify(currentState.movements)
@@ -730,7 +804,11 @@ export function EcommerceProduct() {
           <div
             aria-live="polite"
             className="ecommerce-save-bar"
-            data-state={savedDraftIsCurrent ? 'saved' : draftStorageBlocked ? 'blocked' : 'unsaved'}
+            data-state={savedDraftIsCurrent
+              ? 'saved'
+              : draftStorageBlocked || managedCatalogDigestError
+                ? 'blocked'
+                : 'unsaved'}
             role="status"
           >
             <div>
@@ -738,6 +816,10 @@ export function EcommerceProduct() {
                 ? 'Checking storefront workspace'
                 : draftStorageBlocked
                 ? 'Saved setup needs recovery'
+                : managedCatalogDigestError
+                ? 'Shop catalog check unavailable'
+                : catalogRebindRequired
+                ? 'Shop catalog changed'
                 : savedDraftIsCurrent
                 ? managedIdentity
                   ? `Saved to workspace · revision ${savedDraft?.revision}`
@@ -745,7 +827,9 @@ export function EcommerceProduct() {
                 : savedDraft ? 'Unsaved changes' : 'Not saved yet'}</strong>
               <small>{catalogHydrating
                 ? 'Editing unlocks after the local or managed Shop scope is confirmed.'
-                : draftIssue || (savedDraftIsCurrent && savedDraft
+                : draftIssue || managedCatalogDigestError || (catalogRebindRequired
+                ? 'Save again to bind this storefront to the current Shop catalog.'
+                : savedDraftIsCurrent && savedDraft
                 ? `Saved ${new Date(savedDraft.savedAt).toLocaleString()}`
                 : managedIdentity
                   ? 'Save the storefront name, description, and selected products to this workspace.'
@@ -755,14 +839,21 @@ export function EcommerceProduct() {
                 : null}
             </div>
             <div className="ecommerce-save-actions">
-              <button className="core-button secondary" disabled={!hasUnsavedStorefront || catalogHydrating || draftBusy} onClick={discardStorefrontChanges} type="button">Discard</button>
+              <button className="core-button secondary" disabled={!hasUnsavedFieldChanges || catalogHydrating || draftBusy} onClick={discardStorefrontChanges} type="button">Discard</button>
               <button
                 className="core-button primary"
-                disabled={!hasUnsavedStorefront || !previewResult.preview || catalogHydrating || selectionReviewRequired || draftBusy || draftStorageBlocked}
+                disabled={!hasUnsavedStorefront
+                  || !previewResult.preview
+                  || catalogHydrating
+                  || selectionReviewRequired
+                  || draftBusy
+                  || draftStorageBlocked
+                  || managedCatalogDigestPending
+                  || Boolean(managedCatalogDigestError)}
                 onClick={() => void saveCurrentStorefront()}
                 type="button"
               >
-                {draftBusy ? 'Saving…' : 'Save storefront'}
+                {draftBusy ? 'Saving…' : catalogRebindRequired ? 'Rebind storefront' : 'Save storefront'}
               </button>
             </div>
           </div>

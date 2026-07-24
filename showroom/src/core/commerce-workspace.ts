@@ -1,5 +1,6 @@
 export const COMMERCE_WORKSPACE_SCHEMA = 'supermega.commerce.workspace.v2' as const
 export const COMMERCE_STOREFRONT_SCHEMA = 'supermega.ecommerce.storefront.v1' as const
+const COMMERCE_STOREFRONT_PREVIEW_SCHEMA = 'supermega.ecommerce.storefront_preview.v1' as const
 export const COMMERCE_KEY = 'supermega.commerce.workspace.v2'
 export const LEGACY_COMMERCE_KEYS = ['supermega.commerce.workspace.v1', 'supermega.shop.workspace.v2']
 export const COMMERCE_LOCK = 'supermega-commerce-workspace-v2'
@@ -128,6 +129,8 @@ export type CommerceStorefrontRequest = {
   idempotencyKey: string
   createdAt: string
   sourcePreviewDigest: string
+  sourceStorefrontRevision?: number | null
+  sourceStorefrontActionId?: string | null
   customerReference: string
   fulfilment: 'pickup' | 'delivery'
   currency: 'MMK'
@@ -747,10 +750,14 @@ export function validateCommerceState(value: unknown): CommerceState {
   const storefrontIdempotencyKeys: string[] = []
   const storefrontActionIds: string[] = []
   for (const [index, candidate] of storefrontRequests.entries()) {
-    if (!isRecord(candidate) || !hasExactKeys(
-      candidate,
-      ['schema', 'mode', 'state', 'id', 'idempotencyKey', 'createdAt', 'sourcePreviewDigest', 'customerReference', 'fulfilment', 'currency', 'line', 'totalMmk'],
-    )) throw new Error(`storefrontRequests[${index}] is invalid.`)
+    if (!isRecord(candidate)) throw new Error(`storefrontRequests[${index}] is invalid.`)
+    const legacyFields = ['schema', 'mode', 'state', 'id', 'idempotencyKey', 'createdAt', 'sourcePreviewDigest', 'customerReference', 'fulfilment', 'currency', 'line', 'totalMmk']
+    const currentFields = [...legacyFields, 'sourceStorefrontRevision', 'sourceStorefrontActionId']
+    if (!hasExactKeys(candidate, legacyFields) && !hasExactKeys(candidate, currentFields)) {
+      throw new Error(`storefrontRequests[${index}] is invalid.`)
+    }
+    const hasStorefrontProvenance = 'sourceStorefrontRevision' in candidate
+      && 'sourceStorefrontActionId' in candidate
     const requestId = canonicalText(candidate.id, `storefrontRequests[${index}].id`, 40)
     const idempotencyKey = canonicalText(candidate.idempotencyKey, `storefrontRequests[${index}].idempotencyKey`, 40)
     if (candidate.schema !== 'supermega.ecommerce.order_request.v1'
@@ -762,6 +769,13 @@ export function validateCommerceState(value: unknown): CommerceState {
       || !validTimestamp(candidate.createdAt)
       || typeof candidate.sourcePreviewDigest !== 'string'
       || !sha256DigestPattern.test(candidate.sourcePreviewDigest)
+      || (hasStorefrontProvenance
+        && (candidate.sourceStorefrontRevision === null) !== (candidate.sourceStorefrontActionId === null))
+      || (hasStorefrontProvenance
+        && candidate.sourceStorefrontRevision !== null
+        && (!Number.isSafeInteger(candidate.sourceStorefrontRevision)
+          || Number(candidate.sourceStorefrontRevision) < 1
+          || typeof candidate.sourceStorefrontActionId !== 'string'))
       || candidate.fulfilment !== 'pickup' && candidate.fulfilment !== 'delivery'
       || candidate.currency !== 'MMK'
       || !isRecord(candidate.line)
@@ -769,6 +783,13 @@ export function validateCommerceState(value: unknown): CommerceState {
       throw new Error(`storefrontRequests[${index}] is invalid.`)
     }
     canonicalText(candidate.customerReference, `storefrontRequests[${index}].customerReference`, 80)
+    if (hasStorefrontProvenance && candidate.sourceStorefrontActionId !== null) {
+      canonicalText(
+        candidate.sourceStorefrontActionId,
+        `storefrontRequests[${index}].sourceStorefrontActionId`,
+        160,
+      )
+    }
     canonicalText(candidate.line.sku, `storefrontRequests[${index}].line.sku`, 80)
     canonicalText(candidate.line.name, `storefrontRequests[${index}].line.name`)
     if (candidate.line.variant !== null) canonicalText(candidate.line.variant, `storefrontRequests[${index}].line.variant`)
@@ -1042,6 +1063,39 @@ export async function commerceCatalogDigest(state: CommerceState) {
   return `sha256:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')}`
 }
 
+export async function commerceStorefrontPreviewDigest(state: CommerceState) {
+  const current = validateCommerceState(state)
+  const configuration = commerceStorefrontConfiguration(current)
+  if (!configuration) throw new Error('A saved storefront configuration is required.')
+  if (configuration.shopCatalogDigest !== await commerceCatalogDigest(current)) {
+    throw new Error('The saved storefront configuration does not match the current Shop catalog.')
+  }
+  const itemBySku = new Map(current.items.map((item) => [item.sku, item]))
+  const source = JSON.stringify({
+    schema: COMMERCE_STOREFRONT_PREVIEW_SCHEMA,
+    mode: 'browser-local-preview',
+    sourceCatalogSchema: COMMERCE_WORKSPACE_SCHEMA,
+    storeName: configuration.storeName,
+    summary: configuration.summary,
+    currency: 'MMK',
+    items: configuration.selectedSkus.map((sku) => {
+      const item = itemBySku.get(sku)
+      if (!item) throw new Error(`Saved storefront SKU ${sku} is unavailable.`)
+      return {
+        sku: item.sku,
+        name: item.name,
+        variant: item.variant ?? null,
+        unitPriceMmk: item.price,
+        availability: item.onHand > 0 ? 'available' : 'sold_out',
+      }
+    }),
+  })
+  const subtle = globalThis.crypto?.subtle
+  if (!subtle) throw new Error('SHA-256 is unavailable.')
+  const digest = await subtle.digest('SHA-256', new TextEncoder().encode(source))
+  return `sha256:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')}`
+}
+
 export async function saveCommerceStorefrontConfiguration(
   state: CommerceState,
   input: CommerceStorefrontConfigurationInput,
@@ -1108,11 +1162,31 @@ export async function saveCommerceStorefrontConfiguration(
   })
 }
 
-function sameStorefrontRequest(left: CommerceStorefrontRequest, right: CommerceStorefrontRequest) {
-  return JSON.stringify(left) === JSON.stringify(right)
+export function commerceStorefrontRequestEquals(
+  left: CommerceStorefrontRequest,
+  right: CommerceStorefrontRequest,
+) {
+  return left.schema === right.schema
+    && left.mode === right.mode
+    && left.state === right.state
+    && left.id === right.id
+    && left.idempotencyKey === right.idempotencyKey
+    && left.createdAt === right.createdAt
+    && left.sourcePreviewDigest === right.sourcePreviewDigest
+    && (left.sourceStorefrontRevision ?? null) === (right.sourceStorefrontRevision ?? null)
+    && (left.sourceStorefrontActionId ?? null) === (right.sourceStorefrontActionId ?? null)
+    && left.customerReference === right.customerReference
+    && left.fulfilment === right.fulfilment
+    && left.currency === right.currency
+    && left.line.sku === right.line.sku
+    && left.line.name === right.line.name
+    && left.line.variant === right.line.variant
+    && left.line.quantity === right.line.quantity
+    && left.line.unitPriceMmk === right.line.unitPriceMmk
+    && left.totalMmk === right.totalMmk
 }
 
-export function recordCommerceStorefrontRequest(
+export async function recordCommerceStorefrontRequest(
   state: CommerceState,
   request: CommerceStorefrontRequest,
   proof: CommerceActionProof,
@@ -1136,16 +1210,30 @@ export function recordCommerceStorefrontRequest(
   const existingByIdempotency = requests.find((candidate) => candidate.idempotencyKey === validatedRequest.idempotencyKey)
   if (existingById || existingByIdempotency) {
     const existing = existingById ?? existingByIdempotency as CommerceStorefrontRequest
-    return existingById === existingByIdempotency && sameStorefrontRequest(existing, validatedRequest) ? current : null
+    return existingById === existingByIdempotency
+      && commerceStorefrontRequestEquals(existing, validatedRequest) ? current : null
   }
   if (actionIdIsUsed(current, proof.actionId)
     || current.orders.some((order) => order.sourceRecordId === validatedRequest.id)) return null
   if (requests.length >= maxStorefrontRequests) return null
+  const configuration = commerceStorefrontConfiguration(current)
+  if (!configuration || !configuration.selectedSkus.includes(validatedRequest.line.sku)) return null
+  if (validatedRequest.sourceStorefrontRevision !== configuration.revision
+    || validatedRequest.sourceStorefrontActionId !== configuration.saved.actionId
+    || Date.parse(validatedRequest.createdAt) < Date.parse(configuration.saved.capturedAt)) return null
+  let expectedPreviewDigest: string
+  try {
+    expectedPreviewDigest = await commerceStorefrontPreviewDigest(current)
+  } catch {
+    return null
+  }
+  if (validatedRequest.sourcePreviewDigest !== expectedPreviewDigest) return null
   const matches = current.items.filter((item) => item.sku === validatedRequest.line.sku)
   if (matches.length !== 1
     || matches[0].name !== validatedRequest.line.name
     || (matches[0].variant ?? null) !== validatedRequest.line.variant
-    || matches[0].price !== validatedRequest.line.unitPriceMmk) return null
+    || matches[0].price !== validatedRequest.line.unitPriceMmk
+    || matches[0].onHand < 1) return null
   return validateCommerceState({
     ...current,
     storefrontRequests: [validatedRequest, ...requests],

@@ -16,6 +16,8 @@ export type ManagedStorefrontSaved = {
   storeName: string
   summary: string
   selectedSkus: string[]
+  shopCatalogDigest?: string
+  actionId?: string
 }
 
 export type ManagedStorefrontSavePlan = {
@@ -52,6 +54,8 @@ export function readManagedStorefront(state: CommerceState): ManagedStorefrontSa
     storeName: configuration.storeName,
     summary: configuration.summary,
     selectedSkus: [...configuration.selectedSkus],
+    shopCatalogDigest: configuration.shopCatalogDigest,
+    actionId: configuration.saved.actionId,
   }
 }
 

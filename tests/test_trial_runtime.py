@@ -7,6 +7,10 @@ from uuid import uuid4
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
+from supermega_runtime.commerce_runtime import (
+    commerce_catalog_digest,
+    commerce_storefront_preview_digest,
+)
 from supermega_runtime.runtime import reduce_trial_state
 from supermega_runtime.trial_runtime import create_trial_router
 from supermega_runtime.trial_store import InMemoryTrialStore, TrialPrincipal
@@ -293,7 +297,6 @@ class TrialRuntimeTests(unittest.TestCase):
         client = self._client(store)
         request_uuid = "00000000-0000-4000-8000-000000000020"
         request_id = f"ECR-{request_uuid}"
-        digest = "sha256:" + "b" * 64
         catalog = {
             "schema": "supermega.commerce.workspace.v2",
             "items": [{"sku": "SKU-1", "name": "Test item", "onHand": 10, "reorderAt": 2, "price": 100}],
@@ -301,15 +304,8 @@ class TrialRuntimeTests(unittest.TestCase):
             "movements": [],
             "closes": [],
         }
-
-        def evidence(actor: str) -> dict[str, str]:
-            return {
-                "actionId": f"ACT-{request_uuid}",
-                "capturedAt": "2026-07-24T09:00:00.000Z",
-                "actor": actor,
-                "reason": "Retain this customer request for human Shop review.",
-                "evidenceReference": f"ECOMMERCE:{request_id}:{digest}",
-            }
+        catalog_digest = commerce_catalog_digest(catalog)
+        configured_states: dict[str, dict[str, object]] = {}
 
         for session, actor in (
             ("operator-session", "actor-operator"),
@@ -326,14 +322,66 @@ class TrialRuntimeTests(unittest.TestCase):
                     "payload": {
                         "state": catalog,
                         "evidence": {
-                            **evidence(actor),
                             "actionId": f"ACT-{uuid4()}",
+                            "capturedAt": "2026-07-24T08:58:00.000Z",
+                            "actor": actor,
+                            "reason": "Initialize the current Shop catalog.",
                             "evidenceReference": "catalog://opening/1",
                         },
                     },
                 },
             )
             self.assertEqual(initialized.status_code, 200)
+            configuration_evidence = {
+                "actionId": f"ACT-STOREFRONT-R1-{catalog_digest.removeprefix('sha256:')}",
+                "capturedAt": "2026-07-24T08:59:00.000Z",
+                "actor": actor,
+                "reason": "Save the current storefront before retaining requests.",
+                "evidenceReference": f"ECOMMERCE-STOREFRONT:{catalog_digest}:R1",
+            }
+            configured_state = {
+                **catalog,
+                "storefrontConfiguration": {
+                    "schema": "supermega.ecommerce.storefront.v1",
+                    "revision": 1,
+                    "shopCatalogSnapshotRevision": 1,
+                    "shopCatalogDigest": catalog_digest,
+                    "storeName": "Mingalar Shop",
+                    "summary": "Clear prices and a small customer-ready catalog.",
+                    "selectedSkus": ["SKU-1"],
+                    "saved": configuration_evidence,
+                },
+            }
+            configured = client.post(
+                "/api/trial/v1/commands",
+                headers=self._headers(session),
+                json={
+                    "command_id": str(uuid4()),
+                    "surface": "commerce",
+                    "event_type": "commerce.storefront.configuration.saved",
+                    "expected_version": 1,
+                    "payload": {
+                        "state": configured_state,
+                        "evidence": configuration_evidence,
+                    },
+                },
+            )
+            self.assertEqual(configured.status_code, 200)
+            configured_states[session] = configured.json()["result"]["state"]
+
+        digest = commerce_storefront_preview_digest(configured_states["operator-session"])
+        request_created_at = configured_states["operator-session"][
+            "storefrontConfiguration"
+        ]["saved"]["capturedAt"]  # type: ignore[index]
+
+        def evidence(actor: str) -> dict[str, str]:
+            return {
+                "actionId": f"ACT-{request_uuid}",
+                "capturedAt": request_created_at,
+                "actor": actor,
+                "reason": "Retain this customer request for human Shop review.",
+                "evidenceReference": f"ECOMMERCE:{request_id}:{digest}",
+            }
 
         request = {
             "schema": "supermega.ecommerce.order_request.v1",
@@ -341,30 +389,39 @@ class TrialRuntimeTests(unittest.TestCase):
             "state": "pending_shop_review",
             "id": request_id,
             "idempotencyKey": f"ECI-{request_uuid}",
-            "createdAt": "2026-07-24T09:00:00.000Z",
+            "createdAt": request_created_at,
             "sourcePreviewDigest": digest,
+            "sourceStorefrontRevision": 1,
+            "sourceStorefrontActionId": configured_states["operator-session"]["storefrontConfiguration"]["saved"]["actionId"],  # type: ignore[index]
             "customerReference": "Customer A",
             "fulfilment": "pickup",
             "currency": "MMK",
             "line": {"sku": "SKU-1", "name": "Test item", "variant": None, "quantity": 2, "unitPriceMmk": 100},
             "totalMmk": 200,
         }
-        next_state = {**catalog, "storefrontRequests": [request]}
+        next_state = {
+            **configured_states["operator-session"],
+            "storefrontRequests": [request],
+        }
         command = {
             "command_id": request_uuid,
             "surface": "commerce",
             "event_type": "commerce.storefront_request.received",
-            "expected_version": 1,
+            "expected_version": 2,
             "payload": {"state": next_state, "evidence": evidence("actor-operator")},
         }
         first = client.post("/api/trial/v1/commands", headers=self._headers(), json=command)
         replay = client.post("/api/trial/v1/commands", headers=self._headers(), json=command)
-        self.assertEqual(first.status_code, 200)
-        self.assertEqual(first.json()["result"]["version"], 2)
+        self.assertEqual(first.status_code, 200, first.text)
+        self.assertEqual(first.json()["result"]["version"], 3)
         self.assertTrue(replay.json()["result"]["idempotent_replay"])
         self.assertEqual(first.json()["result"]["state"]["storefrontRequests"], [request])
         for field in ("items", "orders", "movements", "closes"):
             self.assertEqual(first.json()["result"]["state"][field], catalog[field])
+        self.assertEqual(
+            first.json()["result"]["state"]["storefrontConfiguration"],
+            configured_states["operator-session"]["storefrontConfiguration"],
+        )
 
         changed = {
             **command,
@@ -394,7 +451,7 @@ class TrialRuntimeTests(unittest.TestCase):
         recovered_client = self._client(store)
         recovered = recovered_client.get("/api/trial/v1/bootstrap", headers=self._headers())
         self.assertEqual(recovered.status_code, 200)
-        self.assertEqual(recovered.json()["states"]["commerce"]["version"], 2)
+        self.assertEqual(recovered.json()["states"]["commerce"]["version"], 3)
         self.assertEqual(recovered.json()["states"]["commerce"]["state"]["storefrontRequests"], [request])
         recovered_replay = recovered_client.post("/api/trial/v1/commands", headers=self._headers(), json=command)
         self.assertTrue(recovered_replay.json()["result"]["idempotent_replay"])

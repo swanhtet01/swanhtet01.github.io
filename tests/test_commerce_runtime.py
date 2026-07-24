@@ -9,6 +9,7 @@ from uuid import uuid4
 from supermega_runtime.commerce_runtime import (
     COMMERCE_HUMAN_EVENTS,
     commerce_catalog_digest,
+    commerce_storefront_preview_digest,
     validate_commerce_state,
 )
 from supermega_runtime.runtime import reduce_trial_state
@@ -33,6 +34,12 @@ CLOSE_ACTION_ID_3 = "ACT-00000000-0000-4000-8000-000000000003"
 CLOSE_ID_3 = "CLOSE-00000000-0000-4000-8000-000000000003"
 STOREFRONT_REQUEST_UUID = "00000000-0000-4000-8000-000000000010"
 STOREFRONT_CONFIGURATION_UUID = "00000000-0000-4000-8000-000000000011"
+DEFAULT_STOREFRONT_PREVIEW_DIGEST = (
+    "sha256:5708a10fcffa1df487bd93f88809e1cfb678f92888cdf6f22a7deabbaf24c34d"
+)
+DEFAULT_STOREFRONT_ACTION_ID = (
+    "ACT-STOREFRONT-R1-3d8a204568ebc4399841a2fd7482876dc600c699d9603c1ed0ddefc0215804db"
+)
 
 
 def myanmar_business_date(timestamp: str) -> str:
@@ -207,7 +214,10 @@ def storefront_request(
     *,
     request_uuid: str = STOREFRONT_REQUEST_UUID,
     quantity: int = 2,
-    digest: str = "sha256:" + "a" * 64,
+    digest: str = DEFAULT_STOREFRONT_PREVIEW_DIGEST,
+    created_at: str = NOW,
+    source_revision: int | None = 1,
+    source_action_id: str | None = DEFAULT_STOREFRONT_ACTION_ID,
 ) -> dict[str, object]:
     return {
         "schema": "supermega.ecommerce.order_request.v1",
@@ -215,8 +225,10 @@ def storefront_request(
         "state": "pending_shop_review",
         "id": f"ECR-{request_uuid}",
         "idempotencyKey": f"ECI-{request_uuid}",
-        "createdAt": NOW,
+        "createdAt": created_at,
         "sourcePreviewDigest": digest,
+        "sourceStorefrontRevision": source_revision,
+        "sourceStorefrontActionId": source_action_id,
         "customerReference": "Customer A",
         "fulfilment": "pickup",
         "currency": "MMK",
@@ -482,6 +494,7 @@ class CommerceRuntimeTests(unittest.TestCase):
 
     def test_storefront_request_is_retained_without_shop_side_effects(self) -> None:
         current = catalog_state()
+        current["storefrontConfiguration"] = storefront_configuration(current)
         request = storefront_request()
         next_state = deepcopy(current)
         next_state["storefrontRequests"] = [request]
@@ -496,11 +509,16 @@ class CommerceRuntimeTests(unittest.TestCase):
         for field in ("items", "orders", "movements", "closes"):
             self.assertEqual(accepted[field], current[field])
         self.assertEqual(accepted.get("websiteIntakes", []), [])
+        self.assertEqual(
+            accepted["storefrontConfiguration"],
+            current["storefrontConfiguration"],
+        )
 
         for label, invalid in (
             ("changed item", {**next_state, "items": [{**current["items"][0], "onHand": 9}]}),  # type: ignore[index]
             ("created order", {**next_state, "orders": [order_record()]}),
             ("changed price", {**next_state, "storefrontRequests": [{**request, "line": {**request["line"], "unitPriceMmk": 101}, "totalMmk": 202}]}),  # type: ignore[arg-type]
+            ("unbound digest", {**next_state, "storefrontRequests": [{**request, "sourcePreviewDigest": "sha256:" + "b" * 64}]}),
             ("bad digest", {**next_state, "storefrontRequests": [{**request, "sourcePreviewDigest": "sha256:" + "A" * 64}]}),
         ):
             with self.subTest(label=label), self.assertRaises(TrialValidationError):
@@ -509,6 +527,112 @@ class CommerceRuntimeTests(unittest.TestCase):
                     "commerce.storefront_request.received",
                     invalid,
                 )
+
+        unconfigured = catalog_state()
+        unconfigured_next = deepcopy(unconfigured)
+        unconfigured_next["storefrontRequests"] = [request]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                unconfigured,
+                "commerce.storefront_request.received",
+                unconfigured_next,
+            )
+
+        for label, provenance_request in (
+            (
+                "missing provenance",
+                storefront_request(source_revision=None, source_action_id=None),
+            ),
+            (
+                "wrong revision",
+                storefront_request(source_revision=2),
+            ),
+            (
+                "wrong action",
+                storefront_request(source_action_id="ACT-STOREFRONT-WRONG"),
+            ),
+            (
+                "predates save",
+                storefront_request(created_at="2026-07-23T08:59:59.000Z"),
+            ),
+        ):
+            provenance_next = deepcopy(current)
+            provenance_next["storefrontRequests"] = [provenance_request]
+            with self.subTest(label=label), self.assertRaises(TrialValidationError):
+                apply_event(
+                    current,
+                    "commerce.storefront_request.received",
+                    provenance_next,
+                )
+
+        stale_configuration = deepcopy(current)
+        stale_configuration["items"].append(  # type: ignore[union-attr]
+            {
+                "sku": "SKU-2",
+                "name": "Second item",
+                "onHand": 2,
+                "reorderAt": 1,
+                "price": 50,
+            }
+        )
+        stale_next = deepcopy(stale_configuration)
+        stale_next["storefrontRequests"] = [request]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                stale_configuration,
+                "commerce.storefront_request.received",
+                stale_next,
+            )
+
+        excluded = catalog_state()
+        excluded["items"].append(  # type: ignore[union-attr]
+            {
+                "sku": "SKU-2",
+                "name": "Second item",
+                "onHand": 2,
+                "reorderAt": 1,
+                "price": 50,
+            }
+        )
+        excluded_configuration = storefront_configuration(
+            excluded,
+            selected_skus=["SKU-1"],
+        )
+        excluded["storefrontConfiguration"] = excluded_configuration
+        excluded_request = {
+            **request,
+            "sourceStorefrontRevision": excluded_configuration["revision"],
+            "sourceStorefrontActionId": excluded_configuration["saved"]["actionId"],  # type: ignore[index]
+            "line": {
+                **request["line"],  # type: ignore[arg-type]
+                "sku": "SKU-2",
+                "name": "Second item",
+                "unitPriceMmk": 50,
+            },
+            "totalMmk": 100,
+        }
+        excluded_next = deepcopy(excluded)
+        excluded_next["storefrontRequests"] = [excluded_request]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                excluded,
+                "commerce.storefront_request.received",
+                excluded_next,
+            )
+
+        sold_out = deepcopy(current)
+        sold_out["items"][0]["onHand"] = 0  # type: ignore[index]
+        sold_out_request = storefront_request(
+            digest=commerce_storefront_preview_digest(sold_out),
+        )
+        sold_out_next = deepcopy(sold_out)
+        sold_out_next["storefrontRequests"] = [sold_out_request]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                sold_out,
+                "commerce.storefront_request.received",
+                sold_out_next,
+            )
 
         changed_receipt = deepcopy(accepted)
         changed_receipt["storefrontRequests"][0]["customerReference"] = "Changed"  # type: ignore[index]
@@ -521,7 +645,7 @@ class CommerceRuntimeTests(unittest.TestCase):
             )
 
         collision_action_id = f"ACT-{STOREFRONT_REQUEST_UUID}"
-        collision_current = catalog_state()
+        collision_current = deepcopy(current)
         collision_next = deepcopy(collision_current)
         collision_next["items"][0]["onHand"] = 11  # type: ignore[index]
         collision_next["movements"] = [movement("receipt", collision_action_id, 1)]
@@ -591,6 +715,77 @@ class CommerceRuntimeTests(unittest.TestCase):
             commerce_catalog_digest(vector),
             "sha256:c03d623521a78627b7c324771c02be32dcc2f25c7e61d0883ebc6106042e0af2",
         )
+
+    def test_storefront_preview_digest_matches_cross_runtime_golden(self) -> None:
+        current = catalog_state()
+        current["storefrontConfiguration"] = storefront_configuration(current)
+
+        self.assertEqual(
+            commerce_storefront_preview_digest(current),
+            DEFAULT_STOREFRONT_PREVIEW_DIGEST,
+        )
+        unicode_vector: dict[str, object] = {
+            "schema": "supermega.commerce.workspace.v2",
+            "items": [
+                {
+                    "sku": "SM-😀",
+                    "name": "Emoji item",
+                    "onHand": 4,
+                    "reorderAt": 1,
+                    "price": 400,
+                },
+                {
+                    "sku": "SM-A",
+                    "name": "မြန်မာ လက်ဖက်ရည်",
+                    "variant": "သေး",
+                    "onHand": 0,
+                    "reorderAt": 1,
+                    "price": 100,
+                },
+            ],
+            "orders": [],
+            "movements": [],
+            "closes": [],
+        }
+        unicode_vector["storefrontConfiguration"] = storefront_configuration(
+            unicode_vector,
+            store_name="မင်္ဂလာ ဆိုင်",
+            summary="ရွေးထားသော ပစ္စည်းများ။",
+            selected_skus=["SM-A", "SM-😀"],
+        )
+        self.assertEqual(
+            commerce_storefront_preview_digest(unicode_vector),
+            "sha256:a755c68b02a8de75279f0bcda5bb8ed21078ee538a68f583eeb223ee8a43973c",
+        )
+
+    def test_legacy_storefront_request_without_provenance_remains_readable(self) -> None:
+        legacy_request = storefront_request()
+        legacy_request.pop("sourceStorefrontRevision")
+        legacy_request.pop("sourceStorefrontActionId")
+        current = catalog_state()
+        current["storefrontRequests"] = [legacy_request]
+
+        self.assertEqual(
+            validate_commerce_state(current)["storefrontRequests"],
+            [legacy_request],
+        )
+        partial = deepcopy(current)
+        partial["storefrontRequests"][0]["sourceStorefrontRevision"] = None  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(partial)
+
+        next_state = deepcopy(current)
+        next_state["items"][0]["onHand"] = 11  # type: ignore[index]
+        next_state["movements"] = [
+            movement("receipt", "ACT-LEGACY-RECEIPT", 1),
+        ]
+        accepted = apply_event(
+            current,
+            "commerce.stock.received",
+            next_state,
+            action_evidence("ACT-LEGACY-RECEIPT"),
+        )
+        self.assertEqual(accepted["storefrontRequests"], [legacy_request])
 
     def test_storefront_configuration_is_revisioned_without_shop_side_effects(self) -> None:
         current = catalog_state()
@@ -837,6 +1032,7 @@ class CommerceRuntimeTests(unittest.TestCase):
         store = InMemoryTrialStore(reducer=reduce_trial_state)
         operator = TrialPrincipal("workspace-a", "Accountable operator", "human")
         other = TrialPrincipal("workspace-b", "Other operator", "human")
+        configured_states: dict[str, dict[str, object]] = {}
         for principal in (operator, other):
             store.provision_membership(
                 workspace_id=principal.workspace_id,
@@ -844,7 +1040,7 @@ class CommerceRuntimeTests(unittest.TestCase):
                 actor_kind=principal.actor_kind,
                 capabilities=("commerce.write",),
             )
-            store.apply_command(
+            initialized = store.apply_command(
                 principal,
                 command_id=str(uuid4()),
                 surface="commerce",
@@ -855,9 +1051,33 @@ class CommerceRuntimeTests(unittest.TestCase):
                     "evidence": action_evidence(actor=principal.actor_id),
                 },
             )
+            configured = deepcopy(initialized.state)
+            configured["storefrontConfiguration"] = storefront_configuration(
+                configured,
+                actor=principal.actor_id,
+            )
+            saved = store.apply_command(
+                principal,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.storefront.configuration.saved",
+                expected_version=initialized.version,
+                payload={
+                    "state": configured,
+                    "evidence": dict(configured["storefrontConfiguration"]["saved"]),  # type: ignore[index,arg-type]
+                },
+            )
+            configured_states[principal.workspace_id] = dict(saved.state)
 
-        request = storefront_request()
-        state = catalog_state()
+        operator_configuration = configured_states[operator.workspace_id][
+            "storefrontConfiguration"
+        ]
+        request = storefront_request(
+            created_at=operator_configuration["saved"]["capturedAt"],  # type: ignore[index]
+            source_revision=operator_configuration["revision"],  # type: ignore[index]
+            source_action_id=operator_configuration["saved"]["actionId"],  # type: ignore[index]
+        )
+        state = deepcopy(configured_states[operator.workspace_id])
         state["storefrontRequests"] = [request]
         command_id = STOREFRONT_REQUEST_UUID
         payload = {"state": state, "evidence": storefront_evidence(request)}
@@ -866,7 +1086,7 @@ class CommerceRuntimeTests(unittest.TestCase):
             command_id=command_id,
             surface="commerce",
             event_type="commerce.storefront_request.received",
-            expected_version=1,
+            expected_version=2,
             payload=payload,
         )
         replay = store.apply_command(
@@ -874,11 +1094,11 @@ class CommerceRuntimeTests(unittest.TestCase):
             command_id=command_id,
             surface="commerce",
             event_type="commerce.storefront_request.received",
-            expected_version=1,
+            expected_version=2,
             payload=payload,
         )
 
-        self.assertEqual(first.version, 2)
+        self.assertEqual(first.version, 3)
         self.assertTrue(replay.idempotent_replay)
         self.assertEqual(replay.state, first.state)
         self.assertEqual(store.get_state(operator, "commerce").state, first.state)
@@ -892,7 +1112,7 @@ class CommerceRuntimeTests(unittest.TestCase):
                 command_id=command_id,
                 surface="commerce",
                 event_type="commerce.storefront_request.received",
-                expected_version=1,
+                expected_version=2,
                 payload=conflicting_payload,
             )
         with self.assertRaises(TrialVersionConflict):
@@ -901,14 +1121,14 @@ class CommerceRuntimeTests(unittest.TestCase):
                 command_id=str(uuid4()),
                 surface="commerce",
                 event_type="commerce.storefront_request.received",
-                expected_version=1,
+                expected_version=2,
                 payload=payload,
             )
         recovered = store.get_state(
             TrialPrincipal("workspace-a", "Accountable operator", "human"),
             "commerce",
         )
-        self.assertEqual(recovered.version, 2)
+        self.assertEqual(recovered.version, 3)
         self.assertEqual(recovered.state["storefrontRequests"], [request])
 
         self.assertEqual(
