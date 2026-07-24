@@ -1577,6 +1577,8 @@ export function OperationsPage({ product }: { product?: ProductId }) {
   const ecommerceNavigationDraft = (location.state as { ecommerceShopDraft?: EcommerceShopDraft } | null)?.ecommerceShopDraft ?? null
   const routeModule = location.pathname.split('/').filter(Boolean)[1]
   const requestedView = searchParams.get('view')
+  const requestedSource = searchParams.get('source')
+  const requestedRequestId = searchParams.get('request')
   const isProductRoute = Boolean(product) || routeModule === 'commerce' || routeModule === 'production'
   const view: ProductId = product ?? (routeModule === 'production' || requestedView === 'production' || requestedView === 'plant' ? 'production' : 'commerce')
   const requestedTab = searchParams.get('tab')
@@ -1620,7 +1622,7 @@ export function OperationsPage({ product }: { product?: ProductId }) {
     <div className="workspace-screen operations-screen">
       <PageHeading title={productDisplayName(view)} copy={productCopy} actions={<Link className="text-link all-apps-link" to="/operations/">Products</Link>} />
       <nav className="workspace-toolbar view-tabs product-task-tabs" aria-label={`${productDisplayName(view)} tasks`}>{tabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{tab.label}</button>)}</nav>
-      <div className="workspace-view">{view === 'commerce' ? <CommercePage ecommerceNavigationDraft={ecommerceNavigationDraft} managedIdentity={managedIdentity} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
+      <div className="workspace-view">{view === 'commerce' ? <CommercePage ecommerceNavigationDraft={ecommerceNavigationDraft} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedSource={requestedSource} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
     </div>
   )
 }
@@ -1820,11 +1822,14 @@ function ChannelAttributionControl({ attribution, disabled, field, onChange }: {
   </div>
 }
 
-function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
+function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequestId, requestedSource, tab }: {
   ecommerceNavigationDraft: EcommerceShopDraft | null
   managedIdentity: ManagedIdentity | null
+  requestedRequestId: string | null
+  requestedSource: string | null
   tab: CommerceTab
 }) {
+  const navigate = useNavigate()
   const [commerce, mutateCommerce, commerceStorageError, workspaceMode, managedVersion, managedWorkspaceId, commerceCanWrite] = useCommerceWorkspace(managedIdentity)
   const [actions, setActions] = useStoredState<AccountableAction[]>(ACTION_KEY, [], normalizeActions)
   const [pendingAction, setPendingAction] = useState<PendingAccountableAction | null>(null)
@@ -1842,8 +1847,10 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
   const orderComposerRef = useRef<HTMLDialogElement>(null)
   const orderComposerHeadingRef = useRef<HTMLHeadingElement>(null)
   const orderComposerTriggerRef = useRef<HTMLButtonElement>(null)
+  const ecommerceInboxTargetRef = useRef<HTMLButtonElement>(null)
   const preparedChannelRef = useRef<HTMLDivElement>(null)
   const consumedEcommerceDraftId = useRef('')
+  const consumedEcommerceInboxSource = useRef('')
   const [actionTrigger, setActionTrigger] = useState<HTMLElement | null>(null)
   const [notice, setNotice] = useState('')
   const [catalogDraft, setCatalogDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '', price: '', reason: '', evidenceReference: '' })
@@ -1882,6 +1889,10 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
   const pendingStorefrontRequests = storefrontRequests.filter((request) => (
     !commerce.orders.some((order) => order.sourceRecordId === request.id)
   ))
+  const requestedStorefrontRequestIsWaiting = Boolean(
+    requestedRequestId
+    && pendingStorefrontRequests.some((request) => request.id === requestedRequestId),
+  )
   const stockReceiptItem = stockReceiptDraft
     ? commerce.items.find((item) => item.sku === stockReceiptDraft.sku)
     : undefined
@@ -1930,6 +1941,30 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
       })
     return () => { current = false }
   }, [commerce.items, ecommerceNavigationDraft, managedIdentity])
+
+  useEffect(() => {
+    const sourceKey = requestedRequestId || 'ecommerce-inbox'
+    if (requestedSource !== 'ecommerce-inbox'
+      || consumedEcommerceInboxSource.current === sourceKey
+      || tab !== 'orders'
+      || !managedIdentity
+      || workspaceMode !== 'managed-ready') return
+    consumedEcommerceInboxSource.current = sourceKey
+    setOrderEntryMode('online')
+    setNotice(requestedStorefrontRequestIsWaiting
+      ? `${requestedRequestId} is ready for Shop review. Choose Review to prepare the order.`
+      : pendingStorefrontRequests.length
+        ? `${pendingStorefrontRequests.length} Ecommerce ${pendingStorefrontRequests.length === 1 ? 'request is' : 'requests are'} waiting for Shop review.`
+        : 'The Ecommerce inbox is open. No request currently needs Shop review.')
+    const focusFrame = requestAnimationFrame(() => {
+      const dialog = orderComposerRef.current
+      if (dialog && !dialog.open) dialog.showModal()
+      if (requestedStorefrontRequestIsWaiting) ecommerceInboxTargetRef.current?.focus()
+      else orderComposerHeadingRef.current?.focus()
+      navigate('/shop/?tab=orders', { replace: true })
+    })
+    return () => cancelAnimationFrame(focusFrame)
+  }, [managedIdentity, navigate, pendingStorefrontRequests.length, requestedRequestId, requestedSource, requestedStorefrontRequestIsWaiting, tab, workspaceMode])
 
   async function initializeManagedCatalog(event: FormEvent) {
     event.preventDefault()
@@ -2556,7 +2591,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
           <div className="website-intake-head"><div><span className="core-eyebrow">Ecommerce inbox</span><strong>{pendingStorefrontRequests.length} requests waiting</strong></div><span className={`status-pill ${managedIdentity ? 'bounded' : 'pending'}`}>{managedIdentity ? 'Managed' : 'Not connected'}</span></div>
           {managedIdentity && pendingStorefrontRequests.length ? pendingStorefrontRequests.slice(0, 20).map((request) => <div className="website-intake-ready" key={request.id}>
             <div><strong>{request.customerReference} · {request.line.name} × {request.line.quantity}</strong><small>{request.id} · {request.totalMmk.toLocaleString()} MMK · {request.fulfilment}</small></div>
-            <button className="core-button compact" disabled={commerceControlsDisabled} onClick={() => void reviewStorefrontRequest(request.id)} type="button">Review</button>
+            <button className="core-button compact" disabled={commerceControlsDisabled} onClick={() => void reviewStorefrontRequest(request.id)} ref={request.id === requestedRequestId ? ecommerceInboxTargetRef : undefined} type="button">Review</button>
           </div>) : <div className="website-intake-record"><strong>{managedIdentity ? 'No Ecommerce request needs Shop review.' : 'Connect a managed workspace to use the shared inbox.'}</strong><small>No request creates an order, reserves stock, starts payment, sends a message, or requests delivery.</small></div>}
           <Link className="text-link" to="/products/ecommerce/">Open Ecommerce</Link>
         </section>

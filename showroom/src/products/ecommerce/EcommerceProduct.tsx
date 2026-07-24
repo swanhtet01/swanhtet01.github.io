@@ -594,7 +594,7 @@ export function EcommerceProduct() {
       if (nextState === currentState) {
         setManagedInbox({ identity, state: currentState, version: record.version })
         setRequestNotice(`${latestRequest.id} is already retained in the managed Shop inbox.`)
-        navigate('/shop/?tab=orders&source=ecommerce-inbox')
+        navigate(`/shop/?tab=orders&source=ecommerce-inbox&request=${encodeURIComponent(latestRequest.id)}`)
         return
       }
       const commandId = latestRequest.idempotencyKey.slice(4)
@@ -633,7 +633,7 @@ export function EcommerceProduct() {
       setManagedIdentity(identity)
       setManagedInbox({ identity, state: accepted, version: result.version })
       setRequestNotice(`${latestRequest.id} is retained in ${identity.workspaceId}. No order or stock changed.`)
-      navigate('/shop/?tab=orders&source=ecommerce-inbox')
+      navigate(`/shop/?tab=orders&source=ecommerce-inbox&request=${encodeURIComponent(latestRequest.id)}`)
     } catch (error) {
       setRequestNotice(error instanceof Error ? error.message : 'The managed request was not confirmed. Nothing was claimed.')
     } finally {
