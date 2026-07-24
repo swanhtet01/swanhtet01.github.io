@@ -14,7 +14,7 @@ let ecommerceHandoffRuntimeChecks = 0
 let commerceRuntimeChecks = 0
 let productionRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
-const [manifestText, appPackageText, appSource, coreSource, commerceSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, storefrontSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, coreCssSource] = await Promise.all([
+const [manifestText, appPackageText, appSource, coreSource, commerceSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, storefrontSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource] = await Promise.all([
   readFile(resolve(root, 'site-manifest.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'package.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'App.tsx'), 'utf8'),
@@ -44,6 +44,7 @@ const [manifestText, appPackageText, appSource, coreSource, commerceSource, chan
   readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'storefront-request.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'ecommerce-shop-confirm.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'ecommerce-shop-handoff.ts'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'ecommerce-product.css'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'core-app.css'), 'utf8'),
 ])
 const manifest = JSON.parse(manifestText)
@@ -201,11 +202,29 @@ if (!ecommerceSource.includes('Prices and availability are read-only.')
   || !ecommerceSource.includes('Requests enter Shop review. Payment and fulfilment stay separate.')
   || !ecommerceSource.includes('cannot reserve stock, create an order, take payment, send a message, or publish a site.')
   || !ecommerceSource.includes('Same approved copy and Shop snapshot produce the same digest.')
-  || !ecommerceSource.includes('Test a customer request')
+  || !ecommerceSource.includes('Request an item')
+  || ecommerceSource.includes('Test a customer request')
   || !ecommerceSource.includes('Connect a managed workspace for shared, recoverable retention.')
   || !ecommerceSource.includes('No Shop record or stock changed.')
   || !coreSource.includes('<strong>Ecommerce</strong><small>Build a storefront from Shop</small>')
   || !coreSource.includes('<h2>AI Agent Solutions</h2>')) fail('ecommerce_storefront_ui_boundary_missing')
+const directRequestStart = ecommerceSource.indexOf('function openRequestFor')
+const directRequestEnd = ecommerceSource.indexOf('async function createRequestReceipt', directRequestStart)
+const directRequestAction = ecommerceSource.slice(directRequestStart, directRequestEnd)
+if (directRequestStart < 0
+  || directRequestEnd < 0
+  || !ecommerceSource.includes('onClick={() => openRequestFor(item.sku)}')
+  || !ecommerceSource.includes('aria-controls="ecommerce-request-form"')
+  || !ecommerceSource.includes('aria-label={available ? `Request ${item.name}`')
+  || !ecommerceSource.includes("disabled={!available}")
+  || !ecommerceSource.includes('requestCustomerRef.current?.focus')
+  || !ecommerceSource.includes('open={requestOpen}')
+  || !ecommerceSource.includes('placeholder="Name or counter reference"')
+  || !ecommerceSource.includes("useState('')")
+  || ['createRequestReceipt', 'sendToShopReview', 'retainInManagedInbox', 'navigate(', 'saveManagedCommerceCommand', 'localStorage', 'sessionStorage', 'fetch('].some((marker) => directRequestAction.includes(marker))
+  || !ecommerceCssSource.includes('.storefront-request-button')
+  || !ecommerceCssSource.includes('min-height: 44px')
+  || !ecommerceCssSource.includes('@media (max-width: 560px)')) fail('ecommerce_direct_request_action_missing_or_consequential')
 if (!storefrontRequestSource.includes("supermega.ecommerce.order_request.v1")
   || !storefrontRequestSource.includes("state: 'pending_shop_review'")
   || !storefrontRequestSource.includes('buildStorefrontOrderRequest')

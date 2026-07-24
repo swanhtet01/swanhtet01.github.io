@@ -1,0 +1,67 @@
+.storefront-grid article.has-request-action {
+  grid-template-rows: auto auto auto minmax(44px, auto);
+}
+
+.storefront-grid article.has-request-action[data-requested="true"] {
+  border-color: rgba(11, 116, 94, .48);
+  box-shadow: 0 0 0 2px rgba(11, 116, 94, .08);
+}
+
+.storefront-grid article.has-request-action > small {
+  color: #56665d;
+}
+
+.storefront-request-button {
+  min-height: 44px;
+  grid-column: 2 / -1;
+  grid-row: 4;
+  margin-top: 6px;
+  border: 1px solid #0b745e;
+  border-radius: 8px;
+  padding: 0 12px;
+  background: #0b745e;
+  color: #fff;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.storefront-request-button:hover:not(:disabled) {
+  border-color: #075c4b;
+  background: #075c4b;
+}
+
+.storefront-request-button:disabled {
+  border-color: rgba(23, 35, 29, .12);
+  background: rgba(23, 35, 29, .06);
+  color: #7b8980;
+  cursor: not-allowed;
+}
+
+.ecommerce-request-lab {
+  scroll-margin-top: 16px;
+}
+
+.ecommerce-request-body form > .core-button {
+  min-height: 48px;
+}
+
+.ecommerce-request-receipt > .status-pill.bounded {
+  color: #075c4b;
+}
+
+@media (max-width: 560px) {
+  .ecommerce-request-lab > summary {
+    align-items: flex-start;
+    padding-block: 10px;
+  }
+
+  .ecommerce-request-body {
+    padding: 10px;
+  }
+
+  .ecommerce-request-body form > .core-button {
+    width: 100%;
+  }
+}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
 import {
@@ -25,6 +25,7 @@ import {
   readStorefrontCatalog,
   storefrontPreviewDigest,
 } from './storefront-model'
+import './ecommerce-product.css'
 
 type PreviewDevice = 'phone' | 'desktop'
 type EcommerceCatalog = {
@@ -57,14 +58,17 @@ export function EcommerceProduct() {
   const [device, setDevice] = useState<PreviewDevice>('phone')
   const [digestState, setDigestState] = useState({ previewJson: '', value: '', error: '' })
   const [requestLedger, setRequestLedger] = useState(createEmptyStorefrontRequestLedger)
-  const [requestCustomer, setRequestCustomer] = useState('Customer A')
+  const [requestCustomer, setRequestCustomer] = useState('')
   const [requestSku, setRequestSku] = useState(initialSelection[0] ?? '')
   const [requestQuantity, setRequestQuantity] = useState(1)
   const [requestFulfilment, setRequestFulfilment] = useState<'pickup' | 'delivery'>('pickup')
+  const [requestOpen, setRequestOpen] = useState(false)
   const [requestBusy, setRequestBusy] = useState(false)
   const [requestNotice, setRequestNotice] = useState('')
   const [handoffConfirmed, setHandoffConfirmed] = useState(false)
   const [handoffBusy, setHandoffBusy] = useState(false)
+  const requestPanelRef = useRef<HTMLDetailsElement>(null)
+  const requestCustomerRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     let current = true
@@ -145,6 +149,17 @@ export function EcommerceProduct() {
         ? current.filter((candidate) => candidate !== sku)
         : current.length < 8 ? [...current, sku] : current
     ))
+  }
+
+  function openRequestFor(sku: string) {
+    setRequestSku(sku)
+    setRequestOpen(true)
+    setHandoffConfirmed(false)
+    setRequestNotice('')
+    window.requestAnimationFrame(() => {
+      requestPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      requestCustomerRef.current?.focus({ preventScroll: true })
+    })
   }
 
   async function createRequestReceipt(event: FormEvent<HTMLFormElement>) {
@@ -366,15 +381,32 @@ export function EcommerceProduct() {
                   <p>{previewResult.preview.summary}</p>
                 </section>
                 <div className="storefront-grid">
-                  {previewResult.preview.items.map((item) => (
-                    <article key={item.sku}>
+                  {previewResult.preview.items.map((item) => {
+                    const available = item.availability === 'available'
+                    return (
+                    <article
+                      className="has-request-action"
+                      data-requested={requestOpen && currentRequestSku === item.sku ? 'true' : 'false'}
+                      key={item.sku}
+                    >
                       <div aria-hidden="true">{item.name.slice(0, 1).toUpperCase()}</div>
                       <small>{item.variant || item.sku}</small>
                       <strong>{item.name}</strong>
                       <span>{formatMmk(item.unitPriceMmk)}</span>
-                      <b>{item.availability === 'available' ? 'Available' : 'Sold out'}</b>
+                      <b>{available ? 'Available' : 'Sold out'}</b>
+                      <button
+                        aria-controls="ecommerce-request-form"
+                        aria-label={available ? `Request ${item.name}` : `${item.name} is sold out`}
+                        className="storefront-request-button"
+                        disabled={!available}
+                        onClick={() => openRequestFor(item.sku)}
+                        type="button"
+                      >
+                        {available ? 'Request' : 'Sold out'}
+                      </button>
                     </article>
-                  ))}
+                    )
+                  })}
                 </div>
                 <footer>Requests enter Shop review. Payment and fulfilment stay separate.</footer>
               </div>
@@ -393,16 +425,28 @@ export function EcommerceProduct() {
             <small>{digestError || 'Same approved copy and Shop snapshot produce the same digest.'}</small>
           </div>
 
-          <details className="ecommerce-request-lab">
+          <details
+            className="ecommerce-request-lab"
+            onToggle={(event) => setRequestOpen(event.currentTarget.open)}
+            open={requestOpen}
+            ref={requestPanelRef}
+          >
             <summary>
-              <span><strong>Test a customer request</strong><small>Creates one local receipt for Shop review</small></span>
-              <b>{requestLedger.requests.length ? `${requestLedger.requests.length} receipt` : 'Optional'}</b>
+              <span><strong>Request an item</strong><small>Choose quantity and pickup or delivery</small></span>
+              <b>{requestLedger.requests.length ? `${requestLedger.requests.length} pending` : 'Start'}</b>
             </summary>
-            <div className="ecommerce-request-body">
+            <div className="ecommerce-request-body" id="ecommerce-request-form">
               <form onSubmit={(event) => void createRequestReceipt(event)}>
                 <label>
                   <span>Customer reference</span>
-                  <input maxLength={80} onChange={(event) => setRequestCustomer(event.target.value)} required value={requestCustomer} />
+                  <input
+                    maxLength={80}
+                    onChange={(event) => setRequestCustomer(event.target.value)}
+                    placeholder="Name or counter reference"
+                    ref={requestCustomerRef}
+                    required
+                    value={requestCustomer}
+                  />
                 </label>
                 <label>
                   <span>Product</span>
@@ -422,7 +466,7 @@ export function EcommerceProduct() {
                   </select>
                 </label>
                 <button className="core-button primary" disabled={!previewResult.preview || !digest || requestBusy} type="submit">
-                  {requestBusy ? 'Recording…' : 'Create request receipt'}
+                  {requestBusy ? 'Recording…' : 'Create request'}
                 </button>
               </form>
 
