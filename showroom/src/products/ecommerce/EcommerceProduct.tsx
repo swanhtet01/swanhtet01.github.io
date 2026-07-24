@@ -819,12 +819,6 @@ export function EcommerceProduct() {
             )}
           </div>
 
-          <div className="ecommerce-digest" aria-live="polite">
-            <span>Preview digest</span>
-            <code>{digest || (digestError ? 'Unavailable' : 'Calculating…')}</code>
-            <small>{digestError || 'Same approved copy and Shop snapshot produce the same digest.'}</small>
-          </div>
-
           <details
             className="ecommerce-request-lab"
             onToggle={(event) => setRequestOpen(event.currentTarget.open)}
@@ -891,6 +885,18 @@ export function EcommerceProduct() {
               <p className="form-notice" aria-live="polite">{requestNotice || (managedIdentity
                 ? 'Confirm the exact receipt, then retain it in the managed Shop inbox. It remains request intent only.'
                 : 'This local receipt is not a Shop order. Connect a managed workspace for shared, recoverable retention.')}</p>
+            </div>
+          </details>
+
+          <details className="ecommerce-verification" open={digestError ? true : undefined}>
+            <summary>
+              <span><strong>Preview verification</strong><small>Technical proof for operators</small></span>
+              <b>{digestError ? 'Attention' : digest ? 'Ready' : 'Checking'}</b>
+            </summary>
+            <div className="ecommerce-digest" aria-live="polite">
+              <span>Preview digest</span>
+              <code>{digest || (digestError ? 'Unavailable' : 'Calculating…')}</code>
+              <small>{digestError || 'Same approved copy and Shop snapshot produce the same digest.'}</small>
             </div>
           </details>
         </section>
