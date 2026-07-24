@@ -6,7 +6,11 @@ import unittest
 from urllib.parse import quote
 from uuid import uuid4
 
-from supermega_runtime.commerce_runtime import COMMERCE_HUMAN_EVENTS, validate_commerce_state
+from supermega_runtime.commerce_runtime import (
+    COMMERCE_HUMAN_EVENTS,
+    commerce_catalog_digest,
+    validate_commerce_state,
+)
 from supermega_runtime.runtime import reduce_trial_state
 from supermega_runtime.trial_store import (
     InMemoryTrialStore,
@@ -28,6 +32,7 @@ CLOSE_ID_2 = "CLOSE-00000000-0000-4000-8000-000000000002"
 CLOSE_ACTION_ID_3 = "ACT-00000000-0000-4000-8000-000000000003"
 CLOSE_ID_3 = "CLOSE-00000000-0000-4000-8000-000000000003"
 STOREFRONT_REQUEST_UUID = "00000000-0000-4000-8000-000000000010"
+STOREFRONT_CONFIGURATION_UUID = "00000000-0000-4000-8000-000000000011"
 
 
 def myanmar_business_date(timestamp: str) -> str:
@@ -236,6 +241,41 @@ def storefront_evidence(request: dict[str, object]) -> dict[str, str]:
     )
 
 
+def storefront_catalog_digest(state: dict[str, object]) -> str:
+    return commerce_catalog_digest(state)
+
+
+def storefront_configuration(
+    state: dict[str, object],
+    *,
+    revision: int = 1,
+    catalog_revision: int = 1,
+    store_name: str = "Mingalar Shop",
+    summary: str = "Clear prices and a small customer-ready catalog.",
+    selected_skus: list[str] | None = None,
+    digest: str | None = None,
+    actor: str = "Accountable operator",
+    captured_at: str = NOW,
+) -> dict[str, object]:
+    catalog_digest = digest or storefront_catalog_digest(state)
+    evidence = action_evidence(
+        f"ACT-STOREFRONT-R{revision}-{catalog_digest.removeprefix('sha256:')}",
+        actor=actor,
+        captured_at=captured_at,
+        evidence_reference=f"ECOMMERCE-STOREFRONT:{catalog_digest}:R{revision}",
+    )
+    return {
+        "schema": "supermega.ecommerce.storefront.v1",
+        "revision": revision,
+        "shopCatalogSnapshotRevision": catalog_revision,
+        "shopCatalogDigest": catalog_digest,
+        "storeName": store_name,
+        "summary": summary,
+        "selectedSkus": selected_skus or ["SKU-1"],
+        "saved": evidence,
+    }
+
+
 def pending_intake_state() -> dict[str, object]:
     state = catalog_state()
     state["websiteIntakes"] = [website_intake()]
@@ -361,6 +401,8 @@ def evidence_for(event_type: str, next_state: dict[str, object]) -> dict[str, st
         return conversion  # type: ignore[return-value]
     if event_type == "commerce.storefront_request.received":
         return storefront_evidence(next_state["storefrontRequests"][0])  # type: ignore[index,arg-type]
+    if event_type == "commerce.storefront.configuration.saved":
+        return dict(next_state["storefrontConfiguration"]["saved"])  # type: ignore[index,arg-type]
     if event_type in {"commerce.item.created", "commerce.order.created", "commerce.order.cancelled", "commerce.stock.received"}:
         movement_record = next_state["movements"][0]  # type: ignore[index]
         return {
@@ -506,6 +548,291 @@ class CommerceRuntimeTests(unittest.TestCase):
         with self.assertRaises(TrialValidationError):
             validate_commerce_state(oversized)
 
+    def test_storefront_catalog_digest_matches_cross_runtime_golden(self) -> None:
+        vector: dict[str, object] = {
+            "schema": "supermega.commerce.workspace.v2",
+            "items": [
+                {
+                    "sku": "SM-😀",
+                    "name": "Emoji item",
+                    "onHand": 4,
+                    "reorderAt": 1,
+                    "price": 400,
+                },
+                {
+                    "sku": "SM-a",
+                    "name": "Lowercase item",
+                    "variant": "v2",
+                    "onHand": 2,
+                    "reorderAt": 1,
+                    "price": 200,
+                },
+                {
+                    "sku": "SM-\ue000",
+                    "name": "Private-use item",
+                    "onHand": 3,
+                    "reorderAt": 1,
+                    "price": 300,
+                },
+                {
+                    "sku": "SM-A",
+                    "name": "မြန်မာ လက်ဖက်ရည်",
+                    "variant": "သေး",
+                    "onHand": 1,
+                    "reorderAt": 1,
+                    "price": 100,
+                },
+            ],
+            "orders": [],
+            "movements": [],
+            "closes": [],
+        }
+        self.assertEqual(
+            commerce_catalog_digest(vector),
+            "sha256:c03d623521a78627b7c324771c02be32dcc2f25c7e61d0883ebc6106042e0af2",
+        )
+
+    def test_storefront_configuration_is_revisioned_without_shop_side_effects(self) -> None:
+        current = catalog_state()
+        first_state = deepcopy(current)
+        first_state["storefrontConfiguration"] = storefront_configuration(current)
+        first = apply_event(
+            current,
+            "commerce.storefront.configuration.saved",
+            first_state,
+        )
+        self.assertEqual(first["storefrontConfiguration"], first_state["storefrontConfiguration"])
+        for field in ("items", "orders", "movements", "closes"):
+            self.assertEqual(first[field], current[field])
+        self.assertEqual(first.get("websiteIntakes", []), [])
+        self.assertEqual(first.get("storefrontRequests", []), [])
+
+        explicit_null = deepcopy(current)
+        explicit_null["storefrontConfiguration"] = None
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(explicit_null)
+        null_receipt = deepcopy(current)
+        null_receipt["items"][0]["onHand"] = 11  # type: ignore[index]
+        null_receipt["movements"] = [movement("receipt", "ACT-NULL-CONFIG", 1)]
+        null_receipt["storefrontConfiguration"] = None
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "commerce.stock.received",
+                null_receipt,
+                action_evidence("ACT-NULL-CONFIG"),
+            )
+
+        for label, invalid_configuration in (
+            ("unknown SKU", storefront_configuration(current, selected_skus=["UNKNOWN"])),
+            ("wrong digest", storefront_configuration(current, digest="sha256:" + "a" * 64)),
+        ):
+            invalid = deepcopy(current)
+            invalid["storefrontConfiguration"] = invalid_configuration
+            with self.subTest(label=label), self.assertRaises(TrialValidationError):
+                apply_event(
+                    current,
+                    "commerce.storefront.configuration.saved",
+                    invalid,
+                )
+
+        two_item_current = deepcopy(current)
+        two_item_current["items"] = [
+            *two_item_current["items"],  # type: ignore[misc]
+            {"sku": "SKU-2", "name": "Second", "onHand": 2, "reorderAt": 1, "price": 50},
+        ]
+        unsorted = deepcopy(two_item_current)
+        unsorted["storefrontConfiguration"] = storefront_configuration(
+            two_item_current,
+            selected_skus=["SKU-2", "SKU-1"],
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                two_item_current,
+                "commerce.storefront.configuration.saved",
+                unsorted,
+            )
+
+        changed_configuration = deepcopy(first)
+        changed_configuration["storefrontConfiguration"]["storeName"] = "Changed outside event"  # type: ignore[index]
+        receipt_state = deepcopy(first)
+        receipt_state["storefrontRequests"] = [storefront_request()]
+        receipt_state["storefrontConfiguration"] = changed_configuration["storefrontConfiguration"]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                first,
+                "commerce.storefront_request.received",
+                receipt_state,
+            )
+
+        stock_changed = deepcopy(first)
+        stock_changed["items"][0]["onHand"] = 11  # type: ignore[index]
+        stock_changed["movements"] = [movement("receipt", "ACT-STOCK-CONFIG", 1)]
+        stock_changed = apply_event(
+            first,
+            "commerce.stock.received",
+            stock_changed,
+            action_evidence("ACT-STOCK-CONFIG"),
+        )
+        second_state = deepcopy(stock_changed)
+        second_state["storefrontConfiguration"] = storefront_configuration(
+            stock_changed,
+            revision=2,
+            catalog_revision=1,
+            summary="Updated copy after a stock-only change.",
+        )
+        second = apply_event(
+            stock_changed,
+            "commerce.storefront.configuration.saved",
+            second_state,
+        )
+        self.assertEqual(
+            second["storefrontConfiguration"]["shopCatalogSnapshotRevision"],  # type: ignore[index]
+            1,
+        )
+
+        reused_action = deepcopy(second)
+        reused_action["storefrontConfiguration"] = storefront_configuration(
+            second,
+            revision=3,
+            catalog_revision=1,
+            summary="Attempted proof identity reuse.",
+        )
+        reused_action["storefrontConfiguration"]["saved"]["actionId"] = first["storefrontConfiguration"]["saved"]["actionId"]  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                second,
+                "commerce.storefront.configuration.saved",
+                reused_action,
+            )
+
+        catalog_changed = deepcopy(second)
+        catalog_changed["items"] = [
+            {"sku": "SKU-2", "name": "Second", "onHand": 2, "reorderAt": 1, "price": 50},
+            *catalog_changed["items"],  # type: ignore[misc]
+        ]
+        catalog_changed["movements"] = [
+            movement("opening", "ACT-ITEM-CONFIG", 2, sku="SKU-2"),
+            *catalog_changed["movements"],  # type: ignore[misc]
+        ]
+        catalog_changed = apply_event(
+            second,
+            "commerce.item.created",
+            catalog_changed,
+            action_evidence("ACT-ITEM-CONFIG"),
+        )
+        third_state = deepcopy(catalog_changed)
+        third_state["storefrontConfiguration"] = storefront_configuration(
+            catalog_changed,
+            revision=3,
+            catalog_revision=2,
+            selected_skus=["SKU-1", "SKU-2"],
+        )
+        third = apply_event(
+            catalog_changed,
+            "commerce.storefront.configuration.saved",
+            third_state,
+        )
+        self.assertEqual(
+            third["storefrontConfiguration"]["shopCatalogSnapshotRevision"],  # type: ignore[index]
+            2,
+        )
+
+    def test_storefront_configuration_store_is_human_revisioned_and_tenant_scoped(self) -> None:
+        store = InMemoryTrialStore(reducer=reduce_trial_state)
+        operator = TrialPrincipal("workspace-storefront", "operator-a", "human")
+        other = TrialPrincipal("workspace-other", "operator-b", "human")
+        agent = TrialPrincipal("workspace-storefront", "storefront-agent", "agent")
+        for principal in (operator, other, agent):
+            store.provision_membership(
+                workspace_id=principal.workspace_id,
+                actor_id=principal.actor_id,
+                actor_kind=principal.actor_kind,
+                capabilities=("commerce.write",),
+            )
+        initialized = store.apply_command(
+            operator,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.workspace.initialized",
+            expected_version=0,
+            payload={"state": catalog_state(), "evidence": action_evidence("ACT-INIT-STOREFRONT")},
+        )
+        other_initialized = store.apply_command(
+            other,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.workspace.initialized",
+            expected_version=0,
+            payload={"state": catalog_state(), "evidence": action_evidence("ACT-INIT-OTHER", actor=other.actor_id)},
+        )
+        next_state = deepcopy(initialized.state)
+        next_state["storefrontConfiguration"] = storefront_configuration(
+            initialized.state,
+            actor="forged-actor",
+            captured_at="2099-01-01T00:00:00.000Z",
+        )
+        payload = {
+            "state": next_state,
+            "evidence": dict(next_state["storefrontConfiguration"]["saved"]),  # type: ignore[index,arg-type]
+        }
+        command_id = STOREFRONT_CONFIGURATION_UUID
+        saved = store.apply_command(
+            operator,
+            command_id=command_id,
+            surface="commerce",
+            event_type="commerce.storefront.configuration.saved",
+            expected_version=initialized.version,
+            payload=payload,
+        )
+        replay = store.apply_command(
+            operator,
+            command_id=command_id,
+            surface="commerce",
+            event_type="commerce.storefront.configuration.saved",
+            expected_version=initialized.version,
+            payload=payload,
+        )
+        configuration = saved.state["storefrontConfiguration"]
+        self.assertEqual(saved.version, initialized.version + 1)
+        self.assertTrue(replay.idempotent_replay)
+        self.assertEqual(replay.state, saved.state)
+        self.assertEqual(configuration["saved"]["actor"], operator.actor_id)  # type: ignore[index]
+        self.assertNotEqual(configuration["saved"]["capturedAt"], "2099-01-01T00:00:00.000Z")  # type: ignore[index]
+        self.assertEqual(store.get_state(operator, "commerce").updated_by, operator.actor_id)
+        self.assertEqual(store.get_state(other, "commerce").version, other_initialized.version)
+        self.assertNotIn("storefrontConfiguration", store.get_state(other, "commerce").state)
+
+        with self.assertRaises(TrialIdempotencyConflict):
+            conflicting = deepcopy(payload)
+            conflicting["state"]["storefrontConfiguration"]["summary"] = "Conflicting replay."  # type: ignore[index]
+            store.apply_command(
+                operator,
+                command_id=command_id,
+                surface="commerce",
+                event_type="commerce.storefront.configuration.saved",
+                expected_version=initialized.version,
+                payload=conflicting,
+            )
+        with self.assertRaises(TrialVersionConflict):
+            store.apply_command(
+                operator,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.storefront.configuration.saved",
+                expected_version=initialized.version,
+                payload=payload,
+            )
+        with self.assertRaises(TrialHumanApprovalRequired):
+            store.apply_command(
+                agent,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.storefront.configuration.saved",
+                expected_version=saved.version,
+                payload=payload,
+            )
+
     def test_storefront_request_store_replay_revision_tenant_and_recovery(self) -> None:
         store = InMemoryTrialStore(reducer=reduce_trial_state)
         operator = TrialPrincipal("workspace-a", "Accountable operator", "human")
@@ -598,6 +925,7 @@ class CommerceRuntimeTests(unittest.TestCase):
                     "commerce.stock.received",
                     "commerce.close.saved",
                     "commerce.website_intake.converted",
+                    "commerce.storefront.configuration.saved",
                 }
             ),
         )

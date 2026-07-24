@@ -1,4 +1,5 @@
 export const COMMERCE_WORKSPACE_SCHEMA = 'supermega.commerce.workspace.v2' as const
+export const COMMERCE_STOREFRONT_SCHEMA = 'supermega.ecommerce.storefront.v1' as const
 export const COMMERCE_KEY = 'supermega.commerce.workspace.v2'
 export const LEGACY_COMMERCE_KEYS = ['supermega.commerce.workspace.v1', 'supermega.shop.workspace.v2']
 export const COMMERCE_LOCK = 'supermega-commerce-workspace-v2'
@@ -140,6 +141,17 @@ export type CommerceStorefrontRequest = {
   totalMmk: number
 }
 
+export type CommerceStorefrontConfiguration = {
+  schema: typeof COMMERCE_STOREFRONT_SCHEMA
+  revision: number
+  shopCatalogSnapshotRevision: number
+  shopCatalogDigest: string
+  storeName: string
+  summary: string
+  selectedSkus: string[]
+  saved: CommerceActionProof
+}
+
 export type CommerceState = {
   schema: typeof COMMERCE_WORKSPACE_SCHEMA
   items: CommerceItem[]
@@ -148,6 +160,7 @@ export type CommerceState = {
   closes: CommerceClose[]
   websiteIntakes?: CommerceWebsiteIntake[]
   storefrontRequests?: CommerceStorefrontRequest[]
+  storefrontConfiguration?: CommerceStorefrontConfiguration
 }
 
 export type CommerceActionProof = {
@@ -175,6 +188,13 @@ type CommerceStorage = {
   getItem: (key: string) => string | null
   setItem: (key: string, value: string) => void
   removeItem: (key: string) => void
+}
+
+export type CommerceStorefrontConfigurationInput = {
+  storeName: string
+  summary: string
+  selectedSkus: string[]
+  shopCatalogDigest: string
 }
 
 type CommerceLockManager = {
@@ -224,6 +244,23 @@ function canonicalText(value: unknown, field: string, maximum = 180) {
   const text = requiredText(value, field)
   if (value !== text || text.length > maximum) throw new Error(`${field} must be canonical text of at most ${maximum} characters.`)
   return text
+}
+
+function compareCanonicalText(left: string, right: string) {
+  const leftCodePoints = Array.from(left, (character) => character.codePointAt(0) as number)
+  const rightCodePoints = Array.from(right, (character) => character.codePointAt(0) as number)
+  const sharedLength = Math.min(leftCodePoints.length, rightCodePoints.length)
+  for (let index = 0; index < sharedLength; index += 1) {
+    if (leftCodePoints[index] !== rightCodePoints[index]) return leftCodePoints[index] - rightCodePoints[index]
+  }
+  return leftCodePoints.length - rightCodePoints.length
+}
+
+export function commerceStorefrontConfigurationActionId(revision: number, shopCatalogDigest: string) {
+  if (!Number.isSafeInteger(revision) || revision < 1 || !sha256DigestPattern.test(shopCatalogDigest)) {
+    throw new Error('Storefront configuration action identity is invalid.')
+  }
+  return `ACT-STOREFRONT-R${revision}-${shopCatalogDigest.slice('sha256:'.length)}`
 }
 
 function optionalText(value: unknown) {
@@ -339,6 +376,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   if (!Array.isArray(value.items) || !Array.isArray(value.orders) || !Array.isArray(value.movements) || !Array.isArray(value.closes)) throw new Error('Commerce workspace collections are incomplete.')
   if (value.websiteIntakes !== undefined && !Array.isArray(value.websiteIntakes)) throw new Error('Commerce Website intakes must be an array when present.')
   if (value.storefrontRequests !== undefined && !Array.isArray(value.storefrontRequests)) throw new Error('Commerce storefront requests must be an array when present.')
+  if (value.storefrontConfiguration !== undefined && !isRecord(value.storefrontConfiguration)) throw new Error('Commerce storefront configuration must be an object when present.')
 
   const items = value.items as unknown[]
   const orders = value.orders as unknown[]
@@ -346,6 +384,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   const closes = value.closes as unknown[]
   const websiteIntakes = (value.websiteIntakes ?? []) as unknown[]
   const storefrontRequests = (value.storefrontRequests ?? []) as unknown[]
+  const storefrontConfiguration = value.storefrontConfiguration
   if (storefrontRequests.length > maxStorefrontRequests) throw new Error(`Commerce storefront requests cannot exceed ${maxStorefrontRequests}.`)
   const itemSkus: string[] = []
   const itemBySku = new Map<string, Record<string, unknown>>()
@@ -361,6 +400,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   const closedOrderIds: string[] = []
   const websiteIntakeCreationActionIds: string[] = []
   const websiteIntakeConversionActionIds: string[] = []
+  let storefrontConfigurationActionId = ''
 
   for (const [index, candidate] of items.entries()) {
     if (!isRecord(candidate)) throw new Error(`items[${index}] is invalid.`)
@@ -374,6 +414,53 @@ export function validateCommerceState(value: unknown): CommerceState {
     assertSafeInteger(candidate.price, `items[${index}].price`, 1)
   }
   assertUnique(itemSkus, 'Item SKU')
+
+  if (storefrontConfiguration !== undefined) {
+    if (!hasExactKeys(
+      storefrontConfiguration,
+      ['schema', 'revision', 'shopCatalogSnapshotRevision', 'shopCatalogDigest', 'storeName', 'summary', 'selectedSkus', 'saved'],
+    ) || storefrontConfiguration.schema !== COMMERCE_STOREFRONT_SCHEMA) {
+      throw new Error('storefrontConfiguration is invalid.')
+    }
+    assertSafeInteger(storefrontConfiguration.revision, 'storefrontConfiguration.revision', 1)
+    assertSafeInteger(storefrontConfiguration.shopCatalogSnapshotRevision, 'storefrontConfiguration.shopCatalogSnapshotRevision', 1)
+    if (typeof storefrontConfiguration.shopCatalogDigest !== 'string' || !sha256DigestPattern.test(storefrontConfiguration.shopCatalogDigest)) {
+      throw new Error('storefrontConfiguration.shopCatalogDigest is invalid.')
+    }
+    canonicalText(storefrontConfiguration.storeName, 'storefrontConfiguration.storeName', 60)
+    canonicalText(storefrontConfiguration.summary, 'storefrontConfiguration.summary', 180)
+    if (!Array.isArray(storefrontConfiguration.selectedSkus)
+      || storefrontConfiguration.selectedSkus.length < 1
+      || storefrontConfiguration.selectedSkus.length > 8) {
+      throw new Error('storefrontConfiguration.selectedSkus must contain 1 to 8 Shop SKUs.')
+    }
+    const selectedSkus = storefrontConfiguration.selectedSkus.map((sku, index) => (
+      canonicalText(sku, `storefrontConfiguration.selectedSkus[${index}]`, 80)
+    ))
+    assertUnique(selectedSkus, 'Storefront selected SKU')
+    if (selectedSkus.some((sku) => !itemSkus.includes(sku))
+      || !sameStringArray(selectedSkus, [...selectedSkus].sort(compareCanonicalText))) {
+      throw new Error('storefrontConfiguration.selectedSkus must be sorted current Shop SKUs.')
+    }
+    if (!isRecord(storefrontConfiguration.saved)
+      || !hasExactKeys(storefrontConfiguration.saved, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+      || !validProof(storefrontConfiguration.saved as CommerceActionProof)
+      || storefrontConfiguration.saved.evidenceReference !== `ECOMMERCE-STOREFRONT:${storefrontConfiguration.shopCatalogDigest}:R${storefrontConfiguration.revision}`) {
+      throw new Error('storefrontConfiguration.saved is invalid.')
+    }
+    const saved = storefrontConfiguration.saved as CommerceActionProof
+    storefrontConfigurationActionId = canonicalText(saved.actionId, 'storefrontConfiguration.saved.actionId', 160)
+    if (storefrontConfigurationActionId !== commerceStorefrontConfigurationActionId(
+      storefrontConfiguration.revision as number,
+      storefrontConfiguration.shopCatalogDigest,
+    )) {
+      throw new Error('storefrontConfiguration.saved.actionId is invalid.')
+    }
+    if (!validTimestamp(saved.capturedAt)) throw new Error('storefrontConfiguration.saved.capturedAt is invalid.')
+    for (const field of ['actor', 'reason', 'evidenceReference'] as const) {
+      canonicalText(saved[field], `storefrontConfiguration.saved.${field}`)
+    }
+  }
 
   for (const [index, candidate] of orders.entries()) {
     if (!isRecord(candidate)) throw new Error(`orders[${index}] is invalid.`)
@@ -698,7 +785,15 @@ export function validateCommerceState(value: unknown): CommerceState {
   }
   assertUnique(storefrontRequestIds, 'Storefront request ID')
   assertUnique(storefrontIdempotencyKeys, 'Storefront request idempotency key')
-  assertUnique([...new Set(movementActionIds), ...reconciliationActionIds, ...refundSettlementActionIds, ...websiteIntakeCreationActionIds, ...closeActionIds, ...storefrontActionIds], 'Commerce action ID')
+  assertUnique([
+    ...new Set(movementActionIds),
+    ...reconciliationActionIds,
+    ...refundSettlementActionIds,
+    ...websiteIntakeCreationActionIds,
+    ...closeActionIds,
+    ...storefrontActionIds,
+    ...(storefrontConfigurationActionId ? [storefrontConfigurationActionId] : []),
+  ], 'Commerce action ID')
   return value as CommerceState
 }
 
@@ -890,6 +985,7 @@ function actionIdIsUsed(state: CommerceState, actionId: string) {
     || state.orders.some((order) => order.paymentReconciliationActionId === actionId || order.refundSettlementActionId === actionId)
     || state.closes.some((close) => close.actionId === actionId)
     || commerceWebsiteIntakes(state).some((intake) => intake.creation.actionId === actionId || intake.conversion?.actionId === actionId)
+    || state.storefrontConfiguration?.saved.actionId === actionId
 }
 
 function sameWebsiteSource(left: CommerceWebsiteSource, right: CommerceWebsiteSource) {
@@ -921,6 +1017,95 @@ export function commerceWebsiteIntakes(state: CommerceState) {
 
 export function commerceStorefrontRequests(state: CommerceState) {
   return state.storefrontRequests ?? []
+}
+
+export function commerceStorefrontConfiguration(state: CommerceState) {
+  return state.storefrontConfiguration ?? null
+}
+
+export function commerceCatalogDigestSource(state: CommerceState) {
+  const current = validateCommerceState(state)
+  return JSON.stringify(
+    [...current.items]
+      .sort((left, right) => compareCanonicalText(left.sku, right.sku))
+      .map((item) => [item.sku, item.name, item.variant ?? null, item.price]),
+  )
+}
+
+export async function commerceCatalogDigest(state: CommerceState) {
+  const subtle = globalThis.crypto?.subtle
+  if (!subtle) throw new Error('SHA-256 is unavailable.')
+  const digest = await subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(commerceCatalogDigestSource(state)),
+  )
+  return `sha256:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')}`
+}
+
+export async function saveCommerceStorefrontConfiguration(
+  state: CommerceState,
+  input: CommerceStorefrontConfigurationInput,
+  proof: CommerceActionProof,
+) {
+  const current = validateCommerceState(structuredClone(state))
+  if (!validProof(proof)
+    || typeof input.shopCatalogDigest !== 'string'
+    || !sha256DigestPattern.test(input.shopCatalogDigest)
+    || !Array.isArray(input.selectedSkus)
+    || input.selectedSkus.length < 1
+    || input.selectedSkus.length > 8) return null
+  let currentCatalogDigest: string
+  try {
+    currentCatalogDigest = await commerceCatalogDigest(current)
+  } catch {
+    return null
+  }
+  if (input.shopCatalogDigest !== currentCatalogDigest) return null
+  let storeName: string
+  let summary: string
+  let selectedSkus: string[]
+  try {
+    storeName = canonicalText(input.storeName, 'Store name', 60)
+    summary = canonicalText(input.summary, 'Store summary', 180)
+    selectedSkus = input.selectedSkus
+      .map((sku, index) => canonicalText(sku, `Selected SKU ${index + 1}`, 80))
+      .sort(compareCanonicalText)
+  } catch {
+    return null
+  }
+  if (new Set(selectedSkus).size !== selectedSkus.length
+    || selectedSkus.some((sku) => !current.items.some((item) => item.sku === sku))) return null
+  const existing = commerceStorefrontConfiguration(current)
+  if (existing
+    && existing.storeName === storeName
+    && existing.summary === summary
+    && existing.shopCatalogDigest === input.shopCatalogDigest
+    && existing.selectedSkus.length === selectedSkus.length
+    && existing.selectedSkus.every((sku, index) => sku === selectedSkus[index])) return current
+  if (actionIdIsUsed(current, proof.actionId)
+    || (existing?.revision ?? 0) >= Number.MAX_SAFE_INTEGER
+    || (existing?.shopCatalogSnapshotRevision ?? 0) >= Number.MAX_SAFE_INTEGER) return null
+  const revision = (existing?.revision ?? 0) + 1
+  const shopCatalogSnapshotRevision = existing
+    ? existing.shopCatalogDigest === input.shopCatalogDigest
+      ? existing.shopCatalogSnapshotRevision
+      : existing.shopCatalogSnapshotRevision + 1
+    : 1
+  if (proof.actionId !== commerceStorefrontConfigurationActionId(revision, input.shopCatalogDigest)
+    || proof.evidenceReference !== `ECOMMERCE-STOREFRONT:${input.shopCatalogDigest}:R${revision}`) return null
+  return validateCommerceState({
+    ...current,
+    storefrontConfiguration: {
+      schema: COMMERCE_STOREFRONT_SCHEMA,
+      revision,
+      shopCatalogSnapshotRevision,
+      shopCatalogDigest: input.shopCatalogDigest,
+      storeName,
+      summary,
+      selectedSkus,
+      saved: { ...proof },
+    },
+  })
 }
 
 function sameStorefrontRequest(left: CommerceStorefrontRequest, right: CommerceStorefrontRequest) {

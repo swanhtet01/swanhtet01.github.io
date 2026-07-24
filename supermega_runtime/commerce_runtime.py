@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+from hashlib import sha256
+import json
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
@@ -26,6 +28,7 @@ COMMERCE_EVENTS = frozenset(
         "commerce.close.saved",
         "commerce.website_intake.created",
         "commerce.website_intake.converted",
+        "commerce.storefront.configuration.saved",
         "commerce.storefront_request.received",
     }
 )
@@ -41,6 +44,7 @@ COMMERCE_HUMAN_EVENTS = frozenset(
         "commerce.stock.received",
         "commerce.close.saved",
         "commerce.website_intake.converted",
+        "commerce.storefront.configuration.saved",
     }
 )
 _ORDER_STATUSES = ("confirmed", "preparing", "ready", "completed", "cancelled")
@@ -168,6 +172,18 @@ _STOREFRONT_REQUEST_FIELDS = frozenset(
 )
 _STOREFRONT_REQUEST_LINE_FIELDS = frozenset(
     {"sku", "name", "variant", "quantity", "unitPriceMmk"}
+)
+_STOREFRONT_CONFIGURATION_FIELDS = frozenset(
+    {
+        "schema",
+        "revision",
+        "shopCatalogSnapshotRevision",
+        "shopCatalogDigest",
+        "storeName",
+        "summary",
+        "selectedSkus",
+        "saved",
+    }
 )
 
 
@@ -314,7 +330,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         state,
         "commerce state",
         required=_STATE_FIELDS,
-        optional=frozenset({"websiteIntakes", "storefrontRequests"}),
+        optional=frozenset({"websiteIntakes", "storefrontRequests", "storefrontConfiguration"}),
     )
     if state.get("schema") != COMMERCE_SCHEMA:
         raise TrialValidationError(f"commerce state schema must be {COMMERCE_SCHEMA}.")
@@ -328,6 +344,11 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         state.get("storefrontRequests", []),
         "commerce state.storefrontRequests",
     )
+    if "storefrontConfiguration" in state and state["storefrontConfiguration"] is None:
+        raise TrialValidationError(
+            "commerce state.storefrontConfiguration must be an object when present."
+        )
+    storefront_configuration = state.get("storefrontConfiguration")
     if len(storefront_requests) > _MAX_STOREFRONT_REQUESTS:
         raise TrialValidationError(
             f"commerce state.storefrontRequests cannot exceed {_MAX_STOREFRONT_REQUESTS}."
@@ -348,6 +369,87 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         item_skus.append(sku)
         item_by_sku[sku] = item
     _unique(item_skus, "Item SKU")
+
+    storefront_configuration_action_id = ""
+    if storefront_configuration is not None:
+        configuration = _object(
+            storefront_configuration,
+            "commerce state.storefrontConfiguration",
+        )
+        _exact_fields(
+            configuration,
+            "commerce state.storefrontConfiguration",
+            required=_STOREFRONT_CONFIGURATION_FIELDS,
+        )
+        if configuration["schema"] != "supermega.ecommerce.storefront.v1":
+            raise TrialValidationError("commerce state.storefrontConfiguration.schema is invalid.")
+        revision = _integer(
+            configuration["revision"],
+            "commerce state.storefrontConfiguration.revision",
+            minimum=1,
+        )
+        _integer(
+            configuration["shopCatalogSnapshotRevision"],
+            "commerce state.storefrontConfiguration.shopCatalogSnapshotRevision",
+            minimum=1,
+        )
+        digest = _text(
+            configuration["shopCatalogDigest"],
+            "commerce state.storefrontConfiguration.shopCatalogDigest",
+            maximum=71,
+        )
+        if _SHA256_DIGEST_PATTERN.fullmatch(digest) is None:
+            raise TrialValidationError(
+                "commerce state.storefrontConfiguration.shopCatalogDigest is invalid."
+            )
+        _text(
+            configuration["storeName"],
+            "commerce state.storefrontConfiguration.storeName",
+            maximum=60,
+        )
+        _text(
+            configuration["summary"],
+            "commerce state.storefrontConfiguration.summary",
+            maximum=180,
+        )
+        selected_skus = _list(
+            configuration["selectedSkus"],
+            "commerce state.storefrontConfiguration.selectedSkus",
+        )
+        if not 1 <= len(selected_skus) <= 8:
+            raise TrialValidationError(
+                "commerce state.storefrontConfiguration.selectedSkus must contain 1 to 8 Shop SKUs."
+            )
+        normalized_selected_skus = [
+            _text(
+                sku,
+                f"commerce state.storefrontConfiguration.selectedSkus[{index}]",
+                maximum=80,
+            )
+            for index, sku in enumerate(selected_skus)
+        ]
+        _unique(normalized_selected_skus, "Storefront selected SKU")
+        if (
+            normalized_selected_skus != sorted(normalized_selected_skus)
+            or any(sku not in item_by_sku for sku in normalized_selected_skus)
+        ):
+            raise TrialValidationError(
+                "commerce state.storefrontConfiguration.selectedSkus must be sorted current Shop SKUs."
+            )
+        saved = _action_proof(
+            configuration["saved"],
+            "commerce state.storefrontConfiguration.saved",
+        )
+        if saved["evidenceReference"] != f"ECOMMERCE-STOREFRONT:{digest}:R{revision}":
+            raise TrialValidationError(
+                "commerce state.storefrontConfiguration.saved evidence is invalid."
+            )
+        expected_action_id = _storefront_configuration_action_id(revision, digest)
+        if saved["actionId"] != expected_action_id:
+            raise TrialValidationError(
+                "commerce state.storefrontConfiguration.saved action ID is invalid."
+            )
+        storefront_configuration_action_id = saved["actionId"]
 
     order_ids: list[str] = []
     source_record_ids: list[str] = []
@@ -824,6 +926,11 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             *intake_action_ids,
             *close_action_ids,
             *storefront_action_ids,
+            *(
+                [storefront_configuration_action_id]
+                if storefront_configuration_action_id
+                else []
+            ),
         ],
         "Commerce action ID",
     )
@@ -885,6 +992,12 @@ def _validate_event_evidence(
             != f"ECOMMERCE:{request['id']}:{request['sourcePreviewDigest']}"
         ):
             raise TrialValidationError("command evidence must match the retained Ecommerce request receipt.")
+    elif event_type == "commerce.storefront.configuration.saved":
+        saved = next_state["storefrontConfiguration"]["saved"]
+        if not _proof_matches_evidence(saved, evidence):
+            raise TrialValidationError(
+                "command evidence must match the saved Ecommerce storefront configuration."
+            )
 
     movement_kind = {
         "commerce.item.created": "opening",
@@ -1005,6 +1118,33 @@ def _storefront_requests(state: Mapping[str, Any]) -> list[Any]:
     return state.get("storefrontRequests", [])
 
 
+def _storefront_configuration(state: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    configuration = state.get("storefrontConfiguration")
+    return configuration if isinstance(configuration, Mapping) else None
+
+
+def _storefront_configuration_action_id(revision: int, digest: str) -> str:
+    return f"ACT-STOREFRONT-R{revision}-{digest.removeprefix('sha256:')}"
+
+
+def commerce_catalog_digest(state: Mapping[str, Any]) -> str:
+    projection = [
+        [
+            item["sku"],
+            item["name"],
+            item.get("variant"),
+            item["price"],
+        ]
+        for item in sorted(state["items"], key=lambda item: item["sku"])
+    ]
+    encoded = json.dumps(
+        projection,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return f"sha256:{sha256(encoded).hexdigest()}"
+
+
 def _require_website_intakes_unchanged(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
     if _website_intakes(current) != _website_intakes(next_state):
         raise TrialValidationError("event cannot change: websiteIntakes.")
@@ -1013,6 +1153,14 @@ def _require_website_intakes_unchanged(current: Mapping[str, Any], next_state: M
 def _require_storefront_requests_unchanged(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
     if _storefront_requests(current) != _storefront_requests(next_state):
         raise TrialValidationError("event cannot change: storefrontRequests.")
+
+
+def _require_storefront_configuration_unchanged(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    if _storefront_configuration(current) != _storefront_configuration(next_state):
+        raise TrialValidationError("event cannot change: storefrontConfiguration.")
 
 
 def _validate_new_order_and_reservation(
@@ -1366,6 +1514,43 @@ def _validate_storefront_request_received(current: Mapping[str, Any], next_state
         )
 
 
+def _validate_storefront_configuration_saved(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "items", "orders", "movements", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    before = _storefront_configuration(current)
+    after = _storefront_configuration(next_state)
+    if after is None:
+        raise TrialValidationError(
+            "commerce.storefront.configuration.saved requires one storefront configuration."
+        )
+    if after["shopCatalogDigest"] != commerce_catalog_digest(current):
+        raise TrialValidationError(
+            "the storefront configuration must bind to the current Shop catalog."
+        )
+    if before is None:
+        if after["revision"] != 1 or after["shopCatalogSnapshotRevision"] != 1:
+            raise TrialValidationError(
+                "the first storefront configuration must start at revision one."
+            )
+        return
+    content_fields = ("storeName", "summary", "selectedSkus", "shopCatalogDigest")
+    if all(before[field] == after[field] for field in content_fields):
+        raise TrialValidationError("an unchanged storefront configuration cannot advance.")
+    if after["revision"] != before["revision"] + 1:
+        raise TrialValidationError("storefront configuration revision must advance exactly once.")
+    expected_catalog_revision = before["shopCatalogSnapshotRevision"] + (
+        1 if before["shopCatalogDigest"] != after["shopCatalogDigest"] else 0
+    )
+    if after["shopCatalogSnapshotRevision"] != expected_catalog_revision:
+        raise TrialValidationError(
+            "Shop catalog snapshot revision must advance only when its digest changes."
+        )
+
+
 _TRANSITION_VALIDATORS = {
     "commerce.item.created": _validate_item_created,
     "commerce.order.created": _validate_created,
@@ -1377,6 +1562,7 @@ _TRANSITION_VALIDATORS = {
     "commerce.close.saved": _validate_close,
     "commerce.website_intake.created": _validate_website_intake_created,
     "commerce.website_intake.converted": _validate_website_intake_converted,
+    "commerce.storefront.configuration.saved": _validate_storefront_configuration_saved,
     "commerce.storefront_request.received": _validate_storefront_request_received,
 }
 
@@ -1401,6 +1587,7 @@ def reduce_commerce_state(
             or next_state["closes"]
             or _website_intakes(next_state)
             or _storefront_requests(next_state)
+            or _storefront_configuration(next_state)
         ):
             raise TrialValidationError("Commerce initialization requires a non-empty catalog and no operating history.")
         return next_state
@@ -1408,6 +1595,8 @@ def reduce_commerce_state(
     current_state = validate_commerce_state(current)
     if event_type != "commerce.storefront_request.received":
         _require_storefront_requests_unchanged(current_state, next_state)
+    if event_type != "commerce.storefront.configuration.saved":
+        _require_storefront_configuration_unchanged(current_state, next_state)
     _TRANSITION_VALIDATORS[event_type](current_state, next_state)
     _validate_event_evidence(event_type, current_state, next_state, evidence)
     return next_state
@@ -1417,6 +1606,7 @@ __all__ = [
     "COMMERCE_EVENTS",
     "COMMERCE_HUMAN_EVENTS",
     "COMMERCE_SCHEMA",
+    "commerce_catalog_digest",
     "reduce_commerce_state",
     "validate_commerce_state",
 ]

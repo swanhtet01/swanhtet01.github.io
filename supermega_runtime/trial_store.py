@@ -30,6 +30,7 @@ HUMAN_COMMAND_EVENTS = frozenset(
         "commerce.stock.received",
         "commerce.close.saved",
         "commerce.website_intake.converted",
+        "commerce.storefront.configuration.saved",
         "production.workspace.initialized",
         "production.job.created",
         "production.output.recorded",
@@ -409,23 +410,41 @@ def _authoritative_command_payload(
     captured_at: str,
 ) -> JsonObject:
     authoritative = deepcopy(dict(payload))
-    if surface != "commerce" or event_type != "commerce.close.saved":
+    if surface != "commerce":
+        return authoritative
+    if event_type == "commerce.close.saved":
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        closes = state.get("closes") if isinstance(state, Mapping) else None
+        if not isinstance(evidence, Mapping) or not isinstance(state, Mapping) or not isinstance(closes, list) or not closes or not isinstance(closes[0], Mapping):
+            return authoritative
+        authoritative_evidence = dict(evidence)
+        authoritative_evidence["actor"] = principal.actor_id
+        authoritative_evidence["capturedAt"] = captured_at
+        authoritative_close = dict(closes[0])
+        authoritative_close["operator"] = principal.actor_id
+        authoritative_close["createdAt"] = captured_at
+        authoritative_close["businessDate"] = _myanmar_business_date(captured_at)
+        authoritative_closes = [authoritative_close, *deepcopy(closes[1:])]
+        authoritative_state = dict(state)
+        authoritative_state["closes"] = authoritative_closes
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
+    if event_type != "commerce.storefront.configuration.saved":
         return authoritative
     evidence = authoritative.get("evidence")
     state = authoritative.get("state")
-    closes = state.get("closes") if isinstance(state, Mapping) else None
-    if not isinstance(evidence, Mapping) or not isinstance(state, Mapping) or not isinstance(closes, list) or not closes or not isinstance(closes[0], Mapping):
+    configuration = state.get("storefrontConfiguration") if isinstance(state, Mapping) else None
+    if not isinstance(evidence, Mapping) or not isinstance(state, Mapping) or not isinstance(configuration, Mapping):
         return authoritative
     authoritative_evidence = dict(evidence)
     authoritative_evidence["actor"] = principal.actor_id
     authoritative_evidence["capturedAt"] = captured_at
-    authoritative_close = dict(closes[0])
-    authoritative_close["operator"] = principal.actor_id
-    authoritative_close["createdAt"] = captured_at
-    authoritative_close["businessDate"] = _myanmar_business_date(captured_at)
-    authoritative_closes = [authoritative_close, *deepcopy(closes[1:])]
+    authoritative_configuration = dict(configuration)
+    authoritative_configuration["saved"] = deepcopy(authoritative_evidence)
     authoritative_state = dict(state)
-    authoritative_state["closes"] = authoritative_closes
+    authoritative_state["storefrontConfiguration"] = authoritative_configuration
     authoritative["evidence"] = authoritative_evidence
     authoritative["state"] = authoritative_state
     return authoritative

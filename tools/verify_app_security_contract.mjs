@@ -1,8 +1,10 @@
 import { readFile, readdir } from 'node:fs/promises'
 import { resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 const root = resolve(import.meta.dirname, '..')
 const read = (path) => readFile(resolve(root, path), 'utf8')
+const commerceWorkspace = await import(pathToFileURL(resolve(root, 'showroom/src/core/commerce-workspace.ts')).href)
 const [runtime, supabaseAuth, cloudRuntime, vercelEntry, portableEntry, trialRuntime, trialStore, commerceRuntime, websiteRuntime, managedTrialClient, coreApp, rolePreflight, foundationMigration, decisionMigration, websiteMigration, hardeningMigration, databaseValidator, databaseActivator, liveVerifier, workflow, requirements, dockerfile, appEnvironment] = await Promise.all([
   read('supermega_runtime/runtime.py'),
   read('supermega_runtime/supabase_auth.py'),
@@ -35,6 +37,116 @@ const apiSourceEntries = (await readdir(resolve(root, 'api'), { withFileTypes: t
   .sort()
 const rootPackage = JSON.parse(await read('package.json'))
 const rootDependencies = { ...(rootPackage.dependencies || {}), ...(rootPackage.devDependencies || {}) }
+const storefrontCatalogDigestGolden = 'sha256:c03d623521a78627b7c324771c02be32dcc2f25c7e61d0883ebc6106042e0af2'
+const storefrontCatalogDigestVector = {
+  schema: 'supermega.commerce.workspace.v2',
+  items: [
+    { sku: 'SM-😀', name: 'Emoji item', onHand: 4, reorderAt: 1, price: 400 },
+    { sku: 'SM-a', name: 'Lowercase item', variant: 'v2', onHand: 2, reorderAt: 1, price: 200 },
+    { sku: 'SM-\ue000', name: 'Private-use item', onHand: 3, reorderAt: 1, price: 300 },
+    { sku: 'SM-A', name: 'မြန်မာ လက်ဖက်ရည်', variant: 'သေး', onHand: 1, reorderAt: 1, price: 100 },
+  ],
+  orders: [],
+  movements: [],
+  closes: [],
+}
+const storefrontCatalogDigestResult = await commerceWorkspace.commerceCatalogDigest(storefrontCatalogDigestVector)
+const storefrontConfigurationInput = {
+  storeName: 'Mingalar Shop',
+  summary: 'A small customer-ready catalog.',
+  selectedSkus: ['SM-😀', 'SM-A'],
+  shopCatalogDigest: storefrontCatalogDigestResult,
+}
+const storefrontConfigurationProof = (revision, actionId = commerceWorkspace.commerceStorefrontConfigurationActionId(
+  revision,
+  storefrontCatalogDigestResult,
+)) => ({
+  actionId,
+  capturedAt: '2026-07-25T00:00:00.000Z',
+  actor: 'contract-verifier',
+  reason: 'Verify the managed storefront configuration boundary.',
+  evidenceReference: `ECOMMERCE-STOREFRONT:${storefrontCatalogDigestResult}:R${revision}`,
+})
+const savedStorefrontConfiguration = await commerceWorkspace.saveCommerceStorefrontConfiguration(
+  storefrontCatalogDigestVector,
+  storefrontConfigurationInput,
+  storefrontConfigurationProof(1),
+)
+const mutableStorefrontState = structuredClone(storefrontCatalogDigestVector)
+const mutableStorefrontSave = commerceWorkspace.saveCommerceStorefrontConfiguration(
+  mutableStorefrontState,
+  storefrontConfigurationInput,
+  storefrontConfigurationProof(1),
+)
+mutableStorefrontState.items[0].price += 1
+const mutationSafeStorefrontConfiguration = await mutableStorefrontSave
+const forgedCatalogDigest = `sha256:${'0'.repeat(64)}`
+const forgedStorefrontConfiguration = await commerceWorkspace.saveCommerceStorefrontConfiguration(
+  storefrontCatalogDigestVector,
+  {
+    ...storefrontConfigurationInput,
+    shopCatalogDigest: forgedCatalogDigest,
+  },
+  {
+    ...storefrontConfigurationProof(1),
+    actionId: commerceWorkspace.commerceStorefrontConfigurationActionId(1, forgedCatalogDigest),
+    evidenceReference: `ECOMMERCE-STOREFRONT:${forgedCatalogDigest}:R1`,
+  },
+)
+const reusedStorefrontAction = savedStorefrontConfiguration
+  ? await commerceWorkspace.saveCommerceStorefrontConfiguration(
+      savedStorefrontConfiguration,
+      {
+        ...storefrontConfigurationInput,
+        summary: 'Changed copy with a reused historical action.',
+      },
+      storefrontConfigurationProof(2, storefrontConfigurationProof(1).actionId),
+    )
+  : undefined
+let explicitNullStorefrontRejected = false
+try {
+  commerceWorkspace.validateCommerceState({
+    ...storefrontCatalogDigestVector,
+    storefrontConfiguration: null,
+  })
+} catch {
+  explicitNullStorefrontRejected = true
+}
+const newlineCatalogState = {
+  schema: 'supermega.commerce.workspace.v2',
+  items: [
+    { sku: 'a\na', name: 'Embedded newline', onHand: 1, reorderAt: 1, price: 100 },
+    { sku: 'a', name: 'Short SKU', onHand: 1, reorderAt: 1, price: 200 },
+  ],
+  orders: [],
+  movements: [],
+  closes: [],
+}
+const newlineCatalogDigest = await commerceWorkspace.commerceCatalogDigest(newlineCatalogState)
+let unsortedNewlineSkusRejected = false
+try {
+  commerceWorkspace.validateCommerceState({
+    ...newlineCatalogState,
+    storefrontConfiguration: {
+      schema: 'supermega.ecommerce.storefront.v1',
+      revision: 1,
+      shopCatalogSnapshotRevision: 1,
+      shopCatalogDigest: newlineCatalogDigest,
+      storeName: 'Newline test',
+      summary: 'Reject a joined-array ordering collision.',
+      selectedSkus: ['a\na', 'a'],
+      saved: {
+        actionId: commerceWorkspace.commerceStorefrontConfigurationActionId(1, newlineCatalogDigest),
+        capturedAt: '2026-07-25T00:00:00.000Z',
+        actor: 'contract-verifier',
+        reason: 'Verify structural SKU ordering.',
+        evidenceReference: `ECOMMERCE-STOREFRONT:${newlineCatalogDigest}:R1`,
+      },
+    },
+  })
+} catch {
+  unsortedNewlineSkusRejected = true
+}
 
 const failures = []
 const checks = []
@@ -51,6 +163,7 @@ const expectedHumanCommerceEvents = [
   'commerce.payment.reconciled',
   'commerce.refund.settled',
   'commerce.stock.received',
+  'commerce.storefront.configuration.saved',
   'commerce.website_intake.converted',
   'commerce.workspace.initialized',
 ]
@@ -79,6 +192,19 @@ requireContract('production CORS is bounded', /https:\/\/app\.supermega\.dev,htt
 requireContract('API documentation is not public', /docs_url=None/.test(runtime) && /openapi_url=None/.test(runtime))
 requireContract('surface commands use optimistic versions', /expected_version/.test(trialRuntime) && /TrialVersionConflict/.test(trialStore))
 requireContract('commands are idempotent', /TrialIdempotencyConflict/.test(trialStore) && /command_fingerprint/.test(migration))
+requireContract('Ecommerce storefront catalog digest is cross-runtime deterministic', storefrontCatalogDigestResult === storefrontCatalogDigestGolden)
+requireContract('Ecommerce storefront save binds current catalog and deterministic proof identity',
+  savedStorefrontConfiguration?.storefrontConfiguration?.revision === 1
+  && JSON.stringify(savedStorefrontConfiguration.storefrontConfiguration.selectedSkus) === JSON.stringify(['SM-A', 'SM-😀'])
+  && forgedStorefrontConfiguration === null
+  && reusedStorefrontAction === null
+  && explicitNullStorefrontRejected
+  && unsortedNewlineSkusRejected
+  && mutationSafeStorefrontConfiguration?.items[0].price === storefrontCatalogDigestVector.items[0].price
+  && mutationSafeStorefrontConfiguration?.storefrontConfiguration?.shopCatalogDigest === storefrontCatalogDigestGolden
+  && ['items', 'orders', 'movements', 'closes'].every((field) => (
+    JSON.stringify(savedStorefrontConfiguration[field]) === JSON.stringify(storefrontCatalogDigestVector[field])
+  )))
 requireContract('company queue is a managed surface', /"company": "company\.write"/.test(trialStore) && /when 'company' then 'company\.write'/.test(migration))
 requireContract('Website is an authenticated managed surface', /"website": "website\.write"/.test(trialStore) && /reduce_website_state/.test(runtime) && /WEBSITE_HUMAN_EVENTS/.test(trialRuntime) && /when 'website' then 'website\.write'/.test(websiteMigration) && /saveManagedWebsiteCommand/.test(managedTrialClient) && /validate_website_state/.test(websiteRuntime) && /evidence\["actor"\] == event\["actor"\] == record\[actor_field\]/.test(websiteRuntime) && /exact current ready-page set/.test(websiteRuntime) && /sort_keys=True/.test(websiteRuntime))
 requireContract('Website Commerce intake source is transactionally verified with replay-safe retained proof', /commerce\.website_intake\.created/.test(trialRuntime) && /validate_website_snapshot_source/.test(trialRuntime) && /related_surfaces = \("website",\)/.test(trialRuntime) && /state_precondition=state_precondition/.test(trialRuntime) && /_commerce_retains_website_source/.test(trialRuntime) && /_website_fingerprint\(state\) != fingerprint/.test(websiteRuntime) && /not _same_source\(snapshot\["source"\], current_source\)/.test(websiteRuntime) && /locked_surfaces/.test(trialStore) && /for update/i.test(trialStore))
