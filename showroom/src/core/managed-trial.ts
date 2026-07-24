@@ -432,18 +432,24 @@ export async function saveManagedWebsiteCommand(request: {
   evidence: ManagedCommandEvidence
   eventType: ManagedWebsiteEvent
   expectedVersion: number
+  identity: ManagedIdentity
   state: object
 }) {
-  const response = await authorizedRequest<{ result: ManagedWebsiteCommandResult }>('/api/trial/v1/commands', {
-    method: 'POST',
-    body: JSON.stringify({
-      command_id: request.commandId,
-      surface: 'website',
-      event_type: request.eventType,
-      expected_version: request.expectedVersion,
-      payload: { state: request.state, evidence: request.evidence },
-    }),
-  })
+  const response = await authorizedRequest<{ result: ManagedWebsiteCommandResult }>(
+    '/api/trial/v1/commands',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        command_id: request.commandId,
+        surface: 'website',
+        event_type: request.eventType,
+        expected_version: request.expectedVersion,
+        payload: { state: request.state, evidence: request.evidence },
+      }),
+    },
+    true,
+    request.identity,
+  )
   return response.result
 }
 

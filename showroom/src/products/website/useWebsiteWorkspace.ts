@@ -7,8 +7,13 @@ import {
   ManagedTrialError,
   saveManagedWebsiteCommand,
   type ManagedCommandEvidence,
+  type ManagedIdentity,
   type ManagedWebsiteEvent,
 } from '../../core/managed-trial'
+import {
+  acceptManagedWebsiteCommand,
+  sameManagedWebsiteIdentity,
+} from './managed-website'
 import {
   LEGACY_WEBSITE_STORAGE_KEY,
   WEBSITE_STORAGE_KEY,
@@ -158,6 +163,15 @@ function managedFailure(error: unknown) {
   return error instanceof Error ? error.message : 'unknown managed workspace error'
 }
 
+async function requireCurrentManagedIdentity(expected: ManagedIdentity) {
+  const current = await currentManagedIdentity()
+  if (!current || !sameManagedWebsiteIdentity(current, expected)) {
+    throw new ManagedTrialError('The managed Website identity changed. Reload before continuing.', {
+      code: 'managed_identity_changed',
+    })
+  }
+}
+
 function bindManagedActor(current: WebsiteWorkspace, next: WebsiteWorkspace, actor: string): WebsiteWorkspace {
   if (next.evidence.length === current.evidence.length + 1) {
     return {
@@ -205,7 +219,7 @@ export function useWebsiteWorkspace(): {
   const workspaceRef = useRef(initialWorkspace.workspace)
   const storageModeRef = useRef(initialWorkspace.storageMode)
   const managedVersionRef = useRef(0)
-  const managedActorRef = useRef('')
+  const managedIdentityRef = useRef<ManagedIdentity | null>(null)
   const hydratedRef = useRef(false)
   const queueRef = useRef<Promise<void>>(Promise.resolve())
   const updateRepairCandidate = useCallback((candidate: WebsiteInvalidLocalCandidate | null) => {
@@ -235,7 +249,7 @@ export function useWebsiteWorkspace(): {
         if (!managedTrialAuthConfigured()) return
         const identity = await currentManagedIdentity()
         if (!identity || !active) return
-        let bootstrap = await loadManagedBootstrap()
+        let bootstrap = await loadManagedBootstrap(identity)
         if (!active) return
         const record = bootstrap.states.website
         let managedWorkspace: WebsiteWorkspace
@@ -249,6 +263,7 @@ export function useWebsiteWorkspace(): {
               commandId: initializationId,
               eventType: 'website.workspace.initialized',
               expectedVersion: 0,
+              identity,
               evidence: {
                 actionId: initializationId,
                 capturedAt,
@@ -258,13 +273,16 @@ export function useWebsiteWorkspace(): {
               },
               state: seed,
             })
-            const restored = restoreWorkspace(initialized.state)
-            if (!restored) throw new Error('Managed Website initialization returned invalid state.')
-            managedWorkspace = restored
-            managedVersion = initialized.version
+            const accepted = acceptManagedWebsiteCommand(seed, initialized, {
+              commandId: initializationId,
+              eventType: 'website.workspace.initialized',
+              priorVersion: 0,
+            })
+            managedWorkspace = accepted.workspace
+            managedVersion = accepted.version
           } catch (error) {
             if (!(error instanceof ManagedTrialError) || error.code !== 'trial_version_conflict') throw error
-            bootstrap = await loadManagedBootstrap()
+            bootstrap = await loadManagedBootstrap(identity)
             const concurrent = bootstrap.states.website
             const restored = restoreWorkspace(concurrent.state)
             if (!restored || concurrent.version < 1) throw new Error('Concurrent Website initialization returned invalid state.')
@@ -276,8 +294,9 @@ export function useWebsiteWorkspace(): {
           if (!restored) throw new Error('Managed Website state failed the client integrity check.')
           managedWorkspace = restored
         }
+        await requireCurrentManagedIdentity(identity)
         if (!active) return
-        managedActorRef.current = bootstrap.identity.actor_id
+        managedIdentityRef.current = identity
         setManagedActorId(bootstrap.identity.actor_id)
         managedVersionRef.current = managedVersion
         workspaceRef.current = managedWorkspace
@@ -359,35 +378,55 @@ export function useWebsiteWorkspace(): {
         let result: WebsiteMutationResult
 
         if (storageModeRef.current === 'managed') {
+          const managedIdentity = managedIdentityRef.current
+          if (!managedIdentity) {
+            resolve({ ok: false, error: 'Managed Website identity is unavailable. Reload before continuing.' })
+            return
+          }
           const transitioned = applyWebsiteWorkspaceUpdate(current, update)
-          if (!transitioned.ok || !transitioned.changed) {
+          if (!transitioned.ok) {
             resolve(transitioned)
+            return
+          }
+          if (!transitioned.changed) {
+            try {
+              await requireCurrentManagedIdentity(managedIdentity)
+              resolve(transitioned)
+            } catch (error) {
+              resolve({ ok: false, error: `Managed Website identity check failed: ${managedFailure(error)}` })
+            }
             return
           }
           try {
             const id = commandId()
-            const managedWorkspace = bindManagedActor(current, transitioned.workspace, managedActorRef.current)
+            const managedWorkspace = bindManagedActor(current, transitioned.workspace, managedIdentity.userId)
             const transition = accountableTransition(current, managedWorkspace, id)
             if (!transition) throw new Error('Website change does not match a supported managed event.')
+            const priorVersion = managedVersionRef.current
             const saved = await saveManagedWebsiteCommand({
               commandId: id,
               eventType: transition.eventType,
-              expectedVersion: managedVersionRef.current,
-              evidence: { ...transition.evidence, actor: managedActorRef.current },
+              expectedVersion: priorVersion,
+              identity: managedIdentity,
+              evidence: { ...transition.evidence, actor: managedIdentity.userId },
               state: managedWorkspace,
             })
-            const confirmed = restoreWorkspace(saved.state)
-            if (!confirmed) throw new Error('Managed Website confirmation failed its client integrity check.')
-            managedVersionRef.current = saved.version
-            result = { ok: true, changed: true, workspace: confirmed }
+            const accepted = acceptManagedWebsiteCommand(managedWorkspace, saved, {
+              commandId: id,
+              eventType: transition.eventType,
+              priorVersion,
+            })
+            await requireCurrentManagedIdentity(managedIdentity)
+            managedVersionRef.current = accepted.version
+            result = { ok: true, changed: true, workspace: accepted.workspace }
           } catch (error) {
             if (error instanceof ManagedTrialError && error.code === 'trial_version_conflict') {
               try {
-                const bootstrap = await loadManagedBootstrap()
+                const bootstrap = await loadManagedBootstrap(managedIdentity)
+                await requireCurrentManagedIdentity(managedIdentity)
                 const record = bootstrap.states.website
                 const refreshed = restoreWorkspace(record.state)
                 if (!refreshed) throw new Error('The newer managed Website state is invalid.')
-                managedActorRef.current = bootstrap.identity.actor_id
                 setManagedActorId(bootstrap.identity.actor_id)
                 managedVersionRef.current = record.version
                 workspaceRef.current = refreshed

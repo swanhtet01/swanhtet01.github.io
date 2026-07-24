@@ -11,12 +11,13 @@ let websiteRuntimeChecks = 0
 let storefrontRuntimeChecks = 0
 let storefrontDraftRuntimeChecks = 0
 let storefrontRequestRuntimeChecks = 0
+let managedWebsiteRuntimeChecks = 0
 let managedStorefrontRuntimeChecks = 0
 let ecommerceHandoffRuntimeChecks = 0
 let commerceRuntimeChecks = 0
 let productionRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
-const [manifestText, appPackageText, appSource, coreSource, commerceSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, managedStorefrontSource, storefrontSource, storefrontDraftSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource] = await Promise.all([
+const [manifestText, appPackageText, appSource, coreSource, commerceSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, managedWebsiteSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, managedStorefrontSource, storefrontSource, storefrontDraftSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource] = await Promise.all([
   readFile(resolve(root, 'site-manifest.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'package.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'App.tsx'), 'utf8'),
@@ -38,6 +39,7 @@ const [manifestText, appPackageText, appSource, coreSource, commerceSource, chan
   readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-model.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-export.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'useWebsiteWorkspace.ts'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'managed-website.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-product.css'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'WebsiteCommerceIntake.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'product-handoff.ts'), 'utf8'),
@@ -427,7 +429,40 @@ if (!websiteModelSource.includes('repairInvalidWebsiteWorkspace')
   || !websiteSource.includes('Confirm remove')
   || !websiteSource.includes('Shop, Plant, managed data, and domains stay unchanged.')
   || !websiteSource.includes('aria-busy={repairing}')) fail('website_targeted_repair_contract_missing')
-if (!managedTrialSource.includes('saveManagedWebsiteCommand') || !managedTrialSource.includes("surface: 'website'") || !websiteWorkspaceSource.includes('loadManagedBootstrap()') || !websiteWorkspaceSource.includes("storageModeRef.current = 'managed'") || !websiteWorkspaceSource.includes('actor: managedActorRef.current') || !websiteWorkspaceSource.includes("error.code === 'trial_version_conflict'")) fail('managed_website_command_client_missing')
+const managedWebsiteCommandStart = managedTrialSource.indexOf('export async function saveManagedWebsiteCommand')
+const managedWebsiteCommandEnd = managedTrialSource.indexOf('export async function createManagedApproval', managedWebsiteCommandStart)
+const managedWebsiteCommandContract = managedTrialSource.slice(managedWebsiteCommandStart, managedWebsiteCommandEnd)
+const managedWebsiteMutationStart = websiteWorkspaceSource.indexOf("if (storageModeRef.current === 'managed')")
+const managedWebsiteMutationEnd = websiteWorkspaceSource.indexOf("} else if (storageModeRef.current === 'browser-local'", managedWebsiteMutationStart)
+const managedWebsiteMutationContract = websiteWorkspaceSource.slice(managedWebsiteMutationStart, managedWebsiteMutationEnd)
+const managedWebsiteNoChangeStart = managedWebsiteMutationContract.indexOf('if (!transitioned.changed)')
+const managedWebsiteNoChangeEnd = managedWebsiteMutationContract.indexOf('\n          try {', managedWebsiteNoChangeStart)
+const managedWebsiteNoChangeContract = managedWebsiteMutationContract.slice(managedWebsiteNoChangeStart, managedWebsiteNoChangeEnd)
+if (managedWebsiteCommandStart < 0
+  || managedWebsiteCommandEnd < 0
+  || managedWebsiteMutationStart < 0
+  || managedWebsiteMutationEnd < 0
+  || managedWebsiteNoChangeStart < 0
+  || managedWebsiteNoChangeEnd < 0
+  || !managedWebsiteCommandContract.includes("surface: 'website'")
+  || !managedWebsiteCommandContract.includes('identity: ManagedIdentity')
+  || !managedWebsiteCommandContract.includes('request.identity')
+  || !websiteWorkspaceSource.includes('loadManagedBootstrap(identity)')
+  || !websiteWorkspaceSource.includes('loadManagedBootstrap(managedIdentity)')
+  || websiteWorkspaceSource.includes('loadManagedBootstrap()')
+  || !websiteWorkspaceSource.includes('managedIdentityRef')
+  || !websiteWorkspaceSource.includes('identity: managedIdentity')
+  || !websiteWorkspaceSource.includes('requireCurrentManagedIdentity(managedIdentity)')
+  || !websiteWorkspaceSource.includes('acceptManagedWebsiteCommand')
+  || !managedWebsiteNoChangeContract.includes('await requireCurrentManagedIdentity(managedIdentity)')
+  || managedWebsiteNoChangeContract.indexOf('await requireCurrentManagedIdentity(managedIdentity)') > managedWebsiteNoChangeContract.indexOf('resolve(transitioned)')
+  || !websiteWorkspaceSource.includes("storageModeRef.current = 'managed'")
+  || !websiteWorkspaceSource.includes("error.code === 'trial_version_conflict'")
+  || !managedWebsiteSource.includes('result.command_id !== expected.commandId')
+  || !managedWebsiteSource.includes("result.surface !== 'website'")
+  || !managedWebsiteSource.includes('result.event_type !== expected.eventType')
+  || !managedWebsiteSource.includes('result.version !== expected.priorVersion + 1')
+  || !managedWebsiteSource.includes('!sameWorkspace(confirmed, planned)')) fail('managed_website_command_client_missing')
 if (!websiteWorkspaceSource.includes('bindManagedActor') || !websiteWorkspaceSource.includes('verifiedBy: actor') || !websiteWorkspaceSource.includes('reviewer: actor') || !websiteWorkspaceSource.includes('recordedBy: actor')) fail('managed_website_actor_binding_missing')
 const websiteHydrationStart = websiteWorkspaceSource.indexOf('void (async () => {')
 const websiteHydrationEnd = websiteWorkspaceSource.indexOf('})()', websiteHydrationStart)
@@ -2576,6 +2611,87 @@ async function verifyStorefrontRuntime() {
   }
 }
 
+async function verifyManagedWebsiteRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    managedWebsiteRuntimeChecks += 1
+  }
+  try {
+    const nonce = Date.now()
+    const managedWebsite = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'managed-website.ts')).href}?managed-website=${nonce}`)
+    const website = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-model.ts')).href}?managed-website-model=${nonce}`)
+    const identity = { userId: 'OP-WEBSITE', email: 'operator@example.test', workspaceId: 'workspace-website' }
+    assert(managedWebsite.sameManagedWebsiteIdentity(identity, { ...identity }), 'managed_website_matching_identity_rejected')
+    assert(!managedWebsite.sameManagedWebsiteIdentity(identity, { ...identity, workspaceId: 'workspace-other' }), 'managed_website_workspace_switch_accepted')
+    const seed = website.createInitialWorkspace()
+    const commandId = '12345678-1234-4abc-8abc-1234567890ab'
+    const result = {
+      command_id: commandId,
+      surface: 'website',
+      event_type: 'website.workspace.initialized',
+      version: 1,
+      state: seed,
+      idempotent_replay: false,
+    }
+    const accepted = managedWebsite.acceptManagedWebsiteCommand(seed, result, {
+      commandId,
+      eventType: 'website.workspace.initialized',
+      priorVersion: 0,
+    })
+    assert(accepted.workspace.schema === seed.schema && accepted.version === 1 && !accepted.replayed, 'managed_website_matching_receipt_rejected')
+    const reverseObjectKeys = (value) => {
+      if (Array.isArray(value)) return value.map(reverseObjectKeys)
+      if (!value || typeof value !== 'object') return value
+      return Object.fromEntries(Object.entries(value).reverse().map(([key, nested]) => [key, reverseObjectKeys(nested)]))
+    }
+    const reordered = managedWebsite.acceptManagedWebsiteCommand(seed, {
+      ...result,
+      state: reverseObjectKeys(seed),
+    }, {
+      commandId,
+      eventType: 'website.workspace.initialized',
+      priorVersion: 0,
+    })
+    assert(reordered.workspace.schema === seed.schema, 'managed_website_jsonb_key_order_rejected')
+    for (const [label, changed] of [
+      ['command', { ...result, command_id: '12345678-1234-4abc-8abc-1234567890ac' }],
+      ['surface', { ...result, surface: 'commerce' }],
+      ['event', { ...result, event_type: 'website.content.saved' }],
+      ['version', { ...result, version: 2 }],
+      ['replay_shape', { ...result, idempotent_replay: 'false' }],
+    ]) {
+      let rejected = false
+      try {
+        managedWebsite.acceptManagedWebsiteCommand(seed, changed, {
+          commandId,
+          eventType: 'website.workspace.initialized',
+          priorVersion: 0,
+        })
+      } catch { rejected = true }
+      assert(rejected, `managed_website_${label}_receipt_accepted`)
+    }
+    const changedState = website.applyWebsiteWorkspaceUpdate(
+      seed,
+      (current) => ({ ...current, selectedPageId: current.pages[1].id }),
+    )
+    assert(changedState.ok && changedState.changed, 'managed_website_state_fixture_invalid')
+    let swappedStateRejected = false
+    try {
+      managedWebsite.acceptManagedWebsiteCommand(seed, {
+        ...result,
+        state: changedState.ok ? changedState.workspace : seed,
+      }, {
+        commandId,
+        eventType: 'website.workspace.initialized',
+        priorVersion: 0,
+      })
+    } catch { swappedStateRejected = true }
+    assert(swappedStateRejected, 'managed_website_swapped_state_receipt_accepted')
+  } catch (error) {
+    fail(`managed_website_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
 async function verifyManagedStorefrontRuntime() {
   const assert = (condition, reason) => {
     if (!condition) throw new Error(reason)
@@ -3349,6 +3465,7 @@ await verifyWebsiteRuntime()
 await verifyWebsiteOrderCompletionRuntime()
 await verifyStorefrontDraftRuntime()
 await verifyStorefrontRuntime()
+await verifyManagedWebsiteRuntime()
 await verifyManagedStorefrontRuntime()
 await verifyCommerceRuntime()
 await verifyProductionRuntime()
@@ -3363,4 +3480,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', primaryRoutes: 5, operatingModules: 2, prototypeRoutes: 2, compatibilityRedirects: 1, workflowProfiles, channelOrderRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceHandoffRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', primaryRoutes: 5, operatingModules: 2, prototypeRoutes: 2, compatibilityRedirects: 1, workflowProfiles, channelOrderRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceHandoffRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
