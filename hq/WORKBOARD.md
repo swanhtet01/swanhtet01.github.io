@@ -27,12 +27,13 @@ Add another worker only when its assignment has a measurable outcome, a non-over
 | CEO-005 | CEO / Codex integrator | done-local | Establish the multi-agent operating board and safe handoffs. | `hq/`, root `CLAUDE.md` | Commit `7fb4daf`; HQ contract and diff check pass; no push or deploy. |
 | QA-001 | Product / QA Codex worker | done-local | Select Commerce order-to-close as the first pilot workflow. | Read-only; no repository writes | Same-day attributable close rate; target at least 90% across five pilot days; review 2026-07-31. |
 | ENG-001 | Claude Code engineering | blocked-auth | Prove a two-item Website-to-Commerce journey from isolated worktree `supermega-claude-website-commerce-journey`. | One new test file in an isolated worktree | Focused test and full Python suite pass; no product, HQ, hosted, push, or deploy changes. |
-| ENG-002 | Engineering | queued | Record an externally completed refund as human-attributable and settled. | Commerce workspace, UI, and focused tests only | Idempotent due-to-settled transition with actor, time, reason, and external reference; no payment integration. |
+| ENG-002A | Managed runtime | done-local | Add the human-only `commerce.refund.settled` command contract. | Five runtime and test files; no UI | Commit `4d5c29b`; 114 tests prove exact transition, proof, replay, isolation, and agent denial. |
+| ENG-002 | Engineering | done-local | Record an externally completed refund as human-attributable and settled. | Commerce workspace, managed type, UI, and app verifier | Commit `414768c`; build, app/security contracts, and desktop/mobile operator journey pass; no payment integration. |
 | OPS-001 | Platform / owner | blocked-owner | Repeat the private trial on an isolated hosted Supabase target. | Hosted write only after explicit approval | Five migrations, runtime role, isolation, revocation, recovery, Security Advisor, and pooler evidence. |
 | PILOT-001 | Product / founder | ready | Name one Commerce shift supervisor and one safe pilot tenant. | Founder decision | Baseline, authority boundary, five-day evidence plan, and 2026-07-31 review are recorded. |
 | GROWTH-001 | Growth | gated | Prepare onboarding and outreach for the selected pilot only. | Draft-only until founder approves sends | One audience, one offer, one onboarding path, and claims backed by pilot evidence. |
 
-Statuses: `ready`, `active`, `blocked-auth`, `blocked-owner`, `queued`, `review`, `done-local`, `released`.
+Statuses: `ready`, `active`, `blocked-auth`, `blocked-owner`, `blocked-prerequisite`, `queued`, `review`, `done-local`, `released`.
 
 ## Lane boundaries
 
