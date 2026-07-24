@@ -20,7 +20,7 @@ SuperMega builds simple operating products for Myanmar businesses. The customer 
 - **Shop** — implemented local release candidate at `/shop/` under the stable internal `commerce` runtime. `/operations/commerce/` is compatibility-only and resolves to the same records.
 - **Plant** — implemented local release candidate at `/plant/` under the stable internal `production` runtime. `/operations/production/` is compatibility-only and resolves to the same records.
 - **Website** — implemented local release candidate at `/products/website/`; it can produce a deterministic downloadable site artifact but cannot publish or change a domain.
-- **Ecommerce** — implemented local storefront maker at `/products/ecommerce/`. It reads a Shop catalogue snapshot without changing it, lets the operator choose customer-visible products and copy, produces a deterministic preview digest, and can create an idempotent in-memory request receipt marked `pending_shop_review`. The receipt is not durable and does not create a Shop order, reserve stock, take payment, send, request delivery, or publish.
+- **Ecommerce** — implemented local storefront maker at `/products/ecommerce/`. It reads a Shop catalogue snapshot without changing it, lets the operator choose customer-visible products and copy, produces a deterministic preview digest, and can create an idempotent in-memory request receipt marked `pending_shop_review`. One explicit confirmation revalidates the retained receipt, digest, SKU, name, variant, MMK price, quantity, and availability before opening a source-locked Shop draft. The draft is not durable; only Shop's separate accountable action gate can create an order or reserve stock.
 - **AI Agent Solutions** — planned real prototype at `/agents/`. The first solution is Order Intake: approved message or form input to a structured draft, with provenance, evaluation, human review, and zero side effects.
 
 No local demo, passing test, healthy provider, or generated artifact is proof of a live customer system, revenue, production persistence, or autonomous operation.
@@ -33,7 +33,7 @@ Canonical host: `app.supermega.dev`
 - `/shop/` — Shop Orders first; Stock second.
 - `/plant/` — Plant Jobs first; Problems second.
 - `/products/website/` — Website Site, Preview, and Publish workflow.
-- `/products/ecommerce/` — Ecommerce storefront setup, responsive preview, and local request receipt; clearly non-durable and non-publishing.
+- `/products/ecommerce/` — Ecommerce storefront setup, responsive preview, local request receipt, and explicit handoff to a source-locked Shop draft; clearly non-durable and non-publishing.
 - `/agents/` — reserved Agent Solutions workspace; do not present it as available until Order Intake passes evaluation and review gates.
 - `/work/` — internal SuperMega HQ work and agent-team coordination.
 - `/settings/` — setup, evidence export, reset, and managed-readiness utility.
@@ -109,7 +109,7 @@ AI and delegated agents may not independently send customer messages, charge or 
 
 ## Current execution order
 
-1. Add a human-confirmed, idempotent Ecommerce request handoff that creates a reviewable Shop draft without reserving stock or taking payment.
+1. Add an authenticated, durable Ecommerce request inbox on one isolated non-production tenant while preserving the separate Shop action gate.
 2. Run Order Intake through a real server-only provider and expose review UI only if the completed evaluator passes.
 3. Validate Website with one named business and accepted artifact.
 4. Repeat Shop and Plant on one isolated hosted tenant before any production write activation.

@@ -1,7 +1,7 @@
 {
   "schemaVersion": "supermega.site-context.v1",
-  "contextVersion": "2026-07-24.8",
-  "catalogVersion": "2026-07-24.8",
+  "contextVersion": "2026-07-24.9",
+  "catalogVersion": "2026-07-24.9",
   "brand": {
     "name": "SuperMega",
     "domain": "supermega.dev",
@@ -140,11 +140,11 @@
       "route": "https://app.supermega.dev/products/ecommerce/",
       "status": "release-candidate-local",
       "eyebrow": "Ecommerce maker",
-      "headline": "Create a Shop-backed storefront and test customer order intent.",
-      "views": ["Storefront", "Preview", "Request receipt"],
-      "workflow": ["Choose products", "Write storefront copy", "Review phone and desktop", "Retain deterministic preview digest", "Create local pending request receipt"],
-      "proof": ["Read-only Shop catalogue snapshot", "Locked price and availability projection", "Deterministic SHA-256 preview digest", "Idempotent in-memory receipt", "Stale, duplicate, unknown, sold-out, and tampered request rejection"],
-      "boundaries": ["No duplicate stock ledger", "No durable request ledger", "No Shop order or stock reservation", "No cart or payment initiation", "No delivery execution", "No customer send", "No publishing", "No external write"]
+      "headline": "Create a Shop-backed storefront and hand customer intent to human review.",
+      "views": ["Storefront", "Preview", "Request receipt", "Shop review"],
+      "workflow": ["Choose products", "Write storefront copy", "Review phone and desktop", "Retain deterministic preview digest", "Create local pending request receipt", "Confirm exact receipt for Shop review", "Choose payment review", "Open accountable Shop action gate"],
+      "proof": ["Read-only Shop catalogue snapshot", "Locked price and availability projection", "Deterministic SHA-256 preview digest", "Exact retained-ledger membership", "Idempotent in-memory receipt", "Human-confirmed source-locked Shop draft", "16 handoff integrity checks", "Stale, duplicate, unknown, sold-out, repriced, insufficient-stock, and tampered request rejection"],
+      "boundaries": ["No duplicate stock ledger", "No durable shared request inbox", "No Shop order or stock reservation before separate accountable confirmation", "No cart or payment initiation", "No delivery execution", "No customer send", "No publishing", "No external write"]
     }
   ],
   "agentSolutions": {
