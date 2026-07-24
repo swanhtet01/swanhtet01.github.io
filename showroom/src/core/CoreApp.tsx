@@ -4,6 +4,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate, useOutletContext, useS
 import siteManifest from '../../../site-manifest.json'
 import './core-app.css'
 import { WebsiteCommerceIntake } from '../products/WebsiteCommerceIntake'
+import type { EcommerceShopDraft } from '../products/ecommerce/ecommerce-shop-handoff'
 import {
   LEGACY_WEBSITE_STORAGE_KEY,
   WEBSITE_ECOMMERCE_HANDOFF_KEY,
@@ -1435,6 +1436,7 @@ export function OperationsPage({ product }: { product?: ProductId }) {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [managedIdentity] = useManagedIdentity(runtime.status === 'enterprise')
+  const ecommerceNavigationDraft = (location.state as { ecommerceShopDraft?: EcommerceShopDraft } | null)?.ecommerceShopDraft ?? null
   const routeModule = location.pathname.split('/').filter(Boolean)[1]
   const requestedView = searchParams.get('view')
   const isProductRoute = Boolean(product) || routeModule === 'commerce' || routeModule === 'production'
@@ -1480,7 +1482,7 @@ export function OperationsPage({ product }: { product?: ProductId }) {
     <div className="workspace-screen operations-screen">
       <PageHeading title={productDisplayName(view)} copy={productCopy} actions={<Link className="text-link all-apps-link" to="/operations/">Products</Link>} />
       <nav className="workspace-toolbar view-tabs product-task-tabs" aria-label={`${productDisplayName(view)} tasks`}>{tabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{tab.label}</button>)}</nav>
-      <div className="workspace-view">{view === 'commerce' ? <CommercePage managedIdentity={managedIdentity} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
+      <div className="workspace-view">{view === 'commerce' ? <CommercePage ecommerceNavigationDraft={ecommerceNavigationDraft} managedIdentity={managedIdentity} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
     </div>
   )
 }
@@ -1680,7 +1682,11 @@ function ChannelAttributionControl({ attribution, disabled, field, onChange }: {
   </div>
 }
 
-function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdentity | null; tab: CommerceTab }) {
+function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
+  ecommerceNavigationDraft: EcommerceShopDraft | null
+  managedIdentity: ManagedIdentity | null
+  tab: CommerceTab
+}) {
   const [commerce, mutateCommerce, commerceStorageError, workspaceMode, managedVersion, managedWorkspaceId, commerceCanWrite] = useCommerceWorkspace(managedIdentity)
   const [actions, setActions] = useStoredState<AccountableAction[]>(ACTION_KEY, [], normalizeActions)
   const [pendingAction, setPendingAction] = useState<PendingAccountableAction | null>(null)
@@ -1690,8 +1696,10 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
   const [channel, setChannel] = useState('Messenger')
   const [payment, setPayment] = useState('KBZPay')
   const [preparedChannelDraft, setPreparedChannelDraft] = useState<ChannelOrderDraft | null>(null)
+  const [preparedEcommerceDraft, setPreparedEcommerceDraft] = useState<EcommerceShopDraft | null>(null)
   const [orderEntryMode, setOrderEntryMode] = useState<'manual' | 'message' | 'website'>('manual')
   const preparedChannelRef = useRef<HTMLDivElement>(null)
+  const consumedEcommerceDraftId = useRef('')
   const [actionTrigger, setActionTrigger] = useState<HTMLElement | null>(null)
   const [notice, setNotice] = useState('')
   const [catalogDraft, setCatalogDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '', price: '', reason: '', evidenceReference: '' })
@@ -1714,6 +1722,33 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
   const latestClose = commerce.closes.find((close) => close.operator)
   const importedWebsiteOrderIds = commerce.orders.flatMap((order) => order.sourceRecordId ? [order.sourceRecordId] : [])
   const websiteIntakes = commerceWebsiteIntakes(commerce)
+
+  useEffect(() => {
+    if (!ecommerceNavigationDraft || managedIdentity || consumedEcommerceDraftId.current === ecommerceNavigationDraft.id) return
+    let current = true
+    void import('../products/ecommerce/ecommerce-shop-handoff')
+      .then(({ ecommerceShopDraftMatchesCatalog }) => {
+        if (!current) return
+        if (!ecommerceShopDraftMatchesCatalog(ecommerceNavigationDraft, commerce.items)) {
+          setPreparedEcommerceDraft(null)
+          setNotice('The Ecommerce request no longer matches the current Shop catalog. Nothing was prepared.')
+          return
+        }
+        setPreparedChannelDraft(null)
+        setPreparedEcommerceDraft(ecommerceNavigationDraft)
+        setCustomer(ecommerceNavigationDraft.customerReference)
+        setChannel('Ecommerce')
+        setSku(ecommerceNavigationDraft.line.sku)
+        setQuantity(ecommerceNavigationDraft.line.quantity)
+        setPayment('')
+        setOrderEntryMode('manual')
+        setNotice(`${ecommerceNavigationDraft.id} is ready for Shop review. Choose payment, then review the order.`)
+      })
+      .catch(() => {
+        if (current) setNotice('The Ecommerce request guard could not load. Nothing was prepared.')
+      })
+    return () => { current = false }
+  }, [commerce.items, ecommerceNavigationDraft, managedIdentity])
 
   async function initializeManagedCatalog(event: FormEvent) {
     event.preventDefault()
@@ -1873,17 +1908,29 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
     setQuantity(draft.quantity)
     setPayment(draft.payment)
     setPreparedChannelDraft(draft)
+    setPreparedEcommerceDraft(null)
     setOrderEntryMode('manual')
     setNotice(`${draft.sourceRecordId} mapped locally. Review the structured order before any stock changes.`)
   }
 
   function recordOrder(event: FormEvent) {
     event.preventDefault()
+    if (!payment) {
+      setNotice('Choose how payment will be reviewed before preparing this order.')
+      return
+    }
     if (!selected || quantity < 1 || selected.onHand < quantity) {
       setNotice('Quantity is not available. Review stock before confirming the order.')
       return
     }
     const sourceDraft = preparedChannelDraft && channelOrderDraftIsReady(preparedChannelDraft) ? preparedChannelDraft : null
+    const ecommerceDraft = preparedEcommerceDraft
+    if (sourceDraft && ecommerceDraft) {
+      setPreparedChannelDraft(null)
+      setPreparedEcommerceDraft(null)
+      setNotice('Two source drafts were present. Both links were removed and nothing was queued.')
+      return
+    }
     if (sourceDraft && (customer.trim() !== sourceDraft.customer
       || channel !== sourceDraft.channel
       || selected.sku !== sourceDraft.sku
@@ -1893,10 +1940,27 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
       setNotice('The structured order changed after source review. Review the channel mapping again or continue as a manual order.')
       return
     }
-    if (sourceDraft && commerce.orders.some((candidate) => candidate.sourceRecordId === sourceDraft.sourceRecordId)) {
-      setNotice(`${sourceDraft.sourceRecordId} is already linked to an order. No duplicate was queued.`)
+    if (ecommerceDraft && (customer.trim() !== ecommerceDraft.customerReference
+      || channel !== 'Ecommerce'
+      || selected.sku !== ecommerceDraft.line.sku
+      || quantity !== ecommerceDraft.line.quantity
+      || selected.name !== ecommerceDraft.line.name
+      || (selected.variant ?? null) !== ecommerceDraft.line.variant
+      || selected.price !== ecommerceDraft.line.unitPriceMmk
+      || selected.price * quantity !== ecommerceDraft.totalMmk)) {
+      setPreparedEcommerceDraft(null)
+      setNotice('The Ecommerce request changed after confirmation. Return to Ecommerce or continue as a manual order.')
       return
     }
+    const sourceRecordId = sourceDraft?.sourceRecordId ?? ecommerceDraft?.sourceRequestId
+    const sourceEvidence = sourceDraft?.evidenceReference ?? ecommerceDraft?.evidenceReference
+    if (sourceRecordId && commerce.orders.some((candidate) => candidate.sourceRecordId === sourceRecordId)) {
+      setNotice(`${sourceRecordId} is already linked to an order. No duplicate was queued.`)
+      return
+    }
+    const fulfilment = ecommerceDraft
+      ? ecommerceDraft.fulfilment === 'pickup' ? 'Customer pickup' : 'Local delivery request'
+      : undefined
     const order: CommerceOrder = {
       id: uid('ORD'),
       createdAt: new Date().toISOString(),
@@ -1908,8 +1972,9 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
       payment,
       paymentStatus: 'pending',
       refundStatus: 'none',
-      sourceRecordId: sourceDraft?.sourceRecordId,
-      evidenceReference: sourceDraft?.evidenceReference,
+      ...(fulfilment ? { fulfilment } : {}),
+      sourceRecordId,
+      evidenceReference: sourceEvidence,
       total: selected.price * quantity,
       status: 'confirmed',
     }
@@ -1918,16 +1983,18 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
     queueAction({
       kind: 'order_create',
       subjectId: order.id,
-      summary: `Confirm ${order.id} from ${sourceDraft ? `${channel} source ${sourceDraft.sourceRecordId}` : channel}`,
-      before: `${itemSku} · ${beforeStock} on hand${sourceDraft ? ` · ${sourceDraft.sourceRecordId} reviewed` : ''}`,
+      summary: `Confirm ${order.id} from ${sourceRecordId ? `${channel} source ${sourceRecordId}` : channel}`,
+      before: `${itemSku} · ${beforeStock} on hand${sourceRecordId ? ` · ${sourceRecordId} reviewed` : ''}`,
       after: `${order.status} · ${beforeStock - quantity} on hand`,
-      evidenceReferenceSuggestion: sourceDraft?.evidenceReference,
-      evidenceReferenceLocked: Boolean(sourceDraft),
+      evidenceReferenceSuggestion: sourceEvidence,
+      evidenceReferenceLocked: Boolean(sourceRecordId),
       apply: async (action) => {
         await mutateCommerce('commerce.order.created', action.commandId, commerceActionProof(action), (current) => reserveCommerceOrder(current, order, commerceActionProof(action)))
+        if (ecommerceDraft) consumedEcommerceDraftId.current = ecommerceDraft.id
         setQuantity(1)
         setCustomer('')
         setPreparedChannelDraft(null)
+        setPreparedEcommerceDraft(null)
       },
     })
   }
@@ -2115,22 +2182,26 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
       {orderEntryMode === 'message' ? <div className="order-entry-panel" data-mode="message"><ChannelOrderIntake disabled={commerceControlsDisabled} items={commerce.items} onAcceptedFocus={() => requestAnimationFrame(() => preparedChannelRef.current?.focus())} onUse={useChannelDraft} /></div> : null}
       {orderEntryMode === 'manual' ? <>
         <div className="order-entry-panel" data-mode="manual" data-notice={Boolean(orderNotice)}>
+        {preparedEcommerceDraft ? <div className="channel-source-ready">
+          <div><span className="core-eyebrow">Ecommerce request</span><strong>{preparedEcommerceDraft.sourceRequestId}</strong><small>{preparedEcommerceDraft.fulfilment} · price locked · no stock reserved</small></div>
+          <button className="text-link" disabled={Boolean(pendingAction)} onClick={() => { setPreparedEcommerceDraft(null); setNotice('Ecommerce source link removed. The fields remain a manual order draft.') }} type="button">Remove source link</button>
+        </div> : null}
         {preparedChannelDraft && channelOrderDraftIsReady(preparedChannelDraft) ? <div className="channel-source-ready" ref={preparedChannelRef} tabIndex={-1}>
           <div><span className="core-eyebrow">Mapped source</span><strong>{preparedChannelDraft.sourceRecordId}</strong><small>Exact excerpts reviewed; the full message was discarded.</small></div>
           <button className="text-link" disabled={Boolean(pendingAction)} onClick={() => { setPreparedChannelDraft(null); setNotice('Source link removed. The structured fields remain as a manual order draft.') }} type="button">Remove source link</button>
         </div> : null}
         <form className="core-form compact-form commerce-order-form" id="commerce-manual-order-form" onSubmit={recordOrder}>
           <div className="order-essential-fields">
-            <label>Customer<input disabled={commerceControlsDisabled} maxLength={80} value={customer} onChange={(event) => { setCustomer(event.target.value); setPreparedChannelDraft(null) }} placeholder="Name or reference" /></label>
-            <label>Item<select disabled={commerceControlsDisabled} value={selectedSku} onChange={(event) => { setSku(event.target.value); setPreparedChannelDraft(null) }}>{commerce.items.map((item) => <option key={item.sku} value={item.sku}>{item.name} · {item.onHand} available</option>)}</select></label>
-            <label>Quantity<input disabled={commerceControlsDisabled} min="1" max={selected?.onHand ?? 1} type="number" value={quantity} onChange={(event) => { setQuantity(Number(event.target.value)); setPreparedChannelDraft(null) }} /></label>
+            <label>Customer<input disabled={commerceControlsDisabled} maxLength={80} value={customer} onChange={(event) => { setCustomer(event.target.value); setPreparedChannelDraft(null); setPreparedEcommerceDraft(null) }} placeholder="Name or reference" /></label>
+            <label>Item<select disabled={commerceControlsDisabled} value={selectedSku} onChange={(event) => { setSku(event.target.value); setPreparedChannelDraft(null); setPreparedEcommerceDraft(null) }}>{commerce.items.map((item) => <option key={item.sku} value={item.sku}>{item.name} · {item.onHand} available</option>)}</select></label>
+            <label>Quantity<input disabled={commerceControlsDisabled} min="1" max={selected?.onHand ?? 1} type="number" value={quantity} onChange={(event) => { setQuantity(Number(event.target.value)); setPreparedChannelDraft(null); setPreparedEcommerceDraft(null) }} /></label>
             <div className="order-total"><span>Order total</span><strong>{formatMoney((selected?.price ?? 0) * Math.max(quantity, 0))}</strong></div>
           </div>
           <details className="order-options">
             <summary><span>Channel and payment</span><small>{channel} · {payment}</small></summary>
             <div className="form-row order-options-fields">
-              <label>Channel<select disabled={commerceControlsDisabled} value={channel} onChange={(event) => { setChannel(event.target.value); setPreparedChannelDraft(null) }}><option>Messenger</option><option>Viber</option><option>Phone</option><option>Website</option><option>Walk-in</option></select></label>
-              <label>Payment<select disabled={commerceControlsDisabled} value={payment} onChange={(event) => { setPayment(event.target.value); setPreparedChannelDraft(null) }}><option>KBZPay</option><option>WavePay</option><option>Cash on delivery</option><option>Cash</option><option>Card</option></select></label>
+              <label>Channel<select disabled={commerceControlsDisabled} value={channel} onChange={(event) => { setChannel(event.target.value); setPreparedChannelDraft(null); setPreparedEcommerceDraft(null) }}><option>Messenger</option><option>Viber</option><option>Phone</option><option>Website</option><option>Ecommerce</option><option>Walk-in</option></select></label>
+              <label>Payment<select disabled={commerceControlsDisabled} value={payment} onChange={(event) => { setPayment(event.target.value); setPreparedChannelDraft(null) }}><option value="">Choose payment</option><option>KBZPay</option><option>WavePay</option><option>Cash on delivery</option><option>Cash</option><option>Card</option></select></label>
             </div>
           </details>
         </form>

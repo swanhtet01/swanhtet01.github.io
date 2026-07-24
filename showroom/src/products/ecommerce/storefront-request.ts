@@ -80,7 +80,7 @@ function requestMatches(left: StorefrontOrderRequest, right: StorefrontOrderRequ
   return JSON.stringify(left) === JSON.stringify(right)
 }
 
-function validateStorefrontOrderRequest(value: unknown): StorefrontOrderRequest | null {
+function parseStorefrontOrderRequest(value: unknown): StorefrontOrderRequest | null {
   if (!isRecord(value)
     || !hasExactKeys(value, ['schema', 'mode', 'state', 'id', 'idempotencyKey', 'createdAt', 'sourcePreviewDigest', 'customerReference', 'fulfilment', 'currency', 'line', 'totalMmk'])
     || value.schema !== STOREFRONT_REQUEST_SCHEMA
@@ -115,6 +115,12 @@ function validateStorefrontOrderRequest(value: unknown): StorefrontOrderRequest 
     return null
   }
   return value as StorefrontOrderRequest
+}
+
+export function validateStorefrontOrderRequest(value: unknown): StorefrontOrderRequest {
+  const request = parseStorefrontOrderRequest(value)
+  if (!request) throw new Error('Storefront order request contract is invalid.')
+  return request
 }
 
 export function createEmptyStorefrontRequestLedger(): StorefrontRequestLedger {
@@ -178,8 +184,8 @@ export function recordStorefrontOrderRequest(
     || ledger.schema !== STOREFRONT_REQUEST_LEDGER_SCHEMA
     || !Array.isArray(ledger.requests)
     || ledger.requests.length > 20) return null
-  const validatedRequests = ledger.requests.map(validateStorefrontOrderRequest)
-  const validatedRequest = validateStorefrontOrderRequest(request)
+  const validatedRequests = ledger.requests.map(parseStorefrontOrderRequest)
+  const validatedRequest = parseStorefrontOrderRequest(request)
   if (!validatedRequest || validatedRequests.some((candidate) => !candidate)) return null
   const existing = validatedRequests.find((candidate) => candidate?.idempotencyKey === validatedRequest.idempotencyKey)
   if (existing) return requestMatches(existing, validatedRequest) ? ledger : null

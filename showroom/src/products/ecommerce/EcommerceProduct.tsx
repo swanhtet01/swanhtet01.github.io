@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 
+import { confirmEcommerceShopDraft } from './ecommerce-shop-confirm'
 import {
   buildStorefrontOrderRequest,
   createEmptyStorefrontRequestLedger,
@@ -19,6 +20,7 @@ function formatMmk(value: number) {
 }
 
 export function EcommerceProduct() {
+  const navigate = useNavigate()
   const catalog = useMemo(() => readStorefrontCatalog(), [])
   const initialSelection = useMemo(
     () => catalog.items.filter((item) => item.onHand > 0).slice(0, 4).map((item) => item.sku),
@@ -36,6 +38,8 @@ export function EcommerceProduct() {
   const [requestFulfilment, setRequestFulfilment] = useState<'pickup' | 'delivery'>('pickup')
   const [requestBusy, setRequestBusy] = useState(false)
   const [requestNotice, setRequestNotice] = useState('')
+  const [handoffConfirmed, setHandoffConfirmed] = useState(false)
+  const [handoffBusy, setHandoffBusy] = useState(false)
 
   const previewResult = useMemo(() => {
     try {
@@ -97,11 +101,35 @@ export function EcommerceProduct() {
       const nextLedger = recordStorefrontOrderRequest(requestLedger, request)
       if (!nextLedger) throw new Error('The request receipt conflicted with the current local ledger.')
       setRequestLedger(nextLedger)
+      setHandoffConfirmed(false)
       setRequestNotice(`${request.id} is pending Shop review. No Shop record or stock changed.`)
     } catch (error) {
       setRequestNotice(error instanceof Error ? error.message : 'Request receipt failed closed.')
     } finally {
       setRequestBusy(false)
+    }
+  }
+
+  async function sendToShopReview() {
+    if (!latestRequest || !previewResult.preview || !digest || !handoffConfirmed || handoffBusy) return
+    setHandoffBusy(true)
+    setRequestNotice('')
+    try {
+      const currentCatalog = readStorefrontCatalog()
+      if (currentCatalog.source === 'unavailable') throw new Error(currentCatalog.error || 'Current Shop catalog is unavailable.')
+      const draft = await confirmEcommerceShopDraft({
+        request: latestRequest,
+        preview: previewResult.preview,
+        sourcePreviewDigest: digest,
+        currentCatalog: currentCatalog.items,
+        confirmedAt: new Date().toISOString(),
+      })
+      setRequestNotice(`${draft.id} is ready for human review in Shop. No stock or order changed.`)
+      navigate('/shop/?tab=orders&source=ecommerce', { state: { ecommerceShopDraft: draft } })
+    } catch (error) {
+      setRequestNotice(error instanceof Error ? error.message : 'Shop handoff failed closed.')
+    } finally {
+      setHandoffBusy(false)
     }
   }
 
@@ -268,6 +296,15 @@ export function EcommerceProduct() {
                   <small>{latestRequest.fulfilment} · preview {latestRequest.sourcePreviewDigest.slice(7, 19)}</small>
                 </article>
               ) : null}
+              {latestRequest ? <>
+                <label className="website-intake-confirm">
+                  <input checked={handoffConfirmed} onChange={(event) => setHandoffConfirmed(event.target.checked)} type="checkbox" />
+                  <span>I reviewed the SKU, quantity, MMK price, and current availability.</span>
+                </label>
+                <button className="core-button primary" disabled={!handoffConfirmed || !digest || handoffBusy} onClick={() => void sendToShopReview()} type="button">
+                  {handoffBusy ? 'Checking…' : 'Send to Shop review'}
+                </button>
+              </> : null}
               <p className="form-notice" aria-live="polite">{requestNotice || 'This local receipt is not a Shop order. It does not reserve stock, take payment, send a message, or request delivery.'}</p>
             </div>
           </details>
