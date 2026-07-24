@@ -76,9 +76,11 @@ requireContract('local PostgreSQL 17 rehearsal is real but bounded',
   && databaseRehearsal.engine?.major === 17
   && databaseRehearsal.engine?.tlsActive === true
   && databaseRehearsal.engine?.loopbackOnly === true
-  && databaseRehearsal.implementationCommit === 'a88dc7b1349810beb93dbd5450d6c499e627e0e7'
-  && databaseRehearsal.githubCi?.run === 175
+  && databaseRehearsal.implementationCommit === 'd49aae09ba36658a201db1ee07dbecb631f978a7'
+  && databaseRehearsal.githubCi?.run === 180
+  && databaseRehearsal.githubCi?.commit === '338b6fd11bc27da9b7aa42bee2c293a5c0e3a9ef'
   && databaseRehearsal.githubCi?.conclusion === 'success'
+  && databaseRehearsal.githubCi?.coversImplementationCommit === false
   && databaseRehearsal.runtime?.adapter === 'PostgresTrialStore'
   && databaseRehearsal.runtime?.autocommit === false
   && databaseRehearsal.runtime?.explicitTransaction === true

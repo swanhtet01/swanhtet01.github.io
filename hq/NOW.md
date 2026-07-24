@@ -33,7 +33,7 @@ Prove one measured workflow where SuperMega keeps the record and a responsible o
 - Draft PR `#258` remains the release candidate; its validated implementation head is `338b6fd11bc27da9b7aa42bee2c293a5c0e3a9ef`.
 - GitHub `SuperMega App CI` run `180` passed every validation job for that head.
 - Candidate lint and build pass with 207 product/runtime, 51 release, 44 security, 10 migration, and 11 Vercel checks.
-- PostgreSQL 17.10 passes 24 migration, authority, journey, isolation, retry, recovery, and validator checks across two clean TLS clusters. Cleanup passed; external systems were unchanged.
+- PostgreSQL 17.10 was repeated locally at `d49aae0`: 24 migration, authority, journey, isolation, retry, recovery, and validator checks passed across two clean TLS clusters. Cleanup passed; external systems were unchanged. GitHub CI still covers remote head `338b6fd`.
 - Fresh 1280px and 375px audits show no horizontal overflow, error overlay, warning, or console error. At 375px, Commerce Review order is 304×44px; Production has no undersized controls; Website reorder and preview controls are 44×44px. Invalid Website data stayed unchanged in session-only recovery mode.
 - Existing Work focus evidence remains: agent detail moved from 579px to 72px, its first field from 773px to 266px, work detail and new-work intake start at 72px, and Review Prepare moved from 806px to 724px.
 - No Vercel deployment was created by the release-candidate push. The latest `megaos` and `supermega-public` production deployments still reference `main` commit `6885c3201d523d42d176c3dcd91de28dc1e17f6f`.
