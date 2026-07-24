@@ -5,9 +5,10 @@ This is the active company-control layer for SuperMega. It is deliberately small
 ## Read in this order
 
 1. [`NOW.md`](NOW.md) — current outcomes, facts, blockers, and decisions.
-2. [`portfolio.json`](portfolio.json) — machine-readable products, lifecycle, adoption gates, and non-goals.
-3. [`../CURRENT.md`](../CURRENT.md) — durable product, data, authority, and release direction.
-4. [`../site-manifest.json`](../site-manifest.json) — deployable public brand and catalogue contract.
+2. [`WORKBOARD.md`](WORKBOARD.md) — active teams, agent assignments, status, acceptance, and handoff rules.
+3. [`portfolio.json`](portfolio.json) — machine-readable products, lifecycle, adoption gates, and non-goals.
+4. [`../CURRENT.md`](../CURRENT.md) — durable product, data, authority, and release direction.
+5. [`../site-manifest.json`](../site-manifest.json) — deployable public brand and catalogue contract.
 
 ## Operating loop
 
@@ -16,6 +17,7 @@ signal → decision → owned work → evidence → release gate → outcome →
 ```
 
 - Update `NOW.md` when the current outcome, fact, blocker, or decision changes.
+- Update `WORKBOARD.md` when a worker is assigned, blocked, handed off, accepted, or released.
 - Update `portfolio.json` only when product scope or an adoption gate changes.
 - Put execution work in the Product, Engineering, Growth, or Finance workspace—not in another numbered strategy document.
 - A claim is not complete until its source, uncertainty, owner, and next action are explicit.

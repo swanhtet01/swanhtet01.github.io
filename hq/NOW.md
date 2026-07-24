@@ -17,34 +17,31 @@ Prove one measured workflow where SuperMega keeps the record and a responsible o
 ## Current system
 
 - Home, Work, and Products are the only primary destinations; Settings is a utility. Home shows one accountable next action, then the three products.
-- Home loads managed Commerce and Production through the same authenticated identity; it never mixes a managed product with local sample records.
-- Work has one team picker and Work, Agents, Review. Mobile focuses intake or detail until Back; desktop stays split. New work appears only in Work.
+- Home loads managed Commerce and Production through the same authenticated identity and never mixes a managed product with local sample records.
+- Work has one team picker and Work, Agents, Review. Mobile focuses the active task until Back; desktop stays split. New work appears only in Work.
 - Products contains Commerce, Production, and Website. No public agent catalogue, demo-domain collection, POS product, or separate internal-console product is in scope.
 - Commerce: Orders and Stock, compact manual entry, visible Sample or managed-data boundary, and refund due as a primary exception. Production: Jobs and Problems, job-first mobile context, observation-only equipment status, and write gating. Website: one Page selector and Site, Preview, Publish action bar; edit opens first and recovery stays under Site.
-- All three products have authenticated tenant commands. Managed Production starts from real records and requires human-bound evidence.
+- All three products have authenticated tenant commands; managed Production requires human-bound evidence.
 - Website is the only lazy-loaded product workspace. Approval retains one deterministic site file without deploying a site or changing a domain. Invalid local records stay unchanged and require confirmed recovery or the two-step local reset. Web Locks and revisions prevent overlapping saves from silently winning.
 - The managed backend is the private `app_private` schema and dedicated runtime-role contract in Supabase Postgres. Browser code receives neither the database URL nor a service-role key.
-- The PostgreSQL 17.10 gate runs the real `PostgresTrialStore`, proves both product journeys, and restores a fresh TLS cluster; hosted Supabase remains separate.
+- The PostgreSQL 17.10 gate proves both product journeys through the real `PostgresTrialStore` and restores a fresh TLS cluster; hosted Supabase remains separate.
 - Sends, payments, publishing, merges, deployments, access changes, and production writes remain responsible-human actions.
 - Vercel canonical mappings remain `app.supermega.dev` → `megaos`, and `supermega.dev` plus `www.supermega.dev` → `supermega-public`.
 
 ## Latest verification
 
-- Draft PR `#258` remains the release candidate; its validated implementation head is `338b6fd11bc27da9b7aa42bee2c293a5c0e3a9ef`.
-- GitHub `SuperMega App CI` run `180` passed every validation job for that head.
-- Candidate lint and build pass with 207 product/runtime, 51 release, 44 security, 10 migration, and 11 Vercel checks.
-- PostgreSQL 17.10 was repeated locally at `d49aae0`: 24 migration, authority, journey, isolation, retry, recovery, and validator checks passed across two clean TLS clusters. Cleanup passed; external systems were unchanged. GitHub CI still covers remote head `338b6fd`.
+- Product head `f2aaa82` is four commits ahead and adds guarded daily-close evidence: Myanmar date, immutable order membership, exact exceptions, UUID proofs, stale rejection, and server actor/time. All 110 Python tests, lint, build, and app, release, security, migration, Vercel, and HQ checks pass; nothing was pushed or deployed. Legacy closes remain readable but block another close until migrated.
+- Draft PR `#258` remains the release candidate; its validated implementation head is `338b6fd11bc27da9b7aa42bee2c293a5c0e3a9ef`. GitHub `SuperMega App CI` run `180` passed every validation job, including 207 product/runtime, 51 release, 44 security, 10 migration, and 11 Vercel checks.
+- PostgreSQL 17.10 passed 24 migration, authority, journey, isolation, retry, recovery, and validator checks across two clean TLS clusters; cleanup passed and external systems were unchanged.
 - Fresh 1280px and 375px audits show no horizontal overflow, error overlay, warning, or console error. At 375px, Commerce Review order is 304×44px; Production has no undersized controls; Website reorder and preview controls are 44×44px. Invalid Website data stayed unchanged in session-only recovery mode.
 - Existing Work focus evidence remains: agent detail moved from 579px to 72px, its first field from 773px to 266px, work detail and new-work intake start at 72px, and Review Prepare moved from 806px to 724px.
-- No Vercel deployment was created by the release-candidate push. The latest `megaos` and `supermega-public` production deployments still reference `main` commit `6885c3201d523d42d176c3dcd91de28dc1e17f6f`.
+- No Vercel deployment was created; current `megaos` and `supermega-public` production still reference `main` commit `6885c3201d523d42d176c3dcd91de28dc1e17f6f`.
 - The connected `supermegabase` project is active and healthy on hosted PostgreSQL 17.6.1. Read-only inspection confirms `app_private`, `app_private.trial_schema_meta`, and `supermega_trial_backend` are not installed.
-- Supabase migration history currently contains one unrelated public-schema RLS migration, not the five SuperMega private-trial migrations.
-- Existing public tables have 27 informational `rls_enabled_no_policy` findings; they are not private-schema readiness proof.
+- Supabase history has one unrelated public-schema RLS migration; existing public tables have 27 informational `rls_enabled_no_policy` findings, not private-schema readiness proof.
 
 ## Coordination
 
-- This Codex task integrates PR `#258` and owns the go/no-go recommendation. A second Codex task may audit read-only; Claude Code may prepare one backend-rehearsal fix on an isolated branch based on the exact PR head.
-- Workers do not edit this branch or `hq/NOW.md`. Handoffs state base/head SHA, changed paths, checks, risks, and one next action; this task alone decides whether to port a change.
+- `hq/WORKBOARD.md` is assignment authority. This task integrates; `QA-001` is read-only, and `ENG-001` is test-only after Claude authentication. Workers do not edit canonical or HQ files.
 
 ## Blockers
 
