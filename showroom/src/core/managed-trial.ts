@@ -72,6 +72,8 @@ export type ManagedProductionEvent =
   | 'production.quality_hold.placed'
   | 'production.quality_hold.released'
   | 'production.machine_state.changed'
+  | 'production.downtime.started'
+  | 'production.downtime.ended'
 
 export type ManagedCommandResult = {
   command_id: string

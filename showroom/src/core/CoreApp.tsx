@@ -79,11 +79,13 @@ import {
   PRODUCTION_KEY,
   buildProductionShiftHandoff,
   createEmptyProduction,
+  endProductionDowntime,
   formatProductionShiftHandoff,
   loadProductionWorkspace,
   mutateProductionWorkspace,
   openProductionIssue,
   placeProductionQualityHold,
+  productionDowntimeIntervals,
   productionIssueSeverities,
   productionMachineStates,
   productionShiftOutput,
@@ -95,8 +97,10 @@ import {
   registerProductionJob,
   releaseProductionQualityHold,
   resolveProductionIssue,
+  startProductionDowntime,
   validateProductionState,
   type ProductionActionProof,
+  type ProductionDowntimeInterval,
   type ProductionEvent,
   type ProductionIssue,
   type ProductionIssueSeverity,
@@ -189,6 +193,8 @@ type ActionKind =
   | 'quality_hold'
   | 'quality_release'
   | 'machine_state'
+  | 'downtime_start'
+  | 'downtime_end'
 
 type AccountableAction = {
   id: string
@@ -388,7 +394,7 @@ const productionIssueSeverityRank: Record<ProductionIssueSeverity, number> = {
   low: 3,
 }
 
-const wrappedIssueDetail = { overflow: 'visible', textOverflow: 'clip', whiteSpace: 'normal' } as const
+const wrappedIssueDetail = { overflow: 'visible', overflowWrap: 'anywhere', textOverflow: 'clip', whiteSpace: 'normal' } as const
 
 function localDateTimeInputValue(value: Date) {
   const local = new Date(value.getTime() - value.getTimezoneOffset() * 60_000)
@@ -2656,6 +2662,16 @@ const productionEventLabels: Record<ProductionEvent['kind'], string> = {
   quality_hold_placed: 'Quality hold placed',
   quality_hold_released: 'Quality hold released',
   machine_state_changed: 'Machine state changed',
+  downtime_started: 'Downtime started',
+  downtime_ended: 'Downtime ended',
+}
+
+function formatDowntimeDuration(durationMs: number) {
+  const totalMinutes = Math.max(0, Math.floor(durationMs / 60_000))
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  if (!hours) return `${totalMinutes} min`
+  return minutes ? `${hours} hr ${minutes} min` : `${hours} hr`
 }
 
 function ProductionEventHistory({ events }: { events: ProductionEvent[] }) {
@@ -2696,6 +2712,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const [issueClock, setIssueClock] = useState(Date.now)
   const [issueDialogOpen, setIssueDialogOpen] = useState(false)
   const [machineObservation, setMachineObservation] = useState<{ machineId: string; toState: ProductionMachineState } | null>(null)
+  const [downtimeDialogOpen, setDowntimeDialogOpen] = useState(false)
+  const [downtimeMachineId, setDowntimeMachineId] = useState(production.machines[0]?.id ?? '')
   const [jobDraft, setJobDraft] = useState({ id: '', line: '', product: '', target: '' })
   const [notice, setNotice] = useState('')
   const [actionTrigger, setActionTrigger] = useState<HTMLElement | null>(null)
@@ -2706,6 +2724,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const issueTriggerRef = useRef<HTMLButtonElement>(null)
   const machineDialogRef = useRef<HTMLDialogElement>(null)
   const machineTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const downtimeDialogRef = useRef<HTMLDialogElement>(null)
+  const downtimeTriggerRef = useRef<HTMLButtonElement>(null)
   const openIssues = production.issues
     .filter((issue) => issue.status === 'open')
     .sort((left, right) => {
@@ -2739,6 +2759,15 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const machineObservationTargets = observedMachine
     ? productionMachineStates.filter((state) => state !== observedMachine.state)
     : []
+  const downtimeIntervals = productionDowntimeIntervals(production)
+  const openDowntimeIntervals = downtimeIntervals.filter((interval) => !interval.end)
+  const recentDowntimeIntervals = downtimeIntervals.filter((interval) => interval.end).slice(0, 3)
+  const downtimeMachineIds = new Set(openDowntimeIntervals.map((interval) => interval.machineId))
+  const availableDowntimeMachines = production.machines.filter((machine) => !downtimeMachineIds.has(machine.id))
+  const selectedDowntimeMachineId = availableDowntimeMachines.some((machine) => machine.id === downtimeMachineId)
+    ? downtimeMachineId
+    : availableDowntimeMachines[0]?.id ?? ''
+  const selectedDowntimeMachine = availableDowntimeMachines.find((machine) => machine.id === selectedDowntimeMachineId)
 
   useEffect(() => {
     const timer = window.setInterval(() => setIssueClock(Date.now()), 60_000)
@@ -2764,6 +2793,16 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     }
     if (!machineObservation && dialog.open) dialog.close()
   }, [machineObservation, tab])
+
+  useEffect(() => {
+    const dialog = downtimeDialogRef.current
+    if (!dialog) return
+    if (downtimeDialogOpen && !dialog.open) {
+      dialog.showModal()
+      requestAnimationFrame(() => dialog.querySelector<HTMLElement>('[data-downtime-primary]')?.focus())
+    }
+    if (!downtimeDialogOpen && dialog.open) dialog.close()
+  }, [downtimeDialogOpen, tab])
 
   async function initializeManagedProduction(event: FormEvent) {
     event.preventDefault()
@@ -3076,6 +3115,47 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     }, trigger)
   }
 
+  function reviewDowntimeStart(event: FormEvent) {
+    event.preventDefault()
+    if (!selectedDowntimeMachine) return setNotice('Choose one recorded machine without open downtime.')
+    const machine = selectedDowntimeMachine
+    downtimeDialogRef.current?.close()
+    setDowntimeDialogOpen(false)
+    queueAction({
+      kind: 'downtime_start',
+      subjectId: machine.id,
+      summary: `Start downtime record for ${machine.name}`,
+      before: `${machine.name} · no open downtime · machine status record unchanged by this action`,
+      after: `${machine.name} · downtime open with human evidence · machine status record unchanged`,
+      apply: async (record) => {
+        await mutateProduction('production.downtime.started', record.commandId, productionActionProof(record), (current) => startProductionDowntime(current, machine.id, productionActionProof(record)))
+        setDowntimeMachineId('')
+      },
+    }, downtimeTriggerRef.current)
+  }
+
+  function reviewDowntimeEnd(interval: ProductionDowntimeInterval) {
+    const machine = production.machines.find((candidate) => candidate.id === interval.machineId)
+    if (!machine || interval.end) return
+    downtimeDialogRef.current?.close()
+    setDowntimeDialogOpen(false)
+    queueAction({
+      kind: 'downtime_end',
+      subjectId: machine.id,
+      summary: `End downtime record for ${machine.name}`,
+      before: `${machine.name} · downtime open since ${formatTime(interval.startedAt)} · machine status record unchanged by this action`,
+      after: `${machine.name} · downtime closed with new human evidence · machine status record unchanged`,
+      apply: async (record) => {
+        await mutateProduction('production.downtime.ended', record.commandId, productionActionProof(record), (current) => endProductionDowntime(current, machine.id, interval.startActionId, productionActionProof(record)))
+      },
+    }, downtimeTriggerRef.current)
+  }
+
+  function closeDowntimeDialog() {
+    setDowntimeDialogOpen(false)
+    requestAnimationFrame(() => downtimeTriggerRef.current?.focus())
+  }
+
   const productionBoundary = <div className="production-mode-banner" data-write={productionCanWrite ? 'ready' : 'blocked'} role={productionCanWrite ? 'status' : 'alert'}>
     <span className={`status-pill ${productionCanWrite ? 'bounded' : 'pending'}`}>{managedIdentity ? 'Managed records' : 'Local sample'}</span>
     <p>{productionStorageError
@@ -3130,9 +3210,10 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     {productionBoundary}
     <div className="control-workspace">
       <div className="split-workspace">
-        <section className="core-panel">
+        <section className="core-panel" style={{ overflowY: 'auto' }}>
           <div className="panel-head"><div><span className="core-eyebrow">Equipment</span><h2>Recorded status</h2></div></div>
-          <p className="panel-copy production-control-boundary">Records operator observations only. These buttons do not start, stop, or control equipment.</p>
+          <p className="panel-copy production-control-boundary" style={{ fontSize: 11, lineHeight: 1.35, marginTop: 6 }}>Records operator observations only. No equipment control.</p>
+          <button aria-label={`Review downtime records; ${openDowntimeIntervals.length} open`} className="core-button" onClick={() => setDowntimeDialogOpen(true)} ref={downtimeTriggerRef} style={{ justifyContent: 'space-between', margin: '8px 0', width: '100%' }} type="button"><span>Downtime</span><small>{openDowntimeIntervals.length ? `${openDowntimeIntervals.length} open` : `${recentDowntimeIntervals.length} recent`}</small></button>
           {production.machines.length ? <div className="machine-list">{production.machines.map((machine) => <button aria-label={`Review recorded status for ${machine.name}; currently ${productionMachineStateLabels[machine.state]}`} disabled={!productionCanWrite || Boolean(pendingAction)} key={machine.id} type="button" onClick={(event) => openMachineObservation(machine.id, event.currentTarget)}><span className={`machine-dot ${machine.state}`} /><span><strong>{machine.name}</strong><small>{machine.id} - Recorded: {productionMachineStateLabels[machine.state]}</small></span><b>Record status</b></button>)}</div> : <Empty>No equipment records exist in this workspace.</Empty>}
         </section>
         <section className="core-panel production-issue-launcher">
@@ -3162,6 +3243,20 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         </section>
       </div>
     </div>
+    <dialog aria-labelledby="downtime-dialog-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); closeDowntimeDialog() }} ref={downtimeDialogRef}>
+      <div className="panel-head"><div><span className="core-eyebrow">Equipment record</span><h2 id="downtime-dialog-title">Machine downtime</h2></div><button aria-label="Close downtime records" className="text-link" onClick={closeDowntimeDialog} style={{ minHeight: 44 }} type="button">Close</button></div>
+      {openDowntimeIntervals.length ? <div className="issue-list">{openDowntimeIntervals.map((interval, index) => <article key={interval.startActionId}>
+        <span aria-hidden="true" className="issue-mark">DT</span>
+        <div><strong>{interval.machineName} · downtime open</strong><small style={wrappedIssueDetail}>Started {formatTime(interval.startedAt)} by {interval.startedBy} · {formatDowntimeDuration(issueClock - Date.parse(interval.startedAt))} elapsed</small><small style={wrappedIssueDetail}>Reason: {interval.startReason}</small><small style={wrappedIssueDetail}>Evidence: {interval.startEvidenceReference} · Action: {interval.startActionId}</small></div>
+        <button className="core-button" data-downtime-primary={index === 0 ? true : undefined} disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => reviewDowntimeEnd(interval)} type="button">Review end</button>
+      </article>)}</div> : <p className="panel-copy">No machine has an open downtime record.</p>}
+      {availableDowntimeMachines.length ? <form autoComplete="off" className="core-form compact-form" onSubmit={reviewDowntimeStart}>
+        <label>Machine<select data-downtime-primary={!openDowntimeIntervals.length ? true : undefined} disabled={!productionCanWrite || Boolean(pendingAction)} onChange={(event) => setDowntimeMachineId(event.target.value)} value={selectedDowntimeMachineId}>{availableDowntimeMachines.map((machine) => <option key={machine.id} value={machine.id}>{machine.name} · {machine.id} · recorded {productionMachineStateLabels[machine.state]}</option>)}</select></label>
+        <button className="core-button" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedDowntimeMachine} type="submit">Review start</button>
+      </form> : <p className="panel-copy">Every recorded machine already has open downtime.</p>}
+      {recentDowntimeIntervals.length ? <><p className="panel-copy"><strong>Recent closed intervals</strong></p><div className="action-history-list">{recentDowntimeIntervals.map((interval) => <article key={interval.startActionId}><div><strong>{interval.machineName} · {formatDowntimeDuration(interval.durationMs ?? 0)}</strong><small style={wrappedIssueDetail}>{formatTime(interval.startedAt)} to {formatTime(interval.end?.endedAt ?? interval.startedAt)}</small><small style={wrappedIssueDetail}>Start: {interval.startedBy} · {interval.startReason} · {interval.startEvidenceReference}</small><small style={wrappedIssueDetail}>End: {interval.end?.endedBy} · {interval.end?.reason} · {interval.end?.evidenceReference}</small></div></article>)}</div></> : null}
+      <p className="panel-copy">This human record is separate from machine status. It sends no equipment command and changes no job or output.</p>
+    </dialog>
     <dialog aria-labelledby="machine-observation-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); closeMachineObservation() }} ref={machineDialogRef}>
       {observedMachine && machineObservation ? <>
         <div className="panel-head"><div><span className="core-eyebrow">Equipment observation</span><h2 id="machine-observation-title">{observedMachine.name}</h2></div><button aria-label="Close equipment observation" className="text-link" onClick={closeMachineObservation} type="button">Close</button></div>

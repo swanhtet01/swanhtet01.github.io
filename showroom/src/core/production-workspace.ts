@@ -53,7 +53,7 @@ export type ProductionMachine = {
   state: ProductionMachineState
 }
 
-export type ProductionEventKind = 'job_created' | 'output_recorded' | 'issue_opened' | 'issue_resolved' | 'quality_hold_placed' | 'quality_hold_released' | 'machine_state_changed'
+export type ProductionEventKind = 'job_created' | 'output_recorded' | 'issue_opened' | 'issue_resolved' | 'quality_hold_placed' | 'quality_hold_released' | 'machine_state_changed' | 'downtime_started' | 'downtime_ended'
 export type ProductionOutputKind = 'good' | 'scrap'
 
 export type ProductionEvent = {
@@ -75,6 +75,7 @@ export type ProductionEvent = {
   issueContainment?: string
   fromState?: ProductionMachineState
   toState?: ProductionMachineState
+  downtimeStartActionId?: string
 }
 
 export type ProductionState = {
@@ -183,11 +184,31 @@ export type ProductionShiftHandoff = {
   }>
 }
 
+export type ProductionDowntimeInterval = {
+  startActionId: string
+  machineId: string
+  machineName: string
+  startedAt: string
+  startedBy: string
+  startReason: string
+  startEvidenceReference: string
+  end?: {
+    actionId: string
+    endedAt: string
+    endedBy: string
+    reason: string
+    evidenceReference: string
+  }
+  durationMs?: number
+}
+
 const issueKinds: ProductionIssueKind[] = ['quality', 'maintenance', 'materials', 'operations']
 export const productionIssueSeverities: ProductionIssueSeverity[] = ['critical', 'high', 'medium', 'low']
 export const productionMachineStates: ProductionMachineState[] = ['running', 'attention', 'stopped']
-const eventKinds: ProductionEventKind[] = ['job_created', 'output_recorded', 'issue_opened', 'issue_resolved', 'quality_hold_placed', 'quality_hold_released', 'machine_state_changed']
-const qualityHoldEventFields = ['id', 'actionId', 'createdAt', 'actor', 'reason', 'evidenceReference', 'kind', 'subjectId', 'summary']
+const eventKinds: ProductionEventKind[] = ['job_created', 'output_recorded', 'issue_opened', 'issue_resolved', 'quality_hold_placed', 'quality_hold_released', 'machine_state_changed', 'downtime_started', 'downtime_ended']
+const baseEventFields = ['id', 'actionId', 'createdAt', 'actor', 'reason', 'evidenceReference', 'kind', 'subjectId', 'summary']
+const qualityHoldEventFields = baseEventFields
+const downtimeEndEventFields = [...baseEventFields, 'downtimeStartActionId']
 const deterministicSeedNow = Date.parse('2026-07-23T08:00:00.000Z')
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -214,6 +235,12 @@ function validTimestamp(value: unknown) {
     && value === value.trim()
     && /(?:Z|[+-]\d{2}:\d{2})$/.test(value)
     && Number.isFinite(Date.parse(value))
+}
+
+function validDowntimeTimestamp(value: unknown) {
+  return validTimestamp(value)
+    && /^(?!0000)\d{4}-/.test(String(value))
+    && new Date(Date.parse(value as string)).toISOString() === value
 }
 
 function assertSafeInteger(value: unknown, field: string, minimum = 0) {
@@ -390,7 +417,7 @@ export function validateProductionState(value: unknown): ProductionState {
     const issueSnapshotFieldCount = issueSnapshotFields.filter((field) => candidate[field] !== undefined).length
     if (candidate.kind === 'job_created') {
       if (!jobIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown job.`)
-      if (candidate.quantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || issueSnapshotFieldCount || candidate.fromState !== undefined || candidate.toState !== undefined) throw new Error(`events[${index}] job event has unrelated fields.`)
+      if (candidate.quantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || issueSnapshotFieldCount || candidate.fromState !== undefined || candidate.toState !== undefined || candidate.downtimeStartActionId !== undefined) throw new Error(`events[${index}] job event has unrelated fields.`)
     } else if (candidate.kind === 'output_recorded') {
       if (!jobIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown job.`)
       assertSafeInteger(candidate.quantity, `events[${index}].quantity`, 1)
@@ -406,7 +433,7 @@ export function validateProductionState(value: unknown): ProductionState {
           [outputKind === 'scrap' ? 'scrapUnits' : 'goodUnits']: nextShiftTotal,
         })
       }
-      if (issueSnapshotFieldCount || candidate.fromState !== undefined || candidate.toState !== undefined) throw new Error(`events[${index}] output event has unrelated fields.`)
+      if (issueSnapshotFieldCount || candidate.fromState !== undefined || candidate.toState !== undefined || candidate.downtimeStartActionId !== undefined) throw new Error(`events[${index}] output event has unrelated fields.`)
     } else if (candidate.kind === 'quality_hold_placed' || candidate.kind === 'quality_hold_released') {
       if (!jobIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown job.`)
       if (JSON.stringify(Object.keys(candidate).sort()) !== JSON.stringify([...qualityHoldEventFields].sort())) throw new Error(`events[${index}] quality hold event fields are invalid.`)
@@ -415,10 +442,16 @@ export function validateProductionState(value: unknown): ProductionState {
       if (!machineIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown machine.`)
       if (!productionMachineStates.includes(candidate.fromState as ProductionMachineState) || !productionMachineStates.includes(candidate.toState as ProductionMachineState)) throw new Error(`events[${index}] has invalid machine states.`)
       if (candidate.fromState === candidate.toState) throw new Error(`events[${index}] must record a distinct machine observation.`)
-      if (candidate.quantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || issueSnapshotFieldCount) throw new Error(`events[${index}] machine event has unrelated fields.`)
+      if (candidate.quantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || issueSnapshotFieldCount || candidate.downtimeStartActionId !== undefined) throw new Error(`events[${index}] machine event has unrelated fields.`)
+    } else if (candidate.kind === 'downtime_started' || candidate.kind === 'downtime_ended') {
+      if (!machineIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown machine.`)
+      if (!validDowntimeTimestamp(candidate.createdAt)) throw new Error(`events[${index}].createdAt must be a canonical UTC millisecond timestamp for downtime.`)
+      const expectedFields = candidate.kind === 'downtime_ended' ? downtimeEndEventFields : baseEventFields
+      if (JSON.stringify(Object.keys(candidate).sort()) !== JSON.stringify([...expectedFields].sort())) throw new Error(`events[${index}] downtime event fields are invalid.`)
+      if (candidate.kind === 'downtime_ended') canonicalText(candidate.downtimeStartActionId, `events[${index}].downtimeStartActionId`, 160)
     } else if (candidate.kind === 'issue_opened') {
       if (!issueIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown issue.`)
-      if (candidate.quantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || candidate.fromState !== undefined || candidate.toState !== undefined) throw new Error(`events[${index}] issue event has unrelated fields.`)
+      if (candidate.quantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || candidate.fromState !== undefined || candidate.toState !== undefined || candidate.downtimeStartActionId !== undefined) throw new Error(`events[${index}] issue event has unrelated fields.`)
       if (issueSnapshotFieldCount !== 0 && issueSnapshotFieldCount !== issueSnapshotFields.length) throw new Error(`events[${index}] issue snapshot fields must be complete or absent for legacy events.`)
       if (issueSnapshotFieldCount === issueSnapshotFields.length) {
         if (!productionIssueSeverities.includes(candidate.issueSeverity as ProductionIssueSeverity)) throw new Error(`events[${index}].issueSeverity is invalid.`)
@@ -429,7 +462,7 @@ export function validateProductionState(value: unknown): ProductionState {
       }
     } else {
       if (!issueIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown issue.`)
-      if (candidate.quantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || issueSnapshotFieldCount || candidate.fromState !== undefined || candidate.toState !== undefined) throw new Error(`events[${index}] issue event has unrelated fields.`)
+      if (candidate.quantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || issueSnapshotFieldCount || candidate.fromState !== undefined || candidate.toState !== undefined || candidate.downtimeStartActionId !== undefined) throw new Error(`events[${index}] issue event has unrelated fields.`)
     }
   }
   assertUnique(eventIds, 'Production event ID')
@@ -547,7 +580,63 @@ export function validateProductionState(value: unknown): ProductionState {
       if (oldestFirst[index - 1].toState !== oldestFirst[index].fromState) throw new Error(`Machine history for ${machineId} contains a state gap.`)
     }
   }
+  deriveProductionDowntimeIntervals(
+    machines as ProductionMachine[],
+    events as ProductionEvent[],
+  )
   return value as ProductionState
+}
+
+function deriveProductionDowntimeIntervals(
+  machines: ProductionMachine[],
+  events: ProductionEvent[],
+): ProductionDowntimeInterval[] {
+  const intervals: ProductionDowntimeInterval[] = []
+  for (const machine of machines) {
+    const downtimeEvents = events.filter((event) => event.subjectId === machine.id
+      && (event.kind === 'downtime_started' || event.kind === 'downtime_ended'))
+    let activeInterval: ProductionDowntimeInterval | undefined
+    let previousActivityAt: number | undefined
+    for (const event of [...downtimeEvents].reverse()) {
+      const activityAt = Date.parse(event.createdAt)
+      if (previousActivityAt !== undefined && activityAt < previousActivityAt) throw new Error(`Downtime timestamps for ${machine.id} contradict lifecycle order.`)
+      previousActivityAt = activityAt
+      if (event.kind === 'downtime_started') {
+        if (activeInterval) throw new Error(`Downtime history for ${machine.id} starts a second open interval.`)
+        if (event.summary !== `Started downtime for ${machine.name}`) throw new Error(`Downtime start summary for ${machine.id} is not canonical.`)
+        activeInterval = {
+          startActionId: event.actionId,
+          machineId: machine.id,
+          machineName: machine.name,
+          startedAt: event.createdAt,
+          startedBy: event.actor,
+          startReason: event.reason,
+          startEvidenceReference: event.evidenceReference,
+        }
+        intervals.push(activeInterval)
+        continue
+      }
+      if (!activeInterval) throw new Error(`Downtime history for ${machine.id} ends an interval that is not open.`)
+      if (event.downtimeStartActionId !== activeInterval.startActionId) throw new Error(`Downtime end for ${machine.id} does not reference its open interval.`)
+      if (event.summary !== `Ended downtime for ${machine.name}`) throw new Error(`Downtime end summary for ${machine.id} is not canonical.`)
+      const durationMs = activityAt - Date.parse(activeInterval.startedAt)
+      if (!Number.isSafeInteger(durationMs) || durationMs < 0) throw new Error(`Downtime duration for ${machine.id} is invalid.`)
+      activeInterval.end = {
+        actionId: event.actionId,
+        endedAt: event.createdAt,
+        endedBy: event.actor,
+        reason: event.reason,
+        evidenceReference: event.evidenceReference,
+      }
+      activeInterval.durationMs = durationMs
+      activeInterval = undefined
+    }
+  }
+  return intervals.sort((left, right) => {
+    const timeDifference = Date.parse(right.startedAt) - Date.parse(left.startedAt)
+    if (timeDifference) return timeDifference
+    return left.startActionId < right.startActionId ? -1 : left.startActionId > right.startActionId ? 1 : 0
+  })
 }
 
 function migrateLegacyProduction(value: unknown): ProductionState {
@@ -728,6 +817,11 @@ function productionCanonical(value: ProductionState) {
 
 export function productionStateCanonical(state: ProductionState) {
   return productionCanonical(validateProductionState(state))
+}
+
+export function productionDowntimeIntervals(state: ProductionState) {
+  const current = validateProductionState(state)
+  return deriveProductionDowntimeIntervals(current.machines, current.events)
 }
 
 export function buildProductionShiftHandoff(state: ProductionState, shiftRef: string): ProductionShiftHandoff | null {
@@ -1108,6 +1202,66 @@ export function recordProductionMachineState(
     ...state,
     revision: state.revision + 1,
     machines: state.machines.map((candidate) => candidate.id === machineId ? { ...candidate, state: toState } : candidate),
+    events: [event, ...state.events],
+  })
+}
+
+export function startProductionDowntime(
+  state: ProductionState,
+  machineId: string,
+  proof: ProductionActionProof,
+) {
+  if (!validProof(proof) || !validDowntimeTimestamp(proof.capturedAt)) return null
+  const existing = state.events.find((event) => event.actionId === proof.actionId)
+  if (existing) return existing.kind === 'downtime_started'
+    && existing.subjectId === machineId
+    && sameProof(existing, proof) ? state : null
+  const machine = state.machines.find((candidate) => candidate.id === machineId)
+  const currentInterval = productionDowntimeIntervals(state).find((interval) => interval.machineId === machineId && !interval.end)
+  const latestLifecycleEvent = state.events.find((event) => event.subjectId === machineId
+    && (event.kind === 'downtime_started' || event.kind === 'downtime_ended'))
+  if (!machine
+    || currentInterval
+    || (latestLifecycleEvent && Date.parse(proof.capturedAt) < Date.parse(latestLifecycleEvent.createdAt))
+    || actionIdIsUsed(state, proof.actionId)
+    || state.revision >= Number.MAX_SAFE_INTEGER) return null
+  const event = eventFor(proof, { kind: 'downtime_started', subjectId: machineId, summary: `Started downtime for ${machine.name}` })
+  return validateProductionState({
+    ...state,
+    revision: state.revision + 1,
+    events: [event, ...state.events],
+  })
+}
+
+export function endProductionDowntime(
+  state: ProductionState,
+  machineId: string,
+  downtimeStartActionId: string,
+  proof: ProductionActionProof,
+) {
+  if (!validProof(proof) || !validDowntimeTimestamp(proof.capturedAt) || !validCanonicalText(downtimeStartActionId, 160)) return null
+  const existing = state.events.find((event) => event.actionId === proof.actionId)
+  if (existing) return existing.kind === 'downtime_ended'
+    && existing.subjectId === machineId
+    && existing.downtimeStartActionId === downtimeStartActionId
+    && sameProof(existing, proof) ? state : null
+  const machine = state.machines.find((candidate) => candidate.id === machineId)
+  const currentInterval = productionDowntimeIntervals(state).find((interval) => interval.machineId === machineId && !interval.end)
+  if (!machine
+    || !currentInterval
+    || currentInterval.startActionId !== downtimeStartActionId
+    || Date.parse(proof.capturedAt) < Date.parse(currentInterval.startedAt)
+    || actionIdIsUsed(state, proof.actionId)
+    || state.revision >= Number.MAX_SAFE_INTEGER) return null
+  const event = eventFor(proof, {
+    kind: 'downtime_ended',
+    subjectId: machineId,
+    summary: `Ended downtime for ${machine.name}`,
+    downtimeStartActionId,
+  })
+  return validateProductionState({
+    ...state,
+    revision: state.revision + 1,
     events: [event, ...state.events],
   })
 }

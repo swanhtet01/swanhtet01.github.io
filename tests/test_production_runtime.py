@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import datetime, timedelta
 import unittest
 from uuid import uuid4
 
@@ -188,6 +189,46 @@ def released_job_state(
     return state
 
 
+def started_downtime_state(
+    current: dict[str, object],
+    evidence: dict[str, str],
+) -> dict[str, object]:
+    state = deepcopy(current)
+    machine = state["machines"][0]
+    state["revision"] += 1
+    state["events"] = [
+        production_event(
+            evidence,
+            kind="downtime_started",
+            subject_id=machine["id"],
+            summary=f"Started downtime for {machine['name']}",
+        ),
+        *state["events"],
+    ]
+    return state
+
+
+def ended_downtime_state(
+    current: dict[str, object],
+    start_evidence: dict[str, str],
+    end_evidence: dict[str, str],
+) -> dict[str, object]:
+    state = deepcopy(current)
+    machine = state["machines"][0]
+    state["revision"] += 1
+    state["events"] = [
+        production_event(
+            end_evidence,
+            kind="downtime_ended",
+            subject_id=machine["id"],
+            summary=f"Ended downtime for {machine['name']}",
+            downtimeStartActionId=start_evidence["actionId"],
+        ),
+        *state["events"],
+    ]
+    return state
+
+
 def opened_issue_state(
     current: dict[str, object],
     evidence: dict[str, str],
@@ -327,9 +368,29 @@ class ProductionRuntimeTests(unittest.TestCase):
             "production.quality_hold.placed",
             "production.quality_hold.released",
             "production.machine_state.changed",
+            "production.downtime.started",
+            "production.downtime.ended",
         }
         self.assertEqual(PRODUCTION_EVENTS, expected_events)
         self.assertEqual(PRODUCTION_HUMAN_EVENTS, expected_events)
+
+        retained_history = starting_workspace(target=1_000)
+        retained_history["jobs"][0]["output"] = 501
+        retained_history["revision"] = 501
+        retained_history["events"] = [
+            production_event(
+                action_evidence(f"ACT-RETAINED-{index:03d}"),
+                kind="output_recorded",
+                subject_id=retained_history["jobs"][0]["id"],
+                summary="Recorded 1 good units",
+                quantity=1,
+            )
+            for index in range(501)
+        ]
+        self.assertEqual(
+            len(validate_production_state(retained_history)["events"]),
+            501,
+        )
 
         initial = starting_workspace()
         evidence = action_evidence("ACT-INIT-REAL")
@@ -1204,6 +1265,244 @@ class ProductionRuntimeTests(unittest.TestCase):
                 "production.machine_state.changed",
                 unrelated,
                 unrelated_evidence,
+            )
+
+    def test_downtime_interval_is_attributed_distinct_and_fail_closed(self) -> None:
+        current = starting_workspace()
+        original_collections = deepcopy(
+            {
+                "jobs": current["jobs"],
+                "issues": current["issues"],
+                "machines": current["machines"],
+            }
+        )
+        start_evidence = action_evidence("ACT-DOWNTIME-START")
+        started = apply_event(
+            current,
+            "production.downtime.started",
+            started_downtime_state(current, start_evidence),
+            start_evidence,
+        )
+        self.assertEqual(
+            {
+                "jobs": started["jobs"],
+                "issues": started["issues"],
+                "machines": started["machines"],
+            },
+            original_collections,
+        )
+        self.assertEqual(started["events"][0]["kind"], "downtime_started")
+        self.assertEqual(started["events"][0]["actor"], ACTOR)
+        self.assertEqual(
+            started["events"][0]["evidenceReference"],
+            start_evidence["evidenceReference"],
+        )
+
+        duplicate_evidence = action_evidence(
+            "ACT-DOWNTIME-DUPLICATE",
+            captured_at=LATER,
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                started,
+                "production.downtime.started",
+                started_downtime_state(started, duplicate_evidence),
+                duplicate_evidence,
+            )
+
+        unknown_machine = started_downtime_state(
+            current,
+            action_evidence("ACT-DOWNTIME-UNKNOWN"),
+        )
+        unknown_machine["events"][0]["subjectId"] = "MACHINE-UNKNOWN"
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "production.downtime.started",
+                unknown_machine,
+                action_evidence("ACT-DOWNTIME-UNKNOWN"),
+            )
+
+        early_end_evidence = action_evidence(
+            "ACT-DOWNTIME-EARLY-END",
+            captured_at="2026-07-24T08:59:00.000Z",
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                started,
+                "production.downtime.ended",
+                ended_downtime_state(
+                    started,
+                    start_evidence,
+                    early_end_evidence,
+                ),
+                early_end_evidence,
+            )
+
+        submillisecond_end_evidence = action_evidence(
+            "ACT-DOWNTIME-SUBMILLISECOND-END",
+            captured_at="2026-07-24T09:00:00.000400Z",
+        )
+        submillisecond_start_evidence = action_evidence(
+            "ACT-DOWNTIME-SUBMILLISECOND-START",
+            captured_at="2026-07-24T09:00:00.000500Z",
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "production.downtime.started",
+                started_downtime_state(
+                    current,
+                    submillisecond_start_evidence,
+                ),
+                submillisecond_start_evidence,
+            )
+        zero_year_evidence = action_evidence(
+            "ACT-DOWNTIME-ZERO-YEAR",
+            captured_at="0000-07-24T09:00:00.000Z",
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "production.downtime.started",
+                started_downtime_state(current, zero_year_evidence),
+                zero_year_evidence,
+            )
+        for expanded_timestamp in (
+            "+010000-07-24T09:00:00.000Z",
+            "-000001-07-24T09:00:00.000Z",
+        ):
+            expanded_year_evidence = action_evidence(
+                f"ACT-DOWNTIME-EXPANDED-{expanded_timestamp[0]}",
+                captured_at=expanded_timestamp,
+            )
+            with self.assertRaises(TrialValidationError):
+                apply_event(
+                    current,
+                    "production.downtime.started",
+                    started_downtime_state(current, expanded_year_evidence),
+                    expanded_year_evidence,
+                )
+        forged_submillisecond = started_downtime_state(current, start_evidence)
+        forged_submillisecond["events"][0]["createdAt"] = (
+            submillisecond_start_evidence["capturedAt"]
+        )
+        forged_submillisecond["revision"] += 1
+        forged_submillisecond["events"] = [
+            production_event(
+                submillisecond_end_evidence,
+                kind="downtime_ended",
+                subject_id=forged_submillisecond["machines"][0]["id"],
+                summary=(
+                    f"Ended downtime for "
+                    f"{forged_submillisecond['machines'][0]['name']}"
+                ),
+                downtimeStartActionId=start_evidence["actionId"],
+            ),
+            *forged_submillisecond["events"],
+        ]
+        with self.assertRaises(TrialValidationError):
+            validate_production_state(forged_submillisecond)
+
+        wrong_start_evidence = action_evidence(
+            "ACT-DOWNTIME-WRONG-END",
+            captured_at=LATER,
+        )
+        wrong_start = ended_downtime_state(
+            started,
+            start_evidence,
+            wrong_start_evidence,
+        )
+        wrong_start["events"][0]["downtimeStartActionId"] = "ACT-NOT-OPEN"
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                started,
+                "production.downtime.ended",
+                wrong_start,
+                wrong_start_evidence,
+            )
+
+        end_evidence = action_evidence(
+            "ACT-DOWNTIME-END",
+            captured_at=LATER,
+        )
+        ended = apply_event(
+            started,
+            "production.downtime.ended",
+            ended_downtime_state(started, start_evidence, end_evidence),
+            end_evidence,
+        )
+        self.assertEqual(
+            {
+                "jobs": ended["jobs"],
+                "issues": ended["issues"],
+                "machines": ended["machines"],
+            },
+            original_collections,
+        )
+        self.assertEqual(
+            [event["kind"] for event in ended["events"][:2]],
+            ["downtime_ended", "downtime_started"],
+        )
+        self.assertEqual(
+            ended["events"][0]["downtimeStartActionId"],
+            start_evidence["actionId"],
+        )
+        self.assertEqual(
+            datetime.fromisoformat(
+                ended["events"][0]["createdAt"].replace("Z", "+00:00")
+            )
+            - datetime.fromisoformat(
+                ended["events"][1]["createdAt"].replace("Z", "+00:00")
+            ),
+            timedelta(minutes=15),
+        )
+
+        second_end_evidence = action_evidence(
+            "ACT-DOWNTIME-END-AGAIN",
+            captured_at=LATEST,
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                ended,
+                "production.downtime.ended",
+                ended_downtime_state(
+                    ended,
+                    start_evidence,
+                    second_end_evidence,
+                ),
+                second_end_evidence,
+            )
+
+        restart_evidence = action_evidence(
+            "ACT-DOWNTIME-RESTART",
+            captured_at=LATEST,
+        )
+        restarted = apply_event(
+            ended,
+            "production.downtime.started",
+            started_downtime_state(ended, restart_evidence),
+            restart_evidence,
+        )
+        self.assertEqual(restarted["events"][0]["kind"], "downtime_started")
+        self.assertEqual(restarted["machines"], original_collections["machines"])
+
+        detached_end = ended_downtime_state(
+            current,
+            start_evidence,
+            end_evidence,
+        )
+        with self.assertRaises(TrialValidationError):
+            validate_production_state(detached_end)
+
+        unrelated_start = started_downtime_state(current, start_evidence)
+        unrelated_start["machines"][0]["state"] = "stopped"
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "production.downtime.started",
+                unrelated_start,
+                start_evidence,
             )
 
     def test_store_owns_versioning_replay_and_authenticated_audit_actor(self) -> None:

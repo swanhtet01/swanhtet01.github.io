@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Callable
 
 from supermega_runtime.trial_store import TrialValidationError
@@ -21,6 +21,8 @@ PRODUCTION_EVENTS = frozenset(
         "production.quality_hold.placed",
         "production.quality_hold.released",
         "production.machine_state.changed",
+        "production.downtime.started",
+        "production.downtime.ended",
     }
 )
 PRODUCTION_HUMAN_EVENTS = PRODUCTION_EVENTS
@@ -37,12 +39,13 @@ _EVENT_KIND_BY_TYPE = {
     "production.quality_hold.placed": "quality_hold_placed",
     "production.quality_hold.released": "quality_hold_released",
     "production.machine_state.changed": "machine_state_changed",
+    "production.downtime.started": "downtime_started",
+    "production.downtime.ended": "downtime_ended",
 }
 _MAX_SAFE_INTEGER = 9_007_199_254_740_991
 _MAX_JOBS = 100
 _MAX_ISSUES = 500
 _MAX_MACHINES = 100
-_MAX_EVENTS = 500
 
 _STATE_FIELDS = frozenset({"schema", "revision", "jobs", "issues", "machines", "events"})
 _JOB_REQUIRED_FIELDS = frozenset({"id", "line", "product", "target", "output"})
@@ -120,6 +123,21 @@ def _timestamp(value: object, field: str) -> str:
         raise TrialValidationError(f"{field} must be an ISO-8601 timestamp.") from exc
     if parsed.tzinfo is None:
         raise TrialValidationError(f"{field} must include a timezone.")
+    return timestamp
+
+
+def _downtime_timestamp(value: object, field: str) -> str:
+    timestamp = _timestamp(value, field)
+    parsed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    canonical = (
+        parsed.astimezone(timezone.utc)
+        .isoformat(timespec="milliseconds")
+        .replace("+00:00", "Z")
+    )
+    if timestamp != canonical:
+        raise TrialValidationError(
+            f"{field} must be a canonical UTC millisecond timestamp for downtime."
+        )
     return timestamp
 
 
@@ -291,12 +309,15 @@ def _validate_event(
         required = _EVENT_FIELDS | {"quantity"}
     elif kind == "machine_state_changed":
         required = _EVENT_FIELDS | {"fromState", "toState"}
+    elif kind == "downtime_ended":
+        required = _EVENT_FIELDS | {"downtimeStartActionId"}
     elif kind in {
         "job_created",
         "issue_opened",
         "issue_resolved",
         "quality_hold_placed",
         "quality_hold_released",
+        "downtime_started",
     }:
         required = _EVENT_FIELDS
     else:
@@ -354,6 +375,16 @@ def _validate_event(
         if before == after:
             raise TrialValidationError(
                 f"{field} must record a distinct machine observation."
+            )
+    elif kind in {"downtime_started", "downtime_ended"}:
+        if subject_id not in machine_ids:
+            raise TrialValidationError(f"{field} references an unknown machine.")
+        _downtime_timestamp(event["createdAt"], f"{field}.createdAt")
+        if kind == "downtime_ended":
+            _text(
+                event["downtimeStartActionId"],
+                f"{field}.downtimeStartActionId",
+                maximum=160,
             )
     elif kind == "issue_opened":
         if subject_id not in issue_ids:
@@ -674,6 +705,57 @@ def _validate_machine_history(
             )
 
 
+def _validate_downtime_history(
+    machines: Sequence[dict[str, Any]],
+    events: Sequence[dict[str, Any]],
+) -> None:
+    for index, machine in enumerate(machines):
+        newest_first = [
+            event
+            for event in events
+            if event["kind"] in {"downtime_started", "downtime_ended"}
+            and event["subjectId"] == machine["id"]
+        ]
+        active_start: dict[str, Any] | None = None
+        previous_activity_at: datetime | None = None
+        for event in reversed(newest_first):
+            activity_at = datetime.fromisoformat(
+                event["createdAt"].replace("Z", "+00:00")
+            )
+            if (
+                previous_activity_at is not None
+                and activity_at < previous_activity_at
+            ):
+                raise TrialValidationError(
+                    f"machines[{index}] downtime timestamps contradict lifecycle order."
+                )
+            previous_activity_at = activity_at
+            if event["kind"] == "downtime_started":
+                if active_start is not None:
+                    raise TrialValidationError(
+                        f"machines[{index}] has a second open downtime interval."
+                    )
+                if event["summary"] != f"Started downtime for {machine['name']}":
+                    raise TrialValidationError(
+                        f"machines[{index}] downtime start summary is not canonical."
+                    )
+                active_start = event
+                continue
+            if active_start is None:
+                raise TrialValidationError(
+                    f"machines[{index}] ends downtime that is not open."
+                )
+            if event["downtimeStartActionId"] != active_start["actionId"]:
+                raise TrialValidationError(
+                    f"machines[{index}] downtime end does not reference its open interval."
+                )
+            if event["summary"] != f"Ended downtime for {machine['name']}":
+                raise TrialValidationError(
+                    f"machines[{index}] downtime end summary is not canonical."
+                )
+            active_start = None
+
+
 def validate_production_state(value: object) -> dict[str, Any]:
     """Validate a complete managed Production workspace without repairing it."""
 
@@ -695,11 +777,10 @@ def validate_production_state(value: object) -> dict[str, Any]:
         "production state.machines",
         maximum=_MAX_MACHINES,
     )
-    events_raw = _list(
-        state["events"],
-        "production state.events",
-        maximum=_MAX_EVENTS,
-    )
+    events_value = state["events"]
+    if not isinstance(events_value, list):
+        raise TrialValidationError("production state.events must be an array.")
+    events_raw = events_value
 
     jobs = [_validate_job(candidate, index) for index, candidate in enumerate(jobs_raw)]
     issues = [
@@ -739,6 +820,7 @@ def validate_production_state(value: object) -> dict[str, Any]:
     _validate_quality_hold_history(jobs, events)
     _validate_issue_history(issues, events)
     _validate_machine_history(machines, events)
+    _validate_downtime_history(machines, events)
     return deepcopy(state)
 
 
@@ -1055,6 +1137,73 @@ def _validate_machine_state_changed(
         raise TrialValidationError("machine state summary is not canonical.")
 
 
+def _open_downtime_event(
+    events: Sequence[Mapping[str, Any]],
+    machine_id: str,
+) -> Mapping[str, Any] | None:
+    latest = next(
+        (
+            event
+            for event in events
+            if event["subjectId"] == machine_id
+            and event["kind"] in {"downtime_started", "downtime_ended"}
+        ),
+        None,
+    )
+    return latest if latest is not None and latest["kind"] == "downtime_started" else None
+
+
+def _validate_downtime_started(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+    event: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "jobs", "issues", "machines")
+    machine = next(
+        (
+            candidate
+            for candidate in current["machines"]
+            if candidate["id"] == event["subjectId"]
+        ),
+        None,
+    )
+    if machine is None:
+        raise TrialValidationError("downtime start must reference one machine.")
+    if _open_downtime_event(current["events"], machine["id"]) is not None:
+        raise TrialValidationError(
+            "a machine can have at most one open downtime interval."
+        )
+    if event["summary"] != f"Started downtime for {machine['name']}":
+        raise TrialValidationError("downtime start summary is not canonical.")
+
+
+def _validate_downtime_ended(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+    event: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "jobs", "issues", "machines")
+    machine = next(
+        (
+            candidate
+            for candidate in current["machines"]
+            if candidate["id"] == event["subjectId"]
+        ),
+        None,
+    )
+    if machine is None:
+        raise TrialValidationError("downtime end must reference one machine.")
+    open_event = _open_downtime_event(current["events"], machine["id"])
+    if open_event is None:
+        raise TrialValidationError("only open downtime can be ended.")
+    if event["downtimeStartActionId"] != open_event["actionId"]:
+        raise TrialValidationError(
+            "downtime end must reference the exact open interval."
+        )
+    if event["summary"] != f"Ended downtime for {machine['name']}":
+        raise TrialValidationError("downtime end summary is not canonical.")
+
+
 _TRANSITION_VALIDATORS: dict[
     str,
     Callable[
@@ -1069,6 +1218,8 @@ _TRANSITION_VALIDATORS: dict[
     "production.quality_hold.placed": _validate_quality_hold_placed,
     "production.quality_hold.released": _validate_quality_hold_released,
     "production.machine_state.changed": _validate_machine_state_changed,
+    "production.downtime.started": _validate_downtime_started,
+    "production.downtime.ended": _validate_downtime_ended,
 }
 
 
