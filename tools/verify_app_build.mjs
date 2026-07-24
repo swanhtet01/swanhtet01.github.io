@@ -547,7 +547,7 @@ if (!commercePageContract.includes('stockReceiptDraft')
 const commerceOrdersContract = commercePageContract.slice(commercePageContract.indexOf("if (tab === 'orders')"), commercePageContract.indexOf("if (tab === 'inventory')"))
 if (!commerceOrdersContract.includes('order-daily-controls') || !commerceOrdersContract.includes('Save daily close') || !commerceOrdersContract.includes('Close and exceptions')) fail('commerce_daily_controls_not_inside_orders')
 if (!productionSource.includes("supermega.production.workspace.v2") || !productionSource.includes('mutateProductionWorkspace') || !productionSource.includes('productionWorkspaceCanWrite') || !productionSource.includes('.write-probe.') || !productionSource.includes('lockManager.request') || !productionSource.includes('next.revision !== current.revision + 1')) fail('production_v2_locked_store_missing')
-if (!productionSource.includes("'job_created' | 'output_recorded' | 'issue_opened' | 'issue_resolved' | 'machine_state_changed'") || !productionSource.includes('events: [event, ...state.events]') || !productionSource.includes('Production revision must equal the append-only event count.')) fail('production_append_only_record_missing')
+if (!productionSource.includes("'job_created' | 'output_recorded' | 'issue_opened' | 'issue_resolved' | 'quality_hold_placed' | 'quality_hold_released' | 'machine_state_changed'") || !productionSource.includes('events: [event, ...state.events]') || !productionSource.includes('Production revision must equal the append-only event count.')) fail('production_append_only_record_missing')
 if (!productionSource.includes('productionShiftOutput')
   || !productionSource.includes('existing.shiftRef === shiftRef')
   || !productionSource.includes('shiftRef?: string')
@@ -573,6 +573,18 @@ if (!productionSource.includes("export type ProductionIssueSeverity = 'critical'
   || !coreSource.includes('Containment / next action')
   || !coreSource.includes('Review close')
   || !coreSource.includes('Legacy problem · owner, due time, and containment were not recorded')) fail('production_actionable_issue_contract_missing')
+if (!productionSource.includes('placeProductionQualityHold')
+  || !productionSource.includes('releaseProductionQualityHold')
+  || !productionSource.includes('hold timestamps for ${jobId} contradict lifecycle order')
+  || !productionSource.includes('quality hold event fields are invalid')
+  || !managedProductionRuntime.includes('_validate_quality_hold_placed')
+  || !managedProductionRuntime.includes('_validate_quality_hold_released')
+  || !managedProductionRuntime.includes('quality hold timestamps contradict lifecycle order')
+  || !coreSource.includes('Quality holds')
+  || !coreSource.includes('Review hold')
+  || !coreSource.includes('Review release')
+  || !coreSource.includes('Recording a result does not release this hold')
+  || !coreSource.includes("job.qualityHold ? ' · QUALITY HOLD' : ''")) fail('production_quality_hold_contract_missing')
 if (!productionSource.includes('registerProductionJob') || !coreSource.includes('production.job.created') || !coreSource.includes('<summary>Add job</summary>') || !coreSource.includes('Review job')) fail('production_recurring_job_workflow_missing')
 if (!productionSource.includes('currentRaw !== null') || !productionSource.includes('Migration failed closed') || !productionSource.includes('events: []')) fail('production_migration_fail_closed_contract_missing')
 if (!productionSource.includes('recordProductionMachineState')
@@ -586,7 +598,7 @@ if (!productionSource.includes('recordProductionMachineState')
   || !coreSource.includes('machineObservationTargets')
   || coreSource.includes('cycleMachine')) fail('production_truthful_machine_observation_missing')
 if (!managedTrialSource.includes('saveManagedProductionCommand') || !managedTrialSource.includes("surface: 'production'") || !managedTrialSource.includes('eventType: ManagedProductionEvent') || !managedTrialSource.includes('payload: { state: request.state, evidence: request.evidence }')) fail('managed_production_command_client_missing')
-for (const eventType of ['production.workspace.initialized', 'production.job.created', 'production.output.recorded', 'production.issue.opened', 'production.issue.resolved', 'production.machine_state.changed']) {
+for (const eventType of ['production.workspace.initialized', 'production.job.created', 'production.output.recorded', 'production.issue.opened', 'production.issue.resolved', 'production.quality_hold.placed', 'production.quality_hold.released', 'production.machine_state.changed']) {
   if (!coreSource.includes(eventType) || !managedProductionRuntime.includes(eventType)) fail(`managed_production_event_missing:${eventType}`)
 }
 if (managedProductionRuntime.includes('production.snapshot.saved')
@@ -594,6 +606,8 @@ if (managedProductionRuntime.includes('production.snapshot.saved')
   || !managedProductionRuntime.includes('_validate_job_created')
   || !managedProductionRuntime.includes('_validate_output_recorded')
   || !managedProductionRuntime.includes('_validate_issue_resolved')
+  || !managedProductionRuntime.includes('_validate_quality_hold_placed')
+  || !managedProductionRuntime.includes('_validate_quality_hold_released')
   || !managedProductionRuntime.includes('_validate_machine_state_changed')
   || !managedProductionRuntime.includes('Production event must prepend exactly one record and preserve history.')) fail('managed_production_server_transition_contract_missing')
 if (!coreSource.includes("mode: 'managed-unprovisioned'")
@@ -2382,6 +2396,67 @@ async function verifyProductionRuntime() {
       && resolvedLegacyIssue.issues[0].severity === undefined
       && resolvedLegacyIssue.issues[0].resolution?.resolvedBy === legacyResolutionProof.actor,
     'production_legacy_issue_not_readable_or_resolvable')
+
+    const holdProof = proof('ACT-QUALITY-HOLD', 2_600)
+    const held = model.placeProductionQualityHold(base, 'JOB-1', holdProof)
+    assert(held?.jobs[0].qualityHold?.actionId === holdProof.actionId
+      && held.jobs[0].qualityHold.heldAt === holdProof.capturedAt
+      && held.jobs[0].qualityHold.heldBy === holdProof.actor
+      && held.jobs[0].qualityHold.reason === holdProof.reason
+      && held.jobs[0].qualityHold.evidenceReference === holdProof.evidenceReference
+      && held.jobs[0].output === base.jobs[0].output
+      && held.events[0].kind === 'quality_hold_placed',
+    'production_quality_hold_not_recorded_exactly')
+    assert(model.placeProductionQualityHold(held, 'JOB-1', holdProof) === held, 'production_quality_hold_retry_not_idempotent')
+    assert(model.placeProductionQualityHold(held, 'JOB-1', { ...holdProof, reason: 'Changed reason' }) === null, 'production_quality_hold_conflicting_retry_succeeded')
+    assert(model.placeProductionQualityHold(held, 'JOB-1', proof('ACT-QUALITY-HOLD-SECOND', 2_700)) === null, 'production_second_active_quality_hold_succeeded')
+    assert(model.releaseProductionQualityHold(base, 'JOB-1', proof('ACT-QUALITY-RELEASE-NONE', 2_700)) === null, 'production_unheld_quality_release_succeeded')
+    assert(model.releaseProductionQualityHold(held, 'JOB-1', proof('ACT-QUALITY-RELEASE-EARLY', 2_500)) === null, 'production_quality_release_predated_hold')
+    assertThrows(() => model.validateProductionState({
+      ...held,
+      jobs: [{ ...held.jobs[0], qualityHold: { ...held.jobs[0].qualityHold, reason: 'Detached reason' } }],
+    }), 'production_quality_hold_proof_detached_from_event')
+    assertThrows(() => model.validateProductionState({
+      ...held,
+      events: [{ ...held.events[0], unexpected: true }],
+    }), 'production_quality_hold_event_extra_field_accepted')
+
+    const releaseProof = proof('ACT-QUALITY-RELEASE', 2_800)
+    const releasedHold = model.releaseProductionQualityHold(held, 'JOB-1', releaseProof)
+    assert(releasedHold
+      && releasedHold.jobs[0].qualityHold === undefined
+      && releasedHold.jobs[0].output === base.jobs[0].output
+      && releasedHold.events[0].kind === 'quality_hold_released'
+      && releasedHold.events[0].actor === releaseProof.actor
+      && releasedHold.events[0].reason === releaseProof.reason
+      && releasedHold.events[0].evidenceReference === releaseProof.evidenceReference,
+    'production_quality_hold_release_not_recorded_exactly')
+    assert(model.releaseProductionQualityHold(releasedHold, 'JOB-1', releaseProof) === releasedHold, 'production_quality_release_retry_not_idempotent')
+    assert(model.releaseProductionQualityHold(releasedHold, 'JOB-1', { ...releaseProof, evidenceReference: 'EV-CONFLICT' }) === null, 'production_quality_release_conflicting_retry_succeeded')
+    assert(model.placeProductionQualityHold(releasedHold, 'JOB-1', holdProof) === releasedHold, 'production_historical_hold_retry_after_release_not_idempotent')
+    assertThrows(() => model.validateProductionState({
+      ...releasedHold,
+      events: [
+        { ...releasedHold.events[0], createdAt: new Date(Date.parse(holdProof.capturedAt) - 1).toISOString() },
+        ...releasedHold.events.slice(1),
+      ],
+    }), 'production_quality_release_before_hold_timestamp_accepted')
+
+    const reholdProof = proof('ACT-QUALITY-REHOLD', 2_900)
+    const reheld = model.placeProductionQualityHold(releasedHold, 'JOB-1', reholdProof)
+    assert(reheld?.jobs[0].qualityHold?.actionId === reholdProof.actionId
+      && reheld.jobs[0].output === base.jobs[0].output
+      && reheld.events.slice(0, 3).map((event) => event.kind).join(',') === 'quality_hold_placed,quality_hold_released,quality_hold_placed',
+    'production_quality_rehold_after_release_failed')
+    assert(model.releaseProductionQualityHold(reheld, 'JOB-1', releaseProof) === reheld, 'production_historical_release_retry_after_rehold_not_idempotent')
+    assert(model.placeProductionQualityHold(base, 'JOB-MISSING', proof('ACT-QUALITY-HOLD-MISSING', 2_600)) === null, 'production_missing_job_quality_hold_succeeded')
+    assert(model.registerProductionJob(base, { ...newJob, id: 'JOB-HOLD-PREDECLARED', qualityHold: {
+      actionId: 'ACT-PREDECLARED-HOLD',
+      heldAt: holdProof.capturedAt,
+      heldBy: holdProof.actor,
+      reason: holdProof.reason,
+      evidenceReference: holdProof.evidenceReference,
+    } }, proof('ACT-JOB-HOLD-PREDECLARED', 2_600)) === null, 'production_job_predeclared_quality_hold_succeeded')
 
     let machineState = resolved
     const observedStates = ['attention', 'stopped', 'attention', 'running', 'stopped', 'running']
