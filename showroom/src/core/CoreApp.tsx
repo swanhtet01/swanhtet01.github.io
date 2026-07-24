@@ -1206,7 +1206,7 @@ export function OverviewPage() {
   const runtime = useOutletContext<RuntimeHealth>()
   const [managedIdentity] = useManagedIdentity(runtime.status === 'enterprise')
   const [commerce] = useCommerceWorkspace(managedIdentity)
-  const [production] = useProductionWorkspace()
+  const [production] = useProductionWorkspace(managedIdentity)
   const [approvals, setApprovals] = useApprovalWorkspace()
   const [setup] = useSetupWorkspace()
   const [workspace] = useTeamWorkspace()

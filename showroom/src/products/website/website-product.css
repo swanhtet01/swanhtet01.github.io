@@ -2890,6 +2890,11 @@
     min-height: 44px;
   }
 
+  .website-inline-actions > button,
+  .website-navigation-actions > button {
+    min-width: 44px;
+  }
+
   .website-switch,
   .website-confirmation {
     min-height: 44px;

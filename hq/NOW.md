@@ -6,47 +6,52 @@ Mode: guarded release candidate; production remains isolated
 
 ## North-star outcome
 
-Prove one real workflow in which SuperMega keeps the operating record, a responsible owner resolves exceptions, and the business measures the result.
+Prove one measured workflow where SuperMega keeps the record and a responsible owner resolves exceptions.
 
 ## Current outcomes
 
-1. **Release candidate** — review one combined candidate for the simpler company system, product apps, and managed-backend safety gates.
-2. **Managed persistence** — carry the passing local PostgreSQL 17 contract into one isolated hosted Supabase rehearsal before production activation.
+1. **Release candidate** — review one candidate for the simpler company system, products, and backend gates.
+2. **Managed persistence** — repeat the passing PostgreSQL 17 contract and Website-to-Commerce journey on one isolated hosted Supabase target.
 3. **Pilot** — choose one Commerce or Production workflow with a named owner, baseline, target, authority boundary, and evidence plan.
-4. **Website-to-Commerce proof** — repeat the locally proven retained artifact, Commerce intake, and human confirmation on an isolated hosted runtime.
 
 ## Current system
 
-- Home, Work, and Products are the only primary destinations; Settings is a utility.
-- Home reveals one accountable next action, then the three product entries.
-- Work has one team picker and Work, Agents, Review. Mobile intake/details focus until Back; desktop stays split. New work appears only in Work.
+- Home, Work, and Products are the only primary destinations; Settings is a utility. Home shows one accountable next action, then the three products.
+- Home loads managed Commerce and Production through the same authenticated identity; it never mixes a managed product with local sample records.
+- Work has one team picker and Work, Agents, Review. Mobile focuses intake or detail until Back; desktop stays split. New work appears only in Work.
 - Products contains Commerce, Production, and Website. No public agent catalogue, demo-domain collection, POS product, or separate internal-console product is in scope.
-- Commerce: Orders, Stock, collapsed close controls. At 1280x800, Review order stays at 562-606px inside its 219-625px panel; mobile stays page-flow. Production: Jobs, Problems, collapsed recurring-job intake. Website: desktop Pages, Navigation, Publish, Split; mobile Edit, Publish, and Site settings.
-- Commerce, Production, and Website have authenticated tenant commands. Managed Production starts from real records and requires human-bound evidence.
-- Website is the only lazy-loaded product workspace. An approved record retains one deterministic site file without deploying a site or changing a domain. Invalid local records remain unchanged, show one Recovery settings action, and can only be removed through the confirmed two-step local reset.
+- Commerce: Orders and Stock, compact manual entry, visible Sample or managed-data boundary, and refund due as a primary exception. Production: Jobs and Problems, job-first mobile context, observation-only equipment status, and write gating. Website: one Page selector and Site, Preview, Publish action bar; edit opens first and recovery stays under Site.
+- All three products have authenticated tenant commands. Managed Production starts from real records and requires human-bound evidence.
+- Website is the only lazy-loaded product workspace. Approval retains one deterministic site file without deploying a site or changing a domain. Invalid local records stay unchanged and require confirmed recovery or the two-step local reset. Web Locks and revisions prevent overlapping saves from silently winning.
 - The managed backend is the private `app_private` schema and dedicated runtime-role contract in Supabase Postgres. Browser code receives neither the database URL nor a service-role key.
-- The local PostgreSQL 17.10 gate runs the real `PostgresTrialStore`, including retained Website-to-Commerce confirmation and Production job-to-output, then restores a fresh TLS cluster; hosted Supabase remains separate.
+- The PostgreSQL 17.10 gate runs the real `PostgresTrialStore`, proves both product journeys, and restores a fresh TLS cluster; hosted Supabase remains separate.
 - Sends, payments, publishing, merges, deployments, access changes, and production writes remain responsible-human actions.
 - Vercel canonical mappings remain `app.supermega.dev` → `megaos`, and `supermega.dev` plus `www.supermega.dev` → `supermega-public`.
 
 ## Latest verification
 
-- Draft PR `#258` remains the release candidate; its validated implementation head is `a88dc7b1349810beb93dbd5450d6c499e627e0e7`.
-- GitHub `SuperMega App CI` run `175` passed every validation job for that head.
-- Candidate lint and build pass with 178 product/runtime, 51 release, 44 security, 10 migration, 11 Vercel, and 103 Python checks.
+- Draft PR `#258` remains the release candidate; its validated implementation head is `338b6fd11bc27da9b7aa42bee2c293a5c0e3a9ef`.
+- GitHub `SuperMega App CI` run `180` passed every validation job for that head.
+- Candidate lint and build pass with 207 product/runtime, 51 release, 44 security, 10 migration, and 11 Vercel checks.
 - PostgreSQL 17.10 passes 24 migration, authority, journey, isolation, retry, recovery, and validator checks across two clean TLS clusters. Cleanup passed; external systems were unchanged.
-- 375px browser audits show no overflow, undersized controls, or console errors. Website exposes one 44px Recovery settings action; reset scope was inspected without deletion. Work moves agent detail from 579px to 72px and its first field from 773px to 266px; work detail and new-work intake also start at 72px. Review Prepare moved from 806px to 724px.
+- Fresh 1280px and 375px audits show no horizontal overflow, error overlay, warning, or console error. At 375px, Commerce Review order is 304×44px; Production has no undersized controls; Website reorder and preview controls are 44×44px. Invalid Website data stayed unchanged in session-only recovery mode.
+- Existing Work focus evidence remains: agent detail moved from 579px to 72px, its first field from 773px to 266px, work detail and new-work intake start at 72px, and Review Prepare moved from 806px to 724px.
 - No Vercel deployment was created by the release-candidate push. The latest `megaos` and `supermega-public` production deployments still reference `main` commit `6885c3201d523d42d176c3dcd91de28dc1e17f6f`.
 - The connected `supermegabase` project is active and healthy on hosted PostgreSQL 17.6.1. Read-only inspection confirms `app_private`, `app_private.trial_schema_meta`, and `supermega_trial_backend` are not installed.
 - Supabase migration history currently contains one unrelated public-schema RLS migration, not the five SuperMega private-trial migrations.
 - Existing public tables have 27 informational `rls_enabled_no_policy` findings; they are not private-schema readiness proof.
 
+## Coordination
+
+- This Codex task integrates PR `#258` and owns the go/no-go recommendation. A second Codex task may audit read-only; Claude Code may prepare one backend-rehearsal fix on an isolated branch based on the exact PR head.
+- Workers do not edit this branch or `hq/NOW.md`. Handoffs state base/head SHA, changed paths, checks, risks, and one next action; this task alone decides whether to port a change.
+
 ## Blockers
 
 - No isolated Supabase branch or separate non-production project has repeated the five-migration PostgreSQL 17.6 proof.
-- Hosted-only evidence is still missing: Security Advisor, Supavisor transaction-pool behavior, provider recovery, and authenticated repetition of both locally proven product journeys.
+- Hosted-only evidence is missing: Security Advisor, transaction-pool behavior, provider recovery, and authenticated repetition of both proven product journeys.
 - The connected production project contains unrelated existing public-schema objects and advisor findings. Do not treat its healthy status or server version as application readiness.
-- Production still needs the server-only database URL, signing secret, explicit memberships/capabilities, writes-disabled smoke test, founder approval, and a separately authorized writes enablement.
+- Production still needs server-only secrets, explicit memberships/capabilities, a writes-disabled smoke test, founder approval, and separately authorized write enablement.
 - No pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
 
 ## Decisions in force
