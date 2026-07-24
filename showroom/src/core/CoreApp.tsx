@@ -34,6 +34,7 @@ import {
   LEGACY_COMMERCE_KEYS,
   advanceCommerceOrder,
   cancelCommerceOrder,
+  commerceCloseExpectation,
   commerceOrderNeedsAction,
   commerceOrderHasReleasableReservation,
   commerceWorkspaceCanWrite,
@@ -46,6 +47,7 @@ import {
   reconcileCommercePayment,
   registerCommerceItem,
   reserveCommerceOrder,
+  saveCommerceClose,
   validateCommerceState,
   type CommerceActionProof,
   type CommerceItem,
@@ -342,8 +344,7 @@ const productionMachineActionLabels: Record<ProductionMachineState, string> = {
 }
 
 function uid(prefix: string) {
-  const cryptoId = globalThis.crypto?.randomUUID?.().slice(0, 8)
-  return `${prefix}-${cryptoId ?? Date.now().toString(36)}`.toUpperCase()
+  return `${prefix}-${commandUuid()}`.toUpperCase()
 }
 
 function commandUuid() {
@@ -1674,14 +1675,18 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
   const [catalogError, setCatalogError] = useState('')
   const selectedSku = commerce.items.some((item) => item.sku === sku) ? sku : commerce.items[0]?.sku ?? ''
   const selected = commerce.items.find((item) => item.sku === selectedSku)
-  const closableOrders = commerce.orders.filter((order) => order.status === 'completed' && order.paymentStatus === 'reconciled')
-  const reconciledValue = closableOrders.reduce((total, order) => total + order.total, 0)
+  const legacyCloseNeedsMigration = commerce.closes.some((close) => !close.orderIds || !close.businessDate)
+  const closePreview = commerceCloseExpectation(commerce, new Date().toISOString())
+  const closePreviewOrderIds = new Set(closePreview?.orderIds ?? [])
+  const closableOrders = commerce.orders.filter((order) => closePreviewOrderIds.has(order.id))
+  const reconciledValue = closePreview?.total ?? 0
   const lowStock = commerce.items.filter((item) => item.onHand <= item.reorderAt)
   const openOrders = commerce.orders.filter((order) => order.status !== 'completed' && order.status !== 'cancelled')
   const paymentReview = commerce.orders.filter((order) => order.refundStatus === 'due' || (order.status !== 'cancelled' && order.paymentStatus === 'pending'))
   const actionOrders = commerce.orders.filter(commerceOrderNeedsAction)
   const actionOrderIds = new Set(actionOrders.map((order) => order.id))
   const closedOrders = commerce.orders.filter((order) => !actionOrderIds.has(order.id))
+  const latestClose = commerce.closes.find((close) => close.operator)
   const importedWebsiteOrderIds = commerce.orders.flatMap((order) => order.sourceRecordId ? [order.sourceRecordId] : [])
   const websiteIntakes = commerceWebsiteIntakes(commerce)
 
@@ -2021,8 +2026,30 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
   }
 
   function closeDay() {
-    const close = { id: uid('CLOSE'), createdAt: new Date().toISOString(), total: reconciledValue, orders: closableOrders.length }
-    queueAction({ kind: 'daily_close', subjectId: close.id, summary: `Save ${close.id} daily close`, before: `${commerce.closes.length} snapshots`, after: `${commerce.closes.length + 1} snapshots · ${formatMoney(close.total)}`, apply: (action) => mutateCommerce('commerce.close.saved', action.commandId, commerceActionProof(action), (current) => current.closes.some((candidate) => candidate.id === close.id) ? current : { ...current, closes: [close, ...current.closes] }) })
+    const queuedAt = new Date().toISOString()
+    const expected = commerceCloseExpectation(commerce, queuedAt)
+    if (!expected) {
+      setNotice(legacyCloseNeedsMigration
+        ? 'Legacy close history must be migrated before another daily close can be saved.'
+        : 'This business date already has a close. Review the latest snapshot instead of closing it again.')
+      return
+    }
+    const closeId = uid('CLOSE')
+    const paymentExceptions = expected.paymentExceptionOrderIds.length ? expected.paymentExceptionOrderIds.join(', ') : 'none'
+    const stockExceptions = expected.stockExceptionSkus.length ? expected.stockExceptionSkus.join(', ') : 'none'
+    queueAction({
+      kind: 'daily_close',
+      subjectId: closeId,
+      summary: `Close ${expected.businessDate}`,
+      before: `${commerce.closes.length} snapshots`,
+      after: `${expected.orderIds.length} orders (${expected.orderIds.length ? expected.orderIds.join(', ') : 'none'}) · ${formatMoney(expected.total)} · payment exceptions: ${paymentExceptions} · stock exceptions: ${stockExceptions}`,
+      apply: (action) => mutateCommerce(
+        'commerce.close.saved',
+        action.commandId,
+        commerceActionProof(action),
+        (current) => saveCommerceClose(current, closeId, commerceActionProof(action), expected),
+      ),
+    })
   }
 
   const actionGate = <AccountableActionGate authenticatedActor={managedIdentity ? { id: managedIdentity.userId, label: managedIdentity.email } : undefined} key={pendingAction?.id ?? 'commerce-idle'} action={pendingAction} onCancel={() => setPendingAction(null)} onConfirm={confirmAction} returnFocus={actionTrigger} />
@@ -2072,8 +2099,14 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
     <div className="today-more-content">
       <div className="exception-summary"><span><strong>{paymentReview.length}</strong><small>payment review</small></span><span><strong>{lowStock.length}</strong><small>reorder boundaries</small></span></div>
       <div className="boundary-list">{lowStock.map((item) => <Link key={item.sku} to="/operations/commerce/?tab=inventory"><strong>{item.name}</strong><small>{item.onHand} on hand</small></Link>)}</div>
-      <button className="core-button" disabled={commerceControlsDisabled} onClick={closeDay} type="button">Save daily close</button>
+      <p className="form-notice">Orders ready: {closePreview?.orderIds.length ? closePreview.orderIds.join(', ') : 'none'} · Payment exceptions: {paymentReview.length ? paymentReview.map((order) => order.id).join(', ') : 'none'} · Stock exceptions: {lowStock.length ? lowStock.map((item) => item.sku).join(', ') : 'none'}</p>
+      <button className="core-button" disabled={commerceControlsDisabled || !closePreview} onClick={closeDay} type="button">{closePreview ? 'Save daily close' : legacyCloseNeedsMigration ? 'Close history needs migration' : 'Today is closed'}</button>
       <p className="form-notice" aria-live="polite">{`${closableOrders.length} completed, reconciled orders · ${formatMoney(reconciledValue)} ready to close.`}</p>
+      {latestClose?.operator ? <details className="compact-disclosure">
+        <summary><span>Last close · {latestClose.businessDate}</span><small>{latestClose.orders} orders · {formatMoney(latestClose.total)}</small></summary>
+        <p className="form-notice">{latestClose.operator} · {formatTime(latestClose.createdAt)} · evidence {latestClose.evidenceReference}</p>
+        <p className="form-notice">Orders: {latestClose.orderIds?.length ? latestClose.orderIds.join(', ') : 'none'} · Payment exceptions: {latestClose.paymentExceptionOrderIds?.length ? latestClose.paymentExceptionOrderIds.join(', ') : 'none'} · Stock exceptions: {latestClose.stockExceptionSkus?.length ? latestClose.stockExceptionSkus.join(', ') : 'none'}</p>
+      </details> : null}
       <ClosedOrderHistory orders={closedOrders} />
       {actionHistory}
     </div>

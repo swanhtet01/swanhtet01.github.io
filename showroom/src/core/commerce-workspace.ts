@@ -54,6 +54,30 @@ export type CommerceStockMovement = {
   orderId?: string
 }
 
+export type CommerceClose = {
+  id: string
+  createdAt: string
+  total: number
+  orders: number
+  businessDate?: string
+  orderIds?: string[]
+  paymentExceptionOrderIds?: string[]
+  stockExceptionSkus?: string[]
+  actionId?: string
+  operator?: string
+  reason?: string
+  evidenceReference?: string
+}
+
+export type CommerceCloseExpectation = {
+  businessDate: string
+  orderIds: string[]
+  total: number
+  paymentExceptionOrderIds: string[]
+  stockExceptionSkus: string[]
+  stateSnapshot: string
+}
+
 export type CommerceWebsiteSource = {
   fingerprint: string
   approvalId: string
@@ -85,7 +109,7 @@ export type CommerceState = {
   items: CommerceItem[]
   orders: CommerceOrder[]
   movements: CommerceStockMovement[]
-  closes: Array<{ id: string; createdAt: string; total: number; orders: number }>
+  closes: CommerceClose[]
   websiteIntakes?: CommerceWebsiteIntake[]
 }
 
@@ -135,8 +159,13 @@ const paymentStatuses: CommercePaymentStatus[] = ['pending', 'reconciled']
 const refundStatuses: CommerceRefundStatus[] = ['none', 'due']
 const movementKinds: CommerceStockMovementKind[] = ['opening', 'reserve', 'release', 'receipt']
 const websiteIntakeStatuses: CommerceWebsiteIntakeStatus[] = ['pending_confirmation', 'converted']
+const closeSnapshotFields = ['businessDate', 'orderIds', 'paymentExceptionOrderIds', 'stockExceptionSkus', 'actionId', 'operator', 'reason', 'evidenceReference'] as const
 const websiteIntakeIdPattern = /^WINT-[A-Z0-9-]{8,80}$/
 const websiteFingerprintPattern = /^web-[a-f0-9]{8}$/
+const closeIdPattern = /^CLOSE-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
+const closeActionIdPattern = /^ACT-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
+const businessDatePattern = /^\d{4}-\d{2}-\d{2}$/
+const myanmarUtcOffsetMs = (6 * 60 + 30) * 60 * 1000
 const deterministicSeedNow = Date.parse('2026-07-23T08:00:00.000Z')
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -173,6 +202,10 @@ function assertUnique(values: string[], field: string) {
   if (new Set(values).size !== values.length) throw new Error(`${field} values must be unique.`)
 }
 
+function sameStringArray(left: string[], right: string[]) {
+  return left.length === right.length && left.every((value, index) => value === right[index])
+}
+
 function hasExactKeys(value: Record<string, unknown>, required: string[], optional: string[] = []) {
   const fields = Object.keys(value)
   return required.every((field) => fields.includes(field))
@@ -185,6 +218,18 @@ function sameProof(movement: CommerceStockMovement, proof: CommerceActionProof) 
     && movement.actor === proof.actor
     && movement.reason === proof.reason
     && movement.evidenceReference === proof.evidenceReference
+}
+
+function myanmarBusinessDate(timestamp: string) {
+  return new Date(Date.parse(timestamp) + myanmarUtcOffsetMs).toISOString().slice(0, 10)
+}
+
+function sameCloseProof(close: CommerceClose, proof: CommerceActionProof) {
+  return close.actionId === proof.actionId
+    && close.createdAt === proof.capturedAt
+    && close.operator === proof.actor
+    && close.reason === proof.reason
+    && close.evidenceReference === proof.evidenceReference
 }
 
 function validProof(proof: CommerceActionProof) {
@@ -254,6 +299,9 @@ export function validateCommerceState(value: unknown): CommerceState {
   const movementIds: string[] = []
   const movementActionIds: string[] = []
   const reconciliationActionIds: string[] = []
+  const closeActionIds: string[] = []
+  const closeBusinessDates: string[] = []
+  const closedOrderIds: string[] = []
   const websiteIntakeCreationActionIds: string[] = []
   const websiteIntakeConversionActionIds: string[] = []
 
@@ -342,13 +390,59 @@ export function validateCommerceState(value: unknown): CommerceState {
 
   const closeIds: string[] = []
   for (const [index, candidate] of closes.entries()) {
-    if (!isRecord(candidate)) throw new Error(`closes[${index}] is invalid.`)
+    if (!isRecord(candidate) || !hasExactKeys(
+      candidate,
+      ['id', 'createdAt', 'total', 'orders'],
+      [...closeSnapshotFields],
+    )) throw new Error(`closes[${index}] is invalid.`)
     closeIds.push(requiredText(candidate.id, `closes[${index}].id`))
     if (!validTimestamp(candidate.createdAt)) throw new Error(`closes[${index}].createdAt is invalid.`)
     assertSafeInteger(candidate.total, `closes[${index}].total`)
     assertSafeInteger(candidate.orders, `closes[${index}].orders`)
+    const presentSnapshotFields = closeSnapshotFields.filter((field) => candidate[field] !== undefined)
+    if (presentSnapshotFields.length && presentSnapshotFields.length !== closeSnapshotFields.length) {
+      throw new Error(`closes[${index}] has incomplete exception and operator evidence.`)
+    }
+    if (presentSnapshotFields.length) {
+      if (!Array.isArray(candidate.orderIds) || !Array.isArray(candidate.paymentExceptionOrderIds) || !Array.isArray(candidate.stockExceptionSkus)) {
+        throw new Error(`closes[${index}] exception references must be arrays.`)
+      }
+      const businessDate = canonicalText(candidate.businessDate, `closes[${index}].businessDate`, 10)
+      const orderIdsForClose = candidate.orderIds.map((value, referenceIndex) => canonicalText(value, `closes[${index}].orderIds[${referenceIndex}]`, 160))
+      const paymentExceptionOrderIds = candidate.paymentExceptionOrderIds.map((value, referenceIndex) => canonicalText(value, `closes[${index}].paymentExceptionOrderIds[${referenceIndex}]`, 160))
+      const stockExceptionSkus = candidate.stockExceptionSkus.map((value, referenceIndex) => canonicalText(value, `closes[${index}].stockExceptionSkus[${referenceIndex}]`, 80))
+      if (!businessDatePattern.test(businessDate) || businessDate !== myanmarBusinessDate(String(candidate.createdAt))) throw new Error(`closes[${index}].businessDate must match its Myanmar close date.`)
+      assertUnique(orderIdsForClose, `closes[${index}] order ID`)
+      assertUnique(paymentExceptionOrderIds, `closes[${index}] payment exception order ID`)
+      assertUnique(stockExceptionSkus, `closes[${index}] stock exception SKU`)
+      if (orderIdsForClose.some((orderId) => !orderIds.includes(orderId))) throw new Error(`closes[${index}] references an unknown closed order.`)
+      if (paymentExceptionOrderIds.some((orderId) => !orderIds.includes(orderId))) throw new Error(`closes[${index}] references an unknown payment exception order.`)
+      if (stockExceptionSkus.some((sku) => !itemSkus.includes(sku))) throw new Error(`closes[${index}] references an unknown stock exception SKU.`)
+      if (!sameStringArray(orderIdsForClose, [...orderIdsForClose].sort())
+        || !sameStringArray(paymentExceptionOrderIds, [...paymentExceptionOrderIds].sort())
+        || !sameStringArray(stockExceptionSkus, [...stockExceptionSkus].sort())) {
+        throw new Error(`closes[${index}] exception references must be sorted.`)
+      }
+      const memberOrders = orderIdsForClose.map((orderId) => orderById.get(orderId) as Record<string, unknown>)
+      if (memberOrders.some((order) => order.status !== 'completed' || order.paymentStatus !== 'reconciled')
+        || candidate.orders !== orderIdsForClose.length
+        || candidate.total !== memberOrders.reduce((sum, order) => sum + Number(order.total), 0)) {
+        throw new Error(`closes[${index}] totals must match its completed, reconciled order membership.`)
+      }
+      if (!closeIdPattern.test(String(candidate.id))) throw new Error(`closes[${index}].id must be a full close UUID.`)
+      const actionId = canonicalText(candidate.actionId, `closes[${index}].actionId`, 160)
+      if (!closeActionIdPattern.test(actionId)) throw new Error(`closes[${index}].actionId must be a full action UUID.`)
+      closeActionIds.push(actionId)
+      closeBusinessDates.push(businessDate)
+      closedOrderIds.push(...orderIdsForClose)
+      canonicalText(candidate.operator, `closes[${index}].operator`)
+      canonicalText(candidate.reason, `closes[${index}].reason`)
+      canonicalText(candidate.evidenceReference, `closes[${index}].evidenceReference`)
+    }
   }
   assertUnique(closeIds, 'Daily close ID')
+  assertUnique(closeBusinessDates, 'Daily close business date')
+  assertUnique(closedOrderIds, 'Closed order ID')
 
   const intakeIds: string[] = []
   const intakeSources: string[] = []
@@ -428,7 +522,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   assertUnique(intakeIds, 'Website intake ID')
   assertUnique(intakeSources, 'Website intake source')
   assertUnique(websiteIntakeConversionActionIds, 'Website intake conversion action ID')
-  assertUnique([...movementActionIds, ...reconciliationActionIds, ...websiteIntakeCreationActionIds], 'Commerce action ID')
+  assertUnique([...movementActionIds, ...reconciliationActionIds, ...websiteIntakeCreationActionIds, ...closeActionIds], 'Commerce action ID')
   return value as CommerceState
 }
 
@@ -614,6 +708,7 @@ function movementFor(proof: CommerceActionProof, input: Omit<CommerceStockMoveme
 function actionIdIsUsed(state: CommerceState, actionId: string) {
   return state.movements.some((movement) => movement.actionId === actionId)
     || state.orders.some((order) => order.paymentReconciliationActionId === actionId)
+    || state.closes.some((close) => close.actionId === actionId)
     || commerceWebsiteIntakes(state).some((intake) => intake.creation.actionId === actionId || intake.conversion?.actionId === actionId)
 }
 
@@ -924,6 +1019,80 @@ export function reconcileCommercePayment(state: CommerceState, orderId: string, 
       paymentEvidenceReference: proof.evidenceReference,
     } : candidate),
   })
+}
+
+function sameCloseExpectation(left: CommerceCloseExpectation, right: CommerceCloseExpectation) {
+  return left.businessDate === right.businessDate
+    && left.total === right.total
+    && left.stateSnapshot === right.stateSnapshot
+    && sameStringArray(left.orderIds, right.orderIds)
+    && sameStringArray(left.paymentExceptionOrderIds, right.paymentExceptionOrderIds)
+    && sameStringArray(left.stockExceptionSkus, right.stockExceptionSkus)
+}
+
+export function commerceCloseExpectation(state: CommerceState, capturedAt: string): CommerceCloseExpectation | null {
+  if (!validTimestamp(capturedAt)) return null
+  const current = validateCommerceState(state)
+  if (current.closes.some((close) => !close.orderIds || !close.businessDate)) return null
+  const businessDate = myanmarBusinessDate(capturedAt)
+  if (current.closes.some((close) => close.businessDate === businessDate)) return null
+  const previouslyClosedOrderIds = new Set(current.closes.flatMap((close) => close.orderIds ?? []))
+  const orderIds = current.orders
+    .filter((order) => order.status === 'completed'
+      && order.paymentStatus === 'reconciled'
+      && !previouslyClosedOrderIds.has(order.id))
+    .map((order) => order.id)
+    .sort()
+  const total = orderIds.reduce((sum, orderId) => sum + (current.orders.find((order) => order.id === orderId)?.total ?? 0), 0)
+  if (!Number.isSafeInteger(total)) return null
+  return {
+    businessDate,
+    orderIds,
+    total,
+    paymentExceptionOrderIds: current.orders
+      .filter((order) => order.refundStatus === 'due' || (order.status !== 'cancelled' && order.paymentStatus === 'pending'))
+      .map((order) => order.id)
+      .sort(),
+    stockExceptionSkus: current.items
+      .filter((item) => item.onHand <= item.reorderAt)
+      .map((item) => item.sku)
+      .sort(),
+    stateSnapshot: JSON.stringify(current),
+  }
+}
+
+export function saveCommerceClose(
+  state: CommerceState,
+  closeId: string,
+  proof: CommerceActionProof,
+  expected: CommerceCloseExpectation,
+) {
+  if (!validProof(proof)
+    || !validTimestamp(proof.capturedAt)
+    || [proof.actionId, proof.actor, proof.reason, proof.evidenceReference].some((value) => value !== value.trim())
+    || !closeActionIdPattern.test(proof.actionId)
+    || !closeIdPattern.test(closeId)) return null
+  const current = validateCommerceState(state)
+  const existing = current.closes.find((close) => close.id === closeId)
+  if (existing) return sameCloseProof(existing, proof) ? current : null
+  if (actionIdIsUsed(current, proof.actionId)) return null
+  const actual = commerceCloseExpectation(current, proof.capturedAt)
+  if (!actual || !expected || !sameCloseExpectation(actual, expected)) return null
+  const close: CommerceClose = {
+    id: closeId,
+    createdAt: proof.capturedAt,
+    total: actual.total,
+    orders: actual.orderIds.length,
+    businessDate: actual.businessDate,
+    orderIds: actual.orderIds,
+    paymentExceptionOrderIds: actual.paymentExceptionOrderIds,
+    stockExceptionSkus: actual.stockExceptionSkus,
+    actionId: proof.actionId,
+    operator: proof.actor,
+    reason: proof.reason,
+    evidenceReference: proof.evidenceReference,
+  }
+  return validateCommerceState({ ...current, closes: [close, ...current.closes] })
 }
 
 export function advanceCommerceOrder(state: CommerceState, orderId: string, expectedStatus: CommerceOrderStatus) {

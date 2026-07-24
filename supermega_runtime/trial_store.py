@@ -5,7 +5,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 import json
 from threading import RLock
@@ -390,6 +390,44 @@ class TrialStore(Protocol):
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _myanmar_business_date(timestamp: str) -> str:
+    parsed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    return (
+        parsed.astimezone(timezone.utc) + timedelta(hours=6, minutes=30)
+    ).date().isoformat()
+
+
+def _authoritative_command_payload(
+    payload: Mapping[str, Any],
+    *,
+    principal: TrialPrincipal,
+    surface: str,
+    event_type: str,
+    captured_at: str,
+) -> JsonObject:
+    authoritative = deepcopy(dict(payload))
+    if surface != "commerce" or event_type != "commerce.close.saved":
+        return authoritative
+    evidence = authoritative.get("evidence")
+    state = authoritative.get("state")
+    closes = state.get("closes") if isinstance(state, Mapping) else None
+    if not isinstance(evidence, Mapping) or not isinstance(state, Mapping) or not isinstance(closes, list) or not closes or not isinstance(closes[0], Mapping):
+        return authoritative
+    authoritative_evidence = dict(evidence)
+    authoritative_evidence["actor"] = principal.actor_id
+    authoritative_evidence["capturedAt"] = captured_at
+    authoritative_close = dict(closes[0])
+    authoritative_close["operator"] = principal.actor_id
+    authoritative_close["createdAt"] = captured_at
+    authoritative_close["businessDate"] = _myanmar_business_date(captured_at)
+    authoritative_closes = [authoritative_close, *deepcopy(closes[1:])]
+    authoritative_state = dict(state)
+    authoritative_state["closes"] = authoritative_closes
+    authoritative["evidence"] = authoritative_evidence
+    authoritative["state"] = authoritative_state
+    return authoritative
 
 
 def _normalize_uuid(value: str | UUID, *, field_name: str) -> str:
@@ -1225,12 +1263,27 @@ class PostgresTrialStore:
                         for related_surface in related_surface_values
                     },
                 )
+            now = _utc_now()
+            authoritative_payload = _json_object(
+                _authoritative_command_payload(
+                    payload_value,
+                    principal=normalized,
+                    surface=surface_value,
+                    event_type=event_type_value,
+                    captured_at=now,
+                ),
+                field_name="authoritative payload",
+            )
             next_state = _json_object(
-                self.reducer(surface_value, event_type_value, deepcopy(current_state), deepcopy(payload_value)),
+                self.reducer(
+                    surface_value,
+                    event_type_value,
+                    deepcopy(current_state),
+                    deepcopy(authoritative_payload),
+                ),
                 field_name="reduced state",
             )
             next_version = current_version + 1
-            now = _utc_now()
             if row:
                 cursor.execute(
                     """
@@ -1289,7 +1342,7 @@ class PostgresTrialStore:
                     normalized.actor_kind,
                     int(expected_version),
                     next_version,
-                    json.dumps(payload_value, ensure_ascii=False),
+                    json.dumps(authoritative_payload, ensure_ascii=False),
                     json.dumps(result, ensure_ascii=False),
                     now,
                 ),
@@ -1713,8 +1766,24 @@ class InMemoryTrialStore:
                         for related_surface in related_surface_values
                     },
                 )
+            now = _utc_now()
+            authoritative_payload = _json_object(
+                _authoritative_command_payload(
+                    payload_value,
+                    principal=normalized,
+                    surface=surface_value,
+                    event_type=event_type_value,
+                    captured_at=now,
+                ),
+                field_name="authoritative payload",
+            )
             next_state = _json_object(
-                self.reducer(surface_value, event_type_value, deepcopy(current.state), deepcopy(payload_value)),
+                self.reducer(
+                    surface_value,
+                    event_type_value,
+                    deepcopy(current.state),
+                    deepcopy(authoritative_payload),
+                ),
                 field_name="reduced state",
             )
             next_version = current.version + 1
@@ -1724,7 +1793,7 @@ class InMemoryTrialStore:
                 version=next_version,
                 state=deepcopy(next_state),
                 updated_by=normalized.actor_id,
-                updated_at=_utc_now(),
+                updated_at=now,
             )
             result = CommandResult(
                 command_id=command_id_value,

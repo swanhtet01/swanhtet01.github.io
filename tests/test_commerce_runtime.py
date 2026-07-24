@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import datetime, timedelta, timezone
 import unittest
 from uuid import uuid4
 
-from supermega_runtime.commerce_runtime import COMMERCE_HUMAN_EVENTS
+from supermega_runtime.commerce_runtime import COMMERCE_HUMAN_EVENTS, validate_commerce_state
 from supermega_runtime.runtime import reduce_trial_state
 from supermega_runtime.trial_store import InMemoryTrialStore, TrialPrincipal, TrialValidationError
 
@@ -12,6 +13,19 @@ from supermega_runtime.trial_store import InMemoryTrialStore, TrialPrincipal, Tr
 NOW = "2026-07-23T09:00:00.000Z"
 CONVERTED_AT = "2026-07-23T09:15:00.000Z"
 WEBSITE_INTAKE_ID = "WINT-12345678"
+CLOSE_ACTION_ID = "ACT-00000000-0000-4000-8000-000000000001"
+CLOSE_ID = "CLOSE-00000000-0000-4000-8000-000000000001"
+CLOSE_ACTION_ID_2 = "ACT-00000000-0000-4000-8000-000000000002"
+CLOSE_ID_2 = "CLOSE-00000000-0000-4000-8000-000000000002"
+CLOSE_ACTION_ID_3 = "ACT-00000000-0000-4000-8000-000000000003"
+CLOSE_ID_3 = "CLOSE-00000000-0000-4000-8000-000000000003"
+
+
+def myanmar_business_date(timestamp: str) -> str:
+    parsed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    return (
+        parsed.astimezone(timezone.utc) + timedelta(hours=6, minutes=30)
+    ).date().isoformat()
 
 
 def catalog_state() -> dict[str, object]:
@@ -82,6 +96,54 @@ def action_evidence(action_id: str = "ACT-LIFECYCLE", *, captured_at: str = NOW)
         "actor": "Accountable operator",
         "reason": "Verified against the source record.",
         "evidenceReference": f"EV-{action_id}",
+    }
+
+
+def close_record(
+    state: dict[str, object],
+    action_id: str = CLOSE_ACTION_ID,
+    *,
+    close_id: str | None = None,
+    captured_at: str = NOW,
+) -> dict[str, object]:
+    evidence = action_evidence(action_id, captured_at=captured_at)
+    orders = state["orders"]
+    items = state["items"]
+    closes = state["closes"]
+    previously_closed_order_ids = {
+        order_id
+        for close in closes  # type: ignore[union-attr]
+        for order_id in close.get("orderIds", [])
+    }
+    eligible = [
+        order
+        for order in orders  # type: ignore[union-attr]
+        if order["status"] == "completed" and order["paymentStatus"] == "reconciled"
+        and order["id"] not in previously_closed_order_ids
+    ]
+    eligible.sort(key=lambda order: order["id"])
+    return {
+        "id": close_id or f"CLOSE-{action_id.removeprefix('ACT-')}",
+        "createdAt": evidence["capturedAt"],
+        "total": sum(order["total"] for order in eligible),
+        "orders": len(eligible),
+        "businessDate": myanmar_business_date(evidence["capturedAt"]),
+        "orderIds": [order["id"] for order in eligible],
+        "paymentExceptionOrderIds": sorted(
+            order["id"]
+            for order in orders  # type: ignore[union-attr]
+            if order["refundStatus"] == "due"
+            or (order["status"] != "cancelled" and order["paymentStatus"] == "pending")
+        ),
+        "stockExceptionSkus": sorted(
+            item["sku"]
+            for item in items  # type: ignore[union-attr]
+            if item["onHand"] <= item["reorderAt"]
+        ),
+        "actionId": evidence["actionId"],
+        "operator": evidence["actor"],
+        "reason": evidence["reason"],
+        "evidenceReference": evidence["evidenceReference"],
     }
 
 
@@ -191,6 +253,15 @@ def evidence_for(event_type: str, next_state: dict[str, object]) -> dict[str, st
             "actor": order["paymentReconciledBy"],
             "reason": order["paymentReconciliationReason"],
             "evidenceReference": order["paymentEvidenceReference"],
+        }
+    if event_type == "commerce.close.saved":
+        close = next_state["closes"][0]  # type: ignore[index]
+        return {
+            "actionId": close["actionId"],
+            "capturedAt": close["createdAt"],
+            "actor": close["operator"],
+            "reason": close["reason"],
+            "evidenceReference": close["evidenceReference"],
         }
     return action_evidence()
 
@@ -503,14 +574,158 @@ class CommerceRuntimeTests(unittest.TestCase):
         current = apply_event(current, "commerce.order.advanced", completed)
 
         closed = deepcopy(current)
-        closed["closes"] = [{"id": "CLOSE-1", "createdAt": NOW, "total": 200, "orders": 1}]
+        closed["closes"] = [close_record(current)]
         result = apply_event(current, "commerce.close.saved", closed)
         self.assertEqual(result["closes"][0]["total"], 200)  # type: ignore[index]
+        self.assertEqual(result["closes"][0]["operator"], "Accountable operator")  # type: ignore[index]
+        self.assertEqual(result["closes"][0]["businessDate"], "2026-07-23")  # type: ignore[index]
+        self.assertEqual(result["closes"][0]["orderIds"], ["ORD-1"])  # type: ignore[index]
+        self.assertEqual(result["closes"][0]["paymentExceptionOrderIds"], [])  # type: ignore[index]
 
         wrong_close = deepcopy(current)
-        wrong_close["closes"] = [{"id": "CLOSE-2", "createdAt": NOW, "total": 100, "orders": 1}]
+        invalid_close = close_record(current, CLOSE_ACTION_ID_2, close_id=CLOSE_ID_2)
+        invalid_close["total"] = 100
+        wrong_close["closes"] = [invalid_close]
         with self.assertRaises(TrialValidationError):
             apply_event(current, "commerce.close.saved", wrong_close)
+
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "commerce.close.saved",
+                closed,
+                action_evidence("ACT-CLOSE-OTHER"),
+            )
+
+        same_period = deepcopy(result)
+        same_period["closes"] = [
+            close_record(result, CLOSE_ACTION_ID_3, close_id=CLOSE_ID_3),
+            *result["closes"],  # type: ignore[union-attr]
+        ]
+        with self.assertRaises(TrialValidationError):
+            apply_event(result, "commerce.close.saved", same_period)
+
+        next_day_close = close_record(
+            result,
+            CLOSE_ACTION_ID_3,
+            close_id=CLOSE_ID_3,
+            captured_at="2026-07-24T09:00:00.000Z",
+        )
+        self.assertEqual(next_day_close["orderIds"], [])
+        duplicated_membership = deepcopy(result)
+        duplicated_close = deepcopy(next_day_close)
+        duplicated_close.update({"orderIds": ["ORD-1"], "orders": 1, "total": 200})
+        duplicated_membership["closes"] = [
+            duplicated_close,
+            *result["closes"],  # type: ignore[union-attr]
+        ]
+        with self.assertRaises(TrialValidationError):
+            apply_event(result, "commerce.close.saved", duplicated_membership)
+
+        next_day = deepcopy(result)
+        next_day["closes"] = [
+            next_day_close,
+            *result["closes"],  # type: ignore[union-attr]
+        ]
+        accepted_next_day = apply_event(result, "commerce.close.saved", next_day)
+        self.assertEqual(accepted_next_day["closes"][0]["orders"], 0)  # type: ignore[index]
+        self.assertEqual(accepted_next_day["closes"][1]["orderIds"], ["ORD-1"])  # type: ignore[index]
+
+    def test_daily_close_snapshots_exact_exceptions_and_legacy_records_still_load(self) -> None:
+        current = created_state("ORD-EXCEPTION")
+        current["items"][0]["reorderAt"] = 8  # type: ignore[index]
+        close = close_record(current, CLOSE_ACTION_ID_2, close_id=CLOSE_ID_2)
+        self.assertEqual(close["paymentExceptionOrderIds"], ["ORD-EXCEPTION"])
+        self.assertEqual(close["stockExceptionSkus"], ["SKU-1"])
+
+        next_state = deepcopy(current)
+        next_state["closes"] = [close]
+        accepted = apply_event(current, "commerce.close.saved", next_state)
+        self.assertEqual(accepted["closes"][0]["orderIds"], [])  # type: ignore[index]
+        self.assertEqual(accepted["closes"][0]["paymentExceptionOrderIds"], ["ORD-EXCEPTION"])  # type: ignore[index]
+        self.assertEqual(accepted["closes"][0]["stockExceptionSkus"], ["SKU-1"])  # type: ignore[index]
+
+        wrong_payment_exceptions = deepcopy(next_state)
+        wrong_payment_exceptions["closes"][0]["paymentExceptionOrderIds"] = []  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(current, "commerce.close.saved", wrong_payment_exceptions)
+
+        short_ids = deepcopy(next_state)
+        short_ids["closes"][0].update(  # type: ignore[index]
+            {"id": "CLOSE-SHORT", "actionId": "ACT-SHORT"}
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "commerce.close.saved",
+                short_ids,
+                action_evidence("ACT-SHORT"),
+            )
+
+        incomplete_proof = deepcopy(next_state)
+        del incomplete_proof["closes"][0]["operator"]  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "commerce.close.saved",
+                incomplete_proof,
+                action_evidence(CLOSE_ACTION_ID_2),
+            )
+
+        legacy = catalog_state()
+        legacy["closes"] = [
+            {"id": "CLOSE-LEGACY", "createdAt": NOW, "total": 0, "orders": 0}
+        ]
+        self.assertEqual(
+            validate_commerce_state(legacy)["closes"],
+            legacy["closes"],
+        )
+        legacy_received = deepcopy(legacy)
+        legacy_received["items"][0]["onHand"] = 11  # type: ignore[index]
+        legacy_received["movements"] = [
+            movement("receipt", "ACT-LEGACY-RECEIPT", 1)
+        ]
+        accepted_legacy_receipt = apply_event(
+            legacy,
+            "commerce.stock.received",
+            legacy_received,
+        )
+        self.assertEqual(
+            accepted_legacy_receipt["closes"],
+            legacy["closes"],
+        )
+        legacy_with_proven_close = deepcopy(accepted_legacy_receipt)
+        legacy_with_proven_close["closes"] = [
+            close_record(
+                accepted_legacy_receipt,
+                CLOSE_ACTION_ID_3,
+                close_id=CLOSE_ID_3,
+            ),
+            *accepted_legacy_receipt["closes"],  # type: ignore[union-attr]
+        ]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                accepted_legacy_receipt,
+                "commerce.close.saved",
+                legacy_with_proven_close,
+            )
+
+        boundary_state = catalog_state()
+        boundary_close = close_record(
+            boundary_state,
+            CLOSE_ACTION_ID_3,
+            close_id=CLOSE_ID_3,
+            captured_at="2026-07-23T20:00:00.000Z",
+        )
+        self.assertEqual(boundary_close["businessDate"], "2026-07-24")
+        boundary_next = deepcopy(boundary_state)
+        boundary_next["closes"] = [boundary_close]
+        accepted_boundary = apply_event(
+            boundary_state,
+            "commerce.close.saved",
+            boundary_next,
+        )
+        self.assertEqual(accepted_boundary["closes"][0]["businessDate"], "2026-07-24")  # type: ignore[index]
 
     def test_cancellation_releases_once_and_preserves_refund_exception(self) -> None:
         current = created_state("ORD-CANCEL")
@@ -581,6 +796,111 @@ class CommerceRuntimeTests(unittest.TestCase):
         stored = store.get_state(principal, "commerce")
         self.assertEqual(stored.updated_by, principal.actor_id)
         self.assertEqual(stored.state, created_state())
+
+        preparing_state = deepcopy(created.state)
+        preparing_state["orders"][0]["status"] = "preparing"  # type: ignore[index]
+        preparing = store.apply_command(
+            principal,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.order.advanced",
+            expected_version=created.version,
+            payload={
+                "state": preparing_state,
+                "evidence": action_evidence("ACT-STORE-PREPARING"),
+            },
+        )
+        reconciled_state = deepcopy(preparing.state)
+        reconciled_state["orders"][0].update(  # type: ignore[index]
+            {
+                "paymentStatus": "reconciled",
+                "paymentReconciledAt": NOW,
+                "paymentReconciliationActionId": "ACT-STORE-PAYMENT",
+                "paymentReconciledBy": "Accountable operator",
+                "paymentReconciliationReason": "Matched the settlement record.",
+                "paymentEvidenceReference": "EV-STORE-PAYMENT",
+            }
+        )
+        reconciled = store.apply_command(
+            principal,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.payment.reconciled",
+            expected_version=preparing.version,
+            payload={
+                "state": reconciled_state,
+                "evidence": evidence_for(
+                    "commerce.payment.reconciled",
+                    reconciled_state,
+                ),
+            },
+        )
+        ready_state = deepcopy(reconciled.state)
+        ready_state["orders"][0]["status"] = "ready"  # type: ignore[index]
+        ready = store.apply_command(
+            principal,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.order.advanced",
+            expected_version=reconciled.version,
+            payload={
+                "state": ready_state,
+                "evidence": action_evidence("ACT-STORE-READY"),
+            },
+        )
+        completed_state = deepcopy(ready.state)
+        completed_state["orders"][0]["status"] = "completed"  # type: ignore[index]
+        completed = store.apply_command(
+            principal,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.order.advanced",
+            expected_version=ready.version,
+            payload={
+                "state": completed_state,
+                "evidence": action_evidence("ACT-STORE-COMPLETED"),
+            },
+        )
+        forged_close_state = deepcopy(completed.state)
+        forged_close = close_record(
+            completed.state,
+            CLOSE_ACTION_ID,
+            close_id=CLOSE_ID,
+            captured_at="2099-01-01T00:00:00.000Z",
+        )
+        forged_close["operator"] = "Fabricated CFO"
+        forged_close_state["closes"] = [forged_close]
+        forged_payload = {
+            "state": forged_close_state,
+            "evidence": evidence_for("commerce.close.saved", forged_close_state),
+        }
+        close_command_id = str(uuid4())
+        closed = store.apply_command(
+            principal,
+            command_id=close_command_id,
+            surface="commerce",
+            event_type="commerce.close.saved",
+            expected_version=completed.version,
+            payload=forged_payload,
+        )
+        close_replay = store.apply_command(
+            principal,
+            command_id=close_command_id,
+            surface="commerce",
+            event_type="commerce.close.saved",
+            expected_version=completed.version,
+            payload=forged_payload,
+        )
+        authoritative_close = closed.state["closes"][0]  # type: ignore[index]
+        self.assertEqual(authoritative_close["operator"], principal.actor_id)
+        self.assertNotEqual(authoritative_close["createdAt"], "2099-01-01T00:00:00.000Z")
+        self.assertEqual(
+            authoritative_close["businessDate"],
+            myanmar_business_date(authoritative_close["createdAt"]),
+        )
+        self.assertEqual(authoritative_close["orderIds"], ["ORD-1"])
+        self.assertTrue(close_replay.idempotent_replay)
+        self.assertEqual(close_replay.state, closed.state)
 
     def test_unknown_fields_and_legacy_snapshot_event_fail_closed(self) -> None:
         invalid = catalog_state()

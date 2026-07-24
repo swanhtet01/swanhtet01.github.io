@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from supermega_runtime.trial_store import TrialValidationError
@@ -91,7 +91,26 @@ _RECONCILIATION_FIELDS = frozenset(
 _MOVEMENT_FIELDS = frozenset(
     {"id", "actionId", "createdAt", "actor", "reason", "evidenceReference", "kind", "sku", "quantityDelta", "orderId"}
 )
-_CLOSE_FIELDS = frozenset({"id", "createdAt", "total", "orders"})
+_CLOSE_REQUIRED_FIELDS = frozenset({"id", "createdAt", "total", "orders"})
+_CLOSE_SNAPSHOT_FIELDS = frozenset(
+    {
+        "businessDate",
+        "orderIds",
+        "paymentExceptionOrderIds",
+        "stockExceptionSkus",
+        "actionId",
+        "operator",
+        "reason",
+        "evidenceReference",
+    }
+)
+_CLOSE_ID_PATTERN = re.compile(
+    r"^CLOSE-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$"
+)
+_CLOSE_ACTION_ID_PATTERN = re.compile(
+    r"^ACT-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$"
+)
+_BUSINESS_DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _EVIDENCE_FIELDS = frozenset({"actionId", "capturedAt", "actor", "reason", "evidenceReference"})
 _WEBSITE_SOURCE_FIELDS = frozenset({"fingerprint", "approvalId", "snapshotId", "pageId", "siteName", "pagePath"})
 _WEBSITE_INTAKE_REQUIRED_FIELDS = frozenset(
@@ -140,6 +159,13 @@ def _timestamp(value: object, field: str) -> str:
     if parsed.tzinfo is None:
         raise TrialValidationError(f"{field} must include a timezone.")
     return timestamp
+
+
+def _myanmar_business_date(timestamp: str) -> str:
+    parsed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    return (
+        parsed.astimezone(timezone.utc) + timedelta(hours=6, minutes=30)
+    ).date().isoformat()
 
 
 def _integer(value: object, field: str, *, minimum: int = 0) -> int:
@@ -321,14 +347,109 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             raise TrialValidationError(f"{order_id} has an unproven stock release.")
 
     close_ids: list[str] = []
+    close_action_ids: list[str] = []
+    close_business_dates: list[str] = []
+    closed_order_ids: list[str] = []
     for index, candidate in enumerate(closes):
         close = _object(candidate, f"closes[{index}]")
-        _exact_fields(close, f"closes[{index}]", required=_CLOSE_FIELDS)
+        _exact_fields(
+            close,
+            f"closes[{index}]",
+            required=_CLOSE_REQUIRED_FIELDS,
+            optional=_CLOSE_SNAPSHOT_FIELDS,
+        )
         close_ids.append(_text(close["id"], f"closes[{index}].id", maximum=160))
         _timestamp(close["createdAt"], f"closes[{index}].createdAt")
         _integer(close["total"], f"closes[{index}].total")
         _integer(close["orders"], f"closes[{index}].orders")
+        present_snapshot_fields = set(close) & _CLOSE_SNAPSHOT_FIELDS
+        if present_snapshot_fields and present_snapshot_fields != _CLOSE_SNAPSHOT_FIELDS:
+            raise TrialValidationError(
+                f"closes[{index}] requires complete exception and operator evidence."
+            )
+        if present_snapshot_fields:
+            business_date = _text(
+                close["businessDate"],
+                f"closes[{index}].businessDate",
+                maximum=10,
+            )
+            order_ids_for_close = [
+                _text(value, f"closes[{index}].orderIds[{reference_index}]", maximum=160)
+                for reference_index, value in enumerate(
+                    _list(close["orderIds"], f"closes[{index}].orderIds")
+                )
+            ]
+            payment_exception_order_ids = [
+                _text(value, f"closes[{index}].paymentExceptionOrderIds[{reference_index}]", maximum=160)
+                for reference_index, value in enumerate(
+                    _list(
+                        close["paymentExceptionOrderIds"],
+                        f"closes[{index}].paymentExceptionOrderIds",
+                    )
+                )
+            ]
+            stock_exception_skus = [
+                _text(value, f"closes[{index}].stockExceptionSkus[{reference_index}]", maximum=80)
+                for reference_index, value in enumerate(
+                    _list(
+                        close["stockExceptionSkus"],
+                        f"closes[{index}].stockExceptionSkus",
+                    )
+                )
+            ]
+            if (
+                not _BUSINESS_DATE_PATTERN.fullmatch(business_date)
+                or business_date != _myanmar_business_date(str(close["createdAt"]))
+            ):
+                raise TrialValidationError(
+                    f"closes[{index}].businessDate must match its close timestamp."
+                )
+            _unique(order_ids_for_close, f"closes[{index}] order ID")
+            _unique(payment_exception_order_ids, f"closes[{index}] payment exception order ID")
+            _unique(stock_exception_skus, f"closes[{index}] stock exception SKU")
+            if order_ids_for_close != sorted(order_ids_for_close):
+                raise TrialValidationError(f"closes[{index}] order IDs must be sorted.")
+            if payment_exception_order_ids != sorted(payment_exception_order_ids):
+                raise TrialValidationError(f"closes[{index}] payment exception order IDs must be sorted.")
+            if stock_exception_skus != sorted(stock_exception_skus):
+                raise TrialValidationError(f"closes[{index}] stock exception SKUs must be sorted.")
+            if any(order_id not in order_by_id for order_id in order_ids_for_close):
+                raise TrialValidationError(f"closes[{index}] references an unknown closed order.")
+            if any(order_id not in order_by_id for order_id in payment_exception_order_ids):
+                raise TrialValidationError(f"closes[{index}] references an unknown payment exception order.")
+            if any(sku not in item_by_sku for sku in stock_exception_skus):
+                raise TrialValidationError(f"closes[{index}] references an unknown stock exception SKU.")
+            member_orders = [order_by_id[order_id] for order_id in order_ids_for_close]
+            if (
+                any(
+                    order["status"] != "completed"
+                    or order["paymentStatus"] != "reconciled"
+                    for order in member_orders
+                )
+                or close["orders"] != len(order_ids_for_close)
+                or close["total"] != sum(order["total"] for order in member_orders)
+            ):
+                raise TrialValidationError(
+                    f"closes[{index}] totals must match its completed, reconciled order membership."
+                )
+            if not _CLOSE_ID_PATTERN.fullmatch(str(close["id"])):
+                raise TrialValidationError(f"closes[{index}].id must be a full close UUID.")
+            close_action_id = _text(
+                close["actionId"], f"closes[{index}].actionId", maximum=160
+            )
+            if not _CLOSE_ACTION_ID_PATTERN.fullmatch(close_action_id):
+                raise TrialValidationError(
+                    f"closes[{index}].actionId must be a full action UUID."
+                )
+            close_action_ids.append(close_action_id)
+            close_business_dates.append(business_date)
+            closed_order_ids.extend(order_ids_for_close)
+            _text(close["operator"], f"closes[{index}].operator")
+            _text(close["reason"], f"closes[{index}].reason")
+            _text(close["evidenceReference"], f"closes[{index}].evidenceReference")
     _unique(close_ids, "Daily close ID")
+    _unique(close_business_dates, "Daily close business date")
+    _unique(closed_order_ids, "Closed order ID")
 
     intake_ids: list[str] = []
     intake_sources: list[str] = []
@@ -435,6 +556,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             *(action_id for action_id in movement_action_ids if action_id not in conversion_action_ids),
             *reconciliation_action_ids,
             *intake_action_ids,
+            *close_action_ids,
         ],
         "Commerce action ID",
     )
@@ -519,6 +641,16 @@ def _validate_event_evidence(event_type: str, next_state: Mapping[str, Any], evi
             or order.get("paymentEvidenceReference") != evidence["evidenceReference"]
         ):
             raise TrialValidationError("command evidence must match the payment reconciliation evidence.")
+    elif event_type == "commerce.close.saved":
+        close = next_state["closes"][0]
+        if (
+            close.get("actionId") != evidence["actionId"]
+            or close.get("createdAt") != evidence["capturedAt"]
+            or close.get("operator") != evidence["actor"]
+            or close.get("reason") != evidence["reason"]
+            or close.get("evidenceReference") != evidence["evidenceReference"]
+        ):
+            raise TrialValidationError("command evidence must match the daily close proof.")
 
 
 def _one_changed(current: list[Any], next_values: list[Any], field: str) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -678,14 +810,55 @@ def _validate_close(current: Mapping[str, Any], next_state: Mapping[str, Any]) -
     _require_website_intakes_unchanged(current, next_state)
     if len(next_state["closes"]) != len(current["closes"]) + 1 or next_state["closes"][1:] != current["closes"]:
         raise TrialValidationError("commerce.close.saved must prepend exactly one close snapshot.")
-    eligible = [
-        order
-        for order in current["orders"]
-        if order["status"] == "completed" and order["paymentStatus"] == "reconciled"
-    ]
+    if any(
+        "orderIds" not in prior_close or "businessDate" not in prior_close
+        for prior_close in current["closes"]
+    ):
+        raise TrialValidationError(
+            "legacy daily closes must be migrated before another close can be saved."
+        )
+    previously_closed_order_ids = {
+        order_id
+        for prior_close in current["closes"]
+        for order_id in prior_close.get("orderIds", [])
+    }
+    eligible = sorted(
+        [
+            order
+            for order in current["orders"]
+            if order["status"] == "completed"
+            and order["paymentStatus"] == "reconciled"
+            and order["id"] not in previously_closed_order_ids
+        ],
+        key=lambda order: order["id"],
+    )
     close = next_state["closes"][0]
+    if not _CLOSE_SNAPSHOT_FIELDS.issubset(close):
+        raise TrialValidationError("new daily closes require exception and operator evidence.")
+    if close["orderIds"] != [order["id"] for order in eligible]:
+        raise TrialValidationError("daily close order membership must match unclosed completed orders.")
     if close["orders"] != len(eligible) or close["total"] != sum(order["total"] for order in eligible):
         raise TrialValidationError("daily close totals must match completed, reconciled orders.")
+    if close["businessDate"] != _myanmar_business_date(close["createdAt"]) or any(
+        prior_close.get("businessDate") == close["businessDate"]
+        for prior_close in current["closes"]
+    ):
+        raise TrialValidationError("daily close requires one unique business date.")
+    expected_payment_exceptions = sorted(
+        order["id"]
+        for order in current["orders"]
+        if order["refundStatus"] == "due"
+        or (order["status"] != "cancelled" and order["paymentStatus"] == "pending")
+    )
+    expected_stock_exceptions = sorted(
+        item["sku"]
+        for item in current["items"]
+        if item["onHand"] <= item["reorderAt"]
+    )
+    if close["paymentExceptionOrderIds"] != expected_payment_exceptions:
+        raise TrialValidationError("daily close payment exceptions must match current orders.")
+    if close["stockExceptionSkus"] != expected_stock_exceptions:
+        raise TrialValidationError("daily close stock exceptions must match current inventory.")
 
 
 def _validate_website_intake_created(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
