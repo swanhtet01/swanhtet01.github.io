@@ -34,23 +34,23 @@ SuperMega HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are
 
 - Shop runs at `/shop/` with guarded Orders and Stock records on internal `commerce`; the old operations URL is compatibility-only. Intake, reservation, fulfilment, payment, cancellation, refunds, movements, close, and exact positive stock receipts are recorded.
 - Plant runs at `/plant/` with Jobs and Problems on internal `production`; the old operations URL is compatibility-only. Jobs, output, issues, events, and managed commands are recorded, and operators can submit any truthful distinct equipment observation without a forced cycle.
-- Website runs at `/products/website/` with Site, Preview, and Publish. Drafts have one Save/Discard boundary, survive same-tab reload, reject stale overwrite, and block release until resolved. Unreadable browser data pauses saving behind backup-first repair. Site export is deterministic; no deployment or domain write occurs.
-- Ecommerce builds a customer preview from read-only Shop data. Available cards focus `Request an item` with the exact SKU; its digest and receipt are deterministic and idempotent. Managed mode retains the receipt with conflict/recovery checks, while Shop revalidates the catalogue and keeps order or stock consequences behind human confirmation. Mobile now presents Setup and Preview as one clear two-step workspace instead of stacking both full interfaces.
+- Website runs at `/products/website/` with Site, Preview, and Review. Save/Discard drafts survive reload, reject stale overwrite, and pause behind backup-first repair when local data is unreadable. `Review site` creates a deterministic site file; it does not deploy or write a domain.
+- Ecommerce builds from read-only Shop data. Setup puts product selection before Save; preview says `Browse & request`; cards open exact-SKU requests. Managed mode retains conflict-checked receipts; local mode opens an in-memory Shop draft. Shop revalidates and gates every consequence.
 - `/agents/` currently resolves to the compact Products planned state because Agent Teams are internal coordination records and Order Intake has not yet passed the evaluation gate.
 - Home now prioritizes unfinished Shop and Plant operating records before internal company tasks. The internal `/work/` route is labelled HQ, its activity is collapsed on Home, and Products remains the direct launcher for Shop, Plant, Website, and Ecommerce.
 - The default app is browser-local. Authenticated Shop, Plant, Website, and Ecommerce-inbox commands exist, but hosted production activation is not proven.
 
 ## Verified baseline
 
-- Checkpoint `d346340` contains the accepted local Shop, Plant, Website, Ecommerce, and Order Intake work.
+- Checkpoint `3d4d5bb` contains the accepted local Shop, Plant, Website, Ecommerce, and Order Intake work.
 - App lint/build, the full local app contracts, and all 122 Python tests pass for the current product checkpoint.
 - HQ loads as its own 25,057-byte route chunk; the largest JavaScript chunk is 461,555 bytes, leaving 38,445 bytes under the hard gate.
 - Focused coverage reports 98 Shop runtime, 157 Plant runtime, 74 Website runtime, 11 storefront, 13 request, and 16 Ecommerce handoff checks, including managed replay, conflict, tenant-isolation, recovery, and unchanged-ledger proof.
-- Rendered 375-390 px journeys prove required Shop fulfilment handoff, Plant's remaining-unit limit, Website recovery, and truthful Ecommerce status without overflow, browser errors, or pre-confirmation mutation.
+- Rendered 375-390 px journeys prove required Shop fulfilment handoff, Plant's remaining-unit limit, Website recovery, truthful Website/Ecommerce action labels, and product-before-Save storefront setup without overflow, browser errors, or pre-confirmation mutation.
 - PostgreSQL 17.10 passed 24 local migration, authority, journey, isolation, retry, recovery, and validator checks across two clean TLS clusters.
 - Fresh 375 px App Home and three-page public-site audits have no overflow or browser errors; the bottom navigation reads Home, HQ, and Products, public Home measures 4.0 viewports, and Contact exposes only labelled controls.
 - A 390 px Website recovery audit passes with 44 px actions and no overflow or browser errors. Evidence v10 preserves exact Website and Ecommerce local records without duplicating Shop, Plant, or HQ; QA did not run the final repair.
-- Live: canonical domains serve `main` `6885c320`; local `d346340` is +113/+67 versus main/integration. Vercel's misnamed project still builds `swanhtet01.github.io` `3d1d9e32`. No external state changed.
+- Last read-only live audit: canonical domains served `main` `6885c320`, while local `3d4d5bb` is +115/+69 versus the locally tracked main/integration refs. Vercel's misnamed project built `swanhtet01.github.io` `3d1d9e32`. No external state changed.
 - `supermegabase` is healthy on PostgreSQL 17 but has only the older public-schema system, no `app_private` tables, no verified development branch, and 27 informational no-policy notices. The production ref is unset; this is not the isolated rehearsal target.
 
 ## Coordination
@@ -70,7 +70,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - Ecommerce now has a local authenticated tenant-inbox contract and recovery path, but it has no isolated hosted rehearsal or cross-device production proof. The pilot intentionally caps retention at 100 entries inside the revisioned Shop workspace envelope; a normalized indexed queue remains gated on measured volume, retention, and query needs.
 - Agent Teams is not a production agent runtime. Order Intake has a strict 20-case local evaluator for schema validity, source coverage, required-field accuracy, unsafe-ready results, latency, tokens, estimated cost, retries, refusals, and correction rate; it still needs a server-only provider run and a three-minute human review workflow.
 - No isolated hosted Supabase branch or separate non-production project has repeated the local database proof.
-- The canonical domains are 113 local commits behind this candidate; the similarly named Vercel project is linked to the wrong repository. Release actions remain owner-gated.
+- The locally tracked canonical main ref is 115 commits behind this candidate; the similarly named Vercel project was linked to the wrong repository at the last read-only audit. Release actions remain owner-gated.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
 
 ## Decisions in force
@@ -86,7 +86,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 ## Next evidence
 
 1. Keep the passing `/shop/`, `/plant/`, Website, Ecommerce, compatibility, and mobile journeys as regression evidence.
-2. Review the 113-commit release-candidate delta, then obtain explicit owner approval before any push, merge, deployment, or canonical-domain correction.
+2. Review the 115-commit release-candidate delta, then obtain explicit owner approval before any push, merge, deployment, or canonical-domain correction.
 3. Rehearse the completed revisioned Ecommerce request inbox on an owner-approved isolated non-production tenant and capture hosted replay, tenant-isolation, recovery, and zero-conversion evidence.
 4. Generate server-only Order Intake results with no operational tools, score all 20 fixtures, and expose a human review demo only after every quality and zero-side-effect gate passes.
 5. Provision and validate one isolated hosted Supabase rehearsal target before any production write enablement.
