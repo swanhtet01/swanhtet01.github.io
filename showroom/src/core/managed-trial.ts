@@ -2,9 +2,10 @@ import type { Session, SupabaseClient } from '@supabase/supabase-js'
 
 
 const WORKSPACE_STORAGE_KEY = 'supermega.managed.workspace.v1'
-const SUPABASE_URL = String(import.meta.env.VITE_SUPABASE_URL ?? '').trim()
-const SUPABASE_PUBLISHABLE_KEY = String(import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? import.meta.env.VITE_SUPABASE_ANON_KEY ?? '').trim()
-const DEFAULT_WORKSPACE_ID = String(import.meta.env.VITE_SUPERMEGA_TRIAL_WORKSPACE_ID ?? '').trim()
+const BUILD_ENV = import.meta.env ?? {}
+const SUPABASE_URL = String(BUILD_ENV.VITE_SUPABASE_URL ?? '').trim()
+const SUPABASE_PUBLISHABLE_KEY = String(BUILD_ENV.VITE_SUPABASE_PUBLISHABLE_KEY ?? BUILD_ENV.VITE_SUPABASE_ANON_KEY ?? '').trim()
+const DEFAULT_WORKSPACE_ID = String(BUILD_ENV.VITE_SUPERMEGA_TRIAL_WORKSPACE_ID ?? '').trim()
 const WORKSPACE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/
 
 export type ManagedIdentity = {
@@ -46,6 +47,7 @@ export type ManagedCommerceEvent =
   | 'commerce.item.created'
   | 'commerce.website_intake.created'
   | 'commerce.website_intake.converted'
+  | 'commerce.storefront.configuration.saved'
   | 'commerce.storefront_request.received'
   | 'commerce.order.created'
   | 'commerce.order.advanced'
@@ -152,6 +154,37 @@ export class ManagedTrialError extends Error {
   }
 }
 
+function sameManagedIdentity(left: ManagedIdentity, right: ManagedIdentity) {
+  return left.userId === right.userId && left.workspaceId === right.workspaceId
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+export function assertManagedBootstrapIdentity(
+  bootstrap: unknown,
+  expectedIdentity: ManagedIdentity,
+): ManagedBootstrap {
+  if (!isRecord(bootstrap)
+    || !isRecord(bootstrap.identity)
+    || !isRecord(bootstrap.readiness)
+    || !isRecord(bootstrap.states)
+    || !Array.isArray(bootstrap.approvals)) {
+    throw new ManagedTrialError('The managed workspace returned an invalid bootstrap response.', {
+      code: 'managed_bootstrap_invalid',
+    })
+  }
+  if (bootstrap.identity.workspace_id !== expectedIdentity.workspaceId
+    || bootstrap.identity.actor_id !== expectedIdentity.userId
+    || bootstrap.identity.actor_kind !== 'human') {
+    throw new ManagedTrialError('The managed workspace returned a different identity.', {
+      code: 'managed_identity_changed',
+    })
+  }
+  return bootstrap as ManagedBootstrap
+}
+
 let clientPromise: Promise<SupabaseClient | null> | undefined
 
 function validSupabaseUrl(value: string) {
@@ -242,6 +275,7 @@ export async function currentManagedIdentity(): Promise<ManagedIdentity | null> 
   // token with Supabase Auth and authorizes it through workspace membership.
   const { data, error } = await supabase.auth.getSession()
   if (error || !data.session || data.session.user.is_anonymous !== false) return null
+  if (currentManagedWorkspace() !== workspaceId) return null
   return identity(data.session, workspaceId)
 }
 
@@ -284,7 +318,7 @@ async function parseError(response: Response) {
   return new ManagedTrialError(`${message}${blockers}`, { status: response.status, code })
 }
 
-async function sessionForRequest() {
+async function sessionForRequest(expectedIdentity?: ManagedIdentity) {
   const supabase = await authClient()
   if (!supabase) throw new ManagedTrialError('Managed sign-in is not configured.', { code: 'auth_not_configured' })
   const workspaceId = normalizeWorkspaceId(currentManagedWorkspace())
@@ -298,11 +332,27 @@ async function sessionForRequest() {
   if (error || !data.session || data.session.user.is_anonymous !== false) {
     throw new ManagedTrialError('The managed session expired. Sign in again.', { code: 'auth_expired' })
   }
+  if (currentManagedWorkspace() !== workspaceId) {
+    throw new ManagedTrialError('The managed workspace changed during authentication.', {
+      code: 'managed_identity_changed',
+    })
+  }
+  const resolvedIdentity = identity(data.session, workspaceId)
+  if (expectedIdentity && !sameManagedIdentity(resolvedIdentity, expectedIdentity)) {
+    throw new ManagedTrialError('The managed workspace identity changed during the request.', {
+      code: 'managed_identity_changed',
+    })
+  }
   return { session: data.session, workspaceId }
 }
 
-async function authorizedRequest<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
-  const { session, workspaceId } = await sessionForRequest()
+async function authorizedRequest<T>(
+  path: string,
+  init: RequestInit = {},
+  retry = true,
+  expectedIdentity?: ManagedIdentity,
+): Promise<T> {
+  const { session, workspaceId } = await sessionForRequest(expectedIdentity)
   const headers = new Headers(init.headers)
   headers.set('accept', 'application/json')
   headers.set('authorization', `Bearer ${session.access_token}`)
@@ -312,14 +362,23 @@ async function authorizedRequest<T>(path: string, init: RequestInit = {}, retry 
   if (response.status === 401 && retry) {
     const supabase = await authClient()
     const refreshed = await supabase?.auth.refreshSession()
-    if (refreshed?.data.session && !refreshed.error) return authorizedRequest<T>(path, init, false)
+    if (refreshed?.data.session && !refreshed.error) {
+      return authorizedRequest<T>(path, init, false, expectedIdentity)
+    }
   }
+  if (expectedIdentity) await sessionForRequest(expectedIdentity)
   if (!response.ok) throw await parseError(response)
   return response.json() as Promise<T>
 }
 
-export function loadManagedBootstrap() {
-  return authorizedRequest<ManagedBootstrap>('/api/trial/v1/bootstrap')
+export async function loadManagedBootstrap(expectedIdentity?: ManagedIdentity) {
+  const bootstrap = await authorizedRequest<ManagedBootstrap>(
+    '/api/trial/v1/bootstrap',
+    {},
+    true,
+    expectedIdentity,
+  )
+  return expectedIdentity ? assertManagedBootstrapIdentity(bootstrap, expectedIdentity) : bootstrap
 }
 
 export async function saveManagedCommerceCommand(request: {
@@ -327,18 +386,24 @@ export async function saveManagedCommerceCommand(request: {
   evidence: ManagedCommandEvidence
   eventType: ManagedCommerceEvent
   expectedVersion: number
+  identity?: ManagedIdentity
   state: Record<string, unknown>
 }) {
-  const response = await authorizedRequest<{ result: ManagedCommandResult }>('/api/trial/v1/commands', {
-    method: 'POST',
-    body: JSON.stringify({
-      command_id: request.commandId,
-      surface: 'commerce',
-      event_type: request.eventType,
-      expected_version: request.expectedVersion,
-      payload: { state: request.state, evidence: request.evidence },
-    }),
-  })
+  const response = await authorizedRequest<{ result: ManagedCommandResult }>(
+    '/api/trial/v1/commands',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        command_id: request.commandId,
+        surface: 'commerce',
+        event_type: request.eventType,
+        expected_version: request.expectedVersion,
+        payload: { state: request.state, evidence: request.evidence },
+      }),
+    },
+    true,
+    request.identity,
+  )
   return response.result
 }
 

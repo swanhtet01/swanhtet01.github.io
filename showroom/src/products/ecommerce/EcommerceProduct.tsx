@@ -11,10 +11,18 @@ import {
 import {
   currentManagedIdentity,
   loadManagedBootstrap,
+  ManagedTrialError,
   saveManagedCommerceCommand,
   type ManagedIdentity,
+  type ManagedStateRecord,
 } from '../../core/managed-trial'
 import { confirmEcommerceShopDraft } from './ecommerce-shop-confirm'
+import {
+  acceptManagedStorefrontCommand,
+  prepareManagedStorefrontSave,
+  readManagedStorefront,
+  type ManagedStorefrontSaved,
+} from './managed-storefront'
 import {
   buildStorefrontOrderRequest,
   createEmptyStorefrontRequestLedger,
@@ -47,6 +55,16 @@ type ManagedInboxContext = {
   state: CommerceState
   version: number
 }
+type ManagedStorefrontView = {
+  inbox: ManagedInboxContext
+  saved: ManagedStorefrontSaved | null
+  fields: {
+    storeName: string
+    summary: string
+    selectedSkus: string[]
+  }
+  availableSku: string
+}
 
 const DEFAULT_STORE_NAME = 'My Shop'
 const DEFAULT_STORE_SUMMARY = 'Everyday products, clearly priced and ready to request.'
@@ -59,19 +77,49 @@ function defaultSelection(items: CommerceItem[]) {
   return items.filter((item) => item.onHand > 0).slice(0, 4).map((item) => item.sku)
 }
 
-function draftFieldsForCatalog(saved: StorefrontDraftReadResult, items: CommerceItem[]) {
-  if (!saved.draft) {
+function savedLocalDraft(draft: StorefrontDraft | null): ManagedStorefrontSaved | null {
+  if (!draft) return null
+  return {
+    revision: draft.revision,
+    savedAt: draft.savedAt,
+    storeName: draft.storeName,
+    summary: draft.summary,
+    selectedSkus: [...draft.selectedSkus],
+  }
+}
+
+function draftFieldsForCatalog(saved: ManagedStorefrontSaved | null, items: CommerceItem[]) {
+  if (!saved) {
     return {
       storeName: DEFAULT_STORE_NAME,
       summary: DEFAULT_STORE_SUMMARY,
       selectedSkus: defaultSelection(items),
     }
   }
-  const reconciliation = reconcileStorefrontSelection(saved.draft.selectedSkus, items.map((item) => item.sku))
+  const reconciliation = reconcileStorefrontSelection(saved.selectedSkus, items.map((item) => item.sku))
   return {
-    storeName: saved.draft.storeName,
-    summary: saved.draft.summary,
+    storeName: saved.storeName,
+    summary: saved.summary,
     selectedSkus: reconciliation.selectedSkus,
+  }
+}
+
+function resolveManagedStorefront(
+  identity: ManagedIdentity,
+  record: ManagedStateRecord,
+): ManagedStorefrontView | null {
+  if (record.surface !== 'commerce' || !Number.isSafeInteger(record.version) || record.version < 1) return null
+  const state = validateCommerceState(record.state)
+  const saved = readManagedStorefront(state)
+  const fields = draftFieldsForCatalog(saved, state.items)
+  const available = state.items.filter((item) => item.onHand > 0)
+  return {
+    inbox: { identity, state, version: record.version },
+    saved,
+    fields,
+    availableSku: fields.selectedSkus.find((sku) => available.some((item) => item.sku === sku))
+      ?? available[0]?.sku
+      ?? '',
   }
 }
 
@@ -92,8 +140,7 @@ export function EcommerceProduct() {
   const [catalogHydrating, setCatalogHydrating] = useState(true)
   const [managedIdentity, setManagedIdentity] = useState<ManagedIdentity | null>(null)
   const [managedInbox, setManagedInbox] = useState<ManagedInboxContext | null>(null)
-  const [draftScope, setDraftScope] = useState(LOCAL_STOREFRONT_DRAFT_SCOPE)
-  const [savedDraft, setSavedDraft] = useState<StorefrontDraft | null>(null)
+  const [savedDraft, setSavedDraft] = useState<ManagedStorefrontSaved | null>(null)
   const [draftReadStatus, setDraftReadStatus] = useState<StorefrontDraftReadResult['status']>('empty')
   const [draftIssue, setDraftIssue] = useState('')
   const [draftNotice, setDraftNotice] = useState('')
@@ -125,9 +172,9 @@ export function EcommerceProduct() {
         if (!current) return
         if (!identity) {
           const saved = readStorefrontDraft(LOCAL_STOREFRONT_DRAFT_SCOPE)
-          const fields = draftFieldsForCatalog(saved, initialState.catalog.items)
-          setDraftScope(LOCAL_STOREFRONT_DRAFT_SCOPE)
-          setSavedDraft(saved.draft)
+          const localDraft = savedLocalDraft(saved.draft)
+          const fields = draftFieldsForCatalog(localDraft, initialState.catalog.items)
+          setSavedDraft(localDraft)
           setDraftReadStatus(saved.status)
           setDraftIssue(saved.error)
           setStoreName(fields.storeName)
@@ -139,20 +186,17 @@ export function EcommerceProduct() {
           return
         }
         setManagedIdentity(identity)
-        const managedDraftScope = `managed:${identity.workspaceId}`
-        setDraftScope(managedDraftScope)
-        const bootstrap = await loadManagedBootstrap()
+        const bootstrap = await loadManagedBootstrap(identity)
         if (!current) return
-        const record = bootstrap.states.commerce
-        if (record.surface !== 'commerce' || !Number.isSafeInteger(record.version) || record.version < 1) {
-          const saved = readStorefrontDraft(managedDraftScope)
-          const fields = draftFieldsForCatalog(saved, [])
-          setSavedDraft(saved.draft)
-          setDraftReadStatus(saved.status)
-          setDraftIssue(saved.error)
-          setStoreName(fields.storeName)
-          setSummary(fields.summary)
-          setSelectedSkus(fields.selectedSkus)
+        const view = resolveManagedStorefront(identity, bootstrap.states.commerce)
+        if (!view) {
+          setManagedInbox(null)
+          setSavedDraft(null)
+          setDraftReadStatus('empty')
+          setDraftIssue('')
+          setStoreName(DEFAULT_STORE_NAME)
+          setSummary(DEFAULT_STORE_SUMMARY)
+          setSelectedSkus([])
           setCatalog({ source: 'unavailable', items: [], error: 'Create the managed Shop catalog before opening its Ecommerce storefront.' })
           setRequestSku('')
           setRequestLedger(createEmptyStorefrontRequestLedger())
@@ -161,27 +205,24 @@ export function EcommerceProduct() {
           setCatalogHydrating(false)
           return
         }
-        const state = validateCommerceState(record.state)
-        const available = state.items.filter((item) => item.onHand > 0)
-        const saved = readStorefrontDraft(managedDraftScope)
-        const fields = draftFieldsForCatalog(saved, state.items)
-        setSavedDraft(saved.draft)
-        setDraftReadStatus(saved.status)
-        setDraftIssue(saved.error)
-        setStoreName(fields.storeName)
-        setSummary(fields.summary)
-        setSelectedSkus(fields.selectedSkus)
-        setRequestSku(fields.selectedSkus.find((sku) => available.some((item) => item.sku === sku)) ?? available[0]?.sku ?? '')
+        setSavedDraft(view.saved)
+        setDraftReadStatus(view.saved ? 'ready' : 'empty')
+        setDraftIssue('')
+        setStoreName(view.fields.storeName)
+        setSummary(view.fields.summary)
+        setSelectedSkus(view.fields.selectedSkus)
+        setRequestSku(view.availableSku)
         setRequestLedger(createEmptyStorefrontRequestLedger())
         setHandoffConfirmed(false)
         setRequestNotice('')
         setMissingSelectionReviewed(false)
-        setManagedInbox({ identity, state, version: record.version })
-        setCatalog({ source: 'managed-shop', items: state.items, error: '' })
+        setManagedInbox(view.inbox)
+        setCatalog({ source: 'managed-shop', items: view.inbox.state.items, error: '' })
         setCatalogHydrating(false)
       })
       .catch((error) => {
         if (!current) return
+        setManagedInbox(null)
         setCatalog({
           source: 'unavailable',
           items: [],
@@ -200,10 +241,11 @@ export function EcommerceProduct() {
   }, [initialState.catalog.items])
 
   useEffect(() => {
+    if (managedIdentity) return
     function refreshSavedDraft(event: StorageEvent) {
-      if (event.key !== storefrontDraftStorageKey(draftScope)) return
-      const latest = readStorefrontDraft(draftScope)
-      setSavedDraft(latest.draft)
+      if (event.key !== storefrontDraftStorageKey(LOCAL_STOREFRONT_DRAFT_SCOPE)) return
+      const latest = readStorefrontDraft(LOCAL_STOREFRONT_DRAFT_SCOPE)
+      setSavedDraft(savedLocalDraft(latest.draft))
       setDraftReadStatus(latest.status)
       setDraftIssue(latest.error)
       setMissingSelectionReviewed(false)
@@ -211,7 +253,7 @@ export function EcommerceProduct() {
     }
     window.addEventListener('storage', refreshSavedDraft)
     return () => window.removeEventListener('storage', refreshSavedDraft)
-  }, [draftScope])
+  }, [managedIdentity])
 
   const previewResult = useMemo(() => {
     try {
@@ -227,15 +269,11 @@ export function EcommerceProduct() {
     }
   }, [catalog.items, selectedSkus, storeName, summary])
   const previewJson = previewResult.preview ? JSON.stringify(previewResult.preview) : ''
-  const sortedSelectedSkus = useMemo(
-    () => [...selectedSkus].sort((left, right) => left.localeCompare(right)),
-    [selectedSkus],
-  )
   const savedDraftIsCurrent = Boolean(savedDraft
     && savedDraft.storeName === storeName
     && savedDraft.summary === summary
-    && savedDraft.selectedSkus.length === sortedSelectedSkus.length
-    && savedDraft.selectedSkus.every((sku, index) => sku === sortedSelectedSkus[index]))
+    && savedDraft.selectedSkus.length === selectedSkus.length
+    && savedDraft.selectedSkus.every((sku) => selectedSkus.includes(sku)))
   const hasUnsavedStorefront = !savedDraftIsCurrent
   const savedSelectionReconciliation = useMemo(
     () => savedDraft
@@ -245,7 +283,8 @@ export function EcommerceProduct() {
   )
   const missingSavedSkus = catalogHydrating ? [] : savedSelectionReconciliation.missingSkus
   const selectionReviewRequired = missingSavedSkus.length > 0 && !missingSelectionReviewed
-  const draftStorageBlocked = draftReadStatus === 'invalid' || draftReadStatus === 'unavailable'
+  const draftStorageBlocked = !managedIdentity
+    && (draftReadStatus === 'invalid' || draftReadStatus === 'unavailable')
 
   useEffect(() => {
     let current = true
@@ -278,6 +317,100 @@ export function EcommerceProduct() {
     })
   }
 
+  function applyManagedView(view: ManagedStorefrontView, replaceEdits: boolean) {
+    setManagedInbox(view.inbox)
+    setCatalog({ source: 'managed-shop', items: view.inbox.state.items, error: '' })
+    setSavedDraft(view.saved)
+    setDraftReadStatus(view.saved ? 'ready' : 'empty')
+    setDraftIssue('')
+    setRequestSku((sku) => (
+      view.inbox.state.items.some((item) => item.sku === sku && item.onHand > 0)
+        ? sku
+        : view.availableSku
+    ))
+    setMissingSelectionReviewed(false)
+    if (!replaceEdits) return
+    setStoreName(view.fields.storeName)
+    setSummary(view.fields.summary)
+    setSelectedSkus(view.fields.selectedSkus)
+  }
+
+  async function saveManagedStorefront(identity: ManagedIdentity) {
+    if (!globalThis.crypto?.randomUUID) {
+      throw new Error('Secure command identity is unavailable. Nothing was saved.')
+    }
+    const currentIdentity = await currentManagedIdentity()
+    if (!currentIdentity
+      || currentIdentity.workspaceId !== identity.workspaceId
+      || currentIdentity.userId !== identity.userId) {
+      throw new Error('The managed workspace identity changed. Reload before saving.')
+    }
+    const bootstrap = await loadManagedBootstrap(identity)
+    const view = resolveManagedStorefront(identity, bootstrap.states.commerce)
+    if (!view) throw new Error('Create the managed Shop catalog before saving its Ecommerce storefront.')
+    applyManagedView(view, false)
+    const currentSkus = new Set(view.inbox.state.items.map((item) => item.sku))
+    if (selectedSkus.some((sku) => !currentSkus.has(sku))) {
+      throw new Error('The Shop catalog changed. Current edits were kept; review the product selection and save again.')
+    }
+    const plan = await prepareManagedStorefrontSave(
+      view.inbox.state,
+      { storeName, summary, selectedSkus },
+      identity.userId,
+      new Date().toISOString(),
+    )
+    if (plan.status === 'unchanged') {
+      const confirmedIdentity = await currentManagedIdentity()
+      if (!confirmedIdentity
+        || confirmedIdentity.workspaceId !== identity.workspaceId
+        || confirmedIdentity.userId !== identity.userId) {
+        throw new Error('The managed identity changed before the saved storefront could be confirmed.')
+      }
+      const saved = readManagedStorefront(plan.next)
+      if (!saved) throw new Error('The saved storefront configuration could not be read.')
+      setSavedDraft(saved)
+      setDraftReadStatus('ready')
+      setStoreName(saved.storeName)
+      setSummary(saved.summary)
+      setSelectedSkus(saved.selectedSkus)
+      setDraftNotice(`Already saved in ${identity.workspaceId} as revision ${saved.revision}.`)
+      return
+    }
+    const commandId = globalThis.crypto.randomUUID()
+    const result = await saveManagedCommerceCommand({
+      commandId,
+      evidence: plan.evidence,
+      eventType: 'commerce.storefront.configuration.saved',
+      expectedVersion: view.inbox.version,
+      identity,
+      state: plan.next as unknown as Record<string, unknown>,
+    })
+    const receipt = acceptManagedStorefrontCommand(plan, result, {
+      commandId,
+      priorVersion: view.inbox.version,
+      actor: identity.userId,
+    })
+    const confirmedIdentity = await currentManagedIdentity()
+    if (!confirmedIdentity
+      || confirmedIdentity.workspaceId !== identity.workspaceId
+      || confirmedIdentity.userId !== identity.userId) {
+      throw new Error('The managed identity changed before the storefront save was confirmed.')
+    }
+    const accepted = receipt.state
+    const saved = readManagedStorefront(accepted)
+    if (!saved) throw new Error('The accepted storefront configuration could not be read.')
+    setManagedInbox({ identity, state: accepted, version: receipt.version })
+    setCatalog({ source: 'managed-shop', items: accepted.items, error: '' })
+    setSavedDraft(saved)
+    setDraftReadStatus('ready')
+    setDraftIssue('')
+    setStoreName(saved.storeName)
+    setSummary(saved.summary)
+    setSelectedSkus(saved.selectedSkus)
+    setMissingSelectionReviewed(false)
+    setDraftNotice(`Saved to ${identity.workspaceId} as revision ${saved.revision}.`)
+  }
+
   async function saveCurrentStorefront() {
     if (!previewResult.preview
       || catalogHydrating
@@ -287,12 +420,16 @@ export function EcommerceProduct() {
     setDraftBusy(true)
     setDraftNotice('')
     try {
+      if (managedIdentity) {
+        await saveManagedStorefront(managedIdentity)
+        return
+      }
       const saved = await saveStorefrontDraft(
         { storeName, summary, selectedSkus },
         savedDraft?.revision ?? 0,
-        draftScope,
+        LOCAL_STOREFRONT_DRAFT_SCOPE,
       )
-      setSavedDraft(saved)
+      setSavedDraft(savedLocalDraft(saved))
       setDraftReadStatus('ready')
       setDraftIssue('')
       setStoreName(saved.storeName)
@@ -301,11 +438,30 @@ export function EcommerceProduct() {
       setMissingSelectionReviewed(false)
       setDraftNotice(`Storefront saved on this device as revision ${saved.revision}.`)
     } catch (error) {
-      const latest = readStorefrontDraft(draftScope)
-      setSavedDraft(latest.draft)
-      setDraftReadStatus(latest.status)
-      setDraftIssue(latest.error)
-      setDraftNotice(error instanceof Error ? error.message : 'Storefront setup was not saved.')
+      if (managedIdentity && error instanceof ManagedTrialError && error.code === 'trial_version_conflict') {
+        try {
+          const identity = await currentManagedIdentity()
+          if (!identity || identity.workspaceId !== managedIdentity.workspaceId || identity.userId !== managedIdentity.userId) {
+            throw new Error('The managed workspace identity changed before the conflict could be refreshed.')
+          }
+          const bootstrap = await loadManagedBootstrap(identity)
+          const view = resolveManagedStorefront(identity, bootstrap.states.commerce)
+          if (!view) throw new Error('The managed Shop catalog is no longer available.')
+          applyManagedView(view, false)
+          setDraftNotice('Workspace changed in another session. The latest saved revision is loaded; current edits were kept for review.')
+        } catch (refreshError) {
+          setDraftIssue(refreshError instanceof Error ? refreshError.message : 'The latest managed storefront could not be loaded.')
+          setDraftNotice('The storefront save conflicted and the latest workspace revision could not be confirmed.')
+        }
+      } else if (managedIdentity) {
+        setDraftNotice(error instanceof Error ? error.message : 'The managed storefront was not confirmed. Current edits were kept.')
+      } else {
+        const latest = readStorefrontDraft(LOCAL_STOREFRONT_DRAFT_SCOPE)
+        setSavedDraft(savedLocalDraft(latest.draft))
+        setDraftReadStatus(latest.status)
+        setDraftIssue(latest.error)
+        setDraftNotice(error instanceof Error ? error.message : 'Storefront setup was not saved.')
+      }
     } finally {
       setDraftBusy(false)
     }
@@ -405,7 +561,12 @@ export function EcommerceProduct() {
       }
       const identity = await currentManagedIdentity()
       if (!identity) throw new Error('Connect an authenticated workspace in Settings before saving this request.')
-      const bootstrap = await loadManagedBootstrap()
+      if (!managedIdentity
+        || identity.workspaceId !== managedIdentity.workspaceId
+        || identity.userId !== managedIdentity.userId) {
+        throw new Error('The managed workspace changed. Reload Ecommerce before retaining this request.')
+      }
+      const bootstrap = await loadManagedBootstrap(identity)
       const record = bootstrap.states.commerce
       if (record.surface !== 'commerce' || !Number.isSafeInteger(record.version) || record.version < 1) {
         throw new Error('The managed Shop catalog is not ready for Ecommerce requests.')
@@ -426,17 +587,27 @@ export function EcommerceProduct() {
         navigate('/shop/?tab=orders&source=ecommerce-inbox')
         return
       }
+      const commandId = latestRequest.idempotencyKey.slice(4)
       const result = await saveManagedCommerceCommand({
-        commandId: latestRequest.idempotencyKey.slice(4),
+        commandId,
         evidence: proof,
         eventType: 'commerce.storefront_request.received',
         expectedVersion: record.version,
+        identity,
         state: nextState as unknown as Record<string, unknown>,
       })
-      if (result.surface !== 'commerce'
+      if (result.command_id !== commandId
+        || result.surface !== 'commerce'
         || result.event_type !== 'commerce.storefront_request.received'
-        || result.version !== record.version + 1) {
+        || result.version !== record.version + 1
+        || typeof result.idempotent_replay !== 'boolean') {
         throw new Error('The managed Shop returned an invalid Ecommerce inbox receipt.')
+      }
+      const confirmedIdentity = await currentManagedIdentity()
+      if (!confirmedIdentity
+        || confirmedIdentity.workspaceId !== identity.workspaceId
+        || confirmedIdentity.userId !== identity.userId) {
+        throw new Error('The managed identity changed before the Ecommerce inbox receipt was confirmed.')
       }
       const accepted = validateCommerceState(result.state)
       const retained = commerceStorefrontRequests(accepted).find((candidate) => candidate.id === latestRequest.id)
@@ -445,7 +616,8 @@ export function EcommerceProduct() {
         || JSON.stringify(accepted.orders) !== JSON.stringify(currentState.orders)
         || JSON.stringify(accepted.movements) !== JSON.stringify(currentState.movements)
         || JSON.stringify(accepted.closes) !== JSON.stringify(currentState.closes)
-        || JSON.stringify(accepted.websiteIntakes ?? []) !== JSON.stringify(currentState.websiteIntakes ?? [])) {
+        || JSON.stringify(accepted.websiteIntakes ?? []) !== JSON.stringify(currentState.websiteIntakes ?? [])
+        || JSON.stringify(accepted.storefrontConfiguration ?? null) !== JSON.stringify(currentState.storefrontConfiguration ?? null)) {
         throw new Error('The managed Ecommerce receipt changed Shop records and was rejected by the client.')
       }
       setManagedIdentity(identity)
@@ -557,13 +729,17 @@ export function EcommerceProduct() {
                 : draftStorageBlocked
                 ? 'Saved setup needs recovery'
                 : savedDraftIsCurrent
-                ? `Saved on this device · revision ${savedDraft?.revision}`
+                ? managedIdentity
+                  ? `Saved to workspace · revision ${savedDraft?.revision}`
+                  : `Saved on this device · revision ${savedDraft?.revision}`
                 : savedDraft ? 'Unsaved changes' : 'Not saved yet'}</strong>
               <small>{catalogHydrating
                 ? 'Editing unlocks after the local or managed Shop scope is confirmed.'
                 : draftIssue || (savedDraftIsCurrent && savedDraft
                 ? `Saved ${new Date(savedDraft.savedAt).toLocaleString()}`
-                : 'Save the storefront name, description, and selected products for the next visit.')}</small>
+                : managedIdentity
+                  ? 'Save the storefront name, description, and selected products to this workspace.'
+                  : 'Save the storefront name, description, and selected products for the next visit.')}</small>
               {draftStorageBlocked
                 ? <Link className="text-link" to="/settings/#controls">Open recovery settings</Link>
                 : null}

@@ -11,11 +11,12 @@ let websiteRuntimeChecks = 0
 let storefrontRuntimeChecks = 0
 let storefrontDraftRuntimeChecks = 0
 let storefrontRequestRuntimeChecks = 0
+let managedStorefrontRuntimeChecks = 0
 let ecommerceHandoffRuntimeChecks = 0
 let commerceRuntimeChecks = 0
 let productionRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
-const [manifestText, appPackageText, appSource, coreSource, commerceSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, storefrontSource, storefrontDraftSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource] = await Promise.all([
+const [manifestText, appPackageText, appSource, coreSource, commerceSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, managedStorefrontSource, storefrontSource, storefrontDraftSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource] = await Promise.all([
   readFile(resolve(root, 'site-manifest.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'package.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'App.tsx'), 'utf8'),
@@ -41,6 +42,7 @@ const [manifestText, appPackageText, appSource, coreSource, commerceSource, chan
   readFile(resolve(root, 'showroom', 'src', 'products', 'WebsiteCommerceIntake.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'product-handoff.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'EcommerceProduct.tsx'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'managed-storefront.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'storefront-model.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'storefront-draft.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'storefront-request.ts'), 'utf8'),
@@ -237,10 +239,17 @@ if (!ecommerceSource.includes('Prices and availability are read-only.')
   || ecommerceSource.includes('ORDER ONLINE')
   || !ecommerceSource.includes('Discard')
   || !ecommerceSource.includes('Saved on this device')
+  || !ecommerceSource.includes('Saved to workspace')
   || !ecommerceSource.includes('readStorefrontDraft')
   || !ecommerceSource.includes('saveStorefrontDraft')
-  || !ecommerceSource.includes('managed:${identity.workspaceId}')
+  || ecommerceSource.includes('managed:${identity.workspaceId}')
   || !ecommerceSource.includes("window.addEventListener('storage', refreshSavedDraft)")
+  || !ecommerceSource.includes('if (managedIdentity) return')
+  || !ecommerceSource.includes("eventType: 'commerce.storefront.configuration.saved'")
+  || !ecommerceSource.includes("error.code === 'trial_version_conflict'")
+  || !ecommerceSource.includes('current edits were kept for review')
+  || !ecommerceSource.includes('loadManagedBootstrap(identity)')
+  || !ecommerceSource.includes('result.command_id !== commandId')
   || !ecommerceSource.includes('disabled={catalogHydrating || draftBusy}')
   || !ecommerceSource.includes('selectionReviewRequired')
   || !ecommerceSource.includes('Open recovery settings')
@@ -251,6 +260,35 @@ if (!ecommerceSource.includes('Prices and availability are read-only.')
   || !ecommerceCssSource.includes('font-size: 12px')
   || !coreSource.includes('<strong>Ecommerce</strong><small>Build a storefront from Shop</small>')
   || !coreSource.includes('<h2>AI Agent Solutions</h2>')) fail('ecommerce_storefront_ui_boundary_missing')
+const managedStorefrontStart = ecommerceSource.indexOf('async function saveManagedStorefront')
+const managedStorefrontEnd = ecommerceSource.indexOf('async function saveCurrentStorefront', managedStorefrontStart)
+const managedStorefrontAction = ecommerceSource.slice(managedStorefrontStart, managedStorefrontEnd)
+const managedHydrationStart = ecommerceSource.indexOf('setManagedIdentity(identity)')
+const managedHydrationEnd = ecommerceSource.indexOf('.catch((error) =>', managedHydrationStart)
+const managedHydrationAction = ecommerceSource.slice(managedHydrationStart, managedHydrationEnd)
+const managedViewStart = ecommerceSource.indexOf('function applyManagedView')
+const managedViewEnd = ecommerceSource.indexOf('async function saveManagedStorefront', managedViewStart)
+const managedViewAction = ecommerceSource.slice(managedViewStart, managedViewEnd)
+if (managedStorefrontStart < 0
+  || managedStorefrontEnd < 0
+  || managedHydrationStart < 0
+  || managedHydrationEnd < 0
+  || managedViewStart < 0
+  || managedViewEnd < 0
+  || !managedStorefrontAction.includes('prepareManagedStorefrontSave')
+  || !managedStorefrontAction.includes('loadManagedBootstrap')
+  || !managedStorefrontAction.includes('saveManagedCommerceCommand')
+  || !managedStorefrontAction.includes('acceptManagedStorefrontCommand')
+  || !managedStorefrontAction.includes('identity,')
+  || ['saveStorefrontDraft', 'readStorefrontDraft', 'localStorage', 'sessionStorage'].some((marker) => managedStorefrontAction.includes(marker))
+  || ['saveStorefrontDraft', 'readStorefrontDraft', 'localStorage', 'sessionStorage'].some((marker) => managedHydrationAction.includes(marker))
+  || !managedViewAction.includes('if (!replaceEdits) return')
+  || !managedViewAction.includes('setStoreName(view.fields.storeName)')
+  || managedViewAction.indexOf('if (!replaceEdits) return') > managedViewAction.indexOf('setStoreName(view.fields.storeName)')
+  || !managedStorefrontSource.includes('commerceCatalogDigest')
+  || !managedStorefrontSource.includes('commerceStorefrontConfigurationActionId')
+  || !managedStorefrontSource.includes('acceptManagedStorefrontSave')
+  || ['localStorage', 'sessionStorage', 'fetch(', 'XMLHttpRequest'].some((marker) => managedStorefrontSource.includes(marker))) fail('managed_storefront_workspace_save_boundary_missing')
 const ecommerceCatalogIndex = ecommerceSource.indexOf('className="ecommerce-catalog-list"')
 const ecommerceSaveIndex = ecommerceSource.indexOf('className="ecommerce-save-bar"')
 if (ecommerceCatalogIndex < 0 || ecommerceSaveIndex < ecommerceCatalogIndex) fail('ecommerce_save_precedes_product_selection')
@@ -323,6 +361,8 @@ if (!commerceSource.includes('recordCommerceStorefrontRequest')
   || !ecommerceSource.includes("eventType: 'commerce.storefront_request.received'")
   || !ecommerceSource.includes('Save to Shop inbox')
   || !ecommerceSource.includes('latestRequest.sourcePreviewDigest !== currentDigest')
+  || !ecommerceSource.includes('accepted.storefrontConfiguration ?? null')
+  || !ecommerceSource.includes('identity.workspaceId !== managedIdentity.workspaceId')
   || !coreSource.includes('Ecommerce inbox')
   || !coreSource.includes('reviewStorefrontRequest')
   || !coreSource.includes('separate Shop action gate')) fail('managed_ecommerce_inbox_contract_missing')
@@ -614,9 +654,16 @@ if (!commerceSource.includes('export function settleCommerceRefund')
   || !commerceSource.includes('order.refundSettlementActionId === proof.actionId')
   || !commerceSource.includes('order.paymentReconciliationActionId === actionId || order.refundSettlementActionId === actionId')
   || !commerceSource.includes('...refundSettlementActionIds')) fail('commerce_refund_settlement_contract_missing')
-if (!managedTrialSource.includes('saveManagedCommerceCommand') || !managedTrialSource.includes('expected_version: request.expectedVersion') || !managedTrialSource.includes("surface: 'commerce'") || !managedTrialSource.includes('payload: { state: request.state, evidence: request.evidence }')) fail('managed_commerce_command_client_missing')
+if (!managedTrialSource.includes('saveManagedCommerceCommand')
+  || !managedTrialSource.includes('expected_version: request.expectedVersion')
+  || !managedTrialSource.includes("surface: 'commerce'")
+  || !managedTrialSource.includes('payload: { state: request.state, evidence: request.evidence }')
+  || !managedTrialSource.includes('assertManagedBootstrapIdentity')
+  || !managedTrialSource.includes('sessionForRequest(expectedIdentity)')
+  || !managedTrialSource.includes('request.identity')
+  || !managedTrialSource.includes("code: 'managed_identity_changed'")) fail('managed_commerce_command_client_missing')
 const managedCommerceClientSources = `${coreSource}\n${websiteSource}\n${ecommerceSource}`
-for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.payment.reconciled', 'commerce.refund.settled', 'commerce.stock.received', 'commerce.close.saved', 'commerce.website_intake.converted', 'commerce.storefront_request.received']) {
+for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.payment.reconciled', 'commerce.refund.settled', 'commerce.stock.received', 'commerce.close.saved', 'commerce.website_intake.converted', 'commerce.storefront.configuration.saved', 'commerce.storefront_request.received']) {
   if (!managedTrialSource.includes(eventType) || !managedCommerceClientSources.includes(eventType) || !managedCommerceRuntime.includes(eventType)) fail(`managed_commerce_event_missing:${eventType}`)
 }
 if (!managedTrialSource.includes('commerce.website_intake.created')
@@ -1747,6 +1794,21 @@ async function verifyCommerceRuntime() {
       ...model.createEmptyCommerce(),
       items: [{ sku: 'SKU-1', name: 'Test item', onHand: 10, reorderAt: 2, price: 100 }],
     }
+    const baseCatalogDigest = await model.commerceCatalogDigest(base)
+    const configurationProof = {
+      actionId: model.commerceStorefrontConfigurationActionId(1, baseCatalogDigest),
+      capturedAt: '2026-07-23T08:59:00.000Z',
+      actor: 'OP-OWNER',
+      reason: 'Save the current storefront before retaining a request.',
+      evidenceReference: `ECOMMERCE-STOREFRONT:${baseCatalogDigest}:R1`,
+    }
+    const configuredBase = await model.saveCommerceStorefrontConfiguration(base, {
+      storeName: 'Mingalar Shop',
+      summary: 'A configured storefront with a retained request inbox.',
+      selectedSkus: ['SKU-1'],
+      shopCatalogDigest: baseCatalogDigest,
+    }, configurationProof)
+    assert(configuredBase?.storefrontConfiguration?.revision === 1, 'storefront_request_configuration_fixture_failed')
     const storefrontRequestUuid = '00000000-0000-4000-8000-000000000010'
     const storefrontRequest = {
       schema: 'supermega.ecommerce.order_request.v1',
@@ -1765,12 +1827,13 @@ async function verifyCommerceRuntime() {
     const storefrontProof = proof(`ACT-${storefrontRequestUuid}`, 0, {
       evidenceReference: `ECOMMERCE:${storefrontRequest.id}:${storefrontRequest.sourcePreviewDigest}`,
     })
-    const withStorefrontRequest = model.recordCommerceStorefrontRequest(base, storefrontRequest, storefrontProof)
+    const withStorefrontRequest = model.recordCommerceStorefrontRequest(configuredBase, storefrontRequest, storefrontProof)
     assert(withStorefrontRequest?.storefrontRequests?.length === 1, 'storefront_request_not_retained')
-    assert(withStorefrontRequest.items === base.items
-      && withStorefrontRequest.orders === base.orders
-      && withStorefrontRequest.movements === base.movements
-      && withStorefrontRequest.closes === base.closes,
+    assert(withStorefrontRequest.items === configuredBase.items
+      && withStorefrontRequest.orders === configuredBase.orders
+      && withStorefrontRequest.movements === configuredBase.movements
+      && withStorefrontRequest.closes === configuredBase.closes
+      && JSON.stringify(withStorefrontRequest.storefrontConfiguration) === JSON.stringify(configuredBase.storefrontConfiguration),
     'storefront_request_changed_shop_ledgers')
     assert(model.recordCommerceStorefrontRequest(withStorefrontRequest, storefrontRequest, storefrontProof) === withStorefrontRequest, 'storefront_request_retry_not_idempotent')
     assert(model.recordCommerceStorefrontRequest(withStorefrontRequest, {
@@ -2508,6 +2571,141 @@ async function verifyStorefrontRuntime() {
   }
 }
 
+async function verifyManagedStorefrontRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    managedStorefrontRuntimeChecks += 1
+  }
+  try {
+    const nonce = Date.now()
+    const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'managed-storefront.ts')).href}?managed-storefront=${nonce}`)
+    const commerce = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?managed-storefront-commerce=${nonce}`)
+    const managedTrial = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'managed-trial.ts')).href}?managed-storefront-trial=${nonce}`)
+    const identity = { userId: 'OP-MANAGED', email: 'operator@example.test', workspaceId: 'workspace-managed' }
+    const bootstrapIdentity = {
+      identity: {
+        workspace_id: identity.workspaceId,
+        actor_id: identity.userId,
+        actor_kind: 'human',
+      },
+      readiness: {},
+      states: {},
+      approvals: [],
+    }
+    assert(managedTrial.assertManagedBootstrapIdentity(bootstrapIdentity, identity) === bootstrapIdentity, 'managed_storefront_matching_bootstrap_identity_rejected')
+    let mismatchedBootstrapRejected = false
+    try {
+      managedTrial.assertManagedBootstrapIdentity({
+        ...bootstrapIdentity,
+        identity: { ...bootstrapIdentity.identity, workspace_id: 'workspace-other' },
+      }, identity)
+    } catch { mismatchedBootstrapRejected = true }
+    assert(mismatchedBootstrapRejected, 'managed_storefront_mismatched_bootstrap_identity_accepted')
+    let malformedBootstrapRejected = false
+    try {
+      managedTrial.assertManagedBootstrapIdentity({ identity: bootstrapIdentity.identity }, identity)
+    } catch { malformedBootstrapRejected = true }
+    assert(malformedBootstrapRejected, 'managed_storefront_malformed_bootstrap_accepted')
+    const state = commerce.createSeedCommerce()
+    const before = JSON.stringify(state)
+    const input = {
+      storeName: 'Mingalar Shop',
+      summary: 'A small managed catalog for customer requests.',
+      selectedSkus: ['SM-CARE-01', 'SM-1001'],
+    }
+    const plan = await model.prepareManagedStorefrontSave(
+      state,
+      input,
+      'OP-MANAGED',
+      '2026-07-25T00:00:00.000Z',
+    )
+    assert(plan.status === 'ready'
+      && plan.configuration.revision === 1
+      && plan.configuration.shopCatalogSnapshotRevision === 1, 'managed_storefront_first_revision_invalid')
+    assert(JSON.stringify(state) === before, 'managed_storefront_plan_mutated_input')
+    assert(/^sha256:[a-f0-9]{64}$/.test(plan.configuration.shopCatalogDigest)
+      && plan.evidence.actionId === commerce.commerceStorefrontConfigurationActionId(1, plan.configuration.shopCatalogDigest), 'managed_storefront_digest_or_action_identity_invalid')
+    const authoritative = structuredClone(plan.next)
+    authoritative.storefrontConfiguration.saved.capturedAt = '2026-07-25T00:00:01+00:00'
+    const commandResult = {
+      command_id: '00000000-0000-4000-8000-000000000101',
+      surface: 'commerce',
+      event_type: 'commerce.storefront.configuration.saved',
+      version: 8,
+      state: authoritative,
+      idempotent_replay: false,
+    }
+    const acceptedReceipt = model.acceptManagedStorefrontCommand(plan, commandResult, {
+      commandId: commandResult.command_id,
+      priorVersion: 7,
+      actor: 'OP-MANAGED',
+    })
+    const accepted = acceptedReceipt.state
+    assert(acceptedReceipt.version === 8 && acceptedReceipt.replayed === false, 'managed_storefront_command_receipt_not_retained')
+    let swappedReceiptRejected = false
+    try {
+      model.acceptManagedStorefrontCommand(plan, {
+        ...commandResult,
+        command_id: '00000000-0000-4000-8000-000000000102',
+      }, {
+        commandId: commandResult.command_id,
+        priorVersion: 7,
+        actor: 'OP-MANAGED',
+      })
+    } catch { swappedReceiptRejected = true }
+    assert(swappedReceiptRejected, 'managed_storefront_swapped_command_receipt_accepted')
+    assert(model.readManagedStorefront(accepted)?.storeName === input.storeName, 'managed_storefront_accepted_configuration_unreadable')
+    const unchanged = await model.prepareManagedStorefrontSave(
+      accepted,
+      input,
+      'OP-MANAGED',
+      '2026-07-25T00:01:00.000Z',
+    )
+    assert(unchanged.status === 'unchanged' && unchanged.configuration.revision === 1, 'managed_storefront_exact_retry_advanced_revision')
+    const changed = await model.prepareManagedStorefrontSave(
+      accepted,
+      { ...input, summary: 'Updated managed storefront copy.' },
+      'OP-MANAGED',
+      '2026-07-25T00:02:00.000Z',
+    )
+    assert(changed.status === 'ready'
+      && changed.configuration.revision === 2
+      && changed.configuration.shopCatalogSnapshotRevision === 1, 'managed_storefront_copy_change_revision_invalid')
+
+    const stockTampered = structuredClone(plan.next)
+    stockTampered.items[0].onHand += 1
+    let stockTamperRejected = false
+    try { model.acceptManagedStorefrontSave(plan, stockTampered, 'OP-MANAGED') } catch { stockTamperRejected = true }
+    assert(stockTamperRejected, 'managed_storefront_stock_side_effect_accepted')
+    const actorTampered = structuredClone(plan.next)
+    actorTampered.storefrontConfiguration.saved.actor = 'OTHER-ACTOR'
+    let actorTamperRejected = false
+    try { model.acceptManagedStorefrontSave(plan, actorTampered, 'OP-MANAGED') } catch { actorTamperRejected = true }
+    assert(actorTamperRejected, 'managed_storefront_actor_tamper_accepted')
+    const unknownSkuRejected = await model.prepareManagedStorefrontSave(
+      state,
+      { ...input, selectedSkus: ['UNKNOWN-SKU'] },
+      'OP-MANAGED',
+      '2026-07-25T00:03:00.000Z',
+    ).then(() => false, () => true)
+    assert(unknownSkuRejected, 'managed_storefront_unknown_sku_accepted')
+
+    const mutable = structuredClone(state)
+    const mutationSafePlanPromise = model.prepareManagedStorefrontSave(
+      mutable,
+      input,
+      'OP-MANAGED',
+      '2026-07-25T00:04:00.000Z',
+    )
+    mutable.items[0].price += 1_000
+    const mutationSafePlan = await mutationSafePlanPromise
+    assert(mutationSafePlan.current.items[0].price === state.items[0].price
+      && mutationSafePlan.next.items[0].price === state.items[0].price, 'managed_storefront_async_plan_observed_late_mutation')
+  } catch (error) {
+    fail(`managed_storefront_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
 async function verifyProductionRuntime() {
   const assert = (condition, reason) => {
     if (!condition) throw new Error(reason)
@@ -3146,6 +3344,7 @@ await verifyWebsiteRuntime()
 await verifyWebsiteOrderCompletionRuntime()
 await verifyStorefrontDraftRuntime()
 await verifyStorefrontRuntime()
+await verifyManagedStorefrontRuntime()
 await verifyCommerceRuntime()
 await verifyProductionRuntime()
 
@@ -3159,4 +3358,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', primaryRoutes: 5, operatingModules: 2, prototypeRoutes: 2, compatibilityRedirects: 1, workflowProfiles, channelOrderRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, ecommerceHandoffRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', primaryRoutes: 5, operatingModules: 2, prototypeRoutes: 2, compatibilityRedirects: 1, workflowProfiles, channelOrderRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceHandoffRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
