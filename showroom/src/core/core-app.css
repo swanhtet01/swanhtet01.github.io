@@ -406,6 +406,15 @@ textarea { min-height: 72px; resize: vertical; }
 .data-row strong { color: var(--core-ink); }
 .data-row small { color: var(--core-quiet); font-size: 8px; }
 .data-row.table-head { min-height: 34px; color: var(--core-quiet); font-family: var(--core-mono); font-size: 8px; text-transform: uppercase; }
+.data-row[data-receiving="true"] { margin-inline: -8px; border-radius: 8px; padding-inline: 8px; background: var(--core-green-soft); }
+.stock-receipt-editor { display: grid; grid-template-columns: minmax(180px,1fr) minmax(150px,.55fr) minmax(180px,.7fr) auto; gap: 10px; align-items: end; margin-top: 12px; border: 1px solid rgba(11,116,94,.24); border-radius: 12px; padding: 12px; background: var(--core-green-soft); }
+.stock-receipt-copy { min-width: 0; display: grid; gap: 3px; align-self: center; }
+.stock-receipt-copy h3 { margin: 0; font-size: 15px; }
+.stock-receipt-copy small { overflow: hidden; color: var(--core-quiet); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.stock-receipt-preview { min-height: 44px; display: grid; align-content: center; gap: 3px; border-left: 1px solid rgba(11,116,94,.2); padding-left: 12px; }
+.stock-receipt-preview small { color: var(--core-quiet); font-size: 8px; text-transform: uppercase; }
+.stock-receipt-preview strong { color: var(--core-ink); font-size: 13px; }
+.stock-receipt-editor .form-actions { align-self: end; }
 .warning-text { color: var(--core-warn); }
 
 .job-list article { min-height: 55px; display: grid; grid-template-columns: minmax(0,.8fr) minmax(150px,1.2fr); gap: 12px; align-items: center; border-bottom: 1px solid var(--core-line); }
@@ -806,6 +815,10 @@ textarea { min-height: 72px; resize: vertical; }
   .data-row > span:nth-child(3)::before { content: "Reorder"; }
   .data-row > span:nth-child(4)::before { content: "Price"; }
   .inventory-panel { overflow-x: hidden; }
+  .stock-receipt-editor { grid-template-columns: 1fr; }
+  .stock-receipt-preview { border-top: 1px solid rgba(11,116,94,.2); border-left: 0; padding-top: 10px; padding-left: 0; }
+  .stock-receipt-editor .form-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .stock-receipt-editor .core-button { width: 100%; }
   .job-list article { grid-template-columns: 1fr; padding: 9px 0; }
   .channel-mapping-list { max-height: none; overflow: visible; }
   .channel-mapping-row { grid-template-columns: 1fr; }

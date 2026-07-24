@@ -199,6 +199,8 @@ type PendingAccountableAction = Omit<AccountableAction, 'capturedAt' | 'actorKin
 
 type ActionDetails = Pick<AccountableAction, 'actor' | 'reason' | 'evidenceReference'>
 
+class ShopReviewRequiredError extends Error {}
+
 type ProductId = 'commerce' | 'production'
 
 function productDisplayName(product: ProductId) {
@@ -701,6 +703,15 @@ function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = null) {
       if (eventType === 'commerce.workspace.initialized') throw new Error('Browser demo Shop is already initialized.')
       const result = await mutateCommerceWorkspace(transition)
       if (!result.ok) {
+        if (result.error === 'The Commerce state changed or the requested transition is not valid. Nothing was written.') {
+          const latest = loadCommerceWorkspace()
+          const refreshed = { state: latest.state, mode: 'local' as const, workspaceId: '', version: null, error: latest.error, writeReady: !latest.error && commerceWorkspaceCanWrite() }
+          snapshotRef.current = refreshed
+          setLocalSnapshot(refreshed)
+          throw new ShopReviewRequiredError(latest.error
+            ? `Shop changed before this action was applied. Nothing was written; reload to recover the current record. ${latest.error}`
+            : 'Shop changed before this action was applied. Nothing was written; the latest record is loaded for fresh review.')
+        }
         const rejected = { ...snapshotRef.current, error: result.error }
         snapshotRef.current = rejected
         setLocalSnapshot(rejected)
@@ -766,7 +777,7 @@ function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = null) {
           setManagedSnapshot(rejected)
           throw refreshError
         }
-        throw new Error('Shop changed in another session. The latest revision is loaded; review and confirm the action again.')
+        throw new ShopReviewRequiredError('Shop changed in another session. The latest revision is loaded; review and confirm the action again.')
       }
       if (identityRef.current?.workspaceId === workspaceId) {
         const rejected = { ...snapshotRef.current, error: message }
@@ -1708,6 +1719,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
   const [notice, setNotice] = useState('')
   const [catalogDraft, setCatalogDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '', price: '', reason: '', evidenceReference: '' })
   const [itemDraft, setItemDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '', price: '' })
+  const [stockReceiptDraft, setStockReceiptDraft] = useState<{ sku: string; quantity: string } | null>(null)
   const [catalogBusy, setCatalogBusy] = useState(false)
   const [catalogError, setCatalogError] = useState('')
   const selectedSku = commerce.items.some((item) => item.sku === sku) ? sku : commerce.items[0]?.sku ?? ''
@@ -1730,6 +1742,19 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
   const pendingStorefrontRequests = storefrontRequests.filter((request) => (
     !commerce.orders.some((order) => order.sourceRecordId === request.id)
   ))
+  const stockReceiptItem = stockReceiptDraft
+    ? commerce.items.find((item) => item.sku === stockReceiptDraft.sku)
+    : undefined
+  const stockReceiptQuantityText = stockReceiptDraft?.quantity.trim() ?? ''
+  const stockReceiptQuantity = /^\d+$/.test(stockReceiptQuantityText)
+    ? Number(stockReceiptQuantityText)
+    : Number.NaN
+  const stockReceiptResult = stockReceiptItem
+    && Number.isSafeInteger(stockReceiptQuantity)
+    && stockReceiptQuantity > 0
+    && Number.isSafeInteger(stockReceiptItem.onHand + stockReceiptQuantity)
+    ? stockReceiptItem.onHand + stockReceiptQuantity
+    : null
 
   useEffect(() => {
     if (!ecommerceNavigationDraft || managedIdentity || consumedEcommerceDraftId.current === ecommerceNavigationDraft.id) return
@@ -1895,7 +1920,15 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
         ? { ...current, confirmation: record }
         : current)
     }
-    await pendingAction.apply(record)
+    try {
+      await pendingAction.apply(record)
+    } catch (error) {
+      if (error instanceof ShopReviewRequiredError) {
+        setPendingAction(null)
+        setNotice(error.message)
+      }
+      throw error
+    }
     if (!managedIdentity) setActions((current) => [record, ...current])
     setNotice(managedIdentity ? `${record.id} confirmed by the managed Shop API.` : `${record.id} applied and added to the action history.`)
     setPendingAction(null)
@@ -2172,10 +2205,49 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
     queueAction({ kind: 'order_cancel', subjectId: orderId, summary: `Cancel ${order.id} and release stock`, before: `${order.status} · ${item.onHand} on hand · ${order.paymentStatus}`, after: `cancelled · ${item.onHand + order.quantity} on hand · ${paymentAfter}`, apply: (action) => mutateCommerce('commerce.order.cancelled', action.commandId, commerceActionProof(action), (current) => cancelCommerceOrder(current, orderId, commerceActionProof(action))) })
   }
 
-  function restock(itemSku: string) {
+  function openStockReceipt(itemSku: string) {
     const item = commerce.items.find((candidate) => candidate.sku === itemSku)
     if (!item) return
-    queueAction({ kind: 'inventory_receipt', subjectId: itemSku, summary: `Receive 10 units of ${item.name}`, before: `${item.onHand} on hand`, after: `${item.onHand + 10} on hand`, apply: (action) => mutateCommerce('commerce.stock.received', action.commandId, commerceActionProof(action), (current) => receiveCommerceStock(current, itemSku, 10, commerceActionProof(action))) })
+    setStockReceiptDraft((current) => current?.sku === itemSku ? current : { sku: itemSku, quantity: '' })
+    setNotice(`Enter the exact quantity received for ${item.name}. Nothing changes until confirmation.`)
+  }
+
+  function cancelStockReceipt() {
+    setStockReceiptDraft(null)
+    setNotice('Stock receipt cancelled. Shop data was not modified.')
+  }
+
+  function reviewStockReceipt(event: FormEvent) {
+    event.preventDefault()
+    if (!stockReceiptDraft) return
+    const item = commerce.items.find((candidate) => candidate.sku === stockReceiptDraft.sku)
+    const quantityText = stockReceiptDraft.quantity.trim()
+    const receiptQuantity = /^\d+$/.test(quantityText) ? Number(quantityText) : Number.NaN
+    if (!item
+      || !Number.isSafeInteger(receiptQuantity)
+      || receiptQuantity < 1
+      || !Number.isSafeInteger(item.onHand + receiptQuantity)) {
+      setNotice('Enter a positive whole-unit quantity that keeps stock within the safe range.')
+      return
+    }
+    const expectedOnHand = item.onHand
+    const itemSku = item.sku
+    queueAction({
+      kind: 'inventory_receipt',
+      subjectId: itemSku,
+      summary: `Receive ${receiptQuantity.toLocaleString()} units of ${item.name}`,
+      before: `${expectedOnHand.toLocaleString()} on hand`,
+      after: `${(expectedOnHand + receiptQuantity).toLocaleString()} on hand`,
+      apply: async (action) => {
+        const proof = commerceActionProof(action)
+        await mutateCommerce('commerce.stock.received', action.commandId, proof, (current) => {
+          const currentItem = current.items.find((candidate) => candidate.sku === itemSku)
+          if (!currentItem || currentItem.onHand !== expectedOnHand) return null
+          return receiveCommerceStock(current, itemSku, receiptQuantity, proof)
+        })
+        setStockReceiptDraft((current) => current?.sku === itemSku ? null : current)
+      },
+    })
   }
 
   function closeDay() {
@@ -2205,7 +2277,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
     })
   }
 
-  const actionGate = <AccountableActionGate authenticatedActor={managedIdentity ? { id: managedIdentity.userId, label: managedIdentity.email } : undefined} key={pendingAction?.id ?? 'commerce-idle'} action={pendingAction} onCancel={() => setPendingAction(null)} onConfirm={confirmAction} returnFocus={actionTrigger} />
+  const actionGate = <AccountableActionGate authenticatedActor={managedIdentity ? { id: managedIdentity.userId, label: managedIdentity.email } : undefined} key={pendingAction?.id ?? 'commerce-idle'} action={pendingAction} onCancel={() => { setPendingAction(null); setNotice('Change cancelled. Shop data was not modified.') }} onConfirm={confirmAction} returnFocus={actionTrigger} />
   const actionHistory = managedIdentity ? null : <ActionHistory actions={actions} domain="commerce" />
 
   if (tab === 'orders') return <div className="operation-module">
@@ -2285,7 +2357,26 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
     {commerceBoundary}
     <section className="core-panel inventory-panel">
       <div className="panel-head"><div><span className="core-eyebrow">Stock control</span><h2>Inventory and reorder boundaries</h2></div><span className="panel-note">{lowStock.length} at boundary</span></div>
-      <div className="data-table" role="table" aria-label="Shop stock"><div className="data-row table-head" role="row"><span role="columnheader">Item</span><span role="columnheader">On hand</span><span role="columnheader">Reorder</span><span role="columnheader">Price</span><span role="columnheader">Action</span></div>{commerce.items.map((item) => <div className="data-row" role="row" key={item.sku}><span role="rowheader"><strong>{item.name}</strong><small>{item.sku}</small></span><span className={item.onHand <= item.reorderAt ? 'warning-text' : ''} role="cell">{item.onHand}</span><span role="cell">{item.reorderAt}</span><span role="cell">{formatMoney(item.price)}</span><span role="cell"><button className="text-link" disabled={commerceControlsDisabled} type="button" onClick={() => restock(item.sku)}>Receive +10</button></span></div>)}</div>
+      <div className="data-table" role="table" aria-label="Shop stock">
+        <div className="data-row table-head" role="row"><span role="columnheader">Item</span><span role="columnheader">On hand</span><span role="columnheader">Reorder</span><span role="columnheader">Price</span><span role="columnheader">Action</span></div>
+        {commerce.items.map((item) => <div className="data-row" data-receiving={stockReceiptDraft?.sku === item.sku} role="row" key={item.sku}>
+          <span role="rowheader"><strong>{item.name}</strong><small>{item.sku}</small></span>
+          <span className={item.onHand <= item.reorderAt ? 'warning-text' : ''} role="cell">{item.onHand}</span>
+          <span role="cell">{item.reorderAt}</span>
+          <span role="cell">{formatMoney(item.price)}</span>
+          <span role="cell"><button aria-expanded={stockReceiptDraft?.sku === item.sku} className="text-link" disabled={commerceControlsDisabled} type="button" onClick={() => openStockReceipt(item.sku)}>{stockReceiptDraft?.sku === item.sku ? 'Editing receipt' : 'Receive stock'}</button></span>
+        </div>)}
+      </div>
+      {stockReceiptItem && stockReceiptDraft ? <form aria-labelledby="stock-receipt-title" className="stock-receipt-editor" onSubmit={reviewStockReceipt}>
+        <div className="stock-receipt-copy">
+          <span className="core-eyebrow">Receive stock</span>
+          <h3 id="stock-receipt-title">{stockReceiptItem.name}</h3>
+          <small>{stockReceiptItem.sku} · record the counted units received</small>
+        </div>
+        <label>Quantity received<input aria-describedby="stock-receipt-preview" autoFocus disabled={commerceControlsDisabled} inputMode="numeric" max={Number.MAX_SAFE_INTEGER - stockReceiptItem.onHand} min="1" onChange={(event) => setStockReceiptDraft({ sku: stockReceiptItem.sku, quantity: event.target.value })} placeholder="7" required step="1" type="number" value={stockReceiptDraft.quantity} /></label>
+        <div aria-live="polite" className="stock-receipt-preview" id="stock-receipt-preview"><small>New on hand</small><strong>{stockReceiptResult === null ? 'Enter a whole unit count' : `${stockReceiptItem.onHand.toLocaleString()} → ${stockReceiptResult.toLocaleString()}`}</strong></div>
+        <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelStockReceipt} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled || stockReceiptResult === null} type="submit">Review receipt</button></div>
+      </form> : null}
       <details className="compact-disclosure catalog-disclosure">
         <summary>Add catalog item</summary>
         <form className="core-form compact-form catalog-create-form" onSubmit={queueCatalogItem}>
