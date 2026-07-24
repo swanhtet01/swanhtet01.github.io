@@ -75,14 +75,14 @@ import {
 import {
   LEGACY_PRODUCTION_KEYS,
   PRODUCTION_KEY,
-  advanceProductionMachineState,
   createEmptyProduction,
   loadProductionWorkspace,
   mutateProductionWorkspace,
   openProductionIssue,
-  productionMachineTransitions,
+  productionMachineStates,
   productionWorkspaceCanWrite,
   recordProductionOutput,
+  recordProductionMachineState,
   registerProductionJob,
   resolveProductionIssue,
   validateProductionState,
@@ -200,6 +200,7 @@ type PendingAccountableAction = Omit<AccountableAction, 'capturedAt' | 'actorKin
 type ActionDetails = Pick<AccountableAction, 'actor' | 'reason' | 'evidenceReference'>
 
 class ShopReviewRequiredError extends Error {}
+class PlantReviewRequiredError extends Error {}
 
 type ProductId = 'commerce' | 'production'
 
@@ -351,10 +352,10 @@ const productionTabs: Array<{ id: ProductionTab; label: string }> = [
   { id: 'control', label: 'Problems' },
 ]
 
-const productionMachineActionLabels: Record<ProductionMachineState, string> = {
-  running: 'Record needs attention',
-  attention: 'Record as stopped',
-  stopped: 'Record as running',
+const productionMachineStateLabels: Record<ProductionMachineState, string> = {
+  running: 'Running',
+  attention: 'Needs attention',
+  stopped: 'Stopped',
 }
 
 function uid(prefix: string) {
@@ -767,7 +768,7 @@ function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = null) {
           const bootstrap = await loadManagedBootstrap()
           if (identityRef.current?.workspaceId !== workspaceId) throw new Error('The managed workspace changed before Shop could refresh.')
           const refreshed = managedCommerceView(bootstrap.states.commerce, workspaceId)
-          const conflict = { ...refreshed, error: 'Shop changed in another session. The latest revision is loaded; review and confirm the action again.' }
+          const conflict = { ...refreshed, error: '' }
           snapshotRef.current = conflict
           setManagedSnapshot(conflict)
         } catch (refreshError) {
@@ -874,6 +875,22 @@ function useProductionWorkspace(managedIdentity: ManagedIdentity | null = null) 
       if (eventType === 'production.workspace.initialized') throw new Error('Browser demo Plant is already initialized.')
       const result = await mutateProductionWorkspace(transition)
       if (!result.ok) {
+        if (result.error === 'The Production state changed or the requested transition is not valid. Nothing was written.') {
+          const latest = loadProductionWorkspace()
+          const current = {
+            state: latest.state,
+            mode: 'local' as const,
+            workspaceId: '',
+            version: null,
+            error: latest.error,
+            writeReady: !latest.error && productionWorkspaceCanWrite(),
+          }
+          snapshotRef.current = current
+          setLocalSnapshot(current)
+          throw new PlantReviewRequiredError(latest.error
+            ? `Plant changed before this action was applied. Nothing was written; reload to recover the current record. ${latest.error}`
+            : 'Plant changed before this action was applied. Nothing was written; the latest record is loaded for fresh review.')
+        }
         const refreshed = loadProductionWorkspace()
         const rejected = {
           state: refreshed.error ? snapshotRef.current.state : refreshed.state,
@@ -901,7 +918,7 @@ function useProductionWorkspace(managedIdentity: ManagedIdentity | null = null) 
       throw new Error(current.error || 'Managed Plant is not ready for writes.')
     }
     const next = transition(current.state)
-    if (!next) throw new Error('The Plant state changed or this lifecycle step is no longer valid. Nothing was written.')
+    if (!next) throw new PlantReviewRequiredError('The Plant record changed or this lifecycle step is no longer valid. Nothing was written; review the current record again.')
     if (next === current.state) return
     const candidate = validateProductionState(next)
 
@@ -937,7 +954,7 @@ function useProductionWorkspace(managedIdentity: ManagedIdentity | null = null) 
           const bootstrap = await loadManagedBootstrap()
           if (identityRef.current?.workspaceId !== workspaceId) throw new Error('The managed workspace changed before Plant could refresh.')
           const refreshed = managedProductionView(bootstrap.states.production, workspaceId)
-          const conflict = { ...refreshed, error: 'Plant changed in another session. The latest revision is loaded; review and confirm the action again.' }
+          const conflict = { ...refreshed, error: '' }
           snapshotRef.current = conflict
           setManagedSnapshot(conflict)
         } catch (refreshError) {
@@ -947,7 +964,7 @@ function useProductionWorkspace(managedIdentity: ManagedIdentity | null = null) 
           setManagedSnapshot(rejected)
           throw refreshError
         }
-        throw new Error('Plant changed in another session. The latest revision is loaded; review and confirm the action again.')
+        throw new PlantReviewRequiredError('Plant changed in another session. The latest revision is loaded; review and confirm the action again.')
       }
       if (identityRef.current?.workspaceId === workspaceId) {
         const rejected = { ...snapshotRef.current, error: message }
@@ -2509,6 +2526,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const [kind, setKind] = useState<ProductionIssue['kind']>('quality')
   const [summary, setSummary] = useState('')
   const [issueDialogOpen, setIssueDialogOpen] = useState(false)
+  const [machineObservation, setMachineObservation] = useState<{ machineId: string; toState: ProductionMachineState } | null>(null)
   const [jobDraft, setJobDraft] = useState({ id: '', line: '', product: '', target: '' })
   const [notice, setNotice] = useState('')
   const [actionTrigger, setActionTrigger] = useState<HTMLElement | null>(null)
@@ -2517,6 +2535,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const [planError, setPlanError] = useState('')
   const issueDialogRef = useRef<HTMLDialogElement>(null)
   const issueTriggerRef = useRef<HTMLButtonElement>(null)
+  const machineDialogRef = useRef<HTMLDialogElement>(null)
+  const machineTriggerRef = useRef<HTMLButtonElement | null>(null)
   const openIssues = production.issues.filter((issue) => issue.status === 'open')
   const resolvedIssues = production.issues.filter((issue) => issue.status === 'resolved')
   const activeJobs = production.jobs.filter((job) => job.output < job.target)
@@ -2524,6 +2544,12 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const selectedJobId = activeJobs.some((job) => job.id === jobId) ? jobId : activeJobs[0]?.id ?? ''
   const selectedJob = activeJobs.find((job) => job.id === selectedJobId)
   const selectedRemaining = selectedJob ? selectedJob.target - selectedJob.output : 0
+  const observedMachine = machineObservation
+    ? production.machines.find((machine) => machine.id === machineObservation.machineId)
+    : undefined
+  const machineObservationTargets = observedMachine
+    ? productionMachineStates.filter((state) => state !== observedMachine.state)
+    : []
 
   useEffect(() => {
     const dialog = issueDialogRef.current
@@ -2534,6 +2560,16 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     }
     if (!issueDialogOpen && dialog.open) dialog.close()
   }, [issueDialogOpen, tab])
+
+  useEffect(() => {
+    const dialog = machineDialogRef.current
+    if (!dialog) return
+    if (machineObservation && !dialog.open) {
+      dialog.showModal()
+      requestAnimationFrame(() => dialog.querySelector('select')?.focus())
+    }
+    if (!machineObservation && dialog.open) dialog.close()
+  }, [machineObservation, tab])
 
   async function initializeManagedProduction(event: FormEvent) {
     event.preventDefault()
@@ -2624,7 +2660,15 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         ? { ...current, confirmation: record }
         : current)
     }
-    await action.apply(record)
+    try {
+      await action.apply(record)
+    } catch (error) {
+      if (error instanceof PlantReviewRequiredError) {
+        setPendingAction(null)
+        setNotice(error.message)
+      }
+      throw error
+    }
     if (!managedIdentity) setActions((current) => [record, ...current])
     setNotice(managedIdentity ? `${record.id} confirmed by the managed Plant API.` : `${record.id} persisted with attributed Plant evidence.`)
     setPendingAction(null)
@@ -2709,21 +2753,45 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     })
   }
 
-  function cycleMachine(machineId: string) {
+  function openMachineObservation(machineId: string, trigger: HTMLButtonElement) {
     const machine = production.machines.find((candidate) => candidate.id === machineId)
     if (!machine) return
+    const firstAlternative = productionMachineStates.find((state) => state !== machine.state)
+    if (!firstAlternative) return
+    machineTriggerRef.current = trigger
+    setMachineObservation({ machineId, toState: firstAlternative })
+  }
+
+  function closeMachineObservation() {
+    setMachineObservation(null)
+    requestAnimationFrame(() => machineTriggerRef.current?.focus())
+  }
+
+  function reviewMachineObservation(event: FormEvent) {
+    event.preventDefault()
+    if (!machineObservation) return
+    const machine = production.machines.find((candidate) => candidate.id === machineObservation.machineId)
+    if (!machine
+      || machineObservation.toState === machine.state
+      || !productionMachineStates.includes(machineObservation.toState)) {
+      setNotice('Choose a different recorded status for an existing machine.')
+      return
+    }
     const expectedState = machine.state
-    const nextState = productionMachineTransitions[expectedState]
+    const observedState = machineObservation.toState
+    const trigger = machineTriggerRef.current
+    machineDialogRef.current?.close()
+    setMachineObservation(null)
     queueAction({
       kind: 'machine_state',
-      subjectId: machineId,
-      summary: `${productionMachineActionLabels[expectedState]} for ${machine.name}`,
-      before: expectedState,
-      after: nextState,
+      subjectId: machine.id,
+      summary: `Record ${productionMachineStateLabels[observedState].toLowerCase()} for ${machine.name}`,
+      before: `Recorded: ${productionMachineStateLabels[expectedState]}`,
+      after: `Recorded: ${productionMachineStateLabels[observedState]}`,
       apply: async (record) => {
-        await mutateProduction('production.machine_state.changed', record.commandId, productionActionProof(record), (current) => advanceProductionMachineState(current, machineId, expectedState, productionActionProof(record)))
+        await mutateProduction('production.machine_state.changed', record.commandId, productionActionProof(record), (current) => recordProductionMachineState(current, machine.id, expectedState, observedState, productionActionProof(record)))
       },
-    })
+    }, trigger)
   }
 
   const productionBoundary = <div className="production-mode-banner" data-write={productionCanWrite ? 'ready' : 'blocked'} role={productionCanWrite ? 'status' : 'alert'}>
@@ -2780,7 +2848,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         <section className="core-panel">
           <div className="panel-head"><div><span className="core-eyebrow">Equipment</span><h2>Recorded status</h2></div></div>
           <p className="panel-copy production-control-boundary">Records operator observations only. These buttons do not start, stop, or control equipment.</p>
-          {production.machines.length ? <div className="machine-list">{production.machines.map((machine) => <button aria-label={`${productionMachineActionLabels[machine.state]} for ${machine.name}; current recorded state ${machine.state}`} disabled={!productionCanWrite || Boolean(pendingAction)} key={machine.id} type="button" onClick={() => cycleMachine(machine.id)}><span className={`machine-dot ${machine.state}`} /><span><strong>{machine.name}</strong><small>{machine.id} - Recorded: {machine.state}</small></span><b>{productionMachineActionLabels[machine.state]}</b></button>)}</div> : <Empty>No equipment records exist in this workspace.</Empty>}
+          {production.machines.length ? <div className="machine-list">{production.machines.map((machine) => <button aria-label={`Review recorded status for ${machine.name}; currently ${productionMachineStateLabels[machine.state]}`} disabled={!productionCanWrite || Boolean(pendingAction)} key={machine.id} type="button" onClick={(event) => openMachineObservation(machine.id, event.currentTarget)}><span className={`machine-dot ${machine.state}`} /><span><strong>{machine.name}</strong><small>{machine.id} - Recorded: {productionMachineStateLabels[machine.state]}</small></span><b>Record status</b></button>)}</div> : <Empty>No equipment records exist in this workspace.</Empty>}
         </section>
         <section className="core-panel production-issue-launcher">
           <div className="panel-head"><div><span className="core-eyebrow">Shift review</span><h2>Open problems</h2></div><span className="panel-note">{openIssues.length} open</span></div>
@@ -2790,6 +2858,17 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         </section>
       </div>
     </div>
+    <dialog aria-labelledby="machine-observation-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); closeMachineObservation() }} ref={machineDialogRef}>
+      {observedMachine && machineObservation ? <>
+        <div className="panel-head"><div><span className="core-eyebrow">Equipment observation</span><h2 id="machine-observation-title">{observedMachine.name}</h2></div><button aria-label="Close equipment observation" className="text-link" onClick={closeMachineObservation} type="button">Close</button></div>
+        <form className="core-form" onSubmit={reviewMachineObservation}>
+          <label>New recorded status<select onChange={(event) => setMachineObservation((current) => current ? { ...current, toState: event.target.value as ProductionMachineState } : current)} value={machineObservation.toState}>{machineObservationTargets.map((state) => <option key={state} value={state}>{productionMachineStateLabels[state]}</option>)}</select></label>
+          <p className="panel-copy">Currently recorded as {productionMachineStateLabels[observedMachine.state]}. This records an operator observation only; it does not start, stop, or control equipment.</p>
+          <p className="panel-copy">Nothing changes until the accountable review is confirmed.</p>
+          <div className="form-actions"><button className="core-button" onClick={closeMachineObservation} type="button">Cancel</button><button className="core-button primary" type="submit">Review observation</button></div>
+        </form>
+      </> : null}
+    </dialog>
     <dialog aria-labelledby="production-issue-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); setIssueDialogOpen(false); requestAnimationFrame(() => issueTriggerRef.current?.focus()) }} ref={issueDialogRef}>
       <div className="panel-head"><div><span className="core-eyebrow">Plant problem</span><h2 id="production-issue-title">Record an observation</h2></div><button aria-label="Close problem form" className="text-link" onClick={() => { setIssueDialogOpen(false); requestAnimationFrame(() => issueTriggerRef.current?.focus()) }} type="button">Close</button></div>
       <form className="core-form" onSubmit={createIssue}>

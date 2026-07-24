@@ -93,15 +93,9 @@ export type ProductionMutationResult =
   | { ok: false; error: string }
 
 const issueKinds: ProductionIssueKind[] = ['quality', 'maintenance', 'materials', 'operations']
-const machineStates: ProductionMachineState[] = ['running', 'attention', 'stopped']
+export const productionMachineStates: ProductionMachineState[] = ['running', 'attention', 'stopped']
 const eventKinds: ProductionEventKind[] = ['job_created', 'output_recorded', 'issue_opened', 'issue_resolved', 'machine_state_changed']
 const deterministicSeedNow = Date.parse('2026-07-23T08:00:00.000Z')
-
-export const productionMachineTransitions: Record<ProductionMachineState, ProductionMachineState> = {
-  running: 'attention',
-  attention: 'stopped',
-  stopped: 'running',
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -259,7 +253,7 @@ export function validateProductionState(value: unknown): ProductionState {
     if (!isRecord(candidate)) throw new Error(`machines[${index}] is invalid.`)
     machineIds.push(canonicalText(candidate.id, `machines[${index}].id`, 80))
     canonicalText(candidate.name, `machines[${index}].name`)
-    if (!machineStates.includes(candidate.state as ProductionMachineState)) throw new Error(`machines[${index}].state is invalid.`)
+    if (!productionMachineStates.includes(candidate.state as ProductionMachineState)) throw new Error(`machines[${index}].state is invalid.`)
   }
   assertUnique(machineIds, 'Production machine ID')
 
@@ -284,8 +278,8 @@ export function validateProductionState(value: unknown): ProductionState {
       if (candidate.fromState !== undefined || candidate.toState !== undefined) throw new Error(`events[${index}] output event has machine state fields.`)
     } else if (candidate.kind === 'machine_state_changed') {
       if (!machineIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown machine.`)
-      if (!machineStates.includes(candidate.fromState as ProductionMachineState) || !machineStates.includes(candidate.toState as ProductionMachineState)) throw new Error(`events[${index}] has invalid machine states.`)
-      if (productionMachineTransitions[candidate.fromState as ProductionMachineState] !== candidate.toState) throw new Error(`events[${index}] has an invalid machine transition.`)
+      if (!productionMachineStates.includes(candidate.fromState as ProductionMachineState) || !productionMachineStates.includes(candidate.toState as ProductionMachineState)) throw new Error(`events[${index}] has invalid machine states.`)
+      if (candidate.fromState === candidate.toState) throw new Error(`events[${index}] must record a distinct machine observation.`)
       if (candidate.quantity !== undefined) throw new Error(`events[${index}] machine event has a quantity.`)
     } else {
       if (!issueIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown issue.`)
@@ -319,8 +313,13 @@ export function validateProductionState(value: unknown): ProductionState {
   }
   for (const machineId of machineIds) {
     const machine = machines.find((candidate) => isRecord(candidate) && candidate.id === machineId)
-    const latestEvent = events.find((candidate): candidate is Record<string, unknown> => isRecord(candidate) && candidate.kind === 'machine_state_changed' && candidate.subjectId === machineId)
+    const machineEvents = events.filter((candidate): candidate is Record<string, unknown> => isRecord(candidate) && candidate.kind === 'machine_state_changed' && candidate.subjectId === machineId)
+    const latestEvent = machineEvents[0]
     if (latestEvent && (!isRecord(machine) || latestEvent.toState !== machine.state)) throw new Error(`Latest machine event does not match ${machineId}.`)
+    const oldestFirst = [...machineEvents].reverse()
+    for (let index = 1; index < oldestFirst.length; index += 1) {
+      if (oldestFirst[index - 1].toState !== oldestFirst[index].fromState) throw new Error(`Machine history for ${machineId} contains a state gap.`)
+    }
   }
   return value as ProductionState
 }
@@ -356,7 +355,7 @@ function migrateLegacyProduction(value: unknown): ProductionState {
   })
   const machines = value.machines.map((candidate, index): ProductionMachine => {
     if (!isRecord(candidate)) throw new Error(`Legacy machine ${index + 1} is invalid.`)
-    if (!machineStates.includes(candidate.state as ProductionMachineState)) throw new Error(`Legacy machine ${index + 1} state is invalid.`)
+    if (!productionMachineStates.includes(candidate.state as ProductionMachineState)) throw new Error(`Legacy machine ${index + 1} state is invalid.`)
     const state = candidate.state as ProductionMachineState
     return {
       id: requiredText(candidate.id, `Legacy machines[${index}].id`),
@@ -571,14 +570,17 @@ export function resolveProductionIssue(state: ProductionState, issueId: string, 
   })
 }
 
-export function advanceProductionMachineState(
+export function recordProductionMachineState(
   state: ProductionState,
   machineId: string,
   expectedState: ProductionMachineState,
+  toState: ProductionMachineState,
   proof: ProductionActionProof,
 ) {
-  if (!validProof(proof)) return null
-  const toState = productionMachineTransitions[expectedState]
+  if (!validProof(proof)
+    || !productionMachineStates.includes(expectedState)
+    || !productionMachineStates.includes(toState)
+    || expectedState === toState) return null
   const existing = state.events.find((event) => event.actionId === proof.actionId)
   if (existing) return existing.kind === 'machine_state_changed'
     && existing.subjectId === machineId

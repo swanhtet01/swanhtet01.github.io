@@ -25,11 +25,6 @@ PRODUCTION_HUMAN_EVENTS = PRODUCTION_EVENTS
 
 _ISSUE_KINDS = frozenset({"quality", "maintenance", "materials", "operations"})
 _MACHINE_STATES = frozenset({"running", "attention", "stopped"})
-_MACHINE_TRANSITIONS = {
-    "running": "attention",
-    "attention": "stopped",
-    "stopped": "running",
-}
 _EVENT_KIND_BY_TYPE = {
     "production.job.created": "job_created",
     "production.output.recorded": "output_recorded",
@@ -276,8 +271,10 @@ def _validate_event(
             or after not in _MACHINE_STATES
         ):
             raise TrialValidationError(f"{field} has unsupported machine states.")
-        if _MACHINE_TRANSITIONS[before] != after:
-            raise TrialValidationError(f"{field} skips the required machine lifecycle.")
+        if before == after:
+            raise TrialValidationError(
+                f"{field} must record a distinct machine observation."
+            )
     elif subject_id not in issue_ids:
         raise TrialValidationError(f"{field} references an unknown issue.")
     return event
@@ -688,21 +685,25 @@ def _validate_machine_state_changed(
         next_state["machines"],
         "machines",
     )
-    expected_state = _MACHINE_TRANSITIONS[before["state"]]
-    if after != {**before, "state": expected_state}:
-        raise TrialValidationError(
-            "machine state must advance running to attention to stopped to running."
-        )
+    observed_state = event["toState"]
     if (
-        event["subjectId"] != before["id"]
-        or event["fromState"] != before["state"]
-        or event["toState"] != expected_state
+        event["fromState"] != before["state"]
+        or observed_state == before["state"]
     ):
+        raise TrialValidationError(
+            "machine observation must start from the current recorded state "
+            "and change it."
+        )
+    if after != {**before, "state": observed_state}:
+        raise TrialValidationError(
+            "machine observation may change only the one recorded state."
+        )
+    if event["subjectId"] != before["id"]:
         raise TrialValidationError(
             "machine event must describe the one exact state transition."
         )
     expected_summary = (
-        f"{before['name']}: {before['state']} to {expected_state}"
+        f"{before['name']}: {before['state']} to {observed_state}"
     )
     if event["summary"] != expected_summary:
         raise TrialValidationError("machine state summary is not canonical.")

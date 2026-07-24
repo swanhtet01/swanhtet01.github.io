@@ -181,16 +181,12 @@ def resolved_issue_state(
 def machine_state(
     current: dict[str, object],
     evidence: dict[str, str],
+    to_state: str,
 ) -> dict[str, object]:
-    transitions = {
-        "running": "attention",
-        "attention": "stopped",
-        "stopped": "running",
-    }
     state = deepcopy(current)
     machine = state["machines"][0]
     before = machine["state"]
-    after = transitions[before]
+    after = to_state
     machine["state"] = after
     state["revision"] += 1
     state["events"] = [
@@ -631,54 +627,85 @@ class ProductionRuntimeTests(unittest.TestCase):
                 resolve_evidence,
             )
 
-    def test_machine_state_follows_the_complete_required_cycle(self) -> None:
+    def test_machine_state_accepts_truthful_distinct_observations(self) -> None:
         current = starting_workspace()
-        states = ["attention", "stopped", "running"]
-        for index, expected in enumerate(states, start=1):
+        observed_states = [
+            "attention",
+            "stopped",
+            "attention",
+            "running",
+            "stopped",
+            "running",
+        ]
+        for index, observed_state in enumerate(observed_states, start=1):
             evidence = action_evidence(
                 f"ACT-MACHINE-{index:03d}",
-                captured_at=(
-                    NOW
-                    if index == 1
-                    else LATER
-                    if index == 2
-                    else LATEST
-                ),
+                captured_at=NOW,
             )
-            next_state = machine_state(current, evidence)
+            next_state = machine_state(current, evidence, observed_state)
             current = apply_event(
                 current,
                 "production.machine_state.changed",
                 next_state,
                 evidence,
             )
-            self.assertEqual(current["machines"][0]["state"], expected)
+            self.assertEqual(current["machines"][0]["state"], observed_state)
             self.assertEqual(current["revision"], index)
 
-        skipped = starting_workspace()
-        skipped_evidence = action_evidence("ACT-MACHINE-SKIP")
-        skipped["machines"][0]["state"] = "stopped"
-        skipped["revision"] = 1
-        skipped["events"] = [
-            production_event(
-                skipped_evidence,
-                kind="machine_state_changed",
-                subject_id="MACHINE-REAL-001",
-                summary="Assembly machine: running to stopped",
-                fromState="running",
-                toState="stopped",
-            )
-        ]
+        same_evidence = action_evidence("ACT-MACHINE-SAME")
         with self.assertRaises(TrialValidationError):
             apply_event(
                 starting_workspace(),
                 "production.machine_state.changed",
-                skipped,
-                skipped_evidence,
+                machine_state(starting_workspace(), same_evidence, "running"),
+                same_evidence,
+            )
+
+        stale_evidence = action_evidence("ACT-MACHINE-STALE")
+        stale = machine_state(starting_workspace(), stale_evidence, "stopped")
+        stale["events"][0]["fromState"] = "attention"
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                starting_workspace(),
+                "production.machine_state.changed",
+                stale,
+                stale_evidence,
+            )
+
+        unknown_state_evidence = action_evidence("ACT-MACHINE-UNKNOWN-STATE")
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                starting_workspace(),
+                "production.machine_state.changed",
+                machine_state(
+                    starting_workspace(),
+                    unknown_state_evidence,
+                    "offline",
+                ),
+                unknown_state_evidence,
+            )
+
+        unknown_machine_evidence = action_evidence("ACT-MACHINE-UNKNOWN-ID")
+        unknown_machine = machine_state(
+            starting_workspace(),
+            unknown_machine_evidence,
+            "attention",
+        )
+        unknown_machine["events"][0]["subjectId"] = "MACHINE-UNKNOWN"
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                starting_workspace(),
+                "production.machine_state.changed",
+                unknown_machine,
+                unknown_machine_evidence,
             )
 
         unrelated_evidence = action_evidence("ACT-MACHINE-UNRELATED")
-        unrelated = machine_state(starting_workspace(), unrelated_evidence)
+        unrelated = machine_state(
+            starting_workspace(),
+            unrelated_evidence,
+            "stopped",
+        )
         unrelated["jobs"][0]["line"] = "Unauthorized line change"
         with self.assertRaises(TrialValidationError):
             apply_event(
