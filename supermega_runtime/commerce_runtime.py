@@ -25,6 +25,9 @@ COMMERCE_EVENTS = frozenset(
         "commerce.payment.reconciled",
         "commerce.refund.settled",
         "commerce.stock.received",
+        "commerce.purchase_order.created",
+        "commerce.purchase_order.received",
+        "commerce.purchase_order.cancelled",
         "commerce.close.saved",
         "commerce.website_intake.created",
         "commerce.website_intake.converted",
@@ -42,6 +45,9 @@ COMMERCE_HUMAN_EVENTS = frozenset(
         "commerce.payment.reconciled",
         "commerce.refund.settled",
         "commerce.stock.received",
+        "commerce.purchase_order.created",
+        "commerce.purchase_order.received",
+        "commerce.purchase_order.cancelled",
         "commerce.close.saved",
         "commerce.website_intake.converted",
         "commerce.storefront.configuration.saved",
@@ -65,8 +71,16 @@ _STOREFRONT_IDEMPOTENCY_PATTERN = re.compile(
 _SHA256_DIGEST_PATTERN = re.compile(r"sha256:[a-f0-9]{64}")
 _STOREFRONT_PREVIEW_SCHEMA = "supermega.ecommerce.storefront_preview.v1"
 _MAX_STOREFRONT_REQUESTS = 100
+_MAX_PURCHASE_ORDERS = 100
 _MAX_ORDER_LINES = 20
 _MAX_MOVEMENT_ID_LENGTH = 2_000
+_PURCHASE_ORDER_ID_PATTERN = re.compile(
+    r"PO-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
+)
+_ISO_TIMESTAMP_PATTERN = re.compile(
+    r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}"
+    r"(?:\.\d{1,6})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)"
+)
 
 _STATE_FIELDS = frozenset({"schema", "items", "orders", "movements", "closes"})
 _ITEM_FIELDS = frozenset({"sku", "name", "variant", "onHand", "reorderAt", "price"})
@@ -117,8 +131,24 @@ _RECONCILIATION_FIELDS = frozenset(
     }
 )
 _MOVEMENT_FIELDS = frozenset(
-    {"id", "actionId", "createdAt", "actor", "reason", "evidenceReference", "kind", "sku", "quantityDelta", "orderId"}
+    {
+        "id",
+        "actionId",
+        "createdAt",
+        "actor",
+        "reason",
+        "evidenceReference",
+        "kind",
+        "sku",
+        "quantityDelta",
+        "orderId",
+        "purchaseOrderId",
+    }
 )
+_PURCHASE_ORDER_REQUIRED_FIELDS = frozenset(
+    {"id", "createdAt", "supplier", "sku", "quantityOrdered", "creation"}
+)
+_PURCHASE_ORDER_OPTIONAL_FIELDS = frozenset({"cancellation"})
 _CLOSE_REQUIRED_FIELDS = frozenset({"id", "createdAt", "total", "orders"})
 _CLOSE_SNAPSHOT_FIELDS = frozenset(
     {
@@ -223,6 +253,10 @@ def _text(value: object, field: str, *, maximum: int = 180) -> str:
 
 def _timestamp(value: object, field: str) -> str:
     timestamp = _text(value, field, maximum=40)
+    if _ISO_TIMESTAMP_PATTERN.fullmatch(timestamp) is None:
+        raise TrialValidationError(
+            f"{field} must be an ISO-8601 timestamp with seconds, timezone, and at most microsecond precision."
+        )
     try:
         parsed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
     except ValueError as exc:
@@ -350,7 +384,14 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         state,
         "commerce state",
         required=_STATE_FIELDS,
-        optional=frozenset({"websiteIntakes", "storefrontRequests", "storefrontConfiguration"}),
+        optional=frozenset(
+            {
+                "websiteIntakes",
+                "storefrontRequests",
+                "storefrontConfiguration",
+                "purchaseOrders",
+            }
+        ),
     )
     if state.get("schema") != COMMERCE_SCHEMA:
         raise TrialValidationError(f"commerce state schema must be {COMMERCE_SCHEMA}.")
@@ -364,6 +405,10 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         state.get("storefrontRequests", []),
         "commerce state.storefrontRequests",
     )
+    purchase_orders = _list(
+        state.get("purchaseOrders", []),
+        "commerce state.purchaseOrders",
+    )
     if "storefrontConfiguration" in state and state["storefrontConfiguration"] is None:
         raise TrialValidationError(
             "commerce state.storefrontConfiguration must be an object when present."
@@ -372,6 +417,10 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     if len(storefront_requests) > _MAX_STOREFRONT_REQUESTS:
         raise TrialValidationError(
             f"commerce state.storefrontRequests cannot exceed {_MAX_STOREFRONT_REQUESTS}."
+        )
+    if len(purchase_orders) > _MAX_PURCHASE_ORDERS:
+        raise TrialValidationError(
+            f"commerce state.purchaseOrders cannot exceed {_MAX_PURCHASE_ORDERS}."
         )
 
     item_skus: list[str] = []
@@ -389,6 +438,57 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         item_skus.append(sku)
         item_by_sku[sku] = item
     _unique(item_skus, "Item SKU")
+
+    purchase_order_ids: list[str] = []
+    purchase_order_action_ids: list[str] = []
+    purchase_order_by_id: dict[str, dict[str, Any]] = {}
+    for index, candidate in enumerate(purchase_orders):
+        field = f"purchaseOrders[{index}]"
+        purchase_order = _object(candidate, field)
+        _exact_fields(
+            purchase_order,
+            field,
+            required=_PURCHASE_ORDER_REQUIRED_FIELDS,
+            optional=_PURCHASE_ORDER_OPTIONAL_FIELDS,
+        )
+        purchase_order_id = _text(
+            purchase_order["id"],
+            f"{field}.id",
+            maximum=80,
+        )
+        if _PURCHASE_ORDER_ID_PATTERN.fullmatch(purchase_order_id) is None:
+            raise TrialValidationError(f"{field}.id is invalid.")
+        created_at = _timestamp(purchase_order["createdAt"], f"{field}.createdAt")
+        _text(purchase_order["supplier"], f"{field}.supplier", maximum=120)
+        sku = _text(purchase_order["sku"], f"{field}.sku", maximum=80)
+        if sku not in item_by_sku:
+            raise TrialValidationError(f"{field}.sku is unknown.")
+        _integer(
+            purchase_order["quantityOrdered"],
+            f"{field}.quantityOrdered",
+            minimum=1,
+        )
+        creation = _action_proof(purchase_order["creation"], f"{field}.creation")
+        if creation["capturedAt"] != created_at:
+            raise TrialValidationError(
+                f"{field}.creation must be captured when the purchase order was created."
+            )
+        purchase_order_action_ids.append(creation["actionId"])
+        if "cancellation" in purchase_order:
+            cancellation = _action_proof(
+                purchase_order["cancellation"],
+                f"{field}.cancellation",
+            )
+            if datetime.fromisoformat(
+                cancellation["capturedAt"].replace("Z", "+00:00")
+            ) < datetime.fromisoformat(created_at.replace("Z", "+00:00")):
+                raise TrialValidationError(
+                    f"{field}.cancellation cannot precede creation."
+                )
+            purchase_order_action_ids.append(cancellation["actionId"])
+        purchase_order_ids.append(purchase_order_id)
+        purchase_order_by_id[purchase_order_id] = purchase_order
+    _unique(purchase_order_ids, "Purchase order ID")
 
     storefront_configuration_action_id = ""
     if storefront_configuration is not None:
@@ -620,13 +720,15 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     release_actions_by_order: dict[str, set[str]] = {}
     reserve_movement_by_order: dict[str, dict[str, Any]] = {}
     movements_by_action: dict[str, list[dict[str, Any]]] = {}
+    receipt_quantity_by_purchase_order: dict[str, int] = {}
+    latest_receipt_at_by_purchase_order: dict[str, datetime] = {}
     for index, candidate in enumerate(movements):
         movement = _object(candidate, f"movements[{index}]")
         _exact_fields(
             movement,
             f"movements[{index}]",
-            required=_MOVEMENT_FIELDS - {"orderId"},
-            optional=frozenset({"orderId"}),
+            required=_MOVEMENT_FIELDS - {"orderId", "purchaseOrderId"},
+            optional=frozenset({"orderId", "purchaseOrderId"}),
         )
         movement_id = _text(
             movement["id"],
@@ -656,7 +758,64 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         if kind in {"opening", "receipt"}:
             if "orderId" in movement:
                 raise TrialValidationError(f"movements[{index}] {kind} cannot reference an order.")
+            if kind == "opening" and "purchaseOrderId" in movement:
+                raise TrialValidationError(
+                    f"movements[{index}] opening cannot reference a purchase order."
+                )
+            if kind == "receipt" and "purchaseOrderId" in movement:
+                purchase_order_id = _text(
+                    movement["purchaseOrderId"],
+                    f"movements[{index}].purchaseOrderId",
+                    maximum=80,
+                )
+                purchase_order = purchase_order_by_id.get(purchase_order_id)
+                receipt_at = datetime.fromisoformat(
+                    str(movement["createdAt"]).replace("Z", "+00:00")
+                )
+                if (
+                    purchase_order is None
+                    or purchase_order["sku"] != sku
+                    or receipt_at
+                    < datetime.fromisoformat(
+                        str(purchase_order["createdAt"]).replace("Z", "+00:00")
+                    )
+                    or (
+                        "cancellation" in purchase_order
+                        and receipt_at
+                        > datetime.fromisoformat(
+                            str(
+                                purchase_order["cancellation"]["capturedAt"]
+                            ).replace("Z", "+00:00")
+                        )
+                    )
+                ):
+                    raise TrialValidationError(
+                        f"movements[{index}] does not match its purchase order."
+                    )
+                received = (
+                    receipt_quantity_by_purchase_order.get(purchase_order_id, 0)
+                    + quantity_delta
+                )
+                if (
+                    received > purchase_order["quantityOrdered"]
+                    or received > _MAX_SAFE_INTEGER
+                ):
+                    raise TrialValidationError(
+                        f"movements[{index}] exceeds its purchase order quantity."
+                    )
+                receipt_quantity_by_purchase_order[purchase_order_id] = received
+                latest_receipt_at_by_purchase_order[purchase_order_id] = max(
+                    latest_receipt_at_by_purchase_order.get(
+                        purchase_order_id,
+                        datetime.min.replace(tzinfo=timezone.utc),
+                    ),
+                    receipt_at,
+                )
         else:
+            if "purchaseOrderId" in movement:
+                raise TrialValidationError(
+                    f"movements[{index}] sales movement cannot reference a purchase order."
+                )
             order_id = _text(movement.get("orderId"), f"movements[{index}].orderId", maximum=160)
             order = order_by_id.get(order_id)
             matching_lines = [
@@ -722,6 +881,33 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             or len(release_actions_by_order.get(order_id, set())) != 1
         ):
             raise TrialValidationError(f"{order_id} has an unproven stock release.")
+
+    active_purchase_order_skus: list[str] = []
+    for purchase_order_id, purchase_order in purchase_order_by_id.items():
+        received = receipt_quantity_by_purchase_order.get(purchase_order_id, 0)
+        if "cancellation" in purchase_order:
+            cancellation_at = datetime.fromisoformat(
+                str(purchase_order["cancellation"]["capturedAt"]).replace(
+                    "Z",
+                    "+00:00",
+                )
+            )
+            if (
+                received >= purchase_order["quantityOrdered"]
+                or cancellation_at
+                < latest_receipt_at_by_purchase_order.get(
+                    purchase_order_id,
+                    datetime.fromisoformat(
+                        str(purchase_order["createdAt"]).replace("Z", "+00:00")
+                    ),
+                )
+            ):
+                raise TrialValidationError(
+                    f"{purchase_order_id} has an invalid cancellation boundary."
+                )
+        elif received < purchase_order["quantityOrdered"]:
+            active_purchase_order_skus.append(purchase_order["sku"])
+    _unique(active_purchase_order_skus, "Active purchase order SKU")
 
     close_ids: list[str] = []
     close_action_ids: list[str] = []
@@ -945,6 +1131,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             *refund_settlement_action_ids,
             *intake_action_ids,
             *close_action_ids,
+            *purchase_order_action_ids,
             *storefront_action_ids,
             *(
                 [storefront_configuration_action_id]
@@ -1018,12 +1205,33 @@ def _validate_event_evidence(
             raise TrialValidationError(
                 "command evidence must match the saved Ecommerce storefront configuration."
             )
+    elif event_type == "commerce.purchase_order.created":
+        creation = next_state["purchaseOrders"][0]["creation"]
+        if not _proof_matches_evidence(creation, evidence):
+            raise TrialValidationError(
+                "command evidence must match the purchase order creation proof."
+            )
+    elif event_type == "commerce.purchase_order.cancelled":
+        _, cancelled_purchase_order = _one_changed(
+            _purchase_orders(current),
+            _purchase_orders(next_state),
+            "purchaseOrders",
+        )
+        cancellation = cancelled_purchase_order.get("cancellation")
+        if not isinstance(cancellation, Mapping) or not _proof_matches_evidence(
+            cancellation,
+            evidence,
+        ):
+            raise TrialValidationError(
+                "command evidence must match the purchase order cancellation proof."
+            )
 
     movement_kind = {
         "commerce.item.created": "opening",
         "commerce.order.created": "reserve",
         "commerce.order.cancelled": "release",
         "commerce.stock.received": "receipt",
+        "commerce.purchase_order.received": "receipt",
         "commerce.website_intake.converted": "reserve",
     }.get(event_type)
     if movement_kind:
@@ -1143,6 +1351,10 @@ def _storefront_configuration(state: Mapping[str, Any]) -> Mapping[str, Any] | N
     return configuration if isinstance(configuration, Mapping) else None
 
 
+def _purchase_orders(state: Mapping[str, Any]) -> list[Any]:
+    return state.get("purchaseOrders", [])
+
+
 def _storefront_configuration_action_id(revision: int, digest: str) -> str:
     return f"ACT-STOREFRONT-R{revision}-{digest.removeprefix('sha256:')}"
 
@@ -1230,6 +1442,14 @@ def _require_storefront_configuration_unchanged(
 ) -> None:
     if _storefront_configuration(current) != _storefront_configuration(next_state):
         raise TrialValidationError("event cannot change: storefrontConfiguration.")
+
+
+def _require_purchase_orders_unchanged(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    if _purchase_orders(current) != _purchase_orders(next_state):
+        raise TrialValidationError("event cannot change: purchaseOrders.")
 
 
 def _validate_new_order_and_reservation(
@@ -1464,10 +1684,134 @@ def _validate_received(current: Mapping[str, Any], next_state: Mapping[str, Any]
     if len(next_state["movements"]) != len(current["movements"]) + 1 or next_state["movements"][1:] != current["movements"]:
         raise TrialValidationError("commerce.stock.received must prepend exactly one receipt.")
     movement = next_state["movements"][0]
-    if movement.get("kind") != "receipt" or movement.get("sku") != before_item["sku"] or "orderId" in movement or movement.get("id") != _movement_id(str(movement.get("actionId"))):
+    if (
+        movement.get("kind") != "receipt"
+        or movement.get("sku") != before_item["sku"]
+        or "orderId" in movement
+        or "purchaseOrderId" in movement
+        or movement.get("id") != _movement_id(str(movement.get("actionId")))
+    ):
         raise TrialValidationError("stock receipt requires one attributable receipt movement.")
     if after_item != {**before_item, "onHand": before_item["onHand"] + movement["quantityDelta"]}:
         raise TrialValidationError("stock receipt must increase the matching item by its exact quantity.")
+
+
+def _validate_purchase_order_created(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "items", "orders", "movements", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    _require_storefront_configuration_unchanged(current, next_state)
+    current_orders = _purchase_orders(current)
+    next_orders = _purchase_orders(next_state)
+    if len(next_orders) != len(current_orders) + 1 or next_orders[1:] != current_orders:
+        raise TrialValidationError(
+            "commerce.purchase_order.created must prepend exactly one purchase order."
+        )
+    if "cancellation" in next_orders[0]:
+        raise TrialValidationError("a new purchase order cannot start cancelled.")
+
+
+def _validate_purchase_order_received(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "orders", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    _require_storefront_configuration_unchanged(current, next_state)
+    _require_purchase_orders_unchanged(current, next_state)
+    before_item, after_item = _one_changed(
+        current["items"],
+        next_state["items"],
+        "items",
+    )
+    if (
+        len(next_state["movements"]) != len(current["movements"]) + 1
+        or next_state["movements"][1:] != current["movements"]
+    ):
+        raise TrialValidationError(
+            "commerce.purchase_order.received must prepend exactly one receipt."
+        )
+    movement = next_state["movements"][0]
+    purchase_order_id = movement.get("purchaseOrderId")
+    purchase_order = next(
+        (
+            candidate
+            for candidate in _purchase_orders(current)
+            if candidate["id"] == purchase_order_id
+        ),
+        None,
+    )
+    if (
+        purchase_order is None
+        or "cancellation" in purchase_order
+        or movement.get("kind") != "receipt"
+        or movement.get("sku") != purchase_order["sku"]
+        or movement.get("sku") != before_item["sku"]
+        or "orderId" in movement
+        or movement.get("id") != _movement_id(str(movement.get("actionId")))
+    ):
+        raise TrialValidationError(
+            "purchase receipt requires one open matching purchase order."
+        )
+    previously_received = sum(
+        prior["quantityDelta"]
+        for prior in current["movements"]
+        if prior.get("purchaseOrderId") == purchase_order_id
+    )
+    if (
+        movement["quantityDelta"] > purchase_order["quantityOrdered"] - previously_received
+        or after_item
+        != {
+            **before_item,
+            "onHand": before_item["onHand"] + movement["quantityDelta"],
+        }
+    ):
+        raise TrialValidationError(
+            "purchase receipt must increase stock by no more than the outstanding quantity."
+        )
+
+
+def _validate_purchase_order_cancelled(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(
+        current,
+        next_state,
+        "items",
+        "orders",
+        "movements",
+        "closes",
+    )
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    _require_storefront_configuration_unchanged(current, next_state)
+    before, after = _one_changed(
+        _purchase_orders(current),
+        _purchase_orders(next_state),
+        "purchaseOrders",
+    )
+    previously_received = sum(
+        movement["quantityDelta"]
+        for movement in current["movements"]
+        if movement.get("purchaseOrderId") == before["id"]
+    )
+    if (
+        "cancellation" in before
+        or "cancellation" not in after
+        or previously_received >= before["quantityOrdered"]
+        or _without(before, frozenset()) != _without(
+            after,
+            frozenset({"cancellation"}),
+        )
+    ):
+        raise TrialValidationError(
+            "purchase order cancellation may only add proof to an order with an outstanding remainder."
+        )
 
 
 def _validate_close(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
@@ -1660,6 +2004,9 @@ _TRANSITION_VALIDATORS = {
     "commerce.payment.reconciled": _validate_reconciled,
     "commerce.refund.settled": _validate_refund_settled,
     "commerce.stock.received": _validate_received,
+    "commerce.purchase_order.created": _validate_purchase_order_created,
+    "commerce.purchase_order.received": _validate_purchase_order_received,
+    "commerce.purchase_order.cancelled": _validate_purchase_order_cancelled,
     "commerce.close.saved": _validate_close,
     "commerce.website_intake.created": _validate_website_intake_created,
     "commerce.website_intake.converted": _validate_website_intake_converted,
@@ -1689,6 +2036,7 @@ def reduce_commerce_state(
             or _website_intakes(next_state)
             or _storefront_requests(next_state)
             or _storefront_configuration(next_state)
+            or _purchase_orders(next_state)
         ):
             raise TrialValidationError("Commerce initialization requires a non-empty catalog and no operating history.")
         return next_state
@@ -1698,6 +2046,11 @@ def reduce_commerce_state(
         _require_storefront_requests_unchanged(current_state, next_state)
     if event_type != "commerce.storefront.configuration.saved":
         _require_storefront_configuration_unchanged(current_state, next_state)
+    if event_type not in {
+        "commerce.purchase_order.created",
+        "commerce.purchase_order.cancelled",
+    }:
+        _require_purchase_orders_unchanged(current_state, next_state)
     _TRANSITION_VALIDATORS[event_type](current_state, next_state)
     _validate_event_evidence(event_type, current_state, next_state, evidence)
     return next_state

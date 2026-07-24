@@ -34,6 +34,8 @@ CLOSE_ACTION_ID_3 = "ACT-00000000-0000-4000-8000-000000000003"
 CLOSE_ID_3 = "CLOSE-00000000-0000-4000-8000-000000000003"
 STOREFRONT_REQUEST_UUID = "00000000-0000-4000-8000-000000000010"
 STOREFRONT_CONFIGURATION_UUID = "00000000-0000-4000-8000-000000000011"
+PURCHASE_ORDER_UUID = "00000000-0000-4000-8000-000000000020"
+PURCHASE_ORDER_ID = f"PO-{PURCHASE_ORDER_UUID}"
 DEFAULT_STOREFRONT_PREVIEW_DIGEST = (
     "sha256:5708a10fcffa1df487bd93f88809e1cfb678f92888cdf6f22a7deabbaf24c34d"
 )
@@ -96,6 +98,7 @@ def movement(
     created_at: str = NOW,
     sku: str = "SKU-1",
     id_suffix: str | None = None,
+    purchase_order_id: str | None = None,
 ) -> dict[str, object]:
     encoded_action_id = quote(action_id, safe="-_.!~*'()")
     record: dict[str, object] = {
@@ -111,7 +114,26 @@ def movement(
     }
     if order_id:
         record["orderId"] = order_id
+    if purchase_order_id:
+        record["purchaseOrderId"] = purchase_order_id
     return record
+
+
+def purchase_order_record(
+    *,
+    purchase_order_id: str = PURCHASE_ORDER_ID,
+    action_id: str = "ACT-PURCHASE-CREATE",
+    quantity: int = 10,
+    captured_at: str = NOW,
+) -> dict[str, object]:
+    return {
+        "id": purchase_order_id,
+        "createdAt": captured_at,
+        "supplier": "Yangon Supply",
+        "sku": "SKU-1",
+        "quantityOrdered": quantity,
+        "creation": action_evidence(action_id, captured_at=captured_at),
+    }
 
 
 def action_evidence(
@@ -405,6 +427,15 @@ def settled_refund_state(
 
 
 def evidence_for(event_type: str, next_state: dict[str, object]) -> dict[str, str]:
+    if event_type == "commerce.purchase_order.created":
+        return dict(next_state["purchaseOrders"][0]["creation"])  # type: ignore[index, arg-type]
+    if event_type == "commerce.purchase_order.cancelled":
+        cancelled = next(
+            purchase_order
+            for purchase_order in next_state["purchaseOrders"]  # type: ignore[union-attr]
+            if "cancellation" in purchase_order
+        )
+        return dict(cancelled["cancellation"])
     if event_type == "commerce.website_intake.created":
         return dict(next_state["websiteIntakes"][0]["creation"])  # type: ignore[index, arg-type]
     if event_type == "commerce.website_intake.converted":
@@ -415,7 +446,13 @@ def evidence_for(event_type: str, next_state: dict[str, object]) -> dict[str, st
         return storefront_evidence(next_state["storefrontRequests"][0])  # type: ignore[index,arg-type]
     if event_type == "commerce.storefront.configuration.saved":
         return dict(next_state["storefrontConfiguration"]["saved"])  # type: ignore[index,arg-type]
-    if event_type in {"commerce.item.created", "commerce.order.created", "commerce.order.cancelled", "commerce.stock.received"}:
+    if event_type in {
+        "commerce.item.created",
+        "commerce.order.created",
+        "commerce.order.cancelled",
+        "commerce.stock.received",
+        "commerce.purchase_order.received",
+    }:
         movement_record = next_state["movements"][0]  # type: ignore[index]
         return {
             "actionId": movement_record["actionId"],
@@ -491,6 +528,82 @@ class CommerceRuntimeTests(unittest.TestCase):
         )
         with self.assertRaises(TrialValidationError):
             apply_event({}, "commerce.workspace.initialized", pending_intake_state())
+
+    def test_store_rejects_reusing_an_action_id_from_immutable_command_history(self) -> None:
+        store = InMemoryTrialStore(reducer=reduce_trial_state)
+        operator = TrialPrincipal(
+            "workspace-action-history",
+            "Accountable operator",
+            "human",
+        )
+        other_operator = TrialPrincipal(
+            "workspace-action-history-other",
+            "Other operator",
+            "human",
+        )
+        for principal in (operator, other_operator):
+            store.provision_membership(
+                workspace_id=principal.workspace_id,
+                actor_id=principal.actor_id,
+                actor_kind=principal.actor_kind,
+                capabilities=("commerce.write",),
+            )
+        initialization_command_id = str(uuid4())
+        initialization_payload = {
+            "state": catalog_state(),
+            "evidence": action_evidence("ACT-HISTORY-ONLY"),
+        }
+        initialized = store.apply_command(
+            operator,
+            command_id=initialization_command_id,
+            surface="commerce",
+            event_type="commerce.workspace.initialized",
+            expected_version=0,
+            payload=initialization_payload,
+        )
+        replay = store.apply_command(
+            operator,
+            command_id=initialization_command_id,
+            surface="commerce",
+            event_type="commerce.workspace.initialized",
+            expected_version=0,
+            payload=initialization_payload,
+        )
+        self.assertTrue(replay.idempotent_replay)
+
+        purchase_state = deepcopy(initialized.state)
+        purchase_state["purchaseOrders"] = [
+            purchase_order_record(action_id="ACT-HISTORY-ONLY")
+        ]
+        with self.assertRaises(TrialValidationError):
+            store.apply_command(
+                operator,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.purchase_order.created",
+                expected_version=initialized.version,
+                payload={
+                    "state": purchase_state,
+                    "evidence": dict(purchase_state["purchaseOrders"][0]["creation"]),  # type: ignore[index,arg-type]
+                },
+            )
+
+        other_payload = {
+            "state": catalog_state(),
+            "evidence": action_evidence(
+                "ACT-HISTORY-ONLY",
+                actor=other_operator.actor_id,
+            ),
+        }
+        other_initialized = store.apply_command(
+            other_operator,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.workspace.initialized",
+            expected_version=0,
+            payload=other_payload,
+        )
+        self.assertEqual(other_initialized.version, 1)
 
     def test_storefront_request_is_retained_without_shop_side_effects(self) -> None:
         current = catalog_state()
@@ -1143,6 +1256,9 @@ class CommerceRuntimeTests(unittest.TestCase):
                     "commerce.payment.reconciled",
                     "commerce.refund.settled",
                     "commerce.stock.received",
+                    "commerce.purchase_order.created",
+                    "commerce.purchase_order.received",
+                    "commerce.purchase_order.cancelled",
                     "commerce.close.saved",
                     "commerce.website_intake.converted",
                     "commerce.storefront.configuration.saved",
@@ -1380,6 +1496,197 @@ class CommerceRuntimeTests(unittest.TestCase):
         wrong_evidence = action_evidence("ACT-WRONG")
         with self.assertRaises(TrialValidationError):
             apply_event(current, "commerce.stock.received", received, wrong_evidence)
+
+    def test_purchase_order_lifecycle_supports_partial_receipt_and_cancellation(self) -> None:
+        current = catalog_state()
+        purchase_order = purchase_order_record()
+        created_state = deepcopy(current)
+        created_state["purchaseOrders"] = [purchase_order]
+        created = apply_event(
+            current,
+            "commerce.purchase_order.created",
+            created_state,
+        )
+        self.assertEqual(created["purchaseOrders"], [purchase_order])
+        self.assertEqual(created["items"], current["items"])
+
+        partial_state = deepcopy(created)
+        partial_state["items"][0]["onHand"] = 14  # type: ignore[index]
+        partial_state["movements"] = [
+            movement(
+                "receipt",
+                "ACT-PURCHASE-RECEIVE-1",
+                4,
+                created_at="2026-07-23T09:10:00.000Z",
+                purchase_order_id=PURCHASE_ORDER_ID,
+            )
+        ]
+        partial = apply_event(
+            created,
+            "commerce.purchase_order.received",
+            partial_state,
+        )
+        self.assertEqual(partial["items"][0]["onHand"], 14)  # type: ignore[index]
+        self.assertEqual(
+            partial["movements"][0]["purchaseOrderId"],  # type: ignore[index]
+            PURCHASE_ORDER_ID,
+        )
+
+        cancellation = action_evidence(
+            "ACT-PURCHASE-CANCEL",
+            captured_at="2026-07-23T09:20:00.000Z",
+        )
+        cancelled_state = deepcopy(partial)
+        cancelled_state["purchaseOrders"][0]["cancellation"] = cancellation  # type: ignore[index]
+        cancelled = apply_event(
+            partial,
+            "commerce.purchase_order.cancelled",
+            cancelled_state,
+        )
+        self.assertEqual(
+            cancelled["purchaseOrders"][0]["cancellation"],  # type: ignore[index]
+            cancellation,
+        )
+
+        after_cancel = deepcopy(cancelled)
+        after_cancel["items"][0]["onHand"] = 15  # type: ignore[index]
+        after_cancel["movements"] = [
+            movement(
+                "receipt",
+                "ACT-PURCHASE-RECEIVE-AFTER-CANCEL",
+                1,
+                created_at="2026-07-23T09:21:00.000Z",
+                purchase_order_id=PURCHASE_ORDER_ID,
+            ),
+            *cancelled["movements"],  # type: ignore[misc]
+        ]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                cancelled,
+                "commerce.purchase_order.received",
+                after_cancel,
+            )
+
+        legacy_receipt_bypass = deepcopy(cancelled)
+        legacy_receipt_bypass["items"][0]["onHand"] = 15  # type: ignore[index]
+        legacy_receipt_bypass["movements"] = [
+            movement(
+                "receipt",
+                "ACT-LEGACY-RECEIPT-BYPASS",
+                1,
+                created_at=cancellation["capturedAt"],
+                purchase_order_id=PURCHASE_ORDER_ID,
+            ),
+            *cancelled["movements"],  # type: ignore[misc]
+        ]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                cancelled,
+                "commerce.stock.received",
+                legacy_receipt_bypass,
+            )
+
+        second_purchase_order = purchase_order_record(
+            purchase_order_id="PO-00000000-0000-4000-8000-000000000021",
+            action_id="ACT-PURCHASE-CREATE-2",
+            quantity=5,
+            captured_at="2026-07-23T09:21:00.000Z",
+        )
+        second_created_state = deepcopy(cancelled)
+        second_created_state["purchaseOrders"] = [  # type: ignore[assignment]
+            second_purchase_order,
+            *cancelled["purchaseOrders"],  # type: ignore[misc]
+        ]
+        second_created = apply_event(
+            cancelled,
+            "commerce.purchase_order.created",
+            second_created_state,
+        )
+        second_cancellation = action_evidence(
+            "ACT-PURCHASE-CANCEL-2",
+            captured_at="2026-07-23T09:22:00.000Z",
+        )
+        second_cancelled_state = deepcopy(second_created)
+        second_cancelled_state["purchaseOrders"][0]["cancellation"] = second_cancellation  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                second_created,
+                "commerce.purchase_order.cancelled",
+                second_cancelled_state,
+                cancellation,
+            )
+
+    def test_purchase_order_transitions_fail_closed_on_overreceipt_and_cross_event_mutation(self) -> None:
+        current = catalog_state()
+        created_state = deepcopy(current)
+        created_state["purchaseOrders"] = [purchase_order_record()]
+        created = apply_event(current, "commerce.purchase_order.created", created_state)
+
+        duplicate_state = deepcopy(created)
+        duplicate_state["purchaseOrders"] = [  # type: ignore[assignment]
+            purchase_order_record(
+                purchase_order_id="PO-00000000-0000-4000-8000-000000000021",
+                action_id="ACT-PURCHASE-CREATE-2",
+            ),
+            *created["purchaseOrders"],  # type: ignore[misc]
+        ]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                created,
+                "commerce.purchase_order.created",
+                duplicate_state,
+            )
+
+        overreceipt = deepcopy(created)
+        overreceipt["items"][0]["onHand"] = 21  # type: ignore[index]
+        overreceipt["movements"] = [
+            movement(
+                "receipt",
+                "ACT-PURCHASE-OVERRECEIPT",
+                11,
+                created_at="2026-07-23T09:10:00.000Z",
+                purchase_order_id=PURCHASE_ORDER_ID,
+            )
+        ]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                created,
+                "commerce.purchase_order.received",
+                overreceipt,
+            )
+
+        cross_event_mutation = deepcopy(created)
+        cross_event_mutation["purchaseOrders"][0]["supplier"] = "Spoofed supplier"  # type: ignore[index]
+        cross_event_mutation["items"][0]["onHand"] = 11  # type: ignore[index]
+        cross_event_mutation["movements"] = [
+            movement("receipt", "ACT-DIRECT-RECEIPT", 1)
+        ]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                created,
+                "commerce.stock.received",
+                cross_event_mutation,
+            )
+
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "commerce.purchase_order.created",
+                created_state,
+                action_evidence("ACT-SPOOFED"),
+            )
+
+        for captured_at in (
+            "2026-07-23T09:20:00",
+            "2026-07-23T09:20:00.0000001Z",
+        ):
+            invalid_timestamp = deepcopy(created)
+            invalid_timestamp["purchaseOrders"][0]["cancellation"] = action_evidence(  # type: ignore[index]
+                f"ACT-PURCHASE-CANCEL-{captured_at}",
+                captured_at=captured_at,
+            )
+            with self.subTest(captured_at=captured_at), self.assertRaises(TrialValidationError):
+                validate_commerce_state(invalid_timestamp)
 
     def test_multi_line_order_reserves_and_releases_every_price_snapshot_atomically(self) -> None:
         current = catalog_state()

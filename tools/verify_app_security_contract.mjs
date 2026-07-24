@@ -163,6 +163,9 @@ const expectedHumanCommerceEvents = [
   'commerce.order.cancelled',
   'commerce.order.created',
   'commerce.payment.reconciled',
+  'commerce.purchase_order.cancelled',
+  'commerce.purchase_order.created',
+  'commerce.purchase_order.received',
   'commerce.refund.settled',
   'commerce.stock.received',
   'commerce.storefront.configuration.saved',
@@ -214,6 +217,10 @@ requireContract('consequential Commerce events are human-only in router and stor
   && JSON.stringify(humanEventList(trialStore, 'HUMAN_COMMAND_EVENTS', 'SURFACE_WRITE_CAPABILITIES')) === JSON.stringify(expectedHumanCommerceEvents)
   && JSON.stringify(humanEventList(commerceRuntime, 'COMMERCE_HUMAN_EVENTS', '_ORDER_STATUSES')) === JSON.stringify(expectedHumanCommerceEvents)
   && /TrialHumanApprovalRequired/.test(trialStore))
+requireContract('Commerce action IDs cannot be reused across immutable command history', trialStore.includes("payload_json #>> '{evidence,actionId}'")
+  && trialStore.includes(':commerce-action:')
+  && trialStore.includes('_commerce_action_ids')
+  && trialStore.includes('Commerce actionId was already used by an earlier command.'))
 requireContract('audit events are immutable', /workspace_events_immutable/.test(migration) && /reject_workspace_event_mutation/.test(migration))
 requireContract('private schema forces RLS', /create schema if not exists app_private/.test(migration) && /force row level security/gi.test(migration))
 requireContract('browser roles have no private schema grant', /revoke all on schema app_private from public, anon, authenticated, service_role/.test(migration))

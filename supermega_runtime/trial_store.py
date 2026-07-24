@@ -28,6 +28,9 @@ HUMAN_COMMAND_EVENTS = frozenset(
         "commerce.payment.reconciled",
         "commerce.refund.settled",
         "commerce.stock.received",
+        "commerce.purchase_order.created",
+        "commerce.purchase_order.received",
+        "commerce.purchase_order.cancelled",
         "commerce.close.saved",
         "commerce.website_intake.converted",
         "commerce.storefront.configuration.saved",
@@ -452,6 +455,26 @@ def _authoritative_command_payload(
     authoritative["evidence"] = authoritative_evidence
     authoritative["state"] = authoritative_state
     return authoritative
+
+
+def _commerce_command_action_id(
+    surface: str,
+    payload: Mapping[str, Any],
+) -> str | None:
+    if surface != "commerce":
+        return None
+    evidence = payload.get("evidence")
+    if not isinstance(evidence, Mapping):
+        return None
+    action_id = evidence.get("actionId")
+    if (
+        not isinstance(action_id, str)
+        or not action_id
+        or action_id != action_id.strip()
+        or len(action_id) > 160
+    ):
+        return None
+    return action_id
 
 
 def _normalize_uuid(value: str | UUID, *, field_name: str) -> str:
@@ -1256,6 +1279,10 @@ class PostgresTrialStore:
         }
         if related_surface_values:
             command_contract["related_surfaces"] = list(related_surface_values)
+        commerce_action_id = _commerce_command_action_id(
+            surface_value,
+            payload_value,
+        )
         fingerprint = _canonical_fingerprint(
             "state_command",
             command_contract,
@@ -1286,7 +1313,6 @@ class PostgresTrialStore:
                     state=_json_object(replay.get("state", {}), field_name="state"),
                     idempotent_replay=True,
                 )
-
             locked_surfaces = tuple(sorted({surface_value, *related_surface_values}))
             for locked_surface in locked_surfaces:
                 self._lock(cursor, f"{normalized.workspace_id}:state:{locked_surface}")
@@ -1319,6 +1345,26 @@ class PostgresTrialStore:
                     expected_version=int(expected_version),
                     current_version=current_version,
                 )
+            if commerce_action_id is not None:
+                self._lock(
+                    cursor,
+                    f"{normalized.workspace_id}:commerce-action:{commerce_action_id}",
+                )
+                cursor.execute(
+                    """
+                    select command_id
+                    from app_private.workspace_events
+                    where workspace_id = %s
+                      and surface = 'commerce'
+                      and payload_json #>> '{evidence,actionId}' = %s
+                    limit 1
+                    """,
+                    (normalized.workspace_id, commerce_action_id),
+                )
+                if cursor.fetchone():
+                    raise TrialValidationError(
+                        "Commerce actionId was already used by an earlier command."
+                    )
             if state_precondition is not None:
                 state_precondition(
                     deepcopy(current_state),
@@ -1652,6 +1698,7 @@ class InMemoryTrialStore:
         self._memberships: dict[tuple[str, str], tuple[str, str, frozenset[str]]] = {}
         self._states: dict[tuple[str, str], TrialState] = {}
         self._events: dict[tuple[str, str], tuple[str, str, str, JsonObject]] = {}
+        self._commerce_action_ids: dict[tuple[str, str], str] = {}
         self._approvals: dict[tuple[str, str], ApprovalRecord] = {}
         self._approval_commands: dict[tuple[str, str], str] = {}
         self._lock = RLock()
@@ -1805,6 +1852,10 @@ class InMemoryTrialStore:
         }
         if related_surface_values:
             command_contract["related_surfaces"] = list(related_surface_values)
+        commerce_action_id = _commerce_command_action_id(
+            surface_value,
+            payload_value,
+        )
         fingerprint = _canonical_fingerprint(
             "state_command",
             command_contract,
@@ -1843,6 +1894,17 @@ class InMemoryTrialStore:
                 raise TrialVersionConflict(
                     expected_version=int(expected_version),
                     current_version=current.version,
+                )
+            if (
+                commerce_action_id is not None
+                and (
+                    normalized.workspace_id,
+                    commerce_action_id,
+                )
+                in self._commerce_action_ids
+            ):
+                raise TrialValidationError(
+                    "Commerce actionId was already used by an earlier command."
                 )
             if state_precondition is not None:
                 state_precondition(
@@ -1900,6 +1962,10 @@ class InMemoryTrialStore:
                 normalized.actor_kind,
                 result.to_dict(),
             )
+            if commerce_action_id is not None:
+                self._commerce_action_ids[
+                    (normalized.workspace_id, commerce_action_id)
+                ] = command_id_value
             return result
 
     def create_approval(

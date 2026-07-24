@@ -37,19 +37,23 @@ import {
   COMMERCE_KEY,
   LEGACY_COMMERCE_KEYS,
   advanceCommerceOrder,
+  cancelCommercePurchaseOrder,
   cancelCommerceOrder,
   commerceCloseExpectation,
   commerceOrderItemSummary,
   commerceOrderNeedsAction,
   commerceOrderHasReleasableReservation,
+  commercePurchaseOrderProgress,
+  commercePurchaseOrders,
   commerceStorefrontRequests,
   commerceWorkspaceCanWrite,
   commerceWebsiteIntakes,
   convertCommerceWebsiteIntake,
+  createCommercePurchaseOrder,
   createEmptyCommerce,
   loadCommerceWorkspace,
   mutateCommerceWorkspace,
-  receiveCommerceStock,
+  receiveCommercePurchaseOrder,
   reconcileCommercePayment,
   registerCommerceItem,
   reserveCommerceOrder,
@@ -187,6 +191,9 @@ type ActionKind =
   | 'refund_settle'
   | 'catalog_item_create'
   | 'inventory_receipt'
+  | 'purchase_order_create'
+  | 'purchase_order_receive'
+  | 'purchase_order_cancel'
   | 'daily_close'
   | 'production_job'
   | 'production_output'
@@ -198,6 +205,10 @@ type ActionKind =
   | 'machine_state'
   | 'downtime_start'
   | 'downtime_end'
+
+type PurchaseOrderDraft =
+  | { mode: 'create'; sku: string; supplier: string; quantity: string }
+  | { mode: 'receive'; purchaseOrderId: string; quantity: string }
 
 type AccountableAction = {
   id: string
@@ -1847,6 +1858,8 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const orderComposerRef = useRef<HTMLDialogElement>(null)
   const orderComposerHeadingRef = useRef<HTMLHeadingElement>(null)
   const orderComposerTriggerRef = useRef<HTMLButtonElement>(null)
+  const purchaseOrderTriggerRefs = useRef(new Map<string, HTMLButtonElement>())
+  const purchaseOrderEditorRef = useRef<HTMLFormElement>(null)
   const ecommerceInboxTargetRef = useRef<HTMLButtonElement>(null)
   const preparedChannelRef = useRef<HTMLDivElement>(null)
   const consumedEcommerceDraftId = useRef('')
@@ -1855,7 +1868,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const [notice, setNotice] = useState('')
   const [catalogDraft, setCatalogDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '', price: '', reason: '', evidenceReference: '' })
   const [itemDraft, setItemDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '', price: '' })
-  const [stockReceiptDraft, setStockReceiptDraft] = useState<{ sku: string; quantity: string } | null>(null)
+  const [purchaseOrderDraft, setPurchaseOrderDraft] = useState<PurchaseOrderDraft | null>(null)
   const [catalogBusy, setCatalogBusy] = useState(false)
   const [catalogError, setCatalogError] = useState('')
   const selectedSku = commerce.items.some((item) => item.sku === sku) ? sku : commerce.items[0]?.sku ?? ''
@@ -1893,18 +1906,37 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     requestedRequestId
     && pendingStorefrontRequests.some((request) => request.id === requestedRequestId),
   )
-  const stockReceiptItem = stockReceiptDraft
-    ? commerce.items.find((item) => item.sku === stockReceiptDraft.sku)
+  const purchaseOrderRows = commercePurchaseOrders(commerce).map((purchaseOrder) => ({
+    purchaseOrder,
+    progress: commercePurchaseOrderProgress(commerce, purchaseOrder),
+    item: commerce.items.find((item) => item.sku === purchaseOrder.sku),
+  }))
+  const activePurchaseOrderBySku = new Map(
+    purchaseOrderRows
+      .filter(({ progress }) => progress.status === 'open' || progress.status === 'partially_received')
+      .map((row) => [row.purchaseOrder.sku, row]),
+  )
+  const purchaseOrderDraftOrder = purchaseOrderDraft?.mode === 'receive'
+    ? purchaseOrderRows.find(({ purchaseOrder }) => purchaseOrder.id === purchaseOrderDraft.purchaseOrderId)
     : undefined
-  const stockReceiptQuantityText = stockReceiptDraft?.quantity.trim() ?? ''
-  const stockReceiptQuantity = /^\d+$/.test(stockReceiptQuantityText)
-    ? Number(stockReceiptQuantityText)
+  const purchaseOrderDraftItem = purchaseOrderDraft?.mode === 'create'
+    ? commerce.items.find((item) => item.sku === purchaseOrderDraft.sku)
+    : purchaseOrderDraftOrder?.item
+  const purchaseOrderQuantityText = purchaseOrderDraft?.quantity.trim() ?? ''
+  const purchaseOrderQuantity = /^\d+$/.test(purchaseOrderQuantityText)
+    ? Number(purchaseOrderQuantityText)
     : Number.NaN
-  const stockReceiptResult = stockReceiptItem
-    && Number.isSafeInteger(stockReceiptQuantity)
-    && stockReceiptQuantity > 0
-    && Number.isSafeInteger(stockReceiptItem.onHand + stockReceiptQuantity)
-    ? stockReceiptItem.onHand + stockReceiptQuantity
+  const purchaseOrderQuantityLimit = purchaseOrderDraft?.mode === 'receive'
+    ? Math.min(
+        purchaseOrderDraftOrder?.progress.remaining ?? 0,
+        purchaseOrderDraftItem ? Number.MAX_SAFE_INTEGER - purchaseOrderDraftItem.onHand : 0,
+      )
+    : Number.MAX_SAFE_INTEGER
+  const purchaseOrderQuantityResult = purchaseOrderDraftItem
+    && Number.isSafeInteger(purchaseOrderQuantity)
+    && purchaseOrderQuantity > 0
+    && purchaseOrderQuantity <= purchaseOrderQuantityLimit
+    ? purchaseOrderQuantity
     : null
 
   useEffect(() => {
@@ -2049,7 +2081,10 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     requestAnimationFrame(() => orderComposerHeadingRef.current?.focus())
   }
 
-  function queueAction(action: Omit<PendingAccountableAction, 'id' | 'commandId' | 'domain'>): boolean {
+  function queueAction(
+    action: Omit<PendingAccountableAction, 'id' | 'commandId' | 'domain'>,
+    returnFocus?: HTMLElement | null,
+  ): boolean {
     if (!commerceCanWrite) {
       setNotice('Shop changes are paused because this workspace cannot confirm writes. Reload or open Settings before retrying.')
       return false
@@ -2058,9 +2093,11 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       setNotice(`Finish or cancel ${pendingAction.id} before reviewing another change.`)
       return false
     }
-    const trigger = action.kind === 'order_create'
-      ? orderComposerTriggerRef.current
-      : document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const trigger = returnFocus?.isConnected
+      ? returnFocus
+      : action.kind === 'order_create'
+        ? orderComposerTriggerRef.current
+        : document.activeElement instanceof HTMLElement ? document.activeElement : null
     setActionTrigger(trigger)
     if (action.kind === 'order_create' && orderComposerRef.current?.open) orderComposerRef.current.close()
     setPendingAction({ ...action, id: uid('ACT'), commandId: commandUuid(), domain: 'commerce' })
@@ -2496,49 +2533,126 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     })
   }
 
-  function openStockReceipt(itemSku: string) {
+  function openPurchaseOrder(itemSku: string) {
     const item = commerce.items.find((candidate) => candidate.sku === itemSku)
     if (!item) return
-    setStockReceiptDraft((current) => current?.sku === itemSku ? current : { sku: itemSku, quantity: '' })
-    setNotice(`Enter the exact quantity received for ${item.name}. Nothing changes until confirmation.`)
-  }
-
-  function cancelStockReceipt() {
-    setStockReceiptDraft(null)
-    setNotice('Stock receipt cancelled. Shop data was not modified.')
-  }
-
-  function reviewStockReceipt(event: FormEvent) {
-    event.preventDefault()
-    if (!stockReceiptDraft) return
-    const item = commerce.items.find((candidate) => candidate.sku === stockReceiptDraft.sku)
-    const quantityText = stockReceiptDraft.quantity.trim()
-    const receiptQuantity = /^\d+$/.test(quantityText) ? Number(quantityText) : Number.NaN
-    if (!item
-      || !Number.isSafeInteger(receiptQuantity)
-      || receiptQuantity < 1
-      || !Number.isSafeInteger(item.onHand + receiptQuantity)) {
-      setNotice('Enter a positive whole-unit quantity that keeps stock within the safe range.')
+    const active = activePurchaseOrderBySku.get(itemSku)
+    const alreadyEditing = purchaseOrderDraft?.mode === 'create'
+      ? purchaseOrderDraft.sku === itemSku
+      : purchaseOrderDraft?.mode === 'receive'
+        ? purchaseOrderDraft.purchaseOrderId === active?.purchaseOrder.id
+        : false
+    if (alreadyEditing) {
+      requestAnimationFrame(() => purchaseOrderEditorRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus())
+      setNotice(`Continue the ${active ? 'receipt' : 'stock order'} below. Your draft was preserved.`)
       return
     }
+    setPurchaseOrderDraft(active
+      ? { mode: 'receive', purchaseOrderId: active.purchaseOrder.id, quantity: '' }
+      : { mode: 'create', sku: itemSku, supplier: '', quantity: '' })
+    setNotice(active
+      ? `Record only units counted against ${active.purchaseOrder.id}. Nothing changes until confirmation.`
+      : `Create an internal order for ${item.name}. This does not contact a supplier or create a payment.`)
+  }
+
+  function cancelPurchaseOrderEditor() {
+    const itemSku = purchaseOrderDraft?.mode === 'create'
+      ? purchaseOrderDraft.sku
+      : purchaseOrderDraftOrder?.purchaseOrder.sku
+    setPurchaseOrderDraft(null)
+    setNotice('Stock order editing closed. Shop data was not modified.')
+    requestAnimationFrame(() => {
+      if (itemSku) purchaseOrderTriggerRefs.current.get(itemSku)?.focus()
+    })
+  }
+
+  function reviewPurchaseOrder(event: FormEvent) {
+    event.preventDefault()
+    if (!purchaseOrderDraft || !purchaseOrderDraftItem || purchaseOrderQuantityResult === null) {
+      setNotice('Enter a positive whole-unit quantity within the available order balance.')
+      return
+    }
+
+    if (purchaseOrderDraft.mode === 'create') {
+      const supplier = purchaseOrderDraft.supplier.trim()
+      if (!supplier || supplier.length > 120) {
+        setNotice('Enter a supplier reference of 120 characters or fewer.')
+        return
+      }
+      const item = purchaseOrderDraftItem
+      const quantityOrdered = purchaseOrderQuantityResult
+      const purchaseOrderId = uid('PO')
+      queueAction({
+        kind: 'purchase_order_create',
+        subjectId: purchaseOrderId,
+        summary: `Create internal order for ${quantityOrdered.toLocaleString()} units of ${item.name}`,
+        before: `${item.onHand.toLocaleString()} on hand · no active stock order · supplier not contacted`,
+        after: `${purchaseOrderId} · ${supplier} · ${quantityOrdered.toLocaleString()} ordered internally · no message or payment created`,
+        apply: async (action) => {
+          const proof = commerceActionProof(action)
+          await mutateCommerce('commerce.purchase_order.created', action.commandId, proof, (current) => createCommercePurchaseOrder(
+            current,
+            { id: purchaseOrderId, supplier, sku: item.sku, quantityOrdered },
+            proof,
+          ))
+          setPurchaseOrderDraft((current) => current?.mode === 'create' && current.sku === item.sku ? null : current)
+        },
+      }, purchaseOrderTriggerRefs.current.get(item.sku))
+      return
+    }
+
+    const purchaseOrderRow = purchaseOrderDraftOrder
+    if (!purchaseOrderRow?.item) {
+      setNotice('The active stock order is no longer available. Nothing was changed.')
+      return
+    }
+    const { purchaseOrder, progress, item } = purchaseOrderRow
+    const receiptQuantity = purchaseOrderQuantityResult
     const expectedOnHand = item.onHand
-    const itemSku = item.sku
+    const expectedRemaining = progress.remaining
     queueAction({
-      kind: 'inventory_receipt',
-      subjectId: itemSku,
-      summary: `Receive ${receiptQuantity.toLocaleString()} units of ${item.name}`,
-      before: `${expectedOnHand.toLocaleString()} on hand`,
-      after: `${(expectedOnHand + receiptQuantity).toLocaleString()} on hand`,
+      kind: 'purchase_order_receive',
+      subjectId: purchaseOrder.id,
+      summary: `Receive ${receiptQuantity.toLocaleString()} units against ${purchaseOrder.id}`,
+      before: `${progress.received.toLocaleString()} of ${purchaseOrder.quantityOrdered.toLocaleString()} received · ${expectedOnHand.toLocaleString()} on hand`,
+      after: `${(progress.received + receiptQuantity).toLocaleString()} of ${purchaseOrder.quantityOrdered.toLocaleString()} received · ${(expectedOnHand + receiptQuantity).toLocaleString()} on hand`,
       apply: async (action) => {
         const proof = commerceActionProof(action)
-        await mutateCommerce('commerce.stock.received', action.commandId, proof, (current) => {
-          const currentItem = current.items.find((candidate) => candidate.sku === itemSku)
-          if (!currentItem || currentItem.onHand !== expectedOnHand) return null
-          return receiveCommerceStock(current, itemSku, receiptQuantity, proof)
+        await mutateCommerce('commerce.purchase_order.received', action.commandId, proof, (current) => {
+          const currentPurchaseOrder = commercePurchaseOrders(current).find((candidate) => candidate.id === purchaseOrder.id)
+          const currentItem = current.items.find((candidate) => candidate.sku === item.sku)
+          if (!currentPurchaseOrder
+            || !currentItem
+            || currentItem.onHand !== expectedOnHand
+            || commercePurchaseOrderProgress(current, currentPurchaseOrder).remaining !== expectedRemaining) return null
+          return receiveCommercePurchaseOrder(current, purchaseOrder.id, receiptQuantity, proof)
         })
-        setStockReceiptDraft((current) => current?.sku === itemSku ? null : current)
+        setPurchaseOrderDraft((current) => current?.mode === 'receive' && current.purchaseOrderId === purchaseOrder.id ? null : current)
       },
-    })
+    }, purchaseOrderTriggerRefs.current.get(item.sku))
+  }
+
+  function reviewPurchaseOrderCancellation(purchaseOrderId: string) {
+    const row = purchaseOrderRows.find(({ purchaseOrder }) => purchaseOrder.id === purchaseOrderId)
+    if (!row || row.progress.remaining < 1 || row.progress.status === 'cancelled') return
+    const expectedRemaining = row.progress.remaining
+    queueAction({
+      kind: 'purchase_order_cancel',
+      subjectId: row.purchaseOrder.id,
+      summary: `Cancel ${expectedRemaining.toLocaleString()} outstanding units on ${row.purchaseOrder.id}`,
+      before: `${row.progress.received.toLocaleString()} of ${row.purchaseOrder.quantityOrdered.toLocaleString()} received · ${expectedRemaining.toLocaleString()} still open`,
+      after: `outstanding remainder cancelled internally · no supplier message, payment, or accounting entry created`,
+      apply: async (action) => {
+        const proof = commerceActionProof(action)
+        await mutateCommerce('commerce.purchase_order.cancelled', action.commandId, proof, (current) => {
+          const currentPurchaseOrder = commercePurchaseOrders(current).find((candidate) => candidate.id === purchaseOrderId)
+          if (!currentPurchaseOrder
+            || commercePurchaseOrderProgress(current, currentPurchaseOrder).remaining !== expectedRemaining) return null
+          return cancelCommercePurchaseOrder(current, purchaseOrderId, proof)
+        })
+        setPurchaseOrderDraft((current) => current?.mode === 'receive' && current.purchaseOrderId === purchaseOrderId ? null : current)
+      },
+    }, purchaseOrderTriggerRefs.current.get(row.purchaseOrder.sku))
   }
 
   function closeDay() {
@@ -2666,27 +2780,50 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   if (tab === 'inventory') return <div className="operation-module">
     {commerceBoundary}
     <section className="core-panel inventory-panel">
-      <div className="panel-head"><div><span className="core-eyebrow">Stock control</span><h2>Inventory and reorder boundaries</h2></div><span className="panel-note">{lowStock.length} at boundary</span></div>
+      <div className="panel-head"><div><span className="core-eyebrow">Stock</span><h2>Know what you have and what is coming</h2></div><span className="panel-note">{lowStock.length} need attention</span></div>
       <div className="data-table" role="table" aria-label="Shop stock">
-        <div className="data-row table-head" role="row"><span role="columnheader">Item</span><span role="columnheader">On hand</span><span role="columnheader">Reorder</span><span role="columnheader">Price</span><span role="columnheader">Action</span></div>
-        {commerce.items.map((item) => <div className="data-row" data-receiving={stockReceiptDraft?.sku === item.sku} role="row" key={item.sku}>
-          <span role="rowheader"><strong>{item.name}</strong><small>{item.sku}</small></span>
-          <span className={item.onHand <= item.reorderAt ? 'warning-text' : ''} role="cell">{item.onHand}</span>
-          <span role="cell">{item.reorderAt}</span>
-          <span role="cell">{formatMoney(item.price)}</span>
-          <span role="cell"><button aria-expanded={stockReceiptDraft?.sku === item.sku} className="text-link" disabled={commerceControlsDisabled} type="button" onClick={() => openStockReceipt(item.sku)}>{stockReceiptDraft?.sku === item.sku ? 'Editing receipt' : 'Receive stock'}</button></span>
-        </div>)}
+        <div className="data-row table-head" role="row"><span role="columnheader">Item</span><span role="columnheader">On hand</span><span role="columnheader">Reorder</span><span role="columnheader">Price</span><span role="columnheader">Next step</span></div>
+        {commerce.items.map((item) => {
+          const active = activePurchaseOrderBySku.get(item.sku)
+          const editing = purchaseOrderDraft?.mode === 'create'
+            ? purchaseOrderDraft.sku === item.sku
+            : purchaseOrderDraft?.mode === 'receive'
+              ? purchaseOrderDraft.purchaseOrderId === active?.purchaseOrder.id
+              : false
+          return <div className="data-row" data-receiving={editing} role="row" key={item.sku}>
+            <span role="rowheader"><strong>{item.name}</strong><small>{item.sku}</small></span>
+            <span className={item.onHand <= item.reorderAt ? 'warning-text' : ''} role="cell">{item.onHand}</span>
+            <span role="cell">{item.reorderAt}</span>
+            <span role="cell">{formatMoney(item.price)}</span>
+            <span role="cell"><button aria-expanded={editing} className="text-link" disabled={commerceControlsDisabled} ref={(node) => { if (node) purchaseOrderTriggerRefs.current.set(item.sku, node); else purchaseOrderTriggerRefs.current.delete(item.sku) }} type="button" onClick={() => openPurchaseOrder(item.sku)}>{editing ? 'Continue' : active ? `Receive ${active.progress.received}/${active.purchaseOrder.quantityOrdered}` : 'Order stock'}</button></span>
+          </div>
+        })}
       </div>
-      {stockReceiptItem && stockReceiptDraft ? <form aria-labelledby="stock-receipt-title" className="stock-receipt-editor" onSubmit={reviewStockReceipt}>
+      {purchaseOrderDraft && purchaseOrderDraftItem ? <form aria-labelledby="purchase-order-title" className="stock-receipt-editor purchase-order-editor" data-mode={purchaseOrderDraft.mode} onSubmit={reviewPurchaseOrder} ref={purchaseOrderEditorRef}>
         <div className="stock-receipt-copy">
-          <span className="core-eyebrow">Receive stock</span>
-          <h3 id="stock-receipt-title">{stockReceiptItem.name}</h3>
-          <small>{stockReceiptItem.sku} · record the counted units received</small>
+          <span className="core-eyebrow">{purchaseOrderDraft.mode === 'create' ? 'Order stock' : 'Receive order'}</span>
+          <h3 id="purchase-order-title">{purchaseOrderDraftItem.name}</h3>
+          <small>{purchaseOrderDraft.mode === 'create'
+            ? `${purchaseOrderDraftItem.sku} · internal record only`
+            : `${purchaseOrderDraftOrder?.purchaseOrder.id} · ${purchaseOrderDraftOrder?.purchaseOrder.supplier}`}</small>
         </div>
-        <label>Quantity received<input aria-describedby="stock-receipt-preview" autoFocus disabled={commerceControlsDisabled} inputMode="numeric" max={Number.MAX_SAFE_INTEGER - stockReceiptItem.onHand} min="1" onChange={(event) => setStockReceiptDraft({ sku: stockReceiptItem.sku, quantity: event.target.value })} placeholder="7" required step="1" type="number" value={stockReceiptDraft.quantity} /></label>
-        <div aria-live="polite" className="stock-receipt-preview" id="stock-receipt-preview"><small>New on hand</small><strong>{stockReceiptResult === null ? 'Enter a whole unit count' : `${stockReceiptItem.onHand.toLocaleString()} → ${stockReceiptResult.toLocaleString()}`}</strong></div>
-        <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelStockReceipt} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled || stockReceiptResult === null} type="submit">Review receipt</button></div>
+        {purchaseOrderDraft.mode === 'create' ? <label>Supplier reference<input autoFocus disabled={commerceControlsDisabled} maxLength={120} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'create' ? { ...current, supplier: event.target.value } : current)} placeholder="Supplier name" required value={purchaseOrderDraft.supplier} /></label> : null}
+        <label>{purchaseOrderDraft.mode === 'create' ? 'Quantity to order' : 'Quantity received'}<input aria-describedby="stock-receipt-preview" autoFocus={purchaseOrderDraft.mode === 'receive'} disabled={commerceControlsDisabled} inputMode="numeric" max={purchaseOrderQuantityLimit} min="1" onChange={(event) => setPurchaseOrderDraft((current) => current ? { ...current, quantity: event.target.value } : current)} placeholder="10" required step="1" type="number" value={purchaseOrderDraft.quantity} /></label>
+        <div aria-live="polite" className="stock-receipt-preview" id="stock-receipt-preview"><small>{purchaseOrderDraft.mode === 'create' ? 'Internal order' : 'New on hand'}</small><strong>{purchaseOrderQuantityResult === null
+          ? 'Enter whole units'
+          : purchaseOrderDraft.mode === 'create'
+            ? `${purchaseOrderQuantityResult.toLocaleString()} units`
+            : `${purchaseOrderDraftItem.onHand.toLocaleString()} → ${(purchaseOrderDraftItem.onHand + purchaseOrderQuantityResult).toLocaleString()}`}</strong></div>
+        <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelPurchaseOrderEditor} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled || purchaseOrderQuantityResult === null || (purchaseOrderDraft.mode === 'create' && !purchaseOrderDraft.supplier.trim())} type="submit">{purchaseOrderDraft.mode === 'create' ? 'Review order' : 'Review receipt'}</button></div>
       </form> : null}
+      <details className="compact-disclosure purchase-order-history">
+        <summary><span>Purchase orders</span><strong>{purchaseOrderRows.filter(({ progress }) => progress.status === 'open' || progress.status === 'partially_received').length} active · {purchaseOrderRows.length} total</strong></summary>
+        {purchaseOrderRows.length ? <div className="purchase-order-list">{purchaseOrderRows.map(({ purchaseOrder, progress, item }) => <article key={purchaseOrder.id}>
+          <div><strong>{item?.name ?? purchaseOrder.sku}</strong><small>{purchaseOrder.supplier} · {purchaseOrder.id}</small></div>
+          <span><strong>{progress.received}/{purchaseOrder.quantityOrdered}</strong><small>{progress.status.replace('_', ' ')}</small></span>
+          {progress.remaining > 0 && progress.status !== 'cancelled' ? <button aria-label={`Cancel remainder for ${purchaseOrder.id}`} className="text-link" disabled={commerceControlsDisabled} onClick={() => reviewPurchaseOrderCancellation(purchaseOrder.id)} type="button">Cancel remainder</button> : <small className="purchase-order-closed">{progress.status === 'received' ? 'Complete' : 'Closed'}</small>}
+        </article>)}</div> : <p className="empty-state">No purchase orders yet. Use Order stock on an item when replenishment is needed.</p>}
+      </details>
       <details className="compact-disclosure catalog-disclosure">
         <summary>Add catalog item</summary>
         <form className="core-form compact-form catalog-create-form" onSubmit={queueCatalogItem}>
@@ -2697,7 +2834,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
           <p className="panel-copy">The opening balance may be zero. A named operator, reason, and evidence are required before the SKU is recorded.</p>
         </form>
       </details>
-      <p className="form-notice" aria-live="polite">{notice || commerceStorageError || 'Catalog openings and receipts require attributable confirmation and append one stock movement.'}</p>
+      <p className="form-notice" aria-live="polite">{notice || commerceStorageError || 'Stock orders, receipts, and cancellations require attributable confirmation. Supplier contact and payment remain outside this workflow.'}</p>
     </section>
     <StockMovementHistory movements={commerce.movements} />
     {actionGate}

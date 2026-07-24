@@ -629,7 +629,8 @@ const stockTabletCssContract = coreCssSource.slice(stockTabletCssStart, stockTab
 if (stockTabletCssStart < 0
   || stockTabletCssEnd < 0
   || !stockTabletCssContract.includes('.data-table { min-width: 0; }')
-  || !stockTabletCssContract.includes('.data-row.table-head { display: none; }')
+  || !stockTabletCssContract.includes('.data-row.table-head { position: absolute;')
+  || !stockTabletCssContract.includes('clip-path: inset(50%)')
   || !stockTabletCssContract.includes('.data-row > span:nth-child(5) { grid-column: 3; grid-row: 2; justify-self: end; }')
   || !stockTabletCssContract.includes('.inventory-panel { overflow-x: hidden; }')
   || !stockTabletCssContract.includes('.stock-receipt-editor { grid-template-columns: 1fr; }')) fail('shop_stock_tablet_actions_overflow')
@@ -745,9 +746,12 @@ if (!managedTrialSource.includes('saveManagedCommerceCommand')
   || !managedTrialSource.includes('request.identity')
   || !managedTrialSource.includes("code: 'managed_identity_changed'")) fail('managed_commerce_command_client_missing')
 const managedCommerceClientSources = `${coreSource}\n${websiteSource}\n${ecommerceSource}`
-for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.payment.reconciled', 'commerce.refund.settled', 'commerce.stock.received', 'commerce.close.saved', 'commerce.website_intake.converted', 'commerce.storefront.configuration.saved', 'commerce.storefront_request.received']) {
+for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.payment.reconciled', 'commerce.refund.settled', 'commerce.purchase_order.created', 'commerce.purchase_order.received', 'commerce.purchase_order.cancelled', 'commerce.close.saved', 'commerce.website_intake.converted', 'commerce.storefront.configuration.saved', 'commerce.storefront_request.received']) {
   if (!managedTrialSource.includes(eventType) || !managedCommerceClientSources.includes(eventType) || !managedCommerceRuntime.includes(eventType)) fail(`managed_commerce_event_missing:${eventType}`)
 }
+if (!managedTrialSource.includes('commerce.stock.received')
+  || !managedCommerceRuntime.includes('commerce.stock.received')
+  || managedCommerceClientSources.includes('commerce.stock.received')) fail('legacy_direct_stock_receipt_not_read_only')
 if (!managedTrialSource.includes('commerce.website_intake.created')
   || !managedCommerceRuntime.includes('commerce.website_intake.created')
   || managedCommerceClientSources.includes('commerce.website_intake.created')) fail('legacy_website_intake_creation_not_read_only')
@@ -769,16 +773,32 @@ if (!commerceSource.includes('registerCommerceItem') || !coreSource.includes('Ad
 const commerceTabsContract = coreSource.slice(coreSource.indexOf('const commerceTabs'), coreSource.indexOf('const productionTabs'))
 if (commerceTabsContract.includes("{ id: 'today', label: 'Today' }") || !commerceTabsContract.includes("{ id: 'orders', label: 'Orders' }") || !commerceTabsContract.includes("{ id: 'inventory', label: 'Stock' }") || (commerceTabsContract.match(/^\s*\{ id:/gm) || []).length !== 2) fail('commerce_two_tab_contract_changed')
 const commercePageContract = coreSource.slice(coreSource.indexOf('function CommercePage'), coreSource.indexOf('function OrderList'))
-if (!commercePageContract.includes('stockReceiptDraft')
-  || !commercePageContract.includes('Enter the exact quantity received')
-  || !commercePageContract.includes('Number.isSafeInteger(item.onHand + receiptQuantity)')
-  || !commercePageContract.includes('currentItem.onHand !== expectedOnHand')
-  || !commercePageContract.includes('Receive stock')
+if (!commercePageContract.includes('purchaseOrderDraft')
+  || !commercePageContract.includes('Create an internal order')
+  || !commercePageContract.includes('This does not contact a supplier or create a payment.')
+  || !commercePageContract.includes('commercePurchaseOrderProgress(current, currentPurchaseOrder).remaining !== expectedRemaining')
+  || !commercePageContract.includes("'commerce.purchase_order.created'")
+  || !commercePageContract.includes("'commerce.purchase_order.received'")
+  || !commercePageContract.includes("'commerce.purchase_order.cancelled'")
+  || !commercePageContract.includes('createCommercePurchaseOrder(')
+  || !commercePageContract.includes('receiveCommercePurchaseOrder(')
+  || !commercePageContract.includes('cancelCommercePurchaseOrder(')
+  || !commercePageContract.includes('Order stock')
+  || !commercePageContract.includes('Your draft was preserved.')
+  || !commercePageContract.includes('purchaseOrderEditorRef')
   || !commercePageContract.includes('Review receipt')
-  || !commercePageContract.includes('setStockReceiptDraft((current) => current?.sku === itemSku ? null : current)')
+  || !commercePageContract.includes('Cancel remainder')
+  || !commercePageContract.includes('aria-label={`Cancel remainder for ${purchaseOrder.id}`}')
+  || commercePageContract.includes('purchaseOrderRows.slice(')
+  || commercePageContract.includes("'commerce.stock.received'")
   || commercePageContract.includes('Receive +10')
   || !coreCssSource.includes('.stock-receipt-editor')
-  || !coreCssSource.includes('.stock-receipt-preview')) fail('commerce_exact_stock_receipt_ui_missing')
+  || !coreCssSource.includes('.stock-receipt-preview')
+  || !coreCssSource.includes('.purchase-order-list')
+  || !coreCssSource.includes('.data-row .text-link, .purchase-order-list .text-link { min-height: 44px; }')
+  || !coreCssSource.includes('.core-button:disabled, .text-link:disabled')
+  || coreCssSource.includes('.data-row.table-head { display: none; }')
+  || !coreCssSource.includes('.purchase-order-editor[data-mode="create"] { grid-template-columns: repeat(2,minmax(0,1fr)); }')) fail('commerce_purchase_order_ui_missing')
 const commerceOrdersContract = commercePageContract.slice(commercePageContract.indexOf("if (tab === 'orders')"), commercePageContract.indexOf("if (tab === 'inventory')"))
 if (!commerceOrdersContract.includes('order-daily-controls') || !commerceOrdersContract.includes('Save daily close') || !commerceOrdersContract.includes('Close and exceptions')) fail('commerce_daily_controls_not_inside_orders')
 if (!productionSource.includes("supermega.production.workspace.v2") || !productionSource.includes('mutateProductionWorkspace') || !productionSource.includes('productionWorkspaceCanWrite') || !productionSource.includes('.write-probe.') || !productionSource.includes('lockManager.request') || !productionSource.includes('next.revision !== current.revision + 1')) fail('production_v2_locked_store_missing')
@@ -2377,6 +2397,78 @@ async function verifyCommerceRuntime() {
     assert(settledCloseExpectation
       && !settledCloseExpectation.paymentExceptionOrderIds.includes(paidOrder.id)
       && settledCloseExpectation.paymentExceptionOrderIds.includes(unrelatedOrder.id), 'settled_refund_left_as_due_only_exception')
+
+    const purchaseOrderId = 'PO-00000000-0000-4000-8000-000000000020'
+    const purchaseCreationProof = proof('ACT-PURCHASE-CREATE')
+    const purchaseCreated = model.createCommercePurchaseOrder(base, {
+      id: purchaseOrderId,
+      supplier: 'Yangon Supply',
+      sku: 'SKU-1',
+      quantityOrdered: 10,
+    }, purchaseCreationProof)
+    assert(purchaseCreated
+      && purchaseCreated.items === base.items
+      && purchaseCreated.movements === base.movements
+      && purchaseCreated.purchaseOrders[0].id === purchaseOrderId
+      && model.commercePurchaseOrderProgress(purchaseCreated, purchaseCreated.purchaseOrders[0]).status === 'open', 'purchase_order_creation_not_exact')
+    assert(model.createCommercePurchaseOrder(purchaseCreated, {
+      id: purchaseOrderId,
+      supplier: 'Yangon Supply',
+      sku: 'SKU-1',
+      quantityOrdered: 10,
+    }, purchaseCreationProof) === purchaseCreated, 'purchase_order_exact_retry_not_idempotent')
+    assert(model.createCommercePurchaseOrder(purchaseCreated, {
+      id: 'PO-00000000-0000-4000-8000-000000000021',
+      supplier: 'Second supplier',
+      sku: 'SKU-1',
+      quantityOrdered: 5,
+    }, proof('ACT-PURCHASE-CREATE-2')) === null, 'duplicate_active_purchase_order_succeeded')
+    const purchasePartialProof = proof('ACT-PURCHASE-RECEIVE-1', 60_000)
+    const purchasePartial = model.receiveCommercePurchaseOrder(purchaseCreated, purchaseOrderId, 4, purchasePartialProof)
+    const purchasePartialProgress = purchasePartial && model.commercePurchaseOrderProgress(purchasePartial, purchasePartial.purchaseOrders[0])
+    assert(purchasePartial
+      && purchasePartial.items[0].onHand === 14
+      && purchasePartial.movements[0].purchaseOrderId === purchaseOrderId
+      && purchasePartialProgress?.received === 4
+      && purchasePartialProgress.remaining === 6
+      && purchasePartialProgress.status === 'partially_received', 'purchase_order_partial_receipt_not_exact')
+    assert(model.receiveCommercePurchaseOrder(purchasePartial, purchaseOrderId, 4, purchasePartialProof) === purchasePartial, 'purchase_order_receipt_retry_not_idempotent')
+    assert(model.receiveCommercePurchaseOrder(purchasePartial, purchaseOrderId, 7, proof('ACT-PURCHASE-OVERRECEIPT', 120_000)) === null, 'purchase_order_overreceipt_succeeded')
+    assert(model.cancelCommercePurchaseOrder(
+      purchasePartial,
+      purchaseOrderId,
+      proof('ACT-PURCHASE-CANCEL-NO-ZONE', 0, { capturedAt: '2026-07-23T09:02:00' }),
+    ) === null, 'timezone_less_purchase_cancellation_succeeded')
+    const purchaseCancellationProof = proof('ACT-PURCHASE-CANCEL', 180_000)
+    const purchaseCancelled = model.cancelCommercePurchaseOrder(purchasePartial, purchaseOrderId, purchaseCancellationProof)
+    assert(purchaseCancelled
+      && model.commercePurchaseOrderProgress(purchaseCancelled, purchaseCancelled.purchaseOrders[0]).status === 'cancelled'
+      && model.commercePurchaseOrderProgress(purchaseCancelled, purchaseCancelled.purchaseOrders[0]).remaining === 6, 'purchase_order_cancellation_not_exact')
+    assert(model.cancelCommercePurchaseOrder(purchaseCancelled, purchaseOrderId, purchaseCancellationProof) === purchaseCancelled, 'purchase_order_cancel_retry_not_idempotent')
+    assert(model.receiveCommercePurchaseOrder(purchaseCancelled, purchaseOrderId, 1, proof('ACT-PURCHASE-AFTER-CANCEL', 240_000)) === null, 'purchase_order_receipt_after_cancel_succeeded')
+    const purchaseFilled = model.receiveCommercePurchaseOrder(purchasePartial, purchaseOrderId, 6, proof('ACT-PURCHASE-RECEIVE-2', 120_000))
+    assert(purchaseFilled
+      && model.commercePurchaseOrderProgress(purchaseFilled, purchaseFilled.purchaseOrders[0]).status === 'received'
+      && model.cancelCommercePurchaseOrder(purchaseFilled, purchaseOrderId, proof('ACT-PURCHASE-CANCEL-FILLED', 180_000)) === null, 'completed_purchase_order_was_cancellable')
+    const precisePurchaseOrderId = 'PO-00000000-0000-4000-8000-000000000022'
+    const precisePurchaseCreated = model.createCommercePurchaseOrder(base, {
+      id: precisePurchaseOrderId,
+      supplier: 'Precision supplier',
+      sku: 'SKU-1',
+      quantityOrdered: 2,
+    }, proof('ACT-PURCHASE-PRECISE-CREATE', 0, { capturedAt: '2026-07-23T09:00:00.000000Z' }))
+    const precisePurchaseReceived = model.receiveCommercePurchaseOrder(
+      precisePurchaseCreated,
+      precisePurchaseOrderId,
+      1,
+      proof('ACT-PURCHASE-PRECISE-RECEIVE', 0, { capturedAt: '2026-07-23T09:00:00.000900Z' }),
+    )
+    assert(precisePurchaseReceived
+      && model.cancelCommercePurchaseOrder(
+        precisePurchaseReceived,
+        precisePurchaseOrderId,
+        proof('ACT-PURCHASE-PRECISE-CANCEL', 0, { capturedAt: '2026-07-23T09:00:00.000100Z' }),
+      ) === null, 'submillisecond_purchase_cancellation_ordering_collapsed')
 
     const receiptProof = proof('ACT-RECEIPT')
     const received = model.receiveCommerceStock(base, 'SKU-1', 7, receiptProof)
