@@ -14,7 +14,7 @@ export type CommerceItem = {
 
 export type CommerceOrderStatus = 'confirmed' | 'preparing' | 'ready' | 'completed' | 'cancelled'
 export type CommercePaymentStatus = 'pending' | 'reconciled'
-export type CommerceRefundStatus = 'none' | 'due'
+export type CommerceRefundStatus = 'none' | 'due' | 'settled'
 
 export type CommerceOrder = {
   id: string
@@ -32,6 +32,11 @@ export type CommerceOrder = {
   paymentReconciledBy?: string
   paymentReconciliationReason?: string
   paymentEvidenceReference?: string
+  refundSettledAt?: string
+  refundSettlementActionId?: string
+  refundSettledBy?: string
+  refundSettlementReason?: string
+  refundEvidenceReference?: string
   fulfilment?: string
   sourceRecordId?: string
   evidenceReference?: string
@@ -156,10 +161,11 @@ export type CommerceMutationResult =
 
 const orderStatuses: CommerceOrderStatus[] = ['confirmed', 'preparing', 'ready', 'completed', 'cancelled']
 const paymentStatuses: CommercePaymentStatus[] = ['pending', 'reconciled']
-const refundStatuses: CommerceRefundStatus[] = ['none', 'due']
+const refundStatuses: CommerceRefundStatus[] = ['none', 'due', 'settled']
 const movementKinds: CommerceStockMovementKind[] = ['opening', 'reserve', 'release', 'receipt']
 const websiteIntakeStatuses: CommerceWebsiteIntakeStatus[] = ['pending_confirmation', 'converted']
 const closeSnapshotFields = ['businessDate', 'orderIds', 'paymentExceptionOrderIds', 'stockExceptionSkus', 'actionId', 'operator', 'reason', 'evidenceReference'] as const
+const refundSettlementFields = ['refundSettledAt', 'refundSettlementActionId', 'refundSettledBy', 'refundSettlementReason', 'refundEvidenceReference'] as const
 const websiteIntakeIdPattern = /^WINT-[A-Z0-9-]{8,80}$/
 const websiteFingerprintPattern = /^web-[a-f0-9]{8}$/
 const closeIdPattern = /^CLOSE-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
@@ -299,6 +305,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   const movementIds: string[] = []
   const movementActionIds: string[] = []
   const reconciliationActionIds: string[] = []
+  const refundSettlementActionIds: string[] = []
   const closeActionIds: string[] = []
   const closeBusinessDates: string[] = []
   const closedOrderIds: string[] = []
@@ -344,13 +351,25 @@ export function validateCommerceState(value: unknown): CommerceState {
     } else if (candidate.paymentReconciledAt !== undefined || candidate.paymentReconciliationActionId !== undefined || candidate.paymentReconciledBy !== undefined || candidate.paymentReconciliationReason !== undefined || candidate.paymentEvidenceReference !== undefined) {
       throw new Error(`orders[${index}] has reconciliation evidence while payment is pending.`)
     }
-    if (candidate.refundStatus === 'due' && (candidate.status !== 'cancelled' || candidate.paymentStatus !== 'reconciled')) throw new Error(`orders[${index}] has an invalid refund exception.`)
-    if (candidate.status === 'cancelled' && candidate.paymentStatus === 'reconciled' && candidate.refundStatus !== 'due') throw new Error(`orders[${index}] must preserve the refund due exception.`)
+    const presentRefundSettlementFields = refundSettlementFields.filter((field) => candidate[field] !== undefined)
+    if (candidate.refundStatus === 'settled') {
+      if (presentRefundSettlementFields.length !== refundSettlementFields.length) throw new Error(`orders[${index}] requires complete refund settlement evidence.`)
+      if (!validTimestamp(candidate.refundSettledAt) || String(candidate.refundSettledAt).length > 40) throw new Error(`orders[${index}].refundSettledAt is invalid.`)
+      refundSettlementActionIds.push(canonicalText(candidate.refundSettlementActionId, `orders[${index}].refundSettlementActionId`, 160))
+      canonicalText(candidate.refundSettledBy, `orders[${index}].refundSettledBy`)
+      canonicalText(candidate.refundSettlementReason, `orders[${index}].refundSettlementReason`)
+      canonicalText(candidate.refundEvidenceReference, `orders[${index}].refundEvidenceReference`)
+    } else if (presentRefundSettlementFields.length) {
+      throw new Error(`orders[${index}] has settlement evidence while refund is ${candidate.refundStatus}.`)
+    }
+    if ((candidate.refundStatus === 'due' || candidate.refundStatus === 'settled') && (candidate.status !== 'cancelled' || candidate.paymentStatus !== 'reconciled')) throw new Error(`orders[${index}] has an invalid refund exception.`)
+    if (candidate.status === 'cancelled' && candidate.paymentStatus === 'reconciled' && candidate.refundStatus !== 'due' && candidate.refundStatus !== 'settled') throw new Error(`orders[${index}] must preserve a due or settled refund.`)
     orderById.set(candidate.id as string, candidate)
   }
   assertUnique(orderIds, 'Order ID')
   assertUnique(sourceRecordIds, 'Order source record ID')
   assertUnique(reconciliationActionIds, 'Payment reconciliation action ID')
+  assertUnique(refundSettlementActionIds, 'Refund settlement action ID')
 
   const reserveByOrder = new Map<string, number>()
   const releaseByOrder = new Map<string, number>()
@@ -522,7 +541,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   assertUnique(intakeIds, 'Website intake ID')
   assertUnique(intakeSources, 'Website intake source')
   assertUnique(websiteIntakeConversionActionIds, 'Website intake conversion action ID')
-  assertUnique([...movementActionIds, ...reconciliationActionIds, ...websiteIntakeCreationActionIds, ...closeActionIds], 'Commerce action ID')
+  assertUnique([...movementActionIds, ...reconciliationActionIds, ...refundSettlementActionIds, ...websiteIntakeCreationActionIds, ...closeActionIds], 'Commerce action ID')
   return value as CommerceState
 }
 
@@ -707,7 +726,7 @@ function movementFor(proof: CommerceActionProof, input: Omit<CommerceStockMoveme
 
 function actionIdIsUsed(state: CommerceState, actionId: string) {
   return state.movements.some((movement) => movement.actionId === actionId)
-    || state.orders.some((order) => order.paymentReconciliationActionId === actionId)
+    || state.orders.some((order) => order.paymentReconciliationActionId === actionId || order.refundSettlementActionId === actionId)
     || state.closes.some((close) => close.actionId === actionId)
     || commerceWebsiteIntakes(state).some((intake) => intake.creation.actionId === actionId || intake.conversion?.actionId === actionId)
 }
@@ -1017,6 +1036,37 @@ export function reconcileCommercePayment(state: CommerceState, orderId: string, 
       paymentReconciledBy: proof.actor,
       paymentReconciliationReason: proof.reason,
       paymentEvidenceReference: proof.evidenceReference,
+    } : candidate),
+  })
+}
+
+export function settleCommerceRefund(state: CommerceState, orderId: string, proof: CommerceActionProof) {
+  if (!validProof(proof)) return null
+  const order = state.orders.find((candidate) => candidate.id === orderId)
+  if (!order) return null
+  if (order.refundStatus === 'settled') {
+    return order.status === 'cancelled'
+      && order.paymentStatus === 'reconciled'
+      && order.refundSettlementActionId === proof.actionId
+      && order.refundSettledAt === proof.capturedAt
+      && order.refundSettledBy === proof.actor
+      && order.refundSettlementReason === proof.reason
+      && order.refundEvidenceReference === proof.evidenceReference ? state : null
+  }
+  if (order.refundStatus !== 'due'
+    || order.status !== 'cancelled'
+    || order.paymentStatus !== 'reconciled'
+    || actionIdIsUsed(state, proof.actionId)) return null
+  return validateCommerceState({
+    ...state,
+    orders: state.orders.map((candidate) => candidate.id === orderId ? {
+      ...candidate,
+      refundStatus: 'settled' as const,
+      refundSettledAt: proof.capturedAt,
+      refundSettlementActionId: proof.actionId,
+      refundSettledBy: proof.actor,
+      refundSettlementReason: proof.reason,
+      refundEvidenceReference: proof.evidenceReference,
     } : candidate),
   })
 }

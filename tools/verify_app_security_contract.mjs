@@ -49,6 +49,7 @@ const expectedHumanCommerceEvents = [
   'commerce.order.cancelled',
   'commerce.order.created',
   'commerce.payment.reconciled',
+  'commerce.refund.settled',
   'commerce.stock.received',
   'commerce.website_intake.converted',
   'commerce.workspace.initialized',

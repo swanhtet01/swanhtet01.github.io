@@ -48,6 +48,7 @@ import {
   registerCommerceItem,
   reserveCommerceOrder,
   saveCommerceClose,
+  settleCommerceRefund,
   validateCommerceState,
   type CommerceActionProof,
   type CommerceItem,
@@ -161,6 +162,7 @@ type ActionKind =
   | 'order_status'
   | 'order_cancel'
   | 'payment_reconcile'
+  | 'refund_settle'
   | 'catalog_item_create'
   | 'inventory_receipt'
   | 'daily_close'
@@ -2005,6 +2007,27 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
     queueAction({ kind: 'payment_reconcile', subjectId: orderId, summary: `Reconcile ${order.id} payment`, before: `${order.payment} · ${order.paymentStatus}`, after: `${order.payment} · reconciled`, apply: (action) => mutateCommerce('commerce.payment.reconciled', action.commandId, commerceActionProof(action), (current) => reconcileCommercePayment(current, orderId, commerceActionProof(action))) })
   }
 
+  function settleRefund(orderId: string) {
+    const order = commerce.orders.find((candidate) => candidate.id === orderId)
+    if (!order || order.refundStatus !== 'due') {
+      setNotice('Only a refund currently marked due can be recorded as settled.')
+      return
+    }
+    queueAction({
+      kind: 'refund_settle',
+      subjectId: orderId,
+      summary: `Record ${order.id} refund settlement`,
+      before: 'refund due',
+      after: 'refund settled · external provider evidence recorded · no money sent',
+      apply: (action) => mutateCommerce(
+        'commerce.refund.settled',
+        action.commandId,
+        commerceActionProof(action),
+        (current) => settleCommerceRefund(current, orderId, commerceActionProof(action)),
+      ),
+    })
+  }
+
   function cancelOrder(orderId: string) {
     const order = commerce.orders.find((candidate) => candidate.id === orderId)
     if (!order || order.status === 'completed' || order.status === 'cancelled') return
@@ -2092,7 +2115,7 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
         <div className="order-submit-bar">{orderNotice ? <p className="form-notice" aria-live="polite">{orderNotice}</p> : null}<button className="core-button primary" disabled={commerceControlsDisabled} form="commerce-manual-order-form" type="submit">Review order</button></div>
       </> : null}
     </section>
-    <section className="core-panel order-queue-panel"><div className="panel-head"><div><span className="core-eyebrow">Fulfilment</span><h2>{actionOrders.length} orders need action</h2></div><span className="panel-note">{openOrders.length} in fulfilment</span></div><OrderList canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} disabled={commerceControlsDisabled} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} orders={actionOrders} /></section>
+    <section className="core-panel order-queue-panel"><div className="panel-head"><div><span className="core-eyebrow">Fulfilment</span><h2>{actionOrders.length} orders need action</h2></div><span className="panel-note">{openOrders.length} in fulfilment</span></div><OrderList canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} disabled={commerceControlsDisabled} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} orders={actionOrders} /></section>
   </div>
   <details className="core-panel today-more order-daily-controls">
     <summary><span>Close and exceptions</span><small>{paymentReview.length + lowStock.length} items need attention</small></summary>
@@ -2145,6 +2168,7 @@ function OrderList({
   onAdvance,
   onCancel,
   onReconcilePayment,
+  onSettleRefund,
 }: {
   orders: CommerceOrder[]
   canCancel: (id: string) => boolean
@@ -2152,6 +2176,7 @@ function OrderList({
   onAdvance: (id: string) => void
   onCancel: (id: string) => void
   onReconcilePayment: (id: string) => void
+  onSettleRefund: (id: string) => void
 }) {
   if (!orders.length) return <Empty>No orders need action.</Empty>
   const nextAction: Record<'confirmed' | 'preparing' | 'ready', string> = { confirmed: 'Start preparing', preparing: 'Mark ready', ready: 'Complete' }
@@ -2169,11 +2194,12 @@ function OrderList({
         </div>
         <strong>{order.customer} · {order.item} × {order.quantity}</strong>
         <small>{order.id} · {order.channel} · {order.payment}{order.fulfilment ? ` · ${order.fulfilment}` : ''} · {formatTime(order.createdAt)}</small>
-        {order.refundStatus === 'due' ? <small role="note">Refund due. Process it with the payment provider; this trial does not send or settle refunds.</small> : null}
+        {order.refundStatus === 'due' ? <small role="note">Record a refund already completed with the external payment provider. This does not send money.</small> : null}
       </div>
       <div className="order-row-actions">
         <b>{formatMoney(order.total)}</b>
         {reconcileIsPrimary ? <button className="text-link" disabled={disabled} onClick={() => onReconcilePayment(order.id)} type="button">Reconcile payment</button> : null}
+        {order.refundStatus === 'due' ? <button className="text-link" disabled={disabled} onClick={() => onSettleRefund(order.id)} type="button">Record settled refund</button> : null}
         {canAdvance ? <button className="text-link" disabled={disabled} onClick={() => onAdvance(order.id)} type="button">{nextAction[order.status as 'confirmed' | 'preparing' | 'ready']}</button> : null}
         {active && canCancel(order.id) ? <button className="text-link subtle" disabled={disabled} onClick={() => onCancel(order.id)} type="button">Cancel</button> : null}
       </div>
@@ -2189,7 +2215,8 @@ function ClosedOrderHistory({ orders }: { orders: CommerceOrder[] }) {
     <div className="order-archive-list">{visibleOrders.map((order) => <article key={order.id}>
       <div>
         <strong>{order.customer} · {order.item} × {order.quantity}</strong>
-        <small>{order.id} · {order.status} · payment {order.paymentStatus} · {formatTime(order.createdAt)}</small>
+        <small>{order.id} · {order.status} · payment {order.paymentStatus}{order.refundStatus !== 'none' ? ` · refund ${order.refundStatus}` : ''} · {formatTime(order.createdAt)}</small>
+        {order.refundStatus === 'settled' && order.refundSettledAt && order.refundSettledBy && order.refundEvidenceReference ? <small role="note">{order.refundSettledBy} · {formatTime(order.refundSettledAt)} · evidence {order.refundEvidenceReference}</small> : null}
       </div>
       <b>{formatMoney(order.total)}</b>
     </article>)}</div>

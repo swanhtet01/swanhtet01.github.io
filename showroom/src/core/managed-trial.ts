@@ -50,6 +50,7 @@ export type ManagedCommerceEvent =
   | 'commerce.order.advanced'
   | 'commerce.order.cancelled'
   | 'commerce.payment.reconciled'
+  | 'commerce.refund.settled'
   | 'commerce.stock.received'
   | 'commerce.close.saved'
 

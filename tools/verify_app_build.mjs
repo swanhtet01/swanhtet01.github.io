@@ -329,7 +329,6 @@ if (!coreSource.includes('id="commerce-manual-order-form"')
   || !coreSource.includes('className="production-mode-banner commerce-mode-banner"')
   || !coreSource.includes("managedIdentity ? 'Managed records' : 'Sample data'")
   || !coreSource.includes('const commerceControlsDisabled = !commerceCanWrite || Boolean(pendingAction)')
-  || !coreSource.includes('Refund due. Process it with the payment provider; this trial does not send or settle refunds.')
   || !coreSource.includes('<details className="order-options">')
   || !coreSource.includes('<summary><span>Channel and payment</span><small>{channel} · {payment}</small></summary>')
   || !coreCssSource.includes('.order-form-panel { display: flex; flex-direction: column; overflow: hidden; }')
@@ -375,14 +374,34 @@ if (!commerceSource.includes("supermega.commerce.workspace.v2")
   || !commerceSource.includes('commerceOrderNeedsAction')
   || !commerceSource.includes('.write-probe.')
   || !commerceSource.includes('lockManager.request')) fail('commerce_v2_locked_store_missing')
-if (!commerceSource.includes("CommercePaymentStatus = 'pending' | 'reconciled'") || !commerceSource.includes("CommerceRefundStatus = 'none' | 'due'") || commerceSource.includes("'unrecorded'") || commerceSource.includes("'refund_due'")) fail('commerce_payment_or_refund_contract_invalid')
+if (!commerceSource.includes("CommercePaymentStatus = 'pending' | 'reconciled'")
+  || !commerceSource.includes("CommerceRefundStatus = 'none' | 'due' | 'settled'")
+  || !commerceSource.includes('refundSettlementActionId?: string')
+  || !commerceSource.includes('refundEvidenceReference?: string')
+  || commerceSource.includes("'unrecorded'")
+  || commerceSource.includes("'refund_due'")) fail('commerce_payment_or_refund_contract_invalid')
 if (!commerceSource.includes('commerceOrderHasReleasableReservation') || !commerceSource.includes("movement.kind === 'reserve'") || !commerceSource.includes("movement.kind === 'release'") || !commerceSource.includes("kind: 'receipt'") || !commerceSource.includes("kind: 'opening'")) fail('commerce_stock_ledger_contract_missing')
 if (!commerceSource.includes('Recovery failed closed') || !commerceSource.includes('currentRaw !== null') || !commerceSource.includes("movements: []")) fail('commerce_migration_fail_closed_contract_missing')
+if (!commerceSource.includes('export function settleCommerceRefund')
+  || !commerceSource.includes("refundStatus: 'settled' as const")
+  || !commerceSource.includes('order.refundSettlementActionId === proof.actionId')
+  || !commerceSource.includes('order.paymentReconciliationActionId === actionId || order.refundSettlementActionId === actionId')
+  || !commerceSource.includes('...refundSettlementActionIds')) fail('commerce_refund_settlement_contract_missing')
 if (!managedTrialSource.includes('saveManagedCommerceCommand') || !managedTrialSource.includes('expected_version: request.expectedVersion') || !managedTrialSource.includes("surface: 'commerce'") || !managedTrialSource.includes('payload: { state: request.state, evidence: request.evidence }')) fail('managed_commerce_command_client_missing')
 const managedCommerceClientSources = `${coreSource}\n${websiteSource}`
-for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.payment.reconciled', 'commerce.stock.received', 'commerce.close.saved', 'commerce.website_intake.created', 'commerce.website_intake.converted']) {
-  if (!managedCommerceClientSources.includes(eventType) || !managedCommerceRuntime.includes(eventType)) fail(`managed_commerce_event_missing:${eventType}`)
+for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.payment.reconciled', 'commerce.refund.settled', 'commerce.stock.received', 'commerce.close.saved', 'commerce.website_intake.created', 'commerce.website_intake.converted']) {
+  if (!managedTrialSource.includes(eventType) || !managedCommerceClientSources.includes(eventType) || !managedCommerceRuntime.includes(eventType)) fail(`managed_commerce_event_missing:${eventType}`)
 }
+if (!coreSource.includes('Record a refund already completed with the external payment provider. This does not send money.')
+  || !coreSource.includes("order.refundStatus === 'due' ? <button")
+  || !coreSource.includes('onSettleRefund(order.id)')
+  || !coreSource.includes('Record settled refund')
+  || !coreSource.includes("order.refundStatus === 'settled' && order.refundSettledAt")
+  || !coreSource.includes('evidence {order.refundEvidenceReference}')
+  || coreSource.includes('this trial does not send or settle refunds.')) fail('commerce_refund_settlement_ui_not_honest')
+if (!coreSource.includes("'commerce.refund.settled'")
+  || !coreSource.includes('settleCommerceRefund(current, orderId, commerceActionProof(action))')
+  || !coreSource.includes("kind: 'refund_settle'")) fail('commerce_refund_settlement_gate_missing')
 if (!coreSource.includes("mode: 'managed-unprovisioned'") || !coreSource.includes('No browser demo orders, customers, or stock records are copied') || !coreSource.includes('Create managed catalog') || !coreSource.includes('Opening balance reason') || !coreSource.includes('result.version !== current.version + 1') || !coreSource.includes('validateCommerceState(result.state)') || !coreSource.includes("error.code === 'trial_version_conflict'") || !coreSource.includes('managedIdentity ? null : <ActionHistory')) fail('managed_commerce_ui_not_fail_closed')
 if (!coreSource.includes('confirmation?: AccountableAction') || !coreSource.includes('if (action.confirmation) return action.confirmation') || !coreSource.includes('Retry same confirmation') || !coreSource.includes('result.idempotent_replay') || !coreSource.includes('before the replay could be reconciled')) fail('managed_command_retry_not_frozen_or_reconciled')
 if (!managedCommerceRuntime.includes('commerce.workspace.initialized') || managedCommerceRuntime.includes('commerce.snapshot.saved') || !managedCommerceRuntime.includes('_one_changed') || !managedCommerceRuntime.includes('_validate_event_evidence') || !managedCommerceRuntime.includes('daily close totals must match completed, reconciled orders')) fail('managed_commerce_server_transition_contract_missing')
@@ -1306,7 +1325,11 @@ async function verifyCommerceRuntime() {
     const migratedAgain = model.normalizeCommerce(legacy)
     assert(JSON.stringify(migrated) === JSON.stringify(migratedAgain), 'migration_not_deterministic')
     assert(migrated.schema === model.COMMERCE_WORKSPACE_SCHEMA && migrated.items[0].onHand === 10 && migrated.orders[0].id === 'ORD-LEGACY' && migrated.closes[0].id === 'CLOSE-1', 'migration_did_not_preserve_records')
-    assert(migrated.orders[0].paymentStatus === 'pending' && migrated.orders[0].refundStatus === 'none' && migrated.movements.length === 0, 'migration_invented_payment_or_movement_history')
+    assert(migrated.orders[0].paymentStatus === 'pending'
+      && migrated.orders[0].refundStatus === 'none'
+      && migrated.orders[0].refundSettlementActionId === undefined
+      && migrated.orders[0].refundSettledAt === undefined
+      && migrated.movements.length === 0, 'migration_invented_payment_refund_or_movement_history')
     assert(model.normalizeCommerce(migrated) === migrated, 'valid_v2_not_byte_idempotent')
 
     const ledger501 = {
@@ -1447,10 +1470,81 @@ async function verifyCommerceRuntime() {
     const paidCancelled = model.cancelCommerceOrder(paid, paidOrder.id, proof('ACT-CANCEL-PAID'))
     assert(paidCancelled?.orders[0].paymentStatus === 'reconciled' && paidCancelled.orders[0].refundStatus === 'due', 'paid_cancellation_erased_reconciliation_or_refund_exception')
     assert(model.commerceOrderNeedsAction(paidCancelled.orders[0]), 'refund_due_order_hidden_from_action_queue')
+    assert(model.normalizeCommerce(paidCancelled) === paidCancelled, 'legacy_refund_due_state_not_byte_idempotent')
     assert(!model.commerceOrderNeedsAction(cancelled.orders[0]), 'closed_cancelled_order_left_in_action_queue')
     assert(!model.commerceOrderNeedsAction(completed.orders[0]), 'completed_reconciled_order_left_in_action_queue')
     assert(model.commerceOrderNeedsAction({ ...completed.orders[0], paymentStatus: 'pending' }), 'completed_pending_payment_hidden_from_action_queue')
     assert(model.reconcileCommercePayment(paidCancelled, paidOrder.id, proof('ACT-PAY-AFTER-CANCEL')) === null, 'cancelled_payment_reconciled_again')
+
+    const settlementProof = proof('ACT-REFUND-SETTLED', 4_000)
+    const settlementEvidence = {
+      refundSettledAt: settlementProof.capturedAt,
+      refundSettlementActionId: settlementProof.actionId,
+      refundSettledBy: settlementProof.actor,
+      refundSettlementReason: settlementProof.reason,
+      refundEvidenceReference: settlementProof.evidenceReference,
+    }
+    assertThrows(() => model.validateCommerceState({
+      ...cancelled,
+      orders: [{ ...cancelled.orders[0], ...settlementEvidence }],
+    }), 'refund_none_with_settlement_evidence_succeeded')
+    assertThrows(() => model.validateCommerceState({
+      ...paidCancelled,
+      orders: [{ ...paidCancelled.orders[0], ...settlementEvidence }],
+    }), 'refund_due_with_settlement_evidence_succeeded')
+    const { refundEvidenceReference: _missingRefundEvidence, ...incompleteSettlementEvidence } = settlementEvidence
+    assertThrows(() => model.validateCommerceState({
+      ...paidCancelled,
+      orders: [{ ...paidCancelled.orders[0], refundStatus: 'settled', ...incompleteSettlementEvidence }],
+    }), 'incomplete_refund_settlement_evidence_succeeded')
+    assertThrows(() => model.validateCommerceState({
+      ...paidCancelled,
+      orders: [{ ...paidCancelled.orders[0], refundStatus: 'none' }],
+    }), 'cancelled_reconciled_order_without_refund_state_succeeded')
+    assert(model.settleCommerceRefund(reserved, order.id, proof('ACT-SETTLE-NONE')) === null, 'refund_none_was_settled')
+    assert(model.settleCommerceRefund(paidCancelled, paidOrder.id, proof('ACT-PAY-PAID')) === null, 'refund_settlement_reused_payment_action_id')
+
+    const unrelatedReserveProof = proof('ACT-RESERVE-UNRELATED', 3_000)
+    const unrelatedOrder = {
+      ...order,
+      id: 'ORD-UNRELATED',
+      sourceRecordId: 'WEB-UNRELATED',
+      evidenceReference: unrelatedReserveProof.evidenceReference,
+    }
+    const withUnrelatedOrder = model.reserveCommerceOrder(paidCancelled, unrelatedOrder, unrelatedReserveProof)
+    const unrelatedBeforeSettlement = withUnrelatedOrder.orders.find((candidate) => candidate.id === unrelatedOrder.id)
+    const dueCloseExpectation = model.commerceCloseExpectation(withUnrelatedOrder, '2026-07-24T09:00:00.000Z')
+    assert(dueCloseExpectation?.paymentExceptionOrderIds.includes(paidOrder.id), 'refund_due_missing_from_close_exceptions')
+    const settled = model.settleCommerceRefund(withUnrelatedOrder, paidOrder.id, settlementProof)
+    const settledOrder = settled?.orders.find((candidate) => candidate.id === paidOrder.id)
+    assert(settledOrder?.refundStatus === 'settled'
+      && settledOrder.refundSettledAt === settlementProof.capturedAt
+      && settledOrder.refundSettlementActionId === settlementProof.actionId
+      && settledOrder.refundSettledBy === settlementProof.actor
+      && settledOrder.refundSettlementReason === settlementProof.reason
+      && settledOrder.refundEvidenceReference === settlementProof.evidenceReference, 'refund_settlement_lost_complete_attribution')
+    assert(settled !== withUnrelatedOrder
+      && settled.items === withUnrelatedOrder.items
+      && settled.movements === withUnrelatedOrder.movements
+      && settled.closes === withUnrelatedOrder.closes
+      && settled.websiteIntakes === withUnrelatedOrder.websiteIntakes
+      && settled.orders.length === withUnrelatedOrder.orders.length
+      && settled.orders.find((candidate) => candidate.id === unrelatedOrder.id) === unrelatedBeforeSettlement, 'refund_settlement_changed_unrelated_state')
+    assert(model.settleCommerceRefund(settled, paidOrder.id, settlementProof) === settled, 'exact_refund_settlement_retry_not_idempotent')
+    assert(model.settleCommerceRefund(settled, paidOrder.id, { ...settlementProof, evidenceReference: 'EV-REFUND-CONFLICT' }) === null, 'changed_refund_settlement_retry_succeeded')
+    assertThrows(() => model.validateCommerceState({
+      ...settled,
+      orders: settled.orders.map((candidate) => candidate.id === paidOrder.id ? { ...candidate, status: 'completed' } : candidate),
+    }), 'settled_refund_without_cancelled_order_succeeded')
+    assertThrows(() => model.validateCommerceState({
+      ...settled,
+      orders: settled.orders.map((candidate) => candidate.id === paidOrder.id ? { ...candidate, refundSettlementActionId: unrelatedReserveProof.actionId } : candidate),
+    }), 'refund_settlement_action_id_global_reuse_succeeded')
+    assert(!model.commerceOrderNeedsAction(settledOrder), 'settled_refund_left_in_action_queue')
+    const settledCloseExpectation = model.commerceCloseExpectation(settled, '2026-07-24T09:00:00.000Z')
+    assert(settledCloseExpectation
+      && !settledCloseExpectation.paymentExceptionOrderIds.includes(paidOrder.id)
+      && settledCloseExpectation.paymentExceptionOrderIds.includes(unrelatedOrder.id), 'settled_refund_left_as_due_only_exception')
 
     const receiptProof = proof('ACT-RECEIPT')
     const received = model.receiveCommerceStock(base, 'SKU-1', 10, receiptProof)
