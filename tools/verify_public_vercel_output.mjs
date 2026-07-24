@@ -36,6 +36,11 @@ if (manifest.release?.sourceBranch !== 'main') fail('release_source_not_main')
 if (manifest.products?.map((product) => product.id).join(',') !== 'commerce,production') fail('runtime_catalog_not_commerce_and_production')
 if (manifest.products?.map((product) => `${product.publicId}:${product.name}`).join(',') !== 'shop:Shop,plant:Plant') fail('public_catalog_not_shop_and_plant')
 if (manifest.prototypeProducts?.map((product) => `${product.id}:${product.status}`).join(',') !== 'website:release-candidate-local,ecommerce:release-candidate-local') fail('maker_portfolio_drift')
+const ecommerce = manifest.prototypeProducts?.find((product) => product.id === 'ecommerce')
+if (ecommerce?.views?.join(',') !== 'Storefront,Preview,Request receipt'
+  || !ecommerce?.proof?.includes('Idempotent in-memory receipt')
+  || !ecommerce?.boundaries?.includes('No durable request ledger')
+  || !ecommerce?.boundaries?.includes('No Shop order or stock reservation')) fail('ecommerce_request_receipt_contract_drift')
 if (manifest.agentSolutions?.id !== 'agents' || manifest.agentSolutions?.status !== 'prototype-planned') fail('agent_solution_portfolio_drift')
 for (const product of manifest.products || []) {
   if (product.templates?.length !== 3) fail('public_template_count_wrong', { product: product.id })
@@ -150,7 +155,7 @@ for (const token of [
   'id="website"',
   'Available locally',
   'id="ecommerce"',
-  'Create a simple storefront preview from Shop.',
+  'Create a Shop-backed storefront and test customer order intent.',
   'https://app.supermega.dev/products/ecommerce/',
   'id="agents"',
   'Evaluation required',
