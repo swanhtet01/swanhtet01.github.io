@@ -50,11 +50,11 @@ const DEFAULT_NOTICE = 'Website workspace loaded. No website has been deployed.'
 const viewCopy: Record<WebsiteView, { title: string; copy: string }> = {
   content: {
     title: 'Edit page',
-    copy: 'Choose one section, make the change, then preview the page.',
+    copy: 'Edit one section, preview it, then save or discard.',
   },
   publish: {
     title: 'Review and save',
-    copy: 'Check the revision once, approve it, then download the site file.',
+    copy: 'Check the saved revision, approve it, then download the site file.',
   },
 }
 

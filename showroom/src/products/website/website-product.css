@@ -3380,22 +3380,21 @@
   }
 
   .website-heading[data-view="content"] {
-    min-height: 56px;
-    padding: 0 2px;
+    min-height: 72px;
+    padding: 9px 2px;
   }
 
-  .website-heading[data-view="content"] p {
-    display: none;
+  .website-heading[data-view="content"] p,
+  .website-heading[data-view="publish"] p {
+    display: block;
+    font-size: 12px;
+    line-height: 1.35;
   }
 
   .website-heading[data-view="publish"] {
-    min-height: 58px;
+    min-height: 72px;
     display: flex;
     padding-inline: 2px;
-  }
-
-  .website-heading[data-view="publish"] p {
-    display: none;
   }
 }
 
