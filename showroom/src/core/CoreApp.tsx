@@ -85,6 +85,7 @@ import {
   productionShiftOutput,
   productionWorkspaceCanWrite,
   recordProductionOutput,
+  recordProductionScrap,
   recordProductionMachineState,
   registerProductionJob,
   resolveProductionIssue,
@@ -94,6 +95,7 @@ import {
   type ProductionIssue,
   type ProductionJob,
   type ProductionMachineState,
+  type ProductionOutputKind,
   type ProductionState,
 } from './production-workspace'
 
@@ -173,6 +175,7 @@ type ActionKind =
   | 'daily_close'
   | 'production_job'
   | 'production_output'
+  | 'production_scrap'
   | 'issue_create'
   | 'issue_resolution'
   | 'machine_state'
@@ -2621,7 +2624,7 @@ function ProductionEventHistory({ events }: { events: ProductionEvent[] }) {
     <summary><span>Plant record</span><strong>{events.length} attributed events</strong></summary>
     {visibleEvents.length ? <div className="action-history-list">{visibleEvents.map((event) => <article key={event.id}>
       <div>
-        <strong>{productionEventLabels[event.kind]} - {event.summary}</strong>
+        <strong>{event.kind === 'output_recorded' ? event.outputKind === 'scrap' ? 'Scrap recorded' : 'Good output recorded' : productionEventLabels[event.kind]} - {event.summary}</strong>
         <small>{event.subjectId} - {event.actionId} - {event.actor}{event.kind === 'output_recorded' ? ` - Shift: ${event.shiftRef ?? 'Unassigned (legacy)'}` : ''}</small>
         <p>{event.reason} - Evidence: {event.evidenceReference}</p>
       </div>
@@ -2637,6 +2640,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const [pendingAction, setPendingAction] = useState<PendingAccountableAction | null>(null)
   const [jobId, setJobId] = useState(production.jobs[0]?.id ?? '')
   const [quantity, setQuantity] = useState(25)
+  const [outputKind, setOutputKind] = useState<ProductionOutputKind>('good')
   const [shiftRef, setShiftRef] = useState('')
   const [area, setArea] = useState('Line 01')
   const [kind, setKind] = useState<ProductionIssue['kind']>('quality')
@@ -2655,11 +2659,11 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const machineTriggerRef = useRef<HTMLButtonElement | null>(null)
   const openIssues = production.issues.filter((issue) => issue.status === 'open')
   const resolvedIssues = production.issues.filter((issue) => issue.status === 'resolved')
-  const activeJobs = production.jobs.filter((job) => job.output < job.target)
-  const completedJobs = production.jobs.filter((job) => job.output >= job.target)
+  const activeJobs = production.jobs.filter((job) => job.output + (job.scrap ?? 0) < job.target)
+  const completedJobs = production.jobs.filter((job) => job.output + (job.scrap ?? 0) >= job.target)
   const selectedJobId = activeJobs.some((job) => job.id === jobId) ? jobId : activeJobs[0]?.id ?? ''
   const selectedJob = activeJobs.find((job) => job.id === selectedJobId)
-  const selectedRemaining = selectedJob ? selectedJob.target - selectedJob.output : 0
+  const selectedRemaining = selectedJob ? selectedJob.target - selectedJob.output - (selectedJob.scrap ?? 0) : 0
   const canonicalShiftRef = shiftRef.trim()
   const currentShiftOutput = productionShiftOutput(production, canonicalShiftRef)
   const observedMachine = machineObservation
@@ -2799,19 +2803,26 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     if (!Number.isSafeInteger(quantity) || quantity < 1) return setNotice('Enter a whole-unit quantity of at least 1.')
     if (!selectedJob) return setNotice('Choose an active job before recording output.')
     if (selectedRemaining < 1) return setNotice(`${selectedJob.id} is already at target.`)
-    if (quantity > selectedRemaining) return setNotice(`Only ${selectedRemaining} units remain for ${selectedJob.id}. No output was recorded.`)
+    if (quantity > selectedRemaining) return setNotice(`Only ${selectedRemaining} units remain for ${selectedJob.id}. Nothing was recorded.`)
     const recordedJobId = selectedJob.id
     const recordedQuantity = quantity
+    const recordedOutputKind = outputKind
+    const recordedScrap = selectedJob.scrap ?? 0
     const recordedShiftOutput = productionShiftOutput(production, recordedShiftRef)
+    const resultLabel = recordedOutputKind === 'scrap' ? 'scrap units' : 'good units'
+    const nextGood = selectedJob.output + (recordedOutputKind === 'good' ? recordedQuantity : 0)
+    const nextScrap = recordedScrap + (recordedOutputKind === 'scrap' ? recordedQuantity : 0)
     setShiftRef(recordedShiftRef)
     queueAction({
-      kind: 'production_output',
+      kind: recordedOutputKind === 'scrap' ? 'production_scrap' : 'production_output',
       subjectId: recordedJobId,
-      summary: `Record ${recordedQuantity} good units for ${recordedJobId} · ${recordedShiftRef}`,
-      before: `${selectedJob.output} / ${selectedJob.target} recorded · ${recordedShiftOutput.goodUnits} for this shift`,
-      after: `${selectedJob.output + recordedQuantity} / ${selectedJob.target} recorded · ${recordedShiftOutput.goodUnits + recordedQuantity} for this shift`,
+      summary: `Record ${recordedQuantity} ${resultLabel} for ${recordedJobId} · ${recordedShiftRef}`,
+      before: `${selectedJob.output} good · ${recordedScrap} scrap · ${recordedShiftOutput.goodUnits} good / ${recordedShiftOutput.scrapUnits} scrap this shift`,
+      after: `${nextGood} good · ${nextScrap} scrap · ${recordedShiftOutput.goodUnits + (recordedOutputKind === 'good' ? recordedQuantity : 0)} good / ${recordedShiftOutput.scrapUnits + (recordedOutputKind === 'scrap' ? recordedQuantity : 0)} scrap this shift`,
       apply: async (record) => {
-        await mutateProduction('production.output.recorded', record.commandId, productionActionProof(record), (current) => recordProductionOutput(current, recordedJobId, recordedQuantity, recordedShiftRef, productionActionProof(record)))
+        await mutateProduction('production.output.recorded', record.commandId, productionActionProof(record), (current) => recordedOutputKind === 'scrap'
+          ? recordProductionScrap(current, recordedJobId, recordedQuantity, recordedShiftRef, productionActionProof(record))
+          : recordProductionOutput(current, recordedJobId, recordedQuantity, recordedShiftRef, productionActionProof(record)))
       },
     })
   }
@@ -2951,13 +2962,14 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         </details>
       </section>
       <section className="core-panel output-panel">
-        <span className="core-eyebrow">Good output</span><h2>Record job output</h2>
-        <form className="core-form compact-form" onSubmit={recordOutput}>
-          <label>Job<select disabled={!productionCanWrite || Boolean(pendingAction) || !activeJobs.length} value={selectedJobId} onChange={(event) => setJobId(event.target.value)}>{activeJobs.length ? activeJobs.map((job) => <option key={job.id} value={job.id}>{job.id} · {job.product} · {job.line} · {(job.target - job.output).toLocaleString()} left</option>) : <option value="">No active jobs</option>}</select></label>
-          <div className="form-row"><label>Shift reference<input disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} maxLength={80} placeholder="2026-07-24 Day" required value={shiftRef} onChange={(event) => setShiftRef(event.target.value)} /></label><label>Good units<input disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} min="1" step="1" type="number" value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} /></label></div>
-          <p className="form-notice" role="status">{canonicalShiftRef && canonicalShiftRef.length <= 80 ? `Recorded for this shift: ${currentShiftOutput.goodUnits.toLocaleString()} good units across ${currentShiftOutput.entryCount} ${currentShiftOutput.entryCount === 1 ? 'entry' : 'entries'}.` : 'Enter a shift reference to see its recorded subtotal.'}</p>
-          <button className="core-button primary" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob || selectedRemaining < 1 || !canonicalShiftRef || canonicalShiftRef.length > 80} type="submit">Review output</button>
-          <p className="panel-copy">{selectedJob ? `${selectedJob.id} · ${selectedJob.product} · ${selectedJob.line} · ${selectedJob.output.toLocaleString()} / ${selectedJob.target.toLocaleString()} recorded · ${selectedRemaining.toLocaleString()} left.` : 'Add or choose an active job.'} Output is append-only in this trial; verify the job and quantity before review.</p>
+        <span className="core-eyebrow">Job output</span><h2>Record good or scrap</h2>
+        <form autoComplete="off" className="core-form compact-form" onSubmit={recordOutput}>
+          <label>Job<select disabled={!productionCanWrite || Boolean(pendingAction) || !activeJobs.length} value={selectedJobId} onChange={(event) => setJobId(event.target.value)}>{activeJobs.length ? activeJobs.map((job) => <option key={job.id} value={job.id}>{job.id} · {job.product} · {job.line} · {(job.target - job.output - (job.scrap ?? 0)).toLocaleString()} left</option>) : <option value="">No active jobs</option>}</select></label>
+          <label>Result<select disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} value={outputKind} onChange={(event) => setOutputKind(event.target.value as ProductionOutputKind)}><option value="good">Good output</option><option value="scrap">Scrap</option></select></label>
+          <div className="form-row"><label>Shift reference<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} maxLength={80} name="plant-output-shift-reference" placeholder="2026-07-24 Day" required value={shiftRef} onChange={(event) => setShiftRef(event.target.value)} /></label><label>{outputKind === 'scrap' ? 'Scrap units' : 'Good units'}<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} min="1" name="plant-output-quantity" step="1" type="number" value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} /></label></div>
+          <p className="form-notice" role="status">{canonicalShiftRef && canonicalShiftRef.length <= 80 ? `This shift: ${currentShiftOutput.goodUnits.toLocaleString()} good · ${currentShiftOutput.scrapUnits.toLocaleString()} scrap across ${currentShiftOutput.entryCount} ${currentShiftOutput.entryCount === 1 ? 'entry' : 'entries'}.` : 'Enter a shift reference to see its recorded subtotal.'}</p>
+          <button className="core-button primary" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob || selectedRemaining < 1 || !canonicalShiftRef || canonicalShiftRef.length > 80} type="submit">Review {outputKind === 'scrap' ? 'scrap' : 'good output'}</button>
+          <p className="panel-copy">{selectedJob ? `${selectedJob.id} · ${selectedJob.product} · ${selectedJob.line} · ${selectedJob.output.toLocaleString()} good · ${(selectedJob.scrap ?? 0).toLocaleString()} scrap · ${selectedRemaining.toLocaleString()} left.` : 'Add or choose an active job.'} Results are append-only in this trial; verify the job, result, and quantity before review.</p>
         </form>
       </section>
     </div>
@@ -3009,7 +3021,12 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
 
 function JobList({ jobs }: { jobs: ProductionJob[] }) {
   if (!jobs.length) return <Empty>No active jobs. Add a job below to start recording output.</Empty>
-  return <div className="job-list">{jobs.map((job) => { const progress = Math.min(100, Math.round((job.output / job.target) * 100)); return <article key={job.id}><div><span>{job.id} · {job.line}</span><strong>{job.product}</strong></div><div className="job-progress"><span><i style={{ width: `${progress}%` }} /></span><small>{job.output.toLocaleString()} / {job.target.toLocaleString()} · {progress}%</small></div></article> })}</div>
+  return <div className="job-list">{jobs.map((job) => {
+    const scrap = job.scrap ?? 0
+    const accounted = job.output + scrap
+    const progress = Math.min(100, Math.round((accounted / job.target) * 100))
+    return <article key={job.id}><div><span>{job.id} · {job.line}</span><strong>{job.product}</strong></div><div className="job-progress"><span><i style={{ width: `${progress}%` }} /></span><small>{job.output.toLocaleString()} good · {scrap.toLocaleString()} scrap · {accounted.toLocaleString()} / {job.target.toLocaleString()}</small></div></article>
+  })}</div>
 }
 
 function CompletedJobHistory({ jobs }: { jobs: ProductionJob[] }) {

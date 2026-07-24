@@ -12,6 +12,7 @@ export type ProductionJob = {
   product: string
   target: number
   output: number
+  scrap?: number
 }
 
 export type ProductionIssueResolution = {
@@ -39,6 +40,7 @@ export type ProductionMachine = {
 }
 
 export type ProductionEventKind = 'job_created' | 'output_recorded' | 'issue_opened' | 'issue_resolved' | 'machine_state_changed'
+export type ProductionOutputKind = 'good' | 'scrap'
 
 export type ProductionEvent = {
   id: string
@@ -52,6 +54,7 @@ export type ProductionEvent = {
   summary: string
   quantity?: number
   shiftRef?: string
+  outputKind?: ProductionOutputKind
   fromState?: ProductionMachineState
   toState?: ProductionMachineState
 }
@@ -95,6 +98,7 @@ export type ProductionMutationResult =
 
 export type ProductionShiftOutput = {
   goodUnits: number
+  scrapUnits: number
   entryCount: number
 }
 
@@ -222,7 +226,7 @@ export function validateProductionState(value: unknown): ProductionState {
   const machineIds: string[] = []
   const eventIds: string[] = []
   const actionIds: string[] = []
-  const shiftTotals = new Map<string, number>()
+  const shiftTotals = new Map<string, { goodUnits: number; scrapUnits: number }>()
 
   for (const [index, candidate] of jobs.entries()) {
     if (!isRecord(candidate)) throw new Error(`jobs[${index}] is invalid.`)
@@ -231,7 +235,9 @@ export function validateProductionState(value: unknown): ProductionState {
     canonicalText(candidate.product, `jobs[${index}].product`)
     assertSafeInteger(candidate.target, `jobs[${index}].target`, 1)
     assertSafeInteger(candidate.output, `jobs[${index}].output`)
-    if (Number(candidate.output) > Number(candidate.target)) throw new Error(`jobs[${index}].output exceeds target.`)
+    if (candidate.scrap !== undefined) assertSafeInteger(candidate.scrap, `jobs[${index}].scrap`)
+    const accounted = Number(candidate.output) + Number(candidate.scrap ?? 0)
+    if (!Number.isSafeInteger(accounted) || accounted > Number(candidate.target)) throw new Error(`jobs[${index}] good plus scrap exceeds target.`)
   }
   assertUnique(jobIds, 'Production job ID')
 
@@ -278,25 +284,31 @@ export function validateProductionState(value: unknown): ProductionState {
     if (!eventKinds.includes(candidate.kind as ProductionEventKind)) throw new Error(`events[${index}].kind is invalid.`)
     if (candidate.kind === 'job_created') {
       if (!jobIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown job.`)
-      if (candidate.quantity !== undefined || candidate.shiftRef !== undefined || candidate.fromState !== undefined || candidate.toState !== undefined) throw new Error(`events[${index}] job event has unrelated fields.`)
+      if (candidate.quantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || candidate.fromState !== undefined || candidate.toState !== undefined) throw new Error(`events[${index}] job event has unrelated fields.`)
     } else if (candidate.kind === 'output_recorded') {
       if (!jobIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown job.`)
       assertSafeInteger(candidate.quantity, `events[${index}].quantity`, 1)
+      const outputKind = candidate.outputKind === undefined ? 'good' : candidate.outputKind
+      if (outputKind !== 'good' && outputKind !== 'scrap') throw new Error(`events[${index}].outputKind is invalid.`)
       if (candidate.shiftRef !== undefined) {
         const shiftRef = canonicalText(candidate.shiftRef, `events[${index}].shiftRef`, 80)
-        const nextShiftTotal = (shiftTotals.get(shiftRef) ?? 0) + Number(candidate.quantity)
+        const currentShiftTotal = shiftTotals.get(shiftRef) ?? { goodUnits: 0, scrapUnits: 0 }
+        const nextShiftTotal = currentShiftTotal[outputKind === 'scrap' ? 'scrapUnits' : 'goodUnits'] + Number(candidate.quantity)
         if (!Number.isSafeInteger(nextShiftTotal)) throw new Error(`Output total for ${shiftRef} exceeds the safe integer limit.`)
-        shiftTotals.set(shiftRef, nextShiftTotal)
+        shiftTotals.set(shiftRef, {
+          ...currentShiftTotal,
+          [outputKind === 'scrap' ? 'scrapUnits' : 'goodUnits']: nextShiftTotal,
+        })
       }
       if (candidate.fromState !== undefined || candidate.toState !== undefined) throw new Error(`events[${index}] output event has machine state fields.`)
     } else if (candidate.kind === 'machine_state_changed') {
       if (!machineIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown machine.`)
       if (!productionMachineStates.includes(candidate.fromState as ProductionMachineState) || !productionMachineStates.includes(candidate.toState as ProductionMachineState)) throw new Error(`events[${index}] has invalid machine states.`)
       if (candidate.fromState === candidate.toState) throw new Error(`events[${index}] must record a distinct machine observation.`)
-      if (candidate.quantity !== undefined || candidate.shiftRef !== undefined) throw new Error(`events[${index}] machine event has unrelated fields.`)
+      if (candidate.quantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined) throw new Error(`events[${index}] machine event has unrelated fields.`)
     } else {
       if (!issueIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown issue.`)
-      if (candidate.quantity !== undefined || candidate.shiftRef !== undefined || candidate.fromState !== undefined || candidate.toState !== undefined) throw new Error(`events[${index}] issue event has unrelated fields.`)
+      if (candidate.quantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || candidate.fromState !== undefined || candidate.toState !== undefined) throw new Error(`events[${index}] issue event has unrelated fields.`)
     }
   }
   assertUnique(eventIds, 'Production event ID')
@@ -318,11 +330,16 @@ export function validateProductionState(value: unknown): ProductionState {
   }
   for (const jobId of jobIds) {
     const job = jobs.find((candidate) => isRecord(candidate) && candidate.id === jobId)
-    const recorded = events.reduce<number>((total, candidate) => {
-      if (!isRecord(candidate) || candidate.kind !== 'output_recorded' || candidate.subjectId !== jobId) return total
+    const recordedGood = events.reduce<number>((total, candidate) => {
+      if (!isRecord(candidate) || candidate.kind !== 'output_recorded' || candidate.subjectId !== jobId || candidate.outputKind === 'scrap') return total
       return total + Number(candidate.quantity)
     }, 0)
-    if (!isRecord(job) || recorded > Number(job.output)) throw new Error(`Output events exceed the stored output for ${jobId}.`)
+    const recordedScrap = events.reduce<number>((total, candidate) => {
+      if (!isRecord(candidate) || candidate.kind !== 'output_recorded' || candidate.subjectId !== jobId || candidate.outputKind !== 'scrap') return total
+      return total + Number(candidate.quantity)
+    }, 0)
+    if (!isRecord(job) || recordedGood > Number(job.output)) throw new Error(`Good output events exceed the stored output for ${jobId}.`)
+    if (recordedScrap !== Number(job.scrap ?? 0)) throw new Error(`Scrap events do not match the stored scrap for ${jobId}.`)
   }
   for (const machineId of machineIds) {
     const machine = machines.find((candidate) => isRecord(candidate) && candidate.id === machineId)
@@ -488,14 +505,15 @@ function actionIdIsUsed(state: ProductionState, actionId: string) {
 }
 
 export function productionShiftOutput(state: ProductionState, shiftRef: string): ProductionShiftOutput {
-  if (!validCanonicalText(shiftRef, 80)) return { goodUnits: 0, entryCount: 0 }
+  if (!validCanonicalText(shiftRef, 80)) return { goodUnits: 0, scrapUnits: 0, entryCount: 0 }
   return state.events.reduce<ProductionShiftOutput>((subtotal, event) => {
     if (event.kind !== 'output_recorded' || event.shiftRef !== shiftRef) return subtotal
     return {
-      goodUnits: subtotal.goodUnits + (event.quantity ?? 0),
+      goodUnits: subtotal.goodUnits + (event.outputKind === 'scrap' ? 0 : event.quantity ?? 0),
+      scrapUnits: subtotal.scrapUnits + (event.outputKind === 'scrap' ? event.quantity ?? 0 : 0),
       entryCount: subtotal.entryCount + 1,
     }
-  }, { goodUnits: 0, entryCount: 0 })
+  }, { goodUnits: 0, scrapUnits: 0, entryCount: 0 })
 }
 
 export function registerProductionJob(state: ProductionState, job: ProductionJob, proof: ProductionActionProof) {
@@ -506,7 +524,8 @@ export function registerProductionJob(state: ProductionState, job: ProductionJob
     || !validCanonicalText(job.product)
     || !Number.isSafeInteger(job.target)
     || job.target < 1
-    || job.output !== 0) return null
+    || job.output !== 0
+    || job.scrap !== undefined) return null
   const existing = state.events.find((event) => event.actionId === proof.actionId)
   if (existing) {
     const storedJob = state.jobs.find((candidate) => candidate.id === job.id)
@@ -528,22 +547,52 @@ export function registerProductionJob(state: ProductionState, job: ProductionJob
 export function recordProductionOutput(state: ProductionState, jobId: string, quantity: number, shiftRef: string, proof: ProductionActionProof) {
   if (!validProof(proof) || !validCanonicalText(shiftRef, 80) || !Number.isSafeInteger(quantity) || quantity < 1) return null
   const existing = state.events.find((event) => event.actionId === proof.actionId)
-  if (existing) return existing.kind === 'output_recorded' && existing.subjectId === jobId && existing.quantity === quantity && existing.shiftRef === shiftRef && sameProof(existing, proof) ? state : null
+  if (existing) return existing.kind === 'output_recorded' && (existing.outputKind ?? 'good') === 'good' && existing.subjectId === jobId && existing.quantity === quantity && existing.shiftRef === shiftRef && sameProof(existing, proof) ? state : null
   if (actionIdIsUsed(state, proof.actionId)) return null
   const matchingJobs = state.jobs.filter((job) => job.id === jobId)
   const job = matchingJobs.length === 1 ? matchingJobs[0] : undefined
   if (!job) return null
   const nextOutput = job.output + quantity
+  const scrap = job.scrap ?? 0
   const shiftOutput = productionShiftOutput(state, shiftRef)
   if (!Number.isSafeInteger(nextOutput)
     || !Number.isSafeInteger(shiftOutput.goodUnits + quantity)
-    || nextOutput > job.target
+    || nextOutput + scrap > job.target
     || state.revision >= Number.MAX_SAFE_INTEGER) return null
   const event = eventFor(proof, { kind: 'output_recorded', subjectId: jobId, summary: `Recorded ${quantity} good units`, quantity, shiftRef })
   return validateProductionState({
     ...state,
     revision: state.revision + 1,
     jobs: state.jobs.map((candidate) => candidate.id === jobId ? { ...candidate, output: nextOutput } : candidate),
+    events: [event, ...state.events],
+  })
+}
+
+export function recordProductionScrap(state: ProductionState, jobId: string, quantity: number, shiftRef: string, proof: ProductionActionProof) {
+  if (!validProof(proof) || !validCanonicalText(shiftRef, 80) || !Number.isSafeInteger(quantity) || quantity < 1) return null
+  const existing = state.events.find((event) => event.actionId === proof.actionId)
+  if (existing) return existing.kind === 'output_recorded'
+    && existing.outputKind === 'scrap'
+    && existing.subjectId === jobId
+    && existing.quantity === quantity
+    && existing.shiftRef === shiftRef
+    && sameProof(existing, proof) ? state : null
+  if (actionIdIsUsed(state, proof.actionId)) return null
+  const matchingJobs = state.jobs.filter((job) => job.id === jobId)
+  const job = matchingJobs.length === 1 ? matchingJobs[0] : undefined
+  if (!job) return null
+  const currentScrap = job.scrap ?? 0
+  const nextScrap = currentScrap + quantity
+  const shiftOutput = productionShiftOutput(state, shiftRef)
+  if (!Number.isSafeInteger(nextScrap)
+    || !Number.isSafeInteger(shiftOutput.scrapUnits + quantity)
+    || job.output + nextScrap > job.target
+    || state.revision >= Number.MAX_SAFE_INTEGER) return null
+  const event = eventFor(proof, { kind: 'output_recorded', subjectId: jobId, summary: `Recorded ${quantity} scrap units`, quantity, shiftRef, outputKind: 'scrap' })
+  return validateProductionState({
+    ...state,
+    revision: state.revision + 1,
+    jobs: state.jobs.map((candidate) => candidate.id === jobId ? { ...candidate, scrap: nextScrap } : candidate),
     events: [event, ...state.events],
   })
 }

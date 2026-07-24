@@ -25,6 +25,7 @@ PRODUCTION_HUMAN_EVENTS = PRODUCTION_EVENTS
 
 _ISSUE_KINDS = frozenset({"quality", "maintenance", "materials", "operations"})
 _MACHINE_STATES = frozenset({"running", "attention", "stopped"})
+_OUTPUT_KINDS = frozenset({"good", "scrap"})
 _EVENT_KIND_BY_TYPE = {
     "production.job.created": "job_created",
     "production.output.recorded": "output_recorded",
@@ -39,7 +40,8 @@ _MAX_MACHINES = 100
 _MAX_EVENTS = 500
 
 _STATE_FIELDS = frozenset({"schema", "revision", "jobs", "issues", "machines", "events"})
-_JOB_FIELDS = frozenset({"id", "line", "product", "target", "output"})
+_JOB_REQUIRED_FIELDS = frozenset({"id", "line", "product", "target", "output"})
+_JOB_OPTIONAL_FIELDS = frozenset({"scrap"})
 _ISSUE_REQUIRED_FIELDS = frozenset({"id", "createdAt", "area", "kind", "summary", "status"})
 _ISSUE_OPTIONAL_FIELDS = frozenset({"resolution"})
 _MACHINE_FIELDS = frozenset({"id", "name", "state"})
@@ -58,7 +60,7 @@ _EVENT_FIELDS = frozenset(
         "summary",
     }
 )
-_OUTPUT_EVENT_OPTIONAL_FIELDS = frozenset({"shiftRef"})
+_OUTPUT_EVENT_OPTIONAL_FIELDS = frozenset({"shiftRef", "outputKind"})
 
 
 def _object(value: object, field: str) -> dict[str, Any]:
@@ -165,14 +167,20 @@ def _resolution(value: object, field: str) -> dict[str, Any]:
 def _validate_job(candidate: object, index: int) -> dict[str, Any]:
     field = f"jobs[{index}]"
     job = _object(candidate, field)
-    _exact_fields(job, field, required=_JOB_FIELDS)
+    _exact_fields(
+        job,
+        field,
+        required=_JOB_REQUIRED_FIELDS,
+        optional=_JOB_OPTIONAL_FIELDS,
+    )
     _text(job["id"], f"{field}.id", maximum=80)
     _text(job["line"], f"{field}.line", maximum=120)
     _text(job["product"], f"{field}.product")
     target = _integer(job["target"], f"{field}.target", minimum=1)
     output = _integer(job["output"], f"{field}.output")
-    if output > target:
-        raise TrialValidationError(f"{field}.output cannot exceed its target.")
+    scrap = _integer(job.get("scrap", 0), f"{field}.scrap")
+    if output + scrap > target:
+        raise TrialValidationError(f"{field} good plus scrap cannot exceed its target.")
     return job
 
 
@@ -262,6 +270,9 @@ def _validate_event(
         if subject_id not in job_ids:
             raise TrialValidationError(f"{field} references an unknown job.")
         _integer(event["quantity"], f"{field}.quantity", minimum=1)
+        output_kind = event.get("outputKind", "good")
+        if not isinstance(output_kind, str) or output_kind not in _OUTPUT_KINDS:
+            raise TrialValidationError(f"{field}.outputKind is unsupported.")
         if "shiftRef" in event:
             _text(event["shiftRef"], f"{field}.shiftRef", maximum=80)
     elif kind == "job_created":
@@ -339,26 +350,41 @@ def _validate_output_history(
     jobs: Sequence[dict[str, Any]],
     events: Sequence[dict[str, Any]],
 ) -> None:
-    shift_totals: dict[str, int] = {}
+    shift_totals: dict[tuple[str, str], int] = {}
     for event in events:
         shift_ref = event.get("shiftRef")
         if event["kind"] != "output_recorded" or shift_ref is None:
             continue
-        next_total = shift_totals.get(shift_ref, 0) + event["quantity"]
+        output_kind = event.get("outputKind", "good")
+        shift_key = (shift_ref, output_kind)
+        next_total = shift_totals.get(shift_key, 0) + event["quantity"]
         if next_total > _MAX_SAFE_INTEGER:
             raise TrialValidationError(
-                f"Output total for {shift_ref} exceeds the safe integer limit."
+                f"{output_kind.title()} output for {shift_ref} exceeds the safe integer limit."
             )
-        shift_totals[shift_ref] = next_total
+        shift_totals[shift_key] = next_total
     for index, job in enumerate(jobs):
-        recorded = sum(
+        recorded_good = sum(
             event["quantity"]
             for event in events
-            if event["kind"] == "output_recorded" and event["subjectId"] == job["id"]
+            if event["kind"] == "output_recorded"
+            and event["subjectId"] == job["id"]
+            and event.get("outputKind", "good") == "good"
         )
-        if recorded != job["output"]:
+        recorded_scrap = sum(
+            event["quantity"]
+            for event in events
+            if event["kind"] == "output_recorded"
+            and event["subjectId"] == job["id"]
+            and event.get("outputKind") == "scrap"
+        )
+        if recorded_good != job["output"]:
             raise TrialValidationError(
                 f"jobs[{index}].output must equal its immutable output event total."
+            )
+        if recorded_scrap != job.get("scrap", 0):
+            raise TrialValidationError(
+                f"jobs[{index}].scrap must equal its immutable scrap event total."
             )
 
 
@@ -610,11 +636,17 @@ def _validate_output_recorded(
         raise TrialValidationError(
             "output event must reference the one changed job."
         )
-    if after != {**before, "output": before["output"] + quantity}:
+    output_kind = event.get("outputKind", "good")
+    expected = (
+        {**before, "scrap": before.get("scrap", 0) + quantity}
+        if output_kind == "scrap"
+        else {**before, "output": before["output"] + quantity}
+    )
+    if after != expected:
         raise TrialValidationError(
-            "output event may only add its exact quantity to one job."
+            f"{output_kind} output may only add its exact quantity to one job."
         )
-    if event["summary"] != f"Recorded {quantity} good units":
+    if event["summary"] != f"Recorded {quantity} {output_kind} units":
         raise TrialValidationError("output event summary is not canonical.")
 
 
@@ -632,8 +664,10 @@ def _validate_job_created(
             "production.job.created must prepend exactly one job."
         )
     job = next_state["jobs"][0]
-    if job["output"] != 0:
-        raise TrialValidationError("a new Production job must begin at zero output.")
+    if job["output"] != 0 or "scrap" in job:
+        raise TrialValidationError(
+            "a new Production job must begin at zero good and scrap output."
+        )
     if event["subjectId"] != job["id"]:
         raise TrialValidationError("job creation event must reference the new job.")
     expected_summary = f"Created {job['product']} job for {job['line']}"
@@ -769,6 +803,7 @@ def reduce_production_state(
             or next_state["issues"]
             or next_state["events"]
             or next_state["jobs"][0]["output"] != 0
+            or "scrap" in next_state["jobs"][0]
             or next_state["machines"][0]["state"] != "running"
         ):
             raise TrialValidationError(

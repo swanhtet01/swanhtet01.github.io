@@ -115,6 +115,32 @@ def output_state(
     return state
 
 
+def scrap_state(
+    current: dict[str, object],
+    quantity: int,
+    evidence: dict[str, str],
+    *,
+    shift_ref: str = "2026-07-24 Day",
+) -> dict[str, object]:
+    state = deepcopy(current)
+    job = state["jobs"][0]
+    job["scrap"] = job.get("scrap", 0) + quantity
+    state["revision"] += 1
+    state["events"] = [
+        production_event(
+            evidence,
+            kind="output_recorded",
+            subject_id=job["id"],
+            summary=f"Recorded {quantity} scrap units",
+            quantity=quantity,
+            shiftRef=shift_ref,
+            outputKind="scrap",
+        ),
+        *state["events"],
+    ]
+    return state
+
+
 def opened_issue_state(
     current: dict[str, object],
     evidence: dict[str, str],
@@ -456,6 +482,85 @@ class ProductionRuntimeTests(unittest.TestCase):
                 action_evidence("ACT-OUTPUT-005"),
             )
 
+    def test_scrap_is_separate_attributed_and_bounded_by_the_job_target(self) -> None:
+        current = apply_event(
+            {},
+            "production.workspace.initialized",
+            starting_workspace(target=10),
+            action_evidence("ACT-INIT-SCRAP"),
+        )
+        good_evidence = action_evidence("ACT-GOOD-BEFORE-SCRAP")
+        with_good = apply_event(
+            current,
+            "production.output.recorded",
+            output_state(current, 6, good_evidence),
+            good_evidence,
+        )
+        scrap_evidence = action_evidence(
+            "ACT-SCRAP-001",
+            captured_at=LATER,
+        )
+        proposed = scrap_state(with_good, 3, scrap_evidence)
+        accepted = apply_event(
+            with_good,
+            "production.output.recorded",
+            proposed,
+            scrap_evidence,
+        )
+        self.assertEqual(accepted["jobs"][0]["output"], 6)
+        self.assertEqual(accepted["jobs"][0]["scrap"], 3)
+        self.assertEqual(accepted["events"][0]["outputKind"], "scrap")
+        self.assertEqual(accepted["events"][0]["shiftRef"], "2026-07-24 Day")
+        self.assertEqual(accepted["events"][0]["actor"], ACTOR)
+        self.assertEqual(
+            accepted["events"][0]["evidenceReference"],
+            scrap_evidence["evidenceReference"],
+        )
+
+        missing_kind = deepcopy(proposed)
+        missing_kind["events"][0].pop("outputKind")
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                with_good,
+                "production.output.recorded",
+                missing_kind,
+                scrap_evidence,
+            )
+
+        wrong_summary = deepcopy(proposed)
+        wrong_summary["events"][0]["summary"] = "Recorded mixed output"
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                with_good,
+                "production.output.recorded",
+                wrong_summary,
+                scrap_evidence,
+            )
+
+        overflow_scrap_evidence = action_evidence(
+            "ACT-SCRAP-OVER",
+            captured_at=LATEST,
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                accepted,
+                "production.output.recorded",
+                scrap_state(accepted, 2, overflow_scrap_evidence),
+                overflow_scrap_evidence,
+            )
+
+        overflow_good_evidence = action_evidence(
+            "ACT-GOOD-OVER",
+            captured_at=LATEST,
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                accepted,
+                "production.output.recorded",
+                output_state(accepted, 2, overflow_good_evidence),
+                overflow_good_evidence,
+            )
+
     def test_daily_job_creation_is_exact_unique_and_zero_output(self) -> None:
         current = starting_workspace()
         evidence = action_evidence("ACT-JOB-CREATE")
@@ -520,6 +625,16 @@ class ProductionRuntimeTests(unittest.TestCase):
                 current,
                 "production.job.created",
                 nonzero,
+                evidence,
+            )
+
+        predeclared_scrap = deepcopy(created)
+        predeclared_scrap["jobs"][0]["scrap"] = 0
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "production.job.created",
+                predeclared_scrap,
                 evidence,
             )
 

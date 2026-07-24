@@ -552,6 +552,15 @@ if (!productionSource.includes('productionShiftOutput')
   || !productionSource.includes('existing.shiftRef === shiftRef')
   || !productionSource.includes('shiftRef?: string')
   || !managedProductionRuntime.includes('new output events require one canonical shift reference.')) fail('production_shift_output_contract_missing')
+if (!productionSource.includes('recordProductionScrap')
+  || !productionSource.includes("outputKind?: ProductionOutputKind")
+  || !productionSource.includes("existing.outputKind === 'scrap'")
+  || !productionSource.includes('job.output + nextScrap > job.target')
+  || !managedProductionRuntime.includes('event.get("outputKind", "good")')
+  || !managedProductionRuntime.includes('good plus scrap cannot exceed its target')
+  || !coreSource.includes('Record good or scrap')
+  || !coreSource.includes('<option value="scrap">Scrap</option>')
+  || !coreSource.includes("recordProductionScrap(current")) fail('production_scrap_contract_missing')
 if (!productionSource.includes('registerProductionJob') || !coreSource.includes('production.job.created') || !coreSource.includes('<summary>Add job</summary>') || !coreSource.includes('Review job')) fail('production_recurring_job_workflow_missing')
 if (!productionSource.includes('currentRaw !== null') || !productionSource.includes('Migration failed closed') || !productionSource.includes('events: []')) fail('production_migration_fail_closed_contract_missing')
 if (!productionSource.includes('recordProductionMachineState')
@@ -588,18 +597,18 @@ const productionTabsContract = coreSource.slice(coreSource.indexOf('const produc
 if (productionTabsContract.includes("{ id: 'today', label: 'Today' }") || !productionTabsContract.includes("{ id: 'production', label: 'Jobs' }") || !productionTabsContract.includes("{ id: 'control', label: 'Problems' }") || (productionTabsContract.match(/^\s*\{ id:/gm) || []).length !== 2) fail('production_two_tab_contract_changed')
 const productionPageContract = coreSource.slice(coreSource.indexOf('function ProductionPage'), coreSource.indexOf('function JobList'))
 const productionJobsContract = productionPageContract.slice(productionPageContract.indexOf("if (tab === 'production')"), productionPageContract.indexOf("if (tab === 'control')"))
-if (!productionJobsContract.includes('Recorded for this shift:')
+if (!productionJobsContract.includes('This shift:')
   || !productionJobsContract.includes('Shift reference')
   || !coreSource.includes("Unassigned (legacy)")) fail('production_shift_output_ui_missing')
 if (!productionJobsContract.includes('Jobs to finish')
   || !productionJobsContract.includes('<JobList jobs={activeJobs} />')
   || !productionJobsContract.includes('<CompletedJobHistory jobs={completedJobs} />')
-  || !productionJobsContract.includes('Output is append-only in this trial')
+  || !productionJobsContract.includes('Results are append-only in this trial')
   || !productionJobsContract.includes('{job.id} · {job.product} · {job.line}')
   || !coreSource.includes('No active jobs. Add a job below to start recording output.')) fail('production_jobs_not_task_first')
 if (coreCssSource.includes('.production-view > .output-panel { grid-row: 1; }')
   || coreCssSource.includes('.production-view > .job-panel { grid-row: 2; }')) fail('production_mobile_job_context_order_regressed')
-if (coreSource.includes('Math.min(quantity') || !productionPageContract.includes('No output was recorded.') || !productionPageContract.includes('Number.isSafeInteger(quantity)') || productionPageContract.includes('max={selectedRemaining')) fail('production_output_silently_clamped')
+if (coreSource.includes('Math.min(quantity') || !productionPageContract.includes('Nothing was recorded.') || !productionPageContract.includes('Number.isSafeInteger(quantity)') || productionPageContract.includes('max={selectedRemaining')) fail('production_output_silently_clamped')
 if (!productionPageContract.includes('persisted with attributed Plant evidence.') || productionPageContract.includes('<ActionHistory actions={actions} domain="production"')) fail('production_confirmation_record_not_domain_specific')
 if (!coreSource.includes("addEventListener('storage', refreshFromStorage)") || !coreSource.includes("removeEventListener('storage', refreshFromStorage)")) fail('production_cross_tab_refresh_missing')
 if (!coreSource.includes('headingRef.current?.focus()') || !coreSource.includes('returnFocus?.isConnected') || !coreSource.includes('previousFocus.focus()') || !coreSource.includes('aria-live="polite"') || !coreSource.includes('currently ${productionMachineStateLabels[machine.state]}') || !coreSource.includes('requestAnimationFrame(() => machineTriggerRef.current?.focus())')) fail('production_confirmation_accessibility_missing')
@@ -2221,7 +2230,10 @@ async function verifyProductionRuntime() {
     const shiftRef = '2026-07-24 Day'
     const outputState = model.recordProductionOutput(base, 'JOB-1', 10, shiftRef, outputProof)
     assert(outputState?.jobs[0].output === 100 && outputState.revision === 1 && outputState.events[0].quantity === 10 && outputState.events[0].shiftRef === shiftRef && outputState.events[0].actor === outputProof.actor, 'production_output_not_recorded_once')
-    assert(model.productionShiftOutput(outputState, shiftRef).goodUnits === 10 && model.productionShiftOutput(outputState, shiftRef).entryCount === 1, 'production_shift_subtotal_not_derived')
+    assert(model.productionShiftOutput(outputState, shiftRef).goodUnits === 10
+      && model.productionShiftOutput(outputState, shiftRef).scrapUnits === 0
+      && model.productionShiftOutput(outputState, shiftRef).entryCount === 1,
+    'production_shift_subtotal_not_derived')
     assert(model.recordProductionOutput(outputState, 'JOB-1', 10, shiftRef, outputProof) === outputState, 'production_output_retry_not_idempotent')
     assert(model.recordProductionOutput(outputState, 'JOB-1', 10, '2026-07-24 Night', outputProof) === null, 'production_output_conflicting_shift_succeeded')
     assert(model.recordProductionOutput(outputState, 'JOB-1', 9, shiftRef, outputProof) === null, 'production_output_conflicting_quantity_succeeded')
@@ -2232,8 +2244,51 @@ async function verifyProductionRuntime() {
     assert(model.recordProductionOutput(base, 'JOB-MISSING', 1, shiftRef, proof('ACT-MISSING-JOB')) === null, 'production_missing_job_output_succeeded')
     const maxed = { ...model.createEmptyProduction(), jobs: [{ ...legacy.jobs[0], target: Number.MAX_SAFE_INTEGER, output: Number.MAX_SAFE_INTEGER }] }
     assert(model.recordProductionOutput(maxed, 'JOB-1', 1, shiftRef, proof('ACT-OVERFLOW')) === null, 'production_output_overflow_succeeded')
-    assert(model.productionShiftOutput(ledger501, shiftRef).goodUnits === 0 && model.productionShiftOutput(ledger501, shiftRef).entryCount === 0, 'production_legacy_output_was_misattributed_to_shift')
+    assert(model.productionShiftOutput(ledger501, shiftRef).goodUnits === 0
+      && model.productionShiftOutput(ledger501, shiftRef).scrapUnits === 0
+      && model.productionShiftOutput(ledger501, shiftRef).entryCount === 0,
+    'production_legacy_output_was_misattributed_to_shift')
     assertThrows(() => model.validateProductionState({ ...withJob, events: [{ ...withJob.events[0], shiftRef }, ...withJob.events.slice(1)] }), 'production_non_output_shift_reference_accepted')
+    assertThrows(() => model.validateProductionState({
+      ...outputState,
+      events: [{ ...outputState.events[0], outputKind: null }, ...outputState.events.slice(1)],
+    }), 'production_null_output_kind_accepted_as_legacy_good')
+
+    const scrapProof = proof('ACT-SCRAP', 1_000)
+    const scrapState = model.recordProductionScrap(base, 'JOB-1', 4, shiftRef, scrapProof)
+    assert(scrapState?.jobs[0].output === 90
+      && scrapState.jobs[0].scrap === 4
+      && scrapState.events[0].outputKind === 'scrap'
+      && scrapState.events[0].quantity === 4
+      && scrapState.events[0].shiftRef === shiftRef
+      && scrapState.events[0].actor === scrapProof.actor,
+    'production_scrap_not_recorded_separately')
+    assert(model.productionShiftOutput(scrapState, shiftRef).goodUnits === 0
+      && model.productionShiftOutput(scrapState, shiftRef).scrapUnits === 4
+      && model.productionShiftOutput(scrapState, shiftRef).entryCount === 1,
+    'production_scrap_shift_subtotal_not_derived')
+    assert(model.recordProductionScrap(scrapState, 'JOB-1', 4, shiftRef, scrapProof) === scrapState, 'production_scrap_retry_not_idempotent')
+    assert(model.recordProductionScrap(scrapState, 'JOB-1', 3, shiftRef, scrapProof) === null, 'production_scrap_conflicting_quantity_succeeded')
+    assert(model.recordProductionOutput(scrapState, 'JOB-1', 4, shiftRef, scrapProof) === null, 'production_scrap_action_replayed_as_good_output')
+    const goodAfterScrapProof = proof('ACT-GOOD-AFTER-SCRAP', 2_000)
+    const accountedJob = model.recordProductionOutput(scrapState, 'JOB-1', 6, shiftRef, goodAfterScrapProof)
+    assert(accountedJob?.jobs[0].output === 96
+      && accountedJob.jobs[0].scrap === 4
+      && model.productionShiftOutput(accountedJob, shiftRef).goodUnits === 6
+      && model.productionShiftOutput(accountedJob, shiftRef).scrapUnits === 4,
+    'production_good_plus_scrap_not_accounted_to_target')
+    assert(model.recordProductionScrap(scrapState, 'JOB-1', 7, shiftRef, proof('ACT-SCRAP-OVER-TARGET')) === null, 'production_scrap_exceeded_target')
+    assert(model.recordProductionOutput(scrapState, 'JOB-1', 7, shiftRef, proof('ACT-GOOD-OVER-SCRAP')) === null, 'production_good_output_ignored_scrap_cap')
+    assert(['', ' Day', 'Day ', 'X'.repeat(81)].every((candidate, index) => model.recordProductionScrap(base, 'JOB-1', 1, candidate, proof(`ACT-SCRAP-BAD-SHIFT-${index}`)) === null), 'production_invalid_scrap_shift_succeeded')
+    assert([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY].every((scrapQuantity) => model.recordProductionScrap(base, 'JOB-1', scrapQuantity, shiftRef, proof(`ACT-BAD-SCRAP-${String(scrapQuantity)}`)) === null), 'production_invalid_scrap_quantity_succeeded')
+    assertThrows(() => model.validateProductionState({
+      ...scrapState,
+      jobs: [{ ...scrapState.jobs[0], scrap: 5 }],
+    }), 'production_scrap_total_detached_from_event_history')
+    assertThrows(() => model.validateProductionState({
+      ...base,
+      jobs: [{ ...base.jobs[0], scrap: 11 }],
+    }), 'production_good_plus_scrap_over_target_state_accepted')
 
     const issue = { id: 'ISS-1', createdAt: '2026-07-23T10:01:00.000Z', area: 'Line 01', kind: 'quality', summary: 'Temperature drift observed', status: 'open' }
     const openProof = proof('ACT-ISSUE-OPEN', 1_000)
