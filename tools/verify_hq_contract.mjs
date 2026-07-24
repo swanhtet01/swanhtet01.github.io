@@ -121,13 +121,22 @@ requireContract('research decision is superseded',
 
 requireContract('local PostgreSQL rehearsal remains bounded',
   databaseRehearsal.schemaVersion === 'supermega.hq.database-rehearsal.v1'
+  && /^[0-9a-f]{40}$/.test(databaseRehearsal.implementationCommit || '')
   && databaseRehearsal.engine?.major === 17
   && databaseRehearsal.engine?.tlsActive === true
   && databaseRehearsal.engine?.loopbackOnly === true
   && databaseRehearsal.runtime?.adapter === 'PostgresTrialStore'
   && databaseRehearsal.runtime?.explicitTransaction === true
-  && Object.keys(databaseRehearsal.checks || {}).length === 24
+  && databaseRehearsal.migration?.count === 6
+  && databaseRehearsal.migration?.schemaVersion === 5
+  && databaseRehearsal.migration?.productionValidatorReady === true
+  && Object.keys(databaseRehearsal.checks || {}).length === 37
   && Object.values(databaseRehearsal.checks || {}).every((value) => value === true)
+  && databaseRehearsal.checks?.capabilityScopedReads === true
+  && databaseRehearsal.checks?.capabilityScopedEventReads === true
+  && databaseRehearsal.checks?.approvalRequesterReadScoped === true
+  && databaseRehearsal.checks?.approvalReviewerReadsAll === true
+  && databaseRehearsal.checks?.writeCapabilityImpliesRead === true
   && databaseRehearsal.safety?.cleanupComplete === true
   && databaseRehearsal.safety?.secretValuesExposed === false
   && databaseRehearsal.safety?.productionMutated === false
