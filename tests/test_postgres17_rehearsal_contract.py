@@ -52,6 +52,15 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
             "managed_production_job_to_output",
             "managed_human_attribution",
             "managed_exact_retry",
+            "approval_agent_row_spoof_denied",
+            "approval_service_row_spoof_denied",
+            "approval_human_decision_once",
+            "approval_exact_retry",
+            "approval_mutated_retry_rejected",
+            "approval_terminal_replay_rejected",
+            "approval_record_immutable",
+            "approval_decision_event_immutable",
+            "trusted_backend_transaction_context",
         ):
             self.assertIn(expected, lowered)
 
@@ -160,12 +169,82 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
             lambda: (_ for _ in ()).throw(PolicyDenied("denied")),
             "policy_should_deny",
         )
+
+        class ImmutableDenied(Exception):
+            sqlstate = "55000"
+
+        module._expect_database_rejection(
+            lambda: (_ for _ in ()).throw(ImmutableDenied("immutable")),
+            "immutable_record_should_deny",
+            expected_sqlstates=frozenset({"55000"}),
+        )
         with self.assertRaises(module.RehearsalFailure) as caught:
             module._expect_database_rejection(
                 lambda: (_ for _ in ()).throw(RuntimeError("connection disappeared")),
                 "policy_should_deny",
             )
         self.assertEqual(str(caught.exception), "policy_should_deny_unexpected_error")
+
+        class ConstraintDenied(Exception):
+            sqlstate = "23514"
+
+        with self.assertRaises(module.RehearsalFailure) as caught:
+            module._expect_database_rejection(
+                lambda: (_ for _ in ()).throw(ConstraintDenied("wrong boundary")),
+                "immutable_record_should_deny",
+                expected_sqlstates=frozenset({"55000"}),
+            )
+        self.assertEqual(
+            str(caught.exception),
+            "immutable_record_should_deny_unexpected_error",
+        )
+
+    def test_approval_authority_runs_and_restore_compares_full_snapshots(self) -> None:
+        source = REHEARSAL.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(REHEARSAL))
+        functions = {
+            node.name: node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef)
+        }
+
+        def called_names(function_name: str) -> list[str]:
+            names: list[str] = []
+            for node in ast.walk(functions[function_name]):
+                if not isinstance(node, ast.Call):
+                    continue
+                if isinstance(node.func, ast.Name):
+                    names.append(node.func.id)
+                elif isinstance(node.func, ast.Attribute):
+                    names.append(node.func.attr)
+            return names
+
+        self.assertIn(
+            "_exercise_approval_authority",
+            called_names("_run_rehearsal"),
+        )
+        self.assertGreaterEqual(
+            called_names("_exercise_approval_authority").count(
+                "_expect_database_rejection"
+            ),
+            5,
+        )
+        self.assertIn(
+            "_approval_authority_snapshot",
+            called_names("_exercise_approval_authority"),
+        )
+        self.assertIn(
+            "_approval_authority_snapshot",
+            called_names("_verify_restored_data"),
+        )
+        snapshot_source = ast.get_source_segment(
+            source,
+            functions["_approval_authority_snapshot"],
+        )
+        self.assertIsNotNone(snapshot_source)
+        assert snapshot_source is not None
+        self.assertIn("to_jsonb(approval_record)", snapshot_source)
+        self.assertIn("to_jsonb(event_record)", snapshot_source)
 
 
 if __name__ == "__main__":

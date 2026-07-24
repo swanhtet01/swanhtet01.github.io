@@ -44,6 +44,12 @@ JOURNEY_PRODUCT_WORKSPACE = "rehearsal-product"
 JOURNEY_PRODUCT_ACTOR = "owner-product"
 JOURNEY_PRODUCTION_WORKSPACE = "rehearsal-b"
 JOURNEY_PRODUCTION_ACTOR = "owner-b"
+APPROVAL_WORKSPACE = "rehearsal-approval"
+APPROVAL_AGENT_ACTOR = "approval-agent"
+APPROVAL_SERVICE_ACTOR = "approval-service"
+APPROVAL_HUMAN_ACTOR = "approval-owner"
+APPROVAL_IDENTITY_AUTHORITY = "trusted_backend_transaction_context"
+DATABASE_REJECTION_SQLSTATES = frozenset({"23514", "40001", "42501", "55000"})
 
 
 class RehearsalFailure(RuntimeError):
@@ -533,7 +539,13 @@ def _seed_rehearsal_data(admin_database_url: str) -> None:
                   ('rehearsal-b', 'owner-b', 'active',
                    array['production.write']::text[], 'human'),
                   ('rehearsal-product', 'owner-product', 'active',
-                   array['commerce.write', 'website.write']::text[], 'human')
+                   array['commerce.write', 'website.write']::text[], 'human'),
+                  ('rehearsal-approval', 'approval-agent', 'active',
+                   array['approvals.request', 'approvals.decide']::text[], 'agent'),
+                  ('rehearsal-approval', 'approval-service', 'active',
+                   array['approvals.decide']::text[], 'service'),
+                  ('rehearsal-approval', 'approval-owner', 'active',
+                   array['approvals.decide']::text[], 'human')
                 """
             )
 
@@ -1001,6 +1013,8 @@ def _exercise_managed_product_journeys(
             "payment": "Manual review",
             "paymentStatus": "pending",
             "refundStatus": "none",
+            "fulfilment": "pickup",
+            "fulfilmentReference": "Website pickup confirmed by the named owner.",
             "sourceRecordId": intake_id,
             "evidenceReference": conversion_evidence["evidenceReference"],
             "total": 50_000,
@@ -1009,7 +1023,7 @@ def _exercise_managed_product_journeys(
     ]
     conversion_state["movements"] = [
         {
-            "id": f"MOV-{conversion_evidence['actionId']}",
+            "id": f"MOV2:{conversion_evidence['actionId']}",
             "actionId": conversion_evidence["actionId"],
             "createdAt": conversion_evidence["capturedAt"],
             "actor": conversion_evidence["actor"],
@@ -1127,6 +1141,7 @@ def _exercise_managed_product_journeys(
             subject_id="JOB-REAL-002",
             summary="Recorded 5 good units",
             quantity=5,
+            shiftRef="2026-07-24 Day",
         ),
         *output_state["events"],
     ]
@@ -1215,11 +1230,16 @@ def _set_identity(
     cursor.execute("select set_config('app.actor_kind', %s, true)", (actor_kind,))
 
 
-def _expect_database_rejection(operation: Callable[[], None], code: str) -> None:
+def _expect_database_rejection(
+    operation: Callable[[], None],
+    code: str,
+    *,
+    expected_sqlstates: frozenset[str] = DATABASE_REJECTION_SQLSTATES,
+) -> None:
     try:
         operation()
     except Exception as exc:
-        if str(getattr(exc, "sqlstate", "")) in {"23514", "40001", "42501", "55000"}:
+        if str(getattr(exc, "sqlstate", "")) in expected_sqlstates:
             return
         raise RehearsalFailure(f"{code}_unexpected_error") from exc
     raise RehearsalFailure(code)
@@ -1430,6 +1450,350 @@ def _verify_upgrade_and_role_boundaries(
     )
     checks["invalid_initial_version_denied"] = True
     return checks
+
+
+def _approval_authority_snapshot(admin_database_url: str) -> dict[str, Any]:
+    with _connect(admin_database_url, autocommit=True) as administrator:
+        approval_rows = administrator.execute(
+            """
+            select to_jsonb(approval_record)
+            from app_private.approval_requests as approval_record
+            where workspace_id = %s
+            order by approval_id
+            """,
+            (APPROVAL_WORKSPACE,),
+        ).fetchall()
+        event_rows = administrator.execute(
+            """
+            select to_jsonb(event_record)
+            from app_private.workspace_events as event_record
+            where workspace_id = %s and surface = 'approvals'
+            order by event_type, event_id
+            """,
+            (APPROVAL_WORKSPACE,),
+        ).fetchall()
+    approvals = [row[0] for row in approval_rows]
+    events = [row[0] for row in event_rows]
+    if (
+        len(approvals) != 1
+        or [event.get("event_type") for event in events]
+        != ["approval.decided", "approval.requested"]
+    ):
+        raise RehearsalFailure("approval_authority_snapshot_incomplete")
+    return {"approval": approvals[0], "events": events}
+
+
+def _exercise_approval_authority(
+    runtime_database_url: str,
+    admin_database_url: str,
+) -> tuple[dict[str, bool], dict[str, Any]]:
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    from supermega_runtime.trial_store import (
+        PostgresTrialStore,
+        TrialIdempotencyConflict,
+        TrialPrincipal,
+    )
+
+    store = PostgresTrialStore(
+        runtime_database_url,
+        reducer=lambda _surface, _event_type, current, _payload: dict(current),
+        write_enabled=True,
+    )
+    requester = TrialPrincipal(
+        APPROVAL_WORKSPACE,
+        APPROVAL_AGENT_ACTOR,
+        "agent",
+    )
+    human_decider = TrialPrincipal(
+        APPROVAL_WORKSPACE,
+        APPROVAL_HUMAN_ACTOR,
+        "human",
+    )
+    request_command_id = "00000000-0000-4000-8000-000000000101"
+    decision_command_id = "00000000-0000-4000-8000-000000000102"
+    evidence_reference = "review://approval-authority/rehearsal-1"
+    proposal = {
+        "contract": "decision_packet.v1",
+        "subject": {
+            "kind": "release",
+            "id": "approval-authority-rehearsal",
+            "version": 1,
+        },
+        "decision": "Release the approval authority rehearsal",
+        "claims": [
+            {
+                "id": "claim-approval-authority",
+                "claim_type": "fact",
+                "statement": "The bounded approval packet is ready for owner review.",
+                "source_reference": evidence_reference,
+                "captured_at": "2026-07-25T00:00:00+06:30",
+                "status": "verified",
+                "uncertainty": "low",
+                "visibility": "private",
+                "digest": "sha256:" + "1" * 64,
+            }
+        ],
+        "baseline": "The rehearsal remains unreleased.",
+        "target": "The rehearsal is approved by the named owner.",
+        "result": "The database authority boundary is preserved.",
+        "acceptance": "One human decision and its immutable evidence are retained.",
+        "artifact_reference": "artifact://approval-authority/rehearsal-1",
+    }
+    approval = store.create_approval(
+        requester,
+        command_id=request_command_id,
+        title="Approve the database authority rehearsal",
+        proposal=proposal,
+        evidence_refs=(evidence_reference,),
+    )
+    if (
+        approval.status != "pending"
+        or approval.requested_by != APPROVAL_AGENT_ACTOR
+        or approval.requested_actor_kind != "agent"
+        or approval.version != 0
+    ):
+        raise RehearsalFailure("approval_request_attribution_failed")
+
+    def attempt_nonhuman_spoof(actor: str, actor_kind: str) -> None:
+        try:
+            with _connect(runtime_database_url) as runtime:
+                with runtime.transaction():
+                    with runtime.cursor() as cursor:
+                        _set_identity(
+                            cursor,
+                            workspace=APPROVAL_WORKSPACE,
+                            actor=actor,
+                            actor_kind=actor_kind,
+                        )
+                        cursor.execute(
+                            """
+                            select status
+                            from app_private.approval_requests
+                            where workspace_id = %s and approval_id = %s
+                            """,
+                            (APPROVAL_WORKSPACE, approval.approval_id),
+                        )
+                        if cursor.fetchone() != ("pending",):
+                            raise RehearsalFailure(
+                                f"approval_{actor_kind}_pending_read_denied"
+                            )
+                        cursor.execute(
+                            """
+                            update app_private.approval_requests
+                            set status = 'approved',
+                                decided_by = %s,
+                                decided_actor_kind = 'human',
+                                decision_note = 'Spoofed human decision.',
+                                version = version + 1
+                            where workspace_id = %s
+                              and approval_id = %s
+                              and status = 'pending'
+                            returning status
+                            """,
+                            (
+                                APPROVAL_HUMAN_ACTOR,
+                                APPROVAL_WORKSPACE,
+                                approval.approval_id,
+                            ),
+                        )
+                        returned = cursor.fetchone()
+                        affected = cursor.rowcount
+        except RehearsalFailure:
+            raise
+        except Exception as exc:
+            if str(getattr(exc, "sqlstate", "")) == "42501":
+                return
+            raise RehearsalFailure(
+                f"approval_{actor_kind}_spoof_unexpected_error"
+            ) from exc
+        if affected != 0 or returned is not None:
+            raise RehearsalFailure(f"approval_{actor_kind}_spoof_accepted")
+
+    attempt_nonhuman_spoof(APPROVAL_AGENT_ACTOR, "agent")
+    attempt_nonhuman_spoof(APPROVAL_SERVICE_ACTOR, "service")
+
+    with _connect(admin_database_url, autocommit=True) as administrator:
+        pending = administrator.execute(
+            """
+            select status, decided_by, decided_actor_kind, decided_at,
+                   decision_note, version
+            from app_private.approval_requests
+            where workspace_id = %s and approval_id = %s
+            """,
+            (APPROVAL_WORKSPACE, approval.approval_id),
+        ).fetchone()
+    if pending != ("pending", None, None, None, "", 0):
+        raise RehearsalFailure("approval_nonhuman_spoof_changed_record")
+
+    decided = store.decide_approval(
+        human_decider,
+        approval_id=approval.approval_id,
+        command_id=decision_command_id,
+        decision="approved",
+        note="Named owner approved the bounded rehearsal.",
+    )
+    replay = store.decide_approval(
+        human_decider,
+        approval_id=approval.approval_id,
+        command_id=decision_command_id,
+        decision="approved",
+        note="Named owner approved the bounded rehearsal.",
+    )
+    try:
+        store.decide_approval(
+            human_decider,
+            approval_id=approval.approval_id,
+            command_id=decision_command_id,
+            decision="declined",
+            note="Mutated retry must not reuse the decision command.",
+        )
+    except TrialIdempotencyConflict:
+        pass
+    else:
+        raise RehearsalFailure("approval_mutated_retry_accepted")
+    decided_comparable = decided.to_dict()
+    replay_comparable = replay.to_dict()
+    decided_comparable["idempotent_replay"] = False
+    replay_comparable["idempotent_replay"] = False
+    if (
+        decided.status != "approved"
+        or decided.version != 1
+        or decided.decided_by != APPROVAL_HUMAN_ACTOR
+        or decided.decided_actor_kind != "human"
+        or not decided.decided_at
+        or decided.idempotent_replay
+        or not replay.idempotent_replay
+        or replay_comparable != decided_comparable
+    ):
+        raise RehearsalFailure("approval_human_decision_failed")
+
+    approval_snapshot = _approval_authority_snapshot(admin_database_url)
+    decision_events = [
+        event
+        for event in approval_snapshot["events"]
+        if event.get("event_type") == "approval.decided"
+    ]
+    if len(decision_events) != 1:
+        raise RehearsalFailure("approval_decision_evidence_missing")
+    decision_event_snapshot = decision_events[0]
+
+    def replay_terminal_decision() -> None:
+        with _connect(admin_database_url) as administrator:
+            with administrator.transaction():
+                administrator.execute(
+                    """
+                    update app_private.approval_requests
+                    set status = 'declined',
+                        decided_by = %s,
+                        decided_actor_kind = 'human',
+                        decision_note = 'Attempted second decision.',
+                        version = version + 1
+                    where workspace_id = %s and approval_id = %s
+                    """,
+                    (
+                        APPROVAL_HUMAN_ACTOR,
+                        APPROVAL_WORKSPACE,
+                        approval.approval_id,
+                    ),
+                )
+
+    _expect_database_rejection(
+        replay_terminal_decision,
+        "approval_terminal_replay_accepted",
+        expected_sqlstates=frozenset({"55000"}),
+    )
+
+    def mutate_approval_evidence() -> None:
+        with _connect(admin_database_url) as administrator:
+            with administrator.transaction():
+                administrator.execute(
+                    """
+                    update app_private.approval_requests
+                    set proposal_json = proposal_json
+                      || '{"tampered": true}'::jsonb
+                    where workspace_id = %s and approval_id = %s
+                    """,
+                    (APPROVAL_WORKSPACE, approval.approval_id),
+                )
+
+    _expect_database_rejection(
+        mutate_approval_evidence,
+        "approval_evidence_mutation_accepted",
+        expected_sqlstates=frozenset({"55000"}),
+    )
+
+    def delete_approval() -> None:
+        with _connect(admin_database_url) as administrator:
+            with administrator.transaction():
+                administrator.execute(
+                    """
+                    delete from app_private.approval_requests
+                    where workspace_id = %s and approval_id = %s
+                    """,
+                    (APPROVAL_WORKSPACE, approval.approval_id),
+                )
+
+    _expect_database_rejection(
+        delete_approval,
+        "approval_delete_accepted",
+        expected_sqlstates=frozenset({"55000"}),
+    )
+
+    decision_event_id = str(decision_event_snapshot["event_id"])
+
+    def mutate_decision_event() -> None:
+        with _connect(admin_database_url) as administrator:
+            with administrator.transaction():
+                administrator.execute(
+                    """
+                    update app_private.workspace_events
+                    set result_json = '{"tampered": true}'::jsonb
+                    where event_id = %s::uuid
+                    """,
+                    (decision_event_id,),
+                )
+
+    _expect_database_rejection(
+        mutate_decision_event,
+        "approval_decision_event_mutation_accepted",
+        expected_sqlstates=frozenset({"55000"}),
+    )
+
+    def delete_decision_event() -> None:
+        with _connect(admin_database_url) as administrator:
+            with administrator.transaction():
+                administrator.execute(
+                    """
+                    delete from app_private.workspace_events
+                    where event_id = %s::uuid
+                    """,
+                    (decision_event_id,),
+                )
+
+    _expect_database_rejection(
+        delete_decision_event,
+        "approval_decision_event_delete_accepted",
+        expected_sqlstates=frozenset({"55000"}),
+    )
+
+    final_snapshot = _approval_authority_snapshot(admin_database_url)
+    if final_snapshot != approval_snapshot:
+        raise RehearsalFailure("approval_authority_changed_after_rejection")
+
+    return (
+        {
+            "approval_agent_row_spoof_denied": True,
+            "approval_service_row_spoof_denied": True,
+            "approval_human_decision_once": True,
+            "approval_exact_retry": True,
+            "approval_mutated_retry_rejected": True,
+            "approval_terminal_replay_rejected": True,
+            "approval_record_immutable": True,
+            "approval_decision_event_immutable": True,
+        },
+        final_snapshot,
+    )
 
 
 def _exercise_runtime(
@@ -1726,7 +2090,11 @@ def _restore_database(
     )
 
 
-def _verify_restored_data(admin_database_url: str) -> None:
+def _verify_restored_data(
+    admin_database_url: str,
+    *,
+    expected_approval_authority_snapshot: dict[str, Any],
+) -> None:
     with _connect(admin_database_url, autocommit=True) as administrator:
         row = administrator.execute(
             """
@@ -1740,8 +2108,13 @@ def _verify_restored_data(admin_database_url: str) -> None:
               (select count(*) from app_private.approval_requests)
             """
         ).fetchone()
-    if row != (4, 4, 5, 14, 1):
+    if row != (4, 7, 5, 16, 2):
         raise RehearsalFailure("restored_data_mismatch")
+    restored_approval_authority_snapshot = _approval_authority_snapshot(
+        admin_database_url
+    )
+    if restored_approval_authority_snapshot != expected_approval_authority_snapshot:
+        raise RehearsalFailure("restored_approval_authority_mismatch")
 
 
 def _preflight(postgres_bin: Path, openssl: Path) -> dict[str, Any]:
@@ -1858,6 +2231,14 @@ def _run_rehearsal(
                 runtime_database_url,
                 admin_database_url,
             )
+            phase = "approval_authority"
+            (
+                approval_authority,
+                approval_authority_snapshot,
+            ) = _exercise_approval_authority(
+                runtime_database_url,
+                admin_database_url,
+            )
             phase = "runtime_behaviour"
             behaviour = _exercise_runtime(runtime_database_url, admin_database_url)
             phase = "database_backup"
@@ -1933,7 +2314,10 @@ def _run_rehearsal(
             )
             phase = "restored_database_validation"
             restored_validation = _run_validator(restored_runtime_url, environment)
-            _verify_restored_data(restore_admin_database_url)
+            _verify_restored_data(
+                restore_admin_database_url,
+                expected_approval_authority_snapshot=approval_authority_snapshot,
+            )
 
             version = str(preflight["engine"]["version"])
             major = int(preflight["engine"]["major"])
@@ -1958,11 +2342,17 @@ def _run_rehearsal(
                     "dedicated_runtime_role_validated": True,
                     **boundaries,
                     **product_journeys,
+                    **approval_authority,
                     **behaviour,
                     "backup_created": True,
                     "restore_completed": True,
                     "restored_database_validated": restored_validation.get("ready") is True,
                     "restored_data_preserved": True,
+                },
+                "authority": {
+                    "actor_identity_source": APPROVAL_IDENTITY_AUTHORITY,
+                    "database_authenticates_individual_actors": False,
+                    "runtime_credentials_must_remain_server_only": True,
                 },
                 "recovery": {
                     "format": "pg_dump_custom",
