@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from supermega_runtime.production_runtime import (
     PRODUCTION_EVENTS,
     PRODUCTION_HUMAN_EVENTS,
+    validate_production_state,
 )
 from supermega_runtime.runtime import reduce_trial_state
 from supermega_runtime.trial_runtime import create_trial_router
@@ -135,6 +136,52 @@ def scrap_state(
             quantity=quantity,
             shiftRef=shift_ref,
             outputKind="scrap",
+        ),
+        *state["events"],
+    ]
+    return state
+
+
+def held_job_state(
+    current: dict[str, object],
+    evidence: dict[str, str],
+) -> dict[str, object]:
+    state = deepcopy(current)
+    job = state["jobs"][0]
+    job["qualityHold"] = {
+        "actionId": evidence["actionId"],
+        "heldAt": evidence["capturedAt"],
+        "heldBy": evidence["actor"],
+        "reason": evidence["reason"],
+        "evidenceReference": evidence["evidenceReference"],
+    }
+    state["revision"] += 1
+    state["events"] = [
+        production_event(
+            evidence,
+            kind="quality_hold_placed",
+            subject_id=job["id"],
+            summary=f"Held {job['product']} for quality review",
+        ),
+        *state["events"],
+    ]
+    return state
+
+
+def released_job_state(
+    current: dict[str, object],
+    evidence: dict[str, str],
+) -> dict[str, object]:
+    state = deepcopy(current)
+    job = state["jobs"][0]
+    job.pop("qualityHold")
+    state["revision"] += 1
+    state["events"] = [
+        production_event(
+            evidence,
+            kind="quality_hold_released",
+            subject_id=job["id"],
+            summary=f"Released {job['product']} from quality hold",
         ),
         *state["events"],
     ]
@@ -277,6 +324,8 @@ class ProductionRuntimeTests(unittest.TestCase):
             "production.output.recorded",
             "production.issue.opened",
             "production.issue.resolved",
+            "production.quality_hold.placed",
+            "production.quality_hold.released",
             "production.machine_state.changed",
         }
         self.assertEqual(PRODUCTION_EVENTS, expected_events)
@@ -582,6 +631,130 @@ class ProductionRuntimeTests(unittest.TestCase):
                 overflow_good_evidence,
             )
 
+    def test_quality_hold_and_release_are_distinct_evidence_backed_events(self) -> None:
+        current = starting_workspace()
+        hold_evidence = action_evidence("ACT-QUALITY-HOLD")
+        held = apply_event(
+            current,
+            "production.quality_hold.placed",
+            held_job_state(current, hold_evidence),
+            hold_evidence,
+        )
+        quality_hold = held["jobs"][0]["qualityHold"]
+        self.assertEqual(quality_hold["heldBy"], ACTOR)
+        self.assertEqual(
+            quality_hold["evidenceReference"],
+            hold_evidence["evidenceReference"],
+        )
+        self.assertEqual(held["jobs"][0]["output"], current["jobs"][0]["output"])
+        self.assertEqual(held["events"][0]["kind"], "quality_hold_placed")
+
+        second_hold_evidence = action_evidence(
+            "ACT-QUALITY-HOLD-AGAIN",
+            captured_at=LATER,
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                held,
+                "production.quality_hold.placed",
+                held_job_state(held, second_hold_evidence),
+                second_hold_evidence,
+            )
+
+        detached_hold = held_job_state(current, hold_evidence)
+        detached_hold["jobs"][0]["qualityHold"]["reason"] = "Changed reason"
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "production.quality_hold.placed",
+                detached_hold,
+                hold_evidence,
+            )
+
+        unrelated_hold = held_job_state(current, hold_evidence)
+        unrelated_hold["jobs"][0]["output"] = 1
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "production.quality_hold.placed",
+                unrelated_hold,
+                hold_evidence,
+            )
+
+        release_evidence = action_evidence(
+            "ACT-QUALITY-RELEASE",
+            captured_at=LATER,
+        )
+        released = apply_event(
+            held,
+            "production.quality_hold.released",
+            released_job_state(held, release_evidence),
+            release_evidence,
+        )
+        self.assertNotIn("qualityHold", released["jobs"][0])
+        self.assertEqual(released["jobs"][0]["output"], current["jobs"][0]["output"])
+        self.assertEqual(released["events"][0]["kind"], "quality_hold_released")
+        self.assertEqual(
+            released["events"][0]["evidenceReference"],
+            release_evidence["evidenceReference"],
+        )
+        contradictory_release_time = deepcopy(released)
+        contradictory_release_time["events"][0]["createdAt"] = (
+            "2026-07-24T08:59:00.000Z"
+        )
+        with self.assertRaises(TrialValidationError):
+            validate_production_state(contradictory_release_time)
+
+        repeated_release = deepcopy(released)
+        repeated_release["revision"] += 1
+        repeated_release["events"] = [
+            production_event(
+                action_evidence(
+                    "ACT-QUALITY-RELEASE-AGAIN",
+                    captured_at=LATEST,
+                ),
+                kind="quality_hold_released",
+                subject_id=released["jobs"][0]["id"],
+                summary=(
+                    f"Released {released['jobs'][0]['product']} from quality hold"
+                ),
+            ),
+            *repeated_release["events"],
+        ]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                released,
+                "production.quality_hold.released",
+                repeated_release,
+                action_evidence(
+                    "ACT-QUALITY-RELEASE-AGAIN",
+                    captured_at=LATEST,
+                ),
+            )
+
+        rehold_evidence = action_evidence(
+            "ACT-QUALITY-REHOLD",
+            captured_at=LATEST,
+        )
+        reheld = apply_event(
+            released,
+            "production.quality_hold.placed",
+            held_job_state(released, rehold_evidence),
+            rehold_evidence,
+        )
+        self.assertEqual(
+            reheld["jobs"][0]["qualityHold"]["actionId"],
+            rehold_evidence["actionId"],
+        )
+        self.assertEqual(
+            [event["kind"] for event in reheld["events"][:3]],
+            [
+                "quality_hold_placed",
+                "quality_hold_released",
+                "quality_hold_placed",
+            ],
+        )
+
     def test_daily_job_creation_is_exact_unique_and_zero_output(self) -> None:
         current = starting_workspace()
         evidence = action_evidence("ACT-JOB-CREATE")
@@ -656,6 +829,22 @@ class ProductionRuntimeTests(unittest.TestCase):
                 current,
                 "production.job.created",
                 predeclared_scrap,
+                evidence,
+            )
+
+        predeclared_hold = deepcopy(created)
+        predeclared_hold["jobs"][0]["qualityHold"] = {
+            "actionId": "ACT-PREDECLARED-HOLD",
+            "heldAt": NOW,
+            "heldBy": ACTOR,
+            "reason": "Not allowed on creation.",
+            "evidenceReference": "evidence://production/predeclared",
+        }
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "production.job.created",
+                predeclared_hold,
                 evidence,
             )
 

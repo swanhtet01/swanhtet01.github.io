@@ -81,6 +81,7 @@ import {
   loadProductionWorkspace,
   mutateProductionWorkspace,
   openProductionIssue,
+  placeProductionQualityHold,
   productionIssueSeverities,
   productionMachineStates,
   productionShiftOutput,
@@ -89,6 +90,7 @@ import {
   recordProductionScrap,
   recordProductionMachineState,
   registerProductionJob,
+  releaseProductionQualityHold,
   resolveProductionIssue,
   validateProductionState,
   type ProductionActionProof,
@@ -180,6 +182,8 @@ type ActionKind =
   | 'production_scrap'
   | 'issue_create'
   | 'issue_resolution'
+  | 'quality_hold'
+  | 'quality_release'
   | 'machine_state'
 
 type AccountableAction = {
@@ -2645,6 +2649,8 @@ const productionEventLabels: Record<ProductionEvent['kind'], string> = {
   output_recorded: 'Output recorded',
   issue_opened: 'Issue opened',
   issue_resolved: 'Issue resolved',
+  quality_hold_placed: 'Quality hold placed',
+  quality_hold_released: 'Quality hold released',
   machine_state_changed: 'Machine state changed',
 }
 
@@ -2670,6 +2676,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const [, setActions] = useStoredState<AccountableAction[]>(ACTION_KEY, [], normalizeActions)
   const [pendingAction, setPendingAction] = useState<PendingAccountableAction | null>(null)
   const [jobId, setJobId] = useState(production.jobs[0]?.id ?? '')
+  const [holdJobId, setHoldJobId] = useState(production.jobs.find((job) => !job.qualityHold)?.id ?? '')
   const [quantity, setQuantity] = useState(25)
   const [outputKind, setOutputKind] = useState<ProductionOutputKind>('good')
   const [shiftRef, setShiftRef] = useState('')
@@ -2704,6 +2711,10 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     })
   const resolvedIssues = production.issues.filter((issue) => issue.status === 'resolved')
   const urgentIssueCount = openIssues.filter((issue) => issue.severity === 'critical' || issue.severity === 'high').length
+  const heldJobs = production.jobs.filter((job) => Boolean(job.qualityHold))
+  const holdableJobs = production.jobs.filter((job) => !job.qualityHold)
+  const selectedHoldJobId = holdableJobs.some((job) => job.id === holdJobId) ? holdJobId : holdableJobs[0]?.id ?? ''
+  const selectedHoldJob = holdableJobs.find((job) => job.id === selectedHoldJobId)
   const activeJobs = production.jobs.filter((job) => job.output + (job.scrap ?? 0) < job.target)
   const completedJobs = production.jobs.filter((job) => job.output + (job.scrap ?? 0) >= job.target)
   const selectedJobId = activeJobs.some((job) => job.id === jobId) ? jobId : activeJobs[0]?.id ?? ''
@@ -2959,6 +2970,39 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     })
   }
 
+  function placeQualityHold(event: FormEvent) {
+    event.preventDefault()
+    if (!selectedHoldJob) return setNotice('Choose an existing job or batch before reviewing a quality hold.')
+    const heldJobId = selectedHoldJob.id
+    const heldProduct = selectedHoldJob.product
+    queueAction({
+      kind: 'quality_hold',
+      subjectId: heldJobId,
+      summary: `Place quality hold on ${heldJobId}`,
+      before: `${heldProduct} · no quality hold`,
+      after: `${heldProduct} · held by the accountable operator with reason and evidence`,
+      apply: async (record) => {
+        await mutateProduction('production.quality_hold.placed', record.commandId, productionActionProof(record), (current) => placeProductionQualityHold(current, heldJobId, productionActionProof(record)))
+        setHoldJobId('')
+      },
+    })
+  }
+
+  function releaseQualityHold(jobId: string, trigger: HTMLButtonElement) {
+    const job = production.jobs.find((candidate) => candidate.id === jobId)
+    if (!job?.qualityHold) return
+    queueAction({
+      kind: 'quality_release',
+      subjectId: jobId,
+      summary: `Release quality hold on ${jobId}`,
+      before: `${job.product} · held by ${job.qualityHold.heldBy} · ${job.qualityHold.reason}`,
+      after: `${job.product} · released by a named human with new evidence`,
+      apply: async (record) => {
+        await mutateProduction('production.quality_hold.released', record.commandId, productionActionProof(record), (current) => releaseProductionQualityHold(current, jobId, productionActionProof(record)))
+      },
+    }, trigger)
+  }
+
   function openMachineObservation(machineId: string, trigger: HTMLButtonElement) {
     const machine = production.machines.find((candidate) => candidate.id === machineId)
     if (!machine) return
@@ -3037,9 +3081,10 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       <section className="core-panel output-panel">
         <span className="core-eyebrow">Job output</span><h2>Record good or scrap</h2>
         <form autoComplete="off" className="core-form compact-form" onSubmit={recordOutput}>
-          <label>Job<select disabled={!productionCanWrite || Boolean(pendingAction) || !activeJobs.length} value={selectedJobId} onChange={(event) => setJobId(event.target.value)}>{activeJobs.length ? activeJobs.map((job) => <option key={job.id} value={job.id}>{job.id} · {job.product} · {job.line} · {(job.target - job.output - (job.scrap ?? 0)).toLocaleString()} left</option>) : <option value="">No active jobs</option>}</select></label>
+          <label>Job<select disabled={!productionCanWrite || Boolean(pendingAction) || !activeJobs.length} value={selectedJobId} onChange={(event) => setJobId(event.target.value)}>{activeJobs.length ? activeJobs.map((job) => <option key={job.id} value={job.id}>{job.id} · {job.product} · {job.line} · {(job.target - job.output - (job.scrap ?? 0)).toLocaleString()} left{job.qualityHold ? ' · QUALITY HOLD' : ''}</option>) : <option value="">No active jobs</option>}</select></label>
           <label>Result<select disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} value={outputKind} onChange={(event) => setOutputKind(event.target.value as ProductionOutputKind)}><option value="good">Good output</option><option value="scrap">Scrap</option></select></label>
           <div className="form-row"><label>Shift reference<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} maxLength={80} name="plant-output-shift-reference" placeholder="2026-07-24 Day" required value={shiftRef} onChange={(event) => setShiftRef(event.target.value)} /></label><label>{outputKind === 'scrap' ? 'Scrap units' : 'Good units'}<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} min="1" name="plant-output-quantity" step="1" type="number" value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} /></label></div>
+          {selectedJob?.qualityHold ? <p className="form-notice" role="alert">QUALITY HOLD · Held by {selectedJob.qualityHold.heldBy}. Recording a result does not release this hold; verify the hold and evidence before review.</p> : null}
           <p className="form-notice" role="status">{canonicalShiftRef && canonicalShiftRef.length <= 80 ? `This shift: ${currentShiftOutput.goodUnits.toLocaleString()} good · ${currentShiftOutput.scrapUnits.toLocaleString()} scrap across ${currentShiftOutput.entryCount} ${currentShiftOutput.entryCount === 1 ? 'entry' : 'entries'}.` : 'Enter a shift reference to see its recorded subtotal.'}</p>
           <button className="core-button primary" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob || selectedRemaining < 1 || !canonicalShiftRef || canonicalShiftRef.length > 80} type="submit">Review {outputKind === 'scrap' ? 'scrap' : 'good output'}</button>
           <p className="panel-copy">{selectedJob ? `${selectedJob.id} · ${selectedJob.product} · ${selectedJob.line} · ${selectedJob.output.toLocaleString()} good · ${(selectedJob.scrap ?? 0).toLocaleString()} scrap · ${selectedRemaining.toLocaleString()} left.` : 'Add or choose an active job.'} Results are append-only in this trial; verify the job, result, and quantity before review.</p>
@@ -3063,6 +3108,15 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
           <IssueList disabled={!productionCanWrite || Boolean(pendingAction)} issues={openIssues} now={issueClock} onResolve={resolveIssue} />
           <ResolvedIssueHistory issues={resolvedIssues} now={issueClock} />
           <button className="core-button primary" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => setIssueDialogOpen(true)} ref={issueTriggerRef} type="button">Open problem form</button>
+          <details className="compact-disclosure production-history" open={heldJobs.length ? true : undefined}>
+            <summary>Quality holds <span>{heldJobs.length}</span></summary>
+            <QualityHoldList disabled={!productionCanWrite || Boolean(pendingAction)} jobs={heldJobs} onRelease={releaseQualityHold} />
+            {holdableJobs.length ? <form autoComplete="off" className="core-form compact-form" onSubmit={placeQualityHold}>
+              <label>Job or batch<select disabled={!productionCanWrite || Boolean(pendingAction)} onChange={(event) => setHoldJobId(event.target.value)} value={selectedHoldJobId}>{holdableJobs.map((job) => <option key={job.id} value={job.id}>{job.id} · {job.product} · {job.line}</option>)}</select></label>
+              <button className="core-button" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedHoldJob} type="submit">Review hold</button>
+              <p className="panel-copy">The next review records who placed the hold, why, and the source evidence. It does not change output or control equipment.</p>
+            </form> : <p className="panel-copy">Every recorded job is currently held. Release one with evidence before placing another hold.</p>}
+          </details>
         </section>
       </div>
     </div>
@@ -3101,7 +3155,7 @@ function JobList({ jobs }: { jobs: ProductionJob[] }) {
     const scrap = job.scrap ?? 0
     const accounted = job.output + scrap
     const progress = Math.min(100, Math.round((accounted / job.target) * 100))
-    return <article key={job.id}><div><span>{job.id} · {job.line}</span><strong>{job.product}</strong></div><div className="job-progress"><span><i style={{ width: `${progress}%` }} /></span><small>{job.output.toLocaleString()} good · {scrap.toLocaleString()} scrap · {accounted.toLocaleString()} / {job.target.toLocaleString()}</small></div></article>
+    return <article key={job.id}><div><span>{job.id} · {job.line}{job.qualityHold ? ' · QUALITY HOLD' : ''}</span><strong>{job.product}</strong>{job.qualityHold ? <small>Held by {job.qualityHold.heldBy} · Evidence: {job.qualityHold.evidenceReference}</small> : null}</div><div className="job-progress"><span><i style={{ width: `${progress}%` }} /></span><small>{job.output.toLocaleString()} good · {scrap.toLocaleString()} scrap · {accounted.toLocaleString()} / {job.target.toLocaleString()}</small></div></article>
   })}</div>
 }
 
@@ -3143,6 +3197,24 @@ function ResolvedIssueHistory({ issues, now }: { issues: ProductionIssue[]; now:
     <IssueList issues={issues.slice(0, 8)} now={now} onResolve={() => undefined} />
     {issues.length > 8 ? <p>Showing the latest 8 resolved problems.</p> : null}
   </details>
+}
+
+function QualityHoldList({ disabled, jobs, onRelease }: { disabled: boolean; jobs: ProductionJob[]; onRelease: (id: string, trigger: HTMLButtonElement) => void }) {
+  if (!jobs.length) return <Empty>No job or batch is on quality hold.</Empty>
+  return <div className="issue-list">{jobs.map((job) => {
+    const hold = job.qualityHold
+    if (!hold) return null
+    return <article key={job.id}>
+      <span className="issue-mark open">H</span>
+      <div>
+        <strong>{job.product} · {job.id}</strong>
+        <small style={wrappedIssueDetail}>Held by {hold.heldBy} · {formatIssueDue(hold.heldAt)}</small>
+        <small style={wrappedIssueDetail}>Reason: {hold.reason}</small>
+        <small style={wrappedIssueDetail}>Evidence: {hold.evidenceReference}</small>
+      </div>
+      <button className="text-link" disabled={disabled} onClick={(event) => onRelease(job.id, event.currentTarget)} type="button">Review release</button>
+    </article>
+  })}</div>
 }
 
 export function SettingsPage() {

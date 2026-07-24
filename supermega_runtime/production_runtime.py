@@ -18,6 +18,8 @@ PRODUCTION_EVENTS = frozenset(
         "production.output.recorded",
         "production.issue.opened",
         "production.issue.resolved",
+        "production.quality_hold.placed",
+        "production.quality_hold.released",
         "production.machine_state.changed",
     }
 )
@@ -32,6 +34,8 @@ _EVENT_KIND_BY_TYPE = {
     "production.output.recorded": "output_recorded",
     "production.issue.opened": "issue_opened",
     "production.issue.resolved": "issue_resolved",
+    "production.quality_hold.placed": "quality_hold_placed",
+    "production.quality_hold.released": "quality_hold_released",
     "production.machine_state.changed": "machine_state_changed",
 }
 _MAX_SAFE_INTEGER = 9_007_199_254_740_991
@@ -42,7 +46,10 @@ _MAX_EVENTS = 500
 
 _STATE_FIELDS = frozenset({"schema", "revision", "jobs", "issues", "machines", "events"})
 _JOB_REQUIRED_FIELDS = frozenset({"id", "line", "product", "target", "output"})
-_JOB_OPTIONAL_FIELDS = frozenset({"scrap"})
+_JOB_OPTIONAL_FIELDS = frozenset({"scrap", "qualityHold"})
+_QUALITY_HOLD_FIELDS = frozenset(
+    {"actionId", "heldAt", "heldBy", "reason", "evidenceReference"}
+)
 _ISSUE_REQUIRED_FIELDS = frozenset({"id", "createdAt", "area", "kind", "summary", "status"})
 _ISSUE_ACTION_FIELDS = frozenset({"severity", "owner", "dueAt", "containment"})
 _ISSUE_OPTIONAL_FIELDS = _ISSUE_ACTION_FIELDS | {"resolution"}
@@ -169,6 +176,20 @@ def _resolution(value: object, field: str) -> dict[str, Any]:
     return resolution
 
 
+def _quality_hold(value: object, field: str) -> dict[str, Any]:
+    quality_hold = _object(value, field)
+    _exact_fields(quality_hold, field, required=_QUALITY_HOLD_FIELDS)
+    _text(quality_hold["actionId"], f"{field}.actionId", maximum=160)
+    _timestamp(quality_hold["heldAt"], f"{field}.heldAt")
+    _text(quality_hold["heldBy"], f"{field}.heldBy")
+    _text(quality_hold["reason"], f"{field}.reason")
+    _text(
+        quality_hold["evidenceReference"],
+        f"{field}.evidenceReference",
+    )
+    return quality_hold
+
+
 def _validate_job(candidate: object, index: int) -> dict[str, Any]:
     field = f"jobs[{index}]"
     job = _object(candidate, field)
@@ -186,6 +207,8 @@ def _validate_job(candidate: object, index: int) -> dict[str, Any]:
     scrap = _integer(job.get("scrap", 0), f"{field}.scrap")
     if output + scrap > target:
         raise TrialValidationError(f"{field} good plus scrap cannot exceed its target.")
+    if "qualityHold" in job:
+        _quality_hold(job["qualityHold"], f"{field}.qualityHold")
     return job
 
 
@@ -268,7 +291,13 @@ def _validate_event(
         required = _EVENT_FIELDS | {"quantity"}
     elif kind == "machine_state_changed":
         required = _EVENT_FIELDS | {"fromState", "toState"}
-    elif kind in {"job_created", "issue_opened", "issue_resolved"}:
+    elif kind in {
+        "job_created",
+        "issue_opened",
+        "issue_resolved",
+        "quality_hold_placed",
+        "quality_hold_released",
+    }:
         required = _EVENT_FIELDS
     else:
         raise TrialValidationError(f"{field}.kind is unsupported.")
@@ -305,6 +334,9 @@ def _validate_event(
         if "shiftRef" in event:
             _text(event["shiftRef"], f"{field}.shiftRef", maximum=80)
     elif kind == "job_created":
+        if subject_id not in job_ids:
+            raise TrialValidationError(f"{field} references an unknown job.")
+    elif kind in {"quality_hold_placed", "quality_hold_released"}:
         if subject_id not in job_ids:
             raise TrialValidationError(f"{field} references an unknown job.")
     elif kind == "machine_state_changed":
@@ -505,11 +537,107 @@ def _validate_job_history(
         if any(
             events.index(event) >= creation_index
             for event in events
-            if event["kind"] == "output_recorded"
+            if event["kind"]
+            in {
+                "output_recorded",
+                "quality_hold_placed",
+                "quality_hold_released",
+            }
             and event["subjectId"] == job["id"]
         ):
             raise TrialValidationError(
-                f"jobs[{index}] output cannot predate its creation event."
+                f"jobs[{index}] activity cannot predate its creation event."
+            )
+
+
+def _validate_quality_hold_history(
+    jobs: Sequence[dict[str, Any]],
+    events: Sequence[dict[str, Any]],
+) -> None:
+    for index, job in enumerate(jobs):
+        newest_first = [
+            event
+            for event in events
+            if event["kind"]
+            in {"quality_hold_placed", "quality_hold_released"}
+            and event["subjectId"] == job["id"]
+        ]
+        creation_event = next(
+            (
+                event
+                for event in events
+                if event["kind"] == "job_created"
+                and event["subjectId"] == job["id"]
+            ),
+            None,
+        )
+        if creation_event is not None and any(
+            datetime.fromisoformat(
+                event["createdAt"].replace("Z", "+00:00")
+            )
+            < datetime.fromisoformat(
+                creation_event["createdAt"].replace("Z", "+00:00")
+            )
+            for event in newest_first
+        ):
+            raise TrialValidationError(
+                f"jobs[{index}] quality hold timestamp predates job creation."
+            )
+        active_hold: dict[str, Any] | None = None
+        previous_activity_at: datetime | None = None
+        for event in reversed(newest_first):
+            activity_at = datetime.fromisoformat(
+                event["createdAt"].replace("Z", "+00:00")
+            )
+            if (
+                previous_activity_at is not None
+                and activity_at < previous_activity_at
+            ):
+                raise TrialValidationError(
+                    f"jobs[{index}] quality hold timestamps contradict lifecycle order."
+                )
+            previous_activity_at = activity_at
+            if event["kind"] == "quality_hold_placed":
+                if active_hold is not None:
+                    raise TrialValidationError(
+                        f"jobs[{index}] has a second active quality hold."
+                    )
+                if event["summary"] != (
+                    f"Held {job['product']} for quality review"
+                ):
+                    raise TrialValidationError(
+                        f"jobs[{index}] quality hold summary is not canonical."
+                    )
+                active_hold = event
+            else:
+                if active_hold is None:
+                    raise TrialValidationError(
+                        f"jobs[{index}] releases an unheld quality hold."
+                    )
+                if event["summary"] != (
+                    f"Released {job['product']} from quality hold"
+                ):
+                    raise TrialValidationError(
+                        f"jobs[{index}] quality release summary is not canonical."
+                    )
+                active_hold = None
+
+        if active_hold is None:
+            if "qualityHold" in job:
+                raise TrialValidationError(
+                    f"jobs[{index}] quality hold has no unmatched hold event."
+                )
+            continue
+        expected_hold = {
+            "actionId": active_hold["actionId"],
+            "heldAt": active_hold["createdAt"],
+            "heldBy": active_hold["actor"],
+            "reason": active_hold["reason"],
+            "evidenceReference": active_hold["evidenceReference"],
+        }
+        if job.get("qualityHold") != expected_hold:
+            raise TrialValidationError(
+                f"jobs[{index}] quality hold does not match its immutable event."
             )
 
 
@@ -608,6 +736,7 @@ def validate_production_state(value: object) -> dict[str, Any]:
 
     _validate_job_history(jobs, events)
     _validate_output_history(jobs, events)
+    _validate_quality_hold_history(jobs, events)
     _validate_issue_history(issues, events)
     _validate_machine_history(machines, events)
     return deepcopy(state)
@@ -747,9 +876,9 @@ def _validate_job_created(
             "production.job.created must prepend exactly one job."
         )
     job = next_state["jobs"][0]
-    if job["output"] != 0 or "scrap" in job:
+    if job["output"] != 0 or "scrap" in job or "qualityHold" in job:
         raise TrialValidationError(
-            "a new Production job must begin at zero good and scrap output."
+            "a new Production job must begin at zero good and scrap output without a quality hold."
         )
     if event["subjectId"] != job["id"]:
         raise TrialValidationError("job creation event must reference the new job.")
@@ -840,6 +969,57 @@ def _validate_issue_resolved(
         raise TrialValidationError("issue resolution summary is not canonical.")
 
 
+def _validate_quality_hold_placed(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+    event: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "issues", "machines")
+    before, after = _one_changed(current["jobs"], next_state["jobs"], "jobs")
+    if "qualityHold" in before:
+        raise TrialValidationError("only an unheld job can receive a quality hold.")
+    quality_hold = {
+        "actionId": event["actionId"],
+        "heldAt": event["createdAt"],
+        "heldBy": event["actor"],
+        "reason": event["reason"],
+        "evidenceReference": event["evidenceReference"],
+    }
+    if after != {**before, "qualityHold": quality_hold}:
+        raise TrialValidationError(
+            "quality hold may add only exact command evidence to one job."
+        )
+    if event["subjectId"] != before["id"]:
+        raise TrialValidationError(
+            "quality hold event must reference the one changed job."
+        )
+    if event["summary"] != f"Held {before['product']} for quality review":
+        raise TrialValidationError("quality hold summary is not canonical.")
+
+
+def _validate_quality_hold_released(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+    event: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "issues", "machines")
+    before, after = _one_changed(current["jobs"], next_state["jobs"], "jobs")
+    if "qualityHold" not in before:
+        raise TrialValidationError("only a held job can be released.")
+    expected = dict(before)
+    expected.pop("qualityHold")
+    if after != expected:
+        raise TrialValidationError(
+            "quality release may remove only the current hold from one job."
+        )
+    if event["subjectId"] != before["id"]:
+        raise TrialValidationError(
+            "quality release event must reference the one changed job."
+        )
+    if event["summary"] != f"Released {before['product']} from quality hold":
+        raise TrialValidationError("quality release summary is not canonical.")
+
+
 def _validate_machine_state_changed(
     current: Mapping[str, Any],
     next_state: Mapping[str, Any],
@@ -886,6 +1066,8 @@ _TRANSITION_VALIDATORS: dict[
     "production.output.recorded": _validate_output_recorded,
     "production.issue.opened": _validate_issue_opened,
     "production.issue.resolved": _validate_issue_resolved,
+    "production.quality_hold.placed": _validate_quality_hold_placed,
+    "production.quality_hold.released": _validate_quality_hold_released,
     "production.machine_state.changed": _validate_machine_state_changed,
 }
 
@@ -913,6 +1095,7 @@ def reduce_production_state(
             or next_state["events"]
             or next_state["jobs"][0]["output"] != 0
             or "scrap" in next_state["jobs"][0]
+            or "qualityHold" in next_state["jobs"][0]
             or next_state["machines"][0]["state"] != "running"
         ):
             raise TrialValidationError(

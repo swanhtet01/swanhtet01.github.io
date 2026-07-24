@@ -69,6 +69,8 @@ export type ManagedProductionEvent =
   | 'production.output.recorded'
   | 'production.issue.opened'
   | 'production.issue.resolved'
+  | 'production.quality_hold.placed'
+  | 'production.quality_hold.released'
   | 'production.machine_state.changed'
 
 export type ManagedCommandResult = {

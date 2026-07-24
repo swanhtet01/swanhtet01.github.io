@@ -7,6 +7,14 @@ export type ProductionIssueKind = 'quality' | 'maintenance' | 'materials' | 'ope
 export type ProductionIssueSeverity = 'critical' | 'high' | 'medium' | 'low'
 export type ProductionMachineState = 'running' | 'attention' | 'stopped'
 
+export type ProductionQualityHold = {
+  actionId: string
+  heldAt: string
+  heldBy: string
+  reason: string
+  evidenceReference: string
+}
+
 export type ProductionJob = {
   id: string
   line: string
@@ -14,6 +22,7 @@ export type ProductionJob = {
   target: number
   output: number
   scrap?: number
+  qualityHold?: ProductionQualityHold
 }
 
 export type ProductionIssueResolution = {
@@ -44,7 +53,7 @@ export type ProductionMachine = {
   state: ProductionMachineState
 }
 
-export type ProductionEventKind = 'job_created' | 'output_recorded' | 'issue_opened' | 'issue_resolved' | 'machine_state_changed'
+export type ProductionEventKind = 'job_created' | 'output_recorded' | 'issue_opened' | 'issue_resolved' | 'quality_hold_placed' | 'quality_hold_released' | 'machine_state_changed'
 export type ProductionOutputKind = 'good' | 'scrap'
 
 export type ProductionEvent = {
@@ -114,7 +123,8 @@ export type ProductionShiftOutput = {
 const issueKinds: ProductionIssueKind[] = ['quality', 'maintenance', 'materials', 'operations']
 export const productionIssueSeverities: ProductionIssueSeverity[] = ['critical', 'high', 'medium', 'low']
 export const productionMachineStates: ProductionMachineState[] = ['running', 'attention', 'stopped']
-const eventKinds: ProductionEventKind[] = ['job_created', 'output_recorded', 'issue_opened', 'issue_resolved', 'machine_state_changed']
+const eventKinds: ProductionEventKind[] = ['job_created', 'output_recorded', 'issue_opened', 'issue_resolved', 'quality_hold_placed', 'quality_hold_released', 'machine_state_changed']
+const qualityHoldEventFields = ['id', 'actionId', 'createdAt', 'actor', 'reason', 'evidenceReference', 'kind', 'subjectId', 'summary']
 const deterministicSeedNow = Date.parse('2026-07-23T08:00:00.000Z')
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -248,6 +258,17 @@ export function validateProductionState(value: unknown): ProductionState {
     if (candidate.scrap !== undefined) assertSafeInteger(candidate.scrap, `jobs[${index}].scrap`)
     const accounted = Number(candidate.output) + Number(candidate.scrap ?? 0)
     if (!Number.isSafeInteger(accounted) || accounted > Number(candidate.target)) throw new Error(`jobs[${index}] good plus scrap exceeds target.`)
+    if (candidate.qualityHold !== undefined) {
+      if (!isRecord(candidate.qualityHold)) throw new Error(`jobs[${index}].qualityHold is invalid.`)
+      const qualityHold = candidate.qualityHold
+      const qualityHoldFields = ['actionId', 'heldAt', 'heldBy', 'reason', 'evidenceReference']
+      if (JSON.stringify(Object.keys(qualityHold).sort()) !== JSON.stringify([...qualityHoldFields].sort())) throw new Error(`jobs[${index}].qualityHold fields are invalid.`)
+      canonicalText(qualityHold.actionId, `jobs[${index}].qualityHold.actionId`, 160)
+      if (!validTimestamp(qualityHold.heldAt)) throw new Error(`jobs[${index}].qualityHold.heldAt is invalid.`)
+      canonicalText(qualityHold.heldBy, `jobs[${index}].qualityHold.heldBy`)
+      canonicalText(qualityHold.reason, `jobs[${index}].qualityHold.reason`)
+      canonicalText(qualityHold.evidenceReference, `jobs[${index}].qualityHold.evidenceReference`)
+    }
   }
   assertUnique(jobIds, 'Production job ID')
 
@@ -323,6 +344,10 @@ export function validateProductionState(value: unknown): ProductionState {
         })
       }
       if (issueSnapshotFieldCount || candidate.fromState !== undefined || candidate.toState !== undefined) throw new Error(`events[${index}] output event has unrelated fields.`)
+    } else if (candidate.kind === 'quality_hold_placed' || candidate.kind === 'quality_hold_released') {
+      if (!jobIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown job.`)
+      if (JSON.stringify(Object.keys(candidate).sort()) !== JSON.stringify([...qualityHoldEventFields].sort())) throw new Error(`events[${index}] quality hold event fields are invalid.`)
+      if (candidate.quantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || issueSnapshotFieldCount || candidate.fromState !== undefined || candidate.toState !== undefined) throw new Error(`events[${index}] quality hold event has unrelated fields.`)
     } else if (candidate.kind === 'machine_state_changed') {
       if (!machineIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown machine.`)
       if (!productionMachineStates.includes(candidate.fromState as ProductionMachineState) || !productionMachineStates.includes(candidate.toState as ProductionMachineState)) throw new Error(`events[${index}] has invalid machine states.`)
@@ -410,6 +435,44 @@ export function validateProductionState(value: unknown): ProductionState {
     }, 0)
     if (!isRecord(job) || recordedGood > Number(job.output)) throw new Error(`Good output events exceed the stored output for ${jobId}.`)
     if (recordedScrap !== Number(job.scrap ?? 0)) throw new Error(`Scrap events do not match the stored scrap for ${jobId}.`)
+  }
+  for (const jobId of jobIds) {
+    const job = jobs.find((candidate): candidate is Record<string, unknown> => isRecord(candidate) && candidate.id === jobId)
+    if (!job) continue
+    const holdEvents = events.filter((candidate): candidate is Record<string, unknown> => isRecord(candidate)
+      && (candidate.kind === 'quality_hold_placed' || candidate.kind === 'quality_hold_released')
+      && candidate.subjectId === jobId)
+    const creationEvent = events.find((candidate): candidate is Record<string, unknown> => isRecord(candidate) && candidate.kind === 'job_created' && candidate.subjectId === jobId)
+    if (creationEvent && holdEvents.some((event) => events.indexOf(event) >= events.indexOf(creationEvent))) throw new Error(`Quality hold history for ${jobId} predates job creation.`)
+    if (creationEvent && holdEvents.some((event) => Date.parse(event.createdAt as string) < Date.parse(creationEvent.createdAt as string))) throw new Error(`Quality hold timestamp for ${jobId} predates job creation.`)
+    let activeHoldEvent: Record<string, unknown> | undefined
+    let previousActivityAt: number | undefined
+    for (const event of [...holdEvents].reverse()) {
+      const activityAt = Date.parse(event.createdAt as string)
+      if (previousActivityAt !== undefined && activityAt < previousActivityAt) throw new Error(`Quality hold timestamps for ${jobId} contradict lifecycle order.`)
+      previousActivityAt = activityAt
+      if (event.kind === 'quality_hold_placed') {
+        if (activeHoldEvent) throw new Error(`Quality hold history for ${jobId} places a second active hold.`)
+        if (event.summary !== `Held ${job.product} for quality review`) throw new Error(`Quality hold summary for ${jobId} is not canonical.`)
+        activeHoldEvent = event
+      } else {
+        if (!activeHoldEvent) throw new Error(`Quality hold history for ${jobId} releases an unheld job.`)
+        if (event.summary !== `Released ${job.product} from quality hold`) throw new Error(`Quality release summary for ${jobId} is not canonical.`)
+        activeHoldEvent = undefined
+      }
+    }
+    if (activeHoldEvent) {
+      if (!isRecord(job.qualityHold)
+        || job.qualityHold.actionId !== activeHoldEvent.actionId
+        || job.qualityHold.heldAt !== activeHoldEvent.createdAt
+        || job.qualityHold.heldBy !== activeHoldEvent.actor
+        || job.qualityHold.reason !== activeHoldEvent.reason
+        || job.qualityHold.evidenceReference !== activeHoldEvent.evidenceReference) {
+        throw new Error(`Current quality hold for ${jobId} does not match its immutable event.`)
+      }
+    } else if (job.qualityHold !== undefined) {
+      throw new Error(`Current quality hold for ${jobId} has no unmatched hold event.`)
+    }
   }
   for (const machineId of machineIds) {
     const machine = machines.find((candidate) => isRecord(candidate) && candidate.id === machineId)
@@ -595,7 +658,8 @@ export function registerProductionJob(state: ProductionState, job: ProductionJob
     || !Number.isSafeInteger(job.target)
     || job.target < 1
     || job.output !== 0
-    || job.scrap !== undefined) return null
+    || job.scrap !== undefined
+    || job.qualityHold !== undefined) return null
   const existing = state.events.find((event) => event.actionId === proof.actionId)
   if (existing) {
     const storedJob = state.jobs.find((candidate) => candidate.id === job.id)
@@ -663,6 +727,61 @@ export function recordProductionScrap(state: ProductionState, jobId: string, qua
     ...state,
     revision: state.revision + 1,
     jobs: state.jobs.map((candidate) => candidate.id === jobId ? { ...candidate, scrap: nextScrap } : candidate),
+    events: [event, ...state.events],
+  })
+}
+
+export function placeProductionQualityHold(state: ProductionState, jobId: string, proof: ProductionActionProof) {
+  if (!validProof(proof)) return null
+  const existing = state.events.find((event) => event.actionId === proof.actionId)
+  const job = state.jobs.find((candidate) => candidate.id === jobId)
+  if (existing) return existing.kind === 'quality_hold_placed'
+    && existing.subjectId === jobId
+    && sameProof(existing, proof) ? state : null
+  const latestLifecycleEvent = state.events.find((event) => event.subjectId === jobId
+    && (event.kind === 'job_created' || event.kind === 'quality_hold_placed' || event.kind === 'quality_hold_released'))
+  if (!job
+    || job.qualityHold
+    || (latestLifecycleEvent && Date.parse(proof.capturedAt) < Date.parse(latestLifecycleEvent.createdAt))
+    || actionIdIsUsed(state, proof.actionId)
+    || state.revision >= Number.MAX_SAFE_INTEGER) return null
+  const qualityHold: ProductionQualityHold = {
+    actionId: proof.actionId,
+    heldAt: proof.capturedAt,
+    heldBy: proof.actor,
+    reason: proof.reason,
+    evidenceReference: proof.evidenceReference,
+  }
+  const event = eventFor(proof, { kind: 'quality_hold_placed', subjectId: jobId, summary: `Held ${job.product} for quality review` })
+  return validateProductionState({
+    ...state,
+    revision: state.revision + 1,
+    jobs: state.jobs.map((candidate) => candidate.id === jobId ? { ...candidate, qualityHold } : candidate),
+    events: [event, ...state.events],
+  })
+}
+
+export function releaseProductionQualityHold(state: ProductionState, jobId: string, proof: ProductionActionProof) {
+  if (!validProof(proof)) return null
+  const existing = state.events.find((event) => event.actionId === proof.actionId)
+  const job = state.jobs.find((candidate) => candidate.id === jobId)
+  if (existing) return existing.kind === 'quality_hold_released'
+    && existing.subjectId === jobId
+    && sameProof(existing, proof) ? state : null
+  if (!job?.qualityHold
+    || Date.parse(proof.capturedAt) < Date.parse(job.qualityHold.heldAt)
+    || actionIdIsUsed(state, proof.actionId)
+    || state.revision >= Number.MAX_SAFE_INTEGER) return null
+  const event = eventFor(proof, { kind: 'quality_hold_released', subjectId: jobId, summary: `Released ${job.product} from quality hold` })
+  return validateProductionState({
+    ...state,
+    revision: state.revision + 1,
+    jobs: state.jobs.map((candidate) => {
+      if (candidate.id !== jobId) return candidate
+      const releasedJob = { ...candidate }
+      delete releasedJob.qualityHold
+      return releasedJob
+    }),
     events: [event, ...state.events],
   })
 }
