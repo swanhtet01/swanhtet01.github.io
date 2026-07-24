@@ -72,6 +72,7 @@ export type ManagedProductionEvent =
   | 'production.workspace.initialized'
   | 'production.job.created'
   | 'production.output.recorded'
+  | 'production.material.consumed'
   | 'production.issue.opened'
   | 'production.issue.resolved'
   | 'production.quality_hold.placed'

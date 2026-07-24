@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime, timedelta
+from decimal import Decimal
 import unittest
 from uuid import uuid4
 
@@ -137,6 +138,40 @@ def scrap_state(
             quantity=quantity,
             shiftRef=shift_ref,
             outputKind="scrap",
+        ),
+        *state["events"],
+    ]
+    return state
+
+
+def material_state(
+    current: dict[str, object],
+    quantity: int | float,
+    evidence: dict[str, str],
+    *,
+    material_ref: str = "RM-RESIN-01",
+    material_lot: str | None = "LOT-24",
+    material_unit: str = "kg",
+    shift_ref: str = "2026-07-24 Day",
+) -> dict[str, object]:
+    state = deepcopy(current)
+    job = state["jobs"][0]
+    quantity_text = format(Decimal(str(quantity)).normalize(), "f")
+    state["revision"] += 1
+    state["events"] = [
+        production_event(
+            evidence,
+            kind="material_consumed",
+            subject_id=job["id"],
+            summary=(
+                f"Used {quantity_text} {material_unit} {material_ref}"
+                f"{f' · lot {material_lot}' if material_lot else ''}"
+            ),
+            quantity=quantity,
+            shiftRef=shift_ref,
+            materialRef=material_ref,
+            **({"materialLot": material_lot} if material_lot else {}),
+            materialUnit=material_unit,
         ),
         *state["events"],
     ]
@@ -363,6 +398,7 @@ class ProductionRuntimeTests(unittest.TestCase):
             "production.workspace.initialized",
             "production.job.created",
             "production.output.recorded",
+            "production.material.consumed",
             "production.issue.opened",
             "production.issue.resolved",
             "production.quality_hold.placed",
@@ -691,6 +727,224 @@ class ProductionRuntimeTests(unittest.TestCase):
                 output_state(accepted, 2, overflow_good_evidence),
                 overflow_good_evidence,
             )
+
+    def test_material_use_is_job_linked_attributed_and_event_only(self) -> None:
+        current = apply_event(
+            {},
+            "production.workspace.initialized",
+            starting_workspace(target=10),
+            action_evidence("ACT-INIT-MATERIAL"),
+        )
+        evidence = action_evidence("ACT-MATERIAL-001", captured_at=LATER)
+        proposed = material_state(current, 1.25, evidence)
+        accepted = apply_event(
+            current,
+            "production.material.consumed",
+            proposed,
+            evidence,
+        )
+        event = accepted["events"][0]
+        self.assertEqual(accepted["jobs"], current["jobs"])
+        self.assertEqual(accepted["issues"], current["issues"])
+        self.assertEqual(accepted["machines"], current["machines"])
+        self.assertEqual(accepted["revision"], current["revision"] + 1)
+        self.assertEqual(event["kind"], "material_consumed")
+        self.assertEqual(event["subjectId"], current["jobs"][0]["id"])
+        self.assertEqual(event["materialRef"], "RM-RESIN-01")
+        self.assertEqual(event["materialLot"], "LOT-24")
+        self.assertEqual(event["materialUnit"], "kg")
+        self.assertEqual(event["quantity"], 1.25)
+        self.assertEqual(event["shiftRef"], "2026-07-24 Day")
+        self.assertEqual(event["actor"], ACTOR)
+        self.assertEqual(event["evidenceReference"], evidence["evidenceReference"])
+
+        held_evidence = action_evidence("ACT-HOLD-BEFORE-MATERIAL")
+        held = apply_event(
+            current,
+            "production.quality_hold.placed",
+            held_job_state(current, held_evidence),
+            held_evidence,
+        )
+        held_material_evidence = action_evidence(
+            "ACT-MATERIAL-HELD",
+            captured_at=LATER,
+        )
+        held_material = apply_event(
+            held,
+            "production.material.consumed",
+            material_state(
+                held,
+                0.5,
+                held_material_evidence,
+                material_lot=None,
+                material_unit="bag",
+            ),
+            held_material_evidence,
+        )
+        self.assertIn("qualityHold", held_material["jobs"][0])
+        self.assertNotIn("materialLot", held_material["events"][0])
+
+        for name, patch in (
+            ("zero quantity", {"quantity": 0}),
+            ("too precise quantity", {"quantity": 1.2345}),
+            ("unsafe scaled quantity", {"quantity": 9_007_199_254_740_991}),
+            ("unsupported unit", {"materialUnit": "tonne"}),
+            ("noncanonical material", {"materialRef": " RM-01 "}),
+            ("empty lot", {"materialLot": ""}),
+            ("noncanonical lot", {"materialLot": " LOT-01 "}),
+            ("noncanonical shift", {"shiftRef": " Day "}),
+            ("unrelated output kind", {"outputKind": "good"}),
+        ):
+            with self.subTest(name=name):
+                invalid = deepcopy(proposed)
+                invalid["events"][0].update(patch)
+                with self.assertRaises(TrialValidationError):
+                    apply_event(
+                        current,
+                        "production.material.consumed",
+                        invalid,
+                        evidence,
+                    )
+
+        wrong_summary = deepcopy(proposed)
+        wrong_summary["events"][0]["summary"] = "Material recorded"
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "production.material.consumed",
+                wrong_summary,
+                evidence,
+            )
+
+        unrelated = deepcopy(proposed)
+        unrelated["jobs"][0]["line"] = "Changed outside material use"
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "production.material.consumed",
+                unrelated,
+                evidence,
+            )
+
+        completed_evidence = action_evidence(
+            "ACT-COMPLETE-BEFORE-MATERIAL",
+            captured_at=LATER,
+        )
+        completed = apply_event(
+            current,
+            "production.output.recorded",
+            output_state(current, 10, completed_evidence),
+            completed_evidence,
+        )
+        late_material_evidence = action_evidence(
+            "ACT-MATERIAL-AFTER-COMPLETE",
+            captured_at=LATEST,
+        )
+        late_material_state = material_state(
+            completed,
+            1,
+            late_material_evidence,
+        )
+        with self.assertRaises(TrialValidationError):
+            validate_production_state(late_material_state)
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                completed,
+                "production.material.consumed",
+                late_material_state,
+                late_material_evidence,
+            )
+
+        for invalid_timestamp in (
+            "2026-02-30T09:30:00.000Z",
+            "20260724T093000+0630",
+            "٢٠٢٦-07-24T09:30:00.000Z",
+        ):
+            with self.subTest(invalid_timestamp=invalid_timestamp):
+                invalid_evidence = action_evidence(
+                    f"ACT-MATERIAL-TIME-{invalid_timestamp}",
+                    captured_at=invalid_timestamp,
+                )
+                with self.assertRaises(TrialValidationError):
+                    validate_production_state(
+                        material_state(current, 1, invalid_evidence)
+                    )
+
+        creation_evidence = action_evidence(
+            "ACT-MATERIAL-PRECISE-CREATE",
+            captured_at="2026-07-24T09:00:00.000002Z",
+        )
+        created = deepcopy(current)
+        precise_job = {
+            "id": "JOB-PRECISE",
+            "line": "Precision line",
+            "product": "Precision batch",
+            "target": 10,
+            "output": 0,
+        }
+        created["revision"] = 1
+        created["jobs"] = [precise_job, *created["jobs"]]
+        created["events"] = [
+            production_event(
+                creation_evidence,
+                kind="job_created",
+                subject_id=precise_job["id"],
+                summary="Created Precision batch job for Precision line",
+            )
+        ]
+        accepted_creation = apply_event(
+            current,
+            "production.job.created",
+            created,
+            creation_evidence,
+        )
+        early_material_evidence = action_evidence(
+            "ACT-MATERIAL-PRECISE-EARLY",
+            captured_at="2026-07-24T09:00:00.000001Z",
+        )
+        with self.assertRaises(TrialValidationError):
+            validate_production_state(
+                material_state(
+                    accepted_creation,
+                    1,
+                    early_material_evidence,
+                )
+            )
+
+        collision_quantity = 5_000_000_000_000
+        collision_first_evidence = action_evidence(
+            "ACT-MATERIAL-COLLISION-FIRST",
+            captured_at=LATER,
+        )
+        collision_first = apply_event(
+            current,
+            "production.material.consumed",
+            material_state(
+                current,
+                collision_quantity,
+                collision_first_evidence,
+                material_ref="B\u0000C",
+                shift_ref="A",
+            ),
+            collision_first_evidence,
+        )
+        collision_second_evidence = action_evidence(
+            "ACT-MATERIAL-COLLISION-SECOND",
+            captured_at=LATEST,
+        )
+        collision_second = apply_event(
+            collision_first,
+            "production.material.consumed",
+            material_state(
+                collision_first,
+                collision_quantity,
+                collision_second_evidence,
+                material_ref="C",
+                shift_ref="A\u0000B",
+            ),
+            collision_second_evidence,
+        )
+        self.assertEqual(collision_second["revision"], 2)
 
     def test_quality_hold_and_release_are_distinct_evidence_backed_events(self) -> None:
         current = starting_workspace()
@@ -1519,6 +1773,17 @@ class ProductionRuntimeTests(unittest.TestCase):
             "state": starting_workspace(),
             "evidence": action_evidence("ACT-STORE-INIT"),
         }
+        spoofed_payload = deepcopy(initialize_payload)
+        spoofed_payload["evidence"]["actor"] = "actor-spoofed"
+        with self.assertRaises(TrialValidationError):
+            store.apply_command(
+                principal,
+                command_id=str(uuid4()),
+                surface="production",
+                event_type="production.workspace.initialized",
+                expected_version=0,
+                payload=spoofed_payload,
+            )
         initialized = store.apply_command(
             principal,
             command_id=initialize_id,
@@ -1593,15 +1858,50 @@ class ProductionRuntimeTests(unittest.TestCase):
             expected_version=job_created.version,
             payload={"state": next_state, "evidence": output_evidence},
         )
+        material_evidence = action_evidence(
+            "ACT-STORE-MATERIAL",
+            captured_at="2026-07-24T09:45:00.000Z",
+        )
+        material_next_state = material_state(
+            dict(recorded.state),
+            3,
+            material_evidence,
+            material_unit="pack",
+        )
+        material_command_id = str(uuid4())
+        material_recorded = store.apply_command(
+            principal,
+            command_id=material_command_id,
+            surface="production",
+            event_type="production.material.consumed",
+            expected_version=recorded.version,
+            payload={
+                "state": material_next_state,
+                "evidence": material_evidence,
+            },
+        )
+        material_replay = store.apply_command(
+            principal,
+            command_id=material_command_id,
+            surface="production",
+            event_type="production.material.consumed",
+            expected_version=recorded.version,
+            payload={
+                "state": material_next_state,
+                "evidence": material_evidence,
+            },
+        )
 
         self.assertEqual(initialized.version, 1)
         self.assertTrue(replay.idempotent_replay)
         self.assertEqual(job_created.version, 2)
         self.assertTrue(job_replay.idempotent_replay)
         self.assertEqual(recorded.version, 3)
+        self.assertEqual(material_recorded.version, 4)
+        self.assertTrue(material_replay.idempotent_replay)
         stored = store.get_state(principal, "production")
         self.assertEqual(stored.updated_by, principal.actor_id)
-        self.assertEqual(stored.state, next_state)
+        self.assertEqual(stored.state, material_next_state)
 
         conflicting_job_state = deepcopy(job_state)
         conflicting_job_state["jobs"][0]["target"] = 51

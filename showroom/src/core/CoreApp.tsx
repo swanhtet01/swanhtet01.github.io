@@ -91,15 +91,18 @@ import {
   loadProductionWorkspace,
   mutateProductionWorkspace,
   openProductionIssue,
+  parseProductionMaterialQuantity,
   placeProductionQualityHold,
   productionDowntimeIntervals,
   productionIssueSeverities,
+  productionMaterialUnits,
   productionMachineStates,
   productionShiftOutput,
   productionStateCanonical,
   productionWorkspaceCanWrite,
   recordProductionOutput,
   recordProductionScrap,
+  recordProductionMaterialConsumption,
   recordProductionMachineState,
   registerProductionJob,
   releaseProductionQualityHold,
@@ -112,6 +115,7 @@ import {
   type ProductionIssue,
   type ProductionIssueSeverity,
   type ProductionJob,
+  type ProductionMaterialUnit,
   type ProductionMachineState,
   type ProductionOutputKind,
   type ProductionShiftHandoff,
@@ -198,6 +202,7 @@ type ActionKind =
   | 'production_job'
   | 'production_output'
   | 'production_scrap'
+  | 'production_material'
   | 'issue_create'
   | 'issue_resolution'
   | 'quality_hold'
@@ -2934,6 +2939,7 @@ function StockMovementHistory({ movements }: { movements: CommerceStockMovement[
 const productionEventLabels: Record<ProductionEvent['kind'], string> = {
   job_created: 'Job created',
   output_recorded: 'Output recorded',
+  material_consumed: 'Material used',
   issue_opened: 'Issue opened',
   issue_resolved: 'Issue resolved',
   quality_hold_placed: 'Quality hold placed',
@@ -2941,6 +2947,20 @@ const productionEventLabels: Record<ProductionEvent['kind'], string> = {
   machine_state_changed: 'Machine state changed',
   downtime_started: 'Downtime started',
   downtime_ended: 'Downtime ended',
+}
+
+const productionMaterialUnitLabels: Record<ProductionMaterialUnit, string> = {
+  kg: 'kg',
+  g: 'g',
+  l: 'L',
+  ml: 'ml',
+  pcs: 'pieces',
+  pack: 'packs',
+  bag: 'bags',
+  roll: 'rolls',
+  sheet: 'sheets',
+  m: 'm',
+  cm: 'cm',
 }
 
 function formatDowntimeDuration(durationMs: number) {
@@ -2959,7 +2979,7 @@ function ProductionEventHistory({ events }: { events: ProductionEvent[] }) {
     {visibleEvents.length ? <div className="action-history-list">{visibleEvents.map((event) => <article key={event.id}>
       <div>
         <strong>{event.kind === 'output_recorded' ? event.outputKind === 'scrap' ? 'Scrap recorded' : 'Good output recorded' : productionEventLabels[event.kind]} - {event.summary}</strong>
-        <small>{event.subjectId} - {event.actionId} - {event.actor}{event.kind === 'output_recorded' ? ` - Shift: ${event.shiftRef ?? 'Unassigned (legacy)'}` : ''}</small>
+        <small>{event.subjectId} - {event.actionId} - {event.actor}{event.kind === 'output_recorded' ? ` - Shift: ${event.shiftRef ?? 'Unassigned (legacy)'}` : event.kind === 'material_consumed' ? ` - Shift: ${event.shiftRef} - ${event.quantity} ${event.materialUnit} ${event.materialRef}${event.materialLot ? ` - Lot: ${event.materialLot}` : ''}` : ''}</small>
         <p>{event.reason} - Evidence: {event.evidenceReference}</p>
       </div>
       <small>{formatTime(event.createdAt)}</small>
@@ -2979,6 +2999,13 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const [quantity, setQuantity] = useState(1)
   const [outputKind, setOutputKind] = useState<ProductionOutputKind>('good')
   const [shiftRef, setShiftRef] = useState('')
+  const [materialDraft, setMaterialDraft] = useState({
+    jobId: production.jobs.find((job) => job.output + (job.scrap ?? 0) < job.target)?.id ?? '',
+    materialRef: '',
+    materialLot: '',
+    quantity: '1',
+    materialUnit: 'kg' as ProductionMaterialUnit,
+  })
   const [area, setArea] = useState('Line 01')
   const [kind, setKind] = useState<ProductionIssue['kind']>('quality')
   const [severity, setSeverity] = useState<ProductionIssueSeverity>('medium')
@@ -3023,6 +3050,14 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const selectedJobId = activeJobs.some((job) => job.id === jobId) ? jobId : activeJobs[0]?.id ?? ''
   const selectedJob = activeJobs.find((job) => job.id === selectedJobId)
   const selectedRemaining = selectedJob ? selectedJob.target - selectedJob.output - (selectedJob.scrap ?? 0) : 0
+  const selectedMaterialJob = activeJobs.find((job) => job.id === materialDraft.jobId)
+  const materialJobIsStale = Boolean(materialDraft.jobId && !selectedMaterialJob)
+  const parsedMaterialQuantity = parseProductionMaterialQuantity(materialDraft.quantity)
+  const materialQuantityError = parsedMaterialQuantity === null
+    ? 'Enter a positive amount with up to three decimals that can be stored exactly (maximum 9,007,199,254,740.99).'
+    : ''
+  const materialEntries = production.events.filter((event) => event.kind === 'material_consumed')
+  const recentMaterialEntries = materialEntries.slice(0, 5)
   const canonicalShiftRef = shiftRef.trim()
   const currentShiftOutput = productionShiftOutput(production, canonicalShiftRef)
   const currentProductionCanonical = shiftHandoff ? productionStateCanonical(production) : ''
@@ -3211,6 +3246,45 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         await mutateProduction('production.output.recorded', record.commandId, productionActionProof(record), (current) => recordedOutputKind === 'scrap'
           ? recordProductionScrap(current, recordedJobId, recordedQuantity, recordedShiftRef, productionActionProof(record))
           : recordProductionOutput(current, recordedJobId, recordedQuantity, recordedShiftRef, productionActionProof(record)))
+      },
+    })
+  }
+
+  function recordMaterialUse(event: FormEvent) {
+    event.preventDefault()
+    const materialRef = materialDraft.materialRef.trim()
+    const materialLot = materialDraft.materialLot.trim() || undefined
+    const recordedShiftRef = shiftRef.trim()
+    const recordedQuantity = parsedMaterialQuantity
+    const materialUnit = materialDraft.materialUnit
+    if (!selectedMaterialJob) return setNotice('Choose an active job before recording material use.')
+    if (!materialRef || materialRef.length > 120) return setNotice('Enter a material reference of 1 to 120 characters.')
+    if (materialLot && materialLot.length > 120) return setNotice('Enter a lot or batch reference of at most 120 characters.')
+    if (!recordedShiftRef || recordedShiftRef.length > 80) return setNotice('Enter a shift reference of 1 to 80 characters.')
+    if (!productionMaterialUnits.includes(materialUnit)) return setNotice('Choose a supported material unit.')
+    if (recordedQuantity === null) return setNotice('Enter a positive material quantity with no more than three decimal places.')
+    const recordedJobId = selectedMaterialJob.id
+    const recordedProduct = selectedMaterialJob.product
+    const held = Boolean(selectedMaterialJob.qualityHold)
+    const lotSummary = materialLot ? ` · lot ${materialLot}` : ''
+    queueAction({
+      kind: 'production_material',
+      subjectId: recordedJobId,
+      summary: `Record ${recordedQuantity} ${materialUnit} ${materialRef}${lotSummary} for ${recordedJobId}`,
+      before: `${recordedProduct} · no material-use event for this action${held ? ' · QUALITY HOLD remains active' : ''}`,
+      after: `${recordedQuantity} ${materialUnit} ${materialRef}${lotSummary} · ${recordedShiftRef} · internal traceability only${held ? ' · QUALITY HOLD remains active' : ''}`,
+      apply: async (record) => {
+        await mutateProduction('production.material.consumed', record.commandId, productionActionProof(record), (current) => recordProductionMaterialConsumption(
+          current,
+          recordedJobId,
+          materialRef,
+          materialLot,
+          recordedQuantity,
+          materialUnit,
+          recordedShiftRef,
+          productionActionProof(record),
+        ))
+        setMaterialDraft((current) => ({ ...current, jobId: recordedJobId, materialRef: '', materialLot: '', quantity: '1' }))
       },
     })
   }
@@ -3478,6 +3552,33 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
           <button className="core-button primary" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > selectedRemaining || selectedRemaining < 1 || !canonicalShiftRef || canonicalShiftRef.length > 80} type="submit">Review {outputKind === 'scrap' ? 'scrap' : 'good output'}</button>
           <p className="panel-copy">{selectedJob ? `${selectedJob.id} · ${selectedJob.product} · ${selectedJob.line} · ${selectedJob.output.toLocaleString()} good · ${(selectedJob.scrap ?? 0).toLocaleString()} scrap · ${selectedRemaining.toLocaleString()} left.` : 'Add or choose an active job.'} Results are append-only in this trial; verify the job, result, and quantity before review.</p>
         </form>
+        <details className="compact-disclosure production-history">
+          <summary>Material use <span>{materialEntries.length}</span></summary>
+          <form autoComplete="off" className="core-form compact-form" onSubmit={recordMaterialUse}>
+            <label>Job<select disabled={!productionCanWrite || Boolean(pendingAction) || !activeJobs.length} onChange={(event) => setMaterialDraft((current) => ({ ...current, jobId: event.target.value }))} value={materialDraft.jobId}>
+              {!materialDraft.jobId ? <option value="">Choose an active job</option> : null}
+              {materialJobIsStale ? <option disabled value={materialDraft.jobId}>{materialDraft.jobId} · no longer active</option> : null}
+              {activeJobs.map((job) => <option key={job.id} value={job.id}>{job.id} · {job.product} · {job.line}{job.qualityHold ? ' · QUALITY HOLD' : ''}</option>)}
+            </select></label>
+            {materialJobIsStale ? <p className="form-notice" role="alert">The selected job {materialDraft.jobId} is no longer active. Your draft is preserved; choose another job before review.</p> : null}
+            <label>Material reference<input disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaterialJob} maxLength={120} onChange={(event) => setMaterialDraft((current) => ({ ...current, materialRef: event.target.value }))} placeholder="RM-001 or Resin A" required value={materialDraft.materialRef} /></label>
+            <label>Lot or batch (optional)<input disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaterialJob} maxLength={120} onChange={(event) => setMaterialDraft((current) => ({ ...current, materialLot: event.target.value }))} placeholder="LOT-24" value={materialDraft.materialLot} /></label>
+            <div className="form-row">
+              <label>Quantity<input aria-describedby={materialQuantityError ? 'plant-material-quantity-error' : undefined} aria-invalid={materialQuantityError ? true : undefined} disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaterialJob} min="0.001" onChange={(event) => setMaterialDraft((current) => ({ ...current, quantity: event.target.value }))} required step="0.001" type="number" value={materialDraft.quantity} /></label>
+              <label>Unit<select disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaterialJob} onChange={(event) => setMaterialDraft((current) => ({ ...current, materialUnit: event.target.value as ProductionMaterialUnit }))} value={materialDraft.materialUnit}>{productionMaterialUnits.map((unit) => <option key={unit} value={unit}>{productionMaterialUnitLabels[unit]}</option>)}</select></label>
+            </div>
+            {materialQuantityError ? <p className="form-notice" id="plant-material-quantity-error" role="alert">{materialQuantityError}</p> : null}
+            <label>Shift reference<input disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaterialJob} maxLength={80} onChange={(event) => setShiftRef(event.target.value)} placeholder={shiftReferencePlaceholder()} required value={shiftRef} /></label>
+            {selectedMaterialJob?.qualityHold ? <p className="form-notice" role="alert">QUALITY HOLD · This records observed material use only. It does not release the hold.</p> : null}
+            <button className="core-button" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaterialJob || !materialDraft.materialRef.trim() || materialDraft.materialRef.trim().length > 120 || materialDraft.materialLot.trim().length > 120 || !shiftRef.trim() || shiftRef.trim().length > 80 || parsedMaterialQuantity === null} type="submit">Review material use</button>
+            <p className="panel-copy">Creates one job-linked material-use record with up to three decimal places. It does not adjust raw-material inventory, purchasing, costing, accounting, or equipment.</p>
+          </form>
+          {recentMaterialEntries.length ? <div className="issue-list">{recentMaterialEntries.map((entry) => <article key={entry.actionId}>
+            <span aria-hidden="true" className="issue-mark resolved">M</span>
+            <div><strong>{entry.quantity?.toLocaleString(undefined, { maximumFractionDigits: 3 })} {entry.materialUnit} · {entry.materialRef}{entry.materialLot ? ` · lot ${entry.materialLot}` : ''}</strong><small style={wrappedIssueDetail}>{entry.subjectId} · {entry.shiftRef} · {formatIssueDue(entry.createdAt)} · {entry.actor}</small><small style={wrappedIssueDetail}>Evidence: {entry.evidenceReference} · Action: {entry.actionId}</small></div>
+          </article>)}</div> : <Empty>No material use is recorded yet.</Empty>}
+          {materialEntries.length > recentMaterialEntries.length ? <p className="panel-copy">Showing the latest {recentMaterialEntries.length} material entries. The complete attributed record remains in Plant record.</p> : null}
+        </details>
       </section>
     </div>
     {actionControls}
@@ -3632,8 +3733,9 @@ function QualityHoldList({ disabled, jobs, onRelease }: { disabled: boolean; job
 }
 
 function ShiftHandoffView({ handoff, onCopy }: { handoff: ProductionShiftHandoff; onCopy: () => void }) {
+  const visibleMaterialEntries = handoff.materialEntries.slice(0, 8)
   return <div>
-    <p className="form-notice" role="status">{handoff.shiftRef} · revision {handoff.sourceRevision} · {handoff.shiftOutput.goodUnits.toLocaleString()} good · {handoff.shiftOutput.scrapUnits.toLocaleString()} scrap · {handoff.unfinishedJobs.length} unfinished · {handoff.activeHolds.length} held · {handoff.priorityProblems.length} critical/high.</p>
+    <p className="form-notice" role="status">{handoff.shiftRef} · revision {handoff.sourceRevision} · {handoff.shiftOutput.goodUnits.toLocaleString()} good · {handoff.shiftOutput.scrapUnits.toLocaleString()} scrap · {handoff.materialTotals.length} material totals · {handoff.unfinishedJobs.length} unfinished · {handoff.activeHolds.length} held · {handoff.priorityProblems.length} critical/high.</p>
     <details className="compact-disclosure production-history">
       <summary>Shift entries <span>{handoff.shiftEntries.length}</span></summary>
       <div className="issue-list">
@@ -3643,6 +3745,22 @@ function ShiftHandoffView({ handoff, onCopy }: { handoff: ProductionShiftHandoff
         </article>)}
         {!handoff.shiftEntries.length ? <Empty>No output entry is attributed to this shift reference.</Empty> : null}
       </div>
+    </details>
+    <details className="compact-disclosure production-history">
+      <summary>Material use <span>{handoff.materialEntries.length}</span></summary>
+      <p className="panel-copy"><strong>Shift totals</strong></p>
+      <div className="issue-list">
+        {handoff.materialTotals.map((total) => <article key={`${total.materialRef}-${total.materialUnit}`}>
+          <span aria-hidden="true" className="issue-mark resolved">Σ</span>
+          <div><strong>{total.quantity.toLocaleString(undefined, { maximumFractionDigits: 3 })} {total.materialUnit} · {total.materialRef}</strong><small style={wrappedIssueDetail}>{total.entryCount} {total.entryCount === 1 ? 'entry' : 'entries'} in this shift</small></div>
+        </article>)}
+        {!handoff.materialTotals.length ? <Empty>No material use is attributed to this shift reference.</Empty> : null}
+      </div>
+      {visibleMaterialEntries.length ? <><p className="panel-copy"><strong>Recent evidence</strong></p><div className="issue-list">{visibleMaterialEntries.map((entry) => <article key={entry.actionId}>
+        <span aria-hidden="true" className="issue-mark resolved">M</span>
+        <div><strong>{entry.quantity.toLocaleString(undefined, { maximumFractionDigits: 3 })} {entry.materialUnit} · {entry.materialRef}{entry.materialLot ? ` · lot ${entry.materialLot}` : ''}</strong><small style={wrappedIssueDetail}>{entry.jobId} · {entry.product} · {formatIssueDue(entry.recordedAt)} · {entry.recordedBy}</small><small style={wrappedIssueDetail}>Reason: {entry.reason}</small><small style={wrappedIssueDetail}>Evidence: {entry.evidenceReference} · Action: {entry.actionId}</small></div>
+      </article>)}</div></> : null}
+      {handoff.materialEntries.length > visibleMaterialEntries.length ? <p className="panel-copy">Showing the latest {visibleMaterialEntries.length} of {handoff.materialEntries.length} entries. Copy handoff retains every attributed entry.</p> : null}
     </details>
     <details className="compact-disclosure production-history">
       <summary>Unfinished jobs <span>{handoff.unfinishedJobs.length}</span></summary>

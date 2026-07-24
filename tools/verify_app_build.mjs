@@ -802,7 +802,7 @@ if (!commercePageContract.includes('purchaseOrderDraft')
 const commerceOrdersContract = commercePageContract.slice(commercePageContract.indexOf("if (tab === 'orders')"), commercePageContract.indexOf("if (tab === 'inventory')"))
 if (!commerceOrdersContract.includes('order-daily-controls') || !commerceOrdersContract.includes('Save daily close') || !commerceOrdersContract.includes('Close and exceptions')) fail('commerce_daily_controls_not_inside_orders')
 if (!productionSource.includes("supermega.production.workspace.v2") || !productionSource.includes('mutateProductionWorkspace') || !productionSource.includes('productionWorkspaceCanWrite') || !productionSource.includes('.write-probe.') || !productionSource.includes('lockManager.request') || !productionSource.includes('next.revision !== current.revision + 1')) fail('production_v2_locked_store_missing')
-if (!productionSource.includes("'job_created' | 'output_recorded' | 'issue_opened' | 'issue_resolved' | 'quality_hold_placed' | 'quality_hold_released' | 'machine_state_changed'") || !productionSource.includes('events: [event, ...state.events]') || !productionSource.includes('Production revision must equal the append-only event count.')) fail('production_append_only_record_missing')
+if (!productionSource.includes("'job_created' | 'output_recorded' | 'material_consumed' | 'issue_opened' | 'issue_resolved' | 'quality_hold_placed' | 'quality_hold_released' | 'machine_state_changed'") || !productionSource.includes('events: [event, ...state.events]') || !productionSource.includes('Production revision must equal the append-only event count.')) fail('production_append_only_record_missing')
 if (!productionSource.includes('productionShiftOutput')
   || !productionSource.includes('existing.shiftRef === shiftRef')
   || !productionSource.includes('shiftRef?: string')
@@ -816,6 +816,27 @@ if (!productionSource.includes('recordProductionScrap')
   || !coreSource.includes('Record good or scrap')
   || !coreSource.includes('<option value="scrap">Scrap</option>')
   || !coreSource.includes("recordProductionScrap(current")) fail('production_scrap_contract_missing')
+if (!productionSource.includes('recordProductionMaterialConsumption')
+  || !productionSource.includes('parseProductionMaterialQuantity')
+  || !productionSource.includes("kind: 'material_consumed'")
+  || !productionSource.includes('material event fields are invalid')
+  || !productionSource.includes('Material use timestamp for ${String(event.subjectId)} predates job creation')
+  || !managedProductionRuntime.includes('_validate_material_consumed')
+  || !managedProductionRuntime.includes('material use can only be recorded for an active job')
+  || !managedProductionRuntime.includes('production.material.consumed')
+  || !managedTrialSource.includes("'production.material.consumed'")
+  || !coreSource.includes('Review material use')
+  || !coreSource.includes('Material reference')
+  || !coreSource.includes('Lot or batch (optional)')
+  || !coreSource.includes('materialJobIsStale')
+  || !coreSource.includes('parseProductionMaterialQuantity(materialDraft.quantity)')
+  || !coreSource.includes('plant-material-quantity-error')
+  || !coreSource.includes('can be stored exactly (maximum 9,007,199,254,740.99)')
+  || !coreSource.includes('{materialDraft.jobId} · no longer active')
+  || !coreSource.includes('with up to three decimal places')
+  || !productionSource.includes('materialTotals')
+  || !coreSource.includes('It does not adjust raw-material inventory, purchasing, costing, accounting, or equipment.')
+  || !coreSource.includes('No material use is attributed to this shift reference.')) fail('production_material_use_contract_missing')
 if (!productionSource.includes("export type ProductionIssueSeverity = 'critical' | 'high' | 'medium' | 'low'")
   || !productionSource.includes("const actionFields = ['severity', 'owner', 'dueAt', 'containment']")
   || !productionSource.includes('action fields must be complete or absent for legacy records')
@@ -845,6 +866,7 @@ if (!productionSource.includes('buildProductionShiftHandoff')
   || !productionSource.includes('productionStateCanonical')
   || !productionSource.includes('shiftEntries')
   || !productionSource.includes('activeHolds')
+  || !productionSource.includes('materialEntries')
   || !productionSource.includes('Priority problem ${issue.id} has no immutable opening evidence.')
   || !productionSource.includes('no attributed observation recorded')
   || productionSource.includes("'completed output'")
@@ -855,6 +877,7 @@ if (!productionSource.includes('buildProductionShiftHandoff')
   || !coreSource.includes('shiftHandoff.sourceCanonical === currentProductionCanonical')
   || !coreSource.includes('shiftHandoff.shiftRef === handoffShiftRef.trim()')
   || !coreSource.includes('Active quality holds')
+  || !coreSource.includes('material entries')
   || !coreSource.includes('Shift entries')
   || !coreSource.includes('Reason: {machine.observation.reason}')
   || coreSource.includes("'Completed output'")
@@ -889,13 +912,14 @@ if (!productionSource.includes('startProductionDowntime')
   || !coreSource.includes('Review end')
   || !coreSource.includes('This human record is separate from machine status. It sends no equipment command and changes no job or output.')) fail('production_bounded_downtime_contract_missing')
 if (!managedTrialSource.includes('saveManagedProductionCommand') || !managedTrialSource.includes("surface: 'production'") || !managedTrialSource.includes('eventType: ManagedProductionEvent') || !managedTrialSource.includes('payload: { state: request.state, evidence: request.evidence }')) fail('managed_production_command_client_missing')
-for (const eventType of ['production.workspace.initialized', 'production.job.created', 'production.output.recorded', 'production.issue.opened', 'production.issue.resolved', 'production.quality_hold.placed', 'production.quality_hold.released', 'production.machine_state.changed', 'production.downtime.started', 'production.downtime.ended']) {
+for (const eventType of ['production.workspace.initialized', 'production.job.created', 'production.output.recorded', 'production.material.consumed', 'production.issue.opened', 'production.issue.resolved', 'production.quality_hold.placed', 'production.quality_hold.released', 'production.machine_state.changed', 'production.downtime.started', 'production.downtime.ended']) {
   if (!coreSource.includes(eventType) || !managedProductionRuntime.includes(eventType)) fail(`managed_production_event_missing:${eventType}`)
 }
 if (managedProductionRuntime.includes('production.snapshot.saved')
   || !managedProductionRuntime.includes('PRODUCTION_HUMAN_EVENTS = PRODUCTION_EVENTS')
   || !managedProductionRuntime.includes('_validate_job_created')
   || !managedProductionRuntime.includes('_validate_output_recorded')
+  || !managedProductionRuntime.includes('_validate_material_consumed')
   || !managedProductionRuntime.includes('_validate_issue_resolved')
   || !managedProductionRuntime.includes('_validate_quality_hold_placed')
   || !managedProductionRuntime.includes('_validate_quality_hold_released')
@@ -3234,6 +3258,12 @@ async function verifyProductionRuntime() {
     assertThrows(() => model.validateProductionState({ ...model.createEmptyProduction(), jobs: [{ ...legacy.jobs[0], target: Number.MAX_SAFE_INTEGER + 1 }] }), 'production_unsafe_integer_accepted')
     assertThrows(() => model.validateProductionState({ ...model.createEmptyProduction(), machines: [{ ...duplicateMachine, state: 'unknown' }] }), 'production_invalid_machine_state_accepted')
     assertThrows(() => model.validateProductionState({ ...model.createEmptyProduction(), issues: [{ ...duplicateIssue, createdAt: 'not-a-date' }] }), 'production_invalid_issue_timestamp_accepted')
+    for (const createdAt of ['2026-02-30T10:00:00.000Z', '20260723T100000+0630', '٢٠٢٦-07-23T10:00:00.000Z']) {
+      assertThrows(() => model.validateProductionState({
+        ...model.createEmptyProduction(),
+        issues: [{ ...duplicateIssue, createdAt }],
+      }), `production_noncanonical_timestamp_accepted:${createdAt}`)
+    }
     assertThrows(() => model.validateProductionState({ ...ledger501, revision: 500 }), 'production_revision_event_mismatch_accepted')
 
     const base = {
@@ -3318,6 +3348,86 @@ async function verifyProductionRuntime() {
       ...base,
       jobs: [{ ...base.jobs[0], scrap: 11 }],
     }), 'production_good_plus_scrap_over_target_state_accepted')
+
+    const materialProof = proof('ACT-MATERIAL', 3_000)
+    const materialState = model.recordProductionMaterialConsumption(base, 'JOB-1', 'RM-RESIN-01', 'LOT-24', 1.25, 'kg', shiftRef, materialProof)
+    assert(materialState?.revision === 1
+      && JSON.stringify(materialState.jobs) === JSON.stringify(base.jobs)
+      && JSON.stringify(materialState.issues) === JSON.stringify(base.issues)
+      && JSON.stringify(materialState.machines) === JSON.stringify(base.machines)
+      && materialState.events[0].kind === 'material_consumed'
+      && materialState.events[0].subjectId === 'JOB-1'
+      && materialState.events[0].materialRef === 'RM-RESIN-01'
+      && materialState.events[0].materialLot === 'LOT-24'
+      && materialState.events[0].materialUnit === 'kg'
+      && materialState.events[0].quantity === 1.25
+      && materialState.events[0].shiftRef === shiftRef,
+    'production_material_use_not_recorded_as_event_only')
+    assert(model.recordProductionMaterialConsumption(materialState, 'JOB-1', 'RM-RESIN-01', 'LOT-24', 1.25, 'kg', shiftRef, materialProof) === materialState, 'production_material_retry_not_idempotent')
+    assert(model.recordProductionMaterialConsumption(materialState, 'JOB-1', 'RM-RESIN-02', 'LOT-24', 1.25, 'kg', shiftRef, materialProof) === null, 'production_material_conflicting_reference_succeeded')
+    assert(model.recordProductionMaterialConsumption(materialState, 'JOB-1', 'RM-RESIN-01', 'LOT-25', 1.25, 'kg', shiftRef, materialProof) === null, 'production_material_conflicting_lot_succeeded')
+    assert(model.recordProductionMaterialConsumption(materialState, 'JOB-1', 'RM-RESIN-01', 'LOT-24', 1.5, 'kg', shiftRef, materialProof) === null, 'production_material_conflicting_quantity_succeeded')
+    assert(model.recordProductionMaterialConsumption(materialState, 'JOB-1', 'RM-RESIN-01', 'LOT-24', 1.25, 'bag', shiftRef, materialProof) === null, 'production_material_conflicting_unit_succeeded')
+    assert(model.recordProductionMaterialConsumption(materialState, 'JOB-1', 'RM-RESIN-01', 'LOT-24', 1.25, 'kg', '2026-07-24 Night', materialProof) === null, 'production_material_conflicting_shift_succeeded')
+    assert(['', ' RM-01', 'RM-01 ', 'X'.repeat(121)].every((materialRef, index) => model.recordProductionMaterialConsumption(base, 'JOB-1', materialRef, undefined, 1, 'kg', shiftRef, proof(`ACT-MATERIAL-BAD-REF-${index}`)) === null), 'production_invalid_material_reference_succeeded')
+    assert(['', ' LOT-1', 'LOT-1 ', 'X'.repeat(121)].every((materialLot, index) => model.recordProductionMaterialConsumption(base, 'JOB-1', 'RM-01', materialLot, 1, 'kg', shiftRef, proof(`ACT-MATERIAL-BAD-LOT-${index}`)) === null), 'production_invalid_material_lot_succeeded')
+    assert(['', 'tonne', 'KG'].every((materialUnit, index) => model.recordProductionMaterialConsumption(base, 'JOB-1', 'RM-01', undefined, 1, materialUnit, shiftRef, proof(`ACT-MATERIAL-BAD-UNIT-${index}`)) === null), 'production_invalid_material_unit_succeeded')
+    assert([0, -1, 1.2345, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER].every((materialQuantity, index) => model.recordProductionMaterialConsumption(base, 'JOB-1', 'RM-01', undefined, materialQuantity, 'kg', shiftRef, proof(`ACT-MATERIAL-BAD-QTY-${index}`)) === null), 'production_invalid_material_quantity_succeeded')
+    assert([0.001, 0.5, 1.25, 999.999].every((materialQuantity, index) => model.recordProductionMaterialConsumption(base, 'JOB-1', 'RM-01', undefined, materialQuantity, 'kg', shiftRef, proof(`ACT-MATERIAL-FRACTION-${index}`))?.events[0].quantity === materialQuantity), 'production_valid_fractional_material_quantity_rejected')
+    assert(model.parseProductionMaterialQuantity('1.250') === 1.25
+      && model.parseProductionMaterialQuantity('9007199254740.990') === 9007199254740.99,
+    'production_material_quantity_parser_rejected_exact_round_trip')
+    assert(['9007199254740.991', '9007199254740.989', '9007199254740.001'].every((candidate) => model.parseProductionMaterialQuantity(candidate) === null), 'production_material_quantity_parser_rounded_input')
+    assert(['', ' Day', 'Day ', 'X'.repeat(81)].every((materialShiftRef, index) => model.recordProductionMaterialConsumption(base, 'JOB-1', 'RM-01', undefined, 1, 'kg', materialShiftRef, proof(`ACT-MATERIAL-BAD-SHIFT-${index}`)) === null), 'production_invalid_material_shift_succeeded')
+    assert(model.recordProductionMaterialConsumption(base, 'JOB-MISSING', 'RM-01', undefined, 1, 'kg', shiftRef, proof('ACT-MATERIAL-MISSING-JOB')) === null, 'production_missing_job_material_succeeded')
+    assert(model.recordProductionMaterialConsumption(accountedJob, 'JOB-1', 'RM-01', undefined, 1, 'kg', shiftRef, proof('ACT-MATERIAL-CLOSED-JOB')) === null, 'production_completed_job_material_succeeded')
+    const materialSecondProof = proof('ACT-MATERIAL-SECOND', 3_100)
+    const materialSecondState = model.recordProductionMaterialConsumption(materialState, 'JOB-1', 'RM-RESIN-01', 'LOT-25', 0.75, 'kg', shiftRef, materialSecondProof)
+    const materialHandoff = model.buildProductionShiftHandoff(materialSecondState, shiftRef)
+    assert(materialHandoff?.materialEntries.length === 2
+      && materialHandoff.materialEntries.some((entry) => entry.actionId === materialProof.actionId)
+      && materialHandoff.materialEntries.some((entry) => entry.materialRef === 'RM-RESIN-01' && entry.materialLot === 'LOT-24')
+      && materialHandoff.materialEntries.some((entry) => entry.materialRef === 'RM-RESIN-01' && entry.materialLot === 'LOT-25')
+      && materialHandoff.materialTotals.length === 1
+      && materialHandoff.materialTotals[0].quantity === 2
+      && materialHandoff.materialTotals[0].entryCount === 2
+      && model.formatProductionShiftHandoff(materialHandoff).includes('Material totals (1)'),
+    'production_material_use_missing_from_shift_handoff')
+    assertThrows(() => model.validateProductionState({
+      ...materialState,
+      events: [{ ...materialState.events[0], outputKind: 'good' }, ...materialState.events.slice(1)],
+    }), 'production_material_event_accepted_unrelated_field')
+    const collisionQuantity = 5_000_000_000_000
+    const collisionFirst = model.recordProductionMaterialConsumption(base, 'JOB-1', 'B\u0000C', undefined, collisionQuantity, 'kg', 'A', proof('ACT-MATERIAL-COLLISION-FIRST', 3_200))
+    const collisionSecond = model.recordProductionMaterialConsumption(collisionFirst, 'JOB-1', 'C', undefined, collisionQuantity, 'kg', 'A\u0000B', proof('ACT-MATERIAL-COLLISION-SECOND', 3_300))
+    assert(collisionSecond?.revision === 2, 'production_material_tuple_key_collision_rejected')
+    const completedAfterMaterial = model.recordProductionOutput(materialState, 'JOB-1', 10, shiftRef, proof('ACT-OUTPUT-AFTER-MATERIAL', 4_000))
+    assert(completedAfterMaterial?.jobs[0].output === 100, 'production_material_then_completion_setup_failed')
+    assertThrows(() => model.validateProductionState({
+      ...completedAfterMaterial,
+      events: [completedAfterMaterial.events[1], completedAfterMaterial.events[0], ...completedAfterMaterial.events.slice(2)],
+    }), 'production_full_state_material_after_completion_accepted')
+    const preciseJobProof = proof('ACT-PRECISE-JOB', 0, { capturedAt: '2026-07-23T10:00:00.000002Z' })
+    const preciseJob = { id: 'JOB-PRECISE', line: 'Precision line', product: 'Precision batch', target: 10, output: 0 }
+    const preciseWithJob = model.registerProductionJob(base, preciseJob, preciseJobProof)
+    const preciseMaterial = model.recordProductionMaterialConsumption(
+      preciseWithJob,
+      preciseJob.id,
+      'RM-PRECISE',
+      undefined,
+      1,
+      'kg',
+      shiftRef,
+      proof('ACT-PRECISE-MATERIAL', 0, { capturedAt: '2026-07-23T10:00:00.000003Z' }),
+    )
+    assert(preciseMaterial?.events[0].kind === 'material_consumed', 'production_precise_material_setup_failed')
+    assertThrows(() => model.validateProductionState({
+      ...preciseMaterial,
+      events: [
+        { ...preciseMaterial.events[0], createdAt: '2026-07-23T10:00:00.000001Z' },
+        ...preciseMaterial.events.slice(1),
+      ],
+    }), 'production_submillisecond_material_before_creation_accepted')
 
     const issue = {
       id: 'ISS-1',

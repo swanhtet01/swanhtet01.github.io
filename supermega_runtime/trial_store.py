@@ -37,6 +37,7 @@ HUMAN_COMMAND_EVENTS = frozenset(
         "production.workspace.initialized",
         "production.job.created",
         "production.output.recorded",
+        "production.material.consumed",
         "production.issue.opened",
         "production.issue.resolved",
         "production.machine_state.changed",
@@ -455,6 +456,21 @@ def _authoritative_command_payload(
     authoritative["evidence"] = authoritative_evidence
     authoritative["state"] = authoritative_state
     return authoritative
+
+
+def _require_command_evidence_actor(
+    payload: Mapping[str, Any],
+    *,
+    principal: TrialPrincipal,
+    surface: str,
+) -> None:
+    if surface != "production":
+        return
+    evidence = payload.get("evidence")
+    if not isinstance(evidence, Mapping) or evidence.get("actor") != principal.actor_id:
+        raise TrialValidationError(
+            "Production evidence actor must match the authenticated principal."
+        )
 
 
 def _commerce_command_action_id(
@@ -1290,6 +1306,11 @@ class PostgresTrialStore:
         normalized = principal.normalized()
         if event_type_value in HUMAN_COMMAND_EVENTS and normalized.actor_kind != HUMAN_ACTOR_KIND:
             raise TrialHumanApprovalRequired()
+        _require_command_evidence_actor(
+            payload_value,
+            principal=normalized,
+            surface=surface_value,
+        )
         capability = _required_surface_capability(surface_value)
         with self._guarded_cursor(normalized, write=True, capability=capability) as (
             cursor,
@@ -1870,6 +1891,11 @@ class InMemoryTrialStore:
                 _require_surface_read_capability(readiness.capabilities, related_surface)
             if event_type_value in HUMAN_COMMAND_EVENTS and normalized.actor_kind != HUMAN_ACTOR_KIND:
                 raise TrialHumanApprovalRequired()
+            _require_command_evidence_actor(
+                payload_value,
+                principal=normalized,
+                surface=surface_value,
+            )
             replay = self._replay(
                 normalized.workspace_id,
                 normalized.actor_id,

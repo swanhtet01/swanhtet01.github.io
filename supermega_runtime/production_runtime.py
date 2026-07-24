@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
-from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
+from datetime import datetime, timedelta, timezone
+import re
 from typing import Any, Callable
 
 from supermega_runtime.trial_store import TrialValidationError
@@ -16,6 +18,7 @@ PRODUCTION_EVENTS = frozenset(
         "production.workspace.initialized",
         "production.job.created",
         "production.output.recorded",
+        "production.material.consumed",
         "production.issue.opened",
         "production.issue.resolved",
         "production.quality_hold.placed",
@@ -31,9 +34,13 @@ _ISSUE_KINDS = frozenset({"quality", "maintenance", "materials", "operations"})
 _ISSUE_SEVERITIES = frozenset({"critical", "high", "medium", "low"})
 _MACHINE_STATES = frozenset({"running", "attention", "stopped"})
 _OUTPUT_KINDS = frozenset({"good", "scrap"})
+_MATERIAL_UNITS = frozenset(
+    {"kg", "g", "l", "ml", "pcs", "pack", "bag", "roll", "sheet", "m", "cm"}
+)
 _EVENT_KIND_BY_TYPE = {
     "production.job.created": "job_created",
     "production.output.recorded": "output_recorded",
+    "production.material.consumed": "material_consumed",
     "production.issue.opened": "issue_opened",
     "production.issue.resolved": "issue_resolved",
     "production.quality_hold.placed": "quality_hold_placed",
@@ -73,6 +80,14 @@ _EVENT_FIELDS = frozenset(
     }
 )
 _OUTPUT_EVENT_OPTIONAL_FIELDS = frozenset({"shiftRef", "outputKind"})
+_MATERIAL_EVENT_FIELDS = frozenset(
+    {"materialRef", "quantity", "materialUnit", "shiftRef"}
+)
+_MATERIAL_EVENT_OPTIONAL_FIELDS = frozenset({"materialLot"})
+_TIMESTAMP_PATTERN = re.compile(
+    r"^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})"
+    r"(?:\.([0-9]{1,6}))?(Z|([+-])([0-9]{2}):([0-9]{2}))$"
+)
 _ISSUE_EVENT_FIELDS = frozenset(
     {"issueSeverity", "issueOwner", "issueDueAt", "issueContainment"}
 )
@@ -115,15 +130,43 @@ def _text(value: object, field: str, *, maximum: int = 180) -> str:
     return value
 
 
-def _timestamp(value: object, field: str) -> str:
+def _parsed_timestamp(value: object, field: str) -> tuple[str, datetime]:
     timestamp = _text(value, field, maximum=40)
+    match = _TIMESTAMP_PATTERN.fullmatch(timestamp)
+    if match is None:
+        raise TrialValidationError(
+            f"{field} must be a canonical ISO-8601 timestamp."
+        )
+    fraction = (match.group(7) or "").ljust(6, "0")
+    offset_hours = int(match.group(10) or 0)
+    offset_minutes = int(match.group(11) or 0)
+    offset_direction = -1 if match.group(9) == "-" else 1
     try:
-        parsed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+        offset = timezone(
+            offset_direction * timedelta(
+                hours=offset_hours,
+                minutes=offset_minutes,
+            )
+        )
+        parsed = datetime(
+            int(match.group(1)),
+            int(match.group(2)),
+            int(match.group(3)),
+            int(match.group(4)),
+            int(match.group(5)),
+            int(match.group(6)),
+            int(fraction),
+            tzinfo=offset,
+        )
     except ValueError as exc:
-        raise TrialValidationError(f"{field} must be an ISO-8601 timestamp.") from exc
-    if parsed.tzinfo is None:
-        raise TrialValidationError(f"{field} must include a timezone.")
-    return timestamp
+        raise TrialValidationError(
+            f"{field} must be a canonical ISO-8601 timestamp."
+        ) from exc
+    return timestamp, parsed
+
+
+def _timestamp(value: object, field: str) -> str:
+    return _parsed_timestamp(value, field)[0]
 
 
 def _downtime_timestamp(value: object, field: str) -> str:
@@ -149,6 +192,30 @@ def _integer(value: object, field: str, *, minimum: int = 0) -> int:
     ):
         raise TrialValidationError(f"{field} must be a safe integer of at least {minimum}.")
     return value
+
+
+def _material_quantity(value: object, field: str) -> tuple[int, str]:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise TrialValidationError(
+            f"{field} must be positive with at most three decimal places."
+        )
+    try:
+        quantity = Decimal(str(value))
+    except InvalidOperation as exc:
+        raise TrialValidationError(
+            f"{field} must be positive with at most three decimal places."
+        ) from exc
+    scaled = quantity * 1_000
+    if (
+        not quantity.is_finite()
+        or scaled != scaled.to_integral_value()
+        or scaled < 1
+        or scaled > _MAX_SAFE_INTEGER
+    ):
+        raise TrialValidationError(
+            f"{field} must be positive with at most three decimal places."
+        )
+    return int(scaled), format(quantity.normalize(), "f")
 
 
 def _list(value: object, field: str, *, maximum: int) -> list[Any]:
@@ -307,6 +374,8 @@ def _validate_event(
         raise TrialValidationError(f"{field}.kind is unsupported.")
     if kind == "output_recorded":
         required = _EVENT_FIELDS | {"quantity"}
+    elif kind == "material_consumed":
+        required = _EVENT_FIELDS | _MATERIAL_EVENT_FIELDS
     elif kind == "machine_state_changed":
         required = _EVENT_FIELDS | {"fromState", "toState"}
     elif kind == "downtime_ended":
@@ -329,6 +398,8 @@ def _validate_event(
         optional=(
             _OUTPUT_EVENT_OPTIONAL_FIELDS
             if kind == "output_recorded"
+            else _MATERIAL_EVENT_OPTIONAL_FIELDS
+            if kind == "material_consumed"
             else _ISSUE_EVENT_FIELDS
             if kind == "issue_opened"
             else frozenset()
@@ -354,6 +425,32 @@ def _validate_event(
             raise TrialValidationError(f"{field}.outputKind is unsupported.")
         if "shiftRef" in event:
             _text(event["shiftRef"], f"{field}.shiftRef", maximum=80)
+    elif kind == "material_consumed":
+        if subject_id not in job_ids:
+            raise TrialValidationError(f"{field} references an unknown job.")
+        _, quantity_text = _material_quantity(
+            event["quantity"],
+            f"{field}.quantity",
+        )
+        material_ref = _text(
+            event["materialRef"],
+            f"{field}.materialRef",
+            maximum=120,
+        )
+        if "materialLot" in event:
+            _text(event["materialLot"], f"{field}.materialLot", maximum=120)
+        material_unit = event["materialUnit"]
+        if not isinstance(material_unit, str) or material_unit not in _MATERIAL_UNITS:
+            raise TrialValidationError(f"{field}.materialUnit is unsupported.")
+        _text(event["shiftRef"], f"{field}.shiftRef", maximum=80)
+        lot_summary = (
+            f" · lot {event['materialLot']}" if "materialLot" in event else ""
+        )
+        if (
+            event["summary"]
+            != f"Used {quantity_text} {material_unit} {material_ref}{lot_summary}"
+        ):
+            raise TrialValidationError(f"{field}.summary is not canonical.")
     elif kind == "job_created":
         if subject_id not in job_ids:
             raise TrialValidationError(f"{field} references an unknown job.")
@@ -534,6 +631,46 @@ def _validate_output_history(
             )
 
 
+def _validate_material_history(
+    jobs: Sequence[dict[str, Any]],
+    events: Sequence[dict[str, Any]],
+) -> None:
+    totals: dict[tuple[str, str, str], int] = {}
+    for index, event in enumerate(events):
+        if event["kind"] != "material_consumed":
+            continue
+        quantity_milli, _ = _material_quantity(
+            event["quantity"],
+            f"events[{index}].quantity",
+        )
+        key = (event["shiftRef"], event["materialRef"], event["materialUnit"])
+        next_total = totals.get(key, 0) + quantity_milli
+        if next_total > _MAX_SAFE_INTEGER:
+            raise TrialValidationError(
+                f"Material total for {event['materialRef']} in "
+                f"{event['shiftRef']} exceeds the safe fixed-precision limit."
+            )
+        totals[key] = next_total
+    for index, job in enumerate(jobs):
+        good_at_event = 0
+        scrap_at_event = 0
+        for event in reversed(events):
+            if event["subjectId"] != job["id"]:
+                continue
+            if event["kind"] == "material_consumed":
+                if good_at_event + scrap_at_event >= job["target"]:
+                    raise TrialValidationError(
+                        f"jobs[{index}] material use occurred after the job reached target."
+                    )
+                continue
+            if event["kind"] != "output_recorded":
+                continue
+            if event.get("outputKind", "good") == "scrap":
+                scrap_at_event += event["quantity"]
+            else:
+                good_at_event += event["quantity"]
+
+
 def _validate_job_history(
     jobs: Sequence[dict[str, Any]],
     events: Sequence[dict[str, Any]],
@@ -571,6 +708,7 @@ def _validate_job_history(
             if event["kind"]
             in {
                 "output_recorded",
+                "material_consumed",
                 "quality_hold_placed",
                 "quality_hold_released",
             }
@@ -578,6 +716,16 @@ def _validate_job_history(
         ):
             raise TrialValidationError(
                 f"jobs[{index}] activity cannot predate its creation event."
+            )
+        if any(
+            datetime.fromisoformat(event["createdAt"].replace("Z", "+00:00"))
+            < datetime.fromisoformat(matches[0]["createdAt"].replace("Z", "+00:00"))
+            for event in events
+            if event["kind"] == "material_consumed"
+            and event["subjectId"] == job["id"]
+        ):
+            raise TrialValidationError(
+                f"jobs[{index}] material use timestamp cannot predate its creation event."
             )
 
 
@@ -817,6 +965,7 @@ def validate_production_state(value: object) -> dict[str, Any]:
 
     _validate_job_history(jobs, events)
     _validate_output_history(jobs, events)
+    _validate_material_history(jobs, events)
     _validate_quality_hold_history(jobs, events)
     _validate_issue_history(issues, events)
     _validate_machine_history(machines, events)
@@ -942,6 +1091,33 @@ def _validate_output_recorded(
         )
     if event["summary"] != f"Recorded {quantity} {output_kind} units":
         raise TrialValidationError("output event summary is not canonical.")
+
+
+def _validate_material_consumed(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+    event: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "jobs", "issues", "machines")
+    job = next(
+        (candidate for candidate in current["jobs"] if candidate["id"] == event["subjectId"]),
+        None,
+    )
+    if job is None:
+        raise TrialValidationError("material use must reference one existing job.")
+    if job["output"] + job.get("scrap", 0) >= job["target"]:
+        raise TrialValidationError("material use can only be recorded for an active job.")
+    _, quantity_text = _material_quantity(
+        event["quantity"],
+        "material use quantity",
+    )
+    lot_summary = f" · lot {event['materialLot']}" if "materialLot" in event else ""
+    expected_summary = (
+        f"Used {quantity_text} {event['materialUnit']} {event['materialRef']}"
+        f"{lot_summary}"
+    )
+    if event["summary"] != expected_summary:
+        raise TrialValidationError("material use event summary is not canonical.")
 
 
 def _validate_job_created(
@@ -1213,6 +1389,7 @@ _TRANSITION_VALIDATORS: dict[
 ] = {
     "production.job.created": _validate_job_created,
     "production.output.recorded": _validate_output_recorded,
+    "production.material.consumed": _validate_material_consumed,
     "production.issue.opened": _validate_issue_opened,
     "production.issue.resolved": _validate_issue_resolved,
     "production.quality_hold.placed": _validate_quality_hold_placed,
