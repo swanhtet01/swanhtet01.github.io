@@ -393,13 +393,15 @@ if (!publishSource.includes("type PublishStep = 'checks' | 'evidence' | 'approva
   || !publishCssSource.includes('grid-template-columns: repeat(4, minmax(0, 1fr))')
   || !publishCssSource.includes('grid-template-columns: repeat(2, minmax(0, 1fr))')
   || !publishCssSource.includes('font-size: 16px')) fail('website_publish_task_flow_missing')
-if (!publishSource.includes('<details className="website-disclosure website-commerce-handoff">')
-  || !publishSource.includes('Optional Shop handoff')
-  || !publishSource.includes('Create site file')) fail('website_publish_secondary_actions_not_progressively_disclosed')
+if (!publishSource.includes('Create site file')
+  || publishSource.includes('Optional Shop handoff')
+  || publishSource.includes('Send intake')
+  || publishSource.includes('Review in Shop')
+  || publishSource.includes('onPrepareCommerceHandoff')
+  || publishSource.includes('website-handoff')) fail('website_publish_owns_order_intake_or_lost_site_action')
 const websiteMobileCss = websiteCssSource.slice(websiteCssSource.indexOf('@media (max-width: 640px)'), websiteCssSource.indexOf('@media (prefers-reduced-motion'))
 const websitePreviewControlsHiddenUnconditionally = /(?:^|\n)\s*\.website-preview-controls\s*\{\s*display:\s*none/.test(websiteMobileCss)
 if (!websiteMobileCss.includes('.website-preview-controls') || !websiteMobileCss.includes('display: flex') || websitePreviewControlsHiddenUnconditionally) fail('website_mobile_review_controls_hidden')
-if (!websiteMobileCss.includes('.website-handoff-controls input') || !websiteMobileCss.includes('min-height: 44px') || !websiteMobileCss.includes('font-size: 12px')) fail('website_mobile_handoff_controls_undersized')
 if (!websiteCssSource.includes('.website-inline-actions > button,\n  .website-navigation-actions > button {\n    min-width: 44px;')) fail('website_mobile_reorder_touch_target_undersized')
 if (!commerceIntakeSource.includes('Browser-local evidence only.') || !commerceIntakeSource.includes('No customer message, payment, delivery request, or external write occurs.')) fail('commerce_intake_boundary_missing')
 if (!coreSource.includes('Start from a channel message')
@@ -465,12 +467,17 @@ if (!handoffIntakeSource.includes('sku: string') || !handoffIntakeSource.include
 if (!handoffSource.includes("actorKind: 'human'") || !handoffSource.includes("action: 'accept_website_handoff'") || !handoffSource.includes('audit: [audit]') || !handoffSource.includes("existing.handoff.state === 'accepted'") || !handoffSource.includes('setItem(WEBSITE_ECOMMERCE_HANDOFF_KEY, JSON.stringify(store))')) fail('website_handoff_atomic_audit_missing')
 if (!handoffSource.includes("schema: 'ecommerce_order_draft.v1'") || !handoffSource.includes("mode: 'browser-local'") || !handoffSource.includes("schema: 'website_ecommerce_handoff_store.v2'") || !handoffSource.includes('createWebsiteOrderDraft') || !handoffSource.includes('idempotencyKey: current.handoff.id') || !handoffSource.includes("missingFields: ['customer_reference', 'fulfilment_method', 'payment_method']") || !handoffSource.includes('current.draft.idempotencyKey === handoffId') || !handoffSource.includes('if (!current.display) return null')) fail('ecommerce_order_draft_contract_missing')
 if (!handoffSource.includes("schema: 'ecommerce_order_record.v1'") || !handoffSource.includes("schema: 'website_ecommerce_handoff_store.v3'") || !handoffSource.includes("state: 'ready_for_confirmation'") || !handoffSource.includes("action: 'complete_website_order'") || !handoffSource.includes('customerReferenceFor(current.handoff.id)') || !handoffSource.includes('websiteEvidenceReference: current.handoff.source.localPublishId') || !handoffSource.includes('completionMatches(current.order, input)') || !handoffSource.includes('globalThis.navigator.locks.request') || !handoffSource.includes('if (!isHandoffStore(store)) return null')) fail('ecommerce_order_completion_contract_missing')
-if (!websiteSource.includes('approvalIsCurrent || !publishIsCurrent')
-  || !websiteSource.includes('checks.every((check) => check.passed)')
-  || !websiteSource.includes('writeWebsiteEcommerceHandoff(handoff, workspace)')
-  || !websiteSource.includes('createCommerceWebsiteIntake(current')
-  || !websiteSource.includes("storageMode === 'managed' ? 'managed' : 'local'")
-  || !publishSource.includes('No deployment, domain write, payment, stock, customer message, or order change happens here.')) fail('website_handoff_gate_missing')
+if ([
+  'createWebsiteEcommerceHandoff',
+  'readWebsiteEcommerceHandoff',
+  'writeWebsiteEcommerceHandoff',
+  'createCommerceWebsiteIntake',
+  'commerce.website_intake.created',
+  'saveManagedCommerceCommand',
+  "from '../product-handoff'",
+  "from '../../core/commerce-workspace'",
+  "from '../../core/managed-trial'",
+].some((marker) => websiteSource.includes(marker))) fail('website_still_writes_order_intake')
 if (!commerceIntakeSource.includes('acceptWebsiteEcommerceHandoff') || !commerceIntakeSource.includes('matches.length === 1') || !commerceIntakeSource.includes('createWebsiteOrderDraft(context.handoff.id') || !commerceIntakeSource.includes('I reviewed this SKU, quantity, and Website evidence.')) fail('commerce_intake_approval_contract_missing')
 if (!commerceIntakeSource.includes('await completeWebsiteOrderDraft')
   || !commerceIntakeSource.includes('opaque customer reference generated on completion')
@@ -513,9 +520,12 @@ if (!commerceSource.includes('export function settleCommerceRefund')
   || !commerceSource.includes('...refundSettlementActionIds')) fail('commerce_refund_settlement_contract_missing')
 if (!managedTrialSource.includes('saveManagedCommerceCommand') || !managedTrialSource.includes('expected_version: request.expectedVersion') || !managedTrialSource.includes("surface: 'commerce'") || !managedTrialSource.includes('payload: { state: request.state, evidence: request.evidence }')) fail('managed_commerce_command_client_missing')
 const managedCommerceClientSources = `${coreSource}\n${websiteSource}\n${ecommerceSource}`
-for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.payment.reconciled', 'commerce.refund.settled', 'commerce.stock.received', 'commerce.close.saved', 'commerce.website_intake.created', 'commerce.website_intake.converted', 'commerce.storefront_request.received']) {
+for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.payment.reconciled', 'commerce.refund.settled', 'commerce.stock.received', 'commerce.close.saved', 'commerce.website_intake.converted', 'commerce.storefront_request.received']) {
   if (!managedTrialSource.includes(eventType) || !managedCommerceClientSources.includes(eventType) || !managedCommerceRuntime.includes(eventType)) fail(`managed_commerce_event_missing:${eventType}`)
 }
+if (!managedTrialSource.includes('commerce.website_intake.created')
+  || !managedCommerceRuntime.includes('commerce.website_intake.created')
+  || managedCommerceClientSources.includes('commerce.website_intake.created')) fail('legacy_website_intake_creation_not_read_only')
 if (!coreSource.includes('Record a refund already completed with the external payment provider. This does not send money.')
   || !coreSource.includes("order.refundStatus === 'due' ? <button")
   || !coreSource.includes('onSettleRefund(order.id)')

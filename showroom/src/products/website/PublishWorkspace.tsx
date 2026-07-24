@@ -21,17 +21,10 @@ type ApprovalInput = {
   note: string
 }
 
-type CommerceHandoffInput = {
-  sku: string
-  quantity: number
-}
-
 type PublishWorkspaceProps = {
   approvalIsCurrent: boolean
   checks: ReadinessCheck[]
   fingerprint: string
-  handoffAvailable: boolean
-  handoffIsCurrent: boolean
   managedActorId: string
   currentPublishId: string
   publishIsCurrent: boolean
@@ -39,7 +32,6 @@ type PublishWorkspaceProps = {
   onAddEvidence: (input: EvidenceInput) => Promise<boolean>
   onApprove: (input: ApprovalInput) => Promise<boolean>
   onDownloadPublish: (recordId: string) => void
-  onPrepareCommerceHandoff: (input: CommerceHandoffInput) => Promise<void>
   onRecordPublish: () => Promise<void>
 }
 
@@ -56,8 +48,6 @@ export function PublishWorkspace({
   approvalIsCurrent,
   checks,
   fingerprint,
-  handoffAvailable,
-  handoffIsCurrent,
   managedActorId,
   currentPublishId,
   publishIsCurrent,
@@ -65,7 +55,6 @@ export function PublishWorkspace({
   onAddEvidence,
   onApprove,
   onDownloadPublish,
-  onPrepareCommerceHandoff,
   onRecordPublish,
 }: PublishWorkspaceProps) {
   const [evidenceKind, setEvidenceKind] = useState<EvidenceKind>('content')
@@ -75,9 +64,7 @@ export function PublishWorkspace({
   const [reviewer, setReviewer] = useState('')
   const [approvalNote, setApprovalNote] = useState('')
   const [approvalConfirmed, setApprovalConfirmed] = useState(false)
-  const [handoffSku, setHandoffSku] = useState('')
-  const [handoffQuantity, setHandoffQuantity] = useState(1)
-  const [submitting, setSubmitting] = useState<'evidence' | 'approval' | 'snapshot' | 'handoff' | ''>('')
+  const [submitting, setSubmitting] = useState<'evidence' | 'approval' | 'snapshot' | ''>('')
   const bodyRef = useRef<HTMLDivElement>(null)
   const passedCount = checks.filter((check) => check.passed).length
   const allChecksPass = passedCount === checks.length
@@ -122,17 +109,6 @@ export function PublishWorkspace({
     evidence: `${currentEvidenceCount}/${evidenceRequirements.length}`,
     approval: approvalIsCurrent ? 'Approved' : 'Required',
     snapshot: publishIsCurrent ? 'Ready' : 'Not ready',
-  }
-
-  async function prepareCommerceHandoff() {
-    const sku = handoffSku.trim().toUpperCase()
-    if (!sku || !Number.isSafeInteger(handoffQuantity) || handoffQuantity < 1 || handoffQuantity > 99) return
-    setSubmitting('handoff')
-    try {
-      await onPrepareCommerceHandoff({ sku, quantity: handoffQuantity })
-    } finally {
-      setSubmitting('')
-    }
   }
 
   async function submitEvidence(event: FormEvent<HTMLFormElement>) {
@@ -503,53 +479,6 @@ export function PublishWorkspace({
                 </button>
               </div>
             </div>
-
-            <details className="website-disclosure website-commerce-handoff">
-              <summary>
-                <span>Optional Shop handoff</span>
-                <small>Send one approved product request</small>
-              </summary>
-              <div className="website-handoff-action">
-                <div>
-                  <strong>Website → Shop intake</strong>
-                  <p>Send one catalog SKU and quantity. Shop still requires a human to confirm any order, stock, payment, or message change.</p>
-                </div>
-                <div className="website-handoff-controls">
-                <label>
-                  <span>Shop SKU</span>
-                  <input
-                    autoComplete="off"
-                    maxLength={80}
-                    onChange={(event) => setHandoffSku(event.target.value.toUpperCase())}
-                    placeholder="SKU-001"
-                    value={handoffSku}
-                  />
-                </label>
-                <label>
-                  <span>Quantity</span>
-                  <input
-                    max="99"
-                    min="1"
-                    onChange={(event) => setHandoffQuantity(Number(event.target.value))}
-                    step="1"
-                    type="number"
-                    value={handoffQuantity}
-                  />
-                </label>
-                <button
-                  className="website-button is-secondary"
-                  disabled={!publishIsCurrent || !handoffAvailable || handoffIsCurrent || !handoffSku.trim() || Boolean(submitting)}
-                  onClick={() => void prepareCommerceHandoff()}
-                  type="button"
-                >
-                  {handoffIsCurrent ? 'Intake sent' : submitting === 'handoff' ? 'Sending…' : 'Send intake'}
-                </button>
-                {handoffIsCurrent ? (
-                  <a className="website-button is-primary" href="/shop/?tab=orders">Review in Shop</a>
-                ) : null}
-                </div>
-              </div>
-            </details>
 
             {workspace.localPublishes.length ? (
               <div className="website-publish-history">

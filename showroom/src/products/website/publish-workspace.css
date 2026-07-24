@@ -246,7 +246,6 @@
 .website-publish-workspace .website-evidence-status strong,
 .website-publish-workspace .website-approval-record strong,
 .website-publish-workspace .website-local-publish-action strong,
-.website-publish-workspace .website-handoff-action strong,
 .website-publish-workspace .website-publish-history strong {
   font-size: 14px;
 }
@@ -255,7 +254,6 @@
 .website-publish-workspace .website-evidence-status p,
 .website-publish-workspace .website-approval-record p,
 .website-publish-workspace .website-local-publish-action p,
-.website-publish-workspace .website-handoff-action p,
 .website-publish-workspace .website-publish-history small {
   font-size: 13px;
   line-height: 1.45;
@@ -318,8 +316,7 @@
 }
 
 .website-publish-workspace .website-evidence-form label,
-.website-publish-workspace .website-approval-form label,
-.website-publish-workspace .website-handoff-controls label {
+.website-publish-workspace .website-approval-form label {
   color: var(--website-muted);
   font-size: 13px;
 }
@@ -359,8 +356,7 @@
   background: var(--website-panel);
 }
 
-.website-publish-workspace .website-local-publish-action,
-.website-publish-workspace .website-handoff-action {
+.website-publish-workspace .website-local-publish-action {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
@@ -379,44 +375,8 @@
   gap: 8px;
 }
 
-.website-publish-workspace .website-commerce-handoff {
-  margin: 12px 14px;
-}
-
-.website-publish-workspace .website-commerce-handoff .website-handoff-action {
-  border-top: 1px solid var(--website-line);
-}
-
 .website-publish-workspace .website-history-download {
   min-height: 44px;
-}
-
-.website-publish-workspace .website-handoff-action > div:first-child,
-.website-publish-workspace .website-handoff-action > div:last-child {
-  min-width: 0;
-}
-
-.website-publish-workspace .website-handoff-action > div:last-child {
-  display: grid;
-  grid-template-columns: minmax(140px, 1fr) 84px auto;
-  align-items: end;
-  justify-content: stretch;
-  gap: 8px;
-}
-
-.website-publish-workspace .website-handoff-controls input {
-  width: 100%;
-  min-height: 44px;
-  font-size: 14px;
-}
-
-.website-publish-workspace .website-handoff-controls label:nth-child(2) input {
-  width: 100%;
-}
-
-.website-publish-workspace .website-handoff-controls a {
-  grid-column: 1 / -1;
-  justify-self: end;
 }
 
 .website-publish-workspace .website-publish-history {
@@ -456,9 +416,7 @@
 }
 
 .publish-flow-actions .website-button,
-.website-publish-workspace .website-local-publish-action .website-button,
-.website-publish-workspace .website-handoff-controls .website-button,
-.website-publish-workspace .website-handoff-controls a {
+.website-publish-workspace .website-local-publish-action .website-button {
   min-height: 44px;
 }
 
@@ -560,8 +518,7 @@
   }
 
   .website-publish-workspace .website-gate-actions,
-  .website-publish-workspace .website-local-publish-action,
-  .website-publish-workspace .website-handoff-action {
+  .website-publish-workspace .website-local-publish-action {
     display: grid;
     grid-template-columns: 1fr;
     align-items: stretch;
@@ -577,22 +534,9 @@
     display: grid;
   }
 
-  .website-publish-workspace .website-local-publish-action,
-  .website-publish-workspace .website-handoff-action {
+  .website-publish-workspace .website-local-publish-action {
     gap: 12px;
     padding: 13px;
-  }
-
-  .website-publish-workspace .website-handoff-action > div:last-child {
-    grid-template-columns: minmax(0, 1fr) 88px;
-  }
-
-  .website-publish-workspace .website-handoff-controls .website-button,
-  .website-publish-workspace .website-handoff-controls a {
-    width: 100%;
-    grid-column: 1 / -1;
-    justify-content: center;
-    justify-self: stretch;
   }
 
   .website-publish-workspace .website-publish-history > article {
