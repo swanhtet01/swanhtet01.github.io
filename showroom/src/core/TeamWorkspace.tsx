@@ -1,5 +1,5 @@
 import { type FormEvent, useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router'
 
 import { AgentTeamsPanel } from './AgentTeamsPanel'
 import { Empty, PageHeading } from './CoreApp'

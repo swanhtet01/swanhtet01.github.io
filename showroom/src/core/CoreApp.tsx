@@ -1,5 +1,5 @@
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from 'react'
-import { Link, NavLink, Outlet, useLocation, useNavigate, useOutletContext, useSearchParams } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation, useNavigate, useOutletContext, useSearchParams } from 'react-router'
 
 import siteManifest from '../../../site-manifest.json'
 import './core-app.css'
@@ -856,7 +856,7 @@ function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = null) {
       if (error instanceof ManagedTrialError && error.code === 'trial_version_conflict') {
         try {
           const bootstrap = await loadManagedBootstrap(managedIdentity)
-          if (!identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) throw new Error('The managed workspace changed before Shop could refresh.')
+          if (!identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) throw new Error('The managed workspace changed before Shop could refresh.', { cause: error })
           const refreshed = managedCommerceView(
             requireManagedSurfaceState(bootstrap, 'commerce', 'Shop'),
             workspaceId,
@@ -1049,7 +1049,7 @@ function useProductionWorkspace(managedIdentity: ManagedIdentity | null = null) 
       if (error instanceof ManagedTrialError && error.code === 'trial_version_conflict') {
         try {
           const bootstrap = await loadManagedBootstrap(managedIdentity)
-          if (!identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) throw new Error('The managed workspace changed before Plant could refresh.')
+          if (!identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) throw new Error('The managed workspace changed before Plant could refresh.', { cause: error })
           const refreshed = managedProductionView(
             requireManagedSurfaceState(bootstrap, 'production', 'Plant'),
             workspaceId,

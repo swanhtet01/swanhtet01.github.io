@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router'
 
 import {
   commerceCatalogDigest,
@@ -503,14 +503,14 @@ export function EcommerceProduct() {
         try {
           const identity = await currentManagedIdentity()
           if (!identity || identity.workspaceId !== managedIdentity.workspaceId || identity.userId !== managedIdentity.userId) {
-            throw new Error('The managed workspace identity changed before the conflict could be refreshed.')
+            throw new Error('The managed workspace identity changed before the conflict could be refreshed.', { cause: error })
           }
           const bootstrap = await loadManagedBootstrap(identity)
           const view = resolveManagedStorefront(
             identity,
             requireManagedSurfaceState(bootstrap, 'commerce', 'Shop'),
           )
-          if (!view) throw new Error('The managed Shop catalog is no longer available.')
+          if (!view) throw new Error('The managed Shop catalog is no longer available.', { cause: error })
           applyManagedView(view, false)
           setDraftNotice('Workspace changed in another session. The latest saved revision is loaded; current edits were kept for review.')
         } catch (refreshError) {

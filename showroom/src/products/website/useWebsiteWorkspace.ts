@@ -286,7 +286,7 @@ export function useWebsiteWorkspace(): {
             bootstrap = await loadManagedBootstrap(identity)
             const concurrent = requireManagedSurfaceState(bootstrap, 'website', 'Website')
             const restored = restoreWorkspace(concurrent.state)
-            if (!restored || concurrent.version < 1) throw new Error('Concurrent Website initialization returned invalid state.')
+            if (!restored || concurrent.version < 1) throw new Error('Concurrent Website initialization returned invalid state.', { cause: error })
             managedWorkspace = restored
             managedVersion = concurrent.version
           }
@@ -438,7 +438,7 @@ export function useWebsiteWorkspace(): {
                 await requireCurrentManagedIdentity(managedIdentity)
                 const record = requireManagedSurfaceState(bootstrap, 'website', 'Website')
                 const refreshed = restoreWorkspace(record.state)
-                if (!refreshed) throw new Error('The newer managed Website state is invalid.')
+                if (!refreshed) throw new Error('The newer managed Website state is invalid.', { cause: error })
                 setManagedActorId(bootstrap.identity.actor_id)
                 managedVersionRef.current = record.version
                 workspaceRef.current = refreshed
