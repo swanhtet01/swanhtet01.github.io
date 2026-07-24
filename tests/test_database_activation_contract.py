@@ -58,12 +58,19 @@ MIGRATION_V4 = (
     / "migrations"
     / "20260723144500_private_trial_backend_v4_hardening.sql"
 )
+MIGRATION_V5 = (
+    ROOT
+    / "supabase"
+    / "migrations"
+    / "20260724204920_private_trial_backend_v5_read_capabilities.sql"
+)
 MIGRATIONS = (
     MIGRATION_PREFLIGHT,
     MIGRATION_V1,
     MIGRATION_V2,
     MIGRATION_V3,
     MIGRATION_V4,
+    MIGRATION_V5,
 )
 
 PRIVATE_SCHEMA = "app_private"
@@ -164,12 +171,13 @@ def _first_sql_token(statement: str) -> str:
 
 
 class MigrationSecurityEvidenceTests(unittest.TestCase):
-    def test_historical_migrations_are_unchanged_and_v4_is_additive(self) -> None:
+    def test_historical_migrations_are_unchanged_and_v5_is_additive(self) -> None:
         preflight = _normalized_sql(MIGRATION_PREFLIGHT)
         v1 = _normalized_sql(MIGRATION_V1)
         v2 = _normalized_sql(MIGRATION_V2)
         v3 = _normalized_sql(MIGRATION_V3)
         v4 = _normalized_sql(MIGRATION_V4)
+        v5 = _normalized_sql(MIGRATION_V5)
         self.assertIn("pre-existing supermega trial backend role attributes are unsafe", preflight)
         self.assertIn("membership.roleid = backend_record.oid", preflight)
         self.assertIn("dependency.refclassid = 'pg_authid'::regclass", preflight)
@@ -192,6 +200,12 @@ class MigrationSecurityEvidenceTests(unittest.TestCase):
         self.assertIn("new.requested_at := transaction_timestamp()", v4)
         self.assertIn("new.decided_at := transaction_timestamp()", v4)
         self.assertIn("set schema_version = 4", v4)
+        self.assertIn("private trial backend v5 requires schema version 4", v5)
+        self.assertIn("workspace_state.surface || '.read'", v5)
+        self.assertIn("workspace_state.surface || '.write'", v5)
+        self.assertIn("'approvals.read' = any(membership.capabilities)", v5)
+        self.assertIn("approval_requests.requested_by = current_setting('app.actor_id', true)", v5)
+        self.assertIn("set schema_version = 5", v5)
 
     def test_private_schema_and_runtime_role_are_restricted(self) -> None:
         sql = _normalized_sql()
@@ -955,7 +969,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                   "approval_requests_member_read": {
                     "table": "approval_requests",
                     "command": "SELECT",
-                    "qual": "((workspace_id = current_setting('app.workspace_id', true)) and (current_setting('app.actor_kind', true) = any (array['human', 'service', 'agent'])) and (exists ( select 1 from app_private.workspace_memberships membership where ((membership.workspace_id = approval_requests.workspace_id) and (membership.actor_id = current_setting('app.actor_id', true)) and (membership.actor_kind = current_setting('app.actor_kind', true)) and (membership.status = 'active')))))",
+                    "qual": "((workspace_id = current_setting('app.workspace_id', true)) and (current_setting('app.actor_kind', true) = any (array['human', 'service', 'agent'])) and (exists ( select 1 from app_private.workspace_memberships membership where ((membership.workspace_id = approval_requests.workspace_id) and (membership.actor_id = current_setting('app.actor_id', true)) and (membership.actor_kind = current_setting('app.actor_kind', true)) and (membership.status = 'active') and (('approvals.read' = any (membership.capabilities)) or ('approvals.decide' = any (membership.capabilities)) or (('approvals.request' = any (membership.capabilities)) and (approval_requests.requested_by = current_setting('app.actor_id', true))))))))",
                     "with_check": null
                   },
                   "workspace_events_capability_insert": {
@@ -967,7 +981,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                   "workspace_events_member_read": {
                     "table": "workspace_events",
                     "command": "SELECT",
-                    "qual": "((workspace_id = current_setting('app.workspace_id', true)) and (current_setting('app.actor_kind', true) = any (array['human', 'service', 'agent'])) and (exists ( select 1 from app_private.workspace_memberships membership where ((membership.workspace_id = workspace_events.workspace_id) and (membership.actor_id = current_setting('app.actor_id', true)) and (membership.actor_kind = current_setting('app.actor_kind', true)) and (membership.status = 'active')))))",
+                    "qual": "((workspace_id = current_setting('app.workspace_id', true)) and (current_setting('app.actor_kind', true) = any (array['human', 'service', 'agent'])) and (exists ( select 1 from app_private.workspace_memberships membership where ((membership.workspace_id = workspace_events.workspace_id) and (membership.actor_id = current_setting('app.actor_id', true)) and (membership.actor_kind = current_setting('app.actor_kind', true)) and (membership.status = 'active') and (((workspace_events.surface = 'approvals') and (('approvals.read' = any (membership.capabilities)) or ('approvals.decide' = any (membership.capabilities)) or (('approvals.request' = any (membership.capabilities)) and (workspace_events.actor_id = current_setting('app.actor_id', true))))) or ((workspace_events.surface <> 'approvals') and (((workspace_events.surface || '.read') = any (membership.capabilities)) or ((workspace_events.surface || '.write') = any (membership.capabilities)))))))))",
                     "with_check": null
                   },
                   "workspace_memberships_self_read": {
@@ -991,7 +1005,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                   "workspace_state_member_read": {
                     "table": "workspace_state",
                     "command": "SELECT",
-                    "qual": "((workspace_id = current_setting('app.workspace_id', true)) and (current_setting('app.actor_kind', true) = any (array['human', 'service', 'agent'])) and (exists ( select 1 from app_private.workspace_memberships membership where ((membership.workspace_id = workspace_state.workspace_id) and (membership.actor_id = current_setting('app.actor_id', true)) and (membership.actor_kind = current_setting('app.actor_kind', true)) and (membership.status = 'active')))))",
+                    "qual": "((workspace_id = current_setting('app.workspace_id', true)) and (current_setting('app.actor_kind', true) = any (array['human', 'service', 'agent'])) and (exists ( select 1 from app_private.workspace_memberships membership where ((membership.workspace_id = workspace_state.workspace_id) and (membership.actor_id = current_setting('app.actor_id', true)) and (membership.actor_kind = current_setting('app.actor_kind', true)) and (membership.status = 'active') and (((workspace_state.surface || '.read') = any (membership.capabilities)) or ((workspace_state.surface || '.write') = any (membership.capabilities)))))))",
                     "with_check": null
                   }
                 }
@@ -1101,7 +1115,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                         schema_exists=scenario != "missing_schema",
                         schema_ready=scenario != "missing_schema",
                         component="private_trial_backend",
-                        schema_version=0 if scenario == "wrong_version" else 4,
+                        schema_version=0 if scenario == "wrong_version" else 5,
                         tables=tables,
                         table_names=tables,
                         table_count=len(tables),
@@ -1241,7 +1255,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                             return []
                         return [
                             _snapshot(
-                                schema_version=0 if scenario == "wrong_version" else 4,
+                                schema_version=0 if scenario == "wrong_version" else 5,
                             )
                         ]
                     if "pg_policies" in q:
@@ -1797,7 +1811,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
         payload = _extract_json(result.stdout + result.stderr)
         serialized = json.dumps(payload, sort_keys=True).lower()
         self.assertTrue(payload.get("ok") is True or payload.get("status") == "ready")
-        self.assertEqual(payload.get("contract"), "supermega_private_trial_database_v4")
+        self.assertEqual(payload.get("contract"), "supermega_private_trial_database_v5")
         checks = payload.get("checks")
         self.assertIsInstance(checks, dict)
         assert isinstance(checks, dict)
@@ -1835,7 +1849,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
             {
                 "name": PRIVATE_SCHEMA,
                 "component": "private_trial_backend",
-                "version": 4,
+                "version": 5,
             },
         )
         self.assertEqual(

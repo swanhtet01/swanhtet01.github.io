@@ -197,6 +197,66 @@ class TrialRuntimeTests(unittest.TestCase):
         self.assertEqual(body["states"]["commerce"]["updated_by"], "actor-operator")
         self.assertEqual(body["states"]["commerce"]["state"]["sku"], "sku-a")
 
+    def test_bootstrap_filters_states_and_approvals_by_capability(self) -> None:
+        self.store.apply_command(
+            self.operator,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.order.saved",
+            expected_version=0,
+            payload={"changes": {"customer": "private-shop-customer"}},
+        )
+        self.store.apply_command(
+            self.operator,
+            command_id=str(uuid4()),
+            surface="website",
+            event_type="website.content.saved",
+            expected_version=0,
+            payload={"changes": {"headline": "Website-only content"}},
+        )
+        approval = self.store.create_approval(
+            self.operator,
+            command_id=str(uuid4()),
+            title="Review release",
+            proposal=_decision_packet(),
+            evidence_refs=("review://catalog/1",),
+        )
+
+        operator = self.client.get(
+            "/api/trial/v1/bootstrap",
+            headers=self._headers("operator-session"),
+        )
+        self.assertEqual(operator.status_code, 200)
+        self.assertEqual(set(operator.json()["states"]), {"commerce", "website"})
+        self.assertEqual(operator.json()["approvals"][0]["approval_id"], approval.approval_id)
+
+        manager = self.client.get(
+            "/api/trial/v1/bootstrap",
+            headers=self._headers("manager-session"),
+        )
+        self.assertEqual(manager.status_code, 200)
+        self.assertEqual(manager.json()["states"], {})
+        self.assertEqual(manager.json()["approvals"][0]["approval_id"], approval.approval_id)
+        self.assertNotIn("private-shop-customer", str(manager.json()))
+
+        website_reader = TrialPrincipal("workspace-a", "actor-website-reader", "human")
+        self.sessions["website-reader-session"] = website_reader
+        self.store.provision_membership(
+            workspace_id="workspace-a",
+            actor_id="actor-website-reader",
+            actor_kind="human",
+            capabilities=("website.read",),
+        )
+        reader = self.client.get(
+            "/api/trial/v1/bootstrap",
+            headers=self._headers("website-reader-session"),
+        )
+        self.assertEqual(reader.status_code, 200)
+        self.assertEqual(set(reader.json()["states"]), {"website"})
+        self.assertEqual(reader.json()["states"]["website"]["state"]["headline"], "Website-only content")
+        self.assertEqual(reader.json()["approvals"], [])
+        self.assertNotIn("private-shop-customer", str(reader.json()))
+
     def test_bootstrap_is_workspace_scoped(self) -> None:
         shared_command_id = str(uuid4())
         first = self.client.post(

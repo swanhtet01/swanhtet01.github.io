@@ -5,6 +5,7 @@ import {
   loadManagedBootstrap,
   managedTrialAuthConfigured,
   ManagedTrialError,
+  requireManagedSurfaceState,
   saveManagedWebsiteCommand,
   type ManagedCommandEvidence,
   type ManagedIdentity,
@@ -251,7 +252,7 @@ export function useWebsiteWorkspace(): {
         if (!identity || !active) return
         let bootstrap = await loadManagedBootstrap(identity)
         if (!active) return
-        const record = bootstrap.states.website
+        const record = requireManagedSurfaceState(bootstrap, 'website', 'Website')
         let managedWorkspace: WebsiteWorkspace
         let managedVersion = record.version
         if (record.version === 0 && Object.keys(record.state).length === 0) {
@@ -283,7 +284,7 @@ export function useWebsiteWorkspace(): {
           } catch (error) {
             if (!(error instanceof ManagedTrialError) || error.code !== 'trial_version_conflict') throw error
             bootstrap = await loadManagedBootstrap(identity)
-            const concurrent = bootstrap.states.website
+            const concurrent = requireManagedSurfaceState(bootstrap, 'website', 'Website')
             const restored = restoreWorkspace(concurrent.state)
             if (!restored || concurrent.version < 1) throw new Error('Concurrent Website initialization returned invalid state.')
             managedWorkspace = restored
@@ -309,6 +310,17 @@ export function useWebsiteWorkspace(): {
         if (!active) return
         storageModeRef.current = 'session-only'
         setStorageMode('session-only')
+        if (error instanceof ManagedTrialError && error.code === 'trial_capability_required') {
+          const hiddenLocalWorkspace = createInitialWorkspace()
+          managedIdentityRef.current = null
+          managedVersionRef.current = null
+          setManagedActorId('')
+          workspaceRef.current = hiddenLocalWorkspace
+          setWorkspace(hiddenLocalWorkspace)
+          updateRepairCandidate(null)
+          setStorageIssue(`${managedFailure(error)} Browser-local Website content is hidden while this managed account is connected.`)
+          return
+        }
         setStorageIssue(`Managed Website could not be loaded; the current screen is preserved and durable writes are paused: ${managedFailure(error)}`)
       } finally {
         hydratedRef.current = true
@@ -424,7 +436,7 @@ export function useWebsiteWorkspace(): {
               try {
                 const bootstrap = await loadManagedBootstrap(managedIdentity)
                 await requireCurrentManagedIdentity(managedIdentity)
-                const record = bootstrap.states.website
+                const record = requireManagedSurfaceState(bootstrap, 'website', 'Website')
                 const refreshed = restoreWorkspace(record.state)
                 if (!refreshed) throw new Error('The newer managed Website state is invalid.')
                 setManagedActorId(bootstrap.identity.actor_id)

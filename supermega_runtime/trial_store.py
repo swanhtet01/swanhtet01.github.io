@@ -14,7 +14,7 @@ from uuid import UUID, uuid4
 
 
 TRIAL_SCHEMA_COMPONENT = "private_trial_backend"
-TRIAL_SCHEMA_VERSION = 4
+TRIAL_SCHEMA_VERSION = 5
 TRIAL_SURFACES = frozenset({"company", "commerce", "production", "website", "setup"})
 TRUSTED_ACTOR_KINDS = frozenset({"human", "service", "agent"})
 HUMAN_ACTOR_KIND = "human"
@@ -46,6 +46,10 @@ SURFACE_WRITE_CAPABILITIES = {
     "website": "website.write",
     "setup": "setup.write",
 }
+SURFACE_READ_CAPABILITIES = {
+    surface: f"{surface}.read" for surface in SURFACE_WRITE_CAPABILITIES
+}
+APPROVAL_READ_CAPABILITY = "approvals.read"
 APPROVAL_REQUEST_CAPABILITY = "approvals.request"
 APPROVAL_DECIDE_CAPABILITY = "approvals.decide"
 DECISION_PACKET_CONTRACT = "decision_packet.v1"
@@ -636,6 +640,39 @@ def _required_surface_capability(surface: str) -> str:
     return SURFACE_WRITE_CAPABILITIES[_normalize_surface(surface)]
 
 
+def has_surface_read_capability(capabilities: Sequence[str], surface: str) -> bool:
+    surface_value = _normalize_surface(surface)
+    granted = frozenset(capabilities)
+    return (
+        SURFACE_READ_CAPABILITIES[surface_value] in granted
+        or SURFACE_WRITE_CAPABILITIES[surface_value] in granted
+    )
+
+
+def has_approval_read_capability(capabilities: Sequence[str]) -> bool:
+    granted = frozenset(capabilities)
+    return bool(
+        granted.intersection(
+            {
+                APPROVAL_READ_CAPABILITY,
+                APPROVAL_REQUEST_CAPABILITY,
+                APPROVAL_DECIDE_CAPABILITY,
+            }
+        )
+    )
+
+
+def _require_surface_read_capability(capabilities: Sequence[str], surface: str) -> None:
+    surface_value = _normalize_surface(surface)
+    if not has_surface_read_capability(capabilities, surface_value):
+        raise TrialPermissionDenied(SURFACE_READ_CAPABILITIES[surface_value])
+
+
+def _require_approval_read_capability(capabilities: Sequence[str]) -> None:
+    if not has_approval_read_capability(capabilities):
+        raise TrialPermissionDenied(APPROVAL_READ_CAPABILITY)
+
+
 def _principal_auth_ready(principal: TrialPrincipal | None) -> bool:
     if principal is None:
         return False
@@ -1117,7 +1154,8 @@ class PostgresTrialStore:
 
     def get_state(self, principal: TrialPrincipal, surface: str) -> TrialState:
         normalized_surface = _normalize_surface(surface)
-        with self._guarded_cursor(principal, write=False) as (cursor, _):
+        with self._guarded_cursor(principal, write=False) as (cursor, capabilities):
+            _require_surface_read_capability(capabilities, normalized_surface)
             cursor.execute(
                 """
                 select workspace_id, surface, version, state_json, updated_by, updated_at
@@ -1143,7 +1181,8 @@ class PostgresTrialStore:
 
     def list_approvals(self, principal: TrialPrincipal, *, limit: int = 50) -> list[ApprovalRecord]:
         bounded_limit = max(1, min(int(limit), 100))
-        with self._guarded_cursor(principal, write=False) as (cursor, _):
+        with self._guarded_cursor(principal, write=False) as (cursor, capabilities):
+            _require_approval_read_capability(capabilities)
             cursor.execute(
                 """
                 select approval_id, command_id, title, proposal_json, evidence_refs_json,
@@ -1225,7 +1264,12 @@ class PostgresTrialStore:
         if event_type_value in HUMAN_COMMAND_EVENTS and normalized.actor_kind != HUMAN_ACTOR_KIND:
             raise TrialHumanApprovalRequired()
         capability = _required_surface_capability(surface_value)
-        with self._guarded_cursor(normalized, write=True, capability=capability) as (cursor, _):
+        with self._guarded_cursor(normalized, write=True, capability=capability) as (
+            cursor,
+            capabilities,
+        ):
+            for related_surface in related_surface_values:
+                _require_surface_read_capability(capabilities, related_surface)
             self._lock(cursor, f"{normalized.workspace_id}:command:{command_id_value}")
             replay = self._load_event_replay(
                 cursor,
@@ -1607,7 +1651,7 @@ class InMemoryTrialStore:
         self.write_enabled = bool(write_enabled)
         self._memberships: dict[tuple[str, str], tuple[str, str, frozenset[str]]] = {}
         self._states: dict[tuple[str, str], TrialState] = {}
-        self._events: dict[tuple[str, str], tuple[str, JsonObject]] = {}
+        self._events: dict[tuple[str, str], tuple[str, str, str, JsonObject]] = {}
         self._approvals: dict[tuple[str, str], ApprovalRecord] = {}
         self._approval_commands: dict[tuple[str, str], str] = {}
         self._lock = RLock()
@@ -1680,8 +1724,9 @@ class InMemoryTrialStore:
         return normalized, readiness
 
     def get_state(self, principal: TrialPrincipal, surface: str) -> TrialState:
-        normalized, _ = self._guard(principal, write=False)
+        normalized, readiness = self._guard(principal, write=False)
         surface_value = _normalize_surface(surface)
+        _require_surface_read_capability(readiness.capabilities, surface_value)
         state = self._states.get((normalized.workspace_id, surface_value))
         if state is None:
             return TrialState(normalized.workspace_id, surface_value, 0, {})
@@ -1695,21 +1740,39 @@ class InMemoryTrialStore:
         )
 
     def list_approvals(self, principal: TrialPrincipal, *, limit: int = 50) -> list[ApprovalRecord]:
-        normalized, _ = self._guard(principal, write=False)
+        normalized, readiness = self._guard(principal, write=False)
+        _require_approval_read_capability(readiness.capabilities)
+        can_review_all = bool(
+            readiness.capabilities.intersection(
+                {APPROVAL_READ_CAPABILITY, APPROVAL_DECIDE_CAPABILITY}
+            )
+        )
         rows = [
             approval
             for (workspace_id, _), approval in self._approvals.items()
             if workspace_id == normalized.workspace_id
+            and (can_review_all or approval.requested_by == normalized.actor_id)
         ]
         rows.sort(key=lambda row: (row.status != "pending", row.requested_at), reverse=False)
         return [deepcopy(row) for row in rows[: max(1, min(int(limit), 100))]]
 
-    def _replay(self, workspace_id: str, command_id: str, fingerprint: str) -> JsonObject | None:
+    def _replay(
+        self,
+        workspace_id: str,
+        actor_id: str,
+        actor_kind: str,
+        command_id: str,
+        fingerprint: str,
+    ) -> JsonObject | None:
         row = self._events.get((workspace_id, command_id))
         if row is None:
             return None
-        stored_fingerprint, result = row
-        if stored_fingerprint != fingerprint:
+        stored_fingerprint, stored_actor_id, stored_actor_kind, result = row
+        if (
+            stored_fingerprint != fingerprint
+            or stored_actor_id != actor_id
+            or stored_actor_kind != actor_kind
+        ):
             raise TrialIdempotencyConflict(command_id)
         return deepcopy(result)
 
@@ -1747,14 +1810,22 @@ class InMemoryTrialStore:
             command_contract,
         )
         with self._lock:
-            normalized, _ = self._guard(
+            normalized, readiness = self._guard(
                 principal,
                 write=True,
                 capability=_required_surface_capability(surface_value),
             )
+            for related_surface in related_surface_values:
+                _require_surface_read_capability(readiness.capabilities, related_surface)
             if event_type_value in HUMAN_COMMAND_EVENTS and normalized.actor_kind != HUMAN_ACTOR_KIND:
                 raise TrialHumanApprovalRequired()
-            replay = self._replay(normalized.workspace_id, command_id_value, fingerprint)
+            replay = self._replay(
+                normalized.workspace_id,
+                normalized.actor_id,
+                normalized.actor_kind,
+                command_id_value,
+                fingerprint,
+            )
             if replay is not None:
                 return CommandResult(
                     command_id=command_id_value,
@@ -1823,7 +1894,12 @@ class InMemoryTrialStore:
                 state=deepcopy(next_state),
             )
             self._states[(normalized.workspace_id, surface_value)] = next_row
-            self._events[(normalized.workspace_id, command_id_value)] = (fingerprint, result.to_dict())
+            self._events[(normalized.workspace_id, command_id_value)] = (
+                fingerprint,
+                normalized.actor_id,
+                normalized.actor_kind,
+                result.to_dict(),
+            )
             return result
 
     def create_approval(
@@ -1851,7 +1927,13 @@ class InMemoryTrialStore:
                 write=True,
                 capability=APPROVAL_REQUEST_CAPABILITY,
             )
-            replay = self._replay(normalized.workspace_id, command_id_value, fingerprint)
+            replay = self._replay(
+                normalized.workspace_id,
+                normalized.actor_id,
+                normalized.actor_kind,
+                command_id_value,
+                fingerprint,
+            )
             if replay is not None:
                 return _approval_from_mapping(replay["approval"], replay=True)
             approval = ApprovalRecord(
@@ -1869,6 +1951,8 @@ class InMemoryTrialStore:
             self._approval_commands[(normalized.workspace_id, command_id_value)] = approval.approval_id
             self._events[(normalized.workspace_id, command_id_value)] = (
                 fingerprint,
+                normalized.actor_id,
+                normalized.actor_kind,
                 {"approval": approval.to_dict()},
             )
             return deepcopy(approval)
@@ -1901,7 +1985,13 @@ class InMemoryTrialStore:
                 write=True,
                 capability=APPROVAL_DECIDE_CAPABILITY,
             )
-            replay = self._replay(normalized.workspace_id, command_id_value, fingerprint)
+            replay = self._replay(
+                normalized.workspace_id,
+                normalized.actor_id,
+                normalized.actor_kind,
+                command_id_value,
+                fingerprint,
+            )
             if replay is not None:
                 return _approval_from_mapping(replay["approval"], replay=True)
             key = (normalized.workspace_id, approval_id_value)
@@ -1929,6 +2019,8 @@ class InMemoryTrialStore:
             self._approvals[key] = deepcopy(decided)
             self._events[(normalized.workspace_id, command_id_value)] = (
                 fingerprint,
+                normalized.actor_id,
+                normalized.actor_kind,
                 {"approval": decided.to_dict()},
             )
             return deepcopy(decided)

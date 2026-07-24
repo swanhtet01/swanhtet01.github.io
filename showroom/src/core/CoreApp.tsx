@@ -20,8 +20,10 @@ import {
   loadManagedBootstrap,
   ManagedTrialError,
   managedTrialAuthConfigured,
+  requireManagedSurfaceState,
   saveManagedCommerceCommand,
   saveManagedProductionCommand,
+  sameManagedIdentity,
   signInManagedTrial,
   signOutManagedTrial,
   type ManagedApprovalRecord,
@@ -762,15 +764,16 @@ function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = null) {
     if (!managedIdentity) return undefined
 
     let active = true
-    loadManagedBootstrap()
+    loadManagedBootstrap(managedIdentity)
       .then((bootstrap) => {
-        if (!active || identityRef.current?.workspaceId !== managedIdentity.workspaceId) return
-        const next = managedCommerceView(bootstrap.states.commerce, managedIdentity.workspaceId)
+        if (!active || !identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) return
+        const record = requireManagedSurfaceState(bootstrap, 'commerce', 'Shop')
+        const next = managedCommerceView(record, managedIdentity.workspaceId)
         snapshotRef.current = next
         setManagedSnapshot(next)
       })
       .catch((error) => {
-        if (!active || identityRef.current?.workspaceId !== managedIdentity.workspaceId) return
+        if (!active || !identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) return
         const next = { state: createEmptyCommerce(), mode: 'managed-error' as const, workspaceId: managedIdentity.workspaceId, version: null, error: error instanceof Error ? error.message : 'Managed Shop could not be loaded.', writeReady: false }
         snapshotRef.current = next
         setManagedSnapshot(next)
@@ -828,16 +831,19 @@ function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = null) {
         expectedVersion: current.version,
         state: candidate as unknown as Record<string, unknown>,
       })
-      if (identityRef.current?.workspaceId !== workspaceId) throw new Error('The managed workspace changed before the write was confirmed.')
+      if (!identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) throw new Error('The managed workspace changed before the write was confirmed.')
       if (result.surface !== 'commerce' || result.event_type !== eventType || result.version !== current.version + 1) {
         throw new Error('Managed Shop returned an invalid command result.')
       }
       const accepted = validateCommerceState(result.state)
       let nextSnapshot: CommerceWorkspaceView = { state: accepted, mode: 'managed-ready', workspaceId, version: result.version, error: '', writeReady: true }
       if (result.idempotent_replay) {
-        const bootstrap = await loadManagedBootstrap()
-        if (identityRef.current?.workspaceId !== workspaceId) throw new Error('The managed workspace changed before the replay could be reconciled.')
-        const refreshed = managedCommerceView(bootstrap.states.commerce, workspaceId)
+        const bootstrap = await loadManagedBootstrap(managedIdentity)
+        if (!identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) throw new Error('The managed workspace changed before the replay could be reconciled.')
+        const refreshed = managedCommerceView(
+          requireManagedSurfaceState(bootstrap, 'commerce', 'Shop'),
+          workspaceId,
+        )
         if (refreshed.mode !== 'managed-ready' || refreshed.version === null || refreshed.version < result.version) {
           throw new Error('Managed Shop could not reconcile the committed command with current state.')
         }
@@ -849,9 +855,12 @@ function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = null) {
       const message = error instanceof Error ? error.message : 'The managed Shop write was not confirmed.'
       if (error instanceof ManagedTrialError && error.code === 'trial_version_conflict') {
         try {
-          const bootstrap = await loadManagedBootstrap()
-          if (identityRef.current?.workspaceId !== workspaceId) throw new Error('The managed workspace changed before Shop could refresh.')
-          const refreshed = managedCommerceView(bootstrap.states.commerce, workspaceId)
+          const bootstrap = await loadManagedBootstrap(managedIdentity)
+          if (!identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) throw new Error('The managed workspace changed before Shop could refresh.')
+          const refreshed = managedCommerceView(
+            requireManagedSurfaceState(bootstrap, 'commerce', 'Shop'),
+            workspaceId,
+          )
           const conflict = { ...refreshed, error: '' }
           snapshotRef.current = conflict
           setManagedSnapshot(conflict)
@@ -864,7 +873,7 @@ function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = null) {
         }
         throw new ShopReviewRequiredError('Shop changed in another session. The latest revision is loaded; review and confirm the action again.')
       }
-      if (identityRef.current?.workspaceId === workspaceId) {
+      if (identityRef.current && sameManagedIdentity(identityRef.current, managedIdentity)) {
         const rejected = { ...snapshotRef.current, error: message }
         snapshotRef.current = rejected
         setManagedSnapshot(rejected)
@@ -933,15 +942,16 @@ function useProductionWorkspace(managedIdentity: ManagedIdentity | null = null) 
     if (!managedIdentity) return undefined
 
     let active = true
-    loadManagedBootstrap()
+    loadManagedBootstrap(managedIdentity)
       .then((bootstrap) => {
-        if (!active || identityRef.current?.workspaceId !== managedIdentity.workspaceId) return
-        const next = managedProductionView(bootstrap.states.production, managedIdentity.workspaceId)
+        if (!active || !identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) return
+        const record = requireManagedSurfaceState(bootstrap, 'production', 'Plant')
+        const next = managedProductionView(record, managedIdentity.workspaceId)
         snapshotRef.current = next
         setManagedSnapshot(next)
       })
       .catch((error) => {
-        if (!active || identityRef.current?.workspaceId !== managedIdentity.workspaceId) return
+        if (!active || !identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) return
         const next = { state: createEmptyProduction(), mode: 'managed-error' as const, workspaceId: managedIdentity.workspaceId, version: null, error: error instanceof Error ? error.message : 'Managed Plant could not be loaded.', writeReady: false }
         snapshotRef.current = next
         setManagedSnapshot(next)
@@ -1014,16 +1024,19 @@ function useProductionWorkspace(managedIdentity: ManagedIdentity | null = null) 
         expectedVersion: current.version,
         state: candidate as unknown as Record<string, unknown>,
       })
-      if (identityRef.current?.workspaceId !== workspaceId) throw new Error('The managed workspace changed before the write was confirmed.')
+      if (!identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) throw new Error('The managed workspace changed before the write was confirmed.')
       if (result.surface !== 'production' || result.event_type !== eventType || result.version !== current.version + 1) {
         throw new Error('Managed Plant returned an invalid command result.')
       }
       const accepted = validateProductionState(result.state)
       let nextSnapshot: ProductionWorkspaceView = { state: accepted, mode: 'managed-ready', workspaceId, version: result.version, error: '', writeReady: true }
       if (result.idempotent_replay) {
-        const bootstrap = await loadManagedBootstrap()
-        if (identityRef.current?.workspaceId !== workspaceId) throw new Error('The managed workspace changed before the replay could be reconciled.')
-        const refreshed = managedProductionView(bootstrap.states.production, workspaceId)
+        const bootstrap = await loadManagedBootstrap(managedIdentity)
+        if (!identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) throw new Error('The managed workspace changed before the replay could be reconciled.')
+        const refreshed = managedProductionView(
+          requireManagedSurfaceState(bootstrap, 'production', 'Plant'),
+          workspaceId,
+        )
         if (refreshed.mode !== 'managed-ready' || refreshed.version === null || refreshed.version < result.version) {
           throw new Error('Managed Plant could not reconcile the committed command with current state.')
         }
@@ -1035,9 +1048,12 @@ function useProductionWorkspace(managedIdentity: ManagedIdentity | null = null) 
       const message = error instanceof Error ? error.message : 'The managed Plant write was not confirmed.'
       if (error instanceof ManagedTrialError && error.code === 'trial_version_conflict') {
         try {
-          const bootstrap = await loadManagedBootstrap()
-          if (identityRef.current?.workspaceId !== workspaceId) throw new Error('The managed workspace changed before Plant could refresh.')
-          const refreshed = managedProductionView(bootstrap.states.production, workspaceId)
+          const bootstrap = await loadManagedBootstrap(managedIdentity)
+          if (!identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) throw new Error('The managed workspace changed before Plant could refresh.')
+          const refreshed = managedProductionView(
+            requireManagedSurfaceState(bootstrap, 'production', 'Plant'),
+            workspaceId,
+          )
           const conflict = { ...refreshed, error: '' }
           snapshotRef.current = conflict
           setManagedSnapshot(conflict)
@@ -1050,7 +1066,7 @@ function useProductionWorkspace(managedIdentity: ManagedIdentity | null = null) 
         }
         throw new PlantReviewRequiredError('Plant changed in another session. The latest revision is loaded; review and confirm the action again.')
       }
-      if (identityRef.current?.workspaceId === workspaceId) {
+      if (identityRef.current && sameManagedIdentity(identityRef.current, managedIdentity)) {
         const rejected = { ...snapshotRef.current, error: message }
         snapshotRef.current = rejected
         setManagedSnapshot(rejected)
@@ -1387,7 +1403,7 @@ export function OverviewPage() {
   useEffect(() => {
     if (!managedIdentity) return undefined
     let active = true
-    loadManagedBootstrap()
+    loadManagedBootstrap(managedIdentity)
       .then((bootstrap) => {
         if (!active) return
         setApprovals((current) => mergeManagedApprovals(current, bootstrap.approvals))
@@ -3595,7 +3611,7 @@ export function SettingsPage() {
       setManagedIdentity(identity)
       setManagedPassword('')
       try {
-        const bootstrap = await loadManagedBootstrap()
+        const bootstrap = await loadManagedBootstrap(identity)
         setApprovals((current) => mergeManagedApprovals(current, bootstrap.approvals))
         setManagedNotice(`Connected to ${identity.workspaceId}. Managed approvals are ready.`)
       } catch (workspaceError) {

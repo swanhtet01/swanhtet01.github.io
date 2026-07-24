@@ -157,6 +157,33 @@ class TrialStoreTests(unittest.TestCase):
         with self.assertRaises(TrialIdempotencyConflict):
             self._apply(self.operator, command_id=command_id, sku="different-input")
 
+    def test_approval_request_replay_is_bound_to_the_original_actor(self) -> None:
+        command_id = str(uuid4())
+        self.store.create_approval(
+            self.operator,
+            command_id=command_id,
+            title="Actor-bound approval replay",
+            proposal=_decision_packet(),
+            evidence_refs=("review://catalog/1",),
+        )
+        second_requester = TrialPrincipal("workspace-a", "actor-requester-two", "human")
+        self.store.provision_membership(
+            workspace_id="workspace-a",
+            actor_id="actor-requester-two",
+            actor_kind="human",
+            capabilities=("approvals.request",),
+        )
+
+        with self.assertRaises(TrialIdempotencyConflict):
+            self.store.create_approval(
+                second_requester,
+                command_id=command_id,
+                title="Actor-bound approval replay",
+                proposal=_decision_packet(),
+                evidence_refs=("review://catalog/1",),
+            )
+        self.assertEqual(self.store.list_approvals(second_requester), [])
+
     def test_optimistic_version_conflict_does_not_change_state(self) -> None:
         self._apply(self.operator, command_id=str(uuid4()))
 
@@ -255,6 +282,17 @@ class TrialStoreTests(unittest.TestCase):
         self.assertEqual(self.reducer.calls, calls_before_rejection)
 
     def test_write_requires_explicit_surface_capability(self) -> None:
+        self.store.provision_membership(
+            workspace_id="workspace-a",
+            actor_id="actor-operator",
+            actor_kind="human",
+            capabilities=(
+                "commerce.write",
+                "website.write",
+                "production.read",
+                "approvals.request",
+            ),
+        )
         with self.assertRaises(TrialPermissionDenied) as raised:
             self.store.apply_command(
                 self.operator,
@@ -425,7 +463,7 @@ class TrialStoreTests(unittest.TestCase):
             ],
         )
 
-    def test_postgres_schema_probe_requires_version_4_and_hardening_controls(self) -> None:
+    def test_postgres_schema_probe_requires_version_5_and_hardening_controls(self) -> None:
         def canonical_trigger_rows() -> list[dict[str, object]]:
             return [
                 {
@@ -474,7 +512,7 @@ class TrialStoreTests(unittest.TestCase):
                 return self.trigger_rows
 
         ready = {
-            "schema_version": 4,
+            "schema_version": 5,
             "actor_decision_columns_ready": True,
             "security_constraints_ready": True,
         }
@@ -491,7 +529,7 @@ class TrialStoreTests(unittest.TestCase):
         self.assertEqual(cursor.parameters, ())
 
         for field, value in (
-            ("schema_version", 3),
+            ("schema_version", 4),
             ("actor_decision_columns_ready", False),
             ("security_constraints_ready", False),
         ):
@@ -659,9 +697,53 @@ class TrialStoreTests(unittest.TestCase):
             workspace_id="workspace-a",
             actor_id="actor-operator",
             actor_kind="human",
-            capabilities=(),
+            capabilities=("commerce.read",),
         )
         self.assertEqual(read_only.get_state(self.operator, "commerce").version, 0)
+
+    def test_reads_require_product_or_approval_capabilities(self) -> None:
+        with self.assertRaises(TrialPermissionDenied) as state_denied:
+            self.store.get_state(self.manager, "commerce")
+        self.assertEqual(state_denied.exception.required_capability, "commerce.read")
+
+        website_reader = TrialPrincipal("workspace-a", "actor-website-reader", "human")
+        self.store.provision_membership(
+            workspace_id="workspace-a",
+            actor_id="actor-website-reader",
+            actor_kind="human",
+            capabilities=("website.read",),
+        )
+        self.assertEqual(self.store.get_state(website_reader, "website").version, 0)
+        with self.assertRaises(TrialPermissionDenied):
+            self.store.get_state(website_reader, "commerce")
+        with self.assertRaises(TrialPermissionDenied) as approvals_denied:
+            self.store.list_approvals(website_reader)
+        self.assertEqual(approvals_denied.exception.required_capability, "approvals.read")
+
+    def test_related_state_precondition_requires_related_read_capability(self) -> None:
+        commerce_only = TrialPrincipal("workspace-a", "actor-commerce-only", "human")
+        self.store.provision_membership(
+            workspace_id="workspace-a",
+            actor_id="actor-commerce-only",
+            actor_kind="human",
+            capabilities=("commerce.write",),
+        )
+        calls_before_rejection = self.reducer.calls
+
+        with self.assertRaises(TrialPermissionDenied) as denied:
+            self.store.apply_command(
+                commerce_only,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.website_intake.created",
+                expected_version=0,
+                payload={"changes": {"intake": "must-not-write"}},
+                related_surfaces=("website",),
+                state_precondition=lambda _current, _related: None,
+            )
+
+        self.assertEqual(denied.exception.required_capability, "website.read")
+        self.assertEqual(self.reducer.calls, calls_before_rejection)
 
     def test_approval_transition_is_controlled_and_workspace_scoped(self) -> None:
         approval = self.store.create_approval(

@@ -12,6 +12,7 @@ import {
   currentManagedIdentity,
   loadManagedBootstrap,
   ManagedTrialError,
+  requireManagedSurfaceState,
   saveManagedCommerceCommand,
   type ManagedIdentity,
   type ManagedStateRecord,
@@ -188,7 +189,10 @@ export function EcommerceProduct() {
         setManagedIdentity(identity)
         const bootstrap = await loadManagedBootstrap(identity)
         if (!current) return
-        const view = resolveManagedStorefront(identity, bootstrap.states.commerce)
+        const view = resolveManagedStorefront(
+          identity,
+          requireManagedSurfaceState(bootstrap, 'commerce', 'Shop'),
+        )
         if (!view) {
           setManagedInbox(null)
           setSavedDraft(null)
@@ -346,7 +350,10 @@ export function EcommerceProduct() {
       throw new Error('The managed workspace identity changed. Reload before saving.')
     }
     const bootstrap = await loadManagedBootstrap(identity)
-    const view = resolveManagedStorefront(identity, bootstrap.states.commerce)
+    const view = resolveManagedStorefront(
+      identity,
+      requireManagedSurfaceState(bootstrap, 'commerce', 'Shop'),
+    )
     if (!view) throw new Error('Create the managed Shop catalog before saving its Ecommerce storefront.')
     applyManagedView(view, false)
     const currentSkus = new Set(view.inbox.state.items.map((item) => item.sku))
@@ -445,7 +452,10 @@ export function EcommerceProduct() {
             throw new Error('The managed workspace identity changed before the conflict could be refreshed.')
           }
           const bootstrap = await loadManagedBootstrap(identity)
-          const view = resolveManagedStorefront(identity, bootstrap.states.commerce)
+          const view = resolveManagedStorefront(
+            identity,
+            requireManagedSurfaceState(bootstrap, 'commerce', 'Shop'),
+          )
           if (!view) throw new Error('The managed Shop catalog is no longer available.')
           applyManagedView(view, false)
           setDraftNotice('Workspace changed in another session. The latest saved revision is loaded; current edits were kept for review.')
@@ -567,7 +577,7 @@ export function EcommerceProduct() {
         throw new Error('The managed workspace changed. Reload Ecommerce before retaining this request.')
       }
       const bootstrap = await loadManagedBootstrap(identity)
-      const record = bootstrap.states.commerce
+      const record = requireManagedSurfaceState(bootstrap, 'commerce', 'Shop')
       if (record.surface !== 'commerce' || !Number.isSafeInteger(record.version) || record.version < 1) {
         throw new Error('The managed Shop catalog is not ready for Ecommerce requests.')
       }

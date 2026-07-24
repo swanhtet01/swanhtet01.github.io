@@ -20,13 +20,13 @@ from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
 
-CONTRACT = "supermega_private_trial_database_v4"
+CONTRACT = "supermega_private_trial_database_v5"
 REHEARSAL_PREFLIGHT_CONTRACT = "supermega_supabase_rehearsal_preflight_v1"
 SCHEMA = "app_private"
 BACKEND_ROLE = "supermega_trial_backend"
 TRUSTED_OWNER = "postgres"
 SCHEMA_COMPONENT = "private_trial_backend"
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 EXPECTED_POSTGRES_MAJOR = 17
 SAFE_SSL_MODES = frozenset({"require", "verify-ca", "verify-full"})
 EXPECTED_TABLES = frozenset(
@@ -369,7 +369,7 @@ EXPECTED_POLICY_FINGERPRINTS: dict[str, dict[str, str | None]] = {
         "check": None,
     },
     "workspace_state_member_read": {
-        "qual": "a9d2ddd3b6c10273885205138d7bec47b870b0158840e0cc3e93a38cdafdb15d",
+        "qual": "8737b02ce9573202ada4159efafbabb0eb641da45361f297c456e6aa2b903b8d",
         "check": None,
     },
     "workspace_state_capability_insert": {
@@ -381,7 +381,7 @@ EXPECTED_POLICY_FINGERPRINTS: dict[str, dict[str, str | None]] = {
         "check": "5ba3422b3b6e3439bab09012219d76dde5e1770a47f7a35b70baee218a086d9c",
     },
     "workspace_events_member_read": {
-        "qual": "dbd92612761332506cb8000e88bcff3b04fb0a499486c3e4d214dfbdaaf6cbae",
+        "qual": "b0a36ce4bd6d748d8f81f6329e07170a7db2bf945871b1d7f33d50c8c5b8c2e6",
         "check": None,
     },
     "workspace_events_capability_insert": {
@@ -389,7 +389,7 @@ EXPECTED_POLICY_FINGERPRINTS: dict[str, dict[str, str | None]] = {
         "check": "c66753e2421b833b77a5b47f7248bc6fa8a7907fc7a217b520a1eb0af2b91462",
     },
     "approval_requests_member_read": {
-        "qual": "d3b1ca91bdb376190b1b6fa144943079c3b403c29449231d5f9a74f8dfb9e7d9",
+        "qual": "969b01b90e58965bad2d36edd64b57f331a6c7c23c335e47c28a5c84b02f148a",
         "check": None,
     },
     "approval_requests_capability_insert": {
@@ -1624,7 +1624,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--ensure-schema",
         action="store_true",
-        help="Require the complete v4 schema contract; this flag never applies migrations.",
+        help="Require the complete v5 schema contract; this flag never applies migrations.",
     )
     parser.add_argument("--require-ready", action="store_true")
     parser.add_argument(

@@ -33,6 +33,7 @@ MIGRATIONS = (
     "20260722142801_private_trial_backend_v2.sql",
     "20260723094500_private_trial_backend_v3_website.sql",
     "20260723144500_private_trial_backend_v4_hardening.sql",
+    "20260724204920_private_trial_backend_v5_read_capabilities.sql",
 )
 VALIDATOR = ROOT / "tools" / "validate_supermega_database_url.py"
 CONTRACT = "supermega_postgres17_rehearsal_v1"
@@ -535,13 +536,17 @@ def _seed_rehearsal_data(admin_database_url: str) -> None:
                   (workspace_id, actor_id, status, capabilities, actor_kind)
                 values
                   ('rehearsal-a', 'owner-a', 'active',
-                   array['commerce.write']::text[], 'human'),
+                    array['commerce.write']::text[], 'human'),
+                  ('rehearsal-a', 'approval-reader', 'active',
+                    array['approvals.read']::text[], 'human'),
+                  ('rehearsal-a', 'website-reader', 'active',
+                    array['website.read']::text[], 'human'),
                   ('rehearsal-b', 'owner-b', 'active',
                    array['production.write']::text[], 'human'),
                   ('rehearsal-product', 'owner-product', 'active',
-                   array['commerce.write', 'website.write']::text[], 'human'),
+                    array['commerce.write', 'website.write']::text[], 'human'),
                   ('rehearsal-approval', 'approval-agent', 'active',
-                   array['approvals.request', 'approvals.decide']::text[], 'agent'),
+                    array['approvals.request']::text[], 'agent'),
                   ('rehearsal-approval', 'approval-service', 'active',
                    array['approvals.decide']::text[], 'service'),
                   ('rehearsal-approval', 'approval-owner', 'active',
@@ -1781,6 +1786,46 @@ def _exercise_approval_authority(
     if final_snapshot != approval_snapshot:
         raise RehearsalFailure("approval_authority_changed_after_rejection")
 
+    approval_read_visibility: dict[str, tuple[int, list[str]]] = {}
+    for actor, actor_kind in (
+        (APPROVAL_AGENT_ACTOR, "agent"),
+        (APPROVAL_HUMAN_ACTOR, "human"),
+    ):
+        with _connect(runtime_database_url) as runtime:
+            with runtime.transaction():
+                with runtime.cursor() as cursor:
+                    _set_identity(
+                        cursor,
+                        workspace=APPROVAL_WORKSPACE,
+                        actor=actor,
+                        actor_kind=actor_kind,
+                    )
+                    cursor.execute("select count(*) from app_private.approval_requests")
+                    approval_count = int(cursor.fetchone()[0])
+                    cursor.execute(
+                        """
+                        select event_type
+                        from app_private.workspace_events
+                        where surface = 'approvals'
+                        order by event_type
+                        """
+                    )
+                    approval_events = [str(row[0]) for row in cursor.fetchall()]
+                    approval_read_visibility[actor] = (
+                        approval_count,
+                        approval_events,
+                    )
+    if approval_read_visibility[APPROVAL_AGENT_ACTOR] != (
+        1,
+        ["approval.requested"],
+    ):
+        raise RehearsalFailure("approval_requester_read_scope_failed")
+    if approval_read_visibility[APPROVAL_HUMAN_ACTOR] != (
+        1,
+        ["approval.decided", "approval.requested"],
+    ):
+        raise RehearsalFailure("approval_reviewer_read_scope_failed")
+
     return (
         {
             "approval_agent_row_spoof_denied": True,
@@ -1791,6 +1836,8 @@ def _exercise_approval_authority(
             "approval_terminal_replay_rejected": True,
             "approval_record_immutable": True,
             "approval_decision_event_immutable": True,
+            "approval_requester_read_scoped": True,
+            "approval_reviewer_reads_all": True,
         },
         final_snapshot,
     )
@@ -1803,6 +1850,9 @@ def _exercise_runtime(
     checks = {
         "tenant_isolation": False,
         "capability_denial": False,
+        "capability_scoped_reads": False,
+        "capability_scoped_event_reads": False,
+        "write_capability_implies_read": False,
         "optimistic_concurrency": False,
         "event_immutability": False,
         "server_timestamps": False,
@@ -1836,6 +1886,40 @@ def _exercise_runtime(
                       ('rehearsal-a', 'commerce', 1, '{"orders": 1}'::jsonb, 'owner-a')
                     """
                 )
+
+        with _connect(admin_database_url, autocommit=True) as administrator:
+            administrator.execute(
+                """
+                insert into app_private.workspace_state
+                  (workspace_id, surface, version, state_json, updated_by)
+                values
+                  ('rehearsal-a', 'website', 1,
+                   '{"site": "capability-scoped"}'::jsonb, 'administrator')
+                """
+            )
+
+        visible_surfaces: dict[str, list[str]] = {}
+        for actor in ("owner-a", "website-reader", "approval-reader"):
+            with runtime.transaction():
+                with runtime.cursor() as cursor:
+                    _set_identity(cursor, actor=actor)
+                    cursor.execute(
+                        """
+                        select surface
+                        from app_private.workspace_state
+                        order by surface
+                        """
+                    )
+                    visible_surfaces[actor] = [str(row[0]) for row in cursor.fetchall()]
+        if visible_surfaces["owner-a"] != ["commerce"]:
+            raise RehearsalFailure("write_capability_read_denied")
+        checks["write_capability_implies_read"] = True
+        if (
+            visible_surfaces["website-reader"] != ["website"]
+            or visible_surfaces["approval-reader"]
+        ):
+            raise RehearsalFailure("capability_scoped_read_failed")
+        checks["capability_scoped_reads"] = True
 
         def unauthorized_surface() -> None:
             with runtime.transaction():
@@ -1918,6 +2002,30 @@ def _exercise_runtime(
                 if inserted_year < 2025:
                     raise RehearsalFailure("server_timestamp_not_applied")
                 checks["server_timestamps"] = True
+
+        visible_events: dict[str, list[tuple[str, str]]] = {}
+        for actor in ("owner-a", "website-reader", "approval-reader"):
+            with runtime.transaction():
+                with runtime.cursor() as cursor:
+                    _set_identity(cursor, actor=actor)
+                    cursor.execute(
+                        """
+                        select surface, event_type
+                        from app_private.workspace_events
+                        order by event_type
+                        """
+                    )
+                    visible_events[actor] = [
+                        (str(row[0]), str(row[1]))
+                        for row in cursor.fetchall()
+                    ]
+        if (
+            visible_events["owner-a"] != [("commerce", "order.rehearsed")]
+            or visible_events["website-reader"]
+            or visible_events["approval-reader"]
+        ):
+            raise RehearsalFailure("capability_scoped_event_read_failed")
+        checks["capability_scoped_event_reads"] = True
 
         def mutate_event() -> None:
             with _connect(admin_database_url) as administrator:
@@ -2108,7 +2216,7 @@ def _verify_restored_data(
               (select count(*) from app_private.approval_requests)
             """
         ).fetchone()
-    if row != (4, 7, 5, 16, 2):
+    if row != (5, 9, 6, 16, 2):
         raise RehearsalFailure("restored_data_mismatch")
     restored_approval_authority_snapshot = _approval_authority_snapshot(
         admin_database_url
@@ -2334,7 +2442,7 @@ def _run_rehearsal(
                 },
                 "migrations": {
                     "count": len(MIGRATIONS),
-                    "schema_version": 4,
+                    "schema_version": 5,
                     "production_validator_ready": primary_validation.get("ready") is True,
                 },
                 "checks": {
@@ -2357,7 +2465,7 @@ def _run_rehearsal(
                 "recovery": {
                     "format": "pg_dump_custom",
                     "backup_nonempty": True,
-                    "restored_schema_version": 4,
+                    "restored_schema_version": 5,
                 },
                 "cleanup_complete": False,
                 "secret_values_exposed": False,

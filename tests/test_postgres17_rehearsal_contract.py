@@ -84,6 +84,7 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
                 "20260722142801_private_trial_backend_v2.sql",
                 "20260723094500_private_trial_backend_v3_website.sql",
                 "20260723144500_private_trial_backend_v4_hardening.sql",
+                "20260724204920_private_trial_backend_v5_read_capabilities.sql",
             ),
         )
         source = REHEARSAL.read_text(encoding="utf-8")
@@ -114,6 +115,14 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
             "idempotent_replay",
             "rehearsal-product",
             "owner-product",
+            "approval-reader",
+            "website-reader",
+            "capability_scoped_reads",
+            "capability_scoped_event_reads",
+            "write_capability_implies_read",
+            "approval_requester_read_scoped",
+            "approval_reviewer_reads_all",
+            "array['approvals.request']::text[]",
         ):
             self.assertIn(expected, source)
         self.assertNotIn("fastapi.testclient", source.casefold())

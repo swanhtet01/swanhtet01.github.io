@@ -12,6 +12,7 @@ const expectedMigrations = [
   '20260722142801_private_trial_backend_v2.sql',
   '20260723094500_private_trial_backend_v3_website.sql',
   '20260723144500_private_trial_backend_v4_hardening.sql',
+  '20260724204920_private_trial_backend_v5_read_capabilities.sql',
 ]
 const expectedPolicyFingerprints = {
   approval_requests_capability_insert: {
@@ -23,7 +24,7 @@ const expectedPolicyFingerprints = {
     check: '33e38466ad153ad850fb4620e290dd1c78c0bae1fe18d89e4f7bbefe0ce091fd',
   },
   approval_requests_member_read: {
-    qual: 'd3b1ca91bdb376190b1b6fa144943079c3b403c29449231d5f9a74f8dfb9e7d9',
+    qual: '969b01b90e58965bad2d36edd64b57f331a6c7c23c335e47c28a5c84b02f148a',
     check: null,
   },
   workspace_events_capability_insert: {
@@ -31,7 +32,7 @@ const expectedPolicyFingerprints = {
     check: 'c66753e2421b833b77a5b47f7248bc6fa8a7907fc7a217b520a1eb0af2b91462',
   },
   workspace_events_member_read: {
-    qual: 'dbd92612761332506cb8000e88bcff3b04fb0a499486c3e4d214dfbdaaf6cbae',
+    qual: 'b0a36ce4bd6d748d8f81f6329e07170a7db2bf945871b1d7f33d50c8c5b8c2e6',
     check: null,
   },
   workspace_memberships_self_read: {
@@ -47,7 +48,7 @@ const expectedPolicyFingerprints = {
     check: '5ba3422b3b6e3439bab09012219d76dde5e1770a47f7a35b70baee218a086d9c',
   },
   workspace_state_member_read: {
-    qual: 'a9d2ddd3b6c10273885205138d7bec47b870b0158840e0cc3e93a38cdafdb15d',
+    qual: '8737b02ce9573202ada4159efafbabb0eb641da45361f297c456e6aa2b903b8d',
     check: null,
   },
 }
@@ -199,7 +200,7 @@ await applyMigrations(database)
 const version = await database.query(
   "select schema_version from app_private.trial_schema_meta where component = 'private_trial_backend'",
 )
-requireCheck('schema version four', version.rows[0]?.schema_version === 4)
+requireCheck('schema version five', version.rows[0]?.schema_version === 5)
 
 const relations = await database.query(`
   select relation.relname as relation_name, relation.relkind::text as relation_kind,

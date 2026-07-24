@@ -119,7 +119,7 @@ export type ManagedBootstrap = {
     actor_kind: 'human' | 'service' | 'agent'
   }
   readiness: Record<string, unknown>
-  states: Record<ManagedSurface, ManagedStateRecord>
+  states: Partial<Record<ManagedSurface, ManagedStateRecord>>
   approvals: ManagedApprovalRecord[]
 }
 
@@ -154,7 +154,7 @@ export class ManagedTrialError extends Error {
   }
 }
 
-function sameManagedIdentity(left: ManagedIdentity, right: ManagedIdentity) {
+export function sameManagedIdentity(left: ManagedIdentity, right: ManagedIdentity) {
   return left.userId === right.userId && left.workspaceId === right.workspaceId
 }
 
@@ -183,6 +183,29 @@ export function assertManagedBootstrapIdentity(
     })
   }
   return bootstrap as ManagedBootstrap
+}
+
+export function requireManagedSurfaceState(
+  bootstrap: ManagedBootstrap,
+  surface: ManagedSurface,
+  productName: string,
+): ManagedStateRecord {
+  const record = bootstrap.states[surface]
+  if (!record) {
+    throw new ManagedTrialError(
+      `You do not have access to ${productName} in this workspace. Ask a workspace owner to update your role.`,
+      { code: 'trial_capability_required' },
+    )
+  }
+  if (record.surface !== surface
+    || !Number.isSafeInteger(record.version)
+    || record.version < 0
+    || !isRecord(record.state)) {
+    throw new ManagedTrialError(`The managed ${productName} workspace returned an invalid state.`, {
+      code: 'managed_state_invalid',
+    })
+  }
+  return record
 }
 
 let clientPromise: Promise<SupabaseClient | null> | undefined

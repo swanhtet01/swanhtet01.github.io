@@ -28,6 +28,8 @@ from supermega_runtime.trial_store import (
     TrialValidationError,
     TrialVersionConflict,
     StatePrecondition,
+    has_approval_read_capability,
+    has_surface_read_capability,
 )
 from supermega_runtime.website_runtime import WEBSITE_HUMAN_EVENTS, validate_website_snapshot_source
 
@@ -306,8 +308,13 @@ def create_trial_router(*, store: TrialStore, resolve_principal: PrincipalResolv
         states = {
             surface: _invoke(lambda surface=surface: store.get_state(principal, surface)).to_dict()
             for surface in TRIAL_SURFACE_ORDER
+            if has_surface_read_capability(readiness.capabilities, surface)
         }
-        approvals = _invoke(lambda: store.list_approvals(principal))
+        approvals = (
+            _invoke(lambda: store.list_approvals(principal))
+            if has_approval_read_capability(readiness.capabilities)
+            else []
+        )
         return {
             "identity": {
                 "workspace_id": principal.workspace_id,
