@@ -586,6 +586,13 @@ if (!coreSource.includes('className="core-panel next-task-card"')
   || !coreSource.includes('role="columnheader"')
   || !coreSource.includes('role="cell"')
   || coreSource.includes('className="operations-profile"')) fail('task_first_core_ui_contract_changed')
+const actionChangeCssStart = coreCssSource.indexOf('.action-change p {')
+const actionChangeCssEnd = coreCssSource.indexOf('}', actionChangeCssStart)
+const actionChangeCssContract = coreCssSource.slice(actionChangeCssStart, actionChangeCssEnd)
+if (actionChangeCssStart < 0
+  || actionChangeCssEnd < 0
+  || !actionChangeCssContract.includes('font-size: 12px')
+  || !actionChangeCssContract.includes('line-height: 1.5')) fail('accountable_confirmation_delta_unreadable')
 if (!coreSource.includes('id="commerce-manual-order-form"')
   || !coreSource.includes('form="commerce-manual-order-form"')
   || !coreSource.includes('className="order-submit-bar"')

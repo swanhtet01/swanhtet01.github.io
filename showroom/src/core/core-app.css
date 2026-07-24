@@ -198,7 +198,7 @@ textarea { min-height: 72px; resize: vertical; }
 .accountable-action-gate[open] { display: grid; gap: 20px; }
 .accountable-action-gate::backdrop { background: rgba(19,25,41,.5); backdrop-filter: blur(6px); }
 .action-change h2 { margin: 5px 0 10px; font-size: 22px; }
-.action-change p { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin: 0; color: var(--core-quiet); font-family: var(--core-mono); font-size: 8px; }
+.action-change p { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin: 0; color: var(--core-quiet); font-family: var(--core-mono); font-size: 12px; line-height: 1.5; }
 .action-change p strong { color: var(--core-muted); font-weight: 700; }
 .action-change p span { color: var(--core-green); }
 .action-confirm-form { grid-template-columns: 1fr; align-items: end; gap: 12px; }
