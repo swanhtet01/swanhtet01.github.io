@@ -25,7 +25,7 @@
       "path": "/plant/",
       "runtimeSurface": "production",
       "compatibilityPath": "/operations/production/",
-      "job": "Run jobs, output, materials, quality, equipment, maintenance, and shift exceptions from one accountable plant record.",
+      "job": "Run jobs, output, job-linked material use, quality, equipment observations, maintenance, and shift exceptions from one accountable plant record.",
       "surfaces": ["Jobs", "Problems"],
       "templateContract": { "file": "../site-manifest.json", "productId": "production" },
       "nextGate": "Validate one line, maintenance, or quality workflow with an operator, supervisor review, and measured shift evidence."
