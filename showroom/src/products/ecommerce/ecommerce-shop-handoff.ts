@@ -125,7 +125,9 @@ export function recordEcommerceShopDraft(input: {
   confirmedAt: string
 }) {
   const request = validateStorefrontOrderRequest(input.request)
-  if (!isIsoTimestamp(input.confirmedAt)) throw new Error('Shop handoff confirmation time is invalid.')
+  if (!isIsoTimestamp(input.confirmedAt) || Date.parse(input.confirmedAt) < Date.parse(request.createdAt)) {
+    throw new Error('Shop handoff confirmation time is invalid.')
+  }
   const existing = drafts.find((candidate) => candidate.sourceRequestId === request.id)
   if (existing) {
     if (!sameRequestIntent(existing, request)) throw new Error('This request ID conflicts with an existing Shop draft.')

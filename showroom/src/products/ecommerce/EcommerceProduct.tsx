@@ -119,6 +119,7 @@ export function EcommerceProduct() {
       if (currentCatalog.source === 'unavailable') throw new Error(currentCatalog.error || 'Current Shop catalog is unavailable.')
       const draft = await confirmEcommerceShopDraft({
         request: latestRequest,
+        requestLedger,
         preview: previewResult.preview,
         sourcePreviewDigest: digest,
         currentCatalog: currentCatalog.items,

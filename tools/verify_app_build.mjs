@@ -10,10 +10,11 @@ let channelOrderRuntimeChecks = 0
 let websiteRuntimeChecks = 0
 let storefrontRuntimeChecks = 0
 let storefrontRequestRuntimeChecks = 0
+let ecommerceHandoffRuntimeChecks = 0
 let commerceRuntimeChecks = 0
 let productionRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
-const [manifestText, appPackageText, appSource, coreSource, commerceSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, storefrontSource, storefrontRequestSource, coreCssSource] = await Promise.all([
+const [manifestText, appPackageText, appSource, coreSource, commerceSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, storefrontSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, coreCssSource] = await Promise.all([
   readFile(resolve(root, 'site-manifest.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'package.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'App.tsx'), 'utf8'),
@@ -41,6 +42,8 @@ const [manifestText, appPackageText, appSource, coreSource, commerceSource, chan
   readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'EcommerceProduct.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'storefront-model.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'storefront-request.ts'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'ecommerce-shop-confirm.ts'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'ecommerce-shop-handoff.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'core-app.css'), 'utf8'),
 ])
 const manifest = JSON.parse(manifestText)
@@ -195,8 +198,25 @@ if (!storefrontRequestSource.includes("supermega.ecommerce.order_request.v1")
   || !storefrontRequestSource.includes("state: 'pending_shop_review'")
   || !storefrontRequestSource.includes('buildStorefrontOrderRequest')
   || !storefrontRequestSource.includes('recordStorefrontOrderRequest')
+  || !storefrontRequestSource.includes('storefrontRequestLedgerContains')
   || !storefrontRequestSource.includes('await storefrontPreviewDigest(preview) !== sourcePreviewDigest')
   || ['setItem(', 'removeItem(', 'fetch(', 'XMLHttpRequest', 'navigator.locks'].some((marker) => storefrontRequestSource.includes(marker))) fail('ecommerce_request_contract_missing_or_mutating')
+if (!ecommerceConfirmSource.includes('storefrontRequestLedgerContains')
+  || !ecommerceConfirmSource.includes('await storefrontPreviewDigest(preview)')
+  || !ecommerceConfirmSource.includes('await storefrontPreviewDigest(currentPreview)')
+  || !ecommerceConfirmSource.includes('catalogItems[0].onHand < request.line.quantity')
+  || !ecommerceConfirmSource.includes('recordEcommerceShopDraft')
+  || !ecommerceHandoffSource.includes("supermega.ecommerce.shop_draft.v1")
+  || !ecommerceHandoffSource.includes("state: 'review_required'")
+  || !ecommerceHandoffSource.includes('ecommerceShopDraftMatchesCatalog')
+  || !ecommerceHandoffSource.includes('ECOMMERCE:${request.id}:${request.sourcePreviewDigest}')
+  || !ecommerceSource.includes('I reviewed the SKU, quantity, MMK price, and current availability.')
+  || !ecommerceSource.includes('Send to Shop review')
+  || !ecommerceSource.includes('state: { ecommerceShopDraft: draft }')
+  || !coreSource.includes('Ecommerce request')
+  || !coreSource.includes('Choose how payment will be reviewed before preparing this order.')
+  || !coreSource.includes("import('../products/ecommerce/ecommerce-shop-handoff')")
+  || ['setItem(', 'removeItem(', 'localStorage', 'sessionStorage', 'fetch(', 'XMLHttpRequest', 'navigator.locks', 'convertCommerceWebsiteIntake', 'reserveCommerceOrder', 'mutateCommerceWorkspace'].some((marker) => ecommerceConfirmSource.includes(marker) || ecommerceHandoffSource.includes(marker))) fail('ecommerce_shop_handoff_contract_missing_or_mutating')
 if (!appPackage.scripts?.lint?.includes('src/products')) fail('prototype_sources_not_linted')
 if (!websiteSource.includes('No website has been deployed.')
   || !websiteSource.includes('No deployment occurred.')
@@ -330,9 +350,10 @@ if (!coreSource.includes('Start from a channel message')
   || !coreSource.includes('Human-mapped intake')
   || !coreSource.includes('AI is not connected')
   || !coreSource.includes('The full message is not part of the order record.')
-  || !coreSource.includes('sourceRecordId: sourceDraft?.sourceRecordId')
-  || !coreSource.includes('evidenceReferenceSuggestion: sourceDraft?.evidenceReference')
-  || !coreSource.includes('evidenceReferenceLocked: Boolean(sourceDraft)')
+  || !coreSource.includes('const sourceRecordId = sourceDraft?.sourceRecordId ?? ecommerceDraft?.sourceRequestId')
+  || !coreSource.includes('const sourceEvidence = sourceDraft?.evidenceReference ?? ecommerceDraft?.evidenceReference')
+  || !coreSource.includes('evidenceReferenceSuggestion: sourceEvidence')
+  || !coreSource.includes('evidenceReferenceLocked: Boolean(sourceRecordId)')
   || !coreSource.includes('onAcceptedFocus')
   || !coreSource.includes("setOrderEntryMode('manual')")
   || !coreSource.includes("useState<ChannelOrderField>('customer')")
@@ -1650,6 +1671,8 @@ async function verifyStorefrontRuntime() {
     const nonce = Date.now()
     const storefront = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'storefront-model.ts')).href}?storefront-verify=${nonce}`)
     const requestModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'storefront-request.ts')).href}?storefront-request=${nonce}`)
+    const confirmModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'ecommerce-shop-confirm.ts')).href}?ecommerce-confirm=${nonce}`)
+    const handoffModel = await import(pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'ecommerce-shop-handoff.ts')).href)
     const commerce = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?storefront-commerce=${nonce}`)
     const catalog = commerce.createSeedCommerce().items
     const input = {
@@ -1738,6 +1761,69 @@ async function verifyStorefrontRuntime() {
     let tamperedPreviewRejected = false
     try { await storefront.storefrontPreviewDigest({ ...preview, unexpected: true }) } catch { tamperedPreviewRejected = true }
     requestAssert(tamperedPreviewRejected, 'storefront_preview_extra_field_accepted')
+
+    const handoffAssert = (condition, reason) => {
+      if (!condition) throw new Error(reason)
+      ecommerceHandoffRuntimeChecks += 1
+    }
+    const catalogBeforeHandoff = JSON.stringify(catalog)
+    const handoffInput = {
+      request,
+      requestLedger: recorded,
+      preview,
+      sourcePreviewDigest: firstDigest,
+      currentCatalog: catalog,
+      confirmedAt: '2026-07-24T09:01:00.000Z',
+    }
+    const draft = await confirmModel.confirmEcommerceShopDraft(handoffInput)
+    handoffAssert(draft.id === 'ESD-12345678-1234-4ABC-8ABC-1234567890AB' && draft.state === 'review_required', 'ecommerce_handoff_identity_or_state_invalid')
+    handoffAssert(draft.customerReference === request.customerReference
+      && draft.fulfilment === request.fulfilment
+      && JSON.stringify(draft.line) === JSON.stringify(request.line)
+      && draft.totalMmk === request.totalMmk, 'ecommerce_handoff_dropped_request_fields')
+    handoffAssert(draft.evidenceReference === `ECOMMERCE:${request.id}:${firstDigest}`, 'ecommerce_handoff_evidence_not_bound')
+    handoffAssert(!JSON.stringify(draft).includes('onHand') && !JSON.stringify(draft).includes('reorderAt'), 'ecommerce_handoff_leaked_stock_fields')
+    handoffAssert(JSON.stringify(catalog) === catalogBeforeHandoff, 'ecommerce_handoff_mutated_catalog')
+    handoffAssert(handoffModel.readLatestEcommerceShopDraft() === draft, 'ecommerce_handoff_not_retained_in_memory')
+    handoffAssert(await confirmModel.confirmEcommerceShopDraft({ ...handoffInput, confirmedAt: '2026-07-24T09:02:00.000Z' }) === draft, 'ecommerce_handoff_exact_retry_not_idempotent')
+    handoffAssert(handoffModel.ecommerceShopDraftMatchesCatalog(draft, catalog), 'ecommerce_handoff_shop_guard_rejected_current_catalog')
+
+    let unrecordedRejected = false
+    try { await confirmModel.confirmEcommerceShopDraft({ ...handoffInput, requestLedger: emptyLedger }) } catch { unrecordedRejected = true }
+    handoffAssert(unrecordedRejected, 'ecommerce_handoff_unrecorded_receipt_accepted')
+    const conflictingRequest = { ...request, customerReference: 'Customer B' }
+    const conflictingLedger = { schema: recorded.schema, requests: [conflictingRequest] }
+    let conflictingRequestRejected = false
+    try { await confirmModel.confirmEcommerceShopDraft({ ...handoffInput, request: conflictingRequest, requestLedger: conflictingLedger }) } catch { conflictingRequestRejected = true }
+    handoffAssert(conflictingRequestRejected, 'ecommerce_handoff_conflicting_request_replay_accepted')
+    const repricedCatalog = catalog.map((item) => item.sku === request.line.sku ? { ...item, price: item.price + 500 } : item)
+    let repricedCatalogRejected = false
+    try { await confirmModel.confirmEcommerceShopDraft({ ...handoffInput, currentCatalog: repricedCatalog }) } catch { repricedCatalogRejected = true }
+    handoffAssert(repricedCatalogRejected, 'ecommerce_handoff_repriced_catalog_accepted')
+    const insufficientCatalog = catalog.map((item) => item.sku === request.line.sku ? { ...item, onHand: request.line.quantity - 1 } : item)
+    let insufficientStockRejected = false
+    try { await confirmModel.confirmEcommerceShopDraft({ ...handoffInput, currentCatalog: insufficientCatalog }) } catch { insufficientStockRejected = true }
+    handoffAssert(insufficientStockRejected, 'ecommerce_handoff_insufficient_stock_accepted')
+    let stalePreviewRejected = false
+    try { await confirmModel.confirmEcommerceShopDraft({ ...handoffInput, preview: changed }) } catch { stalePreviewRejected = true }
+    handoffAssert(stalePreviewRejected, 'ecommerce_handoff_stale_preview_accepted')
+    const laterRequest = await requestModel.buildStorefrontOrderRequest(preview, firstDigest, {
+      ...requestInput,
+      idempotencyKey: 'ECI-12345678-1234-4ABC-8ABC-1234567890AC',
+    })
+    const laterLedger = requestModel.recordStorefrontOrderRequest(emptyLedger, laterRequest)
+    let earlyConfirmationRejected = false
+    try {
+      await confirmModel.confirmEcommerceShopDraft({
+        ...handoffInput,
+        request: laterRequest,
+        requestLedger: laterLedger,
+        confirmedAt: '2026-07-24T08:59:59.000Z',
+      })
+    } catch { earlyConfirmationRejected = true }
+    handoffAssert(earlyConfirmationRejected, 'ecommerce_handoff_confirmation_before_receipt_accepted')
+    handoffAssert(!handoffModel.ecommerceShopDraftMatchesCatalog({ ...draft, unexpected: true }, catalog), 'ecommerce_handoff_extra_field_accepted')
+    handoffAssert(handoffModel.dismissEcommerceShopDraft(draft.id) && handoffModel.readLatestEcommerceShopDraft() === null, 'ecommerce_handoff_memory_draft_not_dismissed')
   } catch (error) {
     fail(`storefront_runtime:${error instanceof Error ? error.message : 'unknown'}`)
   }
@@ -1977,4 +2063,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', primaryRoutes: 5, operatingModules: 2, prototypeRoutes: 2, compatibilityRedirects: 1, workflowProfiles, channelOrderRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', primaryRoutes: 5, operatingModules: 2, prototypeRoutes: 2, compatibilityRedirects: 1, workflowProfiles, channelOrderRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, ecommerceHandoffRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, bytes }, null, 2))

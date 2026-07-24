@@ -123,6 +123,22 @@ export function validateStorefrontOrderRequest(value: unknown): StorefrontOrderR
   return request
 }
 
+export function storefrontRequestLedgerContains(ledgerValue: unknown, requestValue: unknown) {
+  if (!isRecord(ledgerValue)
+    || !hasExactKeys(ledgerValue, ['schema', 'requests'])
+    || ledgerValue.schema !== STOREFRONT_REQUEST_LEDGER_SCHEMA
+    || !Array.isArray(ledgerValue.requests)
+    || ledgerValue.requests.length > 20) return false
+  const request = parseStorefrontOrderRequest(requestValue)
+  const requests = ledgerValue.requests.map(parseStorefrontOrderRequest)
+  if (!request || requests.some((candidate) => !candidate)) return false
+  const validated = requests as StorefrontOrderRequest[]
+  if (new Set(validated.map((candidate) => candidate.id)).size !== validated.length
+    || new Set(validated.map((candidate) => candidate.idempotencyKey)).size !== validated.length) return false
+  const matches = validated.filter((candidate) => candidate.id === request.id && candidate.idempotencyKey === request.idempotencyKey)
+  return matches.length === 1 && requestMatches(matches[0], request)
+}
+
 export function createEmptyStorefrontRequestLedger(): StorefrontRequestLedger {
   return { schema: STOREFRONT_REQUEST_LEDGER_SCHEMA, requests: [] }
 }

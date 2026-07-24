@@ -7,7 +7,9 @@ import {
 } from './storefront-model.ts'
 import { recordEcommerceShopDraft } from './ecommerce-shop-handoff.ts'
 import {
+  storefrontRequestLedgerContains,
   validateStorefrontOrderRequest,
+  type StorefrontRequestLedger,
   type StorefrontOrderRequest,
 } from './storefront-request.ts'
 
@@ -15,12 +17,16 @@ const digestPattern = /^sha256:[a-f0-9]{64}$/
 
 export async function confirmEcommerceShopDraft(input: {
   request: StorefrontOrderRequest
+  requestLedger: StorefrontRequestLedger
   preview: StorefrontPreview
   sourcePreviewDigest: string
   currentCatalog: CommerceItem[]
   confirmedAt: string
 }) {
   const request = validateStorefrontOrderRequest(input.request)
+  if (!storefrontRequestLedgerContains(input.requestLedger, request)) {
+    throw new Error('The request receipt is not the exact retained Ecommerce record.')
+  }
   const preview = validateStorefrontPreview(input.preview)
   if (!digestPattern.test(input.sourcePreviewDigest)
     || request.sourcePreviewDigest !== input.sourcePreviewDigest
