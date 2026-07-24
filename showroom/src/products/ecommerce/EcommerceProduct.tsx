@@ -361,7 +361,7 @@ export function EcommerceProduct() {
       if (!nextLedger) throw new Error('The request receipt conflicted with the current local ledger.')
       setRequestLedger(nextLedger)
       setHandoffConfirmed(false)
-      setRequestNotice(`${request.id} is pending Shop review. No Shop record or stock changed.`)
+      setRequestNotice(`${request.id} is awaiting Shop handoff. No Shop record or stock changed.`)
     } catch (error) {
       setRequestNotice(error instanceof Error ? error.message : 'Request receipt failed closed.')
     } finally {
@@ -695,7 +695,7 @@ export function EcommerceProduct() {
 
               {latestRequest ? (
                 <article className="ecommerce-request-receipt">
-                  <span className="status-pill bounded">Pending Shop review</span>
+                  <span className="status-pill bounded">Awaiting Shop handoff</span>
                   <strong>{latestRequest.id}</strong>
                   <p>{latestRequest.customerReference} · {latestRequest.line.name} × {latestRequest.line.quantity}</p>
                   <b>{formatMmk(latestRequest.totalMmk)}</b>
