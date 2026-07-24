@@ -7,8 +7,8 @@ import {
   OverviewPage,
   SettingsPage,
 } from './core/CoreApp'
-import { TeamsPage } from './core/TeamWorkspace'
 
+const TeamsPage = lazy(() => import('./core/TeamWorkspace').then((module) => ({ default: module.TeamsPage })))
 const WebsiteProduct = lazy(() => import('./products/website/WebsiteProduct').then((module) => ({ default: module.WebsiteProduct })))
 const EcommerceProduct = lazy(() => import('./products/ecommerce/EcommerceProduct').then((module) => ({ default: module.EcommerceProduct })))
 
@@ -32,7 +32,7 @@ export default function App() {
       <Routes>
         <Route element={<CoreLayout />}>
           <Route element={<OverviewPage />} index />
-          <Route element={<TeamsPage />} path="work/*" />
+          <Route element={<Suspense fallback={<ProductLoading name="HQ" />}><TeamsPage /></Suspense>} path="work/*" />
           <Route element={<OperationsPage />} path="operations/*" />
           <Route element={<OperationsPage product="commerce" />} path="shop/*" />
           <Route element={<OperationsPage product="production" />} path="plant/*" />
