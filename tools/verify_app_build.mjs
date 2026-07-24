@@ -618,8 +618,23 @@ if (!productionSource.includes('recordProductionMachineState')
   || !coreSource.includes('<b>Record status</b>')
   || !coreSource.includes('machineObservationTargets')
   || coreSource.includes('cycleMachine')) fail('production_truthful_machine_observation_missing')
+if (!productionSource.includes('startProductionDowntime')
+  || !productionSource.includes('endProductionDowntime')
+  || !productionSource.includes('productionDowntimeIntervals')
+  || !productionSource.includes('downtimeStartActionId')
+  || !productionSource.includes('validDowntimeTimestamp')
+  || !productionSource.includes('Downtime timestamps for ${machine.id} contradict lifecycle order.')
+  || !managedProductionRuntime.includes('_validate_downtime_history')
+  || !managedProductionRuntime.includes('_validate_downtime_started')
+  || !managedProductionRuntime.includes('_validate_downtime_ended')
+  || !managedProductionRuntime.includes('production.downtime.started')
+  || !managedProductionRuntime.includes('production.downtime.ended')
+  || !coreSource.includes('Machine downtime')
+  || !coreSource.includes('Review start')
+  || !coreSource.includes('Review end')
+  || !coreSource.includes('This human record is separate from machine status. It sends no equipment command and changes no job or output.')) fail('production_bounded_downtime_contract_missing')
 if (!managedTrialSource.includes('saveManagedProductionCommand') || !managedTrialSource.includes("surface: 'production'") || !managedTrialSource.includes('eventType: ManagedProductionEvent') || !managedTrialSource.includes('payload: { state: request.state, evidence: request.evidence }')) fail('managed_production_command_client_missing')
-for (const eventType of ['production.workspace.initialized', 'production.job.created', 'production.output.recorded', 'production.issue.opened', 'production.issue.resolved', 'production.quality_hold.placed', 'production.quality_hold.released', 'production.machine_state.changed']) {
+for (const eventType of ['production.workspace.initialized', 'production.job.created', 'production.output.recorded', 'production.issue.opened', 'production.issue.resolved', 'production.quality_hold.placed', 'production.quality_hold.released', 'production.machine_state.changed', 'production.downtime.started', 'production.downtime.ended']) {
   if (!coreSource.includes(eventType) || !managedProductionRuntime.includes(eventType)) fail(`managed_production_event_missing:${eventType}`)
 }
 if (managedProductionRuntime.includes('production.snapshot.saved')
@@ -630,6 +645,8 @@ if (managedProductionRuntime.includes('production.snapshot.saved')
   || !managedProductionRuntime.includes('_validate_quality_hold_placed')
   || !managedProductionRuntime.includes('_validate_quality_hold_released')
   || !managedProductionRuntime.includes('_validate_machine_state_changed')
+  || !managedProductionRuntime.includes('_validate_downtime_started')
+  || !managedProductionRuntime.includes('_validate_downtime_ended')
   || !managedProductionRuntime.includes('Production event must prepend exactly one record and preserve history.')) fail('managed_production_server_transition_contract_missing')
 if (!coreSource.includes("mode: 'managed-unprovisioned'")
   || !coreSource.includes('No browser demo jobs, issues, equipment, or output are copied')
@@ -2623,6 +2640,105 @@ async function verifyProductionRuntime() {
     assert(model.recordProductionMachineState(machineState, 'MC-1', 'stopped', 'attention', proof('ACT-MACHINE-STALE')) === null, 'production_stale_machine_observation_succeeded')
     assert(model.recordProductionMachineState(machineState, 'MC-1', 'running', 'running', proof('ACT-MACHINE-SAME')) === null, 'production_same_machine_observation_succeeded')
     assert(model.recordProductionMachineState(machineState, 'MC-1', 'running', 'offline', proof('ACT-MACHINE-UNKNOWN')) === null, 'production_unknown_machine_observation_succeeded')
+
+    const downtimeBaseBefore = JSON.stringify(base)
+    assert(model.productionDowntimeIntervals(base).length === 0, 'production_legacy_workspace_invented_downtime')
+    const downtimeStartProof = proof('ACT-DOWNTIME-START', 4_000)
+    const downtimeStarted = model.startProductionDowntime(base, 'MC-1', downtimeStartProof)
+    assert(downtimeStarted
+      && downtimeStarted.revision === base.revision + 1
+      && downtimeStarted.events[0].kind === 'downtime_started'
+      && downtimeStarted.events[0].subjectId === 'MC-1'
+      && downtimeStarted.events[0].actor === downtimeStartProof.actor
+      && downtimeStarted.events[0].reason === downtimeStartProof.reason
+      && downtimeStarted.events[0].evidenceReference === downtimeStartProof.evidenceReference
+      && JSON.stringify(downtimeStarted.jobs) === JSON.stringify(base.jobs)
+      && JSON.stringify(downtimeStarted.issues) === JSON.stringify(base.issues)
+      && JSON.stringify(downtimeStarted.machines) === JSON.stringify(base.machines),
+    'production_downtime_start_not_exact_or_changed_collections')
+    const openDowntime = model.productionDowntimeIntervals(downtimeStarted)
+    assert(openDowntime.length === 1
+      && openDowntime[0].machineId === 'MC-1'
+      && openDowntime[0].machineName === 'Test machine'
+      && openDowntime[0].startActionId === downtimeStartProof.actionId
+      && openDowntime[0].startedAt === downtimeStartProof.capturedAt
+      && openDowntime[0].startedBy === downtimeStartProof.actor
+      && openDowntime[0].startReason === downtimeStartProof.reason
+      && openDowntime[0].startEvidenceReference === downtimeStartProof.evidenceReference
+      && openDowntime[0].end === undefined
+      && openDowntime[0].durationMs === undefined,
+    'production_open_downtime_interval_not_derived_exactly')
+    assert(model.startProductionDowntime(downtimeStarted, 'MC-1', downtimeStartProof) === downtimeStarted, 'production_downtime_start_retry_not_idempotent')
+    assert(model.startProductionDowntime(downtimeStarted, 'MC-1', { ...downtimeStartProof, reason: 'Changed reason' }) === null, 'production_downtime_start_conflicting_retry_succeeded')
+    assert(model.startProductionDowntime(downtimeStarted, 'MC-1', proof('ACT-DOWNTIME-SECOND', 4_100)) === null, 'production_second_open_downtime_succeeded')
+    assert(model.startProductionDowntime(base, 'MC-MISSING', proof('ACT-DOWNTIME-MISSING', 4_000)) === null, 'production_missing_machine_downtime_succeeded')
+    for (const capturedAt of [
+      '2026-07-23T10:00:04.000500Z',
+      '0000-07-23T10:00:04.000Z',
+      '+010000-07-23T10:00:04.000Z',
+      '-000001-07-23T10:00:04.000Z',
+    ]) {
+      assert(model.startProductionDowntime(base, 'MC-1', { ...proof(`ACT-DOWNTIME-TIME-${capturedAt}`), capturedAt }) === null, `production_downtime_invalid_timestamp_accepted:${capturedAt}`)
+    }
+    assert(model.endProductionDowntime(downtimeStarted, 'MC-1', downtimeStartProof.actionId, proof('ACT-DOWNTIME-EARLY-END', 3_999)) === null, 'production_downtime_end_predated_start')
+    assert(model.endProductionDowntime(downtimeStarted, 'MC-1', 'ACT-NOT-OPEN', proof('ACT-DOWNTIME-WRONG-START', 5_000)) === null, 'production_downtime_end_wrong_start_succeeded')
+    const downtimeEndProof = proof('ACT-DOWNTIME-END', 5_000)
+    const downtimeEnded = model.endProductionDowntime(downtimeStarted, 'MC-1', downtimeStartProof.actionId, downtimeEndProof)
+    const closedDowntime = model.productionDowntimeIntervals(downtimeEnded)
+    assert(downtimeEnded
+      && downtimeEnded.events[0].kind === 'downtime_ended'
+      && downtimeEnded.events[0].downtimeStartActionId === downtimeStartProof.actionId
+      && downtimeEnded.events[0].actor === downtimeEndProof.actor
+      && downtimeEnded.events[0].reason === downtimeEndProof.reason
+      && downtimeEnded.events[0].evidenceReference === downtimeEndProof.evidenceReference
+      && JSON.stringify(downtimeEnded.jobs) === JSON.stringify(base.jobs)
+      && JSON.stringify(downtimeEnded.issues) === JSON.stringify(base.issues)
+      && JSON.stringify(downtimeEnded.machines) === JSON.stringify(base.machines),
+    'production_downtime_end_not_exact_or_changed_collections')
+    assert(closedDowntime.length === 1
+      && closedDowntime[0].durationMs === 1_000
+      && closedDowntime[0].end?.actionId === downtimeEndProof.actionId
+      && closedDowntime[0].end?.endedAt === downtimeEndProof.capturedAt
+      && closedDowntime[0].end?.endedBy === downtimeEndProof.actor
+      && closedDowntime[0].end?.reason === downtimeEndProof.reason
+      && closedDowntime[0].end?.evidenceReference === downtimeEndProof.evidenceReference,
+    'production_closed_downtime_interval_not_derived_exactly')
+    assert(model.endProductionDowntime(downtimeEnded, 'MC-1', downtimeStartProof.actionId, downtimeEndProof) === downtimeEnded, 'production_downtime_end_retry_not_idempotent')
+    assert(model.endProductionDowntime(downtimeEnded, 'MC-1', downtimeStartProof.actionId, { ...downtimeEndProof, evidenceReference: 'EV-CONFLICT' }) === null, 'production_downtime_end_conflicting_retry_succeeded')
+    assert(model.startProductionDowntime(downtimeEnded, 'MC-1', downtimeStartProof) === downtimeEnded, 'production_historical_downtime_start_retry_not_idempotent')
+    assert(model.endProductionDowntime(downtimeEnded, 'MC-1', downtimeStartProof.actionId, proof('ACT-DOWNTIME-SECOND-END', 5_500)) === null, 'production_second_downtime_end_succeeded')
+    assert(model.startProductionDowntime(downtimeEnded, 'MC-1', proof('ACT-DOWNTIME-RESTART-EARLY', 4_999)) === null, 'production_downtime_restart_predated_last_end')
+    const downtimeRestartProof = proof('ACT-DOWNTIME-RESTART', 6_000)
+    const downtimeRestarted = model.startProductionDowntime(downtimeEnded, 'MC-1', downtimeRestartProof)
+    assert(downtimeRestarted
+      && model.productionDowntimeIntervals(downtimeRestarted).length === 2
+      && model.productionDowntimeIntervals(downtimeRestarted)[0].startActionId === downtimeRestartProof.actionId
+      && model.productionDowntimeIntervals(downtimeRestarted)[0].end === undefined,
+    'production_downtime_restart_after_end_failed')
+    assert(model.endProductionDowntime(downtimeRestarted, 'MC-1', downtimeStartProof.actionId, downtimeEndProof) === downtimeRestarted, 'production_historical_downtime_end_retry_not_idempotent')
+    assertThrows(() => model.validateProductionState({
+      ...downtimeStarted,
+      revision: downtimeStarted.revision + 1,
+      events: [{
+        ...downtimeStarted.events[0],
+        id: 'EVT-ACT-DOWNTIME-DUPLICATE',
+        actionId: 'ACT-DOWNTIME-DUPLICATE',
+        createdAt: proof('ACT-DOWNTIME-DUPLICATE', 4_500).capturedAt,
+      }, ...downtimeStarted.events],
+    }), 'production_duplicate_open_downtime_history_accepted')
+    assertThrows(() => model.validateProductionState({
+      ...downtimeEnded,
+      events: [{ ...downtimeEnded.events[0], downtimeStartActionId: 'ACT-NOT-OPEN' }, ...downtimeEnded.events.slice(1)],
+    }), 'production_downtime_wrong_linkage_accepted')
+    assertThrows(() => model.validateProductionState({
+      ...downtimeEnded,
+      events: [{ ...downtimeEnded.events[0], createdAt: proof('ACT-DOWNTIME-BACKWARD', 3_999).capturedAt }, ...downtimeEnded.events.slice(1)],
+    }), 'production_backward_downtime_history_accepted')
+    assertThrows(() => model.validateProductionState({
+      ...downtimeStarted,
+      events: [{ ...downtimeStarted.events[0], unexpected: true }],
+    }), 'production_downtime_extra_field_accepted')
+    assert(JSON.stringify(base) === downtimeBaseBefore, 'production_downtime_derivation_mutated_source_state')
 
     values.clear()
     const currentState = model.createSeedProduction()
