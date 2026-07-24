@@ -109,6 +109,27 @@ export type CommerceWebsiteIntake = {
   conversion?: CommerceActionProof & { orderId: string }
 }
 
+export type CommerceStorefrontRequest = {
+  schema: 'supermega.ecommerce.order_request.v1'
+  mode: 'browser-local-request'
+  state: 'pending_shop_review'
+  id: string
+  idempotencyKey: string
+  createdAt: string
+  sourcePreviewDigest: string
+  customerReference: string
+  fulfilment: 'pickup' | 'delivery'
+  currency: 'MMK'
+  line: {
+    sku: string
+    name: string
+    variant: string | null
+    quantity: number
+    unitPriceMmk: number
+  }
+  totalMmk: number
+}
+
 export type CommerceState = {
   schema: typeof COMMERCE_WORKSPACE_SCHEMA
   items: CommerceItem[]
@@ -116,6 +137,7 @@ export type CommerceState = {
   movements: CommerceStockMovement[]
   closes: CommerceClose[]
   websiteIntakes?: CommerceWebsiteIntake[]
+  storefrontRequests?: CommerceStorefrontRequest[]
 }
 
 export type CommerceActionProof = {
@@ -168,6 +190,10 @@ const closeSnapshotFields = ['businessDate', 'orderIds', 'paymentExceptionOrderI
 const refundSettlementFields = ['refundSettledAt', 'refundSettlementActionId', 'refundSettledBy', 'refundSettlementReason', 'refundEvidenceReference'] as const
 const websiteIntakeIdPattern = /^WINT-[A-Z0-9-]{8,80}$/
 const websiteFingerprintPattern = /^web-[a-f0-9]{8}$/
+const storefrontRequestIdPattern = /^ECR-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
+const storefrontIdempotencyPattern = /^ECI-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
+const sha256DigestPattern = /^sha256:[a-f0-9]{64}$/
+const maxStorefrontRequests = 100
 const closeIdPattern = /^CLOSE-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
 const closeActionIdPattern = /^ACT-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
 const businessDatePattern = /^\d{4}-\d{2}-\d{2}$/
@@ -259,7 +285,7 @@ function safeBalance(value: number, delta: number) {
 }
 
 export function createEmptyCommerce(): CommerceState {
-  return { schema: COMMERCE_WORKSPACE_SCHEMA, items: [], orders: [], movements: [], closes: [], websiteIntakes: [] }
+  return { schema: COMMERCE_WORKSPACE_SCHEMA, items: [], orders: [], movements: [], closes: [], websiteIntakes: [], storefrontRequests: [] }
 }
 
 export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
@@ -284,6 +310,7 @@ export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
     ],
     closes: [],
     websiteIntakes: [],
+    storefrontRequests: [],
   }
 }
 
@@ -291,12 +318,15 @@ export function validateCommerceState(value: unknown): CommerceState {
   if (!isRecord(value) || value.schema !== COMMERCE_WORKSPACE_SCHEMA) throw new Error('Commerce workspace schema is not v2.')
   if (!Array.isArray(value.items) || !Array.isArray(value.orders) || !Array.isArray(value.movements) || !Array.isArray(value.closes)) throw new Error('Commerce workspace collections are incomplete.')
   if (value.websiteIntakes !== undefined && !Array.isArray(value.websiteIntakes)) throw new Error('Commerce Website intakes must be an array when present.')
+  if (value.storefrontRequests !== undefined && !Array.isArray(value.storefrontRequests)) throw new Error('Commerce storefront requests must be an array when present.')
 
   const items = value.items as unknown[]
   const orders = value.orders as unknown[]
   const movements = value.movements as unknown[]
   const closes = value.closes as unknown[]
   const websiteIntakes = (value.websiteIntakes ?? []) as unknown[]
+  const storefrontRequests = (value.storefrontRequests ?? []) as unknown[]
+  if (storefrontRequests.length > maxStorefrontRequests) throw new Error(`Commerce storefront requests cannot exceed ${maxStorefrontRequests}.`)
   const itemSkus: string[] = []
   const itemBySku = new Map<string, Record<string, unknown>>()
   const orderIds: string[] = []
@@ -541,7 +571,49 @@ export function validateCommerceState(value: unknown): CommerceState {
   assertUnique(intakeIds, 'Website intake ID')
   assertUnique(intakeSources, 'Website intake source')
   assertUnique(websiteIntakeConversionActionIds, 'Website intake conversion action ID')
-  assertUnique([...movementActionIds, ...reconciliationActionIds, ...refundSettlementActionIds, ...websiteIntakeCreationActionIds, ...closeActionIds], 'Commerce action ID')
+  const storefrontRequestIds: string[] = []
+  const storefrontIdempotencyKeys: string[] = []
+  const storefrontActionIds: string[] = []
+  for (const [index, candidate] of storefrontRequests.entries()) {
+    if (!isRecord(candidate) || !hasExactKeys(
+      candidate,
+      ['schema', 'mode', 'state', 'id', 'idempotencyKey', 'createdAt', 'sourcePreviewDigest', 'customerReference', 'fulfilment', 'currency', 'line', 'totalMmk'],
+    )) throw new Error(`storefrontRequests[${index}] is invalid.`)
+    const requestId = canonicalText(candidate.id, `storefrontRequests[${index}].id`, 40)
+    const idempotencyKey = canonicalText(candidate.idempotencyKey, `storefrontRequests[${index}].idempotencyKey`, 40)
+    if (candidate.schema !== 'supermega.ecommerce.order_request.v1'
+      || candidate.mode !== 'browser-local-request'
+      || candidate.state !== 'pending_shop_review'
+      || !storefrontRequestIdPattern.test(requestId)
+      || !storefrontIdempotencyPattern.test(idempotencyKey)
+      || requestId.slice(4) !== idempotencyKey.slice(4)
+      || !validTimestamp(candidate.createdAt)
+      || typeof candidate.sourcePreviewDigest !== 'string'
+      || !sha256DigestPattern.test(candidate.sourcePreviewDigest)
+      || candidate.fulfilment !== 'pickup' && candidate.fulfilment !== 'delivery'
+      || candidate.currency !== 'MMK'
+      || !isRecord(candidate.line)
+      || !hasExactKeys(candidate.line, ['sku', 'name', 'variant', 'quantity', 'unitPriceMmk'])) {
+      throw new Error(`storefrontRequests[${index}] is invalid.`)
+    }
+    canonicalText(candidate.customerReference, `storefrontRequests[${index}].customerReference`, 80)
+    canonicalText(candidate.line.sku, `storefrontRequests[${index}].line.sku`, 80)
+    canonicalText(candidate.line.name, `storefrontRequests[${index}].line.name`)
+    if (candidate.line.variant !== null) canonicalText(candidate.line.variant, `storefrontRequests[${index}].line.variant`)
+    assertSafeInteger(candidate.line.quantity, `storefrontRequests[${index}].line.quantity`, 1)
+    if (Number(candidate.line.quantity) > 99) throw new Error(`storefrontRequests[${index}].line.quantity must be at most 99.`)
+    assertSafeInteger(candidate.line.unitPriceMmk, `storefrontRequests[${index}].line.unitPriceMmk`, 1)
+    assertSafeInteger(candidate.totalMmk, `storefrontRequests[${index}].totalMmk`, 1)
+    if (candidate.totalMmk !== Number(candidate.line.quantity) * Number(candidate.line.unitPriceMmk)) {
+      throw new Error(`storefrontRequests[${index}].totalMmk is invalid.`)
+    }
+    storefrontRequestIds.push(requestId)
+    storefrontIdempotencyKeys.push(idempotencyKey)
+    storefrontActionIds.push(`ACT-${requestId.slice(4)}`)
+  }
+  assertUnique(storefrontRequestIds, 'Storefront request ID')
+  assertUnique(storefrontIdempotencyKeys, 'Storefront request idempotency key')
+  assertUnique([...movementActionIds, ...reconciliationActionIds, ...refundSettlementActionIds, ...websiteIntakeCreationActionIds, ...closeActionIds, ...storefrontActionIds], 'Commerce action ID')
   return value as CommerceState
 }
 
@@ -609,7 +681,7 @@ function migrateLegacyCommerce(value: unknown): CommerceState {
       orders: legacyInteger(candidate.orders ?? candidate.transactions, 0),
     }
   })
-  return validateCommerceState({ schema: COMMERCE_WORKSPACE_SCHEMA, items, orders, movements: [], closes, websiteIntakes: [] })
+  return validateCommerceState({ schema: COMMERCE_WORKSPACE_SCHEMA, items, orders, movements: [], closes, websiteIntakes: [], storefrontRequests: [] })
 }
 
 export function normalizeCommerce(value: unknown): CommerceState {
@@ -756,6 +828,54 @@ function validWebsiteSource(source: CommerceWebsiteSource) {
 
 export function commerceWebsiteIntakes(state: CommerceState) {
   return state.websiteIntakes ?? []
+}
+
+export function commerceStorefrontRequests(state: CommerceState) {
+  return state.storefrontRequests ?? []
+}
+
+function sameStorefrontRequest(left: CommerceStorefrontRequest, right: CommerceStorefrontRequest) {
+  return JSON.stringify(left) === JSON.stringify(right)
+}
+
+export function recordCommerceStorefrontRequest(
+  state: CommerceState,
+  request: CommerceStorefrontRequest,
+  proof: CommerceActionProof,
+) {
+  const current = validateCommerceState(state)
+  let validatedRequest: CommerceStorefrontRequest
+  try {
+    validatedRequest = validateCommerceState({
+      ...current,
+      storefrontRequests: [request],
+    }).storefrontRequests?.[0] as CommerceStorefrontRequest
+  } catch {
+    return null
+  }
+  if (!validProof(proof)
+    || proof.actionId !== `ACT-${validatedRequest.id.slice(4)}`
+    || proof.capturedAt !== validatedRequest.createdAt
+    || proof.evidenceReference !== `ECOMMERCE:${validatedRequest.id}:${validatedRequest.sourcePreviewDigest}`) return null
+  const requests = commerceStorefrontRequests(current)
+  const existingById = requests.find((candidate) => candidate.id === validatedRequest.id)
+  const existingByIdempotency = requests.find((candidate) => candidate.idempotencyKey === validatedRequest.idempotencyKey)
+  if (existingById || existingByIdempotency) {
+    const existing = existingById ?? existingByIdempotency as CommerceStorefrontRequest
+    return existingById === existingByIdempotency && sameStorefrontRequest(existing, validatedRequest) ? current : null
+  }
+  if (actionIdIsUsed(current, proof.actionId)
+    || current.orders.some((order) => order.sourceRecordId === validatedRequest.id)) return null
+  if (requests.length >= maxStorefrontRequests) return null
+  const matches = current.items.filter((item) => item.sku === validatedRequest.line.sku)
+  if (matches.length !== 1
+    || matches[0].name !== validatedRequest.line.name
+    || (matches[0].variant ?? null) !== validatedRequest.line.variant
+    || matches[0].price !== validatedRequest.line.unitPriceMmk) return null
+  return validateCommerceState({
+    ...current,
+    storefrontRequests: [validatedRequest, ...requests],
+  })
 }
 
 export function commerceOrderNeedsAction(order: CommerceOrder) {

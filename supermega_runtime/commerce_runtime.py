@@ -25,6 +25,7 @@ COMMERCE_EVENTS = frozenset(
         "commerce.close.saved",
         "commerce.website_intake.created",
         "commerce.website_intake.converted",
+        "commerce.storefront_request.received",
     }
 )
 COMMERCE_HUMAN_EVENTS = frozenset(
@@ -50,6 +51,14 @@ _WEBSITE_INTAKE_STATUSES = ("pending_confirmation", "converted")
 _MAX_SAFE_INTEGER = 9_007_199_254_740_991
 _WEBSITE_FINGERPRINT_PATTERN = re.compile(r"web-[a-f0-9]{8}")
 _WEBSITE_INTAKE_ID_PATTERN = re.compile(r"WINT-[A-Z0-9-]{8,80}")
+_STOREFRONT_REQUEST_ID_PATTERN = re.compile(
+    r"ECR-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
+)
+_STOREFRONT_IDEMPOTENCY_PATTERN = re.compile(
+    r"ECI-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
+)
+_SHA256_DIGEST_PATTERN = re.compile(r"sha256:[a-f0-9]{64}")
+_MAX_STOREFRONT_REQUESTS = 100
 
 _STATE_FIELDS = frozenset({"schema", "items", "orders", "movements", "closes"})
 _ITEM_FIELDS = frozenset({"sku", "name", "variant", "onHand", "reorderAt", "price"})
@@ -134,6 +143,25 @@ _WEBSITE_INTAKE_REQUIRED_FIELDS = frozenset(
 )
 _WEBSITE_INTAKE_OPTIONAL_FIELDS = frozenset({"itemVariant", "conversion"})
 _WEBSITE_CONVERSION_FIELDS = _EVIDENCE_FIELDS | {"orderId"}
+_STOREFRONT_REQUEST_FIELDS = frozenset(
+    {
+        "schema",
+        "mode",
+        "state",
+        "id",
+        "idempotencyKey",
+        "createdAt",
+        "sourcePreviewDigest",
+        "customerReference",
+        "fulfilment",
+        "currency",
+        "line",
+        "totalMmk",
+    }
+)
+_STOREFRONT_REQUEST_LINE_FIELDS = frozenset(
+    {"sku", "name", "variant", "quantity", "unitPriceMmk"}
+)
 
 
 def _object(value: object, field: str) -> dict[str, Any]:
@@ -214,11 +242,54 @@ def _action_proof(value: object, field: str, *, with_order_id: bool = False) -> 
     return proof
 
 
+def _storefront_request(value: object, field: str) -> dict[str, Any]:
+    request = _object(value, field)
+    _exact_fields(request, field, required=_STOREFRONT_REQUEST_FIELDS)
+    if request["schema"] != "supermega.ecommerce.order_request.v1":
+        raise TrialValidationError(f"{field}.schema is invalid.")
+    if request["mode"] != "browser-local-request" or request["state"] != "pending_shop_review":
+        raise TrialValidationError(f"{field} must retain its pending browser receipt boundary.")
+    request_id = _text(request["id"], f"{field}.id", maximum=40)
+    idempotency_key = _text(request["idempotencyKey"], f"{field}.idempotencyKey", maximum=40)
+    if (
+        _STOREFRONT_REQUEST_ID_PATTERN.fullmatch(request_id) is None
+        or _STOREFRONT_IDEMPOTENCY_PATTERN.fullmatch(idempotency_key) is None
+        or request_id[4:] != idempotency_key[4:]
+    ):
+        raise TrialValidationError(f"{field} request identity is invalid.")
+    _timestamp(request["createdAt"], f"{field}.createdAt")
+    digest = _text(request["sourcePreviewDigest"], f"{field}.sourcePreviewDigest", maximum=71)
+    if _SHA256_DIGEST_PATTERN.fullmatch(digest) is None:
+        raise TrialValidationError(f"{field}.sourcePreviewDigest is invalid.")
+    _text(request["customerReference"], f"{field}.customerReference", maximum=80)
+    if request["fulfilment"] not in ("pickup", "delivery") or request["currency"] != "MMK":
+        raise TrialValidationError(f"{field} fulfilment or currency is invalid.")
+    line = _object(request["line"], f"{field}.line")
+    _exact_fields(line, f"{field}.line", required=_STOREFRONT_REQUEST_LINE_FIELDS)
+    _text(line["sku"], f"{field}.line.sku", maximum=80)
+    _text(line["name"], f"{field}.line.name")
+    if line["variant"] is not None:
+        _text(line["variant"], f"{field}.line.variant")
+    quantity = _integer(line["quantity"], f"{field}.line.quantity", minimum=1)
+    if quantity > 99:
+        raise TrialValidationError(f"{field}.line.quantity must be at most 99.")
+    unit_price = _integer(line["unitPriceMmk"], f"{field}.line.unitPriceMmk", minimum=1)
+    total = _integer(request["totalMmk"], f"{field}.totalMmk", minimum=1)
+    if total != quantity * unit_price:
+        raise TrialValidationError(f"{field}.totalMmk must equal quantity times unit price.")
+    return request
+
+
 def validate_commerce_state(value: object) -> dict[str, Any]:
     """Validate the complete managed Commerce snapshot without repairing it."""
 
     state = _object(value, "commerce state")
-    _exact_fields(state, "commerce state", required=_STATE_FIELDS, optional=frozenset({"websiteIntakes"}))
+    _exact_fields(
+        state,
+        "commerce state",
+        required=_STATE_FIELDS,
+        optional=frozenset({"websiteIntakes", "storefrontRequests"}),
+    )
     if state.get("schema") != COMMERCE_SCHEMA:
         raise TrialValidationError(f"commerce state schema must be {COMMERCE_SCHEMA}.")
 
@@ -227,6 +298,14 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     movements = _list(state["movements"], "commerce state.movements")
     closes = _list(state["closes"], "commerce state.closes")
     website_intakes = _list(state.get("websiteIntakes", []), "commerce state.websiteIntakes")
+    storefront_requests = _list(
+        state.get("storefrontRequests", []),
+        "commerce state.storefrontRequests",
+    )
+    if len(storefront_requests) > _MAX_STOREFRONT_REQUESTS:
+        raise TrialValidationError(
+            f"commerce state.storefrontRequests cannot exceed {_MAX_STOREFRONT_REQUESTS}."
+        )
 
     item_skus: list[str] = []
     item_by_sku: dict[str, dict[str, Any]] = {}
@@ -585,6 +664,16 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     _unique(intake_ids, "Website intake ID")
     _unique(intake_sources, "Website intake source")
     _unique(intake_action_ids, "Website intake action ID")
+    storefront_request_ids: list[str] = []
+    storefront_idempotency_keys: list[str] = []
+    storefront_action_ids: list[str] = []
+    for index, candidate in enumerate(storefront_requests):
+        request = _storefront_request(candidate, f"storefrontRequests[{index}]")
+        storefront_request_ids.append(request["id"])
+        storefront_idempotency_keys.append(request["idempotencyKey"])
+        storefront_action_ids.append(f"ACT-{request['id'][4:]}")
+    _unique(storefront_request_ids, "Storefront request ID")
+    _unique(storefront_idempotency_keys, "Storefront request idempotency key")
     _unique(
         [
             *(action_id for action_id in movement_action_ids if action_id not in conversion_action_ids),
@@ -592,6 +681,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             *refund_settlement_action_ids,
             *intake_action_ids,
             *close_action_ids,
+            *storefront_action_ids,
         ],
         "Commerce action ID",
     )
@@ -644,6 +734,15 @@ def _validate_event_evidence(
         ]
         if len(conversions) != 1 or not _proof_matches_evidence(conversions[0], evidence):
             raise TrialValidationError("command evidence must match the Website intake conversion proof.")
+    elif event_type == "commerce.storefront_request.received":
+        request = next_state["storefrontRequests"][0]
+        if (
+            evidence["actionId"] != f"ACT-{request['id'][4:]}"
+            or evidence["capturedAt"] != request["createdAt"]
+            or evidence["evidenceReference"]
+            != f"ECOMMERCE:{request['id']}:{request['sourcePreviewDigest']}"
+        ):
+            raise TrialValidationError("command evidence must match the retained Ecommerce request receipt.")
 
     movement_kind = {
         "commerce.item.created": "opening",
@@ -732,9 +831,18 @@ def _website_intakes(state: Mapping[str, Any]) -> list[Any]:
     return state.get("websiteIntakes", [])
 
 
+def _storefront_requests(state: Mapping[str, Any]) -> list[Any]:
+    return state.get("storefrontRequests", [])
+
+
 def _require_website_intakes_unchanged(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
     if _website_intakes(current) != _website_intakes(next_state):
         raise TrialValidationError("event cannot change: websiteIntakes.")
+
+
+def _require_storefront_requests_unchanged(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
+    if _storefront_requests(current) != _storefront_requests(next_state):
+        raise TrialValidationError("event cannot change: storefrontRequests.")
 
 
 def _validate_new_order_and_reservation(
@@ -959,6 +1067,30 @@ def _validate_website_intake_converted(current: Mapping[str, Any], next_state: M
         raise TrialValidationError("Website intake conversion must create its attributable order.")
 
 
+def _validate_storefront_request_received(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
+    _require_unchanged(current, next_state, "items", "orders", "movements", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    current_requests = _storefront_requests(current)
+    next_requests = _storefront_requests(next_state)
+    if len(next_requests) != len(current_requests) + 1 or next_requests[1:] != current_requests:
+        raise TrialValidationError(
+            "commerce.storefront_request.received must prepend exactly one Ecommerce request."
+        )
+    request = next_requests[0]
+    line = request["line"]
+    matching_items = [item for item in current["items"] if item["sku"] == line["sku"]]
+    if (
+        len(matching_items) != 1
+        or matching_items[0]["name"] != line["name"]
+        or matching_items[0].get("variant") != line["variant"]
+        or matching_items[0]["price"] != line["unitPriceMmk"]
+        or any(order.get("sourceRecordId") == request["id"] for order in current["orders"])
+    ):
+        raise TrialValidationError(
+            "the Ecommerce request receipt does not match the current Shop catalog boundary."
+        )
+
+
 _TRANSITION_VALIDATORS = {
     "commerce.item.created": _validate_item_created,
     "commerce.order.created": _validate_created,
@@ -970,6 +1102,7 @@ _TRANSITION_VALIDATORS = {
     "commerce.close.saved": _validate_close,
     "commerce.website_intake.created": _validate_website_intake_created,
     "commerce.website_intake.converted": _validate_website_intake_converted,
+    "commerce.storefront_request.received": _validate_storefront_request_received,
 }
 
 
@@ -992,11 +1125,14 @@ def reduce_commerce_state(
             or next_state["movements"]
             or next_state["closes"]
             or _website_intakes(next_state)
+            or _storefront_requests(next_state)
         ):
             raise TrialValidationError("Commerce initialization requires a non-empty catalog and no operating history.")
         return next_state
 
     current_state = validate_commerce_state(current)
+    if event_type != "commerce.storefront_request.received":
+        _require_storefront_requests_unchanged(current_state, next_state)
     _TRANSITION_VALIDATORS[event_type](current_state, next_state)
     _validate_event_evidence(event_type, current_state, next_state, evidence)
     return next_state

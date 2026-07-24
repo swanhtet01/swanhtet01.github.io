@@ -47,8 +47,8 @@
       "status": "release-candidate-local",
       "path": "/products/ecommerce/",
       "job": "Create a simple customer storefront from a read-only Shop catalogue, then add structured order intent without duplicating Shop back-office records.",
-      "surfaces": ["Storefront", "Preview", "Request receipt", "Shop review"],
-      "nextGate": "Retain the passing source-locked Shop draft boundary while proving an authenticated, revisioned, recoverable Ecommerce request inbox on one isolated non-production tenant before adding cart, payment, delivery execution, or external messaging."
+      "surfaces": ["Storefront", "Preview", "Request receipt", "Shop inbox", "Shop review"],
+      "nextGate": "Rehearse the completed authenticated, revisioned, recoverable Ecommerce request inbox on one owner-approved isolated non-production tenant before adding cart, payment, delivery execution, external messaging, or a normalized indexed queue."
     },
     {
       "id": "agents",

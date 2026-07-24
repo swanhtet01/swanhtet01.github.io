@@ -1,6 +1,19 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
+import {
+  commerceStorefrontRequests,
+  recordCommerceStorefrontRequest,
+  validateCommerceState,
+  type CommerceItem,
+  type CommerceState,
+} from '../../core/commerce-workspace'
+import {
+  currentManagedIdentity,
+  loadManagedBootstrap,
+  saveManagedCommerceCommand,
+  type ManagedIdentity,
+} from '../../core/managed-trial'
 import { confirmEcommerceShopDraft } from './ecommerce-shop-confirm'
 import {
   buildStorefrontOrderRequest,
@@ -14,6 +27,16 @@ import {
 } from './storefront-model'
 
 type PreviewDevice = 'phone' | 'desktop'
+type EcommerceCatalog = {
+  source: 'shop-local' | 'sample' | 'unavailable' | 'managed-shop'
+  items: CommerceItem[]
+  error: string
+}
+type ManagedInboxContext = {
+  identity: ManagedIdentity
+  state: CommerceState
+  version: number
+}
 
 function formatMmk(value: number) {
   return `${value.toLocaleString()} MMK`
@@ -21,7 +44,9 @@ function formatMmk(value: number) {
 
 export function EcommerceProduct() {
   const navigate = useNavigate()
-  const catalog = useMemo(() => readStorefrontCatalog(), [])
+  const [catalog, setCatalog] = useState<EcommerceCatalog>(() => readStorefrontCatalog())
+  const [managedIdentity, setManagedIdentity] = useState<ManagedIdentity | null>(null)
+  const [managedInbox, setManagedInbox] = useState<ManagedInboxContext | null>(null)
   const initialSelection = useMemo(
     () => catalog.items.filter((item) => item.onHand > 0).slice(0, 4).map((item) => item.sku),
     [catalog.items],
@@ -40,6 +65,51 @@ export function EcommerceProduct() {
   const [requestNotice, setRequestNotice] = useState('')
   const [handoffConfirmed, setHandoffConfirmed] = useState(false)
   const [handoffBusy, setHandoffBusy] = useState(false)
+
+  useEffect(() => {
+    let current = true
+    void currentManagedIdentity()
+      .then(async (identity) => {
+        if (!current || !identity) return
+        setManagedIdentity(identity)
+        const bootstrap = await loadManagedBootstrap()
+        if (!current) return
+        const record = bootstrap.states.commerce
+        if (record.surface !== 'commerce' || !Number.isSafeInteger(record.version) || record.version < 1) {
+          setCatalog({ source: 'unavailable', items: [], error: 'Create the managed Shop catalog before opening its Ecommerce storefront.' })
+          setSelectedSkus([])
+          setRequestSku('')
+          setRequestLedger(createEmptyStorefrontRequestLedger())
+          setHandoffConfirmed(false)
+          return
+        }
+        const state = validateCommerceState(record.state)
+        const available = state.items.filter((item) => item.onHand > 0)
+        setSelectedSkus((selected) => {
+          const retained = selected.filter((sku) => available.some((item) => item.sku === sku)).slice(0, 8)
+          return retained.length ? retained : available.slice(0, 4).map((item) => item.sku)
+        })
+        setRequestSku((sku) => available.some((item) => item.sku === sku) ? sku : available[0]?.sku ?? '')
+        setRequestLedger(createEmptyStorefrontRequestLedger())
+        setHandoffConfirmed(false)
+        setRequestNotice('')
+        setManagedInbox({ identity, state, version: record.version })
+        setCatalog({ source: 'managed-shop', items: state.items, error: '' })
+      })
+      .catch((error) => {
+        if (!current) return
+        setCatalog({
+          source: 'unavailable',
+          items: [],
+          error: error instanceof Error ? error.message : 'The authenticated Shop catalog could not be loaded.',
+        })
+        setSelectedSkus([])
+        setRequestSku('')
+        setRequestLedger(createEmptyStorefrontRequestLedger())
+        setHandoffConfirmed(false)
+      })
+    return () => { current = false }
+  }, [])
 
   const previewResult = useMemo(() => {
     try {
@@ -134,8 +204,76 @@ export function EcommerceProduct() {
     }
   }
 
+  async function retainInManagedInbox() {
+    if (!latestRequest || !handoffConfirmed || handoffBusy) return
+    setHandoffBusy(true)
+    setRequestNotice('')
+    try {
+      if (!previewResult.preview) throw new Error('The current storefront preview is unavailable.')
+      const currentDigest = await storefrontPreviewDigest(previewResult.preview)
+      if (latestRequest.sourcePreviewDigest !== currentDigest || digest !== currentDigest) {
+        throw new Error('The storefront changed after this request receipt was created. Create and review a new receipt.')
+      }
+      const identity = await currentManagedIdentity()
+      if (!identity) throw new Error('Connect an authenticated workspace in Settings before saving this request.')
+      const bootstrap = await loadManagedBootstrap()
+      const record = bootstrap.states.commerce
+      if (record.surface !== 'commerce' || !Number.isSafeInteger(record.version) || record.version < 1) {
+        throw new Error('The managed Shop catalog is not ready for Ecommerce requests.')
+      }
+      const currentState = validateCommerceState(record.state)
+      const proof = {
+        actionId: `ACT-${latestRequest.id.slice(4)}`,
+        capturedAt: latestRequest.createdAt,
+        actor: identity.userId,
+        reason: 'Retain this customer request for human Shop review.',
+        evidenceReference: `ECOMMERCE:${latestRequest.id}:${latestRequest.sourcePreviewDigest}`,
+      }
+      const nextState = recordCommerceStorefrontRequest(currentState, latestRequest, proof)
+      if (!nextState) throw new Error('The Ecommerce request conflicts with the current managed Shop inbox.')
+      if (nextState === currentState) {
+        setManagedInbox({ identity, state: currentState, version: record.version })
+        setRequestNotice(`${latestRequest.id} is already retained in the managed Shop inbox.`)
+        navigate('/shop/?tab=orders&source=ecommerce-inbox')
+        return
+      }
+      const result = await saveManagedCommerceCommand({
+        commandId: latestRequest.idempotencyKey.slice(4),
+        evidence: proof,
+        eventType: 'commerce.storefront_request.received',
+        expectedVersion: record.version,
+        state: nextState as unknown as Record<string, unknown>,
+      })
+      if (result.surface !== 'commerce'
+        || result.event_type !== 'commerce.storefront_request.received'
+        || result.version !== record.version + 1) {
+        throw new Error('The managed Shop returned an invalid Ecommerce inbox receipt.')
+      }
+      const accepted = validateCommerceState(result.state)
+      const retained = commerceStorefrontRequests(accepted).find((candidate) => candidate.id === latestRequest.id)
+      if (!retained || JSON.stringify(retained) !== JSON.stringify(latestRequest)
+        || JSON.stringify(accepted.items) !== JSON.stringify(currentState.items)
+        || JSON.stringify(accepted.orders) !== JSON.stringify(currentState.orders)
+        || JSON.stringify(accepted.movements) !== JSON.stringify(currentState.movements)
+        || JSON.stringify(accepted.closes) !== JSON.stringify(currentState.closes)
+        || JSON.stringify(accepted.websiteIntakes ?? []) !== JSON.stringify(currentState.websiteIntakes ?? [])) {
+        throw new Error('The managed Ecommerce receipt changed Shop records and was rejected by the client.')
+      }
+      setManagedIdentity(identity)
+      setManagedInbox({ identity, state: accepted, version: result.version })
+      setRequestNotice(`${latestRequest.id} is retained in ${identity.workspaceId}. No order or stock changed.`)
+      navigate('/shop/?tab=orders&source=ecommerce-inbox')
+    } catch (error) {
+      setRequestNotice(error instanceof Error ? error.message : 'The managed request was not confirmed. Nothing was claimed.')
+    } finally {
+      setHandoffBusy(false)
+    }
+  }
+
   const sourceLabel = catalog.source === 'shop-local'
     ? 'Current local Shop catalog'
+    : catalog.source === 'managed-shop'
+      ? `Managed Shop · ${managedInbox?.identity.workspaceId ?? 'authenticated'}`
       : catalog.source === 'sample'
       ? 'Sample Shop catalog'
       : 'Catalog unavailable'
@@ -150,16 +288,16 @@ export function EcommerceProduct() {
     <div className="workspace-screen ecommerce-product">
       <header className="ecommerce-heading">
         <div>
-          <span className="core-eyebrow">Local preview</span>
+          <span className="core-eyebrow">{managedIdentity ? 'Managed storefront' : 'Local preview'}</span>
           <h1>Ecommerce</h1>
-          <p>Shape a simple customer storefront from Shop. Nothing is published or ordered here.</p>
+          <p>Shape a simple customer storefront from Shop, then retain customer requests for human review.</p>
         </div>
         <Link className="text-link" to="/shop/?tab=inventory">Open Shop stock</Link>
       </header>
 
       <div className="ecommerce-boundary" role="status">
         <span>{sourceLabel}</span>
-        <p>Prices and availability are read-only. This preview cannot change stock, create an order, take payment, send a message, or publish a site.</p>
+        <p>Prices and availability are read-only. A request can enter the authenticated Shop inbox, but cannot reserve stock, create an order, take payment, send a message, or publish a site.</p>
       </div>
 
       <div className="ecommerce-workspace">
@@ -238,7 +376,7 @@ export function EcommerceProduct() {
                     </article>
                   ))}
                 </div>
-                <footer>Ordering is not connected in this preview.</footer>
+                <footer>Requests enter Shop review. Payment and fulfilment stay separate.</footer>
               </div>
             ) : (
               <div className="ecommerce-preview-empty">
@@ -302,11 +440,13 @@ export function EcommerceProduct() {
                   <input checked={handoffConfirmed} onChange={(event) => setHandoffConfirmed(event.target.checked)} type="checkbox" />
                   <span>I reviewed the SKU, quantity, MMK price, and current availability.</span>
                 </label>
-                <button className="core-button primary" disabled={!handoffConfirmed || !digest || handoffBusy} onClick={() => void sendToShopReview()} type="button">
-                  {handoffBusy ? 'Checking…' : 'Send to Shop review'}
+                <button className="core-button primary" disabled={!handoffConfirmed || !digest || handoffBusy} onClick={() => void (managedIdentity ? retainInManagedInbox() : sendToShopReview())} type="button">
+                  {handoffBusy ? 'Checking…' : managedIdentity ? 'Save to Shop inbox' : 'Send to Shop review'}
                 </button>
               </> : null}
-              <p className="form-notice" aria-live="polite">{requestNotice || 'This local receipt is not a Shop order. It does not reserve stock, take payment, send a message, or request delivery.'}</p>
+              <p className="form-notice" aria-live="polite">{requestNotice || (managedIdentity
+                ? 'Confirm the exact receipt, then retain it in the managed Shop inbox. It remains request intent only.'
+                : 'This local receipt is not a Shop order. Connect a managed workspace for shared, recoverable retention.')}</p>
             </div>
           </details>
         </section>

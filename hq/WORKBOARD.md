@@ -4,7 +4,7 @@ Updated: 2026-07-24
 Authority: founder / CEO
 Canonical repository: `C:\Users\thesw\Projects\supermega-platform`
 Integration branch: `agent/supermega-release-candidate`
-Previous local checkpoint: `a60d7407ed0601e27efede5eba6cd1d5ff8c79ab`
+Previous local checkpoint: `36b161ce3ab768a04f3868735eb7b0388fb247e1`
 
 ## One operating model
 
@@ -33,7 +33,7 @@ Claude coordination is paused by founder direction.
 | ENG-003 | Ecommerce Codex | done-local | Build Ecommerce slice 1: deterministic storefront configuration and responsive preview from a read-only Shop catalogue snapshot. | Focused Ecommerce maker, route, catalogue, styles, and verifier only; no Shop mutation | Lint, build, 11 runtime checks, full local release gates, and 1280/375 px browser review pass; no push or deploy. |
 | ENG-006 | Ecommerce Codex | done-local | Build Ecommerce slice 2: a bounded customer order request that stops before Shop consequences. | Storefront request contract and local preview UI only | Immutable storefront digest and item/price snapshot; idempotent in-memory request receipt; 13 request-contract checks and 1280/375 px browser review pass; no stock, Shop order, payment, send, fulfilment, persistence, or external write. |
 | ENG-007 | Shop + Ecommerce Codex | done-local | Add the human-confirmed Ecommerce-to-Shop draft handoff. | Local adapter, confirmation UI, idempotency record, and focused tests only | Exact retained receipt, full digest, SKU, name, variant, price, quantity, and availability are revalidated; 16 handoff checks and 1280/375 px journeys pass; the Shop draft remains behind payment choice and the existing accountable action gate; no order, stock, payment, send, persistence, or external write occurs during handoff. |
-| ENG-008 | Platform + Ecommerce Codex | queued | Add a durable authenticated Ecommerce request inbox on one isolated non-production tenant. | Local migration/API contract, tenant command, recovery, fake-client tests, and UI adapter only until hosted rehearsal approval | Exact idempotent replay; tenant isolation; revision conflict rejection; source receipt and digest retained; recovery proven; no automatic Shop conversion, stock reservation, fulfilment, payment, send, or production activation. |
+| ENG-008 | Platform + Ecommerce Codex | done-local | Add an authenticated Ecommerce request inbox without creating a second back office or bypassing Shop authority. | Existing revisioned Shop workspace contract, tenant command, recovery, fake-client tests, and UI adapter; no hosted write | Exact replay, conflicting-retry, stale-revision, action-identity, cross-tenant, and oversized-inbox rejection pass with bootstrap recovery and unchanged Shop ledgers; no automatic conversion, stock reservation, fulfilment, payment, send, hosted write, or production activation. |
 | ENG-004 | Agent Solutions Codex | done-local | Complete the Order Intake evaluation gate before model or UI integration. | Order-intake evaluator, CLI, and tests only | The 20-case multilingual/adversarial harness requires latency, token, estimated-cost, retry, refusal, correction, schema-validity, provenance, fabricated-fact, and unsafe-ready evidence; 114 tests pass. |
 | ENG-005 | Agent Solutions Codex | queued | Add a server-only Order Intake provider runner with no operational tools or durable raw-message retention. | Provider adapter, API boundary, fake-client tests, and sanitized result writer only | No client secret exposure; strict structured output; one model call; no tools; bounded input/output; every result satisfies the evaluator document contract; failures produce no draft. |
 | OPS-001 | Platform / owner | blocked-owner | Repeat the private trial on one isolated hosted Supabase target. | Hosted write only after explicit approval | Five migrations, runtime role, isolation, revocation, recovery, Security Advisor, and pooler evidence. |
@@ -63,7 +63,7 @@ Statuses: `ready`, `active`, `queued`, `review`, `blocked-owner`, `blocked-prere
 
 - Website owns general pages, navigation, responsive review, approval, and site artifact.
 - Ecommerce owns storefront presentation and customer order intent.
-- Ecommerce reads a versioned Shop catalogue projection and stops at `pending_confirmation`.
+- Ecommerce reads a versioned Shop catalogue projection and stops at `pending_shop_review`.
 - Shop revalidates and owns every operational consequence.
 
 ### AI Agent Solutions
@@ -94,7 +94,7 @@ Every worker handoff contains:
 
 ## Execution order
 
-1. Start ENG-008 from the passing ENG-007 handoff contract; Shop consequences remain behind the existing accountable action gate.
+1. Accept ENG-008 as a completed local contract; its next step is an owner-approved isolated hosted rehearsal, and Shop consequences remain behind the existing accountable action gate.
 2. Start ENG-005 only after the owner chooses whether to reuse or securely create the OpenAI API key; a provider run must pass ENG-004's evaluator before any Agents demo.
 3. Run PILOT-001 only after the corrected Shop route and language pass.
 4. Keep OPS-001 and all production release activity owner-gated.

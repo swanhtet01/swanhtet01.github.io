@@ -13,6 +13,7 @@ from supermega_runtime.trial_store import (
     TrialIdempotencyConflict,
     TrialPrincipal,
     TrialValidationError,
+    TrialVersionConflict,
 )
 
 
@@ -25,6 +26,7 @@ CLOSE_ACTION_ID_2 = "ACT-00000000-0000-4000-8000-000000000002"
 CLOSE_ID_2 = "CLOSE-00000000-0000-4000-8000-000000000002"
 CLOSE_ACTION_ID_3 = "ACT-00000000-0000-4000-8000-000000000003"
 CLOSE_ID_3 = "CLOSE-00000000-0000-4000-8000-000000000003"
+STOREFRONT_REQUEST_UUID = "00000000-0000-4000-8000-000000000010"
 
 
 def myanmar_business_date(timestamp: str) -> str:
@@ -191,6 +193,44 @@ def website_intake(
     }
 
 
+def storefront_request(
+    *,
+    request_uuid: str = STOREFRONT_REQUEST_UUID,
+    quantity: int = 2,
+    digest: str = "sha256:" + "a" * 64,
+) -> dict[str, object]:
+    return {
+        "schema": "supermega.ecommerce.order_request.v1",
+        "mode": "browser-local-request",
+        "state": "pending_shop_review",
+        "id": f"ECR-{request_uuid}",
+        "idempotencyKey": f"ECI-{request_uuid}",
+        "createdAt": NOW,
+        "sourcePreviewDigest": digest,
+        "customerReference": "Customer A",
+        "fulfilment": "pickup",
+        "currency": "MMK",
+        "line": {
+            "sku": "SKU-1",
+            "name": "Test item",
+            "variant": None,
+            "quantity": quantity,
+            "unitPriceMmk": 100,
+        },
+        "totalMmk": quantity * 100,
+    }
+
+
+def storefront_evidence(request: dict[str, object]) -> dict[str, str]:
+    request_id = str(request["id"])
+    digest = str(request["sourcePreviewDigest"])
+    return action_evidence(
+        f"ACT-{request_id[4:]}",
+        captured_at=str(request["createdAt"]),
+        evidence_reference=f"ECOMMERCE:{request_id}:{digest}",
+    )
+
+
 def pending_intake_state() -> dict[str, object]:
     state = catalog_state()
     state["websiteIntakes"] = [website_intake()]
@@ -312,6 +352,8 @@ def evidence_for(event_type: str, next_state: dict[str, object]) -> dict[str, st
         conversion = dict(next_state["websiteIntakes"][0]["conversion"])  # type: ignore[index, arg-type]
         conversion.pop("orderId")
         return conversion  # type: ignore[return-value]
+    if event_type == "commerce.storefront_request.received":
+        return storefront_evidence(next_state["storefrontRequests"][0])  # type: ignore[index,arg-type]
     if event_type in {"commerce.item.created", "commerce.order.created", "commerce.order.cancelled", "commerce.stock.received"}:
         movement_record = next_state["movements"][0]  # type: ignore[index]
         return {
@@ -388,6 +430,152 @@ class CommerceRuntimeTests(unittest.TestCase):
         )
         with self.assertRaises(TrialValidationError):
             apply_event({}, "commerce.workspace.initialized", pending_intake_state())
+
+    def test_storefront_request_is_retained_without_shop_side_effects(self) -> None:
+        current = catalog_state()
+        request = storefront_request()
+        next_state = deepcopy(current)
+        next_state["storefrontRequests"] = [request]
+
+        accepted = apply_event(
+            current,
+            "commerce.storefront_request.received",
+            next_state,
+        )
+
+        self.assertEqual(accepted["storefrontRequests"], [request])
+        for field in ("items", "orders", "movements", "closes"):
+            self.assertEqual(accepted[field], current[field])
+        self.assertEqual(accepted.get("websiteIntakes", []), [])
+
+        for label, invalid in (
+            ("changed item", {**next_state, "items": [{**current["items"][0], "onHand": 9}]}),  # type: ignore[index]
+            ("created order", {**next_state, "orders": [order_record()]}),
+            ("changed price", {**next_state, "storefrontRequests": [{**request, "line": {**request["line"], "unitPriceMmk": 101}, "totalMmk": 202}]}),  # type: ignore[arg-type]
+            ("bad digest", {**next_state, "storefrontRequests": [{**request, "sourcePreviewDigest": "sha256:" + "A" * 64}]}),
+        ):
+            with self.subTest(label=label), self.assertRaises(TrialValidationError):
+                apply_event(
+                    current,
+                    "commerce.storefront_request.received",
+                    invalid,
+                )
+
+        changed_receipt = deepcopy(accepted)
+        changed_receipt["storefrontRequests"][0]["customerReference"] = "Changed"  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                accepted,
+                "commerce.stock.received",
+                changed_receipt,
+                action_evidence(),
+            )
+
+        collision_action_id = f"ACT-{STOREFRONT_REQUEST_UUID}"
+        collision_current = catalog_state()
+        collision_next = deepcopy(collision_current)
+        collision_next["items"][0]["onHand"] = 11  # type: ignore[index]
+        collision_next["movements"] = [movement("receipt", collision_action_id, 1)]
+        collision_current = apply_event(
+            collision_current,
+            "commerce.stock.received",
+            collision_next,
+            action_evidence(collision_action_id),
+        )
+        collision_state = deepcopy(collision_current)
+        collision_state["storefrontRequests"] = [request]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                collision_current,
+                "commerce.storefront_request.received",
+                collision_state,
+            )
+
+        oversized = catalog_state()
+        oversized["storefrontRequests"] = [
+            storefront_request(request_uuid=f"00000000-0000-4000-8000-{index:012d}")
+            for index in range(100, 201)
+        ]
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(oversized)
+
+    def test_storefront_request_store_replay_revision_tenant_and_recovery(self) -> None:
+        store = InMemoryTrialStore(reducer=reduce_trial_state)
+        operator = TrialPrincipal("workspace-a", "Accountable operator", "human")
+        other = TrialPrincipal("workspace-b", "Other operator", "human")
+        for principal in (operator, other):
+            store.provision_membership(
+                workspace_id=principal.workspace_id,
+                actor_id=principal.actor_id,
+                actor_kind=principal.actor_kind,
+                capabilities=("commerce.write",),
+            )
+            store.apply_command(
+                principal,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.workspace.initialized",
+                expected_version=0,
+                payload={
+                    "state": catalog_state(),
+                    "evidence": action_evidence(actor=principal.actor_id),
+                },
+            )
+
+        request = storefront_request()
+        state = catalog_state()
+        state["storefrontRequests"] = [request]
+        command_id = STOREFRONT_REQUEST_UUID
+        payload = {"state": state, "evidence": storefront_evidence(request)}
+        first = store.apply_command(
+            operator,
+            command_id=command_id,
+            surface="commerce",
+            event_type="commerce.storefront_request.received",
+            expected_version=1,
+            payload=payload,
+        )
+        replay = store.apply_command(
+            operator,
+            command_id=command_id,
+            surface="commerce",
+            event_type="commerce.storefront_request.received",
+            expected_version=1,
+            payload=payload,
+        )
+
+        self.assertEqual(first.version, 2)
+        self.assertTrue(replay.idempotent_replay)
+        self.assertEqual(replay.state, first.state)
+        self.assertEqual(store.get_state(operator, "commerce").state, first.state)
+        self.assertNotIn("storefrontRequests", store.get_state(other, "commerce").state)
+
+        conflicting_payload = deepcopy(payload)
+        conflicting_payload["state"]["storefrontRequests"][0]["customerReference"] = "Conflict"  # type: ignore[index]
+        with self.assertRaises(TrialIdempotencyConflict):
+            store.apply_command(
+                operator,
+                command_id=command_id,
+                surface="commerce",
+                event_type="commerce.storefront_request.received",
+                expected_version=1,
+                payload=conflicting_payload,
+            )
+        with self.assertRaises(TrialVersionConflict):
+            store.apply_command(
+                operator,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.storefront_request.received",
+                expected_version=1,
+                payload=payload,
+            )
+        recovered = store.get_state(
+            TrialPrincipal("workspace-a", "Accountable operator", "human"),
+            "commerce",
+        )
+        self.assertEqual(recovered.version, 2)
+        self.assertEqual(recovered.state["storefrontRequests"], [request])
 
         self.assertEqual(
             COMMERCE_HUMAN_EVENTS,

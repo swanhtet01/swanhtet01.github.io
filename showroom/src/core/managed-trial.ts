@@ -46,6 +46,7 @@ export type ManagedCommerceEvent =
   | 'commerce.item.created'
   | 'commerce.website_intake.created'
   | 'commerce.website_intake.converted'
+  | 'commerce.storefront_request.received'
   | 'commerce.order.created'
   | 'commerce.order.advanced'
   | 'commerce.order.cancelled'

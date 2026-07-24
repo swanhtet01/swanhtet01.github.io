@@ -1,7 +1,7 @@
 {
   "schemaVersion": "supermega.site-context.v1",
-  "contextVersion": "2026-07-24.9",
-  "catalogVersion": "2026-07-24.9",
+  "contextVersion": "2026-07-24.10",
+  "catalogVersion": "2026-07-24.10",
   "brand": {
     "name": "SuperMega",
     "domain": "supermega.dev",
@@ -141,10 +141,10 @@
       "status": "release-candidate-local",
       "eyebrow": "Ecommerce maker",
       "headline": "Create a Shop-backed storefront and hand customer intent to human review.",
-      "views": ["Storefront", "Preview", "Request receipt", "Shop review"],
-      "workflow": ["Choose products", "Write storefront copy", "Review phone and desktop", "Retain deterministic preview digest", "Create local pending request receipt", "Confirm exact receipt for Shop review", "Choose payment review", "Open accountable Shop action gate"],
-      "proof": ["Read-only Shop catalogue snapshot", "Locked price and availability projection", "Deterministic SHA-256 preview digest", "Exact retained-ledger membership", "Idempotent in-memory receipt", "Human-confirmed source-locked Shop draft", "16 handoff integrity checks", "Stale, duplicate, unknown, sold-out, repriced, insufficient-stock, and tampered request rejection"],
-      "boundaries": ["No duplicate stock ledger", "No durable shared request inbox", "No Shop order or stock reservation before separate accountable confirmation", "No cart or payment initiation", "No delivery execution", "No customer send", "No publishing", "No external write"]
+      "views": ["Storefront", "Preview", "Request receipt", "Shop inbox", "Shop review"],
+      "workflow": ["Choose products", "Write storefront copy", "Review phone and desktop", "Retain deterministic preview digest", "Create pending request receipt", "Optionally retain exact receipt in authenticated Shop inbox", "Recover or review exact request", "Choose payment review", "Open accountable Shop action gate"],
+      "proof": ["Read-only Shop catalogue snapshot", "Locked price and availability projection", "Deterministic SHA-256 preview digest", "Exact retained-ledger membership", "Idempotent receipt and exact managed replay", "Revision, action-identity, and cross-tenant conflict rejection", "Bootstrap recovery", "Unchanged Shop orders and stock movements", "Human-confirmed source-locked Shop draft", "83 Shop runtime checks", "Stale, duplicate, unknown, sold-out, repriced, insufficient-stock, oversized-inbox, and tampered request rejection"],
+      "boundaries": ["No duplicate stock ledger", "No isolated hosted tenant proof", "Managed inbox uses a 100-entry revisioned Shop workspace pilot envelope; a normalized indexed queue is gated on measured scale", "No Shop order or stock reservation before separate accountable confirmation", "No cart or payment initiation", "No delivery execution", "No customer send", "No publishing", "No external write"]
     }
   ],
   "agentSolutions": {

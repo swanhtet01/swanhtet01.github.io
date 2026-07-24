@@ -37,11 +37,14 @@ if (manifest.products?.map((product) => product.id).join(',') !== 'commerce,prod
 if (manifest.products?.map((product) => `${product.publicId}:${product.name}`).join(',') !== 'shop:Shop,plant:Plant') fail('public_catalog_not_shop_and_plant')
 if (manifest.prototypeProducts?.map((product) => `${product.id}:${product.status}`).join(',') !== 'website:release-candidate-local,ecommerce:release-candidate-local') fail('maker_portfolio_drift')
 const ecommerce = manifest.prototypeProducts?.find((product) => product.id === 'ecommerce')
-if (ecommerce?.views?.join(',') !== 'Storefront,Preview,Request receipt,Shop review'
-  || !ecommerce?.proof?.includes('Idempotent in-memory receipt')
+if (ecommerce?.views?.join(',') !== 'Storefront,Preview,Request receipt,Shop inbox,Shop review'
+  || !ecommerce?.proof?.includes('Idempotent receipt and exact managed replay')
   || !ecommerce?.proof?.includes('Exact retained-ledger membership')
+  || !ecommerce?.proof?.includes('Revision, action-identity, and cross-tenant conflict rejection')
+  || !ecommerce?.proof?.includes('Bootstrap recovery')
   || !ecommerce?.proof?.includes('Human-confirmed source-locked Shop draft')
-  || !ecommerce?.boundaries?.includes('No durable shared request inbox')
+  || !ecommerce?.boundaries?.includes('No isolated hosted tenant proof')
+  || !ecommerce?.boundaries?.includes('Managed inbox uses a 100-entry revisioned Shop workspace pilot envelope; a normalized indexed queue is gated on measured scale')
   || !ecommerce?.boundaries?.includes('No Shop order or stock reservation before separate accountable confirmation')) fail('ecommerce_request_receipt_contract_drift')
 if (manifest.agentSolutions?.id !== 'agents' || manifest.agentSolutions?.status !== 'prototype-planned') fail('agent_solution_portfolio_drift')
 for (const product of manifest.products || []) {

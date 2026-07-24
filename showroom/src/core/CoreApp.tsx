@@ -38,6 +38,7 @@ import {
   commerceCloseExpectation,
   commerceOrderNeedsAction,
   commerceOrderHasReleasableReservation,
+  commerceStorefrontRequests,
   commerceWorkspaceCanWrite,
   commerceWebsiteIntakes,
   convertCommerceWebsiteIntake,
@@ -1697,7 +1698,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
   const [payment, setPayment] = useState('KBZPay')
   const [preparedChannelDraft, setPreparedChannelDraft] = useState<ChannelOrderDraft | null>(null)
   const [preparedEcommerceDraft, setPreparedEcommerceDraft] = useState<EcommerceShopDraft | null>(null)
-  const [orderEntryMode, setOrderEntryMode] = useState<'manual' | 'message' | 'website'>('manual')
+  const [orderEntryMode, setOrderEntryMode] = useState<'manual' | 'message' | 'website' | 'ecommerce'>('manual')
   const preparedChannelRef = useRef<HTMLDivElement>(null)
   const consumedEcommerceDraftId = useRef('')
   const [actionTrigger, setActionTrigger] = useState<HTMLElement | null>(null)
@@ -1722,6 +1723,10 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
   const latestClose = commerce.closes.find((close) => close.operator)
   const importedWebsiteOrderIds = commerce.orders.flatMap((order) => order.sourceRecordId ? [order.sourceRecordId] : [])
   const websiteIntakes = commerceWebsiteIntakes(commerce)
+  const storefrontRequests = commerceStorefrontRequests(commerce)
+  const pendingStorefrontRequests = storefrontRequests.filter((request) => (
+    !commerce.orders.some((order) => order.sourceRecordId === request.id)
+  ))
 
   useEffect(() => {
     if (!ecommerceNavigationDraft || managedIdentity || consumedEcommerceDraftId.current === ecommerceNavigationDraft.id) return
@@ -1911,6 +1916,38 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
     setPreparedEcommerceDraft(null)
     setOrderEntryMode('manual')
     setNotice(`${draft.sourceRecordId} mapped locally. Review the structured order before any stock changes.`)
+  }
+
+  async function reviewStorefrontRequest(requestId: string) {
+    if (!commerceCanWrite || pendingAction) {
+      setNotice('Finish the current Shop action before reviewing an Ecommerce request.')
+      return
+    }
+    const request = pendingStorefrontRequests.find((candidate) => candidate.id === requestId)
+    if (!request) {
+      setNotice('The Ecommerce request is no longer waiting in this Shop inbox.')
+      return
+    }
+    try {
+      const { recordEcommerceShopDraft } = await import('../products/ecommerce/ecommerce-shop-handoff')
+      const draft = recordEcommerceShopDraft({
+        request,
+        currentCatalog: commerce.items,
+        confirmedAt: new Date().toISOString(),
+      })
+      setPreparedChannelDraft(null)
+      setPreparedEcommerceDraft(draft)
+      setCustomer(draft.customerReference)
+      setChannel('Ecommerce')
+      setSku(draft.line.sku)
+      setQuantity(draft.line.quantity)
+      setPayment('')
+      setOrderEntryMode('manual')
+      setNotice(`${request.id} loaded from the authenticated inbox. Choose payment, then use the separate Shop action gate.`)
+    } catch (error) {
+      setPreparedEcommerceDraft(null)
+      setNotice(error instanceof Error ? error.message : 'The Ecommerce inbox request failed closed.')
+    }
   }
 
   function recordOrder(event: FormEvent) {
@@ -2177,9 +2214,20 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
         <button aria-pressed={orderEntryMode === 'manual'} disabled={Boolean(pendingAction)} onClick={() => setOrderEntryMode('manual')} type="button">Enter</button>
         <button aria-pressed={orderEntryMode === 'message'} disabled={Boolean(pendingAction)} onClick={() => setOrderEntryMode('message')} type="button">Message</button>
         <button aria-pressed={orderEntryMode === 'website'} disabled={Boolean(pendingAction)} onClick={() => setOrderEntryMode('website')} type="button">Website</button>
+        <button aria-pressed={orderEntryMode === 'ecommerce'} disabled={Boolean(pendingAction)} onClick={() => setOrderEntryMode('ecommerce')} type="button">Ecommerce</button>
       </div>
       {orderEntryMode === 'website' ? <div className="order-entry-panel" data-mode="website"><WebsiteCommerceIntake catalog={commerce.items} disabled={commerceControlsDisabled} importedSourceIds={importedWebsiteOrderIds} key={`${managedIdentity ? 'managed' : 'local'}:${websiteIntakes.find((intake) => intake.status === 'pending_confirmation')?.id ?? 'none'}`} managedIntakes={websiteIntakes} mode={managedIdentity ? 'managed' : 'local'} onQueueManagedIntake={queueManagedWebsiteIntake} onQueueReadyOrder={queueWebsiteOrder} /></div> : null}
       {orderEntryMode === 'message' ? <div className="order-entry-panel" data-mode="message"><ChannelOrderIntake disabled={commerceControlsDisabled} items={commerce.items} onAcceptedFocus={() => requestAnimationFrame(() => preparedChannelRef.current?.focus())} onUse={useChannelDraft} /></div> : null}
+      {orderEntryMode === 'ecommerce' ? <div className="order-entry-panel" data-mode="ecommerce">
+        <section className="website-intake">
+          <div className="website-intake-head"><div><span className="core-eyebrow">Ecommerce inbox</span><strong>{pendingStorefrontRequests.length} requests waiting</strong></div><span className={`status-pill ${managedIdentity ? 'bounded' : 'pending'}`}>{managedIdentity ? 'Managed' : 'Not connected'}</span></div>
+          {managedIdentity && pendingStorefrontRequests.length ? pendingStorefrontRequests.slice(0, 20).map((request) => <div className="website-intake-ready" key={request.id}>
+            <div><strong>{request.customerReference} · {request.line.name} × {request.line.quantity}</strong><small>{request.id} · {request.totalMmk.toLocaleString()} MMK · {request.fulfilment}</small></div>
+            <button className="core-button compact" disabled={commerceControlsDisabled} onClick={() => void reviewStorefrontRequest(request.id)} type="button">Review</button>
+          </div>) : <div className="website-intake-record"><strong>{managedIdentity ? 'No Ecommerce request needs Shop review.' : 'Connect a managed workspace to use the shared inbox.'}</strong><small>No request creates an order, reserves stock, starts payment, sends a message, or requests delivery.</small></div>}
+          <Link className="text-link" to="/products/ecommerce/">Open Ecommerce</Link>
+        </section>
+      </div> : null}
       {orderEntryMode === 'manual' ? <>
         <div className="order-entry-panel" data-mode="manual" data-notice={Boolean(orderNotice)}>
         {preparedEcommerceDraft ? <div className="channel-source-ready">

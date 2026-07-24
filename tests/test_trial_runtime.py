@@ -7,6 +7,7 @@ from uuid import uuid4
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
+from supermega_runtime.runtime import reduce_trial_state
 from supermega_runtime.trial_runtime import create_trial_router
 from supermega_runtime.trial_store import InMemoryTrialStore, TrialPrincipal
 
@@ -225,6 +226,119 @@ class TrialRuntimeTests(unittest.TestCase):
         ).json()
         self.assertEqual(workspace_a["states"]["commerce"]["state"]["sku"], "workspace-a-sku")
         self.assertEqual(workspace_b["states"]["commerce"]["state"]["sku"], "workspace-b-sku")
+
+    def test_storefront_request_command_is_revisioned_scoped_and_recoverable(self) -> None:
+        store = InMemoryTrialStore(reducer=reduce_trial_state)
+        self._provision(store)
+        client = self._client(store)
+        request_uuid = "00000000-0000-4000-8000-000000000020"
+        request_id = f"ECR-{request_uuid}"
+        digest = "sha256:" + "b" * 64
+        catalog = {
+            "schema": "supermega.commerce.workspace.v2",
+            "items": [{"sku": "SKU-1", "name": "Test item", "onHand": 10, "reorderAt": 2, "price": 100}],
+            "orders": [],
+            "movements": [],
+            "closes": [],
+        }
+
+        def evidence(actor: str) -> dict[str, str]:
+            return {
+                "actionId": f"ACT-{request_uuid}",
+                "capturedAt": "2026-07-24T09:00:00.000Z",
+                "actor": actor,
+                "reason": "Retain this customer request for human Shop review.",
+                "evidenceReference": f"ECOMMERCE:{request_id}:{digest}",
+            }
+
+        for session, actor in (
+            ("operator-session", "actor-operator"),
+            ("other-operator-session", "actor-other"),
+        ):
+            initialized = client.post(
+                "/api/trial/v1/commands",
+                headers=self._headers(session),
+                json={
+                    "command_id": str(uuid4()),
+                    "surface": "commerce",
+                    "event_type": "commerce.workspace.initialized",
+                    "expected_version": 0,
+                    "payload": {
+                        "state": catalog,
+                        "evidence": {
+                            **evidence(actor),
+                            "actionId": f"ACT-{uuid4()}",
+                            "evidenceReference": "catalog://opening/1",
+                        },
+                    },
+                },
+            )
+            self.assertEqual(initialized.status_code, 200)
+
+        request = {
+            "schema": "supermega.ecommerce.order_request.v1",
+            "mode": "browser-local-request",
+            "state": "pending_shop_review",
+            "id": request_id,
+            "idempotencyKey": f"ECI-{request_uuid}",
+            "createdAt": "2026-07-24T09:00:00.000Z",
+            "sourcePreviewDigest": digest,
+            "customerReference": "Customer A",
+            "fulfilment": "pickup",
+            "currency": "MMK",
+            "line": {"sku": "SKU-1", "name": "Test item", "variant": None, "quantity": 2, "unitPriceMmk": 100},
+            "totalMmk": 200,
+        }
+        next_state = {**catalog, "storefrontRequests": [request]}
+        command = {
+            "command_id": request_uuid,
+            "surface": "commerce",
+            "event_type": "commerce.storefront_request.received",
+            "expected_version": 1,
+            "payload": {"state": next_state, "evidence": evidence("actor-operator")},
+        }
+        first = client.post("/api/trial/v1/commands", headers=self._headers(), json=command)
+        replay = client.post("/api/trial/v1/commands", headers=self._headers(), json=command)
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(first.json()["result"]["version"], 2)
+        self.assertTrue(replay.json()["result"]["idempotent_replay"])
+        self.assertEqual(first.json()["result"]["state"]["storefrontRequests"], [request])
+        for field in ("items", "orders", "movements", "closes"):
+            self.assertEqual(first.json()["result"]["state"][field], catalog[field])
+
+        changed = {
+            **command,
+            "payload": {
+                **command["payload"],
+                "state": {
+                    **next_state,
+                    "storefrontRequests": [{**request, "customerReference": "Conflict"}],
+                },
+            },
+        }
+        conflict = client.post("/api/trial/v1/commands", headers=self._headers(), json=changed)
+        self.assertEqual(conflict.status_code, 409)
+        self.assertEqual(conflict.json()["detail"]["code"], "trial_idempotency_conflict")
+        stale = client.post(
+            "/api/trial/v1/commands",
+            headers=self._headers(),
+            json={**command, "command_id": str(uuid4())},
+        )
+        self.assertEqual(stale.status_code, 409)
+        self.assertEqual(stale.json()["detail"]["code"], "trial_version_conflict")
+
+        other = client.get("/api/trial/v1/bootstrap", headers=self._headers("other-operator-session"))
+        self.assertNotIn("storefrontRequests", other.json()["states"]["commerce"]["state"])
+        client.close()
+
+        recovered_client = self._client(store)
+        recovered = recovered_client.get("/api/trial/v1/bootstrap", headers=self._headers())
+        self.assertEqual(recovered.status_code, 200)
+        self.assertEqual(recovered.json()["states"]["commerce"]["version"], 2)
+        self.assertEqual(recovered.json()["states"]["commerce"]["state"]["storefrontRequests"], [request])
+        recovered_replay = recovered_client.post("/api/trial/v1/commands", headers=self._headers(), json=command)
+        self.assertTrue(recovered_replay.json()["result"]["idempotent_replay"])
+        recovered_client.close()
 
     def test_runtime_checks_membership_and_capability(self) -> None:
         missing = self.client.post(

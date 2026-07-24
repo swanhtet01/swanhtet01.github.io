@@ -16,4 +16,15 @@ export default defineConfig({
   plugins: [react()],
   server: { proxy: apiProxy },
   preview: { proxy: apiProxy },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('/src/core/commerce-workspace.ts') || id.includes('/src/core/production-workspace.ts')) {
+            return 'operating-models'
+          }
+        },
+      },
+    },
+  },
 })

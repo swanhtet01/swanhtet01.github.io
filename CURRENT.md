@@ -20,7 +20,7 @@ SuperMega builds simple operating products for Myanmar businesses. The customer 
 - **Shop** — implemented local release candidate at `/shop/` under the stable internal `commerce` runtime. `/operations/commerce/` is compatibility-only and resolves to the same records.
 - **Plant** — implemented local release candidate at `/plant/` under the stable internal `production` runtime. `/operations/production/` is compatibility-only and resolves to the same records.
 - **Website** — implemented local release candidate at `/products/website/`; it can produce a deterministic downloadable site artifact but cannot publish or change a domain.
-- **Ecommerce** — implemented local storefront maker at `/products/ecommerce/`. It reads a Shop catalogue snapshot without changing it, lets the operator choose customer-visible products and copy, produces a deterministic preview digest, and can create an idempotent in-memory request receipt marked `pending_shop_review`. One explicit confirmation revalidates the retained receipt, digest, SKU, name, variant, MMK price, quantity, and availability before opening a source-locked Shop draft. The draft is not durable; only Shop's separate accountable action gate can create an order or reserve stock.
+- **Ecommerce** — implemented local storefront maker at `/products/ecommerce/`. It reads a Shop catalogue snapshot without changing it, lets the operator choose customer-visible products and copy, produces a deterministic preview digest, and creates an idempotent request receipt marked `pending_shop_review`. Browser-local mode retains the receipt only on that device. Authenticated managed mode can retain the exact receipt in the revisioned tenant Shop workspace and recover it through the existing bootstrap path. A Shop operator must still open and revalidate a source-locked draft; only Shop's separate accountable action gate can create an order or reserve stock.
 - **AI Agent Solutions** — planned real prototype at `/agents/`. The first solution is Order Intake: approved message or form input to a structured draft, with provenance, evaluation, human review, and zero side effects.
 
 No local demo, passing test, healthy provider, or generated artifact is proof of a live customer system, revenue, production persistence, or autonomous operation.
@@ -33,7 +33,7 @@ Canonical host: `app.supermega.dev`
 - `/shop/` — Shop Orders first; Stock second.
 - `/plant/` — Plant Jobs first; Problems second.
 - `/products/website/` — Website Site, Preview, and Publish workflow.
-- `/products/ecommerce/` — Ecommerce storefront setup, responsive preview, local request receipt, and explicit handoff to a source-locked Shop draft; clearly non-durable and non-publishing.
+- `/products/ecommerce/` — Ecommerce storefront setup, responsive preview, local request receipt, optional authenticated Shop-inbox retention, and explicit handoff to a source-locked Shop draft; clearly non-publishing and without automatic operational consequences.
 - `/agents/` — reserved Agent Solutions workspace; do not present it as available until Order Intake passes evaluation and review gates.
 - `/work/` — internal SuperMega HQ work and agent-team coordination.
 - `/settings/` — setup, evidence export, reset, and managed-readiness utility.
@@ -84,7 +84,7 @@ AI and delegated agents may not independently send customer messages, charge or 
 - The default app remains an isolated browser-local trial.
 - Shop and Plant currently use the stable `commerce` and `production` state contracts; renaming the interface must not migrate, fork, or silently reset those records.
 - Website retains revisioned content, evidence, approval, deterministic artifact generation, recovery, and a controlled handoff.
-- Ecommerce may create only a structured order intent until a responsible Shop operator confirms it. It does not own stock, fulfilment, reconciliation, refund, or daily-close authority.
+- Ecommerce may create and retain only a structured order intent until a responsible Shop operator confirms it. The managed inbox uses the existing tenant-scoped revision, idempotency, event, and bootstrap contracts; it does not own stock, fulfilment, reconciliation, refund, or daily-close authority.
 - Managed mode remains locked behind authenticated tenant identity, least-privilege capabilities, private schema migrations, isolation, immutable events, backup, recovery, runtime-role checks, and confirmed writes.
 - External sends, payments, publishing, access changes, deployment, and production writes remain owner-approved and auditable.
 - The only approved database handoff is the read-only, fail-closed process in `docs/supermega-enterprise-activation.md`.
@@ -109,7 +109,7 @@ AI and delegated agents may not independently send customer messages, charge or 
 
 ## Current execution order
 
-1. Add an authenticated, durable Ecommerce request inbox on one isolated non-production tenant while preserving the separate Shop action gate.
+1. Rehearse the completed authenticated Ecommerce request-inbox contract on one owner-approved isolated non-production tenant; preserve the separate Shop action gate and collect recovery evidence.
 2. Run Order Intake through a real server-only provider and expose review UI only if the completed evaluator passes.
 3. Validate Website with one named business and accepted artifact.
 4. Repeat Shop and Plant on one isolated hosted tenant before any production write activation.

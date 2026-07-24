@@ -186,11 +186,11 @@ if (!storefrontSource.includes("supermega.ecommerce.storefront_preview.v1")
   || !storefrontSource.includes('validateCommerceState(JSON.parse(raw)).items')
   || ['setItem(', 'removeItem(', 'fetch(', 'XMLHttpRequest', 'navigator.locks'].some((marker) => storefrontSource.includes(marker))) fail('ecommerce_storefront_contract_missing_or_mutating')
 if (!ecommerceSource.includes('Prices and availability are read-only.')
-  || !ecommerceSource.includes('Ordering is not connected in this preview.')
-  || !ecommerceSource.includes('Nothing is published or ordered here.')
+  || !ecommerceSource.includes('Requests enter Shop review. Payment and fulfilment stay separate.')
+  || !ecommerceSource.includes('cannot reserve stock, create an order, take payment, send a message, or publish a site.')
   || !ecommerceSource.includes('Same approved copy and Shop snapshot produce the same digest.')
   || !ecommerceSource.includes('Test a customer request')
-  || !ecommerceSource.includes('This local receipt is not a Shop order.')
+  || !ecommerceSource.includes('Connect a managed workspace for shared, recoverable retention.')
   || !ecommerceSource.includes('No Shop record or stock changed.')
   || !coreSource.includes('<strong>Ecommerce</strong><small>Build a storefront from Shop</small>')
   || !coreSource.includes('<h2>AI Agent Solutions</h2>')) fail('ecommerce_storefront_ui_boundary_missing')
@@ -217,6 +217,18 @@ if (!ecommerceConfirmSource.includes('storefrontRequestLedgerContains')
   || !coreSource.includes('Choose how payment will be reviewed before preparing this order.')
   || !coreSource.includes("import('../products/ecommerce/ecommerce-shop-handoff')")
   || ['setItem(', 'removeItem(', 'localStorage', 'sessionStorage', 'fetch(', 'XMLHttpRequest', 'navigator.locks', 'convertCommerceWebsiteIntake', 'reserveCommerceOrder', 'mutateCommerceWorkspace'].some((marker) => ecommerceConfirmSource.includes(marker) || ecommerceHandoffSource.includes(marker))) fail('ecommerce_shop_handoff_contract_missing_or_mutating')
+if (!commerceSource.includes('recordCommerceStorefrontRequest')
+  || !commerceSource.includes('storefrontRequests?: CommerceStorefrontRequest[]')
+  || !commerceSource.includes('ECOMMERCE:${validatedRequest.id}:${validatedRequest.sourcePreviewDigest}')
+  || !managedTrialSource.includes('commerce.storefront_request.received')
+  || !managedCommerceRuntime.includes('commerce.storefront_request.received')
+  || !ecommerceSource.includes('saveManagedCommerceCommand')
+  || !ecommerceSource.includes("eventType: 'commerce.storefront_request.received'")
+  || !ecommerceSource.includes('Save to Shop inbox')
+  || !ecommerceSource.includes('latestRequest.sourcePreviewDigest !== currentDigest')
+  || !coreSource.includes('Ecommerce inbox')
+  || !coreSource.includes('reviewStorefrontRequest')
+  || !coreSource.includes('separate Shop action gate')) fail('managed_ecommerce_inbox_contract_missing')
 if (!appPackage.scripts?.lint?.includes('src/products')) fail('prototype_sources_not_linted')
 if (!websiteSource.includes('No website has been deployed.')
   || !websiteSource.includes('No deployment occurred.')
@@ -363,7 +375,7 @@ if (!coreSource.includes('Start from a channel message')
 if (!coreSource.includes('className="core-panel next-task-card"')
   || !coreSource.includes('<details className="home-more">')
   || !coreSource.includes('className="product-launcher product-catalog"')
-  || !coreSource.includes("useState<'manual' | 'message' | 'website'>('manual')")
+  || !coreSource.includes("useState<'manual' | 'message' | 'website' | 'ecommerce'>('manual')")
   || !coreSource.includes('aria-label="Order source" className="order-entry-methods"')
   || !coreSource.includes("aria-pressed={orderEntryMode === 'manual'}")
   || !coreSource.includes('<dialog aria-labelledby="action-confirm-title" className="accountable-action-gate"')
@@ -444,8 +456,8 @@ if (!commerceSource.includes('export function settleCommerceRefund')
   || !commerceSource.includes('order.paymentReconciliationActionId === actionId || order.refundSettlementActionId === actionId')
   || !commerceSource.includes('...refundSettlementActionIds')) fail('commerce_refund_settlement_contract_missing')
 if (!managedTrialSource.includes('saveManagedCommerceCommand') || !managedTrialSource.includes('expected_version: request.expectedVersion') || !managedTrialSource.includes("surface: 'commerce'") || !managedTrialSource.includes('payload: { state: request.state, evidence: request.evidence }')) fail('managed_commerce_command_client_missing')
-const managedCommerceClientSources = `${coreSource}\n${websiteSource}`
-for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.payment.reconciled', 'commerce.refund.settled', 'commerce.stock.received', 'commerce.close.saved', 'commerce.website_intake.created', 'commerce.website_intake.converted']) {
+const managedCommerceClientSources = `${coreSource}\n${websiteSource}\n${ecommerceSource}`
+for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.payment.reconciled', 'commerce.refund.settled', 'commerce.stock.received', 'commerce.close.saved', 'commerce.website_intake.created', 'commerce.website_intake.converted', 'commerce.storefront_request.received']) {
   if (!managedTrialSource.includes(eventType) || !managedCommerceClientSources.includes(eventType) || !managedCommerceRuntime.includes(eventType)) fail(`managed_commerce_event_missing:${eventType}`)
 }
 if (!coreSource.includes('Record a refund already completed with the external payment provider. This does not send money.')
@@ -1414,6 +1426,62 @@ async function verifyCommerceRuntime() {
       ...model.createEmptyCommerce(),
       items: [{ sku: 'SKU-1', name: 'Test item', onHand: 10, reorderAt: 2, price: 100 }],
     }
+    const storefrontRequestUuid = '00000000-0000-4000-8000-000000000010'
+    const storefrontRequest = {
+      schema: 'supermega.ecommerce.order_request.v1',
+      mode: 'browser-local-request',
+      state: 'pending_shop_review',
+      id: `ECR-${storefrontRequestUuid}`,
+      idempotencyKey: `ECI-${storefrontRequestUuid}`,
+      createdAt: '2026-07-23T09:00:00.000Z',
+      sourcePreviewDigest: `sha256:${'a'.repeat(64)}`,
+      customerReference: 'Customer A',
+      fulfilment: 'pickup',
+      currency: 'MMK',
+      line: { sku: 'SKU-1', name: 'Test item', variant: null, quantity: 2, unitPriceMmk: 100 },
+      totalMmk: 200,
+    }
+    const storefrontProof = proof(`ACT-${storefrontRequestUuid}`, 0, {
+      evidenceReference: `ECOMMERCE:${storefrontRequest.id}:${storefrontRequest.sourcePreviewDigest}`,
+    })
+    const withStorefrontRequest = model.recordCommerceStorefrontRequest(base, storefrontRequest, storefrontProof)
+    assert(withStorefrontRequest?.storefrontRequests?.length === 1, 'storefront_request_not_retained')
+    assert(withStorefrontRequest.items === base.items
+      && withStorefrontRequest.orders === base.orders
+      && withStorefrontRequest.movements === base.movements
+      && withStorefrontRequest.closes === base.closes,
+    'storefront_request_changed_shop_ledgers')
+    assert(model.recordCommerceStorefrontRequest(withStorefrontRequest, storefrontRequest, storefrontProof) === withStorefrontRequest, 'storefront_request_retry_not_idempotent')
+    assert(model.recordCommerceStorefrontRequest(withStorefrontRequest, {
+      ...storefrontRequest,
+      customerReference: 'Changed',
+    }, storefrontProof) === null, 'storefront_request_identity_conflict_succeeded')
+    assert(model.recordCommerceStorefrontRequest(base, storefrontRequest, {
+      ...storefrontProof,
+      evidenceReference: 'ECOMMERCE:wrong',
+    }) === null, 'storefront_request_wrong_evidence_succeeded')
+    assertThrows(() => model.validateCommerceState({
+      ...withStorefrontRequest,
+      storefrontRequests: [storefrontRequest, storefrontRequest],
+    }), 'duplicate_storefront_request_succeeded')
+    const storefrontActionCollision = model.receiveCommerceStock(base, 'SKU-1', 1, storefrontProof)
+    assert(storefrontActionCollision, 'storefront_action_collision_fixture_failed')
+    assertThrows(() => model.validateCommerceState({
+      ...storefrontActionCollision,
+      storefrontRequests: [storefrontRequest],
+    }), 'storefront_action_collision_succeeded')
+    const fullStorefrontInbox = model.validateCommerceState({
+      ...base,
+      storefrontRequests: Array.from({ length: 100 }, (_, index) => {
+        const requestUuid = `00000000-0000-4000-8000-${String(index + 100).padStart(12, '0')}`
+        return { ...storefrontRequest, id: `ECR-${requestUuid}`, idempotencyKey: `ECI-${requestUuid}` }
+      }),
+    })
+    assert(model.recordCommerceStorefrontRequest(fullStorefrontInbox, storefrontRequest, storefrontProof) === null, 'full_storefront_request_inbox_accepted')
+    assertThrows(() => model.validateCommerceState({
+      ...fullStorefrontInbox,
+      storefrontRequests: [...fullStorefrontInbox.storefrontRequests, storefrontRequest],
+    }), 'oversized_storefront_request_inbox_succeeded')
     assertThrows(() => model.validateCommerceState({
       ...base,
       closes: [{ id: 'CLOSE-NO-ZONE', createdAt: '2026-07-23T09:00:00', total: 0, orders: 0 }],
@@ -2058,9 +2126,12 @@ await verifyProductionRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
 if (bytes > 2_500_000) fail(`artifact_budget:${bytes}`)
+const javascriptFiles = files.filter((path) => path.endsWith('.js'))
+const largestJavascriptBytes = Math.max(...await Promise.all(javascriptFiles.map(async (path) => (await stat(path)).size)))
+if (largestJavascriptBytes > 500_000) fail(`javascript_chunk_budget:${largestJavascriptBytes}`)
 
 if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', primaryRoutes: 5, operatingModules: 2, prototypeRoutes: 2, compatibilityRedirects: 1, workflowProfiles, channelOrderRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, ecommerceHandoffRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', primaryRoutes: 5, operatingModules: 2, prototypeRoutes: 2, compatibilityRedirects: 1, workflowProfiles, channelOrderRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, ecommerceHandoffRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))

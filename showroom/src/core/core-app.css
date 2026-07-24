@@ -304,7 +304,7 @@ textarea { min-height: 72px; resize: vertical; }
 .today-more[open] > summary { border-bottom: 1px solid var(--core-line); }
 .today-more-content { display: grid; gap: 12px; padding: 15px 16px 17px; }
 
-.order-entry-methods { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 4px; margin-bottom: 14px; border-radius: 12px; padding: 4px; background: var(--core-panel-raised); }
+.order-entry-methods { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 4px; margin-bottom: 14px; border-radius: 12px; padding: 4px; background: var(--core-panel-raised); }
 .order-entry-methods button { min-height: 42px; border: 0; border-radius: 9px; background: transparent; color: var(--core-muted); font-size: 13px; font-weight: 740; cursor: pointer; }
 .order-entry-methods button[aria-pressed="true"] { background: #fff; color: var(--core-ink); box-shadow: 0 2px 10px rgba(31,68,51,.09); }
 .order-entry-methods button:disabled { cursor: not-allowed; opacity: .55; }
@@ -569,6 +569,7 @@ textarea { min-height: 72px; resize: vertical; }
 .website-intake-record, .website-intake-ready > div { min-width: 0; display: grid; gap: 4px; }
 .website-intake-record strong, .website-intake-ready strong { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .website-intake-record small, .website-intake-ready small { overflow: hidden; color: var(--core-quiet); font-family: var(--core-mono); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.order-entry-panel[data-mode="ecommerce"] .website-intake-record small { overflow: visible; line-height: 1.5; text-overflow: clip; white-space: normal; }
 .website-intake-confirm { min-height: 44px; display: flex; align-items: center; gap: 8px; border: 1px solid var(--core-line); border-radius: 9px; padding: 7px 9px; background: #fff; font-size: 9px; line-height: 1.35; }
 .website-intake-confirm input { width: 16px; min-height: 16px; margin: 0; }
 .website-intake-completion { display: grid; gap: 8px; }
