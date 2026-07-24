@@ -883,14 +883,14 @@ export function loadWebsiteWorkspace(storage: Pick<WebsiteStorage, 'getItem'>): 
       const current = parseStoredWorkspace(currentRaw)
       return current
         ? { ok: true, source: 'v2', workspace: current }
-        : { ok: false, error: 'Saved Website data is invalid. It was kept unchanged. Draft edits are session-only until you export or reset local data in Settings.' }
+        : { ok: false, error: 'Website saving is paused because the saved data on this device cannot be read safely. The original value is untouched; export a backup or review the guided repair.' }
     }
     const legacyRaw = storage.getItem(LEGACY_WEBSITE_STORAGE_KEY)
     if (legacyRaw !== null) {
       const legacy = parseLegacyWorkspace(legacyRaw)
       return legacy
         ? { ok: true, source: 'v1', workspace: migrateLegacyWorkspace(legacy) }
-        : { ok: false, error: 'Old Website data is invalid. It was kept unchanged and was not replaced with demo data. Use Settings to export or reset local data.' }
+        : { ok: false, error: 'Website saving is paused because older data on this device cannot be read safely. The original value is untouched; export a backup or review the guided repair.' }
     }
     return { ok: true, source: 'seed', workspace: createInitialWorkspace() }
   } catch (error) {

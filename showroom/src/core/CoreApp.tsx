@@ -284,8 +284,33 @@ const SETUP_KEY = 'supermega.setup.v3'
 const ACTION_KEY = 'supermega.accountable.actions.v1'
 const STOREFRONT_DRAFT_RESET_PREFIX = 'supermega.ecommerce.storefront_draft.v1.'
 const LEGACY_STOREFRONT_DRAFT_RESET_KEY = 'supermega.ecommerce.storefront_draft.v1'
+const WEBSITE_RECOVERY_EXPORT_PREFIX = 'supermega.website.workspace.recovery.v1.'
 const LEGACY_APPROVAL_KEYS = ['supermega.approvals.v2']
 const LEGACY_SETUP_KEYS = ['supermega.setup.v2']
+
+function collectLocalProductRecords(storage: Pick<Storage, 'getItem' | 'key' | 'length'>) {
+  const exactKeys = new Set([
+    WEBSITE_STORAGE_KEY,
+    LEGACY_WEBSITE_STORAGE_KEY,
+    WEBSITE_ECOMMERCE_HANDOFF_KEY,
+    LEGACY_STOREFRONT_DRAFT_RESET_KEY,
+  ])
+  const records: Record<string, string> = {}
+  try {
+    for (let index = 0; index < storage.length; index += 1) {
+      const key = storage.key(index)
+      if (!key
+        || (!exactKeys.has(key)
+          && !key.startsWith(STOREFRONT_DRAFT_RESET_PREFIX)
+          && !key.startsWith(WEBSITE_RECOVERY_EXPORT_PREFIX))) continue
+      const value = storage.getItem(key)
+      if (value !== null) records[key] = value
+    }
+  } catch {
+    return {}
+  }
+  return records
+}
 
 function requireProductContract(id: ProductId): ProductContract {
   const product = siteManifest.products.find((candidate) => candidate.id === id)
@@ -3467,7 +3492,8 @@ export function SettingsPage() {
   const evidenceDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Yangon' }).format(new Date())
   const evidenceFilename = `supermega-trial-evidence-${evidenceDate}.json`
   const managedApprovalRequests = approvals.map(toManagedApprovalRequest).filter((request): request is NonNullable<typeof request> => Boolean(request))
-  const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 9, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady, setup, workflowProfile: selectedTemplate, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace }, null, 2))}`
+  const localProductRecords = collectLocalProductRecords(window.localStorage)
+  const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 10, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady, setup, workflowProfile: selectedTemplate, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords }, null, 2))}`
 
   function updateSetup(patch: Partial<SetupState>) {
     setSetup((current) => ({ ...current, ...patch, savedAt: undefined }))

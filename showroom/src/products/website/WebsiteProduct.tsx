@@ -555,8 +555,8 @@ export function WebsiteProduct() {
           {noticePriority !== 'routine' ? (
             <div className="website-notice" aria-busy={repairing} aria-live="polite" data-priority={noticePriority} role="status">
               <p>{repairArmed
-                ? 'The unreadable Website value will be archived, then replaced with the valid workspace on screen. Shop, Plant, managed data, domains, and deployments are not touched.'
-                : repairing ? 'Archiving damaged Website data and confirming the replacement…' : statusNotice}</p>
+                ? 'SuperMega will keep a recovery copy on this device, then restore saving with the valid Website shown here. Nothing will be published; Shop, Plant, managed data, and domains stay unchanged.'
+                : repairing ? 'Keeping a recovery copy and restoring Website saving…' : statusNotice}</p>
               {repairArchiveKey && !repairArmed ? (
                 <div className="website-notice-actions">
                   <button ref={recoveryPrimaryActionRef} className="website-notice-action is-quiet" onClick={() => downloadRepairArchive()} type="button">Download archive</button>
@@ -565,10 +565,13 @@ export function WebsiteProduct() {
               ) : canRepairLocalStorage ? repairArmed ? (
                 <div className="website-notice-actions">
                   <button className="website-notice-action is-quiet" disabled={repairing} onClick={cancelLocalRepair} type="button">Cancel</button>
-                  <button ref={recoveryPrimaryActionRef} className="website-notice-action" disabled={repairing} onClick={() => void repairLocalData()} type="button">Archive and repair</button>
+                  <button ref={recoveryPrimaryActionRef} className="website-notice-action" disabled={repairing} onClick={() => void repairLocalData()} type="button">Keep copy and repair</button>
                 </div>
               ) : (
-                <button ref={recoveryPrimaryActionRef} className="website-notice-action" onClick={armLocalRepair} type="button">Repair local data</button>
+                <div className="website-notice-actions">
+                  <a className="website-notice-action is-quiet" href="/settings/#controls">Export backup</a>
+                  <button ref={recoveryPrimaryActionRef} className="website-notice-action" onClick={armLocalRepair} type="button">Review repair</button>
+                </div>
               ) : storageIssue && storageMode === 'session-only' ? (
                 <a className="website-notice-action" href="/settings/#controls">Recovery settings</a>
               ) : null}
