@@ -105,6 +105,10 @@ requireContract('canonical product routes are stated',
 requireContract('owner authority remains explicit',
   current.includes('External sends, payments, publishing, access changes, deployment, and production writes remain owner-approved')
   && now.includes('No external send, payment, refund, publish, domain change, connector write, merge, deployment, access change, production database write'))
+requireContract('Home prioritizes products before internal machinery',
+  now.includes('Home now prioritizes unfinished Shop and Plant operating records before internal company tasks.')
+  && now.includes('internal `/work/` route is labelled HQ')
+  && now.includes('bottom navigation reads Home, HQ, and Products'))
 requireContract('local and managed truth remains explicit',
   current.includes('The default app remains an isolated browser-local trial')
   && current.includes('Managed mode remains locked behind authenticated tenant identity')

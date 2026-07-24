@@ -48,6 +48,7 @@ const [manifestText, appPackageText, appSource, coreSource, commerceSource, chan
 ])
 const manifest = JSON.parse(manifestText)
 const appPackage = JSON.parse(appPackageText)
+const indexSource = await readFile(resolve(root, 'showroom', 'index.html'), 'utf8')
 
 async function exists(path) {
   try { await stat(path); return true } catch { return false }
@@ -86,8 +87,15 @@ else {
 if (!await exists(manifestPath)) fail('missing_app_webmanifest')
 else {
   const webmanifest = JSON.parse(await readFile(manifestPath, 'utf8'))
-  if (webmanifest.name !== 'SuperMega Company OS' || webmanifest.icons?.[0]?.src !== '/favicon.svg') fail('wrong_app_webmanifest')
+  if (webmanifest.name !== manifest.brand.name
+    || webmanifest.short_name !== manifest.brand.name
+    || webmanifest.description !== manifest.company.supporting
+    || webmanifest.icons?.[0]?.src !== '/favicon.svg') fail('wrong_app_webmanifest')
 }
+if (!indexSource.includes('<title>SuperMega</title>')
+  || !indexSource.includes('Run Shop and Plant, build Website and Ecommerce experiences, and keep owner decisions accountable.')
+  || indexSource.includes('SuperMega Company OS')
+  || indexSource.includes('Run Product, Commerce, and Production')) fail('stale_app_metadata')
 
 const files = await walk(dist)
 const textFiles = files.filter((path) => /\.(?:html|js|css|json|svg)$/.test(path))
@@ -98,7 +106,7 @@ for (const required of ['SUPERMEGA', 'Teams', 'Product', 'Acceptance outcome', '
 if (!coreSource.includes("import siteManifest from '../../../site-manifest.json'")) fail('workflow_contract_not_shared')
 if (coreSource.includes('const setupTemplates =') || coreSource.includes('const setupEntryPoints =')) fail('workflow_contract_duplicated')
 if (!coreSource.includes("{ to: '/', label: 'Home', end: true }")
-  || !coreSource.includes("{ to: '/work/', label: 'Work', end: false }")
+  || !coreSource.includes("{ to: '/work/', label: 'HQ', end: false }")
   || !coreSource.includes("{ to: '/operations/', label: 'Products', end: false }")) fail('first_run_navigation_not_simple')
 const overviewPageContract = coreSource.slice(coreSource.indexOf('export function OverviewPage'), coreSource.indexOf('export function OperationsPage'))
 if (!overviewPageContract.includes('useCommerceWorkspace(managedIdentity)')
@@ -108,6 +116,10 @@ if (!coreSource.includes('className="product-launcher home-products"')
   || !coreSource.includes('to="/plant/?tab=production"')
   || !coreSource.includes('to="/products/website/"')
   || !coreSource.includes('to="/products/ecommerce/"')
+  || !overviewPageContract.includes("label: 'Shop stock'")
+  || !overviewPageContract.includes("label: 'Plant problem'")
+  || !overviewPageContract.includes("label: 'Shop order'")
+  || !overviewPageContract.includes('<summary><span>SuperMega HQ</span><small>Internal company work</small></summary>')
   || !coreSource.includes('const homeWork = visibleWork.slice(0, 3)')) fail('first_run_product_launcher_missing')
 if (coreSource.includes('className="core-panel approval-panel"')) fail('approval_queue_hidden_in_extra_panel')
 if (!coreSource.includes("decidedActorKind: 'human'") || !coreSource.includes('decisionNote: note')) fail('approval_decision_not_human_attributed')

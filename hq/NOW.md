@@ -12,13 +12,13 @@ Prove one measured workflow where SuperMega keeps the record and a responsible o
 
 The customer product map is:
 
-1. **Shop** — the implemented order, stock, fulfilment, payment-status, exception, and daily-close product.
-2. **Plant** — the implemented job, output, quality, materials, equipment, maintenance, and shift-exception product.
-3. **Website** — the implemented local website-making workflow.
-4. **Ecommerce** — the implemented local storefront maker, request receipt, and human-confirmed Shop review handoff.
-5. **AI Agent Solutions** — bounded product assistance, beginning with Order Intake.
+1. **Shop** — orders, stock, fulfilment, payment status, exceptions, and daily close.
+2. **Plant** — jobs, output, problems, equipment, maintenance, and shift handoff.
+3. **Website** — a local website builder and review workflow.
+4. **Ecommerce** — a storefront builder with request receipt and Shop handoff.
+5. **AI Agent Solutions** — bounded assistance, beginning with Order Intake.
 
-`Commerce` and `Production` remain internal runtime/database surface IDs only. The earlier decision to make them public product names and to retire Ecommerce is superseded by the founder’s confirmed direction. Ecommerce must not duplicate Shop: Ecommerce owns the customer-facing storefront and order intent; Shop owns the operational record and close.
+`Commerce` and `Production` remain internal IDs. Ecommerce owns the customer storefront and order intent; Shop owns the operating record and close.
 
 SuperMega HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal systems, not extra public products.
 
@@ -32,22 +32,23 @@ SuperMega HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are
 
 ## Implemented reality
 
-- Shop runs at `/shop/` with Orders and Stock while retaining the stable internal `commerce` state contract. `/operations/commerce/` is compatibility-only and canonicalizes to the same records. Shop has guarded intake, reservation, fulfilment, payment reconciliation, cancellation, refund-due and refund-settled evidence, stock movements, and daily close.
-- Plant runs at `/plant/` with Jobs and Problems while retaining the stable internal `production` state contract. `/operations/production/` is compatibility-only and canonicalizes to the same records. Plant has recurring job creation, output, quality/material/maintenance issues, equipment-state observations, attributed events, and managed command gates.
+- Shop runs at `/shop/` with Orders and Stock on the stable internal `commerce` contract. `/operations/commerce/` is compatibility-only. Intake, reservation, fulfilment, payment, cancellation, refund evidence, stock movement, and daily close are guarded records.
+- Plant runs at `/plant/` with Jobs and Problems on the stable internal `production` contract. `/operations/production/` is compatibility-only. Jobs, output, issues, equipment observations, events, and managed commands are recorded.
 - Website runs at `/products/website/` with Site, Preview, and Publish. It retains revisioned evidence and a deterministic downloadable site file without deployment or domain mutation.
 - `/products/ecommerce/` now provides a focused storefront maker and responsive customer preview from a read-only Shop catalogue snapshot. It emits a deterministic SHA-256 preview digest and creates an exact idempotent request receipt. Browser-local mode keeps the existing device-only flow. Authenticated managed mode retains the exact receipt in the revisioned tenant Shop workspace, rejects stale revisions and conflicting retries, and recovers it through bootstrap. Shop still revalidates the current catalogue and keeps every order or stock consequence behind its separate accountable action gate.
 - `/agents/` currently resolves to the compact Products planned state because Agent Teams are internal coordination records and Order Intake has not yet passed the evaluation gate.
-- Home, Work, Products, and Settings exist in one app shell. Mobile uses focused task flows; no separate app domain is required.
+- Home now prioritizes unfinished Shop and Plant operating records before internal company tasks. The internal `/work/` route is labelled HQ, its activity is collapsed on Home, and Products remains the direct launcher for Shop, Plant, Website, and Ecommerce.
 - The default app is browser-local. Authenticated Shop, Plant, Website, and Ecommerce-inbox commands exist, but hosted production activation is not proven.
 
 ## Verified baseline
 
-- Local implementation head before this authority sync is `36b161c`; it contains the corrected portfolio, completed Order Intake evaluator, Ecommerce preview, request receipt, Shop review handoff, and portfolio verification.
+- Local implementation head before this UX sync is `c3c2204`; it contains the corrected portfolio, Order Intake evaluator, Ecommerce receipt, and Shop review handoff.
 - The corrected candidate passes all 117 Python tests plus the focused app-build contract.
 - Ecommerce keeps 11 deterministic/read-only storefront checks, 13 request-contract checks, and 16 handoff checks. The managed inbox raises the Shop runtime total to 83 checks and adds fake-client proof for exact replay, conflicting idempotency rejection, stale-revision rejection, action-identity collision rejection, bounded pilot retention, cross-tenant isolation, restart recovery, and unchanged Shop orders, stock movements, closes, and Website intake records.
-- Fresh 1280 px and 375 px browser review proves receipt, explicit confirmation, source-locked Shop draft, payment-choice gate, accountable-action dialog, and a 375 px Ecommerce layout with no horizontal overflow or browser errors. Before final Shop confirmation, the sampled state remains 2 orders, 2 movements, 34 units, and zero Ecommerce-linked orders.
+- Fresh 1280 px and 375 px review proves the receipt, Shop draft, payment gate, accountable-action dialog, and no mobile overflow or browser errors. Before confirmation, sampled state remains unchanged.
 - PostgreSQL 17.10 passed 24 local migration, authority, journey, isolation, retry, recovery, and validator checks across two clean TLS clusters.
-- Fresh 1280 px and 375 px browser audits of the corrected candidate passed for Home, Shop, Plant, Products, Website, and Ecommerce without horizontal overflow, undersized actionable controls, error overlay, warning, or console error. Compatibility URLs canonicalized to `/shop/` and `/plant/` while preserving query state.
+- Fresh 1280 px and 375 px audits passed for Home and all four products without overflow, undersized controls, overlays, warnings, or console errors. Compatibility URLs canonicalized correctly.
+- A fresh 375 px Home audit proves the first card is a Shop or Plant operating record, the bottom navigation reads Home, HQ, and Products, internal company activity stays collapsed, and the page has no horizontal overflow or browser errors.
 - No Vercel deployment was created. Current production still references `main` commit `6885c3201d523d42d176c3dcd91de28dc1e17f6f`.
 - The connected `supermegabase` project is healthy, but the private application schema and runtime role are not installed; this is not application readiness proof.
 

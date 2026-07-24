@@ -4,7 +4,7 @@ Updated: 2026-07-24
 Authority: founder / CEO
 Canonical repository: `C:\Users\thesw\Projects\supermega-platform`
 Integration branch: `agent/supermega-release-candidate`
-Previous local checkpoint: `36b161ce3ab768a04f3868735eb7b0388fb247e1`
+Previous local checkpoint: `c3c2204d3bdaeed74fdb988e8a4cce98da13652f`
 
 ## One operating model
 
@@ -28,6 +28,7 @@ Claude coordination is paused by founder direction.
 | --- | --- | --- | --- | --- | --- |
 | CEO-006 | CEO / Codex integrator | done-local | Correct the portfolio to Shop, Plant, Website, Ecommerce, and AI Agent Solutions while preserving stable runtime data. | Authority, manifest, app shell, public generator, and verifiers in bounded slices | HQ, app-build, and public-output contracts passed; desktop/mobile routes preserved existing state; no push or deploy. |
 | QA-002 | Product / QA Codex | done-local | Prove `/shop/` and `/plant/` are canonical, understandable, mobile-safe, and compatibility-preserving. | Read-only browser and contract checks | 1280 px and 375 px journeys passed; old operation paths canonicalized to the same records; no overflow, browser errors, or state reset. |
+| UX-003 | Product UX Codex | done-local | Make Home operationally useful before exposing internal company machinery. | Shared shell, app metadata, focused verifier, and authority only | Shop stock, Plant problems, and Shop orders outrank HQ work; internal work is labelled HQ and collapsed; installed/link metadata uses current Shop, Plant, Website, and Ecommerce language; 375 px browser review passes. |
 | RND-001 | Product R&D Codex | done-local | Define Ecommerce as a customer storefront and order-intent product distinct from Shop. | Read-only Git history audit | Keep the five deleted back-office files deleted; reuse only fingerprint, idempotency, publish, and intake-boundary patterns. |
 | RND-002 | AI Product R&D Codex | done-local | Select the first real AI Agent Solution. | Read-only current-code audit | Order Intake is first: approved input to structured source-backed draft, human accept/discard, zero side effects, and a golden-set gate. |
 | ENG-003 | Ecommerce Codex | done-local | Build Ecommerce slice 1: deterministic storefront configuration and responsive preview from a read-only Shop catalogue snapshot. | Focused Ecommerce maker, route, catalogue, styles, and verifier only; no Shop mutation | Lint, build, 11 runtime checks, full local release gates, and 1280/375 px browser review pass; no push or deploy. |

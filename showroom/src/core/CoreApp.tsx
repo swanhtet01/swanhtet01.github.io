@@ -335,7 +335,7 @@ const checkingRuntime: RuntimeHealth = {
 
 const navigation = [
   { to: '/', label: 'Home', end: true },
-  { to: '/work/', label: 'Work', end: false },
+  { to: '/work/', label: 'HQ', end: false },
   { to: '/operations/', label: 'Products', end: false },
 ] as const
 
@@ -1242,6 +1242,7 @@ export function OverviewPage() {
   const lowStock = commerce.items.filter((item) => item.onHand <= item.reorderAt)
   const openProductionIssues = production.issues.filter((issue) => issue.status === 'open')
   const openOrders = commerce.orders.filter((order) => order.status !== 'completed' && order.status !== 'cancelled')
+  const nextOperatingOrder = openOrders.find(commerceOrderNeedsAction) ?? openOrders[0]
   const agentHandoffs = workspace.agents.filter((agent) => ['waiting_review', 'blocked'].includes(agent.state) && !blockedWork.some((item) => item.id === agent.assignedWorkItemId))
   const releaseComplete = workspace.release.checks.filter((check) => check.complete).length
   const releasePercent = Math.round((releaseComplete / workspace.release.checks.length) * 100)
@@ -1249,19 +1250,21 @@ export function OverviewPage() {
   const operatingExceptions = lowStock.length + openProductionIssues.length
   const ownerAttention = blockedWork.length + pendingApprovals.length + agentHandoffs.length + operatingExceptions + (isPilotReady ? 0 : 1)
   const selectedApproval = pendingApprovals.find((approval) => approval.id === selectedApprovalId)
-  const nextPriority: { label: string; title: string; detail: string; action: string; href?: string; approvalId?: string } = pendingApprovals[0]
-    ? { label: 'Approval', title: pendingApprovals[0].title, detail: `${pendingApprovals[0].packet.claims.length} claims are ready for a human decision.`, action: 'Review now', approvalId: pendingApprovals[0].id }
-    : blockedWork[0]
-      ? { label: 'Blocked work', title: blockedWork[0].title, detail: `${blockedWork[0].owner} needs a decision to continue.`, action: 'Review work', href: `/work/?team=${blockedWork[0].team}&view=work&item=${blockedWork[0].id}` }
-      : agentHandoffs[0]
-        ? { label: 'Team handoff', title: `${agentHandoffs[0].name} needs review`, detail: `${agentHandoffs[0].humanOwner} owns the next decision.`, action: 'Review handoff', href: `/work/?team=${agentHandoffs[0].team}&view=agents&agent=${agentHandoffs[0].id}` }
-        : lowStock[0]
-          ? { label: 'Stock', title: `Reorder ${lowStock[0].name}`, detail: `${lowStock[0].onHand} on hand; boundary is ${lowStock[0].reorderAt}.`, action: 'Open stock', href: '/shop/?tab=inventory' }
-          : openProductionIssues[0]
-            ? { label: 'Plant problem', title: openProductionIssues[0].summary, detail: `${openProductionIssues[0].area} needs review.`, action: 'Review problem', href: '/plant/?tab=control' }
-            : !isPilotReady
-              ? { label: 'Setup', title: 'Define the measurable workflow', detail: `${pilotProgress(setup)}% complete; add the baseline and acceptance evidence.`, action: 'Finish setup', href: '/settings/' }
-              : { label: 'Ready', title: openOrders[0] ? `Continue ${openOrders[0].id}` : 'Start with Shop', detail: openOrders[0] ? 'Move the next open order forward.' : 'No owner decision is waiting.', action: openOrders[0] ? 'Open orders' : 'Open Shop', href: '/shop/?tab=orders' }
+  const nextPriority: { label: string; title: string; detail: string; action: string; href?: string; approvalId?: string } = lowStock[0]
+    ? { label: 'Shop stock', title: `Reorder ${lowStock[0].name}`, detail: `${lowStock[0].onHand} on hand; reorder at ${lowStock[0].reorderAt}.`, action: 'Open stock', href: '/shop/?tab=inventory' }
+    : openProductionIssues[0]
+      ? { label: 'Plant problem', title: openProductionIssues[0].summary, detail: `${openProductionIssues[0].area} needs review.`, action: 'Review problem', href: '/plant/?tab=control' }
+      : nextOperatingOrder
+        ? { label: 'Shop order', title: `Continue ${nextOperatingOrder.id}`, detail: `${nextOperatingOrder.customer} · ${nextOperatingOrder.status.replace('_', ' ')} · payment ${nextOperatingOrder.paymentStatus}.`, action: 'Open orders', href: '/shop/?tab=orders' }
+        : !isPilotReady
+          ? { label: 'Setup', title: 'Define the measurable workflow', detail: `${pilotProgress(setup)}% complete; add the baseline and acceptance evidence.`, action: 'Finish setup', href: '/settings/' }
+          : pendingApprovals[0]
+            ? { label: 'HQ approval', title: pendingApprovals[0].title, detail: `${pendingApprovals[0].packet.claims.length} claims are ready for a human decision.`, action: 'Review now', approvalId: pendingApprovals[0].id }
+            : blockedWork[0]
+              ? { label: 'HQ blocker', title: blockedWork[0].title, detail: `${blockedWork[0].owner} needs a decision to continue.`, action: 'Open HQ', href: `/work/?team=${blockedWork[0].team}&view=work&item=${blockedWork[0].id}` }
+              : agentHandoffs[0]
+                ? { label: 'HQ handoff', title: `${agentHandoffs[0].name} needs review`, detail: `${agentHandoffs[0].humanOwner} owns the next decision.`, action: 'Open HQ', href: `/work/?team=${agentHandoffs[0].team}&view=agents&agent=${agentHandoffs[0].id}` }
+                : { label: 'Ready', title: 'Start with Shop', detail: 'No operating exception or owner decision is waiting.', action: 'Open Shop', href: '/shop/?tab=orders' }
 
   useEffect(() => {
     if (!managedIdentity) return undefined
@@ -1374,7 +1377,7 @@ export function OverviewPage() {
 
   return (
     <div className="workspace-screen command-screen">
-      <PageHeading copy="One clear next action, then the rest when you need it." eyebrow="Home" title="Today" />
+      <PageHeading copy="Continue the most important operating record, or choose a product below." eyebrow="Home" title="Start here" />
       <section className="core-panel next-task-card">
         <div><span className="core-eyebrow">{nextPriority.label}</span><h2>{nextPriority.title}</h2><p>{nextPriority.detail}</p></div>
         {nextPriority.approvalId
@@ -1383,24 +1386,24 @@ export function OverviewPage() {
       </section>
       <nav aria-label="Products" className="product-launcher home-products">
         <Link to="/shop/?tab=orders">
-          <span><strong>Shop</strong><small>Orders, stock and payments</small></span>
+          <span><strong>Shop</strong><small>Orders, payments, and stock</small></span>
           <b>{openOrders.length ? `${openOrders.length} open` : 'Ready'}</b>
         </Link>
         <Link to="/plant/?tab=production">
-          <span><strong>Plant</strong><small>Jobs, output and equipment</small></span>
+          <span><strong>Plant</strong><small>Jobs, output, and problems</small></span>
           <b>{openProductionIssues.length ? `${openProductionIssues.length} issue` : 'Ready'}</b>
         </Link>
         <Link to="/products/website/">
-          <span><strong>Website</strong><small>Pages and order handoff</small></span>
+          <span><strong>Website</strong><small>Build and review a website</small></span>
           <b>Open</b>
         </Link>
         <Link to="/products/ecommerce/">
-          <span><strong>Ecommerce</strong><small>Storefront maker and preview</small></span>
-          <b>Preview</b>
+          <span><strong>Ecommerce</strong><small>Build a Shop-backed storefront</small></span>
+          <b>Open</b>
         </Link>
       </nav>
       <details className="home-more">
-        <summary><span>More activity</span><small>{visibleWork.length} active work · {ownerAttention} priorities</small></summary>
+        <summary><span>SuperMega HQ</span><small>Internal company work</small></summary>
         <div className="command-grid">
         <section className="core-panel command-queue-panel">
           <div className="panel-head"><div><span className="core-eyebrow">Active work</span><h2>{visibleWork.length} items in motion</h2></div><Link className="text-link" to="/work/?team=product&view=work">View all work</Link></div>
