@@ -52,7 +52,8 @@ requireContract('Ecommerce is separate and truthfully limited after local inbox 
   product('ecommerce')?.status === 'release-candidate-local'
   && product('ecommerce')?.job?.includes('read-only Shop catalogue')
   && product('ecommerce')?.surfaces?.join(',') === 'Storefront,Preview,Request receipt,Shop inbox,Shop review'
-  && product('ecommerce')?.nextGate?.includes('completed authenticated, revisioned, recoverable')
+  && product('ecommerce')?.nextGate?.includes('authenticated, revisioned, catalogue-bound')
+  && product('ecommerce')?.nextGate?.includes('recoverable request retention')
   && product('ecommerce')?.nextGate?.includes('isolated non-production tenant')
   && product('ecommerce')?.nextGate?.includes('normalized indexed queue')
   && product('ecommerce')?.nextGate?.includes('payment'))

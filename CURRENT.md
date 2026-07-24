@@ -20,7 +20,7 @@ SuperMega builds simple operating products for Myanmar businesses. The customer 
 - **Shop** — implemented local release candidate at `/shop/` under the stable internal `commerce` runtime. `/operations/commerce/` is compatibility-only and resolves to the same records.
 - **Plant** — implemented local release candidate at `/plant/` under the stable internal `production` runtime. `/operations/production/` is compatibility-only and resolves to the same records.
 - **Website** — implemented local release candidate at `/products/website/`; it can produce a deterministic downloadable site artifact but cannot publish or change a domain.
-- **Ecommerce** — implemented local storefront maker at `/products/ecommerce/`. It reads a Shop catalogue snapshot without changing it, lets the operator choose customer-visible products and copy, produces a deterministic preview digest, and creates an idempotent request receipt marked `pending_shop_review`. Browser-local mode retains the receipt only on that device. Authenticated managed mode can retain the exact receipt in the revisioned tenant Shop workspace and recover it through the existing bootstrap path. A Shop operator must still open and revalidate a source-locked draft; only Shop's separate accountable action gate can create an order or reserve stock.
+- **Ecommerce** — implemented local and managed storefront maker at `/products/ecommerce/`. It reads a Shop catalogue snapshot without changing it, lets the operator choose customer-visible products and copy, produces a deterministic preview digest, and creates an idempotent request receipt marked `pending_shop_review`. Browser-local mode saves setup only on that device. Authenticated managed mode saves the storefront configuration against the exact Shop catalogue digest in the revisioned tenant workspace, recovers it through bootstrap, preserves edits on version conflict, and can retain the exact request receipt in Shop. A Shop operator must still open and revalidate a source-locked draft; only Shop's separate accountable action gate can create an order or reserve stock.
 - **AI Agent Solutions** — planned real prototype at `/agents/`. The first solution is Order Intake: approved message or form input to a structured draft, with provenance, evaluation, human review, and zero side effects.
 
 No local demo, passing test, healthy provider, or generated artifact is proof of a live customer system, revenue, production persistence, or autonomous operation.
@@ -84,7 +84,7 @@ AI and delegated agents may not independently send customer messages, charge or 
 - The default app remains an isolated browser-local trial.
 - Shop and Plant currently use the stable `commerce` and `production` state contracts; renaming the interface must not migrate, fork, or silently reset those records.
 - Website retains revisioned content, evidence, approval, deterministic artifact generation, recovery, and a controlled handoff.
-- Ecommerce may create and retain only a structured order intent until a responsible Shop operator confirms it. The managed inbox uses the existing tenant-scoped revision, idempotency, event, and bootstrap contracts; it does not own stock, fulfilment, reconciliation, refund, or daily-close authority.
+- Ecommerce may retain a catalogue-bound storefront configuration and structured order intent until a responsible Shop operator confirms the intent. Managed setup and inbox writes use the existing tenant-scoped identity, revision, idempotency, event, and bootstrap contracts; neither owns stock, fulfilment, reconciliation, refund, or daily-close authority.
 - Managed mode remains locked behind authenticated tenant identity, least-privilege capabilities, private schema migrations, isolation, immutable events, backup, recovery, runtime-role checks, and confirmed writes.
 - External sends, payments, publishing, access changes, deployment, and production writes remain owner-approved and auditable.
 - The only approved database handoff is the read-only, fail-closed process in `docs/supermega-enterprise-activation.md`.
@@ -109,7 +109,7 @@ AI and delegated agents may not independently send customer messages, charge or 
 
 ## Current execution order
 
-1. Rehearse the completed authenticated Ecommerce request-inbox contract on one owner-approved isolated non-production tenant; preserve the separate Shop action gate and collect recovery evidence.
+1. Rehearse authenticated Ecommerce setup persistence and request-inbox retention on one owner-approved isolated non-production tenant; preserve the separate Shop action gate and collect cross-device, replay, conflict, recovery, and zero-conversion evidence.
 2. Run Order Intake through a real server-only provider and expose review UI only if the completed evaluator passes.
 3. Validate Website with one named business and accepted artifact.
 4. Repeat Shop and Plant on one isolated hosted tenant before any production write activation.
