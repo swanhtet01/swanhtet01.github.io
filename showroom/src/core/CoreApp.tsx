@@ -77,7 +77,9 @@ import {
 import {
   LEGACY_PRODUCTION_KEYS,
   PRODUCTION_KEY,
+  buildProductionShiftHandoff,
   createEmptyProduction,
+  formatProductionShiftHandoff,
   loadProductionWorkspace,
   mutateProductionWorkspace,
   openProductionIssue,
@@ -85,6 +87,7 @@ import {
   productionIssueSeverities,
   productionMachineStates,
   productionShiftOutput,
+  productionStateCanonical,
   productionWorkspaceCanWrite,
   recordProductionOutput,
   recordProductionScrap,
@@ -100,6 +103,7 @@ import {
   type ProductionJob,
   type ProductionMachineState,
   type ProductionOutputKind,
+  type ProductionShiftHandoff,
   type ProductionState,
 } from './production-workspace'
 
@@ -2677,6 +2681,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const [pendingAction, setPendingAction] = useState<PendingAccountableAction | null>(null)
   const [jobId, setJobId] = useState(production.jobs[0]?.id ?? '')
   const [holdJobId, setHoldJobId] = useState(production.jobs.find((job) => !job.qualityHold)?.id ?? '')
+  const [handoffShiftRef, setHandoffShiftRef] = useState('')
+  const [shiftHandoff, setShiftHandoff] = useState<ProductionShiftHandoff | null>(null)
   const [quantity, setQuantity] = useState(25)
   const [outputKind, setOutputKind] = useState<ProductionOutputKind>('good')
   const [shiftRef, setShiftRef] = useState('')
@@ -2722,6 +2728,11 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const selectedRemaining = selectedJob ? selectedJob.target - selectedJob.output - (selectedJob.scrap ?? 0) : 0
   const canonicalShiftRef = shiftRef.trim()
   const currentShiftOutput = productionShiftOutput(production, canonicalShiftRef)
+  const currentProductionCanonical = shiftHandoff ? productionStateCanonical(production) : ''
+  const shiftHandoffIsCurrent = Boolean(shiftHandoff
+    && shiftHandoff.sourceRevision === production.revision
+    && shiftHandoff.sourceCanonical === currentProductionCanonical
+    && shiftHandoff.shiftRef === handoffShiftRef.trim())
   const observedMachine = machineObservation
     ? production.machines.find((machine) => machine.id === machineObservation.machineId)
     : undefined
@@ -3003,6 +3014,27 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     }, trigger)
   }
 
+  function buildShiftHandoff(event: FormEvent) {
+    event.preventDefault()
+    const canonicalHandoffShiftRef = handoffShiftRef.trim()
+    const draft = buildProductionShiftHandoff(production, canonicalHandoffShiftRef)
+    if (!draft) return setNotice('Enter one named shift reference of at most 80 characters.')
+    setHandoffShiftRef(canonicalHandoffShiftRef)
+    setShiftHandoff(draft)
+    setNotice(`Read-only handoff built from Plant revision ${draft.sourceRevision}. No Plant record changed.`)
+  }
+
+  async function copyShiftHandoff() {
+    if (!shiftHandoff || !shiftHandoffIsCurrent) return setNotice('Plant records or the shift reference changed. Build the handoff again before copying it.')
+    if (!navigator.clipboard?.writeText) return setNotice('Clipboard copy is unavailable in this browser. No Plant record changed.')
+    try {
+      await navigator.clipboard.writeText(formatProductionShiftHandoff(shiftHandoff))
+      setNotice('Shift handoff copied. No Plant record changed.')
+    } catch {
+      setNotice('Clipboard copy was not permitted. No Plant record changed.')
+    }
+  }
+
   function openMachineObservation(machineId: string, trigger: HTMLButtonElement) {
     const machine = production.machines.find((candidate) => candidate.id === machineId)
     if (!machine) return
@@ -3117,6 +3149,16 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
               <p className="panel-copy">The next review records who placed the hold, why, and the source evidence. It does not change output or control equipment.</p>
             </form> : <p className="panel-copy">Every recorded job is currently held. Release one with evidence before placing another hold.</p>}
           </details>
+          <details className="compact-disclosure production-history" open={shiftHandoff ? true : undefined}>
+            <summary>Shift handoff <span>{shiftHandoffIsCurrent ? 'Ready' : 'Build'}</span></summary>
+            <form autoComplete="off" className="core-form compact-form" onSubmit={buildShiftHandoff}>
+              <label>Shift reference<input maxLength={80} onChange={(event) => setHandoffShiftRef(event.target.value)} placeholder="2026-07-24 Day" required value={handoffShiftRef} /></label>
+              <button className="core-button" type="submit">Build handoff</button>
+              <p className="panel-copy">Builds a read-only briefing from the current Plant revision. It creates no event, message, or saved copy.</p>
+            </form>
+            {shiftHandoff && !shiftHandoffIsCurrent ? <p className="form-notice" role="alert">Plant records or the shift reference changed after this handoff was built. Build it again before use.</p> : null}
+            {shiftHandoff && shiftHandoffIsCurrent ? <ShiftHandoffView handoff={shiftHandoff} onCopy={copyShiftHandoff} /> : null}
+          </details>
         </section>
       </div>
     </div>
@@ -3215,6 +3257,63 @@ function QualityHoldList({ disabled, jobs, onRelease }: { disabled: boolean; job
       <button className="text-link" disabled={disabled} onClick={(event) => onRelease(job.id, event.currentTarget)} type="button">Review release</button>
     </article>
   })}</div>
+}
+
+function ShiftHandoffView({ handoff, onCopy }: { handoff: ProductionShiftHandoff; onCopy: () => void }) {
+  return <div>
+    <p className="form-notice" role="status">{handoff.shiftRef} · revision {handoff.sourceRevision} · {handoff.shiftOutput.goodUnits.toLocaleString()} good · {handoff.shiftOutput.scrapUnits.toLocaleString()} scrap · {handoff.unfinishedJobs.length} unfinished · {handoff.activeHolds.length} held · {handoff.priorityProblems.length} critical/high.</p>
+    <details className="compact-disclosure production-history">
+      <summary>Shift entries <span>{handoff.shiftEntries.length}</span></summary>
+      <div className="issue-list">
+        {handoff.shiftEntries.map((entry) => <article key={entry.actionId}>
+          <span className="issue-mark resolved">{entry.outputKind === 'scrap' ? 'S' : 'G'}</span>
+          <div><strong>{entry.quantity.toLocaleString()} {entry.outputKind} · {entry.product}</strong><small style={wrappedIssueDetail}>{entry.jobId} · {formatIssueDue(entry.recordedAt)} · {entry.recordedBy}</small><small style={wrappedIssueDetail}>Reason: {entry.reason}</small><small style={wrappedIssueDetail}>Evidence: {entry.evidenceReference} · Action: {entry.actionId}</small></div>
+        </article>)}
+        {!handoff.shiftEntries.length ? <Empty>No output entry is attributed to this shift reference.</Empty> : null}
+      </div>
+    </details>
+    <details className="compact-disclosure production-history">
+      <summary>Unfinished jobs <span>{handoff.unfinishedJobs.length}</span></summary>
+      <div className="issue-list">
+        {handoff.unfinishedJobs.map((job) => <article key={job.id}>
+          <span className={`issue-mark ${job.qualityHold ? 'open' : 'resolved'}`}>{job.qualityHold ? 'H' : 'J'}</span>
+          <div><strong>{job.product} · {job.id}</strong><small style={wrappedIssueDetail}>{job.line} · {job.remainingUnits.toLocaleString()} remaining · {job.goodUnits.toLocaleString()} good · {job.scrapUnits.toLocaleString()} scrap</small>{job.qualityHold ? <small style={wrappedIssueDetail}>QUALITY HOLD · {job.qualityHold.heldBy} · Evidence: {job.qualityHold.evidenceReference}</small> : null}</div>
+        </article>)}
+        {!handoff.unfinishedJobs.length ? <Empty>No unfinished job is recorded.</Empty> : null}
+      </div>
+    </details>
+    <details className="compact-disclosure production-history">
+      <summary>Active quality holds <span>{handoff.activeHolds.length}</span></summary>
+      <div className="issue-list">
+        {handoff.activeHolds.map((heldJob) => <article key={heldJob.id}>
+          <span className="issue-mark open">H</span>
+          <div><strong>{heldJob.product} · {heldJob.id}</strong><small style={wrappedIssueDetail}>{heldJob.line} · target {heldJob.target.toLocaleString()} · {heldJob.goodUnits.toLocaleString()} good · {heldJob.scrapUnits.toLocaleString()} scrap · {heldJob.remainingUnits.toLocaleString()} remaining</small><small style={wrappedIssueDetail}>Held {formatIssueDue(heldJob.qualityHold.heldAt)} by {heldJob.qualityHold.heldBy}</small><small style={wrappedIssueDetail}>Reason: {heldJob.qualityHold.reason}</small><small style={wrappedIssueDetail}>Evidence: {heldJob.qualityHold.evidenceReference} · Action: {heldJob.qualityHold.actionId}</small></div>
+        </article>)}
+        {!handoff.activeHolds.length ? <Empty>No active quality hold is recorded.</Empty> : null}
+      </div>
+    </details>
+    <details className="compact-disclosure production-history">
+      <summary>Critical/high problems <span>{handoff.priorityProblems.length}</span></summary>
+      <div className="issue-list">
+        {handoff.priorityProblems.map((problem) => <article key={problem.id}>
+          <span className="issue-mark open">{problem.severity.charAt(0).toUpperCase()}</span>
+          <div><strong>{problem.summary}</strong><small style={wrappedIssueDetail}>{productionIssueSeverityLabels[problem.severity]} · {problem.area} · Opened {formatIssueDue(problem.openedAt)} by {problem.openedBy}</small><small style={wrappedIssueDetail}>Owner {problem.owner} · Due {formatIssueDue(problem.dueAt)}</small><small style={wrappedIssueDetail}>Next: {problem.containment}</small><small style={wrappedIssueDetail}>Evidence: {problem.evidenceReference} · Action: {problem.actionId}</small></div>
+        </article>)}
+        {!handoff.priorityProblems.length ? <Empty>No open critical or high problem is recorded.</Empty> : null}
+      </div>
+    </details>
+    <details className="compact-disclosure production-history">
+      <summary>Machine observations <span>{handoff.machineObservations.length}</span></summary>
+      <div className="issue-list">
+        {handoff.machineObservations.map((machine) => <article key={machine.id}>
+          <span className={`machine-dot ${machine.state}`} />
+          <div><strong>{machine.name}</strong><small style={wrappedIssueDetail}>{machine.id} · Recorded: {productionMachineStateLabels[machine.state]}</small>{machine.observation ? <><small style={wrappedIssueDetail}>Observed {formatIssueDue(machine.observation.observedAt)} by {machine.observation.observedBy}</small><small style={wrappedIssueDetail}>Reason: {machine.observation.reason}</small><small style={wrappedIssueDetail}>Evidence: {machine.observation.evidenceReference} · Action: {machine.observation.actionId}</small></> : <small style={wrappedIssueDetail}>No attributed observation recorded</small>}</div>
+        </article>)}
+        {!handoff.machineObservations.length ? <Empty>No machine record exists.</Empty> : null}
+      </div>
+    </details>
+    <button className="core-button" onClick={onCopy} type="button">Copy handoff</button>
+  </div>
 }
 
 export function SettingsPage() {

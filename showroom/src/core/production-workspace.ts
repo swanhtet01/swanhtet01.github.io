@@ -120,6 +120,69 @@ export type ProductionShiftOutput = {
   entryCount: number
 }
 
+export type ProductionShiftHandoff = {
+  shiftRef: string
+  sourceRevision: number
+  sourceCanonical: string
+  shiftOutput: ProductionShiftOutput
+  shiftEntries: Array<{
+    actionId: string
+    jobId: string
+    product: string
+    outputKind: ProductionOutputKind
+    quantity: number
+    recordedAt: string
+    recordedBy: string
+    reason: string
+    evidenceReference: string
+  }>
+  unfinishedJobs: Array<{
+    id: string
+    line: string
+    product: string
+    target: number
+    goodUnits: number
+    scrapUnits: number
+    remainingUnits: number
+    qualityHold?: ProductionQualityHold
+  }>
+  activeHolds: Array<{
+    id: string
+    line: string
+    product: string
+    target: number
+    goodUnits: number
+    scrapUnits: number
+    remainingUnits: number
+    qualityHold: ProductionQualityHold
+  }>
+  priorityProblems: Array<{
+    id: string
+    severity: 'critical' | 'high'
+    area: string
+    summary: string
+    openedAt: string
+    owner: string
+    dueAt: string
+    containment: string
+    actionId: string
+    openedBy: string
+    evidenceReference: string
+  }>
+  machineObservations: Array<{
+    id: string
+    name: string
+    state: ProductionMachineState
+    observation: null | {
+      actionId: string
+      observedAt: string
+      observedBy: string
+      reason: string
+      evidenceReference: string
+    }
+  }>
+}
+
 const issueKinds: ProductionIssueKind[] = ['quality', 'maintenance', 'materials', 'operations']
 export const productionIssueSeverities: ProductionIssueSeverity[] = ['critical', 'high', 'medium', 'low']
 export const productionMachineStates: ProductionMachineState[] = ['running', 'attention', 'stopped']
@@ -647,6 +710,170 @@ export function productionShiftOutput(state: ProductionState, shiftRef: string):
       entryCount: subtotal.entryCount + 1,
     }
   }, { goodUnits: 0, scrapUnits: 0, entryCount: 0 })
+}
+
+function canonicalProductionValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalProductionValue)
+  if (!isRecord(value)) return value
+  return Object.fromEntries(
+    Object.entries(value)
+      .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
+      .map(([key, nested]) => [key, canonicalProductionValue(nested)]),
+  )
+}
+
+function productionCanonical(value: ProductionState) {
+  return JSON.stringify(canonicalProductionValue(value))
+}
+
+export function productionStateCanonical(state: ProductionState) {
+  return productionCanonical(validateProductionState(state))
+}
+
+export function buildProductionShiftHandoff(state: ProductionState, shiftRef: string): ProductionShiftHandoff | null {
+  if (!validCanonicalText(shiftRef, 80)) return null
+  const current = validateProductionState(state)
+  const shiftEntries = current.events
+    .filter((event) => event.kind === 'output_recorded' && event.shiftRef === shiftRef)
+    .map((event) => ({
+      actionId: event.actionId,
+      jobId: event.subjectId,
+      product: current.jobs.find((job) => job.id === event.subjectId)?.product ?? event.subjectId,
+      outputKind: event.outputKind ?? 'good',
+      quantity: event.quantity ?? 0,
+      recordedAt: event.createdAt,
+      recordedBy: event.actor,
+      reason: event.reason,
+      evidenceReference: event.evidenceReference,
+    }))
+  const unfinishedJobs = current.jobs
+    .filter((job) => job.output + (job.scrap ?? 0) < job.target)
+    .map((job) => ({
+      id: job.id,
+      line: job.line,
+      product: job.product,
+      target: job.target,
+      goodUnits: job.output,
+      scrapUnits: job.scrap ?? 0,
+      remainingUnits: job.target - job.output - (job.scrap ?? 0),
+      ...(job.qualityHold ? { qualityHold: { ...job.qualityHold } } : {}),
+    }))
+  const activeHolds = current.jobs
+    .filter((job): job is ProductionJob & { qualityHold: ProductionQualityHold } => Boolean(job.qualityHold))
+    .map((job) => ({
+      id: job.id,
+      line: job.line,
+      product: job.product,
+      target: job.target,
+      goodUnits: job.output,
+      scrapUnits: job.scrap ?? 0,
+      remainingUnits: Math.max(0, job.target - job.output - (job.scrap ?? 0)),
+      qualityHold: { ...job.qualityHold },
+    }))
+  const priorityProblems = current.issues
+    .filter((issue): issue is ProductionIssue & {
+      severity: 'critical' | 'high'
+      owner: string
+      dueAt: string
+      containment: string
+    } => issue.status === 'open'
+      && (issue.severity === 'critical' || issue.severity === 'high')
+      && Boolean(issue.owner && issue.dueAt && issue.containment))
+    .sort((left, right) => {
+      const severityDifference = productionIssueSeverities.indexOf(left.severity) - productionIssueSeverities.indexOf(right.severity)
+      return severityDifference
+        || Date.parse(left.dueAt) - Date.parse(right.dueAt)
+        || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0)
+    })
+    .map((issue) => {
+      const openingEvent = current.events.find((event) => event.kind === 'issue_opened' && event.subjectId === issue.id)
+      if (!openingEvent) throw new Error(`Priority problem ${issue.id} has no immutable opening evidence.`)
+      return {
+        id: issue.id,
+        severity: issue.severity,
+        area: issue.area,
+        summary: issue.summary,
+        openedAt: openingEvent.createdAt,
+        owner: issue.owner,
+        dueAt: issue.dueAt,
+        containment: issue.containment,
+        actionId: openingEvent.actionId,
+        openedBy: openingEvent.actor,
+        evidenceReference: openingEvent.evidenceReference,
+      }
+    })
+  const machineObservations = current.machines.map((machine) => {
+    const observationEvent = current.events.find((event) => event.kind === 'machine_state_changed' && event.subjectId === machine.id)
+    return {
+      id: machine.id,
+      name: machine.name,
+      state: machine.state,
+      observation: observationEvent ? {
+        actionId: observationEvent.actionId,
+        observedAt: observationEvent.createdAt,
+        observedBy: observationEvent.actor,
+        reason: observationEvent.reason,
+        evidenceReference: observationEvent.evidenceReference,
+      } : null,
+    }
+  })
+  return {
+    shiftRef,
+    sourceRevision: current.revision,
+    sourceCanonical: productionCanonical(current),
+    shiftOutput: productionShiftOutput(current, shiftRef),
+    shiftEntries,
+    unfinishedJobs,
+    activeHolds,
+    priorityProblems,
+    machineObservations,
+  }
+}
+
+function handoffLine(value: string) {
+  return value.replace(/\s+/g, ' ')
+}
+
+export function formatProductionShiftHandoff(handoff: ProductionShiftHandoff) {
+  const lines = [
+    `Plant shift handoff — ${handoffLine(handoff.shiftRef)}`,
+    `Source revision: ${handoff.sourceRevision}`,
+    `Recorded shift output: ${handoff.shiftOutput.goodUnits} good · ${handoff.shiftOutput.scrapUnits} scrap · ${handoff.shiftOutput.entryCount} entries`,
+    '',
+    `Shift entries (${handoff.shiftEntries.length})`,
+  ]
+  if (!handoff.shiftEntries.length) lines.push('- None')
+  for (const entry of handoff.shiftEntries) {
+    lines.push(`- ${entry.quantity} ${entry.outputKind} · ${handoffLine(entry.jobId)} · ${handoffLine(entry.product)} · recorded ${entry.recordedAt} by ${handoffLine(entry.recordedBy)} · ${handoffLine(entry.reason)} · evidence ${handoffLine(entry.evidenceReference)} · action ${handoffLine(entry.actionId)}`)
+  }
+  lines.push(
+    '',
+    `Unfinished jobs (${handoff.unfinishedJobs.length})`,
+  )
+  if (!handoff.unfinishedJobs.length) lines.push('- None')
+  for (const job of handoff.unfinishedJobs) {
+    lines.push(`- ${handoffLine(job.id)} · ${handoffLine(job.product)} · ${handoffLine(job.line)} · ${job.remainingUnits} remaining · ${job.goodUnits} good · ${job.scrapUnits} scrap${job.qualityHold ? ' · QUALITY HOLD' : ''}`)
+  }
+  lines.push('', `Active quality holds (${handoff.activeHolds.length})`)
+  if (!handoff.activeHolds.length) lines.push('- None')
+  for (const heldJob of handoff.activeHolds) {
+    lines.push(`- ${handoffLine(heldJob.id)} · ${handoffLine(heldJob.product)} · ${handoffLine(heldJob.line)} · target ${heldJob.target} · ${heldJob.goodUnits} good · ${heldJob.scrapUnits} scrap · ${heldJob.remainingUnits} remaining · held ${heldJob.qualityHold.heldAt} by ${handoffLine(heldJob.qualityHold.heldBy)} · ${handoffLine(heldJob.qualityHold.reason)} · evidence ${handoffLine(heldJob.qualityHold.evidenceReference)} · action ${handoffLine(heldJob.qualityHold.actionId)}`)
+  }
+  lines.push('', `Critical/high problems (${handoff.priorityProblems.length})`)
+  if (!handoff.priorityProblems.length) lines.push('- None')
+  for (const problem of handoff.priorityProblems) {
+    lines.push(`- ${problem.severity.toUpperCase()} · ${handoffLine(problem.id)} · ${handoffLine(problem.area)} · ${handoffLine(problem.summary)} · opened ${problem.openedAt} by ${handoffLine(problem.openedBy)} · owner ${handoffLine(problem.owner)} · due ${problem.dueAt} · next ${handoffLine(problem.containment)} · evidence ${handoffLine(problem.evidenceReference)} · action ${handoffLine(problem.actionId)}`)
+  }
+  lines.push('', `Machine observations (${handoff.machineObservations.length})`)
+  if (!handoff.machineObservations.length) lines.push('- None')
+  for (const machine of handoff.machineObservations) {
+    if (!machine.observation) {
+      lines.push(`- ${handoffLine(machine.id)} · ${handoffLine(machine.name)} · recorded ${machine.state} · no attributed observation recorded`)
+      continue
+    }
+    lines.push(`- ${handoffLine(machine.id)} · ${handoffLine(machine.name)} · recorded ${machine.state} · observed ${machine.observation.observedAt} by ${handoffLine(machine.observation.observedBy)} · ${handoffLine(machine.observation.reason)} · evidence ${handoffLine(machine.observation.evidenceReference)} · action ${handoffLine(machine.observation.actionId)}`)
+  }
+  return lines.join('\n')
 }
 
 export function registerProductionJob(state: ProductionState, job: ProductionJob, proof: ProductionActionProof) {

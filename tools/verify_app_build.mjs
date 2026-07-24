@@ -585,6 +585,27 @@ if (!productionSource.includes('placeProductionQualityHold')
   || !coreSource.includes('Review release')
   || !coreSource.includes('Recording a result does not release this hold')
   || !coreSource.includes("job.qualityHold ? ' · QUALITY HOLD' : ''")) fail('production_quality_hold_contract_missing')
+if (!productionSource.includes('buildProductionShiftHandoff')
+  || !productionSource.includes('formatProductionShiftHandoff')
+  || !productionSource.includes('productionStateCanonical')
+  || !productionSource.includes('shiftEntries')
+  || !productionSource.includes('activeHolds')
+  || !productionSource.includes('Priority problem ${issue.id} has no immutable opening evidence.')
+  || !productionSource.includes('no attributed observation recorded')
+  || productionSource.includes("'completed output'")
+  || productionSource.includes('left.id.localeCompare(right.id)')
+  || !coreSource.includes('Shift handoff')
+  || !coreSource.includes('Build handoff')
+  || !coreSource.includes('Copy handoff')
+  || !coreSource.includes('shiftHandoff.sourceCanonical === currentProductionCanonical')
+  || !coreSource.includes('shiftHandoff.shiftRef === handoffShiftRef.trim()')
+  || !coreSource.includes('Active quality holds')
+  || !coreSource.includes('Shift entries')
+  || !coreSource.includes('Reason: {machine.observation.reason}')
+  || coreSource.includes("'Completed output'")
+  || !coreSource.includes('It creates no event, message, or saved copy.')
+  || !coreSource.includes('Plant records or the shift reference changed after this handoff was built.')
+  || !coreSource.includes('No Plant record changed.')) fail('production_shift_handoff_contract_missing')
 if (!productionSource.includes('registerProductionJob') || !coreSource.includes('production.job.created') || !coreSource.includes('<summary>Add job</summary>') || !coreSource.includes('Review job')) fail('production_recurring_job_workflow_missing')
 if (!productionSource.includes('currentRaw !== null') || !productionSource.includes('Migration failed closed') || !productionSource.includes('events: []')) fail('production_migration_fail_closed_contract_missing')
 if (!productionSource.includes('recordProductionMachineState')
@@ -2457,6 +2478,131 @@ async function verifyProductionRuntime() {
       reason: holdProof.reason,
       evidenceReference: holdProof.evidenceReference,
     } }, proof('ACT-JOB-HOLD-PREDECLARED', 2_600)) === null, 'production_job_predeclared_quality_hold_succeeded')
+
+    const completedHeldJob = { id: 'JOB-COMPLETE', line: 'Line 02', product: 'Completed batch', target: 10, output: 10 }
+    const handoffBase = model.validateProductionState({
+      ...base,
+      jobs: [...base.jobs, completedHeldJob],
+      machines: [...base.machines, { id: 'MC-2', name: 'Unobserved machine', state: 'running' }],
+    })
+    const handoffHoldProof = proof('ACT-HANDOFF-HOLD', 3_000)
+    const handoffHeld = model.placeProductionQualityHold(handoffBase, 'JOB-1', handoffHoldProof)
+    const handoffOutputProof = proof('ACT-HANDOFF-OUTPUT', 3_050)
+    const handoffOutput = model.recordProductionOutput(handoffHeld, 'JOB-1', 5, shiftRef, handoffOutputProof)
+    const handoffScrapProof = proof('ACT-HANDOFF-SCRAP', 3_075)
+    const handoffOutputAndScrap = model.recordProductionScrap(handoffOutput, 'JOB-1', 2, shiftRef, handoffScrapProof)
+    const handoffHighZProblem = {
+      ...issue,
+      id: 'ISS-Z',
+      createdAt: '2026-07-23T10:00:03.090Z',
+      summary: 'Seal review is required before the next shift.',
+    }
+    const handoffHighZProof = proof('ACT-HANDOFF-HIGH-Z', 3_100)
+    const handoffWithHighZ = model.openProductionIssue(handoffOutputAndScrap, handoffHighZProblem, handoffHighZProof)
+    const handoffHighUnicodeProblem = {
+      ...handoffHighZProblem,
+      id: 'ISS-Á',
+      createdAt: '2026-07-23T10:00:03.110Z',
+      summary: 'A second high-priority review is open.',
+    }
+    const handoffHighUnicodeProof = proof('ACT-HANDOFF-HIGH-UNICODE', 3_120)
+    const handoffWithHighPair = model.openProductionIssue(handoffWithHighZ, handoffHighUnicodeProblem, handoffHighUnicodeProof)
+    const handoffCriticalProblem = {
+      ...handoffHighZProblem,
+      id: 'ISS-CRITICAL',
+      createdAt: '2026-07-23T10:00:03.130Z',
+      summary: 'Critical disposition is still open.',
+      severity: 'critical',
+    }
+    const handoffCriticalProof = proof('ACT-HANDOFF-CRITICAL', 3_140)
+    const handoffWithCritical = model.openProductionIssue(handoffWithHighPair, handoffCriticalProblem, handoffCriticalProof)
+    const handoffMediumProblem = {
+      ...handoffHighZProblem,
+      id: 'ISS-MEDIUM',
+      createdAt: '2026-07-23T10:00:03.150Z',
+      summary: 'Review the next routine sample.',
+      severity: 'medium',
+    }
+    const handoffMediumProof = proof('ACT-HANDOFF-MEDIUM', 3_160)
+    const handoffWithProblems = model.openProductionIssue(handoffWithCritical, handoffMediumProblem, handoffMediumProof)
+    const handoffMachineFirstProof = proof('ACT-HANDOFF-MACHINE-FIRST', 3_180)
+    const handoffMachineFirst = model.recordProductionMachineState(handoffWithProblems, 'MC-1', 'running', 'attention', handoffMachineFirstProof)
+    const handoffMachineLatestProof = proof('ACT-HANDOFF-MACHINE-LATEST', 3_190)
+    const handoffMachineLatest = model.recordProductionMachineState(handoffMachineFirst, 'MC-1', 'attention', 'stopped', handoffMachineLatestProof)
+    const completedHoldProof = proof('ACT-HANDOFF-COMPLETED-HOLD', 3_200)
+    const handoffState = model.placeProductionQualityHold(handoffMachineLatest, completedHeldJob.id, completedHoldProof)
+    const handoffStateBefore = JSON.stringify(handoffState)
+    const handoff = model.buildProductionShiftHandoff(handoffState, shiftRef)
+    assert(handoff?.shiftRef === shiftRef
+      && handoff.sourceRevision === handoffState.revision
+      && handoff.sourceCanonical === model.productionStateCanonical(handoffState)
+      && handoff.shiftOutput.goodUnits === 5
+      && handoff.shiftOutput.scrapUnits === 2
+      && handoff.shiftOutput.entryCount === 2,
+    'production_shift_handoff_output_or_revision_wrong')
+    assert(handoff.unfinishedJobs.length === 1
+      && handoff.unfinishedJobs[0].id === 'JOB-1'
+      && handoff.unfinishedJobs[0].remainingUnits === 3
+      && handoff.unfinishedJobs[0].qualityHold?.evidenceReference === handoffHoldProof.evidenceReference,
+    'production_shift_handoff_unfinished_or_held_job_missing')
+    assert(handoff.shiftEntries.length === 2
+      && handoff.shiftEntries.some((entry) => entry.actionId === handoffOutputProof.actionId && entry.outputKind === 'good' && entry.quantity === 5)
+      && handoff.shiftEntries.some((entry) => entry.actionId === handoffScrapProof.actionId && entry.outputKind === 'scrap' && entry.quantity === 2)
+      && handoff.shiftEntries.every((entry) => entry.recordedBy === entry.recordedBy.trim() && entry.evidenceReference.startsWith('EV-')),
+    'production_shift_handoff_entries_lost_provenance')
+    assert(handoff.activeHolds.length === 2
+      && handoff.activeHolds.some((entry) => entry.id === 'JOB-1' && entry.target === 100 && entry.goodUnits === 95 && entry.scrapUnits === 2 && entry.remainingUnits === 3 && entry.qualityHold.heldAt === handoffHoldProof.capturedAt)
+      && handoff.activeHolds.some((entry) => entry.id === completedHeldJob.id && entry.target === 10 && entry.goodUnits === 10 && entry.scrapUnits === 0 && entry.remainingUnits === 0 && entry.qualityHold.actionId === completedHoldProof.actionId),
+    'production_shift_handoff_completed_or_unfinished_hold_missing')
+    assert(handoff.priorityProblems.length === 3
+      && handoff.priorityProblems.map((entry) => entry.id).join(',') === 'ISS-CRITICAL,ISS-Z,ISS-Á'
+      && handoff.priorityProblems[0].openedAt === handoffCriticalProof.capturedAt
+      && handoff.priorityProblems[0].openedBy === handoffCriticalProof.actor
+      && handoff.priorityProblems[0].evidenceReference === handoffCriticalProof.evidenceReference,
+    'production_shift_handoff_priority_problem_wrong')
+    assert(handoff.machineObservations.length === 2
+      && handoff.machineObservations[0].state === 'stopped'
+      && handoff.machineObservations[0].observation?.actionId === handoffMachineLatestProof.actionId
+      && handoff.machineObservations[0].observation?.evidenceReference === handoffMachineLatestProof.evidenceReference
+      && handoff.machineObservations[1].id === 'MC-2'
+      && handoff.machineObservations[1].observation === null,
+    'production_shift_handoff_machine_observation_wrong')
+    assert(JSON.stringify(handoff) === JSON.stringify(model.buildProductionShiftHandoff(handoffState, shiftRef)), 'production_shift_handoff_not_deterministic')
+    assert(JSON.stringify(handoffState) === handoffStateBefore, 'production_shift_handoff_mutated_state')
+    const reorderedHandoffState = {
+      events: handoffState.events,
+      machines: handoffState.machines,
+      issues: handoffState.issues,
+      jobs: handoffState.jobs,
+      revision: handoffState.revision,
+      schema: handoffState.schema,
+    }
+    assert(model.productionStateCanonical(reorderedHandoffState) === handoff.sourceCanonical, 'production_shift_handoff_source_depended_on_key_order')
+    const sameRevisionChangedState = model.validateProductionState({
+      ...handoffState,
+      jobs: handoffState.jobs.map((job) => job.id === 'JOB-1' ? { ...job, output: job.output + 1 } : job),
+    })
+    assert(model.productionStateCanonical(sameRevisionChangedState) !== handoff.sourceCanonical, 'production_shift_handoff_source_missed_same_revision_change')
+    const handoffText = model.formatProductionShiftHandoff(handoff)
+    assert(handoffText.includes(`Plant shift handoff — ${shiftRef}`)
+      && handoffText.includes(handoffOutputProof.evidenceReference)
+      && handoffText.includes(handoffScrapProof.evidenceReference)
+      && handoffText.includes(handoffHoldProof.capturedAt)
+      && handoffText.includes(completedHoldProof.evidenceReference)
+      && handoffText.includes(handoffCriticalProof.capturedAt)
+      && handoffText.includes(handoffCriticalProof.actor)
+      && handoffText.includes(handoffMachineLatestProof.evidenceReference)
+      && handoffText.includes(handoffMachineLatestProof.reason)
+      && handoffText.includes('target 10 · 10 good · 0 scrap · 0 remaining')
+      && !handoffText.includes('completed output')
+      && !handoffText.includes(handoffMachineFirstProof.evidenceReference)
+      && !handoffText.includes(handoffMediumProblem.summary),
+    'production_shift_handoff_text_lost_or_invented_evidence')
+    const noObservationHandoff = model.buildProductionShiftHandoff(base, shiftRef)
+    assert(noObservationHandoff?.machineObservations[0].observation === null
+      && model.formatProductionShiftHandoff(noObservationHandoff).includes('no attributed observation recorded'),
+    'production_shift_handoff_missing_no_observation_marker')
+    assert(['', ' Day', 'Day ', 'X'.repeat(81)].every((candidate) => model.buildProductionShiftHandoff(base, candidate) === null), 'production_shift_handoff_invalid_shift_accepted')
 
     let machineState = resolved
     const observedStates = ['attention', 'stopped', 'attention', 'running', 'stopped', 'running']
