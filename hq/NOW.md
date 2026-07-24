@@ -42,15 +42,16 @@ SuperMega HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are
 
 ## Verified baseline
 
-- Checkpoint `532b3b3` is the accepted local product and database-authority baseline.
+- Checkpoint `f9d587a` is the accepted local product and database-authority baseline.
 - App lint/build, the full local release/security/database/HQ contracts, and all 132 Python tests pass for the current product checkpoint.
-- HQ remains its own route chunk; the largest JavaScript chunk is 464,028 bytes, leaving 35,972 bytes under the hard gate.
+- The complete Showroom dependency audit reports zero known vulnerabilities. React Router is on the patched v8 line, the app declares Node `>=22.22.0`, and the lint toolchain preserves caught error causes.
+- HQ remains its own route chunk; the largest JavaScript chunk is 462,132 bytes, leaving 37,868 bytes under the hard gate.
 - Focused app-build coverage includes 112 Shop, 157 Plant, 74 Website, 11 managed-Website, 12 storefront, 15 request, 16 managed-storefront, and 16 Ecommerce handoff runtime checks.
 - Rendered 390-640 px journeys cover Shop fulfilment/stock, Plant output limits, Website recovery, maker actions, and the Ecommerce request path without overflow or pre-confirmation mutation.
 - PostgreSQL 17.10 passed 32 checks across two TLS clusters, including exact approval/event restore equality and the explicit trusted-server identity boundary.
 - Fresh 375 px App Home and three-page public-site audits have no overflow or browser errors; the bottom navigation reads Home, HQ, and Products, public Home measures 4.0 viewports, and Contact exposes only labelled controls.
 - A 390 px Website recovery audit passes with 44 px actions and no overflow or browser errors. Evidence v10 preserves exact Website and Ecommerce local records without duplicating Shop, Plant, or HQ; QA did not run the final repair.
-- GitHub `main` and production remain at `6885c320`; local `532b3b3` is +134 versus main and +88 versus integration. No push, merge, or deployment occurred.
+- GitHub `main` and production remain at `6885c320`; local `f9d587a` is +136 versus main and +90 versus integration. No push, merge, or deployment occurred.
 - Both canonical domains serve matching Vercel release identity from `supermega-public`. `demo.supermega.dev` returns 404; `shop.supermega.dev` has no DNS record.
 - `supermegabase` is healthy PostgreSQL 17.6 but has one older migration, no `app_private`, and none of the six private-trial migrations. Its 27 public tables have RLS and no policies; it is not an activated rehearsal target.
 
@@ -69,7 +70,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - Ecommerce has authenticated setup and inbox contracts, but no isolated hosted rehearsal or cross-device proof. Request retention stays capped at 100 until measured volume justifies an indexed queue.
 - Agent Teams is not a production runtime. Order Intake passed its 20-case evaluator, but no usable local OpenAI API key was found; the provider runner awaits a secure founder decision and still needs a three-minute human review workflow.
 - No isolated hosted Supabase branch or separate non-production project has repeated the local database proof.
-- The locally tracked canonical main ref is 134 commits behind this candidate. Production correctly follows GitHub `main`, so the live app cannot contain the validated local work until an owner-approved integration and coordinated release occurs.
+- The locally tracked canonical main ref is 136 commits behind this candidate. Production correctly follows GitHub `main`, so the live app cannot contain the validated local work until an owner-approved integration and coordinated release occurs.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
 
 ## Decisions in force
@@ -85,7 +86,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 ## Next evidence
 
 1. Keep the passing `/shop/`, `/plant/`, Website, Ecommerce, compatibility, and mobile journeys as regression evidence.
-2. Review the 134-commit release-candidate delta, then obtain explicit owner approval before any push, merge, deployment, or canonical-domain correction.
+2. Review the 136-commit release-candidate delta, then obtain explicit owner approval before any push, merge, deployment, or canonical-domain correction.
 3. Rehearse revisioned Ecommerce setup persistence and request retention on an owner-approved isolated non-production tenant and capture cross-device, replay, tenant-isolation, conflict, recovery, and zero-conversion evidence.
 4. Generate server-only Order Intake results with no operational tools, score all 20 fixtures, and expose a human review demo only after every quality and zero-side-effect gate passes.
 5. Provision and validate one isolated hosted Supabase rehearsal target before any production write enablement.
