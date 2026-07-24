@@ -9,6 +9,7 @@ import {
   LEGACY_WEBSITE_STORAGE_KEY,
   WEBSITE_ECOMMERCE_HANDOFF_KEY,
   WEBSITE_STORAGE_KEY,
+  readWebsiteEcommerceHandoff,
   type WebsiteOrderRecord,
 } from '../products/product-handoff'
 import {
@@ -1783,7 +1784,10 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
   const [payment, setPayment] = useState('KBZPay')
   const [preparedChannelDraft, setPreparedChannelDraft] = useState<ChannelOrderDraft | null>(null)
   const [preparedEcommerceDraft, setPreparedEcommerceDraft] = useState<EcommerceShopDraft | null>(null)
-  const [orderEntryMode, setOrderEntryMode] = useState<'manual' | 'message' | 'website' | 'ecommerce'>('manual')
+  const [orderEntryMode, setOrderEntryMode] = useState<'manual' | 'message' | 'online'>('manual')
+  const orderComposerRef = useRef<HTMLDialogElement>(null)
+  const orderComposerHeadingRef = useRef<HTMLHeadingElement>(null)
+  const orderComposerTriggerRef = useRef<HTMLButtonElement>(null)
   const preparedChannelRef = useRef<HTMLDivElement>(null)
   const consumedEcommerceDraftId = useRef('')
   const [actionTrigger, setActionTrigger] = useState<HTMLElement | null>(null)
@@ -1816,6 +1820,10 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
   const latestClose = commerce.closes.find((close) => close.operator)
   const importedWebsiteOrderIds = commerce.orders.flatMap((order) => order.sourceRecordId ? [order.sourceRecordId] : [])
   const websiteIntakes = commerceWebsiteIntakes(commerce)
+  const localWebsiteIntake = managedIdentity ? null : readWebsiteEcommerceHandoff()
+  const legacyWebsiteWorkWaiting = managedIdentity
+    ? websiteIntakes.some((intake) => intake.status === 'pending_confirmation')
+    : Boolean(localWebsiteIntake && (!localWebsiteIntake.order || !importedWebsiteOrderIds.includes(localWebsiteIntake.order.id)))
   const storefrontRequests = commerceStorefrontRequests(commerce)
   const pendingStorefrontRequests = storefrontRequests.filter((request) => (
     !commerce.orders.some((order) => order.sourceRecordId === request.id)
@@ -1855,6 +1863,11 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
         setPayment('')
         setOrderEntryMode('manual')
         setNotice(`${ecommerceNavigationDraft.id} is ready for Shop review. Choose payment, then review the order.`)
+        requestAnimationFrame(() => {
+          const dialog = orderComposerRef.current
+          if (dialog && !dialog.open) dialog.showModal()
+          orderComposerHeadingRef.current?.focus()
+        })
       })
       .catch(() => {
         if (current) setNotice('The Ecommerce request guard could not load. Nothing was prepared.')
@@ -1935,6 +1948,16 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
   const orderNotice = notice || commerceStorageError
   const commerceControlsDisabled = !commerceCanWrite || Boolean(pendingAction)
 
+  function openOrderComposer() {
+    if (!commerceCanWrite) {
+      setNotice('Shop changes are paused. Open Settings before adding an order.')
+      return
+    }
+    const dialog = orderComposerRef.current
+    if (dialog && !dialog.open) dialog.showModal()
+    requestAnimationFrame(() => orderComposerHeadingRef.current?.focus())
+  }
+
   function queueAction(action: Omit<PendingAccountableAction, 'id' | 'commandId' | 'domain'>): boolean {
     if (!commerceCanWrite) {
       setNotice('Shop changes are paused because this workspace cannot confirm writes. Reload or open Settings before retrying.')
@@ -1944,7 +1967,11 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
       setNotice(`Finish or cancel ${pendingAction.id} before reviewing another change.`)
       return false
     }
-    setActionTrigger(document.activeElement instanceof HTMLElement ? document.activeElement : null)
+    const trigger = action.kind === 'order_create'
+      ? orderComposerTriggerRef.current
+      : document.activeElement instanceof HTMLElement ? document.activeElement : null
+    setActionTrigger(trigger)
+    if (action.kind === 'order_create' && orderComposerRef.current?.open) orderComposerRef.current.close()
     setPendingAction({ ...action, id: uid('ACT'), commandId: commandUuid(), domain: 'commerce' })
     setNotice('Review the change, accountable operator, and evidence before it is applied.')
     return true
@@ -2442,20 +2469,21 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
   const actionGate = <AccountableActionGate authenticatedActor={managedIdentity ? { id: managedIdentity.userId, label: managedIdentity.email } : undefined} key={pendingAction?.id ?? 'commerce-idle'} action={pendingAction} onCancel={() => { setPendingAction(null); setNotice('Change cancelled. Shop data was not modified.') }} onConfirm={confirmAction} returnFocus={actionTrigger} />
   const actionHistory = managedIdentity ? null : <ActionHistory actions={actions} domain="commerce" />
 
-  if (tab === 'orders') return <div className="operation-module">
+  if (tab === 'orders') return <div className="operation-module orders-module">
     {commerceBoundary}
-    <div className="split-workspace order-view">
-    <section className="core-panel order-form-panel">
-      <div className="panel-head"><div><span className="core-eyebrow">New order</span><h2>How did this order arrive?</h2></div><span className={`status-pill ${selected ? 'ready' : 'pending'}`}>{selected ? `${selected.onHand} available` : 'No items'}</span></div>
+    <section className="core-panel order-queue-panel order-workspace">
+      <div className="panel-head"><div><span className="core-eyebrow">Orders</span><h2>{actionOrders.length} {actionOrders.length === 1 ? 'order needs' : 'orders need'} action</h2></div><div className="order-queue-actions"><span className="panel-note">{openOrders.length} in fulfilment</span><button className="core-button primary compact" disabled={!commerceCanWrite || Boolean(pendingAction)} onClick={openOrderComposer} ref={orderComposerTriggerRef} type="button">New order</button></div></div>
+      <OrderList canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} disabled={commerceControlsDisabled} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} orders={actionOrders} />
+    </section>
+    <dialog aria-labelledby="order-composer-title" className="order-composer-dialog" ref={orderComposerRef}>
+      <div className="order-composer-head"><div><span className="core-eyebrow">New order</span><h2 id="order-composer-title" ref={orderComposerHeadingRef} tabIndex={-1}>Add an order</h2><p>Choose the fastest source. Nothing changes until the separate confirmation step.</p></div><button aria-label="Close new order" className="core-button compact" onClick={() => orderComposerRef.current?.close()} type="button">Close</button></div>
       <div aria-label="Order source" className="order-entry-methods" role="group">
-        <button aria-pressed={orderEntryMode === 'manual'} disabled={Boolean(pendingAction)} onClick={() => setOrderEntryMode('manual')} type="button">Enter</button>
-        <button aria-pressed={orderEntryMode === 'message'} disabled={Boolean(pendingAction)} onClick={() => setOrderEntryMode('message')} type="button">Message</button>
-        <button aria-pressed={orderEntryMode === 'website'} disabled={Boolean(pendingAction)} onClick={() => setOrderEntryMode('website')} type="button">Website</button>
-        <button aria-pressed={orderEntryMode === 'ecommerce'} disabled={Boolean(pendingAction)} onClick={() => setOrderEntryMode('ecommerce')} type="button">Ecommerce</button>
+        <button aria-pressed={orderEntryMode === 'manual'} disabled={Boolean(pendingAction)} onClick={() => setOrderEntryMode('manual')} type="button">Enter order</button>
+        <button aria-pressed={orderEntryMode === 'message'} disabled={Boolean(pendingAction)} onClick={() => setOrderEntryMode('message')} type="button">From message</button>
+        <button aria-pressed={orderEntryMode === 'online'} disabled={Boolean(pendingAction)} onClick={() => setOrderEntryMode('online')} type="button">Online request</button>
       </div>
-      {orderEntryMode === 'website' ? <div className="order-entry-panel" data-mode="website"><WebsiteCommerceIntake catalog={commerce.items} disabled={commerceControlsDisabled} importedSourceIds={importedWebsiteOrderIds} key={`${managedIdentity ? 'managed' : 'local'}:${websiteIntakes.find((intake) => intake.status === 'pending_confirmation')?.id ?? 'none'}`} managedIntakes={websiteIntakes} mode={managedIdentity ? 'managed' : 'local'} onQueueManagedIntake={queueManagedWebsiteIntake} onQueueReadyOrder={queueWebsiteOrder} /></div> : null}
       {orderEntryMode === 'message' ? <div className="order-entry-panel" data-mode="message"><ChannelOrderIntake disabled={commerceControlsDisabled} items={commerce.items} onAcceptedFocus={() => requestAnimationFrame(() => preparedChannelRef.current?.focus())} onUse={useChannelDraft} /></div> : null}
-      {orderEntryMode === 'ecommerce' ? <div className="order-entry-panel" data-mode="ecommerce">
+      {orderEntryMode === 'online' ? <div className="order-entry-panel" data-mode="online">
         <section className="website-intake">
           <div className="website-intake-head"><div><span className="core-eyebrow">Ecommerce inbox</span><strong>{pendingStorefrontRequests.length} requests waiting</strong></div><span className={`status-pill ${managedIdentity ? 'bounded' : 'pending'}`}>{managedIdentity ? 'Managed' : 'Not connected'}</span></div>
           {managedIdentity && pendingStorefrontRequests.length ? pendingStorefrontRequests.slice(0, 20).map((request) => <div className="website-intake-ready" key={request.id}>
@@ -2464,6 +2492,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
           </div>) : <div className="website-intake-record"><strong>{managedIdentity ? 'No Ecommerce request needs Shop review.' : 'Connect a managed workspace to use the shared inbox.'}</strong><small>No request creates an order, reserves stock, starts payment, sends a message, or requests delivery.</small></div>}
           <Link className="text-link" to="/products/ecommerce/">Open Ecommerce</Link>
         </section>
+        {legacyWebsiteWorkWaiting ? <details className="legacy-website-intake"><summary>Older Website order needs review</summary><WebsiteCommerceIntake catalog={commerce.items} disabled={commerceControlsDisabled} importedSourceIds={importedWebsiteOrderIds} key={`${managedIdentity ? 'managed' : 'local'}:${websiteIntakes.find((intake) => intake.status === 'pending_confirmation')?.id ?? 'none'}`} managedIntakes={websiteIntakes} mode={managedIdentity ? 'managed' : 'local'} onQueueManagedIntake={queueManagedWebsiteIntake} onQueueReadyOrder={queueWebsiteOrder} /></details> : null}
       </div> : null}
       {orderEntryMode === 'manual' ? <>
         <div className="order-entry-panel" data-mode="manual" data-notice={Boolean(orderNotice)}>
@@ -2503,9 +2532,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
         </div>
         <div className="order-submit-bar">{orderNotice ? <p className="form-notice" aria-live="polite">{orderNotice}</p> : null}<button className="core-button primary" disabled={commerceControlsDisabled} form="commerce-manual-order-form" type="submit">Review order</button></div>
       </> : null}
-    </section>
-    <section className="core-panel order-queue-panel"><div className="panel-head"><div><span className="core-eyebrow">Fulfilment</span><h2>{actionOrders.length} orders need action</h2></div><span className="panel-note">{openOrders.length} in fulfilment</span></div><OrderList canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} disabled={commerceControlsDisabled} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} orders={actionOrders} /></section>
-  </div>
+    </dialog>
   <details className="core-panel today-more order-daily-controls">
     <summary><span>Close and exceptions</span><small>{paymentReview.length + lowStock.length} items need attention</small></summary>
     <div className="today-more-content">

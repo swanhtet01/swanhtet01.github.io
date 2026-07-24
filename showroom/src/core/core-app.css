@@ -219,7 +219,6 @@ textarea { min-height: 72px; resize: vertical; }
 .action-history-list article p { margin: 0; color: var(--core-green); font-family: var(--core-mono); font-size: 8px; }
 .action-history-list article > small { grid-column: 1/-1; }
 .form-panel, .guidance-panel, .output-panel, .decision-form-panel, .setup-form { overflow: auto; }
-.order-form-panel { display: flex; flex-direction: column; overflow: hidden; }
 .guidance-panel ol { display: grid; gap: 10px; margin: 18px 0 0; padding-left: 22px; color: var(--core-muted); font-size: 12px; }
 
 .review-workspace, .control-workspace, .module-today { height: 100%; min-height: 0; display: flex; flex-direction: column; gap: 11px; }
@@ -304,12 +303,20 @@ textarea { min-height: 72px; resize: vertical; }
 .today-more[open] > summary { border-bottom: 1px solid var(--core-line); }
 .today-more-content { display: grid; gap: 12px; padding: 15px 16px 17px; }
 
-.order-entry-methods { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 4px; margin-bottom: 14px; border-radius: 12px; padding: 4px; background: var(--core-panel-raised); }
+.orders-module > .order-workspace { flex: 1; }
+.order-queue-actions { display: flex; align-items: center; gap: 12px; }
+.order-composer-dialog { position: fixed; inset: 0; width: min(720px,calc(100% - 36px)); max-height: calc(100svh - 36px); margin: auto; overflow: hidden; border: 1px solid var(--core-line-strong); border-radius: 18px; padding: 20px; color: var(--core-ink); background: var(--core-panel); box-shadow: 0 30px 90px rgba(25,54,42,.24); }
+.order-composer-dialog[open] { display: flex; flex-direction: column; gap: 14px; }
+.order-composer-dialog::backdrop { background: rgba(19,25,41,.5); backdrop-filter: blur(6px); }
+.order-composer-head { flex: 0 0 auto; display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.order-composer-head h2 { margin: 4px 0; font-size: 24px; line-height: 1.1; letter-spacing: -.03em; }
+.order-composer-head p { margin: 0; color: var(--core-muted); font-size: 12px; line-height: 1.45; }
+.order-composer-head h2:focus { outline: none; }
+.order-entry-methods { flex: 0 0 auto; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 4px; margin-bottom: 0; border-radius: 12px; padding: 4px; background: var(--core-panel-raised); }
 .order-entry-methods button { min-height: 42px; border: 0; border-radius: 9px; background: transparent; color: var(--core-muted); font-size: 13px; font-weight: 740; cursor: pointer; }
 .order-entry-methods button[aria-pressed="true"] { background: #fff; color: var(--core-ink); box-shadow: 0 2px 10px rgba(31,68,51,.09); }
 .order-entry-methods button:disabled { cursor: not-allowed; opacity: .55; }
 .order-entry-panel { min-width: 0; min-height: 0; flex: 1; overflow: auto; }
-.order-entry-panel[data-mode="manual"][data-notice="false"] { overflow: visible; }
 .order-submit-bar { flex: 0 0 auto; border-top: 1px solid var(--core-line); padding-top: 11px; background: var(--core-panel); }
 .order-submit-bar .form-notice { margin: 0 0 8px; }
 .order-submit-bar .core-button { width: 100%; }
@@ -578,7 +585,14 @@ textarea { min-height: 72px; resize: vertical; }
 .website-intake-record, .website-intake-ready > div { min-width: 0; display: grid; gap: 4px; }
 .website-intake-record strong, .website-intake-ready strong { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .website-intake-record small, .website-intake-ready small { overflow: hidden; color: var(--core-quiet); font-family: var(--core-mono); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
-.order-entry-panel[data-mode="ecommerce"] .website-intake-record small { overflow: visible; line-height: 1.5; text-overflow: clip; white-space: normal; }
+.order-entry-panel[data-mode="online"] { display: grid; align-content: start; gap: 10px; }
+.order-entry-panel[data-mode="online"] .website-intake-record small { overflow: visible; line-height: 1.5; text-overflow: clip; white-space: normal; }
+.legacy-website-intake { overflow: hidden; border: 1px solid var(--core-line); border-radius: 10px; background: var(--core-panel-raised); }
+.legacy-website-intake > summary { min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 12px; color: var(--core-ink); font-size: 12px; font-weight: 760; cursor: pointer; list-style: none; }
+.legacy-website-intake > summary::-webkit-details-marker { display: none; }
+.legacy-website-intake > summary::after { color: var(--core-green); font-size: 18px; content: "+"; }
+.legacy-website-intake[open] > summary::after { content: "−"; }
+.legacy-website-intake > .website-intake { border: 0; border-top: 1px solid var(--core-line); border-radius: 0; box-shadow: none; }
 .website-intake-confirm { min-height: 44px; display: flex; align-items: center; gap: 8px; border: 1px solid var(--core-line); border-radius: 9px; padding: 7px 9px; background: #fff; font-size: 9px; line-height: 1.35; }
 .website-intake-confirm input { width: 16px; min-height: 16px; margin: 0; }
 .website-intake-completion { display: grid; gap: 8px; }
@@ -724,8 +738,7 @@ textarea { min-height: 72px; resize: vertical; }
   .settings-grid { min-height: 0; }
   .trial-control-panel { align-items: flex-start; }
   .agent-team-workspace { height: auto; }
-  .order-form-panel { display: block; }
-  .order-entry-panel { overflow: visible; }
+  .order-composer-dialog { inset: auto 0 0; width: 100%; max-height: 94svh; margin: 0 auto; border-radius: 18px 18px 0 0; padding: 16px; }
   .team-screen.mobile-focus-open > .page-heading,
   .team-screen.mobile-focus-open > .simple-toolbar,
   .team-screen.mobile-focus-open > .compact-summary { display: none; }
@@ -854,6 +867,9 @@ textarea { min-height: 72px; resize: vertical; }
 }
 
 @media (max-width: 480px) {
+  .order-composer-head { gap: 10px; }
+  .order-composer-head h2 { font-size: 21px; }
+  .order-entry-methods button { padding-inline: 6px; font-size: 12px; }
   .channel-field-nav { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .channel-field-nav button { min-height: 44px; font-size: 12px; }
   .website-intake-head, .website-intake-ready { align-items: flex-start; }
