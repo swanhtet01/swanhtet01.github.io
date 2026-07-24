@@ -47,8 +47,8 @@
       "status": "release-candidate-local",
       "path": "/products/ecommerce/",
       "job": "Create a simple customer storefront from a read-only Shop catalogue, then add structured order intent without duplicating Shop back-office records.",
-      "surfaces": ["Storefront", "Preview"],
-      "nextGate": "Pass desktop and mobile preview QA, then add a bounded customer order request and prove an idempotent human-confirmed handoff into Shop before adding checkout, payment, delivery, or external messaging."
+      "surfaces": ["Storefront", "Preview", "Request receipt"],
+      "nextGate": "Prove an idempotent human-confirmed handoff into a reviewable Shop draft, with digest, SKU, price, and availability revalidation, before adding cart, payment, delivery, persistence, or external messaging."
     },
     {
       "id": "agents",

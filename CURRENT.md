@@ -13,14 +13,14 @@ SuperMega builds simple operating products for Myanmar businesses. The customer 
 4. **Ecommerce** — a simple storefront and ordering surface that sends structured order intent into Shop.
 5. **AI Agent Solutions** — bounded assistants that prepare work inside the four products and always expose their inputs, output, evidence, and approval boundary.
 
-`commerce` and `production` remain stable internal runtime and database surface identifiers during migration. They are not customer-facing product names. Ecommerce is not a second Shop back office: it owns the customer storefront, product display, cart, and order-intent experience; Shop owns the accountable order, stock, fulfilment, payment-status, and close records.
+`commerce` and `production` remain stable internal runtime and database surface identifiers during migration. They are not customer-facing product names. Ecommerce is not a second Shop back office: it owns the customer storefront, product display, and order-intent experience; Shop owns the accountable order, stock, fulfilment, payment-status, and close records.
 
 ## Product status
 
 - **Shop** — implemented local release candidate at `/shop/` under the stable internal `commerce` runtime. `/operations/commerce/` is compatibility-only and resolves to the same records.
 - **Plant** — implemented local release candidate at `/plant/` under the stable internal `production` runtime. `/operations/production/` is compatibility-only and resolves to the same records.
 - **Website** — implemented local release candidate at `/products/website/`; it can produce a deterministic downloadable site artifact but cannot publish or change a domain.
-- **Ecommerce** — implemented local storefront-maker preview at `/products/ecommerce/`. It reads a Shop catalogue snapshot without changing it, lets the operator choose customer-visible products and copy, and produces a deterministic preview digest. Cart, customer order request, Shop handoff, payment, send, and publishing remain unimplemented.
+- **Ecommerce** — implemented local storefront maker at `/products/ecommerce/`. It reads a Shop catalogue snapshot without changing it, lets the operator choose customer-visible products and copy, produces a deterministic preview digest, and can create an idempotent in-memory request receipt marked `pending_shop_review`. The receipt is not durable and does not create a Shop order, reserve stock, take payment, send, request delivery, or publish.
 - **AI Agent Solutions** — planned real prototype at `/agents/`. The first solution is Order Intake: approved message or form input to a structured draft, with provenance, evaluation, human review, and zero side effects.
 
 No local demo, passing test, healthy provider, or generated artifact is proof of a live customer system, revenue, production persistence, or autonomous operation.
@@ -33,7 +33,7 @@ Canonical host: `app.supermega.dev`
 - `/shop/` — Shop Orders first; Stock second.
 - `/plant/` — Plant Jobs first; Problems second.
 - `/products/website/` — Website Site, Preview, and Publish workflow.
-- `/products/ecommerce/` — Ecommerce storefront setup and responsive preview; clearly local and non-publishing.
+- `/products/ecommerce/` — Ecommerce storefront setup, responsive preview, and local request receipt; clearly non-durable and non-publishing.
 - `/agents/` — reserved Agent Solutions workspace; do not present it as available until Order Intake passes evaluation and review gates.
 - `/work/` — internal SuperMega HQ work and agent-team coordination.
 - `/settings/` — setup, evidence export, reset, and managed-readiness utility.
@@ -109,8 +109,7 @@ AI and delegated agents may not independently send customer messages, charge or 
 
 ## Current execution order
 
-1. Correct public and in-app identity to Shop and Plant while retaining stable internal data contracts.
-2. Extend the passing Ecommerce storefront preview with a customer order request and human-confirmed Shop handoff.
-3. Make Order Intake the first evaluated, reviewable AI Agent Solution.
-4. Validate Website with one named business and accepted artifact.
-5. Repeat Shop and Plant on one isolated hosted tenant before any production write activation.
+1. Add a human-confirmed, idempotent Ecommerce request handoff that creates a reviewable Shop draft without reserving stock or taking payment.
+2. Run Order Intake through a real server-only provider and expose review UI only if the completed evaluator passes.
+3. Validate Website with one named business and accepted artifact.
+4. Repeat Shop and Plant on one isolated hosted tenant before any production write activation.

@@ -31,7 +31,8 @@ Claude coordination is paused by founder direction.
 | RND-001 | Product R&D Codex | done-local | Define Ecommerce as a customer storefront and order-intent product distinct from Shop. | Read-only Git history audit | Keep the five deleted back-office files deleted; reuse only fingerprint, idempotency, publish, and intake-boundary patterns. |
 | RND-002 | AI Product R&D Codex | done-local | Select the first real AI Agent Solution. | Read-only current-code audit | Order Intake is first: approved input to structured source-backed draft, human accept/discard, zero side effects, and a golden-set gate. |
 | ENG-003 | Ecommerce Codex | done-local | Build Ecommerce slice 1: deterministic storefront configuration and responsive preview from a read-only Shop catalogue snapshot. | Focused Ecommerce maker, route, catalogue, styles, and verifier only; no Shop mutation | Lint, build, 11 runtime checks, full local release gates, and 1280/375 px browser review pass; no push or deploy. |
-| ENG-006 | Ecommerce Codex | queued | Build Ecommerce slice 2: a bounded customer order request that stops before Shop consequences. | Storefront request contract and local preview UI only | Immutable storefront digest and item/price snapshot; idempotent request receipt; no stock, Shop order, payment, send, fulfilment, or external write. |
+| ENG-006 | Ecommerce Codex | done-local | Build Ecommerce slice 2: a bounded customer order request that stops before Shop consequences. | Storefront request contract and local preview UI only | Immutable storefront digest and item/price snapshot; idempotent in-memory request receipt; 13 request-contract checks and 1280/375 px browser review pass; no stock, Shop order, payment, send, fulfilment, persistence, or external write. |
+| ENG-007 | Shop + Ecommerce Codex | queued | Add the human-confirmed Ecommerce-to-Shop draft handoff. | Local adapter, confirmation UI, idempotency record, and focused tests only | Revalidate digest, SKU, price, and availability; one explicit confirmation creates one reviewable Shop draft; stale, duplicate, sold-out, and conflicting requests fail closed; no stock reservation, fulfilment, payment, send, persistence, or external write. |
 | ENG-004 | Agent Solutions Codex | done-local | Complete the Order Intake evaluation gate before model or UI integration. | Order-intake evaluator, CLI, and tests only | The 20-case multilingual/adversarial harness requires latency, token, estimated-cost, retry, refusal, correction, schema-validity, provenance, fabricated-fact, and unsafe-ready evidence; 114 tests pass. |
 | ENG-005 | Agent Solutions Codex | queued | Add a server-only Order Intake provider runner with no operational tools or durable raw-message retention. | Provider adapter, API boundary, fake-client tests, and sanitized result writer only | No client secret exposure; strict structured output; one model call; no tools; bounded input/output; every result satisfies the evaluator document contract; failures produce no draft. |
 | OPS-001 | Platform / owner | blocked-owner | Repeat the private trial on one isolated hosted Supabase target. | Hosted write only after explicit approval | Five migrations, runtime role, isolation, revocation, recovery, Security Advisor, and pooler evidence. |
@@ -92,8 +93,7 @@ Every worker handoff contains:
 
 ## Execution order
 
-1. Finish CEO-006 and QA-002; commit one reviewed identity correction.
-2. Start ENG-005 before exposing an Agents demo; a provider run must pass ENG-004's evaluator first.
-3. Start ENG-006 from the passing ENG-003 storefront contract; Shop handoff remains a later human-confirmed slice.
-4. Run PILOT-001 only after the corrected Shop route and language pass.
-5. Keep OPS-001 and all production release activity owner-gated.
+1. Start ENG-007 from the passing ENG-006 receipt contract; Shop consequences remain behind explicit human confirmation.
+2. Start ENG-005 only after the owner chooses whether to reuse or securely create the OpenAI API key; a provider run must pass ENG-004's evaluator before any Agents demo.
+3. Run PILOT-001 only after the corrected Shop route and language pass.
+4. Keep OPS-001 and all production release activity owner-gated.
