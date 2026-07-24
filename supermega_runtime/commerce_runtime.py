@@ -20,6 +20,7 @@ COMMERCE_EVENTS = frozenset(
         "commerce.order.advanced",
         "commerce.order.cancelled",
         "commerce.payment.reconciled",
+        "commerce.refund.settled",
         "commerce.stock.received",
         "commerce.close.saved",
         "commerce.website_intake.created",
@@ -34,6 +35,7 @@ COMMERCE_HUMAN_EVENTS = frozenset(
         "commerce.order.advanced",
         "commerce.order.cancelled",
         "commerce.payment.reconciled",
+        "commerce.refund.settled",
         "commerce.stock.received",
         "commerce.close.saved",
         "commerce.website_intake.converted",
@@ -42,7 +44,7 @@ COMMERCE_HUMAN_EVENTS = frozenset(
 _ORDER_STATUSES = ("confirmed", "preparing", "ready", "completed", "cancelled")
 _NEXT_ORDER_STATUS = {"confirmed": "preparing", "preparing": "ready", "ready": "completed"}
 _PAYMENT_STATUSES = ("pending", "reconciled")
-_REFUND_STATUSES = ("none", "due")
+_REFUND_STATUSES = ("none", "due", "settled")
 _MOVEMENT_KINDS = ("opening", "reserve", "release", "receipt")
 _WEBSITE_INTAKE_STATUSES = ("pending_confirmation", "converted")
 _MAX_SAFE_INTEGER = 9_007_199_254_740_991
@@ -74,6 +76,11 @@ _ORDER_OPTIONAL_FIELDS = frozenset(
         "paymentReconciledBy",
         "paymentReconciliationReason",
         "paymentEvidenceReference",
+        "refundSettledAt",
+        "refundSettlementActionId",
+        "refundSettledBy",
+        "refundSettlementReason",
+        "refundEvidenceReference",
         "fulfilment",
         "sourceRecordId",
         "evidenceReference",
@@ -102,6 +109,15 @@ _CLOSE_SNAPSHOT_FIELDS = frozenset(
         "operator",
         "reason",
         "evidenceReference",
+    }
+)
+_REFUND_SETTLEMENT_FIELDS = frozenset(
+    {
+        "refundSettledAt",
+        "refundSettlementActionId",
+        "refundSettledBy",
+        "refundSettlementReason",
+        "refundEvidenceReference",
     }
 )
 _CLOSE_ID_PATTERN = re.compile(
@@ -231,6 +247,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     order_ids: list[str] = []
     source_record_ids: list[str] = []
     reconciliation_action_ids: list[str] = []
+    refund_settlement_action_ids: list[str] = []
     order_by_id: dict[str, dict[str, Any]] = {}
     for index, candidate in enumerate(orders):
         order = _object(candidate, f"orders[{index}]")
@@ -272,21 +289,38 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         elif present_reconciliation_fields:
             raise TrialValidationError(f"orders[{index}] cannot carry reconciliation evidence while payment is pending.")
 
-        if order["refundStatus"] == "due" and not (
+        present_refund_settlement_fields = _REFUND_SETTLEMENT_FIELDS & set(order)
+        if order["refundStatus"] == "settled":
+            if present_refund_settlement_fields != _REFUND_SETTLEMENT_FIELDS:
+                raise TrialValidationError(f"orders[{index}] requires complete refund settlement evidence.")
+            _timestamp(order["refundSettledAt"], f"orders[{index}].refundSettledAt")
+            refund_settlement_action_ids.append(
+                _text(order["refundSettlementActionId"], f"orders[{index}].refundSettlementActionId", maximum=160)
+            )
+            _text(order["refundSettledBy"], f"orders[{index}].refundSettledBy")
+            _text(order["refundSettlementReason"], f"orders[{index}].refundSettlementReason")
+            _text(order["refundEvidenceReference"], f"orders[{index}].refundEvidenceReference")
+        elif present_refund_settlement_fields:
+            raise TrialValidationError(
+                f"orders[{index}] cannot carry settlement evidence while refund is {order['refundStatus']}."
+            )
+
+        if order["refundStatus"] in {"due", "settled"} and not (
             order["status"] == "cancelled" and order["paymentStatus"] == "reconciled"
         ):
             raise TrialValidationError(f"orders[{index}] has an invalid refund exception.")
         if (
             order["status"] == "cancelled"
             and order["paymentStatus"] == "reconciled"
-            and order["refundStatus"] != "due"
+            and order["refundStatus"] not in {"due", "settled"}
         ):
-            raise TrialValidationError(f"orders[{index}] must preserve the refund due exception.")
+            raise TrialValidationError(f"orders[{index}] must preserve a due or settled refund.")
         order_ids.append(order_id)
         order_by_id[order_id] = order
     _unique(order_ids, "Order ID")
     _unique(source_record_ids, "Order source record ID")
     _unique(reconciliation_action_ids, "Payment reconciliation action ID")
+    _unique(refund_settlement_action_ids, "Refund settlement action ID")
 
     movement_ids: list[str] = []
     movement_action_ids: list[str] = []
@@ -555,6 +589,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         [
             *(action_id for action_id in movement_action_ids if action_id not in conversion_action_ids),
             *reconciliation_action_ids,
+            *refund_settlement_action_ids,
             *intake_action_ids,
             *close_action_ids,
         ],
@@ -591,7 +626,12 @@ def _proof_matches_evidence(proof: Mapping[str, Any], evidence: Mapping[str, str
     )
 
 
-def _validate_event_evidence(event_type: str, next_state: Mapping[str, Any], evidence: Mapping[str, str]) -> None:
+def _validate_event_evidence(
+    event_type: str,
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+    evidence: Mapping[str, str],
+) -> None:
     if event_type == "commerce.website_intake.created":
         creation = next_state["websiteIntakes"][0]["creation"]
         if not _proof_matches_evidence(creation, evidence):
@@ -641,6 +681,16 @@ def _validate_event_evidence(event_type: str, next_state: Mapping[str, Any], evi
             or order.get("paymentEvidenceReference") != evidence["evidenceReference"]
         ):
             raise TrialValidationError("command evidence must match the payment reconciliation evidence.")
+    elif event_type == "commerce.refund.settled":
+        _, order = _one_changed(current["orders"], next_state["orders"], "orders")
+        if (
+            order.get("refundSettlementActionId") != evidence["actionId"]
+            or order.get("refundSettledAt") != evidence["capturedAt"]
+            or order.get("refundSettledBy") != evidence["actor"]
+            or order.get("refundSettlementReason") != evidence["reason"]
+            or order.get("refundEvidenceReference") != evidence["evidenceReference"]
+        ):
+            raise TrialValidationError("command evidence must match the refund settlement evidence.")
     elif event_type == "commerce.close.saved":
         close = next_state["closes"][0]
         if (
@@ -792,6 +842,21 @@ def _validate_reconciled(current: Mapping[str, Any], next_state: Mapping[str, An
         raise TrialValidationError("payment reconciliation requires complete evidence.")
 
 
+def _validate_refund_settled(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
+    _require_unchanged(current, next_state, "items", "movements", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    before, after = _one_changed(current["orders"], next_state["orders"], "orders")
+    if before["refundStatus"] != "due" or after["refundStatus"] != "settled":
+        raise TrialValidationError("only a due refund can be settled.")
+    if _without(before, frozenset({"refundStatus"})) != _without(
+        after,
+        _REFUND_SETTLEMENT_FIELDS | {"refundStatus"},
+    ):
+        raise TrialValidationError("refund settlement may change only refund status and settlement evidence.")
+    if not _REFUND_SETTLEMENT_FIELDS.issubset(after):
+        raise TrialValidationError("refund settlement requires complete evidence.")
+
+
 def _validate_received(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
     _require_unchanged(current, next_state, "orders", "closes")
     _require_website_intakes_unchanged(current, next_state)
@@ -900,6 +965,7 @@ _TRANSITION_VALIDATORS = {
     "commerce.order.advanced": _validate_advanced,
     "commerce.order.cancelled": _validate_cancelled,
     "commerce.payment.reconciled": _validate_reconciled,
+    "commerce.refund.settled": _validate_refund_settled,
     "commerce.stock.received": _validate_received,
     "commerce.close.saved": _validate_close,
     "commerce.website_intake.created": _validate_website_intake_created,
@@ -932,7 +998,7 @@ def reduce_commerce_state(
 
     current_state = validate_commerce_state(current)
     _TRANSITION_VALIDATORS[event_type](current_state, next_state)
-    _validate_event_evidence(event_type, next_state, evidence)
+    _validate_event_evidence(event_type, current_state, next_state, evidence)
     return next_state
 
 

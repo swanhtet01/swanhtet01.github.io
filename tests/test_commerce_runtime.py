@@ -7,7 +7,13 @@ from uuid import uuid4
 
 from supermega_runtime.commerce_runtime import COMMERCE_HUMAN_EVENTS, validate_commerce_state
 from supermega_runtime.runtime import reduce_trial_state
-from supermega_runtime.trial_store import InMemoryTrialStore, TrialPrincipal, TrialValidationError
+from supermega_runtime.trial_store import (
+    InMemoryTrialStore,
+    TrialHumanApprovalRequired,
+    TrialIdempotencyConflict,
+    TrialPrincipal,
+    TrialValidationError,
+)
 
 
 NOW = "2026-07-23T09:00:00.000Z"
@@ -89,13 +95,20 @@ def movement(
     return record
 
 
-def action_evidence(action_id: str = "ACT-LIFECYCLE", *, captured_at: str = NOW) -> dict[str, str]:
+def action_evidence(
+    action_id: str = "ACT-LIFECYCLE",
+    *,
+    captured_at: str = NOW,
+    actor: str = "Accountable operator",
+    reason: str = "Verified against the source record.",
+    evidence_reference: str | None = None,
+) -> dict[str, str]:
     return {
         "actionId": action_id,
         "capturedAt": captured_at,
-        "actor": "Accountable operator",
-        "reason": "Verified against the source record.",
-        "evidenceReference": f"EV-{action_id}",
+        "actor": actor,
+        "reason": reason,
+        "evidenceReference": evidence_reference or f"EV-{action_id}",
     }
 
 
@@ -229,6 +242,69 @@ def created_state(order_id: str = "ORD-1") -> dict[str, object]:
     return state
 
 
+def cancelled_due_state(
+    order_ids: tuple[str, ...] = ("ORD-REFUND",),
+) -> dict[str, object]:
+    state = catalog_state()
+    orders: list[dict[str, object]] = []
+    movements: list[dict[str, object]] = []
+    for order_id in order_ids:
+        order = order_record(order_id)
+        order.update(
+            {
+                "paymentStatus": "reconciled",
+                "paymentReconciledAt": NOW,
+                "paymentReconciliationActionId": f"ACT-PAY-{order_id}",
+                "paymentReconciledBy": "Accountable operator",
+                "paymentReconciliationReason": "Matched payment before cancellation.",
+                "paymentEvidenceReference": f"EV-PAY-{order_id}",
+                "status": "cancelled",
+                "refundStatus": "due",
+            }
+        )
+        orders.append(order)
+        movements.extend(
+            (
+                movement("release", f"ACT-CANCEL-{order_id}", 2, order_id=order_id),
+                movement("reserve", f"ACT-{order_id}", -2, order_id=order_id),
+            )
+        )
+    state["orders"] = orders
+    state["movements"] = movements
+    return state
+
+
+def settled_refund_state(
+    current: dict[str, object],
+    *,
+    order_index: int = 0,
+    action_id: str = "ACT-REFUND-SETTLED",
+    captured_at: str = NOW,
+    actor: str = "Accountable operator",
+    reason: str = "Matched the external refund settlement record.",
+    evidence_reference: str | None = None,
+) -> dict[str, object]:
+    state = deepcopy(current)
+    evidence = action_evidence(
+        action_id,
+        captured_at=captured_at,
+        actor=actor,
+        reason=reason,
+        evidence_reference=evidence_reference,
+    )
+    state["orders"][order_index].update(  # type: ignore[index]
+        {
+            "refundStatus": "settled",
+            "refundSettledAt": evidence["capturedAt"],
+            "refundSettlementActionId": evidence["actionId"],
+            "refundSettledBy": evidence["actor"],
+            "refundSettlementReason": evidence["reason"],
+            "refundEvidenceReference": evidence["evidenceReference"],
+        }
+    )
+    return state
+
+
 def evidence_for(event_type: str, next_state: dict[str, object]) -> dict[str, str]:
     if event_type == "commerce.website_intake.created":
         return dict(next_state["websiteIntakes"][0]["creation"])  # type: ignore[index, arg-type]
@@ -253,6 +329,20 @@ def evidence_for(event_type: str, next_state: dict[str, object]) -> dict[str, st
             "actor": order["paymentReconciledBy"],
             "reason": order["paymentReconciliationReason"],
             "evidenceReference": order["paymentEvidenceReference"],
+        }
+    if event_type == "commerce.refund.settled":
+        settled_orders = [
+            order
+            for order in next_state["orders"]  # type: ignore[union-attr]
+            if order["refundStatus"] == "settled"
+        ]
+        order = settled_orders[0]
+        return {
+            "actionId": order["refundSettlementActionId"],
+            "capturedAt": order["refundSettledAt"],
+            "actor": order["refundSettledBy"],
+            "reason": order["refundSettlementReason"],
+            "evidenceReference": order["refundEvidenceReference"],
         }
     if event_type == "commerce.close.saved":
         close = next_state["closes"][0]  # type: ignore[index]
@@ -309,6 +399,7 @@ class CommerceRuntimeTests(unittest.TestCase):
                     "commerce.order.advanced",
                     "commerce.order.cancelled",
                     "commerce.payment.reconciled",
+                    "commerce.refund.settled",
                     "commerce.stock.received",
                     "commerce.close.saved",
                     "commerce.website_intake.converted",
@@ -754,6 +845,381 @@ class CommerceRuntimeTests(unittest.TestCase):
 
         with self.assertRaises(TrialValidationError):
             apply_event(result, "commerce.order.cancelled", cancelled)
+
+    def test_refund_states_require_exact_complete_unique_settlement_evidence(self) -> None:
+        legacy_none = created_state("ORD-NONE")
+        legacy_due = cancelled_due_state(("ORD-DUE",))
+        self.assertEqual(
+            validate_commerce_state(legacy_none)["orders"][0]["refundStatus"],  # type: ignore[index]
+            "none",
+        )
+        self.assertEqual(
+            validate_commerce_state(legacy_due)["orders"][0]["refundStatus"],  # type: ignore[index]
+            "due",
+        )
+
+        settled = settled_refund_state(legacy_due)
+        validated = validate_commerce_state(settled)
+        self.assertEqual(validated["orders"][0]["refundStatus"], "settled")  # type: ignore[index]
+        settlement_fields = (
+            "refundSettledAt",
+            "refundSettlementActionId",
+            "refundSettledBy",
+            "refundSettlementReason",
+            "refundEvidenceReference",
+        )
+        for field in settlement_fields:
+            with self.subTest(missing=field):
+                incomplete = deepcopy(settled)
+                del incomplete["orders"][0][field]  # type: ignore[index]
+                with self.assertRaises(TrialValidationError):
+                    validate_commerce_state(incomplete)
+
+        for legacy in (legacy_none, legacy_due):
+            with self.subTest(refund_status=legacy["orders"][0]["refundStatus"]):  # type: ignore[index]
+                unexpected_proof = deepcopy(legacy)
+                unexpected_proof["orders"][0]["refundSettledAt"] = NOW  # type: ignore[index]
+                with self.assertRaises(TrialValidationError):
+                    validate_commerce_state(unexpected_proof)
+
+        invalid_timestamp = deepcopy(settled)
+        invalid_timestamp["orders"][0]["refundSettledAt"] = "2026-07-23T09:00:00"  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(invalid_timestamp)
+
+        unsupported_field = deepcopy(settled)
+        unsupported_field["orders"][0]["refundProvider"] = "not-in-contract"  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(unsupported_field)
+
+        active_settlement = deepcopy(settled)
+        active_settlement["orders"][0]["status"] = "confirmed"  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(active_settlement)
+
+        missing_refund_exception = deepcopy(legacy_due)
+        missing_refund_exception["orders"][0]["refundStatus"] = "none"  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(missing_refund_exception)
+
+        cross_proof_collision = deepcopy(settled)
+        cross_proof_collision["orders"][0]["refundSettlementActionId"] = (  # type: ignore[index]
+            cross_proof_collision["orders"][0]["paymentReconciliationActionId"]  # type: ignore[index]
+        )
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(cross_proof_collision)
+
+        duplicate_refunds = cancelled_due_state(("ORD-REFUND-A", "ORD-REFUND-B"))
+        duplicate_refunds = settled_refund_state(
+            duplicate_refunds,
+            order_index=0,
+            action_id="ACT-REFUND-DUPLICATE",
+        )
+        duplicate_refunds = settled_refund_state(
+            duplicate_refunds,
+            order_index=1,
+            action_id="ACT-REFUND-DUPLICATE",
+        )
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(duplicate_refunds)
+
+    def test_refund_settlement_changes_one_due_order_and_matches_exact_command_proof(self) -> None:
+        current = cancelled_due_state(("ORD-REFUND", "ORD-OTHER"))
+        next_state = settled_refund_state(current)
+        proof = evidence_for("commerce.refund.settled", next_state)
+        result = apply_event(
+            current,
+            "commerce.refund.settled",
+            next_state,
+            proof,
+        )
+
+        self.assertEqual(result["orders"][0]["refundStatus"], "settled")  # type: ignore[index]
+        self.assertEqual(result["orders"][1], current["orders"][1])  # type: ignore[index]
+        for collection in ("items", "movements", "closes"):
+            self.assertEqual(result[collection], current[collection])
+
+        mismatches = {
+            "actionId": "ACT-REFUND-OTHER",
+            "capturedAt": "2026-07-23T09:01:00.000Z",
+            "actor": "Different accountable operator",
+            "reason": "Different settlement reason.",
+            "evidenceReference": "EV-REFUND-OTHER",
+        }
+        for field, value in mismatches.items():
+            with self.subTest(evidence_field=field):
+                changed_proof = {**proof, field: value}
+                with self.assertRaises(TrialValidationError):
+                    apply_event(
+                        current,
+                        "commerce.refund.settled",
+                        next_state,
+                        changed_proof,
+                    )
+
+        changed_order_data = deepcopy(next_state)
+        changed_order_data["orders"][0]["customer"] = "Changed customer"  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "commerce.refund.settled",
+                changed_order_data,
+            )
+
+        changed_other_order = deepcopy(next_state)
+        changed_other_order["orders"][1]["customer"] = "Changed other customer"  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "commerce.refund.settled",
+                changed_other_order,
+            )
+
+        changed_inventory = deepcopy(next_state)
+        changed_inventory["items"][0]["onHand"] = 9  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "commerce.refund.settled",
+                changed_inventory,
+            )
+
+        already_settled = deepcopy(result)
+        already_settled["orders"][0]["refundSettlementReason"] = "Second settlement."  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                result,
+                "commerce.refund.settled",
+                already_settled,
+            )
+
+        prior_settlement = cancelled_due_state(("ORD-DUE-NOW", "ORD-SETTLED-EARLIER"))
+        prior_settlement = settled_refund_state(
+            prior_settlement,
+            order_index=1,
+            action_id="ACT-REFUND-EARLIER",
+        )
+        new_settlement = settled_refund_state(
+            prior_settlement,
+            order_index=0,
+            action_id="ACT-REFUND-NOW",
+        )
+        prior_order = prior_settlement["orders"][1]  # type: ignore[index]
+        prior_proof = {
+            "actionId": prior_order["refundSettlementActionId"],
+            "capturedAt": prior_order["refundSettledAt"],
+            "actor": prior_order["refundSettledBy"],
+            "reason": prior_order["refundSettlementReason"],
+            "evidenceReference": prior_order["refundEvidenceReference"],
+        }
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                prior_settlement,
+                "commerce.refund.settled",
+                new_settlement,
+                prior_proof,  # type: ignore[arg-type]
+            )
+
+    def test_daily_close_keeps_due_refunds_open_and_excludes_settled_refunds(self) -> None:
+        current = cancelled_due_state(("ORD-DUE", "ORD-SETTLED"))
+        current = settled_refund_state(
+            current,
+            order_index=1,
+            action_id="ACT-REFUND-CLOSE",
+        )
+        close = close_record(current, CLOSE_ACTION_ID_2, close_id=CLOSE_ID_2)
+        self.assertEqual(close["paymentExceptionOrderIds"], ["ORD-DUE"])
+
+        next_state = deepcopy(current)
+        next_state["closes"] = [close]
+        accepted = apply_event(current, "commerce.close.saved", next_state)
+        self.assertEqual(
+            accepted["closes"][0]["paymentExceptionOrderIds"],  # type: ignore[index]
+            ["ORD-DUE"],
+        )
+
+        wrong_exceptions = deepcopy(next_state)
+        wrong_exceptions["closes"][0]["paymentExceptionOrderIds"] = [  # type: ignore[index]
+            "ORD-DUE",
+            "ORD-SETTLED",
+        ]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "commerce.close.saved",
+                wrong_exceptions,
+            )
+
+    def test_refund_settlement_store_replay_is_exact_human_only_and_workspace_scoped(self) -> None:
+        store = InMemoryTrialStore(reducer=reduce_trial_state)
+        operator = TrialPrincipal("workspace-refund", "Accountable operator", "human")
+        other_operator = TrialPrincipal("workspace-other", "Other operator", "human")
+        agent = TrialPrincipal("workspace-refund", "refund-agent", "agent")
+        for principal in (operator, other_operator, agent):
+            store.provision_membership(
+                workspace_id=principal.workspace_id,
+                actor_id=principal.actor_id,
+                actor_kind=principal.actor_kind,
+                capabilities=("commerce.write",),
+            )
+
+        initialized = store.apply_command(
+            operator,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.workspace.initialized",
+            expected_version=0,
+            payload={
+                "state": catalog_state(),
+                "evidence": action_evidence("ACT-STORE-INIT"),
+            },
+        )
+        other_initialized = store.apply_command(
+            other_operator,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.workspace.initialized",
+            expected_version=0,
+            payload={
+                "state": catalog_state(),
+                "evidence": action_evidence(
+                    "ACT-OTHER-INIT",
+                    actor=other_operator.actor_id,
+                ),
+            },
+        )
+        created_state_value = created_state("ORD-STORE-REFUND")
+        created = store.apply_command(
+            operator,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.order.created",
+            expected_version=initialized.version,
+            payload={
+                "state": created_state_value,
+                "evidence": evidence_for(
+                    "commerce.order.created",
+                    created_state_value,
+                ),
+            },
+        )
+        reconciled_state = deepcopy(created.state)
+        reconciled_state["orders"][0].update(  # type: ignore[index]
+            {
+                "paymentStatus": "reconciled",
+                "paymentReconciledAt": NOW,
+                "paymentReconciliationActionId": "ACT-STORE-REFUND-PAYMENT",
+                "paymentReconciledBy": operator.actor_id,
+                "paymentReconciliationReason": "Matched payment before cancellation.",
+                "paymentEvidenceReference": "EV-STORE-REFUND-PAYMENT",
+            }
+        )
+        reconciled = store.apply_command(
+            operator,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.payment.reconciled",
+            expected_version=created.version,
+            payload={
+                "state": reconciled_state,
+                "evidence": evidence_for(
+                    "commerce.payment.reconciled",
+                    reconciled_state,
+                ),
+            },
+        )
+        cancelled_state = deepcopy(reconciled.state)
+        cancelled_state["items"][0]["onHand"] = 10  # type: ignore[index]
+        cancelled_state["orders"][0].update(  # type: ignore[index]
+            {"status": "cancelled", "refundStatus": "due"}
+        )
+        cancelled_state["movements"] = [
+            movement(
+                "release",
+                "ACT-STORE-REFUND-CANCEL",
+                2,
+                order_id="ORD-STORE-REFUND",
+            ),
+            *reconciled.state["movements"],  # type: ignore[misc]
+        ]
+        cancelled = store.apply_command(
+            operator,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.order.cancelled",
+            expected_version=reconciled.version,
+            payload={
+                "state": cancelled_state,
+                "evidence": evidence_for(
+                    "commerce.order.cancelled",
+                    cancelled_state,
+                ),
+            },
+        )
+        settled_state = settled_refund_state(
+            cancelled.state,
+            action_id="ACT-STORE-REFUND-SETTLED",
+            actor=operator.actor_id,
+        )
+        settlement_payload = {
+            "state": settled_state,
+            "evidence": evidence_for(
+                "commerce.refund.settled",
+                settled_state,
+            ),
+        }
+        settlement_command_id = str(uuid4())
+        settled = store.apply_command(
+            operator,
+            command_id=settlement_command_id,
+            surface="commerce",
+            event_type="commerce.refund.settled",
+            expected_version=cancelled.version,
+            payload=settlement_payload,
+        )
+        replay = store.apply_command(
+            operator,
+            command_id=settlement_command_id,
+            surface="commerce",
+            event_type="commerce.refund.settled",
+            expected_version=cancelled.version,
+            payload=settlement_payload,
+        )
+
+        self.assertEqual(settled.state["orders"][0], settled_state["orders"][0])  # type: ignore[index]
+        self.assertTrue(replay.idempotent_replay)
+        self.assertEqual(replay.state, settled.state)
+        other_state = store.get_state(other_operator, "commerce")
+        self.assertEqual(other_state.version, other_initialized.version)
+        self.assertEqual(other_state.state, other_initialized.state)
+
+        changed_payload = deepcopy(settlement_payload)
+        changed_payload["evidence"]["reason"] = "Changed replay reason."  # type: ignore[index]
+        changed_payload["state"]["orders"][0][  # type: ignore[index]
+            "refundSettlementReason"
+        ] = "Changed replay reason."
+        with self.assertRaises(TrialIdempotencyConflict):
+            store.apply_command(
+                operator,
+                command_id=settlement_command_id,
+                surface="commerce",
+                event_type="commerce.refund.settled",
+                expected_version=cancelled.version,
+                payload=changed_payload,
+            )
+
+        with self.assertRaises(TrialHumanApprovalRequired):
+            store.apply_command(
+                agent,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.refund.settled",
+                expected_version=settled.version,
+                payload=settlement_payload,
+            )
+        other_state_after = store.get_state(other_operator, "commerce")
+        self.assertEqual(other_state_after.version, other_initialized.version)
+        self.assertEqual(other_state_after.state, other_initialized.state)
 
     def test_store_preserves_revision_idempotency_and_authenticated_audit_actor(self) -> None:
         store = InMemoryTrialStore(reducer=reduce_trial_state)
