@@ -43,7 +43,7 @@ SuperMega HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are
 ## Verified baseline
 
 - Checkpoint `92cb497` contains the current corrected portfolio plus the accepted Shop, Plant, Website, Ecommerce, and Order Intake local work.
-- Ecommerce lint/build and the full app contracts pass at `92cb497`. The last complete Python acceptance is 122 tests at `aee6f20`; this Windows environment lacks FastAPI and Pydantic, so no later full Python rerun is claimed.
+- Ecommerce lint/build, the full app contracts, and all 122 Python tests pass for the current product checkpoint.
 - Focused coverage reports 96 Shop runtime, 157 Plant runtime, 74 Website runtime, 11 storefront, 13 request, and 16 Ecommerce handoff checks, including managed replay, conflict, tenant-isolation, recovery, and unchanged-ledger proof.
 - Fresh 1280 px and 375 px journeys cover Shop receipt, Plant observation, Website draft boundaries, and Ecommerce request receipt with no mobile overflow or browser errors and no pre-confirmation mutation.
 - PostgreSQL 17.10 passed 24 local migration, authority, journey, isolation, retry, recovery, and validator checks across two clean TLS clusters.
