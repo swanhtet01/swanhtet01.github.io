@@ -313,7 +313,7 @@ export function useWebsiteWorkspace(): {
         if (error instanceof ManagedTrialError && error.code === 'trial_capability_required') {
           const hiddenLocalWorkspace = createInitialWorkspace()
           managedIdentityRef.current = null
-          managedVersionRef.current = null
+          managedVersionRef.current = 0
           setManagedActorId('')
           workspaceRef.current = hiddenLocalWorkspace
           setWorkspace(hiddenLocalWorkspace)
