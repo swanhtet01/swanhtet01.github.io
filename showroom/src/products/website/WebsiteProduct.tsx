@@ -409,7 +409,7 @@ export function WebsiteProduct() {
 
   function addPage() {
     if (editorWorkspace.pages.length >= MAX_WEBSITE_PAGES) {
-      setNotice('This prototype is capped at four pages. Remove a draft before adding another.')
+      setNotice('This workspace supports up to four pages. Remove a draft before adding another.')
       return
     }
     const staged = stageWorkspace((current) => {
@@ -427,7 +427,7 @@ export function WebsiteProduct() {
 
   function copySelectedPage() {
     if (editorWorkspace.pages.length >= MAX_WEBSITE_PAGES) {
-      setNotice('This prototype is capped at four pages. Remove a draft before duplicating.')
+      setNotice('This workspace supports up to four pages. Remove a draft before duplicating.')
       return
     }
     const sourcePageId = selectedPage.id
@@ -625,7 +625,7 @@ export function WebsiteProduct() {
                         className="website-button is-secondary"
                         disabled={editorWorkspace.pages.length >= MAX_WEBSITE_PAGES}
                         onClick={addPage}
-                        title={editorWorkspace.pages.length >= MAX_WEBSITE_PAGES ? 'The four-page prototype limit is reached' : 'Add page'}
+                        title={editorWorkspace.pages.length >= MAX_WEBSITE_PAGES ? 'The four-page workspace limit is reached' : 'Add page'}
                         type="button"
                       >
                         New page
@@ -705,7 +705,7 @@ export function WebsiteProduct() {
                   </>
                 ) : (
                   <button className="website-button is-primary" onClick={() => openWorkspaceView('publish')} type="button">
-                    Publish
+                    Review site
                   </button>
                 )}
               </div>

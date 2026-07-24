@@ -309,7 +309,7 @@ export function ContentWorkspace({
 
       <footer className="website-panel-actions">
         <div>
-          <button className="website-button is-secondary" disabled={!canDuplicate} onClick={onDuplicate} title={canDuplicate ? 'Duplicate this page' : 'The four-page prototype limit is reached'} type="button">
+          <button className="website-button is-secondary" disabled={!canDuplicate} onClick={onDuplicate} title={canDuplicate ? 'Duplicate this page' : 'The four-page workspace limit is reached'} type="button">
             Duplicate
           </button>
           {page.slug !== '/' && page.stage === 'draft' ? (

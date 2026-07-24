@@ -512,6 +512,39 @@ export function EcommerceProduct() {
             </label>
           </div>
 
+          {missingSavedSkus.length ? (
+            <p className="ecommerce-selection-warning" role="status">
+              Saved products no longer in this Shop: <strong>{missingSavedSkus.join(', ')}</strong>. {missingSelectionReviewed
+                ? 'Current product selection reviewed; save when the preview is ready.'
+                : 'Select or remove a current product to confirm the replacement before saving.'}
+            </p>
+          ) : null}
+
+          <div className="ecommerce-catalog-head">
+            <strong>Shop products</strong>
+            <small>Select 1–8. Price and availability stay locked.</small>
+          </div>
+          {catalog.error ? <p className="form-notice warning-text">{catalog.error}</p> : null}
+          <div className="ecommerce-catalog-list">
+            {catalog.items.map((item) => {
+              const selected = selectedSkus.includes(item.sku)
+              return (
+                <button
+                  aria-pressed={selected}
+                  className="ecommerce-catalog-item"
+                  disabled={catalogHydrating || draftBusy || (!selected && selectedSkus.length >= 8)}
+                  key={item.sku}
+                  onClick={() => toggleSku(item.sku)}
+                  type="button"
+                >
+                  <span><strong>{item.name}</strong><small>{item.variant || item.sku}</small></span>
+                  <span><b>{formatMmk(item.price)}</b><small>{item.onHand > 0 ? 'Available' : 'Sold out'}</small></span>
+                  <i aria-hidden="true">{selected ? '✓' : '+'}</i>
+                </button>
+              )
+            })}
+          </div>
+
           <div
             aria-live="polite"
             className="ecommerce-save-bar"
@@ -548,38 +581,6 @@ export function EcommerceProduct() {
             </div>
           </div>
           <p className="ecommerce-save-notice" aria-live="polite">{draftNotice}</p>
-          {missingSavedSkus.length ? (
-            <p className="ecommerce-selection-warning" role="status">
-              Saved products no longer in this Shop: <strong>{missingSavedSkus.join(', ')}</strong>. {missingSelectionReviewed
-                ? 'Current product selection reviewed; save when the preview is ready.'
-                : 'Select or remove a current product to confirm the replacement before saving.'}
-            </p>
-          ) : null}
-
-          <div className="ecommerce-catalog-head">
-            <strong>Shop products</strong>
-            <small>Select 1–8. Price and availability stay locked.</small>
-          </div>
-          {catalog.error ? <p className="form-notice warning-text">{catalog.error}</p> : null}
-          <div className="ecommerce-catalog-list">
-            {catalog.items.map((item) => {
-              const selected = selectedSkus.includes(item.sku)
-              return (
-                <button
-                  aria-pressed={selected}
-                  className="ecommerce-catalog-item"
-                  disabled={catalogHydrating || draftBusy || (!selected && selectedSkus.length >= 8)}
-                  key={item.sku}
-                  onClick={() => toggleSku(item.sku)}
-                  type="button"
-                >
-                  <span><strong>{item.name}</strong><small>{item.variant || item.sku}</small></span>
-                  <span><b>{formatMmk(item.price)}</b><small>{item.onHand > 0 ? 'Available' : 'Sold out'}</small></span>
-                  <i aria-hidden="true">{selected ? '✓' : '+'}</i>
-                </button>
-              )
-            })}
-          </div>
         </section>
 
         <section className="core-panel ecommerce-preview-panel" aria-labelledby="ecommerce-preview-title" id="ecommerce-preview-panel">
@@ -599,7 +600,7 @@ export function EcommerceProduct() {
                   <b>{previewResult.preview.items.length} products</b>
                 </header>
                 <section className="storefront-hero">
-                  <small>ORDER ONLINE</small>
+                  <small>BROWSE &amp; REQUEST</small>
                   <h3>{previewResult.preview.storeName}</h3>
                   <p>{previewResult.preview.summary}</p>
                 </section>
@@ -708,7 +709,7 @@ export function EcommerceProduct() {
                   <span>I reviewed the SKU, quantity, MMK price, and current availability.</span>
                 </label>
                 <button className="core-button primary" disabled={!handoffConfirmed || !digest || catalogHydrating || handoffBusy} onClick={() => void (managedIdentity ? retainInManagedInbox() : sendToShopReview())} type="button">
-                  {handoffBusy ? 'Checking…' : managedIdentity ? 'Save to Shop inbox' : 'Send to Shop review'}
+                  {handoffBusy ? 'Checking…' : managedIdentity ? 'Save to Shop inbox' : 'Open draft in Shop'}
                 </button>
               </> : null}
               <p className="form-notice" aria-live="polite">{requestNotice || (managedIdentity
