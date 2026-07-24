@@ -81,6 +81,7 @@ import {
   loadProductionWorkspace,
   mutateProductionWorkspace,
   openProductionIssue,
+  productionIssueSeverities,
   productionMachineStates,
   productionShiftOutput,
   productionWorkspaceCanWrite,
@@ -93,6 +94,7 @@ import {
   type ProductionActionProof,
   type ProductionEvent,
   type ProductionIssue,
+  type ProductionIssueSeverity,
   type ProductionJob,
   type ProductionMachineState,
   type ProductionOutputKind,
@@ -362,6 +364,35 @@ const productionMachineStateLabels: Record<ProductionMachineState, string> = {
   running: 'Running',
   attention: 'Needs attention',
   stopped: 'Stopped',
+}
+
+const productionIssueSeverityLabels: Record<ProductionIssueSeverity, string> = {
+  critical: 'Critical',
+  high: 'High',
+  medium: 'Medium',
+  low: 'Low',
+}
+
+const productionIssueSeverityRank: Record<ProductionIssueSeverity, number> = {
+  critical: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
+}
+
+const wrappedIssueDetail = { overflow: 'visible', textOverflow: 'clip', whiteSpace: 'normal' } as const
+
+function localDateTimeInputValue(value: Date) {
+  const local = new Date(value.getTime() - value.getTimezoneOffset() * 60_000)
+  return local.toISOString().slice(0, 16)
+}
+
+function defaultIssueDueInput() {
+  return localDateTimeInputValue(new Date(Date.now() + 4 * 60 * 60 * 1000))
+}
+
+function formatIssueDue(value: string) {
+  return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(value))
 }
 
 function uid(prefix: string) {
@@ -2644,7 +2675,12 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const [shiftRef, setShiftRef] = useState('')
   const [area, setArea] = useState('Line 01')
   const [kind, setKind] = useState<ProductionIssue['kind']>('quality')
+  const [severity, setSeverity] = useState<ProductionIssueSeverity>('medium')
+  const [issueOwner, setIssueOwner] = useState('')
+  const [issueDueInput, setIssueDueInput] = useState(defaultIssueDueInput)
+  const [containment, setContainment] = useState('')
   const [summary, setSummary] = useState('')
+  const [issueClock, setIssueClock] = useState(Date.now)
   const [issueDialogOpen, setIssueDialogOpen] = useState(false)
   const [machineObservation, setMachineObservation] = useState<{ machineId: string; toState: ProductionMachineState } | null>(null)
   const [jobDraft, setJobDraft] = useState({ id: '', line: '', product: '', target: '' })
@@ -2657,8 +2693,17 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const issueTriggerRef = useRef<HTMLButtonElement>(null)
   const machineDialogRef = useRef<HTMLDialogElement>(null)
   const machineTriggerRef = useRef<HTMLButtonElement | null>(null)
-  const openIssues = production.issues.filter((issue) => issue.status === 'open')
+  const openIssues = production.issues
+    .filter((issue) => issue.status === 'open')
+    .sort((left, right) => {
+      const severityDifference = (left.severity ? productionIssueSeverityRank[left.severity] : 4)
+        - (right.severity ? productionIssueSeverityRank[right.severity] : 4)
+      if (severityDifference) return severityDifference
+      return (left.dueAt ? Date.parse(left.dueAt) : Number.POSITIVE_INFINITY)
+        - (right.dueAt ? Date.parse(right.dueAt) : Number.POSITIVE_INFINITY)
+    })
   const resolvedIssues = production.issues.filter((issue) => issue.status === 'resolved')
+  const urgentIssueCount = openIssues.filter((issue) => issue.severity === 'critical' || issue.severity === 'high').length
   const activeJobs = production.jobs.filter((job) => job.output + (job.scrap ?? 0) < job.target)
   const completedJobs = production.jobs.filter((job) => job.output + (job.scrap ?? 0) >= job.target)
   const selectedJobId = activeJobs.some((job) => job.id === jobId) ? jobId : activeJobs[0]?.id ?? ''
@@ -2672,6 +2717,11 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const machineObservationTargets = observedMachine
     ? productionMachineStates.filter((state) => state !== observedMachine.state)
     : []
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setIssueClock(Date.now()), 60_000)
+    return () => window.clearInterval(timer)
+  }, [])
 
   useEffect(() => {
     const dialog = issueDialogRef.current
@@ -2854,19 +2904,42 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
 
   function createIssue(event: FormEvent) {
     event.preventDefault()
-    if (!summary.trim()) return
-    const issue: ProductionIssue = { id: uid('ISS'), createdAt: new Date().toISOString(), area, kind, summary: summary.trim(), status: 'open' }
+    const createdAt = new Date()
+    const dueAt = new Date(issueDueInput)
+    const canonicalOwner = issueOwner.trim()
+    const canonicalContainment = containment.trim()
+    const canonicalSummary = summary.trim()
+    if (!canonicalSummary || !canonicalOwner || !canonicalContainment || Number.isNaN(dueAt.getTime()) || dueAt.getTime() <= createdAt.getTime()) {
+      setNotice('Add an owner, a future due time, and the next containment action before review.')
+      return
+    }
+    const issue: ProductionIssue = {
+      id: uid('ISS'),
+      createdAt: createdAt.toISOString(),
+      area,
+      kind,
+      summary: canonicalSummary,
+      status: 'open',
+      severity,
+      owner: canonicalOwner,
+      dueAt: dueAt.toISOString(),
+      containment: canonicalContainment,
+    }
     issueDialogRef.current?.close()
     setIssueDialogOpen(false)
     queueAction({
       kind: 'issue_create',
       subjectId: issue.id,
-      summary: `Open ${issue.kind} issue for ${issue.area}`,
+      summary: `Open ${productionIssueSeverityLabels[issue.severity ?? 'medium'].toLowerCase()} ${issue.kind} issue for ${issue.area}`,
       before: 'No issue record',
-      after: `${issue.id} - open`,
+      after: `${issue.id} · ${issue.owner} · due ${formatIssueDue(issue.dueAt ?? issue.createdAt)} · containment recorded`,
       apply: async (record) => {
         await mutateProduction('production.issue.opened', record.commandId, productionActionProof(record), (current) => openProductionIssue(current, issue, productionActionProof(record)))
         setSummary('')
+        setIssueOwner('')
+        setContainment('')
+        setSeverity('medium')
+        setIssueDueInput(defaultIssueDueInput())
       },
     }, issueTriggerRef.current)
   }
@@ -2878,7 +2951,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       kind: 'issue_resolution',
       subjectId: issueId,
       summary: `Resolve ${issueId}`,
-      before: issue.status,
+      before: issue.owner && issue.containment ? `${issue.status} · owner ${issue.owner} · containment: ${issue.containment}` : `${issue.status} · legacy issue without assigned owner`,
       after: 'resolved with operator evidence',
       apply: async (record) => {
         await mutateProduction('production.issue.resolved', record.commandId, productionActionProof(record), (current) => resolveProductionIssue(current, issueId, productionActionProof(record)))
@@ -2986,9 +3059,9 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
           {production.machines.length ? <div className="machine-list">{production.machines.map((machine) => <button aria-label={`Review recorded status for ${machine.name}; currently ${productionMachineStateLabels[machine.state]}`} disabled={!productionCanWrite || Boolean(pendingAction)} key={machine.id} type="button" onClick={(event) => openMachineObservation(machine.id, event.currentTarget)}><span className={`machine-dot ${machine.state}`} /><span><strong>{machine.name}</strong><small>{machine.id} - Recorded: {productionMachineStateLabels[machine.state]}</small></span><b>Record status</b></button>)}</div> : <Empty>No equipment records exist in this workspace.</Empty>}
         </section>
         <section className="core-panel production-issue-launcher">
-          <div className="panel-head"><div><span className="core-eyebrow">Shift review</span><h2>Open problems</h2></div><span className="panel-note">{openIssues.length} open</span></div>
-          <IssueList disabled={!productionCanWrite || Boolean(pendingAction)} issues={openIssues} onResolve={resolveIssue} />
-          <ResolvedIssueHistory issues={resolvedIssues} />
+          <div className="panel-head"><div><span className="core-eyebrow">Shift review</span><h2>Open problems</h2></div><span className="panel-note">{urgentIssueCount ? `${urgentIssueCount} urgent · ` : ''}{openIssues.length} open</span></div>
+          <IssueList disabled={!productionCanWrite || Boolean(pendingAction)} issues={openIssues} now={issueClock} onResolve={resolveIssue} />
+          <ResolvedIssueHistory issues={resolvedIssues} now={issueClock} />
           <button className="core-button primary" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => setIssueDialogOpen(true)} ref={issueTriggerRef} type="button">Open problem form</button>
         </section>
       </div>
@@ -3006,9 +3079,12 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     </dialog>
     <dialog aria-labelledby="production-issue-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); setIssueDialogOpen(false); requestAnimationFrame(() => issueTriggerRef.current?.focus()) }} ref={issueDialogRef}>
       <div className="panel-head"><div><span className="core-eyebrow">Plant problem</span><h2 id="production-issue-title">Record an observation</h2></div><button aria-label="Close problem form" className="text-link" onClick={() => { setIssueDialogOpen(false); requestAnimationFrame(() => issueTriggerRef.current?.focus()) }} type="button">Close</button></div>
-      <form className="core-form" onSubmit={createIssue}>
+      <form autoComplete="off" className="core-form" onSubmit={createIssue}>
         <div className="form-row"><label>Type<select value={kind} onChange={(event) => setKind(event.target.value as ProductionIssue['kind'])}><option value="quality">Quality</option><option value="maintenance">Maintenance</option><option value="materials">Materials</option><option value="operations">Operations</option></select></label><label>Area<select value={area} onChange={(event) => setArea(event.target.value)}><option>Line 01</option><option>Line 02</option><option>Line 03</option><option>Materials</option><option>Quality</option></select></label></div>
         <label>Observation<textarea autoFocus maxLength={240} required value={summary} onChange={(event) => setSummary(event.target.value)} placeholder="Describe what happened, not the assumption." /></label>
+        <div className="form-row"><label>Priority<select value={severity} onChange={(event) => setSeverity(event.target.value as ProductionIssueSeverity)}>{productionIssueSeverities.map((candidate) => <option key={candidate} value={candidate}>{productionIssueSeverityLabels[candidate]}</option>)}</select></label><label>Owner<input autoComplete="off" maxLength={120} name="plant-issue-owner" onChange={(event) => setIssueOwner(event.target.value)} placeholder="Named person or role" required value={issueOwner} /></label></div>
+        <label>Due time<input autoComplete="off" min={localDateTimeInputValue(new Date())} name="plant-issue-due" onChange={(event) => setIssueDueInput(event.target.value)} required type="datetime-local" value={issueDueInput} /></label>
+        <label>Containment / next action<textarea maxLength={240} onChange={(event) => setContainment(event.target.value)} placeholder="What happens next, and what stays on hold?" required value={containment} /></label>
         <p className="panel-copy">Nothing is saved until the next accountable review is confirmed.</p>
         <div className="form-actions"><button className="core-button" onClick={() => { setIssueDialogOpen(false); requestAnimationFrame(() => issueTriggerRef.current?.focus()) }} type="button">Cancel</button><button className="core-button primary" type="submit">Review problem</button></div>
       </form>
@@ -3038,24 +3114,33 @@ function CompletedJobHistory({ jobs }: { jobs: ProductionJob[] }) {
   </details>
 }
 
-function IssueList({ disabled = false, issues, onResolve }: { disabled?: boolean; issues: ProductionIssue[]; onResolve: (id: string) => void }) {
+function IssueList({ disabled = false, issues, now, onResolve }: { disabled?: boolean; issues: ProductionIssue[]; now: number; onResolve: (id: string) => void }) {
   if (!issues.length) return <Empty>No production issue is open.</Empty>
-  return <div className="issue-list">{issues.map((issue) => <article key={issue.id}>
-    <span className={`issue-mark ${issue.status}`}>{issue.status === 'open' ? '!' : '✓'}</span>
-    <div>
-      <strong>{issue.summary}</strong>
-      <small>{issue.id} · {issue.kind} · {issue.area} · {formatTime(issue.createdAt)}</small>
-      {issue.status === 'resolved' ? <small>{issue.resolution ? `Resolved by ${issue.resolution.resolvedBy} · Evidence: ${issue.resolution.evidenceReference}` : 'Legacy resolution · no attributed proof was available'}</small> : null}
-    </div>
-    {issue.status === 'open' ? <button className="text-link" disabled={disabled} onClick={() => onResolve(issue.id)} type="button">Review resolution</button> : <b>Resolved</b>}
-  </article>)}</div>
+  return <div className="issue-list">{issues.map((issue) => {
+    const actionable = Boolean(issue.severity && issue.owner && issue.dueAt && issue.containment)
+    const overdue = issue.status === 'open' && Boolean(issue.dueAt) && Date.parse(issue.dueAt ?? '') < now
+    const severityLabel = issue.severity ? productionIssueSeverityLabels[issue.severity] : 'Legacy'
+    return <article key={issue.id} title={issue.id}>
+      <span className={`issue-mark ${issue.status}`}>{issue.status === 'open' ? issue.severity?.charAt(0).toUpperCase() ?? '!' : '✓'}</span>
+      <div>
+        <strong>{issue.summary}</strong>
+        <small style={wrappedIssueDetail}>{severityLabel} · {issue.kind} · {issue.area} · opened {formatTime(issue.createdAt)}</small>
+        {actionable ? <>
+          <small style={wrappedIssueDetail}>{overdue ? 'OVERDUE' : `Due ${formatIssueDue(issue.dueAt ?? '')}`} · Owner {issue.owner}</small>
+          <small style={wrappedIssueDetail}>Next: {issue.containment}</small>
+        </> : <small style={wrappedIssueDetail}>Legacy problem · owner, due time, and containment were not recorded</small>}
+        {issue.status === 'resolved' ? <small style={wrappedIssueDetail}>{issue.resolution ? `Resolved by ${issue.resolution.resolvedBy} · Evidence: ${issue.resolution.evidenceReference}` : 'Legacy resolution · no attributed proof was available'}</small> : null}
+      </div>
+      {issue.status === 'open' ? <button className="text-link" disabled={disabled} onClick={() => onResolve(issue.id)} type="button">Review close</button> : <b>Resolved</b>}
+    </article>
+  })}</div>
 }
 
-function ResolvedIssueHistory({ issues }: { issues: ProductionIssue[] }) {
+function ResolvedIssueHistory({ issues, now }: { issues: ProductionIssue[]; now: number }) {
   if (!issues.length) return null
   return <details className="compact-disclosure production-history resolved-issue-history">
     <summary>Resolved problems <span>{issues.length}</span></summary>
-    <IssueList issues={issues.slice(0, 8)} onResolve={() => undefined} />
+    <IssueList issues={issues.slice(0, 8)} now={now} onResolve={() => undefined} />
     {issues.length > 8 ? <p>Showing the latest 8 resolved problems.</p> : null}
   </details>
 }

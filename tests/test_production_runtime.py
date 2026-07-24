@@ -146,6 +146,7 @@ def opened_issue_state(
     evidence: dict[str, str],
     *,
     issue_id: str = "ISSUE-REAL-001",
+    actionable: bool = True,
 ) -> dict[str, object]:
     state = deepcopy(current)
     issue = {
@@ -156,6 +157,25 @@ def opened_issue_state(
         "summary": "Measured output is outside the approved tolerance.",
         "status": "open",
     }
+    if actionable:
+        issue.update(
+            {
+                "severity": "high",
+                "owner": "Shift supervisor",
+                "dueAt": "2026-07-24T13:00:00.000Z",
+                "containment": "Hold the affected batch and verify the next sample.",
+            }
+        )
+    event_details = (
+        {
+            "issueSeverity": issue["severity"],
+            "issueOwner": issue["owner"],
+            "issueDueAt": issue["dueAt"],
+            "issueContainment": issue["containment"],
+        }
+        if actionable
+        else {}
+    )
     state["revision"] += 1
     state["issues"] = [issue, *state["issues"]]
     state["events"] = [
@@ -164,6 +184,7 @@ def opened_issue_state(
             kind="issue_opened",
             subject_id=issue_id,
             summary="Opened quality issue for Assembly team",
+            **event_details,
         ),
         *state["events"],
     ]
@@ -787,6 +808,126 @@ class ProductionRuntimeTests(unittest.TestCase):
                 unrelated,
                 resolve_evidence,
             )
+
+    def test_new_issue_requires_actionable_ownership_and_due_time(self) -> None:
+        current = starting_workspace()
+        evidence = action_evidence("ACT-ISSUE-ACTIONABLE")
+        proposed = opened_issue_state(current, evidence)
+        accepted = apply_event(
+            current,
+            "production.issue.opened",
+            proposed,
+            evidence,
+        )
+        issue = accepted["issues"][0]
+        self.assertEqual(issue["severity"], "high")
+        self.assertEqual(issue["owner"], "Shift supervisor")
+        self.assertEqual(issue["dueAt"], "2026-07-24T13:00:00.000Z")
+        self.assertEqual(
+            issue["containment"],
+            "Hold the affected batch and verify the next sample.",
+        )
+        self.assertEqual(accepted["events"][0]["issueSeverity"], issue["severity"])
+        self.assertEqual(accepted["events"][0]["issueOwner"], issue["owner"])
+        self.assertEqual(accepted["events"][0]["issueDueAt"], issue["dueAt"])
+        self.assertEqual(
+            accepted["events"][0]["issueContainment"],
+            issue["containment"],
+        )
+
+        for field in ("severity", "owner", "dueAt", "containment"):
+            missing = deepcopy(proposed)
+            missing["issues"][0].pop(field)
+            with self.subTest(missing=field), self.assertRaises(
+                TrialValidationError
+            ):
+                apply_event(
+                    current,
+                    "production.issue.opened",
+                    missing,
+                    evidence,
+                )
+
+        for field, value in (
+            ("severity", "urgent"),
+            ("owner", " Shift supervisor"),
+            ("dueAt", evidence["capturedAt"]),
+            ("containment", ""),
+        ):
+            invalid = deepcopy(proposed)
+            invalid["issues"][0][field] = value
+            with self.subTest(invalid=field), self.assertRaises(
+                TrialValidationError
+            ):
+                apply_event(
+                    current,
+                    "production.issue.opened",
+                    invalid,
+                    evidence,
+                )
+
+        incomplete_snapshot = deepcopy(proposed)
+        incomplete_snapshot["events"][0].pop("issueOwner")
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "production.issue.opened",
+                incomplete_snapshot,
+                evidence,
+            )
+
+        mismatched_snapshot = deepcopy(proposed)
+        mismatched_snapshot["events"][0]["issueOwner"] = "Different owner"
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "production.issue.opened",
+                mismatched_snapshot,
+                evidence,
+            )
+
+        delayed_evidence = action_evidence(
+            "ACT-ISSUE-DELAYED",
+            captured_at=LATER,
+        )
+        expired_at_confirmation = opened_issue_state(
+            current,
+            delayed_evidence,
+        )
+        expired_at_confirmation["issues"][0]["createdAt"] = NOW
+        expired_at_confirmation["issues"][0]["dueAt"] = "2026-07-24T09:10:00.000Z"
+        expired_at_confirmation["events"][0]["issueDueAt"] = (
+            "2026-07-24T09:10:00.000Z"
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "production.issue.opened",
+                expired_at_confirmation,
+                delayed_evidence,
+            )
+
+        legacy = opened_issue_state(
+            current,
+            action_evidence("ACT-ISSUE-LEGACY"),
+            actionable=False,
+        )
+        legacy_resolution = action_evidence(
+            "ACT-ISSUE-LEGACY-RESOLVE",
+            captured_at=LATER,
+        )
+        resolved_legacy = apply_event(
+            legacy,
+            "production.issue.resolved",
+            resolved_issue_state(legacy, legacy_resolution),
+            legacy_resolution,
+        )
+        self.assertNotIn("severity", resolved_legacy["issues"][0])
+        self.assertEqual(resolved_legacy["issues"][0]["status"], "resolved")
+        self.assertEqual(
+            resolved_legacy["issues"][0]["resolution"]["resolvedBy"],
+            ACTOR,
+        )
 
     def test_machine_state_accepts_truthful_distinct_observations(self) -> None:
         current = starting_workspace()

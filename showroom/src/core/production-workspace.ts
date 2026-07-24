@@ -4,6 +4,7 @@ export const LEGACY_PRODUCTION_KEYS = ['supermega.production.workspace.v1', 'sup
 export const PRODUCTION_LOCK = 'supermega-production-workspace-v2'
 
 export type ProductionIssueKind = 'quality' | 'maintenance' | 'materials' | 'operations'
+export type ProductionIssueSeverity = 'critical' | 'high' | 'medium' | 'low'
 export type ProductionMachineState = 'running' | 'attention' | 'stopped'
 
 export type ProductionJob = {
@@ -30,6 +31,10 @@ export type ProductionIssue = {
   kind: ProductionIssueKind
   summary: string
   status: 'open' | 'resolved'
+  severity?: ProductionIssueSeverity
+  owner?: string
+  dueAt?: string
+  containment?: string
   resolution?: ProductionIssueResolution
 }
 
@@ -55,6 +60,10 @@ export type ProductionEvent = {
   quantity?: number
   shiftRef?: string
   outputKind?: ProductionOutputKind
+  issueSeverity?: ProductionIssueSeverity
+  issueOwner?: string
+  issueDueAt?: string
+  issueContainment?: string
   fromState?: ProductionMachineState
   toState?: ProductionMachineState
 }
@@ -103,6 +112,7 @@ export type ProductionShiftOutput = {
 }
 
 const issueKinds: ProductionIssueKind[] = ['quality', 'maintenance', 'materials', 'operations']
+export const productionIssueSeverities: ProductionIssueSeverity[] = ['critical', 'high', 'medium', 'low']
 export const productionMachineStates: ProductionMachineState[] = ['running', 'attention', 'stopped']
 const eventKinds: ProductionEventKind[] = ['job_created', 'output_recorded', 'issue_opened', 'issue_resolved', 'machine_state_changed']
 const deterministicSeedNow = Date.parse('2026-07-23T08:00:00.000Z')
@@ -249,6 +259,16 @@ export function validateProductionState(value: unknown): ProductionState {
     canonicalText(candidate.summary, `issues[${index}].summary`, 240)
     if (!issueKinds.includes(candidate.kind as ProductionIssueKind)) throw new Error(`issues[${index}].kind is invalid.`)
     if (candidate.status !== 'open' && candidate.status !== 'resolved') throw new Error(`issues[${index}].status is invalid.`)
+    const actionFields = ['severity', 'owner', 'dueAt', 'containment'] as const
+    const actionFieldCount = actionFields.filter((field) => candidate[field] !== undefined).length
+    if (actionFieldCount !== 0 && actionFieldCount !== actionFields.length) throw new Error(`issues[${index}] action fields must be complete or absent for legacy records.`)
+    if (actionFieldCount === actionFields.length) {
+      if (!productionIssueSeverities.includes(candidate.severity as ProductionIssueSeverity)) throw new Error(`issues[${index}].severity is invalid.`)
+      canonicalText(candidate.owner, `issues[${index}].owner`, 120)
+      if (!validTimestamp(candidate.dueAt)) throw new Error(`issues[${index}].dueAt is invalid.`)
+      if (Date.parse(candidate.dueAt as string) <= Date.parse(candidate.createdAt as string)) throw new Error(`issues[${index}].dueAt must follow its creation time.`)
+      canonicalText(candidate.containment, `issues[${index}].containment`, 240)
+    }
     if (candidate.status === 'open' && candidate.resolution !== undefined) throw new Error(`issues[${index}] is open but has resolution evidence.`)
     if (candidate.resolution !== undefined) {
       if (!isRecord(candidate.resolution)) throw new Error(`issues[${index}].resolution is invalid.`)
@@ -282,9 +302,11 @@ export function validateProductionState(value: unknown): ProductionState {
     canonicalText(candidate.subjectId, `events[${index}].subjectId`, 80)
     canonicalText(candidate.summary, `events[${index}].summary`, 360)
     if (!eventKinds.includes(candidate.kind as ProductionEventKind)) throw new Error(`events[${index}].kind is invalid.`)
+    const issueSnapshotFields = ['issueSeverity', 'issueOwner', 'issueDueAt', 'issueContainment'] as const
+    const issueSnapshotFieldCount = issueSnapshotFields.filter((field) => candidate[field] !== undefined).length
     if (candidate.kind === 'job_created') {
       if (!jobIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown job.`)
-      if (candidate.quantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || candidate.fromState !== undefined || candidate.toState !== undefined) throw new Error(`events[${index}] job event has unrelated fields.`)
+      if (candidate.quantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || issueSnapshotFieldCount || candidate.fromState !== undefined || candidate.toState !== undefined) throw new Error(`events[${index}] job event has unrelated fields.`)
     } else if (candidate.kind === 'output_recorded') {
       if (!jobIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown job.`)
       assertSafeInteger(candidate.quantity, `events[${index}].quantity`, 1)
@@ -300,15 +322,26 @@ export function validateProductionState(value: unknown): ProductionState {
           [outputKind === 'scrap' ? 'scrapUnits' : 'goodUnits']: nextShiftTotal,
         })
       }
-      if (candidate.fromState !== undefined || candidate.toState !== undefined) throw new Error(`events[${index}] output event has machine state fields.`)
+      if (issueSnapshotFieldCount || candidate.fromState !== undefined || candidate.toState !== undefined) throw new Error(`events[${index}] output event has unrelated fields.`)
     } else if (candidate.kind === 'machine_state_changed') {
       if (!machineIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown machine.`)
       if (!productionMachineStates.includes(candidate.fromState as ProductionMachineState) || !productionMachineStates.includes(candidate.toState as ProductionMachineState)) throw new Error(`events[${index}] has invalid machine states.`)
       if (candidate.fromState === candidate.toState) throw new Error(`events[${index}] must record a distinct machine observation.`)
-      if (candidate.quantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined) throw new Error(`events[${index}] machine event has unrelated fields.`)
-    } else {
+      if (candidate.quantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || issueSnapshotFieldCount) throw new Error(`events[${index}] machine event has unrelated fields.`)
+    } else if (candidate.kind === 'issue_opened') {
       if (!issueIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown issue.`)
       if (candidate.quantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || candidate.fromState !== undefined || candidate.toState !== undefined) throw new Error(`events[${index}] issue event has unrelated fields.`)
+      if (issueSnapshotFieldCount !== 0 && issueSnapshotFieldCount !== issueSnapshotFields.length) throw new Error(`events[${index}] issue snapshot fields must be complete or absent for legacy events.`)
+      if (issueSnapshotFieldCount === issueSnapshotFields.length) {
+        if (!productionIssueSeverities.includes(candidate.issueSeverity as ProductionIssueSeverity)) throw new Error(`events[${index}].issueSeverity is invalid.`)
+        canonicalText(candidate.issueOwner, `events[${index}].issueOwner`, 120)
+        if (!validTimestamp(candidate.issueDueAt)) throw new Error(`events[${index}].issueDueAt is invalid.`)
+        if (Date.parse(candidate.issueDueAt as string) <= Date.parse(candidate.createdAt as string)) throw new Error(`events[${index}].issueDueAt must follow confirmation.`)
+        canonicalText(candidate.issueContainment, `events[${index}].issueContainment`, 240)
+      }
+    } else {
+      if (!issueIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown issue.`)
+      if (candidate.quantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || issueSnapshotFieldCount || candidate.fromState !== undefined || candidate.toState !== undefined) throw new Error(`events[${index}] issue event has unrelated fields.`)
     }
   }
   assertUnique(eventIds, 'Production event ID')
@@ -316,16 +349,53 @@ export function validateProductionState(value: unknown): ProductionState {
   if (Number(value.revision) !== events.length) throw new Error('Production revision must equal the append-only event count.')
 
   for (const [index, candidate] of issues.entries()) {
-    if (!isRecord(candidate) || !isRecord(candidate.resolution)) continue
+    if (!isRecord(candidate)) continue
+    const openingEvents = events.filter((event): event is Record<string, unknown> => isRecord(event) && event.kind === 'issue_opened' && event.subjectId === candidate.id)
+    const resolutionEvents = events.filter((event): event is Record<string, unknown> => isRecord(event) && event.kind === 'issue_resolved' && event.subjectId === candidate.id)
+    if (openingEvents.length > 1) throw new Error(`issues[${index}] has duplicate opening events.`)
+    const openingEvent = openingEvents[0]
+    const actionFieldCount = ['severity', 'owner', 'dueAt', 'containment'].filter((field) => candidate[field] !== undefined).length
+    if (openingEvent) {
+      if (Date.parse(openingEvent.createdAt as string) < Date.parse(candidate.createdAt as string)) {
+        throw new Error(`issues[${index}] opening event predates the issue record.`)
+      }
+      const snapshotFieldCount = ['issueSeverity', 'issueOwner', 'issueDueAt', 'issueContainment'].filter((field) => openingEvent[field] !== undefined).length
+      if (snapshotFieldCount === 4) {
+        if (actionFieldCount !== 4
+          || openingEvent.issueSeverity !== candidate.severity
+          || openingEvent.issueOwner !== candidate.owner
+          || openingEvent.issueDueAt !== candidate.dueAt
+          || openingEvent.issueContainment !== candidate.containment) {
+          throw new Error(`issues[${index}] action fields do not match their immutable opening event.`)
+        }
+      } else if (actionFieldCount !== 0) {
+        throw new Error(`issues[${index}] legacy opening event cannot acquire action fields.`)
+      }
+    } else if (actionFieldCount !== 0) {
+      throw new Error(`issues[${index}] action fields require an immutable opening event.`)
+    }
+
+    if (candidate.status === 'open') {
+      if (resolutionEvents.length) throw new Error(`issues[${index}] is open but has a resolution event.`)
+      continue
+    }
+    if (!isRecord(candidate.resolution)) {
+      if (openingEvent || resolutionEvents.length) throw new Error(`issues[${index}] is resolved without matching proof.`)
+      continue
+    }
     const resolution = candidate.resolution
-    const matchingEvents = events.filter((event) => isRecord(event) && event.kind === 'issue_resolved' && event.subjectId === candidate.id && event.actionId === resolution.actionId)
-    if (matchingEvents.length !== 1) throw new Error(`issues[${index}] resolution is not backed by exactly one event.`)
-  }
-  for (const [index, candidate] of events.entries()) {
-    if (!isRecord(candidate) || candidate.kind !== 'issue_resolved') continue
-    const issue = issues.find((value) => isRecord(value) && value.id === candidate.subjectId)
-    if (!isRecord(issue) || issue.status !== 'resolved' || !isRecord(issue.resolution) || issue.resolution.actionId !== candidate.actionId) {
-      throw new Error(`events[${index}] is not backed by matching issue resolution evidence.`)
+    const matchingEvents = resolutionEvents.filter((event) => isRecord(event) && event.actionId === resolution.actionId)
+    if (resolutionEvents.length !== 1 || matchingEvents.length !== 1) throw new Error(`issues[${index}] resolution is not backed by exactly one event.`)
+    const resolutionEvent = matchingEvents[0]
+    if (!isRecord(resolutionEvent)
+      || resolutionEvent.createdAt !== resolution.resolvedAt
+      || resolutionEvent.actor !== resolution.resolvedBy
+      || resolutionEvent.reason !== resolution.reason
+      || resolutionEvent.evidenceReference !== resolution.evidenceReference) {
+      throw new Error(`issues[${index}] resolution proof does not match its immutable event.`)
+    }
+    if (openingEvent && events.indexOf(resolutionEvent) >= events.indexOf(openingEvent)) {
+      throw new Error(`issues[${index}] resolution must follow its opening event.`)
     }
   }
   for (const jobId of jobIds) {
@@ -606,6 +676,13 @@ export function openProductionIssue(state: ProductionState, issue: ProductionIss
     || !validCanonicalText(issue.id, 80)
     || !validCanonicalText(issue.area, 120)
     || !validCanonicalText(issue.summary, 240)
+    || !productionIssueSeverities.includes(issue.severity as ProductionIssueSeverity)
+    || !validCanonicalText(issue.owner, 120)
+    || !validTimestamp(issue.dueAt)
+    || Date.parse(proof.capturedAt) < Date.parse(issue.createdAt)
+    || Date.parse(issue.dueAt as string) <= Date.parse(issue.createdAt)
+    || Date.parse(issue.dueAt as string) <= Date.parse(proof.capturedAt)
+    || !validCanonicalText(issue.containment, 240)
     || !issueKinds.includes(issue.kind)) return null
   const existing = state.events.find((event) => event.actionId === proof.actionId)
   if (existing) {
@@ -613,7 +690,15 @@ export function openProductionIssue(state: ProductionState, issue: ProductionIss
     return existing.kind === 'issue_opened' && existing.subjectId === issue.id && sameProof(existing, proof) && JSON.stringify(storedIssue) === JSON.stringify(issue) ? state : null
   }
   if (actionIdIsUsed(state, proof.actionId) || state.issues.some((candidate) => candidate.id === issue.id) || state.revision >= Number.MAX_SAFE_INTEGER) return null
-  const event = eventFor(proof, { kind: 'issue_opened', subjectId: issue.id, summary: `Opened ${issue.kind} issue for ${issue.area}` })
+  const event = eventFor(proof, {
+    kind: 'issue_opened',
+    subjectId: issue.id,
+    summary: `Opened ${issue.kind} issue for ${issue.area}`,
+    issueSeverity: issue.severity,
+    issueOwner: issue.owner,
+    issueDueAt: issue.dueAt,
+    issueContainment: issue.containment,
+  })
   return validateProductionState({ ...state, revision: state.revision + 1, issues: [issue, ...state.issues], events: [event, ...state.events] })
 }
 
@@ -626,7 +711,11 @@ export function resolveProductionIssue(state: ProductionState, issueId: string, 
       && existing.subjectId === issueId
       && sameProof(existing, proof)
       && issue?.status === 'resolved'
-      && issue.resolution?.actionId === proof.actionId ? state : null
+      && issue.resolution?.actionId === proof.actionId
+      && issue.resolution.resolvedAt === proof.capturedAt
+      && issue.resolution.resolvedBy === proof.actor
+      && issue.resolution.reason === proof.reason
+      && issue.resolution.evidenceReference === proof.evidenceReference ? state : null
   }
   if (actionIdIsUsed(state, proof.actionId)) return null
   const issue = state.issues.find((candidate) => candidate.id === issueId)

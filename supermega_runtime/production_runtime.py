@@ -24,6 +24,7 @@ PRODUCTION_EVENTS = frozenset(
 PRODUCTION_HUMAN_EVENTS = PRODUCTION_EVENTS
 
 _ISSUE_KINDS = frozenset({"quality", "maintenance", "materials", "operations"})
+_ISSUE_SEVERITIES = frozenset({"critical", "high", "medium", "low"})
 _MACHINE_STATES = frozenset({"running", "attention", "stopped"})
 _OUTPUT_KINDS = frozenset({"good", "scrap"})
 _EVENT_KIND_BY_TYPE = {
@@ -43,7 +44,8 @@ _STATE_FIELDS = frozenset({"schema", "revision", "jobs", "issues", "machines", "
 _JOB_REQUIRED_FIELDS = frozenset({"id", "line", "product", "target", "output"})
 _JOB_OPTIONAL_FIELDS = frozenset({"scrap"})
 _ISSUE_REQUIRED_FIELDS = frozenset({"id", "createdAt", "area", "kind", "summary", "status"})
-_ISSUE_OPTIONAL_FIELDS = frozenset({"resolution"})
+_ISSUE_ACTION_FIELDS = frozenset({"severity", "owner", "dueAt", "containment"})
+_ISSUE_OPTIONAL_FIELDS = _ISSUE_ACTION_FIELDS | {"resolution"}
 _MACHINE_FIELDS = frozenset({"id", "name", "state"})
 _EVIDENCE_FIELDS = frozenset({"actionId", "capturedAt", "actor", "reason", "evidenceReference"})
 _RESOLUTION_FIELDS = frozenset({"actionId", "resolvedAt", "resolvedBy", "reason", "evidenceReference"})
@@ -61,6 +63,9 @@ _EVENT_FIELDS = frozenset(
     }
 )
 _OUTPUT_EVENT_OPTIONAL_FIELDS = frozenset({"shiftRef", "outputKind"})
+_ISSUE_EVENT_FIELDS = frozenset(
+    {"issueSeverity", "issueOwner", "issueDueAt", "issueContainment"}
+)
 
 
 def _object(value: object, field: str) -> dict[str, Any]:
@@ -194,11 +199,29 @@ def _validate_issue(candidate: object, index: int) -> dict[str, Any]:
         optional=_ISSUE_OPTIONAL_FIELDS,
     )
     _text(issue["id"], f"{field}.id", maximum=80)
-    _timestamp(issue["createdAt"], f"{field}.createdAt")
+    created_at = _timestamp(issue["createdAt"], f"{field}.createdAt")
     _text(issue["area"], f"{field}.area", maximum=120)
     _text(issue["summary"], f"{field}.summary", maximum=240)
     if not isinstance(issue["kind"], str) or issue["kind"] not in _ISSUE_KINDS:
         raise TrialValidationError(f"{field}.kind is unsupported.")
+    action_fields = _ISSUE_ACTION_FIELDS.intersection(issue)
+    if action_fields and action_fields != _ISSUE_ACTION_FIELDS:
+        raise TrialValidationError(
+            f"{field} action fields must be complete or absent for legacy records."
+        )
+    if action_fields:
+        if (
+            not isinstance(issue["severity"], str)
+            or issue["severity"] not in _ISSUE_SEVERITIES
+        ):
+            raise TrialValidationError(f"{field}.severity is unsupported.")
+        _text(issue["owner"], f"{field}.owner", maximum=120)
+        due_at = _timestamp(issue["dueAt"], f"{field}.dueAt")
+        if datetime.fromisoformat(due_at.replace("Z", "+00:00")) <= datetime.fromisoformat(
+            created_at.replace("Z", "+00:00")
+        ):
+            raise TrialValidationError(f"{field}.dueAt must follow its creation time.")
+        _text(issue["containment"], f"{field}.containment", maximum=240)
     if (
         not isinstance(issue["status"], str)
         or issue["status"] not in {"open", "resolved"}
@@ -253,7 +276,13 @@ def _validate_event(
         event,
         field,
         required=frozenset(required),
-        optional=_OUTPUT_EVENT_OPTIONAL_FIELDS if kind == "output_recorded" else frozenset(),
+        optional=(
+            _OUTPUT_EVENT_OPTIONAL_FIELDS
+            if kind == "output_recorded"
+            else _ISSUE_EVENT_FIELDS
+            if kind == "issue_opened"
+            else frozenset()
+        ),
     )
 
     action_id = _text(event["actionId"], f"{field}.actionId", maximum=160)
@@ -294,6 +323,33 @@ def _validate_event(
             raise TrialValidationError(
                 f"{field} must record a distinct machine observation."
             )
+    elif kind == "issue_opened":
+        if subject_id not in issue_ids:
+            raise TrialValidationError(f"{field} references an unknown issue.")
+        snapshot_fields = _ISSUE_EVENT_FIELDS.intersection(event)
+        if snapshot_fields and snapshot_fields != _ISSUE_EVENT_FIELDS:
+            raise TrialValidationError(
+                f"{field} issue snapshot fields must be complete or absent for legacy events."
+            )
+        if snapshot_fields:
+            if (
+                not isinstance(event["issueSeverity"], str)
+                or event["issueSeverity"] not in _ISSUE_SEVERITIES
+            ):
+                raise TrialValidationError(f"{field}.issueSeverity is unsupported.")
+            _text(event["issueOwner"], f"{field}.issueOwner", maximum=120)
+            due_at = _timestamp(event["issueDueAt"], f"{field}.issueDueAt")
+            if datetime.fromisoformat(due_at.replace("Z", "+00:00")) <= datetime.fromisoformat(
+                event["createdAt"].replace("Z", "+00:00")
+            ):
+                raise TrialValidationError(
+                    f"{field}.issueDueAt must follow confirmation."
+                )
+            _text(
+                event["issueContainment"],
+                f"{field}.issueContainment",
+                maximum=240,
+            )
     elif subject_id not in issue_ids:
         raise TrialValidationError(f"{field} references an unknown issue.")
     return event
@@ -317,6 +373,33 @@ def _validate_issue_history(
         if len(opened) != 1:
             raise TrialValidationError(
                 f"issues[{index}] must be backed by exactly one opening event."
+            )
+        opening_event = opened[0]
+        if datetime.fromisoformat(
+            opening_event["createdAt"].replace("Z", "+00:00")
+        ) < datetime.fromisoformat(issue["createdAt"].replace("Z", "+00:00")):
+            raise TrialValidationError(
+                f"issues[{index}] opening event predates the issue record."
+            )
+        action_fields = _ISSUE_ACTION_FIELDS.intersection(issue)
+        snapshot_fields = _ISSUE_EVENT_FIELDS.intersection(opening_event)
+        if snapshot_fields:
+            expected_snapshot = {
+                "issueSeverity": issue.get("severity"),
+                "issueOwner": issue.get("owner"),
+                "issueDueAt": issue.get("dueAt"),
+                "issueContainment": issue.get("containment"),
+            }
+            if action_fields != _ISSUE_ACTION_FIELDS or any(
+                opening_event[field] != value
+                for field, value in expected_snapshot.items()
+            ):
+                raise TrialValidationError(
+                    f"issues[{index}] action fields do not match their immutable opening event."
+                )
+        elif action_fields:
+            raise TrialValidationError(
+                f"issues[{index}] legacy opening event cannot acquire action fields."
             )
         if issue["status"] == "open":
             if resolved:
@@ -691,6 +774,32 @@ def _validate_issue_opened(
     issue = next_state["issues"][0]
     if issue["status"] != "open" or "resolution" in issue:
         raise TrialValidationError("a new Production issue must begin open.")
+    if not _ISSUE_ACTION_FIELDS.issubset(issue):
+        raise TrialValidationError(
+            "a new Production issue requires severity, owner, dueAt, and containment."
+        )
+    expected_snapshot = {
+        "issueSeverity": issue["severity"],
+        "issueOwner": issue["owner"],
+        "issueDueAt": issue["dueAt"],
+        "issueContainment": issue["containment"],
+    }
+    if any(event.get(field) != value for field, value in expected_snapshot.items()):
+        raise TrialValidationError(
+            "new Production issue action fields must match the opening event."
+        )
+    if datetime.fromisoformat(event["createdAt"].replace("Z", "+00:00")) < datetime.fromisoformat(
+        issue["createdAt"].replace("Z", "+00:00")
+    ):
+        raise TrialValidationError(
+            "a new Production issue confirmation cannot predate its issue record."
+        )
+    if datetime.fromisoformat(issue["dueAt"].replace("Z", "+00:00")) <= datetime.fromisoformat(
+        event["createdAt"].replace("Z", "+00:00")
+    ):
+        raise TrialValidationError(
+            "a new Production issue due time must follow confirmation."
+        )
     if event["subjectId"] != issue["id"]:
         raise TrialValidationError("opening event must reference the new issue.")
     expected_summary = f"Opened {issue['kind']} issue for {issue['area']}"

@@ -561,6 +561,18 @@ if (!productionSource.includes('recordProductionScrap')
   || !coreSource.includes('Record good or scrap')
   || !coreSource.includes('<option value="scrap">Scrap</option>')
   || !coreSource.includes("recordProductionScrap(current")) fail('production_scrap_contract_missing')
+if (!productionSource.includes("export type ProductionIssueSeverity = 'critical' | 'high' | 'medium' | 'low'")
+  || !productionSource.includes("const actionFields = ['severity', 'owner', 'dueAt', 'containment']")
+  || !productionSource.includes('action fields must be complete or absent for legacy records')
+  || !productionSource.includes('issueContainment?: string')
+  || !productionSource.includes('action fields do not match their immutable opening event')
+  || !productionSource.includes('resolution proof does not match its immutable event')
+  || !managedProductionRuntime.includes('_ISSUE_ACTION_FIELDS.issubset(issue)')
+  || !managedProductionRuntime.includes('new Production issue action fields must match the opening event.')
+  || !managedProductionRuntime.includes('a new Production issue requires severity, owner, dueAt, and containment.')
+  || !coreSource.includes('Containment / next action')
+  || !coreSource.includes('Review close')
+  || !coreSource.includes('Legacy problem · owner, due time, and containment were not recorded')) fail('production_actionable_issue_contract_missing')
 if (!productionSource.includes('registerProductionJob') || !coreSource.includes('production.job.created') || !coreSource.includes('<summary>Add job</summary>') || !coreSource.includes('Review job')) fail('production_recurring_job_workflow_missing')
 if (!productionSource.includes('currentRaw !== null') || !productionSource.includes('Migration failed closed') || !productionSource.includes('events: []')) fail('production_migration_fail_closed_contract_missing')
 if (!productionSource.includes('recordProductionMachineState')
@@ -620,7 +632,7 @@ if (!productionPageContract.includes('className="production-mode-banner"')
   || !productionPageContract.includes('Records operator observations only.')
   || !productionPageContract.includes('disabled={!productionCanWrite')
   || !productionPageContract.includes('<IssueList disabled={!productionCanWrite')
-  || !productionPageContract.includes('<ResolvedIssueHistory issues={resolvedIssues} />')
+  || !productionPageContract.includes('<ResolvedIssueHistory issues={resolvedIssues} now={issueClock} />')
   || !productionPageContract.includes('className="production-issue-dialog"')
   || !productionPageContract.includes("dialog.querySelector('textarea')?.focus()")
   || !productionPageContract.includes('}, [issueDialogOpen, tab])')
@@ -2290,14 +2302,63 @@ async function verifyProductionRuntime() {
       jobs: [{ ...base.jobs[0], scrap: 11 }],
     }), 'production_good_plus_scrap_over_target_state_accepted')
 
-    const issue = { id: 'ISS-1', createdAt: '2026-07-23T10:01:00.000Z', area: 'Line 01', kind: 'quality', summary: 'Temperature drift observed', status: 'open' }
+    const issue = {
+      id: 'ISS-1',
+      createdAt: '2026-07-23T10:00:00.000Z',
+      area: 'Line 01',
+      kind: 'quality',
+      summary: 'Temperature drift observed',
+      status: 'open',
+      severity: 'high',
+      owner: 'Shift supervisor',
+      dueAt: '2026-07-23T14:00:00.000Z',
+      containment: 'Hold the affected batch and verify the next sample.',
+    }
     const openProof = proof('ACT-ISSUE-OPEN', 1_000)
     const opened = model.openProductionIssue(outputState, issue, openProof)
-    assert(opened?.issues[0].id === issue.id && opened.revision === 2 && opened.events[0].kind === 'issue_opened', 'production_issue_not_opened_once')
+    assert(opened?.issues[0].id === issue.id
+      && opened.issues[0].severity === 'high'
+      && opened.issues[0].owner === 'Shift supervisor'
+      && opened.issues[0].dueAt === issue.dueAt
+      && opened.issues[0].containment === issue.containment
+      && opened.events[0].issueSeverity === issue.severity
+      && opened.events[0].issueOwner === issue.owner
+      && opened.events[0].issueDueAt === issue.dueAt
+      && opened.events[0].issueContainment === issue.containment
+      && opened.revision === 2
+      && opened.events[0].kind === 'issue_opened',
+    'production_issue_not_opened_once')
     assert(model.openProductionIssue(opened, issue, openProof) === opened, 'production_issue_open_retry_not_idempotent')
     assert(model.openProductionIssue(opened, { ...issue, summary: 'Changed' }, openProof) === null, 'production_issue_conflicting_retry_succeeded')
     assert(model.openProductionIssue(opened, issue, proof('ACT-ISSUE-DUPLICATE')) === null, 'production_duplicate_issue_id_succeeded')
     assert(model.openProductionIssue(opened, { ...issue, id: 'ISS-2' }, openProof) === null, 'production_reused_action_id_succeeded')
+    assert(['severity', 'owner', 'dueAt', 'containment'].every((field, index) => {
+      const incomplete = { ...issue }
+      delete incomplete[field]
+      return model.openProductionIssue(outputState, incomplete, proof(`ACT-ISSUE-MISSING-${index}`)) === null
+    }), 'production_incomplete_actionable_issue_succeeded')
+    assert(model.openProductionIssue(outputState, { ...issue, severity: 'urgent' }, proof('ACT-ISSUE-BAD-SEVERITY')) === null, 'production_invalid_issue_severity_succeeded')
+    assert(model.openProductionIssue(outputState, { ...issue, owner: ' Shift supervisor' }, proof('ACT-ISSUE-BAD-OWNER')) === null, 'production_noncanonical_issue_owner_succeeded')
+    assert(model.openProductionIssue(outputState, { ...issue, dueAt: issue.createdAt }, proof('ACT-ISSUE-BAD-DUE')) === null, 'production_nonfuture_issue_due_succeeded')
+    assert(model.openProductionIssue(outputState, { ...issue, containment: '' }, proof('ACT-ISSUE-BAD-CONTAINMENT')) === null, 'production_blank_issue_containment_succeeded')
+    const delayedIssueProof = proof('ACT-ISSUE-DELAYED', 60_000)
+    assert(model.openProductionIssue(outputState, { ...issue, dueAt: '2026-07-23T10:00:30.000Z' }, delayedIssueProof) === null, 'production_expired_at_confirmation_issue_succeeded')
+    assertThrows(() => model.validateProductionState({
+      ...opened,
+      issues: [{ ...opened.issues[0], owner: 'Changed owner' }],
+    }), 'production_issue_owner_detached_from_opening_event')
+    assertThrows(() => model.validateProductionState({
+      ...opened,
+      events: [{ ...opened.events[0], issueContainment: 'Changed containment' }, ...opened.events.slice(1)],
+    }), 'production_issue_opening_snapshot_was_mutable')
+    assertThrows(() => model.validateProductionState({
+      ...opened,
+      issues: [{ ...opened.issues[0], severity: undefined, owner: undefined, dueAt: undefined, containment: undefined }],
+    }), 'production_new_issue_bypassed_actionable_fields')
+    assertThrows(() => model.validateProductionState({
+      ...opened,
+      issues: [{ ...opened.issues[0], status: 'resolved' }],
+    }), 'production_new_issue_resolved_without_proof')
     const resolutionProof = proof('ACT-ISSUE-RESOLVE', 2_000)
     const resolved = model.resolveProductionIssue(opened, issue.id, resolutionProof)
     assert(resolved?.issues[0].status === 'resolved' && resolved.issues[0].resolution?.resolvedBy === resolutionProof.actor && resolved.issues[0].resolution?.evidenceReference === resolutionProof.evidenceReference && resolved.events[0].kind === 'issue_resolved', 'production_issue_resolution_lost_proof')
@@ -2305,6 +2366,22 @@ async function verifyProductionRuntime() {
     assert(model.resolveProductionIssue(resolved, issue.id, { ...resolutionProof, reason: 'Changed' }) === null, 'production_resolution_conflicting_retry_succeeded')
     assert(model.resolveProductionIssue(resolved, issue.id, proof('ACT-RESOLVE-AGAIN')) === null, 'production_second_resolution_succeeded')
     assert(model.resolveProductionIssue(resolved, 'ISS-MISSING', proof('ACT-RESOLVE-MISSING')) === null, 'production_missing_issue_resolution_succeeded')
+    const changedResolutionProof = {
+      ...resolved,
+      issues: [{
+        ...resolved.issues[0],
+        resolution: { ...resolved.issues[0].resolution, reason: 'Changed stored reason' },
+      }],
+    }
+    assertThrows(() => model.validateProductionState(changedResolutionProof), 'production_changed_resolution_proof_validated')
+    assert(model.resolveProductionIssue(changedResolutionProof, issue.id, resolutionProof) === null, 'production_changed_resolution_proof_replayed')
+    const legacyIssueState = model.validateProductionState({ ...base, issues: [duplicateIssue] })
+    const legacyResolutionProof = proof('ACT-LEGACY-ISSUE-RESOLVE', 2_500)
+    const resolvedLegacyIssue = model.resolveProductionIssue(legacyIssueState, duplicateIssue.id, legacyResolutionProof)
+    assert(resolvedLegacyIssue?.issues[0].status === 'resolved'
+      && resolvedLegacyIssue.issues[0].severity === undefined
+      && resolvedLegacyIssue.issues[0].resolution?.resolvedBy === legacyResolutionProof.actor,
+    'production_legacy_issue_not_readable_or_resolvable')
 
     let machineState = resolved
     const observedStates = ['attention', 'stopped', 'attention', 'running', 'stopped', 'running']
