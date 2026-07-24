@@ -12,7 +12,7 @@ Prove one measured workflow where SuperMega keeps the record and a responsible o
 
 1. **Release candidate** — review one candidate for the simpler company system, products, and backend gates.
 2. **Managed persistence** — repeat the passing PostgreSQL 17 contract and Website-to-Commerce journey on one isolated hosted Supabase target.
-3. **Pilot** — choose one Commerce or Production workflow with a named owner, baseline, target, authority boundary, and evidence plan.
+3. **Pilot** — Commerce order-to-close is selected; name its shift supervisor, tenant, baseline, authority boundary, and five-day evidence plan.
 
 ## Current system
 
@@ -64,6 +64,6 @@ Prove one measured workflow where SuperMega keeps the record and a responsible o
 
 1. Approve and provision one isolated hosted Supabase rehearsal target.
 2. Repeat the locally proven five-migration, runtime-role, validator, isolation, revocation, and recovery gate; run Supabase Security Advisor and the transaction-mode pooler check.
-3. Repeat both locally proven workflows through authenticated users on the isolated hosted runtime.
+3. Name the Commerce pilot supervisor and baseline; repeat its proven workflow through authenticated users on the isolated hosted runtime.
 4. Repeat the validated migration against production with writes disabled; configure server-only identity and database secrets.
 5. Merge and release the exact reviewed commit only after the coordinated live gates pass; enable writes in a separate owner-approved action.

@@ -5,6 +5,7 @@ Authority: founder / CEO
 Canonical repository: `C:\Users\thesw\Projects\supermega-platform`
 Integration branch: `agent/supermega-release-candidate`
 Product implementation head before this coordination update: `f2aaa82`
+Coordination setup commit: `7fb4daf`
 
 ## One operating model
 
@@ -23,11 +24,12 @@ Add another worker only when its assignment has a measurable outcome, a non-over
 | ID | Team / worker | Status | Outcome | Write authority | Acceptance |
 | --- | --- | --- | --- | --- | --- |
 | CEO-004 | CEO / Codex integrator | done-local | Make Commerce daily close attributable, non-duplicating, stale-safe, and Myanmar-date aware. | Canonical branch, five scoped files | Commit `f2aaa82`; 110 Python tests, lint, build, and `app:verify` pass. |
-| CEO-005 | CEO / Codex integrator | active | Establish the multi-agent operating board and safe handoffs. | `hq/`, root `CLAUDE.md` | Board, Claude assignment, Codex brief, clean verification, local commit. |
-| QA-001 | Product / QA Codex task | ready | Choose the single best pilot workflow from Commerce and Production using current evidence. | Read-only; no repository writes | One recommendation, workflow map, release blockers, pilot metric, and next implementation slice. |
-| ENG-001 | Claude Code engineering | blocked-auth | Prove a two-item Website-to-Commerce journey with deterministic test evidence. | One new test file in an isolated worktree | Focused test and full Python suite pass; no product, HQ, hosted, push, or deploy changes. |
+| CEO-005 | CEO / Codex integrator | done-local | Establish the multi-agent operating board and safe handoffs. | `hq/`, root `CLAUDE.md` | Commit `7fb4daf`; HQ contract and diff check pass; no push or deploy. |
+| QA-001 | Product / QA Codex worker | done-local | Select Commerce order-to-close as the first pilot workflow. | Read-only; no repository writes | Same-day attributable close rate; target at least 90% across five pilot days; review 2026-07-31. |
+| ENG-001 | Claude Code engineering | blocked-auth | Prove a two-item Website-to-Commerce journey from isolated worktree `supermega-claude-website-commerce-journey`. | One new test file in an isolated worktree | Focused test and full Python suite pass; no product, HQ, hosted, push, or deploy changes. |
+| ENG-002 | Engineering | queued | Record an externally completed refund as human-attributable and settled. | Commerce workspace, UI, and focused tests only | Idempotent due-to-settled transition with actor, time, reason, and external reference; no payment integration. |
 | OPS-001 | Platform / owner | blocked-owner | Repeat the private trial on an isolated hosted Supabase target. | Hosted write only after explicit approval | Five migrations, runtime role, isolation, revocation, recovery, Security Advisor, and pooler evidence. |
-| PILOT-001 | Product / founder | queued | Select one responsible operator and one measured Commerce or Production workflow. | Founder decision | Baseline, target, authority boundary, acceptance evidence, and review date are recorded. |
+| PILOT-001 | Product / founder | ready | Name one Commerce shift supervisor and one safe pilot tenant. | Founder decision | Baseline, authority boundary, five-day evidence plan, and 2026-07-31 review are recorded. |
 | GROWTH-001 | Growth | gated | Prepare onboarding and outreach for the selected pilot only. | Draft-only until founder approves sends | One audience, one offer, one onboarding path, and claims backed by pilot evidence. |
 
 Statuses: `ready`, `active`, `blocked-auth`, `blocked-owner`, `queued`, `review`, `done-local`, `released`.
