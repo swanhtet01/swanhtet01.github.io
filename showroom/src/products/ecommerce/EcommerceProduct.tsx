@@ -103,6 +103,7 @@ export function EcommerceProduct() {
   const [summary, setSummary] = useState(initialState.summary)
   const [selectedSkus, setSelectedSkus] = useState(initialState.selectedSkus)
   const [device, setDevice] = useState<PreviewDevice>('phone')
+  const [mobileWorkspace, setMobileWorkspace] = useState<'setup' | 'preview'>('setup')
   const [digestState, setDigestState] = useState({ previewJson: '', value: '', error: '' })
   const [requestLedger, setRequestLedger] = useState(createEmptyStorefrontRequestLedger)
   const [requestCustomer, setRequestCustomer] = useState('')
@@ -267,6 +268,14 @@ export function EcommerceProduct() {
         ? current.filter((candidate) => candidate !== sku)
         : current.length < 8 ? [...current, sku] : current
     ))
+  }
+
+  function showMobileWorkspace(view: 'setup' | 'preview') {
+    setMobileWorkspace(view)
+    if (!window.matchMedia('(max-width: 840px)').matches) return
+    requestAnimationFrame(() => {
+      document.getElementById(`ecommerce-${view}-panel`)?.scrollIntoView({ block: 'start' })
+    })
   }
 
   async function saveCurrentStorefront() {
@@ -480,8 +489,13 @@ export function EcommerceProduct() {
         <p>Prices and availability are read-only. A request can enter the authenticated Shop inbox, but cannot reserve stock, create an order, take payment, send a message, or publish a site.</p>
       </div>
 
-      <div className="ecommerce-workspace">
-        <section className="core-panel ecommerce-setup" aria-busy={catalogHydrating || draftBusy} aria-labelledby="ecommerce-setup-title">
+      <div aria-label="Ecommerce workspace" className="ecommerce-mobile-switch" role="group">
+        <button aria-controls="ecommerce-setup-panel" aria-pressed={mobileWorkspace === 'setup'} onClick={() => showMobileWorkspace('setup')} type="button">1 · Setup</button>
+        <button aria-controls="ecommerce-preview-panel" aria-pressed={mobileWorkspace === 'preview'} onClick={() => showMobileWorkspace('preview')} type="button">2 · Preview</button>
+      </div>
+
+      <div className="ecommerce-workspace" data-mobile-view={mobileWorkspace}>
+        <section className="core-panel ecommerce-setup" aria-busy={catalogHydrating || draftBusy} aria-labelledby="ecommerce-setup-title" id="ecommerce-setup-panel">
           <div className="panel-head">
             <div><span className="core-eyebrow">1 · Storefront</span><h2 id="ecommerce-setup-title">Choose what customers see</h2></div>
             <span className="status-pill bounded">{selectedSkus.length}/8</span>
@@ -568,7 +582,7 @@ export function EcommerceProduct() {
           </div>
         </section>
 
-        <section className="core-panel ecommerce-preview-panel" aria-labelledby="ecommerce-preview-title">
+        <section className="core-panel ecommerce-preview-panel" aria-labelledby="ecommerce-preview-title" id="ecommerce-preview-panel">
           <div className="panel-head ecommerce-preview-head">
             <div><span className="core-eyebrow">2 · Preview</span><h2 id="ecommerce-preview-title">Customer view</h2></div>
             <div className="segmented-control" role="group" aria-label="Preview size">

@@ -11,6 +11,10 @@
   background: rgba(11, 116, 94, .05);
 }
 
+.ecommerce-mobile-switch {
+  display: none;
+}
+
 .ecommerce-save-bar[data-state="unsaved"] {
   border-color: rgba(177, 113, 0, .26);
   background: rgba(177, 113, 0, .05);
@@ -152,5 +156,50 @@
 
   .ecommerce-request-body form > .core-button {
     width: 100%;
+  }
+}
+
+@media (max-width: 840px) {
+  .ecommerce-mobile-switch {
+    position: sticky;
+    z-index: 18;
+    top: 54px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px;
+    border: 1px solid rgba(31, 68, 51, .12);
+    border-radius: 12px;
+    padding: 4px;
+    background: rgba(238, 244, 239, .96);
+    box-shadow: 0 8px 20px rgba(25, 54, 42, .08);
+    backdrop-filter: blur(16px);
+  }
+
+  .ecommerce-mobile-switch button {
+    min-height: 46px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: #56665d;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 760;
+    cursor: pointer;
+  }
+
+  .ecommerce-mobile-switch button[aria-pressed="true"] {
+    background: #fff;
+    color: #17231d;
+    box-shadow: 0 2px 10px rgba(31, 68, 51, .09);
+  }
+
+  .ecommerce-workspace[data-mobile-view="setup"] > .ecommerce-preview-panel,
+  .ecommerce-workspace[data-mobile-view="preview"] > .ecommerce-setup {
+    display: none;
+  }
+
+  .ecommerce-setup,
+  .ecommerce-preview-panel {
+    scroll-margin-top: 112px;
   }
 }
