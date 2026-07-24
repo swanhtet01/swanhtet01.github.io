@@ -48,10 +48,11 @@ requireContract('Website remains truthful',
   product('website')?.status === 'release-candidate-local'
   && product('website')?.surfaces?.join(',') === 'Site,Preview,Publish'
   && product('website')?.nextGate?.includes('named-business brief'))
-requireContract('Ecommerce is separate but not falsely available',
-  product('ecommerce')?.status === 'rebuild-planned'
-  && product('ecommerce')?.job?.includes('hands structured order intent to Shop')
-  && product('ecommerce')?.surfaces?.join(',') === 'Storefront,Products,Ordering'
+requireContract('Ecommerce is separate and truthfully limited to local preview',
+  product('ecommerce')?.status === 'release-candidate-local'
+  && product('ecommerce')?.job?.includes('read-only Shop catalogue')
+  && product('ecommerce')?.surfaces?.join(',') === 'Storefront,Preview'
+  && product('ecommerce')?.nextGate?.includes('bounded customer order request')
   && product('ecommerce')?.nextGate?.includes('idempotent human-confirmed handoff into Shop'))
 requireContract('Agent Solutions starts with Order Intake',
   product('agents')?.status === 'prototype-planned'
@@ -67,7 +68,7 @@ requireContract('manifest preserves internal IDs and restores public names',
     === 'commerce:shop:Shop,production:plant:Plant')
 requireContract('manifest maker products are truthful',
   manifest.prototypeProducts?.map((entry) => `${entry.id}:${entry.status}`).join(',')
-    === 'website:release-candidate-local,ecommerce:rebuild-planned')
+    === 'website:release-candidate-local,ecommerce:release-candidate-local')
 requireContract('manifest agent product is truthful',
   manifest.agentSolutions?.id === 'agents'
   && manifest.agentSolutions?.status === 'prototype-planned'

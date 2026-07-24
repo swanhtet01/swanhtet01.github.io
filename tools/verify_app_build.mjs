@@ -8,10 +8,11 @@ const failures = []
 let orderCompletionRuntimeChecks = 0
 let channelOrderRuntimeChecks = 0
 let websiteRuntimeChecks = 0
+let storefrontRuntimeChecks = 0
 let commerceRuntimeChecks = 0
 let productionRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
-const [manifestText, appPackageText, appSource, coreSource, commerceSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, websiteCssSource, commerceIntakeSource, handoffSource, coreCssSource] = await Promise.all([
+const [manifestText, appPackageText, appSource, coreSource, commerceSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, storefrontSource, coreCssSource] = await Promise.all([
   readFile(resolve(root, 'site-manifest.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'package.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'App.tsx'), 'utf8'),
@@ -36,6 +37,8 @@ const [manifestText, appPackageText, appSource, coreSource, commerceSource, chan
   readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-product.css'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'WebsiteCommerceIntake.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'product-handoff.ts'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'EcommerceProduct.tsx'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'storefront-model.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'core-app.css'), 'utf8'),
 ])
 const manifest = JSON.parse(manifestText)
@@ -95,10 +98,11 @@ if (!coreSource.includes("{ to: '/', label: 'Home', end: true }")
 const overviewPageContract = coreSource.slice(coreSource.indexOf('export function OverviewPage'), coreSource.indexOf('export function OperationsPage'))
 if (!overviewPageContract.includes('useCommerceWorkspace(managedIdentity)')
   || !overviewPageContract.includes('useProductionWorkspace(managedIdentity)')) fail('home_managed_product_sources_not_consistent')
-if (!coreSource.includes('className="product-launcher"')
+if (!coreSource.includes('className="product-launcher home-products"')
   || !coreSource.includes('to="/shop/?tab=orders"')
   || !coreSource.includes('to="/plant/?tab=production"')
   || !coreSource.includes('to="/products/website/"')
+  || !coreSource.includes('to="/products/ecommerce/"')
   || !coreSource.includes('const homeWork = visibleWork.slice(0, 3)')) fail('first_run_product_launcher_missing')
 if (coreSource.includes('className="core-panel approval-panel"')) fail('approval_queue_hidden_in_extra_panel')
 if (!coreSource.includes("decidedActorKind: 'human'") || !coreSource.includes('decisionNote: note')) fail('approval_decision_not_human_attributed')
@@ -163,12 +167,25 @@ if (coreLayoutRouteStart < 0
   || !embeddedWebsiteCss.includes('.website-product {')
   || !embeddedWebsiteCss.includes('overflow: visible;')
   || !embeddedWebsiteCss.includes('.website-shell {\n    height: auto;')) fail('website_shared_app_shell_missing')
-if (!appSource.includes('<Navigate replace to="/operations/#planned" />')
+if (!appSource.includes("lazy(() => import('./products/ecommerce/EcommerceProduct')")
+  || !appSource.includes('<EcommerceProduct />')
   || !appSource.includes('path="products/ecommerce/*"')
   || !appSource.includes('<OperationsPage product="commerce" />')
   || !appSource.includes('path="shop/*"')
   || !appSource.includes('<OperationsPage product="production" />')
   || !appSource.includes('path="plant/*"')) fail('canonical_product_routes_missing')
+if (!storefrontSource.includes("supermega.ecommerce.storefront_preview.v1")
+  || !storefrontSource.includes('readStorefrontCatalog')
+  || !storefrontSource.includes('buildStorefrontPreview')
+  || !storefrontSource.includes("globalThis.crypto.subtle.digest('SHA-256'")
+  || !storefrontSource.includes('validateCommerceState(JSON.parse(raw)).items')
+  || ['setItem(', 'removeItem(', 'fetch(', 'XMLHttpRequest', 'navigator.locks'].some((marker) => storefrontSource.includes(marker))) fail('ecommerce_storefront_contract_missing_or_mutating')
+if (!ecommerceSource.includes('Prices and availability are read-only.')
+  || !ecommerceSource.includes('Ordering is not connected in this preview.')
+  || !ecommerceSource.includes('Nothing is published or ordered here.')
+  || !ecommerceSource.includes('Same approved copy and Shop snapshot produce the same digest.')
+  || !coreSource.includes('<strong>Ecommerce</strong><small>Build a storefront from Shop</small>')
+  || !coreSource.includes('<h2>AI Agent Solutions</h2>')) fail('ecommerce_storefront_ui_boundary_missing')
 if (!appPackage.scripts?.lint?.includes('src/products')) fail('prototype_sources_not_linted')
 if (!websiteSource.includes('No website has been deployed.')
   || !websiteSource.includes('No deployment occurred.')
@@ -1613,6 +1630,65 @@ async function verifyCommerceRuntime() {
   }
 }
 
+async function verifyStorefrontRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    storefrontRuntimeChecks += 1
+  }
+  try {
+    const nonce = Date.now()
+    const storefront = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'storefront-model.ts')).href}?storefront-verify=${nonce}`)
+    const commerce = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?storefront-commerce=${nonce}`)
+    const catalog = commerce.createSeedCommerce().items
+    const input = {
+      storeName: 'Mingalar Shop',
+      summary: 'Clear prices and a small customer-ready catalog.',
+      selectedSkus: ['SM-1003', 'SM-1001', 'SM-CARE-01'],
+    }
+    const preview = storefront.buildStorefrontPreview(catalog, input)
+    const reordered = storefront.buildStorefrontPreview([...catalog].reverse(), input)
+    assert(JSON.stringify(preview) === JSON.stringify(reordered), 'storefront_preview_depends_on_catalog_order')
+    assert(preview.items.map((item) => item.sku).join(',') === 'SM-1001,SM-1003,SM-CARE-01', 'storefront_preview_items_not_canonical')
+    const serialized = JSON.stringify(preview)
+    assert(!serialized.includes('onHand') && !serialized.includes('reorderAt'), 'storefront_preview_leaked_shop_stock_fields')
+    const firstDigest = await storefront.storefrontPreviewDigest(preview)
+    const retryDigest = await storefront.storefrontPreviewDigest(reordered)
+    assert(firstDigest === retryDigest && /^sha256:[a-f0-9]{64}$/.test(firstDigest), 'storefront_digest_not_deterministic_sha256')
+    const changed = storefront.buildStorefrontPreview(catalog, { ...input, summary: 'Changed storefront copy.' })
+    assert(await storefront.storefrontPreviewDigest(changed) !== firstDigest, 'storefront_digest_ignored_copy_change')
+
+    let duplicateCatalogRejected = false
+    try { storefront.buildStorefrontPreview([...catalog, catalog[0]], input) } catch { duplicateCatalogRejected = true }
+    assert(duplicateCatalogRejected, 'storefront_duplicate_catalog_sku_accepted')
+    let duplicateSelectionRejected = false
+    try { storefront.buildStorefrontPreview(catalog, { ...input, selectedSkus: ['SM-1001', 'SM-1001'] }) } catch { duplicateSelectionRejected = true }
+    assert(duplicateSelectionRejected, 'storefront_duplicate_selection_accepted')
+    let unknownSelectionRejected = false
+    try { storefront.buildStorefrontPreview(catalog, { ...input, selectedSkus: ['UNKNOWN-SKU'] }) } catch { unknownSelectionRejected = true }
+    assert(unknownSelectionRejected, 'storefront_unknown_sku_accepted')
+
+    let writes = 0
+    const raw = JSON.stringify(commerce.createSeedCommerce())
+    const currentSnapshot = storefront.readStorefrontCatalog({
+      getItem: () => raw,
+      setItem: () => { writes += 1 },
+    })
+    assert(currentSnapshot.source === 'shop-local' && currentSnapshot.items.length === catalog.length && writes === 0, 'storefront_shop_catalog_read_wrote_or_changed_state')
+    const sampleSnapshot = storefront.readStorefrontCatalog({
+      getItem: () => null,
+      setItem: () => { writes += 1 },
+    })
+    assert(sampleSnapshot.source === 'sample' && sampleSnapshot.items.length > 0 && writes === 0, 'storefront_sample_catalog_wrote_state')
+    const malformedSnapshot = storefront.readStorefrontCatalog({
+      getItem: () => '{broken',
+      setItem: () => { writes += 1 },
+    })
+    assert(malformedSnapshot.source === 'unavailable' && malformedSnapshot.items.length === 0 && writes === 0, 'storefront_malformed_shop_catalog_did_not_fail_closed')
+  } catch (error) {
+    fail(`storefront_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
 async function verifyProductionRuntime() {
   const assert = (condition, reason) => {
     if (!condition) throw new Error(reason)
@@ -1836,6 +1912,7 @@ async function verifyProductionRuntime() {
 await verifyChannelOrderRuntime()
 await verifyWebsiteRuntime()
 await verifyWebsiteOrderCompletionRuntime()
+await verifyStorefrontRuntime()
 await verifyCommerceRuntime()
 await verifyProductionRuntime()
 
@@ -1846,4 +1923,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', primaryRoutes: 4, operatingModules: 2, prototypeRoutes: 1, compatibilityRedirects: 1, workflowProfiles, channelOrderRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', primaryRoutes: 5, operatingModules: 2, prototypeRoutes: 2, compatibilityRedirects: 1, workflowProfiles, channelOrderRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, storefrontRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, bytes }, null, 2))

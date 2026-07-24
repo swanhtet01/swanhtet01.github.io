@@ -1122,6 +1122,8 @@ export function CoreLayout() {
   const runtime = useRuntimeHealth()
   const routeName = location.pathname.startsWith('/products/website/')
     ? 'Website'
+    : location.pathname.startsWith('/products/ecommerce/')
+      ? 'Ecommerce'
     : location.pathname.startsWith('/settings/')
       ? 'Settings'
       : location.pathname.startsWith('/shop/') || location.pathname.startsWith('/operations/commerce/')
@@ -1377,7 +1379,7 @@ export function OverviewPage() {
           ? <button className="core-button primary" onClick={() => setSelectedApprovalId(nextPriority.approvalId ?? '')} type="button">{nextPriority.action}</button>
           : <Link className="core-button primary" to={nextPriority.href ?? '/'}>{nextPriority.action}</Link>}
       </section>
-      <nav aria-label="Products" className="product-launcher">
+      <nav aria-label="Products" className="product-launcher home-products">
         <Link to="/shop/?tab=orders">
           <span><strong>Shop</strong><small>Orders, stock and payments</small></span>
           <b>{openOrders.length ? `${openOrders.length} open` : 'Ready'}</b>
@@ -1389,6 +1391,10 @@ export function OverviewPage() {
         <Link to="/products/website/">
           <span><strong>Website</strong><small>Pages and order handoff</small></span>
           <b>Open</b>
+        </Link>
+        <Link to="/products/ecommerce/">
+          <span><strong>Ecommerce</strong><small>Storefront maker and preview</small></span>
+          <b>Preview</b>
         </Link>
       </nav>
       <details className="home-more">
@@ -1461,10 +1467,11 @@ export function OperationsPage({ product }: { product?: ProductId }) {
         <Link to="/shop/?tab=orders"><span><strong>Shop</strong><small>Orders, payments, and stock</small></span><b>Open</b></Link>
         <Link to="/plant/?tab=production"><span><strong>Plant</strong><small>Jobs, output, and problems</small></span><b>Open</b></Link>
         <Link to="/products/website/"><span><strong>Website</strong><small>Edit, preview, and prepare to publish</small></span><b>Open</b></Link>
+        <Link to="/products/ecommerce/"><span><strong>Ecommerce</strong><small>Build a storefront from Shop</small></span><b>Preview</b></Link>
       </nav>
       <section className="core-panel" id="planned">
-        <div className="panel-head"><div><span className="core-eyebrow">Building next</span><h2>Ecommerce and AI Agent Solutions</h2></div><span className="status-pill bounded">Planned</span></div>
-        <p className="panel-copy">Ecommerce will build the customer storefront and hand order intent to Shop. The first agent will prepare a source-backed order draft for human review. Neither has a demo button until its workflow passes.</p>
+        <div className="panel-head"><div><span className="core-eyebrow">Building next</span><h2>AI Agent Solutions</h2></div><span className="status-pill bounded">Planned</span></div>
+        <p className="panel-copy">The first agent will prepare a source-backed order draft for human review. It has no demo button until recorded provider outputs pass the evaluation gate.</p>
       </section>
     </div>
   }

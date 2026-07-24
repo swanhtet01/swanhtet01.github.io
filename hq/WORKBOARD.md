@@ -4,7 +4,7 @@ Updated: 2026-07-24
 Authority: founder / CEO
 Canonical repository: `C:\Users\thesw\Projects\supermega-platform`
 Integration branch: `agent/supermega-release-candidate`
-Last committed local baseline: `d9382c16ec7f8ce0b4e599f837e21bbcb08d858d`
+Previous local checkpoint: `a60d7407ed0601e27efede5eba6cd1d5ff8c79ab`
 
 ## One operating model
 
@@ -30,7 +30,8 @@ Claude coordination is paused by founder direction.
 | QA-002 | Product / QA Codex | done-local | Prove `/shop/` and `/plant/` are canonical, understandable, mobile-safe, and compatibility-preserving. | Read-only browser and contract checks | 1280 px and 375 px journeys passed; old operation paths canonicalized to the same records; no overflow, browser errors, or state reset. |
 | RND-001 | Product R&D Codex | done-local | Define Ecommerce as a customer storefront and order-intent product distinct from Shop. | Read-only Git history audit | Keep the five deleted back-office files deleted; reuse only fingerprint, idempotency, publish, and intake-boundary patterns. |
 | RND-002 | AI Product R&D Codex | done-local | Select the first real AI Agent Solution. | Read-only current-code audit | Order Intake is first: approved input to structured source-backed draft, human accept/discard, zero side effects, and a golden-set gate. |
-| ENG-003 | Ecommerce Codex | queued | Build Ecommerce slice 1: deterministic storefront configuration and responsive preview from a read-only Shop catalogue snapshot. | New focused Ecommerce maker files only; no Shop mutation | Same input produces same artifact digest; invalid or duplicate SKUs fail; price/stock are not editable; no order, stock, payment, send, or external write. |
+| ENG-003 | Ecommerce Codex | done-local | Build Ecommerce slice 1: deterministic storefront configuration and responsive preview from a read-only Shop catalogue snapshot. | Focused Ecommerce maker, route, catalogue, styles, and verifier only; no Shop mutation | Lint, build, 11 runtime checks, full local release gates, and 1280/375 px browser review pass; no push or deploy. |
+| ENG-006 | Ecommerce Codex | queued | Build Ecommerce slice 2: a bounded customer order request that stops before Shop consequences. | Storefront request contract and local preview UI only | Immutable storefront digest and item/price snapshot; idempotent request receipt; no stock, Shop order, payment, send, fulfilment, or external write. |
 | ENG-004 | Agent Solutions Codex | done-local | Complete the Order Intake evaluation gate before model or UI integration. | Order-intake evaluator, CLI, and tests only | The 20-case multilingual/adversarial harness requires latency, token, estimated-cost, retry, refusal, correction, schema-validity, provenance, fabricated-fact, and unsafe-ready evidence; 114 tests pass. |
 | ENG-005 | Agent Solutions Codex | queued | Add a server-only Order Intake provider runner with no operational tools or durable raw-message retention. | Provider adapter, API boundary, fake-client tests, and sanitized result writer only | No client secret exposure; strict structured output; one model call; no tools; bounded input/output; every result satisfies the evaluator document contract; failures produce no draft. |
 | OPS-001 | Platform / owner | blocked-owner | Repeat the private trial on one isolated hosted Supabase target. | Hosted write only after explicit approval | Five migrations, runtime role, isolation, revocation, recovery, Security Advisor, and pooler evidence. |
@@ -93,6 +94,6 @@ Every worker handoff contains:
 
 1. Finish CEO-006 and QA-002; commit one reviewed identity correction.
 2. Start ENG-005 before exposing an Agents demo; a provider run must pass ENG-004's evaluator first.
-3. Start ENG-003 with only storefront maker and preview; customer submission and Shop handoff are later slices.
+3. Start ENG-006 from the passing ENG-003 storefront contract; Shop handoff remains a later human-confirmed slice.
 4. Run PILOT-001 only after the corrected Shop route and language pass.
 5. Keep OPS-001 and all production release activity owner-gated.

@@ -296,8 +296,9 @@ function headerHtml() {
   return `<header class="site-header"><div class="frame header-inner">${brandHtml()}</div></header>`
 }
 
-function footerHtml() {
-  return `<footer class="site-footer"><div class="frame footer-inner"><span>© ${new Date().getUTCFullYear()} SuperMega · Accountable company software.</span><span class="footer-links"><a href="/contact/">Contact</a><a href="/privacy/">Privacy</a></span></div></footer>`
+function footerHtml(route) {
+  const contactLink = route === '/' ? '' : '<a href="/contact/">Contact</a>'
+  return `<footer class="site-footer"><div class="frame footer-inner"><span>© ${new Date().getUTCFullYear()} SuperMega · Accountable company software.</span><span class="footer-links">${contactLink}<a href="/privacy/">Privacy</a></span></div></footer>`
 }
 
 function documentHtml({ route, title, description, content, robots = 'index,follow' }) {
@@ -325,7 +326,7 @@ function documentHtml({ route, title, description, content, robots = 'index,foll
     <style>${sharedStyle}</style>
   </head>
   <body data-brand-version="${escapeHtml(brand.version)}" data-context-version="${escapeHtml(manifest.contextVersion)}">
-    <div class="shell">${headerHtml(route)}${content}${footerHtml()}</div>
+    <div class="shell">${headerHtml(route)}${content}${footerHtml(route)}</div>
   </body>
 </html>`
 }

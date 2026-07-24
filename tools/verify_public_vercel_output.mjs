@@ -35,7 +35,7 @@ if (manifest.company?.publicPricing !== false) fail('public_pricing_enabled')
 if (manifest.release?.sourceBranch !== 'main') fail('release_source_not_main')
 if (manifest.products?.map((product) => product.id).join(',') !== 'commerce,production') fail('runtime_catalog_not_commerce_and_production')
 if (manifest.products?.map((product) => `${product.publicId}:${product.name}`).join(',') !== 'shop:Shop,plant:Plant') fail('public_catalog_not_shop_and_plant')
-if (manifest.prototypeProducts?.map((product) => `${product.id}:${product.status}`).join(',') !== 'website:release-candidate-local,ecommerce:rebuild-planned') fail('maker_portfolio_drift')
+if (manifest.prototypeProducts?.map((product) => `${product.id}:${product.status}`).join(',') !== 'website:release-candidate-local,ecommerce:release-candidate-local') fail('maker_portfolio_drift')
 if (manifest.agentSolutions?.id !== 'agents' || manifest.agentSolutions?.status !== 'prototype-planned') fail('agent_solution_portfolio_drift')
 for (const product of manifest.products || []) {
   if (product.templates?.length !== 3) fail('public_template_count_wrong', { product: product.id })
@@ -70,7 +70,6 @@ const sharedRequired = [
   'aria-label="SuperMega home"',
   '<span class="brand-mark" aria-hidden="true">&gt;_</span>',
   '<span class="brand-name">SUPERMEGA</span>',
-  'href="/contact/">Contact</a>',
   'href="/privacy/">Privacy</a>',
   'Accountable company software.',
 ]
@@ -113,6 +112,7 @@ for (const [route, page] of pages) {
   if (/target\s*=\s*["']?_blank/i.test(page.html) || page.html.includes('window.open(')) fail('new_tab_navigation_present', { route })
   if (page.html.includes('href="/solutions/"') || page.html.includes('href="/trust/"')) fail('retired_public_navigation_present', { route })
   if (!page.html.includes(`<link rel="canonical" href="${new URL(route, `${manifest.release.productionDomain}/`).href}"`)) fail('canonical_url_wrong', { route })
+  if (route !== '/' && !page.html.includes('href="/contact/">Contact</a>')) fail('support_footer_contact_missing', { route })
 }
 
 const home = pages.get('/')?.html || ''
@@ -150,7 +150,8 @@ for (const token of [
   'id="website"',
   'Available locally',
   'id="ecommerce"',
-  'Focused rebuild planned',
+  'Create a simple storefront preview from Shop.',
+  'https://app.supermega.dev/products/ecommerce/',
   'id="agents"',
   'Evaluation required',
   'No demo button until this workflow passes.',

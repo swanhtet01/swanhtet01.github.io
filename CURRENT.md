@@ -20,7 +20,7 @@ SuperMega builds simple operating products for Myanmar businesses. The customer 
 - **Shop** — implemented local release candidate at `/shop/` under the stable internal `commerce` runtime. `/operations/commerce/` is compatibility-only and resolves to the same records.
 - **Plant** — implemented local release candidate at `/plant/` under the stable internal `production` runtime. `/operations/production/` is compatibility-only and resolves to the same records.
 - **Website** — implemented local release candidate at `/products/website/`; it can produce a deterministic downloadable site artifact but cannot publish or change a domain.
-- **Ecommerce** — planned focused rebuild at `/products/ecommerce/`. The earlier broad prototype was removed when it duplicated Shop. Only the storefront and controlled Shop handoff should return.
+- **Ecommerce** — implemented local storefront-maker preview at `/products/ecommerce/`. It reads a Shop catalogue snapshot without changing it, lets the operator choose customer-visible products and copy, and produces a deterministic preview digest. Cart, customer order request, Shop handoff, payment, send, and publishing remain unimplemented.
 - **AI Agent Solutions** — planned real prototype at `/agents/`. The first solution is Order Intake: approved message or form input to a structured draft, with provenance, evaluation, human review, and zero side effects.
 
 No local demo, passing test, healthy provider, or generated artifact is proof of a live customer system, revenue, production persistence, or autonomous operation.
@@ -33,7 +33,7 @@ Canonical host: `app.supermega.dev`
 - `/shop/` — Shop Orders first; Stock second.
 - `/plant/` — Plant Jobs first; Problems second.
 - `/products/website/` — Website Site, Preview, and Publish workflow.
-- `/products/ecommerce/` — reserved Ecommerce workspace; do not present it as available until the focused rebuild passes.
+- `/products/ecommerce/` — Ecommerce storefront setup and responsive preview; clearly local and non-publishing.
 - `/agents/` — reserved Agent Solutions workspace; do not present it as available until Order Intake passes evaluation and review gates.
 - `/work/` — internal SuperMega HQ work and agent-team coordination.
 - `/settings/` — setup, evidence export, reset, and managed-readiness utility.
@@ -110,7 +110,7 @@ AI and delegated agents may not independently send customer messages, charge or 
 ## Current execution order
 
 1. Correct public and in-app identity to Shop and Plant while retaining stable internal data contracts.
-2. Rebuild Ecommerce as a focused storefront/order-intent product that feeds Shop.
+2. Extend the passing Ecommerce storefront preview with a customer order request and human-confirmed Shop handoff.
 3. Make Order Intake the first evaluated, reviewable AI Agent Solution.
 4. Validate Website with one named business and accepted artifact.
 5. Repeat Shop and Plant on one isolated hosted tenant before any production write activation.

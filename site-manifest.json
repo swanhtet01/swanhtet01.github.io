@@ -1,7 +1,7 @@
 {
   "schemaVersion": "supermega.site-context.v1",
-  "contextVersion": "2026-07-24.6",
-  "catalogVersion": "2026-07-24.6",
+  "contextVersion": "2026-07-24.7",
+  "catalogVersion": "2026-07-24.7",
   "brand": {
     "name": "SuperMega",
     "domain": "supermega.dev",
@@ -130,7 +130,7 @@
       "headline": "Turn an approved brief into a reviewable website.",
       "workspaceSchema": "supermega.website.workspace.v2",
       "views": ["Site", "Preview", "Publish"],
-      "workflow": ["Edit finite pages", "Review responsive preview", "Record attributed evidence", "Approve exact evidence set", "Create downloadable site file", "Optionally prepare Commerce intake"],
+      "workflow": ["Edit finite pages", "Review responsive preview", "Record attributed evidence", "Approve exact evidence set", "Create downloadable site file", "Optionally prepare Shop intake"],
       "proof": ["Monotonic content revision", "Source digest", "Artifact digest", "Evidence IDs", "Human approval", "Append-only events", "Confirmed browser write"],
       "boundaries": ["No CMS", "No domain write", "No analytics connection", "No deployment", "No customer send", "No payment action"]
     },
@@ -138,13 +138,13 @@
       "id": "ecommerce",
       "name": "Ecommerce",
       "route": "https://app.supermega.dev/products/ecommerce/",
-      "status": "rebuild-planned",
+      "status": "release-candidate-local",
       "eyebrow": "Ecommerce maker",
-      "headline": "Create a simple storefront that hands orders to Shop.",
-      "views": ["Storefront", "Products", "Ordering"],
-      "workflow": ["Choose products", "Build storefront", "Review cart", "Capture order intent", "Confirm inside Shop"],
-      "proof": ["Immutable product snapshot", "Idempotent order intent", "Human Shop confirmation"],
-      "boundaries": ["No duplicate stock ledger", "No payment initiation", "No delivery request", "No customer send", "No external write"]
+      "headline": "Create a simple storefront preview from Shop.",
+      "views": ["Storefront", "Preview"],
+      "workflow": ["Choose products", "Write storefront copy", "Review phone and desktop", "Retain deterministic preview digest"],
+      "proof": ["Read-only Shop catalogue snapshot", "Locked price and availability projection", "Deterministic SHA-256 preview digest", "Duplicate and unknown SKU rejection"],
+      "boundaries": ["No duplicate stock ledger", "No cart or order request yet", "No payment initiation", "No delivery request", "No customer send", "No publishing", "No external write"]
     }
   ],
   "agentSolutions": {

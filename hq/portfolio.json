@@ -15,7 +15,7 @@
       "job": "Run orders, stock, fulfilment, payment status, exceptions, and daily close from one accountable shop record.",
       "surfaces": ["Orders", "Stock"],
       "templateContract": { "file": "../site-manifest.json", "productId": "commerce" },
-      "nextGate": "Restore Shop as the user-facing name and route, then repeat one authenticated order-to-close pilot on an isolated hosted tenant with a named operator, baseline, and five-day evidence plan."
+      "nextGate": "Repeat one authenticated order-to-close pilot on an isolated hosted tenant with a named operator, baseline, and five-day evidence plan."
     },
     {
       "id": "plant",
@@ -28,7 +28,7 @@
       "job": "Run jobs, output, materials, quality, equipment, maintenance, and shift exceptions from one accountable plant record.",
       "surfaces": ["Jobs", "Problems"],
       "templateContract": { "file": "../site-manifest.json", "productId": "production" },
-      "nextGate": "Restore Plant as the user-facing name and route, then validate one line, maintenance, or quality workflow with an operator, supervisor review, and measured shift evidence."
+      "nextGate": "Validate one line, maintenance, or quality workflow with an operator, supervisor review, and measured shift evidence."
     },
     {
       "id": "website",
@@ -44,11 +44,11 @@
       "id": "ecommerce",
       "name": "Ecommerce",
       "kind": "maker-product",
-      "status": "rebuild-planned",
+      "status": "release-candidate-local",
       "path": "/products/ecommerce/",
-      "job": "Create a simple customer storefront and ordering surface that hands structured order intent to Shop without duplicating Shop back-office records.",
-      "surfaces": ["Storefront", "Products", "Ordering"],
-      "nextGate": "Recover only the smallest storefront, product, cart, and order-intent flow from the historical prototype; prove an idempotent human-confirmed handoff into Shop before adding checkout, payment, delivery, or external messaging."
+      "job": "Create a simple customer storefront from a read-only Shop catalogue, then add structured order intent without duplicating Shop back-office records.",
+      "surfaces": ["Storefront", "Preview"],
+      "nextGate": "Pass desktop and mobile preview QA, then add a bounded customer order request and prove an idempotent human-confirmed handoff into Shop before adding checkout, payment, delivery, or external messaging."
     },
     {
       "id": "agents",
