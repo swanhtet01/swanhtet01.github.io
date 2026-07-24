@@ -1,48 +1,46 @@
-# Codex task brief: choose the first SuperMega pilot workflow
+# Codex task brief: verify the corrected SuperMega product map
 
-Work item: `QA-001`
-Role: Product / QA operator
-Base SHA: `f2aaa82`
+Work item: `QA-002`
+Role: Product / QA Codex
+Base: current integration branch
 Mode: read-only
 Token mode: lean
 
 ## Objective
 
-Choose one pilot workflow that is already closest to a real, measurable business outcome:
-
-- Commerce: order intake to fulfilment, payment reconciliation, stock exception, and daily close.
-- Production: recurring job to output, problem record, resolution evidence, and owner review.
+Prove that Shop and Plant are the clear canonical products, Website remains truthful, Ecommerce and AI Agent Solutions are visibly planned without fake buttons, and old operation routes preserve the same underlying records.
 
 ## In-scope paths
 
-1. `hq/NOW.md`
-2. `hq/portfolio.json`
-3. `showroom/src/core/CoreApp.tsx`
-4. `showroom/src/core/commerce-workspace.ts`
-5. `showroom/src/core/production-workspace.ts`
+1. `showroom/src/App.tsx`
+2. `showroom/src/core/CoreApp.tsx`
+3. `site-manifest.json`
+4. `tools/verify_app_build.mjs`
+5. `tools/verify_public_vercel_output.mjs`
 
 ## Out of scope
 
-- No file edits, branches, worktrees, commits, pushes, deployments, or connector writes.
-- No YTF, POS, lead-ledger, agent marketplace, new product, or broad visual redesign.
-- Do not propose autonomous sends, payments, publishing, production writes, or unsupported revenue claims.
+- No file edits, branches, commits, pushes, deployments, connector writes, or hosted mutations.
+- No YTF, POS, Claude, lead-ledger, payment, external message, or production database work.
+- No new product modules or visual redesign.
 
-## Deliverable
+## Journeys
 
-Return one compact decision packet:
+1. Open `/` and confirm the first actionable products are Shop, Plant, and Website.
+2. Open `/shop/?tab=orders`, change only browser-local sample state, and confirm the route and UI stay Shop.
+3. Open `/plant/?tab=production`, review Jobs and Problems, and confirm the route and UI stay Plant.
+4. Open `/operations/commerce/?tab=orders` and `/operations/production/?tab=production`; confirm each canonicalizes to Shop or Plant without resetting its current record.
+5. Open Products and confirm Ecommerce and AI Agent Solutions are one compact planned block with no demo button.
+6. Open Website Publish and confirm the optional handoff says Shop and returns to `/shop/?tab=orders`.
 
-1. Recommended pilot and why it wins now.
-2. A five-to-eight-step operator workflow using existing screens and records.
-3. The top three P0/P1 blockers to a real pilot, with exact code or UI evidence.
-4. One baseline metric, one target metric, one responsible human role, and one review date.
-5. The single smallest implementation slice that would improve pilot readiness.
-6. What should explicitly wait.
-
-Prefer the workflow with the shortest path to attributable evidence, not the largest feature list.
+Run at 1280 px and 375 px.
 
 ## Acceptance
 
-- Exactly one pilot recommendation.
-- No more than three blockers.
-- Every claim points to an inspected path or current HQ fact.
-- The next implementation slice fits one task, five paths, and a focused verification command.
+- No horizontal overflow, error overlay, console error, or broken focus.
+- Shop and Plant are the only customer-facing names for the two implemented operating runtimes.
+- Internal `commerce` and `production` IDs remain intact and no local data migration occurs.
+- Ecommerce clearly owns future storefront/order intent; Shop owns order, stock, fulfilment, payment-status, and close.
+- Agents clearly prepare work for human review and have no active demo button.
+- Visible controls are at least 44 px high on mobile.
+- Return one compact evidence packet with exact routes, measurements, and any remaining blocker.

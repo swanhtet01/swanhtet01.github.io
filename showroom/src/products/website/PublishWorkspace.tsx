@@ -506,17 +506,17 @@ export function PublishWorkspace({
 
             <details className="website-disclosure website-commerce-handoff">
               <summary>
-                <span>Optional Commerce handoff</span>
+                <span>Optional Shop handoff</span>
                 <small>Send one approved product request</small>
               </summary>
               <div className="website-handoff-action">
                 <div>
-                  <strong>Website → Commerce intake</strong>
-                  <p>Send one catalog SKU and quantity. Commerce still requires a human to confirm any order, stock, payment, or message change.</p>
+                  <strong>Website → Shop intake</strong>
+                  <p>Send one catalog SKU and quantity. Shop still requires a human to confirm any order, stock, payment, or message change.</p>
                 </div>
                 <div className="website-handoff-controls">
                 <label>
-                  <span>Commerce SKU</span>
+                  <span>Shop SKU</span>
                   <input
                     autoComplete="off"
                     maxLength={80}
@@ -545,7 +545,7 @@ export function PublishWorkspace({
                   {handoffIsCurrent ? 'Intake sent' : submitting === 'handoff' ? 'Sending…' : 'Send intake'}
                 </button>
                 {handoffIsCurrent ? (
-                  <a className="website-button is-primary" href="/operations/commerce/?tab=orders">Review in Commerce</a>
+                  <a className="website-button is-primary" href="/shop/?tab=orders">Review in Shop</a>
                 ) : null}
                 </div>
               </div>

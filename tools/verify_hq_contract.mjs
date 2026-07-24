@@ -2,12 +2,13 @@ import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
 const root = resolve(import.meta.dirname, '..')
-const [readme, now, current, manifestText, portfolioText, databaseRehearsalText] = await Promise.all([
+const [readme, now, current, manifestText, portfolioText, research, databaseRehearsalText] = await Promise.all([
   readFile(resolve(root, 'hq', 'README.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'NOW.md'), 'utf8'),
   readFile(resolve(root, 'CURRENT.md'), 'utf8'),
   readFile(resolve(root, 'site-manifest.json'), 'utf8'),
   readFile(resolve(root, 'hq', 'portfolio.json'), 'utf8'),
+  readFile(resolve(root, 'hq', 'research', 'product-rd-2026-07.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'research', 'postgres17-rehearsal.json'), 'utf8'),
 ])
 
@@ -16,112 +17,139 @@ const portfolio = JSON.parse(portfolioText)
 const databaseRehearsal = JSON.parse(databaseRehearsalText)
 const failures = []
 const requireContract = (name, condition) => { if (!condition) failures.push(name) }
+const product = (id) => portfolio.portfolio?.find((entry) => entry.id === id)
+const internalSystem = (id) => portfolio.internalSystems?.find((entry) => entry.id === id)
 
-requireContract('portfolio schema', portfolio.schemaVersion === 'supermega.hq.portfolio.v1')
-requireContract('portfolio is current', portfolio.updatedAt === '2026-07-24' && now.includes('Updated: 2026-07-24') && current.includes('Last confirmed: 2026-07-24'))
-requireContract('portfolio is narrow', portfolio.portfolio?.map((entry) => entry.id).join(',') === 'company-system,website,commerce,production')
-requireContract('portfolio paths are canonical', portfolio.portfolio?.map((entry) => entry.path).join(',') === '/,/products/website/,/operations/commerce/,/operations/production/')
-requireContract('Website remains a truthful local release candidate', portfolio.portfolio?.find((entry) => entry.id === 'website')?.status === 'release-candidate-local'
-  && portfolio.portfolio?.find((entry) => entry.id === 'website')?.surfaces?.join(',') === 'Pages,Navigation,Publish'
-  && portfolio.portfolio?.find((entry) => entry.id === 'website')?.nextGate?.includes('managed site artifact')
-  && now.includes('without deploying a site or changing a domain'))
-requireContract('Website mobile shell is task first', current.includes('one task-first editor opens by default')
-  && current.includes('Site, Preview, Publish action bar')
-  && current.includes('recovery controls stay inside Site settings')
-  && now.includes('Site, Preview, Publish action bar'))
-requireContract('Commerce owns Website order intake', portfolio.portfolio?.find((entry) => entry.id === 'commerce')?.job.includes('Website') && !portfolio.portfolio?.some((entry) => entry.id === 'ecommerce'))
-requireContract('Commerce managed intake remains adoption-gated', portfolio.portfolio?.find((entry) => entry.id === 'commerce')?.status === 'release-candidate-local'
-  && portfolio.portfolio?.find((entry) => entry.id === 'commerce')?.nextGate?.includes('authenticated human Commerce confirmation'))
-requireContract('product workspaces open on real work', portfolio.portfolio?.find((entry) => entry.id === 'commerce')?.surfaces?.join(',') === 'Orders,Stock'
-  && portfolio.portfolio?.find((entry) => entry.id === 'production')?.surfaces?.join(',') === 'Jobs,Problems'
-  && current.includes('/operations/commerce/?tab=orders')
-  && current.includes('/operations/production/?tab=production')
-  && !current.includes('/operations/commerce/?tab=today')
-  && !current.includes('/operations/production/?tab=today'))
-requireContract('application navigation is current', portfolio.portfolio?.[0]?.surfaces?.join(',') === 'Home,Work,Products,Settings (utility),Agent teams (internal)'
-  && now.includes('Home, Work, and Products are the only primary destinations')
-  && current.includes('Home, Work, and Products are the only primary navigation'))
-requireContract('Home managed product sources stay consistent', current.includes('same authenticated workspace identity')
-  && now.includes('same authenticated identity')
-  && now.includes('never mixes a managed product with local sample records'))
-requireContract('release evidence is current', now.includes('Draft PR `#258` remains')
-  && now.includes('its validated implementation head is')
-  && now.includes('338b6fd11bc27da9b7aa42bee2c293a5c0e3a9ef')
-  && now.includes('run `180` passed every validation job')
-  && now.includes('207 product/runtime'))
-requireContract('Commerce primary action stays visible', current.includes('Review order remains visible below the bounded field scroller')
-  && current.includes('mobile retains normal page flow')
-  && now.includes('Commerce Review order is 304×44px')
-  && now.includes('375px'))
-requireContract('mobile Work focus is measured', current.includes('moves the focused task to the top')
-  && current.includes('restores the full team overview through its Back action')
-  && now.includes('agent detail moved from 579px to 72px')
-  && now.includes('first field from 773px to 266px')
-  && now.includes('work detail and new-work intake start at 72px'))
-requireContract('Work actions match their view', current.includes('New work appears only in Work')
-  && current.includes('each view explains its current task')
-  && now.includes('New work appears only in Work')
-  && now.includes('Review Prepare moved from 806px to 724px'))
-requireContract('Website local recovery is bounded', current.includes('Invalid local Website records stay unchanged')
-  && current.includes('Recovery settings path')
-  && current.includes('two-step reset')
-  && now.includes('Invalid Website data stayed unchanged in session-only recovery mode')
-  && now.includes('confirmed recovery or the two-step local reset'))
-requireContract('hosted database readiness remains truthful', now.includes('PostgreSQL 17.6.1')
-  && now.includes('are not installed')
-  && now.includes('27 informational `rls_enabled_no_policy` findings')
-  && now.includes('Do not treat its healthy status or server version as application readiness'))
-requireContract('local PostgreSQL 17 rehearsal is real but bounded',
-  databaseRehearsal.schemaVersion === 'supermega.hq.database-rehearsal.v1'
-  && databaseRehearsal.engine?.major === 17
-  && databaseRehearsal.engine?.tlsActive === true
-  && databaseRehearsal.engine?.loopbackOnly === true
-  && databaseRehearsal.implementationCommit === 'd49aae09ba36658a201db1ee07dbecb631f978a7'
-  && databaseRehearsal.githubCi?.run === 180
-  && databaseRehearsal.githubCi?.commit === '338b6fd11bc27da9b7aa42bee2c293a5c0e3a9ef'
-  && databaseRehearsal.githubCi?.conclusion === 'success'
-  && databaseRehearsal.githubCi?.coversImplementationCommit === false
-  && databaseRehearsal.runtime?.adapter === 'PostgresTrialStore'
-  && databaseRehearsal.runtime?.autocommit === false
-  && databaseRehearsal.runtime?.explicitTransaction === true
-  && databaseRehearsal.runtime?.transactionLocalIdentity === true
-  && Object.keys(databaseRehearsal.checks || {}).length === 24
-  && Object.values(databaseRehearsal.checks || {}).every((value) => value === true)
-  && databaseRehearsal.checks?.managedWebsiteToCommerceJourney === true
-  && databaseRehearsal.checks?.managedProductionJobToOutput === true
-  && databaseRehearsal.checks?.managedHumanAttribution === true
-  && databaseRehearsal.checks?.managedExactRetry === true
-  && databaseRehearsal.safety?.cleanupComplete === true
-  && databaseRehearsal.safety?.secretValuesExposed === false
-  && databaseRehearsal.safety?.productionMutated === false
-  && databaseRehearsal.safety?.supabaseMutated === false
-  && databaseRehearsal.safety?.vercelMutated === false
-  && databaseRehearsal.remainingHostedGates?.length === 4
-  && now.includes('hosted Supabase remains separate'))
-requireContract('product lifecycle is explicit', portfolio.portfolio?.[0]?.lifecycle?.join(',') === 'discover,define,build,release,learn')
-requireContract('manifest aligns to operating modules', manifest.products?.map((entry) => `${entry.id}:${entry.name}`).join(',') === 'commerce:Commerce,production:Production')
+requireContract('portfolio schema', portfolio.schemaVersion === 'supermega.hq.portfolio.v2')
+requireContract('portfolio is current',
+  portfolio.updatedAt === '2026-07-24'
+  && now.includes('Updated: 2026-07-24')
+  && current.includes('Last confirmed: 2026-07-24'))
+requireContract('customer portfolio is explicit',
+  portfolio.portfolio?.map((entry) => entry.id).join(',') === 'shop,plant,website,ecommerce,agents')
+requireContract('customer paths are canonical',
+  portfolio.portfolio?.map((entry) => entry.path).join(',') === '/shop/,/plant/,/products/website/,/products/ecommerce/,/agents/')
+requireContract('product lifecycle is explicit',
+  portfolio.productLifecycle?.join(',') === 'discover,define,build,release,learn')
+
+requireContract('Shop uses the stable commerce runtime',
+  product('shop')?.name === 'Shop'
+  && product('shop')?.runtimeSurface === 'commerce'
+  && product('shop')?.compatibilityPath === '/operations/commerce/'
+  && product('shop')?.surfaces?.join(',') === 'Orders,Stock'
+  && product('shop')?.templateContract?.productId === 'commerce')
+requireContract('Plant uses the stable production runtime',
+  product('plant')?.name === 'Plant'
+  && product('plant')?.runtimeSurface === 'production'
+  && product('plant')?.compatibilityPath === '/operations/production/'
+  && product('plant')?.surfaces?.join(',') === 'Jobs,Problems'
+  && product('plant')?.templateContract?.productId === 'production')
+requireContract('Website remains truthful',
+  product('website')?.status === 'release-candidate-local'
+  && product('website')?.surfaces?.join(',') === 'Site,Preview,Publish'
+  && product('website')?.nextGate?.includes('named-business brief'))
+requireContract('Ecommerce is separate but not falsely available',
+  product('ecommerce')?.status === 'rebuild-planned'
+  && product('ecommerce')?.job?.includes('hands structured order intent to Shop')
+  && product('ecommerce')?.surfaces?.join(',') === 'Storefront,Products,Ordering'
+  && product('ecommerce')?.nextGate?.includes('idempotent human-confirmed handoff into Shop'))
+requireContract('Agent Solutions starts with Order Intake',
+  product('agents')?.status === 'prototype-planned'
+  && product('agents')?.firstSolution === 'Order Intake Agent'
+  && product('agents')?.nextGate?.includes('zero side effects'))
+requireContract('internal systems are not customer products',
+  portfolio.internalSystems?.map((entry) => entry.id).join(',') === 'company-system,rnd-system'
+  && internalSystem('company-system')?.name === 'SuperMega HQ'
+  && internalSystem('rnd-system')?.public === false)
+
+requireContract('manifest preserves internal IDs and restores public names',
+  manifest.products?.map((entry) => `${entry.id}:${entry.publicId}:${entry.name}`).join(',')
+    === 'commerce:shop:Shop,production:plant:Plant')
+requireContract('manifest maker products are truthful',
+  manifest.prototypeProducts?.map((entry) => `${entry.id}:${entry.status}`).join(',')
+    === 'website:release-candidate-local,ecommerce:rebuild-planned')
+requireContract('manifest agent product is truthful',
+  manifest.agentSolutions?.id === 'agents'
+  && manifest.agentSolutions?.status === 'prototype-planned'
+  && manifest.agentSolutions?.firstSolution === 'Order Intake Agent')
+
 const expectedTemplateIds = {
   commerce: 'social-commerce,retail-wholesale,restaurant-ordering',
   production: 'production-control,maintenance-downtime,quality-traceability',
 }
 let workflowProfileCount = 0
-for (const productId of Object.keys(expectedTemplateIds)) {
-  const hqProduct = portfolio.portfolio?.find((entry) => entry.id === productId)
-  const manifestProduct = manifest.products?.find((entry) => entry.id === productId)
-  requireContract(`${productId} points to shared template contract`, hqProduct?.templateContract?.file === '../site-manifest.json' && hqProduct?.templateContract?.productId === productId && !Object.hasOwn(hqProduct, 'templates'))
-  requireContract(`${productId} template set is supported`, manifestProduct?.templates?.map((entry) => entry.id).join(',') === expectedTemplateIds[productId])
-  requireContract(`${productId} template profiles are executable`, manifestProduct?.templates?.every((entry) => entry.outcome?.trim() && entry.metric?.trim() && entry.workflow?.length >= 5 && entry.entryPoints?.length >= 3))
+for (const runtimeSurface of Object.keys(expectedTemplateIds)) {
+  const manifestProduct = manifest.products?.find((entry) => entry.id === runtimeSurface)
+  requireContract(`${runtimeSurface} template set is supported`,
+    manifestProduct?.templates?.map((entry) => entry.id).join(',') === expectedTemplateIds[runtimeSurface])
+  requireContract(`${runtimeSurface} template profiles are executable`,
+    manifestProduct?.templates?.every((entry) =>
+      entry.outcome?.trim()
+      && entry.metric?.trim()
+      && entry.workflow?.length >= 5
+      && entry.entryPoints?.length >= 3))
   workflowProfileCount += manifestProduct?.templates?.length || 0
 }
-requireContract('current authority includes HQ', current.includes('hq/portfolio.json') && current.includes('## Internal HQ'))
-requireContract('OneDrive archive is not authority', readme.includes('historical archive and source intake') && readme.includes('does not override this repository'))
-requireContract('source provenance retained', ['1VkuZ5_aUQ7DiYirt2asvzwsQJT9F_AuA', '1uxZ1Ey8xLX5yGmOCZrJ7Mx3I0HMd1unT', 'DawBDyzkTf8', '7483054882816675840'].every((token) => readme.includes(token)))
-requireContract('HQ stays concise', readme.length < 7000 && now.length < 7000 && portfolioText.length < 12000)
-requireContract('research remains gated', portfolio.researchGates?.some((entry) => entry.decision === 'reject') && current.includes('Research does not automatically become a dependency.'))
-requireContract('research uses official sources', portfolio.researchGates?.every((entry) => /^https:\/\/(?:vercel\.com|tanstack\.com|supabase\.com)\//.test(entry.source || '')))
 
-for (const forbidden of ['Yangon Tyre', 'ytf.supermega.dev', 'pos.supermega.dev', 'twelve product', 'autonomous employee', 'Service bookings', 'Material receiving']) {
-  requireContract(`retired HQ context absent: ${forbidden}`, !`${readme}\n${now}\n${current}\n${portfolioText}`.toLowerCase().includes(forbidden.toLowerCase()))
+requireContract('current direction owns the corrected boundary',
+  current.includes('The customer portfolio is **Shop**, **Plant**, **Website**, **Ecommerce**')
+  && current.includes('`commerce` and `production` remain stable internal runtime')
+  && current.includes('Ecommerce is not a second Shop back office')
+  && current.includes('SuperMega HQ, R&D, agent coordination, Ops, Console, and machine coordination are internal'))
+requireContract('canonical product routes are stated',
+  ['/shop/', '/plant/', '/products/website/', '/products/ecommerce/', '/agents/']
+    .every((route) => current.includes(`\`${route}\``)))
+requireContract('owner authority remains explicit',
+  current.includes('External sends, payments, publishing, access changes, deployment, and production writes remain owner-approved')
+  && now.includes('No external send, payment, refund, publish, domain change, connector write, merge, deployment, access change, production database write'))
+requireContract('local and managed truth remains explicit',
+  current.includes('The default app remains an isolated browser-local trial')
+  && current.includes('Managed mode remains locked behind authenticated tenant identity')
+  && now.includes('hosted production activation is not proven'))
+requireContract('research decision is superseded',
+  research.includes('superseded in part by the founder')
+  && research.includes('Shop and Plant are the canonical customer-facing operating products')
+  && research.includes('Ecommerce owns the storefront and order-intent layer and feeds Shop'))
+
+requireContract('local PostgreSQL rehearsal remains bounded',
+  databaseRehearsal.schemaVersion === 'supermega.hq.database-rehearsal.v1'
+  && databaseRehearsal.engine?.major === 17
+  && databaseRehearsal.engine?.tlsActive === true
+  && databaseRehearsal.engine?.loopbackOnly === true
+  && databaseRehearsal.runtime?.adapter === 'PostgresTrialStore'
+  && databaseRehearsal.runtime?.explicitTransaction === true
+  && Object.keys(databaseRehearsal.checks || {}).length === 24
+  && Object.values(databaseRehearsal.checks || {}).every((value) => value === true)
+  && databaseRehearsal.safety?.cleanupComplete === true
+  && databaseRehearsal.safety?.secretValuesExposed === false
+  && databaseRehearsal.safety?.productionMutated === false
+  && databaseRehearsal.safety?.supabaseMutated === false
+  && databaseRehearsal.safety?.vercelMutated === false)
+
+requireContract('current authority includes HQ',
+  current.includes('hq/portfolio.json')
+  && current.includes('## Internal company system and R&D'))
+requireContract('OneDrive archive is not authority',
+  readme.includes('historical archive and source intake')
+  && readme.includes('does not override this repository'))
+requireContract('source provenance retained',
+  ['1VkuZ5_aUQ7DiYirt2asvzwsQJT9F_AuA', '1uxZ1Ey8xLX5yGmOCZrJ7Mx3I0HMd1unT', 'DawBDyzkTf8', '7483054882816675840']
+    .every((token) => readme.includes(token)))
+requireContract('HQ stays concise',
+  readme.length < 7000
+  && now.length < 9000
+  && current.length < 14000
+  && portfolioText.length < 16000)
+requireContract('research remains gated',
+  portfolio.researchGates?.some((entry) => entry.decision === 'reject')
+  && current.includes('Resource intelligence stays inside HQ'))
+requireContract('research uses official sources',
+  portfolio.researchGates?.every((entry) =>
+    /^https:\/\/(?:vercel\.com|tanstack\.com|supabase\.com|platform\.openai\.com)\//.test(entry.source || '')))
+
+for (const forbidden of ['Yangon Tyre', 'ytf.supermega.dev', 'pos.supermega.dev', 'twelve product']) {
+  requireContract(`retired HQ context absent: ${forbidden}`,
+    !`${readme}\n${now}\n${current}\n${portfolioText}`.toLowerCase().includes(forbidden.toLowerCase()))
 }
 
 if (failures.length) {
@@ -129,4 +157,11 @@ if (failures.length) {
   process.exit(1)
 }
 
-console.log(JSON.stringify({ ok: true, contract: 'supermega_hq', products: portfolio.portfolio.map((entry) => entry.id), workflowProfiles: workflowProfileCount, researchGates: portfolio.researchGates.length }, null, 2))
+console.log(JSON.stringify({
+  ok: true,
+  contract: 'supermega_hq',
+  products: portfolio.portfolio.map((entry) => entry.id),
+  internalSystems: portfolio.internalSystems.map((entry) => entry.id),
+  workflowProfiles: workflowProfileCount,
+  researchGates: portfolio.researchGates.length,
+}, null, 2))

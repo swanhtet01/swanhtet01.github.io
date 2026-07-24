@@ -432,7 +432,7 @@ export function WebsiteProduct() {
       || !Number.isSafeInteger(input.quantity)
       || input.quantity < 1
       || input.quantity > 99) {
-      setNotice('Enter an exact Commerce SKU and a whole-number quantity from 1 to 99.')
+      setNotice('Enter an exact Shop SKU and a whole-number quantity from 1 to 99.')
       return
     }
 
@@ -468,20 +468,20 @@ export function WebsiteProduct() {
       try {
         const bootstrap = await loadManagedBootstrap()
         if (!managedActorId || bootstrap.identity.actor_id !== managedActorId) {
-          throw new Error('Managed Website identity changed before the Commerce intake could be prepared.')
+          throw new Error('Managed Website identity changed before the Shop intake could be prepared.')
         }
         const record = bootstrap.states.commerce
         if (record.surface !== 'commerce' || record.version < 1) {
-          throw new Error('Create the managed Commerce catalog before sending a Website intake.')
+          throw new Error('Create the managed Shop catalog before sending a Website intake.')
         }
         const current = validateCommerceState(record.state)
         const existing = commerceWebsiteIntakes(current).find((intake) => managedHandoffSourceKey(intake.source) === sourceKey)
         if (existing) {
           if (existing.sku !== sku || existing.quantity !== input.quantity) {
-            throw new Error('This Website snapshot already has a different retained Commerce intake.')
+            throw new Error('This Website snapshot already has a different retained Shop intake.')
           }
           setPreparedHandoffSource(sourceKey)
-          setNotice(`${existing.id} is already retained in managed Commerce.`)
+          setNotice(`${existing.id} is already retained in managed Shop.`)
           return
         }
 
@@ -490,7 +490,7 @@ export function WebsiteProduct() {
           actionId: `ACT-WEB-${secureUuid().toUpperCase()}`,
           capturedAt: new Date().toISOString(),
           actor: managedActorId,
-          reason: 'Approved Website snapshot sent to Commerce intake',
+          reason: 'Approved Website snapshot sent to Shop intake',
           evidenceReference: publish.id,
         }
         const candidate = createCommerceWebsiteIntake(current, {
@@ -499,7 +499,7 @@ export function WebsiteProduct() {
           sku,
           quantity: input.quantity,
         }, proof)
-        if (!candidate || candidate === current) throw new Error('The SKU does not match exactly one managed Commerce catalog item.')
+        if (!candidate || candidate === current) throw new Error('The SKU does not match exactly one managed Shop catalog item.')
         const saved = await saveManagedCommerceCommand({
           commandId,
           eventType: 'commerce.website_intake.created',
@@ -510,15 +510,15 @@ export function WebsiteProduct() {
         if (saved.surface !== 'commerce'
           || saved.event_type !== 'commerce.website_intake.created'
           || saved.version !== record.version + 1) {
-          throw new Error('Managed Commerce returned an invalid intake confirmation.')
+          throw new Error('Managed Shop returned an invalid intake confirmation.')
         }
         const accepted = validateCommerceState(saved.state)
         const retained = commerceWebsiteIntakes(accepted).find((intake) => managedHandoffSourceKey(intake.source) === sourceKey)
         if (!retained || retained.status !== 'pending_confirmation' || retained.sku !== sku || retained.quantity !== input.quantity) {
-          throw new Error('Managed Commerce did not confirm the expected intake record.')
+          throw new Error('Managed Shop did not confirm the expected intake record.')
         }
         setPreparedHandoffSource(sourceKey)
-        setNotice(`${retained.id} is waiting in Commerce. No stock or order changed.`)
+        setNotice(`${retained.id} is waiting in Shop. No stock or order changed.`)
       } catch (error) {
         if (error instanceof ManagedTrialError && error.code === 'trial_version_conflict') {
           try {
@@ -534,7 +534,7 @@ export function WebsiteProduct() {
             // Preserve the original version-conflict message below.
           }
         }
-        setNotice(`Managed Commerce intake was not created: ${error instanceof Error ? error.message : 'unknown managed error'}`)
+        setNotice(`Managed Shop intake was not created: ${error instanceof Error ? error.message : 'unknown managed error'}`)
       }
       return
     }
@@ -570,7 +570,7 @@ export function WebsiteProduct() {
     }
 
     setPreparedHandoffSource(handoffSourceKey(restored))
-    setNotice('Website intake prepared in this browser. Review it in Commerce Orders.')
+    setNotice('Website intake prepared in this browser. Review it in Shop Orders.')
   }
 
   return (
@@ -580,7 +580,7 @@ export function WebsiteProduct() {
           {noticePriority !== 'routine' ? (
             <div className="website-notice" aria-busy={repairing} aria-live="polite" data-priority={noticePriority} role="status">
               <p>{repairArmed
-                ? 'The unreadable Website value will be archived, then replaced with the valid workspace on screen. Commerce, Production, managed data, domains, and deployments are not touched.'
+                ? 'The unreadable Website value will be archived, then replaced with the valid workspace on screen. Shop, Plant, managed data, domains, and deployments are not touched.'
                 : repairing ? 'Archiving damaged Website data and confirming the replacement…' : statusNotice}</p>
               {repairArchiveKey && !repairArmed ? (
                 <div className="website-notice-actions">

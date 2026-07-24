@@ -55,7 +55,7 @@ async function walk(directory) {
   return files
 }
 
-for (const route of ['', 'work', 'operations', 'operations/commerce', 'operations/production', 'products/website', 'products/ecommerce', 'settings']) {
+for (const route of ['', 'work', 'operations', 'shop', 'plant', 'operations/commerce', 'operations/production', 'products/website', 'products/ecommerce', 'agents', 'settings']) {
   const page = resolve(dist, route, 'index.html')
   if (!await exists(page)) fail(`missing_route:${route || '/'}`)
 }
@@ -96,8 +96,8 @@ const overviewPageContract = coreSource.slice(coreSource.indexOf('export functio
 if (!overviewPageContract.includes('useCommerceWorkspace(managedIdentity)')
   || !overviewPageContract.includes('useProductionWorkspace(managedIdentity)')) fail('home_managed_product_sources_not_consistent')
 if (!coreSource.includes('className="product-launcher"')
-  || !coreSource.includes('to="/operations/commerce/?tab=orders"')
-  || !coreSource.includes('to="/operations/production/?tab=production"')
+  || !coreSource.includes('to="/shop/?tab=orders"')
+  || !coreSource.includes('to="/plant/?tab=production"')
   || !coreSource.includes('to="/products/website/"')
   || !coreSource.includes('const homeWork = visibleWork.slice(0, 3)')) fail('first_run_product_launcher_missing')
 if (coreSource.includes('className="core-panel approval-panel"')) fail('approval_queue_hidden_in_extra_panel')
@@ -154,14 +154,21 @@ if (coreLayoutRouteStart < 0
   || websiteRoute < coreLayoutRouteStart
   || websiteRoute > coreLayoutRouteEnd
   || !coreSource.includes("location.pathname.startsWith('/products/website/')")
-  || !coreSource.includes("to === '/operations/' && location.pathname.startsWith('/products/')")
+  || !coreSource.includes("to === '/operations/' && (")
+  || !coreSource.includes("location.pathname.startsWith('/shop/')")
+  || !coreSource.includes("location.pathname.startsWith('/plant/')")
   || websiteSource.includes('className="website-topbar"')
   || websiteSource.includes('className="website-brand"')
   || websiteSource.includes('<main id="website-workspace"')
   || !embeddedWebsiteCss.includes('.website-product {')
   || !embeddedWebsiteCss.includes('overflow: visible;')
   || !embeddedWebsiteCss.includes('.website-shell {\n    height: auto;')) fail('website_shared_app_shell_missing')
-if (!appSource.includes('<Navigate replace to="/operations/commerce/?tab=orders" />') || !appSource.includes('path="products/ecommerce/*"')) fail('legacy_ecommerce_route_not_redirected')
+if (!appSource.includes('<Navigate replace to="/operations/#planned" />')
+  || !appSource.includes('path="products/ecommerce/*"')
+  || !appSource.includes('<OperationsPage product="commerce" />')
+  || !appSource.includes('path="shop/*"')
+  || !appSource.includes('<OperationsPage product="production" />')
+  || !appSource.includes('path="plant/*"')) fail('canonical_product_routes_missing')
 if (!appPackage.scripts?.lint?.includes('src/products')) fail('prototype_sources_not_linted')
 if (!websiteSource.includes('No website has been deployed.')
   || !websiteSource.includes('No deployment occurred.')
@@ -214,7 +221,7 @@ if (!websiteModelSource.includes('repairInvalidWebsiteWorkspace')
   || !websiteSource.includes('Download archive')
   || !websiteSource.includes('Recovery archives')
   || !websiteSource.includes('Confirm remove')
-  || !websiteSource.includes('Commerce, Production, managed data, domains, and deployments are not touched.')
+  || !websiteSource.includes('Shop, Plant, managed data, domains, and deployments are not touched.')
   || !websiteSource.includes('aria-busy={repairing}')) fail('website_targeted_repair_contract_missing')
 if (!managedTrialSource.includes('saveManagedWebsiteCommand') || !managedTrialSource.includes("surface: 'website'") || !websiteWorkspaceSource.includes('loadManagedBootstrap()') || !websiteWorkspaceSource.includes("storageModeRef.current = 'managed'") || !websiteWorkspaceSource.includes('actor: managedActorRef.current') || !websiteWorkspaceSource.includes("error.code === 'trial_version_conflict'")) fail('managed_website_command_client_missing')
 if (!websiteWorkspaceSource.includes('bindManagedActor') || !websiteWorkspaceSource.includes('verifiedBy: actor') || !websiteWorkspaceSource.includes('reviewer: actor') || !websiteWorkspaceSource.includes('recordedBy: actor')) fail('managed_website_actor_binding_missing')
@@ -283,7 +290,7 @@ if (!publishSource.includes("type PublishStep = 'checks' | 'evidence' | 'approva
   || !publishCssSource.includes('grid-template-columns: repeat(2, minmax(0, 1fr))')
   || !publishCssSource.includes('font-size: 16px')) fail('website_publish_task_flow_missing')
 if (!publishSource.includes('<details className="website-disclosure website-commerce-handoff">')
-  || !publishSource.includes('Optional Commerce handoff')
+  || !publishSource.includes('Optional Shop handoff')
   || !publishSource.includes('Create site file')) fail('website_publish_secondary_actions_not_progressively_disclosed')
 const websiteMobileCss = websiteCssSource.slice(websiteCssSource.indexOf('@media (max-width: 640px)'), websiteCssSource.indexOf('@media (prefers-reduced-motion'))
 const websitePreviewControlsHiddenUnconditionally = /(?:^|\n)\s*\.website-preview-controls\s*\{\s*display:\s*none/.test(websiteMobileCss)
@@ -432,7 +439,7 @@ if (!coreSource.includes("mode: 'managed-unprovisioned'")
   || !coreSource.includes("result.surface !== 'production'")
   || !coreSource.includes('validateProductionState(result.state)')
   || !coreSource.includes("error.code === 'trial_version_conflict'")
-  || !coreSource.includes('managedIdentity ? `${record.id} confirmed by the managed Production API.')) fail('managed_production_ui_not_fail_closed')
+  || !coreSource.includes('managedIdentity ? `${record.id} confirmed by the managed Plant API.')) fail('managed_production_ui_not_fail_closed')
 const productionTabsContract = coreSource.slice(coreSource.indexOf('const productionTabs'), coreSource.indexOf('function uid'))
 if (productionTabsContract.includes("{ id: 'today', label: 'Today' }") || !productionTabsContract.includes("{ id: 'production', label: 'Jobs' }") || !productionTabsContract.includes("{ id: 'control', label: 'Problems' }") || (productionTabsContract.match(/^\s*\{ id:/gm) || []).length !== 2) fail('production_two_tab_contract_changed')
 const productionPageContract = coreSource.slice(coreSource.indexOf('function ProductionPage'), coreSource.indexOf('function JobList'))
@@ -446,7 +453,7 @@ if (!productionJobsContract.includes('Jobs to finish')
 if (coreCssSource.includes('.production-view > .output-panel { grid-row: 1; }')
   || coreCssSource.includes('.production-view > .job-panel { grid-row: 2; }')) fail('production_mobile_job_context_order_regressed')
 if (coreSource.includes('Math.min(quantity') || !productionPageContract.includes('No output was recorded.') || !productionPageContract.includes('Number.isSafeInteger(quantity)') || productionPageContract.includes('max={selectedRemaining')) fail('production_output_silently_clamped')
-if (!productionPageContract.includes('persisted with attributed Production evidence.') || productionPageContract.includes('<ActionHistory actions={actions} domain="production"')) fail('production_confirmation_record_not_domain_specific')
+if (!productionPageContract.includes('persisted with attributed Plant evidence.') || productionPageContract.includes('<ActionHistory actions={actions} domain="production"')) fail('production_confirmation_record_not_domain_specific')
 if (!coreSource.includes("addEventListener('storage', refreshFromStorage)") || !coreSource.includes("removeEventListener('storage', refreshFromStorage)")) fail('production_cross_tab_refresh_missing')
 if (!coreSource.includes('headingRef.current?.focus()') || !coreSource.includes('returnFocus?.isConnected') || !coreSource.includes('previousFocus.focus()') || !coreSource.includes('aria-live="polite"') || !coreSource.includes('current recorded state ${machine.state}')) fail('production_confirmation_accessibility_missing')
 if (!productionPageContract.includes('className="production-mode-banner"')
@@ -484,8 +491,11 @@ for (const product of manifest.products || []) {
     }
   }
 }
-for (const route of ['/operations/commerce/', '/operations/production/', '/products/website/']) {
+for (const route of ['/shop/', '/plant/', '/products/website/']) {
   if (!corpus.includes(route)) fail(`missing_canonical_module_route:${route}`)
+}
+for (const route of ['/operations/commerce/', '/operations/production/']) {
+  if (!`${appSource}\n${coreSource}`.includes(route)) fail(`missing_runtime_compatibility_route:${route}`)
 }
 for (const forbidden of ['pos.supermega.dev', 'ytf.supermega.dev', 'Yangon Tyre', 'ytf-plant-a', 'Company Systems That Replace Tool Sprawl', 'Workspace draft', 'Service bookings', 'Material receiving']) {
   if (corpus.toLowerCase().includes(forbidden.toLowerCase())) fail(`retired_context:${forbidden}`)

@@ -199,6 +199,14 @@ type ActionDetails = Pick<AccountableAction, 'actor' | 'reason' | 'evidenceRefer
 
 type ProductId = 'commerce' | 'production'
 
+function productDisplayName(product: ProductId) {
+  return product === 'commerce' ? 'Shop' : 'Plant'
+}
+
+function productCanonicalPath(product: ProductId) {
+  return product === 'commerce' ? '/shop/' : '/plant/'
+}
+
 type WorkflowTemplate = {
   id: string
   name: string
@@ -637,10 +645,10 @@ type CommerceWorkspaceView = {
 }
 
 function managedCommerceView(record: ManagedStateRecord, workspaceId: string): CommerceWorkspaceView {
-  if (record.surface !== 'commerce' || !Number.isSafeInteger(record.version) || record.version < 0) throw new Error('Managed Commerce returned an invalid state envelope.')
+  if (record.surface !== 'commerce' || !Number.isSafeInteger(record.version) || record.version < 0) throw new Error('Managed Shop returned an invalid state envelope.')
   if (record.version === 0) {
-    if (Object.keys(record.state).length) throw new Error('Managed Commerce has state without a valid revision.')
-    return { state: createEmptyCommerce(), mode: 'managed-unprovisioned', workspaceId, version: 0, error: 'This managed workspace has no Commerce catalog yet.', writeReady: false }
+    if (Object.keys(record.state).length) throw new Error('Managed Shop has state without a valid revision.')
+    return { state: createEmptyCommerce(), mode: 'managed-unprovisioned', workspaceId, version: 0, error: 'This managed workspace has no Shop catalog yet.', writeReady: false }
   }
   return { state: validateCommerceState(record.state), mode: 'managed-ready', workspaceId, version: record.version, error: '', writeReady: true }
 }
@@ -674,7 +682,7 @@ function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = null) {
       })
       .catch((error) => {
         if (!active || identityRef.current?.workspaceId !== managedIdentity.workspaceId) return
-        const next = { state: createEmptyCommerce(), mode: 'managed-error' as const, workspaceId: managedIdentity.workspaceId, version: null, error: error instanceof Error ? error.message : 'Managed Commerce could not be loaded.', writeReady: false }
+        const next = { state: createEmptyCommerce(), mode: 'managed-error' as const, workspaceId: managedIdentity.workspaceId, version: null, error: error instanceof Error ? error.message : 'Managed Shop could not be loaded.', writeReady: false }
         snapshotRef.current = next
         setManagedSnapshot(next)
       })
@@ -688,7 +696,7 @@ function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = null) {
     transition: (state: CommerceState) => CommerceState | null,
   ) {
     if (!managedIdentity) {
-      if (eventType === 'commerce.workspace.initialized') throw new Error('Browser demo Commerce is already initialized.')
+      if (eventType === 'commerce.workspace.initialized') throw new Error('Browser demo Shop is already initialized.')
       const result = await mutateCommerceWorkspace(transition)
       if (!result.ok) {
         const rejected = { ...snapshotRef.current, error: result.error }
@@ -707,10 +715,10 @@ function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = null) {
     const initializing = eventType === 'commerce.workspace.initialized'
     const modeReady = initializing ? current.mode === 'managed-unprovisioned' && current.version === 0 : current.mode === 'managed-ready' && current.version !== null
     if (!modeReady || current.workspaceId !== workspaceId || current.version === null) {
-      throw new Error(current.error || 'Managed Commerce is not ready for writes.')
+      throw new Error(current.error || 'Managed Shop is not ready for writes.')
     }
     const next = transition(current.state)
-    if (!next) throw new Error('The Commerce state changed or this lifecycle step is no longer valid. Nothing was written.')
+    if (!next) throw new Error('The Shop state changed or this lifecycle step is no longer valid. Nothing was written.')
     if (next === current.state) return
     const candidate = validateCommerceState(next)
 
@@ -724,7 +732,7 @@ function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = null) {
       })
       if (identityRef.current?.workspaceId !== workspaceId) throw new Error('The managed workspace changed before the write was confirmed.')
       if (result.surface !== 'commerce' || result.event_type !== eventType || result.version !== current.version + 1) {
-        throw new Error('Managed Commerce returned an invalid command result.')
+        throw new Error('Managed Shop returned an invalid command result.')
       }
       const accepted = validateCommerceState(result.state)
       let nextSnapshot: CommerceWorkspaceView = { state: accepted, mode: 'managed-ready', workspaceId, version: result.version, error: '', writeReady: true }
@@ -733,30 +741,30 @@ function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = null) {
         if (identityRef.current?.workspaceId !== workspaceId) throw new Error('The managed workspace changed before the replay could be reconciled.')
         const refreshed = managedCommerceView(bootstrap.states.commerce, workspaceId)
         if (refreshed.mode !== 'managed-ready' || refreshed.version === null || refreshed.version < result.version) {
-          throw new Error('Managed Commerce could not reconcile the committed command with current state.')
+          throw new Error('Managed Shop could not reconcile the committed command with current state.')
         }
         nextSnapshot = { ...refreshed, error: '' }
       }
       snapshotRef.current = nextSnapshot
       setManagedSnapshot(nextSnapshot)
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'The managed Commerce write was not confirmed.'
+      const message = error instanceof Error ? error.message : 'The managed Shop write was not confirmed.'
       if (error instanceof ManagedTrialError && error.code === 'trial_version_conflict') {
         try {
           const bootstrap = await loadManagedBootstrap()
-          if (identityRef.current?.workspaceId !== workspaceId) throw new Error('The managed workspace changed before Commerce could refresh.')
+          if (identityRef.current?.workspaceId !== workspaceId) throw new Error('The managed workspace changed before Shop could refresh.')
           const refreshed = managedCommerceView(bootstrap.states.commerce, workspaceId)
-          const conflict = { ...refreshed, error: 'Commerce changed in another session. The latest revision is loaded; review and confirm the action again.' }
+          const conflict = { ...refreshed, error: 'Shop changed in another session. The latest revision is loaded; review and confirm the action again.' }
           snapshotRef.current = conflict
           setManagedSnapshot(conflict)
         } catch (refreshError) {
-          const refreshMessage = refreshError instanceof Error ? refreshError.message : 'Commerce changed and the latest revision could not be loaded.'
+          const refreshMessage = refreshError instanceof Error ? refreshError.message : 'Shop changed and the latest revision could not be loaded.'
           const rejected = { ...snapshotRef.current, error: refreshMessage }
           snapshotRef.current = rejected
           setManagedSnapshot(rejected)
           throw refreshError
         }
-        throw new Error('Commerce changed in another session. The latest revision is loaded; review and confirm the action again.')
+        throw new Error('Shop changed in another session. The latest revision is loaded; review and confirm the action again.')
       }
       if (identityRef.current?.workspaceId === workspaceId) {
         const rejected = { ...snapshotRef.current, error: message }
@@ -786,10 +794,10 @@ type ProductionWorkspaceView = {
 }
 
 function managedProductionView(record: ManagedStateRecord, workspaceId: string): ProductionWorkspaceView {
-  if (record.surface !== 'production' || !Number.isSafeInteger(record.version) || record.version < 0) throw new Error('Managed Production returned an invalid state envelope.')
+  if (record.surface !== 'production' || !Number.isSafeInteger(record.version) || record.version < 0) throw new Error('Managed Plant returned an invalid state envelope.')
   if (record.version === 0) {
-    if (Object.keys(record.state).length) throw new Error('Managed Production has state without a valid revision.')
-    return { state: createEmptyProduction(), mode: 'managed-unprovisioned', workspaceId, version: 0, error: 'This managed workspace has no Production plan yet.', writeReady: false }
+    if (Object.keys(record.state).length) throw new Error('Managed Plant has state without a valid revision.')
+    return { state: createEmptyProduction(), mode: 'managed-unprovisioned', workspaceId, version: 0, error: 'This managed workspace has no Plant plan yet.', writeReady: false }
   }
   return { state: validateProductionState(record.state), mode: 'managed-ready', workspaceId, version: record.version, error: '', writeReady: true }
 }
@@ -836,7 +844,7 @@ function useProductionWorkspace(managedIdentity: ManagedIdentity | null = null) 
       })
       .catch((error) => {
         if (!active || identityRef.current?.workspaceId !== managedIdentity.workspaceId) return
-        const next = { state: createEmptyProduction(), mode: 'managed-error' as const, workspaceId: managedIdentity.workspaceId, version: null, error: error instanceof Error ? error.message : 'Managed Production could not be loaded.', writeReady: false }
+        const next = { state: createEmptyProduction(), mode: 'managed-error' as const, workspaceId: managedIdentity.workspaceId, version: null, error: error instanceof Error ? error.message : 'Managed Plant could not be loaded.', writeReady: false }
         snapshotRef.current = next
         setManagedSnapshot(next)
       })
@@ -850,7 +858,7 @@ function useProductionWorkspace(managedIdentity: ManagedIdentity | null = null) 
     transition: (state: ProductionState) => ProductionState | null,
   ) {
     if (!managedIdentity) {
-      if (eventType === 'production.workspace.initialized') throw new Error('Browser demo Production is already initialized.')
+      if (eventType === 'production.workspace.initialized') throw new Error('Browser demo Plant is already initialized.')
       const result = await mutateProductionWorkspace(transition)
       if (!result.ok) {
         const refreshed = loadProductionWorkspace()
@@ -877,10 +885,10 @@ function useProductionWorkspace(managedIdentity: ManagedIdentity | null = null) 
     const initializing = eventType === 'production.workspace.initialized'
     const modeReady = initializing ? current.mode === 'managed-unprovisioned' && current.version === 0 : current.mode === 'managed-ready' && current.version !== null
     if (!modeReady || current.workspaceId !== workspaceId || current.version === null) {
-      throw new Error(current.error || 'Managed Production is not ready for writes.')
+      throw new Error(current.error || 'Managed Plant is not ready for writes.')
     }
     const next = transition(current.state)
-    if (!next) throw new Error('The Production state changed or this lifecycle step is no longer valid. Nothing was written.')
+    if (!next) throw new Error('The Plant state changed or this lifecycle step is no longer valid. Nothing was written.')
     if (next === current.state) return
     const candidate = validateProductionState(next)
 
@@ -894,7 +902,7 @@ function useProductionWorkspace(managedIdentity: ManagedIdentity | null = null) 
       })
       if (identityRef.current?.workspaceId !== workspaceId) throw new Error('The managed workspace changed before the write was confirmed.')
       if (result.surface !== 'production' || result.event_type !== eventType || result.version !== current.version + 1) {
-        throw new Error('Managed Production returned an invalid command result.')
+        throw new Error('Managed Plant returned an invalid command result.')
       }
       const accepted = validateProductionState(result.state)
       let nextSnapshot: ProductionWorkspaceView = { state: accepted, mode: 'managed-ready', workspaceId, version: result.version, error: '', writeReady: true }
@@ -903,30 +911,30 @@ function useProductionWorkspace(managedIdentity: ManagedIdentity | null = null) 
         if (identityRef.current?.workspaceId !== workspaceId) throw new Error('The managed workspace changed before the replay could be reconciled.')
         const refreshed = managedProductionView(bootstrap.states.production, workspaceId)
         if (refreshed.mode !== 'managed-ready' || refreshed.version === null || refreshed.version < result.version) {
-          throw new Error('Managed Production could not reconcile the committed command with current state.')
+          throw new Error('Managed Plant could not reconcile the committed command with current state.')
         }
         nextSnapshot = { ...refreshed, error: '' }
       }
       snapshotRef.current = nextSnapshot
       setManagedSnapshot(nextSnapshot)
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'The managed Production write was not confirmed.'
+      const message = error instanceof Error ? error.message : 'The managed Plant write was not confirmed.'
       if (error instanceof ManagedTrialError && error.code === 'trial_version_conflict') {
         try {
           const bootstrap = await loadManagedBootstrap()
-          if (identityRef.current?.workspaceId !== workspaceId) throw new Error('The managed workspace changed before Production could refresh.')
+          if (identityRef.current?.workspaceId !== workspaceId) throw new Error('The managed workspace changed before Plant could refresh.')
           const refreshed = managedProductionView(bootstrap.states.production, workspaceId)
-          const conflict = { ...refreshed, error: 'Production changed in another session. The latest revision is loaded; review and confirm the action again.' }
+          const conflict = { ...refreshed, error: 'Plant changed in another session. The latest revision is loaded; review and confirm the action again.' }
           snapshotRef.current = conflict
           setManagedSnapshot(conflict)
         } catch (refreshError) {
-          const refreshMessage = refreshError instanceof Error ? refreshError.message : 'Production changed and the latest revision could not be loaded.'
+          const refreshMessage = refreshError instanceof Error ? refreshError.message : 'Plant changed and the latest revision could not be loaded.'
           const rejected = { ...snapshotRef.current, error: refreshMessage }
           snapshotRef.current = rejected
           setManagedSnapshot(rejected)
           throw refreshError
         }
-        throw new Error('Production changed in another session. The latest revision is loaded; review and confirm the action again.')
+        throw new Error('Plant changed in another session. The latest revision is loaded; review and confirm the action again.')
       }
       if (identityRef.current?.workspaceId === workspaceId) {
         const rejected = { ...snapshotRef.current, error: message }
@@ -1116,13 +1124,17 @@ export function CoreLayout() {
     ? 'Website'
     : location.pathname.startsWith('/settings/')
       ? 'Settings'
-      : location.pathname.startsWith('/operations/commerce/')
-        ? 'Commerce'
-        : location.pathname.startsWith('/operations/production/')
-          ? 'Production'
+      : location.pathname.startsWith('/shop/') || location.pathname.startsWith('/operations/commerce/')
+        ? 'Shop'
+        : location.pathname.startsWith('/plant/') || location.pathname.startsWith('/operations/production/')
+          ? 'Plant'
           : navigation.find((item) => item.to !== '/' && location.pathname.startsWith(item.to))?.label ?? 'Home'
   const navigationClass = (to: string, isActive: boolean) => (
-    isActive || (to === '/operations/' && location.pathname.startsWith('/products/')) ? 'active' : ''
+    isActive || (to === '/operations/' && (
+      location.pathname.startsWith('/products/')
+      || location.pathname.startsWith('/shop/')
+      || location.pathname.startsWith('/plant/')
+    )) ? 'active' : ''
   )
 
   useEffect(() => {
@@ -1141,7 +1153,7 @@ export function CoreLayout() {
         <div className="sidebar-foot"><RuntimeBadge status={runtime.status} /><NavLink to="/settings/">Settings</NavLink></div>
       </aside>
       <div className="core-stage">
-        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega HQ</span></div><div className="topbar-meta"><NavLink to="/settings/">Settings</NavLink><RuntimeBadge status={runtime.status} /></div></header>
+        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>{location.pathname.startsWith('/work/') ? 'SuperMega HQ' : 'SuperMega'}</span></div><div className="topbar-meta"><NavLink to="/settings/">Settings</NavLink><RuntimeBadge status={runtime.status} /></div></header>
         <nav className="mobile-nav" aria-label="Mobile application">{navigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={item.end} key={item.to} to={item.to}>{item.label}</NavLink>)}</nav>
         <main id="workspace-main" className="core-main"><Outlet context={runtime} /></main>
       </div>
@@ -1240,12 +1252,12 @@ export function OverviewPage() {
       : agentHandoffs[0]
         ? { label: 'Team handoff', title: `${agentHandoffs[0].name} needs review`, detail: `${agentHandoffs[0].humanOwner} owns the next decision.`, action: 'Review handoff', href: `/work/?team=${agentHandoffs[0].team}&view=agents&agent=${agentHandoffs[0].id}` }
         : lowStock[0]
-          ? { label: 'Stock', title: `Reorder ${lowStock[0].name}`, detail: `${lowStock[0].onHand} on hand; boundary is ${lowStock[0].reorderAt}.`, action: 'Open stock', href: '/operations/commerce/?tab=inventory' }
+          ? { label: 'Stock', title: `Reorder ${lowStock[0].name}`, detail: `${lowStock[0].onHand} on hand; boundary is ${lowStock[0].reorderAt}.`, action: 'Open stock', href: '/shop/?tab=inventory' }
           : openProductionIssues[0]
-            ? { label: 'Production problem', title: openProductionIssues[0].summary, detail: `${openProductionIssues[0].area} needs review.`, action: 'Review problem', href: '/operations/production/?tab=control' }
+            ? { label: 'Plant problem', title: openProductionIssues[0].summary, detail: `${openProductionIssues[0].area} needs review.`, action: 'Review problem', href: '/plant/?tab=control' }
             : !isPilotReady
               ? { label: 'Setup', title: 'Define the measurable workflow', detail: `${pilotProgress(setup)}% complete; add the baseline and acceptance evidence.`, action: 'Finish setup', href: '/settings/' }
-              : { label: 'Ready', title: openOrders[0] ? `Continue ${openOrders[0].id}` : 'Start with Commerce', detail: openOrders[0] ? 'Move the next open order forward.' : 'No owner decision is waiting.', action: openOrders[0] ? 'Open orders' : 'Open Commerce', href: '/operations/commerce/?tab=orders' }
+              : { label: 'Ready', title: openOrders[0] ? `Continue ${openOrders[0].id}` : 'Start with Shop', detail: openOrders[0] ? 'Move the next open order forward.' : 'No owner decision is waiting.', action: openOrders[0] ? 'Open orders' : 'Open Shop', href: '/shop/?tab=orders' }
 
   useEffect(() => {
     if (!managedIdentity) return undefined
@@ -1265,7 +1277,7 @@ export function OverviewPage() {
   function prepareCompanyBrief() {
     setBrief([
       `${openWork.length} company work items remain open; ${activeWork.length} are in delivery or review across ${workspace.agents.length} delegated role records.`,
-      `${openOrders.length} Commerce orders, ${lowStock.length} stock exceptions, and ${openProductionIssues.length} Production issues need operating attention.`,
+      `${openOrders.length} Shop orders, ${lowStock.length} stock exceptions, and ${openProductionIssues.length} Plant issues need operating attention.`,
       `${workspace.release.name} is ${releasePercent}% ready from ${workspace.release.checks.length} explicit checks.`,
       isPilotReady ? `${setup.workspace} pilot starts from ${setup.entryPoint}; baseline: ${setup.baseline}; target: ${setup.targetOutcome}.` : `Pilot definition is ${pilotProgress(setup)}% complete and still needs a baseline, target, authority boundary, and acceptance evidence.`,
     ])
@@ -1366,12 +1378,12 @@ export function OverviewPage() {
           : <Link className="core-button primary" to={nextPriority.href ?? '/'}>{nextPriority.action}</Link>}
       </section>
       <nav aria-label="Products" className="product-launcher">
-        <Link to="/operations/commerce/?tab=orders">
-          <span><strong>Commerce</strong><small>Orders, stock and payments</small></span>
+        <Link to="/shop/?tab=orders">
+          <span><strong>Shop</strong><small>Orders, stock and payments</small></span>
           <b>{openOrders.length ? `${openOrders.length} open` : 'Ready'}</b>
         </Link>
-        <Link to="/operations/production/?tab=production">
-          <span><strong>Production</strong><small>Jobs, output and equipment</small></span>
+        <Link to="/plant/?tab=production">
+          <span><strong>Plant</strong><small>Jobs, output and equipment</small></span>
           <b>{openProductionIssues.length ? `${openProductionIssues.length} issue` : 'Ready'}</b>
         </Link>
         <Link to="/products/website/">
@@ -1393,8 +1405,8 @@ export function OverviewPage() {
             {blockedWork.map((item) => <Link key={item.id} to={`/work/?team=${item.team}&view=work&item=${item.id}`}><span>Work</span><strong>{item.title}</strong><small>{item.owner}</small></Link>)}
             {agentHandoffs.map((agent) => <Link key={agent.id} to={`/work/?team=${agent.team}&view=agents&agent=${agent.id}`}><span>Agent</span><strong>{agent.name} {agent.state === 'waiting_review' ? 'needs review' : 'is blocked'}</strong><small>{agent.humanOwner} / {agent.assignedWorkItemId ?? 'unassigned'}</small></Link>)}
             {pendingApprovals.map((approval) => <button className="attention-action" key={approval.id} onClick={() => setSelectedApprovalId(approval.id)} type="button"><span>{approval.managed ? 'Managed approval' : 'Approval'}</span><strong>{approval.title}</strong><small>{approval.packet.claims.length} claims · {formatTime(approval.createdAt)}</small><b>Review</b></button>)}
-            {lowStock.map((item) => <Link key={item.sku} to="/operations/commerce/?tab=inventory"><span>Stock</span><strong>{item.name}</strong><small>{item.onHand} on hand · reorder at {item.reorderAt}</small></Link>)}
-            {openProductionIssues.map((issue) => <Link key={issue.id} to="/operations/production/?tab=control"><span>{issue.kind}</span><strong>{issue.summary}</strong><small>{issue.area}</small></Link>)}
+            {lowStock.map((item) => <Link key={item.sku} to="/shop/?tab=inventory"><span>Stock</span><strong>{item.name}</strong><small>{item.onHand} on hand · reorder at {item.reorderAt}</small></Link>)}
+            {openProductionIssues.map((issue) => <Link key={issue.id} to="/plant/?tab=control"><span>{issue.kind}</span><strong>{issue.summary}</strong><small>{issue.area}</small></Link>)}
             {!ownerAttention ? <Empty>No owner decision needs attention.</Empty> : null}
           </div>
         </section>
@@ -1411,7 +1423,7 @@ export function OverviewPage() {
   )
 }
 
-export function OperationsPage() {
+export function OperationsPage({ product }: { product?: ProductId }) {
   const runtime = useOutletContext<RuntimeHealth>()
   const location = useLocation()
   const navigate = useNavigate()
@@ -1419,8 +1431,8 @@ export function OperationsPage() {
   const [managedIdentity] = useManagedIdentity(runtime.status === 'enterprise')
   const routeModule = location.pathname.split('/').filter(Boolean)[1]
   const requestedView = searchParams.get('view')
-  const isProductRoute = routeModule === 'commerce' || routeModule === 'production'
-  const view: ProductId = routeModule === 'production' || requestedView === 'production' || requestedView === 'plant' ? 'production' : 'commerce'
+  const isProductRoute = Boolean(product) || routeModule === 'commerce' || routeModule === 'production'
+  const view: ProductId = product ?? (routeModule === 'production' || requestedView === 'production' || requestedView === 'plant' ? 'production' : 'commerce')
   const requestedTab = searchParams.get('tab')
   const commerceTab = commerceTabs.some((tab) => tab.id === requestedTab) ? requestedTab as CommerceTab : 'orders'
   const productionTab = productionTabs.some((tab) => tab.id === requestedTab) ? requestedTab as ProductionTab : 'production'
@@ -1429,12 +1441,12 @@ export function OperationsPage() {
 
   useEffect(() => {
     if (!isProductRoute && !requestedView) return
-    const canonicalPath = `/operations/${view}/`
+    const canonicalPath = productCanonicalPath(view)
     if (location.pathname !== canonicalPath || requestedView || !requestedTabIsCanonical) navigate(`${canonicalPath}?tab=${activeTab}`, { replace: true })
   }, [activeTab, isProductRoute, location.pathname, navigate, requestedTabIsCanonical, requestedView, view])
 
   function setTab(tab: CommerceTab | ProductionTab) {
-    navigate(`/operations/${view}/?tab=${tab}`, { replace: true })
+    navigate(`${productCanonicalPath(view)}?tab=${tab}`, { replace: true })
   }
 
   const tabs = view === 'commerce' ? commerceTabs : productionTabs
@@ -1446,17 +1458,21 @@ export function OperationsPage() {
     return <div className="workspace-screen product-catalog-screen">
       <PageHeading eyebrow="Products" title="Choose a workspace" copy="Open the workspace for the job you need to do." />
       <nav aria-label="SuperMega apps" className="product-launcher product-catalog">
-        <Link to="/operations/commerce/?tab=orders"><span><strong>Commerce</strong><small>Orders, payments, and stock</small></span><b>Open</b></Link>
-        <Link to="/operations/production/?tab=production"><span><strong>Production</strong><small>Jobs, output, and problems</small></span><b>Open</b></Link>
+        <Link to="/shop/?tab=orders"><span><strong>Shop</strong><small>Orders, payments, and stock</small></span><b>Open</b></Link>
+        <Link to="/plant/?tab=production"><span><strong>Plant</strong><small>Jobs, output, and problems</small></span><b>Open</b></Link>
         <Link to="/products/website/"><span><strong>Website</strong><small>Edit, preview, and prepare to publish</small></span><b>Open</b></Link>
       </nav>
+      <section className="core-panel" id="planned">
+        <div className="panel-head"><div><span className="core-eyebrow">Building next</span><h2>Ecommerce and AI Agent Solutions</h2></div><span className="status-pill bounded">Planned</span></div>
+        <p className="panel-copy">Ecommerce will build the customer storefront and hand order intent to Shop. The first agent will prepare a source-backed order draft for human review. Neither has a demo button until its workflow passes.</p>
+      </section>
     </div>
   }
 
   return (
     <div className="workspace-screen operations-screen">
-      <PageHeading title={view === 'commerce' ? 'Commerce' : 'Production'} copy={productCopy} actions={<Link className="text-link all-apps-link" to="/operations/">Products</Link>} />
-      <nav className="workspace-toolbar view-tabs product-task-tabs" aria-label={`${view === 'commerce' ? 'Commerce' : 'Production'} tasks`}>{tabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{tab.label}</button>)}</nav>
+      <PageHeading title={productDisplayName(view)} copy={productCopy} actions={<Link className="text-link all-apps-link" to="/operations/">Products</Link>} />
+      <nav className="workspace-toolbar view-tabs product-task-tabs" aria-label={`${productDisplayName(view)} tasks`}>{tabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{tab.label}</button>)}</nav>
       <div className="workspace-view">{view === 'commerce' ? <CommercePage managedIdentity={managedIdentity} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
     </div>
   )
@@ -1732,7 +1748,7 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
   if (managedIdentity && effectiveMode !== 'managed-ready') {
     const unprovisioned = effectiveMode === 'managed-unprovisioned'
     if (unprovisioned) return <section className="core-panel managed-commerce-boundary">
-      <div className="panel-head"><div><span className="core-eyebrow">Managed Commerce setup</span><h2>Create the real catalog</h2></div><span className="status-pill pending">Not provisioned</span></div>
+      <div className="panel-head"><div><span className="core-eyebrow">Managed Shop setup</span><h2>Create the real catalog</h2></div><span className="status-pill pending">Not provisioned</span></div>
       <p className="panel-copy">Start with the first real inventory item. No browser demo orders, customers, or stock records are copied into this workspace.</p>
       <form className="core-form compact-form" onSubmit={(formEvent) => void initializeManagedCatalog(formEvent)}>
         <div className="form-row"><label>SKU<input maxLength={80} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, sku: inputEvent.target.value }))} placeholder="SKU-001" required value={catalogDraft.sku} /></label><label>Item name<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, name: inputEvent.target.value }))} placeholder="Real item name" required value={catalogDraft.name} /></label></div>
@@ -1745,8 +1761,8 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
       </form>
     </section>
     return <section className="core-panel managed-commerce-boundary">
-      <div className="panel-head"><div><span className="core-eyebrow">Managed Commerce</span><h2>{effectiveMode === 'managed-error' ? 'Managed workspace unavailable' : 'Loading authenticated workspace'}</h2></div><span className="status-pill bounded">{effectiveMode === 'managed-error' ? 'Blocked' : 'Checking'}</span></div>
-      <p className="panel-copy">{commerceStorageError || 'Commerce remains read-only until the authenticated tenant state is confirmed.'}</p>
+      <div className="panel-head"><div><span className="core-eyebrow">Managed Shop</span><h2>{effectiveMode === 'managed-error' ? 'Managed workspace unavailable' : 'Loading authenticated workspace'}</h2></div><span className="status-pill bounded">{effectiveMode === 'managed-error' ? 'Blocked' : 'Checking'}</span></div>
+      <p className="panel-copy">{commerceStorageError || 'Shop remains read-only until the authenticated tenant state is confirmed.'}</p>
       <div className="form-actions"><Link className="core-button" to="/settings/">Open workspace settings</Link></div>
     </section>
   }
@@ -1767,7 +1783,7 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
 
   function queueAction(action: Omit<PendingAccountableAction, 'id' | 'commandId' | 'domain'>): boolean {
     if (!commerceCanWrite) {
-      setNotice('Commerce changes are paused because this workspace cannot confirm writes. Reload or open Settings before retrying.')
+      setNotice('Shop changes are paused because this workspace cannot confirm writes. Reload or open Settings before retrying.')
       return false
     }
     if (pendingAction) {
@@ -1831,13 +1847,13 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
     }
     await pendingAction.apply(record)
     if (!managedIdentity) setActions((current) => [record, ...current])
-    setNotice(managedIdentity ? `${record.id} confirmed by the managed Commerce API.` : `${record.id} applied and added to the action history.`)
+    setNotice(managedIdentity ? `${record.id} confirmed by the managed Shop API.` : `${record.id} applied and added to the action history.`)
     setPendingAction(null)
   }
 
   function useChannelDraft(draft: ChannelOrderDraft) {
     if (!commerceCanWrite) {
-      setNotice('Commerce changes are paused because this workspace cannot confirm writes.')
+      setNotice('Shop changes are paused because this workspace cannot confirm writes.')
       return
     }
     if (pendingAction || !channelOrderDraftIsReady(draft)) {
@@ -1911,7 +1927,7 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
 
   function queueWebsiteOrder(record: WebsiteOrderRecord) {
     if (commerce.orders.some((order) => order.id === record.id || order.sourceRecordId === record.id)) {
-      setNotice(`${record.id} is already in the Commerce order queue.`)
+      setNotice(`${record.id} is already in the Shop order queue.`)
       return
     }
     if (pendingAction?.kind === 'order_create' && pendingAction.subjectId === record.id) {
@@ -2121,7 +2137,7 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
     <summary><span>Close and exceptions</span><small>{paymentReview.length + lowStock.length} items need attention</small></summary>
     <div className="today-more-content">
       <div className="exception-summary"><span><strong>{paymentReview.length}</strong><small>payment review</small></span><span><strong>{lowStock.length}</strong><small>reorder boundaries</small></span></div>
-      <div className="boundary-list">{lowStock.map((item) => <Link key={item.sku} to="/operations/commerce/?tab=inventory"><strong>{item.name}</strong><small>{item.onHand} on hand</small></Link>)}</div>
+      <div className="boundary-list">{lowStock.map((item) => <Link key={item.sku} to="/shop/?tab=inventory"><strong>{item.name}</strong><small>{item.onHand} on hand</small></Link>)}</div>
       <p className="form-notice">Orders ready: {closePreview?.orderIds.length ? closePreview.orderIds.join(', ') : 'none'} · Payment exceptions: {paymentReview.length ? paymentReview.map((order) => order.id).join(', ') : 'none'} · Stock exceptions: {lowStock.length ? lowStock.map((item) => item.sku).join(', ') : 'none'}</p>
       <button className="core-button" disabled={commerceControlsDisabled || !closePreview} onClick={closeDay} type="button">{closePreview ? 'Save daily close' : legacyCloseNeedsMigration ? 'Close history needs migration' : 'Today is closed'}</button>
       <p className="form-notice" aria-live="polite">{`${closableOrders.length} completed, reconciled orders · ${formatMoney(reconciledValue)} ready to close.`}</p>
@@ -2140,7 +2156,7 @@ function CommercePage({ managedIdentity, tab }: { managedIdentity: ManagedIdenti
     {commerceBoundary}
     <section className="core-panel inventory-panel">
       <div className="panel-head"><div><span className="core-eyebrow">Stock control</span><h2>Inventory and reorder boundaries</h2></div><span className="panel-note">{lowStock.length} at boundary</span></div>
-      <div className="data-table" role="table" aria-label="Commerce inventory"><div className="data-row table-head" role="row"><span role="columnheader">Item</span><span role="columnheader">On hand</span><span role="columnheader">Reorder</span><span role="columnheader">Price</span><span role="columnheader">Action</span></div>{commerce.items.map((item) => <div className="data-row" role="row" key={item.sku}><span role="rowheader"><strong>{item.name}</strong><small>{item.sku}</small></span><span className={item.onHand <= item.reorderAt ? 'warning-text' : ''} role="cell">{item.onHand}</span><span role="cell">{item.reorderAt}</span><span role="cell">{formatMoney(item.price)}</span><span role="cell"><button className="text-link" disabled={commerceControlsDisabled} type="button" onClick={() => restock(item.sku)}>Receive +10</button></span></div>)}</div>
+      <div className="data-table" role="table" aria-label="Shop stock"><div className="data-row table-head" role="row"><span role="columnheader">Item</span><span role="columnheader">On hand</span><span role="columnheader">Reorder</span><span role="columnheader">Price</span><span role="columnheader">Action</span></div>{commerce.items.map((item) => <div className="data-row" role="row" key={item.sku}><span role="rowheader"><strong>{item.name}</strong><small>{item.sku}</small></span><span className={item.onHand <= item.reorderAt ? 'warning-text' : ''} role="cell">{item.onHand}</span><span role="cell">{item.reorderAt}</span><span role="cell">{formatMoney(item.price)}</span><span role="cell"><button className="text-link" disabled={commerceControlsDisabled} type="button" onClick={() => restock(item.sku)}>Receive +10</button></span></div>)}</div>
       <details className="compact-disclosure catalog-disclosure">
         <summary>Add catalog item</summary>
         <form className="core-form compact-form catalog-create-form" onSubmit={queueCatalogItem}>
@@ -2250,7 +2266,7 @@ function ProductionEventHistory({ events }: { events: ProductionEvent[] }) {
   const [showAll, setShowAll] = useState(false)
   const visibleEvents = showAll ? events : events.slice(0, 8)
   return <details className="core-panel action-history production-event-history">
-    <summary><span>Production record</span><strong>{events.length} attributed events</strong></summary>
+    <summary><span>Plant record</span><strong>{events.length} attributed events</strong></summary>
     {visibleEvents.length ? <div className="action-history-list">{visibleEvents.map((event) => <article key={event.id}>
       <div>
         <strong>{productionEventLabels[event.kind]} - {event.summary}</strong>
@@ -2258,7 +2274,7 @@ function ProductionEventHistory({ events }: { events: ProductionEvent[] }) {
         <p>{event.reason} - Evidence: {event.evidenceReference}</p>
       </div>
       <small>{formatTime(event.createdAt)}</small>
-    </article>)}</div> : <Empty>No attributed Production event has been recorded yet.</Empty>}
+    </article>)}</div> : <Empty>No attributed Plant event has been recorded yet.</Empty>}
     {events.length > 8 ? <button className="text-link" type="button" onClick={() => setShowAll((current) => !current)}>{showAll ? 'Show latest 8' : `Show all ${events.length}`}</button> : null}
   </details>
 }
@@ -2330,9 +2346,9 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         machines: [{ id: machineId, name: machineName, state: 'running' }],
       }))
       setJobId(firstJobId)
-      setNotice(`Managed Production initialized with ${firstJobId}.`)
+      setNotice(`Managed Plant initialized with ${firstJobId}.`)
     } catch (error) {
-      setPlanError(error instanceof Error ? error.message : 'The managed Production plan was not initialized.')
+      setPlanError(error instanceof Error ? error.message : 'The managed Plant plan was not initialized.')
     } finally {
       setPlanBusy(false)
     }
@@ -2342,7 +2358,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   if (managedIdentity && effectiveMode !== 'managed-ready') {
     const unprovisioned = effectiveMode === 'managed-unprovisioned'
     if (unprovisioned) return <section className="core-panel managed-commerce-boundary">
-      <div className="panel-head"><div><span className="core-eyebrow">Managed Production setup</span><h2>Create the real operating plan</h2></div><span className="status-pill pending">Not provisioned</span></div>
+      <div className="panel-head"><div><span className="core-eyebrow">Managed Plant setup</span><h2>Create the real operating plan</h2></div><span className="status-pill pending">Not provisioned</span></div>
       <p className="panel-copy">Start with one real job and one machine. No browser demo jobs, issues, equipment, or output are copied into this workspace.</p>
       <form className="core-form compact-form" onSubmit={(formEvent) => void initializeManagedProduction(formEvent)}>
         <div className="form-row"><label>Job ID<input maxLength={80} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, jobId: inputEvent.target.value }))} placeholder="JOB-001" required value={planDraft.jobId} /></label><label>Line or team<input maxLength={120} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, line: inputEvent.target.value }))} placeholder="Line 01" required value={planDraft.line} /></label></div>
@@ -2355,8 +2371,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       </form>
     </section>
     return <section className="core-panel managed-commerce-boundary">
-      <div className="panel-head"><div><span className="core-eyebrow">Managed Production</span><h2>{effectiveMode === 'managed-error' ? 'Managed workspace unavailable' : 'Loading authenticated workspace'}</h2></div><span className="status-pill bounded">{effectiveMode === 'managed-error' ? 'Blocked' : 'Checking'}</span></div>
-      <p className="panel-copy">{productionStorageError || 'Production remains read-only until the authenticated tenant state is confirmed.'}</p>
+      <div className="panel-head"><div><span className="core-eyebrow">Managed Plant</span><h2>{effectiveMode === 'managed-error' ? 'Managed workspace unavailable' : 'Loading authenticated workspace'}</h2></div><span className="status-pill bounded">{effectiveMode === 'managed-error' ? 'Blocked' : 'Checking'}</span></div>
+      <p className="panel-copy">{productionStorageError || 'Plant remains read-only until the authenticated tenant state is confirmed.'}</p>
       <div className="form-actions"><Link className="core-button" to="/settings/">Open workspace settings</Link></div>
     </section>
   }
@@ -2366,7 +2382,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     trigger?: HTMLElement | null,
   ): boolean {
     if (!productionCanWrite) {
-      setNotice('Production changes are paused because this workspace cannot confirm writes. Reload or open Settings before retrying.')
+      setNotice('Plant changes are paused because this workspace cannot confirm writes. Reload or open Settings before retrying.')
       return false
     }
     if (pendingAction) {
@@ -2390,7 +2406,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     }
     await action.apply(record)
     if (!managedIdentity) setActions((current) => [record, ...current])
-    setNotice(managedIdentity ? `${record.id} confirmed by the managed Production API.` : `${record.id} persisted with attributed Production evidence.`)
+    setNotice(managedIdentity ? `${record.id} confirmed by the managed Plant API.` : `${record.id} persisted with attributed Plant evidence.`)
     setPendingAction(null)
   }
 
@@ -2503,7 +2519,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   </div>
 
   const actionControls = <>
-    <AccountableActionGate authenticatedActor={managedIdentity ? { id: managedIdentity.userId, label: managedIdentity.email } : undefined} key={pendingAction?.id ?? 'production-idle'} action={pendingAction} onCancel={() => { setPendingAction(null); setNotice('Change cancelled. Production data was not modified.') }} onConfirm={confirmAction} returnFocus={actionTrigger} />
+    <AccountableActionGate authenticatedActor={managedIdentity ? { id: managedIdentity.userId, label: managedIdentity.email } : undefined} key={pendingAction?.id ?? 'production-idle'} action={pendingAction} onCancel={() => { setPendingAction(null); setNotice('Change cancelled. Plant data was not modified.') }} onConfirm={confirmAction} returnFocus={actionTrigger} />
     <ProductionEventHistory events={production.events} />
   </>
 
@@ -2511,7 +2527,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     {productionBoundary}
     <div className="split-workspace production-view">
       <section className="core-panel job-panel">
-        <div className="panel-head"><div><span className="core-eyebrow">Production plan</span><h2>Jobs to finish</h2></div><span className="panel-note">{activeJobs.length} active · {completedJobs.length} completed</span></div>
+        <div className="panel-head"><div><span className="core-eyebrow">Plant plan</span><h2>Jobs to finish</h2></div><span className="panel-note">{activeJobs.length} active · {completedJobs.length} completed</span></div>
         <JobList jobs={activeJobs} />
         <CompletedJobHistory jobs={completedJobs} />
         <details className="compact-disclosure catalog-disclosure">
@@ -2555,7 +2571,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       </div>
     </div>
     <dialog aria-labelledby="production-issue-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); setIssueDialogOpen(false); requestAnimationFrame(() => issueTriggerRef.current?.focus()) }} ref={issueDialogRef}>
-      <div className="panel-head"><div><span className="core-eyebrow">Production problem</span><h2 id="production-issue-title">Record an observation</h2></div><button aria-label="Close problem form" className="text-link" onClick={() => { setIssueDialogOpen(false); requestAnimationFrame(() => issueTriggerRef.current?.focus()) }} type="button">Close</button></div>
+      <div className="panel-head"><div><span className="core-eyebrow">Plant problem</span><h2 id="production-issue-title">Record an observation</h2></div><button aria-label="Close problem form" className="text-link" onClick={() => { setIssueDialogOpen(false); requestAnimationFrame(() => issueTriggerRef.current?.focus()) }} type="button">Close</button></div>
       <form className="core-form" onSubmit={createIssue}>
         <div className="form-row"><label>Type<select value={kind} onChange={(event) => setKind(event.target.value as ProductionIssue['kind'])}><option value="quality">Quality</option><option value="maintenance">Maintenance</option><option value="materials">Materials</option><option value="operations">Operations</option></select></label><label>Area<select value={area} onChange={(event) => setArea(event.target.value)}><option>Line 01</option><option>Line 02</option><option>Line 03</option><option>Materials</option><option>Quality</option></select></label></div>
         <label>Observation<textarea autoFocus maxLength={240} required value={summary} onChange={(event) => setSummary(event.target.value)} placeholder="Describe what happened, not the assumption." /></label>
@@ -2646,7 +2662,7 @@ export function SettingsPage() {
   function changeProduct(product: SetupState['product']) {
     const template = templateFor(product, '')
     setSetup({ ...seedSetup, product, template: template.name, entryPoint: template.entryPoints[0] ?? '' })
-    setNotice(`Started a new ${product} pilot draft. Workflow-specific fields were cleared.`)
+    setNotice(`Started a new ${productDisplayName(product)} pilot draft. Workflow-specific fields were cleared.`)
   }
 
   function changeTemplate(name: string) {
@@ -2730,14 +2746,14 @@ export function SettingsPage() {
           <div className="panel-head"><div><span className="core-eyebrow">Pilot definition</span><h2>{settingsStep === 'workflow' ? 'Choose the workflow' : 'Define success and authority'}</h2></div><span className={`status-pill ${isPilotReady ? 'approved' : 'bounded'}`}>{isPilotReady ? 'ready' : `${completion}%`}</span></div>
           <div className="pilot-progress"><div className="progress-track"><i style={{ width: `${completion}%` }} /></div><small>{settingsStep === 'workflow' ? 'Product · template · entry point · owner' : 'Current record · baseline · target · authority · evidence'}</small></div>
           <fieldset className="settings-step-fields" disabled={settingsStep !== 'workflow'} hidden={settingsStep !== 'workflow'}>
-          <div className="segmented-control wide"><button aria-pressed={setup.product === 'commerce'} type="button" onClick={() => changeProduct('commerce')}>Commerce</button><button aria-pressed={setup.product === 'production'} type="button" onClick={() => changeProduct('production')}>Production</button></div>
+          <div className="segmented-control wide"><button aria-pressed={setup.product === 'commerce'} type="button" onClick={() => changeProduct('commerce')}>Shop</button><button aria-pressed={setup.product === 'production'} type="button" onClick={() => changeProduct('production')}>Plant</button></div>
           <div className="form-row"><label>Starting template<select value={setup.template} onChange={(event) => changeTemplate(event.target.value)}>{templatesFor(setup.product).map((template) => <option key={template.id} value={template.name}>{template.name}</option>)}</select></label><label>Entry point<select value={setup.entryPoint} onChange={(event) => updateSetup({ entryPoint: event.target.value })}>{selectedTemplate.entryPoints.map((entryPoint) => <option key={entryPoint}>{entryPoint}</option>)}</select></label></div>
           <div className="template-contract"><span>Workflow</span><strong>{selectedTemplate.workflow.join(' → ')}</strong><small>Measure · {selectedTemplate.metric}</small></div>
-          <div className="form-row"><label>Workspace name<input maxLength={80} required value={setup.workspace} onChange={(event) => updateSetup({ workspace: event.target.value })} placeholder={setup.product === 'commerce' ? 'Example: Social sales team' : 'Example: Main production site'} /></label><label>Responsible owner<input maxLength={80} required value={setup.owner} onChange={(event) => updateSetup({ owner: event.target.value })} placeholder="Name or role" /></label></div>
+          <div className="form-row"><label>Workspace name<input maxLength={80} required value={setup.workspace} onChange={(event) => updateSetup({ workspace: event.target.value })} placeholder={setup.product === 'commerce' ? 'Example: Social sales team' : 'Example: Main plant'} /></label><label>Responsible owner<input maxLength={80} required value={setup.owner} onChange={(event) => updateSetup({ owner: event.target.value })} placeholder="Name or role" /></label></div>
           <div className="settings-step-actions"><span>Step 1 of 3</span><button className="core-button primary" disabled={!workflowReady} onClick={() => chooseSettingsStep('success')} type="button">Continue to success</button></div>
           </fieldset>
           <fieldset className="settings-step-fields" disabled={settingsStep !== 'success'} hidden={settingsStep !== 'success'}>
-          <div className="template-contract settings-workflow-summary"><span>{setup.product}</span><strong>{setup.workspace || 'Unnamed workspace'}</strong><small>{selectedTemplate.name} · {setup.owner || 'Owner needed'}</small></div>
+          <div className="template-contract settings-workflow-summary"><span>{productDisplayName(setup.product)}</span><strong>{setup.workspace || 'Unnamed workspace'}</strong><small>{selectedTemplate.name} · {setup.owner || 'Owner needed'}</small></div>
           <label>Current record<input maxLength={180} required value={setup.currentRecord} onChange={(event) => updateSetup({ currentRecord: event.target.value })} placeholder="What is used today: chat, paper, spreadsheet, system, or machine log?" /></label>
           <div className="form-row pilot-text-row"><label>Baseline<textarea maxLength={240} required value={setup.baseline} onChange={(event) => updateSetup({ baseline: event.target.value })} placeholder="Current time, error rate, backlog, or output." /></label><label>Target outcome<textarea maxLength={240} required value={setup.targetOutcome} onChange={(event) => updateSetup({ targetOutcome: event.target.value })} placeholder={`Set a target for ${selectedTemplate.metric.toLowerCase()}.`} /></label></div>
           <div className="form-row pilot-text-row"><label>Human authority boundary<textarea maxLength={240} required value={setup.authorityBoundary} onChange={(event) => updateSetup({ authorityBoundary: event.target.value })} placeholder="Which sends, payments, approvals, or production changes require an owner?" /></label><label>Acceptance evidence<textarea maxLength={240} required value={setup.acceptanceEvidence} onChange={(event) => updateSetup({ acceptanceEvidence: event.target.value })} placeholder="What record or result proves the pilot works?" /></label></div>
@@ -2754,7 +2770,7 @@ export function SettingsPage() {
           <p className="authority-note">External sends, payments, publishing, access changes, and production writes remain owner-approved and auditable.</p>
         </section> : null}
       </div>
-      {settingsStep === 'system' ? <section className="core-panel trial-control-panel"><div><span className="core-eyebrow">Local evidence</span><h2>Export or reset deliberately.</h2><p>Export the pilot definition and full browser workspace for review. Reset clears Company, Commerce, Production, Website, and handoff records only after confirmation.</p></div><div className="trial-actions"><a className="core-button" download={evidenceFilename} href={evidenceHref}>Export evidence</a>{resetArmed ? <><button className="text-link" onClick={() => setResetArmed(false)} type="button">Cancel</button><button className="core-button danger" onClick={resetDemoWorkspace} type="button">Confirm reset</button></> : <button className="text-link danger-text" onClick={() => setResetArmed(true)} type="button">Reset local trial</button>}</div></section> : null}
+      {settingsStep === 'system' ? <section className="core-panel trial-control-panel"><div><span className="core-eyebrow">Local evidence</span><h2>Export or reset deliberately.</h2><p>Export the pilot definition and full browser workspace for review. Reset clears Company, Shop, Plant, Website, and handoff records only after confirmation.</p></div><div className="trial-actions"><a className="core-button" download={evidenceFilename} href={evidenceHref}>Export evidence</a>{resetArmed ? <><button className="text-link" onClick={() => setResetArmed(false)} type="button">Cancel</button><button className="core-button danger" onClick={resetDemoWorkspace} type="button">Confirm reset</button></> : <button className="text-link danger-text" onClick={() => setResetArmed(true)} type="button">Reset local trial</button>}</div></section> : null}
     </div>
   )
 }

@@ -4,78 +4,94 @@ Updated: 2026-07-24
 Authority: founder / CEO
 Canonical repository: `C:\Users\thesw\Projects\supermega-platform`
 Integration branch: `agent/supermega-release-candidate`
-Product implementation head before this coordination update: `f2aaa82`
-Coordination setup commit: `7fb4daf`
+Last committed local baseline: `d9382c16ec7f8ce0b4e599f837e21bbcb08d858d`
 
 ## One operating model
 
-SuperMega uses one accountable work system. Agents are workers inside it, not separate companies or competing authorities.
+SuperMega uses one accountable Codex work system. The founder defines the product and retains consequential authority. The integrator selects and accepts work; bounded workers inspect, implement, or verify non-overlapping slices.
 
-1. The founder sets consequential authority and approves external actions.
-2. The CEO / integrator task selects one outcome, protects the canonical branch, and accepts or rejects handoffs.
-3. Product and QA workers inspect workflows, evidence, and customer usefulness.
-4. Engineering workers implement one bounded assignment in an isolated branch or worktree.
-5. Growth and Operations work from verified product and pilot evidence; they do not invent traction, customers, or revenue.
+Add a worker only when its assignment has:
 
-Add another worker only when its assignment has a measurable outcome, a non-overlapping write set, an acceptance check, and a named integrator.
+1. one observable outcome;
+2. no more than five in-scope paths;
+3. a non-overlapping write set;
+4. one explicit acceptance check; and
+5. a named integrator.
+
+Visible Codex sidebar task creation is not exposed in the current session. Do not claim a task was created there. Until that control becomes available, this board is assignment authority and internal subagents are used only for bounded work.
+
+Claude coordination is paused by founder direction.
 
 ## Active board
 
 | ID | Team / worker | Status | Outcome | Write authority | Acceptance |
 | --- | --- | --- | --- | --- | --- |
-| CEO-004 | CEO / Codex integrator | done-local | Make Commerce daily close attributable, non-duplicating, stale-safe, and Myanmar-date aware. | Canonical branch, five scoped files | Commit `f2aaa82`; 110 Python tests, lint, build, and `app:verify` pass. |
-| CEO-005 | CEO / Codex integrator | done-local | Establish the multi-agent operating board and safe handoffs. | `hq/`, root `CLAUDE.md` | Commit `7fb4daf`; HQ contract and diff check pass; no push or deploy. |
-| QA-001 | Product / QA Codex worker | done-local | Select Commerce order-to-close as the first pilot workflow. | Read-only; no repository writes | Same-day attributable close rate; target at least 90% across five pilot days; review 2026-07-31. |
-| ENG-001 | Claude Code engineering | blocked-auth | Prove a two-item Website-to-Commerce journey from isolated worktree `supermega-claude-website-commerce-journey`. | One new test file in an isolated worktree | Focused test and full Python suite pass; no product, HQ, hosted, push, or deploy changes. |
-| ENG-002A | Managed runtime | done-local | Add the human-only `commerce.refund.settled` command contract. | Five runtime and test files; no UI | Commit `4d5c29b`; 114 tests prove exact transition, proof, replay, isolation, and agent denial. |
-| ENG-002 | Engineering | done-local | Record an externally completed refund as human-attributable and settled. | Commerce workspace, managed type, UI, and app verifier | Commit `414768c`; build, app/security contracts, and desktop/mobile operator journey pass; no payment integration. |
-| OPS-001 | Platform / owner | blocked-owner | Repeat the private trial on an isolated hosted Supabase target. | Hosted write only after explicit approval | Five migrations, runtime role, isolation, revocation, recovery, Security Advisor, and pooler evidence. |
-| PILOT-001 | Product / founder | ready | Name one Commerce shift supervisor and one safe pilot tenant. | Founder decision | Baseline, authority boundary, five-day evidence plan, and 2026-07-31 review are recorded. |
-| GROWTH-001 | Growth | gated | Prepare onboarding and outreach for the selected pilot only. | Draft-only until founder approves sends | One audience, one offer, one onboarding path, and claims backed by pilot evidence. |
+| CEO-006 | CEO / Codex integrator | done-local | Correct the portfolio to Shop, Plant, Website, Ecommerce, and AI Agent Solutions while preserving stable runtime data. | Authority, manifest, app shell, public generator, and verifiers in bounded slices | HQ, app-build, and public-output contracts passed; desktop/mobile routes preserved existing state; no push or deploy. |
+| QA-002 | Product / QA Codex | done-local | Prove `/shop/` and `/plant/` are canonical, understandable, mobile-safe, and compatibility-preserving. | Read-only browser and contract checks | 1280 px and 375 px journeys passed; old operation paths canonicalized to the same records; no overflow, browser errors, or state reset. |
+| RND-001 | Product R&D Codex | done-local | Define Ecommerce as a customer storefront and order-intent product distinct from Shop. | Read-only Git history audit | Keep the five deleted back-office files deleted; reuse only fingerprint, idempotency, publish, and intake-boundary patterns. |
+| RND-002 | AI Product R&D Codex | done-local | Select the first real AI Agent Solution. | Read-only current-code audit | Order Intake is first: approved input to structured source-backed draft, human accept/discard, zero side effects, and a golden-set gate. |
+| ENG-003 | Ecommerce Codex | queued | Build Ecommerce slice 1: deterministic storefront configuration and responsive preview from a read-only Shop catalogue snapshot. | New focused Ecommerce maker files only; no Shop mutation | Same input produces same artifact digest; invalid or duplicate SKUs fail; price/stock are not editable; no order, stock, payment, send, or external write. |
+| ENG-004 | Agent Solutions Codex | queued | Build the Order Intake evaluation harness before model or UI integration. | Order-intake fixtures, evaluator, and tests only | At least 20 multilingual/adversarial fixtures; schema validity and provenance are 100%; zero unsafe ready-for-review results; latency/cost fields defined. |
+| OPS-001 | Platform / owner | blocked-owner | Repeat the private trial on one isolated hosted Supabase target. | Hosted write only after explicit approval | Five migrations, runtime role, isolation, revocation, recovery, Security Advisor, and pooler evidence. |
+| PILOT-001 | Product / founder | blocked-prerequisite | Name one Shop operator and one safe pilot tenant after QA-002. | Founder decision | Baseline, authority boundary, five-day evidence plan, and review date are recorded. |
+| GROWTH-001 | Growth Codex | gated | Prepare onboarding and outreach for the verified Shop pilot only. | Draft-only until founder approves sends | One audience, one offer, one onboarding path, and every claim backed by pilot evidence. |
+| ENG-001 | Claude Code | paused-founder | Historical Website-to-Shop test assignment. | None while paused | Resume only on explicit founder direction. |
 
-Statuses: `ready`, `active`, `blocked-auth`, `blocked-owner`, `blocked-prerequisite`, `queued`, `review`, `done-local`, `released`.
+Statuses: `ready`, `active`, `queued`, `review`, `blocked-owner`, `blocked-prerequisite`, `paused-founder`, `done-local`, `released`.
 
-## Lane boundaries
+## Product boundaries
 
-### CEO / integrator task
+### Shop
 
-- Owns `hq/NOW.md`, this board, integration decisions, and go/no-go evidence.
-- May inspect all work but does not duplicate a worker's active assignment.
-- Is the only task allowed to port or commit a worker handoff to the canonical branch.
-- Does not push, merge, deploy, enable writes, send messages, or spend money without the relevant owner gate.
+- Customer-facing name: Shop.
+- Stable runtime surface: `commerce`.
+- Owns orders, stock, fulfilment, payment status, cancellation, refunds, and close.
+- Canonical route: `/shop/`; `/operations/commerce/` is compatibility only.
 
-### Product / QA Codex task
+### Plant
 
-- Uses [`CODEX-PRODUCT-QA-BRIEF.md`](CODEX-PRODUCT-QA-BRIEF.md).
-- Remains read-only and returns a decision packet to the CEO / integrator task.
-- Does not redesign every product, create another backlog, or edit HQ authority files.
+- Customer-facing name: Plant.
+- Stable runtime surface: `production`.
+- Owns jobs, output, quality, materials, equipment observations, maintenance, and shift problems.
+- Canonical route: `/plant/`; `/operations/production/` is compatibility only.
 
-### Claude Code engineering
+### Website and Ecommerce
 
-- Uses [`../CLAUDE.md`](../CLAUDE.md).
-- Works from the exact assigned base in an isolated worktree and writes only the declared file.
-- Stops on a product-code requirement and returns the smallest blocker instead of expanding scope.
-- May make one local commit in its own branch; it may not push, merge, deploy, or use hosted credentials.
+- Website owns general pages, navigation, responsive review, approval, and site artifact.
+- Ecommerce owns storefront presentation and customer order intent.
+- Ecommerce reads a versioned Shop catalogue projection and stops at `pending_confirmation`.
+- Shop revalidates and owns every operational consequence.
+
+### AI Agent Solutions
+
+- First solution: Order Intake inside Shop Orders.
+- `/agents/` is a future launcher, not a second runtime.
+- The assistant prepares a draft from approved or synthetic input, shows exact source provenance, and lets a named human correct, accept for manual entry, or discard.
+- It does not create an order, reserve stock, send a reply, initiate payment, publish, deploy, change access, or write externally.
+
+## Integrator rules
+
+- Own `hq/NOW.md`, this board, portfolio authority, integration decisions, and go/no-go evidence.
+- Do not duplicate an active worker assignment.
+- Review every worker handoff and rerun proportionate checks.
+- Do not push, merge, deploy, enable hosted writes, send messages, spend money, publish, or change access without the relevant owner gate.
+- Keep internal runtime names when they protect data compatibility; use customer names in routes, UI, and public claims.
 
 ## Handoff contract
 
-Every worker handoff must contain:
+Every worker handoff contains:
 
-1. Work item ID and observable outcome.
-2. Base SHA, final SHA, branch, and worktree path.
-3. Changed paths and confirmation that no other paths changed.
-4. Commands run and exact pass/fail results.
-5. Remaining risks, assumptions, and anything not tested.
-6. One recommended next action for the CEO / integrator.
+1. work item ID and observable outcome;
+2. base SHA, final SHA, branch, and workspace;
+3. changed paths and confirmation that no other paths changed;
+4. commands run and exact pass/fail results;
+5. remaining risks and anything not tested; and
+6. one recommended next action.
 
-The integrator independently reviews the diff and reruns proportionate checks before accepting it.
+## Execution order
 
-## Daily company cadence
-
-- **Start:** select at most one active outcome per worker and record its acceptance check.
-- **During work:** update only when state changes: ready, active, blocked, review, done-local, released.
-- **Handoff:** attach evidence, not activity narration.
-- **Review:** founder or responsible owner accepts consequential decisions.
-- **End:** update `hq/NOW.md` only with verified facts and the next evidence gate.
-
-Google Workspace may mirror this board for human visibility later, but this repository remains canonical until a separately approved sync is implemented.
+1. Finish CEO-006 and QA-002; commit one reviewed identity correction.
+2. Start ENG-004 before connecting any model or exposing an Agents demo.
+3. Start ENG-003 with only storefront maker and preview; customer submission and Shop handoff are later slices.
+4. Run PILOT-001 only after the corrected Shop route and language pass.
+5. Keep OPS-001 and all production release activity owner-gated.

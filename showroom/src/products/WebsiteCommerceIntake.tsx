@@ -99,7 +99,7 @@ export function WebsiteCommerceIntake({
     })
     setNotice(queued
       ? `${pendingManaged.id} is ready for accountable order confirmation below.`
-      : `${pendingManaged.id} was not queued. Resolve the Commerce notice, then retry.`)
+      : `${pendingManaged.id} was not queued. Resolve the Shop notice, then retry.`)
   }
 
   function acceptIntake(event: FormEvent<HTMLFormElement>) {
@@ -150,7 +150,7 @@ export function WebsiteCommerceIntake({
 
     setContext(completed)
     setConfirmed(false)
-    setNotice(`${completed.order.id} is ready for accountable confirmation into Commerce.`)
+    setNotice(`${completed.order.id} is ready for accountable confirmation in Shop.`)
   }
 
   const stateLabel = !context
@@ -200,7 +200,7 @@ export function WebsiteCommerceIntake({
         <div><Link className="text-link" to="/products/website/">Open Website</Link></div>
       </header>
 
-      {context && !item ? <p className="form-notice warning-text">SKU {context.handoff.intake.sku} does not match exactly one Commerce inventory item. Intake is blocked.</p> : null}
+      {context && !item ? <p className="form-notice warning-text">SKU {context.handoff.intake.sku} does not match exactly one Shop stock item. Intake is blocked.</p> : null}
 
       {context?.handoff.state === 'pending_acceptance' ? (
         <form className="website-intake-form" onSubmit={acceptIntake}>

@@ -42,7 +42,6 @@ async function readPage(route) {
     `meta name="supermega-context-version" content="${manifest.contextVersion}"`,
     'aria-label="SuperMega home"',
     '<span class="brand-mark" aria-hidden="true">&gt;_</span>',
-    'href="https://app.supermega.dev/">Open workspace</a>',
     'href="/contact/">Contact</a>',
     'href="/privacy/">Privacy</a>',
   ]) assert(html.includes(token), 'page_shared_contract_missing', { route, token })
@@ -69,9 +68,10 @@ async function verifyOnce() {
   const pageResults = await Promise.all(manifest.pages.map(async (page) => [page.route, await readPage(page.route)]))
   const pages = new Map(pageResults)
   assert(pages.get('/')?.includes(manifest.company.headline), 'homepage_headline_wrong')
+  assert(pages.get('/')?.includes('href="https://app.supermega.dev/">Explore the product workspace</a>'), 'homepage_workspace_cta_missing')
   assert(pages.get('/')?.includes('Product is a working lifecycle, not another showcase page.'), 'product_team_workspace_missing')
-  assert(pages.get('/')?.includes('https://app.supermega.dev/operations/commerce/?tab=today'), 'commerce_workspace_wrong')
-  assert(pages.get('/')?.includes('https://app.supermega.dev/operations/production/?tab=today'), 'production_workspace_wrong')
+  assert(pages.get('/')?.includes(manifest.products.find((product) => product.publicId === 'shop')?.primaryCta.url), 'shop_workspace_wrong')
+  assert(pages.get('/')?.includes(manifest.products.find((product) => product.publicId === 'plant')?.primaryCta.url), 'plant_workspace_wrong')
   for (const product of manifest.products) for (const template of product.templates) assert(pages.get('/')?.includes(template.name), 'template_catalog_missing', { template: template.id })
   assert(pages.get('/')?.includes('id="trust"'), 'control_boundary_missing')
 
@@ -93,9 +93,10 @@ async function verifyOnce() {
   assert(contact.controls?.idempotency === 'required' && contact.controls?.edge_rate_limit === 'required', 'contact_controls_wrong', contact)
 
   await Promise.all([
-    verifyRedirect('/products/shop/', '/#commerce'),
-    verifyRedirect('/products/factory/', '/#production'),
-    verifyRedirect('/ai-agent-solutions/', '/#product'),
+    verifyRedirect('/products/shop/', '/#shop'),
+    verifyRedirect('/products/factory/', '/#plant'),
+    verifyRedirect('/products/ecommerce/', '/#ecommerce'),
+    verifyRedirect('/ai-agent-solutions/', '/#agents'),
     verifyRedirect('/offers/', '/#product'),
     verifyRedirect('/solutions/', '/#product'),
     verifyRedirect('/trust/', '/#trust'),

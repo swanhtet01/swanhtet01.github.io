@@ -20,8 +20,8 @@ function LegacyEntryRedirect() {
   const params = new URLSearchParams(location.search)
   const demo = params.get('demo')?.toLowerCase()
 
-  if (demo === 'plant' || demo === 'factory') return <Navigate replace to="/operations/production/" />
-  if (demo === 'shop' || demo === 'retail') return <Navigate replace to="/operations/commerce/" />
+  if (demo === 'plant' || demo === 'factory') return <Navigate replace to="/plant/" />
+  if (demo === 'shop' || demo === 'retail') return <Navigate replace to="/shop/" />
   return <Navigate replace to="/" />
 }
 
@@ -29,18 +29,18 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route element={<Navigate replace to="/operations/commerce/?tab=orders" />} path="products/ecommerce/*" />
+        <Route element={<Navigate replace to="/operations/#planned" />} path="products/ecommerce/*" />
         <Route element={<CoreLayout />}>
           <Route element={<OverviewPage />} index />
           <Route element={<TeamsPage />} path="work/*" />
           <Route element={<OperationsPage />} path="operations/*" />
+          <Route element={<OperationsPage product="commerce" />} path="shop/*" />
+          <Route element={<OperationsPage product="production" />} path="plant/*" />
           <Route element={<Suspense fallback={<ProductLoading name="Website" />}><WebsiteProduct /></Suspense>} path="products/website/*" />
           <Route element={<SettingsPage />} path="settings/*" />
           <Route element={<LegacyEntryRedirect />} path="legacy-entry" />
-          <Route element={<Navigate replace to="/operations/commerce/" />} path="shop/*" />
-          <Route element={<Navigate replace to="/operations/production/" />} path="plant/*" />
-          <Route element={<Navigate replace to="/#brief" />} path="agents/*" />
-          <Route element={<Navigate replace to="/#brief" />} path="assist/*" />
+          <Route element={<Navigate replace to="/operations/#planned" />} path="agents/*" />
+          <Route element={<Navigate replace to="/operations/#planned" />} path="assist/*" />
           <Route element={<Navigate replace to="/settings/" />} path="setup/*" />
           <Route element={<Navigate replace to="/settings/#controls" />} path="trust/*" />
           <Route element={<Navigate replace to="/" />} path="app/*" />

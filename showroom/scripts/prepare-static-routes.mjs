@@ -1,7 +1,7 @@
 import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
-const routePaths = ['work', 'operations', 'operations/commerce', 'operations/production', 'products/website', 'products/ecommerce', 'settings']
+const routePaths = ['work', 'operations', 'shop', 'plant', 'operations/commerce', 'operations/production', 'products/website', 'products/ecommerce', 'agents', 'settings']
 
 async function main() {
   const rootDir = await realpath(process.cwd())

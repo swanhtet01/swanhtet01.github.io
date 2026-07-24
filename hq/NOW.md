@@ -2,68 +2,86 @@
 
 Updated: 2026-07-24
 Owner: founder / CEO
-Mode: guarded release candidate; production remains isolated
+Mode: Codex-only guarded release candidate; production remains isolated
 
 ## North-star outcome
 
 Prove one measured workflow where SuperMega keeps the record and a responsible owner resolves exceptions.
 
+## Portfolio correction
+
+The customer product map is:
+
+1. **Shop** — the implemented order, stock, fulfilment, payment-status, exception, and daily-close product.
+2. **Plant** — the implemented job, output, quality, materials, equipment, maintenance, and shift-exception product.
+3. **Website** — the implemented local website-making workflow.
+4. **Ecommerce** — the planned customer storefront and order-intent maker that feeds Shop.
+5. **AI Agent Solutions** — bounded product assistance, beginning with Order Intake.
+
+`Commerce` and `Production` remain internal runtime/database surface IDs only. The earlier decision to make them public product names and to retire Ecommerce is superseded by the founder’s confirmed direction. Ecommerce must not duplicate Shop: Ecommerce owns the customer-facing storefront and order intent; Shop owns the operational record and close.
+
+SuperMega HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal systems, not extra public products.
+
 ## Current outcomes
 
-1. **Release candidate** — review one candidate for the simpler company system, products, and backend gates.
-2. **Managed persistence** — repeat the passing PostgreSQL 17 contract and Website-to-Commerce journey on one isolated hosted Supabase target.
-3. **Pilot** — Commerce order-to-close is selected; name its shift supervisor, tenant, baseline, authority boundary, and five-day evidence plan.
+1. **Identity** — restore Shop and Plant in the public site, app labels, canonical routes, and verification contracts without changing their stable stored data.
+2. **Ecommerce** — recover the smallest storefront, product, cart, and structured order-intent flow from the removed prototype.
+3. **Agents** — turn the existing Order Intake evaluation work into the first real, reviewable agent demo with no external side effects.
+4. **Website** — validate one named-business brief through an accepted responsive artifact.
+5. **Managed persistence** — repeat the passing PostgreSQL 17 contract on one isolated hosted Supabase target before production activation.
 
-## Current system
+## Implemented reality
 
-- Home, Work, and Products are the only primary destinations; Settings is a utility. Home shows one accountable next action, then the three products.
-- Home loads managed Commerce and Production through the same authenticated identity and never mixes a managed product with local sample records.
-- Work has one team picker and Work, Agents, Review. Mobile focuses the active task until Back; desktop stays split. New work appears only in Work.
-- Products contains Commerce, Production, and Website. No public agent catalogue, demo-domain collection, POS product, or separate internal-console product is in scope.
-- Commerce: Orders and Stock, compact manual entry, visible Sample or managed-data boundary, and refund due as a primary exception. Production: Jobs and Problems, job-first mobile context, observation-only equipment status, and write gating. Website: one Page selector and Site, Preview, Publish action bar; edit opens first and recovery stays under Site.
-- All three products have authenticated tenant commands; managed Production requires human-bound evidence.
-- Website is the only lazy-loaded product workspace. Approval retains one deterministic site file without deploying a site or changing a domain. Invalid local records stay unchanged and require confirmed recovery or the two-step local reset. Web Locks and revisions prevent overlapping saves from silently winning.
-- The managed backend is the private `app_private` schema and dedicated runtime-role contract in Supabase Postgres. Browser code receives neither the database URL nor a service-role key.
-- The PostgreSQL 17.10 gate proves both product journeys through the real `PostgresTrialStore` and restores a fresh TLS cluster; hosted Supabase remains separate.
-- Sends, payments, publishing, merges, deployments, access changes, and production writes remain responsible-human actions.
-- Vercel canonical mappings remain `app.supermega.dev` → `megaos`, and `supermega.dev` plus `www.supermega.dev` → `supermega-public`.
+- Shop runs at `/shop/` with Orders and Stock while retaining the stable internal `commerce` state contract. `/operations/commerce/` is compatibility-only and canonicalizes to the same records. Shop has guarded intake, reservation, fulfilment, payment reconciliation, cancellation, refund-due and refund-settled evidence, stock movements, and daily close.
+- Plant runs at `/plant/` with Jobs and Problems while retaining the stable internal `production` state contract. `/operations/production/` is compatibility-only and canonicalizes to the same records. Plant has recurring job creation, output, quality/material/maintenance issues, equipment-state observations, attributed events, and managed command gates.
+- Website runs at `/products/website/` with Site, Preview, and Publish. It retains revisioned evidence and a deterministic downloadable site file without deployment or domain mutation.
+- `/products/ecommerce/` currently resolves to the compact Products planned state. The previous broad Ecommerce prototype remains deleted; the focused customer-facing product is not yet rebuilt.
+- `/agents/` currently resolves to the compact Products planned state because Agent Teams are internal coordination records and Order Intake has not yet passed the evaluation gate.
+- Home, Work, Products, and Settings exist in one app shell. Mobile uses focused task flows; no separate app domain is required.
+- The default app is browser-local. Authenticated Shop, Plant, and Website commands exist, but hosted production activation is not proven.
 
-## Latest verification
+## Verified baseline
 
-- Product head `414768c` is eight commits ahead. It adds guarded daily close plus human-only refund due-to-settled recording with complete proof, exact replay, and isolation. All 114 Python tests, build, and app, release, security, migration, Vercel, and HQ checks pass; nothing was pushed or deployed.
-- Draft PR `#258` remains the release candidate; its validated implementation head is `338b6fd11bc27da9b7aa42bee2c293a5c0e3a9ef`. GitHub `SuperMega App CI` run `180` passed every validation job, including 207 product/runtime, 51 release, 44 security, 10 migration, and 11 Vercel checks.
-- PostgreSQL 17.10 passed 24 migration, authority, journey, isolation, retry, recovery, and validator checks across two clean TLS clusters; cleanup passed and external systems were unchanged.
-- Fresh 1280px and 375px audits, including refund recording, show no horizontal overflow, error overlay, warning, or console error. At 375px, Commerce Review order is 304×44px and visible controls are at least 44px high; Production has no undersized controls; Website reorder and preview controls are 44×44px. Invalid Website data stayed unchanged in session-only recovery mode.
-- Existing Work focus evidence remains: agent detail moved from 579px to 72px, its first field from 773px to 266px, work detail and new-work intake start at 72px, and Review Prepare moved from 806px to 724px.
-- No Vercel deployment was created; current `megaos` and `supermega-public` production still reference `main` commit `6885c3201d523d42d176c3dcd91de28dc1e17f6f`.
-- The connected `supermegabase` project is active and healthy on hosted PostgreSQL 17.6.1. Read-only inspection confirms `app_private`, `app_private.trial_schema_meta`, and `supermega_trial_backend` are not installed.
-- Supabase history has one unrelated public-schema RLS migration; existing public tables have 27 informational `rls_enabled_no_policy` findings, not private-schema readiness proof.
+- Local implementation head before this portfolio correction is `d9382c16ec7f8ce0b4e599f837e21bbcb08d858d`; the corrected candidate passed its full local suite and is ready for a local checkpoint.
+- The corrected candidate passed all 114 Python tests, Showroom lint and build, app, release, security, migration, Vercel, HQ, generated-public, artifact-budget, and contact-function checks.
+- PostgreSQL 17.10 passed 24 local migration, authority, journey, isolation, retry, recovery, and validator checks across two clean TLS clusters.
+- Fresh 1280 px and 375 px browser audits of the corrected candidate passed for Home, Shop, Plant, Products, and Website without horizontal overflow, error overlay, warning, or console error. Compatibility URLs canonicalized to `/shop/` and `/plant/` while preserving query state.
+- No Vercel deployment was created. Current production still references `main` commit `6885c3201d523d42d176c3dcd91de28dc1e17f6f`.
+- The connected `supermegabase` project is healthy, but the private application schema and runtime role are not installed; this is not application readiness proof.
 
 ## Coordination
 
-- `hq/WORKBOARD.md` is assignment authority. This task integrates; `QA-001` is read-only, and `ENG-001` is test-only after Claude authentication. Workers do not edit canonical or HQ files.
+- This Codex task owns portfolio authority and integration.
+- Bounded Codex subagents may inspect, test, or patch disjoint files. They cannot redefine the portfolio or perform owner-gated actions.
+- Visible Codex task creation is unavailable in the current session, so no separate sidebar task may be claimed as created.
+- Claude coordination is paused by founder direction.
+- `hq/WORKBOARD.md` remains assignment authority.
+
+## Owner-gated actions
+
+No external send, payment, refund, publish, domain change, connector write, merge, deployment, access change, production database write, paid resource, or revenue claim occurs without explicit owner approval.
 
 ## Blockers
 
-- No isolated Supabase branch or separate non-production project has repeated the five-migration PostgreSQL 17.6 proof.
-- Hosted-only evidence is missing: Security Advisor, transaction-pool behavior, provider recovery, and authenticated repetition of both proven product journeys.
-- The connected production project contains unrelated existing public-schema objects and advisor findings. Do not treat its healthy status or server version as application readiness.
-- Production still needs server-only secrets, explicit memberships/capabilities, a writes-disabled smoke test, founder approval, and separately authorized write enablement.
-- No pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
+- Ecommerce does not currently have a product route or focused implementation.
+- Agent Teams is not a production agent runtime; Order Intake still needs server-only model execution, structured output, provenance, cost controls, and golden-set evaluation.
+- No isolated hosted Supabase branch or separate non-production project has repeated the local database proof.
+- No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
 
 ## Decisions in force
 
-- PR `#258` is the single integration candidate; its component drafts are not separate release candidates.
-- Do not apply the private-trial migrations to the connected production project before an isolated rehearsal passes.
-- Do not create a paid Supabase branch or project without confirming its organization and cost.
-- One company system; no public agent catalogue, internal-console product, or demo-domain collection.
-- AI prepares bounded work from approved records; responsible owners retain consequential authority.
-- Do not add another CRM, queue, orchestrator, or agent runtime until a measured gap proves it necessary.
+- Shop and Plant are the two core operating products.
+- Website and Ecommerce are distinct maker products; Ecommerce feeds Shop and never duplicates its back office.
+- AI Agent Solutions are real bounded workflows, not employee theatre or a public agent catalogue.
+- Internal technical IDs may remain `commerce` and `production` until a separately tested data migration is justified.
+- One app, one identity foundation, one evidence/approval model, and one coordinated release path.
+- New modules require a real user job, an implemented state transition, a failure/recovery path, and an acceptance test.
+- R&D resources become verified implementation assets, not public directory pages.
 
 ## Next evidence
 
-1. Approve and provision one isolated hosted Supabase rehearsal target.
-2. Repeat the locally proven five-migration, runtime-role, validator, isolation, revocation, and recovery gate; run Supabase Security Advisor and the transaction-mode pooler check.
-3. Name the Commerce pilot supervisor and baseline; repeat its proven workflow through authenticated users on the isolated hosted runtime.
-4. Repeat the validated migration against production with writes disabled; configure server-only identity and database secrets.
-5. Merge and release the exact reviewed commit only after the coordinated live gates pass; enable writes in a separate owner-approved action.
+1. Commit the corrected candidate after the full local release suite confirms the already-passing HQ, generated-public, app-build, desktop, and mobile checks.
+2. Keep the passing `/shop/`, `/plant/`, compatibility, and mobile journeys as regression evidence.
+3. Approve the focused Ecommerce rebuild contract, then implement only storefront-to-Shop order intent.
+4. Run the Order Intake golden set and expose a human review demo only after zero-side-effect checks pass.
+5. Provision and validate one isolated hosted Supabase rehearsal target before any production write enablement.

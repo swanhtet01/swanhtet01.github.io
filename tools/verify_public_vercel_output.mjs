@@ -33,7 +33,10 @@ requireFile(configPath, 'config.json')
 if (manifest.schemaVersion !== 'supermega.site-context.v1') fail('manifest_schema_changed')
 if (manifest.company?.publicPricing !== false) fail('public_pricing_enabled')
 if (manifest.release?.sourceBranch !== 'main') fail('release_source_not_main')
-if (manifest.products?.map((product) => product.id).join(',') !== 'commerce,production') fail('public_catalog_not_commerce_and_production')
+if (manifest.products?.map((product) => product.id).join(',') !== 'commerce,production') fail('runtime_catalog_not_commerce_and_production')
+if (manifest.products?.map((product) => `${product.publicId}:${product.name}`).join(',') !== 'shop:Shop,plant:Plant') fail('public_catalog_not_shop_and_plant')
+if (manifest.prototypeProducts?.map((product) => `${product.id}:${product.status}`).join(',') !== 'website:release-candidate-local,ecommerce:rebuild-planned') fail('maker_portfolio_drift')
+if (manifest.agentSolutions?.id !== 'agents' || manifest.agentSolutions?.status !== 'prototype-planned') fail('agent_solution_portfolio_drift')
 for (const product of manifest.products || []) {
   if (product.templates?.length !== 3) fail('public_template_count_wrong', { product: product.id })
   for (const template of product.templates || []) {
@@ -67,7 +70,6 @@ const sharedRequired = [
   'aria-label="SuperMega home"',
   '<span class="brand-mark" aria-hidden="true">&gt;_</span>',
   '<span class="brand-name">SUPERMEGA</span>',
-  'href="https://app.supermega.dev/">Open workspace</a>',
   'href="/contact/">Contact</a>',
   'href="/privacy/">Privacy</a>',
   'Accountable company software.',
@@ -125,7 +127,7 @@ for (const token of [
   '02 / WORK',
   'One next action for the company.',
   'Owners, evidence, review, and release',
-  'Website, Commerce, and Production',
+  'Shop, Plant, Website, Ecommerce, and Agents',
   '<summary>How work moves</summary>',
   '<summary>What it covers</summary>',
   'min-height: 44px',
@@ -133,18 +135,25 @@ for (const token of [
   'Release',
   'Learn',
   'id="operations"',
-  'Two operational wedges. One company foundation.',
-  'Commerce and Production model accountable records and actions in browser-local workspaces.',
+  'Shop and Plant run the work.',
+  'Both products use accountable browser-local records today.',
   'Explore the product workspace',
   'Start with one real workflow.',
-  'Preview browser-local orders, stock, fulfilment, payment status, follow-up, and close across common channels.',
+  'Run browser-local orders, stock, fulfilment, payment status, exceptions, and daily close across common channels.',
   'No live channel, checkout, payment, delivery, customer send, or external write is connected.',
-  'Preview recurring jobs, output, machine state, quality, maintenance, exceptions, and shift handoffs in a clearly labelled local demo.',
+  'Run recurring jobs, output, machine state, quality, maintenance, exceptions, and shift handoffs in a clearly labelled local demo.',
   'No machine telemetry, machine control, access change, or external write is connected.',
   'id="trust"',
   'Assistance may organize, inspect, summarize, and draft from approved records.',
-  'https://app.supermega.dev/operations/commerce/?tab=orders',
-  'https://app.supermega.dev/operations/production/?tab=production',
+  'https://app.supermega.dev/shop/?tab=orders',
+  'https://app.supermega.dev/plant/?tab=production',
+  'id="website"',
+  'Available locally',
+  'id="ecommerce"',
+  'Focused rebuild planned',
+  'id="agents"',
+  'Evaluation required',
+  'No demo button until this workflow passes.',
 ]) {
   if (!home.includes(token)) fail('homepage_contract_missing', { token })
 }
@@ -164,7 +173,7 @@ if (home.includes('Commerce and Production carry real records and actions.')) fa
 if ((home.match(/<a\b/g) || []).length > 8) fail('homepage_link_surface_too_large')
 
 const contact = pages.get('/contact/')?.html || ''
-for (const token of ['data-contact-form', 'action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="product"', 'value="website"', 'value="commerce"', 'value="production"', 'name="template"', 'name="goal"', 'name="idempotency_key"', 'x-idempotency-key', 'rate_limited', 'Describe one real workflow or recurring handoff, and note any screenshot or spreadsheet you can share.', 'Company work', 'Website', 'Commerce and orders', 'No account, data connection, automation, or external action begins from this form.', 'swanhtet@supermega.dev']) {
+for (const token of ['data-contact-form', 'action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="product"', 'value="shop"', 'value="plant"', 'value="website"', 'value="ecommerce"', 'value="agents"', 'name="template"', 'name="goal"', 'name="idempotency_key"', 'x-idempotency-key', 'rate_limited', 'Describe one real workflow or recurring handoff, and note any screenshot or spreadsheet you can share.', '>Shop<', '>Plant<', '>Website<', '>Ecommerce<', '>AI Agent Solutions<', 'No account, data connection, automation, or external action begins from this form.', 'swanhtet@supermega.dev']) {
   if (!contact.includes(token)) fail('contact_contract_missing', { token })
 }
 
