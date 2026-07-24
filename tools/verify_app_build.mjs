@@ -493,6 +493,18 @@ if (!commerceSource.includes("CommercePaymentStatus = 'pending' | 'reconciled'")
   || commerceSource.includes("'unrecorded'")
   || commerceSource.includes("'refund_due'")) fail('commerce_payment_or_refund_contract_invalid')
 if (!commerceSource.includes('commerceOrderHasReleasableReservation') || !commerceSource.includes("movement.kind === 'reserve'") || !commerceSource.includes("movement.kind === 'release'") || !commerceSource.includes("kind: 'receipt'") || !commerceSource.includes("kind: 'opening'")) fail('commerce_stock_ledger_contract_missing')
+if (!commerceSource.includes('export type CommerceOrderLine')
+  || !commerceSource.includes('lines?: CommerceOrderLine[]')
+  || !commerceSource.includes('one reservation action covering every order line')
+  || !commerceSource.includes('proofMovements.length === lines.length')
+  || !managedCommerceRuntime.includes('one stock reservation per order line')
+  || !managedCommerceRuntime.includes("line must freeze the current item name, variant, and MMK price")
+  || !commerceSource.includes('encodeURIComponent(proof.actionId)')
+  || !managedCommerceRuntime.includes('def _movement_id(')
+  || !coreSource.includes('Add item')
+  || !coreSource.includes('updateExtraOrderLine')
+  || !coreSource.includes('order.lines.length === 1')
+  || !coreSource.includes('line.unitPriceMmk.toLocaleString()')) fail('commerce_multi_line_order_contract_missing')
 if (!commerceSource.includes('Recovery failed closed') || !commerceSource.includes('currentRaw !== null') || !commerceSource.includes("movements: []")) fail('commerce_migration_fail_closed_contract_missing')
 if (!commerceSource.includes('export function settleCommerceRefund')
   || !commerceSource.includes("refundStatus: 'settled' as const")
@@ -1670,6 +1682,15 @@ async function verifyCommerceRuntime() {
     assert(model.registerCommerceItem(withItem, newItem, openingProof) === withItem, 'catalog_item_retry_not_idempotent')
     assert(model.registerCommerceItem(withItem, { ...newItem, price: 251 }, openingProof) === null, 'catalog_item_conflicting_retry_succeeded')
     assert(model.registerCommerceItem(withItem, newItem, proof('ACT-ITEM-DUPLICATE')) === null, 'duplicate_catalog_sku_succeeded')
+    assertThrows(() => model.validateCommerceState({
+      ...base,
+      items: [{ ...base.items[0], name: ' Test item ' }],
+    }), 'noncanonical_catalog_item_loaded_as_writable')
+    assert(model.registerCommerceItem(base, {
+      ...newItem,
+      sku: 'SKU-LONG-NAME',
+      name: 'x'.repeat(181),
+    }, proof('ACT-ITEM-LONG-NAME')) === null, 'oversized_catalog_item_was_registered')
     const reserveProof = proof('ACT-RESERVE')
     const order = {
       id: 'ORD-1',
@@ -1692,6 +1713,79 @@ async function verifyCommerceRuntime() {
     assert(model.reserveCommerceOrder(reserved, order, reserveProof) === reserved, 'exact_reservation_retry_not_idempotent')
     assert(model.reserveCommerceOrder(reserved, { ...order, quantity: 3, total: 300 }, reserveProof) === null, 'conflicting_reservation_retry_succeeded')
     assert(model.reserveCommerceOrder(reserved, { ...order, id: 'ORD-2' }, proof('ACT-RESERVE-2')) === null, 'duplicate_source_order_succeeded')
+
+    const multiBase = {
+      ...base,
+      items: [
+        base.items[0],
+        { sku: 'SKU-2', name: 'Second item', variant: 'Large', onHand: 5, reorderAt: 1, price: 250 },
+      ],
+    }
+    const multiProof = proof('ACT-MULTI-RESERVE')
+    const multiOrder = {
+      id: 'ORD-MULTI',
+      createdAt: multiProof.capturedAt,
+      customer: 'Counter A',
+      channel: 'Walk-in',
+      item: '2 items',
+      quantity: 3,
+      payment: 'Cash',
+      paymentStatus: 'pending',
+      refundStatus: 'none',
+      lines: [
+        { sku: 'SKU-1', name: 'Test item', quantity: 2, unitPriceMmk: 100 },
+        { sku: 'SKU-2', name: 'Second item', variant: 'Large', quantity: 1, unitPriceMmk: 250 },
+      ],
+      total: 450,
+      status: 'confirmed',
+    }
+    const multiReserved = model.reserveCommerceOrder(multiBase, multiOrder, multiProof)
+    assert(multiReserved?.items[0].onHand === 8
+      && multiReserved.items[1].onHand === 4
+      && multiReserved.movements.length === 2
+      && multiReserved.movements.every((movement) => movement.actionId === multiProof.actionId)
+      && multiReserved.movements.map((movement) => movement.id).join('|') === 'MOV2:ACT-MULTI-RESERVE:L1|MOV2:ACT-MULTI-RESERVE:L2',
+    'multi_line_reservation_not_atomic')
+    assert(model.reserveCommerceOrder(multiReserved, multiOrder, multiProof) === multiReserved, 'multi_line_reservation_retry_not_idempotent')
+    assert(model.reserveCommerceOrder(multiReserved, {
+      ...multiOrder,
+      total: 451,
+      lines: [multiOrder.lines[0], { ...multiOrder.lines[1], unitPriceMmk: 251 }],
+    }, multiProof) === null, 'multi_line_conflicting_price_retry_succeeded')
+    assertThrows(() => model.validateCommerceState({
+      ...multiReserved,
+      movements: [
+        multiReserved.movements[0],
+        { ...multiReserved.movements[1], id: 'MOV2:ACT-SPLIT:L2', actionId: 'ACT-SPLIT' },
+      ],
+    }), 'multi_line_split_reservation_action_succeeded')
+    const collisionProof = proof('ACT-MULTI-RESERVE-L1', 1_000)
+    const collisionReserved = model.reserveCommerceOrder(multiReserved, {
+      ...multiOrder,
+      id: 'ORD-COLLISION',
+      createdAt: collisionProof.capturedAt,
+      item: 'Second item',
+      itemSku: 'SKU-2',
+      quantity: 1,
+      lines: [{ ...multiOrder.lines[1], quantity: 1 }],
+      total: 250,
+    }, collisionProof)
+    assert(collisionReserved
+      && new Set(collisionReserved.movements.map((movement) => movement.id)).size === collisionReserved.movements.length,
+    'multi_line_movement_id_collided_with_single_line_action')
+    const repricedMulti = model.validateCommerceState({
+      ...multiReserved,
+      items: multiReserved.items.map((item) => item.sku === 'SKU-1' ? { ...item, price: 125 } : item),
+    })
+    assert(repricedMulti.orders[0].lines[0].unitPriceMmk === 100, 'multi_line_price_snapshot_followed_catalog_change')
+    const multiCancelProof = proof('ACT-MULTI-CANCEL', 2_000)
+    const multiCancelled = model.cancelCommerceOrder(multiReserved, multiOrder.id, multiCancelProof)
+    assert(multiCancelled?.items[0].onHand === 10
+      && multiCancelled.items[1].onHand === 5
+      && multiCancelled.orders[0].status === 'cancelled'
+      && multiCancelled.movements.filter((movement) => movement.kind === 'release').length === 2,
+    'multi_line_cancellation_not_atomic')
+    assert(model.cancelCommerceOrder(multiCancelled, multiOrder.id, multiCancelProof) === multiCancelled, 'multi_line_cancellation_retry_not_idempotent')
 
     const preparing = model.advanceCommerceOrder(reserved, order.id, 'confirmed')
     const ready = model.advanceCommerceOrder(preparing, order.id, 'preparing')

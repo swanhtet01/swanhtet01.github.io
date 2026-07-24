@@ -7,6 +7,7 @@ from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import quote
 
 from supermega_runtime.trial_store import TrialValidationError
 
@@ -59,6 +60,8 @@ _STOREFRONT_IDEMPOTENCY_PATTERN = re.compile(
 )
 _SHA256_DIGEST_PATTERN = re.compile(r"sha256:[a-f0-9]{64}")
 _MAX_STOREFRONT_REQUESTS = 100
+_MAX_ORDER_LINES = 20
+_MAX_MOVEMENT_ID_LENGTH = 2_000
 
 _STATE_FIELDS = frozenset({"schema", "items", "orders", "movements", "closes"})
 _ITEM_FIELDS = frozenset({"sku", "name", "variant", "onHand", "reorderAt", "price"})
@@ -93,8 +96,11 @@ _ORDER_OPTIONAL_FIELDS = frozenset(
         "fulfilment",
         "sourceRecordId",
         "evidenceReference",
+        "lines",
     }
 )
+_ORDER_LINE_REQUIRED_FIELDS = frozenset({"sku", "name", "quantity", "unitPriceMmk"})
+_ORDER_LINE_OPTIONAL_FIELDS = frozenset({"variant"})
 _RECONCILIATION_FIELDS = frozenset(
     {
         "paymentReconciledAt",
@@ -229,6 +235,25 @@ def _unique(values: Sequence[str], field: str) -> None:
         raise TrialValidationError(f"{field} values must be unique.")
 
 
+def _order_item_summary(lines: Sequence[Mapping[str, Any]]) -> str:
+    return str(lines[0]["name"]) if len(lines) == 1 else f"{len(lines)} items"
+
+
+def _reservation_lines(order: Mapping[str, Any]) -> list[dict[str, Any]]:
+    if "lines" in order:
+        return [
+            {"sku": line["sku"], "quantity": line["quantity"]}
+            for line in order["lines"]
+        ]
+    item_sku = order.get("itemSku")
+    return [{"sku": item_sku, "quantity": order["quantity"]}] if item_sku else []
+
+
+def _movement_id(action_id: str, suffix: str | None = None) -> str:
+    encoded_action_id = quote(action_id, safe="-_.!~*'()")
+    return f"MOV2:{encoded_action_id}{f':{suffix}' if suffix else ''}"
+
+
 def _action_proof(value: object, field: str, *, with_order_id: bool = False) -> dict[str, Any]:
     proof = _object(value, field)
     required = _WEBSITE_CONVERSION_FIELDS if with_order_id else _EVIDENCE_FIELDS
@@ -342,6 +367,65 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 raise TrialValidationError(f"orders[{index}].itemSku is unknown.")
         _integer(order["quantity"], f"orders[{index}].quantity", minimum=1)
         _integer(order["total"], f"orders[{index}].total")
+        if "lines" in order:
+            lines = _list(order["lines"], f"orders[{index}].lines")
+            if not 1 <= len(lines) <= _MAX_ORDER_LINES:
+                raise TrialValidationError(
+                    f"orders[{index}].lines must contain 1 to {_MAX_ORDER_LINES} entries."
+                )
+            line_skus: list[str] = []
+            captured_quantity = 0
+            captured_total = 0
+            validated_lines: list[dict[str, Any]] = []
+            for line_index, line_candidate in enumerate(lines):
+                line_field = f"orders[{index}].lines[{line_index}]"
+                line = _object(line_candidate, line_field)
+                _exact_fields(
+                    line,
+                    line_field,
+                    required=_ORDER_LINE_REQUIRED_FIELDS,
+                    optional=_ORDER_LINE_OPTIONAL_FIELDS,
+                )
+                line_sku = _text(line["sku"], f"{line_field}.sku", maximum=80)
+                if line_sku not in item_by_sku:
+                    raise TrialValidationError(f"{line_field}.sku is unknown.")
+                _text(line["name"], f"{line_field}.name")
+                if "variant" in line:
+                    _text(line["variant"], f"{line_field}.variant")
+                line_quantity = _integer(
+                    line["quantity"],
+                    f"{line_field}.quantity",
+                    minimum=1,
+                )
+                unit_price = _integer(
+                    line["unitPriceMmk"],
+                    f"{line_field}.unitPriceMmk",
+                    minimum=1,
+                )
+                line_total = line_quantity * unit_price
+                captured_quantity += line_quantity
+                captured_total += line_total
+                if (
+                    line_total > _MAX_SAFE_INTEGER
+                    or captured_quantity > _MAX_SAFE_INTEGER
+                    or captured_total > _MAX_SAFE_INTEGER
+                ):
+                    raise TrialValidationError(
+                        f"orders[{index}].lines exceed the safe integer limit."
+                    )
+                line_skus.append(line_sku)
+                validated_lines.append(line)
+            _unique(line_skus, f"orders[{index}] line SKU")
+            expected_item_sku = validated_lines[0]["sku"] if len(validated_lines) == 1 else None
+            if (
+                order["item"] != _order_item_summary(validated_lines)
+                or order.get("itemSku") != expected_item_sku
+                or order["quantity"] != captured_quantity
+                or order["total"] != captured_total
+            ):
+                raise TrialValidationError(
+                    f"orders[{index}] does not match its immutable line snapshots."
+                )
         if order["status"] not in _ORDER_STATUSES:
             raise TrialValidationError(f"orders[{index}].status is invalid.")
         if order["paymentStatus"] not in _PAYMENT_STATUSES:
@@ -405,7 +489,10 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     movement_action_ids: list[str] = []
     reserve_by_order: dict[str, int] = {}
     release_by_order: dict[str, int] = {}
+    reserve_actions_by_order: dict[str, set[str]] = {}
+    release_actions_by_order: dict[str, set[str]] = {}
     reserve_movement_by_order: dict[str, dict[str, Any]] = {}
+    movements_by_action: dict[str, list[dict[str, Any]]] = {}
     for index, candidate in enumerate(movements):
         movement = _object(candidate, f"movements[{index}]")
         _exact_fields(
@@ -414,7 +501,11 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             required=_MOVEMENT_FIELDS - {"orderId"},
             optional=frozenset({"orderId"}),
         )
-        movement_id = _text(movement["id"], f"movements[{index}].id", maximum=180)
+        movement_id = _text(
+            movement["id"],
+            f"movements[{index}].id",
+            maximum=_MAX_MOVEMENT_ID_LENGTH,
+        )
         action_id = _text(movement["actionId"], f"movements[{index}].actionId", maximum=160)
         _timestamp(movement["createdAt"], f"movements[{index}].createdAt")
         for field in ("actor", "reason", "evidenceReference"):
@@ -425,6 +516,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         kind = movement["kind"]
         if kind not in _MOVEMENT_KINDS:
             raise TrialValidationError(f"movements[{index}].kind is invalid.")
+        movements_by_action.setdefault(action_id, []).append(movement)
         if kind == "opening":
             quantity_delta = _integer(movement["quantityDelta"], f"movements[{index}].quantityDelta")
         else:
@@ -440,23 +532,68 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         else:
             order_id = _text(movement.get("orderId"), f"movements[{index}].orderId", maximum=160)
             order = order_by_id.get(order_id)
-            if not order or order.get("itemSku") != sku or quantity_delta != order["quantity"]:
+            matching_lines = [
+                line
+                for line in (_reservation_lines(order) if order else [])
+                if line["sku"] == sku
+            ]
+            if not order or len(matching_lines) != 1 or quantity_delta != matching_lines[0]["quantity"]:
                 raise TrialValidationError(f"movements[{index}] does not match its order reservation.")
             counter = reserve_by_order if kind == "reserve" else release_by_order
             counter[order_id] = counter.get(order_id, 0) + 1
+            actions = (
+                reserve_actions_by_order
+                if kind == "reserve"
+                else release_actions_by_order
+            )
+            actions.setdefault(order_id, set()).add(action_id)
             if kind == "reserve":
-                reserve_movement_by_order[order_id] = movement
+                reserve_movement_by_order.setdefault(order_id, movement)
             if kind == "release" and order["status"] != "cancelled":
                 raise TrialValidationError(f"movements[{index}] release requires a cancelled order.")
         movement_ids.append(movement_id)
         movement_action_ids.append(action_id)
     _unique(movement_ids, "Stock movement ID")
-    _unique(movement_action_ids, "Stock movement action ID")
+    for action_id, action_movements in movements_by_action.items():
+        if len(action_movements) < 2:
+            continue
+        first = action_movements[0]
+        if (
+            first["kind"] not in {"reserve", "release"}
+            or not first.get("orderId")
+            or len({movement["sku"] for movement in action_movements}) != len(action_movements)
+            or any(
+                movement["kind"] != first["kind"]
+                or movement.get("orderId") != first["orderId"]
+                or movement["createdAt"] != first["createdAt"]
+                or movement["actor"] != first["actor"]
+                or movement["reason"] != first["reason"]
+                or movement["evidenceReference"] != first["evidenceReference"]
+                for movement in action_movements
+            )
+        ):
+            raise TrialValidationError(
+                f"Stock movement action {action_id} is not one exact order reservation group."
+            )
     for order_id, count in reserve_by_order.items():
-        if count != 1:
-            raise TrialValidationError(f"{order_id} has more than one reservation.")
+        order = order_by_id.get(order_id)
+        if (
+            not order
+            or count != len(_reservation_lines(order))
+            or len(reserve_actions_by_order.get(order_id, set())) != 1
+        ):
+            raise TrialValidationError(
+                f"{order_id} does not have one reservation action covering every order line."
+            )
     for order_id, count in release_by_order.items():
-        if count != 1 or reserve_by_order.get(order_id) != 1:
+        order = order_by_id.get(order_id)
+        expected = len(_reservation_lines(order)) if order else 0
+        if (
+            not expected
+            or count != expected
+            or reserve_by_order.get(order_id) != expected
+            or len(release_actions_by_order.get(order_id, set())) != 1
+        ):
             raise TrialValidationError(f"{order_id} has an unproven stock release.")
 
     close_ids: list[str] = []
@@ -676,7 +813,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     _unique(storefront_idempotency_keys, "Storefront request idempotency key")
     _unique(
         [
-            *(action_id for action_id in movement_action_ids if action_id not in conversion_action_ids),
+            *(action_id for action_id in dict.fromkeys(movement_action_ids) if action_id not in conversion_action_ids),
             *reconciliation_action_ids,
             *refund_settlement_action_ids,
             *intake_action_ids,
@@ -752,16 +889,21 @@ def _validate_event_evidence(
         "commerce.website_intake.converted": "reserve",
     }.get(event_type)
     if movement_kind:
-        movement = next_state["movements"][0]
-        if movement.get("kind") != movement_kind or any(
-            movement.get(movement_field) != evidence[evidence_field]
-            for movement_field, evidence_field in (
-                ("actionId", "actionId"),
-                ("createdAt", "capturedAt"),
-                ("actor", "actor"),
-                ("reason", "reason"),
-                ("evidenceReference", "evidenceReference"),
+        added_count = len(next_state["movements"]) - len(current["movements"])
+        added_movements = next_state["movements"][:added_count]
+        if not added_movements or any(
+            movement.get("kind") != movement_kind
+            or any(
+                movement.get(movement_field) != evidence[evidence_field]
+                for movement_field, evidence_field in (
+                    ("actionId", "actionId"),
+                    ("createdAt", "capturedAt"),
+                    ("actor", "actor"),
+                    ("reason", "reason"),
+                    ("evidenceReference", "evidenceReference"),
+                )
             )
+            for movement in added_movements
         ):
             raise TrialValidationError("command evidence must match the attributable stock movement.")
     elif event_type == "commerce.payment.reconciled":
@@ -817,6 +959,29 @@ def _one_changed(current: list[Any], next_values: list[Any], field: str) -> tupl
     return before, after
 
 
+def _changed_records(
+    current: list[Any],
+    next_values: list[Any],
+    field: str,
+) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+    if len(current) != len(next_values):
+        raise TrialValidationError(
+            f"{field} must preserve its record count for this event."
+        )
+    changes: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    identity_field = "sku" if field == "items" else "id"
+    for index, (before_value, after_value) in enumerate(
+        zip(current, next_values, strict=True)
+    ):
+        before = _object(before_value, f"current {field}[{index}]")
+        after = _object(after_value, f"next {field}[{index}]")
+        if before.get(identity_field) != after.get(identity_field):
+            raise TrialValidationError(f"{field} record identity cannot change.")
+        if before != after:
+            changes.append((before, after))
+    return changes
+
+
 def _without(value: Mapping[str, Any], fields: frozenset[str]) -> dict[str, Any]:
     return {key: nested for key, nested in value.items() if key not in fields}
 
@@ -853,28 +1018,78 @@ def _validate_new_order_and_reservation(
 ) -> None:
     if len(next_state["orders"]) != len(current["orders"]) + 1 or next_state["orders"][1:] != current["orders"]:
         raise TrialValidationError(f"{event_type} must prepend exactly one order.")
-    if len(next_state["movements"]) != len(current["movements"]) + 1 or next_state["movements"][1:] != current["movements"]:
-        raise TrialValidationError(f"{event_type} must prepend exactly one stock reservation.")
     _require_unchanged(current, next_state, "closes")
-    before_item, after_item = _one_changed(current["items"], next_state["items"], "items")
     order = next_state["orders"][0]
-    movement = next_state["movements"][0]
     if order.get("status") != "confirmed" or order.get("paymentStatus") != "pending" or order.get("refundStatus") != "none":
         raise TrialValidationError("a new order must start confirmed with pending payment and no refund exception.")
-    if not order.get("itemSku") or order["itemSku"] != before_item["sku"]:
-        raise TrialValidationError("a new order must reference the changed inventory item.")
-    if order["total"] != before_item["price"] * order["quantity"]:
-        raise TrialValidationError("a new order total must equal the current item price times quantity.")
-    if after_item != {**before_item, "onHand": before_item["onHand"] - order["quantity"]}:
-        raise TrialValidationError("a new order must reserve its exact quantity from stock.")
-    if movement != {
-        **{key: movement[key] for key in ("id", "actionId", "createdAt", "actor", "reason", "evidenceReference")},
-        "kind": "reserve",
-        "sku": order["itemSku"],
-        "quantityDelta": -order["quantity"],
-        "orderId": order["id"],
-    } or movement["id"] != f"MOV-{movement['actionId']}":
-        raise TrialValidationError("a new order requires one attributable stock reservation.")
+    lines = _reservation_lines(order)
+    if not lines:
+        raise TrialValidationError("a new order must reference at least one inventory item.")
+    if (
+        len(next_state["movements"]) != len(current["movements"]) + len(lines)
+        or next_state["movements"][len(lines):] != current["movements"]
+    ):
+        raise TrialValidationError(
+            f"{event_type} must prepend one stock reservation per order line."
+        )
+
+    item_changes = _changed_records(current["items"], next_state["items"], "items")
+    changed_by_sku = {before["sku"]: (before, after) for before, after in item_changes}
+    if set(changed_by_sku) != {line["sku"] for line in lines}:
+        raise TrialValidationError(
+            "a new order may change only the inventory items in its lines."
+        )
+
+    captured_lines = {
+        line["sku"]: line
+        for line in order.get("lines", [])
+    }
+    for line in lines:
+        before_item, after_item = changed_by_sku[line["sku"]]
+        captured_line = captured_lines.get(line["sku"])
+        if captured_line is not None and (
+            captured_line["name"] != before_item["name"]
+            or captured_line.get("variant") != before_item.get("variant")
+            or captured_line["unitPriceMmk"] != before_item["price"]
+        ):
+            raise TrialValidationError(
+                "a new order line must freeze the current item name, variant, and MMK price."
+            )
+        if captured_line is None and (
+            len(lines) != 1
+            or order.get("itemSku") != before_item["sku"]
+            or order["item"] != before_item["name"]
+            or order["total"] != before_item["price"] * order["quantity"]
+        ):
+            raise TrialValidationError(
+                "a legacy single-item order must match the current catalog item."
+            )
+        if after_item != {
+            **before_item,
+            "onHand": before_item["onHand"] - line["quantity"],
+        }:
+            raise TrialValidationError(
+                "a new order must reserve every line's exact quantity from stock."
+            )
+
+    added_movements = next_state["movements"][:len(lines)]
+    for index, (line, movement) in enumerate(
+        zip(lines, added_movements, strict=True)
+    ):
+        expected_id = _movement_id(
+            movement["actionId"],
+            f"L{index + 1}" if len(lines) > 1 else None,
+        )
+        if (
+            movement.get("kind") != "reserve"
+            or movement.get("sku") != line["sku"]
+            or movement.get("quantityDelta") != -line["quantity"]
+            or movement.get("orderId") != order["id"]
+            or movement.get("id") != expected_id
+        ):
+            raise TrialValidationError(
+                "a new order requires one exact attributable reservation per line."
+            )
 
 
 def _validate_created(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
@@ -896,7 +1111,7 @@ def _validate_item_created(current: Mapping[str, Any], next_state: Mapping[str, 
         or movement.get("sku") != item["sku"]
         or movement.get("quantityDelta") != item["onHand"]
         or "orderId" in movement
-        or movement.get("id") != f"MOV-{movement.get('actionId')}"
+        or movement.get("id") != _movement_id(str(movement.get("actionId")))
     ):
         raise TrialValidationError("a new catalog item requires one exact attributable opening balance.")
 
@@ -917,25 +1132,77 @@ def _validate_cancelled(current: Mapping[str, Any], next_state: Mapping[str, Any
     _require_unchanged(current, next_state, "closes")
     _require_website_intakes_unchanged(current, next_state)
     before_order, after_order = _one_changed(current["orders"], next_state["orders"], "orders")
-    before_item, after_item = _one_changed(current["items"], next_state["items"], "items")
-    if len(next_state["movements"]) != len(current["movements"]) + 1 or next_state["movements"][1:] != current["movements"]:
-        raise TrialValidationError("commerce.order.cancelled must prepend exactly one stock release.")
     if before_order["status"] in {"completed", "cancelled"}:
         raise TrialValidationError("completed or cancelled orders cannot be cancelled.")
     expected_refund = "due" if before_order["paymentStatus"] == "reconciled" else "none"
     if after_order != {**before_order, "status": "cancelled", "refundStatus": expected_refund}:
         raise TrialValidationError("cancellation may change only order status and the required refund exception.")
-    if before_order.get("itemSku") != before_item["sku"]:
-        raise TrialValidationError("cancellation must release the order inventory item.")
-    if after_item != {**before_item, "onHand": before_item["onHand"] + before_order["quantity"]}:
-        raise TrialValidationError("cancellation must release the exact reserved quantity.")
-    movement = next_state["movements"][0]
-    if movement.get("kind") != "release" or movement.get("sku") != before_item["sku"] or movement.get("orderId") != before_order["id"] or movement.get("quantityDelta") != before_order["quantity"] or movement.get("id") != f"MOV-{movement.get('actionId')}":
-        raise TrialValidationError("cancellation requires one attributable stock release.")
+    lines = _reservation_lines(before_order)
+    if not lines:
+        raise TrialValidationError(
+            "cancellation requires an attributable order reservation."
+        )
+    if (
+        len(next_state["movements"]) != len(current["movements"]) + len(lines)
+        or next_state["movements"][len(lines):] != current["movements"]
+    ):
+        raise TrialValidationError(
+            "commerce.order.cancelled must prepend one stock release per order line."
+        )
+    item_changes = _changed_records(current["items"], next_state["items"], "items")
+    changed_by_sku = {before["sku"]: (before, after) for before, after in item_changes}
+    if set(changed_by_sku) != {line["sku"] for line in lines}:
+        raise TrialValidationError(
+            "cancellation may change only the inventory items in its order lines."
+        )
+    for line in lines:
+        before_item, after_item = changed_by_sku[line["sku"]]
+        if after_item != {
+            **before_item,
+            "onHand": before_item["onHand"] + line["quantity"],
+        }:
+            raise TrialValidationError(
+                "cancellation must release every line's exact reserved quantity."
+            )
+    added_movements = next_state["movements"][:len(lines)]
+    for index, (line, movement) in enumerate(
+        zip(lines, added_movements, strict=True)
+    ):
+        expected_id = _movement_id(
+            str(movement.get("actionId")),
+            f"L{index + 1}" if len(lines) > 1 else None,
+        )
+        if (
+            movement.get("kind") != "release"
+            or movement.get("sku") != line["sku"]
+            or movement.get("orderId") != before_order["id"]
+            or movement.get("quantityDelta") != line["quantity"]
+            or movement.get("id") != expected_id
+        ):
+            raise TrialValidationError(
+                "cancellation requires one exact attributable stock release per line."
+            )
     reserves = [entry for entry in current["movements"] if entry.get("kind") == "reserve" and entry.get("orderId") == before_order["id"]]
     releases = [entry for entry in current["movements"] if entry.get("kind") == "release" and entry.get("orderId") == before_order["id"]]
-    if len(reserves) != 1 or releases:
-        raise TrialValidationError("cancellation requires exactly one unmatched reservation.")
+    if (
+        len(reserves) != len(lines)
+        or releases
+        or any(
+            len(
+                [
+                    reserve
+                    for reserve in reserves
+                    if reserve.get("sku") == line["sku"]
+                    and reserve.get("quantityDelta") == -line["quantity"]
+                ]
+            )
+            != 1
+            for line in lines
+        )
+    ):
+        raise TrialValidationError(
+            "cancellation requires one unmatched reservation per order line."
+        )
 
 
 def _validate_reconciled(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
@@ -972,7 +1239,7 @@ def _validate_received(current: Mapping[str, Any], next_state: Mapping[str, Any]
     if len(next_state["movements"]) != len(current["movements"]) + 1 or next_state["movements"][1:] != current["movements"]:
         raise TrialValidationError("commerce.stock.received must prepend exactly one receipt.")
     movement = next_state["movements"][0]
-    if movement.get("kind") != "receipt" or movement.get("sku") != before_item["sku"] or "orderId" in movement or movement.get("id") != f"MOV-{movement.get('actionId')}":
+    if movement.get("kind") != "receipt" or movement.get("sku") != before_item["sku"] or "orderId" in movement or movement.get("id") != _movement_id(str(movement.get("actionId"))):
         raise TrialValidationError("stock receipt requires one attributable receipt movement.")
     if after_item != {**before_item, "onHand": before_item["onHand"] + movement["quantityDelta"]}:
         raise TrialValidationError("stock receipt must increase the matching item by its exact quantity.")

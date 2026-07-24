@@ -36,6 +36,7 @@ import {
   advanceCommerceOrder,
   cancelCommerceOrder,
   commerceCloseExpectation,
+  commerceOrderItemSummary,
   commerceOrderNeedsAction,
   commerceOrderHasReleasableReservation,
   commerceStorefrontRequests,
@@ -55,6 +56,7 @@ import {
   type CommerceActionProof,
   type CommerceItem,
   type CommerceOrder,
+  type CommerceOrderLine,
   type CommerceOrderStatus,
   type CommerceState,
   type CommerceStockMovement,
@@ -1725,6 +1727,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
   const [pendingAction, setPendingAction] = useState<PendingAccountableAction | null>(null)
   const [sku, setSku] = useState(commerce.items[0]?.sku ?? '')
   const [quantity, setQuantity] = useState(1)
+  const [extraOrderLines, setExtraOrderLines] = useState<Array<{ sku: string; quantity: number }>>([])
   const [customer, setCustomer] = useState('')
   const [channel, setChannel] = useState('Messenger')
   const [payment, setPayment] = useState('KBZPay')
@@ -1742,6 +1745,13 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
   const [catalogError, setCatalogError] = useState('')
   const selectedSku = commerce.items.some((item) => item.sku === sku) ? sku : commerce.items[0]?.sku ?? ''
   const selected = commerce.items.find((item) => item.sku === selectedSku)
+  const manualOrderLineDrafts = [{ sku: selectedSku, quantity }, ...extraOrderLines]
+  const manualOrderLineItems = manualOrderLineDrafts.map((line) => ({
+    ...line,
+    item: commerce.items.find((item) => item.sku === line.sku),
+  }))
+  const manualOrderQuantity = manualOrderLineDrafts.reduce((total, line) => total + Math.max(line.quantity, 0), 0)
+  const manualOrderTotal = manualOrderLineItems.reduce((total, line) => total + (line.item?.price ?? 0) * Math.max(line.quantity, 0), 0)
   const legacyCloseNeedsMigration = commerce.closes.some((close) => !close.orderIds || !close.businessDate)
   const closePreview = commerceCloseExpectation(commerce, new Date().toISOString())
   const closePreviewOrderIds = new Set(closePreview?.orderIds ?? [])
@@ -1791,6 +1801,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
         setChannel('Ecommerce')
         setSku(ecommerceNavigationDraft.line.sku)
         setQuantity(ecommerceNavigationDraft.line.quantity)
+        setExtraOrderLines([])
         setPayment('')
         setOrderEntryMode('manual')
         setNotice(`${ecommerceNavigationDraft.id} is ready for Shop review. Choose payment, then review the order.`)
@@ -1965,6 +1976,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
     setChannel(draft.channel)
     setSku(draft.sku)
     setQuantity(draft.quantity)
+    setExtraOrderLines([])
     setPayment(draft.payment)
     setPreparedChannelDraft(draft)
     setPreparedEcommerceDraft(null)
@@ -1995,6 +2007,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
       setChannel('Ecommerce')
       setSku(draft.line.sku)
       setQuantity(draft.line.quantity)
+      setExtraOrderLines([])
       setPayment('')
       setOrderEntryMode('manual')
       setNotice(`${request.id} loaded from the authenticated inbox. Choose payment, then use the separate Shop action gate.`)
@@ -2004,14 +2017,36 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
     }
   }
 
+  function addOrderLine() {
+    const usedSkus = new Set(manualOrderLineDrafts.map((line) => line.sku))
+    const nextItem = commerce.items.find((item) => !usedSkus.has(item.sku))
+    if (!nextItem || manualOrderLineDrafts.length >= 20) {
+      setNotice('Every available catalog item is already in this order.')
+      return
+    }
+    setExtraOrderLines((current) => [...current, { sku: nextItem.sku, quantity: 1 }])
+    setPreparedChannelDraft(null)
+    setPreparedEcommerceDraft(null)
+    setNotice(`${nextItem.name} added. Each item can appear once in an order.`)
+  }
+
+  function updateExtraOrderLine(index: number, patch: Partial<{ sku: string; quantity: number }>) {
+    setExtraOrderLines((current) => current.map((line, lineIndex) => lineIndex === index ? { ...line, ...patch } : line))
+    setPreparedChannelDraft(null)
+    setPreparedEcommerceDraft(null)
+  }
+
+  function removeExtraOrderLine(index: number) {
+    setExtraOrderLines((current) => current.filter((_, lineIndex) => lineIndex !== index))
+    setPreparedChannelDraft(null)
+    setPreparedEcommerceDraft(null)
+    setNotice('Item removed from this order draft. Shop data has not changed.')
+  }
+
   function recordOrder(event: FormEvent) {
     event.preventDefault()
     if (!payment) {
       setNotice('Choose how payment will be reviewed before preparing this order.')
-      return
-    }
-    if (!selected || quantity < 1 || selected.onHand < quantity) {
-      setNotice('Quantity is not available. Review stock before confirming the order.')
       return
     }
     const sourceDraft = preparedChannelDraft && channelOrderDraftIsReady(preparedChannelDraft) ? preparedChannelDraft : null
@@ -2022,10 +2057,53 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
       setNotice('Two source drafts were present. Both links were removed and nothing was queued.')
       return
     }
+    const orderLineSkus = new Set<string>()
+    const orderLines: CommerceOrderLine[] = []
+    let orderQuantity = 0
+    let orderTotal = 0
+    for (const line of manualOrderLineItems) {
+      if (!line.item
+        || !Number.isSafeInteger(line.quantity)
+        || line.quantity < 1
+        || line.item.onHand < line.quantity
+        || orderLineSkus.has(line.item.sku)) {
+        setNotice('Each order item must be unique, in stock, and use a whole quantity of at least 1.')
+        return
+      }
+      const lineTotal = line.item.price * line.quantity
+      const nextQuantity = orderQuantity + line.quantity
+      const nextTotal = orderTotal + lineTotal
+      if (!Number.isSafeInteger(lineTotal) || !Number.isSafeInteger(nextQuantity) || !Number.isSafeInteger(nextTotal)) {
+        setNotice('This order exceeds the supported whole-MMK or quantity limit.')
+        return
+      }
+      orderLineSkus.add(line.item.sku)
+      orderQuantity = nextQuantity
+      orderTotal = nextTotal
+      orderLines.push({
+        sku: line.item.sku,
+        name: line.item.name,
+        ...(line.item.variant ? { variant: line.item.variant } : {}),
+        quantity: line.quantity,
+        unitPriceMmk: line.item.price,
+      })
+    }
+    const selectedLine = orderLines[0]
+    const selectedItem = manualOrderLineItems[0]?.item
+    if (!selectedLine || !selectedItem) {
+      setNotice('Add at least one available catalog item before reviewing the order.')
+      return
+    }
+    if ((sourceDraft || ecommerceDraft) && orderLines.length !== 1) {
+      setPreparedChannelDraft(null)
+      setPreparedEcommerceDraft(null)
+      setNotice('Source-backed requests contain one reviewed item. The source link was removed; review this as a manual multi-item order.')
+      return
+    }
     if (sourceDraft && (customer.trim() !== sourceDraft.customer
       || channel !== sourceDraft.channel
-      || selected.sku !== sourceDraft.sku
-      || quantity !== sourceDraft.quantity
+      || selectedLine.sku !== sourceDraft.sku
+      || selectedLine.quantity !== sourceDraft.quantity
       || payment !== sourceDraft.payment)) {
       setPreparedChannelDraft(null)
       setNotice('The structured order changed after source review. Review the channel mapping again or continue as a manual order.')
@@ -2033,12 +2111,12 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
     }
     if (ecommerceDraft && (customer.trim() !== ecommerceDraft.customerReference
       || channel !== 'Ecommerce'
-      || selected.sku !== ecommerceDraft.line.sku
-      || quantity !== ecommerceDraft.line.quantity
-      || selected.name !== ecommerceDraft.line.name
-      || (selected.variant ?? null) !== ecommerceDraft.line.variant
-      || selected.price !== ecommerceDraft.line.unitPriceMmk
-      || selected.price * quantity !== ecommerceDraft.totalMmk)) {
+      || selectedLine.sku !== ecommerceDraft.line.sku
+      || selectedLine.quantity !== ecommerceDraft.line.quantity
+      || selectedLine.name !== ecommerceDraft.line.name
+      || (selectedLine.variant ?? null) !== ecommerceDraft.line.variant
+      || selectedLine.unitPriceMmk !== ecommerceDraft.line.unitPriceMmk
+      || orderTotal !== ecommerceDraft.totalMmk)) {
       setPreparedEcommerceDraft(null)
       setNotice('The Ecommerce request changed after confirmation. Return to Ecommerce or continue as a manual order.')
       return
@@ -2052,37 +2130,43 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
     const fulfilment = ecommerceDraft
       ? ecommerceDraft.fulfilment === 'pickup' ? 'Customer pickup' : 'Local delivery request'
       : undefined
+    const sourceBacked = Boolean(sourceRecordId)
     const order: CommerceOrder = {
       id: uid('ORD'),
       createdAt: new Date().toISOString(),
       customer: customer.trim() || 'Guest',
       channel,
-      item: selected.name,
-      itemSku: selected.sku,
-      quantity,
+      item: sourceBacked ? selectedLine.name : commerceOrderItemSummary(orderLines),
+      ...(sourceBacked || orderLines.length === 1 ? { itemSku: selectedLine.sku } : {}),
+      quantity: orderQuantity,
       payment,
       paymentStatus: 'pending',
       refundStatus: 'none',
       ...(fulfilment ? { fulfilment } : {}),
       sourceRecordId,
       evidenceReference: sourceEvidence,
-      total: selected.price * quantity,
+      ...(!sourceBacked ? { lines: orderLines } : {}),
+      total: orderTotal,
       status: 'confirmed',
     }
-    const itemSku = selected.sku
-    const beforeStock = selected.onHand
+    const lineReview = orderLines.map((line) => `${line.sku} × ${line.quantity} @ ${line.unitPriceMmk.toLocaleString()} MMK`).join(', ')
+    const reservationReview = orderLines.map((line) => {
+      const item = commerce.items.find((candidate) => candidate.sku === line.sku)
+      return `${line.sku} ${item?.onHand ?? 0} → ${(item?.onHand ?? 0) - line.quantity}`
+    }).join(', ')
     queueAction({
       kind: 'order_create',
       subjectId: order.id,
-      summary: `Confirm ${order.id} from ${sourceRecordId ? `${channel} source ${sourceRecordId}` : channel}`,
-      before: `${itemSku} · ${beforeStock} on hand${sourceRecordId ? ` · ${sourceRecordId} reviewed` : ''}`,
-      after: `${order.status} · ${beforeStock - quantity} on hand`,
+      summary: `Confirm ${order.id} with ${orderLines.length} item ${orderLines.length === 1 ? 'line' : 'lines'}`,
+      before: `${lineReview}${sourceRecordId ? ` · ${sourceRecordId} reviewed` : ''}`,
+      after: `${order.status} · ${reservationReview}`,
       evidenceReferenceSuggestion: sourceEvidence,
       evidenceReferenceLocked: Boolean(sourceRecordId),
       apply: async (action) => {
         await mutateCommerce('commerce.order.created', action.commandId, commerceActionProof(action), (current) => reserveCommerceOrder(current, order, commerceActionProof(action)))
         if (ecommerceDraft) consumedEcommerceDraftId.current = ecommerceDraft.id
         setQuantity(1)
+        setExtraOrderLines([])
         setCustomer('')
         setPreparedChannelDraft(null)
         setPreparedEcommerceDraft(null)
@@ -2213,14 +2297,24 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
     const order = commerce.orders.find((candidate) => candidate.id === orderId)
     if (!order || order.status === 'completed' || order.status === 'cancelled') return
     if (!commerceOrderHasReleasableReservation(commerce, orderId)) return setNotice(`${order.id} has no unmatched, attributable reservation. Cancellation failed closed without changing stock.`)
-    if (!order.itemSku) return
-    const item = commerce.items.find((candidate) => candidate.sku === order.itemSku)
-    if (!item) {
-      setNotice(`${order.id} inventory reference is unavailable, so cancellation failed closed.`)
+    const lines = order.lines ?? (order.itemSku ? [{ sku: order.itemSku, quantity: order.quantity }] : [])
+    const stockLines = lines.map((line) => {
+      const item = commerce.items.find((candidate) => candidate.sku === line.sku)
+      return item ? { sku: line.sku, quantity: line.quantity, onHand: item.onHand } : null
+    })
+    if (!lines.length || stockLines.some((line) => !line)) {
+      setNotice(`${order.id} inventory references are unavailable, so cancellation failed closed.`)
       return
     }
     const paymentAfter = order.paymentStatus === 'reconciled' ? 'reconciled · refund due' : 'pending'
-    queueAction({ kind: 'order_cancel', subjectId: orderId, summary: `Cancel ${order.id} and release stock`, before: `${order.status} · ${item.onHand} on hand · ${order.paymentStatus}`, after: `cancelled · ${item.onHand + order.quantity} on hand · ${paymentAfter}`, apply: (action) => mutateCommerce('commerce.order.cancelled', action.commandId, commerceActionProof(action), (current) => cancelCommerceOrder(current, orderId, commerceActionProof(action))) })
+    queueAction({
+      kind: 'order_cancel',
+      subjectId: orderId,
+      summary: `Cancel ${order.id} and release ${lines.length} stock ${lines.length === 1 ? 'line' : 'lines'}`,
+      before: `${order.status} · ${order.paymentStatus} · ${stockLines.map((line) => `${line?.sku} ${line?.onHand}`).join(', ')}`,
+      after: `cancelled · ${paymentAfter} · ${stockLines.map((line) => `${line?.sku} ${(line?.onHand ?? 0) + (line?.quantity ?? 0)}`).join(', ')}`,
+      apply: (action) => mutateCommerce('commerce.order.cancelled', action.commandId, commerceActionProof(action), (current) => cancelCommerceOrder(current, orderId, commerceActionProof(action))),
+    })
   }
 
   function openStockReceipt(itemSku: string) {
@@ -2303,7 +2397,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
     <div className="split-workspace order-view">
     <section className="core-panel order-form-panel">
       <div className="panel-head"><div><span className="core-eyebrow">New order</span><h2>How did this order arrive?</h2></div><span className={`status-pill ${selected ? 'ready' : 'pending'}`}>{selected ? `${selected.onHand} available` : 'No items'}</span></div>
-      <div aria-label="Order source" className="order-entry-methods">
+      <div aria-label="Order source" className="order-entry-methods" role="group">
         <button aria-pressed={orderEntryMode === 'manual'} disabled={Boolean(pendingAction)} onClick={() => setOrderEntryMode('manual')} type="button">Enter</button>
         <button aria-pressed={orderEntryMode === 'message'} disabled={Boolean(pendingAction)} onClick={() => setOrderEntryMode('message')} type="button">Message</button>
         <button aria-pressed={orderEntryMode === 'website'} disabled={Boolean(pendingAction)} onClick={() => setOrderEntryMode('website')} type="button">Website</button>
@@ -2334,10 +2428,20 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, tab }: {
         <form className="core-form compact-form commerce-order-form" id="commerce-manual-order-form" onSubmit={recordOrder}>
           <div className="order-essential-fields">
             <label>Customer<input disabled={commerceControlsDisabled} maxLength={80} value={customer} onChange={(event) => { setCustomer(event.target.value); setPreparedChannelDraft(null); setPreparedEcommerceDraft(null) }} placeholder="Name or reference" /></label>
-            <label>Item<select disabled={commerceControlsDisabled} value={selectedSku} onChange={(event) => { setSku(event.target.value); setPreparedChannelDraft(null); setPreparedEcommerceDraft(null) }}>{commerce.items.map((item) => <option key={item.sku} value={item.sku}>{item.name} · {item.onHand} available</option>)}</select></label>
-            <label>Quantity<input disabled={commerceControlsDisabled} min="1" max={selected?.onHand ?? 1} type="number" value={quantity} onChange={(event) => { setQuantity(Number(event.target.value)); setPreparedChannelDraft(null); setPreparedEcommerceDraft(null) }} /></label>
-            <div className="order-total"><span>Order total</span><strong>{formatMoney((selected?.price ?? 0) * Math.max(quantity, 0))}</strong></div>
+            <label>{extraOrderLines.length ? 'Item 1' : 'Item'}<select disabled={commerceControlsDisabled} value={selectedSku} onChange={(event) => { setSku(event.target.value); setPreparedChannelDraft(null); setPreparedEcommerceDraft(null) }}>{commerce.items.map((item) => <option key={item.sku} value={item.sku}>{item.name} · {item.onHand} available</option>)}</select></label>
+            <label>{extraOrderLines.length ? 'Quantity 1' : 'Quantity'}<input disabled={commerceControlsDisabled} min="1" max={selected?.onHand ?? 1} type="number" value={quantity} onChange={(event) => { setQuantity(Number(event.target.value)); setPreparedChannelDraft(null); setPreparedEcommerceDraft(null) }} /></label>
+            <div className="order-total"><span>{manualOrderLineDrafts.length} {manualOrderLineDrafts.length === 1 ? 'item' : 'items'} · {manualOrderQuantity} units</span><strong>{formatMoney(manualOrderTotal)}</strong></div>
           </div>
+          {extraOrderLines.map((line, index) => {
+            const item = commerce.items.find((candidate) => candidate.sku === line.sku)
+            const lineNumber = index + 2
+            return <div className="form-row" key={`${index}:${line.sku}`}>
+              <label>Item {lineNumber}<select disabled={commerceControlsDisabled} value={line.sku} onChange={(event) => updateExtraOrderLine(index, { sku: event.target.value })}>{commerce.items.map((candidate) => <option key={candidate.sku} value={candidate.sku}>{candidate.name} · {candidate.onHand} available</option>)}</select></label>
+              <label>Quantity {lineNumber}<input disabled={commerceControlsDisabled} max={item?.onHand ?? 1} min="1" onChange={(event) => updateExtraOrderLine(index, { quantity: Number(event.target.value) })} type="number" value={line.quantity} /></label>
+              <button aria-label={`Remove item ${lineNumber}`} className="core-button compact" disabled={commerceControlsDisabled} onClick={() => removeExtraOrderLine(index)} type="button">Remove</button>
+            </div>
+          })}
+          <button className="core-button compact" disabled={commerceControlsDisabled || manualOrderLineDrafts.length >= commerce.items.length || manualOrderLineDrafts.length >= 20} onClick={addOrderLine} type="button">Add item</button>
           <details className="order-options">
             <summary><span>Channel and payment</span><small>{channel} · {payment}</small></summary>
             <div className="form-row order-options-fields">
@@ -2446,7 +2550,12 @@ function OrderList({
           <span className={`status-pill ${order.paymentStatus === 'reconciled' ? 'approved' : 'pending'}`}>payment {order.paymentStatus}</span>
           {order.refundStatus === 'due' ? <span className="status-pill pending">refund due</span> : null}
         </div>
-        <strong>{order.customer} · {order.item} × {order.quantity}</strong>
+        <strong>{order.customer} · {order.lines
+          ? order.lines.length === 1
+            ? `${order.lines[0].name} × ${order.quantity}`
+            : `${order.lines.length} items · ${order.quantity} units`
+          : `${order.item} × ${order.quantity}`}</strong>
+        {order.lines ? <small>{order.lines.map((line) => `${line.name} × ${line.quantity} @ ${line.unitPriceMmk.toLocaleString()} MMK`).join(' · ')}</small> : null}
         <small>{order.id} · {order.channel} · {order.payment}{order.fulfilment ? ` · ${order.fulfilment}` : ''} · {formatTime(order.createdAt)}</small>
         {order.refundStatus === 'due' ? <small role="note">Record a refund already completed with the external payment provider. This does not send money.</small> : null}
       </div>
@@ -2468,7 +2577,12 @@ function ClosedOrderHistory({ orders }: { orders: CommerceOrder[] }) {
     <summary><span>Order history</span><small>{orders.length} closed</small></summary>
     <div className="order-archive-list">{visibleOrders.map((order) => <article key={order.id}>
       <div>
-        <strong>{order.customer} · {order.item} × {order.quantity}</strong>
+        <strong>{order.customer} · {order.lines
+          ? order.lines.length === 1
+            ? `${order.lines[0].name} × ${order.quantity}`
+            : `${order.lines.length} items · ${order.quantity} units`
+          : `${order.item} × ${order.quantity}`}</strong>
+        {order.lines ? <small>{order.lines.map((line) => `${line.name} × ${line.quantity} @ ${line.unitPriceMmk.toLocaleString()} MMK`).join(' · ')}</small> : null}
         <small>{order.id} · {order.status} · payment {order.paymentStatus}{order.refundStatus !== 'none' ? ` · refund ${order.refundStatus}` : ''} · {formatTime(order.createdAt)}</small>
         {order.refundStatus === 'settled' && order.refundSettledAt && order.refundSettledBy && order.refundEvidenceReference ? <small role="note">{order.refundSettledBy} · {formatTime(order.refundSettledAt)} · evidence {order.refundEvidenceReference}</small> : null}
       </div>

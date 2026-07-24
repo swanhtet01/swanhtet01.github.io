@@ -3,6 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import unittest
+from urllib.parse import quote
 from uuid import uuid4
 
 from supermega_runtime.commerce_runtime import COMMERCE_HUMAN_EVENTS, validate_commerce_state
@@ -80,9 +81,11 @@ def movement(
     order_id: str | None = None,
     created_at: str = NOW,
     sku: str = "SKU-1",
+    id_suffix: str | None = None,
 ) -> dict[str, object]:
+    encoded_action_id = quote(action_id, safe="-_.!~*'()")
     record: dict[str, object] = {
-        "id": f"MOV-{action_id}",
+        "id": f"MOV2:{encoded_action_id}{f':{id_suffix}' if id_suffix else ''}",
         "actionId": action_id,
         "createdAt": created_at,
         "actor": "Accountable operator",
@@ -819,6 +822,183 @@ class CommerceRuntimeTests(unittest.TestCase):
         wrong_evidence = action_evidence("ACT-WRONG")
         with self.assertRaises(TrialValidationError):
             apply_event(current, "commerce.stock.received", received, wrong_evidence)
+
+    def test_multi_line_order_reserves_and_releases_every_price_snapshot_atomically(self) -> None:
+        current = catalog_state()
+        current["items"].append(  # type: ignore[union-attr]
+            {
+                "sku": "SKU-2",
+                "name": "Second item",
+                "variant": "Large",
+                "onHand": 5,
+                "reorderAt": 1,
+                "price": 250,
+            }
+        )
+        order = {
+            "id": "ORD-MULTI",
+            "createdAt": NOW,
+            "customer": "Counter A",
+            "channel": "Walk-in",
+            "item": "2 items",
+            "quantity": 3,
+            "payment": "Cash",
+            "paymentStatus": "pending",
+            "refundStatus": "none",
+            "lines": [
+                {
+                    "sku": "SKU-1",
+                    "name": "Test item",
+                    "quantity": 2,
+                    "unitPriceMmk": 100,
+                },
+                {
+                    "sku": "SKU-2",
+                    "name": "Second item",
+                    "variant": "Large",
+                    "quantity": 1,
+                    "unitPriceMmk": 250,
+                },
+            ],
+            "total": 450,
+            "status": "confirmed",
+        }
+        created = deepcopy(current)
+        created["items"][0]["onHand"] = 8  # type: ignore[index]
+        created["items"][1]["onHand"] = 4  # type: ignore[index]
+        created["orders"] = [order]
+        created["movements"] = [
+            movement(
+                "reserve",
+                "ACT-MULTI",
+                -2,
+                order_id="ORD-MULTI",
+                sku="SKU-1",
+                id_suffix="L1",
+            ),
+            movement(
+                "reserve",
+                "ACT-MULTI",
+                -1,
+                order_id="ORD-MULTI",
+                sku="SKU-2",
+                id_suffix="L2",
+            ),
+        ]
+        accepted = apply_event(current, "commerce.order.created", created)
+        self.assertEqual(
+            [item["onHand"] for item in accepted["items"]],  # type: ignore[index]
+            [8, 4],
+        )
+        self.assertEqual(accepted["orders"][0]["total"], 450)  # type: ignore[index]
+        self.assertEqual(
+            [movement_record["actionId"] for movement_record in accepted["movements"]],  # type: ignore[index]
+            ["ACT-MULTI", "ACT-MULTI"],
+        )
+
+        collision_order = {
+            **order,
+            "id": "ORD-COLLISION",
+            "item": "Second item",
+            "itemSku": "SKU-2",
+            "quantity": 1,
+            "lines": [
+                {
+                    "sku": "SKU-2",
+                    "name": "Second item",
+                    "variant": "Large",
+                    "quantity": 1,
+                    "unitPriceMmk": 250,
+                }
+            ],
+            "total": 250,
+        }
+        collision_safe = deepcopy(accepted)
+        collision_safe["items"][1]["onHand"] = 3  # type: ignore[index]
+        collision_safe["orders"] = [collision_order, *accepted["orders"]]  # type: ignore[misc]
+        collision_safe["movements"] = [
+            movement(
+                "reserve",
+                "ACT-MULTI-L1",
+                -1,
+                order_id="ORD-COLLISION",
+                sku="SKU-2",
+            ),
+            *accepted["movements"],  # type: ignore[misc]
+        ]
+        collision_accepted = apply_event(
+            accepted,
+            "commerce.order.created",
+            collision_safe,
+        )
+        movement_ids = [
+            movement_record["id"]
+            for movement_record in collision_accepted["movements"]  # type: ignore[union-attr]
+        ]
+        self.assertEqual(len(movement_ids), len(set(movement_ids)))
+
+        repriced = deepcopy(accepted)
+        repriced["items"][0]["price"] = 125  # type: ignore[index]
+        self.assertEqual(
+            validate_commerce_state(repriced)["orders"][0]["lines"][0]["unitPriceMmk"],  # type: ignore[index]
+            100,
+        )
+
+        missing_line = deepcopy(created)
+        missing_line["movements"] = [missing_line["movements"][0]]  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(current, "commerce.order.created", missing_line)
+
+        wrong_price = deepcopy(created)
+        wrong_price["orders"][0]["lines"][1]["unitPriceMmk"] = 251  # type: ignore[index]
+        wrong_price["orders"][0]["total"] = 451  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(current, "commerce.order.created", wrong_price)
+
+        cancelled = deepcopy(accepted)
+        cancelled["items"][0]["onHand"] = 10  # type: ignore[index]
+        cancelled["items"][1]["onHand"] = 5  # type: ignore[index]
+        cancelled["orders"][0].update(  # type: ignore[index]
+            {"status": "cancelled", "refundStatus": "none"}
+        )
+        cancelled["movements"] = [
+            movement(
+                "release",
+                "ACT-CANCEL-MULTI",
+                2,
+                order_id="ORD-MULTI",
+                sku="SKU-1",
+                id_suffix="L1",
+            ),
+            movement(
+                "release",
+                "ACT-CANCEL-MULTI",
+                1,
+                order_id="ORD-MULTI",
+                sku="SKU-2",
+                id_suffix="L2",
+            ),
+            *accepted["movements"],  # type: ignore[misc]
+        ]
+        released = apply_event(
+            accepted,
+            "commerce.order.cancelled",
+            cancelled,
+        )
+        self.assertEqual(
+            [item["onHand"] for item in released["items"]],  # type: ignore[index]
+            [10, 5],
+        )
+        self.assertEqual(
+            len(
+                [
+                    movement_record
+                    for movement_record in released["movements"]  # type: ignore[union-attr]
+                    if movement_record["kind"] == "release"
+                ]
+            ),
+            2,
+        )
 
     def test_order_progress_payment_and_close_are_server_checked(self) -> None:
         current = created_state()
