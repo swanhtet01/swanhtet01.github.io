@@ -44,6 +44,15 @@ type StorefrontInput = {
   selectedSkus: string[]
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function hasExactKeys(value: Record<string, unknown>, keys: string[]) {
+  const actual = Object.keys(value)
+  return actual.length === keys.length && keys.every((key) => actual.includes(key))
+}
+
 function browserStorage(): ReadableStorage | undefined {
   try {
     return globalThis.localStorage as ReadableStorage | undefined
@@ -136,7 +145,7 @@ export function buildStorefrontPreview(
     return item
   })
 
-  return {
+  return validateStorefrontPreview({
     schema: STOREFRONT_PREVIEW_SCHEMA,
     mode: 'browser-local-preview',
     sourceCatalogSchema: COMMERCE_WORKSPACE_SCHEMA,
@@ -152,15 +161,63 @@ export function buildStorefrontPreview(
         unitPriceMmk: item.price,
         availability: item.onHand > 0 ? 'available' : 'sold_out',
       })),
+  })
+}
+
+export function validateStorefrontPreview(value: unknown): StorefrontPreview {
+  if (!isRecord(value) || !hasExactKeys(value, ['schema', 'mode', 'sourceCatalogSchema', 'storeName', 'summary', 'currency', 'items'])) {
+    throw new Error('Storefront preview contract is invalid.')
+  }
+  if (value.schema !== STOREFRONT_PREVIEW_SCHEMA
+    || value.mode !== 'browser-local-preview'
+    || value.sourceCatalogSchema !== COMMERCE_WORKSPACE_SCHEMA
+    || value.currency !== 'MMK'
+    || !Array.isArray(value.items)
+    || !value.items.length
+    || value.items.length > 8) throw new Error('Storefront preview contract is invalid.')
+  const storeName = canonicalText(value.storeName, 'Store name', 60)
+  const summary = canonicalText(value.summary, 'Store summary', 180)
+  const items = value.items.map((candidate, index) => {
+    if (!isRecord(candidate) || !hasExactKeys(candidate, ['sku', 'name', 'variant', 'unitPriceMmk', 'availability'])) {
+      throw new Error(`Storefront item ${index + 1} is invalid.`)
+    }
+    const sku = canonicalText(candidate.sku, `Storefront item ${index + 1} SKU`, 80)
+    const name = canonicalText(candidate.name, `Storefront item ${index + 1} name`, 180)
+    const variant = candidate.variant === null ? null : canonicalText(candidate.variant, `Storefront item ${index + 1} variant`, 180)
+    if (!Number.isSafeInteger(candidate.unitPriceMmk) || Number(candidate.unitPriceMmk) < 1) {
+      throw new Error(`${sku} has an invalid storefront price.`)
+    }
+    if (candidate.availability !== 'available' && candidate.availability !== 'sold_out') {
+      throw new Error(`${sku} has invalid storefront availability.`)
+    }
+    const availability: StorefrontPreviewItem['availability'] = candidate.availability
+    return {
+      sku,
+      name,
+      variant,
+      unitPriceMmk: Number(candidate.unitPriceMmk),
+      availability,
+    }
+  })
+  const skus = items.map((item) => item.sku)
+  if (new Set(skus).size !== skus.length || skus.join(',') !== [...skus].sort((left, right) => left.localeCompare(right)).join(',')) {
+    throw new Error('Storefront item SKUs must be unique and canonical.')
+  }
+  return {
+    schema: STOREFRONT_PREVIEW_SCHEMA,
+    mode: 'browser-local-preview',
+    sourceCatalogSchema: COMMERCE_WORKSPACE_SCHEMA,
+    storeName,
+    summary,
+    currency: 'MMK',
+    items,
   }
 }
 
 export async function storefrontPreviewDigest(preview: StorefrontPreview) {
-  if (preview.schema !== STOREFRONT_PREVIEW_SCHEMA || preview.mode !== 'browser-local-preview') {
-    throw new Error('Storefront preview contract is invalid.')
-  }
+  const validated = validateStorefrontPreview(preview)
   if (!globalThis.crypto?.subtle) throw new Error('Secure preview digest is unavailable.')
-  const bytes = new TextEncoder().encode(JSON.stringify(preview))
+  const bytes = new TextEncoder().encode(JSON.stringify(validated))
   const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes)
   return `sha256:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')}`
 }

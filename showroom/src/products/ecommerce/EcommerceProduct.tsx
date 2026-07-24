@@ -1,6 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 
+import {
+  buildStorefrontOrderRequest,
+  createEmptyStorefrontRequestLedger,
+  recordStorefrontOrderRequest,
+} from './storefront-request'
 import {
   buildStorefrontPreview,
   readStorefrontCatalog,
@@ -24,6 +29,13 @@ export function EcommerceProduct() {
   const [selectedSkus, setSelectedSkus] = useState(initialSelection)
   const [device, setDevice] = useState<PreviewDevice>('phone')
   const [digestState, setDigestState] = useState({ previewJson: '', value: '', error: '' })
+  const [requestLedger, setRequestLedger] = useState(createEmptyStorefrontRequestLedger)
+  const [requestCustomer, setRequestCustomer] = useState('Customer A')
+  const [requestSku, setRequestSku] = useState(initialSelection[0] ?? '')
+  const [requestQuantity, setRequestQuantity] = useState(1)
+  const [requestFulfilment, setRequestFulfilment] = useState<'pickup' | 'delivery'>('pickup')
+  const [requestBusy, setRequestBusy] = useState(false)
+  const [requestNotice, setRequestNotice] = useState('')
 
   const previewResult = useMemo(() => {
     try {
@@ -61,6 +73,38 @@ export function EcommerceProduct() {
     ))
   }
 
+  async function createRequestReceipt(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!previewResult.preview || !digest || requestBusy) return
+    if (!globalThis.crypto?.randomUUID) {
+      setRequestNotice('Secure request identity is unavailable. Nothing was recorded.')
+      return
+    }
+    setRequestBusy(true)
+    setRequestNotice('')
+    try {
+      const selectedSku = previewResult.preview.items.some((item) => item.sku === requestSku)
+        ? requestSku
+        : previewResult.preview.items[0]?.sku ?? ''
+      const request = await buildStorefrontOrderRequest(previewResult.preview, digest, {
+        idempotencyKey: `ECI-${globalThis.crypto.randomUUID().toUpperCase()}`,
+        customerReference: requestCustomer,
+        sku: selectedSku,
+        quantity: requestQuantity,
+        fulfilment: requestFulfilment,
+        createdAt: new Date().toISOString(),
+      })
+      const nextLedger = recordStorefrontOrderRequest(requestLedger, request)
+      if (!nextLedger) throw new Error('The request receipt conflicted with the current local ledger.')
+      setRequestLedger(nextLedger)
+      setRequestNotice(`${request.id} is pending Shop review. No Shop record or stock changed.`)
+    } catch (error) {
+      setRequestNotice(error instanceof Error ? error.message : 'Request receipt failed closed.')
+    } finally {
+      setRequestBusy(false)
+    }
+  }
+
   const sourceLabel = catalog.source === 'shop-local'
     ? 'Current local Shop catalog'
       : catalog.source === 'sample'
@@ -68,6 +112,10 @@ export function EcommerceProduct() {
       : 'Catalog unavailable'
   const digest = digestState.previewJson === previewJson ? digestState.value : ''
   const digestError = digestState.previewJson === previewJson ? digestState.error : ''
+  const currentRequestSku = previewResult.preview?.items.some((item) => item.sku === requestSku)
+    ? requestSku
+    : previewResult.preview?.items[0]?.sku ?? ''
+  const latestRequest = requestLedger.requests[0]
 
   return (
     <div className="workspace-screen ecommerce-product">
@@ -177,6 +225,52 @@ export function EcommerceProduct() {
             <code>{digest || (digestError ? 'Unavailable' : 'Calculating…')}</code>
             <small>{digestError || 'Same approved copy and Shop snapshot produce the same digest.'}</small>
           </div>
+
+          <details className="ecommerce-request-lab">
+            <summary>
+              <span><strong>Test a customer request</strong><small>Creates one local receipt for Shop review</small></span>
+              <b>{requestLedger.requests.length ? `${requestLedger.requests.length} receipt` : 'Optional'}</b>
+            </summary>
+            <div className="ecommerce-request-body">
+              <form onSubmit={(event) => void createRequestReceipt(event)}>
+                <label>
+                  <span>Customer reference</span>
+                  <input maxLength={80} onChange={(event) => setRequestCustomer(event.target.value)} required value={requestCustomer} />
+                </label>
+                <label>
+                  <span>Product</span>
+                  <select onChange={(event) => setRequestSku(event.target.value)} required value={currentRequestSku}>
+                    {previewResult.preview?.items.map((item) => <option key={item.sku} value={item.sku}>{item.name} · {formatMmk(item.unitPriceMmk)}</option>)}
+                  </select>
+                </label>
+                <label>
+                  <span>Quantity</span>
+                  <input max={99} min={1} onChange={(event) => setRequestQuantity(Number(event.target.value))} required type="number" value={requestQuantity} />
+                </label>
+                <label>
+                  <span>Fulfilment</span>
+                  <select onChange={(event) => setRequestFulfilment(event.target.value as 'pickup' | 'delivery')} value={requestFulfilment}>
+                    <option value="pickup">Pickup</option>
+                    <option value="delivery">Delivery request</option>
+                  </select>
+                </label>
+                <button className="core-button primary" disabled={!previewResult.preview || !digest || requestBusy} type="submit">
+                  {requestBusy ? 'Recording…' : 'Create request receipt'}
+                </button>
+              </form>
+
+              {latestRequest ? (
+                <article className="ecommerce-request-receipt">
+                  <span className="status-pill bounded">Pending Shop review</span>
+                  <strong>{latestRequest.id}</strong>
+                  <p>{latestRequest.customerReference} · {latestRequest.line.name} × {latestRequest.line.quantity}</p>
+                  <b>{formatMmk(latestRequest.totalMmk)}</b>
+                  <small>{latestRequest.fulfilment} · preview {latestRequest.sourcePreviewDigest.slice(7, 19)}</small>
+                </article>
+              ) : null}
+              <p className="form-notice" aria-live="polite">{requestNotice || 'This local receipt is not a Shop order. It does not reserve stock, take payment, send a message, or request delivery.'}</p>
+            </div>
+          </details>
         </section>
       </div>
     </div>

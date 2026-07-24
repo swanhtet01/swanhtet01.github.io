@@ -586,6 +586,7 @@ textarea { min-height: 72px; resize: vertical; }
 .ecommerce-boundary p { margin: 0; color: var(--core-muted); font-size: 11px; line-height: 1.45; }
 .ecommerce-workspace { min-height: 0; flex: 1; display: grid; grid-template-columns: minmax(320px,.85fr) minmax(460px,1.15fr); gap: 12px; }
 .ecommerce-setup, .ecommerce-preview-panel { min-height: 0; display: flex; flex-direction: column; padding: 17px; }
+.ecommerce-preview-panel { overflow: auto; }
 .ecommerce-copy-fields { display: grid; grid-template-columns: minmax(0,.72fr) minmax(0,1.28fr); gap: 9px; margin-top: 2px; }
 .ecommerce-copy-fields label { display: grid; gap: 6px; color: var(--core-muted); font-size: 10px; font-weight: 720; }
 .ecommerce-copy-fields input, .ecommerce-copy-fields textarea { width: 100%; min-height: 44px; border: 1px solid var(--core-line-strong); border-radius: 9px; padding: 10px 11px; background: #fff; color: var(--core-ink); font-size: 13px; resize: none; }
@@ -629,6 +630,27 @@ textarea { min-height: 72px; resize: vertical; }
 .ecommerce-digest span { color: var(--core-green); font-family: var(--core-mono); font-size: 8px; font-weight: 800; text-transform: uppercase; }
 .ecommerce-digest code { min-width: 0; overflow: hidden; color: var(--core-ink); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .ecommerce-digest small { grid-column: 1/-1; color: var(--core-quiet); font-size: 8px; }
+.ecommerce-request-lab { margin-top: 10px; border: 1px solid var(--core-line); border-radius: 10px; background: rgba(255,255,255,.72); }
+.ecommerce-request-lab > summary { min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 0 12px; cursor: pointer; list-style: none; }
+.ecommerce-request-lab > summary::-webkit-details-marker { display: none; }
+.ecommerce-request-lab > summary > span { display: grid; gap: 2px; }
+.ecommerce-request-lab > summary strong { font-size: 11px; }
+.ecommerce-request-lab > summary small { color: var(--core-quiet); font-size: 8px; }
+.ecommerce-request-lab > summary b { color: var(--core-green); font-family: var(--core-mono); font-size: 8px; text-transform: uppercase; }
+.ecommerce-request-lab > summary::after { color: var(--core-green); content: "+"; font-size: 16px; }
+.ecommerce-request-lab[open] > summary { border-bottom: 1px solid var(--core-line); }
+.ecommerce-request-lab[open] > summary::after { content: "−"; }
+.ecommerce-request-body { display: grid; grid-template-columns: minmax(0,1.4fr) minmax(180px,.6fr); gap: 10px; padding: 11px; }
+.ecommerce-request-body form { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+.ecommerce-request-body form label { display: grid; gap: 5px; color: var(--core-muted); font-size: 9px; font-weight: 720; }
+.ecommerce-request-body form input, .ecommerce-request-body form select { width: 100%; min-height: 44px; border: 1px solid var(--core-line-strong); border-radius: 8px; padding: 0 9px; background: #fff; color: var(--core-ink); font-size: 11px; }
+.ecommerce-request-body form .core-button { grid-column: 1/-1; }
+.ecommerce-request-receipt { min-width: 0; display: grid; align-content: center; gap: 5px; border: 1px solid rgba(11,116,94,.18); border-radius: 9px; padding: 11px; background: var(--core-green-soft); }
+.ecommerce-request-receipt strong { overflow: hidden; font-family: var(--core-mono); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.ecommerce-request-receipt p { margin: 0; color: var(--core-muted); font-size: 9px; line-height: 1.4; }
+.ecommerce-request-receipt > b { font-size: 13px; }
+.ecommerce-request-receipt small { color: var(--core-quiet); font-size: 8px; }
+.ecommerce-request-body > .form-notice { grid-column: 1/-1; margin: 0; }
 
 :focus-visible { outline: 3px solid rgba(11,116,94,.32); outline-offset: 2px; }
 
@@ -740,6 +762,9 @@ textarea { min-height: 72px; resize: vertical; }
   .ecommerce-preview-head { align-items: flex-start; }
   .ecommerce-preview-head .segmented-control { width: auto; }
   .ecommerce-preview-frame { min-height: 520px; padding: 8px; }
+  .ecommerce-request-body { grid-template-columns: 1fr; }
+  .ecommerce-request-body form { grid-template-columns: 1fr; }
+  .ecommerce-request-body form .core-button { grid-column: auto; }
   .workspace-toolbar { display: grid; justify-content: stretch; }
   .product-task-tabs { width: 100%; grid-template-columns: repeat(2,minmax(0,1fr)); overflow: visible; }
   .product-task-tabs button { min-width: 0; justify-content: center; }

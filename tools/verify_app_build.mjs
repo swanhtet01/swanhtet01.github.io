@@ -9,10 +9,11 @@ let orderCompletionRuntimeChecks = 0
 let channelOrderRuntimeChecks = 0
 let websiteRuntimeChecks = 0
 let storefrontRuntimeChecks = 0
+let storefrontRequestRuntimeChecks = 0
 let commerceRuntimeChecks = 0
 let productionRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
-const [manifestText, appPackageText, appSource, coreSource, commerceSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, storefrontSource, coreCssSource] = await Promise.all([
+const [manifestText, appPackageText, appSource, coreSource, commerceSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, storefrontSource, storefrontRequestSource, coreCssSource] = await Promise.all([
   readFile(resolve(root, 'site-manifest.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'package.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'App.tsx'), 'utf8'),
@@ -39,6 +40,7 @@ const [manifestText, appPackageText, appSource, coreSource, commerceSource, chan
   readFile(resolve(root, 'showroom', 'src', 'products', 'product-handoff.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'EcommerceProduct.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'storefront-model.ts'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'storefront-request.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'core-app.css'), 'utf8'),
 ])
 const manifest = JSON.parse(manifestText)
@@ -184,8 +186,17 @@ if (!ecommerceSource.includes('Prices and availability are read-only.')
   || !ecommerceSource.includes('Ordering is not connected in this preview.')
   || !ecommerceSource.includes('Nothing is published or ordered here.')
   || !ecommerceSource.includes('Same approved copy and Shop snapshot produce the same digest.')
+  || !ecommerceSource.includes('Test a customer request')
+  || !ecommerceSource.includes('This local receipt is not a Shop order.')
+  || !ecommerceSource.includes('No Shop record or stock changed.')
   || !coreSource.includes('<strong>Ecommerce</strong><small>Build a storefront from Shop</small>')
   || !coreSource.includes('<h2>AI Agent Solutions</h2>')) fail('ecommerce_storefront_ui_boundary_missing')
+if (!storefrontRequestSource.includes("supermega.ecommerce.order_request.v1")
+  || !storefrontRequestSource.includes("state: 'pending_shop_review'")
+  || !storefrontRequestSource.includes('buildStorefrontOrderRequest')
+  || !storefrontRequestSource.includes('recordStorefrontOrderRequest')
+  || !storefrontRequestSource.includes('await storefrontPreviewDigest(preview) !== sourcePreviewDigest')
+  || ['setItem(', 'removeItem(', 'fetch(', 'XMLHttpRequest', 'navigator.locks'].some((marker) => storefrontRequestSource.includes(marker))) fail('ecommerce_request_contract_missing_or_mutating')
 if (!appPackage.scripts?.lint?.includes('src/products')) fail('prototype_sources_not_linted')
 if (!websiteSource.includes('No website has been deployed.')
   || !websiteSource.includes('No deployment occurred.')
@@ -1638,6 +1649,7 @@ async function verifyStorefrontRuntime() {
   try {
     const nonce = Date.now()
     const storefront = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'storefront-model.ts')).href}?storefront-verify=${nonce}`)
+    const requestModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'storefront-request.ts')).href}?storefront-request=${nonce}`)
     const commerce = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?storefront-commerce=${nonce}`)
     const catalog = commerce.createSeedCommerce().items
     const input = {
@@ -1684,6 +1696,48 @@ async function verifyStorefrontRuntime() {
       setItem: () => { writes += 1 },
     })
     assert(malformedSnapshot.source === 'unavailable' && malformedSnapshot.items.length === 0 && writes === 0, 'storefront_malformed_shop_catalog_did_not_fail_closed')
+
+    const requestAssert = (condition, reason) => {
+      if (!condition) throw new Error(reason)
+      storefrontRequestRuntimeChecks += 1
+    }
+    const requestInput = {
+      idempotencyKey: 'ECI-12345678-1234-4ABC-8ABC-1234567890AB',
+      customerReference: 'Customer A',
+      sku: 'SM-1001',
+      quantity: 2,
+      fulfilment: 'pickup',
+      createdAt: '2026-07-24T09:00:00.000Z',
+    }
+    const request = await requestModel.buildStorefrontOrderRequest(preview, firstDigest, requestInput)
+    requestAssert(request.id === 'ECR-12345678-1234-4ABC-8ABC-1234567890AB' && request.state === 'pending_shop_review', 'storefront_request_identity_or_state_invalid')
+    requestAssert(request.totalMmk === 37_000 && request.line.unitPriceMmk === 18_500 && request.line.quantity === 2, 'storefront_request_price_snapshot_invalid')
+    requestAssert(!JSON.stringify(request).includes('onHand') && !JSON.stringify(request).includes('reorderAt'), 'storefront_request_leaked_shop_stock_fields')
+    const emptyLedger = requestModel.createEmptyStorefrontRequestLedger()
+    const recorded = requestModel.recordStorefrontOrderRequest(emptyLedger, request)
+    requestAssert(recorded?.requests.length === 1 && recorded.requests[0].id === request.id, 'storefront_request_not_recorded')
+    requestAssert(requestModel.recordStorefrontOrderRequest(recorded, request) === recorded, 'storefront_request_exact_retry_not_idempotent')
+    const conflicting = { ...request, totalMmk: request.totalMmk + request.line.unitPriceMmk, line: { ...request.line, quantity: 3 } }
+    requestAssert(requestModel.recordStorefrontOrderRequest(recorded, conflicting) === null, 'storefront_request_conflicting_retry_succeeded')
+    requestAssert(requestModel.recordStorefrontOrderRequest(recorded, { ...request, currency: 'USD' }) === null, 'storefront_request_tampered_currency_accepted')
+    requestAssert(requestModel.recordStorefrontOrderRequest({ ...recorded, unexpected: true }, request) === null, 'storefront_request_malformed_ledger_accepted')
+
+    let staleDigestRejected = false
+    try { await requestModel.buildStorefrontOrderRequest(preview, await storefront.storefrontPreviewDigest(changed), requestInput) } catch { staleDigestRejected = true }
+    requestAssert(staleDigestRejected, 'storefront_request_stale_digest_accepted')
+    let unknownSkuRejected = false
+    try { await requestModel.buildStorefrontOrderRequest(preview, firstDigest, { ...requestInput, sku: 'UNKNOWN-SKU' }) } catch { unknownSkuRejected = true }
+    requestAssert(unknownSkuRejected, 'storefront_request_unknown_sku_accepted')
+    let oversizedRejected = false
+    try { await requestModel.buildStorefrontOrderRequest(preview, firstDigest, { ...requestInput, quantity: 100 }) } catch { oversizedRejected = true }
+    requestAssert(oversizedRejected, 'storefront_request_oversized_quantity_accepted')
+    const soldOutPreview = { ...preview, items: preview.items.map((item, index) => index === 0 ? { ...item, availability: 'sold_out' } : item) }
+    let soldOutRejected = false
+    try { await requestModel.buildStorefrontOrderRequest(soldOutPreview, await storefront.storefrontPreviewDigest(soldOutPreview), requestInput) } catch { soldOutRejected = true }
+    requestAssert(soldOutRejected, 'storefront_request_sold_out_item_accepted')
+    let tamperedPreviewRejected = false
+    try { await storefront.storefrontPreviewDigest({ ...preview, unexpected: true }) } catch { tamperedPreviewRejected = true }
+    requestAssert(tamperedPreviewRejected, 'storefront_preview_extra_field_accepted')
   } catch (error) {
     fail(`storefront_runtime:${error instanceof Error ? error.message : 'unknown'}`)
   }
@@ -1923,4 +1977,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', primaryRoutes: 5, operatingModules: 2, prototypeRoutes: 2, compatibilityRedirects: 1, workflowProfiles, channelOrderRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, storefrontRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', primaryRoutes: 5, operatingModules: 2, prototypeRoutes: 2, compatibilityRedirects: 1, workflowProfiles, channelOrderRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, bytes }, null, 2))
