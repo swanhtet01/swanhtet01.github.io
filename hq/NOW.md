@@ -26,7 +26,7 @@ SuperMega HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are
 
 1. **Identity** — restore Shop and Plant in the public site, app labels, canonical routes, and verification contracts without changing their stable stored data.
 2. **Ecommerce** — recover the smallest storefront, product, cart, and structured order-intent flow from the removed prototype.
-3. **Agents** — turn the existing Order Intake evaluation work into the first real, reviewable agent demo with no external side effects.
+3. **Agents** — run the completed Order Intake evaluator against real server-only provider outputs, then build the first review/edit/accept-discard demo only if its quality gates pass.
 4. **Website** — validate one named-business brief through an accepted responsive artifact.
 5. **Managed persistence** — repeat the passing PostgreSQL 17 contract on one isolated hosted Supabase target before production activation.
 
@@ -64,7 +64,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 ## Blockers
 
 - Ecommerce does not currently have a product route or focused implementation.
-- Agent Teams is not a production agent runtime; Order Intake still needs server-only model execution, structured output, provenance, cost controls, and golden-set evaluation.
+- Agent Teams is not a production agent runtime. Order Intake has a strict 20-case local evaluator for schema validity, source coverage, required-field accuracy, unsafe-ready results, latency, tokens, estimated cost, retries, refusals, and correction rate; it still needs a server-only provider run and a three-minute human review workflow.
 - No isolated hosted Supabase branch or separate non-production project has repeated the local database proof.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
 
@@ -83,5 +83,5 @@ No external send, payment, refund, publish, domain change, connector write, merg
 1. Commit the corrected candidate after the full local release suite confirms the already-passing HQ, generated-public, app-build, desktop, and mobile checks.
 2. Keep the passing `/shop/`, `/plant/`, compatibility, and mobile journeys as regression evidence.
 3. Approve the focused Ecommerce rebuild contract, then implement only storefront-to-Shop order intent.
-4. Run the Order Intake golden set and expose a human review demo only after zero-side-effect checks pass.
+4. Generate server-only Order Intake results with no operational tools, score all 20 fixtures, and expose a human review demo only after every quality and zero-side-effect gate passes.
 5. Provision and validate one isolated hosted Supabase rehearsal target before any production write enablement.

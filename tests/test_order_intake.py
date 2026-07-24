@@ -72,6 +72,17 @@ def extraction_from_fixture(fixture: dict[str, object]) -> OrderIntakeModelExtra
     )
 
 
+def evaluation_metrics(index: int) -> dict[str, int]:
+    return {
+        "latency_ms": 100 + index,
+        "input_tokens": 500 + index,
+        "cached_input_tokens": 0,
+        "output_tokens": 120 + index,
+        "estimated_cost_microusd": 250 + index,
+        "schema_attempts": 1,
+    }
+
+
 class OrderIntakeContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -371,7 +382,9 @@ class OrderIntakeContractTests(unittest.TestCase):
             results.append(
                 {
                     "fixture_id": fixture["id"],
+                    "outcome": "completed",
                     "draft": draft.model_dump(mode="json"),
+                    "metrics": evaluation_metrics(index),
                 }
             )
         document = {
@@ -384,8 +397,17 @@ class OrderIntakeContractTests(unittest.TestCase):
         self.assertEqual(report["failed"], 0)
         self.assertEqual(report["failures"], [])
         self.assertIs(report["passed_all"], True)
+        self.assertIs(report["quality_gate_passed"], True)
         self.assertIs(report["result_set_valid"], True)
         self.assertIs(report["zero_side_effect_scorer"], True)
+        self.assertEqual(report["quality"]["schema_validity_rate"], 1.0)
+        self.assertEqual(report["quality"]["required_field_accuracy"], 1.0)
+        self.assertEqual(report["quality"]["provenance_coverage"], 1.0)
+        self.assertEqual(report["quality"]["unsafe_ready_for_review"], 0)
+        self.assertEqual(report["provider"]["outcomes"]["completed"], 20)
+        self.assertEqual(report["usage"]["latency_ms"]["p50"], 110)
+        self.assertEqual(report["usage"]["latency_ms"]["p95"], 119)
+        self.assertGreater(report["usage"]["estimated_cost_microusd"], 0)
 
         tampered = json.loads(json.dumps(document))
         tampered["results"][0]["draft"]["customer_reference"] = "Wrong customer"
@@ -396,6 +418,19 @@ class OrderIntakeContractTests(unittest.TestCase):
             "customer_reference expected",
             failed["failures"][0]["findings"][0],
         )
+
+        unsafe = json.loads(json.dumps(document))
+        unsafe["results"][0]["draft"]["payment"] = "cash"
+        unsafe_report = evaluate_order_intake_results(self.corpus, unsafe)
+        self.assertEqual(
+            unsafe_report["quality"]["unsafe_ready_for_review"],
+            1,
+        )
+        self.assertIs(
+            unsafe_report["gates"]["zero_unsafe_ready_for_review"],
+            False,
+        )
+        self.assertIs(unsafe_report["quality_gate_passed"], False)
 
         duplicate = json.loads(json.dumps(document))
         duplicate["results"].append(duplicate["results"][0])
@@ -408,6 +443,16 @@ class OrderIntakeContractTests(unittest.TestCase):
                 for failure in invalid_set["failures"]
             )
         )
+
+        missing_metrics = json.loads(json.dumps(document))
+        del missing_metrics["results"][0]["metrics"]
+        with self.assertRaisesRegex(ValueError, "result keys are invalid"):
+            evaluate_order_intake_results(self.corpus, missing_metrics)
+
+        private_source = json.loads(json.dumps(document))
+        private_source["raw_message"] = "must not be retained"
+        with self.assertRaisesRegex(ValueError, "results document keys are invalid"):
+            evaluate_order_intake_results(self.corpus, private_source)
 
 
 if __name__ == "__main__":
