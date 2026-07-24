@@ -2,6 +2,9 @@
   "name": "supermega-platform",
   "private": true,
   "version": "0.0.0",
+  "supermega": {
+    "productionSupabaseProjectRef": ""
+  },
   "scripts": {
     "build": "npm run public:build",
     "app:release:write": "node tools/write_app_release_metadata.mjs",
@@ -28,6 +31,7 @@
     "kernel:verify": "npm --prefix kernel run verify",
     "deploy:kernel:prod": "npm --prefix kernel run deploy:prod",
     "db:supermega:activate": "powershell -ExecutionPolicy Bypass -File tools/activate_supermega_database.ps1",
+    "database:supabase:preflight": "powershell -ExecutionPolicy Bypass -File tools/preflight_supermega_supabase.ps1",
     "database:postgres17:preflight": "node tools/run_postgres17_rehearsal.mjs --preflight",
     "database:postgres17:rehearse": "node tools/run_postgres17_rehearsal.mjs",
     "database:migrations:verify": "node tools/verify_private_trial_migrations.mjs",

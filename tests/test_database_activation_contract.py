@@ -1,20 +1,32 @@
 from __future__ import annotations
 
 import ast
+from hashlib import sha256
+import importlib.util
 import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
 import textwrap
+import types
 import unittest
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
 VALIDATOR = ROOT / "tools" / "validate_supermega_database_url.py"
 ACTIVATOR = ROOT / "tools" / "activate_supermega_database.ps1"
+SUPABASE_PREFLIGHT = ROOT / "tools" / "preflight_supermega_supabase.ps1"
+ACTIVATION_RUNBOOK = ROOT / "docs" / "supermega-enterprise-activation.md"
+PACKAGE_JSON = ROOT / "package.json"
+POWERSHELL = shutil.which("powershell") if os.name == "nt" else None
+SUPABASE_PREFLIGHT_QUERY_SHA256 = (
+    "9157ca7802c7f422c616aba86465c22fabee57dcf032b21af8685069b8983a9e"
+)
 TRIAL_STORE = ROOT / "supermega_runtime" / "trial_store.py"
 MIGRATION_PREFLIGHT = (
     ROOT
@@ -107,6 +119,18 @@ FORBIDDEN_ROLES = ("public", "anon", "authenticated", "service_role")
 
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
+
+
+def _load_validator():
+    spec = importlib.util.spec_from_file_location(
+        "supermega_database_validator_contract",
+        VALIDATOR,
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError("validator_import_failed")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _normalized_sql(path: Path | None = None) -> str:
@@ -365,6 +389,423 @@ class ActivationWrapperContractTests(unittest.TestCase):
                 {"select", "with"},
                 f"readiness helper contains non-read SQL: {statement!r}",
             )
+
+
+class SupabaseRehearsalPreflightContractTests(unittest.TestCase):
+    TARGET_REF = "abcdefghijklmnopqrst"
+    PRODUCTION_REF = "zyxwvutsrqponmlkjihg"
+    SECRET = "Supabase-rehearsal-secret"
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.validator = _load_validator()
+        cls._temporary_directory = tempfile.TemporaryDirectory()
+        cls.ca_file = Path(cls._temporary_directory.name) / "supabase-ca.crt"
+        cls.ca_file.write_text(
+            "-----BEGIN CERTIFICATE-----\nTEST-CA\n-----END CERTIFICATE-----\n",
+            encoding="ascii",
+        )
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls._temporary_directory.cleanup()
+
+    def _direct_url(self, project_ref: str | None = None) -> str:
+        target = project_ref or self.TARGET_REF
+        return (
+            f"postgresql://postgres:{self.SECRET}@db.{target}.supabase.co:"
+            "5432/postgres?sslmode=verify-full"
+        )
+
+    def _pooler_url(self, *, port: int = 5432) -> str:
+        return (
+            f"postgresql://postgres.{self.TARGET_REF}:{self.SECRET}"
+            f"@aws-0-ap-southeast-1.pooler.supabase.com:{port}"
+            "/postgres?sslmode=verify-full"
+        )
+
+    def _assert_configuration_error(
+        self,
+        expected_code: str,
+        database_url: str,
+        *,
+        expected_ref: str | None = None,
+        production_ref: str | None = None,
+    ) -> None:
+        with self.assertRaises(self.validator.AuditConfigurationError) as caught:
+            self.validator.validate_supabase_rehearsal_target(
+                database_url,
+                expected_project_ref=expected_ref or self.TARGET_REF,
+                production_project_ref=production_ref or self.PRODUCTION_REF,
+            )
+        self.assertEqual(caught.exception.code, expected_code)
+
+    def test_direct_and_shared_session_pooler_admin_connections_are_accepted(self) -> None:
+        self.assertEqual(
+            self.validator.validate_supabase_rehearsal_target(
+                self._direct_url(),
+                expected_project_ref=self.TARGET_REF,
+                production_project_ref=self.PRODUCTION_REF,
+            ),
+            "direct",
+        )
+        self.assertEqual(
+            self.validator.validate_supabase_rehearsal_target(
+                self._pooler_url(),
+                expected_project_ref=self.TARGET_REF,
+                production_project_ref=self.PRODUCTION_REF,
+            ),
+            "session_pooler",
+        )
+
+    def test_project_binding_and_migration_connection_fail_closed(self) -> None:
+        self._assert_configuration_error(
+            "rehearsal_target_is_production",
+            self._direct_url(),
+            production_ref=self.TARGET_REF,
+        )
+        self._assert_configuration_error(
+            "rehearsal_target_is_production",
+            self._direct_url(self.PRODUCTION_REF),
+        )
+        self._assert_configuration_error(
+            "rehearsal_target_ref_mismatch",
+            self._direct_url("11111111111111111111"),
+        )
+        self._assert_configuration_error(
+            "rehearsal_target_not_supabase",
+            (
+                f"postgresql://postgres:{self.SECRET}@database.example.invalid:"
+                "5432/postgres?sslmode=verify-full"
+            ),
+        )
+        self._assert_configuration_error(
+            "rehearsal_transaction_pooler_not_for_migrations",
+            self._pooler_url(port=6543),
+        )
+        self._assert_configuration_error(
+            "rehearsal_connection_parameter_not_allowed",
+            self._direct_url()
+            + f"&host=db.{self.PRODUCTION_REF}.supabase.co",
+        )
+        self._assert_configuration_error(
+            "rehearsal_verify_full_required",
+            self._direct_url().replace("verify-full", "require"),
+        )
+
+    def test_database_probe_is_read_only_sanitized_and_always_closed(self) -> None:
+        statements: list[str] = []
+        snapshot = {
+            "server_version_num": 170010,
+            "transaction_read_only": True,
+            "tls_active": True,
+            "session_role_stable": True,
+            "can_create_role": True,
+            "can_create_schema": True,
+            "postgres_database": True,
+            "private_schema_absent": True,
+            "backend_role_absent": True,
+        }
+
+        class Cursor:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def execute(self, statement, _params=()):
+                statements.append(str(statement))
+
+            def fetchone(self):
+                return snapshot
+
+        class Connection:
+            def __init__(self):
+                self.rolled_back = False
+                self.closed = False
+
+            def cursor(self):
+                return Cursor()
+
+            def rollback(self):
+                self.rolled_back = True
+
+            def close(self):
+                self.closed = True
+
+        connection = Connection()
+        report = self.validator.audit_supabase_rehearsal_target(
+            self._direct_url(),
+            expected_project_ref=self.TARGET_REF,
+            production_project_ref=self.PRODUCTION_REF,
+            ssl_root_cert_path=str(self.ca_file),
+            connect_factory=lambda _database_url, _ssl_root_cert: connection,
+        )
+
+        self.assertTrue(report["ready"], report)
+        self.assertEqual(report["connection_mode"], "direct")
+        self.assertEqual(report["mutation_statements_executed"], 0)
+        self.assertFalse(report["production_mutated"])
+        self.assertFalse(report["supabase_mutated"])
+        self.assertFalse(report["vercel_mutated"])
+        self.assertTrue(connection.rolled_back)
+        self.assertTrue(connection.closed)
+        self.assertEqual(len(statements), 2)
+        self.assertEqual(
+            re.sub(r"\s+", " ", statements[0]).strip().lower(),
+            "set transaction read only",
+        )
+        self.assertEqual(_first_sql_token(statements[1]), "with")
+        normalized_catalog_probe = re.sub(
+            r"\s+",
+            " ",
+            statements[1],
+        ).strip()
+        self.assertEqual(
+            sha256(normalized_catalog_probe.encode("utf-8")).hexdigest(),
+            SUPABASE_PREFLIGHT_QUERY_SHA256,
+        )
+        catalog_probe_without_literals = re.sub(
+            r"'(?:''|[^'])*'",
+            "''",
+            statements[1],
+        )
+        self.assertNotRegex(
+            catalog_probe_without_literals,
+            re.compile(
+                r"\b(insert|update|delete|merge|call|do|create|alter|drop|"
+                r"truncate|grant|revoke|copy)\b",
+                re.IGNORECASE,
+            ),
+        )
+        serialized = json.dumps(report, sort_keys=True)
+        self.assertNotIn(self.SECRET, serialized)
+        self.assertEqual(report["target_project_ref"], self.TARGET_REF)
+        self.assertEqual(report["tls_mode"], "verify-full")
+        self.assertNotIn(self.PRODUCTION_REF, serialized)
+
+    def test_connection_options_preserve_and_enforce_verify_full(self) -> None:
+        calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+        fake_psycopg = types.ModuleType("psycopg")
+        fake_rows = types.ModuleType("psycopg.rows")
+        fake_rows.dict_row = object()
+
+        def connect(*args, **kwargs):
+            calls.append((args, kwargs))
+            return object()
+
+        fake_psycopg.connect = connect
+        with mock.patch.dict(
+            sys.modules,
+            {"psycopg": fake_psycopg, "psycopg.rows": fake_rows},
+        ):
+            self.validator._open_supabase_rehearsal_connection(
+                self._direct_url(),
+                str(self.ca_file),
+            )
+            self.validator._open_connection(self._direct_url())
+
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[0][1]["sslmode"], "verify-full")
+        self.assertEqual(calls[0][1]["sslrootcert"], str(self.ca_file))
+        self.assertEqual(calls[1][1]["sslmode"], "verify-full")
+        self.assertNotIn("sslrootcert", calls[1][1])
+
+    def test_wrapper_and_operator_contract_do_not_apply_or_publish_anything(self) -> None:
+        source = _read(SUPABASE_PREFLIGHT)
+        source_lower = source.lower()
+        parameter_block = source.split(")", 1)[0]
+        self.assertNotIn("mandatory = $true", source_lower)
+        self.assertNotIn("$ProductionProjectRef", parameter_block)
+        self.assertIn("--rehearsal-preflight", source)
+        self.assertIn("--env-key SUPERMEGA_REHEARSAL_ADMIN_DATABASE_URL", source)
+        self.assertIn(
+            "--expected-project-ref-env-key SUPERMEGA_REHEARSAL_PROJECT_REF",
+            source,
+        )
+        self.assertIn(
+            "--production-project-ref-env-key SUPERMEGA_PRODUCTION_PROJECT_REF",
+            source,
+        )
+        self.assertIn(
+            "--ssl-root-cert-env-key SUPERMEGA_SUPABASE_CA_FILE",
+            source,
+        )
+        self.assertIn(
+            "$env:SUPERMEGA_REHEARSAL_ADMIN_DATABASE_URL = $resolved",
+            source,
+        )
+        self.assertIn("& python $ValidatorPath", source)
+        self.assertIn(
+            "$env:SUPERMEGA_PRODUCTION_PROJECT_REF = $TrustedProductionProjectRef",
+            source,
+        )
+        self.assertIn(
+            "$env:SUPERMEGA_SUPABASE_CA_FILE = $resolvedCertificate",
+            source,
+        )
+        self.assertIn("status --porcelain -- package.json", source)
+        self.assertIn("productionSupabaseProjectRef", source)
+        self.assertNotIn("vercel env", source_lower)
+        self.assertNotIn("psql", source_lower)
+        self.assertNotIn(".sql", source_lower)
+        self.assertNotIn("activate_supermega_database", source_lower)
+        validator_invocation = next(
+            line
+            for line in source.splitlines()
+            if "& python $ValidatorPath" in line
+        )
+        self.assertNotIn("$resolved", validator_invocation.lower())
+        for line in source.splitlines():
+            if "write-output" in line.lower():
+                self.assertNotIn("$resolved", line.lower())
+
+        package = json.loads(_read(PACKAGE_JSON))
+        trusted_production_ref = package["supermega"][
+            "productionSupabaseProjectRef"
+        ]
+        self.assertTrue(
+            trusted_production_ref == ""
+            or re.fullmatch(r"[a-z0-9]{20}", trusted_production_ref),
+            trusted_production_ref,
+        )
+        self.assertEqual(
+            package["scripts"]["database:supabase:preflight"],
+            (
+                "powershell -ExecutionPolicy Bypass -File "
+                "tools/preflight_supermega_supabase.ps1"
+            ),
+        )
+        runbook = _read(ACTIVATION_RUNBOOK)
+        self.assertIn("npm run database:supabase:preflight --", runbook)
+        self.assertIn("-ExpectedProjectRef <NON_PRODUCTION_PROJECT_REF>", runbook)
+        self.assertIn(
+            "-SslRootCertFile .tmp\\supermega-rehearsal-ca.crt",
+            runbook,
+        )
+        self.assertNotIn("-ProductionProjectRef", runbook)
+        self.assertIn("sslmode=verify-full", runbook)
+        self.assertIn("transaction-mode pooler on port `6543`", runbook)
+
+    @unittest.skipUnless(
+        POWERSHELL is not None,
+        "Windows PowerShell is required for the wrapper execution contract",
+    )
+    def test_wrapper_failure_restores_environment_and_redacts_secret(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            fixture_root = Path(temporary_directory)
+            fixture_tools = fixture_root / "tools"
+            fixture_tools.mkdir()
+            fixture_wrapper = fixture_tools / SUPABASE_PREFLIGHT.name
+            shutil.copy2(SUPABASE_PREFLIGHT, fixture_wrapper)
+            shutil.copy2(VALIDATOR, fixture_tools / VALIDATOR.name)
+            (fixture_root / "package.json").write_text(
+                json.dumps(
+                    {
+                        "supermega": {
+                            "productionSupabaseProjectRef": self.PRODUCTION_REF,
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            database_url_file = fixture_root / "rehearsal-url.txt"
+            database_url_file.write_text(
+                (
+                    f"postgresql://postgres:{self.SECRET}"
+                    "@database.example.invalid:5432/postgres"
+                    "?sslmode=verify-full"
+                ),
+                encoding="utf-8",
+            )
+            fixture_ca = fixture_root / "supabase-ca.crt"
+            shutil.copy2(self.ca_file, fixture_ca)
+
+            subprocess.run(
+                ["git", "init", "--quiet"],
+                cwd=fixture_root,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            subprocess.run(
+                ["git", "add", "package.json"],
+                cwd=fixture_root,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            subprocess.run(
+                [
+                    "git",
+                    "-c",
+                    "user.name=SuperMega Contract",
+                    "-c",
+                    "user.email=contract@supermega.invalid",
+                    "commit",
+                    "--quiet",
+                    "-m",
+                    "fixture",
+                ],
+                cwd=fixture_root,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            def powershell_literal(value: Path) -> str:
+                return str(value).replace("'", "''")
+
+            harness = textwrap.dedent(
+                f"""
+                $env:SUPERMEGA_REHEARSAL_ADMIN_DATABASE_URL = 'before-url'
+                $env:SUPERMEGA_REHEARSAL_PROJECT_REF = 'before-expected'
+                $env:SUPERMEGA_PRODUCTION_PROJECT_REF = 'before-production'
+                $env:SUPERMEGA_SUPABASE_CA_FILE = 'before-certificate'
+                $caught = ''
+                try {{
+                  . '{powershell_literal(fixture_wrapper)}' `
+                    -DatabaseUrlFile '{powershell_literal(database_url_file)}' `
+                    -ExpectedProjectRef '{self.TARGET_REF}' `
+                    -SslRootCertFile '{powershell_literal(fixture_ca)}'
+                }}
+                catch {{
+                  $caught = [string]$_.Exception.Message
+                }}
+                @{{
+                  caught = $caught
+                  url = $env:SUPERMEGA_REHEARSAL_ADMIN_DATABASE_URL
+                  expected = $env:SUPERMEGA_REHEARSAL_PROJECT_REF
+                  production = $env:SUPERMEGA_PRODUCTION_PROJECT_REF
+                  certificate = $env:SUPERMEGA_SUPABASE_CA_FILE
+                }} | ConvertTo-Json -Compress
+                """
+            )
+            result = subprocess.run(
+                [
+                    str(POWERSHELL),
+                    "-NoProfile",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-Command",
+                    harness,
+                ],
+                cwd=fixture_root,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+
+        output = result.stdout + result.stderr
+        self.assertEqual(result.returncode, 0, output)
+        self.assertNotIn(self.SECRET, output)
+        state = _extract_json(output)
+        self.assertIn("preflight failed", str(state["caught"]).lower())
+        self.assertEqual(state["url"], "before-url")
+        self.assertEqual(state["expected"], "before-expected")
+        self.assertEqual(state["production"], "before-production")
+        self.assertEqual(state["certificate"], "before-certificate")
 
 
 @unittest.skipUnless(

@@ -12,20 +12,23 @@ import argparse
 from hashlib import sha256
 import json
 import os
+from pathlib import Path
 import re
 import sys
 from collections.abc import Mapping, Sequence
 from typing import Any
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, unquote, urlsplit
 
 
 CONTRACT = "supermega_private_trial_database_v4"
+REHEARSAL_PREFLIGHT_CONTRACT = "supermega_supabase_rehearsal_preflight_v1"
 SCHEMA = "app_private"
 BACKEND_ROLE = "supermega_trial_backend"
 TRUSTED_OWNER = "postgres"
 SCHEMA_COMPONENT = "private_trial_backend"
 SCHEMA_VERSION = 4
 EXPECTED_POSTGRES_MAJOR = 17
+SAFE_SSL_MODES = frozenset({"require", "verify-ca", "verify-full"})
 EXPECTED_TABLES = frozenset(
     {
         "trial_schema_meta",
@@ -563,9 +566,206 @@ def validate_database_url(database_url: str) -> None:
         raise AuditConfigurationError("database_url_target_invalid")
     if set(query).intersection({"options", "service", "servicefile", "passfile"}):
         raise AuditConfigurationError("database_url_unsafe_option")
-    ssl_modes = {value.lower() for value in query.get("sslmode", [])}
-    if ssl_modes.intersection({"disable", "allow", "prefer"}):
+    ssl_modes = [value.lower() for value in query.get("sslmode", [])]
+    if len(ssl_modes) > 1 or (
+        ssl_modes and ssl_modes[0] not in SAFE_SSL_MODES
+    ):
         raise AuditConfigurationError("database_url_tls_required")
+
+
+def _database_url_sslmode(database_url: str) -> str:
+    values = parse_qs(
+        urlsplit(database_url).query,
+        keep_blank_values=True,
+    ).get("sslmode", [])
+    return values[0].lower() if values else "require"
+
+
+def validate_ssl_root_certificate(path_value: str) -> str:
+    """Resolve a public CA certificate without exposing its local path."""
+
+    if not path_value.strip():
+        raise AuditConfigurationError("rehearsal_ssl_root_certificate_missing")
+    try:
+        path = Path(path_value).resolve(strict=True)
+        if not path.is_file() or path.stat().st_size > 1_048_576:
+            raise OSError("certificate_file_invalid")
+        certificate = path.read_text(encoding="ascii")
+    except (OSError, UnicodeError) as exc:
+        raise AuditConfigurationError(
+            "rehearsal_ssl_root_certificate_invalid"
+        ) from exc
+    if (
+        "-----BEGIN CERTIFICATE-----" not in certificate
+        or "-----END CERTIFICATE-----" not in certificate
+        or "PRIVATE KEY-----" in certificate
+    ):
+        raise AuditConfigurationError("rehearsal_ssl_root_certificate_invalid")
+    return str(path)
+
+
+def validate_supabase_rehearsal_target(
+    database_url: str,
+    *,
+    expected_project_ref: str,
+    production_project_ref: str,
+) -> str:
+    """Bind a migration preflight to one explicit non-production Supabase target."""
+
+    validate_database_url(database_url)
+    expected = expected_project_ref.strip().lower()
+    production = production_project_ref.strip().lower()
+    if not re.fullmatch(r"[a-z0-9]{20}", expected):
+        raise AuditConfigurationError("rehearsal_expected_project_ref_invalid")
+    if not re.fullmatch(r"[a-z0-9]{20}", production):
+        raise AuditConfigurationError("rehearsal_production_project_ref_invalid")
+    if expected == production:
+        raise AuditConfigurationError("rehearsal_target_is_production")
+
+    parsed = urlsplit(database_url)
+    query = parse_qs(parsed.query, keep_blank_values=True)
+    if set(query) - {"sslmode"}:
+        raise AuditConfigurationError("rehearsal_connection_parameter_not_allowed")
+    if [value.lower() for value in query.get("sslmode", [])] != ["verify-full"]:
+        raise AuditConfigurationError("rehearsal_verify_full_required")
+    host = str(parsed.hostname or "").lower()
+    username = unquote(parsed.username or "")
+    port = parsed.port or 5432
+    if parsed.path.strip("/") != "postgres":
+        raise AuditConfigurationError("rehearsal_database_must_be_postgres")
+
+    direct = re.fullmatch(r"db\.([a-z0-9]{20})\.supabase\.co", host)
+    pooler = re.fullmatch(r"[a-z0-9-]+\.pooler\.supabase\.com", host)
+    if direct:
+        target_ref = direct.group(1)
+        if username != "postgres" or port != 5432:
+            raise AuditConfigurationError("rehearsal_direct_admin_connection_required")
+        mode = "direct"
+    elif pooler:
+        pooler_user = re.fullmatch(r"postgres\.([a-z0-9]{20})", username)
+        if not pooler_user:
+            raise AuditConfigurationError("rehearsal_pooler_admin_connection_required")
+        target_ref = pooler_user.group(1)
+        if port == 6543:
+            raise AuditConfigurationError("rehearsal_transaction_pooler_not_for_migrations")
+        if port != 5432:
+            raise AuditConfigurationError("rehearsal_session_pooler_required")
+        mode = "session_pooler"
+    else:
+        raise AuditConfigurationError("rehearsal_target_not_supabase")
+
+    if target_ref == production:
+        raise AuditConfigurationError("rehearsal_target_is_production")
+    if target_ref != expected:
+        raise AuditConfigurationError("rehearsal_target_ref_mismatch")
+    return mode
+
+
+def collect_supabase_rehearsal_target_snapshot(connection: Any) -> dict[str, Any]:
+    """Inspect a clean migration target inside one forced read-only transaction."""
+
+    with connection.cursor() as cursor:
+        cursor.execute("set transaction read only")
+        cursor.execute(
+            """
+            with current_login as (
+              select rolcreaterole, rolsuper
+              from pg_roles
+              where rolname = current_user
+            )
+            select
+              current_setting('server_version_num')::integer as server_version_num,
+              current_setting('transaction_read_only') = 'on' as transaction_read_only,
+              coalesce((select ssl from pg_stat_ssl where pid = pg_backend_pid()), false) as tls_active,
+              current_user = session_user as session_role_stable,
+              coalesce(
+                (select rolcreaterole or rolsuper from current_login),
+                false
+              ) as can_create_role,
+              has_database_privilege(current_user, current_database(), 'CREATE') as can_create_schema,
+              current_database() = 'postgres' as postgres_database,
+              to_regnamespace('app_private') is null as private_schema_absent,
+              not exists (
+                select 1 from pg_roles where rolname = 'supermega_trial_backend'
+              ) as backend_role_absent
+            """
+        )
+        return _mapping(cursor.fetchone())
+
+
+def evaluate_supabase_rehearsal_target_snapshot(
+    snapshot: Mapping[str, Any],
+    *,
+    connection_mode: str,
+    target_project_ref: str,
+) -> dict[str, Any]:
+    try:
+        server_version_num = int(snapshot.get("server_version_num", 0))
+    except (TypeError, ValueError):
+        server_version_num = 0
+    checks = {
+        "postgres_major_17": server_version_num // 10_000 == EXPECTED_POSTGRES_MAJOR,
+        "read_only_encrypted_connection": (
+            _bool(snapshot.get("transaction_read_only"))
+            and _bool(snapshot.get("tls_active"))
+        ),
+        "session_role_stable": _bool(snapshot.get("session_role_stable")),
+        "administrative_role_can_create_runtime_role": _bool(snapshot.get("can_create_role")),
+        "administrative_role_can_create_private_schema": _bool(snapshot.get("can_create_schema")),
+        "postgres_database_selected": _bool(snapshot.get("postgres_database")),
+        "private_schema_absent": _bool(snapshot.get("private_schema_absent")),
+        "backend_role_absent": _bool(snapshot.get("backend_role_absent")),
+    }
+    failed = sorted(name for name, passed in checks.items() if not passed)
+    return {
+        "ok": not failed,
+        "ready": not failed,
+        "status": "clean_target" if not failed else "attention",
+        "contract": REHEARSAL_PREFLIGHT_CONTRACT,
+        "connection_mode": connection_mode,
+        "target_project_ref": target_project_ref,
+        "tls_mode": "verify-full",
+        "checks": checks,
+        "failed_checks": failed,
+        "mutation_statements_executed": 0,
+        "secret_values_exposed": False,
+        "production_mutated": False,
+        "supabase_mutated": False,
+        "vercel_mutated": False,
+    }
+
+
+def audit_supabase_rehearsal_target(
+    database_url: str,
+    *,
+    expected_project_ref: str,
+    production_project_ref: str,
+    ssl_root_cert_path: str,
+    connect_factory: Any = None,
+) -> dict[str, Any]:
+    connection_mode = validate_supabase_rehearsal_target(
+        database_url,
+        expected_project_ref=expected_project_ref,
+        production_project_ref=production_project_ref,
+    )
+    resolved_ssl_root_cert = validate_ssl_root_certificate(
+        ssl_root_cert_path
+    )
+    connection = (
+        connect_factory or _open_supabase_rehearsal_connection
+    )(database_url, resolved_ssl_root_cert)
+    try:
+        snapshot = collect_supabase_rehearsal_target_snapshot(connection)
+        return evaluate_supabase_rehearsal_target_snapshot(
+            snapshot,
+            connection_mode=connection_mode,
+            target_project_ref=expected_project_ref.strip().lower(),
+        )
+    finally:
+        try:
+            connection.rollback()
+        finally:
+            connection.close()
 
 
 def _execute_rows(cursor: Any, query: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
@@ -1347,18 +1547,39 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _open_connection(database_url: str) -> Any:
+def _postgres_driver() -> tuple[Any, Any]:
     try:
         import psycopg
         from psycopg.rows import dict_row
     except ImportError as exc:
         raise RuntimeError("postgres_driver_missing") from exc
+    return psycopg, dict_row
+
+
+def _open_connection(database_url: str) -> Any:
+    psycopg, dict_row = _postgres_driver()
     return psycopg.connect(
         database_url,
         row_factory=dict_row,
         connect_timeout=5,
-        sslmode="require",
+        sslmode=_database_url_sslmode(database_url),
         application_name="supermega-readiness-audit",
+        options="-c default_transaction_read_only=on -c statement_timeout=5000 -c lock_timeout=1000",
+    )
+
+
+def _open_supabase_rehearsal_connection(
+    database_url: str,
+    ssl_root_cert_path: str,
+) -> Any:
+    psycopg, dict_row = _postgres_driver()
+    return psycopg.connect(
+        database_url,
+        row_factory=dict_row,
+        connect_timeout=5,
+        sslmode="verify-full",
+        sslrootcert=ssl_root_cert_path,
+        application_name="supermega-supabase-rehearsal-preflight",
         options="-c default_transaction_read_only=on -c statement_timeout=5000 -c lock_timeout=1000",
     )
 
@@ -1376,16 +1597,25 @@ def audit_database(database_url: str, *, connect_factory: Any = None) -> dict[st
             connection.close()
 
 
-def _safe_failure(code: str) -> dict[str, Any]:
-    return {
+def _safe_failure(code: str, *, contract: str = CONTRACT) -> dict[str, Any]:
+    report = {
         "ok": False,
         "ready": False,
         "status": "attention",
-        "contract": CONTRACT,
+        "contract": contract,
         "error": code,
         "mutation_statements_executed": 0,
         "secret_values_exposed": False,
     }
+    if contract == REHEARSAL_PREFLIGHT_CONTRACT:
+        report.update(
+            {
+                "production_mutated": False,
+                "supabase_mutated": False,
+                "vercel_mutated": False,
+            }
+        )
+    return report
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -1402,6 +1632,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="Exercise policy-bypass fixtures without opening a database connection.",
     )
+    parser.add_argument(
+        "--rehearsal-preflight",
+        action="store_true",
+        help="Verify one explicit clean non-production Supabase migration target without mutation.",
+    )
+    parser.add_argument(
+        "--expected-project-ref-env-key",
+        default="SUPERMEGA_REHEARSAL_PROJECT_REF",
+    )
+    parser.add_argument(
+        "--production-project-ref-env-key",
+        default="SUPERMEGA_PRODUCTION_PROJECT_REF",
+    )
+    parser.add_argument(
+        "--ssl-root-cert-env-key",
+        default="SUPERMEGA_SUPABASE_CA_FILE",
+    )
     args = parser.parse_args(argv)
 
     if args.self_test:
@@ -1409,25 +1656,67 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(json.dumps(report, sort_keys=True))
         return 0 if report["ok"] is True else 1
 
-    if not re.fullmatch(r"[A-Z][A-Z0-9_]{2,80}", args.env_key):
-        print(json.dumps(_safe_failure("env_key_invalid"), sort_keys=True))
+    environment_keys = [args.env_key]
+    if args.rehearsal_preflight:
+        environment_keys.extend(
+            [
+                args.expected_project_ref_env_key,
+                args.production_project_ref_env_key,
+                args.ssl_root_cert_env_key,
+            ]
+        )
+    if not all(re.fullmatch(r"[A-Z][A-Z0-9_]{2,80}", key) for key in environment_keys):
+        contract = REHEARSAL_PREFLIGHT_CONTRACT if args.rehearsal_preflight else CONTRACT
+        print(json.dumps(_safe_failure("env_key_invalid", contract=contract), sort_keys=True))
         return 2
     database_url = str(os.getenv(args.env_key, "")).strip()
     if not database_url:
-        print(json.dumps(_safe_failure("database_url_missing"), sort_keys=True))
+        contract = REHEARSAL_PREFLIGHT_CONTRACT if args.rehearsal_preflight else CONTRACT
+        print(json.dumps(_safe_failure("database_url_missing", contract=contract), sort_keys=True))
+        return 2
+
+    if args.rehearsal_preflight and (args.ensure_schema or args.require_ready):
+        print(
+            json.dumps(
+                _safe_failure(
+                    "rehearsal_preflight_mode_conflict",
+                    contract=REHEARSAL_PREFLIGHT_CONTRACT,
+                ),
+                sort_keys=True,
+            )
+        )
         return 2
 
     try:
-        report = audit_database(database_url)
+        if args.rehearsal_preflight:
+            report = audit_supabase_rehearsal_target(
+                database_url,
+                expected_project_ref=str(
+                    os.getenv(args.expected_project_ref_env_key, "")
+                ),
+                production_project_ref=str(
+                    os.getenv(args.production_project_ref_env_key, "")
+                ),
+                ssl_root_cert_path=str(
+                    os.getenv(args.ssl_root_cert_env_key, "")
+                ),
+            )
+        else:
+            report = audit_database(database_url)
     except AuditConfigurationError as exc:
-        report = _safe_failure(exc.code)
+        contract = REHEARSAL_PREFLIGHT_CONTRACT if args.rehearsal_preflight else CONTRACT
+        report = _safe_failure(exc.code, contract=contract)
     except RuntimeError as exc:
         code = str(exc) if str(exc) in {"postgres_driver_missing", "unexpected_database_row"} else "database_audit_failed"
-        report = _safe_failure(code)
+        contract = REHEARSAL_PREFLIGHT_CONTRACT if args.rehearsal_preflight else CONTRACT
+        report = _safe_failure(code, contract=contract)
     except Exception:
-        report = _safe_failure("database_connection_or_audit_failed")
+        contract = REHEARSAL_PREFLIGHT_CONTRACT if args.rehearsal_preflight else CONTRACT
+        report = _safe_failure("database_connection_or_audit_failed", contract=contract)
 
     print(json.dumps(report, sort_keys=True))
+    if args.rehearsal_preflight:
+        return 0 if report.get("ready") is True else 1
     if args.require_ready or args.ensure_schema:
         return 0 if report.get("ok") is True else 1
     return 0
