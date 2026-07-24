@@ -593,6 +593,16 @@ if (actionChangeCssStart < 0
   || actionChangeCssEnd < 0
   || !actionChangeCssContract.includes('font-size: 12px')
   || !actionChangeCssContract.includes('line-height: 1.5')) fail('accountable_confirmation_delta_unreadable')
+const stockTabletCssStart = coreCssSource.indexOf('@media (max-width: 760px)')
+const stockTabletCssEnd = coreCssSource.indexOf('@media (max-width: 560px)', stockTabletCssStart)
+const stockTabletCssContract = coreCssSource.slice(stockTabletCssStart, stockTabletCssEnd)
+if (stockTabletCssStart < 0
+  || stockTabletCssEnd < 0
+  || !stockTabletCssContract.includes('.data-table { min-width: 0; }')
+  || !stockTabletCssContract.includes('.data-row.table-head { display: none; }')
+  || !stockTabletCssContract.includes('.data-row > span:nth-child(5) { grid-column: 3; grid-row: 2; justify-self: end; }')
+  || !stockTabletCssContract.includes('.inventory-panel { overflow-x: hidden; }')
+  || !stockTabletCssContract.includes('.stock-receipt-editor { grid-template-columns: 1fr; }')) fail('shop_stock_tablet_actions_overflow')
 if (!coreSource.includes('id="commerce-manual-order-form"')
   || !coreSource.includes('form="commerce-manual-order-form"')
   || !coreSource.includes('className="order-submit-bar"')
