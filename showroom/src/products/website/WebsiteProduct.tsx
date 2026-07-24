@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 
 import { ContentWorkspace } from './ContentWorkspace'
 import { NavigationWorkspace } from './NavigationWorkspace'
@@ -78,7 +79,9 @@ export function WebsiteProduct() {
     storageIssue,
     managedActorId,
   } = useWebsiteWorkspace()
-  const [view, setView] = useState<WebsiteView>('content')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const requestedView = searchParams.get('view')
+  const view: WebsiteView = requestedView === 'publish' ? 'publish' : 'content'
   const [surface, setSurface] = useState<'work' | 'preview'>('work')
   const [selectedPageId, setSelectedPageId] = useState(workspace.selectedPageId)
   const [siteSettingsOpen, setSiteSettingsOpen] = useState(false)
@@ -154,6 +157,13 @@ export function WebsiteProduct() {
   }, [])
 
   useEffect(() => {
+    if (requestedView === null || requestedView === 'publish') return
+    const next = new URLSearchParams(searchParams)
+    next.delete('view')
+    setSearchParams(next, { replace: true })
+  }, [requestedView, searchParams, setSearchParams])
+
+  useEffect(() => {
     if (typeof window === 'undefined' || !editSessionScope) return
     if (editSessionRef.current?.scope === editSessionScope) return
     const restoreTimer = window.setTimeout(() => {
@@ -173,6 +183,13 @@ export function WebsiteProduct() {
     }, 0)
     return () => window.clearTimeout(restoreTimer)
   }, [editSessionScope])
+
+  useEffect(() => {
+    if (view !== 'publish' || !hasUnsavedChanges) return
+    const next = new URLSearchParams(searchParams)
+    next.delete('view')
+    setSearchParams(next, { replace: true })
+  }, [hasUnsavedChanges, searchParams, setSearchParams, view])
 
   useEffect(() => {
     if (headingFocusRequest > 0) headingRef.current?.focus()
@@ -199,7 +216,10 @@ export function WebsiteProduct() {
       setNotice('Save or discard the unsaved Website preview before reviewing release evidence.')
       return
     }
-    setView(nextView)
+    const next = new URLSearchParams(searchParams)
+    if (nextView === 'publish') next.set('view', 'publish')
+    else next.delete('view')
+    setSearchParams(next)
     setSurface('work')
     setSiteSettingsOpen(false)
     requestHeadingFocus()
