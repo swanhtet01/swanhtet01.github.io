@@ -94,6 +94,8 @@ def output_state(
     current: dict[str, object],
     quantity: int,
     evidence: dict[str, str],
+    *,
+    shift_ref: str = "2026-07-24 Day",
 ) -> dict[str, object]:
     state = deepcopy(current)
     job = state["jobs"][0]
@@ -106,6 +108,7 @@ def output_state(
             subject_id=job["id"],
             summary=f"Recorded {quantity} good units",
             quantity=quantity,
+            shiftRef=shift_ref,
         ),
         *state["events"],
     ]
@@ -364,6 +367,49 @@ class ProductionRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(accepted["revision"], 1)
         self.assertEqual(accepted["jobs"][0]["output"], 4)
+        self.assertEqual(accepted["events"][0]["shiftRef"], "2026-07-24 Day")
+
+        missing_shift_evidence = action_evidence("ACT-OUTPUT-MISSING-SHIFT")
+        missing_shift = output_state(current, 1, missing_shift_evidence)
+        missing_shift["events"][0].pop("shiftRef")
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "production.output.recorded",
+                missing_shift,
+                missing_shift_evidence,
+            )
+
+        legacy_current = deepcopy(accepted)
+        legacy_current["events"][0].pop("shiftRef")
+        legacy_evidence = action_evidence(
+            "ACT-OUTPUT-AFTER-LEGACY",
+            captured_at=LATER,
+        )
+        after_legacy = apply_event(
+            legacy_current,
+            "production.output.recorded",
+            output_state(legacy_current, 1, legacy_evidence),
+            legacy_evidence,
+        )
+        self.assertNotIn("shiftRef", after_legacy["events"][1])
+        self.assertEqual(after_legacy["events"][0]["shiftRef"], "2026-07-24 Day")
+
+        for index, invalid_shift in enumerate(("", " Day", "Day ", "X" * 81)):
+            invalid_evidence = action_evidence(f"ACT-OUTPUT-BAD-SHIFT-{index}")
+            invalid = output_state(
+                current,
+                1,
+                invalid_evidence,
+                shift_ref=invalid_shift,
+            )
+            with self.assertRaises(TrialValidationError):
+                apply_event(
+                    current,
+                    "production.output.recorded",
+                    invalid,
+                    invalid_evidence,
+                )
 
         exact_evidence = action_evidence(
             "ACT-OUTPUT-002",

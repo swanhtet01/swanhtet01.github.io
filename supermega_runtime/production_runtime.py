@@ -58,6 +58,7 @@ _EVENT_FIELDS = frozenset(
         "summary",
     }
 )
+_OUTPUT_EVENT_OPTIONAL_FIELDS = frozenset({"shiftRef"})
 
 
 def _object(value: object, field: str) -> dict[str, Any]:
@@ -240,7 +241,12 @@ def _validate_event(
         required = _EVENT_FIELDS
     else:
         raise TrialValidationError(f"{field}.kind is unsupported.")
-    _exact_fields(event, field, required=frozenset(required))
+    _exact_fields(
+        event,
+        field,
+        required=frozenset(required),
+        optional=_OUTPUT_EVENT_OPTIONAL_FIELDS if kind == "output_recorded" else frozenset(),
+    )
 
     action_id = _text(event["actionId"], f"{field}.actionId", maximum=160)
     event_id = _text(event["id"], f"{field}.id", maximum=164)
@@ -256,6 +262,8 @@ def _validate_event(
         if subject_id not in job_ids:
             raise TrialValidationError(f"{field} references an unknown job.")
         _integer(event["quantity"], f"{field}.quantity", minimum=1)
+        if "shiftRef" in event:
+            _text(event["shiftRef"], f"{field}.shiftRef", maximum=80)
     elif kind == "job_created":
         if subject_id not in job_ids:
             raise TrialValidationError(f"{field} references an unknown job.")
@@ -331,6 +339,17 @@ def _validate_output_history(
     jobs: Sequence[dict[str, Any]],
     events: Sequence[dict[str, Any]],
 ) -> None:
+    shift_totals: dict[str, int] = {}
+    for event in events:
+        shift_ref = event.get("shiftRef")
+        if event["kind"] != "output_recorded" or shift_ref is None:
+            continue
+        next_total = shift_totals.get(shift_ref, 0) + event["quantity"]
+        if next_total > _MAX_SAFE_INTEGER:
+            raise TrialValidationError(
+                f"Output total for {shift_ref} exceeds the safe integer limit."
+            )
+        shift_totals[shift_ref] = next_total
     for index, job in enumerate(jobs):
         recorded = sum(
             event["quantity"]
@@ -581,6 +600,10 @@ def _validate_output_recorded(
     event: Mapping[str, Any],
 ) -> None:
     _require_unchanged(current, next_state, "issues", "machines")
+    if "shiftRef" not in event:
+        raise TrialValidationError(
+            "new output events require one canonical shift reference."
+        )
     before, after = _one_changed(current["jobs"], next_state["jobs"], "jobs")
     quantity = event["quantity"]
     if event["subjectId"] != before["id"]:

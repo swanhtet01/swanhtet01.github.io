@@ -536,6 +536,10 @@ const commerceOrdersContract = commercePageContract.slice(commercePageContract.i
 if (!commerceOrdersContract.includes('order-daily-controls') || !commerceOrdersContract.includes('Save daily close') || !commerceOrdersContract.includes('Close and exceptions')) fail('commerce_daily_controls_not_inside_orders')
 if (!productionSource.includes("supermega.production.workspace.v2") || !productionSource.includes('mutateProductionWorkspace') || !productionSource.includes('productionWorkspaceCanWrite') || !productionSource.includes('.write-probe.') || !productionSource.includes('lockManager.request') || !productionSource.includes('next.revision !== current.revision + 1')) fail('production_v2_locked_store_missing')
 if (!productionSource.includes("'job_created' | 'output_recorded' | 'issue_opened' | 'issue_resolved' | 'machine_state_changed'") || !productionSource.includes('events: [event, ...state.events]') || !productionSource.includes('Production revision must equal the append-only event count.')) fail('production_append_only_record_missing')
+if (!productionSource.includes('productionShiftOutput')
+  || !productionSource.includes('existing.shiftRef === shiftRef')
+  || !productionSource.includes('shiftRef?: string')
+  || !managedProductionRuntime.includes('new output events require one canonical shift reference.')) fail('production_shift_output_contract_missing')
 if (!productionSource.includes('registerProductionJob') || !coreSource.includes('production.job.created') || !coreSource.includes('<summary>Add job</summary>') || !coreSource.includes('Review job')) fail('production_recurring_job_workflow_missing')
 if (!productionSource.includes('currentRaw !== null') || !productionSource.includes('Migration failed closed') || !productionSource.includes('events: []')) fail('production_migration_fail_closed_contract_missing')
 if (!productionSource.includes('recordProductionMachineState')
@@ -572,6 +576,9 @@ const productionTabsContract = coreSource.slice(coreSource.indexOf('const produc
 if (productionTabsContract.includes("{ id: 'today', label: 'Today' }") || !productionTabsContract.includes("{ id: 'production', label: 'Jobs' }") || !productionTabsContract.includes("{ id: 'control', label: 'Problems' }") || (productionTabsContract.match(/^\s*\{ id:/gm) || []).length !== 2) fail('production_two_tab_contract_changed')
 const productionPageContract = coreSource.slice(coreSource.indexOf('function ProductionPage'), coreSource.indexOf('function JobList'))
 const productionJobsContract = productionPageContract.slice(productionPageContract.indexOf("if (tab === 'production')"), productionPageContract.indexOf("if (tab === 'control')"))
+if (!productionJobsContract.includes('Recorded for this shift:')
+  || !productionJobsContract.includes('Shift reference')
+  || !coreSource.includes("Unassigned (legacy)")) fail('production_shift_output_ui_missing')
 if (!productionJobsContract.includes('Jobs to finish')
   || !productionJobsContract.includes('<JobList jobs={activeJobs} />')
   || !productionJobsContract.includes('<CompletedJobHistory jobs={completedJobs} />')
@@ -2117,16 +2124,22 @@ async function verifyProductionRuntime() {
       { ...newJob, id: 'JOB-BAD-OUTPUT', output: 1 },
     ].every((job, index) => model.registerProductionJob(base, job, proof(`ACT-JOB-BAD-${index}`)) === null), 'production_invalid_job_succeeded')
     const outputProof = proof('ACT-OUTPUT')
-    const outputState = model.recordProductionOutput(base, 'JOB-1', 10, outputProof)
-    assert(outputState?.jobs[0].output === 100 && outputState.revision === 1 && outputState.events[0].quantity === 10 && outputState.events[0].actor === outputProof.actor, 'production_output_not_recorded_once')
-    assert(model.recordProductionOutput(outputState, 'JOB-1', 10, outputProof) === outputState, 'production_output_retry_not_idempotent')
-    assert(model.recordProductionOutput(outputState, 'JOB-1', 9, outputProof) === null, 'production_output_conflicting_quantity_succeeded')
-    assert(model.recordProductionOutput(outputState, 'JOB-1', 10, { ...outputProof, evidenceReference: 'EV-CONFLICT' }) === null, 'production_output_conflicting_evidence_succeeded')
-    assert([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY].every((quantity) => model.recordProductionOutput(base, 'JOB-1', quantity, proof(`ACT-BAD-${String(quantity)}`)) === null), 'production_invalid_output_quantity_succeeded')
-    assert(model.recordProductionOutput(base, 'JOB-1', 11, proof('ACT-OVER-TARGET')) === null, 'production_over_target_output_succeeded')
-    assert(model.recordProductionOutput(base, 'JOB-MISSING', 1, proof('ACT-MISSING-JOB')) === null, 'production_missing_job_output_succeeded')
+    const shiftRef = '2026-07-24 Day'
+    const outputState = model.recordProductionOutput(base, 'JOB-1', 10, shiftRef, outputProof)
+    assert(outputState?.jobs[0].output === 100 && outputState.revision === 1 && outputState.events[0].quantity === 10 && outputState.events[0].shiftRef === shiftRef && outputState.events[0].actor === outputProof.actor, 'production_output_not_recorded_once')
+    assert(model.productionShiftOutput(outputState, shiftRef).goodUnits === 10 && model.productionShiftOutput(outputState, shiftRef).entryCount === 1, 'production_shift_subtotal_not_derived')
+    assert(model.recordProductionOutput(outputState, 'JOB-1', 10, shiftRef, outputProof) === outputState, 'production_output_retry_not_idempotent')
+    assert(model.recordProductionOutput(outputState, 'JOB-1', 10, '2026-07-24 Night', outputProof) === null, 'production_output_conflicting_shift_succeeded')
+    assert(model.recordProductionOutput(outputState, 'JOB-1', 9, shiftRef, outputProof) === null, 'production_output_conflicting_quantity_succeeded')
+    assert(model.recordProductionOutput(outputState, 'JOB-1', 10, shiftRef, { ...outputProof, evidenceReference: 'EV-CONFLICT' }) === null, 'production_output_conflicting_evidence_succeeded')
+    assert(['', ' Day', 'Day ', 'X'.repeat(81)].every((candidate, index) => model.recordProductionOutput(base, 'JOB-1', 1, candidate, proof(`ACT-BAD-SHIFT-${index}`)) === null), 'production_invalid_shift_reference_succeeded')
+    assert([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY].every((quantity) => model.recordProductionOutput(base, 'JOB-1', quantity, shiftRef, proof(`ACT-BAD-${String(quantity)}`)) === null), 'production_invalid_output_quantity_succeeded')
+    assert(model.recordProductionOutput(base, 'JOB-1', 11, shiftRef, proof('ACT-OVER-TARGET')) === null, 'production_over_target_output_succeeded')
+    assert(model.recordProductionOutput(base, 'JOB-MISSING', 1, shiftRef, proof('ACT-MISSING-JOB')) === null, 'production_missing_job_output_succeeded')
     const maxed = { ...model.createEmptyProduction(), jobs: [{ ...legacy.jobs[0], target: Number.MAX_SAFE_INTEGER, output: Number.MAX_SAFE_INTEGER }] }
-    assert(model.recordProductionOutput(maxed, 'JOB-1', 1, proof('ACT-OVERFLOW')) === null, 'production_output_overflow_succeeded')
+    assert(model.recordProductionOutput(maxed, 'JOB-1', 1, shiftRef, proof('ACT-OVERFLOW')) === null, 'production_output_overflow_succeeded')
+    assert(model.productionShiftOutput(ledger501, shiftRef).goodUnits === 0 && model.productionShiftOutput(ledger501, shiftRef).entryCount === 0, 'production_legacy_output_was_misattributed_to_shift')
+    assertThrows(() => model.validateProductionState({ ...withJob, events: [{ ...withJob.events[0], shiftRef }, ...withJob.events.slice(1)] }), 'production_non_output_shift_reference_accepted')
 
     const issue = { id: 'ISS-1', createdAt: '2026-07-23T10:01:00.000Z', area: 'Line 01', kind: 'quality', summary: 'Temperature drift observed', status: 'open' }
     const openProof = proof('ACT-ISSUE-OPEN', 1_000)
@@ -2213,20 +2226,20 @@ async function verifyProductionRuntime() {
     values.set(model.PRODUCTION_KEY, JSON.stringify(base))
     lockRequests = 0
     const concurrentOutput = await Promise.all([
-      model.mutateProductionWorkspace((state) => model.recordProductionOutput(state, 'JOB-1', 7, proof('ACT-CONCURRENT-7')), storage, locks),
-      model.mutateProductionWorkspace((state) => model.recordProductionOutput(state, 'JOB-1', 5, proof('ACT-CONCURRENT-5')), storage, locks),
+      model.mutateProductionWorkspace((state) => model.recordProductionOutput(state, 'JOB-1', 7, '2026-07-24 Day', proof('ACT-CONCURRENT-7')), storage, locks),
+      model.mutateProductionWorkspace((state) => model.recordProductionOutput(state, 'JOB-1', 5, '2026-07-24 Day', proof('ACT-CONCURRENT-5')), storage, locks),
     ])
     const concurrentOutputState = JSON.parse(values.get(model.PRODUCTION_KEY))
     assert(lockRequests === 2 && concurrentOutput.filter((result) => result.ok).length === 1, 'production_concurrent_output_not_serialized')
     assert(concurrentOutputState.jobs[0].output <= concurrentOutputState.jobs[0].target && concurrentOutputState.events.length === 1 && concurrentOutputState.revision === 1, 'production_concurrent_output_exceeded_target')
-    const replay = await model.mutateProductionWorkspace((state) => model.recordProductionOutput(state, 'JOB-1', 7, proof('ACT-CONCURRENT-7')), storage, locks)
+    const replay = await model.mutateProductionWorkspace((state) => model.recordProductionOutput(state, 'JOB-1', 7, '2026-07-24 Day', proof('ACT-CONCURRENT-7')), storage, locks)
     assert(replay.ok && replay.replayed === true && JSON.parse(values.get(model.PRODUCTION_KEY)).revision === 1, 'production_persisted_retry_changed_state')
 
     values.clear()
     values.set(model.PRODUCTION_KEY, JSON.stringify(base))
     const concurrentIssue = { ...issue, id: 'ISS-CONCURRENT' }
     const mixedResults = await Promise.all([
-      model.mutateProductionWorkspace((state) => model.recordProductionOutput(state, 'JOB-1', 5, proof('ACT-MIXED-OUTPUT')), storage, locks),
+      model.mutateProductionWorkspace((state) => model.recordProductionOutput(state, 'JOB-1', 5, '2026-07-24 Day', proof('ACT-MIXED-OUTPUT')), storage, locks),
       model.mutateProductionWorkspace((state) => model.openProductionIssue(state, concurrentIssue, proof('ACT-MIXED-ISSUE')), storage, locks),
     ])
     const mixedState = JSON.parse(values.get(model.PRODUCTION_KEY))
@@ -2236,13 +2249,13 @@ async function verifyProductionRuntime() {
     values.set(model.PRODUCTION_KEY, JSON.stringify(base))
     const beforeFailure = values.get(model.PRODUCTION_KEY)
     const failingStorage = { getItem: storage.getItem, setItem: () => { throw new Error('quota') } }
-    const failedWrite = await model.mutateProductionWorkspace((state) => model.recordProductionOutput(state, 'JOB-1', 1, proof('ACT-WRITE-FAIL')), failingStorage, locks)
+    const failedWrite = await model.mutateProductionWorkspace((state) => model.recordProductionOutput(state, 'JOB-1', 1, '2026-07-24 Day', proof('ACT-WRITE-FAIL')), failingStorage, locks)
     assert(!failedWrite.ok && values.get(model.PRODUCTION_KEY) === beforeFailure, 'production_storage_failure_advanced_state')
     const invalidMutation = await model.mutateProductionWorkspace((state) => ({ ...state, revision: state.revision + 1 }), storage, locks)
     assert(!invalidMutation.ok && values.get(model.PRODUCTION_KEY) === beforeFailure, 'production_non_append_mutation_succeeded')
     const throwingMutation = await model.mutateProductionWorkspace(() => { throw new Error('transition') }, storage, locks)
     assert(!throwingMutation.ok && throwingMutation.error.includes('transition failed') && values.get(model.PRODUCTION_KEY) === beforeFailure, 'production_transition_failure_was_misclassified')
-    const unlocked = await model.mutateProductionWorkspace((state) => model.recordProductionOutput(state, 'JOB-1', 1, proof('ACT-NO-LOCK')), storage, {})
+    const unlocked = await model.mutateProductionWorkspace((state) => model.recordProductionOutput(state, 'JOB-1', 1, '2026-07-24 Day', proof('ACT-NO-LOCK')), storage, {})
     assert(!unlocked.ok && values.get(model.PRODUCTION_KEY) === beforeFailure, 'production_unlocked_write_succeeded')
   } catch (error) {
     fail(`production_runtime:${error instanceof Error ? error.message : 'unknown'}`)

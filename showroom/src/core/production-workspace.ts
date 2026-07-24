@@ -51,6 +51,7 @@ export type ProductionEvent = {
   subjectId: string
   summary: string
   quantity?: number
+  shiftRef?: string
   fromState?: ProductionMachineState
   toState?: ProductionMachineState
 }
@@ -91,6 +92,11 @@ export type ProductionWorkspaceSnapshot = {
 export type ProductionMutationResult =
   | { ok: true; state: ProductionState; replayed: boolean }
   | { ok: false; error: string }
+
+export type ProductionShiftOutput = {
+  goodUnits: number
+  entryCount: number
+}
 
 const issueKinds: ProductionIssueKind[] = ['quality', 'maintenance', 'materials', 'operations']
 export const productionMachineStates: ProductionMachineState[] = ['running', 'attention', 'stopped']
@@ -216,6 +222,7 @@ export function validateProductionState(value: unknown): ProductionState {
   const machineIds: string[] = []
   const eventIds: string[] = []
   const actionIds: string[] = []
+  const shiftTotals = new Map<string, number>()
 
   for (const [index, candidate] of jobs.entries()) {
     if (!isRecord(candidate)) throw new Error(`jobs[${index}] is invalid.`)
@@ -271,19 +278,25 @@ export function validateProductionState(value: unknown): ProductionState {
     if (!eventKinds.includes(candidate.kind as ProductionEventKind)) throw new Error(`events[${index}].kind is invalid.`)
     if (candidate.kind === 'job_created') {
       if (!jobIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown job.`)
-      if (candidate.quantity !== undefined || candidate.fromState !== undefined || candidate.toState !== undefined) throw new Error(`events[${index}] job event has unrelated fields.`)
+      if (candidate.quantity !== undefined || candidate.shiftRef !== undefined || candidate.fromState !== undefined || candidate.toState !== undefined) throw new Error(`events[${index}] job event has unrelated fields.`)
     } else if (candidate.kind === 'output_recorded') {
       if (!jobIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown job.`)
       assertSafeInteger(candidate.quantity, `events[${index}].quantity`, 1)
+      if (candidate.shiftRef !== undefined) {
+        const shiftRef = canonicalText(candidate.shiftRef, `events[${index}].shiftRef`, 80)
+        const nextShiftTotal = (shiftTotals.get(shiftRef) ?? 0) + Number(candidate.quantity)
+        if (!Number.isSafeInteger(nextShiftTotal)) throw new Error(`Output total for ${shiftRef} exceeds the safe integer limit.`)
+        shiftTotals.set(shiftRef, nextShiftTotal)
+      }
       if (candidate.fromState !== undefined || candidate.toState !== undefined) throw new Error(`events[${index}] output event has machine state fields.`)
     } else if (candidate.kind === 'machine_state_changed') {
       if (!machineIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown machine.`)
       if (!productionMachineStates.includes(candidate.fromState as ProductionMachineState) || !productionMachineStates.includes(candidate.toState as ProductionMachineState)) throw new Error(`events[${index}] has invalid machine states.`)
       if (candidate.fromState === candidate.toState) throw new Error(`events[${index}] must record a distinct machine observation.`)
-      if (candidate.quantity !== undefined) throw new Error(`events[${index}] machine event has a quantity.`)
+      if (candidate.quantity !== undefined || candidate.shiftRef !== undefined) throw new Error(`events[${index}] machine event has unrelated fields.`)
     } else {
       if (!issueIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown issue.`)
-      if (candidate.quantity !== undefined || candidate.fromState !== undefined || candidate.toState !== undefined) throw new Error(`events[${index}] issue event has unrelated fields.`)
+      if (candidate.quantity !== undefined || candidate.shiftRef !== undefined || candidate.fromState !== undefined || candidate.toState !== undefined) throw new Error(`events[${index}] issue event has unrelated fields.`)
     }
   }
   assertUnique(eventIds, 'Production event ID')
@@ -474,6 +487,17 @@ function actionIdIsUsed(state: ProductionState, actionId: string) {
   return state.events.some((event) => event.actionId === actionId)
 }
 
+export function productionShiftOutput(state: ProductionState, shiftRef: string): ProductionShiftOutput {
+  if (!validCanonicalText(shiftRef, 80)) return { goodUnits: 0, entryCount: 0 }
+  return state.events.reduce<ProductionShiftOutput>((subtotal, event) => {
+    if (event.kind !== 'output_recorded' || event.shiftRef !== shiftRef) return subtotal
+    return {
+      goodUnits: subtotal.goodUnits + (event.quantity ?? 0),
+      entryCount: subtotal.entryCount + 1,
+    }
+  }, { goodUnits: 0, entryCount: 0 })
+}
+
 export function registerProductionJob(state: ProductionState, job: ProductionJob, proof: ProductionActionProof) {
   if (!validProof(proof)
     || !isRecord(job)
@@ -501,17 +525,21 @@ export function registerProductionJob(state: ProductionState, job: ProductionJob
   })
 }
 
-export function recordProductionOutput(state: ProductionState, jobId: string, quantity: number, proof: ProductionActionProof) {
-  if (!validProof(proof) || !Number.isSafeInteger(quantity) || quantity < 1) return null
+export function recordProductionOutput(state: ProductionState, jobId: string, quantity: number, shiftRef: string, proof: ProductionActionProof) {
+  if (!validProof(proof) || !validCanonicalText(shiftRef, 80) || !Number.isSafeInteger(quantity) || quantity < 1) return null
   const existing = state.events.find((event) => event.actionId === proof.actionId)
-  if (existing) return existing.kind === 'output_recorded' && existing.subjectId === jobId && existing.quantity === quantity && sameProof(existing, proof) ? state : null
+  if (existing) return existing.kind === 'output_recorded' && existing.subjectId === jobId && existing.quantity === quantity && existing.shiftRef === shiftRef && sameProof(existing, proof) ? state : null
   if (actionIdIsUsed(state, proof.actionId)) return null
   const matchingJobs = state.jobs.filter((job) => job.id === jobId)
   const job = matchingJobs.length === 1 ? matchingJobs[0] : undefined
   if (!job) return null
   const nextOutput = job.output + quantity
-  if (!Number.isSafeInteger(nextOutput) || nextOutput > job.target || state.revision >= Number.MAX_SAFE_INTEGER) return null
-  const event = eventFor(proof, { kind: 'output_recorded', subjectId: jobId, summary: `Recorded ${quantity} good units`, quantity })
+  const shiftOutput = productionShiftOutput(state, shiftRef)
+  if (!Number.isSafeInteger(nextOutput)
+    || !Number.isSafeInteger(shiftOutput.goodUnits + quantity)
+    || nextOutput > job.target
+    || state.revision >= Number.MAX_SAFE_INTEGER) return null
+  const event = eventFor(proof, { kind: 'output_recorded', subjectId: jobId, summary: `Recorded ${quantity} good units`, quantity, shiftRef })
   return validateProductionState({
     ...state,
     revision: state.revision + 1,
