@@ -9,12 +9,13 @@ let orderCompletionRuntimeChecks = 0
 let channelOrderRuntimeChecks = 0
 let websiteRuntimeChecks = 0
 let storefrontRuntimeChecks = 0
+let storefrontDraftRuntimeChecks = 0
 let storefrontRequestRuntimeChecks = 0
 let ecommerceHandoffRuntimeChecks = 0
 let commerceRuntimeChecks = 0
 let productionRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
-const [manifestText, appPackageText, appSource, coreSource, commerceSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, storefrontSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource] = await Promise.all([
+const [manifestText, appPackageText, appSource, coreSource, commerceSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, storefrontSource, storefrontDraftSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource] = await Promise.all([
   readFile(resolve(root, 'site-manifest.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'package.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'App.tsx'), 'utf8'),
@@ -41,6 +42,7 @@ const [manifestText, appPackageText, appSource, coreSource, commerceSource, chan
   readFile(resolve(root, 'showroom', 'src', 'products', 'product-handoff.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'EcommerceProduct.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'storefront-model.ts'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'storefront-draft.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'storefront-request.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'ecommerce-shop-confirm.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'ecommerce-shop-handoff.ts'), 'utf8'),
@@ -198,6 +200,27 @@ if (!storefrontSource.includes("supermega.ecommerce.storefront_preview.v1")
   || !storefrontSource.includes("globalThis.crypto.subtle.digest('SHA-256'")
   || !storefrontSource.includes('validateCommerceState(JSON.parse(raw)).items')
   || ['setItem(', 'removeItem(', 'fetch(', 'XMLHttpRequest', 'navigator.locks'].some((marker) => storefrontSource.includes(marker))) fail('ecommerce_storefront_contract_missing_or_mutating')
+if (!storefrontDraftSource.includes("supermega.ecommerce.storefront_draft.v1")
+  || !storefrontDraftSource.includes("['schema', 'scope', 'revision', 'savedAt', 'storeName', 'summary', 'selectedSkus']")
+  || !storefrontDraftSource.includes('STOREFRONT_DRAFT_KEY_PREFIX')
+  || !storefrontDraftSource.includes('STOREFRONT_DRAFT_LOCK_PREFIX')
+  || !storefrontDraftSource.includes('encodeURIComponent(canonicalScope(scope))')
+  || !storefrontDraftSource.includes('readStorefrontDraft(canonicalDraftScope, storage)')
+  || !storefrontDraftSource.includes('currentRevision !== expectedRevision')
+  || !storefrontDraftSource.includes('sameDraftInput(current, candidate)')
+  || !storefrontDraftSource.includes('storage.getItem(storageKey) !== nextRaw')
+  || !storefrontDraftSource.includes('The previous saved value was restored.')
+  || !storefrontDraftSource.includes("status: 'invalid'")
+  || !storefrontDraftSource.includes('reconcileStorefrontSelection')
+  || ['customerReference', 'requestLedger', 'payment', 'fulfilment', 'phone', 'address'].some((marker) => storefrontDraftSource.includes(marker))) fail('ecommerce_storefront_draft_contract_missing_or_contains_request_data')
+const storefrontDraftStoragePrefix = /export const STOREFRONT_DRAFT_KEY_PREFIX = '([^']+)'/.exec(storefrontDraftSource)?.[1]
+if (!storefrontDraftStoragePrefix
+  || !coreSource.includes(`const STOREFRONT_DRAFT_RESET_PREFIX = '${storefrontDraftStoragePrefix}'`)
+  || !coreSource.includes("const LEGACY_STOREFRONT_DRAFT_RESET_KEY = 'supermega.ecommerce.storefront_draft.v1'")
+  || !coreSource.includes('key?.startsWith(STOREFRONT_DRAFT_RESET_PREFIX)')
+  || !coreSource.includes('WEBSITE_ECOMMERCE_HANDOFF_KEY,\n      LEGACY_STOREFRONT_DRAFT_RESET_KEY,\n      ...retainedKeys,')
+  || !coreSource.includes('Website, Ecommerce setup, and handoff records')
+  || coreSource.includes("from '../products/ecommerce/storefront-draft'")) fail('ecommerce_storefront_draft_not_in_deliberate_reset_or_broke_lazy_boundary')
 if (!ecommerceSource.includes('Prices and availability are read-only.')
   || !ecommerceSource.includes('Requests enter Shop review. Payment and fulfilment stay separate.')
   || !ecommerceSource.includes('cannot reserve stock, create an order, take payment, send a message, or publish a site.')
@@ -206,6 +229,21 @@ if (!ecommerceSource.includes('Prices and availability are read-only.')
   || ecommerceSource.includes('Test a customer request')
   || !ecommerceSource.includes('Connect a managed workspace for shared, recoverable retention.')
   || !ecommerceSource.includes('No Shop record or stock changed.')
+  || !ecommerceSource.includes('Save storefront')
+  || !ecommerceSource.includes('Discard')
+  || !ecommerceSource.includes('Saved on this device')
+  || !ecommerceSource.includes('readStorefrontDraft')
+  || !ecommerceSource.includes('saveStorefrontDraft')
+  || !ecommerceSource.includes('managed:${identity.workspaceId}')
+  || !ecommerceSource.includes("window.addEventListener('storage', refreshSavedDraft)")
+  || !ecommerceSource.includes('disabled={catalogHydrating || draftBusy}')
+  || !ecommerceSource.includes('selectionReviewRequired')
+  || !ecommerceSource.includes('Open recovery settings')
+  || !ecommerceSource.includes('Saved products no longer in this Shop')
+  || !ecommerceCssSource.includes('.ecommerce-save-bar')
+  || !ecommerceCssSource.includes('.ecommerce-save-actions .core-button')
+  || !ecommerceCssSource.includes('.ecommerce-selection-warning')
+  || !ecommerceCssSource.includes('font-size: 12px')
   || !coreSource.includes('<strong>Ecommerce</strong><small>Build a storefront from Shop</small>')
   || !coreSource.includes('<h2>AI Agent Solutions</h2>')) fail('ecommerce_storefront_ui_boundary_missing')
 const directRequestStart = ecommerceSource.indexOf('function openRequestFor')
@@ -216,7 +254,7 @@ if (directRequestStart < 0
   || !ecommerceSource.includes('onClick={() => openRequestFor(item.sku)}')
   || !ecommerceSource.includes('aria-controls="ecommerce-request-form"')
   || !ecommerceSource.includes('aria-label={available ? `Request ${item.name}`')
-  || !ecommerceSource.includes("disabled={!available}")
+  || !ecommerceSource.includes("disabled={!available || catalogHydrating}")
   || !ecommerceSource.includes('requestCustomerRef.current?.focus')
   || !ecommerceSource.includes('open={requestOpen}')
   || !ecommerceSource.includes('placeholder="Name or counter reference"')
@@ -2035,6 +2073,205 @@ async function verifyCommerceRuntime() {
   }
 }
 
+async function verifyStorefrontDraftRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    storefrontDraftRuntimeChecks += 1
+  }
+  try {
+    const draftModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'storefront-draft.ts')).href}?storefront-draft=${Date.now()}`)
+    const values = new Map()
+    const storage = {
+      getItem: (key) => values.get(key) ?? null,
+      setItem: (key, value) => values.set(key, String(value)),
+      removeItem: (key) => values.delete(key),
+    }
+    let lockRequests = 0
+    let lockQueue = Promise.resolve()
+    const locks = {
+      request: (_name, _options, callback) => {
+        lockRequests += 1
+        const run = lockQueue.then(callback, callback)
+        lockQueue = run.then(() => undefined, () => undefined)
+        return run
+      },
+    }
+    const localScope = draftModel.LOCAL_STOREFRONT_DRAFT_SCOPE
+    const managedScope = 'managed:workspace-a'
+    const localKey = draftModel.storefrontDraftStorageKey(localScope)
+    const managedKey = draftModel.storefrontDraftStorageKey(managedScope)
+    const input = {
+      storeName: 'Mingalar Shop',
+      summary: 'Clear prices and a small customer-ready catalog.',
+      selectedSkus: ['SM-1003', 'SM-1001'],
+    }
+
+    const empty = draftModel.readStorefrontDraft(localScope, storage)
+    assert(empty.status === 'empty' && empty.draft === null, 'storefront_draft_empty_read_invalid')
+    const first = await draftModel.saveStorefrontDraft(input, 0, localScope, {
+      storage,
+      locks,
+      now: () => '2026-07-24T10:00:00.000Z',
+    })
+    const firstRaw = values.get(localKey)
+    assert(first.revision === 1
+      && first.scope === localScope
+      && first.savedAt === '2026-07-24T10:00:00.000Z'
+      && first.selectedSkus.join(',') === 'SM-1001,SM-1003',
+    'storefront_draft_first_save_not_canonical')
+    assert(Object.keys(JSON.parse(firstRaw)).sort().join(',') === 'revision,savedAt,schema,scope,selectedSkus,storeName,summary', 'storefront_draft_persisted_extra_fields')
+    const restored = draftModel.readStorefrontDraft(localScope, storage)
+    assert(restored.status === 'ready' && JSON.stringify(restored.draft) === JSON.stringify(first), 'storefront_draft_reload_failed')
+    assert(draftModel.readStorefrontDraft(managedScope, storage).status === 'empty', 'storefront_draft_leaked_across_scopes')
+
+    const managed = await draftModel.saveStorefrontDraft({ ...input, storeName: 'Managed Shop' }, 0, managedScope, {
+      storage,
+      locks,
+      now: () => '2026-07-24T10:00:30.000Z',
+    })
+    assert(managed.scope === managedScope
+      && managed.storeName === 'Managed Shop'
+      && values.get(localKey) === firstRaw
+      && values.has(managedKey),
+    'storefront_draft_managed_scope_overwrote_local_scope')
+    const reconciled = draftModel.reconcileStorefrontSelection(
+      ['MANAGED-ONLY', 'SHARED-SKU'],
+      ['LOCAL-ONLY', 'SHARED-SKU'],
+    )
+    assert(reconciled.selectedSkus.join(',') === 'SHARED-SKU'
+      && reconciled.missingSkus.join(',') === 'MANAGED-ONLY',
+    'storefront_draft_authoritative_catalog_reconciliation_failed')
+
+    const replay = await draftModel.saveStorefrontDraft({ ...input, selectedSkus: [...input.selectedSkus].reverse() }, 1, localScope, {
+      storage,
+      locks,
+      now: () => '2026-07-24T10:01:00.000Z',
+    })
+    assert(replay.revision === 1 && replay.savedAt === first.savedAt && values.get(localKey) === firstRaw, 'storefront_draft_exact_replay_advanced_revision')
+    let staleRejected = false
+    try {
+      await draftModel.saveStorefrontDraft({ ...input, summary: 'Stale edit.' }, 0, localScope, {
+        storage,
+        locks,
+        now: () => '2026-07-24T10:02:00.000Z',
+      })
+    } catch { staleRejected = true }
+    assert(staleRejected && values.get(localKey) === firstRaw, 'storefront_draft_stale_save_overwrote_current')
+
+    const second = await draftModel.saveStorefrontDraft({ ...input, summary: 'Updated storefront copy.' }, 1, localScope, {
+      storage,
+      locks,
+      now: () => '2026-07-24T10:03:00.000Z',
+    })
+    assert(second.revision === 2 && second.summary === 'Updated storefront copy.', 'storefront_draft_update_did_not_advance_once')
+    const secondRaw = values.get(localKey)
+    for (const invalid of [
+      { ...input, storeName: ' Mingalar Shop' },
+      { ...input, selectedSkus: [] },
+      { ...input, selectedSkus: ['SM-1001', 'SM-1001'] },
+    ]) {
+      let rejected = false
+      try {
+        await draftModel.saveStorefrontDraft(invalid, 2, localScope, {
+          storage,
+          locks,
+          now: () => '2026-07-24T10:04:00.000Z',
+        })
+      } catch { rejected = true }
+      assert(rejected && values.get(localKey) === secondRaw, 'storefront_draft_invalid_input_wrote_state')
+    }
+
+    let timestampRejected = false
+    try {
+      await draftModel.saveStorefrontDraft({ ...input, summary: 'Timestamp test.' }, 2, localScope, {
+        storage,
+        locks,
+        now: () => '2026-07-24T10:05:00Z',
+      })
+    } catch { timestampRejected = true }
+    assert(timestampRejected && values.get(localKey) === secondRaw, 'storefront_draft_noncanonical_timestamp_written')
+
+    values.set(localKey, '{broken')
+    const malformed = draftModel.readStorefrontDraft(localScope, storage)
+    let malformedSaveRejected = false
+    try {
+      await draftModel.saveStorefrontDraft(input, 0, localScope, {
+        storage,
+        locks,
+        now: () => '2026-07-24T10:06:00.000Z',
+      })
+    } catch { malformedSaveRejected = true }
+    assert(malformed.status === 'invalid' && malformedSaveRejected && values.get(localKey) === '{broken', 'storefront_draft_malformed_value_replaced')
+
+    values.set(localKey, JSON.stringify({ ...first, unexpected: true }))
+    assert(draftModel.readStorefrontDraft(localScope, storage).status === 'invalid', 'storefront_draft_extra_field_accepted')
+    values.set(localKey, JSON.stringify({ ...first, scope: managedScope }))
+    assert(draftModel.readStorefrontDraft(localScope, storage).status === 'invalid', 'storefront_draft_wrong_scope_record_accepted')
+    const unavailable = draftModel.readStorefrontDraft(localScope, {
+      getItem: () => { throw new Error('blocked') },
+      setItem: storage.setItem,
+      removeItem: storage.removeItem,
+    })
+    assert(unavailable.status === 'unavailable' && unavailable.draft === null, 'storefront_draft_unreadable_storage_not_reported')
+
+    values.clear()
+    lockRequests = 0
+    const concurrent = await Promise.allSettled([
+      draftModel.saveStorefrontDraft(input, 0, localScope, {
+        storage,
+        locks,
+        now: () => '2026-07-24T10:07:00.000Z',
+      }),
+      draftModel.saveStorefrontDraft({ ...input, summary: 'Concurrent edit.' }, 0, localScope, {
+        storage,
+        locks,
+        now: () => '2026-07-24T10:07:01.000Z',
+      }),
+    ])
+    assert(lockRequests === 2
+      && concurrent.filter((result) => result.status === 'fulfilled').length === 1
+      && JSON.parse(values.get(localKey)).revision === 1,
+    'storefront_draft_concurrent_save_not_serialized')
+
+    const beforeFailure = values.get(localKey)
+    const failingStorage = {
+      getItem: storage.getItem,
+      setItem: () => { throw new Error('quota') },
+      removeItem: storage.removeItem,
+    }
+    let writeFailureRejected = false
+    try {
+      await draftModel.saveStorefrontDraft({ ...input, summary: 'Write failure.' }, 1, localScope, {
+        storage: failingStorage,
+        locks,
+        now: () => '2026-07-24T10:08:00.000Z',
+      })
+    } catch { writeFailureRejected = true }
+    assert(writeFailureRejected && values.get(localKey) === beforeFailure, 'storefront_draft_failed_write_changed_saved_value')
+
+    let firstMismatchWrite = true
+    const mismatchStorage = {
+      getItem: storage.getItem,
+      setItem: (key, value) => {
+        values.set(key, firstMismatchWrite ? `${value}x` : String(value))
+        firstMismatchWrite = false
+      },
+      removeItem: storage.removeItem,
+    }
+    let mismatchRejected = false
+    try {
+      await draftModel.saveStorefrontDraft({ ...input, summary: 'Confirmation failure.' }, 1, localScope, {
+        storage: mismatchStorage,
+        locks,
+        now: () => '2026-07-24T10:09:00.000Z',
+      })
+    } catch { mismatchRejected = true }
+    assert(mismatchRejected && values.get(localKey) === beforeFailure, 'storefront_draft_unconfirmed_write_not_rolled_back')
+  } catch (error) {
+    fail(`storefront_draft_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
 async function verifyStorefrontRuntime() {
   const assert = (condition, reason) => {
     if (!condition) throw new Error(reason)
@@ -2838,6 +3075,7 @@ async function verifyProductionRuntime() {
 await verifyChannelOrderRuntime()
 await verifyWebsiteRuntime()
 await verifyWebsiteOrderCompletionRuntime()
+await verifyStorefrontDraftRuntime()
 await verifyStorefrontRuntime()
 await verifyCommerceRuntime()
 await verifyProductionRuntime()
@@ -2852,4 +3090,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', primaryRoutes: 5, operatingModules: 2, prototypeRoutes: 2, compatibilityRedirects: 1, workflowProfiles, channelOrderRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, ecommerceHandoffRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', primaryRoutes: 5, operatingModules: 2, prototypeRoutes: 2, compatibilityRedirects: 1, workflowProfiles, channelOrderRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, ecommerceHandoffRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
