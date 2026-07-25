@@ -73,6 +73,15 @@ export type CommerceOrder = {
   status: CommerceOrderStatus
 }
 
+export type CommerceOrderPromiseUrgency = 'late' | 'due_soon' | 'scheduled' | 'unrecorded'
+
+export function commerceOrderPromiseUrgency(order: CommerceOrder, now: number): CommerceOrderPromiseUrgency {
+  const promisedAt = order.promisedAt ? Date.parse(order.promisedAt) : Number.NaN
+  if (!Number.isFinite(promisedAt) || !Number.isFinite(now)) return 'unrecorded'
+  if (promisedAt <= now) return 'late'
+  return promisedAt - now <= 60 * 60 * 1000 ? 'due_soon' : 'scheduled'
+}
+
 export type CommerceStockMovementKind = 'opening' | 'reserve' | 'release' | 'receipt' | 'count' | 'return'
 
 export type CommerceStockMovement = {

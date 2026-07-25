@@ -45,6 +45,7 @@ import {
   commerceOrderItemSummary,
   commerceOrderNeedsAction,
   commerceOrderHasReleasableReservation,
+  commerceOrderPromiseUrgency,
   commercePurchaseOrderProgress,
   commercePurchaseOrders,
   commerceStorefrontRequests,
@@ -516,6 +517,15 @@ function defaultOrderPromiseInput() {
 
 function defaultJobDueInput() {
   return localDateTimeInputValue(new Date(Date.now() + 8 * 60 * 60 * 1000))
+}
+
+function useMinuteClock() {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 60_000)
+    return () => window.clearInterval(timer)
+  }, [])
+  return now
 }
 
 function commerceOrderPromiseTime(order: CommerceOrder) {
@@ -3945,6 +3955,7 @@ function OrderList({
   onReconcilePayment: (id: string) => void
   onSettleRefund: (id: string) => void
 }) {
+  const promiseNow = useMinuteClock()
   if (!orders.length) return <Empty>No orders need action.</Empty>
   const nextAction: Record<'confirmed' | 'preparing' | 'ready', string> = { confirmed: 'Start preparing', preparing: 'Mark ready', ready: 'Complete' }
   return <div className="order-list">{orders.map((order) => {
@@ -3952,12 +3963,16 @@ function OrderList({
     const needsPayment = order.paymentStatus === 'pending'
     const reconcileIsPrimary = needsPayment && (order.status === 'ready' || order.status === 'completed')
     const canAdvance = active && !reconcileIsPrimary
+    const promiseUrgency = active ? commerceOrderPromiseUrgency(order, promiseNow) : 'scheduled'
     return <article key={order.id}>
       <div>
         <div className="order-statuses">
           <span className={`status-pill ${order.status === 'completed' ? 'approved' : order.status === 'cancelled' ? 'pending' : 'bounded'}`}>{order.status}</span>
           <span className={`status-pill ${order.paymentStatus === 'reconciled' ? 'approved' : 'pending'}`}>payment {order.paymentStatus}</span>
           {order.refundStatus === 'due' ? <span className="status-pill pending">refund due</span> : null}
+          {promiseUrgency === 'late' ? <span className="status-pill pending">late</span> : null}
+          {promiseUrgency === 'due_soon' ? <span className="status-pill bounded">due soon</span> : null}
+          {promiseUrgency === 'unrecorded' ? <span className="status-pill pending">promise missing</span> : null}
         </div>
         <strong>{order.customer} · {order.lines
           ? order.lines.length === 1
