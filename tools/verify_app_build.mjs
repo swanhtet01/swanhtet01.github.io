@@ -911,6 +911,14 @@ if (!commerceSource.includes("CommerceOrderPromiseUrgency = 'late' | 'due_soon' 
   || !coreSource.includes("promiseUrgency === 'late'")
   || !coreSource.includes('>due soon</span>')
   || !coreSource.includes('>promise missing</span>')) fail('commerce_order_promise_urgency_missing')
+if (!commerceSource.includes("CommercePurchaseOrderArrivalUrgency = 'late' | 'due_soon' | 'scheduled' | 'unrecorded' | 'closed'")
+  || !commerceSource.includes('export function commercePurchaseOrderArrivalUrgency')
+  || !commerceSource.includes('expectedAt - now <= 24 * 60 * 60 * 1000')
+  || !coreSource.includes('data-arrival-risk={arrivalUrgency}')
+  || !coreSource.includes("' · Late'")
+  || !coreSource.includes("' · Due soon'")
+  || !coreCssSource.includes('[data-arrival-risk=\"late\"]')
+  || !coreCssSource.includes('[data-arrival-risk=\"unrecorded\"]')) fail('commerce_purchase_order_arrival_urgency_missing')
 if (!commerceSource.includes('commerceOrderHasReleasableReservation') || !commerceSource.includes("movement.kind === 'reserve'") || !commerceSource.includes("movement.kind === 'release'") || !commerceSource.includes("kind: 'receipt'") || !commerceSource.includes("kind: 'opening'")) fail('commerce_stock_ledger_contract_missing')
 if (!commerceSource.includes('export type CommerceOrderLine')
   || !commerceSource.includes('lines?: CommerceOrderLine[]')
@@ -3172,6 +3180,32 @@ async function verifyCommerceRuntime() {
       && purchaseCreated.purchaseOrders[0].id === purchaseOrderId
       && purchaseCreated.purchaseOrders[0].expectedAt === purchaseExpectedAt
       && model.commercePurchaseOrderProgress(purchaseCreated, purchaseCreated.purchaseOrders[0]).status === 'open', 'purchase_order_creation_not_exact')
+    const purchaseOpenProgress = model.commercePurchaseOrderProgress(purchaseCreated, purchaseCreated.purchaseOrders[0])
+    assert(model.commercePurchaseOrderArrivalUrgency(
+      purchaseCreated.purchaseOrders[0],
+      purchaseOpenProgress,
+      Date.parse('2026-07-24T08:59:59.999Z'),
+    ) === 'scheduled', 'purchase_arrival_more_than_24_hours_away_not_scheduled')
+    assert(model.commercePurchaseOrderArrivalUrgency(
+      purchaseCreated.purchaseOrders[0],
+      purchaseOpenProgress,
+      Date.parse('2026-07-24T09:00:00.000Z'),
+    ) === 'due_soon', 'purchase_arrival_24_hour_boundary_not_due_soon')
+    assert(model.commercePurchaseOrderArrivalUrgency(
+      purchaseCreated.purchaseOrders[0],
+      purchaseOpenProgress,
+      Date.parse(purchaseExpectedAt),
+    ) === 'late', 'purchase_arrival_at_deadline_not_late')
+    assert(model.commercePurchaseOrderArrivalUrgency(
+      { ...purchaseCreated.purchaseOrders[0], expectedAt: undefined },
+      purchaseOpenProgress,
+      Date.parse(purchaseCreationProof.capturedAt),
+    ) === 'unrecorded', 'legacy_purchase_arrival_not_marked_unrecorded')
+    assert(model.commercePurchaseOrderArrivalUrgency(
+      purchaseCreated.purchaseOrders[0],
+      purchaseOpenProgress,
+      Number.NaN,
+    ) === 'unrecorded', 'purchase_arrival_invalid_clock_not_fail_closed')
     assert(model.createCommercePurchaseOrder(purchaseCreated, {
       id: purchaseOrderId,
       expectedAt: purchaseExpectedAt,
@@ -3233,6 +3267,11 @@ async function verifyCommerceRuntime() {
     const purchaseCancelled = model.cancelCommercePurchaseOrder(purchasePartial, purchaseOrderId, purchaseCancellationProof)
     assert(purchaseCancelled
       && model.commercePurchaseOrderProgress(purchaseCancelled, purchaseCancelled.purchaseOrders[0]).status === 'cancelled'
+      && model.commercePurchaseOrderArrivalUrgency(
+        purchaseCancelled.purchaseOrders[0],
+        model.commercePurchaseOrderProgress(purchaseCancelled, purchaseCancelled.purchaseOrders[0]),
+        Date.parse('2026-07-26T09:00:00.000Z'),
+      ) === 'closed'
       && model.commercePurchaseOrderProgress(purchaseCancelled, purchaseCancelled.purchaseOrders[0]).remaining === 6, 'purchase_order_cancellation_not_exact')
     assert(model.cancelCommercePurchaseOrder(purchaseCancelled, purchaseOrderId, purchaseCancellationProof) === purchaseCancelled, 'purchase_order_cancel_retry_not_idempotent')
     assert(model.receiveCommercePurchaseOrder(purchaseCancelled, purchaseOrderId, 1, proof('ACT-PURCHASE-AFTER-CANCEL', 240_000)) === null, 'purchase_order_receipt_after_cancel_succeeded')

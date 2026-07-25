@@ -202,6 +202,8 @@ export type CommercePurchaseOrderProgress = {
   status: 'open' | 'partially_received' | 'received' | 'cancelled'
 }
 
+export type CommercePurchaseOrderArrivalUrgency = 'late' | 'due_soon' | 'scheduled' | 'unrecorded' | 'closed'
+
 export type CommerceCatalogChange = {
   sku: string
   previousPrice: number
@@ -1800,6 +1802,18 @@ export function commercePurchaseOrderProgress(state: CommerceState, purchaseOrde
           ? 'partially_received'
           : 'open',
   }
+}
+
+export function commercePurchaseOrderArrivalUrgency(
+  purchaseOrder: CommercePurchaseOrder,
+  progress: CommercePurchaseOrderProgress,
+  now: number,
+): CommercePurchaseOrderArrivalUrgency {
+  if (progress.status === 'received' || progress.status === 'cancelled') return 'closed'
+  const expectedAt = purchaseOrder.expectedAt ? Date.parse(purchaseOrder.expectedAt) : Number.NaN
+  if (!Number.isFinite(expectedAt) || !Number.isFinite(now)) return 'unrecorded'
+  if (expectedAt <= now) return 'late'
+  return expectedAt - now <= 24 * 60 * 60 * 1000 ? 'due_soon' : 'scheduled'
 }
 
 export function compareCommercePurchaseOrderAttention(

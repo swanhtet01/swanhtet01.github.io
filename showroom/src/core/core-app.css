@@ -461,6 +461,7 @@ textarea { min-height: 72px; resize: vertical; }
 .purchase-order-list article > span { justify-items: end; }
 .purchase-order-list article small { overflow: hidden; color: var(--core-quiet); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
 .purchase-order-list article > span small { text-transform: capitalize; }
+.purchase-order-list [data-arrival-risk="late"], .purchase-order-list [data-arrival-risk="unrecorded"] { color: var(--core-warn); font-weight: 760; }
 .purchase-order-closed { justify-self: end; }
 .warning-text { color: var(--core-warn); }
 
