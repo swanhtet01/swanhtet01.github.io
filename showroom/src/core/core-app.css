@@ -468,6 +468,9 @@ textarea { min-height: 72px; resize: vertical; }
 .job-list article > div { min-width: 0; display: grid; gap: 3px; }
 .job-list span, .job-list small { color: var(--core-quiet); font-size: 11px; }
 .job-list strong { font-size: 13px; }
+.job-list .job-schedule { color: var(--core-green); font-family: var(--core-mono); font-size: 10px; font-weight: 760; letter-spacing: .02em; }
+.job-list .job-schedule[data-priority="urgent"], .job-list .job-schedule.overdue { color: var(--core-warn); }
+.job-list .job-schedule[data-priority="low"], .job-list .job-schedule[data-priority="legacy"] { color: var(--core-quiet); }
 .job-progress > span { height: 5px; overflow: hidden; border-radius: 999px; background: rgba(255,255,255,.06); }
 .job-progress i { display: block; height: 100%; background: var(--core-green); }
 .production-mode-banner { min-height: 48px; display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 10px; border: 1px solid var(--core-line); border-radius: var(--core-radius); padding: 7px 11px; background: var(--core-panel); }

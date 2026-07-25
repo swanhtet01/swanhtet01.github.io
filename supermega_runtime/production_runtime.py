@@ -35,6 +35,7 @@ PRODUCTION_HUMAN_EVENTS = PRODUCTION_EVENTS
 
 _ISSUE_KINDS = frozenset({"quality", "maintenance", "materials", "operations"})
 _ISSUE_SEVERITIES = frozenset({"critical", "high", "medium", "low"})
+_JOB_PRIORITIES = frozenset({"urgent", "normal", "low"})
 _MACHINE_STATES = frozenset({"running", "attention", "stopped"})
 _OUTPUT_KINDS = frozenset({"good", "scrap"})
 _MATERIAL_UNITS = frozenset(
@@ -62,7 +63,8 @@ _MAX_MACHINES = 100
 
 _STATE_FIELDS = frozenset({"schema", "revision", "jobs", "issues", "machines", "events"})
 _JOB_REQUIRED_FIELDS = frozenset({"id", "line", "product", "target", "output"})
-_JOB_OPTIONAL_FIELDS = frozenset({"scrap", "qualityHold", "closure"})
+_JOB_SCHEDULE_FIELDS = frozenset({"priority", "dueAt"})
+_JOB_OPTIONAL_FIELDS = _JOB_SCHEDULE_FIELDS | {"scrap", "qualityHold", "closure"}
 _QUALITY_HOLD_FIELDS = frozenset(
     {"actionId", "heldAt", "heldBy", "reason", "evidenceReference"}
 )
@@ -97,6 +99,7 @@ _EVENT_FIELDS = frozenset(
     }
 )
 _OUTPUT_EVENT_OPTIONAL_FIELDS = frozenset({"shiftRef", "outputKind"})
+_JOB_CREATED_EVENT_FIELDS = frozenset({"jobPriority", "jobDueAt"})
 _JOB_CLOSE_EVENT_FIELDS = frozenset({"shiftRef", "remainingQuantity"})
 _MATERIAL_EVENT_FIELDS = frozenset(
     {"materialRef", "quantity", "materialUnit", "shiftRef"}
@@ -328,6 +331,16 @@ def _validate_job(candidate: object, index: int) -> dict[str, Any]:
     _text(job["product"], f"{field}.product")
     target = _integer(job["target"], f"{field}.target", minimum=1)
     output = _integer(job["output"], f"{field}.output")
+    schedule_fields = _JOB_SCHEDULE_FIELDS.intersection(job)
+    if schedule_fields and schedule_fields != _JOB_SCHEDULE_FIELDS:
+        raise TrialValidationError(
+            f"{field} schedule fields must be complete or absent for legacy records."
+        )
+    if schedule_fields:
+        priority = job["priority"]
+        if not isinstance(priority, str) or priority not in _JOB_PRIORITIES:
+            raise TrialValidationError(f"{field}.priority is unsupported.")
+        _timestamp(job["dueAt"], f"{field}.dueAt")
     scrap = _integer(job.get("scrap", 0), f"{field}.scrap")
     if output + scrap > target:
         raise TrialValidationError(f"{field} good plus scrap cannot exceed its target.")
@@ -449,6 +462,8 @@ def _validate_event(
         optional=(
             _OUTPUT_EVENT_OPTIONAL_FIELDS
             if kind == "output_recorded"
+            else _JOB_CREATED_EVENT_FIELDS
+            if kind == "job_created"
             else _MATERIAL_EVENT_OPTIONAL_FIELDS
             if kind == "material_consumed"
             else _ISSUE_EVENT_FIELDS
@@ -514,6 +529,22 @@ def _validate_event(
     elif kind == "job_created":
         if subject_id not in job_ids:
             raise TrialValidationError(f"{field} references an unknown job.")
+        schedule_fields = _JOB_CREATED_EVENT_FIELDS.intersection(event)
+        if schedule_fields and schedule_fields != _JOB_CREATED_EVENT_FIELDS:
+            raise TrialValidationError(
+                f"{field} job schedule fields must be complete or absent "
+                "for legacy events."
+            )
+        if schedule_fields:
+            priority = event["jobPriority"]
+            if not isinstance(priority, str) or priority not in _JOB_PRIORITIES:
+                raise TrialValidationError(f"{field}.jobPriority is unsupported.")
+            due_at = _timestamp(event["jobDueAt"], f"{field}.jobDueAt")
+            created_at = _timestamp(event["createdAt"], f"{field}.createdAt")
+            if due_at <= created_at:
+                raise TrialValidationError(
+                    f"{field}.jobDueAt must follow confirmation."
+                )
     elif kind in {"quality_hold_placed", "quality_hold_released"}:
         if subject_id not in job_ids:
             raise TrialValidationError(f"{field} references an unknown job.")
@@ -777,7 +808,26 @@ def _validate_job_history(
             raise TrialValidationError(
                 f"jobs[{index}] must be backed by exactly one creation event."
             )
-        creation_index = events.index(matches[0])
+        creation_event = matches[0]
+        job_schedule_fields = _JOB_SCHEDULE_FIELDS.intersection(job)
+        event_schedule_fields = _JOB_CREATED_EVENT_FIELDS.intersection(
+            creation_event
+        )
+        if event_schedule_fields:
+            if (
+                job_schedule_fields != _JOB_SCHEDULE_FIELDS
+                or creation_event["jobPriority"] != job["priority"]
+                or creation_event["jobDueAt"] != job["dueAt"]
+            ):
+                raise TrialValidationError(
+                    f"jobs[{index}] schedule must match its immutable "
+                    "creation event."
+                )
+        elif job_schedule_fields:
+            raise TrialValidationError(
+                f"jobs[{index}] legacy creation event cannot acquire a schedule."
+            )
+        creation_index = events.index(creation_event)
         if any(
             events.index(event) >= creation_index
             for event in events
@@ -1407,6 +1457,7 @@ def _validate_job_created(
     job = next_state["jobs"][0]
     if (
         job["output"] != 0
+        or _JOB_SCHEDULE_FIELDS.intersection(job) != _JOB_SCHEDULE_FIELDS
         or "scrap" in job
         or "qualityHold" in job
         or "closure" in job
@@ -1414,6 +1465,15 @@ def _validate_job_created(
         raise TrialValidationError(
             "a new Production job must begin at zero good and scrap output "
             "without a quality hold or closure."
+        )
+    if (
+        _JOB_CREATED_EVENT_FIELDS.intersection(event)
+        != _JOB_CREATED_EVENT_FIELDS
+        or event["jobPriority"] != job["priority"]
+        or event["jobDueAt"] != job["dueAt"]
+    ):
+        raise TrialValidationError(
+            "job creation must freeze the exact priority and due time."
         )
     if event["subjectId"] != job["id"]:
         raise TrialValidationError("job creation event must reference the new job.")
@@ -1773,14 +1833,23 @@ def reduce_production_state(
             or next_state["issues"]
             or next_state["events"]
             or next_state["jobs"][0]["output"] != 0
+            or _JOB_SCHEDULE_FIELDS.intersection(next_state["jobs"][0])
+            != _JOB_SCHEDULE_FIELDS
             or "scrap" in next_state["jobs"][0]
             or "qualityHold" in next_state["jobs"][0]
             or "closure" in next_state["jobs"][0]
             or next_state["machines"][0]["state"] != "running"
         ):
             raise TrialValidationError(
-                "Production initialization requires one real zero-output job, "
-                "one running machine, and no copied operating history."
+                "Production initialization requires one scheduled zero-output "
+                "job, one running machine, and no copied operating history."
+            )
+        if _timestamp(
+            next_state["jobs"][0]["dueAt"],
+            "jobs[0].dueAt",
+        ) <= _timestamp(evidence["capturedAt"], "evidence.capturedAt"):
+            raise TrialValidationError(
+                "The opening Production job due time must follow confirmation."
             )
         return next_state
 

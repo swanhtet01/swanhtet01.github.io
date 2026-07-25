@@ -1225,8 +1225,9 @@ if (!productionJobsContract.includes('This shift:')
   || coreSource.includes('placeholder="2026-07-24 Day"')
   || !coreSource.includes("Unassigned (legacy)")) fail('production_shift_output_ui_missing')
 if (!productionJobsContract.includes('Jobs to finish')
-  || !productionJobsContract.includes('<JobList jobs={activeJobs} />')
-  || !productionJobsContract.includes('<CompletedJobHistory jobs={completedJobs} />')
+  || !productionJobsContract.includes('<JobList jobs={activeJobs} now={issueClock} />')
+  || !productionJobsContract.includes('<CompletedJobHistory jobs={completedJobs} now={issueClock} />')
+  || !productionJobsContract.includes('Priority and due time set the visible run order.')
   || !productionJobsContract.includes('Results are append-only.')
   || !productionJobsContract.includes('{job.id} · {job.product} · {job.line}')
   || !coreSource.includes('No active jobs. Add a job below to start recording output.')) fail('production_jobs_not_task_first')
@@ -4254,14 +4255,34 @@ async function verifyProductionRuntime() {
       jobs: [{ id: 'JOB-1', line: 'Line 01', product: 'Test batch', target: 100, output: 90 }],
       machines: [{ id: 'MC-1', name: 'Test machine', state: 'running' }],
     }
-    const newJob = { id: 'JOB-2', line: 'Line 02', product: 'Second batch', target: 250, output: 0 }
+    const newJob = {
+      id: 'JOB-2',
+      line: 'Line 02',
+      product: 'Second batch',
+      target: 250,
+      output: 0,
+      priority: 'urgent',
+      dueAt: '2026-07-24T10:00:00.000Z',
+    }
     const jobProof = proof('ACT-JOB-CREATE')
     const withJob = model.registerProductionJob(base, newJob, jobProof)
     assert(withJob?.jobs[0].id === newJob.id && withJob.jobs[0].output === 0 && withJob.revision === 1 && withJob.events[0].kind === 'job_created', 'production_job_not_created_once')
+    assert(withJob.events[0].jobPriority === newJob.priority && withJob.events[0].jobDueAt === newJob.dueAt, 'production_job_schedule_not_frozen')
     assert(model.registerProductionJob(withJob, newJob, jobProof) === withJob, 'production_job_retry_not_idempotent')
     assert(model.registerProductionJob(withJob, { ...newJob, target: 251 }, jobProof) === null, 'production_job_conflicting_retry_succeeded')
     assert(model.registerProductionJob(withJob, newJob, proof('ACT-JOB-DUPLICATE')) === null, 'production_duplicate_job_id_succeeded')
     assert(model.registerProductionJob(withJob, { ...newJob, id: 'JOB-3' }, jobProof) === null, 'production_job_reused_action_id_succeeded')
+    assert(model.registerProductionJob(base, { ...newJob, priority: undefined, dueAt: undefined }, proof('ACT-JOB-UNSCHEDULED')) === null, 'production_unscheduled_job_succeeded')
+    assert(model.registerProductionJob(base, { ...newJob, priority: 'invalid' }, proof('ACT-JOB-PRIORITY')) === null, 'production_invalid_job_priority_succeeded')
+    assert(model.registerProductionJob(base, { ...newJob, dueAt: jobProof.capturedAt }, proof('ACT-JOB-OVERDUE')) === null, 'production_nonfuture_job_due_succeeded')
+    assertThrows(() => model.validateProductionState({
+      ...withJob,
+      jobs: [{ ...withJob.jobs[0], priority: 'low' }, ...withJob.jobs.slice(1)],
+    }), 'production_job_schedule_rewrite_accepted')
+    assertThrows(() => model.validateProductionState({
+      ...withJob,
+      events: [{ ...withJob.events[0], jobDueAt: '2026-07-25T10:00:00.000Z' }, ...withJob.events.slice(1)],
+    }), 'production_job_event_schedule_rewrite_accepted')
     assert([
       { ...newJob, id: '', target: 1 },
       { ...newJob, id: 'JOB-BAD-0', target: 0 },
@@ -4415,7 +4436,15 @@ async function verifyProductionRuntime() {
       events: [completedAfterMaterial.events[1], completedAfterMaterial.events[0], ...completedAfterMaterial.events.slice(2)],
     }), 'production_full_state_material_after_completion_accepted')
     const preciseJobProof = proof('ACT-PRECISE-JOB', 0, { capturedAt: '2026-07-23T10:00:00.000002Z' })
-    const preciseJob = { id: 'JOB-PRECISE', line: 'Precision line', product: 'Precision batch', target: 10, output: 0 }
+    const preciseJob = {
+      id: 'JOB-PRECISE',
+      line: 'Precision line',
+      product: 'Precision batch',
+      target: 10,
+      output: 0,
+      priority: 'normal',
+      dueAt: '2026-07-24T10:00:00.000Z',
+    }
     const preciseWithJob = model.registerProductionJob(base, preciseJob, preciseJobProof)
     const preciseMaterial = model.recordProductionMaterialConsumption(
       preciseWithJob,
@@ -4993,8 +5022,8 @@ async function verifyProductionRuntime() {
     values.set(model.PRODUCTION_KEY, JSON.stringify(base))
     lockRequests = 0
     const concurrentJobs = await Promise.all([
-      model.mutateProductionWorkspace((state) => model.registerProductionJob(state, { id: 'JOB-2', line: 'Line 02', product: 'Second batch', target: 250, output: 0 }, proof('ACT-CONCURRENT-JOB-2')), storage, locks),
-      model.mutateProductionWorkspace((state) => model.registerProductionJob(state, { id: 'JOB-3', line: 'Line 03', product: 'Third batch', target: 300, output: 0 }, proof('ACT-CONCURRENT-JOB-3')), storage, locks),
+      model.mutateProductionWorkspace((state) => model.registerProductionJob(state, { id: 'JOB-2', line: 'Line 02', product: 'Second batch', target: 250, output: 0, priority: 'urgent', dueAt: '2026-07-24T10:00:00.000Z' }, proof('ACT-CONCURRENT-JOB-2')), storage, locks),
+      model.mutateProductionWorkspace((state) => model.registerProductionJob(state, { id: 'JOB-3', line: 'Line 03', product: 'Third batch', target: 300, output: 0, priority: 'normal', dueAt: '2026-07-25T10:00:00.000Z' }, proof('ACT-CONCURRENT-JOB-3')), storage, locks),
     ])
     const concurrentJobState = JSON.parse(values.get(model.PRODUCTION_KEY))
     assert(concurrentJobs.every((result) => result.ok) && concurrentJobState.jobs.length === 3 && concurrentJobState.events.length === 2 && concurrentJobState.revision === 2, 'production_concurrent_jobs_did_not_both_survive')

@@ -5,6 +5,7 @@ export const PRODUCTION_LOCK = 'supermega-production-workspace-v2'
 
 export type ProductionIssueKind = 'quality' | 'maintenance' | 'materials' | 'operations'
 export type ProductionIssueSeverity = 'critical' | 'high' | 'medium' | 'low'
+export type ProductionJobPriority = 'urgent' | 'normal' | 'low'
 export type ProductionMachineState = 'running' | 'attention' | 'stopped'
 export type ProductionMaterialUnit = 'kg' | 'g' | 'l' | 'ml' | 'pcs' | 'pack' | 'bag' | 'roll' | 'sheet' | 'm' | 'cm'
 
@@ -32,6 +33,8 @@ export type ProductionJob = {
   product: string
   target: number
   output: number
+  priority?: ProductionJobPriority
+  dueAt?: string
   scrap?: number
   qualityHold?: ProductionQualityHold
   closure?: ProductionJobClosure
@@ -89,6 +92,8 @@ export type ProductionEvent = {
   issueOwner?: string
   issueDueAt?: string
   issueContainment?: string
+  jobPriority?: ProductionJobPriority
+  jobDueAt?: string
   fromState?: ProductionMachineState
   toState?: ProductionMachineState
   downtimeStartActionId?: string
@@ -195,6 +200,8 @@ export type ProductionShiftHandoff = {
     goodUnits: number
     scrapUnits: number
     remainingUnits: number
+    priority?: ProductionJobPriority
+    dueAt?: string
     qualityHold?: ProductionQualityHold
   }>
   activeHolds: Array<{
@@ -273,10 +280,12 @@ export type ProductionMaintenanceRecord = {
 
 const issueKinds: ProductionIssueKind[] = ['quality', 'maintenance', 'materials', 'operations']
 export const productionIssueSeverities: ProductionIssueSeverity[] = ['critical', 'high', 'medium', 'low']
+export const productionJobPriorities: ProductionJobPriority[] = ['urgent', 'normal', 'low']
 export const productionMachineStates: ProductionMachineState[] = ['running', 'attention', 'stopped']
 export const productionMaterialUnits: ProductionMaterialUnit[] = ['kg', 'g', 'l', 'ml', 'pcs', 'pack', 'bag', 'roll', 'sheet', 'm', 'cm']
 const eventKinds: ProductionEventKind[] = ['job_created', 'job_closed', 'output_recorded', 'material_consumed', 'issue_opened', 'issue_resolved', 'quality_hold_placed', 'quality_hold_released', 'machine_state_changed', 'downtime_started', 'downtime_ended', 'maintenance_started', 'maintenance_completed']
 const baseEventFields = ['id', 'actionId', 'createdAt', 'actor', 'reason', 'evidenceReference', 'kind', 'subjectId', 'summary']
+const jobCreatedEventFields = [...baseEventFields, 'jobPriority', 'jobDueAt']
 const jobClosedEventFields = [...baseEventFields, 'shiftRef', 'remainingQuantity']
 const qualityHoldEventFields = baseEventFields
 const materialEventFields = [...baseEventFields, 'quantity', 'shiftRef', 'materialRef', 'materialUnit']
@@ -285,12 +294,12 @@ const downtimeEndEventFields = [...baseEventFields, 'downtimeStartActionId']
 const maintenanceStartEventFields = [...baseEventFields, 'maintenanceOwner']
 const maintenanceCompleteEventFields = [...baseEventFields, 'maintenanceStartActionId']
 const productionStateFields = ['schema', 'revision', 'jobs', 'issues', 'machines', 'events']
-const productionJobFields = ['id', 'line', 'product', 'target', 'output', 'scrap', 'qualityHold', 'closure']
+const productionJobFields = ['id', 'line', 'product', 'target', 'output', 'priority', 'dueAt', 'scrap', 'qualityHold', 'closure']
 const productionIssueFields = ['id', 'createdAt', 'area', 'kind', 'summary', 'status', 'severity', 'owner', 'dueAt', 'containment', 'resolution']
 const productionIssueResolutionFields = ['actionId', 'resolvedAt', 'resolvedBy', 'reason', 'evidenceReference']
 const productionMachineFields = ['id', 'name', 'state']
 const eventFieldsByKind: Record<ProductionEventKind, string[]> = {
-  job_created: baseEventFields,
+  job_created: jobCreatedEventFields,
   job_closed: jobClosedEventFields,
   output_recorded: [...baseEventFields, 'quantity', 'shiftRef', 'outputKind'],
   material_consumed: [...materialEventFields, ...materialOptionalEventFields],
@@ -406,6 +415,26 @@ function compareTimestamps(left: string, right: string) {
   return leftMicros < rightMicros ? -1 : 1
 }
 
+const productionJobPriorityRank: Record<ProductionJobPriority, number> = {
+  urgent: 0,
+  normal: 1,
+  low: 2,
+}
+
+export function compareProductionJobSchedule(left: ProductionJob, right: ProductionJob) {
+  const priorityDifference = (left.priority ? productionJobPriorityRank[left.priority] : 3)
+    - (right.priority ? productionJobPriorityRank[right.priority] : 3)
+  if (priorityDifference) return priorityDifference
+  const dueDifference = left.dueAt && right.dueAt
+    ? compareTimestamps(left.dueAt, right.dueAt)
+    : left.dueAt
+      ? -1
+      : right.dueAt
+        ? 1
+        : 0
+  return dueDifference || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0)
+}
+
 function validDowntimeTimestamp(value: unknown) {
   return validTimestamp(value)
     && /^(?!0000)\d{4}-/.test(String(value))
@@ -475,9 +504,9 @@ export function createSeedProduction(now = deterministicSeedNow): ProductionStat
     schema: PRODUCTION_WORKSPACE_SCHEMA,
     revision: 0,
     jobs: [
-      { id: 'JOB-201', line: 'Line 01', product: 'Batch Alpha', target: 1200, output: 860 },
-      { id: 'JOB-202', line: 'Line 02', product: 'Batch Beta', target: 900, output: 745 },
-      { id: 'JOB-203', line: 'Line 03', product: 'Batch Gamma', target: 650, output: 650 },
+      { id: 'JOB-201', line: 'Line 01', product: 'Batch Alpha', target: 1200, output: 860, priority: 'urgent', dueAt: new Date(now + 7 * 24 * 60 * 60 * 1000).toISOString() },
+      { id: 'JOB-202', line: 'Line 02', product: 'Batch Beta', target: 900, output: 745, priority: 'normal', dueAt: new Date(now + 8 * 24 * 60 * 60 * 1000).toISOString() },
+      { id: 'JOB-203', line: 'Line 03', product: 'Batch Gamma', target: 650, output: 650, priority: 'low', dueAt: new Date(now + 6 * 24 * 60 * 60 * 1000).toISOString() },
     ],
     issues: [
       { id: 'ISS-301', createdAt: new Date(now - 82 * 60 * 1000).toISOString(), area: 'Line 02', kind: 'quality', summary: 'Temperature drift requires supervisor review', status: 'open' },
@@ -517,6 +546,13 @@ export function validateProductionState(value: unknown): ProductionState {
     canonicalText(candidate.product, `jobs[${index}].product`)
     assertSafeInteger(candidate.target, `jobs[${index}].target`, 1)
     assertSafeInteger(candidate.output, `jobs[${index}].output`)
+    const scheduleFields = ['priority', 'dueAt'] as const
+    const scheduleFieldCount = scheduleFields.filter((field) => candidate[field] !== undefined).length
+    if (scheduleFieldCount !== 0 && scheduleFieldCount !== scheduleFields.length) throw new Error(`jobs[${index}] schedule fields must be complete or absent for legacy records.`)
+    if (scheduleFieldCount === scheduleFields.length) {
+      if (!productionJobPriorities.includes(candidate.priority as ProductionJobPriority)) throw new Error(`jobs[${index}].priority is invalid.`)
+      if (!validTimestamp(candidate.dueAt)) throw new Error(`jobs[${index}].dueAt is invalid.`)
+    }
     if (candidate.scrap !== undefined) assertSafeInteger(candidate.scrap, `jobs[${index}].scrap`)
     const accounted = Number(candidate.output) + Number(candidate.scrap ?? 0)
     if (!Number.isSafeInteger(accounted) || accounted > Number(candidate.target)) throw new Error(`jobs[${index}] good plus scrap exceeds target.`)
@@ -609,6 +645,14 @@ export function validateProductionState(value: unknown): ProductionState {
     const maintenanceFieldCount = ['maintenanceOwner', 'maintenanceStartActionId'].filter((field) => candidate[field] !== undefined).length
     if (candidate.kind === 'job_created') {
       if (!jobIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown job.`)
+      const scheduleSnapshotFields = ['jobPriority', 'jobDueAt'] as const
+      const scheduleSnapshotFieldCount = scheduleSnapshotFields.filter((field) => candidate[field] !== undefined).length
+      if (scheduleSnapshotFieldCount !== 0 && scheduleSnapshotFieldCount !== scheduleSnapshotFields.length) throw new Error(`events[${index}] job schedule fields must be complete or absent for legacy events.`)
+      if (scheduleSnapshotFieldCount === scheduleSnapshotFields.length) {
+        if (!productionJobPriorities.includes(candidate.jobPriority as ProductionJobPriority)) throw new Error(`events[${index}].jobPriority is invalid.`)
+        if (!validTimestamp(candidate.jobDueAt)) throw new Error(`events[${index}].jobDueAt is invalid.`)
+        if (timestampAtOrBefore(candidate.jobDueAt as string, candidate.createdAt as string)) throw new Error(`events[${index}].jobDueAt must follow confirmation.`)
+      }
       if (candidate.quantity !== undefined || candidate.remainingQuantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || materialFieldCount || issueSnapshotFieldCount || maintenanceFieldCount || candidate.fromState !== undefined || candidate.toState !== undefined || candidate.downtimeStartActionId !== undefined) throw new Error(`events[${index}] job event has unrelated fields.`)
     } else if (candidate.kind === 'job_closed') {
       if (!jobIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown job.`)
@@ -686,6 +730,25 @@ export function validateProductionState(value: unknown): ProductionState {
   assertUnique(eventIds, 'Production event ID')
   assertUnique(actionIds, 'Production action ID')
   if (Number(value.revision) !== events.length) throw new Error('Production revision must equal the append-only event count.')
+
+  for (const [index, candidate] of jobs.entries()) {
+    if (!isRecord(candidate)) continue
+    const creationEvents = events.filter((event): event is Record<string, unknown> => isRecord(event) && event.kind === 'job_created' && event.subjectId === candidate.id)
+    if (creationEvents.length > 1) throw new Error(`jobs[${index}] has duplicate creation events.`)
+    const creationEvent = creationEvents[0]
+    if (!creationEvent) continue
+    const scheduleFieldCount = ['priority', 'dueAt'].filter((field) => candidate[field] !== undefined).length
+    const snapshotFieldCount = ['jobPriority', 'jobDueAt'].filter((field) => creationEvent[field] !== undefined).length
+    if (snapshotFieldCount === 2) {
+      if (scheduleFieldCount !== 2
+        || creationEvent.jobPriority !== candidate.priority
+        || creationEvent.jobDueAt !== candidate.dueAt) {
+        throw new Error(`jobs[${index}] schedule does not match its immutable creation event.`)
+      }
+    } else if (scheduleFieldCount !== 0) {
+      throw new Error(`jobs[${index}] legacy creation event cannot acquire a schedule.`)
+    }
+  }
 
   for (const [index, candidate] of issues.entries()) {
     if (!isRecord(candidate)) continue
@@ -1244,6 +1307,7 @@ export function buildProductionShiftHandoff(state: ProductionState, shiftRef: st
     })
   const unfinishedJobs = current.jobs
     .filter((job) => !job.closure && job.output + (job.scrap ?? 0) < job.target)
+    .sort(compareProductionJobSchedule)
     .map((job) => ({
       id: job.id,
       line: job.line,
@@ -1252,6 +1316,7 @@ export function buildProductionShiftHandoff(state: ProductionState, shiftRef: st
       goodUnits: job.output,
       scrapUnits: job.scrap ?? 0,
       remainingUnits: job.target - job.output - (job.scrap ?? 0),
+      ...(job.priority && job.dueAt ? { priority: job.priority, dueAt: job.dueAt } : {}),
       ...(job.qualityHold ? { qualityHold: { ...job.qualityHold } } : {}),
     }))
   const activeHolds = current.jobs
@@ -1379,7 +1444,8 @@ export function formatProductionShiftHandoff(handoff: ProductionShiftHandoff) {
   )
   if (!handoff.unfinishedJobs.length) lines.push('- None')
   for (const job of handoff.unfinishedJobs) {
-    lines.push(`- ${handoffLine(job.id)} · ${handoffLine(job.product)} · ${handoffLine(job.line)} · ${job.remainingUnits} remaining · ${job.goodUnits} good · ${job.scrapUnits} scrap${job.qualityHold ? ' · QUALITY HOLD' : ''}`)
+    const schedule = job.priority && job.dueAt ? ` · ${job.priority.toUpperCase()} · due ${job.dueAt}` : ' · schedule not recorded'
+    lines.push(`- ${handoffLine(job.id)} · ${handoffLine(job.product)} · ${handoffLine(job.line)} · ${job.remainingUnits} remaining · ${job.goodUnits} good · ${job.scrapUnits} scrap${schedule}${job.qualityHold ? ' · QUALITY HOLD' : ''}`)
   }
   lines.push('', `Active quality holds (${handoff.activeHolds.length})`)
   if (!handoff.activeHolds.length) lines.push('- None')
@@ -1409,14 +1475,21 @@ export function formatProductionShiftHandoff(handoff: ProductionShiftHandoff) {
 }
 
 export function registerProductionJob(state: ProductionState, job: ProductionJob, proof: ProductionActionProof) {
+  if (!isRecord(job)) return null
+  const jobPriority = job.priority
+  const jobDueAt = job.dueAt
   if (!validProof(proof)
-    || !isRecord(job)
     || !validCanonicalText(job.id, 80)
     || !validCanonicalText(job.line, 120)
     || !validCanonicalText(job.product)
     || !Number.isSafeInteger(job.target)
     || job.target < 1
     || job.output !== 0
+    || !jobPriority
+    || !productionJobPriorities.includes(jobPriority)
+    || !jobDueAt
+    || !validTimestamp(jobDueAt)
+    || timestampAtOrBefore(jobDueAt, proof.capturedAt)
     || job.scrap !== undefined
     || job.qualityHold !== undefined
     || job.closure !== undefined) return null
@@ -1429,7 +1502,13 @@ export function registerProductionJob(state: ProductionState, job: ProductionJob
       && JSON.stringify(storedJob) === JSON.stringify(job) ? state : null
   }
   if (actionIdIsUsed(state, proof.actionId) || state.jobs.some((candidate) => candidate.id === job.id) || state.revision >= Number.MAX_SAFE_INTEGER) return null
-  const event = eventFor(proof, { kind: 'job_created', subjectId: job.id, summary: `Created ${job.product} job for ${job.line}` })
+  const event = eventFor(proof, {
+    kind: 'job_created',
+    subjectId: job.id,
+    summary: `Created ${job.product} job for ${job.line}`,
+    jobPriority,
+    jobDueAt,
+  })
   return validateProductionState({
     ...state,
     revision: state.revision + 1,

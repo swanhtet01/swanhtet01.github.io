@@ -98,6 +98,7 @@ import {
   PRODUCTION_KEY,
   buildProductionShiftHandoff,
   closeProductionJob,
+  compareProductionJobSchedule,
   completeProductionMaintenance,
   createEmptyProduction,
   endProductionDowntime,
@@ -109,6 +110,7 @@ import {
   placeProductionQualityHold,
   productionDowntimeIntervals,
   productionIssueSeverities,
+  productionJobPriorities,
   productionMaintenanceRecords,
   productionMaterialUnits,
   productionMachineStates,
@@ -131,6 +133,7 @@ import {
   type ProductionIssue,
   type ProductionIssueSeverity,
   type ProductionJob,
+  type ProductionJobPriority,
   type ProductionMaintenanceRecord,
   type ProductionMaterialUnit,
   type ProductionMachineState,
@@ -488,6 +491,12 @@ const productionIssueSeverityRank: Record<ProductionIssueSeverity, number> = {
   low: 3,
 }
 
+const productionJobPriorityLabels: Record<ProductionJobPriority, string> = {
+  urgent: 'Urgent',
+  normal: 'Normal',
+  low: 'Low',
+}
+
 const wrappedIssueDetail = { overflow: 'visible', overflowWrap: 'anywhere', textOverflow: 'clip', whiteSpace: 'normal' } as const
 
 function localDateTimeInputValue(value: Date) {
@@ -497,6 +506,10 @@ function localDateTimeInputValue(value: Date) {
 
 function defaultIssueDueInput() {
   return localDateTimeInputValue(new Date(Date.now() + 4 * 60 * 60 * 1000))
+}
+
+function defaultJobDueInput() {
+  return localDateTimeInputValue(new Date(Date.now() + 8 * 60 * 60 * 1000))
 }
 
 function shiftReferencePlaceholder() {
@@ -4112,10 +4125,28 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const [maintenanceDialogOpen, setMaintenanceDialogOpen] = useState(false)
   const [maintenanceMachineId, setMaintenanceMachineId] = useState(production.machines[0]?.id ?? '')
   const [maintenanceOwner, setMaintenanceOwner] = useState('')
-  const [jobDraft, setJobDraft] = useState({ id: '', line: '', product: '', target: '' })
+  const [jobDraft, setJobDraft] = useState<{ id: string; line: string; product: string; target: string; priority: ProductionJobPriority; dueAt: string }>({
+    id: '',
+    line: '',
+    product: '',
+    target: '',
+    priority: 'normal',
+    dueAt: defaultJobDueInput(),
+  })
   const [notice, setNotice] = useState('')
   const [actionTrigger, setActionTrigger] = useState<HTMLElement | null>(null)
-  const [planDraft, setPlanDraft] = useState({ jobId: '', line: '', product: '', target: '', machineId: '', machineName: '', reason: '', evidenceReference: '' })
+  const [planDraft, setPlanDraft] = useState<{ jobId: string; line: string; product: string; target: string; priority: ProductionJobPriority; dueAt: string; machineId: string; machineName: string; reason: string; evidenceReference: string }>({
+    jobId: '',
+    line: '',
+    product: '',
+    target: '',
+    priority: 'normal',
+    dueAt: defaultJobDueInput(),
+    machineId: '',
+    machineName: '',
+    reason: '',
+    evidenceReference: '',
+  })
   const [planBusy, setPlanBusy] = useState(false)
   const [planError, setPlanError] = useState('')
   const issueDialogRef = useRef<HTMLDialogElement>(null)
@@ -4141,7 +4172,9 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const holdableJobs = production.jobs.filter((job) => !job.qualityHold && !job.closure)
   const selectedHoldJobId = holdableJobs.some((job) => job.id === holdJobId) ? holdJobId : holdableJobs[0]?.id ?? ''
   const selectedHoldJob = holdableJobs.find((job) => job.id === selectedHoldJobId)
-  const activeJobs = production.jobs.filter((job) => !job.closure && job.output + (job.scrap ?? 0) < job.target)
+  const activeJobs = production.jobs
+    .filter((job) => !job.closure && job.output + (job.scrap ?? 0) < job.target)
+    .sort(compareProductionJobSchedule)
   const completedJobs = production.jobs.filter((job) => Boolean(job.closure) || job.output + (job.scrap ?? 0) >= job.target)
   const selectedJobId = activeJobs.some((job) => job.id === jobId) ? jobId : activeJobs[0]?.id ?? ''
   const selectedJob = activeJobs.find((job) => job.id === selectedJobId)
@@ -4238,12 +4271,13 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     const line = planDraft.line.trim()
     const product = planDraft.product.trim()
     const jobTarget = Number(planDraft.target)
+    const jobDueAt = new Date(planDraft.dueAt)
     const machineId = planDraft.machineId.trim().toUpperCase()
     const machineName = planDraft.machineName.trim()
     const reason = planDraft.reason.trim()
     const evidenceReference = planDraft.evidenceReference.trim()
-    if (!firstJobId || !line || !product || !machineId || !machineName || !reason || !evidenceReference || !Number.isSafeInteger(jobTarget) || jobTarget < 1) {
-      setPlanError('Enter one real job, one machine, a whole-number target, reason, and evidence reference.')
+    if (!firstJobId || !line || !product || !machineId || !machineName || !reason || !evidenceReference || !Number.isSafeInteger(jobTarget) || jobTarget < 1 || Number.isNaN(jobDueAt.getTime()) || jobDueAt.getTime() <= Date.now()) {
+      setPlanError('Enter one real job with a future due time, one machine, a whole-number target, reason, and evidence reference.')
       return
     }
     const proof: ProductionActionProof = {
@@ -4258,7 +4292,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     try {
       await mutateProduction('production.workspace.initialized', commandUuid(), proof, (current) => current.jobs.length || current.issues.length || current.machines.length || current.events.length ? null : validateProductionState({
         ...current,
-        jobs: [{ id: firstJobId, line, product, target: jobTarget, output: 0 }],
+        jobs: [{ id: firstJobId, line, product, target: jobTarget, output: 0, priority: planDraft.priority, dueAt: jobDueAt.toISOString() }],
         machines: [{ id: machineId, name: machineName, state: 'running' }],
       }))
       setJobId(firstJobId)
@@ -4279,6 +4313,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       <form className="core-form compact-form" onSubmit={(formEvent) => void initializeManagedProduction(formEvent)}>
         <div className="form-row"><label>Job ID<input maxLength={80} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, jobId: inputEvent.target.value }))} placeholder="JOB-001" required value={planDraft.jobId} /></label><label>Line or team<input maxLength={120} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, line: inputEvent.target.value }))} placeholder="Line 01" required value={planDraft.line} /></label></div>
         <div className="form-row"><label>Product or batch<input maxLength={180} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, product: inputEvent.target.value }))} placeholder="Product name" required value={planDraft.product} /></label><label>Target units<input min="1" onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, target: inputEvent.target.value }))} required step="1" type="number" value={planDraft.target} /></label></div>
+        <div className="form-row"><label>Priority<select onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, priority: inputEvent.target.value as ProductionJobPriority }))} value={planDraft.priority}>{productionJobPriorities.map((priority) => <option key={priority} value={priority}>{productionJobPriorityLabels[priority]}</option>)}</select></label><label>Due time<input autoComplete="off" min={localDateTimeInputValue(new Date())} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, dueAt: inputEvent.target.value }))} required type="datetime-local" value={planDraft.dueAt} /></label></div>
         <div className="form-row"><label>Machine ID<input maxLength={80} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, machineId: inputEvent.target.value }))} placeholder="MC-01" required value={planDraft.machineId} /></label><label>Machine name<input maxLength={180} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, machineName: inputEvent.target.value }))} placeholder="Mixer 01" required value={planDraft.machineName} /></label></div>
         <label>Opening plan reason<input maxLength={180} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, reason: inputEvent.target.value }))} placeholder="How this job and target were confirmed" required value={planDraft.reason} /></label>
         <label>Evidence reference<input maxLength={180} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, evidenceReference: inputEvent.target.value }))} placeholder="Shift plan, work order, or count sheet" required value={planDraft.evidenceReference} /></label>
@@ -4442,21 +4477,23 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     const line = jobDraft.line.trim()
     const product = jobDraft.product.trim()
     const jobTarget = Number(jobDraft.target)
-    if (!id || !line || !product || !Number.isSafeInteger(jobTarget) || jobTarget < 1) {
-      setNotice('Enter a unique job ID, line or team, product or batch, and whole-number target.')
+    const dueAt = new Date(jobDraft.dueAt)
+    if (!id || !line || !product || !Number.isSafeInteger(jobTarget) || jobTarget < 1 || Number.isNaN(dueAt.getTime()) || dueAt.getTime() <= Date.now()) {
+      setNotice('Enter a unique job ID, line or team, product or batch, whole-number target, and future due time.')
       return
     }
-    const job: ProductionJob = { id, line, product, target: jobTarget, output: 0 }
+    const canonicalDueAt = dueAt.toISOString()
+    const job: ProductionJob = { id, line, product, target: jobTarget, output: 0, priority: jobDraft.priority, dueAt: canonicalDueAt }
     queueAction({
       kind: 'production_job',
       subjectId: id,
       summary: `Create ${id} for ${product}`,
       before: 'No production job',
-      after: `${line} · target ${jobTarget.toLocaleString()}`,
+      after: `${line} · ${productionJobPriorityLabels[jobDraft.priority]} · due ${formatIssueDue(canonicalDueAt)} · target ${jobTarget.toLocaleString()}`,
       apply: async (record) => {
         await mutateProduction('production.job.created', record.commandId, productionActionProof(record), (current) => registerProductionJob(current, job, productionActionProof(record)))
         setJobId(id)
-        setJobDraft({ id: '', line: '', product: '', target: '' })
+        setJobDraft({ id: '', line: '', product: '', target: '', priority: 'normal', dueAt: defaultJobDueInput() })
       },
     })
   }
@@ -4722,15 +4759,16 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     <div className="split-workspace production-view">
       <section className="core-panel job-panel">
         <div className="panel-head"><div><span className="core-eyebrow">Plant plan</span><h2>Jobs to finish</h2></div><span className="panel-note">{activeJobs.length} active · {completedJobs.length} finished</span></div>
-        <JobList jobs={activeJobs} />
-        <CompletedJobHistory jobs={completedJobs} />
+        <JobList jobs={activeJobs} now={issueClock} />
+        <CompletedJobHistory jobs={completedJobs} now={issueClock} />
         <details className="compact-disclosure catalog-disclosure">
           <summary>Add job</summary>
           <form className="core-form compact-form" onSubmit={createJob}>
             <div className="form-row"><label>Job ID<input disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={80} onChange={(event) => setJobDraft((current) => ({ ...current, id: event.target.value }))} placeholder="JOB-002" required value={jobDraft.id} /></label><label>Line or team<input disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={120} onChange={(event) => setJobDraft((current) => ({ ...current, line: event.target.value }))} placeholder="Line 02" required value={jobDraft.line} /></label></div>
             <div className="form-row"><label>Product or batch<input disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={180} onChange={(event) => setJobDraft((current) => ({ ...current, product: event.target.value }))} placeholder="Product name" required value={jobDraft.product} /></label><label>Target units<input disabled={!productionCanWrite || Boolean(pendingAction)} min="1" onChange={(event) => setJobDraft((current) => ({ ...current, target: event.target.value }))} required step="1" type="number" value={jobDraft.target} /></label></div>
+            <div className="form-row"><label>Priority<select disabled={!productionCanWrite || Boolean(pendingAction)} onChange={(event) => setJobDraft((current) => ({ ...current, priority: event.target.value as ProductionJobPriority }))} value={jobDraft.priority}>{productionJobPriorities.map((priority) => <option key={priority} value={priority}>{productionJobPriorityLabels[priority]}</option>)}</select></label><label>Due time<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction)} min={localDateTimeInputValue(new Date())} onChange={(event) => setJobDraft((current) => ({ ...current, dueAt: event.target.value }))} required type="datetime-local" value={jobDraft.dueAt} /></label></div>
             <button className="core-button" disabled={!productionCanWrite || Boolean(pendingAction)} type="submit">Review job</button>
-            <p className="panel-copy">The accountable operator, reason, and source record are confirmed in the next step.</p>
+            <p className="panel-copy">Priority and due time set the visible run order. The accountable operator, reason, and source record are confirmed in the next step.</p>
           </form>
         </details>
       </section>
@@ -4876,21 +4914,26 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   return null
 }
 
-function JobList({ jobs }: { jobs: ProductionJob[] }) {
+function JobList({ jobs, now }: { jobs: ProductionJob[]; now: number }) {
   if (!jobs.length) return <Empty>No active jobs. Add a job below to start recording output.</Empty>
   return <div className="job-list">{jobs.map((job) => {
     const scrap = job.scrap ?? 0
     const accounted = job.output + scrap
     const progress = Math.min(100, Math.round((accounted / job.target) * 100))
-    return <article key={job.id}><div><span>{job.id} · {job.line}{job.qualityHold ? ' · QUALITY HOLD' : ''}{job.closure ? ' · CLOSED SHORT' : ''}</span><strong>{job.product}</strong>{job.closure ? <small>Closed {formatIssueDue(job.closure.closedAt)} by {job.closure.closedBy} · Shift {job.closure.shiftRef} · {job.closure.remainingUnits.toLocaleString()} not produced</small> : null}{job.qualityHold ? <small>Held by {job.qualityHold.heldBy} · Evidence: {job.qualityHold.evidenceReference}</small> : null}</div><div className="job-progress"><span><i style={{ width: `${progress}%` }} /></span><small>{job.output.toLocaleString()} good · {scrap.toLocaleString()} scrap · {accounted.toLocaleString()} / {job.target.toLocaleString()}{job.closure ? ` · ${job.closure.remainingUnits.toLocaleString()} closed short` : ''}</small></div></article>
+    const scheduled = Boolean(job.priority && job.dueAt)
+    const overdue = Boolean(!job.closure && job.dueAt && Date.parse(job.dueAt) <= now)
+    const scheduleLabel = scheduled
+      ? `${productionJobPriorityLabels[job.priority ?? 'normal']} · ${overdue ? 'OVERDUE ' : job.closure ? 'Was due ' : 'Due '}${formatIssueDue(job.dueAt ?? '')}`
+      : 'Schedule not recorded · legacy job'
+    return <article key={job.id}><div><span>{job.id} · {job.line}{job.qualityHold ? ' · QUALITY HOLD' : ''}{job.closure ? ' · CLOSED SHORT' : ''}</span><strong>{job.product}</strong><small className={`job-schedule${overdue ? ' overdue' : ''}`} data-priority={job.priority ?? 'legacy'}>{scheduleLabel}</small>{job.closure ? <small>Closed {formatIssueDue(job.closure.closedAt)} by {job.closure.closedBy} · Shift {job.closure.shiftRef} · {job.closure.remainingUnits.toLocaleString()} not produced</small> : null}{job.qualityHold ? <small>Held by {job.qualityHold.heldBy} · Evidence: {job.qualityHold.evidenceReference}</small> : null}</div><div className="job-progress"><span><i style={{ width: `${progress}%` }} /></span><small>{job.output.toLocaleString()} good · {scrap.toLocaleString()} scrap · {accounted.toLocaleString()} / {job.target.toLocaleString()}{job.closure ? ` · ${job.closure.remainingUnits.toLocaleString()} closed short` : ''}</small></div></article>
   })}</div>
 }
 
-function CompletedJobHistory({ jobs }: { jobs: ProductionJob[] }) {
+function CompletedJobHistory({ jobs, now }: { jobs: ProductionJob[]; now: number }) {
   if (!jobs.length) return null
   return <details className="compact-disclosure production-history">
     <summary>Finished jobs <span>{jobs.length}</span></summary>
-    <JobList jobs={jobs.slice(0, 8)} />
+    <JobList jobs={jobs.slice(0, 8)} now={now} />
     {jobs.length > 8 ? <p>Showing the latest 8 completed jobs.</p> : null}
   </details>
 }
@@ -4989,7 +5032,7 @@ function ShiftHandoffView({ handoff, onCopy }: { handoff: ProductionShiftHandoff
       <div className="issue-list">
         {handoff.unfinishedJobs.map((job) => <article key={job.id}>
           <span className={`issue-mark ${job.qualityHold ? 'open' : 'resolved'}`}>{job.qualityHold ? 'H' : 'J'}</span>
-          <div><strong>{job.product} · {job.id}</strong><small style={wrappedIssueDetail}>{job.line} · {job.remainingUnits.toLocaleString()} remaining · {job.goodUnits.toLocaleString()} good · {job.scrapUnits.toLocaleString()} scrap</small>{job.qualityHold ? <small style={wrappedIssueDetail}>QUALITY HOLD · {job.qualityHold.heldBy} · Evidence: {job.qualityHold.evidenceReference}</small> : null}</div>
+          <div><strong>{job.product} · {job.id}</strong><small style={wrappedIssueDetail}>{job.line} · {job.remainingUnits.toLocaleString()} remaining · {job.goodUnits.toLocaleString()} good · {job.scrapUnits.toLocaleString()} scrap</small><small style={wrappedIssueDetail}>{job.priority && job.dueAt ? `${productionJobPriorityLabels[job.priority]} · Due ${formatIssueDue(job.dueAt)}` : 'Schedule not recorded · legacy job'}</small>{job.qualityHold ? <small style={wrappedIssueDetail}>QUALITY HOLD · {job.qualityHold.heldBy} · Evidence: {job.qualityHold.evidenceReference}</small> : null}</div>
         </article>)}
         {!handoff.unfinishedJobs.length ? <Empty>No unfinished job is recorded.</Empty> : null}
       </div>

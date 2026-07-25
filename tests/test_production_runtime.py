@@ -57,6 +57,8 @@ def starting_workspace(*, target: int = 100) -> dict[str, object]:
                 "product": "Customer batch 001",
                 "target": target,
                 "output": 0,
+                "priority": "normal",
+                "dueAt": "2026-07-25T09:00:00.000Z",
             }
         ],
         "issues": [],
@@ -683,6 +685,31 @@ class ProductionRuntimeTests(unittest.TestCase):
             initial,
         )
 
+        unscheduled_initial = deepcopy(initial)
+        unscheduled_initial["jobs"][0].pop("priority")
+        unscheduled_initial["jobs"][0].pop("dueAt")
+        self.assertEqual(
+            validate_production_state(unscheduled_initial),
+            unscheduled_initial,
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                {},
+                "production.workspace.initialized",
+                unscheduled_initial,
+                evidence,
+            )
+
+        overdue_initial = deepcopy(initial)
+        overdue_initial["jobs"][0]["dueAt"] = NOW
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                {},
+                "production.workspace.initialized",
+                overdue_initial,
+                evidence,
+            )
+
         already_initialized = starting_workspace()
         with self.assertRaises(TrialValidationError):
             apply_event(
@@ -1124,6 +1151,8 @@ class ProductionRuntimeTests(unittest.TestCase):
             "product": "Precision batch",
             "target": 10,
             "output": 0,
+            "priority": "urgent",
+            "dueAt": "2026-07-25T09:00:00.000Z",
         }
         created["revision"] = 1
         created["jobs"] = [precise_job, *created["jobs"]]
@@ -1133,6 +1162,8 @@ class ProductionRuntimeTests(unittest.TestCase):
                 kind="job_created",
                 subject_id=precise_job["id"],
                 summary="Created Precision batch job for Precision line",
+                jobPriority=precise_job["priority"],
+                jobDueAt=precise_job["dueAt"],
             )
         ]
         accepted_creation = apply_event(
@@ -1323,6 +1354,8 @@ class ProductionRuntimeTests(unittest.TestCase):
             "product": "Customer batch 002",
             "target": 75,
             "output": 0,
+            "priority": "urgent",
+            "dueAt": "2026-07-25T09:00:00.000Z",
         }
         created["revision"] = 1
         created["jobs"] = [job, *created["jobs"]]
@@ -1332,6 +1365,8 @@ class ProductionRuntimeTests(unittest.TestCase):
                 kind="job_created",
                 subject_id=job["id"],
                 summary="Created Customer batch 002 job for Assembly team",
+                jobPriority=job["priority"],
+                jobDueAt=job["dueAt"],
             )
         ]
         accepted = apply_event(
@@ -1344,6 +1379,55 @@ class ProductionRuntimeTests(unittest.TestCase):
         self.assertEqual(accepted["jobs"][1:], current["jobs"])
         self.assertEqual(accepted["issues"], current["issues"])
         self.assertEqual(accepted["machines"], current["machines"])
+        self.assertEqual(accepted["events"][0]["jobPriority"], "urgent")
+        self.assertEqual(
+            accepted["events"][0]["jobDueAt"],
+            "2026-07-25T09:00:00.000Z",
+        )
+
+        unscheduled = deepcopy(created)
+        unscheduled["jobs"][0].pop("priority")
+        unscheduled["jobs"][0].pop("dueAt")
+        unscheduled["events"][0].pop("jobPriority")
+        unscheduled["events"][0].pop("jobDueAt")
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "production.job.created",
+                unscheduled,
+                evidence,
+            )
+
+        rewritten_priority = deepcopy(created)
+        rewritten_priority["events"][0]["jobPriority"] = "low"
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "production.job.created",
+                rewritten_priority,
+                evidence,
+            )
+
+        rewritten_due_at = deepcopy(created)
+        rewritten_due_at["jobs"][0]["dueAt"] = "2026-07-26T09:00:00.000Z"
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "production.job.created",
+                rewritten_due_at,
+                evidence,
+            )
+
+        overdue = deepcopy(created)
+        overdue["jobs"][0]["dueAt"] = NOW
+        overdue["events"][0]["jobDueAt"] = NOW
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "production.job.created",
+                overdue,
+                evidence,
+            )
 
         duplicate = deepcopy(created)
         duplicate["jobs"][0]["id"] = current["jobs"][0]["id"]
@@ -2438,6 +2522,8 @@ class ProductionRuntimeTests(unittest.TestCase):
             "product": "Customer batch 002",
             "target": 50,
             "output": 0,
+            "priority": "normal",
+            "dueAt": "2026-07-25T09:00:00.000Z",
         }
         job_state["revision"] = 1
         job_state["jobs"] = [new_job, *job_state["jobs"]]
@@ -2447,6 +2533,8 @@ class ProductionRuntimeTests(unittest.TestCase):
                 kind="job_created",
                 subject_id=new_job["id"],
                 summary="Created Customer batch 002 job for Assembly team",
+                jobPriority=new_job["priority"],
+                jobDueAt=new_job["dueAt"],
             )
         ]
         job_command_id = str(uuid4())
