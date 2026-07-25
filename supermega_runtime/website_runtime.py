@@ -482,7 +482,7 @@ def _validate_workflow_event(value: object, field: str) -> dict[str, Any]:
 
 
 def validate_website_state(value: object) -> dict[str, Any]:
-    """Validate a complete Website v2 workspace without repairing it."""
+    """Validate one Website snapshot structurally; command history establishes managed provenance."""
 
     state = _object(value, "website state")
     _exact(state, "website state", _STATE_FIELDS)
@@ -512,6 +512,14 @@ def validate_website_state(value: object) -> dict[str, Any]:
     evidence = [_validate_evidence(item, f"evidence[{index}]") for index, item in enumerate(_array(state["evidence"], "website state.evidence"))]
     approvals = [_validate_approval(item, f"approvals[{index}]") for index, item in enumerate(_array(state["approvals"], "website state.approvals"))]
     publishes = [_validate_publish(item, f"localPublishes[{index}]") for index, item in enumerate(_array(state["localPublishes"], "website state.localPublishes"))]
+    release_records = [*evidence, *approvals, *publishes]
+    if any(item["migratedFromV1"] for item in release_records):
+        raise TrialValidationError(
+            "Website legacy release claims are not trusted; retain the source backup and record current review evidence."
+        )
+    confirmed_release_count = revision - content_revision
+    if len(release_records) > confirmed_release_count:
+        raise TrialValidationError("Website revision history does not match its release records.")
     events = [_validate_workflow_event(item, f"events[{index}]") for index, item in enumerate(_array(state["events"], "website state.events"))]
     for values, field in ((evidence, "Evidence ID"), (approvals, "Approval ID"), (publishes, "Publish ID"), (events, "Event ID")):
         _unique([item["id"] for item in values], field)

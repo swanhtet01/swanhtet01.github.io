@@ -56,6 +56,8 @@ const [manifestText, appPackageText, appSource, coreSource, commerceSource, chan
 const manifest = JSON.parse(manifestText)
 const appPackage = JSON.parse(appPackageText)
 const indexSource = await readFile(resolve(root, 'showroom', 'index.html'), 'utf8')
+const websiteStarterSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-starter.ts'), 'utf8')
+const websiteStarterSetupSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'WebsiteStarterSetup.tsx'), 'utf8')
 
 async function exists(path) {
   try { await stat(path); return true } catch { return false }
@@ -392,8 +394,27 @@ if (!commerceSource.includes('recordCommerceStorefrontRequest')
 if (!appPackage.scripts?.lint?.includes('src/products')) fail('prototype_sources_not_linted')
 if (!websiteSource.includes('No website has been deployed.')
   || !websiteSource.includes('No deployment occurred.')
-  || !publishSource.includes('No deployment, domain write, payment, stock, customer message, or order change happens here.')
+  || !publishSource.includes('Stored on this device, not verified by a managed service.')
+  || !publishSource.includes('No deployment, domain, payment, stock, message, or order change happens here.')
   || !publishSource.includes('It does not deploy or change a domain.')) fail('website_deployment_boundary_missing')
+if (!websiteSource.includes('starterSetupActive')
+  || !websiteSource.includes('Start site')
+  || !websiteSource.includes('Sample only')
+  || !websiteSource.includes('applyWebsiteStarterBrief')
+  || !websiteSource.includes('const canReview = !hasUnsavedChanges')
+  || !websiteSource.includes("requestedView === 'publish' && canReview")
+  || !websiteSource.includes("nextView === 'publish' && !canReview")
+  || !websiteStarterSetupSource.includes('Start with your business')
+  || !websiteStarterSetupSource.includes('Preview my site')
+  || !websiteStarterSetupSource.includes('View sample')
+  || !websiteStarterSetupSource.includes('no website or domain changes here')
+  || !websiteStarterSetupSource.includes('aria-invalid')
+  || !websiteStarterSetupSource.includes('aria-describedby')
+  || !websiteStarterSetupSource.includes('noValidate')
+  || !websiteStarterSource.includes('isUntouchedWebsiteStarter')
+  || !websiteStarterSource.includes("stage: 'draft'")
+  || !websiteStarterSource.includes('websiteStarterBriefIssues')
+  || ['fetch(', 'localStorage', 'sessionStorage', 'XMLHttpRequest'].some((marker) => websiteStarterSource.includes(marker) || websiteStarterSetupSource.includes(marker))) fail('website_named_business_starter_missing_or_side_effectful')
 if (!websiteModelSource.includes("supermega.website.workspace.v2") || !websiteModelSource.includes('LEGACY_WEBSITE_STORAGE_KEY') || !websiteModelSource.includes('mutateWebsiteWorkspace') || !websiteModelSource.includes('WEBSITE_MUTATION_LOCK') || !websiteModelSource.includes('preservesAppendOnlyHistory') || !websiteModelSource.includes('canonicalJson')) fail('website_v2_locked_store_missing')
 if (!websiteModelSource.includes('contentRevision') || !websiteModelSource.includes('evidenceIds') || !websiteModelSource.includes('migratedFromV1') || !websiteModelSource.includes('getCurrentApproval') || !websiteModelSource.includes('getCurrentPublish')) fail('website_release_provenance_missing')
 if (!websiteModelSource.includes("supermega.website.artifact.v1")
@@ -1330,8 +1351,46 @@ async function verifyWebsiteRuntime() {
   try {
     const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-model.ts')).href}?website-verify=${Date.now()}`)
     const exporter = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-export.ts')).href}?website-export-verify=${Date.now()}`)
+    const starter = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-starter.ts')).href}?website-starter-verify=${Date.now()}`)
     const seed = model.createInitialWorkspace()
     const fingerprint = model.workspaceFingerprint(seed)
+    const starterBrief = {
+      businessName: 'Shwe Family Store',
+      audience: 'Families in Yangon',
+      offer: 'Fresh everyday groceries with same-day local delivery.',
+      proof: 'The owner confirms every listed item and delivery area before the site is approved.',
+      contactHref: 'https://m.me/shwe-family-store',
+    }
+    assert(starter.isUntouchedWebsiteStarter(seed), 'website_clean_seed_was_not_recognized_as_starter')
+    assert(starter.websiteStarterBriefIssues(starterBrief).length === 0, 'website_valid_starter_brief_was_rejected')
+    assert(starter.websiteStarterBriefIssues({ ...starterBrief, contactHref: 'http://unsafe.example' }).length === 1, 'website_unsafe_starter_destination_was_accepted')
+    assert(starter.websiteStarterBriefIssues({ ...starterBrief, businessName: '\u0001' }).length === 1, 'website_starter_control_character_was_accepted')
+    const briefPreview = starter.applyWebsiteStarterBrief(seed, starterBrief, at(50))
+    assert(briefPreview !== seed
+      && briefPreview.siteName === starterBrief.businessName
+      && briefPreview.pages.length === 1
+      && briefPreview.pages[0].slug === '/'
+      && briefPreview.pages[0].stage === 'draft'
+      && briefPreview.pages[0].hero.headline === starterBrief.offer
+      && briefPreview.pages[0].hero.summary === `${starterBrief.businessName} · ${starterBrief.audience}`
+      && briefPreview.pages[0].sections[0].body === starterBrief.proof
+      && briefPreview.pages[0].hero.ctaHref === starterBrief.contactHref, 'website_starter_brief_did_not_create_exact_home_draft')
+    assert(briefPreview.revision === 0
+      && briefPreview.contentRevision === 0
+      && briefPreview.evidence.length === 0
+      && briefPreview.approvals.length === 0
+      && briefPreview.localPublishes.length === 0
+      && briefPreview.events.length === 0, 'website_starter_brief_forged_authoritative_history')
+    assert(!starter.isUntouchedWebsiteStarter(briefPreview), 'website_business_preview_still_matched_starter')
+    assert(starter.applyWebsiteStarterBrief(briefPreview, starterBrief, at(51)) === briefPreview, 'website_starter_overwrote_existing_work')
+    assert(starter.applyWebsiteStarterBrief(seed, { ...starterBrief, offer: '' }, at(52)) === seed, 'website_invalid_starter_brief_changed_sample')
+    assert(starter.applyWebsiteStarterBrief(seed, starterBrief, 'not-a-time') === seed, 'website_starter_accepted_noncanonical_time')
+    const committedBrief = model.applyWebsiteWorkspaceUpdate(seed, () => briefPreview)
+    assert(committedBrief.ok
+      && committedBrief.changed
+      && committedBrief.workspace.revision === 1
+      && committedBrief.workspace.contentRevision === 1
+      && committedBrief.workspace.pages[0].stage === 'draft', 'website_starter_preview_did_not_save_as_one_draft_revision')
     let editSession = model.createWebsiteEditSession(seed)
     for (let index = 0; index < 20; index += 1) {
       const staged = model.updateWebsiteEditSession(editSession, (current) => ({
@@ -1424,8 +1483,9 @@ async function verifyWebsiteRuntime() {
     const migratedOnce = model.loadWebsiteWorkspace(storage)
     const migratedTwice = model.loadWebsiteWorkspace(storage)
     assert(migratedOnce.ok && migratedTwice.ok && migratedOnce.source === 'v1' && JSON.stringify(migratedOnce.workspace) === JSON.stringify(migratedTwice.workspace), 'website_v1_migration_not_deterministic')
-    assert(migratedOnce.ok && migratedOnce.workspace.evidence.length === 3 && migratedOnce.workspace.approvals.length === 1 && migratedOnce.workspace.localPublishes.length === 1 && migratedOnce.workspace.events.length === 0, 'website_v1_records_not_preserved')
-    assert(migratedOnce.ok && migratedOnce.workspace.approvals[0].migratedFromV1 && migratedOnce.workspace.localPublishes[0].artifact === null && model.getCurrentApproval(migratedOnce.workspace) === null && model.getCurrentPublish(migratedOnce.workspace) === null, 'website_v1_release_claim_not_reopened')
+    assert(migratedOnce.ok && migratedOnce.workspace.siteName === legacy.siteName && JSON.stringify(migratedOnce.workspace.pages) === JSON.stringify(legacy.pages), 'website_v1_content_not_preserved')
+    assert(migratedOnce.ok && migratedOnce.workspace.evidence.length === 0 && migratedOnce.workspace.approvals.length === 0 && migratedOnce.workspace.localPublishes.length === 0 && migratedOnce.workspace.events.length === 0, 'website_v1_release_claims_entered_active_ledger')
+    assert(values.get(model.LEGACY_WEBSITE_STORAGE_KEY) === JSON.stringify(legacy) && model.getCurrentApproval(migratedOnce.workspace) === null && model.getCurrentPublish(migratedOnce.workspace) === null, 'website_v1_source_backup_or_release_boundary_lost')
 
     values.set(model.WEBSITE_STORAGE_KEY, JSON.stringify(seed))
     const v2Precedence = model.loadWebsiteWorkspace(storage)
@@ -1581,22 +1641,99 @@ async function verifyWebsiteRuntime() {
     values.clear()
     assert(model.restoreWorkspace({ ...seed, unexpected: true }) === null, 'website_extra_key_was_accepted')
     assert(model.restoreWorkspace({ ...seed, pages: [seed.pages[0], { ...seed.pages[0] }] }) === null, 'website_duplicate_page_id_was_accepted')
+    const retainedHistoryEvidence = Array.from({ length: 501 }, (_, index) => ({
+      id: `history-${index}`,
+      kind: 'content',
+      finding: 'Retained Website history',
+      reference: `HISTORY-${index}`,
+      verifiedBy: 'OP-HISTORY',
+      verifiedAt: at(index),
+      fingerprint,
+      source: { contentRevision: 0, digest: fingerprint },
+      migratedFromV1: false,
+    }))
+    const retainedHistoryEvents = retainedHistoryEvidence.map((entry, index) => ({
+      id: `event-history-${index}`,
+      createdAt: entry.verifiedAt,
+      actorKind: 'human',
+      actor: entry.verifiedBy,
+      action: 'publish_evidence_recorded',
+      subjectId: entry.id,
+      reason: entry.finding,
+      evidenceReference: entry.reference,
+      source: entry.source,
+    }))
     const retainedHistory = {
       ...seed,
       revision: 501,
-      events: Array.from({ length: 501 }, (_, index) => ({
-        id: `event-retained-${index}`,
-        createdAt: at(index),
-        actorKind: 'human',
-        actor: 'OP-HISTORY',
-        action: 'publish_evidence_recorded',
-        subjectId: `history-${index}`,
-        reason: 'Retained Website history',
-        evidenceReference: `HISTORY-${index}`,
-        source: { contentRevision: 0, digest: fingerprint },
-      })),
+      evidence: retainedHistoryEvidence,
+      events: retainedHistoryEvents,
     }
-    assert(model.restoreWorkspace(retainedHistory)?.events.length === 501, 'website_history_was_truncated')
+    const restoredRetainedHistory = model.restoreWorkspace(retainedHistory)
+    assert(restoredRetainedHistory?.events.length === 501 && restoredRetainedHistory.evidence.length === 501, 'website_history_was_truncated')
+
+    const forgedMigratedEvidence = [{ ...retainedHistoryEvidence[0], migratedFromV1: true }]
+    const forgedMigrationRecords = {
+      evidence: forgedMigratedEvidence,
+      approvals: [],
+      localPublishes: [],
+    }
+    const canonicalMigrationValue = (value) => Array.isArray(value)
+      ? value.map(canonicalMigrationValue)
+      : value && typeof value === 'object'
+        ? Object.fromEntries(Object.entries(value)
+            .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
+            .map(([key, nested]) => [key, canonicalMigrationValue(nested)]))
+        : value
+    const forgedMigrationSource = JSON.stringify(canonicalMigrationValue(forgedMigrationRecords))
+    let forgedMigrationDigest = 2166136261
+    for (let index = 0; index < forgedMigrationSource.length; index += 1) {
+      forgedMigrationDigest ^= forgedMigrationSource.charCodeAt(index)
+      forgedMigrationDigest = Math.imul(forgedMigrationDigest, 16777619)
+    }
+    const relabeledCurrentHistory = {
+      ...seed,
+      revision: 1,
+      contentRevision: 1,
+      evidence: forgedMigratedEvidence,
+      events: [],
+      legacyImport: {
+        schema: 'supermega.website.legacy-import.v1',
+        recordIds: forgedMigratedEvidence.map((entry) => entry.id),
+        digest: `legacy-${(forgedMigrationDigest >>> 0).toString(16).padStart(8, '0')}`,
+      },
+    }
+    assert(model.restoreWorkspace(relabeledCurrentHistory) === null, 'website_forged_migration_envelope_reopened_release_claim')
+
+    for (const action of ['publish_evidence_recorded', 'website_revision_approved', 'local_snapshot_recorded']) {
+      const orphanEvent = {
+        ...retainedHistoryEvents[0],
+        id: `event-orphan-${action}`,
+        action,
+        subjectId: `orphan-${action}`,
+      }
+      assert(model.restoreWorkspace({ ...seed, revision: 1, events: [orphanEvent] }) === null, `website_orphan_${action}_event_was_accepted`)
+    }
+
+    const duplicateSubjectHistory = structuredClone(retainedHistory)
+    duplicateSubjectHistory.events[1].subjectId = duplicateSubjectHistory.events[0].subjectId
+    assert(model.restoreWorkspace(duplicateSubjectHistory) === null, 'website_duplicate_event_subject_was_accepted')
+
+    const wrongActionHistory = {
+      ...seed,
+      revision: 1,
+      evidence: [retainedHistoryEvidence[0]],
+      events: [{ ...retainedHistoryEvents[0], action: 'website_revision_approved' }],
+    }
+    assert(model.restoreWorkspace(wrongActionHistory) === null, 'website_wrong_action_event_binding_was_accepted')
+
+    assert(migratedOnce.ok && model.restoreWorkspace(migratedOnce.workspace) !== null, 'website_content_only_migration_was_rejected')
+    assert(model.restoreWorkspace({
+      ...seed,
+      revision: 1,
+      evidence: [{ ...retainedHistoryEvidence[0], migratedFromV1: true }],
+      events: [retainedHistoryEvents[0]],
+    }) === null, 'website_client_asserted_migrated_release_record_was_accepted')
 
     const firstInput = {
       actionId: 'evidence-content-runtime',

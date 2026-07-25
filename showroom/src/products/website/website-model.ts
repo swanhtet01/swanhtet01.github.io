@@ -821,7 +821,7 @@ export function recordWebsiteSnapshot(workspace: WebsiteWorkspace, input: {
 export function applyWebsiteWorkspaceUpdate(current: WebsiteWorkspace, update: WebsiteWorkspaceUpdate): WebsiteMutationResult {
   try {
     const candidate = update(current)
-    if (!isWebsiteWorkspace(candidate)) return { ok: false, error: 'Website transition produced an invalid workspace.' }
+    if (!isWebsiteWorkspace(candidate, 1)) return { ok: false, error: 'Website transition produced an invalid workspace.' }
     if (candidate.revision !== current.revision || candidate.contentRevision !== current.contentRevision) {
       return { ok: false, error: 'Website transitions cannot set revision metadata directly.' }
     }
@@ -1162,6 +1162,8 @@ export async function deleteWebsiteRecoveryArchive(
   }
 }
 
+// A restored device snapshot is structurally valid, not a signed audit checkpoint.
+// In-app writes establish append-only history by comparing it with the prior workspace.
 export function restoreWorkspace(value: unknown): WebsiteWorkspace | null {
   if (isWebsiteWorkspace(value)) return value
   const restoredV2 = restoreV2(value)
@@ -1188,28 +1190,6 @@ export function formatTimestamp(value: string) {
 }
 
 function migrateLegacyWorkspace(legacy: LegacyWebsiteWorkspace): WebsiteWorkspace {
-  const sourceForDigest = (digest: string): WebsiteSourceRef => ({ contentRevision: 0, digest })
-  const evidence: PublishEvidence[] = legacy.evidence.map((entry) => ({
-    ...entry,
-    source: sourceForDigest(entry.fingerprint),
-    migratedFromV1: true,
-  }))
-  const approvals: PublishApproval[] = legacy.approval ? [{
-    ...legacy.approval,
-    evidenceIds: evidence
-      .filter((entry) => entry.fingerprint === legacy.approval?.fingerprint)
-      .map((entry) => entry.id),
-    source: sourceForDigest(legacy.approval.fingerprint),
-    migratedFromV1: true,
-  }] : []
-  const localPublishes: LocalPublishRecord[] = legacy.localPublishes.map((record) => ({
-    ...record,
-    approvalId: legacy.approval?.fingerprint === record.fingerprint ? legacy.approval.id : null,
-    evidenceIds: evidence.filter((entry) => entry.fingerprint === record.fingerprint).map((entry) => entry.id),
-    source: sourceForDigest(record.fingerprint),
-    migratedFromV1: true,
-    artifact: null,
-  }))
   return {
     schema: WEBSITE_SCHEMA,
     version: 2,
@@ -1218,9 +1198,9 @@ function migrateLegacyWorkspace(legacy: LegacyWebsiteWorkspace): WebsiteWorkspac
     siteName: legacy.siteName,
     pages: legacy.pages,
     selectedPageId: legacy.selectedPageId,
-    evidence,
-    approvals,
-    localPublishes,
+    evidence: [],
+    approvals: [],
+    localPublishes: [],
     events: [],
   }
 }
@@ -1246,7 +1226,7 @@ function restoreV2(value: unknown) {
   return isWebsiteWorkspace(migrated) ? migrated : null
 }
 
-function isWebsiteWorkspace(value: unknown): value is WebsiteWorkspace {
+function isWebsiteWorkspace(value: unknown, pendingReleaseRecords = 0): value is WebsiteWorkspace {
   if (!isRecord(value) || !hasExactKeys(value, [
     'schema', 'version', 'revision', 'contentRevision', 'siteName', 'pages', 'selectedPageId',
     'evidence', 'approvals', 'localPublishes', 'events',
@@ -1261,6 +1241,11 @@ function isWebsiteWorkspace(value: unknown): value is WebsiteWorkspace {
   if (!Array.isArray(value.evidence) || !value.evidence.every(isPublishEvidence) || !hasUniqueIds(value.evidence)) return false
   if (!Array.isArray(value.approvals) || !value.approvals.every(isPublishApproval) || !hasUniqueIds(value.approvals)) return false
   if (!Array.isArray(value.localPublishes) || !value.localPublishes.every(isLocalPublishRecord) || !hasUniqueIds(value.localPublishes)) return false
+  const releaseRecords = [...value.evidence, ...value.approvals, ...value.localPublishes]
+  if (releaseRecords.some((record) => record.migratedFromV1)) return false
+  const releaseRecordCount = releaseRecords.length
+  const confirmedReleaseCount = revision - contentRevision
+  if (releaseRecordCount > confirmedReleaseCount + pendingReleaseRecords) return false
   if (!Array.isArray(value.events) || !value.events.every(isWorkflowEvent) || !hasUniqueIds(value.events)
     || !hasUniqueStrings(value.events.map((event) => event.subjectId))) return false
   const sourceRevisionIsValid = [...value.evidence, ...value.approvals, ...value.localPublishes, ...value.events]
@@ -1268,6 +1253,15 @@ function isWebsiteWorkspace(value: unknown): value is WebsiteWorkspace {
   if (!sourceRevisionIsValid) return false
   const evidenceById = new Map(value.evidence.map((entry) => [entry.id, entry]))
   const eventBySubject = new Map(value.events.map((entry) => [entry.subjectId, entry]))
+  const expectedEvents: Array<{ subjectId: string; action: WebsiteWorkflowEvent['action'] }> = [
+    ...value.evidence.map((entry) => ({ subjectId: entry.id, action: 'publish_evidence_recorded' as const })),
+    ...value.approvals.map((entry) => ({ subjectId: entry.id, action: 'website_revision_approved' as const })),
+    ...value.localPublishes.map((entry) => ({ subjectId: entry.id, action: 'local_snapshot_recorded' as const })),
+  ]
+  if (!hasUniqueStrings(expectedEvents.map((entry) => entry.subjectId))) return false
+  const expectedEventBySubject = new Map(expectedEvents.map((entry) => [entry.subjectId, entry.action]))
+  if (value.events.length !== expectedEvents.length
+    || !value.events.every((event) => expectedEventBySubject.get(event.subjectId) === event.action)) return false
   for (const evidence of value.evidence) {
     if (!evidence.migratedFromV1) {
       const event = eventBySubject.get(evidence.id)

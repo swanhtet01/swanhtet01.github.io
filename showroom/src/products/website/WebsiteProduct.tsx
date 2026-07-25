@@ -5,8 +5,14 @@ import { ContentWorkspace } from './ContentWorkspace'
 import { NavigationWorkspace } from './NavigationWorkspace'
 import { PublishWorkspace } from './PublishWorkspace'
 import { SitePreview } from './SitePreview'
+import { WebsiteStarterSetup } from './WebsiteStarterSetup'
 import { useWebsiteWorkspace } from './useWebsiteWorkspace'
 import { createWebsiteHtmlDownload } from './website-export'
+import {
+  applyWebsiteStarterBrief,
+  isUntouchedWebsiteStarter,
+  type WebsiteStarterBrief,
+} from './website-starter'
 import {
   approveWebsiteRevision,
   commitWebsiteEditSession,
@@ -81,10 +87,10 @@ export function WebsiteProduct() {
   } = useWebsiteWorkspace()
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedView = searchParams.get('view')
-  const view: WebsiteView = requestedView === 'publish' ? 'publish' : 'content'
   const [surface, setSurface] = useState<'work' | 'preview'>('work')
   const [selectedPageId, setSelectedPageId] = useState(workspace.selectedPageId)
   const [siteSettingsOpen, setSiteSettingsOpen] = useState(false)
+  const [starterDismissed, setStarterDismissed] = useState(false)
   const [editSessionState, setEditSessionState] = useState<WebsiteEditSessionState | null>(null)
   const [savingDraft, setSavingDraft] = useState(false)
   const [repairConfirmationRevision, setRepairConfirmationRevision] = useState<number | null>(null)
@@ -116,16 +122,30 @@ export function WebsiteProduct() {
   const editConflict = Boolean(activeEditSession && !websiteEditSessionMatches(activeEditSession, workspace))
   const fingerprint = workspaceFingerprint(workspace)
   const checks = readinessChecks(workspace, fingerprint)
+  const contentChecksPass = checks
+    .filter((check) => !check.id.startsWith('evidence-'))
+    .every((check) => check.passed)
   const approval = getCurrentApproval(workspace)
   const publish = getCurrentPublish(workspace)
   const approvalIsCurrent = Boolean(approval)
   const publishIsCurrent = Boolean(publish)
-  const activeViewCopy = view === 'content' && surface === 'preview'
+  const starterAvailable = !hasUnsavedChanges && isUntouchedWebsiteStarter(editorWorkspace)
+  const canReview = !hasUnsavedChanges && !starterAvailable && contentChecksPass
+  const view: WebsiteView = requestedView === 'publish' && canReview ? 'publish' : 'content'
+  const starterSetupActive = view === 'content' && starterAvailable && !starterDismissed
+  const activeViewCopy = starterSetupActive
+    ? {
+        title: 'Start your website',
+        copy: 'Answer five short questions, then preview before anything is saved.',
+      }
+    : view === 'content' && surface === 'preview'
     ? {
         title: hasUnsavedChanges ? 'Preview unsaved changes' : 'Preview page',
         copy: hasUnsavedChanges
           ? 'This preview is not saved yet. Return to edit, then save or discard it.'
-          : 'Check the selected page at desktop, tablet, or mobile size.',
+          : selectedPage.stage === 'draft'
+            ? 'This page is saved as a draft. Return to edit and mark it ready.'
+            : 'Check the selected page at desktop, tablet, or mobile size.',
       }
     : viewCopy[view]
   const savedStateNotice = storageMode === 'managed'
@@ -133,7 +153,9 @@ export function WebsiteProduct() {
     : storageMode === 'browser-local'
       ? 'Changes are saved on this device. Nothing has been deployed.'
       : 'Changes last for this session only. Nothing has been deployed.'
-  const saveStateLabel = editConflict
+  const saveStateLabel = starterAvailable
+    ? 'Sample only'
+    : editConflict
     ? 'Saved version changed'
     : hasUnsavedChanges
       ? 'Unsaved preview'
@@ -185,11 +207,11 @@ export function WebsiteProduct() {
   }, [editSessionScope])
 
   useEffect(() => {
-    if (view !== 'publish' || !hasUnsavedChanges) return
+    if (requestedView !== 'publish' || canReview) return
     const next = new URLSearchParams(searchParams)
     next.delete('view')
     setSearchParams(next, { replace: true })
-  }, [hasUnsavedChanges, searchParams, setSearchParams, view])
+  }, [canReview, requestedView, searchParams, setSearchParams])
 
   useEffect(() => {
     if (headingFocusRequest > 0) headingRef.current?.focus()
@@ -214,6 +236,10 @@ export function WebsiteProduct() {
   function openWorkspaceView(nextView: WebsiteView) {
     if (nextView === 'publish' && hasUnsavedChanges) {
       setNotice('Save or discard the unsaved Website preview before reviewing release evidence.')
+      return
+    }
+    if (nextView === 'publish' && !canReview) {
+      setNotice('Finish and save every page before reviewing release evidence.')
       return
     }
     const next = new URLSearchParams(searchParams)
@@ -320,6 +346,12 @@ export function WebsiteProduct() {
     if (!activeEditSession || savingDraft) return
     clearEditSession()
     setDeleteCandidateId('')
+    if (isUntouchedWebsiteStarter(workspace)) {
+      setStarterDismissed(false)
+      setSurface('work')
+      setSiteSettingsOpen(false)
+      requestHeadingFocus()
+    }
     setNotice('Unsaved Website changes discarded. The saved workspace was not changed.')
   }
 
@@ -443,6 +475,31 @@ export function WebsiteProduct() {
       setDeleteCandidateId('')
       setNotice('New page added to the unsaved preview.')
     }
+  }
+
+  function startWithBusiness(brief: WebsiteStarterBrief) {
+    if (!starterAvailable) {
+      setNotice('The Website sample has already changed. Nothing was replaced.')
+      return
+    }
+    const staged = stageWorkspace((current) => (
+      applyWebsiteStarterBrief(current, brief, new Date().toISOString())
+    ))
+    if (!staged) {
+      setNotice('The business brief was not applied. Review every required field and try again.')
+      return
+    }
+    setSelectedPageId(staged.workspace.selectedPageId)
+    setStarterDismissed(true)
+    openContentSurface('preview')
+    setNotice('Your one-page site is ready as an unsaved preview. Review it, then Save or Discard.')
+  }
+
+  function openStarterSetup() {
+    setStarterDismissed(false)
+    setSurface('work')
+    setSiteSettingsOpen(false)
+    requestHeadingFocus()
   }
 
   function copySelectedPage() {
@@ -603,21 +660,29 @@ export function WebsiteProduct() {
               aria-label="Website actions"
               className="website-action-bar"
               data-editing={hasUnsavedChanges ? 'true' : 'false'}
+              data-starter={starterSetupActive ? 'true' : 'false'}
             >
-              <div className="website-page-control">
-                <label htmlFor="website-page-select">Page</label>
-                <select
-                  id="website-page-select"
-                  onChange={(event) => selectPage(event.currentTarget.value)}
-                  value={selectedPage.id}
-                >
-                  {editorWorkspace.pages.map((page) => (
-                    <option key={page.id} value={page.id}>
-                      {page.internalName || 'Untitled page'} — {page.slug || 'No path'} ({page.stage})
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {starterSetupActive ? (
+                <div className="website-page-control website-starter-control">
+                  <span>Start</span>
+                  <strong>Business website</strong>
+                </div>
+              ) : (
+                <div className="website-page-control">
+                  <label htmlFor="website-page-select">Page</label>
+                  <select
+                    id="website-page-select"
+                    onChange={(event) => selectPage(event.currentTarget.value)}
+                    value={selectedPage.id}
+                  >
+                    {editorWorkspace.pages.map((page) => (
+                      <option key={page.id} value={page.id}>
+                        {page.internalName || 'Untitled page'} — {page.slug || 'No path'} ({page.stage})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <span
                 aria-live="polite"
                 className="website-save-state"
@@ -626,72 +691,80 @@ export function WebsiteProduct() {
               >
                 {saveStateLabel}
               </span>
-              <div className="website-primary-actions">
-                <details
-                  className="website-site-settings"
-                  onKeyDown={(event) => {
-                    if (event.key !== 'Escape') return
-                    setSiteSettingsOpen(false)
-                    event.currentTarget.querySelector('summary')?.focus()
-                  }}
-                  onToggle={(event) => setSiteSettingsOpen(event.currentTarget.open)}
-                  open={siteSettingsOpen}
-                >
-                  <summary>Site</summary>
-                  <div className="website-site-settings-content">
-                    <div className="website-site-settings-actions">
-                      <span>{editorWorkspace.pages.length} pages · {visiblePageCount} in navigation</span>
-                      <button
-                        className="website-button is-secondary"
-                        disabled={editorWorkspace.pages.length >= MAX_WEBSITE_PAGES}
-                        onClick={addPage}
-                        title={editorWorkspace.pages.length >= MAX_WEBSITE_PAGES ? 'The four-page workspace limit is reached' : 'Add page'}
-                        type="button"
-                      >
-                        New page
-                      </button>
+              {!starterSetupActive ? (
+                <div className="website-primary-actions">
+                {starterAvailable ? (
+                  <button className="website-button is-primary" onClick={openStarterSetup} type="button">
+                    Start site
+                  </button>
+                ) : null}
+                {surface === 'work' ? (
+                  <details
+                    className="website-site-settings"
+                    onKeyDown={(event) => {
+                      if (event.key !== 'Escape') return
+                      setSiteSettingsOpen(false)
+                      event.currentTarget.querySelector('summary')?.focus()
+                    }}
+                    onToggle={(event) => setSiteSettingsOpen(event.currentTarget.open)}
+                    open={siteSettingsOpen}
+                  >
+                    <summary>Site</summary>
+                    <div className="website-site-settings-content">
+                      <div className="website-site-settings-actions">
+                        <span>{editorWorkspace.pages.length} pages · {visiblePageCount} in navigation</span>
+                        <button
+                          className="website-button is-secondary"
+                          disabled={editorWorkspace.pages.length >= MAX_WEBSITE_PAGES}
+                          onClick={addPage}
+                          title={editorWorkspace.pages.length >= MAX_WEBSITE_PAGES ? 'The four-page workspace limit is reached' : 'Add page'}
+                          type="button"
+                        >
+                          New page
+                        </button>
+                      </div>
+                      <NavigationWorkspace
+                        onMovePage={movePage}
+                        onSelectPage={previewPage}
+                        onSiteNameChange={(siteName) => {
+                          stageWorkspace((current) => ({ ...current, siteName }))
+                        }}
+                        onUpdatePage={updatePage}
+                        workspace={editorWorkspace}
+                      />
+                      {recoveryArchives.length ? (
+                        <details className="website-recovery-manager">
+                          <summary>Recovery archives <span>{recoveryArchives.length}</span></summary>
+                          <div className="website-recovery-list">
+                            <p>Unreadable Website values kept on this device. Download before removing anything you may need.</p>
+                            {recoveryArchives.map((archive) => {
+                              const deleteArmed = recoveryDeleteCandidate === archive.archiveKey
+                              return (
+                                <div className="website-recovery-row" key={archive.archiveKey}>
+                                  <div>
+                                    <strong>{formatRecoveryDate(archive.archivedAt)}</strong>
+                                    <span>{archive.sourceKey === LEGACY_WEBSITE_STORAGE_KEY ? 'Old Website data' : 'Website data'}</span>
+                                  </div>
+                                  <div className="website-recovery-actions">
+                                    <button onClick={() => downloadRepairArchive(archive.archiveKey)} type="button">Download</button>
+                                    {deleteArmed ? (
+                                      <>
+                                        <button className="is-quiet" onClick={() => setRecoveryDeleteCandidate('')} type="button">Cancel</button>
+                                        <button className="is-danger" onClick={() => void removeRecoveryArchive(archive.archiveKey)} type="button">Confirm remove</button>
+                                      </>
+                                    ) : (
+                                      <button className="is-quiet" onClick={() => void removeRecoveryArchive(archive.archiveKey)} type="button">Remove</button>
+                                    )}
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </details>
+                      ) : null}
                     </div>
-                    <NavigationWorkspace
-                      onMovePage={movePage}
-                      onSelectPage={previewPage}
-                      onSiteNameChange={(siteName) => {
-                        stageWorkspace((current) => ({ ...current, siteName }))
-                      }}
-                      onUpdatePage={updatePage}
-                      workspace={editorWorkspace}
-                    />
-                    {recoveryArchives.length ? (
-                      <details className="website-recovery-manager">
-                        <summary>Recovery archives <span>{recoveryArchives.length}</span></summary>
-                        <div className="website-recovery-list">
-                          <p>Unreadable Website values kept on this device. Download before removing anything you may need.</p>
-                          {recoveryArchives.map((archive) => {
-                            const deleteArmed = recoveryDeleteCandidate === archive.archiveKey
-                            return (
-                              <div className="website-recovery-row" key={archive.archiveKey}>
-                                <div>
-                                  <strong>{formatRecoveryDate(archive.archivedAt)}</strong>
-                                  <span>{archive.sourceKey === LEGACY_WEBSITE_STORAGE_KEY ? 'Old Website data' : 'Website data'}</span>
-                                </div>
-                                <div className="website-recovery-actions">
-                                  <button onClick={() => downloadRepairArchive(archive.archiveKey)} type="button">Download</button>
-                                  {deleteArmed ? (
-                                    <>
-                                      <button className="is-quiet" onClick={() => setRecoveryDeleteCandidate('')} type="button">Cancel</button>
-                                      <button className="is-danger" onClick={() => void removeRecoveryArchive(archive.archiveKey)} type="button">Confirm remove</button>
-                                    </>
-                                  ) : (
-                                    <button className="is-quiet" onClick={() => void removeRecoveryArchive(archive.archiveKey)} type="button">Remove</button>
-                                  )}
-                                </div>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      </details>
-                    ) : null}
-                  </div>
-                </details>
+                  </details>
+                ) : null}
                 <button
                   aria-pressed={surface === 'preview'}
                   className="website-button is-secondary"
@@ -723,12 +796,13 @@ export function WebsiteProduct() {
                       {savingDraft ? 'Saving…' : 'Save'}
                     </button>
                   </>
-                ) : (
+                ) : canReview ? (
                   <button className="website-button is-primary" onClick={() => openWorkspaceView('publish')} type="button">
                     Review site
                   </button>
-                )}
-              </div>
+                ) : null}
+                </div>
+              ) : null}
             </section>
           ) : null}
 
@@ -751,14 +825,21 @@ export function WebsiteProduct() {
           >
             <div className="website-work-surface">
               {view === 'content' ? (
-                <ContentWorkspace
-                  canDuplicate={editorWorkspace.pages.length < MAX_WEBSITE_PAGES}
-                  deleteArmed={deleteCandidateId === selectedPage.id}
-                  onDuplicate={copySelectedPage}
-                  onRequestDelete={requestDeletePage}
-                  onUpdatePage={(update) => updatePage(selectedPage.id, update)}
-                  page={selectedPage}
-                />
+                starterSetupActive ? (
+                  <WebsiteStarterSetup
+                    onCreate={startWithBusiness}
+                    onViewSample={() => setStarterDismissed(true)}
+                  />
+                ) : (
+                  <ContentWorkspace
+                    canDuplicate={editorWorkspace.pages.length < MAX_WEBSITE_PAGES}
+                    deleteArmed={deleteCandidateId === selectedPage.id}
+                    onDuplicate={copySelectedPage}
+                    onRequestDelete={requestDeletePage}
+                    onUpdatePage={(update) => updatePage(selectedPage.id, update)}
+                    page={selectedPage}
+                  />
+                )
               ) : null}
 
               {view === 'publish' ? (

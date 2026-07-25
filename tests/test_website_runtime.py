@@ -5,6 +5,7 @@ import unittest
 
 from supermega_runtime.trial_store import TrialValidationError
 from supermega_runtime.website_runtime import (
+    _canonical_digest,
     _website_artifact,
     _website_fingerprint,
     reduce_website_state,
@@ -172,6 +173,26 @@ class WebsiteRuntimeTests(unittest.TestCase):
         current["pages"].append(draft_page)
         for kind in ("content", "responsive", "links"):
             current = _record_evidence(current, kind)
+
+        relabeled_migration = deepcopy(current)
+        relabeled_migration["evidence"][0]["migratedFromV1"] = True
+        relabeled_subject = relabeled_migration["evidence"][0]["id"]
+        relabeled_migration["events"] = [
+            event for event in relabeled_migration["events"] if event["subjectId"] != relabeled_subject
+        ]
+        relabeled_migration["contentRevision"] = relabeled_migration["revision"]
+        forged_records = {
+            "evidence": [entry for entry in relabeled_migration["evidence"] if entry["migratedFromV1"]],
+            "approvals": [],
+            "localPublishes": [],
+        }
+        relabeled_migration["legacyImport"] = {
+            "schema": "supermega.website.legacy-import.v1",
+            "recordIds": [entry["id"] for entry in forged_records["evidence"]],
+            "digest": f"legacy-{_canonical_digest(forged_records)}",
+        }
+        with self.assertRaises(TrialValidationError):
+            validate_website_state(relabeled_migration)
 
         source = _source(current)
         evidence_ids = [entry["id"] for entry in current["evidence"]]
@@ -348,6 +369,27 @@ class WebsiteRuntimeTests(unittest.TestCase):
                 "website.revision.approved",
                 current,
                 _command(tampered, action_id="approval-1", reason=str(approval["note"]), reference=",".join(evidence_ids)),
+            )
+
+    def test_managed_command_cannot_reclassify_a_deleted_release_record(self) -> None:
+        current = _record_evidence(_state(), "content")
+        forged = deepcopy(current)
+        forged["revision"] = int(current["revision"]) + 1
+        forged["contentRevision"] = forged["revision"]
+        forged["evidence"] = []
+        forged["events"] = []
+
+        self.assertEqual(validate_website_state(forged), forged)
+        with self.assertRaises(TrialValidationError):
+            reduce_website_state(
+                "website.content.saved",
+                current,
+                _command(
+                    forged,
+                    action_id="content-forged",
+                    reason="Website draft content saved",
+                    reference="website:content:2",
+                ),
             )
 
     def test_initialization_rejects_client_asserted_history_and_invalid_timestamp(self) -> None:

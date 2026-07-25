@@ -184,8 +184,10 @@ export function PublishWorkspace({
       </nav>
 
       <div className="publish-flow-boundary" role="note">
-        <strong>Local record only</strong>
-        <span>No deployment, domain write, payment, stock, customer message, or order change happens here.</span>
+        <strong>{managedActorId ? 'Managed workspace record' : 'Device-local record'}</strong>
+        <span>{managedActorId
+          ? 'Saved through the managed command history. No deployment, domain, payment, stock, message, or order change happens here.'
+          : 'Stored on this device, not verified by a managed service. No deployment, domain, payment, stock, message, or order change happens here.'}</span>
       </div>
 
       <div className="website-editor-scroll publish-flow-body" ref={bodyRef}>
