@@ -24,17 +24,16 @@ SuperMega HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are
 
 ## Current outcomes
 
-1. **Identity** — restore Shop and Plant in the public site, app labels, canonical routes, and verification contracts without changing their stable stored data.
-2. **Ecommerce** — take the completed authenticated, revisioned storefront-setup and request-inbox contracts through one owner-approved isolated hosted rehearsal while preserving the human-confirmed Shop action boundary.
-3. **Agents** — run the completed Order Intake evaluator against real server-only provider outputs, then build the first review/edit/accept-discard demo only if its quality gates pass.
-4. **Website** — validate one named-business brief through an accepted responsive artifact.
-5. **Managed persistence** — repeat the passing PostgreSQL 17 contract on one isolated hosted Supabase target before production activation.
+1. **Ecommerce** — take authenticated storefront setup and request inbox through one owner-approved isolated hosted rehearsal while preserving the human-confirmed Shop boundary.
+2. **Agents** — run the Order Intake evaluator against real server-only provider outputs, then build a review demo only if its quality gates pass.
+3. **Website** — repeat the named-business lifecycle in an authenticated managed workspace.
+4. **Managed persistence** — repeat the PostgreSQL 17 contract on one isolated hosted Supabase target before production activation.
 
 ## Implemented reality
 
 - Shop runs at `/shop/` with guarded Orders and Stock records. It covers intake, reservations, fulfilment, payment/refund evidence, counts, movements, daily close, purchase orders, attributable completion, and partial returns. Only restock disposition changes stock; returns never alter payment or order totals. Supplier messaging, payment, and accounting remain outside the workflow.
 - Plant runs at `/plant/` with Jobs and Problems; the old operations URL is compatibility-only. Its record covers jobs, short closes, output, job-linked materials, quality/problems, equipment observations, downtime, owned maintenance start/completion, and handoff. Maintenance is evidence-only: no machine, job, downtime, purchasing, parts, costing, or accounting side effects.
-- Website runs at `/products/website/` with Site, Preview, and Review. Drafts survive reload, reject stale overwrite, and use backup-first repair. `?view=publish` resumes Review; invalid links or recovered edits safely return to Edit. Review creates a deterministic site file, not a deployment.
+- Website runs at `/products/website/` with a named-business starter, Preview, and gated Review. Five business fields become one unsaved page, then Preview and Save. Review stays hidden until the saved page is ready and creates a deterministic site file, never a deployment. Draft recovery and stale-overwrite protection remain.
 - Ecommerce builds from read-only Shop data. Managed setup is revisioned and catalogue-bound; receipts require the saved storefront, current catalogue, selected available SKU, and exact preview digest to agree. Local setup stays on-device. Shop revalidates and gates every consequence.
 - `/agents/` currently resolves to the compact Products planned state because Agent Teams are internal coordination records. Order Intake has passed its local 20-case evaluator, but the server-only provider runner is held at the OpenAI credential gate and no provider-backed demo is claimed.
 - Home now prioritizes unfinished Shop and Plant operating records before internal company tasks. The internal `/work/` route is labelled HQ, its activity is collapsed on Home, and Products remains the direct launcher. The bottom navigation reads Home, HQ, and Products.
@@ -42,17 +41,17 @@ SuperMega HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are
 
 ## Verified baseline
 
-- Checkpoint `bbd09ed` is the accepted local product and database-authority baseline.
-- App lint/build, the full local release/security/database/HQ contracts, and all 145 Python tests pass for the current product checkpoint.
+- Checkpoint `906d064` is the accepted local product and database-authority baseline.
+- App lint/build, the full local release/security/database/HQ contracts, and all 146 Python tests pass for the current product checkpoint.
 - The complete Showroom dependency audit reports zero known vulnerabilities. React Router is on the patched v8 line, the app declares Node `>=22.22.0`, and the lint toolchain preserves caught error causes.
-- HQ remains its own route chunk; the largest JavaScript chunk is 494,957 bytes, leaving 5,043 bytes under the hard gate.
-- Focused app-build coverage includes 160 Shop, 224 Plant, 74 Website, 11 managed-Website, 12 storefront, 15 request, 16 managed-storefront, and 16 Ecommerce handoff checks.
+- HQ remains its own route chunk; the largest JavaScript chunk is 495,020 bytes, leaving 4,980 bytes under the hard gate.
+- Focused app-build coverage includes 160 Shop, 224 Plant, 94 Website, 11 managed-Website, 12 storefront, 15 request, 16 managed-storefront, and 16 Ecommerce handoff checks.
 - Rendered Shop journeys prove purchase `0/10 → 4/10 → cancelled 6`, count `8 → 6`, and returns: sellable `21 → 22`, not-restocked stays `34`, then sellable `34 → 35`. A stale desktop confirmation loses safely to mobile. At 390/1280 px there is no horizontal overflow; the return editor uses one workspace scroll and mobile controls are 44 px.
 - Rendered Plant journeys prove fractional material use, a `340`-unit short close, and attributed maintenance start/completion. Open maintenance enters handoff; completed work drops out. Desktop and 390 px layouts have no overflow, undersized controls, or browser errors.
+- Website QA proves named setup → preview → Save → ready → 6/6 Review at 390/1280 px, with 44 px actions, attached errors, and no horizontal overflow. Device-local and managed records are labelled separately.
 - PostgreSQL 17.10 passed 32 checks across two TLS clusters, including exact approval/event restore equality and the explicit trusted-server identity boundary.
-- Local `bbd09ed` is +148 over cached `origin/main` `6885c320` and +102 over cached integration `338b6fd`. Live GitHub/Vercel state was not refreshed; no push, merge, or deployment occurred.
-- Both canonical domains serve matching Vercel release identity from `supermega-public`. `demo.supermega.dev` returns 404; `shop.supermega.dev` has no DNS record.
-- `supermegabase` is healthy PostgreSQL 17.6 but has one older migration, no `app_private`, and none of the six private-trial migrations. Its 27 public tables have RLS and no policies; it is not an activated rehearsal target.
+- Local `906d064` is +150 over cached `origin/main` `6885c320` and +104 over cached release-candidate tracking `338b6fd`. Live GitHub/Vercel state was not refreshed; no push, merge, or deployment occurred.
+- Last live audit: canonical domains matched `supermega-public`; `demo.supermega.dev` was 404, `shop.supermega.dev` had no DNS, and `supermegabase` lacked `app_private` plus the six trial migrations.
 
 ## Coordination
 
@@ -69,7 +68,8 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - Ecommerce has authenticated setup and inbox contracts, but no isolated hosted rehearsal or cross-device proof. Request retention stays capped at 100 until measured volume justifies an indexed queue.
 - Agent Teams is not a production runtime. Order Intake passed its 20-case evaluator, but no usable local OpenAI API key was found; the provider runner awaits a secure founder decision and still needs a three-minute human review workflow.
 - No isolated hosted Supabase branch or separate non-production project has repeated the local database proof.
-- The locally tracked canonical main ref is 148 commits behind this product checkpoint. Production correctly follows GitHub `main`, so the live app cannot contain the validated local work until an owner-approved integration and coordinated release occurs.
+- Browser-local Website records cannot authenticate out-of-band storage edits; managed commands use the locked prior state and separate ledger. Hosted activation remains unproven.
+- The locally tracked canonical main ref is 150 commits behind this product checkpoint. Production correctly follows GitHub `main`, so the live app cannot contain the validated local work until an owner-approved integration and coordinated release occurs.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
 
 ## Decisions in force
@@ -85,7 +85,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 ## Next evidence
 
 1. Keep the passing `/shop/`, `/plant/`, Website, Ecommerce, compatibility, and mobile journeys as regression evidence.
-2. Review the 146-commit release-candidate delta, then obtain explicit owner approval before any push, merge, deployment, or canonical-domain correction.
+2. Review the 150-commit release-candidate delta, then obtain explicit owner approval before any push, merge, deployment, or canonical-domain correction.
 3. Rehearse revisioned Ecommerce setup persistence and request retention on an owner-approved isolated non-production tenant and capture cross-device, replay, tenant-isolation, conflict, recovery, and zero-conversion evidence.
 4. Generate server-only Order Intake results with no operational tools, score all 20 fixtures, and expose a human review demo only after every quality and zero-side-effect gate passes.
 5. Provision and validate one isolated hosted Supabase rehearsal target before any production write enablement.
