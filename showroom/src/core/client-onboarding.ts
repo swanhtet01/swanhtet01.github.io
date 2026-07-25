@@ -1,0 +1,466 @@
+export const CLIENT_IMPORT_SCHEMA = 'supermega.client_import_preview.v1' as const
+export const CLIENT_STAGING_SCHEMA = 'supermega.client_import_staging.v1' as const
+export const CLIENT_IMPORT_MAX_BYTES = 512 * 1024
+export const CLIENT_IMPORT_MAX_ROWS = 500
+
+export type ClientSolutionId = 'commerce' | 'production' | 'website' | 'ecommerce'
+export type ClientImportMapping = Record<string, string>
+export type ClientImportRowStatus = 'ready' | 'invalid' | 'duplicate'
+export type ClientImportSuggestionBasis = 'exact' | 'alias' | 'ambiguous' | 'unmapped'
+
+type ClientImportFieldKind = 'boolean' | 'date' | 'integer' | 'slug' | 'sku' | 'text' | 'url'
+
+export type ClientImportField = {
+  id: string
+  label: string
+  required: boolean
+  kind: ClientImportFieldKind
+  aliases: readonly string[]
+  maximum?: number
+  minimum?: number
+}
+
+export type ClientImportObject = {
+  id: string
+  label: string
+  description: string
+  keyField: string
+  fields: readonly ClientImportField[]
+  template: string
+  activationBoundary: string
+}
+
+export type ClientImportIssue = {
+  code: string
+  field: string | 'file' | 'row'
+  message: string
+}
+
+export type ClientImportSuggestion = {
+  field: string
+  header: string
+  basis: ClientImportSuggestionBasis
+}
+
+export type ClientImportRow = {
+  rowNumber: number
+  status: ClientImportRowStatus
+  key: string
+  source: Record<string, string>
+  values: Record<string, string>
+  issues: ClientImportIssue[]
+}
+
+export type ClientImportPreview = {
+  schema: typeof CLIENT_IMPORT_SCHEMA
+  product: ClientSolutionId
+  object: string
+  sourceName: string
+  sourceDigest: string
+  previewDigest: string
+  headers: string[]
+  fields: ClientImportField[]
+  mapping: ClientImportMapping
+  suggestions: ClientImportSuggestion[]
+  fileIssues: ClientImportIssue[]
+  rows: ClientImportRow[]
+  readyForStaging: boolean
+  totals: {
+    rows: number
+    ready: number
+    invalid: number
+    duplicates: number
+    issueRows: number
+  }
+}
+
+type ParsedCsvRow = {
+  rowNumber: number
+  cells: string[]
+}
+
+const formulaPrefix = /^[=+\-@]/
+
+const objects: Record<ClientSolutionId, ClientImportObject> = {
+  commerce: {
+    id: 'shop_catalog',
+    label: 'Shop catalog',
+    description: 'Opening items, stock thresholds, and MMK selling prices.',
+    keyField: 'sku',
+    activationBoundary: 'A named Shop operator must separately confirm an accountable catalog import.',
+    template: 'sku,item_name,opening_stock,reorder_at,price_mmk\r\nSKU-001,Green tea,24,8,4500\r\nSKU-002,Myanmar coffee,12,5,7000\r\n',
+    fields: [
+      { id: 'sku', label: 'SKU', required: true, kind: 'sku', aliases: ['sku', 'item_sku', 'product_sku', 'stock_code', 'item_code', 'product_code', 'ပစ္စည်းကုဒ်'], maximum: 80 },
+      { id: 'name', label: 'Item name', required: true, kind: 'text', aliases: ['item_name', 'name', 'product_name', 'title', 'description', 'ပစ္စည်းအမည်'], maximum: 180 },
+      { id: 'onHand', label: 'Opening stock', required: true, kind: 'integer', aliases: ['opening_stock', 'on_hand', 'available_stock', 'stock', 'quantity', 'qty', 'လက်ကျန်'], minimum: 0 },
+      { id: 'reorderAt', label: 'Reorder at', required: true, kind: 'integer', aliases: ['reorder_at', 'reorder_level', 'reorder_point', 'low_stock_at', 'minimum_stock', 'min_stock'], minimum: 0 },
+      { id: 'price', label: 'Price (MMK)', required: true, kind: 'integer', aliases: ['price_mmk', 'price', 'unit_price', 'selling_price', 'mmk_price', 'စျေးနှုန်း'], minimum: 1 },
+    ],
+  },
+  production: {
+    id: 'plant_jobs',
+    label: 'Plant jobs',
+    description: 'Initial production jobs, targets, due dates, and line ownership.',
+    keyField: 'jobCode',
+    activationBoundary: 'A Plant owner must verify capacity, material, and safety before jobs enter the live schedule.',
+    template: 'job_code,product_name,target_quantity,due_date,production_line\r\nJOB-001,20 inch tyre,500,2026-08-15,Line A\r\nJOB-002,16 inch tyre,300,2026-08-16,Line B\r\n',
+    fields: [
+      { id: 'jobCode', label: 'Job code', required: true, kind: 'sku', aliases: ['job_code', 'job_id', 'work_order', 'work_order_id', 'order_number', 'အလုပ်ကုဒ်'], maximum: 80 },
+      { id: 'productName', label: 'Product', required: true, kind: 'text', aliases: ['product_name', 'product', 'item_name', 'output', 'finished_good', 'ကုန်ပစ္စည်း'], maximum: 180 },
+      { id: 'targetQuantity', label: 'Target quantity', required: true, kind: 'integer', aliases: ['target_quantity', 'target', 'planned_quantity', 'plan_qty', 'quantity', 'အရေအတွက်'], minimum: 1 },
+      { id: 'dueDate', label: 'Due date', required: true, kind: 'date', aliases: ['due_date', 'required_date', 'finish_date', 'planned_end', 'ရက်စွဲ'] },
+      { id: 'line', label: 'Production line', required: true, kind: 'text', aliases: ['production_line', 'line', 'work_center', 'machine_group', 'လိုင်း'], maximum: 120 },
+    ],
+  },
+  website: {
+    id: 'website_pages',
+    label: 'Website pages',
+    description: 'Finite page structure and approved source copy for a client website.',
+    keyField: 'slug',
+    activationBoundary: 'Imported copy remains a draft until a human reviews the responsive preview and approves the exact evidence set.',
+    template: 'page_slug,page_title,headline,body,contact_url\r\nhome,Home,Clear software for daily work,Explain the main offer and proof.,https://example.com/contact\r\nabout,About,Why customers trust us,Add the approved company story.,https://example.com/contact\r\n',
+    fields: [
+      { id: 'slug', label: 'Page slug', required: true, kind: 'slug', aliases: ['page_slug', 'slug', 'path', 'url_slug', 'စာမျက်နှာ'], maximum: 80 },
+      { id: 'title', label: 'Page title', required: true, kind: 'text', aliases: ['page_title', 'title', 'seo_title', 'စာမျက်နှာခေါင်းစဉ်'], maximum: 120 },
+      { id: 'headline', label: 'Headline', required: true, kind: 'text', aliases: ['headline', 'heading', 'hero_title', 'ခေါင်းစဉ်'], maximum: 180 },
+      { id: 'body', label: 'Body copy', required: true, kind: 'text', aliases: ['body', 'body_copy', 'content', 'description', 'စာသား'], maximum: 1200 },
+      { id: 'contactUrl', label: 'Contact URL', required: false, kind: 'url', aliases: ['contact_url', 'cta_url', 'contact_link', 'call_to_action'] },
+    ],
+  },
+  ecommerce: {
+    id: 'storefront_merchandising',
+    label: 'Ecommerce merchandising',
+    description: 'Shop SKU references, collections, and storefront display copy without duplicating stock or price.',
+    keyField: 'sku',
+    activationBoundary: 'Every SKU must match the current Shop catalog before a storefront draft can be approved.',
+    template: 'sku,featured,collection,display_name,merchandising_note\r\nSKU-001,true,Best sellers,Green tea,Lead with the locally sourced proof.\r\nSKU-002,false,Coffee,Myanmar coffee,Show after the best sellers.\r\n',
+    fields: [
+      { id: 'sku', label: 'Shop SKU', required: true, kind: 'sku', aliases: ['sku', 'shop_sku', 'item_sku', 'product_code', 'ပစ္စည်းကုဒ်'], maximum: 80 },
+      { id: 'featured', label: 'Featured', required: true, kind: 'boolean', aliases: ['featured', 'is_featured', 'highlight', 'promoted'] },
+      { id: 'collection', label: 'Collection', required: true, kind: 'text', aliases: ['collection', 'category', 'group', 'catalog_section'], maximum: 120 },
+      { id: 'displayName', label: 'Display name', required: false, kind: 'text', aliases: ['display_name', 'storefront_name', 'name', 'title'], maximum: 180 },
+      { id: 'note', label: 'Merchandising note', required: false, kind: 'text', aliases: ['merchandising_note', 'note', 'display_note', 'instructions'], maximum: 300 },
+    ],
+  },
+}
+
+function hasControlCharacter(value: string) {
+  return Array.from(value).some((character) => {
+    const codePoint = character.codePointAt(0) as number
+    return codePoint <= 31 || codePoint === 127
+  })
+}
+
+function normalizeHeader(value: string) {
+  return value
+    .trim()
+    .normalize('NFKC')
+    .toLocaleLowerCase('en-US')
+    .replace(/[^\p{L}\p{N}]+/gu, '_')
+    .replace(/^_+|_+$/g, '')
+}
+
+function compareCodePoints(left: string, right: string) {
+  const leftPoints = Array.from(left, (character) => character.codePointAt(0) as number)
+  const rightPoints = Array.from(right, (character) => character.codePointAt(0) as number)
+  const shared = Math.min(leftPoints.length, rightPoints.length)
+  for (let index = 0; index < shared; index += 1) {
+    if (leftPoints[index] !== rightPoints[index]) return leftPoints[index] - rightPoints[index]
+  }
+  return leftPoints.length - rightPoints.length
+}
+
+function byteLength(value: string) {
+  return new TextEncoder().encode(value).byteLength
+}
+
+async function sha256(value: string) {
+  if (!globalThis.crypto?.subtle) throw new Error('Secure import fingerprinting is unavailable in this browser.')
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
+  return `sha256:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')}`
+}
+
+function parseCsv(input: string) {
+  if (byteLength(input) > CLIENT_IMPORT_MAX_BYTES) throw new Error(`Choose a CSV smaller than ${CLIENT_IMPORT_MAX_BYTES / 1024} KB.`)
+  if (input.includes('\0')) throw new Error('The CSV contains a null byte and was rejected.')
+  const source = input.startsWith('\uFEFF') ? input.slice(1) : input
+  if (!source.trim()) throw new Error('The CSV is empty.')
+
+  const rows: ParsedCsvRow[] = []
+  let cells: string[] = []
+  let field = ''
+  let inQuotes = false
+  let quotedFieldClosed = false
+  let line = 1
+  let rowStart = 1
+  const pushRow = () => {
+    cells.push(field)
+    rows.push({ rowNumber: rowStart, cells })
+    cells = []
+    field = ''
+    quotedFieldClosed = false
+    rowStart = line + 1
+  }
+
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index]
+    if (inQuotes) {
+      if (character === '"') {
+        if (source[index + 1] === '"') {
+          field += '"'
+          index += 1
+        } else {
+          inQuotes = false
+          quotedFieldClosed = true
+        }
+      } else {
+        field += character
+        if (character === '\n') line += 1
+      }
+      continue
+    }
+    if (quotedFieldClosed && character !== ',' && character !== '\n' && character !== '\r') throw new Error(`CSV row ${rowStart} has text after a closing quote.`)
+    if (character === '"') {
+      if (field.length) throw new Error(`CSV row ${rowStart} has a quote inside an unquoted value.`)
+      inQuotes = true
+    } else if (character === ',') {
+      cells.push(field)
+      field = ''
+      quotedFieldClosed = false
+    } else if (character === '\n') {
+      pushRow()
+      line += 1
+    } else if (character === '\r') {
+      if (source[index + 1] === '\n') continue
+      pushRow()
+      line += 1
+    } else {
+      field += character
+    }
+  }
+  if (inQuotes) throw new Error(`CSV row ${rowStart} has an unclosed quoted value.`)
+  if (field.length || cells.length) rows.push({ rowNumber: rowStart, cells: [...cells, field] })
+  while (rows.length > 1 && rows.at(-1)?.cells.every((cell) => !cell)) rows.pop()
+  if (!rows.length) throw new Error('The CSV has no header row.')
+  if (rows.length - 1 > CLIENT_IMPORT_MAX_ROWS) throw new Error(`Preview at most ${CLIENT_IMPORT_MAX_ROWS} rows at a time.`)
+  return { source, rows }
+}
+
+function inspectHeaders(headers: string[]) {
+  if (headers.length > 50) throw new Error('The CSV has more than 50 columns.')
+  if (headers.some((header) => !header.trim() || hasControlCharacter(header))) throw new Error('Every CSV column needs a visible header without control characters.')
+  const normalized = headers.map(normalizeHeader)
+  if (new Set(normalized).size !== normalized.length) throw new Error('The CSV has duplicate or equivalent column headers.')
+  return normalized
+}
+
+function suggestMapping(object: ClientImportObject, headers: string[], normalizedHeaders: string[]) {
+  const mapping: ClientImportMapping = {}
+  const suggestions: ClientImportSuggestion[] = []
+  for (const field of object.fields) {
+    const aliases = [field.id, ...field.aliases].map(normalizeHeader)
+    const ranked = normalizedHeaders.flatMap((header, index) => {
+      const rank = aliases.indexOf(header)
+      return rank < 0 ? [] : [{ header: headers[index], rank }]
+    }).sort((left, right) => left.rank - right.rank || compareCodePoints(left.header, right.header))
+    const best = ranked[0]
+    const ambiguous = Boolean(best && ranked.filter((candidate) => candidate.rank === best.rank).length > 1)
+    mapping[field.id] = best && !ambiguous ? best.header : ''
+    suggestions.push({
+      field: field.id,
+      header: mapping[field.id],
+      basis: ambiguous ? 'ambiguous' : !best ? 'unmapped' : best.rank === 0 ? 'exact' : 'alias',
+    })
+  }
+  return { mapping, suggestions }
+}
+
+function mappingIssues(object: ClientImportObject, headers: string[], mapping: ClientImportMapping) {
+  const issues: ClientImportIssue[] = []
+  const selected: string[] = []
+  for (const field of object.fields) {
+    const header = mapping[field.id] ?? ''
+    if (!header && field.required) issues.push({ code: 'mapping_required', field: field.id, message: `Map ${field.label} to one CSV column.` })
+    else if (header && !headers.includes(header)) issues.push({ code: 'mapping_unknown_header', field: field.id, message: `${field.label} is mapped to a missing column.` })
+    else if (header) selected.push(header)
+  }
+  const duplicates = selected.filter((header, index) => selected.indexOf(header) !== index)
+  for (const header of [...new Set(duplicates)]) issues.push({ code: 'mapping_reused_header', field: 'file', message: `${header} cannot supply more than one target field.` })
+  return issues
+}
+
+function fieldIssue(field: ClientImportField, value: string): ClientImportIssue | null {
+  if (!value) return field.required ? { code: 'value_required', field: field.id, message: `${field.label} is required.` } : null
+  if (value !== value.trim()) return { code: 'value_not_canonical', field: field.id, message: `${field.label} has leading or trailing spaces.` }
+  if (value !== value.normalize('NFC')) return { code: 'unicode_normalization', field: field.id, message: `${field.label} must use normalized Unicode text.` }
+  if (hasControlCharacter(value)) return { code: 'control_character', field: field.id, message: `${field.label} contains a control character.` }
+  if (formulaPrefix.test(value)) return { code: 'spreadsheet_formula', field: field.id, message: `${field.label} begins like a spreadsheet formula and was rejected.` }
+  if (field.maximum && value.length > field.maximum) return { code: 'value_too_long', field: field.id, message: `${field.label} must be ${field.maximum} characters or fewer.` }
+
+  if (field.kind === 'integer') {
+    if (!/^[0-9]+$/.test(value)) return { code: 'whole_number_required', field: field.id, message: `${field.label} must use whole ASCII digits without commas or signs.` }
+    const parsed = Number(value)
+    if (!Number.isSafeInteger(parsed) || parsed < (field.minimum ?? 0)) return { code: 'number_out_of_range', field: field.id, message: `${field.label} is outside the supported range.` }
+  } else if (field.kind === 'sku') {
+    if (!/^[A-Z0-9][A-Z0-9._/-]{0,79}$/.test(value)) return { code: 'identifier_not_canonical', field: field.id, message: `${field.label} must use uppercase letters, digits, dots, slashes, underscores, or hyphens.` }
+  } else if (field.kind === 'slug') {
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value)) return { code: 'slug_not_canonical', field: field.id, message: `${field.label} must be a lowercase URL slug such as about-us.` }
+  } else if (field.kind === 'date') {
+    const parsed = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T00:00:00.000Z`) : null
+    if (!parsed || Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) return { code: 'date_not_canonical', field: field.id, message: `${field.label} must use a real YYYY-MM-DD date.` }
+  } else if (field.kind === 'boolean') {
+    if (value !== 'true' && value !== 'false') return { code: 'boolean_not_canonical', field: field.id, message: `${field.label} must be true or false.` }
+  } else if (field.kind === 'url') {
+    try {
+      const parsed = new URL(value)
+      if (!['https:', 'mailto:', 'tel:'].includes(parsed.protocol)) throw new Error('protocol')
+    } catch {
+      return { code: 'url_not_allowed', field: field.id, message: `${field.label} must be an HTTPS, mailto, or tel URL.` }
+    }
+  }
+  return null
+}
+
+function rowFromMapping(parsed: ParsedCsvRow, object: ClientImportObject, headers: string[], mapping: ClientImportMapping, fileIssues: ClientImportIssue[]) {
+  const source = Object.fromEntries(headers.map((header, index) => [header, parsed.cells[index] ?? '']))
+  const issues: ClientImportIssue[] = []
+  if (parsed.cells.length !== headers.length) issues.push({ code: 'column_count', field: 'row', message: `Expected ${headers.length} columns but found ${parsed.cells.length}.` })
+  if (parsed.cells.every((cell) => !cell)) issues.push({ code: 'empty_row', field: 'row', message: 'Remove the empty CSV row.' })
+  if (fileIssues.length) issues.push({ code: 'mapping_incomplete', field: 'row', message: 'Complete the column mapping before this row can be checked.' })
+  const values = Object.fromEntries(object.fields.map((field) => [field.id, mapping[field.id] ? source[mapping[field.id]] ?? '' : '']))
+  if (!issues.length) {
+    for (const field of object.fields) {
+      const issue = fieldIssue(field, values[field.id] ?? '')
+      if (issue) issues.push(issue)
+    }
+  }
+  return {
+    rowNumber: parsed.rowNumber,
+    status: issues.length ? 'invalid' as const : 'ready' as const,
+    key: values[object.keyField] ?? '',
+    source,
+    values,
+    issues,
+  }
+}
+
+function classifyDuplicates(rows: ClientImportRow[]) {
+  const byKey = new Map<string, ClientImportRow[]>()
+  for (const row of rows) {
+    if (row.status !== 'ready' || !row.key) continue
+    const matches = byKey.get(row.key) ?? []
+    matches.push(row)
+    byKey.set(row.key, matches)
+  }
+  for (const [key, matches] of byKey) {
+    if (matches.length < 2) continue
+    for (const row of matches) {
+      row.status = 'duplicate'
+      row.issues.push({ code: 'duplicate_object_key', field: 'row', message: `${key} appears ${matches.length} times in this file.` })
+    }
+  }
+}
+
+function totalsFor(rows: ClientImportRow[]) {
+  return {
+    rows: rows.length,
+    ready: rows.filter((row) => row.status === 'ready').length,
+    invalid: rows.filter((row) => row.status === 'invalid').length,
+    duplicates: rows.filter((row) => row.status === 'duplicate').length,
+    issueRows: rows.filter((row) => row.status !== 'ready').length,
+  }
+}
+
+function safeSourceName(sourceName: string) {
+  const value = sourceName.trim() || 'client-data.csv'
+  if (value.length > 180 || hasControlCharacter(value)) throw new Error('The source filename is invalid.')
+  return value
+}
+
+export function clientImportObject(product: ClientSolutionId) {
+  return objects[product]
+}
+
+export function clientImportTemplate(product: ClientSolutionId) {
+  return objects[product].template
+}
+
+export async function createClientImportPreview(
+  csvText: string,
+  product: ClientSolutionId,
+  selectedMapping?: ClientImportMapping,
+  sourceName = 'client-data.csv',
+): Promise<ClientImportPreview> {
+  const object = objects[product]
+  const parsed = parseCsv(csvText)
+  const headerRow = parsed.rows[0]
+  if (!headerRow) throw new Error('The CSV has no header row.')
+  const headers = headerRow.cells
+  const normalizedHeaders = inspectHeaders(headers)
+  const suggested = suggestMapping(object, headers, normalizedHeaders)
+  const mapping = selectedMapping ? { ...selectedMapping } : suggested.mapping
+  const fileIssues = mappingIssues(object, headers, mapping)
+  const rows = parsed.rows.slice(1).map((row) => rowFromMapping(row, object, headers, mapping, fileIssues))
+  if (!rows.length) fileIssues.push({ code: 'data_rows_required', field: 'file', message: 'Add at least one data row below the header.' })
+  classifyDuplicates(rows)
+  const totals = totalsFor(rows)
+  const normalizedMapping = Object.fromEntries(object.fields.map((field) => [field.id, mapping[field.id] ?? '']))
+  const sourceDigest = await sha256(parsed.source)
+  const previewDigest = await sha256(JSON.stringify({ schema: CLIENT_IMPORT_SCHEMA, product, object: object.id, sourceDigest, mapping: normalizedMapping }))
+  return {
+    schema: CLIENT_IMPORT_SCHEMA,
+    product,
+    object: object.id,
+    sourceName: safeSourceName(sourceName),
+    sourceDigest,
+    previewDigest,
+    headers,
+    fields: object.fields.map((field) => ({ ...field, aliases: [...field.aliases] })),
+    mapping: normalizedMapping,
+    suggestions: suggested.suggestions,
+    fileIssues,
+    rows,
+    readyForStaging: fileIssues.length === 0 && totals.rows > 0 && totals.ready === totals.rows,
+    totals,
+  }
+}
+
+function boundedContext(value: string, label: string) {
+  const normalized = value.trim()
+  if (!normalized || normalized.length > 120 || hasControlCharacter(normalized)) throw new Error(`${label} is required before staging.`)
+  return normalized
+}
+
+export function buildClientImportStagingPackage(preview: ClientImportPreview, context: {
+  workflowTemplateId: string
+  workspace: string
+  owner: string
+}) {
+  if (preview.schema !== CLIENT_IMPORT_SCHEMA || !preview.readyForStaging || preview.rows.some((row) => row.status !== 'ready')) {
+    throw new Error('Resolve every mapping and row issue before creating a staging package.')
+  }
+  const workflowTemplateId = boundedContext(context.workflowTemplateId, 'Workflow template')
+  const workspace = boundedContext(context.workspace, 'Workspace name')
+  const owner = boundedContext(context.owner, 'Responsible owner')
+  return {
+    contract: CLIENT_STAGING_SCHEMA,
+    product: preview.product,
+    object: preview.object,
+    workflowTemplateId,
+    workspace,
+    owner,
+    source: {
+      name: preview.sourceName,
+      digest: preview.sourceDigest,
+      previewDigest: preview.previewDigest,
+    },
+    mapping: preview.mapping,
+    rows: preview.rows.map((row) => ({ sourceRow: row.rowNumber, key: row.key, values: row.values })),
+    controls: {
+      rowCount: preview.totals.rows,
+      humanReviewRequired: true,
+      externalWritesPerformed: false,
+      activationStatus: 'staged_not_applied',
+    },
+  }
+}

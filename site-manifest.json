@@ -1,7 +1,7 @@
 {
   "schemaVersion": "supermega.site-context.v1",
-  "contextVersion": "2026-07-24.11",
-  "catalogVersion": "2026-07-24.10",
+  "contextVersion": "2026-07-26.1",
+  "catalogVersion": "2026-07-26.1",
   "brand": {
     "name": "SuperMega",
     "domain": "supermega.dev",
@@ -131,6 +131,32 @@
       "workspaceSchema": "supermega.website.workspace.v2",
       "views": ["Site", "Preview", "Publish"],
       "workflow": ["Edit finite pages", "Review responsive preview", "Record attributed evidence", "Approve exact evidence set", "Create downloadable site file", "Optionally prepare Shop intake"],
+      "templates": [
+        {
+          "id": "business-presence",
+          "name": "Business presence",
+          "outcome": "Create a clear mobile-first company website with services, proof, and one contact path.",
+          "workflow": ["Define audience", "Shape offer", "Add proof", "Review mobile", "Approve site file"],
+          "entryPoints": ["Business brief", "Existing website", "Company profile"],
+          "metric": "Qualified contact starts and content approval time"
+        },
+        {
+          "id": "lead-generation",
+          "name": "Lead generation",
+          "outcome": "Turn one offer into a focused landing experience with attributable proof and enquiry intent.",
+          "workflow": ["Choose offer", "Write promise", "Add evidence", "Review conversion path", "Approve site file"],
+          "entryPoints": ["Campaign brief", "Sales deck", "Service list"],
+          "metric": "Qualified enquiry rate and response readiness"
+        },
+        {
+          "id": "catalog-showcase",
+          "name": "Catalog showcase",
+          "outcome": "Present a finite product or service collection and route approved interest into accountable follow-up.",
+          "workflow": ["Structure collection", "Add product proof", "Review navigation", "Test enquiry path", "Approve site file"],
+          "entryPoints": ["Catalog CSV", "Product sheet", "Existing brochure"],
+          "metric": "Catalog completion and enquiry handoff accuracy"
+        }
+      ],
       "proof": ["Monotonic content revision", "Source digest", "Artifact digest", "Evidence IDs", "Human approval", "Append-only events", "Confirmed browser write"],
       "boundaries": ["No CMS", "No domain write", "No analytics connection", "No deployment", "No customer send", "No payment action"]
     },
@@ -143,6 +169,32 @@
       "headline": "Create a Shop-backed storefront and hand customer intent to human review.",
       "views": ["Storefront", "Preview", "Request receipt", "Shop inbox", "Shop review"],
       "workflow": ["Choose products", "Write storefront copy", "Review phone and desktop", "Retain deterministic preview digest", "Create pending request receipt", "Optionally retain exact receipt in authenticated Shop inbox", "Recover or review exact request", "Choose payment review", "Open accountable Shop action gate"],
+      "templates": [
+        {
+          "id": "social-storefront",
+          "name": "Social storefront",
+          "outcome": "Give chat-first sellers a focused Shop-backed catalog and a reviewable order-request handoff.",
+          "workflow": ["Select Shop items", "Merchandise collection", "Review mobile", "Capture request", "Confirm in Shop"],
+          "entryPoints": ["Shop catalog", "Social product list", "Campaign collection"],
+          "metric": "Request completion and Shop confirmation time"
+        },
+        {
+          "id": "pickup-preorder",
+          "name": "Pickup and preorder",
+          "outcome": "Collect product intent for pickup or preorder without creating payment or stock side effects.",
+          "workflow": ["Select availability", "Set collection", "Capture intent", "Review promise", "Confirm in Shop"],
+          "entryPoints": ["Shop catalog", "Preorder sheet", "Store collection"],
+          "metric": "Confirmed request rate and promise accuracy"
+        },
+        {
+          "id": "wholesale-request",
+          "name": "Wholesale request",
+          "outcome": "Present a controlled wholesale assortment and hand quantity requests to a named Shop reviewer.",
+          "workflow": ["Choose assortment", "Add trade context", "Capture quantities", "Review buyer details", "Confirm in Shop"],
+          "entryPoints": ["Shop catalog", "Wholesale list", "Buyer request sheet"],
+          "metric": "Qualified wholesale requests and review cycle time"
+        }
+      ],
       "proof": ["Read-only Shop catalogue snapshot", "Locked price and availability projection", "Deterministic SHA-256 preview digest", "Exact retained-ledger membership", "Idempotent receipt and exact managed replay", "Revision, action-identity, and cross-tenant conflict rejection", "Bootstrap recovery", "Unchanged Shop orders and stock movements", "Human-confirmed source-locked Shop draft", "83 Shop runtime checks", "Stale, duplicate, unknown, sold-out, repriced, insufficient-stock, oversized-inbox, and tampered request rejection"],
       "boundaries": ["No duplicate stock ledger", "No isolated hosted tenant proof", "Managed inbox uses a 100-entry revisioned Shop workspace pilot envelope; a normalized indexed queue is gated on measured scale", "No Shop order or stock reservation before separate accountable confirmation", "No cart or payment initiation", "No delivery execution", "No customer send", "No publishing", "No external write"]
     }

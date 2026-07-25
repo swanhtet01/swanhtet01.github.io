@@ -1,4 +1,4 @@
-import { type FormEvent, type ReactNode, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, type FormEvent, type ReactNode, useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate, useOutletContext, useSearchParams } from 'react-router'
 
 import siteManifest from '../../../site-manifest.json'
@@ -96,6 +96,7 @@ import type {
   ShopCatalogImportMapping,
   ShopCatalogImportPreview,
 } from './shop-catalog-import'
+import type { ClientSolutionId } from './client-onboarding'
 import type {
   CommerceOrderDraft,
   CommerceOrderDraftInput,
@@ -150,6 +151,8 @@ import {
   type ProductionShiftHandoff,
   type ProductionState,
 } from './production-workspace'
+
+const ClientDataOnboarding = lazy(() => import('./ClientDataOnboarding').then((module) => ({ default: module.ClientDataOnboarding })))
 
 type DecisionClaim = {
   id: string
@@ -343,9 +346,13 @@ function downloadCatalogCsv(filename: string, content: string) {
 }
 
 type ProductId = 'commerce' | 'production'
+type SetupProductId = ClientSolutionId
 
-function productDisplayName(product: ProductId) {
-  return product === 'commerce' ? 'Shop' : 'Plant'
+function productDisplayName(product: SetupProductId) {
+  if (product === 'commerce') return 'Shop'
+  if (product === 'production') return 'Plant'
+  if (product === 'website') return 'Website'
+  return 'Ecommerce'
 }
 
 function productCanonicalPath(product: ProductId) {
@@ -362,12 +369,12 @@ type WorkflowTemplate = {
 }
 
 type ProductContract = {
-  id: ProductId
+  id: SetupProductId
   templates: WorkflowTemplate[]
 }
 
 type SetupState = {
-  product: ProductId
+  product: SetupProductId
   template: string
   workspace: string
   owner: string
@@ -434,22 +441,24 @@ function collectLocalProductRecords(storage: Pick<Storage, 'getItem' | 'key' | '
   return records
 }
 
-function requireProductContract(id: ProductId): ProductContract {
-  const product = siteManifest.products.find((candidate) => candidate.id === id)
+function requireProductContract(id: SetupProductId): ProductContract {
+  const product = [...siteManifest.products, ...siteManifest.prototypeProducts].find((candidate) => candidate.id === id)
   if (!product) throw new Error(`Missing ${id} product contract.`)
   return { id, templates: product.templates }
 }
 
-const productContracts: Record<ProductId, ProductContract> = {
+const productContracts: Record<SetupProductId, ProductContract> = {
   commerce: requireProductContract('commerce'),
   production: requireProductContract('production'),
+  website: requireProductContract('website'),
+  ecommerce: requireProductContract('ecommerce'),
 }
 
-function templatesFor(product: ProductId) {
+function templatesFor(product: SetupProductId) {
   return productContracts[product].templates
 }
 
-function templateFor(product: ProductId, name: string) {
+function templateFor(product: SetupProductId, name: string) {
   const templates = templatesFor(product)
   const fallback = templates[0]
   if (!fallback) throw new Error(`Missing ${product} workflow templates.`)
@@ -475,7 +484,13 @@ const pilotRequiredFields = ['workspace', 'owner', 'entryPoint', 'currentRecord'
 
 function normalizeSetup(value: SetupState) {
   const source = (value && typeof value === 'object' ? value : seedSetup) as Omit<Partial<SetupState>, 'product'> & { product?: string }
-  const product: ProductId = source.product === 'production' || source.product === 'plant' ? 'production' : 'commerce'
+  const product: SetupProductId = source.product === 'production' || source.product === 'plant'
+    ? 'production'
+    : source.product === 'website'
+      ? 'website'
+      : source.product === 'ecommerce'
+        ? 'ecommerce'
+        : 'commerce'
   const template = templateFor(product, String(source.template || ''))
   const sourceEntryPoint = String(source.entryPoint || '')
   const normalized: SetupState = {
@@ -5727,7 +5742,7 @@ export function SettingsPage() {
 
   return (
     <div className="workspace-screen settings-screen">
-      <PageHeading eyebrow="Settings" title="Set up one real workflow" copy="Choose the work, define success, then review what is safe to activate." />
+      <PageHeading eyebrow="Settings" title="Set up one client solution" copy="Start from a proven template, bring existing data safely, then define success and activation boundaries." />
       <nav aria-label="Setup steps" className="settings-step-nav">
         <button aria-current={settingsStep === 'workflow' ? 'step' : undefined} onClick={() => chooseSettingsStep('workflow')} type="button"><span>1</span>Workflow</button>
         <button aria-current={settingsStep === 'success' ? 'step' : undefined} onClick={() => chooseSettingsStep('success')} type="button"><span>2</span>Success</button>
@@ -5738,10 +5753,11 @@ export function SettingsPage() {
           <div className="panel-head"><div><span className="core-eyebrow">Pilot definition</span><h2>{settingsStep === 'workflow' ? 'Choose the workflow' : 'Define success and authority'}</h2></div><span className={`status-pill ${isPilotReady ? 'approved' : 'bounded'}`}>{isPilotReady ? 'ready' : `${completion}%`}</span></div>
           <div className="pilot-progress"><div className="progress-track"><i style={{ width: `${completion}%` }} /></div><small>{settingsStep === 'workflow' ? 'Product · template · entry point · owner' : 'Current record · baseline · target · authority · evidence'}</small></div>
           <fieldset className="settings-step-fields" disabled={settingsStep !== 'workflow'} hidden={settingsStep !== 'workflow'}>
-          <div className="segmented-control wide"><button aria-pressed={setup.product === 'commerce'} type="button" onClick={() => changeProduct('commerce')}>Shop</button><button aria-pressed={setup.product === 'production'} type="button" onClick={() => changeProduct('production')}>Plant</button></div>
+          <div className="segmented-control wide"><button aria-pressed={setup.product === 'commerce'} type="button" onClick={() => changeProduct('commerce')}>Shop</button><button aria-pressed={setup.product === 'production'} type="button" onClick={() => changeProduct('production')}>Plant</button><button aria-pressed={setup.product === 'website'} type="button" onClick={() => changeProduct('website')}>Website</button><button aria-pressed={setup.product === 'ecommerce'} type="button" onClick={() => changeProduct('ecommerce')}>Ecommerce</button></div>
           <div className="form-row"><label>Starting template<select value={setup.template} onChange={(event) => changeTemplate(event.target.value)}>{templatesFor(setup.product).map((template) => <option key={template.id} value={template.name}>{template.name}</option>)}</select></label><label>Entry point<select value={setup.entryPoint} onChange={(event) => updateSetup({ entryPoint: event.target.value })}>{selectedTemplate.entryPoints.map((entryPoint) => <option key={entryPoint}>{entryPoint}</option>)}</select></label></div>
           <div className="template-contract"><span>Workflow</span><strong>{selectedTemplate.workflow.join(' → ')}</strong><small>Measure · {selectedTemplate.metric}</small></div>
-          <div className="form-row"><label>Workspace name<input maxLength={80} required value={setup.workspace} onChange={(event) => updateSetup({ workspace: event.target.value })} placeholder={setup.product === 'commerce' ? 'Example: Social sales team' : 'Example: Main plant'} /></label><label>Responsible owner<input maxLength={80} required value={setup.owner} onChange={(event) => updateSetup({ owner: event.target.value })} placeholder="Name or role" /></label></div>
+          <div className="form-row"><label>Workspace name<input maxLength={80} required value={setup.workspace} onChange={(event) => updateSetup({ workspace: event.target.value })} placeholder={setup.product === 'commerce' ? 'Example: Social sales team' : setup.product === 'production' ? 'Example: Main plant' : setup.product === 'website' ? 'Example: Company website' : 'Example: Online order desk'} /></label><label>Responsible owner<input maxLength={80} required value={setup.owner} onChange={(event) => updateSetup({ owner: event.target.value })} placeholder="Name or role" /></label></div>
+          <Suspense fallback={<p className="form-notice" role="status">Loading the client data template…</p>}><ClientDataOnboarding owner={setup.owner} product={setup.product} workflowTemplateId={selectedTemplate.id} workspace={setup.workspace} /></Suspense>
           <div className="settings-step-actions"><span>Step 1 of 3</span><button className="core-button primary" disabled={!workflowReady} onClick={() => chooseSettingsStep('success')} type="button">Continue to success</button></div>
           </fieldset>
           <fieldset className="settings-step-fields" disabled={settingsStep !== 'success'} hidden={settingsStep !== 'success'}>
