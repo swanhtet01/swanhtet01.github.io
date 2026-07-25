@@ -12,10 +12,10 @@
       "path": "/shop/",
       "runtimeSurface": "commerce",
       "compatibilityPath": "/operations/commerce/",
-      "job": "Run orders, available-stock counts, purchasing and receipt, fulfilment, payment status, exceptions, and daily close from one accountable shop record.",
+      "job": "Run orders, available-stock counts, purchasing and receipt, fulfilment, payment status, bounded returns, exceptions, and daily close from one accountable shop record.",
       "surfaces": ["Orders", "Stock"],
       "templateContract": { "file": "../site-manifest.json", "productId": "commerce" },
-      "nextGate": "Repeat one authenticated order-to-close pilot on an isolated hosted tenant with a named operator, baseline, and five-day evidence plan."
+      "nextGate": "Repeat one authenticated order-to-close and return-exception pilot on an isolated hosted tenant with a named operator, baseline, and five-day evidence plan."
     },
     {
       "id": "plant",
