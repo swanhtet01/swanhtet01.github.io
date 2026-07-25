@@ -1,9 +1,9 @@
 param(
   [string]$BaseUrl = "https://supermega-app-453184845544.asia-southeast1.run.app",
   [string]$PublicUrl = "https://supermega.dev",
-  [string]$Username = "owner",
-  [string]$Password = "supermega-demo",
-  [string]$Workspace = "supermega-lab",
+  [string]$Username = "",
+  [string]$Password = "",
+  [string]$Workspace = "",
   [string]$PythonPath = "",
   [string]$RunId = ""
 )
@@ -55,6 +55,22 @@ $smokeScript = Join-Path $PSScriptRoot "smoke_test_supermega_app.py"
 $jobScript = Join-Path $PSScriptRoot "run_supermega_agent_jobs.py"
 $operatorScript = Join-Path $PSScriptRoot "run_supermega_operator_cycle.ps1"
 
+if ([string]::IsNullOrWhiteSpace($Username)) {
+  $Username = $env:SUPERMEGA_AGENT_USERNAME
+}
+if ([string]::IsNullOrWhiteSpace($Password)) {
+  $Password = $env:SUPERMEGA_AGENT_PASSWORD
+}
+if ([string]::IsNullOrWhiteSpace($Workspace)) {
+  $Workspace = $env:SUPERMEGA_AGENT_WORKSPACE
+}
+if ([string]::IsNullOrWhiteSpace($Workspace)) {
+  $Workspace = "supermega-lab"
+}
+if ([string]::IsNullOrWhiteSpace($Username) -or [string]::IsNullOrWhiteSpace($Password)) {
+  throw "Set SUPERMEGA_AGENT_USERNAME and SUPERMEGA_AGENT_PASSWORD before running the founder cycle."
+}
+
 $operatorArgs = @(
   "-ExecutionPolicy",
   "Bypass",
@@ -72,7 +88,13 @@ if (-not [string]::IsNullOrWhiteSpace($RunId)) {
 $operatorJson = & powershell @operatorArgs
 $operator = $operatorJson | Out-String | ConvertFrom-Json
 
-$agentJobsJson = & $python $jobScript --base-url $BaseUrl --username $Username --password $Password --workspace $Workspace --as-json
+$env:SUPERMEGA_AGENT_USERNAME = $Username
+$env:SUPERMEGA_AGENT_PASSWORD = $Password
+$env:SUPERMEGA_AGENT_WORKSPACE = $Workspace
+$agentJobsJson = & $python $jobScript --base-url $BaseUrl --workspace $Workspace --as-json
+if ($LASTEXITCODE -ne 0) {
+  throw "Agent job runner rejected the target or failed before the founder login."
+}
 $agentJobs = $agentJobsJson | Out-String | ConvertFrom-Json
 
 $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession

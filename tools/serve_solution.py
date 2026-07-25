@@ -584,7 +584,86 @@ class WorkspaceProfileUpdateRequest(BaseModel):
 
 
 class CloudPreviewDeployRequest(BaseModel):
-    mode: str = "claimable_preview"
+    model_config = ConfigDict(extra="forbid")
+
+    approval_id: str = Field(min_length=1, max_length=120)
+    mode: str = Field(
+        default="claimable_preview",
+        pattern=r"^(claimable_preview|preview|direct|vercel|vercel_cli)$",
+    )
+    revision: str = Field(pattern=r"^[0-9a-fA-F]{40}$")
+
+
+PREVIEW_DEPLOY_APPROVAL_GATE = "deployment.preview"
+PREVIEW_DEPLOY_APPROVAL_ROUTE = "/api/cloud/deployments/preview"
+
+
+def _validate_preview_deploy_approval(
+    approval_rows: list[dict[str, Any]],
+    *,
+    workspace_id: str,
+    approval_id: str,
+    mode: str,
+    revision: str,
+) -> dict[str, Any]:
+    normalized_workspace_id = str(workspace_id or "").strip()
+    normalized_approval_id = str(approval_id or "").strip()
+    normalized_mode = str(mode or "claimable_preview").strip().lower()
+    normalized_revision = str(revision or "").strip().lower()
+    expected_entity = f"cloud-preview:{normalized_mode}:{normalized_revision}"
+    row = next(
+        (
+            item
+            for item in approval_rows
+            if str(item.get("approval_id", "")).strip() == normalized_approval_id
+        ),
+        None,
+    )
+    if not row:
+        raise ValueError("preview_deploy_approval_not_found")
+    if str(row.get("workspace_id", "")).strip() != normalized_workspace_id:
+        raise ValueError("preview_deploy_approval_workspace_mismatch")
+    if str(row.get("status", "")).strip().lower() != "approved":
+        raise ValueError("preview_deploy_approval_not_approved")
+    if str(row.get("approval_gate", "")).strip().lower() != PREVIEW_DEPLOY_APPROVAL_GATE:
+        raise ValueError("preview_deploy_approval_gate_mismatch")
+    if str(row.get("related_route", "")).strip() != PREVIEW_DEPLOY_APPROVAL_ROUTE:
+        raise ValueError("preview_deploy_approval_route_mismatch")
+    if str(row.get("related_entity", "")).strip().lower() != expected_entity:
+        raise ValueError("preview_deploy_approval_target_mismatch")
+    payload = row.get("payload", {}) if isinstance(row.get("payload"), dict) else {}
+    if str(payload.get("deployment_mode", "")).strip().lower() != normalized_mode:
+        raise ValueError("preview_deploy_approval_mode_mismatch")
+    if str(payload.get("deployment_revision", "")).strip().lower() != normalized_revision:
+        raise ValueError("preview_deploy_approval_revision_mismatch")
+    authority = (
+        payload.get("_approval_authority", {})
+        if isinstance(payload.get("_approval_authority"), dict)
+        else {}
+    )
+    if str(authority.get("workspace_id", "")).strip() != normalized_workspace_id:
+        raise ValueError("preview_deploy_approval_authority_mismatch")
+    history = (
+        payload.get("decision_history", [])
+        if isinstance(payload.get("decision_history"), list)
+        else []
+    )
+    approved_decision = next(
+        (
+            decision
+            for decision in reversed(history)
+            if isinstance(decision, dict)
+            and str(decision.get("to_status", "")).strip().lower() == "approved"
+        ),
+        None,
+    )
+    if (
+        not approved_decision
+        or not str(approved_decision.get("actor", "")).strip()
+        or not str(approved_decision.get("note", "")).strip()
+    ):
+        raise ValueError("preview_deploy_approval_evidence_missing")
+    return row
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -3068,7 +3147,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             return "cron"
         session = _session_from_request(request)
         if session:
-            validated_session = _require_agent_ops_control_access(request)
+            validated_session = _require_agent_ops_execute_access(request)
             return str(validated_session.get("display_name", validated_session.get("username", "system"))).strip() or "system"
         raise HTTPException(status_code=401, detail="Internal automation auth required.")
 
@@ -3237,6 +3316,8 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
     OWNER_CAPABILITIES = frozenset(
         {
             *MANAGER_CAPABILITIES,
+            "agent_ops.execute",
+            "agent_ops.deploy",
             "operations.view",
             "dqms.view",
             "maintenance.view",
@@ -3295,6 +3376,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                 "actions.view",
                 "approvals.view",
                 "agent_ops.view",
+                "agent_ops.execute",
                 "architect.view",
                 "tenant_admin.view",
                 "knowledge_admin.view",
@@ -3389,11 +3471,25 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             detail="Solution Architect access required.",
         )
 
-    def _require_agent_ops_control_access(request: Request) -> dict[str, Any]:
+    def _require_agent_ops_view_access(request: Request) -> dict[str, Any]:
         return _require_capability_access(
             request,
-            capabilities={"agent_ops.view", "architect.view", "tenant_admin.view", "platform_admin.view"},
-            detail="Agent Ops control access required.",
+            capabilities={"agent_ops.view", "agent_ops.execute", "agent_ops.deploy"},
+            detail="Agent Ops view access required.",
+        )
+
+    def _require_agent_ops_execute_access(request: Request) -> dict[str, Any]:
+        return _require_capability_access(
+            request,
+            capabilities={"agent_ops.execute"},
+            detail="Agent Ops execution access required.",
+        )
+
+    def _require_agent_ops_deploy_access(request: Request) -> dict[str, Any]:
+        return _require_capability_access(
+            request,
+            capabilities={"agent_ops.deploy"},
+            detail="Agent Ops deployment access required.",
         )
 
     def _require_runtime_control_access(request: Request) -> dict[str, Any]:
@@ -3424,13 +3520,6 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             request,
             capabilities={"agent_ops.view", "director.view", "architect.view", "security_admin.view", "tenant_admin.view", "platform_admin.view"},
             detail="Model operations access required.",
-        )
-
-    def _require_cloud_control_manage_access(request: Request) -> dict[str, Any]:
-        return _require_capability_access(
-            request,
-            capabilities={"agent_ops.view", "tenant_admin.view", "platform_admin.view"},
-            detail="Cloud operations management access required.",
         )
 
     def _require_agent_manifest_access(request: Request) -> dict[str, Any]:
@@ -8425,6 +8514,44 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         }
         return payload
 
+    def _require_clean_preview_deploy_revision(requested_revision: str) -> str:
+        normalized_requested_revision = str(requested_revision or "").strip().lower()
+        git_path = shutil.which("git")
+        if not git_path:
+            raise HTTPException(status_code=503, detail="Preview deploy requires Git revision verification.")
+        try:
+            revision_result = subprocess.run(
+                [git_path, "rev-parse", "--verify", "HEAD"],
+                cwd=str(REPO_ROOT),
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise HTTPException(status_code=503, detail="Preview deploy revision could not be verified.") from exc
+        current_revision = str(revision_result.stdout or "").strip().lower()
+        if revision_result.returncode != 0 or not re.fullmatch(r"[0-9a-f]{40}", current_revision):
+            raise HTTPException(status_code=503, detail="Preview deploy revision could not be verified.")
+        if current_revision != normalized_requested_revision:
+            raise HTTPException(status_code=409, detail="Preview deploy revision does not match the approved artifact.")
+        try:
+            status_result = subprocess.run(
+                [git_path, "status", "--porcelain=v1", "--untracked-files=all"],
+                cwd=str(REPO_ROOT),
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise HTTPException(status_code=503, detail="Preview deploy worktree state could not be verified.") from exc
+        if status_result.returncode != 0:
+            raise HTTPException(status_code=503, detail="Preview deploy worktree state could not be verified.")
+        if str(status_result.stdout or "").strip():
+            raise HTTPException(status_code=409, detail="Preview deploy requires a clean approved worktree.")
+        return current_revision
+
     def _run_preview_deploy(mode: str = "claimable_preview") -> dict[str, Any]:
         normalized_mode = str(mode or "claimable_preview").strip().lower()
         deploy_script = REPO_ROOT / "tools" / "deploy_claimable_preview.sh"
@@ -10354,6 +10481,8 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
     @app.post("/api/workforce/automation/apply")
     def apply_workforce_automation(request_http: Request, request: WorkforceAutomationRequest) -> dict[str, Any]:
         session = _require_workforce_manage_access(request_http)
+        if request.queue_default_jobs or request.process_queue:
+            session = _require_agent_ops_execute_access(request_http)
         workspace_id = str(session.get("workspace_id", "")).strip()
         actor = str(session.get("display_name", session.get("username", "system"))).strip() or "system"
         source = str(request.source or "").strip() or "workforce_command"
@@ -10725,8 +10854,47 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
 
     @app.post("/api/cloud/deployments/preview")
     def cloud_preview_deploy(request: Request, payload: CloudPreviewDeployRequest) -> dict[str, Any]:
-        session = _require_cloud_control_manage_access(request)
+        session = _require_agent_ops_deploy_access(request)
+        workspace_id = _require_session_workspace_id(session)
+        try:
+            approval = _validate_preview_deploy_approval(
+                list_approval_entries(
+                    state_db,
+                    workspace_id=workspace_id,
+                    status="approved",
+                    limit=500,
+                ),
+                workspace_id=workspace_id,
+                approval_id=payload.approval_id,
+                mode=payload.mode,
+                revision=payload.revision,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        approved_revision = _require_clean_preview_deploy_revision(payload.revision)
         deploy_result = _run_preview_deploy(payload.mode)
+        approval_payload = approval.get("payload", {}) if isinstance(approval.get("payload"), dict) else {}
+        decision_history = (
+            approval_payload.get("decision_history", [])
+            if isinstance(approval_payload.get("decision_history"), list)
+            else []
+        )
+        approved_decision = next(
+            (
+                decision
+                for decision in reversed(decision_history)
+                if isinstance(decision, dict)
+                and str(decision.get("to_status", "")).strip().lower() == "approved"
+            ),
+            {},
+        )
+        deploy_result["approval"] = {
+            "approval_id": str(approval.get("approval_id", "")).strip(),
+            "approved_by": str(approved_decision.get("actor", "")).strip(),
+            "gate": str(approval.get("approval_gate", "")).strip(),
+            "target": str(approval.get("related_entity", "")).strip(),
+            "revision": approved_revision,
+        }
         _record_workspace_preview(session, deploy_result)
         return {
             "status": "ready",
@@ -10846,7 +11014,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "role": str(session.get("role", "")).strip(),
             "display_name": str(session.get("display_name", "")).strip(),
             "capabilities": sorted(_role_capabilities(str(session.get("role", "")))),
-            "can_run_jobs": _session_has_any_capability(session, {"agent_ops.view", "tenant_admin.view", "platform_admin.view"}),
+            "can_run_jobs": _session_has_any_capability(session, {"agent_ops.execute"}),
             "can_manage_runtime": _session_has_any_capability(session, {"tenant_admin.view", "platform_admin.view"}),
             "can_approve_guardrails": _session_has_any_capability(
                 session,
@@ -10921,7 +11089,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
 
     @app.get("/api/agent-runs")
     def agent_runs(request: Request, job_type: str | None = None, status: str | None = None, limit: int = 50) -> dict[str, Any]:
-        session = _require_session(request)
+        session = _require_agent_ops_view_access(request)
         workspace_id = str(session.get("workspace_id", "")).strip()
         rows = enterprise_list_agent_runs(
             enterprise_db_url,
@@ -10946,7 +11114,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
 
     @app.post("/api/agent-runs")
     def create_agent_run(request_http: Request, request: AgentRunRequest) -> dict[str, Any]:
-        session = _require_agent_ops_control_access(request_http)
+        session = _require_agent_ops_execute_access(request_http)
         workspace_id = str(session.get("workspace_id", "")).strip()
         job_type = str(request.job_type or "").strip().lower()
         if job_type not in {item["job_type"] for item in AGENT_JOB_TEMPLATES}:
@@ -11000,7 +11168,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
 
     @app.post("/api/agent-runs/process-queue")
     def process_agent_run_queue(request_http: Request, request: AgentQueueProcessRequest) -> dict[str, Any]:
-        session = _require_agent_ops_control_access(request_http)
+        session = _require_agent_ops_execute_access(request_http)
         return _process_agent_run_queue(
             workspace_id=str(session.get("workspace_id", "")).strip(),
             source=str(request.source or "").strip() or "manual_worker",
@@ -11049,7 +11217,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
 
     @app.post("/api/agent-runs/run-defaults")
     def run_default_agent_runs(request_http: Request, request: AgentBatchRunRequest) -> dict[str, Any]:
-        session = _require_agent_ops_control_access(request_http)
+        session = _require_agent_ops_execute_access(request_http)
         workspace_id = str(session.get("workspace_id", "")).strip()
         triggered_by = str(session.get("display_name", session.get("username", "system")))
         normalized_source = str(request.source or "").strip() or "manual_batch"
@@ -12525,7 +12693,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "role": str(session.get("role", "")).strip(),
             "display_name": str(session.get("display_name", "")).strip(),
             "capabilities": sorted(_role_capabilities(str(session.get("role", "")))),
-            "can_run_jobs": _session_has_any_capability(session, {"agent_ops.view", "tenant_admin.view", "platform_admin.view"}),
+            "can_run_jobs": _session_has_any_capability(session, {"agent_ops.execute"}),
             "can_manage_runtime": _session_has_any_capability(session, {"tenant_admin.view", "platform_admin.view"}),
             "can_approve_guardrails": _session_has_any_capability(
                 session,
