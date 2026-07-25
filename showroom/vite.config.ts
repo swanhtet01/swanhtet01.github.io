@@ -20,7 +20,11 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (id.includes('/src/core/commerce-workspace.ts') || id.includes('/src/core/production-workspace.ts')) {
+          if (id.includes('/src/core/commerce-workspace.ts')
+            || id.includes('/src/core/production-workspace.ts')
+            || id.includes('/src/core/channel-order-intake.ts')
+            || id.includes('/src/core/managed-trial.ts')
+            || id.includes('/src/core/team-work.ts')) {
             return 'operating-models'
           }
         },

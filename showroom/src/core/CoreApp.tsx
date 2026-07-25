@@ -85,6 +85,11 @@ import {
   type ChannelOrderDraft,
   type ChannelOrderField,
 } from './channel-order-intake'
+import type {
+  CommerceOrderDraft,
+  CommerceOrderDraftInput,
+  CommerceOrderDraftReadResult,
+} from './commerce-order-draft'
 import {
   LEGACY_PRODUCTION_KEYS,
   PRODUCTION_KEY,
@@ -329,6 +334,8 @@ const ACTION_KEY = 'supermega.accountable.actions.v1'
 const STOREFRONT_DRAFT_RESET_PREFIX = 'supermega.ecommerce.storefront_draft.v2.'
 const LEGACY_STOREFRONT_DRAFT_RESET_PREFIX = 'supermega.ecommerce.storefront_draft.v1.'
 const LEGACY_STOREFRONT_DRAFT_RESET_KEY = 'supermega.ecommerce.storefront_draft.v1'
+const SHOP_ORDER_DRAFT_RESET_PREFIX = 'supermega.shop.order_draft.v1.'
+const SHOP_ORDER_DRAFT_RESET_EPOCH_KEY = 'supermega.shop.order_draft_reset.v1'
 const WEBSITE_RECOVERY_EXPORT_PREFIX = 'supermega.website.workspace.recovery.v1.'
 const LEGACY_APPROVAL_KEYS = ['supermega.approvals.v2']
 const LEGACY_SETUP_KEYS = ['supermega.setup.v2']
@@ -348,6 +355,7 @@ function collectLocalProductRecords(storage: Pick<Storage, 'getItem' | 'key' | '
         || (!exactKeys.has(key)
           && !key.startsWith(STOREFRONT_DRAFT_RESET_PREFIX)
           && !key.startsWith(LEGACY_STOREFRONT_DRAFT_RESET_PREFIX)
+          && !key.startsWith(SHOP_ORDER_DRAFT_RESET_PREFIX)
           && !key.startsWith(WEBSITE_RECOVERY_EXPORT_PREFIX))) continue
       const value = storage.getItem(key)
       if (value !== null) records[key] = value
@@ -1875,6 +1883,70 @@ function ChannelAttributionControl({ attribution, disabled, field, onChange }: {
   </div>
 }
 
+function localCommerceOrderDraftScope(workspaceId?: string) {
+  return workspaceId ? `managed:${workspaceId}` : 'local'
+}
+
+function localCommerceOrderDraftStorageKey(scope: string) {
+  return `${SHOP_ORDER_DRAFT_RESET_PREFIX}${encodeURIComponent(scope)}`
+}
+
+function localCommerceOrderDraftCatalogState(draft: CommerceOrderDraft, catalog: CommerceItem[]) {
+  const currentBySku = new Map(catalog.map((item) => [item.sku, item]))
+  const missingSkus: string[] = []
+  const insufficientSkus: string[] = []
+  const changedSkus: string[] = []
+  for (const line of draft.lines) {
+    const item = currentBySku.get(line.sku)
+    if (!item) {
+      missingSkus.push(line.sku)
+      continue
+    }
+    if (item.onHand < line.quantity) insufficientSkus.push(line.sku)
+    if (item.price !== line.unitPriceMmk || item.onHand !== line.availableAtSave) changedSkus.push(line.sku)
+  }
+  return {
+    current: missingSkus.length === 0 && insufficientSkus.length === 0 && changedSkus.length === 0,
+    canRebind: missingSkus.length === 0 && insufficientSkus.length === 0,
+  }
+}
+
+function buildCommerceOrderRecoveryInput(
+  fields: {
+    customer: string
+    channel: string
+    payment: string
+    fulfilment: '' | 'pickup' | 'delivery'
+    fulfilmentReference: string
+    lines: Array<{ sku: string; quantity: number }>
+  },
+  catalog: CommerceItem[],
+  baseline: CommerceOrderDraft | null,
+): CommerceOrderDraftInput | null {
+  const lines = fields.lines.map((line) => {
+    const retained = baseline?.lines.find((candidate) => (
+      candidate.sku === line.sku && candidate.quantity === line.quantity
+    ))
+    const item = catalog.find((candidate) => candidate.sku === line.sku)
+    if (!retained && !item) return null
+    return {
+      sku: line.sku,
+      quantity: line.quantity,
+      unitPriceMmk: retained?.unitPriceMmk ?? item?.price ?? 0,
+      availableAtSave: retained?.availableAtSave ?? item?.onHand ?? 0,
+    }
+  })
+  if (lines.some((line) => line === null)) return null
+  return {
+    customer: fields.customer.trim(),
+    channel: fields.channel as CommerceOrderDraftInput['channel'],
+    payment: fields.payment as CommerceOrderDraftInput['payment'],
+    fulfilment: fields.fulfilment,
+    fulfilmentReference: fields.fulfilmentReference.trim(),
+    lines: lines as CommerceOrderDraftInput['lines'],
+  }
+}
+
 function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequestId, requestedSource, tab }: {
   ecommerceNavigationDraft: EcommerceShopDraft | null
   managedIdentity: ManagedIdentity | null
@@ -1884,6 +1956,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
 }) {
   const navigate = useNavigate()
   const [commerce, mutateCommerce, commerceStorageError, workspaceMode, managedVersion, managedWorkspaceId, commerceCanWrite] = useCommerceWorkspace(managedIdentity)
+  const orderDraftScope = localCommerceOrderDraftScope(managedIdentity?.workspaceId)
   const [actions, setActions] = useStoredState<AccountableAction[]>(ACTION_KEY, [], normalizeActions)
   const [pendingAction, setPendingAction] = useState<PendingAccountableAction | null>(null)
   const [sku, setSku] = useState(commerce.items[0]?.sku ?? '')
@@ -1891,12 +1964,20 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const [extraOrderLines, setExtraOrderLines] = useState<Array<{ sku: string; quantity: number }>>([])
   const [customer, setCustomer] = useState('')
   const [channel, setChannel] = useState('Messenger')
-  const [payment, setPayment] = useState('KBZPay')
+  const [payment, setPayment] = useState('')
   const [fulfilment, setFulfilment] = useState<'' | 'pickup' | 'delivery'>('')
   const [fulfilmentReference, setFulfilmentReference] = useState('')
   const [preparedChannelDraft, setPreparedChannelDraft] = useState<ChannelOrderDraft | null>(null)
   const [preparedEcommerceDraft, setPreparedEcommerceDraft] = useState<EcommerceShopDraft | null>(null)
   const [orderEntryMode, setOrderEntryMode] = useState<'manual' | 'message' | 'online'>('manual')
+  const [orderDraftRead, setOrderDraftRead] = useState<CommerceOrderDraftReadResult>({ status: 'empty', draft: null, error: '' })
+  const [orderDraftActive, setOrderDraftActive] = useState(false)
+  const [resumedOrderDraft, setResumedOrderDraft] = useState<CommerceOrderDraft | null>(null)
+  const [orderDraftIssue, setOrderDraftIssue] = useState('')
+  const [orderDraftSaving, setOrderDraftSaving] = useState(false)
+  const [orderDraftConflict, setOrderDraftConflict] = useState(false)
+  const [orderDraftInitializedScope, setOrderDraftInitializedScope] = useState('')
+  const orderDraftInitialized = orderDraftInitializedScope === orderDraftScope
   const orderComposerRef = useRef<HTMLDialogElement>(null)
   const orderComposerHeadingRef = useRef<HTMLHeadingElement>(null)
   const orderComposerTriggerRef = useRef<HTMLButtonElement>(null)
@@ -1910,6 +1991,12 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const preparedChannelRef = useRef<HTMLDivElement>(null)
   const consumedEcommerceDraftId = useRef('')
   const consumedEcommerceInboxSource = useRef('')
+  const orderDraftRevisionRef = useRef(orderDraftRead.draft?.revision ?? 0)
+  const orderDraftSaveQueueRef = useRef(Promise.resolve())
+  const orderDraftCatalogRef = useRef(commerce.items)
+  const orderDraftScopeRef = useRef(orderDraftScope)
+  const orderDraftOperationEpochRef = useRef(0)
+  const orderDraftResetEpochRef = useRef(0)
   const [actionTrigger, setActionTrigger] = useState<HTMLElement | null>(null)
   const [notice, setNotice] = useState('')
   const [catalogDraft, setCatalogDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '', price: '', reason: '', evidenceReference: '' })
@@ -1919,7 +2006,9 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const [returnDraft, setReturnDraft] = useState<CommerceReturnDraft | null>(null)
   const [catalogBusy, setCatalogBusy] = useState(false)
   const [catalogError, setCatalogError] = useState('')
-  const selectedSku = commerce.items.some((item) => item.sku === sku) ? sku : commerce.items[0]?.sku ?? ''
+  const selectedSku = commerce.items.some((item) => item.sku === sku) || (resumedOrderDraft && sku)
+    ? sku
+    : commerce.items[0]?.sku ?? ''
   const selected = commerce.items.find((item) => item.sku === selectedSku)
   const manualOrderLineDrafts = [{ sku: selectedSku, quantity }, ...extraOrderLines]
   const manualOrderLineItems = manualOrderLineDrafts.map((line) => ({
@@ -1928,6 +2017,41 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   }))
   const manualOrderQuantity = manualOrderLineDrafts.reduce((total, line) => total + Math.max(line.quantity, 0), 0)
   const manualOrderTotal = manualOrderLineItems.reduce((total, line) => total + (line.item?.price ?? 0) * Math.max(line.quantity, 0), 0)
+  const orderDraftHasMeaningfulFields = Boolean(customer.trim()
+    || channel !== 'Messenger'
+    || payment
+    || fulfilment
+    || fulfilmentReference.trim()
+    || extraOrderLines.length
+    || quantity !== 1
+    || selectedSku !== (commerce.items[0]?.sku ?? ''))
+  const orderDraftFieldKey = JSON.stringify({
+    customer,
+    channel,
+    payment,
+    fulfilment,
+    fulfilmentReference,
+    lines: manualOrderLineDrafts,
+  })
+  const currentOrderRecoveryInput = buildCommerceOrderRecoveryInput(
+    { customer, channel, payment, fulfilment, fulfilmentReference, lines: manualOrderLineDrafts },
+    commerce.items,
+    null,
+  )
+  const resumedOrderLinesMatch = Boolean(resumedOrderDraft
+    && resumedOrderDraft.lines.length === manualOrderLineDrafts.length
+    && resumedOrderDraft.lines.every((line, index) => (
+      line.sku === manualOrderLineDrafts[index]?.sku
+      && line.quantity === manualOrderLineDrafts[index]?.quantity
+    )))
+  const resumedOrderCatalogState = resumedOrderDraft
+    ? localCommerceOrderDraftCatalogState(resumedOrderDraft, commerce.items)
+    : null
+  const resumedOrderNeedsReview = Boolean(orderDraftActive
+    && resumedOrderDraft
+    && (!resumedOrderLinesMatch || !resumedOrderCatalogState?.current))
+  const resumedOrderCanRebind = Boolean(currentOrderRecoveryInput
+    && currentOrderRecoveryInput.lines.every((line) => line.availableAtSave >= line.quantity))
   const legacyCloseNeedsMigration = commerce.closes.some((close) => !close.orderIds || !close.businessDate)
   const closePreview = commerceCloseExpectation(commerce, new Date().toISOString())
   const closePreviewOrderIds = new Set(closePreview?.orderIds ?? [])
@@ -2022,13 +2146,196 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     : null
 
   useEffect(() => {
+    let current = true
+    const scopeChanged = orderDraftScopeRef.current !== orderDraftScope
+    orderDraftOperationEpochRef.current += 1
+    orderDraftScopeRef.current = orderDraftScope
+    if (scopeChanged) {
+      queueMicrotask(() => {
+        if (!current || orderDraftScopeRef.current !== orderDraftScope) return
+        orderComposerRef.current?.close()
+        setOrderDraftActive(false)
+        setResumedOrderDraft(null)
+        setOrderDraftConflict(false)
+        setSku('')
+        setQuantity(1)
+        setExtraOrderLines([])
+        setCustomer('')
+        setChannel('Messenger')
+        setPayment('')
+        setFulfilment('')
+        setFulfilmentReference('')
+        setPreparedChannelDraft(null)
+        setPreparedEcommerceDraft(null)
+        setOrderEntryMode('manual')
+      })
+    }
+    void import('./commerce-order-draft')
+      .then(({ commerceOrderDraftResetEpoch, readCommerceOrderDraft }) => {
+        if (!current || orderDraftScopeRef.current !== orderDraftScope) return
+        const latest = readCommerceOrderDraft(orderDraftScope)
+        orderDraftResetEpochRef.current = commerceOrderDraftResetEpoch()
+        orderDraftRevisionRef.current = latest.draft?.revision ?? 0
+        setOrderDraftRead(latest)
+        setOrderDraftIssue(latest.error)
+        setOrderDraftInitializedScope(orderDraftScope)
+      })
+      .catch(() => {
+        if (!current || orderDraftScopeRef.current !== orderDraftScope) return
+        const recoveryError = 'Order recovery could not load. Shop records remain available, but new unfinished orders cannot be saved safely.'
+        setOrderDraftRead({
+          status: 'unavailable',
+          draft: null,
+          error: recoveryError,
+        })
+        setOrderDraftIssue(recoveryError)
+        setOrderDraftInitializedScope(orderDraftScope)
+      })
+    return () => { current = false }
+  }, [orderDraftScope])
+
+  useEffect(() => {
+    orderDraftCatalogRef.current = commerce.items
+  }, [commerce.items])
+
+  useEffect(() => {
+    const storageKey = localCommerceOrderDraftStorageKey(orderDraftScope)
+    function refreshOrderDraft(event: StorageEvent) {
+      if (event.key !== storageKey
+        && event.key !== SHOP_ORDER_DRAFT_RESET_EPOCH_KEY
+        && event.key !== null) return
+      orderDraftOperationEpochRef.current += 1
+      void import('./commerce-order-draft').then(({ commerceOrderDraftResetEpoch, readCommerceOrderDraft }) => {
+        if (orderDraftScopeRef.current !== orderDraftScope) return
+        const latest = readCommerceOrderDraft(orderDraftScope)
+        orderDraftResetEpochRef.current = commerceOrderDraftResetEpoch()
+        orderDraftRevisionRef.current = latest.draft?.revision ?? 0
+        setOrderDraftRead(latest)
+        if (orderDraftActive) {
+          setOrderDraftConflict(true)
+          setOrderDraftIssue('The unfinished order changed in another tab. Current fields were kept; close this form to review the latest saved draft.')
+          return
+        }
+        setOrderDraftIssue(latest.error)
+      }).catch(() => {
+        setOrderDraftIssue('The changed order draft could not be read. Current fields were kept.')
+      })
+    }
+    window.addEventListener('storage', refreshOrderDraft)
+    return () => window.removeEventListener('storage', refreshOrderDraft)
+  }, [orderDraftActive, orderDraftScope])
+
+  useEffect(() => {
+    if (!orderDraftActive
+      || !orderDraftInitialized
+      || orderEntryMode !== 'manual'
+      || preparedChannelDraft
+      || preparedEcommerceDraft
+      || pendingAction
+      || !commerceCanWrite
+      || orderDraftConflict
+      || orderDraftRead.status === 'invalid'
+      || orderDraftRead.status === 'unavailable') return
+    const operationEpochAtSchedule = orderDraftOperationEpochRef.current
+    const resetEpochAtSchedule = orderDraftResetEpochRef.current
+    const recoveryFields = JSON.parse(orderDraftFieldKey) as {
+      customer: string
+      channel: string
+      payment: string
+      fulfilment: '' | 'pickup' | 'delivery'
+      fulfilmentReference: string
+      lines: Array<{ sku: string; quantity: number }>
+    }
+    const timer = window.setTimeout(() => {
+      const scopeAtSave = orderDraftScope
+      const operation = async () => {
+        if (orderDraftScopeRef.current !== scopeAtSave
+          || orderDraftOperationEpochRef.current !== operationEpochAtSchedule) return
+        setOrderDraftSaving(true)
+        try {
+          const expectedRevision = orderDraftRevisionRef.current
+          if (!orderDraftHasMeaningfulFields) {
+            if (expectedRevision > 0) {
+              const { discardCommerceOrderDraft } = await import('./commerce-order-draft')
+              if (orderDraftScopeRef.current !== scopeAtSave
+                || orderDraftOperationEpochRef.current !== operationEpochAtSchedule) return
+              await discardCommerceOrderDraft(scopeAtSave, expectedRevision, {
+                expectedResetEpoch: resetEpochAtSchedule,
+              })
+            }
+            if (orderDraftScopeRef.current !== scopeAtSave
+              || orderDraftOperationEpochRef.current !== operationEpochAtSchedule) return
+            orderDraftRevisionRef.current = 0
+            setOrderDraftRead({ status: 'empty', draft: null, error: '' })
+            setResumedOrderDraft(null)
+            setOrderDraftIssue('')
+            return
+          }
+          const input = buildCommerceOrderRecoveryInput(
+            recoveryFields,
+            orderDraftCatalogRef.current,
+            resumedOrderDraft,
+          )
+          if (!input) {
+            setOrderDraftIssue('Choose current Shop items before this unfinished order can be saved.')
+            return
+          }
+          const { saveCommerceOrderDraft } = await import('./commerce-order-draft')
+          if (orderDraftScopeRef.current !== scopeAtSave
+            || orderDraftOperationEpochRef.current !== operationEpochAtSchedule) return
+          const saved = await saveCommerceOrderDraft(
+            input,
+            expectedRevision,
+            scopeAtSave,
+            { expectedResetEpoch: resetEpochAtSchedule },
+          )
+          if (orderDraftScopeRef.current !== scopeAtSave
+            || orderDraftOperationEpochRef.current !== operationEpochAtSchedule) return
+          orderDraftRevisionRef.current = saved.revision
+          setOrderDraftRead({ status: 'ready', draft: saved, error: '' })
+          setOrderDraftIssue('')
+        } catch (error) {
+          if (orderDraftScopeRef.current === scopeAtSave
+            && orderDraftOperationEpochRef.current === operationEpochAtSchedule) {
+            setOrderDraftIssue(error instanceof Error ? error.message : 'The unfinished order could not be saved.')
+          }
+        } finally {
+          if (orderDraftScopeRef.current === scopeAtSave) setOrderDraftSaving(false)
+        }
+      }
+      orderDraftSaveQueueRef.current = orderDraftSaveQueueRef.current.then(operation, operation)
+    }, 250)
+    return () => window.clearTimeout(timer)
+  }, [
+    commerceCanWrite,
+    orderDraftActive,
+    orderDraftConflict,
+    orderDraftFieldKey,
+    orderDraftHasMeaningfulFields,
+    orderDraftInitialized,
+    orderDraftRead.status,
+    orderDraftScope,
+    orderEntryMode,
+    pendingAction,
+    preparedChannelDraft,
+    preparedEcommerceDraft,
+    resumedOrderDraft,
+  ])
+
+  useEffect(() => {
     if (!ecommerceNavigationDraft || managedIdentity || consumedEcommerceDraftId.current === ecommerceNavigationDraft.id) return
     let current = true
     void import('../products/ecommerce/ecommerce-shop-handoff')
       .then(({ ecommerceShopDraftMatchesCatalog }) => {
         if (!current) return
+        const navigationDraftId = ecommerceNavigationDraft.id
         if (!ecommerceShopDraftMatchesCatalog(ecommerceNavigationDraft, commerce.items)) {
+          consumedEcommerceDraftId.current = navigationDraftId
+          if (preparedEcommerceDraft) {
+            setFulfilmentReference('')
+          }
           setPreparedEcommerceDraft(null)
+          navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
           setNotice('The Ecommerce request no longer matches the current Shop catalog. Nothing was prepared.')
           return
         }
@@ -2043,6 +2350,9 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         setFulfilment(ecommerceNavigationDraft.fulfilment)
         setFulfilmentReference(ecommerceNavigationDraft.sourceRequestId)
         setOrderEntryMode('manual')
+        setOrderDraftActive(true)
+        setResumedOrderDraft(null)
+        setOrderDraftConflict(false)
         setNotice(`${ecommerceNavigationDraft.id} is ready for Shop review. Choose payment, then review the order.`)
         requestAnimationFrame(() => {
           const dialog = orderComposerRef.current
@@ -2054,7 +2364,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         if (current) setNotice('The Ecommerce request guard could not load. Nothing was prepared.')
       })
     return () => { current = false }
-  }, [commerce.items, ecommerceNavigationDraft, managedIdentity])
+  }, [commerce.items, ecommerceNavigationDraft, managedIdentity, navigate, preparedEcommerceDraft])
 
   useEffect(() => {
     const sourceKey = requestedRequestId || 'ecommerce-inbox'
@@ -2065,6 +2375,9 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       || workspaceMode !== 'managed-ready') return
     consumedEcommerceInboxSource.current = sourceKey
     setOrderEntryMode('online')
+    setOrderDraftActive(true)
+    setResumedOrderDraft(null)
+    setOrderDraftConflict(false)
     setNotice(requestedStorefrontRequestIsWaiting
       ? `${requestedRequestId} is ready for Shop review. Choose Review to prepare the order.`
       : pendingStorefrontRequests.length
@@ -2153,14 +2466,185 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const orderNotice = notice || commerceStorageError
   const commerceControlsDisabled = !commerceCanWrite || Boolean(pendingAction)
 
+  function showOrderComposer() {
+    const dialog = orderComposerRef.current
+    if (dialog && !dialog.open) dialog.showModal()
+    requestAnimationFrame(() => orderComposerHeadingRef.current?.focus())
+  }
+
+  function resetOrderDraftFields() {
+    setSku(commerce.items[0]?.sku ?? '')
+    setQuantity(1)
+    setExtraOrderLines([])
+    setCustomer('')
+    setChannel('Messenger')
+    setPayment('')
+    setFulfilment('')
+    setFulfilmentReference('')
+    setPreparedChannelDraft(null)
+    setPreparedEcommerceDraft(null)
+    setOrderEntryMode('manual')
+  }
+
+  function detachPreparedOrderSources(options: { channel?: boolean; ecommerce?: boolean } = {}) {
+    const removeChannel = options.channel ?? true
+    const removeEcommerce = options.ecommerce ?? true
+    const removed = (removeChannel && Boolean(preparedChannelDraft))
+      || (removeEcommerce && Boolean(preparedEcommerceDraft))
+    if (removeEcommerce && preparedEcommerceDraft) {
+      consumedEcommerceDraftId.current = preparedEcommerceDraft.id
+      navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
+    }
+    if (removeChannel) setPreparedChannelDraft(null)
+    if (removeEcommerce) setPreparedEcommerceDraft(null)
+    if (removed) setFulfilmentReference('')
+    return removed
+  }
+
   function openOrderComposer() {
     if (!commerceCanWrite) {
       setNotice('Shop changes are paused. Open Settings before adding an order.')
       return
     }
-    const dialog = orderComposerRef.current
-    if (dialog && !dialog.open) dialog.showModal()
-    requestAnimationFrame(() => orderComposerHeadingRef.current?.focus())
+    if (!orderDraftInitialized) {
+      setNotice('Order recovery is still loading. Try again in a moment.')
+      return
+    }
+    if (orderDraftRead.status === 'unavailable') {
+      setNotice(orderDraftRead.error || 'Order recovery is unavailable. Open Settings before starting a manual order.')
+      return
+    }
+    setOrderDraftActive(true)
+    setResumedOrderDraft(null)
+    setOrderDraftConflict(false)
+    setOrderDraftIssue('')
+    showOrderComposer()
+  }
+
+  function closeOrderComposer() {
+    orderComposerRef.current?.close()
+    setOrderDraftActive(false)
+    setResumedOrderDraft(null)
+    setOrderDraftConflict(false)
+    setOrderDraftIssue(orderDraftRead.error)
+  }
+
+  function resumeSavedOrderDraft() {
+    const draft = orderDraftRead.status === 'ready' ? orderDraftRead.draft : null
+    if (!draft) {
+      setOrderDraftIssue(orderDraftRead.error || 'No saved order draft is available to resume.')
+      return
+    }
+    const [firstLine, ...remainingLines] = draft.lines
+    if (!firstLine) {
+      setOrderDraftIssue('The saved order draft has no item to resume.')
+      return
+    }
+    setCustomer(draft.customer)
+    setChannel(draft.channel)
+    setPayment(draft.payment)
+    setFulfilment(draft.fulfilment)
+    setFulfilmentReference(draft.fulfilmentReference)
+    setSku(firstLine.sku)
+    setQuantity(firstLine.quantity)
+    setExtraOrderLines(remainingLines.map((line) => ({ sku: line.sku, quantity: line.quantity })))
+    setPreparedChannelDraft(null)
+    setPreparedEcommerceDraft(null)
+    setOrderEntryMode('manual')
+    setResumedOrderDraft(draft)
+    setOrderDraftActive(true)
+    setOrderDraftConflict(false)
+    const catalogState = localCommerceOrderDraftCatalogState(draft, commerce.items)
+    setOrderDraftIssue(catalogState.current
+      ? 'Unfinished order restored. Source-message and Ecommerce links are never recovered.'
+      : 'Shop price or availability changed. Review current Shop values before this order can continue.')
+    showOrderComposer()
+  }
+
+  async function discardSavedOrderDraft() {
+    if (orderDraftConflict) {
+      setOrderDraftIssue('The saved draft changed in another tab. Close this form before discarding the latest saved copy.')
+      return
+    }
+    const scopeAtDiscard = orderDraftScope
+    const operationEpochAtDiscard = orderDraftOperationEpochRef.current
+    const resetEpochAtDiscard = orderDraftResetEpochRef.current
+    const discardInvalidDraft = orderDraftRead.status === 'invalid'
+    const invalidFingerprintAtDiscard = discardInvalidDraft
+      ? orderDraftRead.invalidFingerprint
+      : undefined
+    setOrderDraftActive(false)
+    setOrderDraftSaving(true)
+    try {
+      await orderDraftSaveQueueRef.current
+      if (orderDraftScopeRef.current !== scopeAtDiscard
+        || orderDraftOperationEpochRef.current !== operationEpochAtDiscard) {
+        throw new Error('The unfinished order changed while discard was waiting. Review the latest saved draft.')
+      }
+      const expectedRevision = discardInvalidDraft ? undefined : orderDraftRevisionRef.current
+      const { discardCommerceOrderDraft } = await import('./commerce-order-draft')
+      if (discardInvalidDraft || (expectedRevision ?? 0) > 0) {
+        await discardCommerceOrderDraft(scopeAtDiscard, expectedRevision || undefined, {
+          expectedResetEpoch: resetEpochAtDiscard,
+          expectedInvalidFingerprint: invalidFingerprintAtDiscard,
+        })
+      }
+      if (orderDraftScopeRef.current !== scopeAtDiscard
+        || orderDraftOperationEpochRef.current !== operationEpochAtDiscard) {
+        throw new Error('The unfinished order changed while discard was being confirmed. Review the latest saved draft.')
+      }
+      orderDraftOperationEpochRef.current += 1
+      orderDraftRevisionRef.current = 0
+      setOrderDraftRead({ status: 'empty', draft: null, error: '' })
+      setResumedOrderDraft(null)
+      setOrderDraftConflict(false)
+      setOrderDraftIssue('')
+      resetOrderDraftFields()
+      orderComposerRef.current?.close()
+      setNotice('Unfinished order discarded. No Shop order, stock, or payment record changed.')
+    } catch (error) {
+      if (orderComposerRef.current?.open) setOrderDraftActive(true)
+      setOrderDraftIssue(error instanceof Error ? error.message : 'The unfinished order could not be discarded.')
+    } finally {
+      setOrderDraftSaving(false)
+    }
+  }
+
+  async function acceptCurrentOrderDraftCatalog() {
+    if (!resumedOrderDraft || !currentOrderRecoveryInput || !resumedOrderCanRebind || orderDraftSaving) return
+    const scopeAtRebind = orderDraftScope
+    const operationEpochAtRebind = orderDraftOperationEpochRef.current
+    const resetEpochAtRebind = orderDraftResetEpochRef.current
+    const inputAtRebind = currentOrderRecoveryInput
+    setOrderDraftSaving(true)
+    try {
+      await orderDraftSaveQueueRef.current
+      if (orderDraftScopeRef.current !== scopeAtRebind
+        || orderDraftOperationEpochRef.current !== operationEpochAtRebind) {
+        throw new Error('The unfinished order changed while Shop values were being reviewed. Reload the saved draft.')
+      }
+      const expectedRevision = orderDraftRevisionRef.current
+      const { saveCommerceOrderDraft } = await import('./commerce-order-draft')
+      const saved = await saveCommerceOrderDraft(
+        inputAtRebind,
+        expectedRevision,
+        scopeAtRebind,
+        { expectedResetEpoch: resetEpochAtRebind },
+      )
+      if (orderDraftScopeRef.current !== scopeAtRebind
+        || orderDraftOperationEpochRef.current !== operationEpochAtRebind) {
+        throw new Error('The unfinished order changed while Shop values were being recorded. Reload the saved draft.')
+      }
+      orderDraftRevisionRef.current = saved.revision
+      setOrderDraftRead({ status: 'ready', draft: saved, error: '' })
+      setResumedOrderDraft(saved)
+      setOrderDraftConflict(false)
+      setOrderDraftIssue('Current Shop prices and availability reviewed. The order can continue.')
+    } catch (error) {
+      setOrderDraftIssue(error instanceof Error ? error.message : 'Current Shop values could not be recorded.')
+    } finally {
+      setOrderDraftSaving(false)
+    }
   }
 
   function queueAction(
@@ -2303,7 +2787,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       setOrderEntryMode('manual')
       setNotice(`${request.id} loaded from the authenticated inbox. Choose payment, then use the separate Shop action gate.`)
     } catch (error) {
-      setPreparedEcommerceDraft(null)
+      detachPreparedOrderSources({ channel: false })
       setNotice(error instanceof Error ? error.message : 'The Ecommerce inbox request failed closed.')
     }
   }
@@ -2316,26 +2800,29 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       return
     }
     setExtraOrderLines((current) => [...current, { sku: nextItem.sku, quantity: 1 }])
-    setPreparedChannelDraft(null)
-    setPreparedEcommerceDraft(null)
+    detachPreparedOrderSources()
     setNotice(`${nextItem.name} added. Each item can appear once in an order.`)
   }
 
   function updateExtraOrderLine(index: number, patch: Partial<{ sku: string; quantity: number }>) {
     setExtraOrderLines((current) => current.map((line, lineIndex) => lineIndex === index ? { ...line, ...patch } : line))
-    setPreparedChannelDraft(null)
-    setPreparedEcommerceDraft(null)
+    detachPreparedOrderSources()
   }
 
   function removeExtraOrderLine(index: number) {
     setExtraOrderLines((current) => current.filter((_, lineIndex) => lineIndex !== index))
-    setPreparedChannelDraft(null)
-    setPreparedEcommerceDraft(null)
+    detachPreparedOrderSources()
     setNotice('Item removed from this order draft. Shop data has not changed.')
   }
 
   function recordOrder(event: FormEvent) {
     event.preventDefault()
+    if (orderDraftConflict || resumedOrderNeedsReview) {
+      setOrderDraftIssue(orderDraftConflict
+        ? 'Close this form and resume the latest saved order before review.'
+        : 'Review current Shop prices and availability before preparing this recovered order.')
+      return
+    }
     if (!payment) {
       setNotice('Choose how payment will be reviewed before preparing this order.')
       return
@@ -2348,8 +2835,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     const sourceDraft = preparedChannelDraft && channelOrderDraftIsReady(preparedChannelDraft) ? preparedChannelDraft : null
     const ecommerceDraft = preparedEcommerceDraft
     if (sourceDraft && ecommerceDraft) {
-      setPreparedChannelDraft(null)
-      setPreparedEcommerceDraft(null)
+      detachPreparedOrderSources()
       setNotice('Two source drafts were present. Both links were removed and nothing was queued.')
       return
     }
@@ -2391,8 +2877,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       return
     }
     if ((sourceDraft || ecommerceDraft) && orderLines.length !== 1) {
-      setPreparedChannelDraft(null)
-      setPreparedEcommerceDraft(null)
+      detachPreparedOrderSources()
       setNotice('Source-backed requests contain one reviewed item. The source link was removed; review this as a manual multi-item order.')
       return
     }
@@ -2401,7 +2886,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       || selectedLine.sku !== sourceDraft.sku
       || selectedLine.quantity !== sourceDraft.quantity
       || payment !== sourceDraft.payment)) {
-      setPreparedChannelDraft(null)
+      detachPreparedOrderSources({ ecommerce: false })
       setNotice('The structured order changed after source review. Review the channel mapping again or continue as a manual order.')
       return
     }
@@ -2414,7 +2899,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       || (selectedLine.variant ?? null) !== ecommerceDraft.line.variant
       || selectedLine.unitPriceMmk !== ecommerceDraft.line.unitPriceMmk
       || orderTotal !== ecommerceDraft.totalMmk)) {
-      setPreparedEcommerceDraft(null)
+      detachPreparedOrderSources({ channel: false })
       setNotice('The Ecommerce request changed after confirmation. Return to Ecommerce or continue as a manual order.')
       return
     }
@@ -2425,6 +2910,10 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       return
     }
     const sourceBacked = Boolean(sourceRecordId)
+    const recoveryInputAtReview = sourceBacked ? null : currentOrderRecoveryInput
+    const recoveryScopeAtReview = orderDraftScope
+    const recoveryOperationEpochAtReview = orderDraftOperationEpochRef.current
+    const recoveryResetEpochAtReview = orderDraftResetEpochRef.current
     const order: CommerceOrder = {
       id: uid('ORD'),
       createdAt: new Date().toISOString(),
@@ -2459,14 +2948,58 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       evidenceReferenceLocked: Boolean(sourceRecordId),
       apply: async (action) => {
         await mutateCommerce('commerce.order.created', action.commandId, commerceActionProof(action), (current) => reserveCommerceOrder(current, order, commerceActionProof(action)))
-        if (ecommerceDraft) consumedEcommerceDraftId.current = ecommerceDraft.id
-        setQuantity(1)
-        setExtraOrderLines([])
-        setCustomer('')
-        setFulfilment('')
-        setFulfilmentReference('')
-        setPreparedChannelDraft(null)
-        setPreparedEcommerceDraft(null)
+        if (ecommerceDraft) {
+          consumedEcommerceDraftId.current = ecommerceDraft.id
+          navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
+        }
+        if (recoveryInputAtReview) {
+          try {
+            await orderDraftSaveQueueRef.current
+            if (orderDraftScopeRef.current !== recoveryScopeAtReview
+              || orderDraftOperationEpochRef.current !== recoveryOperationEpochAtReview) {
+              throw new Error('a newer or different unfinished order is now saved')
+            }
+            const {
+              commerceOrderDraftMatchesInput,
+              discardCommerceOrderDraft,
+              readCommerceOrderDraft,
+            } = await import('./commerce-order-draft')
+            const latestRecovery = readCommerceOrderDraft(recoveryScopeAtReview)
+            if (latestRecovery.status === 'ready'
+              && latestRecovery.draft
+              && commerceOrderDraftMatchesInput(latestRecovery.draft, recoveryInputAtReview)) {
+              await discardCommerceOrderDraft(
+                recoveryScopeAtReview,
+                latestRecovery.draft.revision,
+                { expectedResetEpoch: recoveryResetEpochAtReview },
+              )
+              if (orderDraftScopeRef.current !== recoveryScopeAtReview
+                || orderDraftOperationEpochRef.current !== recoveryOperationEpochAtReview) {
+                throw new Error('a newer unfinished order arrived while the confirmed copy was being cleared')
+              }
+              orderDraftOperationEpochRef.current += 1
+              orderDraftRevisionRef.current = 0
+              setOrderDraftRead({ status: 'empty', draft: null, error: '' })
+              setOrderDraftIssue('')
+            } else if (latestRecovery.status === 'empty') {
+              orderDraftRevisionRef.current = 0
+              setOrderDraftRead(latestRecovery)
+              setOrderDraftIssue('')
+            } else {
+              orderDraftRevisionRef.current = latestRecovery.draft?.revision ?? 0
+              setOrderDraftRead(latestRecovery)
+              throw new Error('the saved recovery copy does not exactly match the confirmed manual order')
+            }
+          } catch (error) {
+            setOrderDraftIssue(error instanceof Error
+              ? `Order confirmed, but its local recovery copy remains: ${error.message}`
+              : 'Order confirmed, but its local recovery copy could not be cleared.')
+          }
+        }
+        setOrderDraftActive(false)
+        setResumedOrderDraft(null)
+        setOrderDraftConflict(false)
+        resetOrderDraftFields()
       },
     })
   }
@@ -2926,17 +3459,70 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     })
   }
 
-  const actionGate = <AccountableActionGate authenticatedActor={managedIdentity ? { id: managedIdentity.userId, label: managedIdentity.email } : undefined} key={pendingAction?.id ?? 'commerce-idle'} action={pendingAction} onCancel={() => { setPendingAction(null); setNotice('Change cancelled. Shop data was not modified.') }} onConfirm={confirmAction} returnFocus={actionTrigger} />
+  const actionGate = <AccountableActionGate authenticatedActor={managedIdentity ? { id: managedIdentity.userId, label: managedIdentity.email } : undefined} key={pendingAction?.id ?? 'commerce-idle'} action={pendingAction} onCancel={() => {
+    if (pendingAction?.kind === 'order_create') {
+      setOrderDraftActive(false)
+      setResumedOrderDraft(null)
+    }
+    setPendingAction(null)
+    setNotice('Change cancelled. Shop data was not modified.')
+  }} onConfirm={confirmAction} returnFocus={actionTrigger} />
   const actionHistory = managedIdentity ? null : <ActionHistory actions={actions} domain="commerce" />
+  const orderDraftRecoveryWarning = orderDraftRead.status === 'ready'
+    && orderDraftIssue.startsWith('Order confirmed, but its local recovery copy remains:')
+  const orderDraftRecoveryBlocked = orderDraftRead.status === 'invalid'
+    || orderDraftRead.status === 'unavailable'
 
   if (tab === 'orders') return <div className={`operation-module orders-module${returnDraft && selectedReturnLine ? ' has-return-draft' : ''}`}>
     {commerceBoundary}
     <section className="core-panel order-queue-panel order-workspace">
-      <div className="panel-head"><div><span className="core-eyebrow">Orders</span><h2>{actionOrders.length} {actionOrders.length === 1 ? 'order needs' : 'orders need'} action</h2></div><div className="order-queue-actions"><span className="panel-note">{openOrders.length} in fulfilment</span><button className="core-button primary compact" disabled={!commerceCanWrite || Boolean(pendingAction)} onClick={openOrderComposer} ref={orderComposerTriggerRef} type="button">New order</button></div></div>
+      <div className="panel-head"><div><span className="core-eyebrow">Orders</span><h2>{actionOrders.length} {actionOrders.length === 1 ? 'order needs' : 'orders need'} action</h2></div><div className="order-queue-actions"><span className="panel-note">{openOrders.length} in fulfilment</span><button className="core-button primary compact" disabled={!commerceCanWrite || Boolean(pendingAction) || !orderDraftInitialized || orderDraftRecoveryBlocked} onClick={orderDraftRead.status === 'ready' && !orderDraftActive ? resumeSavedOrderDraft : openOrderComposer} ref={orderComposerTriggerRef} type="button">{!orderDraftInitialized ? 'Loading orders' : orderDraftRead.status === 'unavailable' ? 'Recovery unavailable' : orderDraftRead.status === 'ready' && !orderDraftActive ? 'Resume order' : 'New order'}</button></div></div>
+      {!orderDraftActive && !pendingAction && (orderDraftRead.status === 'ready' || orderDraftRecoveryBlocked) ? <div className={`order-draft-recovery ${orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'is-blocked' : ''}`} role={orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'alert' : 'status'}>
+        <div>
+          <strong>{orderDraftRecoveryWarning
+            ? 'Confirmed order left a saved recovery copy'
+            : orderDraftRead.status === 'ready'
+              ? 'Unfinished order saved on this device'
+              : orderDraftRead.status === 'invalid'
+                ? 'Saved order draft needs recovery'
+                : 'Order recovery unavailable'}</strong>
+          <small>{orderDraftRecoveryWarning
+            ? orderDraftIssue
+            : orderDraftRead.status === 'ready' && orderDraftRead.draft
+            ? `${orderDraftRead.draft.lines.length} ${orderDraftRead.draft.lines.length === 1 ? 'item' : 'items'} · revision ${orderDraftRead.draft.revision} · ${new Date(orderDraftRead.draft.savedAt).toLocaleString()}`
+            : orderDraftRead.error}</small>
+          {orderDraftRecoveryWarning && orderDraftRead.draft ? <small>{orderDraftRead.draft.lines.length} {orderDraftRead.draft.lines.length === 1 ? 'item' : 'items'} · revision {orderDraftRead.draft.revision} · review before creating another order</small> : null}
+        </div>
+        <div className="order-draft-recovery-actions">
+          {orderDraftRead.status === 'ready' ? <button className="core-button compact" onClick={resumeSavedOrderDraft} type="button">Resume</button> : <Link className="text-link" to="/settings/#controls">{orderDraftRead.status === 'invalid' ? 'Export evidence' : 'Open Settings'}</Link>}
+          {orderDraftRead.status !== 'unavailable' ? <button className="text-link danger-text" disabled={orderDraftSaving} onClick={() => void discardSavedOrderDraft()} type="button">{orderDraftRead.status === 'ready' ? 'Discard' : 'Discard unreadable draft'}</button> : null}
+        </div>
+      </div> : null}
       <OrderList canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} disabled={commerceControlsDisabled} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} orders={actionOrders} />
     </section>
-    <dialog aria-labelledby="order-composer-title" className="order-composer-dialog" ref={orderComposerRef}>
-      <div className="order-composer-head"><div><span className="core-eyebrow">New order</span><h2 id="order-composer-title" ref={orderComposerHeadingRef} tabIndex={-1}>Add an order</h2><p>Choose the fastest source. Nothing changes until the separate confirmation step.</p></div><button aria-label="Close new order" className="core-button compact" onClick={() => orderComposerRef.current?.close()} type="button">Close</button></div>
+    <dialog aria-labelledby="order-composer-title" className="order-composer-dialog" onClose={() => {
+      setOrderDraftActive(false)
+      setResumedOrderDraft(null)
+      setOrderDraftConflict(false)
+    }} ref={orderComposerRef}>
+      <div className="order-composer-head"><div><span className="core-eyebrow">New order</span><h2 id="order-composer-title" ref={orderComposerHeadingRef} tabIndex={-1}>Add an order</h2><p>Choose the fastest source. Nothing changes until the separate confirmation step.</p></div><div className="order-composer-actions">{orderDraftHasMeaningfulFields && !preparedChannelDraft && !preparedEcommerceDraft ? <button className="text-link danger-text" disabled={orderDraftSaving || orderDraftConflict} onClick={() => void discardSavedOrderDraft()} type="button">Discard draft</button> : null}<button aria-label="Close new order" className="core-button compact" onClick={closeOrderComposer} type="button">Close</button></div></div>
+      {orderDraftActive && orderEntryMode === 'manual' && !preparedChannelDraft && !preparedEcommerceDraft && (orderDraftHasMeaningfulFields || resumedOrderDraft || orderDraftIssue) ? <div className={`order-draft-status ${orderDraftConflict || resumedOrderNeedsReview ? 'needs-review' : ''}`} role={orderDraftConflict ? 'alert' : 'status'}>
+        <div>
+          <strong>{orderDraftConflict
+            ? 'Saved draft changed in another tab'
+            : resumedOrderNeedsReview
+              ? 'Review current Shop values'
+              : orderDraftSaving
+                ? 'Saving unfinished order'
+                : orderDraftRead.status === 'ready'
+                  ? 'Draft saved on this device'
+                  : 'Unfinished order'}</strong>
+          <small>{orderDraftIssue || (orderDraftRead.status === 'ready'
+            ? 'Customer, fulfilment, item quantities, and payment can be resumed after reload.'
+            : 'This structured manual draft stays on this device. Raw messages and source links are never stored.')}</small>
+        </div>
+        {resumedOrderNeedsReview ? <button className="core-button compact" disabled={!resumedOrderCanRebind || orderDraftSaving || orderDraftConflict} onClick={() => void acceptCurrentOrderDraftCatalog()} type="button">Use current Shop values</button> : null}
+      </div> : null}
       <div aria-label="Order source" className="order-entry-methods" role="group">
         <button aria-pressed={orderEntryMode === 'manual'} disabled={Boolean(pendingAction)} onClick={() => setOrderEntryMode('manual')} type="button">Enter order</button>
         <button aria-pressed={orderEntryMode === 'message'} disabled={Boolean(pendingAction)} onClick={() => setOrderEntryMode('message')} type="button">From message</button>
@@ -2959,49 +3545,49 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         <div className="order-entry-panel" data-mode="manual">
         {preparedEcommerceDraft ? <div className="channel-source-ready">
           <div><span className="core-eyebrow">Ecommerce request</span><strong>{preparedEcommerceDraft.sourceRequestId}</strong><small>{preparedEcommerceDraft.fulfilment} · price locked · no stock reserved</small></div>
-          <button className="text-link" disabled={Boolean(pendingAction)} onClick={() => { setPreparedEcommerceDraft(null); setNotice('Ecommerce source link removed. The fields remain a manual order draft.') }} type="button">Remove source link</button>
+          <button className="text-link" disabled={Boolean(pendingAction)} onClick={() => { detachPreparedOrderSources({ channel: false }); setNotice('Ecommerce source link removed. Enter a manual handoff reference before recovery can save this order.') }} type="button">Remove source link</button>
         </div> : null}
         {preparedChannelDraft && channelOrderDraftIsReady(preparedChannelDraft) ? <div className="channel-source-ready" ref={preparedChannelRef} tabIndex={-1}>
           <div><span className="core-eyebrow">Mapped source</span><strong>{preparedChannelDraft.sourceRecordId}</strong><small>Exact excerpts reviewed; the full message was discarded.</small></div>
-          <button className="text-link" disabled={Boolean(pendingAction)} onClick={() => { setPreparedChannelDraft(null); setNotice('Source link removed. The structured fields remain as a manual order draft.') }} type="button">Remove source link</button>
+          <button className="text-link" disabled={Boolean(pendingAction)} onClick={() => { detachPreparedOrderSources({ ecommerce: false }); setNotice('Source link removed. Enter a manual handoff reference before recovery can save this order.') }} type="button">Remove source link</button>
         </div> : null}
         <form className="core-form compact-form commerce-order-form" id="commerce-manual-order-form" onSubmit={recordOrder}>
           <div className="order-essential-fields">
-            <label>Customer<input disabled={commerceControlsDisabled} maxLength={80} value={customer} onChange={(event) => { setCustomer(event.target.value); setPreparedChannelDraft(null); setPreparedEcommerceDraft(null) }} placeholder="Name or reference" /></label>
+            <label>Customer<input disabled={commerceControlsDisabled} maxLength={80} value={customer} onChange={(event) => { setCustomer(event.target.value); detachPreparedOrderSources() }} placeholder="Name or reference" /></label>
             <label>Fulfilment<select disabled={commerceControlsDisabled} required value={fulfilment} onChange={(event) => {
               setFulfilment(event.target.value as '' | 'pickup' | 'delivery')
               if (preparedEcommerceDraft) {
-                setPreparedEcommerceDraft(null)
+                detachPreparedOrderSources({ channel: false })
                 setNotice('Fulfilment changed. The Ecommerce source link was removed; review this as a manual order.')
               }
             }}><option value="">Choose pickup or delivery</option><option value="pickup">Pickup</option><option value="delivery">Delivery</option></select></label>
             <label>Handoff reference<input disabled={commerceControlsDisabled} maxLength={160} onChange={(event) => setFulfilmentReference(event.target.value)} placeholder="Pickup ticket or delivery route" required value={fulfilmentReference} /></label>
-            <label>{extraOrderLines.length ? 'Item 1' : 'Item'}<select disabled={commerceControlsDisabled} value={selectedSku} onChange={(event) => { setSku(event.target.value); setPreparedChannelDraft(null); setPreparedEcommerceDraft(null) }}>{commerce.items.map((item) => <option key={item.sku} value={item.sku}>{item.name} · {item.onHand} available</option>)}</select></label>
-            <label>{extraOrderLines.length ? 'Quantity 1' : 'Quantity'}<input disabled={commerceControlsDisabled} min="1" max={selected?.onHand ?? 1} type="number" value={quantity} onChange={(event) => { setQuantity(Number(event.target.value)); setPreparedChannelDraft(null); setPreparedEcommerceDraft(null) }} /></label>
+            <label>{extraOrderLines.length ? 'Item 1' : 'Item'}<select disabled={commerceControlsDisabled} value={selectedSku} onChange={(event) => { setSku(event.target.value); detachPreparedOrderSources() }}>{!commerce.items.some((item) => item.sku === selectedSku) && selectedSku ? <option disabled value={selectedSku}>{selectedSku} · no longer in Shop</option> : null}{commerce.items.map((item) => <option key={item.sku} value={item.sku}>{item.name} · {item.onHand} available</option>)}</select></label>
+            <label>{extraOrderLines.length ? 'Quantity 1' : 'Quantity'}<input disabled={commerceControlsDisabled} min="1" max={selected?.onHand ?? 1} type="number" value={quantity} onChange={(event) => { setQuantity(Number(event.target.value)); detachPreparedOrderSources() }} /></label>
             <div className="order-total"><span>{manualOrderLineDrafts.length} {manualOrderLineDrafts.length === 1 ? 'item' : 'items'} · {manualOrderQuantity} units</span><strong>{formatMoney(manualOrderTotal)}</strong></div>
           </div>
           {extraOrderLines.map((line, index) => {
             const item = commerce.items.find((candidate) => candidate.sku === line.sku)
             const lineNumber = index + 2
             return <div className="form-row" key={`${index}:${line.sku}`}>
-              <label>Item {lineNumber}<select disabled={commerceControlsDisabled} value={line.sku} onChange={(event) => updateExtraOrderLine(index, { sku: event.target.value })}>{commerce.items.map((candidate) => <option key={candidate.sku} value={candidate.sku}>{candidate.name} · {candidate.onHand} available</option>)}</select></label>
+              <label>Item {lineNumber}<select disabled={commerceControlsDisabled} value={line.sku} onChange={(event) => updateExtraOrderLine(index, { sku: event.target.value })}>{!commerce.items.some((candidate) => candidate.sku === line.sku) && line.sku ? <option disabled value={line.sku}>{line.sku} · no longer in Shop</option> : null}{commerce.items.map((candidate) => <option key={candidate.sku} value={candidate.sku}>{candidate.name} · {candidate.onHand} available</option>)}</select></label>
               <label>Quantity {lineNumber}<input disabled={commerceControlsDisabled} max={item?.onHand ?? 1} min="1" onChange={(event) => updateExtraOrderLine(index, { quantity: Number(event.target.value) })} type="number" value={line.quantity} /></label>
               <button aria-label={`Remove item ${lineNumber}`} className="core-button compact" disabled={commerceControlsDisabled} onClick={() => removeExtraOrderLine(index)} type="button">Remove</button>
             </div>
           })}
           <button className="core-button compact" disabled={commerceControlsDisabled || manualOrderLineDrafts.length >= commerce.items.length || manualOrderLineDrafts.length >= 20} onClick={addOrderLine} type="button">Add item</button>
           {!preparedEcommerceDraft ? <details className="order-options">
-            <summary><span>Channel and payment</span><small>{channel} · {payment}</small></summary>
+            <summary><span>Channel and payment</span><small>{channel} · {payment || 'Choose payment'}</small></summary>
             <div className="form-row order-options-fields">
-              <label>Channel<select disabled={commerceControlsDisabled} value={channel} onChange={(event) => { setChannel(event.target.value); setPreparedChannelDraft(null); setPreparedEcommerceDraft(null) }}><option>Messenger</option><option>Viber</option><option>Phone</option><option>Website</option><option>Ecommerce</option><option>Walk-in</option></select></label>
-              <label>Payment<select disabled={commerceControlsDisabled} value={payment} onChange={(event) => { setPayment(event.target.value); setPreparedChannelDraft(null) }}><option value="">Choose payment</option><option>KBZPay</option><option>WavePay</option><option>Cash on delivery</option><option>Cash</option><option>Card</option></select></label>
+              <label>Channel<select disabled={commerceControlsDisabled} value={channel} onChange={(event) => { setChannel(event.target.value); detachPreparedOrderSources() }}><option>Messenger</option><option>Viber</option><option>Phone</option><option>Website</option><option>Ecommerce</option><option>Walk-in</option></select></label>
+              <label>Payment<select disabled={commerceControlsDisabled} value={payment} onChange={(event) => { setPayment(event.target.value); detachPreparedOrderSources({ ecommerce: false }) }}><option value="">Choose payment</option><option>KBZPay</option><option>WavePay</option><option>Cash on delivery</option><option>Cash</option><option>Card</option></select></label>
             </div>
           </details> : null}
         </form>
         </div>
         <div className="order-submit-bar" data-ecommerce-payment={preparedEcommerceDraft ? 'true' : 'false'}>
           {preparedEcommerceDraft ? <label className="order-ecommerce-payment"><span>Payment</span><select disabled={commerceControlsDisabled} form="commerce-manual-order-form" required value={payment} onChange={(event) => { setPayment(event.target.value); setPreparedChannelDraft(null) }}><option value="">Choose payment</option><option>KBZPay</option><option>WavePay</option><option>Cash on delivery</option><option>Cash</option><option>Card</option></select></label> : null}
-          <button className="core-button primary" disabled={commerceControlsDisabled || (Boolean(preparedEcommerceDraft) && !payment)} form="commerce-manual-order-form" type="submit">{preparedEcommerceDraft && !payment ? 'Choose payment first' : 'Review order'}</button>
+          <button className="core-button primary" disabled={commerceControlsDisabled || !payment || resumedOrderNeedsReview || orderDraftConflict} form="commerce-manual-order-form" type="submit">{!payment ? 'Choose payment first' : resumedOrderNeedsReview ? 'Review current Shop values' : orderDraftConflict ? 'Reload saved draft' : 'Review order'}</button>
         </div>
       </> : null}
     </dialog>
@@ -4306,6 +4892,7 @@ export function SettingsPage() {
   const [teamWorkspace] = useTeamWorkspace()
   const [notice, setNotice] = useState('')
   const [resetArmed, setResetArmed] = useState(false)
+  const [resetBusy, setResetBusy] = useState(false)
   const [settingsStepState, setSettingsStepState] = useState<'workflow' | 'success' | 'system'>('workflow')
   const [managedIdentity, setManagedIdentity] = useManagedIdentity(runtime.status === 'enterprise')
   const [managedEmail, setManagedEmail] = useState('')
@@ -4356,29 +4943,37 @@ export function SettingsPage() {
     chooseSettingsStep('system')
   }
 
-  function resetDemoWorkspace() {
-    const retainedKeys = Array.from({ length: window.localStorage.length }, (_, index) => window.localStorage.key(index))
-      .filter((key): key is string => Boolean(key?.startsWith(STOREFRONT_DRAFT_RESET_PREFIX)
-        || key?.startsWith(LEGACY_STOREFRONT_DRAFT_RESET_PREFIX)))
-    ;[
-      COMMERCE_KEY,
-      PRODUCTION_KEY,
-      APPROVAL_KEY,
-      SETUP_KEY,
-      ACTION_KEY,
-      TEAM_WORK_KEY,
-      WEBSITE_STORAGE_KEY,
-      LEGACY_WEBSITE_STORAGE_KEY,
-      WEBSITE_ECOMMERCE_HANDOFF_KEY,
-      LEGACY_STOREFRONT_DRAFT_RESET_KEY,
-      ...retainedKeys,
-      ...LEGACY_TEAM_WORK_KEYS,
-      ...LEGACY_COMMERCE_KEYS,
-      ...LEGACY_PRODUCTION_KEYS,
-      ...LEGACY_APPROVAL_KEYS,
-      ...LEGACY_SETUP_KEYS,
-    ].forEach((key) => window.localStorage.removeItem(key))
-    window.location.assign('/')
+  async function resetDemoWorkspace() {
+    setResetBusy(true)
+    try {
+      const { resetCommerceOrderDraftRecovery } = await import('./commerce-order-draft')
+      await resetCommerceOrderDraftRecovery()
+      const retainedKeys = Array.from({ length: window.localStorage.length }, (_, index) => window.localStorage.key(index))
+        .filter((key): key is string => Boolean(key?.startsWith(STOREFRONT_DRAFT_RESET_PREFIX)
+          || key?.startsWith(LEGACY_STOREFRONT_DRAFT_RESET_PREFIX)))
+      ;[
+        COMMERCE_KEY,
+        PRODUCTION_KEY,
+        APPROVAL_KEY,
+        SETUP_KEY,
+        ACTION_KEY,
+        TEAM_WORK_KEY,
+        WEBSITE_STORAGE_KEY,
+        LEGACY_WEBSITE_STORAGE_KEY,
+        WEBSITE_ECOMMERCE_HANDOFF_KEY,
+        LEGACY_STOREFRONT_DRAFT_RESET_KEY,
+        ...retainedKeys,
+        ...LEGACY_TEAM_WORK_KEYS,
+        ...LEGACY_COMMERCE_KEYS,
+        ...LEGACY_PRODUCTION_KEYS,
+        ...LEGACY_APPROVAL_KEYS,
+        ...LEGACY_SETUP_KEYS,
+      ].forEach((key) => window.localStorage.removeItem(key))
+      window.location.assign('/')
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'The local trial could not be reset safely.')
+      setResetBusy(false)
+    }
   }
 
   async function connectManagedWorkspace(event: FormEvent) {
@@ -4449,7 +5044,7 @@ export function SettingsPage() {
           <p className="authority-note">External sends, payments, publishing, access changes, and production writes remain owner-approved and auditable.</p>
         </section> : null}
       </div>
-      {settingsStep === 'system' ? <section className="core-panel trial-control-panel"><div><span className="core-eyebrow">Local evidence</span><h2>Export or reset deliberately.</h2><p>Export the pilot definition and full browser workspace for review. Reset clears Company, Shop, Plant, Website, Ecommerce setup, and handoff records only after confirmation.</p></div><div className="trial-actions"><a className="core-button" download={evidenceFilename} href={evidenceHref}>Export evidence</a>{resetArmed ? <><button className="text-link" onClick={() => setResetArmed(false)} type="button">Cancel</button><button className="core-button danger" onClick={resetDemoWorkspace} type="button">Confirm reset</button></> : <button className="text-link danger-text" onClick={() => setResetArmed(true)} type="button">Reset local trial</button>}</div></section> : null}
+      {settingsStep === 'system' ? <section className="core-panel trial-control-panel"><div><span className="core-eyebrow">Local evidence</span><h2>Export or reset deliberately.</h2><p>Export the pilot definition and full browser workspace for review. Reset clears Company, Shop, unfinished order drafts, Plant, Website, Ecommerce setup, and handoff records only after confirmation.</p></div><div className="trial-actions"><a className="core-button" download={evidenceFilename} href={evidenceHref}>Export evidence</a>{resetArmed ? <><button className="text-link" disabled={resetBusy} onClick={() => setResetArmed(false)} type="button">Cancel</button><button className="core-button danger" disabled={resetBusy} onClick={() => void resetDemoWorkspace()} type="button">{resetBusy ? 'Resetting…' : 'Confirm reset'}</button></> : <button className="text-link danger-text" onClick={() => setResetArmed(true)} type="button">Reset local trial</button>}</div></section> : null}
     </div>
   )
 }

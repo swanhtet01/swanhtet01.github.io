@@ -11,18 +11,20 @@ let websiteRuntimeChecks = 0
 let storefrontRuntimeChecks = 0
 let storefrontDraftRuntimeChecks = 0
 let storefrontRequestRuntimeChecks = 0
+let commerceOrderDraftRuntimeChecks = 0
 let managedWebsiteRuntimeChecks = 0
 let managedStorefrontRuntimeChecks = 0
 let ecommerceHandoffRuntimeChecks = 0
 let commerceRuntimeChecks = 0
 let productionRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
-const [manifestText, appPackageText, appSource, coreSource, commerceSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, managedWebsiteSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, managedStorefrontSource, storefrontSource, storefrontDraftSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource] = await Promise.all([
+const [manifestText, appPackageText, appSource, coreSource, commerceSource, commerceOrderDraftSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, managedWebsiteSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, managedStorefrontSource, storefrontSource, storefrontDraftSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource] = await Promise.all([
   readFile(resolve(root, 'site-manifest.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'package.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'App.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'CoreApp.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'core', 'commerce-order-draft.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'channel-order-intake.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'managed-trial.ts'), 'utf8'),
   readFile(resolve(root, 'supermega_runtime', 'commerce_runtime.py'), 'utf8'),
@@ -56,8 +58,14 @@ const [manifestText, appPackageText, appSource, coreSource, commerceSource, chan
 const manifest = JSON.parse(manifestText)
 const appPackage = JSON.parse(appPackageText)
 const indexSource = await readFile(resolve(root, 'showroom', 'index.html'), 'utf8')
+const viteConfigSource = await readFile(resolve(root, 'showroom', 'vite.config.ts'), 'utf8')
 const websiteStarterSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-starter.ts'), 'utf8')
 const websiteStarterSetupSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'WebsiteStarterSetup.tsx'), 'utf8')
+
+if (!viteConfigSource.includes("id.includes('/src/core/channel-order-intake.ts')")
+  || !viteConfigSource.includes("id.includes('/src/core/managed-trial.ts')")
+  || !viteConfigSource.includes("id.includes('/src/core/team-work.ts')")
+  || !viteConfigSource.includes("return 'operating-models'")) fail('shop_order_intake_chunk_headroom_missing')
 
 async function exists(path) {
   try { await stat(path); return true } catch { return false }
@@ -236,6 +244,8 @@ if (!storefrontDraftSource.includes("supermega.ecommerce.storefront_draft.v2")
   || ['customerReference', 'requestLedger', 'payment', 'fulfilment', 'phone', 'address'].some((marker) => storefrontDraftSource.includes(marker))) fail('ecommerce_storefront_draft_contract_missing_or_contains_request_data')
 const storefrontDraftStoragePrefix = /export const STOREFRONT_DRAFT_KEY_PREFIX = '([^']+)'/.exec(storefrontDraftSource)?.[1]
 const legacyStorefrontDraftStoragePrefix = /export const LEGACY_STOREFRONT_DRAFT_KEY_PREFIX = '([^']+)'/.exec(storefrontDraftSource)?.[1]
+const commerceOrderDraftStoragePrefix = /export const COMMERCE_ORDER_DRAFT_KEY_PREFIX = '([^']+)'/.exec(commerceOrderDraftSource)?.[1]
+const commerceOrderDraftResetEpochKey = /export const COMMERCE_ORDER_DRAFT_RESET_EPOCH_KEY = '([^']+)'/.exec(commerceOrderDraftSource)?.[1]
 const localProductExportBlock = sourceBlock(
   coreSource,
   'function collectLocalProductRecords(',
@@ -243,21 +253,77 @@ const localProductExportBlock = sourceBlock(
 )
 const localProductResetBlock = sourceBlock(
   coreSource,
-  '  function resetDemoWorkspace()',
+  '  async function resetDemoWorkspace()',
   '\n  }\n\n  async function connectManagedWorkspace',
+)
+const rejectedEcommerceNavigationBlock = sourceBlock(
+  coreSource,
+  '        if (!ecommerceShopDraftMatchesCatalog(ecommerceNavigationDraft, commerce.items)) {',
+  "\n          setNotice('The Ecommerce request no longer matches the current Shop catalog. Nothing was prepared.')",
 )
 if (!storefrontDraftStoragePrefix
   || !legacyStorefrontDraftStoragePrefix
+  || !commerceOrderDraftStoragePrefix
+  || !commerceOrderDraftResetEpochKey
   || !coreSource.includes(`const STOREFRONT_DRAFT_RESET_PREFIX = '${storefrontDraftStoragePrefix}'`)
   || !coreSource.includes(`const LEGACY_STOREFRONT_DRAFT_RESET_PREFIX = '${legacyStorefrontDraftStoragePrefix}'`)
+  || !coreSource.includes(`const SHOP_ORDER_DRAFT_RESET_PREFIX = '${commerceOrderDraftStoragePrefix}'`)
+  || !coreSource.includes(`const SHOP_ORDER_DRAFT_RESET_EPOCH_KEY = '${commerceOrderDraftResetEpochKey}'`)
   || !coreSource.includes("const LEGACY_STOREFRONT_DRAFT_RESET_KEY = 'supermega.ecommerce.storefront_draft.v1'")
   || !localProductExportBlock.includes('key.startsWith(STOREFRONT_DRAFT_RESET_PREFIX)')
   || !localProductExportBlock.includes('key.startsWith(LEGACY_STOREFRONT_DRAFT_RESET_PREFIX)')
+  || !localProductExportBlock.includes('key.startsWith(SHOP_ORDER_DRAFT_RESET_PREFIX)')
   || !localProductResetBlock.includes('key?.startsWith(STOREFRONT_DRAFT_RESET_PREFIX)')
   || !localProductResetBlock.includes('key?.startsWith(LEGACY_STOREFRONT_DRAFT_RESET_PREFIX)')
-  || !localProductResetBlock.includes('WEBSITE_ECOMMERCE_HANDOFF_KEY,\n      LEGACY_STOREFRONT_DRAFT_RESET_KEY,\n      ...retainedKeys,')
+  || !localProductResetBlock.includes("const { resetCommerceOrderDraftRecovery } = await import('./commerce-order-draft')")
+  || !localProductResetBlock.includes('await resetCommerceOrderDraftRecovery()')
+  || !localProductResetBlock.includes('WEBSITE_ECOMMERCE_HANDOFF_KEY,\n        LEGACY_STOREFRONT_DRAFT_RESET_KEY,\n        ...retainedKeys,')
   || !coreSource.includes('Website, Ecommerce setup, and handoff records')
   || coreSource.includes("from '../products/ecommerce/storefront-draft'")) fail('ecommerce_storefront_draft_not_in_deliberate_reset_or_broke_lazy_boundary')
+if (!commerceOrderDraftSource.includes("COMMERCE_ORDER_DRAFT_SCHEMA = 'supermega.shop.order_draft.v1'")
+  || !commerceOrderDraftSource.includes("['sku', 'quantity', 'unitPriceMmk', 'availableAtSave']")
+  || !commerceOrderDraftSource.includes('COMMERCE_ORDER_DRAFT_MAX_BYTES')
+  || !commerceOrderDraftSource.includes('COMMERCE_ORDER_DRAFT_LOCK_PREFIX')
+  || !commerceOrderDraftSource.includes('COMMERCE_ORDER_DRAFT_RESET_LOCK')
+  || !commerceOrderDraftSource.includes('commerceOrderDraftUtf8Bytes')
+  || !commerceOrderDraftSource.includes('new TextEncoder().encode(value).byteLength')
+  || !commerceOrderDraftSource.includes('expectedResetEpoch')
+  || !commerceOrderDraftSource.includes('expectedInvalidFingerprint')
+  || !commerceOrderDraftSource.includes('unreadableDraftFingerprint(currentRaw)')
+  || !commerceOrderDraftSource.includes('currentRevision !== expectedRevision')
+  || !commerceOrderDraftSource.includes('storage.getItem(storageKey) !== nextRaw')
+  || !commerceOrderDraftSource.includes('resetCommerceOrderDraftRecovery')
+  || !commerceOrderDraftSource.includes('commerceOrderDraftMatchesInput')
+  || !commerceOrderDraftSource.includes('commerceOrderDraftCatalogState')
+  || !commerceOrderDraftSource.includes('rebindCommerceOrderDraft')
+  || ['rawMessage', 'sourceRecordId', 'evidenceReference', 'phone', 'address'].some((marker) => commerceOrderDraftSource.includes(marker))) fail('commerce_order_draft_contract_missing_or_contains_source_data')
+if (!coreSource.includes("from './commerce-order-draft'")
+  || !coreSource.includes("import('./commerce-order-draft')")
+  || !coreSource.includes('readCommerceOrderDraft(orderDraftScope)')
+  || !coreSource.includes("window.addEventListener('storage', refreshOrderDraft)")
+  || !coreSource.includes('saveCommerceOrderDraft(')
+  || !coreSource.includes('discardCommerceOrderDraft(')
+  || !coreSource.includes('resumeSavedOrderDraft')
+  || !coreSource.includes('acceptCurrentOrderDraftCatalog')
+  || !coreSource.includes('resumedOrderNeedsReview')
+  || !coreSource.includes('orderDraftOperationEpochRef.current !== operationEpochAtSchedule')
+  || !coreSource.includes('commerceOrderDraftMatchesInput(latestRecovery.draft, recoveryInputAtReview)')
+  || !coreSource.includes('sourceBacked ? null : currentOrderRecoveryInput')
+  || !coreSource.includes('Enter a manual handoff reference before recovery can save this order.')
+  || !coreSource.includes("navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })")
+  || !coreSource.includes('const navigationDraftId = ecommerceNavigationDraft.id')
+  || !rejectedEcommerceNavigationBlock.includes('consumedEcommerceDraftId.current = navigationDraftId')
+  || !rejectedEcommerceNavigationBlock.includes('setPreparedEcommerceDraft(null)')
+  || !rejectedEcommerceNavigationBlock.includes("navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })")
+  || !coreSource.includes('Loading orders')
+  || !coreSource.includes('Confirmed order left a saved recovery copy')
+  || !coreSource.includes('Recovery unavailable')
+  || !coreSource.includes('expectedInvalidFingerprint: invalidFingerprintAtDiscard')
+  || !coreSource.includes('Unfinished order saved on this device')
+  || !coreSource.includes('Source-message and Ecommerce links are never recovered.')
+  || !coreSource.includes('Order confirmed, but its local recovery copy remains:')
+  || !coreSource.includes("setPayment('')")
+  || !coreSource.includes('unfinished order drafts')) fail('commerce_order_draft_recovery_ui_missing')
 if (!ecommerceSource.includes("'sourcePreviewDigest' in draft")
   || !ecommerceSource.includes('localPreviewDigest: draft.sourcePreviewDigest')
   || !ecommerceSource.includes('legacyStorefrontDraftStorageKey(LOCAL_STOREFRONT_DRAFT_SCOPE)')
@@ -440,8 +506,8 @@ if (!ecommerceConfirmSource.includes('storefrontRequestLedgerContains')
   || ecommerceReviewPosition < ecommercePaymentPosition
   || !ecommerceOrderSubmit.includes("data-ecommerce-payment={preparedEcommerceDraft ? 'true' : 'false'}")
   || !ecommerceOrderSubmit.includes('form="commerce-manual-order-form" required value={payment}')
-  || !ecommerceOrderSubmit.includes("disabled={commerceControlsDisabled || (Boolean(preparedEcommerceDraft) && !payment)}")
-  || !ecommerceOrderSubmit.includes("preparedEcommerceDraft && !payment ? 'Choose payment first' : 'Review order'")
+  || !ecommerceOrderSubmit.includes('disabled={commerceControlsDisabled || !payment || resumedOrderNeedsReview || orderDraftConflict}')
+  || !ecommerceOrderSubmit.includes("!payment ? 'Choose payment first' : resumedOrderNeedsReview ? 'Review current Shop values'")
   || !coreCssSource.includes('.order-ecommerce-payment')
   || !coreSource.includes("import('../products/ecommerce/ecommerce-shop-handoff')")
   || ['setItem(', 'removeItem(', 'localStorage', 'sessionStorage', 'fetch(', 'XMLHttpRequest', 'navigator.locks', 'convertCommerceWebsiteIntake', 'reserveCommerceOrder', 'mutateCommerceWorkspace'].some((marker) => ecommerceConfirmSource.includes(marker) || ecommerceHandoffSource.includes(marker))) fail('ecommerce_shop_handoff_contract_missing_or_mutating')
@@ -752,7 +818,7 @@ if (!coreSource.includes('id="commerce-manual-order-form"')
   || !coreSource.includes("managedIdentity ? 'Managed records' : 'Sample data'")
   || !coreSource.includes('const commerceControlsDisabled = !commerceCanWrite || Boolean(pendingAction)')
   || !coreSource.includes('<details className="order-options">')
-  || !coreSource.includes('<summary><span>Channel and payment</span><small>{channel} · {payment}</small></summary>')
+  || !coreSource.includes("<summary><span>Channel and payment</span><small>{channel} · {payment || 'Choose payment'}</small></summary>")
   || !coreSource.includes('<dialog aria-labelledby="order-composer-title" className="order-composer-dialog"')
   || !coreSource.includes('ref={orderComposerTriggerRef}')
   || !coreSource.includes('if (dialog && !dialog.open) dialog.showModal()')
@@ -3007,6 +3073,260 @@ async function verifyCommerceRuntime() {
   }
 }
 
+async function verifyCommerceOrderDraftRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    commerceOrderDraftRuntimeChecks += 1
+  }
+  try {
+    const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-order-draft.ts')).href}?commerce-order-draft=${Date.now()}`)
+    const values = new Map()
+    const storage = {
+      getItem: (key) => values.get(key) ?? null,
+      setItem: (key, value) => values.set(key, String(value)),
+      removeItem: (key) => values.delete(key),
+      get length() { return values.size },
+      key: (index) => [...values.keys()][index] ?? null,
+    }
+    const lockCalls = []
+    const lockQueues = new Map()
+    const locks = {
+      request: (name, options, callback) => {
+        lockCalls.push({ name, options })
+        const lockQueue = lockQueues.get(name) ?? Promise.resolve()
+        const run = lockQueue.then(callback, callback)
+        lockQueues.set(name, run.then(() => undefined, () => undefined))
+        return run
+      },
+    }
+    const localScope = model.commerceOrderDraftScope()
+    const managedScope = model.commerceOrderDraftScope('workspace-a')
+    const localKey = model.commerceOrderDraftStorageKey(localScope)
+    const managedKey = model.commerceOrderDraftStorageKey(managedScope)
+    const input = {
+      customer: 'Ko Aung',
+      channel: 'Messenger',
+      payment: 'KBZPay',
+      fulfilment: 'pickup',
+      fulfilmentReference: 'PICKUP-17',
+      lines: [
+        { sku: 'SM-1001', quantity: 2, unitPriceMmk: 18_500, availableAtSave: 34 },
+        { sku: 'SM-1003', quantity: 1, unitPriceMmk: 12_000, availableAtSave: 21 },
+      ],
+    }
+    const catalog = [
+      { sku: 'SM-1001', price: 18_500, onHand: 34 },
+      { sku: 'SM-1003', price: 12_000, onHand: 21 },
+    ]
+
+    assert(model.readCommerceOrderDraft(localScope, storage).status === 'empty', 'commerce_order_draft_empty_read_invalid')
+    const first = await model.saveCommerceOrderDraft(input, 0, localScope, {
+      storage,
+      locks,
+      now: () => '2026-07-25T05:00:00.000Z',
+    })
+    const firstRaw = values.get(localKey)
+    assert(first.revision === 1
+      && first.scope === 'local'
+      && first.lines.length === 2
+      && first.savedAt === '2026-07-25T05:00:00.000Z',
+    'commerce_order_draft_first_save_invalid')
+    assert(Object.keys(JSON.parse(firstRaw)).sort().join(',') === 'channel,customer,fulfilment,fulfilmentReference,lines,payment,revision,savedAt,schema,scope', 'commerce_order_draft_extra_fields_persisted')
+    assert(lockCalls[0]?.name === 'supermega:shop:order-draft:reset'
+      && lockCalls[1]?.name === 'supermega:shop:order-draft:local'
+      && lockCalls.slice(0, 2).every((call) => call.options?.mode === 'exclusive'),
+    'commerce_order_draft_wrong_lock_scope_or_mode')
+    assert(model.readCommerceOrderDraft(localScope, storage).status === 'ready'
+      && JSON.stringify(model.readCommerceOrderDraft(localScope, storage).draft) === JSON.stringify(first),
+    'commerce_order_draft_reload_failed')
+    const replay = await model.saveCommerceOrderDraft({ ...input, lines: input.lines.map((line) => ({ ...line })) }, 1, localScope, {
+      storage,
+      locks,
+      now: () => '2026-07-25T05:01:00.000Z',
+    })
+    assert(replay.revision === 1 && values.get(localKey) === firstRaw, 'commerce_order_draft_exact_replay_advanced')
+    const updated = await model.saveCommerceOrderDraft({ ...input, customer: 'May' }, 1, localScope, {
+      storage,
+      locks,
+      now: () => '2026-07-25T05:02:00.000Z',
+    })
+    assert(updated.revision === 2 && updated.customer === 'May', 'commerce_order_draft_update_not_revisioned')
+    const managed = await model.saveCommerceOrderDraft(input, 0, managedScope, {
+      storage,
+      locks,
+      now: () => '2026-07-25T05:03:00.000Z',
+    })
+    assert(managed.scope === 'managed:workspace-a'
+      && values.has(managedKey)
+      && model.readCommerceOrderDraft(localScope, storage).draft?.customer === 'May',
+    'commerce_order_draft_cross_scope_leak')
+
+    const current = model.commerceOrderDraftCatalogState(first, catalog)
+    assert(current.current && current.canRebind, 'commerce_order_draft_current_catalog_rejected')
+    const repriced = model.commerceOrderDraftCatalogState(first, catalog.map((item) => item.sku === 'SM-1001' ? { ...item, price: item.price + 1 } : item))
+    assert(!repriced.current && repriced.canRebind && repriced.changedSkus.join(',') === 'SM-1001', 'commerce_order_draft_price_drift_not_detected')
+    const stockChanged = model.commerceOrderDraftCatalogState(first, catalog.map((item) => item.sku === 'SM-1001' ? { ...item, onHand: item.onHand - 1 } : item))
+    assert(!stockChanged.current && stockChanged.canRebind && stockChanged.changedSkus.join(',') === 'SM-1001', 'commerce_order_draft_availability_drift_not_detected')
+    const insufficient = model.commerceOrderDraftCatalogState(first, catalog.map((item) => item.sku === 'SM-1001' ? { ...item, onHand: 1 } : item))
+    assert(!insufficient.current && !insufficient.canRebind && insufficient.insufficientSkus.join(',') === 'SM-1001', 'commerce_order_draft_insufficient_stock_not_blocked')
+    const missing = model.commerceOrderDraftCatalogState(first, catalog.slice(1))
+    assert(!missing.current && !missing.canRebind && missing.missingSkus.join(',') === 'SM-1001', 'commerce_order_draft_missing_sku_not_blocked')
+    const rebound = model.rebindCommerceOrderDraft(first, catalog.map((item) => item.sku === 'SM-1001' ? { ...item, price: 19_000, onHand: 30 } : item))
+    assert(rebound.customer === input.customer
+      && rebound.lines[0].unitPriceMmk === 19_000
+      && rebound.lines[0].availableAtSave === 30,
+    'commerce_order_draft_rebind_changed_operator_fields_or_kept_stale_catalog')
+
+    let staleRejected = false
+    try {
+      await model.saveCommerceOrderDraft({ ...input, customer: 'Stale' }, 1, localScope, {
+        storage,
+        locks,
+        now: () => '2026-07-25T05:04:00.000Z',
+      })
+    } catch { staleRejected = true }
+    assert(staleRejected && model.readCommerceOrderDraft(localScope, storage).draft?.revision === 2, 'commerce_order_draft_stale_save_overwrote_current')
+    for (const invalid of [
+      { ...input, customer: ' Ko Aung' },
+      { ...input, lines: [] },
+      { ...input, lines: [input.lines[0], input.lines[0]] },
+      { ...input, payment: 'Crypto' },
+      { ...input, lines: [{ ...input.lines[0], quantity: 0 }] },
+    ]) {
+      let rejected = false
+      try {
+        await model.saveCommerceOrderDraft(invalid, 2, localScope, {
+          storage,
+          locks,
+          now: () => '2026-07-25T05:05:00.000Z',
+        })
+      } catch { rejected = true }
+      assert(rejected && model.readCommerceOrderDraft(localScope, storage).draft?.revision === 2, 'commerce_order_draft_invalid_input_written')
+    }
+
+    values.set(localKey, '{broken')
+    const malformed = model.readCommerceOrderDraft(localScope, storage)
+    let malformedSaveRejected = false
+    try {
+      await model.saveCommerceOrderDraft(input, 0, localScope, {
+        storage,
+        locks,
+        now: () => '2026-07-25T05:06:00.000Z',
+      })
+    } catch { malformedSaveRejected = true }
+    assert(malformed.status === 'invalid'
+      && /^[0-9]+:[0-9a-f]{8}:[0-9a-f]{8}$/.test(malformed.invalidFingerprint)
+      && malformedSaveRejected
+      && values.get(localKey) === '{broken',
+    'commerce_order_draft_malformed_value_replaced')
+    const oversizedRaw = 'x'.repeat(16_385)
+    values.set(localKey, oversizedRaw)
+    const oversized = model.readCommerceOrderDraft(localScope, storage)
+    assert(oversized.status === 'invalid' && oversized.invalidFingerprint, 'commerce_order_draft_oversized_value_accepted')
+    assert(model.commerceOrderDraftUtf8Bytes('က'.repeat(6_000)) === 18_000, 'commerce_order_draft_multilingual_bytes_mismeasured')
+    values.set(localKey, JSON.stringify(updated))
+    let replacedInvalidDiscardRejected = false
+    try {
+      await model.discardCommerceOrderDraft(localScope, undefined, {
+        storage,
+        locks,
+        expectedInvalidFingerprint: oversized.invalidFingerprint,
+      })
+    } catch { replacedInvalidDiscardRejected = true }
+    assert(replacedInvalidDiscardRejected
+      && model.readCommerceOrderDraft(localScope, storage).draft?.revision === updated.revision,
+    'commerce_order_draft_stale_invalid_discard_removed_replacement')
+    values.set(localKey, oversizedRaw)
+    await model.discardCommerceOrderDraft(localScope, undefined, {
+      storage,
+      locks,
+      expectedInvalidFingerprint: oversized.invalidFingerprint,
+    })
+    assert(!values.has(localKey), 'commerce_order_draft_invalid_value_not_explicitly_discarded')
+
+    const restored = await model.saveCommerceOrderDraft(input, 0, localScope, {
+      storage,
+      locks,
+      now: () => '2026-07-25T05:07:00.000Z',
+    })
+    let wrongDiscardRejected = false
+    try {
+      await model.discardCommerceOrderDraft(localScope, restored.revision + 1, { storage, locks })
+    } catch { wrongDiscardRejected = true }
+    assert(wrongDiscardRejected && values.has(localKey), 'commerce_order_draft_wrong_revision_discarded_current')
+    await model.discardCommerceOrderDraft(localScope, restored.revision, { storage, locks })
+    assert(model.readCommerceOrderDraft(localScope, storage).status === 'empty', 'commerce_order_draft_discard_failed')
+
+    const resetLocal = await model.saveCommerceOrderDraft(input, 0, localScope, {
+      storage,
+      locks,
+      expectedResetEpoch: 0,
+      now: () => '2026-07-25T05:07:10.000Z',
+    })
+    const resetEpoch = await model.resetCommerceOrderDraftRecovery({ storage, locks })
+    assert(resetEpoch === 1
+      && model.commerceOrderDraftResetEpoch(storage) === 1
+      && !values.has(localKey)
+      && !values.has(managedKey),
+    'commerce_order_draft_reset_did_not_clear_scoped_drafts')
+    let preResetSaveRejected = false
+    try {
+      await model.saveCommerceOrderDraft({ ...input, customer: 'Queued before reset' }, resetLocal.revision, localScope, {
+        storage,
+        locks,
+        expectedResetEpoch: 0,
+        now: () => '2026-07-25T05:07:12.000Z',
+      })
+    } catch { preResetSaveRejected = true }
+    assert(preResetSaveRejected && !values.has(localKey), 'commerce_order_draft_pre_reset_save_recreated_draft')
+    const postResetSave = await model.saveCommerceOrderDraft(input, 0, localScope, {
+      storage,
+      locks,
+      expectedResetEpoch: 1,
+      now: () => '2026-07-25T05:07:13.000Z',
+    })
+    assert(postResetSave.revision === 1 && model.readCommerceOrderDraft(localScope, storage).status === 'ready', 'commerce_order_draft_post_reset_save_failed')
+
+    values.clear()
+    lockCalls.length = 0
+    lockQueues.clear()
+    const concurrent = await Promise.allSettled([
+      model.saveCommerceOrderDraft(input, 0, localScope, {
+        storage,
+        locks,
+        now: () => '2026-07-25T05:08:00.000Z',
+      }),
+      model.saveCommerceOrderDraft({ ...input, customer: 'Concurrent' }, 0, localScope, {
+        storage,
+        locks,
+        now: () => '2026-07-25T05:08:01.000Z',
+      }),
+    ])
+    assert(concurrent.filter((result) => result.status === 'fulfilled').length === 1
+      && JSON.parse(values.get(localKey)).revision === 1
+      && lockCalls.every((call) => ['supermega:shop:order-draft:reset', 'supermega:shop:order-draft:local'].includes(call.name) && call.options?.mode === 'exclusive'),
+    'commerce_order_draft_concurrent_save_not_serialized')
+
+    const beforeFailure = values.get(localKey)
+    const failingStorage = {
+      getItem: storage.getItem,
+      setItem: () => { throw new Error('quota') },
+      removeItem: storage.removeItem,
+    }
+    let failedWriteRejected = false
+    try {
+      await model.saveCommerceOrderDraft({ ...input, customer: 'Write failure' }, 1, localScope, {
+        storage: failingStorage,
+        locks,
+        now: () => '2026-07-25T05:09:00.000Z',
+      })
+    } catch { failedWriteRejected = true }
+    assert(failedWriteRejected && values.get(localKey) === beforeFailure, 'commerce_order_draft_failed_write_changed_state')
+  } catch (error) {
+    fail(`commerce_order_draft_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
 async function verifyStorefrontDraftRuntime() {
   const assert = (condition, reason) => {
     if (!condition) throw new Error(reason)
@@ -4584,6 +4904,7 @@ async function verifyProductionRuntime() {
 await verifyChannelOrderRuntime()
 await verifyWebsiteRuntime()
 await verifyWebsiteOrderCompletionRuntime()
+await verifyCommerceOrderDraftRuntime()
 await verifyStorefrontDraftRuntime()
 await verifyStorefrontRuntime()
 await verifyManagedWebsiteRuntime()
@@ -4601,4 +4922,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', primaryRoutes: 5, operatingModules: 2, prototypeRoutes: 2, compatibilityRedirects: 1, workflowProfiles, channelOrderRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceHandoffRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', primaryRoutes: 5, operatingModules: 2, prototypeRoutes: 2, compatibilityRedirects: 1, workflowProfiles, channelOrderRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceHandoffRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
