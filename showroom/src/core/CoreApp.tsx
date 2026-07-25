@@ -326,7 +326,8 @@ type ProductionTab = 'production' | 'control'
 const APPROVAL_KEY = 'supermega.approvals.v3'
 const SETUP_KEY = 'supermega.setup.v3'
 const ACTION_KEY = 'supermega.accountable.actions.v1'
-const STOREFRONT_DRAFT_RESET_PREFIX = 'supermega.ecommerce.storefront_draft.v1.'
+const STOREFRONT_DRAFT_RESET_PREFIX = 'supermega.ecommerce.storefront_draft.v2.'
+const LEGACY_STOREFRONT_DRAFT_RESET_PREFIX = 'supermega.ecommerce.storefront_draft.v1.'
 const LEGACY_STOREFRONT_DRAFT_RESET_KEY = 'supermega.ecommerce.storefront_draft.v1'
 const WEBSITE_RECOVERY_EXPORT_PREFIX = 'supermega.website.workspace.recovery.v1.'
 const LEGACY_APPROVAL_KEYS = ['supermega.approvals.v2']
@@ -346,6 +347,7 @@ function collectLocalProductRecords(storage: Pick<Storage, 'getItem' | 'key' | '
       if (!key
         || (!exactKeys.has(key)
           && !key.startsWith(STOREFRONT_DRAFT_RESET_PREFIX)
+          && !key.startsWith(LEGACY_STOREFRONT_DRAFT_RESET_PREFIX)
           && !key.startsWith(WEBSITE_RECOVERY_EXPORT_PREFIX))) continue
       const value = storage.getItem(key)
       if (value !== null) records[key] = value
@@ -4356,7 +4358,8 @@ export function SettingsPage() {
 
   function resetDemoWorkspace() {
     const retainedKeys = Array.from({ length: window.localStorage.length }, (_, index) => window.localStorage.key(index))
-      .filter((key): key is string => Boolean(key?.startsWith(STOREFRONT_DRAFT_RESET_PREFIX)))
+      .filter((key): key is string => Boolean(key?.startsWith(STOREFRONT_DRAFT_RESET_PREFIX)
+        || key?.startsWith(LEGACY_STOREFRONT_DRAFT_RESET_PREFIX)))
     ;[
       COMMERCE_KEY,
       PRODUCTION_KEY,

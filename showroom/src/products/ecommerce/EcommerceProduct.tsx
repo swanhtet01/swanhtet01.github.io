@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router'
 
 import {
+  COMMERCE_KEY,
   commerceCatalogDigest,
   commerceCatalogDigestSource,
   commerceStorefrontConfiguration,
@@ -40,10 +41,12 @@ import {
 } from './storefront-model'
 import {
   LOCAL_STOREFRONT_DRAFT_SCOPE,
+  legacyStorefrontDraftStorageKey,
   readStorefrontDraft,
   reconcileStorefrontSelection,
   saveStorefrontDraft,
   storefrontDraftStorageKey,
+  type LegacyStorefrontDraft,
   type StorefrontDraft,
   type StorefrontDraftReadResult,
 } from './storefront-draft'
@@ -55,6 +58,9 @@ type EcommerceCatalog = {
   items: CommerceItem[]
   error: string
 }
+type SavedStorefrontState = ManagedStorefrontSaved & {
+  localPreviewDigest?: string
+}
 type ManagedInboxContext = {
   identity: ManagedIdentity
   state: CommerceState
@@ -62,7 +68,7 @@ type ManagedInboxContext = {
 }
 type ManagedStorefrontView = {
   inbox: ManagedInboxContext
-  saved: ManagedStorefrontSaved | null
+  saved: SavedStorefrontState | null
   fields: {
     storeName: string
     summary: string
@@ -82,7 +88,7 @@ function defaultSelection(items: CommerceItem[]) {
   return items.filter((item) => item.onHand > 0).slice(0, 4).map((item) => item.sku)
 }
 
-function savedLocalDraft(draft: StorefrontDraft | null): ManagedStorefrontSaved | null {
+function savedLocalDraft(draft: StorefrontDraft | LegacyStorefrontDraft | null): SavedStorefrontState | null {
   if (!draft) return null
   return {
     revision: draft.revision,
@@ -90,10 +96,11 @@ function savedLocalDraft(draft: StorefrontDraft | null): ManagedStorefrontSaved 
     storeName: draft.storeName,
     summary: draft.summary,
     selectedSkus: [...draft.selectedSkus],
+    ...('sourcePreviewDigest' in draft ? { localPreviewDigest: draft.sourcePreviewDigest } : {}),
   }
 }
 
-function draftFieldsForCatalog(saved: ManagedStorefrontSaved | null, items: CommerceItem[]) {
+function draftFieldsForCatalog(saved: SavedStorefrontState | null, items: CommerceItem[]) {
   if (!saved) {
     return {
       storeName: DEFAULT_STORE_NAME,
@@ -145,7 +152,7 @@ export function EcommerceProduct() {
   const [catalogHydrating, setCatalogHydrating] = useState(true)
   const [managedIdentity, setManagedIdentity] = useState<ManagedIdentity | null>(null)
   const [managedInbox, setManagedInbox] = useState<ManagedInboxContext | null>(null)
-  const [savedDraft, setSavedDraft] = useState<ManagedStorefrontSaved | null>(null)
+  const [savedDraft, setSavedDraft] = useState<SavedStorefrontState | null>(null)
   const [draftReadStatus, setDraftReadStatus] = useState<StorefrontDraftReadResult['status']>('empty')
   const [draftIssue, setDraftIssue] = useState('')
   const [draftNotice, setDraftNotice] = useState('')
@@ -255,9 +262,26 @@ export function EcommerceProduct() {
 
   useEffect(() => {
     if (managedIdentity) return
-    function refreshSavedDraft(event: StorageEvent) {
-      if (event.key !== storefrontDraftStorageKey(LOCAL_STOREFRONT_DRAFT_SCOPE)) return
+    const currentDraftKey = storefrontDraftStorageKey(LOCAL_STOREFRONT_DRAFT_SCOPE)
+    const legacyDraftKey = legacyStorefrontDraftStorageKey(LOCAL_STOREFRONT_DRAFT_SCOPE)
+    function refreshLocalStorefront(event: StorageEvent) {
+      if (event.key === COMMERCE_KEY || event.key === null) {
+        const latestCatalog = readStorefrontCatalog()
+        setCatalog(latestCatalog)
+        setRequestSku((current) => latestCatalog.items.some((item) => item.sku === current && item.onHand > 0)
+          ? current
+          : latestCatalog.items.find((item) => item.onHand > 0)?.sku ?? '')
+        setMissingSelectionReviewed(false)
+        setHandoffConfirmed(false)
+        setRequestNotice('')
+        setDraftNotice('Shop catalog changed in another tab. Review the customer view and save the storefront again.')
+        if (event.key === COMMERCE_KEY) return
+      }
+      if (event.key !== currentDraftKey
+        && event.key !== legacyDraftKey
+        && event.key !== null) return
       const latest = readStorefrontDraft(LOCAL_STOREFRONT_DRAFT_SCOPE)
+      if (event.key === legacyDraftKey && latest.status === 'ready') return
       setSavedDraft(savedLocalDraft(latest.draft))
       setDraftReadStatus(latest.status)
       setDraftIssue(latest.error)
@@ -265,8 +289,8 @@ export function EcommerceProduct() {
       setHandoffConfirmed(false)
       setDraftNotice('Saved storefront setup changed in another tab. Current edits were kept; Discard loads the latest saved version.')
     }
-    window.addEventListener('storage', refreshSavedDraft)
-    return () => window.removeEventListener('storage', refreshSavedDraft)
+    window.addEventListener('storage', refreshLocalStorefront)
+    return () => window.removeEventListener('storage', refreshLocalStorefront)
   }, [managedIdentity])
 
   const previewResult = useMemo(() => {
@@ -283,6 +307,8 @@ export function EcommerceProduct() {
     }
   }, [catalog.items, selectedSkus, storeName, summary])
   const previewJson = previewResult.preview ? JSON.stringify(previewResult.preview) : ''
+  const digest = digestState.previewJson === previewJson ? digestState.value : ''
+  const digestError = digestState.previewJson === previewJson ? digestState.error : ''
   const managedCatalogSource = managedInbox
     ? commerceCatalogDigestSource(managedInbox.state)
     : ''
@@ -300,17 +326,37 @@ export function EcommerceProduct() {
     && savedDraft.summary === summary
     && savedDraft.selectedSkus.length === selectedSkus.length
     && savedDraft.selectedSkus.every((sku) => selectedSkus.includes(sku)))
-  const savedCatalogIsCurrent = !managedIdentity || Boolean(savedDraft?.shopCatalogDigest
-    && managedCatalogDigest
-    && savedDraft.shopCatalogDigest === managedCatalogDigest)
+  const savedCatalogIsCurrent = managedIdentity
+    ? Boolean(savedDraft?.shopCatalogDigest
+      && managedCatalogDigest
+      && savedDraft.shopCatalogDigest === managedCatalogDigest)
+    : Boolean(savedDraft?.localPreviewDigest
+      && digest
+      && savedDraft.localPreviewDigest === digest)
   const savedDraftIsCurrent = savedFieldsAreCurrent && savedCatalogIsCurrent
   const hasUnsavedStorefront = !savedDraftIsCurrent
   const hasUnsavedFieldChanges = !savedFieldsAreCurrent
-  const catalogRebindRequired = Boolean(managedIdentity
+  const managedCatalogRebindRequired = Boolean(managedIdentity
     && savedDraft
     && savedFieldsAreCurrent
     && managedCatalogDigest
     && !savedCatalogIsCurrent)
+  const localCatalogRebindRequired = Boolean(!managedIdentity
+    && savedDraft?.localPreviewDigest
+    && savedFieldsAreCurrent
+    && digest
+    && !savedCatalogIsCurrent)
+  const catalogRebindRequired = managedCatalogRebindRequired || localCatalogRebindRequired
+  const localFingerprintUpgradeRequired = Boolean(!managedIdentity
+    && savedDraft
+    && savedFieldsAreCurrent
+    && digest
+    && !savedDraft.localPreviewDigest)
+  const localFingerprintPending = Boolean(!managedIdentity
+    && savedDraft
+    && savedFieldsAreCurrent
+    && !digest
+    && !digestError)
   const savedSelectionReconciliation = useMemo(
     () => savedDraft
       ? reconcileStorefrontSelection(savedDraft.selectedSkus, catalog.items.map((item) => item.sku))
@@ -475,6 +521,8 @@ export function EcommerceProduct() {
 
   async function saveCurrentStorefront() {
     if (!previewResult.preview
+      || !digest
+      || Boolean(digestError)
       || catalogHydrating
       || selectionReviewRequired
       || draftBusy
@@ -491,7 +539,7 @@ export function EcommerceProduct() {
         return
       }
       const saved = await saveStorefrontDraft(
-        { storeName, summary, selectedSkus },
+        { storeName, summary, selectedSkus, sourcePreviewDigest: digest },
         savedDraft?.revision ?? 0,
         LOCAL_STOREFRONT_DRAFT_SCOPE,
       )
@@ -733,8 +781,6 @@ export function EcommerceProduct() {
       : catalog.source === 'sample'
       ? 'Sample Shop catalog'
       : 'Catalog unavailable'
-  const digest = digestState.previewJson === previewJson ? digestState.value : ''
-  const digestError = digestState.previewJson === previewJson ? digestState.error : ''
   const currentRequestSku = previewResult.preview?.items.some((item) => item.sku === requestSku)
     ? requestSku
     : previewResult.preview?.items[0]?.sku ?? ''
@@ -829,10 +875,14 @@ export function EcommerceProduct() {
             <div>
               <strong>{catalogHydrating
                 ? 'Checking storefront workspace'
+                : localFingerprintPending
+                ? 'Checking saved storefront fingerprint'
                 : draftStorageBlocked
                 ? 'Saved setup needs recovery'
                 : managedCatalogDigestError
                 ? 'Shop catalog check unavailable'
+                : localFingerprintUpgradeRequired
+                ? 'Saved setup needs fingerprint upgrade'
                 : catalogRebindRequired
                 ? 'Shop catalog changed'
                 : savedDraftIsCurrent
@@ -842,6 +892,8 @@ export function EcommerceProduct() {
                 : savedDraft ? 'Unsaved changes' : 'Not saved yet'}</strong>
               <small>{catalogHydrating
                 ? 'Editing unlocks after the local or managed Shop scope is confirmed.'
+                : localFingerprintPending
+                ? 'Comparing the saved fingerprint with the current Shop-backed customer view.'
                 : draftIssue || managedCatalogDigestError || (catalogRebindRequired
                 ? 'Save again to bind this storefront to the current Shop catalog.'
                 : savedDraftIsCurrent && savedDraft
@@ -859,6 +911,8 @@ export function EcommerceProduct() {
                 className="core-button primary"
                 disabled={!hasUnsavedStorefront
                   || !previewResult.preview
+                  || !digest
+                  || Boolean(digestError)
                   || catalogHydrating
                   || selectionReviewRequired
                   || draftBusy
@@ -868,7 +922,7 @@ export function EcommerceProduct() {
                 onClick={() => void saveCurrentStorefront()}
                 type="button"
               >
-                {draftBusy ? 'Saving…' : catalogRebindRequired ? 'Rebind storefront' : 'Save storefront'}
+                {draftBusy ? 'Saving…' : localFingerprintUpgradeRequired ? 'Upgrade storefront' : catalogRebindRequired ? 'Rebind storefront' : 'Save storefront'}
               </button>
             </div>
           </div>
@@ -1016,13 +1070,13 @@ export function EcommerceProduct() {
 
           <details className="ecommerce-verification" open={digestError ? true : undefined}>
             <summary>
-              <span><strong>Preview verification</strong><small>Technical proof for operators</small></span>
+              <span><strong>Preview verification</strong><small>Local currentness check</small></span>
               <b>{digestError ? 'Attention' : digest ? 'Ready' : 'Checking'}</b>
             </summary>
             <div className="ecommerce-digest" aria-live="polite">
-              <span>Preview digest</span>
+              <span>Preview fingerprint</span>
               <code>{digest || (digestError ? 'Unavailable' : 'Calculating…')}</code>
-              <small>{digestError || 'Same approved copy and Shop snapshot produce the same digest.'}</small>
+              <small>{digestError || 'The same storefront fields and Shop snapshot produce the same local fingerprint.'}</small>
             </div>
           </details>
         </section>

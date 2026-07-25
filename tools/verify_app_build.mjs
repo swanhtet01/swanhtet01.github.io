@@ -63,6 +63,13 @@ async function exists(path) {
   try { await stat(path); return true } catch { return false }
 }
 
+function sourceBlock(source, startMarker, endMarker) {
+  const normalizedSource = source.replaceAll('\r\n', '\n')
+  const start = normalizedSource.indexOf(startMarker)
+  const end = start < 0 ? -1 : normalizedSource.indexOf(endMarker, start + startMarker.length)
+  return start >= 0 && end > start ? normalizedSource.slice(start, end) : ''
+}
+
 async function walk(directory) {
   const files = []
   for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -209,9 +216,14 @@ if (!storefrontSource.includes("supermega.ecommerce.storefront_preview.v1")
   || !storefrontSource.includes("globalThis.crypto.subtle.digest('SHA-256'")
   || !storefrontSource.includes('validateCommerceState(JSON.parse(raw)).items')
   || ['setItem(', 'removeItem(', 'fetch(', 'XMLHttpRequest', 'navigator.locks'].some((marker) => storefrontSource.includes(marker))) fail('ecommerce_storefront_contract_missing_or_mutating')
-if (!storefrontDraftSource.includes("supermega.ecommerce.storefront_draft.v1")
-  || !storefrontDraftSource.includes("['schema', 'scope', 'revision', 'savedAt', 'storeName', 'summary', 'selectedSkus']")
+if (!storefrontDraftSource.includes("supermega.ecommerce.storefront_draft.v2")
+  || !storefrontDraftSource.includes("LEGACY_STOREFRONT_DRAFT_SCHEMA = 'supermega.ecommerce.storefront_draft.v1'")
+  || !storefrontDraftSource.includes("['schema', 'scope', 'revision', 'savedAt', 'storeName', 'summary', 'selectedSkus', 'sourcePreviewDigest']")
+  || !storefrontDraftSource.includes("status: 'legacy'")
+  || !storefrontDraftSource.includes('legacyStorefrontDraftStorageKey')
+  || !storefrontDraftSource.includes('/^sha256:[0-9a-f]{64}$/')
   || !storefrontDraftSource.includes('STOREFRONT_DRAFT_KEY_PREFIX')
+  || !storefrontDraftSource.includes('LEGACY_STOREFRONT_DRAFT_KEY_PREFIX')
   || !storefrontDraftSource.includes('STOREFRONT_DRAFT_LOCK_PREFIX')
   || !storefrontDraftSource.includes('encodeURIComponent(canonicalScope(scope))')
   || !storefrontDraftSource.includes('readStorefrontDraft(canonicalDraftScope, storage)')
@@ -223,20 +235,47 @@ if (!storefrontDraftSource.includes("supermega.ecommerce.storefront_draft.v1")
   || !storefrontDraftSource.includes('reconcileStorefrontSelection')
   || ['customerReference', 'requestLedger', 'payment', 'fulfilment', 'phone', 'address'].some((marker) => storefrontDraftSource.includes(marker))) fail('ecommerce_storefront_draft_contract_missing_or_contains_request_data')
 const storefrontDraftStoragePrefix = /export const STOREFRONT_DRAFT_KEY_PREFIX = '([^']+)'/.exec(storefrontDraftSource)?.[1]
+const legacyStorefrontDraftStoragePrefix = /export const LEGACY_STOREFRONT_DRAFT_KEY_PREFIX = '([^']+)'/.exec(storefrontDraftSource)?.[1]
+const localProductExportBlock = sourceBlock(
+  coreSource,
+  'function collectLocalProductRecords(',
+  '\n}\n\nfunction requireProductContract',
+)
+const localProductResetBlock = sourceBlock(
+  coreSource,
+  '  function resetDemoWorkspace()',
+  '\n  }\n\n  async function connectManagedWorkspace',
+)
 if (!storefrontDraftStoragePrefix
+  || !legacyStorefrontDraftStoragePrefix
   || !coreSource.includes(`const STOREFRONT_DRAFT_RESET_PREFIX = '${storefrontDraftStoragePrefix}'`)
+  || !coreSource.includes(`const LEGACY_STOREFRONT_DRAFT_RESET_PREFIX = '${legacyStorefrontDraftStoragePrefix}'`)
   || !coreSource.includes("const LEGACY_STOREFRONT_DRAFT_RESET_KEY = 'supermega.ecommerce.storefront_draft.v1'")
-  || !coreSource.includes('key?.startsWith(STOREFRONT_DRAFT_RESET_PREFIX)')
-  || !coreSource.includes('WEBSITE_ECOMMERCE_HANDOFF_KEY,\n      LEGACY_STOREFRONT_DRAFT_RESET_KEY,\n      ...retainedKeys,')
+  || !localProductExportBlock.includes('key.startsWith(STOREFRONT_DRAFT_RESET_PREFIX)')
+  || !localProductExportBlock.includes('key.startsWith(LEGACY_STOREFRONT_DRAFT_RESET_PREFIX)')
+  || !localProductResetBlock.includes('key?.startsWith(STOREFRONT_DRAFT_RESET_PREFIX)')
+  || !localProductResetBlock.includes('key?.startsWith(LEGACY_STOREFRONT_DRAFT_RESET_PREFIX)')
+  || !localProductResetBlock.includes('WEBSITE_ECOMMERCE_HANDOFF_KEY,\n      LEGACY_STOREFRONT_DRAFT_RESET_KEY,\n      ...retainedKeys,')
   || !coreSource.includes('Website, Ecommerce setup, and handoff records')
   || coreSource.includes("from '../products/ecommerce/storefront-draft'")) fail('ecommerce_storefront_draft_not_in_deliberate_reset_or_broke_lazy_boundary')
+if (!ecommerceSource.includes("'sourcePreviewDigest' in draft")
+  || !ecommerceSource.includes('localPreviewDigest: draft.sourcePreviewDigest')
+  || !ecommerceSource.includes('legacyStorefrontDraftStorageKey(LOCAL_STOREFRONT_DRAFT_SCOPE)')
+  || !ecommerceSource.includes('savedDraft.localPreviewDigest === digest')
+  || !ecommerceSource.includes('sourcePreviewDigest: digest')
+  || !ecommerceSource.includes('Saved setup needs fingerprint upgrade')
+  || !ecommerceSource.includes('Upgrade storefront')
+  || !ecommerceSource.includes('localCatalogRebindRequired')
+  || !ecommerceSource.includes('event.key === COMMERCE_KEY || event.key === null')
+  || !ecommerceSource.includes("setDraftNotice('Shop catalog changed in another tab.")
+  || !ecommerceSource.includes("event.key === legacyDraftKey && latest.status === 'ready'")) fail('ecommerce_local_storefront_fingerprint_or_sync_missing')
 if (!ecommerceSource.includes('Prices and availability are read-only.')
   || !ecommerceSource.includes('Requests enter Shop review. Payment and fulfilment stay separate.')
   || !ecommerceSource.includes('cannot reserve stock, create an order, take payment, send a message, or publish a site.')
   || !ecommerceSource.includes('className="ecommerce-verification"')
   || !ecommerceSource.includes('Preview verification')
-  || !ecommerceSource.includes('Technical proof for operators')
-  || !ecommerceSource.includes('Same approved copy and Shop snapshot produce the same digest.')
+  || !ecommerceSource.includes('Local currentness check')
+  || !ecommerceSource.includes('same storefront fields and Shop snapshot produce the same local fingerprint.')
   || !ecommerceSource.includes('Request an item')
   || ecommerceSource.includes('Test a customer request')
   || !ecommerceSource.includes('Connect a managed workspace for shared, recoverable retention.')
@@ -250,7 +289,7 @@ if (!ecommerceSource.includes('Prices and availability are read-only.')
   || !ecommerceSource.includes('readStorefrontDraft')
   || !ecommerceSource.includes('saveStorefrontDraft')
   || ecommerceSource.includes('managed:${identity.workspaceId}')
-  || !ecommerceSource.includes("window.addEventListener('storage', refreshSavedDraft)")
+  || !ecommerceSource.includes("window.addEventListener('storage', refreshLocalStorefront)")
   || !ecommerceSource.includes('if (managedIdentity) return')
   || !ecommerceSource.includes("eventType: 'commerce.storefront.configuration.saved'")
   || !ecommerceSource.includes("error.code === 'trial_version_conflict'")
@@ -2982,10 +3021,12 @@ async function verifyStorefrontDraftRuntime() {
       removeItem: (key) => values.delete(key),
     }
     let lockRequests = 0
+    const lockCalls = []
     let lockQueue = Promise.resolve()
     const locks = {
-      request: (_name, _options, callback) => {
+      request: (name, options, callback) => {
         lockRequests += 1
+        lockCalls.push({ name, options })
         const run = lockQueue.then(callback, callback)
         lockQueue = run.then(() => undefined, () => undefined)
         return run
@@ -2993,12 +3034,19 @@ async function verifyStorefrontDraftRuntime() {
     }
     const localScope = draftModel.LOCAL_STOREFRONT_DRAFT_SCOPE
     const managedScope = 'managed:workspace-a'
+    const legacyScope = 'legacy:workspace-a'
     const localKey = draftModel.storefrontDraftStorageKey(localScope)
+    const localLegacyKey = draftModel.legacyStorefrontDraftStorageKey(localScope)
     const managedKey = draftModel.storefrontDraftStorageKey(managedScope)
+    const legacyKey = draftModel.legacyStorefrontDraftStorageKey(legacyScope)
+    const migratedKey = draftModel.storefrontDraftStorageKey(legacyScope)
+    const previewDigestA = `sha256:${'a'.repeat(64)}`
+    const previewDigestB = `sha256:${'b'.repeat(64)}`
     const input = {
       storeName: 'Mingalar Shop',
       summary: 'Clear prices and a small customer-ready catalog.',
       selectedSkus: ['SM-1003', 'SM-1001'],
+      sourcePreviewDigest: previewDigestA,
     }
 
     const empty = draftModel.readStorefrontDraft(localScope, storage)
@@ -3012,9 +3060,13 @@ async function verifyStorefrontDraftRuntime() {
     assert(first.revision === 1
       && first.scope === localScope
       && first.savedAt === '2026-07-24T10:00:00.000Z'
+      && first.sourcePreviewDigest === previewDigestA
       && first.selectedSkus.join(',') === 'SM-1001,SM-1003',
     'storefront_draft_first_save_not_canonical')
-    assert(Object.keys(JSON.parse(firstRaw)).sort().join(',') === 'revision,savedAt,schema,scope,selectedSkus,storeName,summary', 'storefront_draft_persisted_extra_fields')
+    assert(lockCalls[0]?.name === `supermega:ecommerce:storefront-draft:${encodeURIComponent(localScope)}`
+      && lockCalls[0]?.options?.mode === 'exclusive',
+    'storefront_draft_wrong_lock_scope_or_mode')
+    assert(Object.keys(JSON.parse(firstRaw)).sort().join(',') === 'revision,savedAt,schema,scope,selectedSkus,sourcePreviewDigest,storeName,summary', 'storefront_draft_persisted_extra_fields')
     const restored = draftModel.readStorefrontDraft(localScope, storage)
     assert(restored.status === 'ready' && JSON.stringify(restored.draft) === JSON.stringify(first), 'storefront_draft_reload_failed')
     assert(draftModel.readStorefrontDraft(managedScope, storage).status === 'empty', 'storefront_draft_leaked_across_scopes')
@@ -3029,6 +3081,36 @@ async function verifyStorefrontDraftRuntime() {
       && values.get(localKey) === firstRaw
       && values.has(managedKey),
     'storefront_draft_managed_scope_overwrote_local_scope')
+    const legacyRecord = {
+      schema: draftModel.LEGACY_STOREFRONT_DRAFT_SCHEMA,
+      scope: legacyScope,
+      revision: 7,
+      savedAt: '2026-07-24T09:00:00.000Z',
+      storeName: input.storeName,
+      summary: input.summary,
+      selectedSkus: [...input.selectedSkus].sort(),
+    }
+    const legacyRaw = JSON.stringify(legacyRecord)
+    values.set(legacyKey, legacyRaw)
+    const legacyRead = draftModel.readStorefrontDraft(legacyScope, storage)
+    assert(legacyRead.status === 'legacy'
+      && legacyRead.draft?.revision === 7
+      && !('sourcePreviewDigest' in legacyRead.draft),
+    'storefront_draft_legacy_record_not_exposed_for_upgrade')
+    const migrated = await draftModel.saveStorefrontDraft(input, 7, legacyScope, {
+      storage,
+      locks,
+      now: () => '2026-07-24T10:00:45.000Z',
+    })
+    assert(migrated.revision === 8
+      && migrated.sourcePreviewDigest === previewDigestA
+      && values.get(legacyKey) === legacyRaw
+      && draftModel.readStorefrontDraft(legacyScope, storage).status === 'ready',
+    'storefront_draft_legacy_upgrade_not_additive_or_current')
+    values.set(legacyKey, JSON.stringify({ ...legacyRecord, summary: 'Older fallback must stay ignored.' }))
+    assert(draftModel.readStorefrontDraft(legacyScope, storage).draft?.summary === input.summary
+      && values.has(migratedKey),
+    'storefront_draft_v2_did_not_take_precedence')
     const reconciled = draftModel.reconcileStorefrontSelection(
       ['MANAGED-ONLY', 'SHARED-SKU'],
       ['LOCAL-ONLY', 'SHARED-SKU'],
@@ -3043,6 +3125,16 @@ async function verifyStorefrontDraftRuntime() {
       now: () => '2026-07-24T10:01:00.000Z',
     })
     assert(replay.revision === 1 && replay.savedAt === first.savedAt && values.get(localKey) === firstRaw, 'storefront_draft_exact_replay_advanced_revision')
+    const rebound = await draftModel.saveStorefrontDraft({ ...input, sourcePreviewDigest: previewDigestB }, 1, localScope, {
+      storage,
+      locks,
+      now: () => '2026-07-24T10:01:30.000Z',
+    })
+    const reboundRaw = values.get(localKey)
+    assert(rebound.revision === 2
+      && rebound.sourcePreviewDigest === previewDigestB
+      && rebound.storeName === first.storeName,
+    'storefront_draft_preview_proof_change_did_not_advance_revision')
     let staleRejected = false
     try {
       await draftModel.saveStorefrontDraft({ ...input, summary: 'Stale edit.' }, 0, localScope, {
@@ -3051,23 +3143,24 @@ async function verifyStorefrontDraftRuntime() {
         now: () => '2026-07-24T10:02:00.000Z',
       })
     } catch { staleRejected = true }
-    assert(staleRejected && values.get(localKey) === firstRaw, 'storefront_draft_stale_save_overwrote_current')
+    assert(staleRejected && values.get(localKey) === reboundRaw, 'storefront_draft_stale_save_overwrote_current')
 
-    const second = await draftModel.saveStorefrontDraft({ ...input, summary: 'Updated storefront copy.' }, 1, localScope, {
+    const second = await draftModel.saveStorefrontDraft({ ...input, summary: 'Updated storefront copy.', sourcePreviewDigest: previewDigestB }, 2, localScope, {
       storage,
       locks,
       now: () => '2026-07-24T10:03:00.000Z',
     })
-    assert(second.revision === 2 && second.summary === 'Updated storefront copy.', 'storefront_draft_update_did_not_advance_once')
+    assert(second.revision === 3 && second.summary === 'Updated storefront copy.', 'storefront_draft_update_did_not_advance_once')
     const secondRaw = values.get(localKey)
     for (const invalid of [
       { ...input, storeName: ' Mingalar Shop' },
       { ...input, selectedSkus: [] },
       { ...input, selectedSkus: ['SM-1001', 'SM-1001'] },
+      { ...input, sourcePreviewDigest: 'sha256:not-a-proof' },
     ]) {
       let rejected = false
       try {
-        await draftModel.saveStorefrontDraft(invalid, 2, localScope, {
+        await draftModel.saveStorefrontDraft(invalid, 3, localScope, {
           storage,
           locks,
           now: () => '2026-07-24T10:04:00.000Z',
@@ -3078,7 +3171,7 @@ async function verifyStorefrontDraftRuntime() {
 
     let timestampRejected = false
     try {
-      await draftModel.saveStorefrontDraft({ ...input, summary: 'Timestamp test.' }, 2, localScope, {
+      await draftModel.saveStorefrontDraft({ ...input, summary: 'Timestamp test.', sourcePreviewDigest: previewDigestB }, 3, localScope, {
         storage,
         locks,
         now: () => '2026-07-24T10:05:00Z',
@@ -3086,6 +3179,7 @@ async function verifyStorefrontDraftRuntime() {
     } catch { timestampRejected = true }
     assert(timestampRejected && values.get(localKey) === secondRaw, 'storefront_draft_noncanonical_timestamp_written')
 
+    values.set(localLegacyKey, JSON.stringify({ ...legacyRecord, scope: localScope }))
     values.set(localKey, '{broken')
     const malformed = draftModel.readStorefrontDraft(localScope, storage)
     let malformedSaveRejected = false
@@ -3096,7 +3190,11 @@ async function verifyStorefrontDraftRuntime() {
         now: () => '2026-07-24T10:06:00.000Z',
       })
     } catch { malformedSaveRejected = true }
-    assert(malformed.status === 'invalid' && malformedSaveRejected && values.get(localKey) === '{broken', 'storefront_draft_malformed_value_replaced')
+    assert(malformed.status === 'invalid'
+      && malformedSaveRejected
+      && values.get(localKey) === '{broken'
+      && values.has(localLegacyKey),
+    'storefront_draft_malformed_v2_replaced_or_fell_back')
 
     values.set(localKey, JSON.stringify({ ...first, unexpected: true }))
     assert(draftModel.readStorefrontDraft(localScope, storage).status === 'invalid', 'storefront_draft_extra_field_accepted')
@@ -3111,6 +3209,7 @@ async function verifyStorefrontDraftRuntime() {
 
     values.clear()
     lockRequests = 0
+    lockCalls.length = 0
     const concurrent = await Promise.allSettled([
       draftModel.saveStorefrontDraft(input, 0, localScope, {
         storage,
@@ -3124,6 +3223,8 @@ async function verifyStorefrontDraftRuntime() {
       }),
     ])
     assert(lockRequests === 2
+      && lockCalls.every((call) => call.name === `supermega:ecommerce:storefront-draft:${encodeURIComponent(localScope)}`
+        && call.options?.mode === 'exclusive')
       && concurrent.filter((result) => result.status === 'fulfilled').length === 1
       && JSON.parse(values.get(localKey)).revision === 1,
     'storefront_draft_concurrent_save_not_serialized')
@@ -3213,6 +3314,16 @@ async function verifyStorefrontRuntime() {
     'storefront_customer_and_managed_preview_digests_diverged')
     const changed = storefront.buildStorefrontPreview(catalog, { ...input, summary: 'Changed storefront copy.' })
     assert(await storefront.storefrontPreviewDigest(changed) !== firstDigest, 'storefront_digest_ignored_copy_change')
+    const repriced = storefront.buildStorefrontPreview(
+      catalog.map((item) => item.sku === 'SM-1001' ? { ...item, price: item.price + 1 } : item),
+      input,
+    )
+    assert(await storefront.storefrontPreviewDigest(repriced) !== firstDigest, 'storefront_digest_ignored_selected_price_change')
+    const soldOut = storefront.buildStorefrontPreview(
+      catalog.map((item) => item.sku === 'SM-1001' ? { ...item, onHand: 0 } : item),
+      input,
+    )
+    assert(await storefront.storefrontPreviewDigest(soldOut) !== firstDigest, 'storefront_digest_ignored_selected_availability_change')
 
     let duplicateCatalogRejected = false
     try { storefront.buildStorefrontPreview([...catalog, catalog[0]], input) } catch { duplicateCatalogRejected = true }

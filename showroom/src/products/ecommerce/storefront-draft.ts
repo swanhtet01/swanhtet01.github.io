@@ -1,5 +1,7 @@
-export const STOREFRONT_DRAFT_SCHEMA = 'supermega.ecommerce.storefront_draft.v1' as const
-export const STOREFRONT_DRAFT_KEY_PREFIX = 'supermega.ecommerce.storefront_draft.v1.'
+export const STOREFRONT_DRAFT_SCHEMA = 'supermega.ecommerce.storefront_draft.v2' as const
+export const LEGACY_STOREFRONT_DRAFT_SCHEMA = 'supermega.ecommerce.storefront_draft.v1' as const
+export const STOREFRONT_DRAFT_KEY_PREFIX = 'supermega.ecommerce.storefront_draft.v2.'
+export const LEGACY_STOREFRONT_DRAFT_KEY_PREFIX = 'supermega.ecommerce.storefront_draft.v1.'
 export const LOCAL_STOREFRONT_DRAFT_SCOPE = 'local'
 const STOREFRONT_DRAFT_LOCK_PREFIX = 'supermega:ecommerce:storefront-draft:'
 
@@ -7,6 +9,7 @@ export type StorefrontDraftInput = {
   storeName: string
   summary: string
   selectedSkus: string[]
+  sourcePreviewDigest: string
 }
 
 export type StorefrontDraft = StorefrontDraftInput & {
@@ -16,9 +19,13 @@ export type StorefrontDraft = StorefrontDraftInput & {
   savedAt: string
 }
 
+export type LegacyStorefrontDraft = Omit<StorefrontDraft, 'schema' | 'sourcePreviewDigest'> & {
+  schema: typeof LEGACY_STOREFRONT_DRAFT_SCHEMA
+}
+
 export type StorefrontDraftReadResult = {
-  status: 'empty' | 'ready' | 'invalid' | 'unavailable'
-  draft: StorefrontDraft | null
+  status: 'empty' | 'ready' | 'legacy' | 'invalid' | 'unavailable'
+  draft: StorefrontDraft | LegacyStorefrontDraft | null
   error: string
 }
 
@@ -66,6 +73,10 @@ export function storefrontDraftStorageKey(scope: string) {
   return `${STOREFRONT_DRAFT_KEY_PREFIX}${encodeURIComponent(canonicalScope(scope))}`
 }
 
+export function legacyStorefrontDraftStorageKey(scope: string) {
+  return `${LEGACY_STOREFRONT_DRAFT_KEY_PREFIX}${encodeURIComponent(canonicalScope(scope))}`
+}
+
 function canonicalTimestamp(value: unknown) {
   if (typeof value !== 'string'
     || !/^(?!0000)\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) {
@@ -78,7 +89,7 @@ function canonicalTimestamp(value: unknown) {
   return value
 }
 
-function canonicalInput(value: StorefrontDraftInput): StorefrontDraftInput {
+function canonicalFields(value: Omit<StorefrontDraftInput, 'sourcePreviewDigest'>) {
   const storeName = canonicalText(value.storeName, 'Store name', 60)
   const summary = canonicalText(value.summary, 'Store summary', 180)
   if (!Array.isArray(value.selectedSkus) || value.selectedSkus.length < 1 || value.selectedSkus.length > 8) {
@@ -93,8 +104,22 @@ function canonicalInput(value: StorefrontDraftInput): StorefrontDraftInput {
   return { storeName, summary, selectedSkus }
 }
 
+function canonicalPreviewDigest(value: unknown) {
+  if (typeof value !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(value)) {
+    throw new Error('Saved storefront preview fingerprint must be a canonical SHA-256 digest.')
+  }
+  return value
+}
+
+function canonicalInput(value: StorefrontDraftInput): StorefrontDraftInput {
+  return {
+    ...canonicalFields(value),
+    sourcePreviewDigest: canonicalPreviewDigest(value.sourcePreviewDigest),
+  }
+}
+
 export function reconcileStorefrontSelection(savedSkus: string[], catalogSkus: string[]) {
-  const saved = canonicalInput({
+  const saved = canonicalFields({
     storeName: 'Reconciliation',
     summary: 'Validate one saved storefront selection against the authoritative Shop catalog.',
     selectedSkus: savedSkus,
@@ -133,13 +158,14 @@ function browserLocks(): StorefrontDraftLockManager | undefined {
 function sameDraftInput(left: StorefrontDraft, right: StorefrontDraftInput) {
   return left.storeName === right.storeName
     && left.summary === right.summary
+    && left.sourcePreviewDigest === right.sourcePreviewDigest
     && left.selectedSkus.length === right.selectedSkus.length
     && left.selectedSkus.every((sku, index) => sku === right.selectedSkus[index])
 }
 
 export function validateStorefrontDraft(value: unknown, expectedScope?: string): StorefrontDraft {
   if (!isRecord(value)
-    || !hasExactKeys(value, ['schema', 'scope', 'revision', 'savedAt', 'storeName', 'summary', 'selectedSkus'])
+    || !hasExactKeys(value, ['schema', 'scope', 'revision', 'savedAt', 'storeName', 'summary', 'selectedSkus', 'sourcePreviewDigest'])
     || value.schema !== STOREFRONT_DRAFT_SCHEMA
     || !Number.isSafeInteger(value.revision)
     || Number(value.revision) < 1) {
@@ -149,6 +175,7 @@ export function validateStorefrontDraft(value: unknown, expectedScope?: string):
     storeName: value.storeName as string,
     summary: value.summary as string,
     selectedSkus: value.selectedSkus as string[],
+    sourcePreviewDigest: value.sourcePreviewDigest as string,
   })
   const scope = canonicalScope(value.scope)
   if (expectedScope !== undefined && scope !== canonicalScope(expectedScope)) {
@@ -163,12 +190,39 @@ export function validateStorefrontDraft(value: unknown, expectedScope?: string):
   }
 }
 
+export function validateLegacyStorefrontDraft(value: unknown, expectedScope?: string): LegacyStorefrontDraft {
+  if (!isRecord(value)
+    || !hasExactKeys(value, ['schema', 'scope', 'revision', 'savedAt', 'storeName', 'summary', 'selectedSkus'])
+    || value.schema !== LEGACY_STOREFRONT_DRAFT_SCHEMA
+    || !Number.isSafeInteger(value.revision)
+    || Number(value.revision) < 1) {
+    throw new Error('Legacy saved storefront setup is invalid.')
+  }
+  const input = canonicalFields({
+    storeName: value.storeName as string,
+    summary: value.summary as string,
+    selectedSkus: value.selectedSkus as string[],
+  })
+  const scope = canonicalScope(value.scope)
+  if (expectedScope !== undefined && scope !== canonicalScope(expectedScope)) {
+    throw new Error('Legacy saved storefront setup belongs to a different workspace scope.')
+  }
+  return {
+    schema: LEGACY_STOREFRONT_DRAFT_SCHEMA,
+    scope,
+    revision: Number(value.revision),
+    savedAt: canonicalTimestamp(value.savedAt),
+    ...input,
+  }
+}
+
 export function readStorefrontDraft(
   scope = LOCAL_STOREFRONT_DRAFT_SCOPE,
   storage = browserStorage(),
 ): StorefrontDraftReadResult {
   const canonicalDraftScope = canonicalScope(scope)
   const storageKey = storefrontDraftStorageKey(canonicalDraftScope)
+  const legacyStorageKey = legacyStorefrontDraftStorageKey(canonicalDraftScope)
   if (!storage) {
     return {
       status: 'unavailable',
@@ -177,8 +231,10 @@ export function readStorefrontDraft(
     }
   }
   let raw: string | null
+  let legacyRaw: string | null = null
   try {
     raw = storage.getItem(storageKey)
+    if (raw === null) legacyRaw = storage.getItem(legacyStorageKey)
   } catch {
     return {
       status: 'unavailable',
@@ -186,9 +242,16 @@ export function readStorefrontDraft(
       error: 'Saved storefront setup could not be read. Nothing was replaced.',
     }
   }
-  if (raw === null) return { status: 'empty', draft: null, error: '' }
+  if (raw === null && legacyRaw === null) return { status: 'empty', draft: null, error: '' }
   try {
-    return { status: 'ready', draft: validateStorefrontDraft(JSON.parse(raw), canonicalDraftScope), error: '' }
+    if (raw !== null) {
+      return { status: 'ready', draft: validateStorefrontDraft(JSON.parse(raw), canonicalDraftScope), error: '' }
+    }
+    return {
+      status: 'legacy',
+      draft: validateLegacyStorefrontDraft(JSON.parse(legacyRaw as string), canonicalDraftScope),
+      error: 'Saved storefront setup needs one fingerprint upgrade before it can receive requests.',
+    }
   } catch {
     return {
       status: 'invalid',
@@ -225,7 +288,7 @@ export async function saveStorefrontDraft(
     if (currentRevision !== expectedRevision) {
       throw new Error('Saved storefront setup changed in another session. Review the latest saved version before retrying.')
     }
-    if (current && sameDraftInput(current, candidate)) return current
+    if (current?.schema === STOREFRONT_DRAFT_SCHEMA && sameDraftInput(current, candidate)) return current
     if (currentRevision >= Number.MAX_SAFE_INTEGER) throw new Error('Saved storefront revision cannot advance safely.')
 
     const next = validateStorefrontDraft({
