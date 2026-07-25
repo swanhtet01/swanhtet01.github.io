@@ -39,6 +39,7 @@ HUMAN_COMMAND_EVENTS = frozenset(
         "commerce.storefront.configuration.saved",
         "production.workspace.initialized",
         "production.job.created",
+        "production.job.schedule_updated",
         "production.job.closed",
         "production.output.recorded",
         "production.material.consumed",

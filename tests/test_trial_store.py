@@ -294,6 +294,7 @@ class TrialStoreTests(unittest.TestCase):
         human_only_events = (
             "production.workspace.initialized",
             "production.job.created",
+            "production.job.schedule_updated",
             "production.job.closed",
             "production.output.recorded",
             "production.material.consumed",

@@ -17,6 +17,7 @@ PRODUCTION_EVENTS = frozenset(
     {
         "production.workspace.initialized",
         "production.job.created",
+        "production.job.schedule_updated",
         "production.job.closed",
         "production.output.recorded",
         "production.material.consumed",
@@ -43,6 +44,7 @@ _MATERIAL_UNITS = frozenset(
 )
 _EVENT_KIND_BY_TYPE = {
     "production.job.created": "job_created",
+    "production.job.schedule_updated": "job_schedule_updated",
     "production.job.closed": "job_closed",
     "production.output.recorded": "output_recorded",
     "production.material.consumed": "material_consumed",
@@ -100,6 +102,9 @@ _EVENT_FIELDS = frozenset(
 )
 _OUTPUT_EVENT_OPTIONAL_FIELDS = frozenset({"shiftRef", "outputKind"})
 _JOB_CREATED_EVENT_FIELDS = frozenset({"jobPriority", "jobDueAt"})
+_JOB_SCHEDULE_UPDATE_PREVIOUS_FIELDS = frozenset(
+    {"fromJobPriority", "fromJobDueAt"}
+)
 _JOB_CLOSE_EVENT_FIELDS = frozenset({"shiftRef", "remainingQuantity"})
 _MATERIAL_EVENT_FIELDS = frozenset(
     {"materialRef", "quantity", "materialUnit", "shiftRef"}
@@ -432,6 +437,8 @@ def _validate_event(
         raise TrialValidationError(f"{field}.kind is unsupported.")
     if kind == "job_closed":
         required = _EVENT_FIELDS | _JOB_CLOSE_EVENT_FIELDS
+    elif kind == "job_schedule_updated":
+        required = _EVENT_FIELDS | _JOB_CREATED_EVENT_FIELDS
     elif kind == "output_recorded":
         required = _EVENT_FIELDS | {"quantity"}
     elif kind == "material_consumed":
@@ -464,6 +471,8 @@ def _validate_event(
             if kind == "output_recorded"
             else _JOB_CREATED_EVENT_FIELDS
             if kind == "job_created"
+            else _JOB_SCHEDULE_UPDATE_PREVIOUS_FIELDS
+            if kind == "job_schedule_updated"
             else _MATERIAL_EVENT_OPTIONAL_FIELDS
             if kind == "material_consumed"
             else _ISSUE_EVENT_FIELDS
@@ -526,11 +535,15 @@ def _validate_event(
             != f"Used {quantity_text} {material_unit} {material_ref}{lot_summary}"
         ):
             raise TrialValidationError(f"{field}.summary is not canonical.")
-    elif kind == "job_created":
+    elif kind in {"job_created", "job_schedule_updated"}:
         if subject_id not in job_ids:
             raise TrialValidationError(f"{field} references an unknown job.")
         schedule_fields = _JOB_CREATED_EVENT_FIELDS.intersection(event)
-        if schedule_fields and schedule_fields != _JOB_CREATED_EVENT_FIELDS:
+        if (
+            kind == "job_created"
+            and schedule_fields
+            and schedule_fields != _JOB_CREATED_EVENT_FIELDS
+        ):
             raise TrialValidationError(
                 f"{field} job schedule fields must be complete or absent "
                 "for legacy events."
@@ -545,6 +558,25 @@ def _validate_event(
                 raise TrialValidationError(
                     f"{field}.jobDueAt must follow confirmation."
                 )
+        if kind == "job_schedule_updated":
+            previous_fields = _JOB_SCHEDULE_UPDATE_PREVIOUS_FIELDS.intersection(event)
+            if (
+                previous_fields
+                and previous_fields != _JOB_SCHEDULE_UPDATE_PREVIOUS_FIELDS
+            ):
+                raise TrialValidationError(
+                    f"{field} previous job schedule fields must be complete or absent."
+                )
+            if previous_fields:
+                previous_priority = event["fromJobPriority"]
+                if (
+                    not isinstance(previous_priority, str)
+                    or previous_priority not in _JOB_PRIORITIES
+                ):
+                    raise TrialValidationError(
+                        f"{field}.fromJobPriority is unsupported."
+                    )
+                _timestamp(event["fromJobDueAt"], f"{field}.fromJobDueAt")
     elif kind in {"quality_hold_placed", "quality_hold_released"}:
         if subject_id not in job_ids:
             raise TrialValidationError(f"{field} references an unknown job.")
@@ -764,6 +796,12 @@ def _validate_material_history(
         for event in reversed(events):
             if event["subjectId"] != job["id"]:
                 continue
+            if event["kind"] == "job_schedule_updated":
+                if good_at_event + scrap_at_event >= job["target"]:
+                    raise TrialValidationError(
+                        f"jobs[{index}] schedule changed after the job reached target."
+                    )
+                continue
             if event["kind"] == "material_consumed":
                 if good_at_event + scrap_at_event >= job["target"]:
                     raise TrialValidationError(
@@ -803,36 +841,131 @@ def _validate_job_history(
                 raise TrialValidationError(
                     "The initial Production job cannot have a later creation event."
                 )
-            continue
-        if len(matches) != 1:
+            creation_event = None
+        elif len(matches) != 1:
             raise TrialValidationError(
                 f"jobs[{index}] must be backed by exactly one creation event."
             )
-        creation_event = matches[0]
+        else:
+            creation_event = matches[0]
+
+        schedule_events = [
+            event
+            for event in events
+            if event["kind"] == "job_schedule_updated"
+            and event["subjectId"] == job["id"]
+        ]
         job_schedule_fields = _JOB_SCHEDULE_FIELDS.intersection(job)
-        event_schedule_fields = _JOB_CREATED_EVENT_FIELDS.intersection(
-            creation_event
-        )
-        if event_schedule_fields:
+        expected_priority: object | None = None
+        expected_due_at: object | None = None
+        previous_activity_at: datetime | None = None
+        schedule_history_exists = creation_event is not None or bool(schedule_events)
+
+        if creation_event is not None:
+            event_schedule_fields = _JOB_CREATED_EVENT_FIELDS.intersection(
+                creation_event
+            )
+            if event_schedule_fields:
+                expected_priority = creation_event["jobPriority"]
+                expected_due_at = creation_event["jobDueAt"]
+            previous_activity_at = datetime.fromisoformat(
+                creation_event["createdAt"].replace("Z", "+00:00")
+            )
+        elif schedule_events:
+            opening_event = schedule_events[-1]
+            opening_fields = _JOB_SCHEDULE_UPDATE_PREVIOUS_FIELDS.intersection(
+                opening_event
+            )
+            if opening_fields:
+                expected_priority = opening_event["fromJobPriority"]
+                expected_due_at = opening_event["fromJobDueAt"]
+
+        for event in reversed(schedule_events):
+            activity_at = datetime.fromisoformat(
+                event["createdAt"].replace("Z", "+00:00")
+            )
             if (
-                job_schedule_fields != _JOB_SCHEDULE_FIELDS
-                or creation_event["jobPriority"] != job["priority"]
-                or creation_event["jobDueAt"] != job["dueAt"]
+                creation_event is not None
+                and events.index(event) >= events.index(creation_event)
             ):
                 raise TrialValidationError(
-                    f"jobs[{index}] schedule must match its immutable "
-                    "creation event."
+                    f"jobs[{index}] schedule update predates job creation."
                 )
-        elif job_schedule_fields:
-            raise TrialValidationError(
-                f"jobs[{index}] legacy creation event cannot acquire a schedule."
+            if (
+                previous_activity_at is not None
+                and activity_at < previous_activity_at
+            ):
+                raise TrialValidationError(
+                    f"jobs[{index}] schedule update timestamps contradict "
+                    "lifecycle order."
+                )
+            previous_activity_at = activity_at
+            previous_fields = _JOB_SCHEDULE_UPDATE_PREVIOUS_FIELDS.intersection(
+                event
             )
+            expected_exists = (
+                expected_priority is not None and expected_due_at is not None
+            )
+            if expected_exists:
+                if (
+                    previous_fields != _JOB_SCHEDULE_UPDATE_PREVIOUS_FIELDS
+                    or event["fromJobPriority"] != expected_priority
+                    or event["fromJobDueAt"] != expected_due_at
+                ):
+                    raise TrialValidationError(
+                        f"jobs[{index}] schedule update does not continue its "
+                        "immutable history."
+                    )
+            elif previous_fields:
+                raise TrialValidationError(
+                    f"jobs[{index}] legacy schedule update invents a prior plan."
+                )
+            if (
+                expected_exists
+                and event["jobPriority"] == expected_priority
+                and event["jobDueAt"] == expected_due_at
+            ):
+                raise TrialValidationError(
+                    f"jobs[{index}] schedule update does not change the plan."
+                )
+            if event["summary"] != (
+                f"Updated {job['product']} schedule for {job['line']}"
+            ):
+                raise TrialValidationError(
+                    f"jobs[{index}] schedule update summary is not canonical."
+                )
+            expected_priority = event["jobPriority"]
+            expected_due_at = event["jobDueAt"]
+
+        if schedule_history_exists:
+            expected_exists = (
+                expected_priority is not None and expected_due_at is not None
+            )
+            if expected_exists:
+                if (
+                    job_schedule_fields != _JOB_SCHEDULE_FIELDS
+                    or job["priority"] != expected_priority
+                    or job["dueAt"] != expected_due_at
+                ):
+                    raise TrialValidationError(
+                        f"jobs[{index}] schedule does not match its immutable "
+                        "event history."
+                    )
+            elif job_schedule_fields:
+                raise TrialValidationError(
+                    f"jobs[{index}] legacy creation event cannot acquire a "
+                    "schedule without an update."
+                )
+
+        if creation_event is None:
+            continue
         creation_index = events.index(creation_event)
         if any(
             events.index(event) >= creation_index
             for event in events
             if event["kind"]
             in {
+                "job_schedule_updated",
                 "job_closed",
                 "output_recorded",
                 "material_consumed",
@@ -846,7 +979,9 @@ def _validate_job_history(
             )
         if any(
             datetime.fromisoformat(event["createdAt"].replace("Z", "+00:00"))
-            < datetime.fromisoformat(matches[0]["createdAt"].replace("Z", "+00:00"))
+            < datetime.fromisoformat(
+                creation_event["createdAt"].replace("Z", "+00:00")
+            )
             for event in events
             if event["kind"] == "material_consumed"
             and event["subjectId"] == job["id"]
@@ -922,12 +1057,17 @@ def _validate_job_closure_history(
             event_index < close_index
             and candidate["subjectId"] == job["id"]
             and candidate["kind"]
-            in {"output_recorded", "material_consumed", "quality_hold_placed"}
+            in {
+                "job_schedule_updated",
+                "output_recorded",
+                "material_consumed",
+                "quality_hold_placed",
+            }
             for event_index, candidate in enumerate(events)
         ):
             raise TrialValidationError(
-                f"jobs[{index}] has output, material use, or a new quality hold "
-                "after closure."
+                f"jobs[{index}] has scheduling, output, material use, or a new "
+                "quality hold after closure."
             )
         closed_at = datetime.fromisoformat(event["createdAt"].replace("Z", "+00:00"))
         if any(
@@ -1406,6 +1546,75 @@ def _validate_material_consumed(
         raise TrialValidationError("material use event summary is not canonical.")
 
 
+def _validate_job_schedule_updated(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+    event: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "issues", "machines")
+    before, after = _one_changed(current["jobs"], next_state["jobs"], "jobs")
+    if (
+        "closure" in before
+        or before["output"] + before.get("scrap", 0) >= before["target"]
+    ):
+        raise TrialValidationError(
+            "job schedule can only change for an active Production job."
+        )
+    if event["subjectId"] != before["id"]:
+        raise TrialValidationError(
+            "job schedule event must reference the one changed job."
+        )
+    expected = {
+        **before,
+        "priority": event["jobPriority"],
+        "dueAt": event["jobDueAt"],
+    }
+    if after != expected:
+        raise TrialValidationError(
+            "job schedule may change only the exact priority and due time."
+        )
+    if (
+        before.get("priority") == event["jobPriority"]
+        and before.get("dueAt") == event["jobDueAt"]
+    ):
+        raise TrialValidationError("job schedule update must change the plan.")
+    before_schedule_fields = _JOB_SCHEDULE_FIELDS.intersection(before)
+    previous_fields = _JOB_SCHEDULE_UPDATE_PREVIOUS_FIELDS.intersection(event)
+    if before_schedule_fields == _JOB_SCHEDULE_FIELDS:
+        if (
+            previous_fields != _JOB_SCHEDULE_UPDATE_PREVIOUS_FIELDS
+            or event["fromJobPriority"] != before["priority"]
+            or event["fromJobDueAt"] != before["dueAt"]
+        ):
+            raise TrialValidationError(
+                "job schedule update must freeze the exact previous plan."
+            )
+    elif previous_fields:
+        raise TrialValidationError(
+            "an unscheduled legacy job cannot invent a previous plan."
+        )
+    latest_job_event = next(
+        (
+            candidate
+            for candidate in current["events"]
+            if candidate["subjectId"] == before["id"]
+        ),
+        None,
+    )
+    if latest_job_event is not None and datetime.fromisoformat(
+        event["createdAt"].replace("Z", "+00:00")
+    ) < datetime.fromisoformat(
+        latest_job_event["createdAt"].replace("Z", "+00:00")
+    ):
+        raise TrialValidationError(
+            "job schedule confirmation cannot predate its latest activity."
+        )
+    if event["summary"] != (
+        f"Updated {before['product']} schedule for {before['line']}"
+    ):
+        raise TrialValidationError("job schedule summary is not canonical.")
+
+
 def _validate_job_closed(
     current: Mapping[str, Any],
     next_state: Mapping[str, Any],
@@ -1796,6 +2005,7 @@ _TRANSITION_VALIDATORS: dict[
     ],
 ] = {
     "production.job.created": _validate_job_created,
+    "production.job.schedule_updated": _validate_job_schedule_updated,
     "production.job.closed": _validate_job_closed,
     "production.output.recorded": _validate_output_recorded,
     "production.material.consumed": _validate_material_consumed,

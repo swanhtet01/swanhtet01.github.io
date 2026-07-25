@@ -120,6 +120,46 @@ def output_state(
     return state
 
 
+def schedule_state(
+    current: dict[str, object],
+    priority: str,
+    due_at: str,
+    evidence: dict[str, str],
+    *,
+    job_id: str | None = None,
+) -> dict[str, object]:
+    state = deepcopy(current)
+    job = next(
+        candidate
+        for candidate in state["jobs"]
+        if job_id is None or candidate["id"] == job_id
+    )
+    previous = (
+        {
+            "fromJobPriority": job["priority"],
+            "fromJobDueAt": job["dueAt"],
+        }
+        if "priority" in job and "dueAt" in job
+        else {}
+    )
+    job["priority"] = priority
+    job["dueAt"] = due_at
+    state["revision"] += 1
+    state["events"] = [
+        production_event(
+            evidence,
+            kind="job_schedule_updated",
+            subject_id=job["id"],
+            summary=f"Updated {job['product']} schedule for {job['line']}",
+            **previous,
+            jobPriority=priority,
+            jobDueAt=due_at,
+        ),
+        *state["events"],
+    ]
+    return state
+
+
 def scrap_state(
     current: dict[str, object],
     quantity: int,
@@ -477,6 +517,7 @@ class ProductionRuntimeTests(unittest.TestCase):
         expected_events = {
             "production.workspace.initialized",
             "production.job.created",
+            "production.job.schedule_updated",
             "production.job.closed",
             "production.output.recorded",
             "production.material.consumed",
@@ -509,6 +550,270 @@ class ProductionRuntimeTests(unittest.TestCase):
         self.assertEqual(
             len(validate_production_state(retained_history)["events"]),
             501,
+        )
+
+    def test_job_schedule_update_is_chained_exact_and_active_only(self) -> None:
+        current = starting_workspace()
+        first_evidence = action_evidence(
+            "ACT-JOB-SCHEDULE-001",
+            captured_at=LATER,
+        )
+        first_proposed = schedule_state(
+            current,
+            "urgent",
+            "2026-07-26T09:00:00.000Z",
+            first_evidence,
+        )
+        first = apply_event(
+            current,
+            "production.job.schedule_updated",
+            first_proposed,
+            first_evidence,
+        )
+
+        self.assertEqual(first["jobs"][0]["priority"], "urgent")
+        self.assertEqual(first["jobs"][0]["dueAt"], "2026-07-26T09:00:00.000Z")
+        self.assertEqual(first["jobs"][0]["target"], current["jobs"][0]["target"])
+        self.assertEqual(first["jobs"][0]["output"], current["jobs"][0]["output"])
+        self.assertEqual(first["issues"], current["issues"])
+        self.assertEqual(first["machines"], current["machines"])
+        self.assertEqual(first["events"][0]["fromJobPriority"], "normal")
+        self.assertEqual(
+            first["events"][0]["fromJobDueAt"],
+            "2026-07-25T09:00:00.000Z",
+        )
+        self.assertEqual(first["events"][0]["jobPriority"], "urgent")
+
+        second_evidence = action_evidence(
+            "ACT-JOB-SCHEDULE-002",
+            captured_at=LATEST,
+        )
+        second = apply_event(
+            first,
+            "production.job.schedule_updated",
+            schedule_state(
+                first,
+                "low",
+                "2026-07-27T09:00:00.000Z",
+                second_evidence,
+            ),
+            second_evidence,
+        )
+        self.assertEqual(
+            [
+                (
+                    event.get("fromJobPriority"),
+                    event["jobPriority"],
+                    event["jobDueAt"],
+                )
+                for event in second["events"][:2]
+            ],
+            [
+                ("urgent", "low", "2026-07-27T09:00:00.000Z"),
+                ("normal", "urgent", "2026-07-26T09:00:00.000Z"),
+            ],
+        )
+
+        legacy = starting_workspace()
+        legacy["jobs"][0].pop("priority")
+        legacy["jobs"][0].pop("dueAt")
+        legacy_evidence = action_evidence(
+            "ACT-JOB-SCHEDULE-LEGACY",
+            captured_at=LATER,
+        )
+        scheduled_legacy = apply_event(
+            legacy,
+            "production.job.schedule_updated",
+            schedule_state(
+                legacy,
+                "normal",
+                "2026-07-26T12:00:00.000Z",
+                legacy_evidence,
+            ),
+            legacy_evidence,
+        )
+        self.assertNotIn("fromJobPriority", scheduled_legacy["events"][0])
+        self.assertNotIn("fromJobDueAt", scheduled_legacy["events"][0])
+
+        no_op_evidence = action_evidence(
+            "ACT-JOB-SCHEDULE-NOOP",
+            captured_at="2026-07-24T09:45:00.000Z",
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                second,
+                "production.job.schedule_updated",
+                schedule_state(
+                    second,
+                    "low",
+                    "2026-07-27T09:00:00.000Z",
+                    no_op_evidence,
+                ),
+                no_op_evidence,
+            )
+
+        nonfuture_evidence = action_evidence(
+            "ACT-JOB-SCHEDULE-NONFUTURE",
+            captured_at=LATER,
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "production.job.schedule_updated",
+                schedule_state(
+                    current,
+                    "urgent",
+                    LATER,
+                    nonfuture_evidence,
+                ),
+                nonfuture_evidence,
+            )
+
+        forged_previous = deepcopy(first_proposed)
+        forged_previous["events"][0]["fromJobPriority"] = "low"
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "production.job.schedule_updated",
+                forged_previous,
+                first_evidence,
+            )
+
+        unrelated_output = deepcopy(first_proposed)
+        unrelated_output["jobs"][0]["output"] = 1
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "production.job.schedule_updated",
+                unrelated_output,
+                first_evidence,
+            )
+
+        rewritten_current = deepcopy(second)
+        rewritten_current["jobs"][0]["dueAt"] = "2026-07-28T09:00:00.000Z"
+        with self.assertRaises(TrialValidationError):
+            validate_production_state(rewritten_current)
+
+        completed = output_state(
+            starting_workspace(target=1),
+            1,
+            action_evidence("ACT-JOB-SCHEDULE-COMPLETE-BASE", captured_at=NOW),
+        )
+        completed_evidence = action_evidence(
+            "ACT-JOB-SCHEDULE-COMPLETE",
+            captured_at=LATER,
+        )
+        completed_schedule_state = schedule_state(
+            completed,
+            "urgent",
+            "2026-07-26T09:00:00.000Z",
+            completed_evidence,
+        )
+        with self.assertRaises(TrialValidationError):
+            validate_production_state(completed_schedule_state)
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                completed,
+                "production.job.schedule_updated",
+                completed_schedule_state,
+                completed_evidence,
+            )
+
+        close_evidence = action_evidence(
+            "ACT-JOB-SCHEDULE-CLOSE-BASE",
+            captured_at=LATER,
+        )
+        closed = apply_event(
+            current,
+            "production.job.closed",
+            closed_job_state(current, close_evidence),
+            close_evidence,
+        )
+        closed_evidence = action_evidence(
+            "ACT-JOB-SCHEDULE-CLOSED",
+            captured_at=LATEST,
+        )
+        closed_schedule_state = schedule_state(
+            closed,
+            "urgent",
+            "2026-07-26T09:00:00.000Z",
+            closed_evidence,
+        )
+        with self.assertRaises(TrialValidationError):
+            validate_production_state(closed_schedule_state)
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                closed,
+                "production.job.schedule_updated",
+                closed_schedule_state,
+                closed_evidence,
+            )
+
+        latest_output = output_state(
+            current,
+            1,
+            action_evidence("ACT-JOB-SCHEDULE-LATEST-OUTPUT", captured_at=LATEST),
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                latest_output,
+                "production.job.schedule_updated",
+                schedule_state(
+                    latest_output,
+                    "urgent",
+                    "2026-07-26T09:00:00.000Z",
+                    first_evidence,
+                ),
+                first_evidence,
+            )
+
+        creation_evidence = action_evidence(
+            "ACT-JOB-SCHEDULE-CREATE",
+            captured_at=NOW,
+        )
+        created = deepcopy(current)
+        created_job = {
+            "id": "JOB-SCHEDULED-CREATED",
+            "line": "Finishing team",
+            "product": "Created scheduled batch",
+            "target": 25,
+            "output": 0,
+            "priority": "urgent",
+            "dueAt": "2026-07-25T12:00:00.000Z",
+        }
+        created["revision"] = 1
+        created["jobs"] = [created_job, *created["jobs"]]
+        created["events"] = [
+            production_event(
+                creation_evidence,
+                kind="job_created",
+                subject_id=created_job["id"],
+                summary="Created Created scheduled batch job for Finishing team",
+                jobPriority=created_job["priority"],
+                jobDueAt=created_job["dueAt"],
+            )
+        ]
+        accepted_created = apply_event(
+            current,
+            "production.job.created",
+            created,
+            creation_evidence,
+        )
+        updated_created = apply_event(
+            accepted_created,
+            "production.job.schedule_updated",
+            schedule_state(
+                accepted_created,
+                "normal",
+                "2026-07-27T12:00:00.000Z",
+                first_evidence,
+                job_id=created_job["id"],
+            ),
+            first_evidence,
+        )
+        self.assertEqual(
+            updated_created["events"][0]["fromJobDueAt"],
+            created_job["dueAt"],
         )
 
     def test_short_close_is_evidence_backed_terminal_and_fail_closed(self) -> None:
@@ -2555,12 +2860,47 @@ class ProductionRuntimeTests(unittest.TestCase):
             payload={"state": job_state, "evidence": job_evidence},
         )
 
+        schedule_evidence = action_evidence(
+            "ACT-STORE-JOB-SCHEDULE",
+            captured_at="2026-07-24T09:20:00.000Z",
+        )
+        schedule_next_state = schedule_state(
+            dict(job_created.state),
+            "low",
+            "2026-07-26T09:00:00.000Z",
+            schedule_evidence,
+            job_id=new_job["id"],
+        )
+        schedule_command_id = str(uuid4())
+        job_scheduled = store.apply_command(
+            principal,
+            command_id=schedule_command_id,
+            surface="production",
+            event_type="production.job.schedule_updated",
+            expected_version=job_created.version,
+            payload={
+                "state": schedule_next_state,
+                "evidence": schedule_evidence,
+            },
+        )
+        schedule_replay = store.apply_command(
+            principal,
+            command_id=schedule_command_id,
+            surface="production",
+            event_type="production.job.schedule_updated",
+            expected_version=job_created.version,
+            payload={
+                "state": schedule_next_state,
+                "evidence": schedule_evidence,
+            },
+        )
+
         output_evidence = action_evidence(
             "ACT-STORE-OUTPUT",
             captured_at=LATEST,
         )
         next_state = output_state(
-            dict(job_created.state),
+            dict(job_scheduled.state),
             5,
             output_evidence,
         )
@@ -2569,7 +2909,7 @@ class ProductionRuntimeTests(unittest.TestCase):
             command_id=str(uuid4()),
             surface="production",
             event_type="production.output.recorded",
-            expected_version=job_created.version,
+            expected_version=job_scheduled.version,
             payload={"state": next_state, "evidence": output_evidence},
         )
         material_evidence = action_evidence(
@@ -2636,10 +2976,12 @@ class ProductionRuntimeTests(unittest.TestCase):
         self.assertTrue(replay.idempotent_replay)
         self.assertEqual(job_created.version, 2)
         self.assertTrue(job_replay.idempotent_replay)
-        self.assertEqual(recorded.version, 3)
-        self.assertEqual(material_recorded.version, 4)
+        self.assertEqual(job_scheduled.version, 3)
+        self.assertTrue(schedule_replay.idempotent_replay)
+        self.assertEqual(recorded.version, 4)
+        self.assertEqual(material_recorded.version, 5)
         self.assertTrue(material_replay.idempotent_replay)
-        self.assertEqual(job_closed.version, 5)
+        self.assertEqual(job_closed.version, 6)
         self.assertTrue(close_replay.idempotent_replay)
         self.assertEqual(job_closed.state["jobs"][0]["closure"]["closedBy"], ACTOR)
         stored = store.get_state(principal, "production")
@@ -2676,6 +3018,22 @@ class ProductionRuntimeTests(unittest.TestCase):
                 payload={
                     "state": conflicting_job_state,
                     "evidence": job_evidence,
+                },
+            )
+
+        conflicting_schedule_state = deepcopy(schedule_next_state)
+        conflicting_schedule_state["jobs"][0]["priority"] = "urgent"
+        conflicting_schedule_state["events"][0]["jobPriority"] = "urgent"
+        with self.assertRaises(TrialIdempotencyConflict):
+            store.apply_command(
+                principal,
+                command_id=schedule_command_id,
+                surface="production",
+                event_type="production.job.schedule_updated",
+                expected_version=job_created.version,
+                payload={
+                    "state": conflicting_schedule_state,
+                    "evidence": schedule_evidence,
                 },
             )
 

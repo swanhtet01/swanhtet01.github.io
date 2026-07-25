@@ -1039,7 +1039,7 @@ if (!openPurchaseOrderContract.includes('Your count draft was preserved.')
   || !openStockCountContract.includes('Your stock-order draft was preserved.')
   || openStockCountContract.includes('setPurchaseOrderDraft(null)')) fail('commerce_stock_editor_switch_discards_draft')
 if (!productionSource.includes("supermega.production.workspace.v2") || !productionSource.includes('mutateProductionWorkspace') || !productionSource.includes('productionWorkspaceCanWrite') || !productionSource.includes('.write-probe.') || !productionSource.includes('lockManager.request') || !productionSource.includes('next.revision !== current.revision + 1')) fail('production_v2_locked_store_missing')
-if (!productionSource.includes("'job_created' | 'job_closed' | 'output_recorded' | 'material_consumed' | 'issue_opened' | 'issue_resolved' | 'quality_hold_placed' | 'quality_hold_released' | 'machine_state_changed'") || !productionSource.includes('events: [event, ...state.events]') || !productionSource.includes('Production revision must equal the append-only event count.')) fail('production_append_only_record_missing')
+if (!productionSource.includes("'job_created' | 'job_schedule_updated' | 'job_closed' | 'output_recorded' | 'material_consumed' | 'issue_opened' | 'issue_resolved' | 'quality_hold_placed' | 'quality_hold_released' | 'machine_state_changed'") || !productionSource.includes('events: [event, ...state.events]') || !productionSource.includes('Production revision must equal the append-only event count.')) fail('production_append_only_record_missing')
 if (!productionSource.includes('productionShiftOutput')
   || !productionSource.includes('existing.shiftRef === shiftRef')
   || !productionSource.includes('shiftRef?: string')
@@ -1126,10 +1126,20 @@ if (!productionSource.includes('buildProductionShiftHandoff')
   || !coreSource.includes('Plant records or the shift reference changed after this handoff was built.')
   || !coreSource.includes('No Plant record changed.')) fail('production_shift_handoff_contract_missing')
 if (!productionSource.includes('registerProductionJob') || !coreSource.includes('production.job.created') || !coreSource.includes('<summary>Add job</summary>') || !coreSource.includes('Review job')) fail('production_recurring_job_workflow_missing')
+if (!productionSource.includes('updateProductionJobSchedule')
+  || !productionSource.includes("kind: 'job_schedule_updated'")
+  || !coreSource.includes('production.job.schedule_updated')
+  || !coreSource.includes('Change plan')
+  || !coreSource.includes('Review plan')
+  || !coreSource.includes("'Legacy unscheduled'")
+  || !coreSource.includes('event.fromJobPriority')
+  || !managedTrialSource.includes("'production.job.schedule_updated'")
+  || !managedProductionRuntime.includes('_validate_job_schedule_updated')
+  || !managedProductionRuntime.includes('job schedule may change only the exact priority and due time.')) fail('production_job_schedule_update_contract_missing')
 if (!productionSource.includes('closeProductionJob')
   || !productionSource.includes("kind: 'job_closed'")
   || !productionSource.includes('remainingQuantity')
-  || !productionSource.includes('has output, material use, or a new quality hold after closure')
+  || !productionSource.includes('has scheduling, output, material use, or a new quality hold after closure')
   || !productionSource.includes('activity appended after closure predates the close timestamp')
   || !managedProductionRuntime.includes('_validate_job_closed')
   || !managedProductionRuntime.includes('production.job.closed')
@@ -1187,12 +1197,13 @@ if (!managedProductionCommandContract.includes("surface: 'production'")
   || !managedProductionCommandContract.includes('payload: { state: request.state, evidence: request.evidence }')
   || !managedProductionCommandContract.includes('request.identity')
   || !coreSource.includes('identity: managedIdentity')) fail('managed_production_command_client_missing')
-for (const eventType of ['production.workspace.initialized', 'production.job.created', 'production.job.closed', 'production.output.recorded', 'production.material.consumed', 'production.issue.opened', 'production.issue.resolved', 'production.quality_hold.placed', 'production.quality_hold.released', 'production.machine_state.changed', 'production.downtime.started', 'production.downtime.ended', 'production.maintenance.started', 'production.maintenance.completed']) {
+for (const eventType of ['production.workspace.initialized', 'production.job.created', 'production.job.schedule_updated', 'production.job.closed', 'production.output.recorded', 'production.material.consumed', 'production.issue.opened', 'production.issue.resolved', 'production.quality_hold.placed', 'production.quality_hold.released', 'production.machine_state.changed', 'production.downtime.started', 'production.downtime.ended', 'production.maintenance.started', 'production.maintenance.completed']) {
   if (!coreSource.includes(eventType) || !managedProductionRuntime.includes(eventType)) fail(`managed_production_event_missing:${eventType}`)
 }
 if (managedProductionRuntime.includes('production.snapshot.saved')
   || !managedProductionRuntime.includes('PRODUCTION_HUMAN_EVENTS = PRODUCTION_EVENTS')
   || !managedProductionRuntime.includes('_validate_job_created')
+  || !managedProductionRuntime.includes('_validate_job_schedule_updated')
   || !managedProductionRuntime.includes('_validate_job_closed')
   || !managedProductionRuntime.includes('_validate_output_recorded')
   || !managedProductionRuntime.includes('_validate_material_consumed')
@@ -1225,7 +1236,7 @@ if (!productionJobsContract.includes('This shift:')
   || coreSource.includes('placeholder="2026-07-24 Day"')
   || !coreSource.includes("Unassigned (legacy)")) fail('production_shift_output_ui_missing')
 if (!productionJobsContract.includes('Jobs to finish')
-  || !productionJobsContract.includes('<JobList jobs={activeJobs} now={issueClock} />')
+  || !productionJobsContract.includes('<JobList disabled={!productionCanWrite || Boolean(pendingAction)} jobs={activeJobs} now={issueClock} onSchedule={openJobSchedule} />')
   || !productionJobsContract.includes('<CompletedJobHistory jobs={completedJobs} now={issueClock} />')
   || !productionJobsContract.includes('Priority and due time set the visible run order.')
   || !productionJobsContract.includes('Results are append-only.')
@@ -4283,6 +4294,64 @@ async function verifyProductionRuntime() {
       ...withJob,
       events: [{ ...withJob.events[0], jobDueAt: '2026-07-25T10:00:00.000Z' }, ...withJob.events.slice(1)],
     }), 'production_job_event_schedule_rewrite_accepted')
+    const scheduleProof = proof('ACT-JOB-SCHEDULE', 500)
+    const rescheduled = model.updateProductionJobSchedule(withJob, newJob.id, 'low', '2026-07-25T10:00:00.000Z', scheduleProof)
+    assert(rescheduled?.jobs[0].priority === 'low'
+      && rescheduled.jobs[0].dueAt === '2026-07-25T10:00:00.000Z'
+      && rescheduled.jobs[0].target === newJob.target
+      && rescheduled.jobs[0].output === 0
+      && rescheduled.events[0].kind === 'job_schedule_updated'
+      && rescheduled.events[0].fromJobPriority === newJob.priority
+      && rescheduled.events[0].fromJobDueAt === newJob.dueAt
+      && rescheduled.events[0].jobPriority === 'low',
+    'production_job_schedule_not_updated_exactly')
+    assert(model.updateProductionJobSchedule(rescheduled, newJob.id, 'low', '2026-07-25T10:00:00.000Z', scheduleProof) === rescheduled, 'production_job_schedule_retry_not_idempotent')
+    assert(model.updateProductionJobSchedule(rescheduled, newJob.id, 'normal', '2026-07-25T10:00:00.000Z', scheduleProof) === null, 'production_job_schedule_conflicting_retry_succeeded')
+    assert(model.updateProductionJobSchedule(rescheduled, newJob.id, 'low', '2026-07-25T10:00:00.000Z', proof('ACT-JOB-SCHEDULE-NOOP', 600)) === null, 'production_job_schedule_noop_succeeded')
+    assert(model.updateProductionJobSchedule(withJob, newJob.id, 'low', scheduleProof.capturedAt, proof('ACT-JOB-SCHEDULE-NONFUTURE', 500)) === null, 'production_job_schedule_nonfuture_due_succeeded')
+    assert(model.updateProductionJobSchedule(rescheduled, 'JOB-1', 'urgent', '2026-07-25T10:00:00.000Z', scheduleProof) === null, 'production_job_schedule_action_reuse_succeeded')
+    const chainedScheduleProof = proof('ACT-JOB-SCHEDULE-CHAIN', 1_000)
+    const chainedSchedule = model.updateProductionJobSchedule(rescheduled, newJob.id, 'normal', '2026-07-26T10:00:00.000Z', chainedScheduleProof)
+    assert(chainedSchedule?.events[0].fromJobPriority === 'low'
+      && chainedSchedule.events[0].fromJobDueAt === '2026-07-25T10:00:00.000Z'
+      && chainedSchedule.events[1].fromJobPriority === 'urgent',
+    'production_job_schedule_history_not_chained')
+    assertThrows(() => model.validateProductionState({
+      ...rescheduled,
+      events: [{ ...rescheduled.events[0], fromJobPriority: 'normal' }, ...rescheduled.events.slice(1)],
+    }), 'production_job_schedule_previous_snapshot_tamper_accepted')
+    assertThrows(() => model.validateProductionState({
+      ...rescheduled,
+      jobs: [{ ...rescheduled.jobs[0], dueAt: '2026-07-27T10:00:00.000Z' }, ...rescheduled.jobs.slice(1)],
+    }), 'production_job_schedule_current_snapshot_tamper_accepted')
+    const legacySchedule = model.updateProductionJobSchedule(base, 'JOB-1', 'normal', '2026-07-25T10:00:00.000Z', proof('ACT-JOB-SCHEDULE-LEGACY', 500))
+    assert(legacySchedule?.jobs[0].priority === 'normal'
+      && legacySchedule.events[0].kind === 'job_schedule_updated'
+      && legacySchedule.events[0].fromJobPriority === undefined
+      && legacySchedule.events[0].fromJobDueAt === undefined,
+    'production_legacy_job_first_schedule_rejected')
+    const latestOutput = model.recordProductionOutput(base, 'JOB-1', 1, '2026-07-24 Day', proof('ACT-JOB-SCHEDULE-LATEST-OUTPUT', 2_000))
+    assert(model.updateProductionJobSchedule(latestOutput, 'JOB-1', 'urgent', '2026-07-25T10:00:00.000Z', proof('ACT-JOB-SCHEDULE-BACKDATED', 1_500)) === null, 'production_backdated_job_schedule_succeeded')
+    assert(model.updateProductionJobSchedule({ ...base, jobs: [{ ...base.jobs[0], output: 100 }] }, 'JOB-1', 'urgent', '2026-07-25T10:00:00.000Z', proof('ACT-JOB-SCHEDULE-COMPLETE', 500)) === null, 'production_completed_job_schedule_succeeded')
+    const completedScheduleProof = proof('ACT-JOB-SCHEDULE-COMPLETE-FORGED', 500)
+    assertThrows(() => model.validateProductionState({
+      ...base,
+      revision: 1,
+      jobs: [{ ...base.jobs[0], output: 100, priority: 'urgent', dueAt: '2026-07-25T10:00:00.000Z' }],
+      events: [{
+        id: `EVT-${completedScheduleProof.actionId}`,
+        actionId: completedScheduleProof.actionId,
+        createdAt: completedScheduleProof.capturedAt,
+        actor: completedScheduleProof.actor,
+        reason: completedScheduleProof.reason,
+        evidenceReference: completedScheduleProof.evidenceReference,
+        kind: 'job_schedule_updated',
+        subjectId: 'JOB-1',
+        summary: 'Updated Test batch schedule for Line 01',
+        jobPriority: 'urgent',
+        jobDueAt: '2026-07-25T10:00:00.000Z',
+      }],
+    }), 'production_completed_job_forged_schedule_state_accepted')
     assert([
       { ...newJob, id: '', target: 1 },
       { ...newJob, id: 'JOB-BAD-0', target: 0 },
@@ -4303,6 +4372,26 @@ async function verifyProductionRuntime() {
     assert(model.recordProductionOutput(closedShort, 'JOB-1', 1, closeShiftRef, proof('ACT-JOB-CLOSE-OUTPUT')) === null, 'production_output_after_short_close_succeeded')
     assert(model.recordProductionMaterialConsumption(closedShort, 'JOB-1', 'RM-CLOSE', undefined, 1, 'kg', closeShiftRef, proof('ACT-JOB-CLOSE-MATERIAL')) === null, 'production_material_after_short_close_succeeded')
     assert(model.placeProductionQualityHold(closedShort, 'JOB-1', proof('ACT-JOB-CLOSE-HOLD')) === null, 'production_hold_after_short_close_succeeded')
+    assert(model.updateProductionJobSchedule(closedShort, 'JOB-1', 'urgent', '2026-07-25T10:00:00.000Z', proof('ACT-JOB-CLOSE-SCHEDULE')) === null, 'production_schedule_after_short_close_succeeded')
+    const closedScheduleProof = proof('ACT-JOB-CLOSE-SCHEDULE-FORGED', 1_000)
+    assertThrows(() => model.validateProductionState({
+      ...closedShort,
+      revision: closedShort.revision + 1,
+      jobs: [{ ...closedShort.jobs[0], priority: 'urgent', dueAt: '2026-07-25T10:00:00.000Z' }],
+      events: [{
+        id: `EVT-${closedScheduleProof.actionId}`,
+        actionId: closedScheduleProof.actionId,
+        createdAt: closedScheduleProof.capturedAt,
+        actor: closedScheduleProof.actor,
+        reason: closedScheduleProof.reason,
+        evidenceReference: closedScheduleProof.evidenceReference,
+        kind: 'job_schedule_updated',
+        subjectId: 'JOB-1',
+        summary: 'Updated Test batch schedule for Line 01',
+        jobPriority: 'urgent',
+        jobDueAt: '2026-07-25T10:00:00.000Z',
+      }, ...closedShort.events],
+    }), 'production_closed_job_forged_schedule_state_accepted')
     const closedHandoff = model.buildProductionShiftHandoff(closedShort, closeShiftRef)
     assert(closedHandoff?.shortCloses.length === 1
       && closedHandoff.shortCloses[0].remainingUnits === 10

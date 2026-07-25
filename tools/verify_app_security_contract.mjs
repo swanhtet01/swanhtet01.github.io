@@ -256,6 +256,7 @@ const expectedHumanProductionEvents = [
   'production.issue.resolved',
   'production.job.closed',
   'production.job.created',
+  'production.job.schedule_updated',
   'production.machine_state.changed',
   'production.maintenance.completed',
   'production.maintenance.started',
