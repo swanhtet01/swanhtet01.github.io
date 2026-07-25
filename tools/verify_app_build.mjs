@@ -1126,16 +1126,22 @@ if (!productionSource.includes('buildProductionShiftHandoff')
   || !coreSource.includes('Plant records or the shift reference changed after this handoff was built.')
   || !coreSource.includes('No Plant record changed.')) fail('production_shift_handoff_contract_missing')
 if (!productionSource.includes('registerProductionJob') || !coreSource.includes('production.job.created') || !coreSource.includes('<summary>Add job</summary>') || !coreSource.includes('Review job')) fail('production_recurring_job_workflow_missing')
-if (!productionSource.includes('updateProductionJobSchedule')
+if (!productionSource.includes('updateProductionJobPlan')
   || !productionSource.includes("kind: 'job_schedule_updated'")
+  || !productionSource.includes('jobOwner: owner')
+  || !productionSource.includes('fromJobOwner')
   || !coreSource.includes('production.job.schedule_updated')
   || !coreSource.includes('Change plan')
   || !coreSource.includes('Review plan')
+  || !coreSource.includes('Responsible owner')
+  || !coreSource.includes('Change the owner, priority, or due time before review.')
+  || !coreSource.includes('It grants no access, assigns no machine, and dispatches no work.')
   || !coreSource.includes("'Legacy unscheduled'")
   || !coreSource.includes('event.fromJobPriority')
+  || !coreSource.includes('event.fromJobOwner')
   || !managedTrialSource.includes("'production.job.schedule_updated'")
   || !managedProductionRuntime.includes('_validate_job_schedule_updated')
-  || !managedProductionRuntime.includes('job schedule may change only the exact priority and due time.')) fail('production_job_schedule_update_contract_missing')
+  || !managedProductionRuntime.includes('job plan may change only the exact owner, priority, and due time.')) fail('production_job_plan_update_contract_missing')
 if (!productionSource.includes('closeProductionJob')
   || !productionSource.includes("kind: 'job_closed'")
   || !productionSource.includes('remainingQuantity')
@@ -1238,7 +1244,7 @@ if (!productionJobsContract.includes('This shift:')
 if (!productionJobsContract.includes('Jobs to finish')
   || !productionJobsContract.includes('<JobList disabled={!productionCanWrite || Boolean(pendingAction)} jobs={activeJobs} now={issueClock} onSchedule={openJobSchedule} />')
   || !productionJobsContract.includes('<CompletedJobHistory jobs={completedJobs} now={issueClock} />')
-  || !productionJobsContract.includes('Priority and due time set the visible run order.')
+  || !productionJobsContract.includes('Owner, priority, and due time make responsibility and run order visible.')
   || !productionJobsContract.includes('Results are append-only.')
   || !productionJobsContract.includes('{job.id} · {job.product} · {job.line}')
   || !coreSource.includes('No active jobs. Add a job below to start recording output.')) fail('production_jobs_not_task_first')
@@ -4272,18 +4278,23 @@ async function verifyProductionRuntime() {
       product: 'Second batch',
       target: 250,
       output: 0,
+      owner: 'Line 02 lead',
       priority: 'urgent',
       dueAt: '2026-07-24T10:00:00.000Z',
     }
     const jobProof = proof('ACT-JOB-CREATE')
     const withJob = model.registerProductionJob(base, newJob, jobProof)
     assert(withJob?.jobs[0].id === newJob.id && withJob.jobs[0].output === 0 && withJob.revision === 1 && withJob.events[0].kind === 'job_created', 'production_job_not_created_once')
-    assert(withJob.events[0].jobPriority === newJob.priority && withJob.events[0].jobDueAt === newJob.dueAt, 'production_job_schedule_not_frozen')
+    assert(withJob.events[0].jobPriority === newJob.priority
+      && withJob.events[0].jobDueAt === newJob.dueAt
+      && withJob.events[0].jobOwner === newJob.owner,
+    'production_job_plan_not_frozen')
     assert(model.registerProductionJob(withJob, newJob, jobProof) === withJob, 'production_job_retry_not_idempotent')
     assert(model.registerProductionJob(withJob, { ...newJob, target: 251 }, jobProof) === null, 'production_job_conflicting_retry_succeeded')
     assert(model.registerProductionJob(withJob, newJob, proof('ACT-JOB-DUPLICATE')) === null, 'production_duplicate_job_id_succeeded')
     assert(model.registerProductionJob(withJob, { ...newJob, id: 'JOB-3' }, jobProof) === null, 'production_job_reused_action_id_succeeded')
     assert(model.registerProductionJob(base, { ...newJob, priority: undefined, dueAt: undefined }, proof('ACT-JOB-UNSCHEDULED')) === null, 'production_unscheduled_job_succeeded')
+    assert(model.registerProductionJob(base, { ...newJob, owner: undefined }, proof('ACT-JOB-UNOWNED')) === null, 'production_unowned_job_succeeded')
     assert(model.registerProductionJob(base, { ...newJob, priority: 'invalid' }, proof('ACT-JOB-PRIORITY')) === null, 'production_invalid_job_priority_succeeded')
     assert(model.registerProductionJob(base, { ...newJob, dueAt: jobProof.capturedAt }, proof('ACT-JOB-OVERDUE')) === null, 'production_nonfuture_job_due_succeeded')
     assertThrows(() => model.validateProductionState({
@@ -4295,27 +4306,33 @@ async function verifyProductionRuntime() {
       events: [{ ...withJob.events[0], jobDueAt: '2026-07-25T10:00:00.000Z' }, ...withJob.events.slice(1)],
     }), 'production_job_event_schedule_rewrite_accepted')
     const scheduleProof = proof('ACT-JOB-SCHEDULE', 500)
-    const rescheduled = model.updateProductionJobSchedule(withJob, newJob.id, 'low', '2026-07-25T10:00:00.000Z', scheduleProof)
+    const rescheduled = model.updateProductionJobPlan(withJob, newJob.id, 'low', '2026-07-25T10:00:00.000Z', 'Night shift lead', scheduleProof)
     assert(rescheduled?.jobs[0].priority === 'low'
       && rescheduled.jobs[0].dueAt === '2026-07-25T10:00:00.000Z'
+      && rescheduled.jobs[0].owner === 'Night shift lead'
       && rescheduled.jobs[0].target === newJob.target
       && rescheduled.jobs[0].output === 0
       && rescheduled.events[0].kind === 'job_schedule_updated'
       && rescheduled.events[0].fromJobPriority === newJob.priority
       && rescheduled.events[0].fromJobDueAt === newJob.dueAt
-      && rescheduled.events[0].jobPriority === 'low',
-    'production_job_schedule_not_updated_exactly')
-    assert(model.updateProductionJobSchedule(rescheduled, newJob.id, 'low', '2026-07-25T10:00:00.000Z', scheduleProof) === rescheduled, 'production_job_schedule_retry_not_idempotent')
-    assert(model.updateProductionJobSchedule(rescheduled, newJob.id, 'normal', '2026-07-25T10:00:00.000Z', scheduleProof) === null, 'production_job_schedule_conflicting_retry_succeeded')
-    assert(model.updateProductionJobSchedule(rescheduled, newJob.id, 'low', '2026-07-25T10:00:00.000Z', proof('ACT-JOB-SCHEDULE-NOOP', 600)) === null, 'production_job_schedule_noop_succeeded')
-    assert(model.updateProductionJobSchedule(withJob, newJob.id, 'low', scheduleProof.capturedAt, proof('ACT-JOB-SCHEDULE-NONFUTURE', 500)) === null, 'production_job_schedule_nonfuture_due_succeeded')
-    assert(model.updateProductionJobSchedule(rescheduled, 'JOB-1', 'urgent', '2026-07-25T10:00:00.000Z', scheduleProof) === null, 'production_job_schedule_action_reuse_succeeded')
+      && rescheduled.events[0].fromJobOwner === newJob.owner
+      && rescheduled.events[0].jobPriority === 'low'
+      && rescheduled.events[0].jobOwner === 'Night shift lead',
+    'production_job_plan_not_updated_exactly')
+    assert(model.updateProductionJobPlan(rescheduled, newJob.id, 'low', '2026-07-25T10:00:00.000Z', 'Night shift lead', scheduleProof) === rescheduled, 'production_job_plan_retry_not_idempotent')
+    assert(model.updateProductionJobPlan(rescheduled, newJob.id, 'normal', '2026-07-25T10:00:00.000Z', 'Night shift lead', scheduleProof) === null, 'production_job_plan_conflicting_retry_succeeded')
+    assert(model.updateProductionJobPlan(rescheduled, newJob.id, 'low', '2026-07-25T10:00:00.000Z', 'Night shift lead', proof('ACT-JOB-SCHEDULE-NOOP', 600)) === null, 'production_job_plan_noop_succeeded')
+    assert(model.updateProductionJobPlan(withJob, newJob.id, 'low', scheduleProof.capturedAt, 'Night shift lead', proof('ACT-JOB-SCHEDULE-NONFUTURE', 500)) === null, 'production_job_plan_nonfuture_due_succeeded')
+    assert(['', ' Shift lead', 'Shift lead ', 'X'.repeat(121)].every((owner, index) => model.updateProductionJobPlan(withJob, newJob.id, 'low', '2026-07-25T10:00:00.000Z', owner, proof(`ACT-JOB-PLAN-BAD-OWNER-${index}`, 500)) === null), 'production_invalid_job_owner_succeeded')
+    assert(model.updateProductionJobPlan(rescheduled, 'JOB-1', 'urgent', '2026-07-25T10:00:00.000Z', 'Legacy line lead', scheduleProof) === null, 'production_job_plan_action_reuse_succeeded')
     const chainedScheduleProof = proof('ACT-JOB-SCHEDULE-CHAIN', 1_000)
-    const chainedSchedule = model.updateProductionJobSchedule(rescheduled, newJob.id, 'normal', '2026-07-26T10:00:00.000Z', chainedScheduleProof)
+    const chainedSchedule = model.updateProductionJobPlan(rescheduled, newJob.id, 'normal', '2026-07-26T10:00:00.000Z', 'Finishing supervisor', chainedScheduleProof)
     assert(chainedSchedule?.events[0].fromJobPriority === 'low'
       && chainedSchedule.events[0].fromJobDueAt === '2026-07-25T10:00:00.000Z'
+      && chainedSchedule.events[0].fromJobOwner === 'Night shift lead'
+      && chainedSchedule.events[0].jobOwner === 'Finishing supervisor'
       && chainedSchedule.events[1].fromJobPriority === 'urgent',
-    'production_job_schedule_history_not_chained')
+    'production_job_plan_history_not_chained')
     assertThrows(() => model.validateProductionState({
       ...rescheduled,
       events: [{ ...rescheduled.events[0], fromJobPriority: 'normal' }, ...rescheduled.events.slice(1)],
@@ -4324,20 +4341,56 @@ async function verifyProductionRuntime() {
       ...rescheduled,
       jobs: [{ ...rescheduled.jobs[0], dueAt: '2026-07-27T10:00:00.000Z' }, ...rescheduled.jobs.slice(1)],
     }), 'production_job_schedule_current_snapshot_tamper_accepted')
-    const legacySchedule = model.updateProductionJobSchedule(base, 'JOB-1', 'normal', '2026-07-25T10:00:00.000Z', proof('ACT-JOB-SCHEDULE-LEGACY', 500))
+    assertThrows(() => model.validateProductionState({
+      ...rescheduled,
+      jobs: [{ ...rescheduled.jobs[0], owner: 'Unrecorded reassignment' }, ...rescheduled.jobs.slice(1)],
+    }), 'production_job_owner_current_snapshot_tamper_accepted')
+    assertThrows(() => model.validateProductionState({
+      ...rescheduled,
+      events: [{ ...rescheduled.events[0], fromJobOwner: 'Different previous owner' }, ...rescheduled.events.slice(1)],
+    }), 'production_job_owner_previous_snapshot_tamper_accepted')
+    const legacySchedule = model.updateProductionJobPlan(base, 'JOB-1', 'normal', '2026-07-25T10:00:00.000Z', 'Legacy line lead', proof('ACT-JOB-SCHEDULE-LEGACY', 500))
     assert(legacySchedule?.jobs[0].priority === 'normal'
+      && legacySchedule.jobs[0].owner === 'Legacy line lead'
       && legacySchedule.events[0].kind === 'job_schedule_updated'
       && legacySchedule.events[0].fromJobPriority === undefined
-      && legacySchedule.events[0].fromJobDueAt === undefined,
-    'production_legacy_job_first_schedule_rejected')
+      && legacySchedule.events[0].fromJobDueAt === undefined
+      && legacySchedule.events[0].fromJobOwner === undefined
+      && legacySchedule.events[0].jobOwner === 'Legacy line lead',
+    'production_legacy_job_first_plan_rejected')
+    const scheduleOnlyProof = proof('ACT-JOB-SCHEDULE-ONLY-OLD', 400)
+    const scheduleOnly = model.validateProductionState({
+      ...base,
+      revision: 1,
+      jobs: [{ ...base.jobs[0], priority: 'normal', dueAt: '2026-07-25T10:00:00.000Z' }],
+      events: [{
+        id: `EVT-${scheduleOnlyProof.actionId}`,
+        actionId: scheduleOnlyProof.actionId,
+        createdAt: scheduleOnlyProof.capturedAt,
+        actor: scheduleOnlyProof.actor,
+        reason: scheduleOnlyProof.reason,
+        evidenceReference: scheduleOnlyProof.evidenceReference,
+        kind: 'job_schedule_updated',
+        subjectId: 'JOB-1',
+        summary: 'Updated Test batch schedule for Line 01',
+        jobPriority: 'normal',
+        jobDueAt: '2026-07-25T10:00:00.000Z',
+      }],
+    })
+    const upgradedScheduleOnly = model.updateProductionJobPlan(scheduleOnly, 'JOB-1', 'normal', '2026-07-25T10:00:00.000Z', 'Named shift lead', proof('ACT-JOB-SCHEDULE-ONLY-UPGRADE', 600))
+    assert(upgradedScheduleOnly?.jobs[0].owner === 'Named shift lead'
+      && upgradedScheduleOnly.events[0].fromJobOwner === undefined
+      && upgradedScheduleOnly.events[1].jobOwner === undefined
+      && upgradedScheduleOnly.events[1].summary === 'Updated Test batch schedule for Line 01',
+    'production_schedule_only_history_upgrade_failed')
     const latestOutput = model.recordProductionOutput(base, 'JOB-1', 1, '2026-07-24 Day', proof('ACT-JOB-SCHEDULE-LATEST-OUTPUT', 2_000))
-    assert(model.updateProductionJobSchedule(latestOutput, 'JOB-1', 'urgent', '2026-07-25T10:00:00.000Z', proof('ACT-JOB-SCHEDULE-BACKDATED', 1_500)) === null, 'production_backdated_job_schedule_succeeded')
-    assert(model.updateProductionJobSchedule({ ...base, jobs: [{ ...base.jobs[0], output: 100 }] }, 'JOB-1', 'urgent', '2026-07-25T10:00:00.000Z', proof('ACT-JOB-SCHEDULE-COMPLETE', 500)) === null, 'production_completed_job_schedule_succeeded')
+    assert(model.updateProductionJobPlan(latestOutput, 'JOB-1', 'urgent', '2026-07-25T10:00:00.000Z', 'Legacy line lead', proof('ACT-JOB-SCHEDULE-BACKDATED', 1_500)) === null, 'production_backdated_job_plan_succeeded')
+    assert(model.updateProductionJobPlan({ ...base, jobs: [{ ...base.jobs[0], output: 100 }] }, 'JOB-1', 'urgent', '2026-07-25T10:00:00.000Z', 'Legacy line lead', proof('ACT-JOB-SCHEDULE-COMPLETE', 500)) === null, 'production_completed_job_plan_succeeded')
     const completedScheduleProof = proof('ACT-JOB-SCHEDULE-COMPLETE-FORGED', 500)
     assertThrows(() => model.validateProductionState({
       ...base,
       revision: 1,
-      jobs: [{ ...base.jobs[0], output: 100, priority: 'urgent', dueAt: '2026-07-25T10:00:00.000Z' }],
+      jobs: [{ ...base.jobs[0], output: 100, owner: 'Legacy line lead', priority: 'urgent', dueAt: '2026-07-25T10:00:00.000Z' }],
       events: [{
         id: `EVT-${completedScheduleProof.actionId}`,
         actionId: completedScheduleProof.actionId,
@@ -4347,11 +4400,12 @@ async function verifyProductionRuntime() {
         evidenceReference: completedScheduleProof.evidenceReference,
         kind: 'job_schedule_updated',
         subjectId: 'JOB-1',
-        summary: 'Updated Test batch schedule for Line 01',
+        summary: 'Updated Test batch plan for Line 01',
         jobPriority: 'urgent',
         jobDueAt: '2026-07-25T10:00:00.000Z',
+        jobOwner: 'Legacy line lead',
       }],
-    }), 'production_completed_job_forged_schedule_state_accepted')
+    }), 'production_completed_job_forged_plan_state_accepted')
     assert([
       { ...newJob, id: '', target: 1 },
       { ...newJob, id: 'JOB-BAD-0', target: 0 },
@@ -4372,12 +4426,12 @@ async function verifyProductionRuntime() {
     assert(model.recordProductionOutput(closedShort, 'JOB-1', 1, closeShiftRef, proof('ACT-JOB-CLOSE-OUTPUT')) === null, 'production_output_after_short_close_succeeded')
     assert(model.recordProductionMaterialConsumption(closedShort, 'JOB-1', 'RM-CLOSE', undefined, 1, 'kg', closeShiftRef, proof('ACT-JOB-CLOSE-MATERIAL')) === null, 'production_material_after_short_close_succeeded')
     assert(model.placeProductionQualityHold(closedShort, 'JOB-1', proof('ACT-JOB-CLOSE-HOLD')) === null, 'production_hold_after_short_close_succeeded')
-    assert(model.updateProductionJobSchedule(closedShort, 'JOB-1', 'urgent', '2026-07-25T10:00:00.000Z', proof('ACT-JOB-CLOSE-SCHEDULE')) === null, 'production_schedule_after_short_close_succeeded')
+    assert(model.updateProductionJobPlan(closedShort, 'JOB-1', 'urgent', '2026-07-25T10:00:00.000Z', 'Legacy line lead', proof('ACT-JOB-CLOSE-SCHEDULE')) === null, 'production_plan_after_short_close_succeeded')
     const closedScheduleProof = proof('ACT-JOB-CLOSE-SCHEDULE-FORGED', 1_000)
     assertThrows(() => model.validateProductionState({
       ...closedShort,
       revision: closedShort.revision + 1,
-      jobs: [{ ...closedShort.jobs[0], priority: 'urgent', dueAt: '2026-07-25T10:00:00.000Z' }],
+      jobs: [{ ...closedShort.jobs[0], owner: 'Legacy line lead', priority: 'urgent', dueAt: '2026-07-25T10:00:00.000Z' }],
       events: [{
         id: `EVT-${closedScheduleProof.actionId}`,
         actionId: closedScheduleProof.actionId,
@@ -4387,11 +4441,12 @@ async function verifyProductionRuntime() {
         evidenceReference: closedScheduleProof.evidenceReference,
         kind: 'job_schedule_updated',
         subjectId: 'JOB-1',
-        summary: 'Updated Test batch schedule for Line 01',
+        summary: 'Updated Test batch plan for Line 01',
         jobPriority: 'urgent',
         jobDueAt: '2026-07-25T10:00:00.000Z',
+        jobOwner: 'Legacy line lead',
       }, ...closedShort.events],
-    }), 'production_closed_job_forged_schedule_state_accepted')
+    }), 'production_closed_job_forged_plan_state_accepted')
     const closedHandoff = model.buildProductionShiftHandoff(closedShort, closeShiftRef)
     assert(closedHandoff?.shortCloses.length === 1
       && closedHandoff.shortCloses[0].remainingUnits === 10
@@ -4531,6 +4586,7 @@ async function verifyProductionRuntime() {
       product: 'Precision batch',
       target: 10,
       output: 0,
+      owner: 'Precision lead',
       priority: 'normal',
       dueAt: '2026-07-24T10:00:00.000Z',
     }
@@ -5111,8 +5167,8 @@ async function verifyProductionRuntime() {
     values.set(model.PRODUCTION_KEY, JSON.stringify(base))
     lockRequests = 0
     const concurrentJobs = await Promise.all([
-      model.mutateProductionWorkspace((state) => model.registerProductionJob(state, { id: 'JOB-2', line: 'Line 02', product: 'Second batch', target: 250, output: 0, priority: 'urgent', dueAt: '2026-07-24T10:00:00.000Z' }, proof('ACT-CONCURRENT-JOB-2')), storage, locks),
-      model.mutateProductionWorkspace((state) => model.registerProductionJob(state, { id: 'JOB-3', line: 'Line 03', product: 'Third batch', target: 300, output: 0, priority: 'normal', dueAt: '2026-07-25T10:00:00.000Z' }, proof('ACT-CONCURRENT-JOB-3')), storage, locks),
+      model.mutateProductionWorkspace((state) => model.registerProductionJob(state, { id: 'JOB-2', line: 'Line 02', product: 'Second batch', target: 250, output: 0, owner: 'Line 02 lead', priority: 'urgent', dueAt: '2026-07-24T10:00:00.000Z' }, proof('ACT-CONCURRENT-JOB-2')), storage, locks),
+      model.mutateProductionWorkspace((state) => model.registerProductionJob(state, { id: 'JOB-3', line: 'Line 03', product: 'Third batch', target: 300, output: 0, owner: 'Line 03 lead', priority: 'normal', dueAt: '2026-07-25T10:00:00.000Z' }, proof('ACT-CONCURRENT-JOB-3')), storage, locks),
     ])
     const concurrentJobState = JSON.parse(values.get(model.PRODUCTION_KEY))
     assert(concurrentJobs.every((result) => result.ok) && concurrentJobState.jobs.length === 3 && concurrentJobState.events.length === 2 && concurrentJobState.revision === 2, 'production_concurrent_jobs_did_not_both_survive')

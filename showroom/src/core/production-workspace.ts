@@ -33,6 +33,7 @@ export type ProductionJob = {
   product: string
   target: number
   output: number
+  owner?: string
   priority?: ProductionJobPriority
   dueAt?: string
   scrap?: number
@@ -94,8 +95,10 @@ export type ProductionEvent = {
   issueContainment?: string
   jobPriority?: ProductionJobPriority
   jobDueAt?: string
+  jobOwner?: string
   fromJobPriority?: ProductionJobPriority
   fromJobDueAt?: string
+  fromJobOwner?: string
   fromState?: ProductionMachineState
   toState?: ProductionMachineState
   downtimeStartActionId?: string
@@ -202,6 +205,7 @@ export type ProductionShiftHandoff = {
     goodUnits: number
     scrapUnits: number
     remainingUnits: number
+    owner?: string
     priority?: ProductionJobPriority
     dueAt?: string
     qualityHold?: ProductionQualityHold
@@ -287,8 +291,8 @@ export const productionMachineStates: ProductionMachineState[] = ['running', 'at
 export const productionMaterialUnits: ProductionMaterialUnit[] = ['kg', 'g', 'l', 'ml', 'pcs', 'pack', 'bag', 'roll', 'sheet', 'm', 'cm']
 const eventKinds: ProductionEventKind[] = ['job_created', 'job_schedule_updated', 'job_closed', 'output_recorded', 'material_consumed', 'issue_opened', 'issue_resolved', 'quality_hold_placed', 'quality_hold_released', 'machine_state_changed', 'downtime_started', 'downtime_ended', 'maintenance_started', 'maintenance_completed']
 const baseEventFields = ['id', 'actionId', 'createdAt', 'actor', 'reason', 'evidenceReference', 'kind', 'subjectId', 'summary']
-const jobCreatedEventFields = [...baseEventFields, 'jobPriority', 'jobDueAt']
-const jobScheduleUpdateEventFields = [...jobCreatedEventFields, 'fromJobPriority', 'fromJobDueAt']
+const jobCreatedEventFields = [...baseEventFields, 'jobPriority', 'jobDueAt', 'jobOwner']
+const jobScheduleUpdateEventFields = [...jobCreatedEventFields, 'fromJobPriority', 'fromJobDueAt', 'fromJobOwner']
 const jobClosedEventFields = [...baseEventFields, 'shiftRef', 'remainingQuantity']
 const qualityHoldEventFields = baseEventFields
 const materialEventFields = [...baseEventFields, 'quantity', 'shiftRef', 'materialRef', 'materialUnit']
@@ -297,7 +301,7 @@ const downtimeEndEventFields = [...baseEventFields, 'downtimeStartActionId']
 const maintenanceStartEventFields = [...baseEventFields, 'maintenanceOwner']
 const maintenanceCompleteEventFields = [...baseEventFields, 'maintenanceStartActionId']
 const productionStateFields = ['schema', 'revision', 'jobs', 'issues', 'machines', 'events']
-const productionJobFields = ['id', 'line', 'product', 'target', 'output', 'priority', 'dueAt', 'scrap', 'qualityHold', 'closure']
+const productionJobFields = ['id', 'line', 'product', 'target', 'output', 'owner', 'priority', 'dueAt', 'scrap', 'qualityHold', 'closure']
 const productionIssueFields = ['id', 'createdAt', 'area', 'kind', 'summary', 'status', 'severity', 'owner', 'dueAt', 'containment', 'resolution']
 const productionIssueResolutionFields = ['actionId', 'resolvedAt', 'resolvedBy', 'reason', 'evidenceReference']
 const productionMachineFields = ['id', 'name', 'state']
@@ -550,6 +554,7 @@ export function validateProductionState(value: unknown): ProductionState {
     canonicalText(candidate.product, `jobs[${index}].product`)
     assertSafeInteger(candidate.target, `jobs[${index}].target`, 1)
     assertSafeInteger(candidate.output, `jobs[${index}].output`)
+    if (candidate.owner !== undefined) canonicalText(candidate.owner, `jobs[${index}].owner`, 120)
     const scheduleFields = ['priority', 'dueAt'] as const
     const scheduleFieldCount = scheduleFields.filter((field) => candidate[field] !== undefined).length
     if (scheduleFieldCount !== 0 && scheduleFieldCount !== scheduleFields.length) throw new Error(`jobs[${index}] schedule fields must be complete or absent for legacy records.`)
@@ -658,6 +663,8 @@ export function validateProductionState(value: unknown): ProductionState {
         if (!validTimestamp(candidate.jobDueAt)) throw new Error(`events[${index}].jobDueAt is invalid.`)
         if (timestampAtOrBefore(candidate.jobDueAt as string, candidate.createdAt as string)) throw new Error(`events[${index}].jobDueAt must follow confirmation.`)
       }
+      if (candidate.jobOwner !== undefined) canonicalText(candidate.jobOwner, `events[${index}].jobOwner`, 120)
+      if (candidate.kind === 'job_created' && candidate.jobOwner !== undefined && scheduleSnapshotFieldCount !== scheduleSnapshotFields.length) throw new Error(`events[${index}] a job owner requires the complete opening plan.`)
       if (candidate.kind === 'job_schedule_updated') {
         const previousScheduleFields = ['fromJobPriority', 'fromJobDueAt'] as const
         const previousScheduleFieldCount = previousScheduleFields.filter((field) => candidate[field] !== undefined).length
@@ -666,8 +673,14 @@ export function validateProductionState(value: unknown): ProductionState {
           if (!productionJobPriorities.includes(candidate.fromJobPriority as ProductionJobPriority)) throw new Error(`events[${index}].fromJobPriority is invalid.`)
           if (!validTimestamp(candidate.fromJobDueAt)) throw new Error(`events[${index}].fromJobDueAt is invalid.`)
         }
+        if (candidate.fromJobOwner !== undefined) canonicalText(candidate.fromJobOwner, `events[${index}].fromJobOwner`, 120)
+        if (candidate.fromJobOwner !== undefined && candidate.jobOwner === undefined) throw new Error(`events[${index}] previous job owner cannot exist without a current owner.`)
         const job = jobs.find((entry): entry is Record<string, unknown> => isRecord(entry) && entry.id === candidate.subjectId)
-        if (!job || candidate.summary !== `Updated ${String(job.product)} schedule for ${String(job.line)}`) throw new Error(`events[${index}] job schedule summary is not canonical.`)
+        if (!job) throw new Error(`events[${index}] references an unknown job.`)
+        const expectedSummary = candidate.jobOwner === undefined
+          ? `Updated ${String(job.product)} schedule for ${String(job.line)}`
+          : `Updated ${String(job.product)} plan for ${String(job.line)}`
+        if (candidate.summary !== expectedSummary) throw new Error(`events[${index}] job plan summary is not canonical.`)
       }
       if (candidate.quantity !== undefined || candidate.remainingQuantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || materialFieldCount || issueSnapshotFieldCount || maintenanceFieldCount || candidate.fromState !== undefined || candidate.toState !== undefined || candidate.downtimeStartActionId !== undefined) throw new Error(`events[${index}] job event has unrelated fields.`)
     } else if (candidate.kind === 'job_closed') {
@@ -757,12 +770,18 @@ export function validateProductionState(value: unknown): ProductionState {
     const scheduleFieldCount = ['priority', 'dueAt'].filter((field) => candidate[field] !== undefined).length
     let expectedPriority: unknown
     let expectedDueAt: unknown
+    let expectedOwner: unknown
+    let ownerHistoryStarted = false
     let previousActivityAt: bigint | undefined
     if (creationEvent) {
       const snapshotFieldCount = ['jobPriority', 'jobDueAt'].filter((field) => creationEvent[field] !== undefined).length
       if (snapshotFieldCount === 2) {
         expectedPriority = creationEvent.jobPriority
         expectedDueAt = creationEvent.jobDueAt
+      }
+      if (creationEvent.jobOwner !== undefined) {
+        expectedOwner = creationEvent.jobOwner
+        ownerHistoryStarted = true
       }
       previousActivityAt = timestampMicros(creationEvent.createdAt as string) ?? undefined
     } else {
@@ -771,6 +790,11 @@ export function validateProductionState(value: unknown): ProductionState {
       if (openingFieldCount === 2) {
         expectedPriority = openingEvent.fromJobPriority
         expectedDueAt = openingEvent.fromJobDueAt
+      }
+      const openingOwnerEvent = [...scheduleEvents].reverse().find((event) => event.jobOwner !== undefined)
+      if (openingOwnerEvent?.fromJobOwner !== undefined) {
+        expectedOwner = openingOwnerEvent.fromJobOwner
+        ownerHistoryStarted = true
       }
     }
     for (const event of [...scheduleEvents].reverse()) {
@@ -786,7 +810,22 @@ export function validateProductionState(value: unknown): ProductionState {
           && (event.fromJobPriority !== expectedPriority || event.fromJobDueAt !== expectedDueAt))) {
         throw new Error(`jobs[${index}] schedule update does not continue its immutable history.`)
       }
-      if (event.jobPriority === expectedPriority && event.jobDueAt === expectedDueAt) throw new Error(`jobs[${index}] schedule update does not change the plan.`)
+      const scheduleUnchanged = event.jobPriority === expectedPriority && event.jobDueAt === expectedDueAt
+      if (event.jobOwner === undefined) {
+        if (ownerHistoryStarted) throw new Error(`jobs[${index}] plan update drops its immutable owner history.`)
+        if (scheduleUnchanged) throw new Error(`jobs[${index}] schedule update does not change the plan.`)
+        if (event.summary !== `Updated ${String(candidate.product)} schedule for ${String(candidate.line)}`) throw new Error(`jobs[${index}] legacy schedule update summary is not canonical.`)
+      } else {
+        if (expectedOwner !== undefined) {
+          if (event.fromJobOwner !== expectedOwner) throw new Error(`jobs[${index}] plan update does not continue its immutable owner history.`)
+        } else if (event.fromJobOwner !== undefined) {
+          throw new Error(`jobs[${index}] first owner assignment invents a previous owner.`)
+        }
+        if (scheduleUnchanged && ownerHistoryStarted && event.jobOwner === expectedOwner) throw new Error(`jobs[${index}] plan update does not change the plan.`)
+        if (event.summary !== `Updated ${String(candidate.product)} plan for ${String(candidate.line)}`) throw new Error(`jobs[${index}] plan update summary is not canonical.`)
+        expectedOwner = event.jobOwner
+        ownerHistoryStarted = true
+      }
       expectedPriority = event.jobPriority
       expectedDueAt = event.jobDueAt
     }
@@ -795,6 +834,11 @@ export function validateProductionState(value: unknown): ProductionState {
       || (expectedFieldCount === 2
         && (candidate.priority !== expectedPriority || candidate.dueAt !== expectedDueAt))) {
       throw new Error(`jobs[${index}] schedule does not match its immutable event history.`)
+    }
+    if (ownerHistoryStarted) {
+      if (candidate.owner !== expectedOwner) throw new Error(`jobs[${index}] owner does not match its immutable plan history.`)
+    } else if (candidate.owner !== undefined) {
+      throw new Error(`jobs[${index}] legacy history cannot acquire an owner without a plan update.`)
     }
   }
 
@@ -1368,6 +1412,7 @@ export function buildProductionShiftHandoff(state: ProductionState, shiftRef: st
       goodUnits: job.output,
       scrapUnits: job.scrap ?? 0,
       remainingUnits: job.target - job.output - (job.scrap ?? 0),
+      ...(job.owner ? { owner: job.owner } : {}),
       ...(job.priority && job.dueAt ? { priority: job.priority, dueAt: job.dueAt } : {}),
       ...(job.qualityHold ? { qualityHold: { ...job.qualityHold } } : {}),
     }))
@@ -1497,7 +1542,8 @@ export function formatProductionShiftHandoff(handoff: ProductionShiftHandoff) {
   if (!handoff.unfinishedJobs.length) lines.push('- None')
   for (const job of handoff.unfinishedJobs) {
     const schedule = job.priority && job.dueAt ? ` · ${job.priority.toUpperCase()} · due ${job.dueAt}` : ' · schedule not recorded'
-    lines.push(`- ${handoffLine(job.id)} · ${handoffLine(job.product)} · ${handoffLine(job.line)} · ${job.remainingUnits} remaining · ${job.goodUnits} good · ${job.scrapUnits} scrap${schedule}${job.qualityHold ? ' · QUALITY HOLD' : ''}`)
+    const owner = job.owner ? ` · owner ${handoffLine(job.owner)}` : ' · owner not recorded'
+    lines.push(`- ${handoffLine(job.id)} · ${handoffLine(job.product)} · ${handoffLine(job.line)}${owner} · ${job.remainingUnits} remaining · ${job.goodUnits} good · ${job.scrapUnits} scrap${schedule}${job.qualityHold ? ' · QUALITY HOLD' : ''}`)
   }
   lines.push('', `Active quality holds (${handoff.activeHolds.length})`)
   if (!handoff.activeHolds.length) lines.push('- None')
@@ -1530,6 +1576,7 @@ export function registerProductionJob(state: ProductionState, job: ProductionJob
   if (!isRecord(job)) return null
   const jobPriority = job.priority
   const jobDueAt = job.dueAt
+  const jobOwner = job.owner
   if (!validProof(proof)
     || !validCanonicalText(job.id, 80)
     || !validCanonicalText(job.line, 120)
@@ -1542,6 +1589,8 @@ export function registerProductionJob(state: ProductionState, job: ProductionJob
     || !jobDueAt
     || !validTimestamp(jobDueAt)
     || timestampAtOrBefore(jobDueAt, proof.capturedAt)
+    || !jobOwner
+    || !validCanonicalText(jobOwner, 120)
     || job.scrap !== undefined
     || job.qualityHold !== undefined
     || job.closure !== undefined) return null
@@ -1560,6 +1609,7 @@ export function registerProductionJob(state: ProductionState, job: ProductionJob
     summary: `Created ${job.product} job for ${job.line}`,
     jobPriority,
     jobDueAt,
+    jobOwner,
   })
   return validateProductionState({
     ...state,
@@ -1569,48 +1619,54 @@ export function registerProductionJob(state: ProductionState, job: ProductionJob
   })
 }
 
-export function updateProductionJobSchedule(
+export function updateProductionJobPlan(
   state: ProductionState,
   jobId: string,
   priority: ProductionJobPriority,
   dueAt: string,
+  owner: string,
   proof: ProductionActionProof,
 ) {
   if (!validProof(proof)
     || !validCanonicalText(jobId, 80)
     || !productionJobPriorities.includes(priority)
     || !validTimestamp(dueAt)
-    || timestampAtOrBefore(dueAt, proof.capturedAt)) return null
+    || timestampAtOrBefore(dueAt, proof.capturedAt)
+    || !validCanonicalText(owner, 120)) return null
   const existing = state.events.find((event) => event.actionId === proof.actionId)
   const job = state.jobs.find((candidate) => candidate.id === jobId)
   if (existing) return existing.kind === 'job_schedule_updated'
     && existing.subjectId === jobId
     && existing.jobPriority === priority
     && existing.jobDueAt === dueAt
+    && existing.jobOwner === owner
     && job?.priority === priority
     && job?.dueAt === dueAt
+    && job?.owner === owner
     && sameProof(existing, proof) ? state : null
   const accounted = job ? job.output + (job.scrap ?? 0) : 0
   const latestJobEvent = state.events.find((event) => event.subjectId === jobId)
   if (!job
     || job.closure
     || accounted >= job.target
-    || (job.priority === priority && job.dueAt === dueAt)
+    || (job.priority === priority && job.dueAt === dueAt && job.owner === owner)
     || (latestJobEvent && timestampBefore(proof.capturedAt, latestJobEvent.createdAt))
     || actionIdIsUsed(state, proof.actionId)
     || state.revision >= Number.MAX_SAFE_INTEGER) return null
   const event = eventFor(proof, {
     kind: 'job_schedule_updated',
     subjectId: jobId,
-    summary: `Updated ${job.product} schedule for ${job.line}`,
+    summary: `Updated ${job.product} plan for ${job.line}`,
     ...(job.priority && job.dueAt ? { fromJobPriority: job.priority, fromJobDueAt: job.dueAt } : {}),
+    ...(job.owner ? { fromJobOwner: job.owner } : {}),
     jobPriority: priority,
     jobDueAt: dueAt,
+    jobOwner: owner,
   })
   return validateProductionState({
     ...state,
     revision: state.revision + 1,
-    jobs: state.jobs.map((candidate) => candidate.id === jobId ? { ...candidate, priority, dueAt } : candidate),
+    jobs: state.jobs.map((candidate) => candidate.id === jobId ? { ...candidate, priority, dueAt, owner } : candidate),
     events: [event, ...state.events],
   })
 }

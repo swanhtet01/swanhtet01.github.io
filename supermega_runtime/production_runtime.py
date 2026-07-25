@@ -66,7 +66,12 @@ _MAX_MACHINES = 100
 _STATE_FIELDS = frozenset({"schema", "revision", "jobs", "issues", "machines", "events"})
 _JOB_REQUIRED_FIELDS = frozenset({"id", "line", "product", "target", "output"})
 _JOB_SCHEDULE_FIELDS = frozenset({"priority", "dueAt"})
-_JOB_OPTIONAL_FIELDS = _JOB_SCHEDULE_FIELDS | {"scrap", "qualityHold", "closure"}
+_JOB_OPTIONAL_FIELDS = _JOB_SCHEDULE_FIELDS | {
+    "owner",
+    "scrap",
+    "qualityHold",
+    "closure",
+}
 _QUALITY_HOLD_FIELDS = frozenset(
     {"actionId", "heldAt", "heldBy", "reason", "evidenceReference"}
 )
@@ -102,9 +107,11 @@ _EVENT_FIELDS = frozenset(
 )
 _OUTPUT_EVENT_OPTIONAL_FIELDS = frozenset({"shiftRef", "outputKind"})
 _JOB_CREATED_EVENT_FIELDS = frozenset({"jobPriority", "jobDueAt"})
+_JOB_OWNER_EVENT_FIELDS = frozenset({"jobOwner"})
 _JOB_SCHEDULE_UPDATE_PREVIOUS_FIELDS = frozenset(
     {"fromJobPriority", "fromJobDueAt"}
 )
+_JOB_OWNER_UPDATE_PREVIOUS_FIELDS = frozenset({"fromJobOwner"})
 _JOB_CLOSE_EVENT_FIELDS = frozenset({"shiftRef", "remainingQuantity"})
 _MATERIAL_EVENT_FIELDS = frozenset(
     {"materialRef", "quantity", "materialUnit", "shiftRef"}
@@ -336,6 +343,8 @@ def _validate_job(candidate: object, index: int) -> dict[str, Any]:
     _text(job["product"], f"{field}.product")
     target = _integer(job["target"], f"{field}.target", minimum=1)
     output = _integer(job["output"], f"{field}.output")
+    if "owner" in job:
+        _text(job["owner"], f"{field}.owner", maximum=120)
     schedule_fields = _JOB_SCHEDULE_FIELDS.intersection(job)
     if schedule_fields and schedule_fields != _JOB_SCHEDULE_FIELDS:
         raise TrialValidationError(
@@ -469,9 +478,13 @@ def _validate_event(
         optional=(
             _OUTPUT_EVENT_OPTIONAL_FIELDS
             if kind == "output_recorded"
-            else _JOB_CREATED_EVENT_FIELDS
+            else _JOB_CREATED_EVENT_FIELDS | _JOB_OWNER_EVENT_FIELDS
             if kind == "job_created"
-            else _JOB_SCHEDULE_UPDATE_PREVIOUS_FIELDS
+            else (
+                _JOB_SCHEDULE_UPDATE_PREVIOUS_FIELDS
+                | _JOB_OWNER_EVENT_FIELDS
+                | _JOB_OWNER_UPDATE_PREVIOUS_FIELDS
+            )
             if kind == "job_schedule_updated"
             else _MATERIAL_EVENT_OPTIONAL_FIELDS
             if kind == "material_consumed"
@@ -558,6 +571,16 @@ def _validate_event(
                 raise TrialValidationError(
                     f"{field}.jobDueAt must follow confirmation."
                 )
+        if "jobOwner" in event:
+            _text(event["jobOwner"], f"{field}.jobOwner", maximum=120)
+        if (
+            kind == "job_created"
+            and "jobOwner" in event
+            and schedule_fields != _JOB_CREATED_EVENT_FIELDS
+        ):
+            raise TrialValidationError(
+                f"{field} a job owner requires the complete opening plan."
+            )
         if kind == "job_schedule_updated":
             previous_fields = _JOB_SCHEDULE_UPDATE_PREVIOUS_FIELDS.intersection(event)
             if (
@@ -577,6 +600,12 @@ def _validate_event(
                         f"{field}.fromJobPriority is unsupported."
                     )
                 _timestamp(event["fromJobDueAt"], f"{field}.fromJobDueAt")
+            if "fromJobOwner" in event:
+                _text(event["fromJobOwner"], f"{field}.fromJobOwner", maximum=120)
+                if "jobOwner" not in event:
+                    raise TrialValidationError(
+                        f"{field} previous job owner requires a current owner."
+                    )
     elif kind in {"quality_hold_placed", "quality_hold_released"}:
         if subject_id not in job_ids:
             raise TrialValidationError(f"{field} references an unknown job.")
@@ -858,6 +887,8 @@ def _validate_job_history(
         job_schedule_fields = _JOB_SCHEDULE_FIELDS.intersection(job)
         expected_priority: object | None = None
         expected_due_at: object | None = None
+        expected_owner: object | None = None
+        owner_history_started = False
         previous_activity_at: datetime | None = None
         schedule_history_exists = creation_event is not None or bool(schedule_events)
 
@@ -868,6 +899,9 @@ def _validate_job_history(
             if event_schedule_fields:
                 expected_priority = creation_event["jobPriority"]
                 expected_due_at = creation_event["jobDueAt"]
+            if "jobOwner" in creation_event:
+                expected_owner = creation_event["jobOwner"]
+                owner_history_started = True
             previous_activity_at = datetime.fromisoformat(
                 creation_event["createdAt"].replace("Z", "+00:00")
             )
@@ -879,6 +913,20 @@ def _validate_job_history(
             if opening_fields:
                 expected_priority = opening_event["fromJobPriority"]
                 expected_due_at = opening_event["fromJobDueAt"]
+            opening_owner_event = next(
+                (
+                    event
+                    for event in reversed(schedule_events)
+                    if "jobOwner" in event
+                ),
+                None,
+            )
+            if (
+                opening_owner_event is not None
+                and "fromJobOwner" in opening_owner_event
+            ):
+                expected_owner = opening_owner_event["fromJobOwner"]
+                owner_history_started = True
 
         for event in reversed(schedule_events):
             activity_at = datetime.fromisoformat(
@@ -920,20 +968,53 @@ def _validate_job_history(
                 raise TrialValidationError(
                     f"jobs[{index}] legacy schedule update invents a prior plan."
                 )
-            if (
+            schedule_unchanged = (
                 expected_exists
                 and event["jobPriority"] == expected_priority
                 and event["jobDueAt"] == expected_due_at
-            ):
-                raise TrialValidationError(
-                    f"jobs[{index}] schedule update does not change the plan."
-                )
-            if event["summary"] != (
-                f"Updated {job['product']} schedule for {job['line']}"
-            ):
-                raise TrialValidationError(
-                    f"jobs[{index}] schedule update summary is not canonical."
-                )
+            )
+            if "jobOwner" not in event:
+                if owner_history_started:
+                    raise TrialValidationError(
+                        f"jobs[{index}] plan update drops its immutable owner history."
+                    )
+                if schedule_unchanged:
+                    raise TrialValidationError(
+                        f"jobs[{index}] schedule update does not change the plan."
+                    )
+                if event["summary"] != (
+                    f"Updated {job['product']} schedule for {job['line']}"
+                ):
+                    raise TrialValidationError(
+                        f"jobs[{index}] legacy schedule update summary is not canonical."
+                    )
+            else:
+                if expected_owner is not None:
+                    if event.get("fromJobOwner") != expected_owner:
+                        raise TrialValidationError(
+                            f"jobs[{index}] plan update does not continue its "
+                            "immutable owner history."
+                        )
+                elif "fromJobOwner" in event:
+                    raise TrialValidationError(
+                        f"jobs[{index}] first owner assignment invents a previous owner."
+                    )
+                if (
+                    schedule_unchanged
+                    and owner_history_started
+                    and event["jobOwner"] == expected_owner
+                ):
+                    raise TrialValidationError(
+                        f"jobs[{index}] plan update does not change the plan."
+                    )
+                if event["summary"] != (
+                    f"Updated {job['product']} plan for {job['line']}"
+                ):
+                    raise TrialValidationError(
+                        f"jobs[{index}] plan update summary is not canonical."
+                    )
+                expected_owner = event["jobOwner"]
+                owner_history_started = True
             expected_priority = event["jobPriority"]
             expected_due_at = event["jobDueAt"]
 
@@ -955,6 +1036,16 @@ def _validate_job_history(
                 raise TrialValidationError(
                     f"jobs[{index}] legacy creation event cannot acquire a "
                     "schedule without an update."
+                )
+            if owner_history_started:
+                if job.get("owner") != expected_owner:
+                    raise TrialValidationError(
+                        f"jobs[{index}] owner does not match its immutable plan history."
+                    )
+            elif "owner" in job:
+                raise TrialValidationError(
+                    f"jobs[{index}] legacy history cannot acquire an owner "
+                    "without a plan update."
                 )
 
         if creation_event is None:
@@ -1562,22 +1653,28 @@ def _validate_job_schedule_updated(
         )
     if event["subjectId"] != before["id"]:
         raise TrialValidationError(
-            "job schedule event must reference the one changed job."
+            "job plan event must reference the one changed job."
+        )
+    if "jobOwner" not in event:
+        raise TrialValidationError(
+            "a new job plan update must name its responsible owner."
         )
     expected = {
         **before,
         "priority": event["jobPriority"],
         "dueAt": event["jobDueAt"],
+        "owner": event["jobOwner"],
     }
     if after != expected:
         raise TrialValidationError(
-            "job schedule may change only the exact priority and due time."
+            "job plan may change only the exact owner, priority, and due time."
         )
     if (
         before.get("priority") == event["jobPriority"]
         and before.get("dueAt") == event["jobDueAt"]
+        and before.get("owner") == event["jobOwner"]
     ):
-        raise TrialValidationError("job schedule update must change the plan.")
+        raise TrialValidationError("job plan update must change the plan.")
     before_schedule_fields = _JOB_SCHEDULE_FIELDS.intersection(before)
     previous_fields = _JOB_SCHEDULE_UPDATE_PREVIOUS_FIELDS.intersection(event)
     if before_schedule_fields == _JOB_SCHEDULE_FIELDS:
@@ -1593,6 +1690,15 @@ def _validate_job_schedule_updated(
         raise TrialValidationError(
             "an unscheduled legacy job cannot invent a previous plan."
         )
+    if "owner" in before:
+        if event.get("fromJobOwner") != before["owner"]:
+            raise TrialValidationError(
+                "job plan update must freeze the exact previous owner."
+            )
+    elif "fromJobOwner" in event:
+        raise TrialValidationError(
+            "an unassigned legacy job cannot invent a previous owner."
+        )
     latest_job_event = next(
         (
             candidate
@@ -1607,12 +1713,12 @@ def _validate_job_schedule_updated(
         latest_job_event["createdAt"].replace("Z", "+00:00")
     ):
         raise TrialValidationError(
-            "job schedule confirmation cannot predate its latest activity."
+            "job plan confirmation cannot predate its latest activity."
         )
     if event["summary"] != (
-        f"Updated {before['product']} schedule for {before['line']}"
+        f"Updated {before['product']} plan for {before['line']}"
     ):
-        raise TrialValidationError("job schedule summary is not canonical.")
+        raise TrialValidationError("job plan summary is not canonical.")
 
 
 def _validate_job_closed(
@@ -1667,22 +1773,24 @@ def _validate_job_created(
     if (
         job["output"] != 0
         or _JOB_SCHEDULE_FIELDS.intersection(job) != _JOB_SCHEDULE_FIELDS
+        or "owner" not in job
         or "scrap" in job
         or "qualityHold" in job
         or "closure" in job
     ):
         raise TrialValidationError(
-            "a new Production job must begin at zero good and scrap output "
-            "without a quality hold or closure."
+            "a new Production job must name one owner and begin at zero good "
+            "and scrap output without a quality hold or closure."
         )
     if (
         _JOB_CREATED_EVENT_FIELDS.intersection(event)
         != _JOB_CREATED_EVENT_FIELDS
         or event["jobPriority"] != job["priority"]
         or event["jobDueAt"] != job["dueAt"]
+        or event.get("jobOwner") != job["owner"]
     ):
         raise TrialValidationError(
-            "job creation must freeze the exact priority and due time."
+            "job creation must freeze the exact owner, priority, and due time."
         )
     if event["subjectId"] != job["id"]:
         raise TrialValidationError("job creation event must reference the new job.")
@@ -2045,14 +2153,16 @@ def reduce_production_state(
             or next_state["jobs"][0]["output"] != 0
             or _JOB_SCHEDULE_FIELDS.intersection(next_state["jobs"][0])
             != _JOB_SCHEDULE_FIELDS
+            or "owner" not in next_state["jobs"][0]
             or "scrap" in next_state["jobs"][0]
             or "qualityHold" in next_state["jobs"][0]
             or "closure" in next_state["jobs"][0]
             or next_state["machines"][0]["state"] != "running"
         ):
             raise TrialValidationError(
-                "Production initialization requires one scheduled zero-output "
-                "job, one running machine, and no copied operating history."
+                "Production initialization requires one owned, scheduled "
+                "zero-output job, one running machine, and no copied operating "
+                "history."
             )
         if _timestamp(
             next_state["jobs"][0]["dueAt"],

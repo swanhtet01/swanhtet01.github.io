@@ -57,6 +57,7 @@ def starting_workspace(*, target: int = 100) -> dict[str, object]:
                 "product": "Customer batch 001",
                 "target": target,
                 "output": 0,
+                "owner": "Shift lead",
                 "priority": "normal",
                 "dueAt": "2026-07-25T09:00:00.000Z",
             }
@@ -127,6 +128,7 @@ def schedule_state(
     evidence: dict[str, str],
     *,
     job_id: str | None = None,
+    owner: str | None = None,
 ) -> dict[str, object]:
     state = deepcopy(current)
     job = next(
@@ -142,18 +144,27 @@ def schedule_state(
         if "priority" in job and "dueAt" in job
         else {}
     )
+    previous_owner = (
+        {"fromJobOwner": job["owner"]}
+        if "owner" in job
+        else {}
+    )
+    next_owner = owner if owner is not None else job.get("owner", "Shift lead")
     job["priority"] = priority
     job["dueAt"] = due_at
+    job["owner"] = next_owner
     state["revision"] += 1
     state["events"] = [
         production_event(
             evidence,
             kind="job_schedule_updated",
             subject_id=job["id"],
-            summary=f"Updated {job['product']} schedule for {job['line']}",
+            summary=f"Updated {job['product']} plan for {job['line']}",
             **previous,
+            **previous_owner,
             jobPriority=priority,
             jobDueAt=due_at,
+            jobOwner=next_owner,
         ),
         *state["events"],
     ]
@@ -563,6 +574,7 @@ class ProductionRuntimeTests(unittest.TestCase):
             "urgent",
             "2026-07-26T09:00:00.000Z",
             first_evidence,
+            owner="Night shift lead",
         )
         first = apply_event(
             current,
@@ -573,6 +585,7 @@ class ProductionRuntimeTests(unittest.TestCase):
 
         self.assertEqual(first["jobs"][0]["priority"], "urgent")
         self.assertEqual(first["jobs"][0]["dueAt"], "2026-07-26T09:00:00.000Z")
+        self.assertEqual(first["jobs"][0]["owner"], "Night shift lead")
         self.assertEqual(first["jobs"][0]["target"], current["jobs"][0]["target"])
         self.assertEqual(first["jobs"][0]["output"], current["jobs"][0]["output"])
         self.assertEqual(first["issues"], current["issues"])
@@ -583,6 +596,8 @@ class ProductionRuntimeTests(unittest.TestCase):
             "2026-07-25T09:00:00.000Z",
         )
         self.assertEqual(first["events"][0]["jobPriority"], "urgent")
+        self.assertEqual(first["events"][0]["fromJobOwner"], "Shift lead")
+        self.assertEqual(first["events"][0]["jobOwner"], "Night shift lead")
 
         second_evidence = action_evidence(
             "ACT-JOB-SCHEDULE-002",
@@ -596,6 +611,7 @@ class ProductionRuntimeTests(unittest.TestCase):
                 "low",
                 "2026-07-27T09:00:00.000Z",
                 second_evidence,
+                owner="Finishing supervisor",
             ),
             second_evidence,
         )
@@ -605,18 +621,33 @@ class ProductionRuntimeTests(unittest.TestCase):
                     event.get("fromJobPriority"),
                     event["jobPriority"],
                     event["jobDueAt"],
+                    event.get("fromJobOwner"),
+                    event.get("jobOwner"),
                 )
                 for event in second["events"][:2]
             ],
             [
-                ("urgent", "low", "2026-07-27T09:00:00.000Z"),
-                ("normal", "urgent", "2026-07-26T09:00:00.000Z"),
+                (
+                    "urgent",
+                    "low",
+                    "2026-07-27T09:00:00.000Z",
+                    "Night shift lead",
+                    "Finishing supervisor",
+                ),
+                (
+                    "normal",
+                    "urgent",
+                    "2026-07-26T09:00:00.000Z",
+                    "Shift lead",
+                    "Night shift lead",
+                ),
             ],
         )
 
         legacy = starting_workspace()
         legacy["jobs"][0].pop("priority")
         legacy["jobs"][0].pop("dueAt")
+        legacy["jobs"][0].pop("owner")
         legacy_evidence = action_evidence(
             "ACT-JOB-SCHEDULE-LEGACY",
             captured_at=LATER,
@@ -634,6 +665,49 @@ class ProductionRuntimeTests(unittest.TestCase):
         )
         self.assertNotIn("fromJobPriority", scheduled_legacy["events"][0])
         self.assertNotIn("fromJobDueAt", scheduled_legacy["events"][0])
+        self.assertNotIn("fromJobOwner", scheduled_legacy["events"][0])
+        self.assertEqual(scheduled_legacy["jobs"][0]["owner"], "Shift lead")
+
+        schedule_only_evidence = action_evidence(
+            "ACT-JOB-SCHEDULE-ONLY-HISTORY",
+            captured_at=NOW,
+        )
+        schedule_only = starting_workspace()
+        schedule_only["jobs"][0].pop("owner")
+        schedule_only["jobs"][0]["priority"] = "urgent"
+        schedule_only["jobs"][0]["dueAt"] = "2026-07-26T09:00:00.000Z"
+        schedule_only["revision"] = 1
+        schedule_only["events"] = [
+            production_event(
+                schedule_only_evidence,
+                kind="job_schedule_updated",
+                subject_id=schedule_only["jobs"][0]["id"],
+                summary="Updated Customer batch 001 schedule for Assembly team",
+                fromJobPriority="normal",
+                fromJobDueAt="2026-07-25T09:00:00.000Z",
+                jobPriority="urgent",
+                jobDueAt="2026-07-26T09:00:00.000Z",
+            )
+        ]
+        validate_production_state(schedule_only)
+        upgraded_schedule_only_evidence = action_evidence(
+            "ACT-JOB-SCHEDULE-ONLY-UPGRADE",
+            captured_at=LATER,
+        )
+        upgraded_schedule_only = apply_event(
+            schedule_only,
+            "production.job.schedule_updated",
+            schedule_state(
+                schedule_only,
+                "urgent",
+                "2026-07-26T09:00:00.000Z",
+                upgraded_schedule_only_evidence,
+                owner="Named shift lead",
+            ),
+            upgraded_schedule_only_evidence,
+        )
+        self.assertEqual(upgraded_schedule_only["jobs"][0]["owner"], "Named shift lead")
+        self.assertNotIn("fromJobOwner", upgraded_schedule_only["events"][0])
 
         no_op_evidence = action_evidence(
             "ACT-JOB-SCHEDULE-NOOP",
@@ -679,6 +753,47 @@ class ProductionRuntimeTests(unittest.TestCase):
                 first_evidence,
             )
 
+        forged_previous_owner = deepcopy(first_proposed)
+        forged_previous_owner["events"][0]["fromJobOwner"] = "Different lead"
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "production.job.schedule_updated",
+                forged_previous_owner,
+                first_evidence,
+            )
+
+        missing_owner_snapshot = deepcopy(first_proposed)
+        missing_owner_snapshot["events"][0].pop("jobOwner")
+        missing_owner_snapshot["events"][0].pop("fromJobOwner")
+        missing_owner_snapshot["events"][0]["summary"] = (
+            "Updated Customer batch 001 schedule for Assembly team"
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "production.job.schedule_updated",
+                missing_owner_snapshot,
+                first_evidence,
+            )
+
+        for invalid_owner in (" Shift lead", "Shift lead ", "x" * 121):
+            with self.subTest(invalid_owner=invalid_owner), self.assertRaises(
+                TrialValidationError
+            ):
+                apply_event(
+                    current,
+                    "production.job.schedule_updated",
+                    schedule_state(
+                        current,
+                        "urgent",
+                        "2026-07-26T09:00:00.000Z",
+                        first_evidence,
+                        owner=invalid_owner,
+                    ),
+                    first_evidence,
+                )
+
         unrelated_output = deepcopy(first_proposed)
         unrelated_output["jobs"][0]["output"] = 1
         with self.assertRaises(TrialValidationError):
@@ -693,6 +808,11 @@ class ProductionRuntimeTests(unittest.TestCase):
         rewritten_current["jobs"][0]["dueAt"] = "2026-07-28T09:00:00.000Z"
         with self.assertRaises(TrialValidationError):
             validate_production_state(rewritten_current)
+
+        rewritten_owner = deepcopy(second)
+        rewritten_owner["jobs"][0]["owner"] = "Unrecorded reassignment"
+        with self.assertRaises(TrialValidationError):
+            validate_production_state(rewritten_owner)
 
         completed = output_state(
             starting_workspace(target=1),
@@ -778,6 +898,7 @@ class ProductionRuntimeTests(unittest.TestCase):
             "product": "Created scheduled batch",
             "target": 25,
             "output": 0,
+            "owner": "Finishing lead",
             "priority": "urgent",
             "dueAt": "2026-07-25T12:00:00.000Z",
         }
@@ -791,6 +912,7 @@ class ProductionRuntimeTests(unittest.TestCase):
                 summary="Created Created scheduled batch job for Finishing team",
                 jobPriority=created_job["priority"],
                 jobDueAt=created_job["dueAt"],
+                jobOwner=created_job["owner"],
             )
         ]
         accepted_created = apply_event(
@@ -814,6 +936,10 @@ class ProductionRuntimeTests(unittest.TestCase):
         self.assertEqual(
             updated_created["events"][0]["fromJobDueAt"],
             created_job["dueAt"],
+        )
+        self.assertEqual(
+            updated_created["events"][0]["fromJobOwner"],
+            created_job["owner"],
         )
 
     def test_short_close_is_evidence_backed_terminal_and_fail_closed(self) -> None:
@@ -1002,6 +1128,20 @@ class ProductionRuntimeTests(unittest.TestCase):
                 {},
                 "production.workspace.initialized",
                 unscheduled_initial,
+                evidence,
+            )
+
+        unowned_initial = deepcopy(initial)
+        unowned_initial["jobs"][0].pop("owner")
+        self.assertEqual(
+            validate_production_state(unowned_initial),
+            unowned_initial,
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                {},
+                "production.workspace.initialized",
+                unowned_initial,
                 evidence,
             )
 
@@ -1456,6 +1596,7 @@ class ProductionRuntimeTests(unittest.TestCase):
             "product": "Precision batch",
             "target": 10,
             "output": 0,
+            "owner": "Precision lead",
             "priority": "urgent",
             "dueAt": "2026-07-25T09:00:00.000Z",
         }
@@ -1469,6 +1610,7 @@ class ProductionRuntimeTests(unittest.TestCase):
                 summary="Created Precision batch job for Precision line",
                 jobPriority=precise_job["priority"],
                 jobDueAt=precise_job["dueAt"],
+                jobOwner=precise_job["owner"],
             )
         ]
         accepted_creation = apply_event(
@@ -1659,6 +1801,7 @@ class ProductionRuntimeTests(unittest.TestCase):
             "product": "Customer batch 002",
             "target": 75,
             "output": 0,
+            "owner": "Assembly lead",
             "priority": "urgent",
             "dueAt": "2026-07-25T09:00:00.000Z",
         }
@@ -1672,6 +1815,7 @@ class ProductionRuntimeTests(unittest.TestCase):
                 summary="Created Customer batch 002 job for Assembly team",
                 jobPriority=job["priority"],
                 jobDueAt=job["dueAt"],
+                jobOwner=job["owner"],
             )
         ]
         accepted = apply_event(
@@ -1689,6 +1833,28 @@ class ProductionRuntimeTests(unittest.TestCase):
             accepted["events"][0]["jobDueAt"],
             "2026-07-25T09:00:00.000Z",
         )
+        self.assertEqual(accepted["events"][0]["jobOwner"], "Assembly lead")
+
+        unowned = deepcopy(created)
+        unowned["jobs"][0].pop("owner")
+        unowned["events"][0].pop("jobOwner")
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "production.job.created",
+                unowned,
+                evidence,
+            )
+
+        forged_owner = deepcopy(created)
+        forged_owner["events"][0]["jobOwner"] = "Different lead"
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "production.job.created",
+                forged_owner,
+                evidence,
+            )
 
         unscheduled = deepcopy(created)
         unscheduled["jobs"][0].pop("priority")
@@ -2827,6 +2993,7 @@ class ProductionRuntimeTests(unittest.TestCase):
             "product": "Customer batch 002",
             "target": 50,
             "output": 0,
+            "owner": "Assembly lead",
             "priority": "normal",
             "dueAt": "2026-07-25T09:00:00.000Z",
         }
@@ -2840,6 +3007,7 @@ class ProductionRuntimeTests(unittest.TestCase):
                 summary="Created Customer batch 002 job for Assembly team",
                 jobPriority=new_job["priority"],
                 jobDueAt=new_job["dueAt"],
+                jobOwner=new_job["owner"],
             )
         ]
         job_command_id = str(uuid4())

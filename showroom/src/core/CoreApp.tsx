@@ -126,7 +126,7 @@ import {
   resolveProductionIssue,
   startProductionDowntime,
   startProductionMaintenance,
-  updateProductionJobSchedule,
+  updateProductionJobPlan,
   validateProductionState,
   type ProductionActionProof,
   type ProductionDowntimeInterval,
@@ -4041,7 +4041,7 @@ function StockMovementHistory({ movements }: { movements: CommerceStockMovement[
 
 const productionEventLabels: Record<ProductionEvent['kind'], string> = {
   job_created: 'Job created',
-  job_schedule_updated: 'Job schedule updated',
+  job_schedule_updated: 'Job plan updated',
   job_closed: 'Job closed short',
   output_recorded: 'Output recorded',
   material_consumed: 'Material used',
@@ -4078,6 +4078,16 @@ function formatDowntimeDuration(durationMs: number) {
   return minutes ? `${hours} hr ${minutes} min` : `${hours} hr`
 }
 
+function productionJobPlanEventDetail(event: ProductionEvent) {
+  const previousSchedule = event.fromJobPriority && event.fromJobDueAt
+    ? `${productionJobPriorityLabels[event.fromJobPriority]} / ${formatIssueDue(event.fromJobDueAt)}`
+    : 'Legacy unscheduled'
+  const nextSchedule = `${productionJobPriorityLabels[event.jobPriority ?? 'normal']} / ${formatIssueDue(event.jobDueAt ?? event.createdAt)}`
+  const previousOwner = event.fromJobOwner ? `owner ${event.fromJobOwner}` : 'owner not recorded'
+  const nextOwner = event.jobOwner ? `owner ${event.jobOwner}` : 'owner not recorded (legacy)'
+  return ` - ${previousSchedule} / ${previousOwner} to ${nextSchedule} / ${nextOwner}`
+}
+
 function ProductionEventHistory({ events }: { events: ProductionEvent[] }) {
   const [showAll, setShowAll] = useState(false)
   const visibleEvents = showAll ? events : events.slice(0, 8)
@@ -4086,7 +4096,7 @@ function ProductionEventHistory({ events }: { events: ProductionEvent[] }) {
     {visibleEvents.length ? <div className="action-history-list">{visibleEvents.map((event) => <article key={event.id}>
       <div>
         <strong>{event.kind === 'output_recorded' ? event.outputKind === 'scrap' ? 'Scrap recorded' : 'Good output recorded' : productionEventLabels[event.kind]} - {event.summary}</strong>
-        <small>{event.subjectId} - {event.actionId} - {event.actor}{event.kind === 'output_recorded' ? ` - Shift: ${event.shiftRef ?? 'Unassigned (legacy)'}` : event.kind === 'material_consumed' ? ` - Shift: ${event.shiftRef} - ${event.quantity} ${event.materialUnit} ${event.materialRef}${event.materialLot ? ` - Lot: ${event.materialLot}` : ''}` : event.kind === 'job_schedule_updated' ? ` - ${event.fromJobPriority && event.fromJobDueAt ? `${productionJobPriorityLabels[event.fromJobPriority]} / ${formatIssueDue(event.fromJobDueAt)}` : 'Legacy unscheduled'} to ${productionJobPriorityLabels[event.jobPriority ?? 'normal']} / ${formatIssueDue(event.jobDueAt ?? event.createdAt)}` : event.kind === 'job_closed' ? ` - Shift: ${event.shiftRef} - ${event.remainingQuantity} not produced` : event.kind === 'maintenance_started' ? ` - Owner: ${event.maintenanceOwner}` : event.kind === 'maintenance_completed' ? ` - Start action: ${event.maintenanceStartActionId}` : ''}</small>
+        <small>{event.subjectId} - {event.actionId} - {event.actor}{event.kind === 'output_recorded' ? ` - Shift: ${event.shiftRef ?? 'Unassigned (legacy)'}` : event.kind === 'material_consumed' ? ` - Shift: ${event.shiftRef} - ${event.quantity} ${event.materialUnit} ${event.materialRef}${event.materialLot ? ` - Lot: ${event.materialLot}` : ''}` : event.kind === 'job_schedule_updated' ? productionJobPlanEventDetail(event) : event.kind === 'job_closed' ? ` - Shift: ${event.shiftRef} - ${event.remainingQuantity} not produced` : event.kind === 'maintenance_started' ? ` - Owner: ${event.maintenanceOwner}` : event.kind === 'maintenance_completed' ? ` - Start action: ${event.maintenanceStartActionId}` : ''}</small>
         <p>{event.reason} - Evidence: {event.evidenceReference}</p>
       </div>
       <small>{formatTime(event.createdAt)}</small>
@@ -4128,22 +4138,24 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const [maintenanceDialogOpen, setMaintenanceDialogOpen] = useState(false)
   const [maintenanceMachineId, setMaintenanceMachineId] = useState(production.machines[0]?.id ?? '')
   const [maintenanceOwner, setMaintenanceOwner] = useState('')
-  const [jobDraft, setJobDraft] = useState<{ id: string; line: string; product: string; target: string; priority: ProductionJobPriority; dueAt: string }>({
+  const [jobDraft, setJobDraft] = useState<{ id: string; line: string; product: string; target: string; owner: string; priority: ProductionJobPriority; dueAt: string }>({
     id: '',
     line: '',
     product: '',
     target: '',
+    owner: '',
     priority: 'normal',
     dueAt: defaultJobDueInput(),
   })
-  const [scheduleDraft, setScheduleDraft] = useState<{ jobId: string; priority: ProductionJobPriority; dueAt: string } | null>(null)
+  const [scheduleDraft, setScheduleDraft] = useState<{ jobId: string; owner: string; priority: ProductionJobPriority; dueAt: string } | null>(null)
   const [notice, setNotice] = useState('')
   const [actionTrigger, setActionTrigger] = useState<HTMLElement | null>(null)
-  const [planDraft, setPlanDraft] = useState<{ jobId: string; line: string; product: string; target: string; priority: ProductionJobPriority; dueAt: string; machineId: string; machineName: string; reason: string; evidenceReference: string }>({
+  const [planDraft, setPlanDraft] = useState<{ jobId: string; line: string; product: string; target: string; owner: string; priority: ProductionJobPriority; dueAt: string; machineId: string; machineName: string; reason: string; evidenceReference: string }>({
     jobId: '',
     line: '',
     product: '',
     target: '',
+    owner: '',
     priority: 'normal',
     dueAt: defaultJobDueInput(),
     machineId: '',
@@ -4286,14 +4298,15 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     const firstJobId = planDraft.jobId.trim().toUpperCase()
     const line = planDraft.line.trim()
     const product = planDraft.product.trim()
+    const owner = planDraft.owner.trim()
     const jobTarget = Number(planDraft.target)
     const jobDueAt = new Date(planDraft.dueAt)
     const machineId = planDraft.machineId.trim().toUpperCase()
     const machineName = planDraft.machineName.trim()
     const reason = planDraft.reason.trim()
     const evidenceReference = planDraft.evidenceReference.trim()
-    if (!firstJobId || !line || !product || !machineId || !machineName || !reason || !evidenceReference || !Number.isSafeInteger(jobTarget) || jobTarget < 1 || Number.isNaN(jobDueAt.getTime()) || jobDueAt.getTime() <= Date.now()) {
-      setPlanError('Enter one real job with a future due time, one machine, a whole-number target, reason, and evidence reference.')
+    if (!firstJobId || !line || !product || !owner || owner.length > 120 || !machineId || !machineName || !reason || !evidenceReference || !Number.isSafeInteger(jobTarget) || jobTarget < 1 || Number.isNaN(jobDueAt.getTime()) || jobDueAt.getTime() <= Date.now()) {
+      setPlanError('Enter one real job with an owner and future due time, one machine, a whole-number target, reason, and evidence reference.')
       return
     }
     const proof: ProductionActionProof = {
@@ -4308,7 +4321,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     try {
       await mutateProduction('production.workspace.initialized', commandUuid(), proof, (current) => current.jobs.length || current.issues.length || current.machines.length || current.events.length ? null : validateProductionState({
         ...current,
-        jobs: [{ id: firstJobId, line, product, target: jobTarget, output: 0, priority: planDraft.priority, dueAt: jobDueAt.toISOString() }],
+        jobs: [{ id: firstJobId, line, product, target: jobTarget, output: 0, owner, priority: planDraft.priority, dueAt: jobDueAt.toISOString() }],
         machines: [{ id: machineId, name: machineName, state: 'running' }],
       }))
       setJobId(firstJobId)
@@ -4330,6 +4343,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         <div className="form-row"><label>Job ID<input maxLength={80} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, jobId: inputEvent.target.value }))} placeholder="JOB-001" required value={planDraft.jobId} /></label><label>Line or team<input maxLength={120} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, line: inputEvent.target.value }))} placeholder="Line 01" required value={planDraft.line} /></label></div>
         <div className="form-row"><label>Product or batch<input maxLength={180} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, product: inputEvent.target.value }))} placeholder="Product name" required value={planDraft.product} /></label><label>Target units<input min="1" onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, target: inputEvent.target.value }))} required step="1" type="number" value={planDraft.target} /></label></div>
         <div className="form-row"><label>Priority<select onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, priority: inputEvent.target.value as ProductionJobPriority }))} value={planDraft.priority}>{productionJobPriorities.map((priority) => <option key={priority} value={priority}>{productionJobPriorityLabels[priority]}</option>)}</select></label><label>Due time<input autoComplete="off" min={localDateTimeInputValue(new Date())} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, dueAt: inputEvent.target.value }))} required type="datetime-local" value={planDraft.dueAt} /></label></div>
+        <label>Responsible owner<input autoComplete="off" maxLength={120} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, owner: inputEvent.target.value }))} placeholder="Named person or role" required value={planDraft.owner} /></label>
         <div className="form-row"><label>Machine ID<input maxLength={80} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, machineId: inputEvent.target.value }))} placeholder="MC-01" required value={planDraft.machineId} /></label><label>Machine name<input maxLength={180} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, machineName: inputEvent.target.value }))} placeholder="Mixer 01" required value={planDraft.machineName} /></label></div>
         <label>Opening plan reason<input maxLength={180} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, reason: inputEvent.target.value }))} placeholder="How this job and target were confirmed" required value={planDraft.reason} /></label>
         <label>Evidence reference<input maxLength={180} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, evidenceReference: inputEvent.target.value }))} placeholder="Shift plan, work order, or count sheet" required value={planDraft.evidenceReference} /></label>
@@ -4492,24 +4506,25 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     const id = jobDraft.id.trim().toUpperCase()
     const line = jobDraft.line.trim()
     const product = jobDraft.product.trim()
+    const owner = jobDraft.owner.trim()
     const jobTarget = Number(jobDraft.target)
     const dueAt = new Date(jobDraft.dueAt)
-    if (!id || !line || !product || !Number.isSafeInteger(jobTarget) || jobTarget < 1 || Number.isNaN(dueAt.getTime()) || dueAt.getTime() <= Date.now()) {
-      setNotice('Enter a unique job ID, line or team, product or batch, whole-number target, and future due time.')
+    if (!id || !line || !product || !owner || owner.length > 120 || !Number.isSafeInteger(jobTarget) || jobTarget < 1 || Number.isNaN(dueAt.getTime()) || dueAt.getTime() <= Date.now()) {
+      setNotice('Enter a unique job ID, line or team, product or batch, responsible owner, whole-number target, and future due time.')
       return
     }
     const canonicalDueAt = dueAt.toISOString()
-    const job: ProductionJob = { id, line, product, target: jobTarget, output: 0, priority: jobDraft.priority, dueAt: canonicalDueAt }
+    const job: ProductionJob = { id, line, product, target: jobTarget, output: 0, owner, priority: jobDraft.priority, dueAt: canonicalDueAt }
     queueAction({
       kind: 'production_job',
       subjectId: id,
       summary: `Create ${id} for ${product}`,
       before: 'No production job',
-      after: `${line} · ${productionJobPriorityLabels[jobDraft.priority]} · due ${formatIssueDue(canonicalDueAt)} · target ${jobTarget.toLocaleString()}`,
+      after: `${line} · owner ${owner} · ${productionJobPriorityLabels[jobDraft.priority]} · due ${formatIssueDue(canonicalDueAt)} · target ${jobTarget.toLocaleString()}`,
       apply: async (record) => {
         await mutateProduction('production.job.created', record.commandId, productionActionProof(record), (current) => registerProductionJob(current, job, productionActionProof(record)))
         setJobId(id)
-        setJobDraft({ id: '', line: '', product: '', target: '', priority: 'normal', dueAt: defaultJobDueInput() })
+        setJobDraft({ id: '', line: '', product: '', target: '', owner: '', priority: 'normal', dueAt: defaultJobDueInput() })
       },
     })
   }
@@ -4519,6 +4534,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     scheduleTriggerRef.current = trigger
     setScheduleDraft({
       jobId: job.id,
+      owner: job.owner ?? '',
       priority: job.priority ?? 'normal',
       dueAt: job.dueAt ? localDateTimeInputValue(new Date(job.dueAt)) : defaultJobDueInput(),
     })
@@ -4534,6 +4550,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     if (!scheduleDraft) return
     const job = production.jobs.find((candidate) => candidate.id === scheduleDraft.jobId)
     const dueAt = new Date(scheduleDraft.dueAt)
+    const owner = scheduleDraft.owner.trim()
     if (!job || job.closure || job.output + (job.scrap ?? 0) >= job.target) {
       setNotice(`${scheduleDraft.jobId} is no longer active. Reload its current plan before review.`)
       return
@@ -4542,32 +4559,39 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       setNotice('Choose a future due time before reviewing the schedule.')
       return
     }
+    if (!owner || owner.length > 120) {
+      setNotice('Name one responsible owner of 1 to 120 characters before reviewing the plan.')
+      return
+    }
     const priority = scheduleDraft.priority
     const canonicalDueAt = dueAt.toISOString()
-    if (job.priority === priority && job.dueAt === canonicalDueAt) {
-      setNotice('Change the priority or due time before review.')
+    if (job.priority === priority && job.dueAt === canonicalDueAt && job.owner === owner) {
+      setNotice('Change the owner, priority, or due time before review.')
       return
     }
     const expectedRevision = production.revision
     const expectedPriority = job.priority
     const expectedDueAt = job.dueAt
+    const expectedOwner = job.owner
     const beforeSchedule = expectedPriority && expectedDueAt
       ? `${productionJobPriorityLabels[expectedPriority]} · due ${formatIssueDue(expectedDueAt)}`
       : 'Schedule not recorded · legacy job'
+    const beforeOwner = expectedOwner ? `owner ${expectedOwner}` : 'owner not recorded · legacy job'
     const queued = queueAction({
       kind: 'production_job_schedule',
       subjectId: job.id,
-      summary: `Update ${job.id} schedule`,
-      before: beforeSchedule,
-      after: `${productionJobPriorityLabels[priority]} · due ${formatIssueDue(canonicalDueAt)} · target and output unchanged`,
+      summary: `Update ${job.id} plan`,
+      before: `${beforeOwner} · ${beforeSchedule}`,
+      after: `owner ${owner} · ${productionJobPriorityLabels[priority]} · due ${formatIssueDue(canonicalDueAt)} · target and output unchanged`,
       apply: async (record) => {
         await mutateProduction('production.job.schedule_updated', record.commandId, productionActionProof(record), (current) => {
           const currentJob = current.jobs.find((candidate) => candidate.id === job.id)
           if (current.revision !== expectedRevision
             || !currentJob
             || currentJob.priority !== expectedPriority
-            || currentJob.dueAt !== expectedDueAt) return null
-          return updateProductionJobSchedule(current, job.id, priority, canonicalDueAt, productionActionProof(record))
+            || currentJob.dueAt !== expectedDueAt
+            || currentJob.owner !== expectedOwner) return null
+          return updateProductionJobPlan(current, job.id, priority, canonicalDueAt, owner, productionActionProof(record))
         })
       },
     }, scheduleTriggerRef.current)
@@ -4843,8 +4867,9 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
             <div className="form-row"><label>Job ID<input disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={80} onChange={(event) => setJobDraft((current) => ({ ...current, id: event.target.value }))} placeholder="JOB-002" required value={jobDraft.id} /></label><label>Line or team<input disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={120} onChange={(event) => setJobDraft((current) => ({ ...current, line: event.target.value }))} placeholder="Line 02" required value={jobDraft.line} /></label></div>
             <div className="form-row"><label>Product or batch<input disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={180} onChange={(event) => setJobDraft((current) => ({ ...current, product: event.target.value }))} placeholder="Product name" required value={jobDraft.product} /></label><label>Target units<input disabled={!productionCanWrite || Boolean(pendingAction)} min="1" onChange={(event) => setJobDraft((current) => ({ ...current, target: event.target.value }))} required step="1" type="number" value={jobDraft.target} /></label></div>
             <div className="form-row"><label>Priority<select disabled={!productionCanWrite || Boolean(pendingAction)} onChange={(event) => setJobDraft((current) => ({ ...current, priority: event.target.value as ProductionJobPriority }))} value={jobDraft.priority}>{productionJobPriorities.map((priority) => <option key={priority} value={priority}>{productionJobPriorityLabels[priority]}</option>)}</select></label><label>Due time<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction)} min={localDateTimeInputValue(new Date())} onChange={(event) => setJobDraft((current) => ({ ...current, dueAt: event.target.value }))} required type="datetime-local" value={jobDraft.dueAt} /></label></div>
+            <label>Responsible owner<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={120} onChange={(event) => setJobDraft((current) => ({ ...current, owner: event.target.value }))} placeholder="Named person or role" required value={jobDraft.owner} /></label>
             <button className="core-button" disabled={!productionCanWrite || Boolean(pendingAction)} type="submit">Review job</button>
-            <p className="panel-copy">Priority and due time set the visible run order. The accountable operator, reason, and source record are confirmed in the next step.</p>
+            <p className="panel-copy">Owner, priority, and due time make responsibility and run order visible. The accountable operator, reason, and source record are confirmed in the next step.</p>
           </form>
         </details>
       </section>
@@ -4896,7 +4921,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         <div className="panel-head"><div><span className="core-eyebrow">Plant plan</span><h2 id="job-schedule-title">Change {scheduleDraft.jobId} plan</h2></div><button aria-label="Close job schedule" className="text-link" onClick={closeJobSchedule} type="button">Close</button></div>
         <form autoComplete="off" className="core-form" onSubmit={reviewJobSchedule}>
           <div className="form-row"><label>Priority<select disabled={!productionCanWrite || Boolean(pendingAction)} onChange={(event) => setScheduleDraft((current) => current ? { ...current, priority: event.target.value as ProductionJobPriority } : current)} value={scheduleDraft.priority}>{productionJobPriorities.map((priority) => <option key={priority} value={priority}>{productionJobPriorityLabels[priority]}</option>)}</select></label><label>Due time<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction)} min={localDateTimeInputValue(new Date())} onChange={(event) => setScheduleDraft((current) => current ? { ...current, dueAt: event.target.value } : current)} required type="datetime-local" value={scheduleDraft.dueAt} /></label></div>
-          <p className="panel-copy">This changes run order only. Target, output, quality hold, materials, machines, and accounting stay unchanged.</p>
+          <label>Responsible owner<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={120} onChange={(event) => setScheduleDraft((current) => current ? { ...current, owner: event.target.value } : current)} placeholder="Named person or role" required value={scheduleDraft.owner} /></label>
+          <p className="panel-copy">This records responsibility and run order only. It grants no access, assigns no machine, and dispatches no work. Target, output, quality hold, materials, and accounting stay unchanged.</p>
           <p className="panel-copy">Nothing changes until the accountable operator confirms a reason and evidence.</p>
           <div className="form-actions"><button className="core-button" onClick={closeJobSchedule} type="button">Cancel</button><button className="core-button primary" disabled={!productionCanWrite || Boolean(pendingAction)} type="submit">Review plan</button></div>
         </form>
@@ -5012,7 +5038,8 @@ function JobList({ disabled = false, jobs, now, onSchedule }: { disabled?: boole
     const scheduleLabel = scheduled
       ? `${productionJobPriorityLabels[job.priority ?? 'normal']} · ${overdue ? 'OVERDUE ' : job.closure ? 'Was due ' : 'Due '}${formatIssueDue(job.dueAt ?? '')}`
       : 'Schedule not recorded · legacy job'
-    return <article key={job.id}><div><span>{job.id} · {job.line}{job.qualityHold ? ' · QUALITY HOLD' : ''}{job.closure ? ' · CLOSED SHORT' : ''}</span><strong>{job.product}</strong><small className={`job-schedule${overdue ? ' overdue' : ''}`} data-priority={job.priority ?? 'legacy'}>{scheduleLabel}</small>{job.closure ? <small>Closed {formatIssueDue(job.closure.closedAt)} by {job.closure.closedBy} · Shift {job.closure.shiftRef} · {job.closure.remainingUnits.toLocaleString()} not produced</small> : null}{job.qualityHold ? <small>Held by {job.qualityHold.heldBy} · Evidence: {job.qualityHold.evidenceReference}</small> : null}{onSchedule && !job.closure && accounted < job.target ? <button className="text-link" disabled={disabled} onClick={(event) => onSchedule(job, event.currentTarget)} type="button">Change plan</button> : null}</div><div className="job-progress"><span><i style={{ width: `${progress}%` }} /></span><small>{job.output.toLocaleString()} good · {scrap.toLocaleString()} scrap · {accounted.toLocaleString()} / {job.target.toLocaleString()}{job.closure ? ` · ${job.closure.remainingUnits.toLocaleString()} closed short` : ''}</small></div></article>
+    const ownerLabel = job.owner ? `Owner ${job.owner}` : 'Owner not recorded · legacy job'
+    return <article key={job.id}><div><span>{job.id} · {job.line}{job.qualityHold ? ' · QUALITY HOLD' : ''}{job.closure ? ' · CLOSED SHORT' : ''}</span><strong>{job.product}</strong><small className={`job-schedule${overdue ? ' overdue' : ''}`} data-priority={job.priority ?? 'legacy'}>{ownerLabel} · {scheduleLabel}</small>{job.closure ? <small>Closed {formatIssueDue(job.closure.closedAt)} by {job.closure.closedBy} · Shift {job.closure.shiftRef} · {job.closure.remainingUnits.toLocaleString()} not produced</small> : null}{job.qualityHold ? <small>Held by {job.qualityHold.heldBy} · Evidence: {job.qualityHold.evidenceReference}</small> : null}{onSchedule && !job.closure && accounted < job.target ? <button className="text-link" disabled={disabled} onClick={(event) => onSchedule(job, event.currentTarget)} type="button">Change plan</button> : null}</div><div className="job-progress"><span><i style={{ width: `${progress}%` }} /></span><small>{job.output.toLocaleString()} good · {scrap.toLocaleString()} scrap · {accounted.toLocaleString()} / {job.target.toLocaleString()}{job.closure ? ` · ${job.closure.remainingUnits.toLocaleString()} closed short` : ''}</small></div></article>
   })}</div>
 }
 
