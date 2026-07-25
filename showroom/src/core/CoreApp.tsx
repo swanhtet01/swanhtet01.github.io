@@ -1375,6 +1375,7 @@ function RuntimeBadge({ status }: { status: RuntimeStatus }) {
 export function CoreLayout() {
   const location = useLocation()
   const runtime = useRuntimeHealth()
+  const workspaceMainRef = useRef<HTMLElement>(null)
   const routeName = location.pathname.startsWith('/products/website/')
     ? 'Website'
     : location.pathname.startsWith('/products/ecommerce/')
@@ -1401,7 +1402,7 @@ export function CoreLayout() {
 
   return (
     <div className="core-shell">
-      <a className="core-skip" href="#workspace-main">Skip to workspace</a>
+      <a className="core-skip" href="#workspace-main" onClick={() => requestAnimationFrame(() => workspaceMainRef.current?.focus())}>Skip to workspace</a>
       <aside className="core-sidebar">
         <Brand />
         <nav className="core-nav" aria-label="Application">
@@ -1412,7 +1413,7 @@ export function CoreLayout() {
       <div className="core-stage">
         <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>{location.pathname.startsWith('/work/') ? 'SuperMega HQ' : 'SuperMega'}</span></div><div className="topbar-meta"><NavLink to="/settings/">Settings</NavLink><RuntimeBadge status={runtime.status} /></div></header>
         <nav className="mobile-nav" aria-label="Mobile application">{navigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={item.end} key={item.to} to={item.to}>{item.label}</NavLink>)}</nav>
-        <main id="workspace-main" className="core-main"><Outlet context={runtime} /></main>
+        <main id="workspace-main" className="core-main" ref={workspaceMainRef} tabIndex={-1}><Outlet context={runtime} /></main>
       </div>
     </div>
   )

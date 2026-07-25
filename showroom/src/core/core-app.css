@@ -32,7 +32,7 @@ a { color: inherit; }
 .core-sidebar { position: fixed; inset: 0 auto 0 0; z-index: 30; width: 184px; display: flex; flex-direction: column; border-right: 1px solid var(--core-line); padding: 20px 16px 16px; background: rgba(238,244,239,.96); backdrop-filter: blur(20px); }
 .core-stage { min-width: 0; min-height: 0; grid-column: 2; display: grid; grid-template-rows: 56px minmax(0,1fr); }
 .core-main { width: min(calc(100% - 40px), 1420px); height: 100%; min-width: 0; min-height: 0; margin: 0 auto; padding: 20px 0; overflow: hidden; }
-.core-skip { position: fixed; z-index: 100; top: -60px; left: 230px; border: 1px solid var(--core-green); border-radius: 5px; padding: 9px 12px; background: var(--core-panel); text-decoration: none; }
+.core-skip { position: fixed; z-index: 100; top: -60px; left: 230px; min-height: 44px; display: inline-flex; align-items: center; box-sizing: border-box; border: 1px solid var(--core-green); border-radius: 5px; padding: 9px 12px; background: var(--core-panel); text-decoration: none; }
 .core-skip:focus { top: 10px; }
 
 .core-brand { min-height: 38px; display: inline-flex; align-items: center; gap: 11px; text-decoration: none; }
@@ -552,7 +552,7 @@ textarea { min-height: 72px; resize: vertical; }
 .team-mobile-back, .agent-mobile-back { display: none; }
 
 .evidence-disclosure { margin-top: 14px; border-top: 1px solid var(--core-line); }
-.evidence-disclosure > summary, .decision-workspace-disclosure > summary, .company-brief-disclosure > summary { min-height: 42px; display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--core-muted); font-size: 11px; cursor: pointer; list-style: none; }
+.evidence-disclosure > summary, .decision-workspace-disclosure > summary, .company-brief-disclosure > summary { min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--core-muted); font-size: 11px; cursor: pointer; list-style: none; }
 .evidence-disclosure > summary::-webkit-details-marker, .decision-workspace-disclosure > summary::-webkit-details-marker, .company-brief-disclosure > summary::-webkit-details-marker, .compact-disclosure > summary::-webkit-details-marker { display: none; }
 .evidence-disclosure > summary::before, .decision-workspace-disclosure > summary::before, .company-brief-disclosure > summary::before { color: var(--core-green); font-family: var(--core-mono); content: ">_"; }
 .evidence-disclosure > summary span, .decision-workspace-disclosure > summary span { margin-right: auto; color: var(--core-ink); font-weight: 760; }
@@ -613,10 +613,10 @@ textarea { min-height: 72px; resize: vertical; }
 .decision-form-panel { overflow: auto; border-left: 1px solid var(--core-line); padding-left: 14px; }
 .decision-form-panel > h2 { margin: 4px 0 10px; font-size: 16px; }
 
-.release-review-link { min-height: 34px; display: inline-flex; align-items: center; margin-top: 5px; color: var(--core-green); font-size: 10px; font-weight: 740; text-decoration: none; }
+.release-review-link { min-height: 44px; display: inline-flex; align-items: center; margin-top: 5px; color: var(--core-green); font-size: 10px; font-weight: 740; text-decoration: none; }
 .company-brief-disclosure { margin-top: 5px; border-top: 1px solid var(--core-line); }
 .company-brief-disclosure > summary { justify-content: flex-start; color: var(--core-ink); font-weight: 740; }
-.company-brief-disclosure > .text-link { min-height: 30px; }
+.company-brief-disclosure > .text-link { min-height: 44px; }
 
 .operations-toolbar-actions { display: flex; align-items: center; gap: 10px; }
 
