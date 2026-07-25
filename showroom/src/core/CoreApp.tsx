@@ -1292,7 +1292,7 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
   }
 
   return <dialog aria-labelledby="action-confirm-title" className="accountable-action-gate" onCancel={(event) => { event.preventDefault(); if (!busy && !action.confirmation) onCancel() }} ref={dialogRef}>
-    <div className="action-change"><span className="core-eyebrow">Confirm change</span><h2 id="action-confirm-title" ref={headingRef} tabIndex={-1}>{action.summary}</h2><p><strong>{action.before}</strong><span>→</span><strong>{action.after}</strong></p></div>
+    <div className="action-change"><span className="core-eyebrow">Confirm change</span><h2 id="action-confirm-title" ref={headingRef} tabIndex={-1}>{action.summary}</h2><dl className="action-change-flow"><div><dt>Current evidence</dt><dd>{action.before}</dd></div><div><dt>After confirmation</dt><dd>{action.after}</dd></div></dl></div>
     <form className="core-form action-confirm-form" onSubmit={(event) => void submit(event)}>
       {authenticatedActor
         ? <label>Your account<input readOnly value={authenticatedActor.label} /></label>
@@ -3242,9 +3242,9 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     queueAction({
       kind: 'order_create',
       subjectId: order.id,
-      summary: `Confirm ${order.id} with ${orderLines.length} item ${orderLines.length === 1 ? 'line' : 'lines'}`,
-      before: `${lineReview}${sourceRecordId ? ` · ${sourceRecordId} reviewed` : ''}`,
-      after: `${order.status} · owner: confirming operator · promised ${formatTime(canonicalPromisedAt)} · ${fulfilmentLabel(order.fulfilment)} · ${order.fulfilmentReference} · ${reservationReview}`,
+      summary: ecommerceDraft ? 'Review Ecommerce order' : `Confirm ${order.id} with ${orderLines.length} item ${orderLines.length === 1 ? 'line' : 'lines'}`,
+      before: `${sourceRecordId ? `Request ${sourceRecordId} · ` : ''}Customer ${order.customer} · ${lineReview}`,
+      after: `Order ${order.id} · Payment ${payment} · Owner confirming operator · Promise ${formatIssueDue(canonicalPromisedAt)} · ${fulfilmentLabel(order.fulfilment)} · Stock ${reservationReview}`,
       evidenceReferenceSuggestion: sourceEvidence,
       evidenceReferenceLocked: Boolean(sourceRecordId),
       apply: async (action) => {

@@ -199,9 +199,10 @@ textarea { min-height: 72px; resize: vertical; }
 .accountable-action-gate[open] { display: grid; gap: 20px; }
 .accountable-action-gate::backdrop { background: rgba(19,25,41,.5); backdrop-filter: blur(6px); }
 .action-change h2 { margin: 5px 0 10px; font-size: 22px; }
-.action-change p { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin: 0; color: var(--core-quiet); font-family: var(--core-mono); font-size: 12px; line-height: 1.5; }
-.action-change p strong { color: var(--core-muted); font-weight: 700; }
-.action-change p span { color: var(--core-green); }
+.action-change-flow { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin: 0; }
+.action-change-flow > div { min-width: 0; border: 1px solid var(--core-line); border-radius: 10px; padding: 10px; background: var(--core-surface-soft); }
+.action-change-flow dt { color: var(--core-green); font-family: var(--core-mono); font-size: 9px; font-weight: 760; letter-spacing: .06em; text-transform: uppercase; }
+.action-change-flow dd { margin: 5px 0 0; overflow-wrap: anywhere; color: var(--core-muted); font-family: var(--core-mono); font-size: 12px; font-weight: 700; line-height: 1.5; }
 .action-confirm-form { grid-template-columns: 1fr; align-items: end; gap: 12px; }
 .action-confirm-form .form-actions { min-width: max-content; align-items: center; }
 .action-confirm-form > .form-notice { grid-column: 1/-1; }
@@ -895,6 +896,7 @@ textarea { min-height: 72px; resize: vertical; }
   .order-submit-bar[data-ecommerce-payment="true"] { grid-template-columns: 1fr; }
   .decision-dialog { inset: auto 0 0; width: 100%; max-height: 92svh; margin: 0 auto; border-radius: 10px 10px 0 0; padding: 15px; }
   .accountable-action-gate { inset: auto 0 0; width: 100%; max-height: 92svh; margin: 0 auto; border-radius: 16px 16px 0 0; padding: 18px; }
+  .action-change-flow { grid-template-columns: 1fr; }
   .production-issue-dialog { inset: auto 0 0; width: 100%; max-height: 92svh; margin: 0 auto; border-radius: 16px 16px 0 0; padding: 18px; }
   .decision-packet-meta, .decision-outcomes, .decision-fields { grid-template-columns: 1fr; }
   .decision-packet-meta span, .decision-outcomes span { border-right: 0; border-bottom: 1px solid var(--core-line); }
