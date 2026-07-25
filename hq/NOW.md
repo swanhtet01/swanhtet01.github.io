@@ -32,7 +32,7 @@ SuperMega HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are
 
 ## Implemented reality
 
-- Shop runs at `/shop/` with guarded Orders and Stock records on internal `commerce`; the old operations URL is compatibility-only. Intake, reservation, fulfilment, payment, cancellation, refunds, movements, close, and supplier purchase orders with partial receipt or remainder cancellation are recorded. Supplier messaging, payment, and accounting remain outside the workflow.
+- Shop runs at `/shop/` with guarded Orders and Stock records on internal `commerce`; the old operations URL is compatibility-only. It records intake, reservation, fulfilment, payment, cancellation, refunds, available-stock counts, movements, close, and supplier purchase orders. Supplier messaging, payment, and accounting remain outside the workflow.
 - Plant runs at `/plant/` with Jobs and Problems on internal `production`; the old operations URL is compatibility-only. Its accountable record covers jobs, good/scrap output, job-linked material use, quality, issues, equipment observations, downtime, and shift handoff. Material use does not adjust inventory, purchasing, costing, accounting, or equipment.
 - Website runs at `/products/website/` with Site, Preview, and Review. Drafts survive reload, reject stale overwrite, and use backup-first repair. `?view=publish` resumes Review; invalid links or recovered edits safely return to Edit. Review creates a deterministic site file, not a deployment.
 - Ecommerce builds from read-only Shop data. Managed setup is revisioned and catalogue-bound; receipts require the saved storefront, current catalogue, selected available SKU, and exact preview digest to agree. Local setup stays on-device. Shop revalidates and gates every consequence.
@@ -43,14 +43,14 @@ SuperMega HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are
 ## Verified baseline
 
 - Checkpoint `d077b9b` is the accepted local product and database-authority baseline.
-- App lint/build, the full local release/security/database/HQ contracts, and all 136 Python tests pass for the current product checkpoint.
+- App lint/build, the full local release/security/database/HQ contracts, and all 139 Python tests pass for the current product checkpoint.
 - The complete Showroom dependency audit reports zero known vulnerabilities. React Router is on the patched v8 line, the app declares Node `>=22.22.0`, and the lint toolchain preserves caught error causes.
-- HQ remains its own route chunk; the largest JavaScript chunk is 474,467 bytes, leaving 25,533 bytes under the hard gate.
-- Focused app-build coverage includes 124 Shop, 184 Plant, 74 Website, 11 managed-Website, 12 storefront, 15 request, 16 managed-storefront, and 16 Ecommerce handoff runtime checks.
-- A rendered isolated Shop journey creates an internal order for 10 units, receives 4, then cancels the remaining 6 with exact stock and ledger changes. Desktop and 390 px layouts have no horizontal overflow, mobile actions are 44 px, column headers remain accessible, drafts and focus are preserved, and confirmation copy creates no supplier, payment, or accounting claim.
+- HQ remains its own route chunk; the largest JavaScript chunk is 479,340 bytes, leaving 20,660 bytes under the hard gate.
+- Focused app-build coverage includes 144 Shop, 184 Plant, 74 Website, 11 managed-Website, 12 storefront, 15 request, 16 managed-storefront, and 16 Ecommerce handoff checks.
+- Rendered isolated Shop journeys prove purchase `0/10 → 4/10 → cancelled 6` and an accountable available-stock count `8 → 6` with one `-2` movement. Desktop and 390 px layouts have no horizontal overflow; mobile controls are 44 px and unfinished count/order drafts survive blocked switching.
 - A rendered Plant journey records fractional material use with lot and shift evidence, derives handoff totals, and preserves a named stale-job draft. Desktop and 390 px layouts have no horizontal overflow; mobile controls are 44 px.
 - PostgreSQL 17.10 passed 32 checks across two TLS clusters, including exact approval/event restore equality and the explicit trusted-server identity boundary.
-- Local `d077b9b` is +140 over cached `origin/main` `6885c320` and +94 over cached integration `338b6fd`. Live GitHub/Vercel state was not refreshed; no push, merge, or deployment occurred.
+- Local `f999b83` is +142 over cached `origin/main` `6885c320` and +96 over cached integration `338b6fd`. Live GitHub/Vercel state was not refreshed; no push, merge, or deployment occurred.
 - Both canonical domains serve matching Vercel release identity from `supermega-public`. `demo.supermega.dev` returns 404; `shop.supermega.dev` has no DNS record.
 - `supermegabase` is healthy PostgreSQL 17.6 but has one older migration, no `app_private`, and none of the six private-trial migrations. Its 27 public tables have RLS and no policies; it is not an activated rehearsal target.
 
