@@ -58,12 +58,13 @@ class FakeWorkerResponse:
 
 class CloudRuntimeTests(unittest.TestCase):
     worker_url = "https://worker.supermega.dev/api/internal/agent-runs/process-queue"
+    worker_secret = "0123456789abcdef0123456789abcdef"
 
     @staticmethod
     def _environment(**overrides: str) -> dict[str, str]:
         return {
             "CRON_SECRET": "cron-secret",
-            "SUPERMEGA_INTERNAL_CRON_TOKEN": "worker-secret",
+            "SUPERMEGA_INTERNAL_CRON_TOKEN": CloudRuntimeTests.worker_secret,
             "SUPERMEGA_CLOUD_TASKS_WORKER_URL": CloudRuntimeTests.worker_url,
             "SUPERMEGA_CLOUD_TASKS_ALLOWED_HOSTS": "worker.supermega.dev",
             **overrides,
@@ -124,7 +125,7 @@ class CloudRuntimeTests(unittest.TestCase):
                 },
             )
             bearer = client.get(QUEUE_CRON_PATH, headers={"authorization": "Bearer cron-secret"})
-            explicit_header = client.get(QUEUE_CRON_PATH, headers={"x-cron-secret": "worker-secret"})
+            explicit_header = client.get(QUEUE_CRON_PATH, headers={"x-cron-secret": self.worker_secret})
 
         for response in (missing, wrong, malformed, ambiguous):
             self.assertEqual(response.status_code, 401)
@@ -177,7 +178,7 @@ class CloudRuntimeTests(unittest.TestCase):
         self.assertEqual(queue_payload["budget_grant"]["max_runs"], 2)
         verify_agent_budget_grant(
             queue_payload["budget_grant"],
-            secret="worker-secret",
+            secret=self.worker_secret,
             requested_job_types=queue_payload["job_types"],
         )
         self.assertEqual(daily_payload["cycle"], "daily")
@@ -198,7 +199,7 @@ class CloudRuntimeTests(unittest.TestCase):
         self.assertEqual(log_payload["status"], "accepted")
         self.assertTrue(log_payload["worker_invoked"])
         self.assertGreaterEqual(log_payload["duration_ms"], 0)
-        self.assertNotIn("worker-secret", captured.records[0].getMessage())
+        self.assertNotIn(self.worker_secret, captured.records[0].getMessage())
 
     def test_non_https_unlisted_and_query_worker_urls_are_rejected_without_network_access(self) -> None:
         cases = (
@@ -262,8 +263,8 @@ class CloudRuntimeTests(unittest.TestCase):
 
         worker_request = open_worker.call_args.args[0]
         request_headers = {key.lower(): value for key, value in worker_request.header_items()}
-        self.assertEqual(request_headers["authorization"], "Bearer worker-secret")
-        self.assertEqual(request_headers["x-supermega-cron-token"], "worker-secret")
+        self.assertEqual(request_headers["authorization"], f"Bearer {self.worker_secret}")
+        self.assertEqual(request_headers["x-supermega-cron-token"], self.worker_secret)
         self.assertEqual(worker_request.full_url, self.worker_url)
 
     def test_missing_side_effect_report_fails_closed(self) -> None:
@@ -344,6 +345,7 @@ class CloudRuntimeTests(unittest.TestCase):
 
 
 class AgentGovernanceTests(unittest.TestCase):
+    grant_secret = "0123456789abcdef0123456789abcdef"
     job_types = [
         "revenue_scout",
         "list_clerk",
@@ -365,14 +367,14 @@ class AgentGovernanceTests(unittest.TestCase):
     def test_signed_grants_are_bounded_tamper_evident_and_expiring(self) -> None:
         observed_at = datetime(2026, 7, 26, 6, 0, tzinfo=timezone.utc)
         grant = issue_agent_budget_grant(
-            secret="worker-secret",
+            secret=self.grant_secret,
             cycle="queue",
             job_types=["task_triage", "ops_watch"],
             now=observed_at,
         )
         verified = verify_agent_budget_grant(
             grant,
-            secret="worker-secret",
+            secret=self.grant_secret,
             requested_job_types=["task_triage", "ops_watch"],
             now=observed_at + timedelta(minutes=1),
         )
@@ -381,12 +383,21 @@ class AgentGovernanceTests(unittest.TestCase):
 
         tampered = {**grant, "max_runs": 1}
         with self.assertRaises(AgentGovernanceError) as tampered_error:
-            verify_agent_budget_grant(tampered, secret="worker-secret", now=observed_at)
+            verify_agent_budget_grant(tampered, secret=self.grant_secret, now=observed_at)
         self.assertEqual(tampered_error.exception.code, "budget_grant_signature_invalid")
 
         with self.assertRaises(AgentGovernanceError) as expired_error:
-            verify_agent_budget_grant(grant, secret="worker-secret", now=observed_at + timedelta(minutes=6))
+            verify_agent_budget_grant(grant, secret=self.grant_secret, now=observed_at + timedelta(minutes=6))
         self.assertEqual(expired_error.exception.code, "budget_grant_expired")
+
+        with self.assertRaises(AgentGovernanceError) as weak_secret_error:
+            issue_agent_budget_grant(
+                secret="worker-secret",
+                cycle="queue",
+                job_types=["task_triage"],
+                now=observed_at,
+            )
+        self.assertEqual(weak_secret_error.exception.code, "budget_grant_secret_invalid")
 
         with patch.dict(os.environ, {"SUPERMEGA_AGENT_MAX_RUNNING": "99"}):
             with self.assertRaises(AgentGovernanceError) as policy_error:
@@ -405,6 +416,8 @@ class AgentGovernanceTests(unittest.TestCase):
         self.assertEqual(idle["target_active_executions"], 0)
         self.assertEqual(idle["idle_registered_specialists"], 175)
         self.assertFalse(idle["registered_specialists_consume_compute"])
+        self.assertTrue(idle["registry_attention"])
+        self.assertEqual(idle["limits"]["max_registered_specialists"], 256)
 
         busy = plan_agent_capacity(
             queued_job_types=self.job_types,
@@ -551,7 +564,7 @@ class AgentGovernanceTests(unittest.TestCase):
             for job_type in ("task_triage", "ops_watch"):
                 create_agent_run(database_url, workspace_id=workspace_id, job_type=job_type)
             grant = issue_agent_budget_grant(
-                secret="worker-secret",
+                secret=self.grant_secret,
                 cycle="queue",
                 job_types=["task_triage", "ops_watch"],
             )
@@ -561,7 +574,7 @@ class AgentGovernanceTests(unittest.TestCase):
                 job_types=["task_triage", "ops_watch"],
                 limit=8,
                 budget_grant=grant,
-                grant_secret="worker-secret",
+                grant_secret=self.grant_secret,
                 require_budget_grant=True,
             )
             self.assertEqual(len(claimed), 2)
@@ -573,7 +586,7 @@ class AgentGovernanceTests(unittest.TestCase):
                     job_types=["task_triage", "ops_watch"],
                     limit=8,
                     budget_grant=grant,
-                    grant_secret="worker-secret",
+                    grant_secret=self.grant_secret,
                     require_budget_grant=True,
                 )
             self.assertEqual(replay_error.exception.code, "budget_grant_replayed")

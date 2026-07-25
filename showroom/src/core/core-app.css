@@ -553,7 +553,7 @@ textarea { min-height: 72px; resize: vertical; }
 .simple-toolbar { justify-content: flex-start; }
 .team-picker { min-width: 220px; display: flex; align-items: center; gap: 9px; }
 .team-picker > span { color: var(--core-quiet); font-family: var(--core-mono); font-size: 10px; font-weight: 760; text-transform: uppercase; }
-.team-picker select { min-height: 38px; padding-block: 0; }
+.team-picker select { min-height: 44px; padding-block: 0; }
 .simple-toolbar .view-tabs { margin-left: auto; }
 .team-mobile-back, .agent-mobile-back { display: none; }
 

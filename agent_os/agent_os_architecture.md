@@ -1,87 +1,51 @@
-# AgentOS Infrastructure Architecture
+# SuperMega agent operating architecture
 
-## Overview
-This document outlines the architecture for **AgentOS**, a distributed AI agent operating system deployed on AWS. It leverages **OpenManus** for general-purpose agent orchestration and **LangGraph** for stateful, complex workflows (Logistics/Finance). The system is containerized using Docker and managed via a central API Gateway.
+This directory contains the machine-readable workforce registry used by the internal SuperMega control surfaces. It is not a second application, a customer product, or evidence that every registered specialist is running.
 
-## Core Components
+## Runtime authority
 
-### 1. The "Brain" (Orchestrator)
-*   **Role**: High-level task delegation and state management.
-*   **Technology**: **OpenManus** (running in `direct` mode).
-*   **Function**: Receives natural language commands from the CEO (User), breaks them down into sub-tasks, and routes them to specialized department agents.
+The active managed runtime is the queue and governance path in `mark1_pilot/agent_governance.py`, `mark1_pilot/enterprise_store.py`, `supermega_runtime/cloud_runtime.py`, and the authenticated API boundary. The old OpenManus/LangGraph/AWS compose sketch is retired and must not be deployed.
 
-### 2. Department Sub-machines (Specialized Agents)
-*   **Logistics Core**:
-    *   **Framework**: **LangGraph** (Stateful workflow).
-    *   **Responsibility**: Inventory scanning, PO drafting, Shipping tracking.
-    *   **Tools**: Google Sheets API, **ERPNext API**.
-*   **Finance Reactor**:
-    *   **Framework**: **LangGraph** (Stateful workflow).
-    *   **Responsibility**: Invoice auditing, Cash flow forecasting, Stripe payments.
-    *   **Tools**: **ERPNext API**, Stripe API, Banking APIs.
-*   **Code Foundry**:
-    *   **Framework**: **OpenManus** (Coding agent).
-    *   **Responsibility**: System maintenance, feature development, self-healing.
-    *   **Tools**: Git, Docker, AWS CLI.
+Registry size and execution capacity are separate:
 
-### 3. The "Nervous System" (Communication)
-*   **API Gateway**: A **FastAPI** server that exposes endpoints for the web dashboard to poll status and logs.
-*   **Message Queue**: **Redis** for inter-agent communication and task queuing.
-*   **Memory Store**: **PostgreSQL** (via ERPNext or standalone) for long-term agent memory and state persistence.
+- registered specialists are reusable role definitions and consume no compute by themselves;
+- no queued work means zero active execution;
+- at most four unique job families may run concurrently by default;
+- one job family may have only one in-flight reservation;
+- the queue, daily runs, daily work units, batch size, retries, and lease duration are bounded;
+- every worker claim receives a short-lived signed budget grant and one consumable reservation;
+- idempotency, lease expiry, audit records, and human approval boundaries fail closed.
 
-## Infrastructure Stack (Docker Compose)
+A registry containing 175 specialists is therefore dormant unless work is queued. It is still an information-design warning: duplicate or unused roles should be reused, paused, or removed from the active roster instead of being presented as a 175-person company.
 
-```yaml
-version: '3.8'
-services:
-  # The Brain
-  orchestrator:
-    image: openmanus/core:latest
-    environment:
-      - MODE=orchestrator
-    depends_on:
-      - redis
-      - db
+## Small company model
 
-  # Department Agents
-  logistics-core:
-    build: ./agents/logistics
-    environment:
-      - AGENT_TYPE=logistics
-      - GOOGLE_SHEETS_ID=...
-    volumes:
-      - ./logs:/app/logs
+SuperMega has four internal operating teams:
 
-  finance-reactor:
-    build: ./agents/finance
-    environment:
-      - AGENT_TYPE=finance
-      - ERPNEXT_URL=...
-    volumes:
-      - ./logs:/app/logs
+1. Product — customer evidence, portfolio, acceptance, and learning.
+2. Engineering — implementation, verification, security, incidents, and releases.
+3. Growth — positioning, onboarding, qualified leads, and draft communications.
+4. Finance / Risk — spend, privacy, access, exceptions, and approval evidence.
 
-  # Infrastructure
-  api-gateway:
-    build: ./gateway
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./logs:/app/logs
+The customer portfolio remains Shop, Plant, Website, and Ecommerce. AI assistance is a shared capability. Agent teams live under HQ at `/work/?view=agents`; they are not additional products.
 
-  redis:
-    image: redis:alpine
-  
-  db:
-    image: postgres:15
-```
+## Consequential-action boundary
 
-## Deployment Strategy
-1.  **Provision AWS Instance**: EC2 (t3.xlarge or higher) or Lightsail.
-2.  **Install Docker & Compose**: Standard setup.
-3.  **Deploy Stack**: `docker-compose up -d`.
-4.  **Connect Dashboard**: Point the React frontend to the AWS IP address (e.g., `http://aws-ip:8000`).
+Agents may inspect approved sources, prepare drafts, make bounded local changes, run tests, and assemble evidence. They may not independently send messages, spend money, change access, expose data, publish, merge, deploy, alter domains, enable production writes, execute payments/refunds, or control equipment.
 
-## Next Steps
-1.  Create the `docker-compose.yml` file.
-2.  Write the `Dockerfile` for the specialized agents.
-3.  Develop the **FastAPI Gateway** to serve logs to the frontend.
+Every consequential action requires an attributed human decision with scope, evidence, and time. An executor cannot waive a failed verification gate or approve its own release.
+
+## Security baseline
+
+- Secrets stay server-side and budget-signing secrets contain at least 32 UTF-8 bytes.
+- Customer and operational data are tenant-scoped with deny-by-default authorization.
+- Storage buckets are private by default; anonymous or broad authenticated listing is forbidden. Downloads use short-lived, purpose-bound access after authorization.
+- Untrusted files, webpages, prompts, and connector content never become instructions or canonical memory without validation and provenance.
+- Logs are structured and bounded; they exclude credentials and raw customer payloads.
+- Vercel releases require immutable commit identity, preflight checks, rollback evidence, and a bounded post-deploy error scan. Observability configuration is an owner-gated infrastructure change.
+
+## Operating loop
+
+`signal → one owner → bounded work → independent verification → human gate → release or rollback → measured learning`
+
+Scale comes from reusable templates and demand-driven execution, not from keeping idle agents alive.

@@ -64,6 +64,7 @@ class AgentWorkforcePolicy:
     max_daily_runs: int = 64
     max_daily_units: int = 96
     max_batch_jobs: int = 5
+    max_registered_specialists: int = 256
     lease_seconds: int = 300
 
     @property
@@ -78,6 +79,7 @@ class AgentWorkforcePolicy:
             "max_daily_runs": self.max_daily_runs,
             "max_daily_units": self.max_daily_units,
             "max_batch_jobs": self.max_batch_jobs,
+            "max_registered_specialists": self.max_registered_specialists,
             "lease_seconds": self.lease_seconds,
             "job_units": dict(AGENT_JOB_UNITS),
             "job_daily_limits": dict(AGENT_JOB_DAILY_LIMITS),
@@ -112,6 +114,7 @@ def load_agent_workforce_policy() -> AgentWorkforcePolicy:
         max_daily_runs=_bounded_environment_int("SUPERMEGA_AGENT_MAX_DAILY_RUNS", 64, 1, 128),
         max_daily_units=_bounded_environment_int("SUPERMEGA_AGENT_MAX_DAILY_UNITS", 96, 1, 256),
         max_batch_jobs=_bounded_environment_int("SUPERMEGA_AGENT_MAX_BATCH_JOBS", 5, 1, 7),
+        max_registered_specialists=_bounded_environment_int("SUPERMEGA_AGENT_MAX_REGISTERED_SPECIALISTS", 256, 4, 10_000),
         lease_seconds=_bounded_environment_int("SUPERMEGA_AGENT_LEASE_SECONDS", 300, 30, 900),
     )
     if policy.max_daily_runs < policy.max_running:
@@ -195,10 +198,14 @@ def plan_agent_capacity(
     """Plan useful execution demand without treating a specialist roster as workers."""
 
     active_policy = policy or load_agent_workforce_policy()
-    if type(registered_specialists) is not int or registered_specialists < 0 or registered_specialists > 100_000:
+    if (
+        type(registered_specialists) is not int
+        or registered_specialists < 0
+        or registered_specialists > active_policy.max_registered_specialists
+    ):
         raise AgentGovernanceError(
             "agent_capacity_state_invalid",
-            "registered_specialists must be a whole number between 0 and 100000.",
+            f"registered_specialists must be a whole number between 0 and {active_policy.max_registered_specialists}.",
         )
 
     queued = _agent_job_sequence(queued_job_types, field="queued_job_types")
@@ -289,6 +296,7 @@ def plan_agent_capacity(
         "recommended_claim_work_units": selected_units,
         "target_active_executions": target_active_executions,
         "idle_registered_specialists": max(0, registered_specialists - target_active_executions),
+        "registry_attention": registered_specialists > max(active_policy.max_running * 16, 64),
         "scale_to_zero": target_active_executions == 0,
         "deferred_jobs": len(queued) - len(selected),
         "deferred_reasons": deferred,
@@ -304,6 +312,7 @@ def plan_agent_capacity(
             "max_batch_jobs": active_policy.max_batch_jobs,
             "max_daily_runs": active_policy.max_daily_runs,
             "max_daily_units": active_policy.max_daily_units,
+            "max_registered_specialists": active_policy.max_registered_specialists,
             "in_flight_per_job": 1,
         },
     }
@@ -336,7 +345,7 @@ def _grant_signature_payload(grant: Mapping[str, object]) -> bytes:
 
 def sign_agent_budget_grant(grant: Mapping[str, object], secret: str) -> str:
     normalized_secret = str(secret or "").strip()
-    if len(normalized_secret) < 12:
+    if len(normalized_secret.encode("utf-8")) < 32:
         raise AgentGovernanceError("budget_grant_secret_invalid", "The budget grant signing secret is not configured securely.")
     return hmac.new(normalized_secret.encode("utf-8"), _grant_signature_payload(grant), hashlib.sha256).hexdigest()
 

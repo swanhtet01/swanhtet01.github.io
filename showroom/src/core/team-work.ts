@@ -6,7 +6,7 @@ export type WorkStatus = 'backlog' | 'in_progress' | 'blocked' | 'review' | 'don
 export type ProductStage = 'discover' | 'define' | 'build' | 'release' | 'learn'
 export type EvidenceKind = 'customer' | 'metric' | 'test' | 'release' | 'decision' | 'source'
 export type EvidenceStatus = 'observed' | 'verified'
-export type AgentState = 'available' | 'assigned' | 'waiting_review' | 'blocked'
+export type AgentState = 'available' | 'assigned' | 'waiting_review' | 'blocked' | 'paused'
 export type AgentCapability = 'research' | 'planning' | 'implementation' | 'verification' | 'analysis' | 'drafting'
 export type AgentApprovalBoundary = 'prepare_only' | 'local_change_review'
 
@@ -84,8 +84,12 @@ export type TeamWorkspaceState = {
   release: ProductRelease
 }
 
-export const TEAM_WORK_KEY = 'supermega.team.workspace.v3'
-export const LEGACY_TEAM_WORK_KEYS = ['supermega.team.workspace.v2'] as const
+export const AGENT_ROSTER_LIMIT = 12
+export const AGENT_ACTIVE_ASSIGNMENT_LIMIT = 4
+export const AGENT_ASSIGNMENT_STALE_AFTER_MS = 24 * 60 * 60 * 1000
+
+export const TEAM_WORK_KEY = 'supermega.team.workspace.v4'
+export const LEGACY_TEAM_WORK_KEYS = ['supermega.team.workspace.v3', 'supermega.team.workspace.v2'] as const
 
 export const teamDefinitions = [
   { id: 'product', label: 'Product', purpose: 'Outcomes, backlog, acceptance, decisions, and release readiness.' },
@@ -116,7 +120,18 @@ export const agentStates = [
   { id: 'assigned', label: 'Assigned' },
   { id: 'waiting_review', label: 'Needs review' },
   { id: 'blocked', label: 'Blocked' },
+  { id: 'paused', label: 'Paused' },
 ] as const satisfies ReadonlyArray<{ id: AgentState; label: string }>
+
+export function agentStateUsesActiveCapacity(state: AgentState) {
+  return state === 'assigned' || state === 'waiting_review'
+}
+
+export function agentAssignmentIsStale(agent: Pick<DelegatedAgent, 'state' | 'updatedAt'>, observedAt = Date.now()) {
+  if (!agentStateUsesActiveCapacity(agent.state)) return false
+  const updatedAt = Date.parse(agent.updatedAt)
+  return !Number.isFinite(updatedAt) || observedAt - updatedAt > AGENT_ASSIGNMENT_STALE_AFTER_MS
+}
 
 export const agentCapabilities = [
   { id: 'research', label: 'Research' },
@@ -454,13 +469,32 @@ function normalizeAgent(value: DelegatedAgent, index: number): DelegatedAgent | 
 
 function normalizeWorkspace(value: Partial<TeamWorkspaceState>): TeamWorkspaceState {
   const items = Array.isArray(value.items) ? value.items.map(normalizeWorkItem) : seedTeamWorkspace.items
+  const claimedAssignments = new Set<string>()
+  let activeAssignments = 0
+  const observedAt = Date.now()
   const agents = (Array.isArray(value.agents) ? value.agents.map(normalizeAgent).filter((agent): agent is DelegatedAgent => Boolean(agent)) : [])
     .map((agent) => {
       const assignedItem = items.find((item) => item.id === agent.assignedWorkItemId)
       const hasValidAssignment = !agent.assignedWorkItemId || assignedItem?.team === agent.team
       if (!hasValidAssignment) return { ...agent, assignedWorkItemId: undefined, state: 'blocked' as const }
-      if (agent.state === 'waiting_review' && !agent.lastEvidence) return { ...agent, state: 'blocked' as const }
-      return agent
+      let normalized = agent.state === 'waiting_review' && !agent.lastEvidence
+        ? { ...agent, state: 'blocked' as const }
+        : agent
+      if ((normalized.state === 'available' || normalized.state === 'paused') && normalized.assignedWorkItemId) {
+        normalized = { ...normalized, assignedWorkItemId: undefined }
+      }
+      if (normalized.assignedWorkItemId) {
+        if (claimedAssignments.has(normalized.assignedWorkItemId)) {
+          return { ...normalized, assignedWorkItemId: undefined, state: 'blocked' as const }
+        }
+        claimedAssignments.add(normalized.assignedWorkItemId)
+      }
+      if (!agentStateUsesActiveCapacity(normalized.state)) return normalized
+      if (!normalized.assignedWorkItemId
+        || activeAssignments >= AGENT_ACTIVE_ASSIGNMENT_LIMIT
+        || agentAssignmentIsStale(normalized, observedAt)) return { ...normalized, state: 'blocked' as const }
+      activeAssignments += 1
+      return normalized
     })
   return {
     items,

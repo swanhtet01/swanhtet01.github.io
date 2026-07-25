@@ -1,288 +1,255 @@
 {
-  "resource_id": "supermega-core-agent-workspace",
+  "resource_id": "supermega-core-agent-workspace-v2",
   "tenant_key": "default",
   "company": {
-    "name": "SUPERMEGA.dev Core Platform",
-    "public_label": "SUPERMEGA.dev Core",
+    "name": "SuperMega",
+    "public_label": "supermega.dev",
     "domain": "app.supermega.dev",
-    "sector": "AI-native operating software"
+    "sector": "AI-native operating software",
+    "customer_products": ["Shop", "Plant", "Website", "Ecommerce"]
   },
   "dialectic": {
-    "thesis": "Give operators one AI-native control plane for modules, queues, knowledge, runtime health, and rollout.",
-    "antithesis": "Tool sprawl, scattered context, and weak guardrails create automation theater instead of trustworthy execution.",
-    "synthesis": "A tenant-aware agent workspace merges roles, tools, trust boundaries, and live state into one governed operating surface."
+    "thesis": "Use a small reusable specialist registry to operate the company with evidence.",
+    "antithesis": "A large always-on roster creates cost, clutter, duplicated ownership, and unsafe autonomy.",
+    "synthesis": "Keep four accountable teams, scale execution from zero only for queued work, and gate every consequential action."
+  },
+  "runtime_policy": {
+    "contract": "supermega.agent-workforce-policy.v1",
+    "execution_model": "ephemeral_demand_driven",
+    "registered_specialists_consume_compute": false,
+    "idle_active_execution_target": 0,
+    "max_running": 4,
+    "max_queued": 24,
+    "max_daily_runs": 64,
+    "max_daily_work_units": 96,
+    "max_batch_jobs": 5,
+    "max_registered_specialists": 256,
+    "in_flight_per_job": 1,
+    "budget_grant_secret_minimum_utf8_bytes": 32,
+    "human_gates": ["external_send", "payment", "access_change", "customer_data_export", "publish", "merge", "deploy", "domain_change", "production_write", "equipment_control"]
   },
   "workspaces": [
     {
-      "id": "control-plane",
-      "name": "Control Plane",
-      "route": "/app/workbench",
-      "mission": "Sequence product, architecture, runtime, and rollout decisions from one admin layer.",
-      "owner_roles": ["platform_admin", "tenant_admin", "architect"]
+      "id": "product-hq",
+      "name": "Product",
+      "route": "/work/?team=product&view=work",
+      "mission": "Turn customer evidence into one prioritized outcome and measurable acceptance contract.",
+      "owner_roles": ["director", "architect"]
     },
     {
-      "id": "runtime-lane",
-      "name": "Runtime Lane",
-      "route": "/app/runtime",
-      "mission": "Monitor connectors, autonomy loops, policy guardrails, and operational health.",
-      "owner_roles": ["agent_ops", "director", "platform_admin"]
+      "id": "engineering-hq",
+      "name": "Engineering",
+      "route": "/work/?team=engineering&view=work",
+      "mission": "Implement, secure, verify, and release bounded changes with rollback evidence.",
+      "owner_roles": ["platform_admin", "agent_ops"]
     },
     {
-      "id": "cloud-lane",
-      "name": "Cloud Lane",
-      "route": "/app/cloud",
-      "mission": "Run deployment posture, queue readiness, workforce cadence, and environment ownership.",
-      "owner_roles": ["platform_admin", "agent_ops", "architect"]
+      "id": "growth-hq",
+      "name": "Growth",
+      "route": "/work/?team=growth&view=work",
+      "mission": "Prepare truthful positioning, onboarding, qualification, and owner-approved communication.",
+      "owner_roles": ["tenant_admin", "director"]
     },
     {
-      "id": "knowledge-lane",
-      "name": "Knowledge Lane",
-      "route": "/app/knowledge",
-      "mission": "Promote source evidence into canonical documents, entities, and durable memory.",
-      "owner_roles": ["knowledge_admin", "tenant_admin", "platform_admin"]
+      "id": "finance-risk-hq",
+      "name": "Finance / Risk",
+      "route": "/work/?team=finance&view=work",
+      "mission": "Control spend, privacy, access, security exceptions, and approval evidence.",
+      "owner_roles": ["platform_admin", "tenant_admin"]
     }
   ],
   "role_profiles": [
     {
       "id": "platform_admin",
       "name": "Platform Admin",
-      "home": "/app/platform-admin",
-      "mission": "Provision tenants, manage modules, and own cross-tenant control posture.",
+      "home": "/work/?team=engineering&view=review",
+      "mission": "Own runtime, access, security, and release posture.",
       "capabilities": ["platform_admin.view", "tenant_admin.view", "security_admin.view"],
-      "tool_profile": "core-admin-stack"
+      "tool_profile": "engineering-safe-stack"
     },
     {
       "id": "tenant_admin",
-      "name": "Tenant Admin",
-      "home": "/app/platform-admin",
-      "mission": "Manage one workspace, its users, modules, and deployment readiness.",
+      "name": "Workspace Owner",
+      "home": "/settings/",
+      "mission": "Own one workspace, its users, data boundary, and activation decision.",
       "capabilities": ["tenant_admin.view", "connector_admin.view", "knowledge_admin.view"],
-      "tool_profile": "workspace-admin-stack"
+      "tool_profile": "workspace-safe-stack"
     },
     {
       "id": "architect",
-      "name": "Implementation Lead",
-      "home": "/app/architect",
-      "mission": "Map client operating reality into modules, rollout packs, and delivery order.",
+      "name": "Product Architect",
+      "home": "/work/?team=product&view=work",
+      "mission": "Map real workflows into the four products and reusable client templates.",
       "capabilities": ["architect.view", "agent_ops.view", "director.view"],
-      "tool_profile": "design-and-rollout-stack"
+      "tool_profile": "product-safe-stack"
     },
     {
       "id": "agent_ops",
-      "name": "Agent Ops",
-      "home": "/app/teams",
-      "mission": "Run bounded workforce loops and manage job health, retries, and team scope.",
+      "name": "Agent Operations",
+      "home": "/work/?team=engineering&view=agents",
+      "mission": "Keep queued execution bounded, useful, attributable, and scaled to zero when idle.",
       "capabilities": ["agent_ops.view", "actions.view"],
-      "tool_profile": "autonomy-stack"
+      "tool_profile": "agent-ops-safe-stack"
     },
     {
       "id": "director",
       "name": "Director",
-      "home": "/app/director",
-      "mission": "Review performance, risk, and strategic pressure with evidence-backed summaries.",
+      "home": "/work/?team=product&view=review",
+      "mission": "Review outcomes, risks, evidence, and the next company decision.",
       "capabilities": ["director.view", "actions.view", "operations.view"],
-      "tool_profile": "executive-stack"
+      "tool_profile": "product-safe-stack"
     },
     {
       "id": "knowledge_admin",
-      "name": "Knowledge Admin",
-      "home": "/app/knowledge",
-      "mission": "Govern canonical memory, provenance, and retrieval quality.",
+      "name": "Knowledge Steward",
+      "home": "/work/?team=product&view=review",
+      "mission": "Keep evidence, provenance, and reusable context trustworthy.",
       "capabilities": ["knowledge_admin.view", "security_admin.view"],
-      "tool_profile": "knowledge-stack"
+      "tool_profile": "workspace-safe-stack"
     }
   ],
   "tool_profiles": [
     {
-      "id": "core-admin-stack",
-      "name": "Core Admin Stack",
-      "users": ["platform_admin"],
-      "tools": ["Platform Admin", "Cloud Ops", "Workbench", "Security Control"],
-      "guardrails": ["Workspace or platform admin required", "Cross-tenant changes must be audited", "Sensitive writes require policy review"]
+      "id": "product-safe-stack",
+      "name": "Product evidence stack",
+      "tools": ["approved source read", "local analysis", "draft", "evaluation"],
+      "forbidden": ["external send", "customer claim without evidence", "production write"]
     },
     {
-      "id": "workspace-admin-stack",
-      "name": "Workspace Admin Stack",
-      "users": ["tenant_admin"],
-      "tools": ["Platform Admin", "Connectors", "Knowledge", "Policies"],
-      "guardrails": ["Tenant-scoped only", "Connector changes must preserve ownership", "Member roles require review"]
+      "id": "engineering-safe-stack",
+      "name": "Engineering verification stack",
+      "tools": ["scoped repository read", "bounded local edit", "tests", "security scan"],
+      "forbidden": ["unapproved push", "merge", "deploy", "credential disclosure"]
     },
     {
-      "id": "design-and-rollout-stack",
-      "name": "Design And Rollout Stack",
-      "users": ["architect", "director"],
-      "tools": ["Solution Architect", "Workbench", "Cloud Ops", "Meta Workspace"],
-      "guardrails": ["Rollout changes must stay workspace-scoped", "Launch packs cannot leak across tenants", "Tasks require saved task lineage"]
+      "id": "workspace-safe-stack",
+      "name": "Workspace administration stack",
+      "tools": ["tenant-scoped read", "approval preparation", "audit review"],
+      "forbidden": ["access change", "data export", "connector write", "payment"]
     },
     {
-      "id": "autonomy-stack",
-      "name": "Autonomy Stack",
-      "users": ["agent_ops"],
-      "tools": ["Agent Ops", "Runtime", "Cloud Ops", "Action Queue"],
-      "guardrails": ["No sensitive writes without approval", "Jobs need explicit read and write scope", "Queue workers must stay auditable"]
-    },
-    {
-      "id": "knowledge-stack",
-      "name": "Knowledge Stack",
-      "users": ["knowledge_admin", "tenant_admin"],
-      "tools": ["Knowledge", "Data Fabric", "Policies"],
-      "guardrails": ["Untrusted source data stays outside canon", "Promotion requires provenance", "Cross-workspace references are blocked by default"]
+      "id": "agent-ops-safe-stack",
+      "name": "Demand-driven agent stack",
+      "tools": ["queue read", "capacity plan", "signed budget grant", "trace review"],
+      "forbidden": ["unbounded run", "duplicate in-flight job", "self-approval", "silent side effect"]
     }
   ],
   "knowledge_resources": [
-    {
-      "id": "module-catalog",
-      "name": "Workspace module catalog",
-      "source": "enterprise module definitions",
-      "trust_tier": "canonical",
-      "cadence": "live query",
-      "used_by": ["Platform Admin", "Workbench", "Agent Space"]
-    },
-    {
-      "id": "workspace-membership",
-      "name": "Workspace membership and roles",
-      "source": "enterprise workspace members",
-      "trust_tier": "canonical",
-      "cadence": "live query",
-      "used_by": ["Platform Admin", "Agent Ops", "Agent Space"]
-    },
-    {
-      "id": "runtime-summary",
-      "name": "Runtime and cloud control signals",
-      "source": "runtime and cloud control payloads",
-      "trust_tier": "canonical",
-      "cadence": "live query",
-      "used_by": ["Runtime", "Cloud Ops", "Agent Space"]
-    },
-    {
-      "id": "supervisor-heartbeat",
-      "name": "Supervisor heartbeat",
-      "source": "pilot-data/supervisor_status.json",
-      "trust_tier": "operational",
-      "cadence": "every cycle",
-      "used_by": ["Cloud Ops", "Runtime", "Agent Space"]
-    },
-    {
-      "id": "agent-manifest",
-      "name": "Agent operating manifest",
-      "source": "agent_team_system snapshot and operating manifest",
-      "trust_tier": "modeled",
-      "cadence": "on update",
-      "used_by": ["Agent Ops", "Workbench", "Agent Space"]
-    },
-    {
-      "id": "rollout-packs",
-      "name": "Rollout packs and launch tasks",
-      "source": "workspace-scoped rollout snapshots",
-      "trust_tier": "canonical",
-      "cadence": "on launch",
-      "used_by": ["Meta", "Architect", "Agent Space"]
-    }
+    {"id": "hq-now", "name": "HQ now", "reference": "repository://hq/NOW.md", "authority": "current operating state"},
+    {"id": "hq-board", "name": "Work board", "reference": "repository://hq/WORKBOARD.md", "authority": "assignment and evidence"},
+    {"id": "portfolio", "name": "Portfolio", "reference": "repository://hq/portfolio.json", "authority": "four customer products"},
+    {"id": "site-contract", "name": "Site manifest", "reference": "repository://site-manifest.json", "authority": "public routes and brand"}
   ],
   "trust_boundaries": [
     {
       "id": "workspace-scope",
-      "name": "Workspace scope",
-      "rule": "Tenant data may only be read through the active workspace or a validated shared admin scope.",
-      "surfaces": ["/api/meta/workspace", "/api/rollouts/latest", "/api/snapshots/{workspace_key}"]
+      "name": "Workspace isolation",
+      "rule": "Every data read and write is bound to authenticated workspace membership and least privilege.",
+      "surfaces": ["managed API", "database RLS", "connectors"]
     },
     {
-      "id": "promotion-gate",
-      "name": "Knowledge promotion gate",
-      "rule": "Raw or inferred source material cannot become canonical memory without provenance and review.",
-      "surfaces": ["/app/knowledge", "/app/policies", "/app/data-fabric"]
+      "id": "private-storage",
+      "name": "Private object storage",
+      "rule": "Anonymous and broad authenticated bucket listing are denied; object access is authorized and short lived.",
+      "surfaces": ["Supabase Storage", "S3-compatible storage", "client uploads"]
     },
     {
       "id": "autonomy-gate",
-      "name": "Autonomous write gate",
-      "rule": "Agents can prepare, classify, and draft but must stop before high-impact writes unless explicitly approved.",
-      "surfaces": ["/app/teams", "/app/runtime", "/app/actions"]
+      "name": "Consequential action gate",
+      "rule": "Agents prepare and verify; a named human authorizes consequential external or production actions.",
+      "surfaces": ["/work/?view=agents", "managed queue", "approval ledger"]
     },
     {
-      "id": "cloud-ops-gate",
-      "name": "Cloud operations gate",
-      "rule": "Queue, deploy, and runtime host changes are limited to cloud-capable roles and logged with environment context.",
-      "surfaces": ["/app/cloud", "/app/runtime"]
+      "id": "budget-gate",
+      "name": "Execution budget",
+      "rule": "A short-lived signed grant, one lease, idempotency, and remaining workspace capacity are required before execution.",
+      "surfaces": ["capacity planner", "agent run queue", "budget reservation ledger"]
+    },
+    {
+      "id": "release-observability",
+      "name": "Release and observability",
+      "rule": "A release retains immutable identity, rollback evidence, structured logs, and a bounded post-deploy error review.",
+      "surfaces": ["Vercel release", "runtime logs", "release record"]
     }
   ],
   "ai_teams": [
     {
-      "id": "release-crew",
-      "name": "Release Crew",
-      "workspace": "control-plane",
-      "mission": "Turn module changes into rollout-safe releases with smoke, gating, and operator follow-through.",
-      "reads": ["module catalog", "runtime summary", "cloud control"],
-      "writes": ["release sequencing", "launch tasks", "change notes"],
-      "approval_gate": "Architect or platform admin review"
+      "id": "product-team",
+      "name": "Product Team",
+      "workspace": "product-hq",
+      "mission": "Own customer evidence, portfolio fit, acceptance, and measured learning.",
+      "reads": ["approved research", "pilot evidence", "product metrics"],
+      "writes": ["problem briefs", "acceptance proposals", "priority proposals"],
+      "approval_gate": "Founder or product owner decision"
     },
     {
-      "id": "connector-reliability-pod",
-      "name": "Connector Reliability Pod",
-      "workspace": "runtime-lane",
-      "mission": "Keep Gmail, Drive, and other evidence sources fresh enough for agent work.",
-      "reads": ["connector signals", "coverage score", "audit events"],
-      "writes": ["repair queue", "refresh recommendations"],
-      "approval_gate": "Tenant admin or platform admin review"
+      "id": "engineering-team",
+      "name": "Engineering Team",
+      "workspace": "engineering-hq",
+      "mission": "Own implementation, independent verification, security, incidents, and releases.",
+      "reads": ["scoped code", "tests", "runtime evidence"],
+      "writes": ["bounded local changes", "test evidence", "release candidates"],
+      "approval_gate": "Independent review plus owner release decision"
     },
     {
-      "id": "knowledge-curation-pod",
-      "name": "Knowledge Curation Pod",
-      "workspace": "knowledge-lane",
-      "mission": "Convert raw evidence into structured, traceable knowledge assets.",
-      "reads": ["documents", "source metadata", "promotion rules"],
-      "writes": ["knowledge candidates", "entity suggestions", "provenance links"],
-      "approval_gate": "Knowledge admin review"
+      "id": "growth-team",
+      "name": "Growth Team",
+      "workspace": "growth-hq",
+      "mission": "Own truthful positioning, onboarding, qualification, and draft communication.",
+      "reads": ["approved claims", "pilot evidence", "lead context"],
+      "writes": ["campaign drafts", "onboarding drafts", "follow-up proposals"],
+      "approval_gate": "Founder approval before external send"
     },
     {
-      "id": "operator-assist-pod",
-      "name": "Operator Assist Pod",
-      "workspace": "runtime-lane",
-      "mission": "Prepare queues, classify work, and keep action owners focused on next moves.",
-      "reads": ["workspace tasks", "approvals", "exceptions"],
-      "writes": ["draft actions", "triage labels", "priority suggestions"],
-      "approval_gate": "Role owner review"
+      "id": "finance-risk-team",
+      "name": "Finance / Risk Team",
+      "workspace": "finance-risk-hq",
+      "mission": "Own spend, access, privacy, security exceptions, and approval quality.",
+      "reads": ["budget evidence", "access evidence", "audit events"],
+      "writes": ["risk findings", "approval proposals", "incident recommendations"],
+      "approval_gate": "Named accountable human"
     }
   ],
   "execution_loops": [
     {
-      "id": "rollout-loop",
-      "name": "Rollout and launch loop",
-      "trigger": "New tenant or module expansion",
-      "outputs": ["recommended stack", "launch tasks", "queue alignment"],
-      "kpis": ["time to first live module", "launch task completion rate"]
+      "id": "product-loop",
+      "name": "Product learning loop",
+      "trigger": "Verified customer signal",
+      "outputs": ["one owned outcome", "acceptance criteria", "template candidate"],
+      "kpis": ["measured workflow completion", "accepted evidence rate"]
     },
     {
-      "id": "connector-health-loop",
-      "name": "Connector health loop",
-      "trigger": "Freshness drop or auth drift",
-      "outputs": ["repair commands", "owner routing", "coverage recovery"],
-      "kpis": ["healthy connector count", "coverage score"]
+      "id": "delivery-loop",
+      "name": "Delivery and release loop",
+      "trigger": "Accepted bounded work",
+      "outputs": ["verified local candidate", "security evidence", "rollback plan"],
+      "kpis": ["first-pass verification", "escaped defect rate", "rollback readiness"]
     },
     {
-      "id": "knowledge-promotion-loop",
-      "name": "Knowledge promotion loop",
-      "trigger": "New evidence or source changes",
-      "outputs": ["canonical candidates", "entity links", "review queue"],
-      "kpis": ["promotion acceptance rate", "retrieval quality"]
+      "id": "agent-capacity-loop",
+      "name": "Demand-driven capacity loop",
+      "trigger": "Unique queued job",
+      "outputs": ["capacity decision", "signed budget grant", "bounded trace"],
+      "kpis": ["idle active executions", "useful completion rate", "work units per accepted outcome"]
     },
     {
-      "id": "autonomy-ops-loop",
-      "name": "Autonomy operations loop",
-      "trigger": "Queued work and stale job families",
-      "outputs": ["job runs", "priority queues", "exception routing"],
-      "kpis": ["stale job count", "queue throughput", "failed run count"]
+      "id": "security-loop",
+      "name": "Security and incident loop",
+      "trigger": "Control failure, exposure signal, or release candidate",
+      "outputs": ["containment", "evidence", "owner decision", "regression check"],
+      "kpis": ["unauthorized consequential actions", "open high-severity findings", "time to containment"]
     }
   ],
   "quick_links": [
-    { "label": "Cloud Ops", "route": "/app/cloud" },
-    { "label": "Runtime", "route": "/app/runtime" },
-    { "label": "Agent Ops", "route": "/app/teams" },
-    { "label": "Workbench", "route": "/app/workbench" }
+    {"label": "HQ work", "route": "/work/"},
+    {"label": "Agent capacity", "route": "/work/?team=engineering&view=agents"},
+    {"label": "Products", "route": "/products/"},
+    {"label": "Settings", "route": "/settings/"}
   ],
   "references": [
-    "showroom/src/lib/tenantOperatingModel.ts",
-    "showroom/src/lib/agentOperatingModel.ts",
-    "showroom/src/lib/enterprisePortalBlueprint.ts",
-    "tools/serve_solution.py"
+    "repository://agent_os/agent_os_architecture.md",
+    "repository://mark1_pilot/agent_governance.py",
+    "repository://hq/NOW.md",
+    "repository://hq/WORKBOARD.md"
   ]
 }

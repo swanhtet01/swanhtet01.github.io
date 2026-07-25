@@ -1,8 +1,11 @@
 import { type Dispatch, type FormEvent, type SetStateAction, useState } from 'react'
 
 import {
+  AGENT_ACTIVE_ASSIGNMENT_LIMIT,
+  AGENT_ROSTER_LIMIT,
   agentApprovalBoundaries,
   agentCapabilities,
+  agentStateUsesActiveCapacity,
   agentStates,
   createTeamId,
   defaultAgentCapabilities,
@@ -50,6 +53,10 @@ export function AgentTeamsPanel({ activeTeam, selectedAgentId, onSelectAgent, wo
   function addAgent(event: FormEvent) {
     event.preventDefault()
     if (!name.trim() || !role.trim() || !humanOwner.trim()) return
+    if (workspace.agents.length >= AGENT_ROSTER_LIMIT) {
+      setNotice(`The local roster is capped at ${AGENT_ROSTER_LIMIT}. Pause or reuse an existing role instead of creating more.`)
+      return
+    }
     const timestamp = new Date().toISOString()
     const agent: DelegatedAgent = {
       id: createTeamId('AGT'),
@@ -73,21 +80,50 @@ export function AgentTeamsPanel({ activeTeam, selectedAgentId, onSelectAgent, wo
 
   function assignWork(workItemId: string) {
     if (!selectedAgent) return
+    if (!workItemId) {
+      updateAgent(selectedAgent.id, { assignedWorkItemId: undefined, state: 'available', lastEvidence: undefined })
+      setNotice(`${selectedAgent.name} returned to available; no execution is running.`)
+      return
+    }
+    const existingOwner = workspace.agents.find((agent) => agent.id !== selectedAgent.id && agent.assignedWorkItemId === workItemId)
+    if (existingOwner) {
+      setNotice(`${workItemId} already belongs to ${existingOwner.name}. One role owns each work item.`)
+      return
+    }
+    const activeCount = workspace.agents.filter((agent) => agentStateUsesActiveCapacity(agent.state)).length
+    const needsCapacity = !agentStateUsesActiveCapacity(selectedAgent.state)
+    if (needsCapacity && activeCount >= AGENT_ACTIVE_ASSIGNMENT_LIMIT && (selectedAgent.state === 'available' || selectedAgent.state === 'paused')) {
+      setNotice(`Active assignment capacity is ${AGENT_ACTIVE_ASSIGNMENT_LIMIT}. Finish, block, or pause one role first.`)
+      return
+    }
     updateAgent(selectedAgent.id, {
-      assignedWorkItemId: workItemId || undefined,
-      state: workItemId ? selectedAgent.state === 'available' ? 'assigned' : selectedAgent.state : 'available',
+      assignedWorkItemId: workItemId,
+      state: selectedAgent.state === 'available' || selectedAgent.state === 'paused' ? 'assigned' : selectedAgent.state === 'waiting_review' ? 'assigned' : selectedAgent.state,
+      lastEvidence: selectedAgent.assignedWorkItemId === workItemId ? selectedAgent.lastEvidence : undefined,
     })
-    setNotice(workItemId ? `${selectedAgent.name} assigned to ${workItemId}.` : `${selectedAgent.name} returned to available.`)
+    setNotice(`${selectedAgent.name} assigned to ${workItemId}.`)
   }
 
   function changeState(state: AgentState) {
     if (!selectedAgent) return
-    if (state !== 'available' && !selectedAgent.assignedWorkItemId) {
+    if ((state === 'available' || state === 'paused')) {
+      updateAgent(selectedAgent.id, { state, assignedWorkItemId: undefined })
+      setNotice(`${selectedAgent.name} moved to ${agentStateLabel(state)}; no execution is running.`)
+      return
+    }
+    if (!selectedAgent.assignedWorkItemId) {
       setNotice('Assign accountable work before changing this role state.')
       return
     }
     if (state === 'waiting_review' && !selectedAgent.lastEvidence) {
       setNotice('Record evidence before requesting human review.')
+      return
+    }
+    const activeCount = workspace.agents.filter((agent) => agentStateUsesActiveCapacity(agent.state)).length
+    if (agentStateUsesActiveCapacity(state)
+      && !agentStateUsesActiveCapacity(selectedAgent.state)
+      && activeCount >= AGENT_ACTIVE_ASSIGNMENT_LIMIT) {
+      setNotice(`Active assignment capacity is ${AGENT_ACTIVE_ASSIGNMENT_LIMIT}. Finish, block, or pause one role first.`)
       return
     }
     updateAgent(selectedAgent.id, { state })
@@ -123,11 +159,15 @@ export function AgentTeamsPanel({ activeTeam, selectedAgentId, onSelectAgent, wo
     setNotice(`Evidence recorded for ${selectedAgent.name}; human review is still required.`)
   }
 
+  const activeCount = workspace.agents.filter((agent) => agentStateUsesActiveCapacity(agent.state)).length
   const assignedCount = teamAgents.filter((agent) => agent.state === 'assigned').length
   const reviewCount = teamAgents.filter((agent) => agent.state === 'waiting_review').length
   const blockedCount = teamAgents.filter((agent) => agent.state === 'blocked').length
+  const dormantCount = teamAgents.filter((agent) => !agentStateUsesActiveCapacity(agent.state)).length
   const rosterSummary = [
     `${teamAgents.length} ${teamAgents.length === 1 ? 'role' : 'roles'}`,
+    `${activeCount}/${AGENT_ACTIVE_ASSIGNMENT_LIMIT} company capacity`,
+    ...(dormantCount ? [`${dormantCount} dormant`] : []),
     ...(assignedCount ? [`${assignedCount} assigned`] : []),
     ...(reviewCount ? [`${reviewCount} waiting review`] : []),
     ...(blockedCount ? [`${blockedCount} blocked`] : []),
@@ -143,7 +183,7 @@ export function AgentTeamsPanel({ activeTeam, selectedAgentId, onSelectAgent, wo
               <h2>Delegated roles</h2>
               <p className="agent-roster-overview" aria-label="Agent team summary">
                 <span>{rosterSummary}</span>
-                <span>Agents prepare work; named humans approve consequential actions.</span>
+                <span>Agents prepare work; named humans approve consequential actions. Roster records consume no compute; queued execution scales to zero.</span>
               </p>
             </div>
             <details className="compact-disclosure">
@@ -152,7 +192,7 @@ export function AgentTeamsPanel({ activeTeam, selectedAgentId, onSelectAgent, wo
                 <label>Name<input maxLength={80} required value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. QA operator" /></label>
                 <label>Role<input maxLength={140} required value={role} onChange={(event) => setRole(event.target.value)} placeholder="One bounded responsibility" /></label>
                 <label>Human owner<input maxLength={80} required value={humanOwner} onChange={(event) => setHumanOwner(event.target.value)} placeholder="Accountable person or role" /></label>
-                <button className="core-button primary compact" type="submit">Add local role</button>
+                <button className="core-button primary compact" disabled={workspace.agents.length >= AGENT_ROSTER_LIMIT} type="submit">{workspace.agents.length >= AGENT_ROSTER_LIMIT ? 'Roster full' : 'Add local role'}</button>
               </form>
             </details>
           </div>
@@ -172,7 +212,7 @@ export function AgentTeamsPanel({ activeTeam, selectedAgentId, onSelectAgent, wo
             <button className="agent-mobile-back text-link" onClick={() => onSelectAgent('')} type="button">Back to roles</button>
             <div className="record-detail-head">
               <div><span className="core-eyebrow">{selectedAgent.id}</span><h2>{selectedAgent.name}</h2><p>{selectedAgent.role}</p></div>
-              <span className={`status-pill ${selectedAgent.state === 'waiting_review' ? 'pending' : selectedAgent.state === 'blocked' ? 'pending' : 'bounded'}`}>{agentStateLabel(selectedAgent.state)}</span>
+              <span className={`status-pill ${selectedAgent.state === 'waiting_review' || selectedAgent.state === 'blocked' || selectedAgent.state === 'paused' ? 'pending' : 'bounded'}`}>{agentStateLabel(selectedAgent.state)}</span>
             </div>
             <div className="agent-control-grid">
               <label>Human owner<input maxLength={80} value={selectedAgent.humanOwner} onChange={(event) => updateAgent(selectedAgent.id, { humanOwner: event.target.value })} /></label>
