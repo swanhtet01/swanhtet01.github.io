@@ -440,6 +440,8 @@ textarea { min-height: 72px; resize: vertical; }
 .data-row.table-head { min-height: 34px; color: var(--core-quiet); font-family: var(--core-mono); font-size: 8px; text-transform: uppercase; }
 .data-row[data-receiving="true"] { margin-inline: -8px; border-radius: 8px; padding-inline: 8px; background: var(--core-green-soft); }
 .data-row .text-link, .purchase-order-list .text-link { min-height: 44px; }
+.catalog-row-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.catalog-row-actions .text-link { min-width: 44px; justify-content: center; }
 .stock-receipt-editor { display: grid; grid-template-columns: minmax(180px,1fr) minmax(150px,.55fr) minmax(180px,.7fr) auto; gap: 10px; align-items: end; margin-top: 12px; border: 1px solid rgba(11,116,94,.24); border-radius: 12px; padding: 12px; background: var(--core-green-soft); }
 .stock-receipt-copy { min-width: 0; display: grid; gap: 3px; align-self: center; }
 .stock-receipt-copy h3 { margin: 0; font-size: 15px; }

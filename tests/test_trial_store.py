@@ -260,6 +260,7 @@ class TrialStoreTests(unittest.TestCase):
         human_only_events = (
             "commerce.workspace.initialized",
             "commerce.item.created",
+            "commerce.item.updated",
             "commerce.order.created",
             "commerce.order.advanced",
             "commerce.order.cancelled",

@@ -136,6 +136,7 @@ export type CommerceWebsiteIntake = {
   unitPrice: number
   total: number
   creation: CommerceActionProof
+  snapshotDigest?: string
   conversion?: CommerceActionProof & { orderId: string }
 }
 
@@ -189,12 +190,31 @@ export type CommercePurchaseOrderProgress = {
   status: 'open' | 'partially_received' | 'received' | 'cancelled'
 }
 
+export type CommerceCatalogChange = {
+  sku: string
+  previousPrice: number
+  nextPrice: number
+  previousReorderAt: number
+  nextReorderAt: number
+  proof: CommerceActionProof
+}
+
+export type CommerceCatalogBaseline = {
+  sku: string
+  price: number
+  reorderAt: number
+  proof: CommerceActionProof
+  anchorDigest: string
+}
+
 export type CommerceState = {
   schema: typeof COMMERCE_WORKSPACE_SCHEMA
   items: CommerceItem[]
   orders: CommerceOrder[]
   movements: CommerceStockMovement[]
   closes: CommerceClose[]
+  catalogBaselines?: CommerceCatalogBaseline[]
+  catalogChanges?: CommerceCatalogChange[]
   websiteIntakes?: CommerceWebsiteIntake[]
   storefrontRequests?: CommerceStorefrontRequest[]
   storefrontConfiguration?: CommerceStorefrontConfiguration
@@ -207,6 +227,14 @@ export type CommerceActionProof = {
   actor: string
   reason: string
   evidenceReference: string
+}
+
+export type CommerceItemUpdate = {
+  sku: string
+  expectedPrice: number
+  nextPrice: number
+  expectedReorderAt: number
+  nextReorderAt: number
 }
 
 export type CommerceOrderReturnInput = {
@@ -287,6 +315,8 @@ const storefrontIdempotencyPattern = /^ECI-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-
 const sha256DigestPattern = /^sha256:[a-f0-9]{64}$/
 const maxStorefrontRequests = 100
 const maxPurchaseOrders = 100
+const maxCatalogBaselines = 500
+const maxCatalogChanges = 500
 const maxOrderLines = 20
 const maxReturnsPerOrder = 100
 const closeIdPattern = /^CLOSE-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
@@ -439,6 +469,129 @@ function validProof(proof: CommerceActionProof) {
     )
 }
 
+const sha256RoundConstants = new Uint32Array([
+  0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+  0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+  0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+  0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+  0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+  0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+  0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+  0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+])
+
+function rotateRight(value: number, bits: number) {
+  return (value >>> bits) | (value << (32 - bits))
+}
+
+function sha256Hex(source: string) {
+  const input = new TextEncoder().encode(source)
+  const paddedLength = Math.ceil((input.length + 9) / 64) * 64
+  const padded = new Uint8Array(paddedLength)
+  padded.set(input)
+  padded[input.length] = 0x80
+  const view = new DataView(padded.buffer)
+  const bitLength = BigInt(input.length) * 8n
+  view.setUint32(paddedLength - 8, Number(bitLength >> 32n), false)
+  view.setUint32(paddedLength - 4, Number(bitLength & 0xffffffffn), false)
+
+  const hash = new Uint32Array([
+    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+    0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
+  ])
+  const words = new Uint32Array(64)
+  for (let offset = 0; offset < paddedLength; offset += 64) {
+    for (let index = 0; index < 16; index += 1) words[index] = view.getUint32(offset + index * 4, false)
+    for (let index = 16; index < 64; index += 1) {
+      const before15 = words[index - 15]
+      const before2 = words[index - 2]
+      const sigma0 = rotateRight(before15, 7) ^ rotateRight(before15, 18) ^ (before15 >>> 3)
+      const sigma1 = rotateRight(before2, 17) ^ rotateRight(before2, 19) ^ (before2 >>> 10)
+      words[index] = (words[index - 16] + sigma0 + words[index - 7] + sigma1) >>> 0
+    }
+    let [a, b, c, d, e, f, g, h] = hash
+    for (let index = 0; index < 64; index += 1) {
+      const sum1 = rotateRight(e, 6) ^ rotateRight(e, 11) ^ rotateRight(e, 25)
+      const choice = (e & f) ^ (~e & g)
+      const temporary1 = (h + sum1 + choice + sha256RoundConstants[index] + words[index]) >>> 0
+      const sum0 = rotateRight(a, 2) ^ rotateRight(a, 13) ^ rotateRight(a, 22)
+      const majority = (a & b) ^ (a & c) ^ (b & c)
+      const temporary2 = (sum0 + majority) >>> 0
+      h = g
+      g = f
+      f = e
+      e = (d + temporary1) >>> 0
+      d = c
+      c = b
+      b = a
+      a = (temporary1 + temporary2) >>> 0
+    }
+    hash[0] = (hash[0] + a) >>> 0
+    hash[1] = (hash[1] + b) >>> 0
+    hash[2] = (hash[2] + c) >>> 0
+    hash[3] = (hash[3] + d) >>> 0
+    hash[4] = (hash[4] + e) >>> 0
+    hash[5] = (hash[5] + f) >>> 0
+    hash[6] = (hash[6] + g) >>> 0
+    hash[7] = (hash[7] + h) >>> 0
+  }
+  return Array.from(hash, (word) => word.toString(16).padStart(8, '0')).join('')
+}
+
+function proofDigestProjection(proof: CommerceActionProof) {
+  return [proof.actionId, proof.capturedAt, proof.actor, proof.reason, proof.evidenceReference]
+}
+
+export function commerceCatalogBaselineDigest(
+  baseline: Omit<CommerceCatalogBaseline, 'anchorDigest'>,
+) {
+  return `sha256:${sha256Hex(JSON.stringify([
+    'supermega.commerce.catalog-baseline.v1',
+    baseline.sku,
+    baseline.price,
+    baseline.reorderAt,
+    proofDigestProjection(baseline.proof),
+  ]))}`
+}
+
+export function createCommerceCatalogBaseline(
+  item: Pick<CommerceItem, 'sku' | 'price' | 'reorderAt'>,
+  proof: CommerceActionProof,
+): CommerceCatalogBaseline {
+  const baseline = {
+    sku: item.sku,
+    price: item.price,
+    reorderAt: item.reorderAt,
+    proof: { ...proof },
+  }
+  return { ...baseline, anchorDigest: commerceCatalogBaselineDigest(baseline) }
+}
+
+export function commerceWebsiteIntakeSnapshotDigest(
+  intake: Omit<CommerceWebsiteIntake, 'snapshotDigest' | 'conversion' | 'status'>,
+) {
+  return `sha256:${sha256Hex(JSON.stringify([
+    'supermega.commerce.website-intake.snapshot.v1',
+    intake.id,
+    intake.createdAt,
+    [
+      intake.source.fingerprint,
+      intake.source.approvalId,
+      intake.source.snapshotId,
+      intake.source.pageId,
+      intake.source.siteName,
+      intake.source.pagePath,
+    ],
+    intake.sku,
+    intake.quantity,
+    intake.itemName,
+    intake.itemVariant ?? null,
+    intake.unitPrice,
+    intake.total,
+    proofDigestProjection(intake.creation),
+  ]))}`
+}
+
 function safeBalance(value: number, delta: number) {
   const next = value + delta
   return Number.isSafeInteger(next) && next >= 0 ? next : null
@@ -454,21 +607,29 @@ function reservationLinesForOrder(order: CommerceOrder) {
 }
 
 export function createEmptyCommerce(): CommerceState {
-  return { schema: COMMERCE_WORKSPACE_SCHEMA, items: [], orders: [], movements: [], closes: [], websiteIntakes: [], storefrontRequests: [], purchaseOrders: [] }
+  return { schema: COMMERCE_WORKSPACE_SCHEMA, items: [], orders: [], movements: [], closes: [], catalogBaselines: [], catalogChanges: [], websiteIntakes: [], storefrontRequests: [], purchaseOrders: [] }
 }
 
 export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
   const firstOrderAt = new Date(now - 54 * 60 * 1000).toISOString()
   const secondOrderAt = new Date(now - 29 * 60 * 1000).toISOString()
+  const items: CommerceItem[] = [
+    { sku: 'SM-1001', name: 'Daily essentials basket', onHand: 34, reorderAt: 10, price: 18500 },
+    { sku: 'SM-1002', name: 'Cold drink pack', onHand: 8, reorderAt: 12, price: 6500 },
+    { sku: 'SM-1003', name: 'Household refill', onHand: 21, reorderAt: 8, price: 12000 },
+    { sku: 'SM-1004', name: 'Personal care set', onHand: 13, reorderAt: 6, price: 22500 },
+    { sku: 'SM-CARE-01', name: 'Family care set', variant: 'Standard bundle', onHand: 14, reorderAt: 6, price: 31000 },
+  ]
+  const baselineProof: CommerceActionProof = {
+    actionId: 'ACT-DEMO-CATALOG-BASELINE',
+    capturedAt: new Date(now).toISOString(),
+    actor: 'Demo operator',
+    reason: 'Anchor the seeded Shop catalog values.',
+    evidenceReference: 'DEMO-SEED-CATALOG',
+  }
   return {
     schema: COMMERCE_WORKSPACE_SCHEMA,
-    items: [
-      { sku: 'SM-1001', name: 'Daily essentials basket', onHand: 34, reorderAt: 10, price: 18500 },
-      { sku: 'SM-1002', name: 'Cold drink pack', onHand: 8, reorderAt: 12, price: 6500 },
-      { sku: 'SM-1003', name: 'Household refill', onHand: 21, reorderAt: 8, price: 12000 },
-      { sku: 'SM-1004', name: 'Personal care set', onHand: 13, reorderAt: 6, price: 22500 },
-      { sku: 'SM-CARE-01', name: 'Family care set', variant: 'Standard bundle', onHand: 14, reorderAt: 6, price: 31000 },
-    ],
+    items,
     orders: [
       { id: 'ORD-1042', createdAt: firstOrderAt, customer: 'May', channel: 'Messenger', item: 'Daily essentials basket', itemSku: 'SM-1001', quantity: 2, payment: 'KBZPay', paymentStatus: 'pending', refundStatus: 'none', total: 37000, status: 'preparing' },
       { id: 'ORD-1041', createdAt: secondOrderAt, customer: 'Ko Aung', channel: 'Phone', item: 'Household refill', itemSku: 'SM-1003', quantity: 1, payment: 'Cash on delivery', paymentStatus: 'pending', refundStatus: 'none', total: 12000, status: 'ready' },
@@ -478,6 +639,8 @@ export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
       { id: 'MOV-ACT-DEMO-1041', actionId: 'ACT-DEMO-1041', createdAt: secondOrderAt, actor: 'Demo operator', reason: 'Seed the local Commerce walkthrough.', evidenceReference: 'DEMO-SEED-ORD-1041', kind: 'reserve', sku: 'SM-1003', quantityDelta: -1, orderId: 'ORD-1041' },
     ],
     closes: [],
+    catalogBaselines: items.map((item) => createCommerceCatalogBaseline(item, baselineProof)),
+    catalogChanges: [],
     websiteIntakes: [],
     storefrontRequests: [],
     purchaseOrders: [],
@@ -487,6 +650,8 @@ export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
 export function validateCommerceState(value: unknown): CommerceState {
   if (!isRecord(value) || value.schema !== COMMERCE_WORKSPACE_SCHEMA) throw new Error('Commerce workspace schema is not v2.')
   if (!Array.isArray(value.items) || !Array.isArray(value.orders) || !Array.isArray(value.movements) || !Array.isArray(value.closes)) throw new Error('Commerce workspace collections are incomplete.')
+  if (value.catalogBaselines !== undefined && !Array.isArray(value.catalogBaselines)) throw new Error('Commerce catalog baselines must be an array when present.')
+  if (value.catalogChanges !== undefined && !Array.isArray(value.catalogChanges)) throw new Error('Commerce catalog changes must be an array when present.')
   if (value.websiteIntakes !== undefined && !Array.isArray(value.websiteIntakes)) throw new Error('Commerce Website intakes must be an array when present.')
   if (value.storefrontRequests !== undefined && !Array.isArray(value.storefrontRequests)) throw new Error('Commerce storefront requests must be an array when present.')
   if (value.storefrontConfiguration !== undefined && !isRecord(value.storefrontConfiguration)) throw new Error('Commerce storefront configuration must be an object when present.')
@@ -496,10 +661,14 @@ export function validateCommerceState(value: unknown): CommerceState {
   const orders = value.orders as unknown[]
   const movements = value.movements as unknown[]
   const closes = value.closes as unknown[]
+  const catalogBaselines = (value.catalogBaselines ?? []) as unknown[]
+  const catalogChanges = (value.catalogChanges ?? []) as unknown[]
   const websiteIntakes = (value.websiteIntakes ?? []) as unknown[]
   const storefrontRequests = (value.storefrontRequests ?? []) as unknown[]
   const storefrontConfiguration = value.storefrontConfiguration
   const purchaseOrders = (value.purchaseOrders ?? []) as unknown[]
+  if (catalogBaselines.length > maxCatalogBaselines) throw new Error(`Commerce catalog baselines cannot exceed ${maxCatalogBaselines}.`)
+  if (catalogChanges.length > maxCatalogChanges) throw new Error(`Commerce catalog changes cannot exceed ${maxCatalogChanges}.`)
   if (storefrontRequests.length > maxStorefrontRequests) throw new Error(`Commerce storefront requests cannot exceed ${maxStorefrontRequests}.`)
   if (purchaseOrders.length > maxPurchaseOrders) throw new Error(`Commerce purchase orders cannot exceed ${maxPurchaseOrders}.`)
   const itemSkus: string[] = []
@@ -520,6 +689,8 @@ export function validateCommerceState(value: unknown): CommerceState {
   const closedOrderIds: string[] = []
   const websiteIntakeCreationActionIds: string[] = []
   const websiteIntakeConversionActionIds: string[] = []
+  const catalogBaselineActionIds: string[] = []
+  const catalogChangeActionIds: string[] = []
   const purchaseOrderActionIds: string[] = []
   const purchaseOrderIds: string[] = []
   const activePurchaseOrderSkus: string[] = []
@@ -538,6 +709,106 @@ export function validateCommerceState(value: unknown): CommerceState {
     assertSafeInteger(candidate.price, `items[${index}].price`, 1)
   }
   assertUnique(itemSkus, 'Item SKU')
+
+  const catalogBaselineSkus: string[] = []
+  const catalogBaselineBySku = new Map<string, CommerceCatalogBaseline>()
+  const catalogBaselineProofByAction = new Map<string, CommerceActionProof>()
+  for (const [index, candidate] of catalogBaselines.entries()) {
+    if (!isRecord(candidate) || !hasExactKeys(
+      candidate,
+      ['sku', 'price', 'reorderAt', 'proof', 'anchorDigest'],
+    )) throw new Error(`catalogBaselines[${index}] is invalid.`)
+    const sku = canonicalText(candidate.sku, `catalogBaselines[${index}].sku`, 80)
+    if (!itemBySku.has(sku)) throw new Error(`catalogBaselines[${index}].sku is unknown.`)
+    assertSafeInteger(candidate.price, `catalogBaselines[${index}].price`, 1)
+    assertSafeInteger(candidate.reorderAt, `catalogBaselines[${index}].reorderAt`)
+    if (!isRecord(candidate.proof)
+      || !hasExactKeys(candidate.proof, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+      || !validProof(candidate.proof as CommerceActionProof)) {
+      throw new Error(`catalogBaselines[${index}].proof is invalid.`)
+    }
+    const proof = candidate.proof as unknown as CommerceActionProof
+    for (const field of ['actionId', 'actor', 'reason', 'evidenceReference'] as const) {
+      canonicalText(proof[field], `catalogBaselines[${index}].proof.${field}`, field === 'actionId' ? 160 : 180)
+    }
+    if (typeof candidate.anchorDigest !== 'string'
+      || !sha256DigestPattern.test(candidate.anchorDigest)
+      || candidate.anchorDigest !== commerceCatalogBaselineDigest({
+        sku,
+        price: Number(candidate.price),
+        reorderAt: Number(candidate.reorderAt),
+        proof,
+      })) {
+      throw new Error(`catalogBaselines[${index}].anchorDigest is invalid.`)
+    }
+    const priorProof = catalogBaselineProofByAction.get(proof.actionId)
+    if (priorProof && !sameActionProof(priorProof, proof)) {
+      throw new Error(`catalogBaselines[${index}].proof conflicts with its shared catalog command.`)
+    }
+    const baseline = candidate as unknown as CommerceCatalogBaseline
+    catalogBaselineSkus.push(sku)
+    catalogBaselineActionIds.push(proof.actionId)
+    catalogBaselineBySku.set(sku, baseline)
+    catalogBaselineProofByAction.set(proof.actionId, proof)
+  }
+  assertUnique(catalogBaselineSkus, 'Catalog baseline SKU')
+
+  const newerCatalogChangeBySku = new Map<string, CommerceCatalogChange>()
+  for (const [index, candidate] of catalogChanges.entries()) {
+    if (!isRecord(candidate) || !hasExactKeys(
+      candidate,
+      ['sku', 'previousPrice', 'nextPrice', 'previousReorderAt', 'nextReorderAt', 'proof'],
+    )) throw new Error(`catalogChanges[${index}] is invalid.`)
+    const sku = canonicalText(candidate.sku, `catalogChanges[${index}].sku`, 80)
+    const item = itemBySku.get(sku)
+    if (!item) throw new Error(`catalogChanges[${index}].sku is unknown.`)
+    assertSafeInteger(candidate.previousPrice, `catalogChanges[${index}].previousPrice`, 1)
+    assertSafeInteger(candidate.nextPrice, `catalogChanges[${index}].nextPrice`, 1)
+    assertSafeInteger(candidate.previousReorderAt, `catalogChanges[${index}].previousReorderAt`)
+    assertSafeInteger(candidate.nextReorderAt, `catalogChanges[${index}].nextReorderAt`)
+    if (candidate.previousPrice === candidate.nextPrice
+      && candidate.previousReorderAt === candidate.nextReorderAt) {
+      throw new Error(`catalogChanges[${index}] cannot record an unchanged item.`)
+    }
+    if (!isRecord(candidate.proof)
+      || !hasExactKeys(candidate.proof, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+      || !validProof(candidate.proof as CommerceActionProof)) {
+      throw new Error(`catalogChanges[${index}].proof is invalid.`)
+    }
+    const proof = candidate.proof as unknown as CommerceActionProof
+    for (const field of ['actionId', 'actor', 'reason', 'evidenceReference'] as const) {
+      canonicalText(proof[field], `catalogChanges[${index}].proof.${field}`, field === 'actionId' ? 160 : 180)
+    }
+    const change = candidate as unknown as CommerceCatalogChange
+    const newer = newerCatalogChangeBySku.get(sku)
+    if (!newer) {
+      if (item.price !== change.nextPrice || item.reorderAt !== change.nextReorderAt) {
+        throw new Error(`catalogChanges[${index}] does not match the current catalog item.`)
+      }
+    } else if (newer.previousPrice !== change.nextPrice
+      || newer.previousReorderAt !== change.nextReorderAt
+      || (timestampMicros(newer.proof.capturedAt) as bigint) < (timestampMicros(change.proof.capturedAt) as bigint)) {
+      throw new Error(`catalogChanges[${index}] breaks the newest-first item history.`)
+    }
+    newerCatalogChangeBySku.set(sku, change)
+    catalogChangeActionIds.push(proof.actionId)
+  }
+  for (const [sku, oldestChange] of newerCatalogChangeBySku) {
+    const baseline = catalogBaselineBySku.get(sku)
+    if (!baseline) throw new Error(`Catalog change history for ${sku} has no anchored baseline.`)
+    if (baseline.price !== oldestChange.previousPrice
+      || baseline.reorderAt !== oldestChange.previousReorderAt
+      || (timestampMicros(baseline.proof.capturedAt) as bigint) > (timestampMicros(oldestChange.proof.capturedAt) as bigint)) {
+      throw new Error(`Catalog change history for ${sku} does not start from its anchored baseline.`)
+    }
+  }
+  for (const [sku, baseline] of catalogBaselineBySku) {
+    if (newerCatalogChangeBySku.has(sku)) continue
+    const item = itemBySku.get(sku) as Record<string, unknown>
+    if (item.price !== baseline.price || item.reorderAt !== baseline.reorderAt) {
+      throw new Error(`Catalog baseline for ${sku} does not match the unchanged catalog item.`)
+    }
+  }
 
   for (const [index, candidate] of purchaseOrders.entries()) {
     if (!isRecord(candidate) || !hasExactKeys(
@@ -1016,7 +1287,7 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (!isRecord(candidate) || !hasExactKeys(
       candidate,
       ['id', 'createdAt', 'status', 'source', 'sku', 'quantity', 'itemName', 'unitPrice', 'total', 'creation'],
-      ['itemVariant', 'conversion'],
+      ['itemVariant', 'snapshotDigest', 'conversion'],
     )) throw new Error(`websiteIntakes[${index}] is invalid.`)
     const intakeId = canonicalText(candidate.id, `websiteIntakes[${index}].id`, 85)
     if (!websiteIntakeIdPattern.test(intakeId)) throw new Error(`websiteIntakes[${index}].id is invalid.`)
@@ -1041,8 +1312,8 @@ export function validateCommerceState(value: unknown): CommerceState {
     const itemVariant = candidate.itemVariant === undefined ? undefined : canonicalText(candidate.itemVariant, `websiteIntakes[${index}].itemVariant`)
     assertSafeInteger(candidate.unitPrice, `websiteIntakes[${index}].unitPrice`, 1)
     assertSafeInteger(candidate.total, `websiteIntakes[${index}].total`, 1)
-    if (itemName !== item.name || itemVariant !== optionalText(item.variant) || candidate.unitPrice !== item.price || candidate.total !== Number(candidate.quantity) * Number(candidate.unitPrice)) {
-      throw new Error(`websiteIntakes[${index}] does not match its Commerce catalog record.`)
+    if (itemName !== item.name || itemVariant !== optionalText(item.variant) || candidate.total !== Number(candidate.quantity) * Number(candidate.unitPrice)) {
+      throw new Error(`websiteIntakes[${index}] does not match its retained Commerce snapshot.`)
     }
     if (!isRecord(candidate.creation) || !hasExactKeys(candidate.creation, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])) {
       throw new Error(`websiteIntakes[${index}].creation is invalid.`)
@@ -1050,6 +1321,25 @@ export function validateCommerceState(value: unknown): CommerceState {
     const creation = candidate.creation as CommerceActionProof
     if (!validProof(creation) || creation.capturedAt !== candidate.createdAt) throw new Error(`websiteIntakes[${index}].creation is invalid.`)
     for (const field of ['actionId', 'actor', 'reason', 'evidenceReference'] as const) canonicalText(creation[field], `websiteIntakes[${index}].creation.${field}`, field === 'actionId' ? 160 : 180)
+    if (candidate.snapshotDigest !== undefined) {
+      const snapshot: Omit<CommerceWebsiteIntake, 'snapshotDigest' | 'conversion' | 'status'> = {
+        id: intakeId,
+        createdAt: candidate.createdAt as string,
+        source: candidate.source as unknown as CommerceWebsiteSource,
+        sku,
+        quantity: Number(candidate.quantity),
+        itemName,
+        unitPrice: Number(candidate.unitPrice),
+        total: Number(candidate.total),
+        creation,
+      }
+      if (itemVariant !== undefined) snapshot.itemVariant = itemVariant
+      if (typeof candidate.snapshotDigest !== 'string'
+        || !sha256DigestPattern.test(candidate.snapshotDigest)
+        || candidate.snapshotDigest !== commerceWebsiteIntakeSnapshotDigest(snapshot)) {
+        throw new Error(`websiteIntakes[${index}].snapshotDigest is invalid.`)
+      }
+    }
     websiteIntakeCreationActionIds.push(creation.actionId)
 
     const matchingSourceOrders = orders.filter((order) => isRecord(order) && order.sourceRecordId === intakeId) as Record<string, unknown>[]
@@ -1148,13 +1438,49 @@ export function validateCommerceState(value: unknown): CommerceState {
   }
   assertUnique(storefrontRequestIds, 'Storefront request ID')
   assertUnique(storefrontIdempotencyKeys, 'Storefront request idempotency key')
+  const catalogBaselineActionSet = new Set(catalogBaselineActionIds)
+  for (const actionId of catalogBaselineActionSet) {
+    const baselines = [...catalogBaselineBySku.values()].filter((baseline) => baseline.proof.actionId === actionId)
+    const matchingChanges = catalogChanges.filter((candidate) => isRecord(candidate)
+      && isRecord(candidate.proof)
+      && candidate.proof.actionId === actionId) as unknown as CommerceCatalogChange[]
+    const matchingMovements = movements.filter((candidate) => isRecord(candidate)
+      && candidate.actionId === actionId) as unknown as CommerceStockMovement[]
+    if (matchingChanges.length && matchingMovements.length) {
+      throw new Error(`Catalog baseline action ${actionId} cannot anchor two event types.`)
+    }
+    if (matchingChanges.length) {
+      const [baseline] = baselines
+      const [change] = matchingChanges
+      if (baselines.length !== 1
+        || matchingChanges.length !== 1
+        || change !== newerCatalogChangeBySku.get(baseline.sku)
+        || change.sku !== baseline.sku
+        || !sameActionProof(change.proof, baseline.proof)) {
+        throw new Error(`Catalog baseline action ${actionId} does not match its first catalog change.`)
+      }
+    }
+    if (matchingMovements.length) {
+      const [baseline] = baselines
+      const [movement] = matchingMovements
+      if (baselines.length !== 1
+        || matchingMovements.length !== 1
+        || movement.kind !== 'opening'
+        || movement.sku !== baseline.sku
+        || !sameProof(movement, baseline.proof)) {
+        throw new Error(`Catalog baseline action ${actionId} does not match its opening balance.`)
+      }
+    }
+  }
   assertUnique([
-    ...new Set(movementActionIds.filter((actionId) => !returnActionIds.includes(actionId))),
+    ...new Set(movementActionIds.filter((actionId) => !returnActionIds.includes(actionId) && !catalogBaselineActionSet.has(actionId))),
     ...reconciliationActionIds,
     ...refundSettlementActionIds,
     ...advancementActionIds,
     ...completionActionIds,
     ...returnActionIds,
+    ...catalogChangeActionIds.filter((actionId) => !catalogBaselineActionSet.has(actionId)),
+    ...catalogBaselineActionSet,
     ...websiteIntakeCreationActionIds,
     ...closeActionIds,
     ...purchaseOrderActionIds,
@@ -1228,7 +1554,7 @@ function migrateLegacyCommerce(value: unknown): CommerceState {
       orders: legacyInteger(candidate.orders ?? candidate.transactions, 0),
     }
   })
-  return validateCommerceState({ schema: COMMERCE_WORKSPACE_SCHEMA, items, orders, movements: [], closes, websiteIntakes: [], storefrontRequests: [], purchaseOrders: [] })
+  return validateCommerceState({ schema: COMMERCE_WORKSPACE_SCHEMA, items, orders, movements: [], closes, catalogBaselines: [], catalogChanges: [], websiteIntakes: [], storefrontRequests: [], purchaseOrders: [] })
 }
 
 export function normalizeCommerce(value: unknown): CommerceState {
@@ -1354,6 +1680,8 @@ function actionIdIsUsed(state: CommerceState, actionId: string) {
     || state.orders.some((order) => order.completion?.actionId === actionId)
     || state.orders.some((order) => order.returns?.some((record) => record.actionId === actionId))
     || state.closes.some((close) => close.actionId === actionId)
+    || commerceCatalogBaselines(state).some((baseline) => baseline.proof.actionId === actionId)
+    || commerceCatalogChanges(state).some((change) => change.proof.actionId === actionId)
     || commerceWebsiteIntakes(state).some((intake) => intake.creation.actionId === actionId || intake.conversion?.actionId === actionId)
     || commercePurchaseOrders(state).some((purchaseOrder) => purchaseOrder.creation.actionId === actionId || purchaseOrder.cancellation?.actionId === actionId)
     || state.storefrontConfiguration?.saved.actionId === actionId
@@ -1376,6 +1704,23 @@ function sameActionProof(left: CommerceActionProof, right: CommerceActionProof) 
     && left.evidenceReference === right.evidenceReference
 }
 
+function sameCatalogChange(left: CommerceCatalogChange, right: CommerceCatalogChange) {
+  return left.sku === right.sku
+    && left.previousPrice === right.previousPrice
+    && left.nextPrice === right.nextPrice
+    && left.previousReorderAt === right.previousReorderAt
+    && left.nextReorderAt === right.nextReorderAt
+    && sameActionProof(left.proof, right.proof)
+}
+
+function sameCatalogBaseline(left: CommerceCatalogBaseline, right: CommerceCatalogBaseline) {
+  return left.sku === right.sku
+    && left.price === right.price
+    && left.reorderAt === right.reorderAt
+    && left.anchorDigest === right.anchorDigest
+    && sameActionProof(left.proof, right.proof)
+}
+
 function validWebsiteSource(source: CommerceWebsiteSource) {
   return websiteFingerprintPattern.test(source.fingerprint)
     && [source.approvalId, source.snapshotId, source.pageId, source.siteName, source.pagePath].every((value) => typeof value === 'string' && value === value.trim() && value.length > 0 && value.length <= 160)
@@ -1384,6 +1729,14 @@ function validWebsiteSource(source: CommerceWebsiteSource) {
 
 export function commerceWebsiteIntakes(state: CommerceState) {
   return state.websiteIntakes ?? []
+}
+
+export function commerceCatalogBaselines(state: CommerceState) {
+  return state.catalogBaselines ?? []
+}
+
+export function commerceCatalogChanges(state: CommerceState) {
+  return state.catalogChanges ?? []
 }
 
 export function commerceStorefrontRequests(state: CommerceState) {
@@ -1656,10 +2009,9 @@ export function createCommerceWebsiteIntake(
   if (!item) return null
   const total = item.price * input.quantity
   if (!Number.isSafeInteger(total) || total < 1) return null
-  const intake: CommerceWebsiteIntake = {
+  const snapshot: Omit<CommerceWebsiteIntake, 'snapshotDigest' | 'conversion' | 'status'> = {
     id: input.id,
     createdAt: proof.capturedAt,
-    status: 'pending_confirmation',
     source: { ...input.source },
     sku: item.sku,
     quantity: input.quantity,
@@ -1668,7 +2020,12 @@ export function createCommerceWebsiteIntake(
     total,
     creation: { ...proof },
   }
-  if (item.variant) intake.itemVariant = item.variant
+  if (item.variant) snapshot.itemVariant = item.variant
+  const intake: CommerceWebsiteIntake = {
+    ...snapshot,
+    status: 'pending_confirmation',
+    snapshotDigest: commerceWebsiteIntakeSnapshotDigest(snapshot),
+  }
   return validateCommerceState({
     ...current,
     websiteIntakes: [intake, ...intakes],
@@ -1701,6 +2058,7 @@ export function convertCommerceWebsiteIntake(
       && order.payment === (input.paymentMethod === 'cash_on_delivery' ? 'Cash on delivery' : input.paymentMethod === 'manual_qr' ? 'Manual QR review' : 'Manual bank transfer')
       && sameActionProof(intake.conversion, proof) ? current : null
   }
+  if (!intake.snapshotDigest) return null
   if (actionIdIsUsed(current, proof.actionId)) return null
   const item = current.items.find((candidate) => candidate.sku === intake.sku)
   if (!item
@@ -1770,15 +2128,74 @@ export function registerCommerceItem(state: CommerceState, item: CommerceItem, p
   const proofMovement = state.movements.find((movement) => movement.actionId === proof.actionId)
   if (proofMovement) {
     const storedItem = state.items.find((candidate) => candidate.sku === item.sku)
+    const expectedBaseline = createCommerceCatalogBaseline(item, proof)
+    const storedBaseline = commerceCatalogBaselines(state).find((candidate) => candidate.sku === item.sku)
     return proofMovement.kind === 'opening'
       && proofMovement.sku === item.sku
       && proofMovement.quantityDelta === item.onHand
       && sameProof(proofMovement, proof)
-      && JSON.stringify(storedItem) === JSON.stringify(item) ? state : null
+      && JSON.stringify(storedItem) === JSON.stringify(item)
+      && (!storedBaseline || sameCatalogBaseline(storedBaseline, expectedBaseline)) ? state : null
   }
   if (actionIdIsUsed(state, proof.actionId) || state.items.some((candidate) => candidate.sku === item.sku)) return null
   const opening = movementFor(proof, { kind: 'opening', sku: item.sku, quantityDelta: item.onHand })
-  return validateCommerceState({ ...state, items: [item, ...state.items], movements: [opening, ...state.movements] })
+  const baseline = createCommerceCatalogBaseline(item, proof)
+  return validateCommerceState({
+    ...state,
+    items: [item, ...state.items],
+    movements: [opening, ...state.movements],
+    catalogBaselines: [baseline, ...commerceCatalogBaselines(state)],
+  })
+}
+
+export function updateCommerceItem(state: CommerceState, update: CommerceItemUpdate, proof: CommerceActionProof) {
+  if (!validProof(proof)
+    || typeof update?.sku !== 'string'
+    || !update.sku
+    || update.sku !== update.sku.trim()
+    || update.sku.length > 80
+    || !Number.isSafeInteger(update.expectedPrice)
+    || update.expectedPrice < 1
+    || !Number.isSafeInteger(update.nextPrice)
+    || update.nextPrice < 1
+    || !Number.isSafeInteger(update.expectedReorderAt)
+    || update.expectedReorderAt < 0
+    || !Number.isSafeInteger(update.nextReorderAt)
+    || update.nextReorderAt < 0
+    || (update.expectedPrice === update.nextPrice
+      && update.expectedReorderAt === update.nextReorderAt)) return null
+  const current = validateCommerceState(state)
+  const change: CommerceCatalogChange = {
+    sku: update.sku,
+    previousPrice: update.expectedPrice,
+    nextPrice: update.nextPrice,
+    previousReorderAt: update.expectedReorderAt,
+    nextReorderAt: update.nextReorderAt,
+    proof: { ...proof },
+  }
+  const changes = commerceCatalogChanges(current)
+  const baselines = commerceCatalogBaselines(current)
+  const replay = changes.find((candidate) => candidate.proof.actionId === proof.actionId)
+  if (replay) return sameCatalogChange(replay, change) ? current : null
+  const existingBaseline = baselines.find((baseline) => baseline.sku === update.sku)
+  if (changes.length >= maxCatalogChanges
+    || (!existingBaseline && baselines.length >= maxCatalogBaselines)
+    || actionIdIsUsed(current, proof.actionId)) return null
+  const items = current.items.filter((item) => item.sku === update.sku)
+  if (items.length !== 1
+    || items[0].price !== update.expectedPrice
+    || items[0].reorderAt !== update.expectedReorderAt) return null
+  const nextBaselines = existingBaseline
+    ? baselines
+    : [createCommerceCatalogBaseline(items[0], proof), ...baselines]
+  return validateCommerceState({
+    ...current,
+    items: current.items.map((item) => item.sku === update.sku
+      ? { ...item, price: update.nextPrice, reorderAt: update.nextReorderAt }
+      : item),
+    catalogBaselines: nextBaselines,
+    catalogChanges: [change, ...changes],
+  })
 }
 
 function validatedOrderLineSnapshots(order: CommerceOrder): CommerceOrderLine[] | null {

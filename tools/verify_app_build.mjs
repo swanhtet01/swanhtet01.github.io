@@ -922,7 +922,7 @@ if (!managedTrialSource.includes('saveManagedCommerceCommand')
   || !managedTrialSource.includes('request.identity')
   || !managedTrialSource.includes("code: 'managed_identity_changed'")) fail('managed_commerce_command_client_missing')
 const managedCommerceClientSources = `${coreSource}\n${websiteSource}\n${ecommerceSource}`
-for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.order.return_recorded', 'commerce.payment.reconciled', 'commerce.refund.settled', 'commerce.stock.counted', 'commerce.purchase_order.created', 'commerce.purchase_order.received', 'commerce.purchase_order.cancelled', 'commerce.close.saved', 'commerce.website_intake.converted', 'commerce.storefront.configuration.saved', 'commerce.storefront_request.received']) {
+for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.item.updated', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.order.return_recorded', 'commerce.payment.reconciled', 'commerce.refund.settled', 'commerce.stock.counted', 'commerce.purchase_order.created', 'commerce.purchase_order.received', 'commerce.purchase_order.cancelled', 'commerce.close.saved', 'commerce.website_intake.converted', 'commerce.storefront.configuration.saved', 'commerce.storefront_request.received']) {
   if (!managedTrialSource.includes(eventType) || !managedCommerceClientSources.includes(eventType) || !managedCommerceRuntime.includes(eventType)) fail(`managed_commerce_event_missing:${eventType}`)
 }
 if (!managedTrialSource.includes('commerce.stock.received')
@@ -954,6 +954,25 @@ if ((coreSource.match(/const conflict = \{ \.\.\.refreshed, error: '' \}/g) || [
 if (!coreSource.includes('confirmation?: AccountableAction') || !coreSource.includes('if (action.confirmation) return action.confirmation') || !coreSource.includes('Retry same confirmation') || !coreSource.includes('result.idempotent_replay') || !coreSource.includes('before the replay could be reconciled')) fail('managed_command_retry_not_frozen_or_reconciled')
 if (!managedCommerceRuntime.includes('commerce.workspace.initialized') || managedCommerceRuntime.includes('commerce.snapshot.saved') || !managedCommerceRuntime.includes('_one_changed') || !managedCommerceRuntime.includes('_validate_event_evidence') || !managedCommerceRuntime.includes('daily close totals must match completed, reconciled orders')) fail('managed_commerce_server_transition_contract_missing')
 if (!commerceSource.includes('registerCommerceItem') || !coreSource.includes('Add catalog item') || !coreSource.includes('Review catalog item') || !coreSource.includes('The opening balance may be zero.') || !managedCommerceRuntime.includes('one exact attributable opening balance')) fail('commerce_catalog_creation_contract_missing')
+if (!commerceSource.includes('export type CommerceCatalogChange')
+  || !commerceSource.includes('export type CommerceCatalogBaseline')
+  || !commerceSource.includes('commerceCatalogBaselineDigest')
+  || !commerceSource.includes('export function updateCommerceItem')
+  || !commerceSource.includes('has no anchored baseline')
+  || !commerceSource.includes('catalogChanges: [change, ...changes]')
+  || !commerceSource.includes('item.price !== change.nextPrice || item.reorderAt !== change.nextReorderAt')
+  || !coreSource.includes("kind: 'catalog_item_update'")
+  || !coreSource.includes("'commerce.item.updated'")
+  || !coreSource.includes('Edit item')
+  || !coreSource.includes('Only price and reorder level change')
+  || !managedCommerceRuntime.includes('def _validate_item_updated')
+  || !managedCommerceRuntime.includes('commerce_catalog_baseline_digest')
+  || !managedCommerceRuntime.includes('"commerce.item.updated"')) fail('commerce_catalog_update_contract_missing')
+if (!commerceSource.includes('commerceWebsiteIntakeSnapshotDigest')
+  || !commerceSource.includes('snapshotDigest: commerceWebsiteIntakeSnapshotDigest(snapshot)')
+  || !commerceSource.includes('if (!intake.snapshotDigest) return null')
+  || !managedCommerceRuntime.includes('commerce_website_intake_snapshot_digest')
+  || !managedCommerceRuntime.includes('legacy Website intakes without a snapshot digest cannot be converted')) fail('commerce_website_snapshot_binding_missing')
 if (!commerceSource.includes("export type CommerceStockMovementKind = 'opening' | 'reserve' | 'release' | 'receipt' | 'count'")
   || !commerceSource.includes('export function countCommerceStock')
   || !commerceSource.includes('expectedQuantity: item.onHand')
@@ -2543,6 +2562,7 @@ async function verifyCommerceRuntime() {
       quantity: 2,
     }, intakeProof)
     assert(intake?.websiteIntakes?.length === 1 && intake.websiteIntakes[0].status === 'pending_confirmation', 'managed_website_intake_not_recorded')
+    assert(intake.websiteIntakes[0].snapshotDigest === 'sha256:58c85cb3640d6e4510551181009bd0cbae46f5f51a6db6c7b0f6485d76e4933d', 'managed_website_snapshot_digest_drifted')
     assert(intake.items[0].onHand === 10 && intake.orders.length === 0 && intake.movements.length === 0, 'managed_website_intake_moved_stock_or_created_order')
     assert(model.createCommerceWebsiteIntake(intake, {
       id: 'WINT-OTHER123',
@@ -2578,11 +2598,120 @@ async function verifyCommerceRuntime() {
       fulfilmentMethod: 'local_delivery',
       paymentMethod: 'manual_qr',
     }, { ...conversionProof, actionId: intakeProof.actionId }) === null, 'managed_website_action_id_reuse_succeeded')
+    const legacyUnboundIntake = model.validateCommerceState({
+      ...intake,
+      websiteIntakes: [{ ...intake.websiteIntakes[0], snapshotDigest: undefined }],
+    })
+    assert(model.convertCommerceWebsiteIntake(legacyUnboundIntake, 'WINT-12345678', {
+      customer: 'Customer reference',
+      fulfilmentMethod: 'local_delivery',
+      paymentMethod: 'manual_qr',
+    }, conversionProof) === null, 'legacy_unbound_website_intake_converted')
+
+    const catalogUpdate = {
+      sku: 'SKU-1',
+      expectedPrice: 100,
+      nextPrice: 125,
+      expectedReorderAt: 2,
+      nextReorderAt: 3,
+    }
+    const catalogUpdateProof = proof('ACT-ITEM-UPDATE', 2_000)
+    const updatedCatalog = model.updateCommerceItem(intake, catalogUpdate, catalogUpdateProof)
+    assert(updatedCatalog?.items[0].price === 125
+      && updatedCatalog.items[0].reorderAt === 3
+      && updatedCatalog.items[0].onHand === 10
+      && updatedCatalog.catalogBaselines?.[0].anchorDigest === 'sha256:fe1d49f917797c9b6f35354c7787c21dffee2746d82a7a16c7ed19b1e0dbb35e'
+      && updatedCatalog.catalogChanges?.[0].proof.actionId === catalogUpdateProof.actionId,
+    'catalog_item_update_not_recorded_exactly')
+    assert(updatedCatalog.orders === intake.orders
+      && updatedCatalog.movements === intake.movements
+      && updatedCatalog.closes === intake.closes
+      && updatedCatalog.websiteIntakes === intake.websiteIntakes
+      && updatedCatalog.websiteIntakes[0].unitPrice === 100,
+    'catalog_item_update_rewrote_operating_history')
+    assert(model.updateCommerceItem(updatedCatalog, catalogUpdate, catalogUpdateProof) === updatedCatalog, 'catalog_item_update_retry_not_idempotent')
+    const reorderedCatalogUpdate = model.validateCommerceState({
+      ...updatedCatalog,
+      catalogChanges: [{
+        proof: { ...updatedCatalog.catalogChanges[0].proof },
+        nextReorderAt: updatedCatalog.catalogChanges[0].nextReorderAt,
+        previousReorderAt: updatedCatalog.catalogChanges[0].previousReorderAt,
+        nextPrice: updatedCatalog.catalogChanges[0].nextPrice,
+        previousPrice: updatedCatalog.catalogChanges[0].previousPrice,
+        sku: updatedCatalog.catalogChanges[0].sku,
+      }],
+    })
+    assert(model.updateCommerceItem(reorderedCatalogUpdate, catalogUpdate, catalogUpdateProof) === reorderedCatalogUpdate, 'catalog_item_update_reordered_retry_not_idempotent')
+    assert(model.updateCommerceItem(updatedCatalog, { ...catalogUpdate, nextPrice: 126 }, catalogUpdateProof) === null, 'catalog_item_update_conflicting_retry_succeeded')
+    assert(model.updateCommerceItem(updatedCatalog, { ...catalogUpdate, nextPrice: 130 }, proof('ACT-ITEM-UPDATE-STALE', 3_000)) === null, 'catalog_item_update_stale_review_succeeded')
+    assert(model.updateCommerceItem(intake, catalogUpdate, intakeProof) === null, 'catalog_item_update_reused_action_succeeded')
+    assert(model.convertCommerceWebsiteIntake(updatedCatalog, 'WINT-12345678', {
+      customer: 'Customer reference',
+      fulfilmentMethod: 'local_delivery',
+      paymentMethod: 'manual_qr',
+    }, conversionProof) === null, 'stale_website_intake_converted_after_catalog_update')
+    assertThrows(() => model.validateCommerceState({
+      ...updatedCatalog,
+      websiteIntakes: [{
+        ...updatedCatalog.websiteIntakes[0],
+        unitPrice: 125,
+        total: 250,
+      }],
+    }), 'rewritten_stale_website_snapshot_bypassed_digest')
+    assertThrows(() => model.validateCommerceState({
+      ...updatedCatalog,
+      catalogChanges: [{
+        ...updatedCatalog.catalogChanges[0],
+        previousPrice: 99,
+      }],
+    }), 'catalog_opening_value_not_anchored')
+    assertThrows(() => model.validateCommerceState({
+      ...updatedCatalog,
+      catalogBaselines: [{
+        ...updatedCatalog.catalogBaselines[0],
+        price: 99,
+      }],
+    }), 'catalog_baseline_digest_not_enforced')
+    const secondCatalogUpdateProof = proof('ACT-ITEM-UPDATE-2', 3_000)
+    const updatedCatalogAgain = model.updateCommerceItem(updatedCatalog, {
+      sku: 'SKU-1',
+      expectedPrice: 125,
+      nextPrice: 130,
+      expectedReorderAt: 3,
+      nextReorderAt: 4,
+    }, secondCatalogUpdateProof)
+    assert(updatedCatalogAgain?.catalogChanges?.length === 2
+      && updatedCatalogAgain.catalogChanges[0].previousPrice === updatedCatalog.catalogChanges[0].nextPrice,
+    'catalog_item_update_history_not_chained')
+    assertThrows(() => model.validateCommerceState({
+      ...updatedCatalogAgain,
+      catalogChanges: [
+        updatedCatalogAgain.catalogChanges[0],
+        { ...updatedCatalogAgain.catalogChanges[1], nextPrice: 126 },
+      ],
+    }), 'catalog_item_update_broken_chain_loaded')
+    assertThrows(() => model.validateCommerceState({
+      ...updatedCatalog,
+      catalogChanges: [{ ...updatedCatalog.catalogChanges[0], proof: { ...catalogUpdateProof, unexpected: true } }],
+    }), 'catalog_item_update_extra_proof_field_loaded')
+    assertThrows(() => model.validateCommerceState({
+      ...updatedCatalog,
+      catalogChanges: Array.from({ length: 501 }, () => updatedCatalog.catalogChanges[0]),
+    }), 'catalog_item_update_history_cap_not_enforced')
+    const updatedConfiguredCatalog = model.updateCommerceItem(configuredBase, catalogUpdate, catalogUpdateProof)
+    assert(updatedConfiguredCatalog
+      && await model.commerceCatalogDigest(updatedConfiguredCatalog) !== configuredBase.storefrontConfiguration.shopCatalogDigest
+      && await model.recordCommerceStorefrontRequest(updatedConfiguredCatalog, storefrontRequest, storefrontProof) === null,
+    'catalog_item_update_did_not_stale_saved_storefront')
 
     const newItem = { sku: 'SKU-2', name: 'Second item', onHand: 0, reorderAt: 3, price: 250 }
     const openingProof = proof('ACT-ITEM-CREATE')
     const withItem = model.registerCommerceItem(base, newItem, openingProof)
-    assert(withItem?.items[0].sku === newItem.sku && withItem.movements[0].kind === 'opening' && withItem.movements[0].quantityDelta === 0, 'catalog_item_opening_not_recorded')
+    assert(withItem?.items[0].sku === newItem.sku
+      && withItem.movements[0].kind === 'opening'
+      && withItem.movements[0].quantityDelta === 0
+      && withItem.catalogBaselines[0].sku === newItem.sku,
+    'catalog_item_opening_not_recorded')
     assert(model.registerCommerceItem(withItem, newItem, openingProof) === withItem, 'catalog_item_retry_not_idempotent')
     assert(model.registerCommerceItem(withItem, { ...newItem, price: 251 }, openingProof) === null, 'catalog_item_conflicting_retry_succeeded')
     assert(model.registerCommerceItem(withItem, newItem, proof('ACT-ITEM-DUPLICATE')) === null, 'duplicate_catalog_sku_succeeded')
@@ -3965,12 +4094,21 @@ async function verifyManagedStorefrontRuntime() {
       '2026-07-25T00:01:00.000Z',
     )
     assert(unchanged.status === 'unchanged' && unchanged.configuration.revision === 1, 'managed_storefront_exact_retry_advanced_revision')
-    const repricedAccepted = commerce.validateCommerceState({
-      ...accepted,
-      items: accepted.items.map((item, index) => (
-        index === 0 ? { ...item, price: item.price + 500 } : item
-      )),
+    const repricedItem = accepted.items[0]
+    const repricedAccepted = commerce.updateCommerceItem(accepted, {
+      sku: repricedItem.sku,
+      expectedPrice: repricedItem.price,
+      nextPrice: repricedItem.price + 500,
+      expectedReorderAt: repricedItem.reorderAt,
+      nextReorderAt: repricedItem.reorderAt,
+    }, {
+      actionId: 'ACT-MANAGED-STOREFRONT-REPRICE',
+      capturedAt: '2026-07-25T00:01:15.000Z',
+      actor: 'OP-MANAGED',
+      reason: 'Approved the reviewed catalog price before rebinding the storefront.',
+      evidenceReference: 'EV-MANAGED-STOREFRONT-REPRICE',
     })
+    assert(repricedAccepted, 'managed_storefront_reprice_fixture_failed')
     const rebound = await model.prepareManagedStorefrontSave(
       repricedAccepted,
       input,
@@ -4017,10 +4155,10 @@ async function verifyManagedStorefrontRuntime() {
       'OP-MANAGED',
       '2026-07-25T00:04:00.000Z',
     )
-    mutable.items[0].price += 1_000
+    mutable.items[0].onHand += 1_000
     const mutationSafePlan = await mutationSafePlanPromise
-    assert(mutationSafePlan.current.items[0].price === state.items[0].price
-      && mutationSafePlan.next.items[0].price === state.items[0].price, 'managed_storefront_async_plan_observed_late_mutation')
+    assert(mutationSafePlan.current.items[0].onHand === state.items[0].onHand
+      && mutationSafePlan.next.items[0].onHand === state.items[0].onHand, 'managed_storefront_async_plan_observed_late_mutation')
   } catch (error) {
     fail(`managed_storefront_runtime:${error instanceof Error ? error.message : 'unknown'}`)
   }

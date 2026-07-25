@@ -51,6 +51,7 @@ import {
   commerceWorkspaceCanWrite,
   commerceWebsiteIntakes,
   convertCommerceWebsiteIntake,
+  createCommerceCatalogBaseline,
   createCommercePurchaseOrder,
   createEmptyCommerce,
   loadCommerceWorkspace,
@@ -62,9 +63,11 @@ import {
   reserveCommerceOrder,
   saveCommerceClose,
   settleCommerceRefund,
+  updateCommerceItem,
   validateCommerceState,
   type CommerceActionProof,
   type CommerceItem,
+  type CommerceItemUpdate,
   type CommerceOrder,
   type CommerceOrderLine,
   type CommerceOrderStatus,
@@ -209,6 +212,7 @@ type ActionKind =
   | 'payment_reconcile'
   | 'refund_settle'
   | 'catalog_item_create'
+  | 'catalog_item_update'
   | 'inventory_receipt'
   | 'inventory_count'
   | 'purchase_order_create'
@@ -237,6 +241,14 @@ type PurchaseOrderDraft =
 type StockCountDraft = {
   sku: string
   quantity: string
+}
+
+type CatalogItemEditDraft = {
+  sku: string
+  expectedPrice: number
+  expectedReorderAt: number
+  price: string
+  reorderAt: string
 }
 
 type CommerceReturnDraft = {
@@ -1981,6 +1993,8 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const orderComposerRef = useRef<HTMLDialogElement>(null)
   const orderComposerHeadingRef = useRef<HTMLHeadingElement>(null)
   const orderComposerTriggerRef = useRef<HTMLButtonElement>(null)
+  const catalogEditTriggerRefs = useRef(new Map<string, HTMLButtonElement>())
+  const catalogEditEditorRef = useRef<HTMLFormElement>(null)
   const purchaseOrderTriggerRefs = useRef(new Map<string, HTMLButtonElement>())
   const purchaseOrderEditorRef = useRef<HTMLFormElement>(null)
   const stockCountTriggerRef = useRef<HTMLButtonElement>(null)
@@ -2001,6 +2015,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const [notice, setNotice] = useState('')
   const [catalogDraft, setCatalogDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '', price: '', reason: '', evidenceReference: '' })
   const [itemDraft, setItemDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '', price: '' })
+  const [catalogEditDraft, setCatalogEditDraft] = useState<CatalogItemEditDraft | null>(null)
   const [purchaseOrderDraft, setPurchaseOrderDraft] = useState<PurchaseOrderDraft | null>(null)
   const [stockCountDraft, setStockCountDraft] = useState<StockCountDraft | null>(null)
   const [returnDraft, setReturnDraft] = useState<CommerceReturnDraft | null>(null)
@@ -2110,6 +2125,31 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     && purchaseOrderQuantity <= purchaseOrderQuantityLimit
     ? purchaseOrderQuantity
     : null
+  const catalogEditItem = catalogEditDraft
+    ? commerce.items.find((item) => item.sku === catalogEditDraft.sku)
+    : undefined
+  const catalogEditPriceText = catalogEditDraft?.price.trim() ?? ''
+  const catalogEditPrice = /^[0-9]+$/.test(catalogEditPriceText)
+    ? Number(catalogEditPriceText)
+    : Number.NaN
+  const catalogEditPriceResult = Number.isSafeInteger(catalogEditPrice) && catalogEditPrice >= 1
+    ? catalogEditPrice
+    : null
+  const catalogEditReorderText = catalogEditDraft?.reorderAt.trim() ?? ''
+  const catalogEditReorder = /^[0-9]+$/.test(catalogEditReorderText)
+    ? Number(catalogEditReorderText)
+    : Number.NaN
+  const catalogEditReorderResult = Number.isSafeInteger(catalogEditReorder) && catalogEditReorder >= 0
+    ? catalogEditReorder
+    : null
+  const catalogEditStale = Boolean(catalogEditDraft && (!catalogEditItem
+    || catalogEditItem.price !== catalogEditDraft.expectedPrice
+    || catalogEditItem.reorderAt !== catalogEditDraft.expectedReorderAt))
+  const catalogEditChanged = Boolean(catalogEditDraft
+    && catalogEditPriceResult !== null
+    && catalogEditReorderResult !== null
+    && (catalogEditPriceResult !== catalogEditDraft.expectedPrice
+      || catalogEditReorderResult !== catalogEditDraft.expectedReorderAt))
   const stockCountItem = stockCountDraft
     ? commerce.items.find((item) => item.sku === stockCountDraft.sku)
     : undefined
@@ -2420,6 +2460,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       await mutateCommerce('commerce.workspace.initialized', commandUuid(), proof, (current) => current.items.length || current.orders.length || current.movements.length || current.closes.length || commerceWebsiteIntakes(current).length ? null : validateCommerceState({
         ...current,
         items: [{ sku: skuValue, name, onHand, reorderAt, price }],
+        catalogBaselines: [createCommerceCatalogBaseline({ sku: skuValue, price, reorderAt }, proof)],
       }))
       setNotice(`Managed catalog initialized with ${skuValue}.`)
     } catch (error) {
@@ -2703,6 +2744,99 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         setSku(item.sku)
       },
     })
+  }
+
+  function openCatalogItemEditor(itemSku: string) {
+    const item = commerce.items.find((candidate) => candidate.sku === itemSku)
+    if (!item) return
+    if (stockCountDraft) {
+      const selector = stockCountDraft.sku ? '#stock-count-quantity' : '#stock-count-sku'
+      requestAnimationFrame(() => stockCountEditorRef.current?.querySelector<HTMLElement>(selector)?.focus())
+      setNotice('Finish or cancel the stock count before editing catalog values. Your count draft was preserved.')
+      return
+    }
+    if (purchaseOrderDraft) {
+      requestAnimationFrame(() => purchaseOrderEditorRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus())
+      setNotice('Finish or cancel the stock order before editing catalog values. Your stock-order draft was preserved.')
+      return
+    }
+    const alreadyEditingCurrent = catalogEditDraft?.sku === item.sku
+      && catalogEditDraft.expectedPrice === item.price
+      && catalogEditDraft.expectedReorderAt === item.reorderAt
+    if (alreadyEditingCurrent) {
+      requestAnimationFrame(() => catalogEditEditorRef.current?.querySelector<HTMLInputElement>('#catalog-edit-price')?.focus())
+      setNotice(`Continue editing ${item.sku} below. Your draft was preserved.`)
+      return
+    }
+    setCatalogEditDraft({
+      sku: item.sku,
+      expectedPrice: item.price,
+      expectedReorderAt: item.reorderAt,
+      price: String(item.price),
+      reorderAt: String(item.reorderAt),
+    })
+    setNotice(`Edit only the current price and reorder level for ${item.name}. Stock and prior orders stay unchanged.`)
+    requestAnimationFrame(() => catalogEditEditorRef.current?.querySelector<HTMLInputElement>('#catalog-edit-price')?.focus())
+  }
+
+  function cancelCatalogItemEditor() {
+    const itemSku = catalogEditDraft?.sku
+    setCatalogEditDraft(null)
+    setNotice('Catalog editing closed. Shop data was not modified.')
+    requestAnimationFrame(() => {
+      if (itemSku) catalogEditTriggerRefs.current.get(itemSku)?.focus()
+    })
+  }
+
+  function reviewCatalogItemUpdate(event: FormEvent) {
+    event.preventDefault()
+    if (!catalogEditDraft || !catalogEditItem
+      || catalogEditPriceResult === null || catalogEditReorderResult === null) {
+      setNotice('Enter a whole-MMK price of at least 1 and a non-negative whole reorder level.')
+      return
+    }
+    if (catalogEditStale) {
+      setNotice('Catalog values changed while this editor was open. Reload current values before review.')
+      return
+    }
+    if (!catalogEditChanged) {
+      setNotice('Change the price or reorder level before review. Nothing was queued.')
+      return
+    }
+    const item = catalogEditItem
+    const update: CommerceItemUpdate = {
+      sku: item.sku,
+      expectedPrice: catalogEditDraft.expectedPrice,
+      nextPrice: catalogEditPriceResult,
+      expectedReorderAt: catalogEditDraft.expectedReorderAt,
+      nextReorderAt: catalogEditReorderResult,
+    }
+    queueAction({
+      kind: 'catalog_item_update',
+      subjectId: item.sku,
+      summary: `Update catalog values for ${item.name}`,
+      before: `${item.sku} · ${formatMoney(update.expectedPrice)} · reorder at ${update.expectedReorderAt.toLocaleString()}`,
+      after: `${item.sku} · ${formatMoney(update.nextPrice)} · reorder at ${update.nextReorderAt.toLocaleString()} · stock unchanged`,
+      apply: async (action) => {
+        const proof = commerceActionProof(action)
+        let reviewRequired = false
+        try {
+          await mutateCommerce('commerce.item.updated', action.commandId, proof, (current) => {
+            const next = updateCommerceItem(current, update, proof)
+            if (!next) reviewRequired = true
+            return next
+          })
+          setCatalogEditDraft((current) => current?.sku === item.sku ? null : current)
+        } catch (error) {
+          if (reviewRequired || error instanceof ShopReviewRequiredError) {
+            setCatalogEditDraft(null)
+            requestAnimationFrame(() => catalogEditTriggerRefs.current.get(item.sku)?.focus())
+            throw new ShopReviewRequiredError(`Catalog values changed while ${item.sku} was under review. Nothing was applied; reopen Edit item to use the current values.`)
+          }
+          throw error
+        }
+      },
+    }, catalogEditTriggerRefs.current.get(item.sku))
   }
 
   async function confirmAction(details: ActionDetails) {
@@ -3238,6 +3372,11 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   function openPurchaseOrder(itemSku: string) {
     const item = commerce.items.find((candidate) => candidate.sku === itemSku)
     if (!item) return
+    if (catalogEditDraft) {
+      requestAnimationFrame(() => catalogEditEditorRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus())
+      setNotice('Finish or cancel the catalog edit before opening a stock order. Your catalog draft was preserved.')
+      return
+    }
     if (stockCountDraft) {
       const selector = stockCountDraft.sku ? '#stock-count-quantity' : '#stock-count-sku'
       requestAnimationFrame(() => stockCountEditorRef.current?.querySelector<HTMLElement>(selector)?.focus())
@@ -3350,6 +3489,11 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     if (purchaseOrderDraft) {
       requestAnimationFrame(() => purchaseOrderEditorRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus())
       setNotice('Finish or cancel the stock order before starting a count. Your stock-order draft was preserved.')
+      return
+    }
+    if (catalogEditDraft) {
+      requestAnimationFrame(() => catalogEditEditorRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus())
+      setNotice('Finish or cancel the catalog edit before starting a count. Your catalog draft was preserved.')
       return
     }
     setStockCountDraft({ sku: '', quantity: '' })
@@ -3647,20 +3791,34 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         <div className="data-row table-head" role="row"><span role="columnheader">Item</span><span role="columnheader">Available</span><span role="columnheader">Reorder</span><span role="columnheader">Price</span><span role="columnheader">Next step</span></div>
         {commerce.items.map((item) => {
           const active = activePurchaseOrderBySku.get(item.sku)
+          const catalogEditing = catalogEditDraft?.sku === item.sku
           const editing = purchaseOrderDraft?.mode === 'create'
             ? purchaseOrderDraft.sku === item.sku
             : purchaseOrderDraft?.mode === 'receive'
               ? purchaseOrderDraft.purchaseOrderId === active?.purchaseOrder.id
               : false
-          return <div className="data-row" data-receiving={editing} role="row" key={item.sku}>
+          return <div className="data-row" data-receiving={editing || catalogEditing} role="row" key={item.sku}>
             <span role="rowheader"><strong>{item.name}</strong><small>{item.sku}</small></span>
             <span className={item.onHand <= item.reorderAt ? 'warning-text' : ''} role="cell">{item.onHand}</span>
             <span role="cell">{item.reorderAt}</span>
             <span role="cell">{formatMoney(item.price)}</span>
-            <span role="cell"><button aria-expanded={editing} className="text-link" disabled={commerceControlsDisabled} ref={(node) => { if (node) purchaseOrderTriggerRefs.current.set(item.sku, node); else purchaseOrderTriggerRefs.current.delete(item.sku) }} type="button" onClick={() => openPurchaseOrder(item.sku)}>{editing ? 'Continue' : active ? `Receive ${active.progress.received}/${active.purchaseOrder.quantityOrdered}` : 'Order stock'}</button></span>
+            <span className="catalog-row-actions" role="cell">
+              <button aria-controls="catalog-item-editor" aria-expanded={catalogEditing} aria-label={`Edit price and reorder level for ${item.name}`} className="text-link" disabled={commerceControlsDisabled} ref={(node) => { if (node) catalogEditTriggerRefs.current.set(item.sku, node); else catalogEditTriggerRefs.current.delete(item.sku) }} type="button" onClick={() => openCatalogItemEditor(item.sku)}>{catalogEditing ? 'Editing' : 'Edit'}</button>
+              <button aria-expanded={editing} aria-label={active ? `Receive stock for ${item.name}` : `Order stock for ${item.name}`} className="text-link" disabled={commerceControlsDisabled} ref={(node) => { if (node) purchaseOrderTriggerRefs.current.set(item.sku, node); else purchaseOrderTriggerRefs.current.delete(item.sku) }} type="button" onClick={() => openPurchaseOrder(item.sku)}>{editing ? 'Continue' : active ? 'Receive' : 'Order'}</button>
+            </span>
           </div>
         })}
       </div>
+      {catalogEditDraft && catalogEditItem ? <form aria-labelledby="catalog-item-editor-title" className="stock-receipt-editor" id="catalog-item-editor" onSubmit={reviewCatalogItemUpdate} ref={catalogEditEditorRef}>
+        <div className="stock-receipt-copy">
+          <span className="core-eyebrow">Edit item</span>
+          <h3 id="catalog-item-editor-title">{catalogEditItem.name}</h3>
+          <small>{catalogEditItem.sku} · Only price and reorder level change{catalogEditStale ? ' · reload current values' : ''}</small>
+        </div>
+        <label>Price (MMK)<input aria-invalid={Boolean(catalogEditPriceText) && catalogEditPriceResult === null} autoFocus disabled={commerceControlsDisabled || catalogEditStale} id="catalog-edit-price" inputMode="numeric" max={Number.MAX_SAFE_INTEGER} min="1" onChange={(event) => setCatalogEditDraft((current) => current ? { ...current, price: event.target.value } : current)} required step="1" type="number" value={catalogEditDraft.price} /></label>
+        <label>Reorder at<input aria-invalid={Boolean(catalogEditReorderText) && catalogEditReorderResult === null} disabled={commerceControlsDisabled || catalogEditStale} inputMode="numeric" max={Number.MAX_SAFE_INTEGER} min="0" onChange={(event) => setCatalogEditDraft((current) => current ? { ...current, reorderAt: event.target.value } : current)} required step="1" type="number" value={catalogEditDraft.reorderAt} /></label>
+        <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelCatalogItemEditor} type="button">Cancel</button><button className="core-button primary" disabled={catalogEditStale ? Boolean(pendingAction) || !commerceCanWrite : commerceControlsDisabled || !catalogEditChanged} onClick={catalogEditStale ? () => openCatalogItemEditor(catalogEditItem.sku) : undefined} type={catalogEditStale ? 'button' : 'submit'}>{catalogEditStale ? 'Reload values' : 'Review changes'}</button></div>
+      </form> : null}
       {purchaseOrderDraft && purchaseOrderDraftItem ? <form aria-labelledby="purchase-order-title" className="stock-receipt-editor purchase-order-editor" data-mode={purchaseOrderDraft.mode} onSubmit={reviewPurchaseOrder} ref={purchaseOrderEditorRef}>
         <div className="stock-receipt-copy">
           <span className="core-eyebrow">{purchaseOrderDraft.mode === 'create' ? 'Order stock' : 'Receive order'}</span>
@@ -3696,7 +3854,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
           <p className="panel-copy">The opening balance may be zero. A named operator, reason, and evidence are required before the SKU is recorded.</p>
         </form>
       </details>
-      <p className="form-notice" aria-live="polite">{commerceStorageError || 'Counts, stock orders, receipts, and cancellations require attributable confirmation. Supplier contact, payment, and accounting remain outside this workflow.'}</p>
+      <p className="form-notice" aria-live="polite">{commerceStorageError || 'Catalog values, counts, stock orders, receipts, and cancellations require attributable confirmation. Supplier contact, payment, and accounting remain outside this workflow.'}</p>
     </section>
     <StockMovementHistory movements={commerce.movements} />
     {actionGate}

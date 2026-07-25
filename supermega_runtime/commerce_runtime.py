@@ -19,6 +19,7 @@ COMMERCE_EVENTS = frozenset(
     {
         "commerce.workspace.initialized",
         "commerce.item.created",
+        "commerce.item.updated",
         "commerce.order.created",
         "commerce.order.advanced",
         "commerce.order.cancelled",
@@ -41,6 +42,7 @@ COMMERCE_HUMAN_EVENTS = frozenset(
     {
         "commerce.workspace.initialized",
         "commerce.item.created",
+        "commerce.item.updated",
         "commerce.order.created",
         "commerce.order.advanced",
         "commerce.order.cancelled",
@@ -77,6 +79,8 @@ _SHA256_DIGEST_PATTERN = re.compile(r"sha256:[a-f0-9]{64}")
 _STOREFRONT_PREVIEW_SCHEMA = "supermega.ecommerce.storefront_preview.v1"
 _MAX_STOREFRONT_REQUESTS = 100
 _MAX_PURCHASE_ORDERS = 100
+_MAX_CATALOG_BASELINES = 500
+_MAX_CATALOG_CHANGES = 500
 _MAX_ORDER_LINES = 20
 _MAX_RETURNS_PER_ORDER = 100
 _MAX_MOVEMENT_ID_LENGTH = 2_000
@@ -90,6 +94,19 @@ _ISO_TIMESTAMP_PATTERN = re.compile(
 
 _STATE_FIELDS = frozenset({"schema", "items", "orders", "movements", "closes"})
 _ITEM_FIELDS = frozenset({"sku", "name", "variant", "onHand", "reorderAt", "price"})
+_CATALOG_CHANGE_FIELDS = frozenset(
+    {
+        "sku",
+        "previousPrice",
+        "nextPrice",
+        "previousReorderAt",
+        "nextReorderAt",
+        "proof",
+    }
+)
+_CATALOG_BASELINE_FIELDS = frozenset(
+    {"sku", "price", "reorderAt", "proof", "anchorDigest"}
+)
 _ORDER_REQUIRED_FIELDS = frozenset(
     {
         "id",
@@ -206,7 +223,9 @@ _WEBSITE_SOURCE_FIELDS = frozenset({"fingerprint", "approvalId", "snapshotId", "
 _WEBSITE_INTAKE_REQUIRED_FIELDS = frozenset(
     {"id", "createdAt", "status", "source", "sku", "quantity", "itemName", "unitPrice", "total", "creation"}
 )
-_WEBSITE_INTAKE_OPTIONAL_FIELDS = frozenset({"itemVariant", "conversion"})
+_WEBSITE_INTAKE_OPTIONAL_FIELDS = frozenset(
+    {"itemVariant", "snapshotDigest", "conversion"}
+)
 _WEBSITE_CONVERSION_FIELDS = _EVIDENCE_FIELDS | {"orderId"}
 _STOREFRONT_REQUEST_FIELDS = frozenset(
     {
@@ -413,6 +432,8 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 "storefrontRequests",
                 "storefrontConfiguration",
                 "purchaseOrders",
+                "catalogBaselines",
+                "catalogChanges",
             }
         ),
     )
@@ -432,6 +453,14 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         state.get("purchaseOrders", []),
         "commerce state.purchaseOrders",
     )
+    catalog_baselines = _list(
+        state.get("catalogBaselines", []),
+        "commerce state.catalogBaselines",
+    )
+    catalog_changes = _list(
+        state.get("catalogChanges", []),
+        "commerce state.catalogChanges",
+    )
     if "storefrontConfiguration" in state and state["storefrontConfiguration"] is None:
         raise TrialValidationError(
             "commerce state.storefrontConfiguration must be an object when present."
@@ -444,6 +473,14 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     if len(purchase_orders) > _MAX_PURCHASE_ORDERS:
         raise TrialValidationError(
             f"commerce state.purchaseOrders cannot exceed {_MAX_PURCHASE_ORDERS}."
+        )
+    if len(catalog_baselines) > _MAX_CATALOG_BASELINES:
+        raise TrialValidationError(
+            f"commerce state.catalogBaselines cannot exceed {_MAX_CATALOG_BASELINES}."
+        )
+    if len(catalog_changes) > _MAX_CATALOG_CHANGES:
+        raise TrialValidationError(
+            f"commerce state.catalogChanges cannot exceed {_MAX_CATALOG_CHANGES}."
         )
 
     item_skus: list[str] = []
@@ -461,6 +498,135 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         item_skus.append(sku)
         item_by_sku[sku] = item
     _unique(item_skus, "Item SKU")
+
+    catalog_baseline_skus: list[str] = []
+    catalog_baseline_action_ids: list[str] = []
+    catalog_baseline_by_sku: dict[str, dict[str, Any]] = {}
+    catalog_baseline_proof_by_action: dict[str, dict[str, str]] = {}
+    for index, candidate in enumerate(catalog_baselines):
+        field = f"catalogBaselines[{index}]"
+        baseline = _object(candidate, field)
+        _exact_fields(baseline, field, required=_CATALOG_BASELINE_FIELDS)
+        sku = _text(baseline["sku"], f"{field}.sku", maximum=80)
+        if sku not in item_by_sku:
+            raise TrialValidationError(f"{field}.sku is unknown.")
+        _integer(baseline["price"], f"{field}.price", minimum=1)
+        _integer(baseline["reorderAt"], f"{field}.reorderAt")
+        proof = _action_proof(baseline["proof"], f"{field}.proof")
+        anchor_digest = _text(
+            baseline["anchorDigest"],
+            f"{field}.anchorDigest",
+            maximum=71,
+        )
+        if (
+            _SHA256_DIGEST_PATTERN.fullmatch(anchor_digest) is None
+            or anchor_digest != commerce_catalog_baseline_digest(baseline)
+        ):
+            raise TrialValidationError(f"{field}.anchorDigest is invalid.")
+        prior_proof = catalog_baseline_proof_by_action.get(proof["actionId"])
+        if prior_proof is not None and prior_proof != proof:
+            raise TrialValidationError(
+                f"{field}.proof conflicts with its shared catalog command."
+            )
+        catalog_baseline_skus.append(sku)
+        catalog_baseline_action_ids.append(proof["actionId"])
+        catalog_baseline_by_sku[sku] = baseline
+        catalog_baseline_proof_by_action[proof["actionId"]] = proof
+    _unique(catalog_baseline_skus, "Catalog baseline SKU")
+
+    catalog_change_action_ids: list[str] = []
+    newest_change_by_sku: dict[str, dict[str, Any]] = {}
+    for index, candidate in enumerate(catalog_changes):
+        field = f"catalogChanges[{index}]"
+        change = _object(candidate, field)
+        _exact_fields(change, field, required=_CATALOG_CHANGE_FIELDS)
+        sku = _text(change["sku"], f"{field}.sku", maximum=80)
+        item = item_by_sku.get(sku)
+        if item is None:
+            raise TrialValidationError(f"{field}.sku is unknown.")
+        previous_price = _integer(
+            change["previousPrice"],
+            f"{field}.previousPrice",
+            minimum=1,
+        )
+        next_price = _integer(
+            change["nextPrice"],
+            f"{field}.nextPrice",
+            minimum=1,
+        )
+        previous_reorder_at = _integer(
+            change["previousReorderAt"],
+            f"{field}.previousReorderAt",
+        )
+        next_reorder_at = _integer(
+            change["nextReorderAt"],
+            f"{field}.nextReorderAt",
+        )
+        if (
+            previous_price == next_price
+            and previous_reorder_at == next_reorder_at
+        ):
+            raise TrialValidationError(
+                f"{field} must change price or reorder point."
+            )
+        proof = _action_proof(change["proof"], f"{field}.proof")
+        newer_change = newest_change_by_sku.get(sku)
+        if newer_change is None:
+            if (
+                item["price"] != next_price
+                or item["reorderAt"] != next_reorder_at
+            ):
+                raise TrialValidationError(
+                    f"{field} newest values must match the current catalog item."
+                )
+        else:
+            if (
+                newer_change["previousPrice"] != next_price
+                or newer_change["previousReorderAt"] != next_reorder_at
+            ):
+                raise TrialValidationError(
+                    f"{field} does not continue the newest-first catalog change chain."
+                )
+            newer_captured_at = datetime.fromisoformat(
+                str(newer_change["proof"]["capturedAt"]).replace("Z", "+00:00")
+            )
+            captured_at = datetime.fromisoformat(
+                proof["capturedAt"].replace("Z", "+00:00")
+            )
+            if captured_at > newer_captured_at:
+                raise TrialValidationError(
+                    f"{field} catalog changes must be newest first per SKU."
+                )
+        newest_change_by_sku[sku] = change
+        catalog_change_action_ids.append(proof["actionId"])
+    _unique(catalog_change_action_ids, "Catalog change action ID")
+    for sku, oldest_change in newest_change_by_sku.items():
+        baseline = catalog_baseline_by_sku.get(sku)
+        if baseline is None:
+            raise TrialValidationError(
+                f"Catalog change history for {sku} has no anchored baseline."
+            )
+        if (
+            baseline["price"] != oldest_change["previousPrice"]
+            or baseline["reorderAt"] != oldest_change["previousReorderAt"]
+            or datetime.fromisoformat(
+                str(baseline["proof"]["capturedAt"]).replace("Z", "+00:00")
+            )
+            > datetime.fromisoformat(
+                str(oldest_change["proof"]["capturedAt"]).replace("Z", "+00:00")
+            )
+        ):
+            raise TrialValidationError(
+                f"Catalog change history for {sku} does not start from its anchored baseline."
+            )
+    for sku, baseline in catalog_baseline_by_sku.items():
+        if sku in newest_change_by_sku:
+            continue
+        item = item_by_sku[sku]
+        if item["price"] != baseline["price"] or item["reorderAt"] != baseline["reorderAt"]:
+            raise TrialValidationError(
+                f"Catalog baseline for {sku} does not match the unchanged catalog item."
+            )
 
     purchase_order_ids: list[str] = []
     purchase_order_action_ids: list[str] = []
@@ -1419,14 +1585,26 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         if (
             item_name != item["name"]
             or item_variant != item.get("variant")
-            or unit_price != item["price"]
             or total != quantity * unit_price
         ):
-            raise TrialValidationError(f"{field} does not match its Commerce catalog record.")
+            raise TrialValidationError(
+                f"{field} does not match its retained Commerce snapshot."
+            )
 
         creation = _action_proof(intake["creation"], f"{field}.creation")
         if creation["capturedAt"] != created_at:
             raise TrialValidationError(f"{field}.creation must be captured when the intake was created.")
+        if "snapshotDigest" in intake:
+            snapshot_digest = _text(
+                intake["snapshotDigest"],
+                f"{field}.snapshotDigest",
+                maximum=71,
+            )
+            if (
+                _SHA256_DIGEST_PATTERN.fullmatch(snapshot_digest) is None
+                or snapshot_digest != commerce_website_intake_snapshot_digest(intake)
+            ):
+                raise TrialValidationError(f"{field}.snapshotDigest is invalid.")
         intake_action_ids.append(creation["actionId"])
 
         matching_source_orders = [
@@ -1484,6 +1662,63 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         storefront_action_ids.append(f"ACT-{request['id'][4:]}")
     _unique(storefront_request_ids, "Storefront request ID")
     _unique(storefront_idempotency_keys, "Storefront request idempotency key")
+    catalog_baseline_action_set = set(catalog_baseline_action_ids)
+    for action_id in catalog_baseline_action_set:
+        baselines = [
+            baseline
+            for baseline in catalog_baseline_by_sku.values()
+            if baseline["proof"]["actionId"] == action_id
+        ]
+        matching_changes = [
+            change
+            for change in catalog_changes
+            if change["proof"]["actionId"] == action_id
+        ]
+        matching_movements = movements_by_action.get(action_id, [])
+        if matching_changes and matching_movements:
+            raise TrialValidationError(
+                f"Catalog baseline action {action_id} cannot anchor two event types."
+            )
+        if matching_changes:
+            baseline = baselines[0] if len(baselines) == 1 else None
+            change = matching_changes[0] if len(matching_changes) == 1 else None
+            if (
+                baseline is None
+                or change is None
+                or newest_change_by_sku.get(baseline["sku"]) != change
+                or change["sku"] != baseline["sku"]
+                or change["proof"] != baseline["proof"]
+            ):
+                raise TrialValidationError(
+                    f"Catalog baseline action {action_id} does not match its first catalog change."
+                )
+        if matching_movements:
+            baseline = baselines[0] if len(baselines) == 1 else None
+            movement = (
+                matching_movements[0]
+                if len(matching_movements) == 1
+                else None
+            )
+            proof = baseline["proof"] if baseline is not None else {}
+            if (
+                baseline is None
+                or movement is None
+                or movement["kind"] != "opening"
+                or movement["sku"] != baseline["sku"]
+                or any(
+                    movement[movement_field] != proof[proof_field]
+                    for movement_field, proof_field in (
+                        ("actionId", "actionId"),
+                        ("createdAt", "capturedAt"),
+                        ("actor", "actor"),
+                        ("reason", "reason"),
+                        ("evidenceReference", "evidenceReference"),
+                    )
+                )
+            ):
+                raise TrialValidationError(
+                    f"Catalog baseline action {action_id} does not match its opening balance."
+                )
     _unique(
         [
             *(
@@ -1491,6 +1726,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 for action_id in dict.fromkeys(movement_action_ids)
                 if action_id not in conversion_action_ids
                 and action_id not in return_action_ids
+                and action_id not in catalog_baseline_action_set
             ),
             *reconciliation_action_ids,
             *refund_settlement_action_ids,
@@ -1500,6 +1736,12 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             *intake_action_ids,
             *close_action_ids,
             *purchase_order_action_ids,
+            *(
+                action_id
+                for action_id in catalog_change_action_ids
+                if action_id not in catalog_baseline_action_set
+            ),
+            *catalog_baseline_action_set,
             *storefront_action_ids,
             *(
                 [storefront_configuration_action_id]
@@ -1546,7 +1788,17 @@ def _validate_event_evidence(
     next_state: Mapping[str, Any],
     evidence: Mapping[str, str],
 ) -> None:
-    if event_type == "commerce.website_intake.created":
+    if event_type == "commerce.item.updated":
+        changes = _catalog_changes(next_state)
+        proof = changes[0]["proof"] if changes else {}
+        if not isinstance(proof, Mapping) or not _proof_matches_evidence(
+            proof,
+            evidence,
+        ):
+            raise TrialValidationError(
+                "command evidence must match the catalog change proof."
+            )
+    elif event_type == "commerce.website_intake.created":
         creation = next_state["websiteIntakes"][0]["creation"]
         if not _proof_matches_evidence(creation, evidence):
             raise TrialValidationError("command evidence must match the Website intake creation proof.")
@@ -1772,8 +2024,77 @@ def _purchase_orders(state: Mapping[str, Any]) -> list[Any]:
     return state.get("purchaseOrders", [])
 
 
+def _catalog_changes(state: Mapping[str, Any]) -> list[Any]:
+    return state.get("catalogChanges", [])
+
+
+def _catalog_baselines(state: Mapping[str, Any]) -> list[Any]:
+    return state.get("catalogBaselines", [])
+
+
 def _storefront_configuration_action_id(revision: int, digest: str) -> str:
     return f"ACT-STOREFRONT-R{revision}-{digest.removeprefix('sha256:')}"
+
+
+def _proof_digest_projection(proof: Mapping[str, Any]) -> list[Any]:
+    return [
+        proof["actionId"],
+        proof["capturedAt"],
+        proof["actor"],
+        proof["reason"],
+        proof["evidenceReference"],
+    ]
+
+
+def _projection_digest(projection: Sequence[Any]) -> str:
+    encoded = json.dumps(
+        projection,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return f"sha256:{sha256(encoded).hexdigest()}"
+
+
+def commerce_catalog_baseline_digest(baseline: Mapping[str, Any]) -> str:
+    """Bind one opening price and reorder snapshot to its accountable proof."""
+
+    return _projection_digest(
+        [
+            "supermega.commerce.catalog-baseline.v1",
+            baseline["sku"],
+            baseline["price"],
+            baseline["reorderAt"],
+            _proof_digest_projection(baseline["proof"]),
+        ]
+    )
+
+
+def commerce_website_intake_snapshot_digest(intake: Mapping[str, Any]) -> str:
+    """Bind the immutable Website intake fields retained for later review."""
+
+    source = intake["source"]
+    return _projection_digest(
+        [
+            "supermega.commerce.website-intake.snapshot.v1",
+            intake["id"],
+            intake["createdAt"],
+            [
+                source["fingerprint"],
+                source["approvalId"],
+                source["snapshotId"],
+                source["pageId"],
+                source["siteName"],
+                source["pagePath"],
+            ],
+            intake["sku"],
+            intake["quantity"],
+            intake["itemName"],
+            intake.get("itemVariant"),
+            intake["unitPrice"],
+            intake["total"],
+            _proof_digest_projection(intake["creation"]),
+        ]
+    )
 
 
 def commerce_catalog_digest(state: Mapping[str, Any]) -> str:
@@ -1867,6 +2188,22 @@ def _require_purchase_orders_unchanged(
 ) -> None:
     if _purchase_orders(current) != _purchase_orders(next_state):
         raise TrialValidationError("event cannot change: purchaseOrders.")
+
+
+def _require_catalog_changes_unchanged(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    if _catalog_changes(current) != _catalog_changes(next_state):
+        raise TrialValidationError("event cannot change: catalogChanges.")
+
+
+def _require_catalog_baselines_unchanged(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    if _catalog_baselines(current) != _catalog_baselines(next_state):
+        raise TrialValidationError("event cannot change: catalogBaselines.")
 
 
 def _validate_new_order_and_reservation(
@@ -1968,6 +2305,16 @@ def _validate_item_created(current: Mapping[str, Any], next_state: Mapping[str, 
         raise TrialValidationError("commerce.item.created must prepend exactly one opening balance.")
     item = next_state["items"][0]
     movement = next_state["movements"][0]
+    current_baselines = _catalog_baselines(current)
+    next_baselines = _catalog_baselines(next_state)
+    if (
+        len(next_baselines) != len(current_baselines) + 1
+        or next_baselines[1:] != current_baselines
+    ):
+        raise TrialValidationError(
+            "commerce.item.created must prepend exactly one catalog baseline."
+        )
+    baseline = next_baselines[0]
     if (
         movement.get("kind") != "opening"
         or movement.get("sku") != item["sku"]
@@ -1976,6 +2323,84 @@ def _validate_item_created(current: Mapping[str, Any], next_state: Mapping[str, 
         or movement.get("id") != _movement_id(str(movement.get("actionId")))
     ):
         raise TrialValidationError("a new catalog item requires one exact attributable opening balance.")
+    if (
+        baseline["sku"] != item["sku"]
+        or baseline["price"] != item["price"]
+        or baseline["reorderAt"] != item["reorderAt"]
+        or baseline["proof"]["actionId"] != movement["actionId"]
+        or baseline["proof"]["capturedAt"] != movement["createdAt"]
+        or baseline["proof"]["actor"] != movement["actor"]
+        or baseline["proof"]["reason"] != movement["reason"]
+        or baseline["proof"]["evidenceReference"] != movement["evidenceReference"]
+    ):
+        raise TrialValidationError(
+            "a new catalog item baseline must match its exact opening proof."
+        )
+
+
+def _validate_item_updated(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
+    _require_unchanged(current, next_state, "orders", "movements", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    before, after = _one_changed(current["items"], next_state["items"], "items")
+    mutable_fields = frozenset({"price", "reorderAt"})
+    if _without(before, mutable_fields) != _without(after, mutable_fields):
+        raise TrialValidationError(
+            "commerce.item.updated may change only price and reorderAt."
+        )
+
+    current_changes = _catalog_changes(current)
+    next_changes = _catalog_changes(next_state)
+    if (
+        len(next_changes) != len(current_changes) + 1
+        or next_changes[1:] != current_changes
+    ):
+        raise TrialValidationError(
+            "commerce.item.updated must prepend exactly one catalog change."
+        )
+    change = next_changes[0]
+    if (
+        change["sku"] != before["sku"]
+        or change["previousPrice"] != before["price"]
+        or change["nextPrice"] != after["price"]
+        or change["previousReorderAt"] != before["reorderAt"]
+        or change["nextReorderAt"] != after["reorderAt"]
+    ):
+        raise TrialValidationError(
+            "catalog change values must match the exact item transition."
+        )
+    current_baselines = _catalog_baselines(current)
+    next_baselines = _catalog_baselines(next_state)
+    current_baseline = next(
+        (
+            baseline
+            for baseline in current_baselines
+            if baseline["sku"] == before["sku"]
+        ),
+        None,
+    )
+    if current_baseline is not None:
+        if next_baselines != current_baselines:
+            raise TrialValidationError(
+                "commerce.item.updated cannot rewrite an existing catalog baseline."
+            )
+    else:
+        if (
+            len(next_baselines) != len(current_baselines) + 1
+            or next_baselines[1:] != current_baselines
+        ):
+            raise TrialValidationError(
+                "the first catalog update must prepend one anchored baseline."
+            )
+        baseline = next_baselines[0]
+        if (
+            baseline["sku"] != before["sku"]
+            or baseline["price"] != before["price"]
+            or baseline["reorderAt"] != before["reorderAt"]
+            or baseline["proof"] != change["proof"]
+        ):
+            raise TrialValidationError(
+                "the first catalog update baseline must match the reviewed prior values and proof."
+            )
 
 
 def _validate_advanced(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
@@ -2474,6 +2899,27 @@ def _validate_close(current: Mapping[str, Any], next_state: Mapping[str, Any]) -
         raise TrialValidationError("daily close stock exceptions must match current inventory.")
 
 
+def _require_website_intake_matches_current_catalog(
+    intake: Mapping[str, Any],
+    state: Mapping[str, Any],
+    *,
+    field: str,
+) -> None:
+    item = next(
+        (candidate for candidate in state["items"] if candidate["sku"] == intake["sku"]),
+        None,
+    )
+    if (
+        item is None
+        or intake["itemName"] != item["name"]
+        or intake.get("itemVariant") != item.get("variant")
+        or intake["unitPrice"] != item["price"]
+    ):
+        raise TrialValidationError(
+            f"{field} must match the current Commerce catalog record."
+        )
+
+
 def _validate_website_intake_created(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
     _require_unchanged(current, next_state, "items", "orders", "movements", "closes")
     current_intakes = _website_intakes(current)
@@ -2482,18 +2928,38 @@ def _validate_website_intake_created(current: Mapping[str, Any], next_state: Map
         raise TrialValidationError("commerce.website_intake.created must prepend exactly one Website intake.")
     if next_intakes[0]["status"] != "pending_confirmation":
         raise TrialValidationError("a new Website intake must await human confirmation.")
+    if "snapshotDigest" not in next_intakes[0]:
+        raise TrialValidationError(
+            "a new Website intake requires an immutable snapshot digest."
+        )
+    _require_website_intake_matches_current_catalog(
+        next_intakes[0],
+        current,
+        field="new Website intake",
+    )
 
 
 def _validate_website_intake_converted(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
+    current_intakes = _website_intakes(current)
+    next_intakes = _website_intakes(next_state)
+    before, after = _one_changed(
+        current_intakes,
+        next_intakes,
+        "websiteIntakes",
+    )
+    _require_website_intake_matches_current_catalog(
+        before,
+        current,
+        field="Website intake conversion",
+    )
+    if "snapshotDigest" not in before:
+        raise TrialValidationError(
+            "legacy Website intakes without a snapshot digest cannot be converted."
+        )
     _validate_new_order_and_reservation(
         current,
         next_state,
         event_type="commerce.website_intake.converted",
-    )
-    before, after = _one_changed(
-        _website_intakes(current),
-        _website_intakes(next_state),
-        "websiteIntakes",
     )
     if before["status"] != "pending_confirmation" or after["status"] != "converted":
         raise TrialValidationError("only a pending Website intake can be converted.")
@@ -2602,6 +3068,7 @@ def _validate_storefront_configuration_saved(
 
 _TRANSITION_VALIDATORS = {
     "commerce.item.created": _validate_item_created,
+    "commerce.item.updated": _validate_item_updated,
     "commerce.order.created": _validate_created,
     "commerce.order.advanced": _validate_advanced,
     "commerce.order.cancelled": _validate_cancelled,
@@ -2643,11 +3110,16 @@ def reduce_commerce_state(
             or _storefront_requests(next_state)
             or _storefront_configuration(next_state)
             or _purchase_orders(next_state)
+            or _catalog_changes(next_state)
         ):
             raise TrialValidationError("Commerce initialization requires a non-empty catalog and no operating history.")
         return next_state
 
     current_state = validate_commerce_state(current)
+    if event_type != "commerce.item.updated":
+        _require_catalog_changes_unchanged(current_state, next_state)
+    if event_type not in {"commerce.item.created", "commerce.item.updated"}:
+        _require_catalog_baselines_unchanged(current_state, next_state)
     if event_type != "commerce.storefront_request.received":
         _require_storefront_requests_unchanged(current_state, next_state)
     if event_type != "commerce.storefront.configuration.saved":
@@ -2666,8 +3138,10 @@ __all__ = [
     "COMMERCE_EVENTS",
     "COMMERCE_HUMAN_EVENTS",
     "COMMERCE_SCHEMA",
+    "commerce_catalog_baseline_digest",
     "commerce_catalog_digest",
     "commerce_storefront_preview_digest",
+    "commerce_website_intake_snapshot_digest",
     "reduce_commerce_state",
     "validate_commerce_state",
 ]

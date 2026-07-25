@@ -151,6 +151,79 @@ try {
   unsortedNewlineSkusRejected = true
 }
 
+const integrityProof = {
+  actionId: 'ACT-WEBSITE-INTAKE',
+  capturedAt: '2026-07-23T09:00:00.000Z',
+  actor: 'OP-OWNER',
+  reason: 'Verified against the source record.',
+  evidenceReference: 'EV-ACT-WEBSITE-INTAKE',
+}
+const integrityBase = {
+  ...commerceWorkspace.createEmptyCommerce(),
+  items: [{ sku: 'SKU-1', name: 'Test item', onHand: 10, reorderAt: 2, price: 100 }],
+}
+const boundWebsiteIntake = commerceWorkspace.createCommerceWebsiteIntake(integrityBase, {
+  id: 'WINT-12345678',
+  source: {
+    fingerprint: 'web-1234abcd',
+    approvalId: 'approval-1',
+    snapshotId: 'snapshot-1',
+    pageId: 'page-products',
+    siteName: 'Test Website',
+    pagePath: '/products',
+  },
+  sku: 'SKU-1',
+  quantity: 2,
+}, integrityProof)
+let rewrittenWebsiteSnapshotRejected = false
+try {
+  const tampered = structuredClone(boundWebsiteIntake)
+  tampered.websiteIntakes[0].unitPrice = 125
+  tampered.websiteIntakes[0].total = 250
+  commerceWorkspace.validateCommerceState(tampered)
+} catch {
+  rewrittenWebsiteSnapshotRejected = true
+}
+const legacyUnboundWebsiteState = structuredClone(boundWebsiteIntake)
+delete legacyUnboundWebsiteState.websiteIntakes[0].snapshotDigest
+const readableLegacyWebsiteState = commerceWorkspace.validateCommerceState(legacyUnboundWebsiteState)
+const legacyWebsiteConversion = commerceWorkspace.convertCommerceWebsiteIntake(
+  readableLegacyWebsiteState,
+  'WINT-12345678',
+  {
+    customer: 'Customer reference',
+    fulfilmentMethod: 'pickup',
+    paymentMethod: 'cash_on_delivery',
+  },
+  {
+    ...integrityProof,
+    actionId: 'ACT-WEBSITE-CONVERT',
+    capturedAt: '2026-07-23T09:01:00.000Z',
+    evidenceReference: 'EV-ACT-WEBSITE-CONVERT',
+  },
+)
+const catalogIntegrityProof = {
+  ...integrityProof,
+  actionId: 'ACT-ITEM-UPDATE',
+  capturedAt: '2026-07-23T09:00:02.000Z',
+  evidenceReference: 'EV-ACT-ITEM-UPDATE',
+}
+const catalogIntegrityState = commerceWorkspace.updateCommerceItem(integrityBase, {
+  sku: 'SKU-1',
+  expectedPrice: 100,
+  nextPrice: 125,
+  expectedReorderAt: 2,
+  nextReorderAt: 3,
+}, catalogIntegrityProof)
+let rewrittenCatalogOpeningRejected = false
+try {
+  const tampered = structuredClone(catalogIntegrityState)
+  tampered.catalogChanges[0].previousPrice = 99
+  commerceWorkspace.validateCommerceState(tampered)
+} catch {
+  rewrittenCatalogOpeningRejected = true
+}
+
 const failures = []
 const checks = []
 const requireContract = (name, condition) => {
@@ -160,6 +233,7 @@ const requireContract = (name, condition) => {
 const expectedHumanCommerceEvents = [
   'commerce.close.saved',
   'commerce.item.created',
+  'commerce.item.updated',
   'commerce.order.advanced',
   'commerce.order.cancelled',
   'commerce.order.created',
@@ -218,6 +292,19 @@ requireContract('API documentation is not public', /docs_url=None/.test(runtime)
 requireContract('surface commands use optimistic versions', /expected_version/.test(trialRuntime) && /TrialVersionConflict/.test(trialStore))
 requireContract('commands are idempotent', /TrialIdempotencyConflict/.test(trialStore) && /command_fingerprint/.test(migration))
 requireContract('Ecommerce storefront catalog digest is cross-runtime deterministic', storefrontCatalogDigestResult === storefrontCatalogDigestGolden)
+requireContract('Website order snapshots are digest-bound and legacy records fail closed at conversion',
+  boundWebsiteIntake?.websiteIntakes?.[0]?.snapshotDigest === 'sha256:58c85cb3640d6e4510551181009bd0cbae46f5f51a6db6c7b0f6485d76e4933d'
+  && rewrittenWebsiteSnapshotRejected
+  && readableLegacyWebsiteState.websiteIntakes[0].snapshotDigest === undefined
+  && legacyWebsiteConversion === null
+  && /commerce_website_intake_snapshot_digest/.test(commerceRuntime)
+  && /legacy Website intakes without a snapshot digest cannot be converted/.test(commerceRuntime))
+requireContract('Shop catalog change history is anchored to a deterministic opening baseline',
+  catalogIntegrityState?.catalogBaselines?.[0]?.anchorDigest === 'sha256:fe1d49f917797c9b6f35354c7787c21dffee2746d82a7a16c7ed19b1e0dbb35e'
+  && catalogIntegrityState?.catalogChanges?.[0]?.previousPrice === 100
+  && rewrittenCatalogOpeningRejected
+  && /commerce_catalog_baseline_digest/.test(commerceRuntime)
+  && /has no anchored baseline/.test(commerceRuntime))
 requireContract('Ecommerce storefront save binds current catalog and deterministic proof identity',
   savedStorefrontConfiguration?.storefrontConfiguration?.revision === 1
   && JSON.stringify(savedStorefrontConfiguration.storefrontConfiguration.selectedSkus) === JSON.stringify(['SM-A', 'SM-😀'])
@@ -232,7 +319,7 @@ requireContract('Ecommerce storefront save binds current catalog and determinist
   )))
 requireContract('company queue is a managed surface', /"company": "company\.write"/.test(trialStore) && /when 'company' then 'company\.write'/.test(migration))
 requireContract('Website is an authenticated managed surface', /"website": "website\.write"/.test(trialStore) && /reduce_website_state/.test(runtime) && /WEBSITE_HUMAN_EVENTS/.test(trialRuntime) && /when 'website' then 'website\.write'/.test(websiteMigration) && /saveManagedWebsiteCommand/.test(managedTrialClient) && /validate_website_state/.test(websiteRuntime) && /evidence\["actor"\] == event\["actor"\] == record\[actor_field\]/.test(websiteRuntime) && /exact current ready-page set/.test(websiteRuntime) && /sort_keys=True/.test(websiteRuntime))
-requireContract('Website Commerce intake source is transactionally verified with replay-safe retained proof', /commerce\.website_intake\.created/.test(trialRuntime) && /validate_website_snapshot_source/.test(trialRuntime) && /related_surfaces = \("website",\)/.test(trialRuntime) && /state_precondition=state_precondition/.test(trialRuntime) && /_commerce_retains_website_source/.test(trialRuntime) && /_website_fingerprint\(state\) != fingerprint/.test(websiteRuntime) && /not _same_source\(snapshot\["source"\], current_source\)/.test(websiteRuntime) && /locked_surfaces/.test(trialStore) && /for update/i.test(trialStore))
+requireContract('Website Commerce intake source is transactionally verified with replay-safe retained proof', /commerce\.website_intake\.created/.test(trialRuntime) && /validate_website_snapshot_source/.test(trialRuntime) && /related_surfaces = \("website",\)/.test(trialRuntime) && /state_precondition=state_precondition/.test(trialRuntime) && /_commerce_retains_website_source/.test(trialRuntime) && /_website_fingerprint\(state\) != fingerprint/.test(websiteRuntime) && /not _same_source\(snapshot\["source"\], current_source\)/.test(websiteRuntime) && /event_type == "commerce\.website_intake\.created"/.test(trialStore) && /intake\["snapshotDigest"\] = f"sha256:/.test(trialStore) && /locked_surfaces/.test(trialStore) && /for update/i.test(trialStore))
 requireContract('consequential Commerce events are human-only in router and store', /COMMERCE_HUMAN_EVENTS/.test(trialRuntime)
   && JSON.stringify(humanEventList(trialStore, 'HUMAN_COMMAND_EVENTS', 'SURFACE_WRITE_CAPABILITIES')) === JSON.stringify(expectedHumanCommerceEvents)
   && JSON.stringify(humanEventList(commerceRuntime, 'COMMERCE_HUMAN_EVENTS', '_ORDER_STATUSES')) === JSON.stringify(expectedHumanCommerceEvents)
@@ -249,6 +336,13 @@ requireContract('Shop order and payment attribution is server authoritative',
   && /commerce\.payment\.reconciled/.test(trialStore)
   && /authoritative_order\["paymentReconciledAt"\] = captured_at/.test(trialStore)
   && /authoritative_order\["paymentReconciledBy"\] = principal\.actor_id/.test(trialStore))
+requireContract('Shop catalog update attribution is server authoritative',
+  /event_type == "commerce\.item\.updated"/.test(trialStore)
+  && /authoritative_change\["proof"\] = deepcopy\(authoritative_evidence\)/.test(trialStore)
+  && /authoritative_baseline\["proof"\] = deepcopy\(authoritative_evidence\)/.test(trialStore)
+  && /authoritative_baseline\["anchorDigest"\]/.test(trialStore)
+  && /authoritative_evidence\["actor"\] = principal\.actor_id/.test(trialStore)
+  && /effective_captured_at = _not_before\(/.test(trialStore))
 requireContract('Shop return and completion attribution is server authoritative and monotonic',
   /commerce\.order\.return_recorded/.test(trialStore)
   && /authoritative_return\["actor"\] = principal\.actor_id/.test(trialStore)

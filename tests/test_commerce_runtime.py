@@ -7,9 +7,12 @@ from urllib.parse import quote
 from uuid import uuid4
 
 from supermega_runtime.commerce_runtime import (
+    COMMERCE_EVENTS,
     COMMERCE_HUMAN_EVENTS,
+    commerce_catalog_baseline_digest,
     commerce_catalog_digest,
     commerce_storefront_preview_digest,
+    commerce_website_intake_snapshot_digest,
     validate_commerce_state,
 )
 from supermega_runtime.runtime import reduce_trial_state
@@ -163,6 +166,75 @@ def action_evidence(
     }
 
 
+def catalog_baseline(
+    item: dict[str, object],
+    proof: dict[str, str],
+) -> dict[str, object]:
+    baseline: dict[str, object] = {
+        "sku": item["sku"],
+        "price": item["price"],
+        "reorderAt": item["reorderAt"],
+        "proof": deepcopy(proof),
+    }
+    baseline["anchorDigest"] = commerce_catalog_baseline_digest(baseline)
+    return baseline
+
+
+def catalog_update_state(
+    current: dict[str, object],
+    *,
+    next_price: int | None = 125,
+    next_reorder_at: int | None = 4,
+    action_id: str = "ACT-CATALOG-UPDATE",
+    captured_at: str = NOW,
+    actor: str = "Accountable operator",
+) -> dict[str, object]:
+    state = deepcopy(current)
+    item = state["items"][0]  # type: ignore[index]
+    previous_price = item["price"]
+    previous_reorder_at = item["reorderAt"]
+    item["price"] = previous_price if next_price is None else next_price
+    item["reorderAt"] = (
+        previous_reorder_at if next_reorder_at is None else next_reorder_at
+    )
+    proof = action_evidence(
+        action_id,
+        captured_at=captured_at,
+        actor=actor,
+        reason="Approved the reviewed catalog values.",
+    )
+    change = {
+        "sku": item["sku"],
+        "previousPrice": previous_price,
+        "nextPrice": item["price"],
+        "previousReorderAt": previous_reorder_at,
+        "nextReorderAt": item["reorderAt"],
+        "proof": proof,
+    }
+    prior_changes = current.get("catalogChanges", [])
+    state["catalogChanges"] = [
+        change,
+        *deepcopy(prior_changes),  # type: ignore[arg-type]
+    ]
+    prior_baselines = current.get("catalogBaselines", [])
+    if not any(
+        baseline.get("sku") == item["sku"]
+        for baseline in prior_baselines  # type: ignore[union-attr]
+    ):
+        state["catalogBaselines"] = [
+            catalog_baseline(
+                {
+                    **item,
+                    "price": previous_price,
+                    "reorderAt": previous_reorder_at,
+                },
+                proof,
+            ),
+            *deepcopy(prior_baselines),  # type: ignore[arg-type]
+        ]
+    return state
+
+
 def close_record(
     state: dict[str, object],
     action_id: str = CLOSE_ACTION_ID,
@@ -227,8 +299,9 @@ def website_intake(
     intake_id: str = WEBSITE_INTAKE_ID,
     action_id: str = "ACT-WEB-INTAKE",
     source: dict[str, str] | None = None,
+    bound: bool = True,
 ) -> dict[str, object]:
-    return {
+    intake: dict[str, object] = {
         "id": intake_id,
         "createdAt": NOW,
         "status": "pending_confirmation",
@@ -240,6 +313,9 @@ def website_intake(
         "total": 200,
         "creation": action_evidence(action_id),
     }
+    if bound:
+        intake["snapshotDigest"] = commerce_website_intake_snapshot_digest(intake)
+    return intake
 
 
 def storefront_request(
@@ -508,6 +584,8 @@ def settled_refund_state(
 
 
 def evidence_for(event_type: str, next_state: dict[str, object]) -> dict[str, str]:
+    if event_type == "commerce.item.updated":
+        return dict(next_state["catalogChanges"][0]["proof"])  # type: ignore[index,arg-type]
     if event_type == "commerce.purchase_order.created":
         return dict(next_state["purchaseOrders"][0]["creation"])  # type: ignore[index, arg-type]
     if event_type == "commerce.purchase_order.cancelled":
@@ -631,16 +709,325 @@ class CommerceRuntimeTests(unittest.TestCase):
     def test_legacy_v2_state_and_empty_intake_collection_are_backward_compatible(self) -> None:
         legacy = catalog_state()
         self.assertNotIn("websiteIntakes", legacy)
+        self.assertNotIn("catalogChanges", legacy)
+        self.assertEqual(validate_commerce_state(legacy), legacy)
         self.assertEqual(apply_event({}, "commerce.workspace.initialized", legacy), legacy)
 
         explicit_empty = catalog_state()
         explicit_empty["websiteIntakes"] = []
+        explicit_empty["catalogChanges"] = []
         self.assertEqual(
             apply_event({}, "commerce.workspace.initialized", explicit_empty),
             explicit_empty,
         )
         with self.assertRaises(TrialValidationError):
             apply_event({}, "commerce.workspace.initialized", pending_intake_state())
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                {},
+                "commerce.workspace.initialized",
+                catalog_update_state(catalog_state()),
+            )
+
+    def test_catalog_update_changes_only_price_reorder_and_binds_exact_proof(self) -> None:
+        current = catalog_state()
+        next_state = catalog_update_state(
+            current,
+            next_price=125,
+            next_reorder_at=4,
+        )
+        accepted = apply_event(current, "commerce.item.updated", next_state)
+
+        self.assertEqual(
+            accepted["items"][0],  # type: ignore[index]
+            {
+                **current["items"][0],  # type: ignore[index]
+                "price": 125,
+                "reorderAt": 4,
+            },
+        )
+        expected_proof = action_evidence(
+            "ACT-CATALOG-UPDATE",
+            reason="Approved the reviewed catalog values.",
+        )
+        self.assertEqual(
+            accepted["catalogChanges"][0],  # type: ignore[index]
+            {
+                "sku": "SKU-1",
+                "previousPrice": 100,
+                "nextPrice": 125,
+                "previousReorderAt": 2,
+                "nextReorderAt": 4,
+                "proof": expected_proof,
+            },
+        )
+        self.assertEqual(
+            accepted["catalogBaselines"][0]["anchorDigest"],  # type: ignore[index]
+            "sha256:b919e89be047ecdfc1dbce76f5aa95936c41d09d54eb4778bc7507e2c372b509",
+        )
+        for collection in ("orders", "movements", "closes"):
+            self.assertEqual(accepted[collection], current[collection])
+
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "commerce.item.updated",
+                next_state,
+                action_evidence(
+                    "ACT-CATALOG-UPDATE",
+                    reason="Different command evidence.",
+                ),
+            )
+
+        stale_previous = deepcopy(next_state)
+        stale_previous["catalogChanges"][0]["previousPrice"] = 99  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(stale_previous)
+        with self.assertRaises(TrialValidationError):
+            apply_event(current, "commerce.item.updated", stale_previous)
+
+        rewritten_baseline = deepcopy(next_state)
+        rewritten_baseline["catalogBaselines"][0]["price"] = 99  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(rewritten_baseline)
+
+        missing_baseline = deepcopy(next_state)
+        missing_baseline["catalogBaselines"] = []
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(missing_baseline)
+
+        wrong_next = deepcopy(next_state)
+        wrong_next["catalogChanges"][0]["nextPrice"] = 126  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(wrong_next)
+
+    def test_catalog_update_rejects_forbidden_item_and_collection_changes(self) -> None:
+        current = catalog_state()
+        current["items"].append(  # type: ignore[union-attr]
+            {
+                "sku": "SKU-2",
+                "name": "Second item",
+                "onHand": 3,
+                "reorderAt": 1,
+                "price": 250,
+            }
+        )
+        changed_name = catalog_update_state(current)
+        changed_name["items"][0]["name"] = "Rewritten item"  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(current, "commerce.item.updated", changed_name)
+
+        changed_two_items = catalog_update_state(current)
+        changed_two_items["items"][1]["price"] = 300  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(current, "commerce.item.updated", changed_two_items)
+
+        current_with_order = created_state()
+        changed_order = catalog_update_state(current_with_order)
+        changed_order["orders"][0]["customer"] = "Rewritten customer"  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current_with_order,
+                "commerce.item.updated",
+                changed_order,
+            )
+
+        historical_change = catalog_update_state(current)
+        historical_change["items"][0]["price"] = 100  # type: ignore[index]
+        historical_change["items"][0]["reorderAt"] = 2  # type: ignore[index]
+        historical_change["catalogChanges"][0].update(  # type: ignore[index]
+            {
+                "previousPrice": 90,
+                "nextPrice": 100,
+                "previousReorderAt": 1,
+                "nextReorderAt": 2,
+            }
+        )
+        received = deepcopy(current)
+        received["items"][0]["onHand"] = 15  # type: ignore[index]
+        received["movements"] = [
+            movement("receipt", "ACT-RECEIVE-WITH-CATALOG-HISTORY", 5)
+        ]
+        received["catalogChanges"] = historical_change["catalogChanges"]
+        with self.assertRaises(TrialValidationError):
+            apply_event(current, "commerce.stock.received", received)
+
+    def test_catalog_change_state_rejects_malformed_over_cap_and_broken_chains(self) -> None:
+        current = catalog_state()
+        valid = catalog_update_state(current)
+
+        malformed_states: list[tuple[str, dict[str, object]]] = []
+        unknown_sku = deepcopy(valid)
+        unknown_sku["catalogChanges"][0]["sku"] = "SKU-UNKNOWN"  # type: ignore[index]
+        malformed_states.append(("unknown SKU", unknown_sku))
+
+        unsafe_price = deepcopy(valid)
+        unsafe_price["catalogChanges"][0]["previousPrice"] = True  # type: ignore[index]
+        malformed_states.append(("unsafe price", unsafe_price))
+
+        negative_reorder = deepcopy(valid)
+        negative_reorder["catalogChanges"][0]["previousReorderAt"] = -1  # type: ignore[index]
+        malformed_states.append(("negative reorder", negative_reorder))
+
+        no_op = deepcopy(valid)
+        no_op["items"][0]["price"] = 100  # type: ignore[index]
+        no_op["items"][0]["reorderAt"] = 2  # type: ignore[index]
+        no_op["catalogChanges"][0].update(  # type: ignore[index]
+            {
+                "previousPrice": 100,
+                "nextPrice": 100,
+                "previousReorderAt": 2,
+                "nextReorderAt": 2,
+            }
+        )
+        malformed_states.append(("no-op", no_op))
+
+        extra_proof_field = deepcopy(valid)
+        extra_proof_field["catalogChanges"][0]["proof"]["untrusted"] = True  # type: ignore[index]
+        malformed_states.append(("extra proof field", extra_proof_field))
+
+        for label, malformed in malformed_states:
+            with self.subTest(label=label), self.assertRaises(TrialValidationError):
+                validate_commerce_state(malformed)
+
+        over_cap = deepcopy(valid)
+        over_cap["catalogChanges"] = [
+            deepcopy(valid["catalogChanges"][0])  # type: ignore[index]
+            for _ in range(501)
+        ]
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(over_cap)
+
+        first = apply_event(current, "commerce.item.updated", valid)
+        chained = catalog_update_state(
+            first,
+            next_price=150,
+            next_reorder_at=6,
+            action_id="ACT-CATALOG-UPDATE-2",
+            captured_at=CONVERTED_AT,
+        )
+        self.assertEqual(
+            apply_event(first, "commerce.item.updated", chained),
+            chained,
+        )
+
+        broken_chain = deepcopy(chained)
+        broken_chain["catalogChanges"][1]["nextPrice"] = 124  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(broken_chain)
+
+        wrong_order = deepcopy(chained)
+        wrong_order["catalogChanges"][1]["proof"]["capturedAt"] = RETURN_AT  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(wrong_order)
+
+        current_mismatch = deepcopy(chained)
+        current_mismatch["items"][0]["price"] = 149  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(current_mismatch)
+
+    def test_catalog_update_rejects_reused_action_id(self) -> None:
+        first = apply_event(
+            catalog_state(),
+            "commerce.item.updated",
+            catalog_update_state(catalog_state()),
+        )
+        reused = catalog_update_state(
+            first,
+            next_price=150,
+            next_reorder_at=6,
+            action_id="ACT-CATALOG-UPDATE",
+            captured_at=CONVERTED_AT,
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(first, "commerce.item.updated", reused)
+
+    def test_catalog_update_command_replay_is_exact(self) -> None:
+        store = InMemoryTrialStore(reducer=reduce_trial_state)
+        operator = TrialPrincipal(
+            "workspace-catalog-update",
+            "Accountable operator",
+            "human",
+        )
+        store.provision_membership(
+            workspace_id=operator.workspace_id,
+            actor_id=operator.actor_id,
+            actor_kind=operator.actor_kind,
+            capabilities=("commerce.write",),
+        )
+        initialized = store.apply_command(
+            operator,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.workspace.initialized",
+            expected_version=0,
+            payload={
+                "state": catalog_state(),
+                "evidence": action_evidence("ACT-CATALOG-INITIALIZE"),
+            },
+        )
+        updated_state = catalog_update_state(
+            initialized.state,
+            actor="Spoofed client actor",
+        )
+        payload = {
+            "state": updated_state,
+            "evidence": evidence_for("commerce.item.updated", updated_state),
+        }
+        command_id = str(uuid4())
+        first = store.apply_command(
+            operator,
+            command_id=command_id,
+            surface="commerce",
+            event_type="commerce.item.updated",
+            expected_version=initialized.version,
+            payload=payload,
+        )
+        replay = store.apply_command(
+            operator,
+            command_id=command_id,
+            surface="commerce",
+            event_type="commerce.item.updated",
+            expected_version=initialized.version,
+            payload=payload,
+        )
+
+        self.assertEqual(first.version, 2)
+        self.assertEqual(
+            first.state["catalogChanges"][0]["proof"]["actor"],  # type: ignore[index]
+            operator.actor_id,
+        )
+        self.assertNotEqual(
+            first.state["catalogChanges"][0]["proof"]["capturedAt"],  # type: ignore[index]
+            NOW,
+        )
+        self.assertEqual(
+            first.state["catalogBaselines"][0]["proof"],  # type: ignore[index]
+            first.state["catalogChanges"][0]["proof"],  # type: ignore[index]
+        )
+        self.assertEqual(
+            first.state["catalogBaselines"][0]["anchorDigest"],  # type: ignore[index]
+            commerce_catalog_baseline_digest(
+                first.state["catalogBaselines"][0]  # type: ignore[index,arg-type]
+            ),
+        )
+        self.assertTrue(replay.idempotent_replay)
+        self.assertEqual(replay.state, first.state)
+
+        conflicting_payload = deepcopy(payload)
+        conflicting_payload["evidence"]["reason"] = "Conflicting replay."  # type: ignore[index]
+        conflicting_payload["state"]["catalogChanges"][0]["proof"]["reason"] = (  # type: ignore[index]
+            "Conflicting replay."
+        )
+        with self.assertRaises(TrialIdempotencyConflict):
+            store.apply_command(
+                operator,
+                command_id=command_id,
+                surface="commerce",
+                event_type="commerce.item.updated",
+                expected_version=initialized.version,
+                payload=conflicting_payload,
+            )
 
     def test_store_rejects_reusing_an_action_id_from_immutable_command_history(self) -> None:
         store = InMemoryTrialStore(reducer=reduce_trial_state)
@@ -1136,6 +1523,13 @@ class CommerceRuntimeTests(unittest.TestCase):
             movement("opening", "ACT-ITEM-CONFIG", 2, sku="SKU-2"),
             *catalog_changed["movements"],  # type: ignore[misc]
         ]
+        catalog_changed["catalogBaselines"] = [
+            catalog_baseline(
+                catalog_changed["items"][0],  # type: ignore[index,arg-type]
+                action_evidence("ACT-ITEM-CONFIG"),
+            ),
+            *catalog_changed.get("catalogBaselines", []),  # type: ignore[misc]
+        ]
         catalog_changed = apply_event(
             second,
             "commerce.item.created",
@@ -1363,6 +1757,7 @@ class CommerceRuntimeTests(unittest.TestCase):
                 {
                     "commerce.workspace.initialized",
                     "commerce.item.created",
+                    "commerce.item.updated",
                     "commerce.order.created",
                     "commerce.order.advanced",
                     "commerce.order.cancelled",
@@ -1380,6 +1775,7 @@ class CommerceRuntimeTests(unittest.TestCase):
                 }
             ),
         )
+        self.assertIn("commerce.item.updated", COMMERCE_EVENTS)
 
     def test_website_intake_creation_records_no_order_or_stock_movement(self) -> None:
         current = catalog_state()
@@ -1399,6 +1795,81 @@ class CommerceRuntimeTests(unittest.TestCase):
                 pending_intake_state(),
                 action_evidence("ACT-SPOOFED-CREATION"),
             )
+
+    def test_website_intake_snapshot_binding_rejects_rewrite_and_blocks_legacy_conversion(self) -> None:
+        bound = pending_intake_state()
+        self.assertEqual(
+            bound["websiteIntakes"][0]["snapshotDigest"],  # type: ignore[index]
+            "sha256:9d7d7ecf238017ca75f06dbfb6cbdf237578dbba3f07b3612e877808ee53b223",
+        )
+
+        rewritten = deepcopy(bound)
+        rewritten["websiteIntakes"][0]["unitPrice"] = 125  # type: ignore[index]
+        rewritten["websiteIntakes"][0]["total"] = 250  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(rewritten)
+
+        legacy = catalog_state()
+        legacy["websiteIntakes"] = [website_intake(bound=False)]
+        self.assertEqual(
+            validate_commerce_state(legacy)["websiteIntakes"][0]["unitPrice"],  # type: ignore[index]
+            100,
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                catalog_state(),
+                "commerce.website_intake.created",
+                legacy,
+            )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                legacy,
+                "commerce.website_intake.converted",
+                converted_intake_state(legacy),
+            )
+
+        store = InMemoryTrialStore(reducer=reduce_trial_state)
+        operator = TrialPrincipal(
+            "workspace-intake-binding",
+            "Accountable operator",
+            "human",
+        )
+        store.provision_membership(
+            workspace_id=operator.workspace_id,
+            actor_id=operator.actor_id,
+            actor_kind=operator.actor_kind,
+            capabilities=("commerce.write",),
+        )
+        initialized = store.apply_command(
+            operator,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.workspace.initialized",
+            expected_version=0,
+            payload={
+                "state": catalog_state(),
+                "evidence": action_evidence("ACT-INTAKE-BINDING-INITIALIZE"),
+            },
+        )
+        unbound_next = deepcopy(initialized.state)
+        unbound_next["websiteIntakes"] = [website_intake(bound=False)]
+        created = store.apply_command(
+            operator,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.website_intake.created",
+            expected_version=initialized.version,
+            payload={
+                "state": unbound_next,
+                "evidence": action_evidence("ACT-WEB-INTAKE"),
+            },
+        )
+        self.assertEqual(
+            created.state["websiteIntakes"][0]["snapshotDigest"],  # type: ignore[index]
+            commerce_website_intake_snapshot_digest(
+                created.state["websiteIntakes"][0]  # type: ignore[index,arg-type]
+            ),
+        )
 
     def test_website_intake_conversion_creates_one_attributable_order_and_reservation(self) -> None:
         current = apply_event(
@@ -1427,6 +1898,57 @@ class CommerceRuntimeTests(unittest.TestCase):
                 "commerce.website_intake.converted",
                 converted_intake_state(current),
                 action_evidence("ACT-SPOOFED-CONVERSION", captured_at=CONVERTED_AT),
+            )
+
+    def test_historical_website_intake_survives_catalog_update_but_stale_conversion_fails(self) -> None:
+        pending = apply_event(
+            catalog_state(),
+            "commerce.website_intake.created",
+            pending_intake_state(),
+        )
+        updated = apply_event(
+            pending,
+            "commerce.item.updated",
+            catalog_update_state(pending, next_price=125, next_reorder_at=4),
+        )
+
+        self.assertEqual(
+            validate_commerce_state(updated)["websiteIntakes"][0]["unitPrice"],  # type: ignore[index]
+            100,
+        )
+        self.assertEqual(updated["items"][0]["price"], 125)  # type: ignore[index]
+        renamed_snapshot = deepcopy(updated)
+        renamed_snapshot["websiteIntakes"][0]["itemName"] = "Rewritten item"  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(renamed_snapshot)
+        stale_conversion = converted_intake_state(updated)
+        self.assertEqual(
+            validate_commerce_state(stale_conversion)["websiteIntakes"][0]["unitPrice"],  # type: ignore[index]
+            100,
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                updated,
+                "commerce.website_intake.converted",
+                stale_conversion,
+            )
+
+        updated_without_intake = apply_event(
+            catalog_state(),
+            "commerce.item.updated",
+            catalog_update_state(catalog_state(), next_price=125),
+        )
+        stale_creation = deepcopy(updated_without_intake)
+        stale_creation["websiteIntakes"] = [website_intake()]
+        self.assertEqual(
+            validate_commerce_state(stale_creation)["websiteIntakes"][0]["unitPrice"],  # type: ignore[index]
+            100,
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                updated_without_intake,
+                "commerce.website_intake.created",
+                stale_creation,
             )
 
     def test_intake_events_reject_spoofed_collection_and_record_diffs(self) -> None:
@@ -1550,6 +2072,9 @@ class CommerceRuntimeTests(unittest.TestCase):
         created = deepcopy(current)
         created["items"] = [new_item, *current["items"]]  # type: ignore[misc]
         created["movements"] = [movement("opening", "ACT-ITEM", 0, sku="SKU-2")]
+        created["catalogBaselines"] = [
+            catalog_baseline(new_item, action_evidence("ACT-ITEM"))
+        ]
         accepted = apply_event(current, "commerce.item.created", created)
         self.assertEqual(accepted["items"][0], new_item)  # type: ignore[index]
         self.assertEqual(accepted["movements"][0]["kind"], "opening")  # type: ignore[index]
@@ -1580,6 +2105,13 @@ class CommerceRuntimeTests(unittest.TestCase):
                 next_state["movements"] = [
                     movement("opening", f"ACT-ITEM-{label.upper()}", 7, sku=str(item["sku"])),
                     *state_with_intake["movements"],  # type: ignore[misc]
+                ]
+                next_state["catalogBaselines"] = [
+                    catalog_baseline(
+                        item,
+                        action_evidence(f"ACT-ITEM-{label.upper()}"),
+                    ),
+                    *state_with_intake.get("catalogBaselines", []),  # type: ignore[misc]
                 ]
                 accepted_with_intake = apply_event(state_with_intake, "commerce.item.created", next_state)
                 self.assertEqual(accepted_with_intake["items"][0], item)  # type: ignore[index]

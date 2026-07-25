@@ -22,6 +22,7 @@ HUMAN_COMMAND_EVENTS = frozenset(
     {
         "commerce.workspace.initialized",
         "commerce.item.created",
+        "commerce.item.updated",
         "commerce.order.created",
         "commerce.order.advanced",
         "commerce.order.cancelled",
@@ -442,6 +443,139 @@ def _authoritative_command_payload(
 ) -> JsonObject:
     authoritative = deepcopy(dict(payload))
     if surface != "commerce":
+        return authoritative
+    if event_type == "commerce.item.updated":
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        changes = state.get("catalogChanges") if isinstance(state, Mapping) else None
+        if (
+            not isinstance(evidence, Mapping)
+            or not isinstance(state, Mapping)
+            or not isinstance(changes, list)
+            or not changes
+            or not isinstance(changes[0], Mapping)
+            or not isinstance(changes[0].get("proof"), Mapping)
+            or changes[0]["proof"].get("actionId") != evidence.get("actionId")
+        ):
+            return authoritative
+        target_sku = changes[0].get("sku")
+        prior_change = next(
+            (
+                change
+                for change in changes[1:]
+                if isinstance(change, Mapping)
+                and change.get("sku") == target_sku
+                and isinstance(change.get("proof"), Mapping)
+            ),
+            None,
+        )
+        effective_captured_at = _not_before(
+            captured_at,
+            prior_change["proof"].get("capturedAt")
+            if isinstance(prior_change, Mapping)
+            else None,
+        )
+        authoritative_evidence = dict(evidence)
+        authoritative_evidence["actor"] = principal.actor_id
+        authoritative_evidence["capturedAt"] = effective_captured_at
+        authoritative_change = dict(changes[0])
+        authoritative_change["proof"] = deepcopy(authoritative_evidence)
+        authoritative_state = dict(state)
+        authoritative_state["catalogChanges"] = [
+            authoritative_change,
+            *deepcopy(changes[1:]),
+        ]
+        baselines = state.get("catalogBaselines")
+        if isinstance(baselines, list):
+            authoritative_baselines = deepcopy(baselines)
+            for index, baseline in enumerate(authoritative_baselines):
+                proof = baseline.get("proof") if isinstance(baseline, Mapping) else None
+                if (
+                    isinstance(proof, Mapping)
+                    and baseline.get("sku") == target_sku
+                    and proof.get("actionId") == evidence.get("actionId")
+                ):
+                    authoritative_baseline = dict(baseline)
+                    authoritative_baseline["proof"] = deepcopy(authoritative_evidence)
+                    projection = [
+                        "supermega.commerce.catalog-baseline.v1",
+                        authoritative_baseline.get("sku"),
+                        authoritative_baseline.get("price"),
+                        authoritative_baseline.get("reorderAt"),
+                        [
+                            authoritative_evidence.get("actionId"),
+                            authoritative_evidence.get("capturedAt"),
+                            authoritative_evidence.get("actor"),
+                            authoritative_evidence.get("reason"),
+                            authoritative_evidence.get("evidenceReference"),
+                        ],
+                    ]
+                    encoded = json.dumps(
+                        projection,
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    ).encode("utf-8")
+                    authoritative_baseline["anchorDigest"] = (
+                        f"sha256:{sha256(encoded).hexdigest()}"
+                    )
+                    authoritative_baselines[index] = authoritative_baseline
+            authoritative_state["catalogBaselines"] = authoritative_baselines
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
+    if event_type == "commerce.website_intake.created":
+        state = authoritative.get("state")
+        intakes = state.get("websiteIntakes") if isinstance(state, Mapping) else None
+        if (
+            not isinstance(state, Mapping)
+            or not isinstance(intakes, list)
+            or not intakes
+            or not isinstance(intakes[0], Mapping)
+            or not isinstance(intakes[0].get("source"), Mapping)
+            or not isinstance(intakes[0].get("creation"), Mapping)
+        ):
+            return authoritative
+        intake = dict(intakes[0])
+        source = intake["source"]
+        creation = intake["creation"]
+        projection = [
+            "supermega.commerce.website-intake.snapshot.v1",
+            intake.get("id"),
+            intake.get("createdAt"),
+            [
+                source.get("fingerprint"),
+                source.get("approvalId"),
+                source.get("snapshotId"),
+                source.get("pageId"),
+                source.get("siteName"),
+                source.get("pagePath"),
+            ],
+            intake.get("sku"),
+            intake.get("quantity"),
+            intake.get("itemName"),
+            intake.get("itemVariant"),
+            intake.get("unitPrice"),
+            intake.get("total"),
+            [
+                creation.get("actionId"),
+                creation.get("capturedAt"),
+                creation.get("actor"),
+                creation.get("reason"),
+                creation.get("evidenceReference"),
+            ],
+        ]
+        encoded = json.dumps(
+            projection,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        intake["snapshotDigest"] = f"sha256:{sha256(encoded).hexdigest()}"
+        authoritative_state = dict(state)
+        authoritative_state["websiteIntakes"] = [
+            intake,
+            *deepcopy(intakes[1:]),
+        ]
+        authoritative["state"] = authoritative_state
         return authoritative
     if event_type == "commerce.order.created":
         evidence = authoritative.get("evidence")
