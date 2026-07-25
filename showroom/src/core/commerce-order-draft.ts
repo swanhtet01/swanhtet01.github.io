@@ -25,6 +25,7 @@ export type CommerceOrderDraftInput = {
   payment: CommerceOrderDraftPayment
   fulfilment: CommerceOrderDraftFulfilment
   fulfilmentReference: string
+  promisedAt: string
   lines: CommerceOrderDraftLine[]
 }
 
@@ -163,6 +164,7 @@ function canonicalLine(value: unknown): CommerceOrderDraftLine {
 function canonicalInput(value: CommerceOrderDraftInput): CommerceOrderDraftInput {
   const customer = canonicalText(value.customer, 'Order draft customer', 80)
   const fulfilmentReference = canonicalText(value.fulfilmentReference, 'Order draft handoff reference', 160)
+  const promisedAt = value.promisedAt === '' ? '' : canonicalTimestamp(value.promisedAt)
   if (!commerceOrderDraftChannels.includes(value.channel)) throw new Error('Order draft channel is invalid.')
   if (value.payment !== '' && !commerceOrderDraftPayments.includes(value.payment)) {
     throw new Error('Order draft payment is invalid.')
@@ -181,6 +183,7 @@ function canonicalInput(value: CommerceOrderDraftInput): CommerceOrderDraftInput
     payment: value.payment,
     fulfilment: value.fulfilment,
     fulfilmentReference,
+    promisedAt,
     lines,
   }
 }
@@ -210,6 +213,7 @@ export function commerceOrderDraftMatchesInput(left: CommerceOrderDraft, right: 
     && left.payment === right.payment
     && left.fulfilment === right.fulfilment
     && left.fulfilmentReference === right.fulfilmentReference
+    && left.promisedAt === right.promisedAt
     && left.lines.length === right.lines.length
     && left.lines.every((line, index) => {
       const candidate = right.lines[index]
@@ -244,19 +248,21 @@ export function commerceOrderDraftStorageKey(scope: string) {
 }
 
 export function validateCommerceOrderDraft(value: unknown, expectedScope?: string): CommerceOrderDraft {
+  const legacyFields = [
+    'schema',
+    'scope',
+    'revision',
+    'savedAt',
+    'customer',
+    'channel',
+    'payment',
+    'fulfilment',
+    'fulfilmentReference',
+    'lines',
+  ]
   if (!isRecord(value)
-    || !hasExactKeys(value, [
-      'schema',
-      'scope',
-      'revision',
-      'savedAt',
-      'customer',
-      'channel',
-      'payment',
-      'fulfilment',
-      'fulfilmentReference',
-      'lines',
-    ])
+    || (!hasExactKeys(value, legacyFields)
+      && !hasExactKeys(value, [...legacyFields, 'promisedAt']))
     || value.schema !== COMMERCE_ORDER_DRAFT_SCHEMA
     || !Number.isSafeInteger(value.revision)
     || Number(value.revision) < 1) {
@@ -277,6 +283,7 @@ export function validateCommerceOrderDraft(value: unknown, expectedScope?: strin
       payment: value.payment as CommerceOrderDraftPayment,
       fulfilment: value.fulfilment as CommerceOrderDraftFulfilment,
       fulfilmentReference: value.fulfilmentReference as string,
+      promisedAt: typeof value.promisedAt === 'string' ? value.promisedAt : '',
       lines: value.lines as CommerceOrderDraftLine[],
     }),
   }
@@ -582,6 +589,7 @@ export function rebindCommerceOrderDraft(
     payment: draft.payment,
     fulfilment: draft.fulfilment,
     fulfilmentReference: draft.fulfilmentReference,
+    promisedAt: draft.promisedAt,
     lines: draft.lines.map((line) => {
       const item = bySku.get(line.sku)
       if (!item) throw new Error('Recovered Shop item is missing.')

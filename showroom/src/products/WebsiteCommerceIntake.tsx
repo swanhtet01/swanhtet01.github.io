@@ -31,7 +31,7 @@ type WebsiteCommerceIntakeProps = {
   managedIntakes?: CommerceWebsiteIntake[]
   mode: 'local' | 'managed'
   onQueueManagedIntake?: (intakeId: string, input: CommerceWebsiteOrderInput) => boolean
-  onQueueReadyOrder: (order: WebsiteOrderRecord) => void
+  onQueueReadyOrder: (order: WebsiteOrderRecord, promisedAt: string) => void
 }
 
 const operatorPattern = /^OP-[A-Z0-9][A-Z0-9_-]{2,31}$/
@@ -46,6 +46,22 @@ const paymentLabels: Record<WebsiteOrderPaymentMethod, string> = {
   cash_on_delivery: 'Cash on delivery',
   manual_qr: 'Manual QR review',
   manual_bank_transfer: 'Manual bank transfer',
+}
+
+function localDateTimeInputValue(value: Date) {
+  const local = new Date(value.getTime() - value.getTimezoneOffset() * 60_000)
+  return local.toISOString().slice(0, 16)
+}
+
+function defaultPromiseInput() {
+  return localDateTimeInputValue(new Date(Date.now() + 2 * 60 * 60 * 1000))
+}
+
+function canonicalFuturePromise(value: string) {
+  const promisedAt = new Date(value)
+  return value && !Number.isNaN(promisedAt.getTime()) && promisedAt.getTime() > Date.now()
+    ? promisedAt.toISOString()
+    : ''
 }
 
 function matchingCatalogItem(context: WebsiteEcommerceHandoffContext, catalog: WebsiteCommerceCatalogItem[]) {
@@ -81,6 +97,7 @@ export function WebsiteCommerceIntake({
   const [evidenceReference, setEvidenceReference] = useState('')
   const [fulfilmentMethod, setFulfilmentMethod] = useState<WebsiteOrderFulfilmentMethod | ''>('')
   const [paymentMethod, setPaymentMethod] = useState<WebsiteOrderPaymentMethod | ''>('')
+  const [promisedAt, setPromisedAt] = useState(defaultPromiseInput)
   const [confirmed, setConfirmed] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [notice, setNotice] = useState('')
@@ -91,11 +108,13 @@ export function WebsiteCommerceIntake({
 
   function reviewManagedIntake(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (disabled || !pendingManaged || !customer.trim() || !fulfilmentMethod || !paymentMethod || !onQueueManagedIntake) return
+    const canonicalPromisedAt = canonicalFuturePromise(promisedAt)
+    if (disabled || !pendingManaged || !customer.trim() || !fulfilmentMethod || !paymentMethod || !canonicalPromisedAt || !onQueueManagedIntake) return
     const queued = onQueueManagedIntake(pendingManaged.id, {
       customer: customer.trim(),
       fulfilmentMethod,
       paymentMethod,
+      promisedAt: canonicalPromisedAt,
     })
     setNotice(queued
       ? `${pendingManaged.id} is ready for accountable order confirmation below.`
@@ -182,7 +201,8 @@ export function WebsiteCommerceIntake({
               <label>Fulfilment<select disabled={disabled} onChange={(event) => setFulfilmentMethod(event.target.value as WebsiteOrderFulfilmentMethod | '')} required value={fulfilmentMethod}><option value="">Select</option><option value="pickup">Customer pickup</option><option value="local_delivery">Local delivery</option></select></label>
               <label>Payment<select disabled={disabled} onChange={(event) => setPaymentMethod(event.target.value as WebsiteOrderPaymentMethod | '')} required value={paymentMethod}><option value="">Select</option><option value="cash_on_delivery">Cash on delivery</option><option value="manual_qr">Manual QR review</option><option value="manual_bank_transfer">Manual bank transfer</option></select></label>
             </div>
-            <button className="core-button primary" disabled={disabled || !customer.trim() || !fulfilmentMethod || !paymentMethod} type="submit">Review order</button>
+            <label>Promised for<input autoComplete="off" disabled={disabled} min={localDateTimeInputValue(new Date())} onChange={(event) => setPromisedAt(event.target.value)} required type="datetime-local" value={promisedAt} /></label>
+            <button className="core-button primary" disabled={disabled || !customer.trim() || !fulfilmentMethod || !paymentMethod || !canonicalFuturePromise(promisedAt)} type="submit">Review order</button>
           </form>
         ) : (
           <div className="website-intake-ready"><div><strong>Nothing to process</strong><small>Send an approved SKU and quantity from Website when a real request is ready.</small></div></div>
@@ -234,7 +254,8 @@ export function WebsiteCommerceIntake({
       {context?.order ? (
         <div className="website-intake-ready">
           <div><strong>{context.order.customerReference} · {context.order.lines[0]?.itemName} × {context.order.lines[0]?.quantity}</strong><small>{context.order.id} · {fulfilmentLabels[context.order.fulfilmentMethod]} · {paymentLabels[context.order.paymentMethod]} · {context.order.totalMmk.toLocaleString()} MMK</small></div>
-          <button className="core-button primary" disabled={disabled || imported} onClick={() => onQueueReadyOrder(context.order!)} type="button">{imported ? 'In order queue' : 'Confirm into orders'}</button>
+          <label>Promised for<input autoComplete="off" disabled={disabled || imported} min={localDateTimeInputValue(new Date())} onChange={(event) => setPromisedAt(event.target.value)} required type="datetime-local" value={promisedAt} /></label>
+          <button className="core-button primary" disabled={disabled || imported || !canonicalFuturePromise(promisedAt)} onClick={() => onQueueReadyOrder(context.order!, canonicalFuturePromise(promisedAt))} type="button">{imported ? 'In order queue' : 'Confirm into orders'}</button>
         </div>
       ) : null}
 

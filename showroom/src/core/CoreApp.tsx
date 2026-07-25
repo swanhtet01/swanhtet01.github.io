@@ -510,8 +510,23 @@ function defaultIssueDueInput() {
   return localDateTimeInputValue(new Date(Date.now() + 4 * 60 * 60 * 1000))
 }
 
+function defaultOrderPromiseInput() {
+  return localDateTimeInputValue(new Date(Date.now() + 2 * 60 * 60 * 1000))
+}
+
 function defaultJobDueInput() {
   return localDateTimeInputValue(new Date(Date.now() + 8 * 60 * 60 * 1000))
+}
+
+function commerceOrderPromiseTime(order: CommerceOrder) {
+  if (!order.promisedAt) return Number.POSITIVE_INFINITY
+  const promisedAt = Date.parse(order.promisedAt)
+  return Number.isNaN(promisedAt) ? Number.POSITIVE_INFINITY : promisedAt
+}
+
+function compareCommerceOrderPromise(left: CommerceOrder, right: CommerceOrder) {
+  return commerceOrderPromiseTime(left) - commerceOrderPromiseTime(right)
+    || Date.parse(left.createdAt) - Date.parse(right.createdAt)
 }
 
 function shiftReferencePlaceholder() {
@@ -1463,7 +1478,9 @@ export function OverviewPage() {
   const pendingApprovals = approvals.filter((item) => item.status === 'pending')
   const lowStock = commerce.items.filter((item) => item.onHand <= item.reorderAt)
   const openProductionIssues = production.issues.filter((issue) => issue.status === 'open')
-  const openOrders = commerce.orders.filter((order) => order.status !== 'completed' && order.status !== 'cancelled')
+  const openOrders = commerce.orders
+    .filter((order) => order.status !== 'completed' && order.status !== 'cancelled')
+    .sort(compareCommerceOrderPromise)
   const nextOperatingOrder = openOrders.find(commerceOrderNeedsAction) ?? openOrders[0]
   const agentHandoffs = workspace.agents.filter((agent) => ['waiting_review', 'blocked'].includes(agent.state) && !blockedWork.some((item) => item.id === agent.assignedWorkItemId))
   const releaseComplete = workspace.release.checks.filter((check) => check.complete).length
@@ -1477,7 +1494,7 @@ export function OverviewPage() {
     : openProductionIssues[0]
       ? { label: 'Plant problem', title: openProductionIssues[0].summary, detail: `${openProductionIssues[0].area} needs review.`, action: 'Review problem', href: '/plant/?tab=control' }
       : nextOperatingOrder
-        ? { label: 'Shop order', title: `Continue ${nextOperatingOrder.id}`, detail: `${nextOperatingOrder.customer} · ${nextOperatingOrder.status.replace('_', ' ')} · payment ${nextOperatingOrder.paymentStatus}.`, action: 'Open orders', href: '/shop/?tab=orders' }
+        ? { label: 'Shop order', title: `Continue ${nextOperatingOrder.id}`, detail: `${nextOperatingOrder.customer} · ${nextOperatingOrder.status.replace('_', ' ')} · ${nextOperatingOrder.promisedAt ? `promised ${formatTime(nextOperatingOrder.promisedAt)}` : 'promise not recorded'}.`, action: 'Open orders', href: '/shop/?tab=orders' }
         : !isPilotReady
           ? { label: 'Setup', title: 'Define the measurable workflow', detail: `${pilotProgress(setup)}% complete; add the baseline and acceptance evidence.`, action: 'Finish setup', href: '/settings/' }
           : pendingApprovals[0]
@@ -1945,6 +1962,7 @@ function buildCommerceOrderRecoveryInput(
     payment: string
     fulfilment: '' | 'pickup' | 'delivery'
     fulfilmentReference: string
+    promisedAt: string
     lines: Array<{ sku: string; quantity: number }>
   },
   catalog: CommerceItem[],
@@ -1964,12 +1982,14 @@ function buildCommerceOrderRecoveryInput(
     }
   })
   if (lines.some((line) => line === null)) return null
+  const promisedAt = fields.promisedAt ? new Date(fields.promisedAt) : null
   return {
     customer: fields.customer.trim(),
     channel: fields.channel as CommerceOrderDraftInput['channel'],
     payment: fields.payment as CommerceOrderDraftInput['payment'],
     fulfilment: fields.fulfilment,
     fulfilmentReference: fields.fulfilmentReference.trim(),
+    promisedAt: promisedAt && !Number.isNaN(promisedAt.getTime()) ? promisedAt.toISOString() : '',
     lines: lines as CommerceOrderDraftInput['lines'],
   }
 }
@@ -1994,6 +2014,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const [payment, setPayment] = useState('')
   const [fulfilment, setFulfilment] = useState<'' | 'pickup' | 'delivery'>('')
   const [fulfilmentReference, setFulfilmentReference] = useState('')
+  const [promisedAt, setPromisedAt] = useState('')
   const [preparedChannelDraft, setPreparedChannelDraft] = useState<ChannelOrderDraft | null>(null)
   const [preparedEcommerceDraft, setPreparedEcommerceDraft] = useState<EcommerceShopDraft | null>(null)
   const [orderEntryMode, setOrderEntryMode] = useState<'manual' | 'message' | 'online'>('manual')
@@ -2052,6 +2073,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     || payment
     || fulfilment
     || fulfilmentReference.trim()
+    || promisedAt
     || extraOrderLines.length
     || quantity !== 1
     || selectedSku !== (commerce.items[0]?.sku ?? ''))
@@ -2061,10 +2083,11 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     payment,
     fulfilment,
     fulfilmentReference,
+    promisedAt,
     lines: manualOrderLineDrafts,
   })
   const currentOrderRecoveryInput = buildCommerceOrderRecoveryInput(
-    { customer, channel, payment, fulfilment, fulfilmentReference, lines: manualOrderLineDrafts },
+    { customer, channel, payment, fulfilment, fulfilmentReference, promisedAt, lines: manualOrderLineDrafts },
     commerce.items,
     null,
   )
@@ -2090,7 +2113,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const lowStock = commerce.items.filter((item) => item.onHand <= item.reorderAt)
   const openOrders = commerce.orders.filter((order) => order.status !== 'completed' && order.status !== 'cancelled')
   const paymentReview = commerce.orders.filter((order) => order.refundStatus === 'due' || (order.status !== 'cancelled' && order.paymentStatus === 'pending'))
-  const actionOrders = commerce.orders.filter(commerceOrderNeedsAction)
+  const actionOrders = commerce.orders.filter(commerceOrderNeedsAction).sort(compareCommerceOrderPromise)
   const actionOrderIds = new Set(actionOrders.map((order) => order.id))
   const closedOrders = commerce.orders.filter((order) => !actionOrderIds.has(order.id))
   const latestClose = commerce.closes.find((close) => close.operator)
@@ -2220,6 +2243,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         setPayment('')
         setFulfilment('')
         setFulfilmentReference('')
+        setPromisedAt('')
         setPreparedChannelDraft(null)
         setPreparedEcommerceDraft(null)
         setOrderEntryMode('manual')
@@ -2299,6 +2323,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       payment: string
       fulfilment: '' | 'pickup' | 'delivery'
       fulfilmentReference: string
+      promisedAt: string
       lines: Array<{ sku: string; quantity: number }>
     }
     const timer = window.setTimeout(() => {
@@ -2404,11 +2429,12 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         setPayment('')
         setFulfilment(ecommerceNavigationDraft.fulfilment)
         setFulfilmentReference(ecommerceNavigationDraft.sourceRequestId)
+        setPromisedAt(defaultOrderPromiseInput())
         setOrderEntryMode('manual')
         setOrderDraftActive(true)
         setResumedOrderDraft(null)
         setOrderDraftConflict(false)
-        setNotice(`${ecommerceNavigationDraft.id} is ready for Shop review. Choose payment, then review the order.`)
+        setNotice(`${ecommerceNavigationDraft.id} is ready for Shop review. Confirm the promise and payment, then review the order.`)
         requestAnimationFrame(() => {
           const dialog = orderComposerRef.current
           if (dialog && !dialog.open) dialog.showModal()
@@ -2537,6 +2563,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     setPayment('')
     setFulfilment('')
     setFulfilmentReference('')
+    setPromisedAt('')
     setPreparedChannelDraft(null)
     setPreparedEcommerceDraft(null)
     setOrderEntryMode('manual')
@@ -2570,6 +2597,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       setNotice(orderDraftRead.error || 'Order recovery is unavailable. Open Settings before starting a manual order.')
       return
     }
+    if (!promisedAt) setPromisedAt(defaultOrderPromiseInput())
     setOrderDraftActive(true)
     setResumedOrderDraft(null)
     setOrderDraftConflict(false)
@@ -2601,6 +2629,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     setPayment(draft.payment)
     setFulfilment(draft.fulfilment)
     setFulfilmentReference(draft.fulfilmentReference)
+    setPromisedAt(draft.promisedAt ? localDateTimeInputValue(new Date(draft.promisedAt)) : '')
     setSku(firstLine.sku)
     setQuantity(firstLine.quantity)
     setExtraOrderLines(remainingLines.map((line) => ({ sku: line.sku, quantity: line.quantity })))
@@ -2900,6 +2929,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     setPayment(draft.payment)
     setFulfilment('')
     setFulfilmentReference(draft.sourceRecordId)
+    setPromisedAt(defaultOrderPromiseInput())
     setPreparedChannelDraft(draft)
     setPreparedEcommerceDraft(null)
     setOrderEntryMode('manual')
@@ -2933,8 +2963,9 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       setPayment('')
       setFulfilment(draft.fulfilment)
       setFulfilmentReference(draft.sourceRequestId)
+      setPromisedAt(defaultOrderPromiseInput())
       setOrderEntryMode('manual')
-      setNotice(`${request.id} loaded from the authenticated inbox. Choose payment, then use the separate Shop action gate.`)
+      setNotice(`${request.id} loaded from the authenticated inbox. Confirm the promise and payment, then use the separate Shop action gate.`)
     } catch (error) {
       detachPreparedOrderSources({ channel: false })
       setNotice(error instanceof Error ? error.message : 'The Ecommerce inbox request failed closed.')
@@ -2981,6 +3012,13 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       setNotice('Choose pickup or delivery and enter its handoff reference before reviewing this order.')
       return
     }
+    const reviewedAt = new Date()
+    const promisedTime = new Date(promisedAt)
+    if (!promisedAt || Number.isNaN(promisedTime.getTime()) || promisedTime.getTime() <= reviewedAt.getTime()) {
+      setNotice('Choose a promised pickup or delivery time that is still in the future.')
+      return
+    }
+    const canonicalPromisedAt = promisedTime.toISOString()
     const sourceDraft = preparedChannelDraft && channelOrderDraftIsReady(preparedChannelDraft) ? preparedChannelDraft : null
     const ecommerceDraft = preparedEcommerceDraft
     if (sourceDraft && ecommerceDraft) {
@@ -3065,7 +3103,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     const recoveryResetEpochAtReview = orderDraftResetEpochRef.current
     const order: CommerceOrder = {
       id: uid('ORD'),
-      createdAt: new Date().toISOString(),
+      createdAt: reviewedAt.toISOString(),
       customer: customer.trim() || 'Guest',
       channel,
       item: sourceBacked ? selectedLine.name : commerceOrderItemSummary(orderLines),
@@ -3076,6 +3114,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       refundStatus: 'none',
       fulfilment,
       fulfilmentReference: handoffReference,
+      promisedAt: canonicalPromisedAt,
       sourceRecordId,
       evidenceReference: sourceEvidence,
       ...(!sourceBacked ? { lines: orderLines } : {}),
@@ -3092,7 +3131,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       subjectId: order.id,
       summary: `Confirm ${order.id} with ${orderLines.length} item ${orderLines.length === 1 ? 'line' : 'lines'}`,
       before: `${lineReview}${sourceRecordId ? ` · ${sourceRecordId} reviewed` : ''}`,
-      after: `${order.status} · ${fulfilmentLabel(order.fulfilment)} · ${order.fulfilmentReference} · ${reservationReview}`,
+      after: `${order.status} · promised ${formatTime(canonicalPromisedAt)} · ${fulfilmentLabel(order.fulfilment)} · ${order.fulfilmentReference} · ${reservationReview}`,
       evidenceReferenceSuggestion: sourceEvidence,
       evidenceReferenceLocked: Boolean(sourceRecordId),
       apply: async (action) => {
@@ -3153,7 +3192,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     })
   }
 
-  function queueWebsiteOrder(record: WebsiteOrderRecord) {
+  function queueWebsiteOrder(record: WebsiteOrderRecord, promisedAtInput: string) {
     if (commerce.orders.some((order) => order.id === record.id || order.sourceRecordId === record.id)) {
       setNotice(`${record.id} is already in the Shop order queue.`)
       return
@@ -3170,6 +3209,13 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       setNotice('Website order confirmation failed closed. Recheck the item, immutable price, quantity, and available stock.')
       return
     }
+    const promisedTime = new Date(promisedAtInput)
+    const reviewedAt = new Date()
+    if (!promisedAtInput || Number.isNaN(promisedTime.getTime()) || promisedTime.getTime() <= reviewedAt.getTime()) {
+      setNotice('Choose a promised pickup or delivery time that is still in the future.')
+      return
+    }
+    const canonicalPromisedAt = promisedTime.toISOString()
 
     const paymentLabel = record.paymentMethod === 'cash_on_delivery' ? 'Cash on delivery' : record.paymentMethod === 'manual_qr' ? 'Manual QR review' : 'Manual bank transfer'
     const orderFulfilment = record.fulfilmentMethod === 'pickup' ? 'pickup' : 'delivery'
@@ -3186,6 +3232,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       refundStatus: 'none',
       fulfilment: orderFulfilment,
       fulfilmentReference: record.id,
+      promisedAt: canonicalPromisedAt,
       sourceRecordId: record.id,
       evidenceReference: record.completion.evidenceReference,
       total: record.totalMmk,
@@ -3197,7 +3244,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       subjectId: record.id,
       summary: `Confirm ${record.id} from Website`,
       before: `ready for confirmation · ${item.sku} · ${beforeStock} on hand`,
-      after: `confirmed · ${fulfilmentLabel(orderFulfilment)} · ${record.id} · ${beforeStock - line.quantity} on hand`,
+      after: `confirmed · promised ${formatTime(canonicalPromisedAt)} · ${fulfilmentLabel(orderFulfilment)} · ${record.id} · ${beforeStock - line.quantity} on hand`,
       apply: (action) => mutateCommerce('commerce.order.created', action.commandId, commerceActionProof(action), (current) => reserveCommerceOrder(current, order, commerceActionProof(action))),
     })
   }
@@ -3220,7 +3267,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       subjectId: orderId,
       summary: `Confirm ${orderId} from Website`,
       before: `${intake.id} waiting · ${item.onHand} on hand`,
-      after: `${fulfilment} · ${item.onHand - intake.quantity} on hand`,
+      after: `${fulfilment} · promised ${formatTime(input.promisedAt)} · ${item.onHand - intake.quantity} on hand`,
       apply: (action) => mutateCommerce(
         'commerce.website_intake.converted',
         action.commandId,
@@ -3677,7 +3724,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
                   ? 'Draft saved on this device'
                   : 'Unfinished order'}</strong>
           <small>{orderDraftIssue || (orderDraftRead.status === 'ready'
-            ? 'Customer, fulfilment, item quantities, and payment can be resumed after reload.'
+            ? 'Customer, promise, fulfilment, item quantities, and payment can be resumed after reload.'
             : 'This structured manual draft stays on this device. Raw messages and source links are never stored.')}</small>
         </div>
         {resumedOrderNeedsReview ? <button className="core-button compact" disabled={!resumedOrderCanRebind || orderDraftSaving || orderDraftConflict} onClick={() => void acceptCurrentOrderDraftCatalog()} type="button">Use current Shop values</button> : null}
@@ -3720,6 +3767,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
                 setNotice('Fulfilment changed. The Ecommerce source link was removed; review this as a manual order.')
               }
             }}><option value="">Choose pickup or delivery</option><option value="pickup">Pickup</option><option value="delivery">Delivery</option></select></label>
+            <label>Promised for<input autoComplete="off" disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date())} onChange={(event) => setPromisedAt(event.target.value)} required type="datetime-local" value={promisedAt} /></label>
             <label>Handoff reference<input disabled={commerceControlsDisabled} maxLength={160} onChange={(event) => setFulfilmentReference(event.target.value)} placeholder="Pickup ticket or delivery route" required value={fulfilmentReference} /></label>
             <label>{extraOrderLines.length ? 'Item 1' : 'Item'}<select disabled={commerceControlsDisabled} value={selectedSku} onChange={(event) => { setSku(event.target.value); detachPreparedOrderSources() }}>{!commerce.items.some((item) => item.sku === selectedSku) && selectedSku ? <option disabled value={selectedSku}>{selectedSku} · no longer in Shop</option> : null}{commerce.items.map((item) => <option key={item.sku} value={item.sku}>{item.name} · {item.onHand} available</option>)}</select></label>
             <label>{extraOrderLines.length ? 'Quantity 1' : 'Quantity'}<input disabled={commerceControlsDisabled} min="1" max={selected?.onHand ?? 1} type="number" value={quantity} onChange={(event) => { setQuantity(Number(event.target.value)); detachPreparedOrderSources() }} /></label>
@@ -3746,7 +3794,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         </div>
         <div className="order-submit-bar" data-ecommerce-payment={preparedEcommerceDraft ? 'true' : 'false'}>
           {preparedEcommerceDraft ? <label className="order-ecommerce-payment"><span>Payment</span><select disabled={commerceControlsDisabled} form="commerce-manual-order-form" required value={payment} onChange={(event) => { setPayment(event.target.value); setPreparedChannelDraft(null) }}><option value="">Choose payment</option><option>KBZPay</option><option>WavePay</option><option>Cash on delivery</option><option>Cash</option><option>Card</option></select></label> : null}
-          <button className="core-button primary" disabled={commerceControlsDisabled || !payment || resumedOrderNeedsReview || orderDraftConflict} form="commerce-manual-order-form" type="submit">{!payment ? 'Choose payment first' : resumedOrderNeedsReview ? 'Review current Shop values' : orderDraftConflict ? 'Reload saved draft' : 'Review order'}</button>
+          <button className="core-button primary" disabled={commerceControlsDisabled || !payment || !promisedAt || resumedOrderNeedsReview || orderDraftConflict} form="commerce-manual-order-form" type="submit">{!promisedAt ? 'Choose promise first' : !payment ? 'Choose payment first' : resumedOrderNeedsReview ? 'Review current Shop values' : orderDraftConflict ? 'Reload saved draft' : 'Review order'}</button>
         </div>
       </> : null}
     </dialog>
@@ -3916,7 +3964,7 @@ function OrderList({
             : `${order.lines.length} items · ${order.quantity} units`
           : `${order.item} × ${order.quantity}`}</strong>
         {order.lines ? <small>{order.lines.map((line) => `${line.name} × ${line.quantity} @ ${line.unitPriceMmk.toLocaleString()} MMK`).join(' · ')}</small> : null}
-        <small>{order.id} · {order.channel} · {order.payment}{order.fulfilment ? ` · ${fulfilmentLabel(order.fulfilment)}` : ''}{order.fulfilmentReference ? ` · ${order.fulfilmentReference}` : ''} · {formatTime(order.createdAt)}</small>
+        <small>{order.id} · {order.channel} · {order.payment}{order.fulfilment ? ` · ${fulfilmentLabel(order.fulfilment)}` : ''}{order.fulfilmentReference ? ` · ${order.fulfilmentReference}` : ''} · {order.promisedAt ? `promised ${formatTime(order.promisedAt)}` : 'promise not recorded'} · created {formatTime(order.createdAt)}</small>
         {order.refundStatus === 'due' ? <small role="note">Record a refund already completed with the external payment provider. This does not send money.</small> : null}
       </div>
       <div className="order-row-actions">
@@ -3984,7 +4032,7 @@ function ClosedOrderHistory({
             : `${order.lines.length} items · ${order.quantity} units`
           : `${order.item} × ${order.quantity}`}</strong>
         {order.lines ? <small>{order.lines.map((line) => `${line.name} × ${line.quantity} @ ${line.unitPriceMmk.toLocaleString()} MMK`).join(' · ')}</small> : null}
-        <small>{order.id} · {order.status} · payment {order.paymentStatus}{order.refundStatus !== 'none' ? ` · refund ${order.refundStatus}` : ''}{order.fulfilment ? ` · ${fulfilmentLabel(order.fulfilment)}` : ''}{order.fulfilmentReference ? ` · ${order.fulfilmentReference}` : ''} · {formatTime(order.createdAt)}</small>
+        <small>{order.id} · {order.status} · payment {order.paymentStatus}{order.refundStatus !== 'none' ? ` · refund ${order.refundStatus}` : ''}{order.fulfilment ? ` · ${fulfilmentLabel(order.fulfilment)}` : ''}{order.fulfilmentReference ? ` · ${order.fulfilmentReference}` : ''} · {order.promisedAt ? `promised ${formatTime(order.promisedAt)}` : 'promise not recorded'} · created {formatTime(order.createdAt)}</small>
         {order.refundStatus === 'settled' && order.refundSettledAt && order.refundSettledBy && order.refundEvidenceReference ? <small role="note">{order.refundSettledBy} · {formatTime(order.refundSettledAt)} · evidence {order.refundEvidenceReference}</small> : null}
         {order.status === 'completed' && order.completion ? <small role="note">Completed by {order.completion.actor} · {formatTime(order.completion.capturedAt)} · evidence {order.completion.evidenceReference}</small> : null}
         {order.status === 'completed' && !order.completion ? <small role="note">Return unavailable: this older order has no attributable completion proof.</small> : null}

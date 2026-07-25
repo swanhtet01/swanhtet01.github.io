@@ -137,6 +137,7 @@ _ORDER_OPTIONAL_FIELDS = frozenset(
         "refundEvidenceReference",
         "fulfilment",
         "fulfilmentReference",
+        "promisedAt",
         "sourceRecordId",
         "evidenceReference",
         "lines",
@@ -888,6 +889,20 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 )
                 if field == "sourceRecordId":
                     source_record_ids.append(value_text)
+        if "promisedAt" in order:
+            promised_at = datetime.fromisoformat(
+                _timestamp(
+                    order["promisedAt"],
+                    f"orders[{index}].promisedAt",
+                ).replace("Z", "+00:00")
+            )
+            created_at = datetime.fromisoformat(
+                str(order["createdAt"]).replace("Z", "+00:00")
+            )
+            if promised_at <= created_at:
+                raise TrialValidationError(
+                    f"orders[{index}].promisedAt must be after its creation time."
+                )
 
         present_reconciliation_fields = _RECONCILIATION_FIELDS & set(order)
         if order["paymentStatus"] == "reconciled":
@@ -2221,6 +2236,11 @@ def _validate_new_order_and_reservation(
     if order.get("fulfilment") not in {"pickup", "delivery"}:
         raise TrialValidationError("a new order requires pickup or delivery fulfilment.")
     _text(order.get("fulfilmentReference"), "new order.fulfilmentReference", maximum=160)
+    promised_at = datetime.fromisoformat(
+        _timestamp(order.get("promisedAt"), "new order.promisedAt").replace(
+            "Z", "+00:00"
+        )
+    )
     lines = _reservation_lines(order)
     if not lines:
         raise TrialValidationError("a new order must reference at least one inventory item.")
@@ -2272,6 +2292,16 @@ def _validate_new_order_and_reservation(
             )
 
     added_movements = next_state["movements"][:len(lines)]
+    if any(
+        promised_at
+        <= datetime.fromisoformat(
+            str(movement["createdAt"]).replace("Z", "+00:00")
+        )
+        for movement in added_movements
+    ):
+        raise TrialValidationError(
+            "a new order promise must remain in the future when stock is reserved."
+        )
     for index, (line, movement) in enumerate(
         zip(lines, added_movements, strict=True)
     ):

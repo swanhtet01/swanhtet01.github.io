@@ -296,6 +296,8 @@ if (!commerceOrderDraftSource.includes("COMMERCE_ORDER_DRAFT_SCHEMA = 'supermega
   || !commerceOrderDraftSource.includes('commerceOrderDraftMatchesInput')
   || !commerceOrderDraftSource.includes('commerceOrderDraftCatalogState')
   || !commerceOrderDraftSource.includes('rebindCommerceOrderDraft')
+  || !commerceOrderDraftSource.includes('promisedAt')
+  || !commerceOrderDraftSource.includes("typeof value.promisedAt === 'string' ? value.promisedAt : ''")
   || ['rawMessage', 'sourceRecordId', 'evidenceReference', 'phone', 'address'].some((marker) => commerceOrderDraftSource.includes(marker))) fail('commerce_order_draft_contract_missing_or_contains_source_data')
 if (!coreSource.includes("from './commerce-order-draft'")
   || !coreSource.includes("import('./commerce-order-draft')")
@@ -506,8 +508,8 @@ if (!ecommerceConfirmSource.includes('storefrontRequestLedgerContains')
   || ecommerceReviewPosition < ecommercePaymentPosition
   || !ecommerceOrderSubmit.includes("data-ecommerce-payment={preparedEcommerceDraft ? 'true' : 'false'}")
   || !ecommerceOrderSubmit.includes('form="commerce-manual-order-form" required value={payment}')
-  || !ecommerceOrderSubmit.includes('disabled={commerceControlsDisabled || !payment || resumedOrderNeedsReview || orderDraftConflict}')
-  || !ecommerceOrderSubmit.includes("!payment ? 'Choose payment first' : resumedOrderNeedsReview ? 'Review current Shop values'")
+  || !ecommerceOrderSubmit.includes('disabled={commerceControlsDisabled || !payment || !promisedAt || resumedOrderNeedsReview || orderDraftConflict}')
+  || !ecommerceOrderSubmit.includes("!promisedAt ? 'Choose promise first' : !payment ? 'Choose payment first' : resumedOrderNeedsReview ? 'Review current Shop values'")
   || !coreCssSource.includes('.order-ecommerce-payment')
   || !coreSource.includes("import('../products/ecommerce/ecommerce-shop-handoff')")
   || ['setItem(', 'removeItem(', 'localStorage', 'sessionStorage', 'fetch(', 'XMLHttpRequest', 'navigator.locks', 'convertCommerceWebsiteIntake', 'reserveCommerceOrder', 'mutateCommerceWorkspace'].some((marker) => ecommerceConfirmSource.includes(marker) || ecommerceHandoffSource.includes(marker))) fail('ecommerce_shop_handoff_contract_missing_or_mutating')
@@ -807,9 +809,13 @@ if (!coreSource.includes('id="commerce-manual-order-form"')
   || !coreSource.includes('className="order-essential-fields"')
   || !coreSource.includes('<label>Fulfilment<select')
   || !coreSource.includes('Handoff reference<input')
+  || !coreSource.includes('Promised for<input')
   || !coreSource.includes('fulfilmentReference: handoffReference')
+  || !coreSource.includes('promisedAt: canonicalPromisedAt')
   || !commerceSource.includes('fulfilmentReference?: string')
+  || !commerceSource.includes('promisedAt?: string')
   || !managedCommerceRuntime.includes('"fulfilmentReference"')
+  || !managedCommerceRuntime.includes('"promisedAt"')
   || !coreSource.includes('function ClosedOrderHistory')
   || !coreSource.includes('orders={actionOrders}')
   || !coreSource.includes('orders={closedOrders}')
@@ -869,9 +875,11 @@ if (!commerceIntakeSource.includes('await completeWebsiteOrderDraft')
   || !commerceIntakeSource.includes('opaque customer reference generated on completion')
   || !commerceIntakeSource.includes('Create ready order')
   || !commerceIntakeSource.includes('Confirm into orders')
+  || !commerceIntakeSource.includes('canonicalFuturePromise')
+  || !commerceIntakeSource.includes('Promised for<input')
   || !commerceIntakeSource.includes('disabled?: boolean')
   || !commerceIntakeSource.includes('if (disabled ||')) fail('commerce_order_completion_ui_missing')
-if (!coreSource.includes('function queueWebsiteOrder') || !coreSource.includes('sourceRecordId') || !coreSource.includes('item.price !== line.unitPriceMmk') || !coreSource.includes('Website order confirmation failed closed') || !coreSource.includes('Confirm ${record.id} from Website')) fail('website_order_not_integrated_with_commerce')
+if (!coreSource.includes('function queueWebsiteOrder') || !coreSource.includes('sourceRecordId') || !coreSource.includes('item.price !== line.unitPriceMmk') || !coreSource.includes('Website order confirmation failed closed') || !coreSource.includes('Confirm ${record.id} from Website') || !coreSource.includes('promised ${formatTime(canonicalPromisedAt)}')) fail('website_order_not_integrated_with_commerce')
 if (!commerceSource.includes("supermega.commerce.workspace.v2")
   || !commerceSource.includes('loadCommerceWorkspace')
   || !commerceSource.includes('mutateCommerceWorkspace')
@@ -1480,6 +1488,7 @@ async function verifyChannelOrderRuntime() {
       refundStatus: 'none',
       fulfilment: 'pickup',
       fulfilmentReference: drafts[0].sourceRecordId,
+      promisedAt: '2026-07-23T14:00:00.000Z',
       sourceRecordId: drafts[0].sourceRecordId,
       evidenceReference: drafts[0].evidenceReference,
       total: item.price * drafts[0].quantity,
@@ -2595,13 +2604,19 @@ async function verifyCommerceRuntime() {
       quantity: 3,
     }, proof('ACT-WEBSITE-CONFLICT')) === null, 'managed_website_source_conflict_succeeded')
     const conversionProof = proof('ACT-WEBSITE-CONVERT', 1_000)
+    const conversionPromisedAt = '2026-07-23T11:00:00.000Z'
     const convertedIntake = model.convertCommerceWebsiteIntake(intake, 'WINT-12345678', {
       customer: 'Customer reference',
       fulfilmentMethod: 'local_delivery',
       paymentMethod: 'manual_qr',
+      promisedAt: conversionPromisedAt,
     }, conversionProof)
     assert(convertedIntake?.websiteIntakes?.[0].status === 'converted' && convertedIntake.websiteIntakes[0].conversion.orderId === 'ORD-WEB-12345678', 'managed_website_intake_not_converted')
-    assert(convertedIntake.items[0].onHand === 8 && convertedIntake.orders[0].sourceRecordId === 'WINT-12345678' && convertedIntake.movements[0].quantityDelta === -2, 'managed_website_conversion_not_atomic')
+    assert(convertedIntake.items[0].onHand === 8
+      && convertedIntake.orders[0].sourceRecordId === 'WINT-12345678'
+      && convertedIntake.orders[0].promisedAt === conversionPromisedAt
+      && convertedIntake.movements[0].quantityDelta === -2,
+    'managed_website_conversion_not_atomic')
     assertThrows(() => model.validateCommerceState({
       ...convertedIntake,
       movements: [{ ...convertedIntake.movements[0], actor: 'spoofed-actor' }, ...convertedIntake.movements.slice(1)],
@@ -2610,12 +2625,20 @@ async function verifyCommerceRuntime() {
       customer: 'Customer reference',
       fulfilmentMethod: 'local_delivery',
       paymentMethod: 'manual_qr',
+      promisedAt: conversionPromisedAt,
     }, conversionProof) === convertedIntake, 'managed_website_conversion_retry_not_idempotent')
     assert(model.convertCommerceWebsiteIntake(intake, 'WINT-12345678', {
       customer: 'Customer reference',
       fulfilmentMethod: 'local_delivery',
       paymentMethod: 'manual_qr',
+      promisedAt: conversionPromisedAt,
     }, { ...conversionProof, actionId: intakeProof.actionId }) === null, 'managed_website_action_id_reuse_succeeded')
+    assert(model.convertCommerceWebsiteIntake(intake, 'WINT-12345678', {
+      customer: 'Customer reference',
+      fulfilmentMethod: 'local_delivery',
+      paymentMethod: 'manual_qr',
+      promisedAt: conversionProof.capturedAt,
+    }, conversionProof) === null, 'managed_website_stale_promise_succeeded')
     const legacyUnboundIntake = model.validateCommerceState({
       ...intake,
       websiteIntakes: [{ ...intake.websiteIntakes[0], snapshotDigest: undefined }],
@@ -2624,6 +2647,7 @@ async function verifyCommerceRuntime() {
       customer: 'Customer reference',
       fulfilmentMethod: 'local_delivery',
       paymentMethod: 'manual_qr',
+      promisedAt: conversionPromisedAt,
     }, conversionProof) === null, 'legacy_unbound_website_intake_converted')
 
     const catalogUpdate = {
@@ -2667,6 +2691,7 @@ async function verifyCommerceRuntime() {
       customer: 'Customer reference',
       fulfilmentMethod: 'local_delivery',
       paymentMethod: 'manual_qr',
+      promisedAt: conversionPromisedAt,
     }, conversionProof) === null, 'stale_website_intake_converted_after_catalog_update')
     assertThrows(() => model.validateCommerceState({
       ...updatedCatalog,
@@ -2756,6 +2781,7 @@ async function verifyCommerceRuntime() {
       refundStatus: 'none',
       fulfilment: 'pickup',
       fulfilmentReference: 'PICKUP-001',
+      promisedAt: '2026-07-23T11:00:00.000Z',
       sourceRecordId: 'WEB-1',
       evidenceReference: reserveProof.evidenceReference,
       total: 200,
@@ -2763,8 +2789,17 @@ async function verifyCommerceRuntime() {
     }
     const reserved = model.reserveCommerceOrder(base, order, reserveProof)
     assert(reserved?.items[0].onHand === 8 && reserved.orders.length === 1 && reserved.movements.length === 1, 'reservation_did_not_apply_once')
+    const legacyPromiselessOrder = { ...reserved.orders[0] }
+    delete legacyPromiselessOrder.promisedAt
+    assert(model.validateCommerceState({ ...reserved, orders: [legacyPromiselessOrder] }).orders[0].promisedAt === undefined, 'legacy_order_without_promise_not_readable')
+    assertThrows(() => model.validateCommerceState({
+      ...reserved,
+      orders: [{ ...reserved.orders[0], promisedAt: reserved.orders[0].createdAt }],
+    }), 'backdated_order_promise_loaded')
     assert(model.reserveCommerceOrder(base, { ...order, fulfilment: undefined }, reserveProof) === null, 'order_without_fulfilment_succeeded')
     assert(model.reserveCommerceOrder(base, { ...order, fulfilmentReference: '' }, reserveProof) === null, 'order_without_fulfilment_reference_succeeded')
+    assert(model.reserveCommerceOrder(base, { ...order, promisedAt: undefined }, reserveProof) === null, 'order_without_promised_time_succeeded')
+    assert(model.reserveCommerceOrder(base, { ...order, promisedAt: reserveProof.capturedAt }, reserveProof) === null, 'order_with_stale_promised_time_succeeded')
     assert(model.reserveCommerceOrder(reserved, order, reserveProof) === reserved, 'exact_reservation_retry_not_idempotent')
     assert(model.reserveCommerceOrder(reserved, { ...order, quantity: 3, total: 300 }, reserveProof) === null, 'conflicting_reservation_retry_succeeded')
     assert(model.reserveCommerceOrder(reserved, { ...order, id: 'ORD-2' }, proof('ACT-RESERVE-2')) === null, 'duplicate_source_order_succeeded')
@@ -2845,6 +2880,7 @@ async function verifyCommerceRuntime() {
       refundStatus: 'none',
       fulfilment: 'pickup',
       fulfilmentReference: 'COUNTER-A',
+      promisedAt: '2026-07-23T11:00:00.000Z',
       lines: [
         { sku: 'SKU-1', name: 'Test item', quantity: 2, unitPriceMmk: 100 },
         { sku: 'SKU-2', name: 'Second item', variant: 'Large', quantity: 1, unitPriceMmk: 250 },
@@ -3256,6 +3292,7 @@ async function verifyCommerceOrderDraftRuntime() {
       payment: 'KBZPay',
       fulfilment: 'pickup',
       fulfilmentReference: 'PICKUP-17',
+      promisedAt: '2026-07-25T07:00:00.000Z',
       lines: [
         { sku: 'SM-1001', quantity: 2, unitPriceMmk: 18_500, availableAtSave: 34 },
         { sku: 'SM-1003', quantity: 1, unitPriceMmk: 12_000, availableAtSave: 21 },
@@ -3276,9 +3313,13 @@ async function verifyCommerceOrderDraftRuntime() {
     assert(first.revision === 1
       && first.scope === 'local'
       && first.lines.length === 2
+      && first.promisedAt === input.promisedAt
       && first.savedAt === '2026-07-25T05:00:00.000Z',
     'commerce_order_draft_first_save_invalid')
-    assert(Object.keys(JSON.parse(firstRaw)).sort().join(',') === 'channel,customer,fulfilment,fulfilmentReference,lines,payment,revision,savedAt,schema,scope', 'commerce_order_draft_extra_fields_persisted')
+    assert(Object.keys(JSON.parse(firstRaw)).sort().join(',') === 'channel,customer,fulfilment,fulfilmentReference,lines,payment,promisedAt,revision,savedAt,schema,scope', 'commerce_order_draft_extra_fields_persisted')
+    const legacyDraft = { ...first }
+    delete legacyDraft.promisedAt
+    assert(model.validateCommerceOrderDraft(legacyDraft, localScope).promisedAt === '', 'commerce_order_draft_legacy_promise_not_migrated_additively')
     assert(lockCalls[0]?.name === 'supermega:shop:order-draft:reset'
       && lockCalls[1]?.name === 'supermega:shop:order-draft:local'
       && lockCalls.slice(0, 2).every((call) => call.options?.mode === 'exclusive'),
@@ -3320,6 +3361,7 @@ async function verifyCommerceOrderDraftRuntime() {
     assert(!missing.current && !missing.canRebind && missing.missingSkus.join(',') === 'SM-1001', 'commerce_order_draft_missing_sku_not_blocked')
     const rebound = model.rebindCommerceOrderDraft(first, catalog.map((item) => item.sku === 'SM-1001' ? { ...item, price: 19_000, onHand: 30 } : item))
     assert(rebound.customer === input.customer
+      && rebound.promisedAt === input.promisedAt
       && rebound.lines[0].unitPriceMmk === 19_000
       && rebound.lines[0].availableAtSave === 30,
     'commerce_order_draft_rebind_changed_operator_fields_or_kept_stale_catalog')
@@ -3338,6 +3380,7 @@ async function verifyCommerceOrderDraftRuntime() {
       { ...input, lines: [] },
       { ...input, lines: [input.lines[0], input.lines[0]] },
       { ...input, payment: 'Crypto' },
+      { ...input, promisedAt: '2026-07-25T07:00:00' },
       { ...input, lines: [{ ...input.lines[0], quantity: 0 }] },
     ]) {
       let rejected = false

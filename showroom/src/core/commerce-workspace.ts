@@ -61,6 +61,7 @@ export type CommerceOrder = {
   refundEvidenceReference?: string
   fulfilment?: string
   fulfilmentReference?: string
+  promisedAt?: string
   sourceRecordId?: string
   evidenceReference?: string
   lines?: CommerceOrderLine[]
@@ -264,6 +265,7 @@ export type CommerceWebsiteOrderInput = {
   customer: string
   fulfilmentMethod: 'pickup' | 'local_delivery'
   paymentMethod: 'cash_on_delivery' | 'manual_qr' | 'manual_bank_transfer'
+  promisedAt: string
 }
 
 export type CommercePurchaseOrderInput = {
@@ -631,8 +633,8 @@ export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
     schema: COMMERCE_WORKSPACE_SCHEMA,
     items,
     orders: [
-      { id: 'ORD-1042', createdAt: firstOrderAt, customer: 'May', channel: 'Messenger', item: 'Daily essentials basket', itemSku: 'SM-1001', quantity: 2, payment: 'KBZPay', paymentStatus: 'pending', refundStatus: 'none', total: 37000, status: 'preparing' },
-      { id: 'ORD-1041', createdAt: secondOrderAt, customer: 'Ko Aung', channel: 'Phone', item: 'Household refill', itemSku: 'SM-1003', quantity: 1, payment: 'Cash on delivery', paymentStatus: 'pending', refundStatus: 'none', total: 12000, status: 'ready' },
+      { id: 'ORD-1042', createdAt: firstOrderAt, customer: 'May', channel: 'Messenger', item: 'Daily essentials basket', itemSku: 'SM-1001', quantity: 2, payment: 'KBZPay', paymentStatus: 'pending', refundStatus: 'none', promisedAt: new Date(now + 60 * 60 * 1000).toISOString(), total: 37000, status: 'preparing' },
+      { id: 'ORD-1041', createdAt: secondOrderAt, customer: 'Ko Aung', channel: 'Phone', item: 'Household refill', itemSku: 'SM-1003', quantity: 1, payment: 'Cash on delivery', paymentStatus: 'pending', refundStatus: 'none', promisedAt: new Date(now + 90 * 60 * 1000).toISOString(), total: 12000, status: 'ready' },
     ],
     movements: [
       { id: 'MOV-ACT-DEMO-1042', actionId: 'ACT-DEMO-1042', createdAt: firstOrderAt, actor: 'Demo operator', reason: 'Seed the local Commerce walkthrough.', evidenceReference: 'DEMO-SEED-ORD-1042', kind: 'reserve', sku: 'SM-1001', quantityDelta: -2, orderId: 'ORD-1042' },
@@ -955,6 +957,13 @@ export function validateCommerceState(value: unknown): CommerceState {
           ? canonicalText(candidate[field], `orders[${index}].${field}`, 160)
           : requiredText(candidate[field], `orders[${index}].${field}`)
         if (field === 'sourceRecordId') sourceRecordIds.push(fieldValue)
+      }
+    }
+    if (candidate.promisedAt !== undefined) {
+      const promisedAt = timestampMicros(candidate.promisedAt)
+      const createdAt = timestampMicros(candidate.createdAt)
+      if (promisedAt === null || createdAt === null || promisedAt <= createdAt) {
+        throw new Error(`orders[${index}].promisedAt must be after its creation time.`)
       }
     }
     if (candidate.paymentStatus === 'reconciled') {
@@ -2044,7 +2053,9 @@ export function convertCommerceWebsiteIntake(
     || input.customer !== input.customer.trim()
     || input.customer.length > 80
     || !['pickup', 'local_delivery'].includes(input.fulfilmentMethod)
-    || !['cash_on_delivery', 'manual_qr', 'manual_bank_transfer'].includes(input.paymentMethod)) return null
+    || !['cash_on_delivery', 'manual_qr', 'manual_bank_transfer'].includes(input.paymentMethod)
+    || timestampMicros(input.promisedAt) === null
+    || (timestampMicros(input.promisedAt) as bigint) <= (timestampMicros(proof.capturedAt) as bigint)) return null
   const current = validateCommerceState(state)
   const intakes = commerceWebsiteIntakes(current)
   const intake = intakes.find((candidate) => candidate.id === intakeId)
@@ -2055,6 +2066,7 @@ export function convertCommerceWebsiteIntake(
       && order?.customer === input.customer
       && order.fulfilment === (input.fulfilmentMethod === 'pickup' ? 'pickup' : 'delivery')
       && order.fulfilmentReference === intake.id
+      && order.promisedAt === input.promisedAt
       && order.payment === (input.paymentMethod === 'cash_on_delivery' ? 'Cash on delivery' : input.paymentMethod === 'manual_qr' ? 'Manual QR review' : 'Manual bank transfer')
       && sameActionProof(intake.conversion, proof) ? current : null
   }
@@ -2089,6 +2101,7 @@ export function convertCommerceWebsiteIntake(
     refundStatus: 'none',
     fulfilment,
     fulfilmentReference: intake.id,
+    promisedAt: input.promisedAt,
     sourceRecordId: intake.id,
     evidenceReference: proof.evidenceReference,
     total: intake.total,
@@ -2228,6 +2241,9 @@ function validatedOrderLineSnapshots(order: CommerceOrder): CommerceOrderLine[] 
 }
 
 export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder, proof: CommerceActionProof) {
+  const promisedAt = timestampMicros(order.promisedAt)
+  const createdAt = timestampMicros(order.createdAt)
+  const confirmedAt = timestampMicros(proof.capturedAt)
   if (!validProof(proof)
     || order.status !== 'confirmed'
     || !['pickup', 'delivery'].includes(order.fulfilment ?? '')
@@ -2235,6 +2251,11 @@ export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder,
     || !order.fulfilmentReference.trim()
     || order.fulfilmentReference !== order.fulfilmentReference.trim()
     || order.fulfilmentReference.length > 160
+    || promisedAt === null
+    || createdAt === null
+    || confirmedAt === null
+    || promisedAt <= createdAt
+    || promisedAt <= confirmedAt
     || !Number.isSafeInteger(order.quantity)
     || order.quantity < 1
     || !Number.isSafeInteger(order.total)

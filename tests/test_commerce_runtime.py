@@ -28,6 +28,7 @@ from supermega_runtime.trial_store import (
 
 NOW = "2026-07-23T09:00:00.000Z"
 CONVERTED_AT = "2026-07-23T09:15:00.000Z"
+PROMISED_AT = "2026-07-23T11:00:00.000Z"
 PAYMENT_AT = "2026-07-23T09:10:00.000Z"
 COMPLETED_AT = "2026-07-23T09:20:00.000Z"
 RETURN_AT = "2026-07-23T09:30:00.000Z"
@@ -90,6 +91,7 @@ def order_record(order_id: str = "ORD-1") -> dict[str, object]:
         "refundStatus": "none",
         "fulfilment": "pickup",
         "fulfilmentReference": f"FUL-{order_id}",
+        "promisedAt": PROMISED_AT,
         "sourceRecordId": f"WEB-{order_id}",
         "total": 200,
         "status": "confirmed",
@@ -2123,11 +2125,40 @@ class CommerceRuntimeTests(unittest.TestCase):
         created = apply_event(current, "commerce.order.created", created_state())
         self.assertEqual(created["items"][0]["onHand"], 8)  # type: ignore[index]
 
-        for missing_field in ("fulfilment", "fulfilmentReference"):
+        legacy_without_promise = created_state()
+        legacy_without_promise["orders"][0].pop("promisedAt")  # type: ignore[index]
+        self.assertEqual(
+            validate_commerce_state(legacy_without_promise),
+            legacy_without_promise,
+        )
+        for promised_at in (
+            "2026-07-23T11:00:00",
+            NOW,
+        ):
+            invalid_promise = created_state()
+            invalid_promise["orders"][0]["promisedAt"] = promised_at  # type: ignore[index]
+            with self.subTest(invalid_promised_at=promised_at), self.assertRaises(TrialValidationError):
+                validate_commerce_state(invalid_promise)
+
+        for missing_field in ("fulfilment", "fulfilmentReference", "promisedAt"):
             without_handoff = created_state()
             without_handoff["orders"][0].pop(missing_field)  # type: ignore[index]
             with self.subTest(missing_order_handoff=missing_field), self.assertRaises(TrialValidationError):
                 apply_event(current, "commerce.order.created", without_handoff)
+
+        stale_promise = created_state()
+        stale_promise["orders"][0]["promisedAt"] = "2026-07-23T09:10:00.000Z"  # type: ignore[index]
+        stale_promise["movements"][0]["createdAt"] = CONVERTED_AT  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "commerce.order.created",
+                stale_promise,
+                action_evidence(
+                    "ACT-ORD-1",
+                    captured_at=CONVERTED_AT,
+                ),
+            )
 
         arbitrary_stock = deepcopy(current)
         arbitrary_stock["items"][0]["onHand"] = 9  # type: ignore[index]
@@ -2676,6 +2707,7 @@ class CommerceRuntimeTests(unittest.TestCase):
             "refundStatus": "none",
             "fulfilment": "pickup",
             "fulfilmentReference": "COUNTER-A",
+            "promisedAt": PROMISED_AT,
             "lines": [
                 {
                     "sku": "SKU-1",
@@ -2840,6 +2872,16 @@ class CommerceRuntimeTests(unittest.TestCase):
                 "advancementActionIds": ["ACT-PREPARING"],
             }
         )
+        rewritten_promise = deepcopy(preparing)
+        rewritten_promise["orders"][0]["promisedAt"] = (  # type: ignore[index]
+            "2026-07-23T12:00:00.000Z"
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "commerce.order.advanced",
+                rewritten_promise,
+            )
         current = apply_event(current, "commerce.order.advanced", preparing)
 
         ready = deepcopy(current)
@@ -3451,6 +3493,9 @@ class CommerceRuntimeTests(unittest.TestCase):
             },
         )
         created_state_value = created_state("ORD-STORE-REFUND")
+        created_state_value["orders"][0]["promisedAt"] = (  # type: ignore[index]
+            "2099-01-02T00:00:00.000Z"
+        )
         created = store.apply_command(
             operator,
             command_id=str(uuid4()),
@@ -3612,6 +3657,9 @@ class CommerceRuntimeTests(unittest.TestCase):
         forged_created_state = created_state()
         forged_created_state["orders"][0]["createdAt"] = (  # type: ignore[index]
             "2099-01-01T00:00:00.000Z"
+        )
+        forged_created_state["orders"][0]["promisedAt"] = (  # type: ignore[index]
+            "2099-01-02T00:00:00.000Z"
         )
         forged_created_state["movements"][0].update(  # type: ignore[index]
             {
