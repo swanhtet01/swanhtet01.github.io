@@ -48,6 +48,8 @@ Run the product app locally:
 npm.cmd run dev
 ```
 
+This starts the canonical FastAPI runtime and Vite together on loopback (`127.0.0.1:8788` and `127.0.0.1:5173`). The default command clears database, hosted-auth, model, and external-worker configuration, so managed writes remain disabled. Use the separately gated rehearsal workflow for any managed database testing.
+
 ## Release policy
 
 Production releases come only from reviewed `main` commits through:
