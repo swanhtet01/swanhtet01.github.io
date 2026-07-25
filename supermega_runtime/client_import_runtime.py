@@ -120,6 +120,7 @@ class ClientImportValidationResult:
     object_id: str
     workflow_template_id: str
     preview_digest: str
+    package_digest: str
     row_count: int
     target_surface: str
     required_capability: str
@@ -132,6 +133,7 @@ class ClientImportValidationResult:
             "object": self.object_id,
             "workflow_template_id": self.workflow_template_id,
             "preview_digest": self.preview_digest,
+            "package_digest": self.package_digest,
             "row_count": self.row_count,
             "checks": [
                 "contract",
@@ -142,6 +144,7 @@ class ClientImportValidationResult:
                 "unique_keys",
                 "source_rows",
                 "preview_digest",
+                "package_digest",
             ],
             "activation": {
                 "status": "not_applied",
@@ -308,6 +311,15 @@ def _preview_digest(
     return f"sha256:{sha256(canonical).hexdigest()}"
 
 
+def _package_digest(value: Mapping[str, Any]) -> str:
+    canonical = json.dumps(
+        value,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return f"sha256:{sha256(canonical).hexdigest()}"
+
+
 def validate_client_import_staging_package(value: object) -> ClientImportValidationResult:
     """Validate a complete import package without retaining or applying it."""
 
@@ -345,11 +357,26 @@ def validate_client_import_staging_package(value: object) -> ClientImportValidat
     )
     if workflow_template_id not in CLIENT_IMPORT_PROFILE_IDS[product]:
         raise _fail("package.workflowTemplateId is not valid for the selected product.")
-    _text(package["workspace"], "package.workspace", maximum=120, formula_safe=False)
-    _text(package["owner"], "package.owner", maximum=120, formula_safe=False)
+    workspace = _text(
+        package["workspace"],
+        "package.workspace",
+        maximum=120,
+        formula_safe=False,
+    )
+    owner = _text(
+        package["owner"],
+        "package.owner",
+        maximum=120,
+        formula_safe=False,
+    )
 
     source = _exact_object(package["source"], "package.source", ("name", "digest", "previewDigest"))
-    _text(source["name"], "package.source.name", maximum=180, formula_safe=False)
+    source_name = _text(
+        source["name"],
+        "package.source.name",
+        maximum=180,
+        formula_safe=False,
+    )
     source_digest = _text(source["digest"], "package.source.digest", maximum=71)
     preview_digest = _text(source["previewDigest"], "package.source.previewDigest", maximum=71)
     if not _DIGEST.fullmatch(source_digest) or not _DIGEST.fullmatch(preview_digest):
@@ -378,6 +405,7 @@ def validate_client_import_staging_package(value: object) -> ClientImportValidat
         raise _fail(f"package.rows must contain between 1 and {CLIENT_IMPORT_MAX_ROWS} rows.")
     seen_keys: set[str] = set()
     seen_source_rows: set[int] = set()
+    normalized_rows: list[dict[str, Any]] = []
     previous_source_row = 1
     for index, candidate in enumerate(rows):
         row_path = f"package.rows[{index}]"
@@ -407,6 +435,13 @@ def validate_client_import_staging_package(value: object) -> ClientImportValidat
         if key in seen_keys:
             raise _fail("Package row keys must be unique.")
         seen_keys.add(key)
+        normalized_rows.append(
+            {
+                "sourceRow": source_row,
+                "key": key,
+                "values": values,
+            }
+        )
 
     controls = _exact_object(
         package["controls"],
@@ -432,11 +467,36 @@ def validate_client_import_staging_package(value: object) -> ClientImportValidat
     if not hmac.compare_digest(expected_preview_digest, preview_digest):
         raise _fail("The preview digest does not match this workflow and mapping.")
 
+    package_digest = _package_digest(
+        {
+            "contract": CLIENT_IMPORT_STAGING_SCHEMA,
+            "product": product,
+            "object": spec.identifier,
+            "workflowTemplateId": workflow_template_id,
+            "workspace": workspace,
+            "owner": owner,
+            "source": {
+                "name": source_name,
+                "digest": source_digest,
+                "previewDigest": preview_digest,
+            },
+            "mapping": mapping,
+            "rows": normalized_rows,
+            "controls": {
+                "rowCount": len(normalized_rows),
+                "humanReviewRequired": True,
+                "externalWritesPerformed": False,
+                "activationStatus": "staged_not_applied",
+            },
+        }
+    )
+
     return ClientImportValidationResult(
         product=product,
         object_id=spec.identifier,
         workflow_template_id=workflow_template_id,
         preview_digest=preview_digest,
+        package_digest=package_digest,
         row_count=len(rows),
         target_surface=spec.target_surface,
         required_capability=spec.required_capability,

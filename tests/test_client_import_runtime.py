@@ -211,6 +211,46 @@ class ClientImportValidatorTests(unittest.TestCase):
         )
         result = validate_client_import_staging_package(package)
         self.assertEqual(result.workflow_template_id, "social-commerce")
+        self.assertEqual(
+            result.package_digest,
+            "sha256:603e8c30da4b4e35129c3b55a393341b7671f5d09e851836b4058917a3f7f16b",
+        )
+
+    def test_package_digest_binds_rows_owner_and_workspace_context(self) -> None:
+        baseline = _package()
+        baseline_result = validate_client_import_staging_package(baseline)
+
+        def reverse_object_keys(value: object) -> object:
+            if isinstance(value, list):
+                return [reverse_object_keys(item) for item in value]
+            if isinstance(value, dict):
+                return {
+                    key: reverse_object_keys(nested)
+                    for key, nested in reversed(tuple(value.items()))
+                }
+            return value
+
+        reordered_result = validate_client_import_staging_package(reverse_object_keys(baseline))
+        self.assertEqual(reordered_result.package_digest, baseline_result.package_digest)
+        variants = []
+
+        changed_row = deepcopy(baseline)
+        changed_row["rows"][0]["values"]["name"] = "Myanmar coffee 500g"
+        variants.append(changed_row)
+
+        changed_owner = deepcopy(baseline)
+        changed_owner["owner"] = "Different accountable owner"
+        variants.append(changed_owner)
+
+        changed_workspace = deepcopy(baseline)
+        changed_workspace["workspace"] = "Different Myanmar Company"
+        variants.append(changed_workspace)
+
+        for candidate in variants:
+            with self.subTest(candidate=candidate["owner"]):
+                result = validate_client_import_staging_package(candidate)
+                self.assertEqual(result.preview_digest, baseline_result.preview_digest)
+                self.assertNotEqual(result.package_digest, baseline_result.package_digest)
 
     def test_identity_mapping_rows_controls_and_digest_fail_closed(self) -> None:
         cases: list[tuple[str, dict[str, object]]] = []
@@ -412,6 +452,7 @@ class ClientImportRouteTests(unittest.TestCase):
         validation = response.json()["validation"]
         self.assertEqual(validation["workspace_id"], "workspace-a")
         self.assertEqual(validation["workflow_template_id"], "retail-wholesale")
+        self.assertRegex(validation["package_digest"], r"^sha256:[0-9a-f]{64}$")
         self.assertEqual(validation["activation"]["status"], "not_applied")
         self.assertEqual((self.store._states, self.store._events), before)
         self.assertEqual(self.reducer.calls, 0)
