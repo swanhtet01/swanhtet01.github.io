@@ -98,7 +98,7 @@ async function walk(directory) {
   return files
 }
 
-for (const route of ['', 'work', 'operations', 'shop', 'plant', 'operations/commerce', 'operations/production', 'products/website', 'products/ecommerce', 'agents', 'settings']) {
+for (const route of ['', 'work', 'operations', 'shop', 'plant', 'website', 'ecommerce', 'operations/commerce', 'operations/production', 'products/website', 'products/ecommerce', 'agents', 'settings']) {
   const page = resolve(dist, route, 'index.html')
   if (!await exists(page)) fail(`missing_route:${route || '/'}`)
 }
@@ -165,8 +165,8 @@ if (!coreSource.includes('className="product-launcher home-products"')
   || !coreSource.includes('to="/shop/?tab=orders"')
   || !overviewPageContract.includes("to={openProductionIssues.length ? '/plant/?tab=control' : '/plant/?tab=production'}")
   || !overviewPageContract.includes("openProductionIssues.length === 1 ? 'issue' : 'issues'")
-  || !coreSource.includes('to="/products/website/"')
-  || !coreSource.includes('to="/products/ecommerce/"')
+  || !coreSource.includes('to="/website/"')
+  || !coreSource.includes('to="/ecommerce/"')
   || !overviewPageContract.includes("label: 'Shop stock'")
   || !overviewPageContract.includes("label: 'Plant problem'")
   || !overviewPageContract.includes("label: 'Shop order'")
@@ -240,13 +240,13 @@ if (!appSource.includes("lazy(() => import('./core/TeamWorkspace')")
   || !appSource.includes('<ProductLoading name="HQ" />')) fail('hq_route_not_isolated')
 const coreLayoutRouteStart = appSource.indexOf('<Route element={<CoreLayout />}>')
 const coreLayoutRouteEnd = appSource.indexOf('</Route>', coreLayoutRouteStart)
-const websiteRoute = appSource.indexOf('path="products/website/*"')
+const websiteRoute = appSource.indexOf('path="website/*"')
 const embeddedWebsiteCss = websiteCssSource.slice(websiteCssSource.indexOf('/* Website runs inside the shared SuperMega shell. */'))
 if (coreLayoutRouteStart < 0
   || coreLayoutRouteEnd < 0
   || websiteRoute < coreLayoutRouteStart
   || websiteRoute > coreLayoutRouteEnd
-  || !coreSource.includes("location.pathname.startsWith('/products/website/')")
+  || !coreSource.includes("location.pathname.startsWith('/website/')")
   || !coreSource.includes("to === '/operations/' && (")
   || !coreSource.includes("location.pathname.startsWith('/shop/')")
   || !coreSource.includes("location.pathname.startsWith('/plant/')")
@@ -258,11 +258,18 @@ if (coreLayoutRouteStart < 0
   || !embeddedWebsiteCss.includes('.website-shell {\n    height: auto;')) fail('website_shared_app_shell_missing')
 if (!appSource.includes("lazy(() => import('./products/ecommerce/EcommerceProduct')")
   || !appSource.includes('<EcommerceProduct />')
-  || !appSource.includes('path="products/ecommerce/*"')
+  || !appSource.includes('path="ecommerce/*"')
   || !appSource.includes('<OperationsPage product="commerce" />')
   || !appSource.includes('path="shop/*"')
   || !appSource.includes('<OperationsPage product="production" />')
   || !appSource.includes('path="plant/*"')) fail('canonical_product_routes_missing')
+if (!appSource.includes('<Navigate replace to="/website/" />')
+  || !appSource.includes('<Navigate replace to="/ecommerce/" />')
+  || !appSource.includes('path="products/website/*"')
+  || !appSource.includes('path="products/ecommerce/*"')) fail('maker_product_compatibility_routes_missing')
+if ((appSource.match(/<Navigate replace to="\/work\/\?view=agents" \/>/g) || []).length !== 2
+  || !appSource.includes('path="agents/*"')
+  || !appSource.includes('path="assist/*"')) fail('agents_not_internal_hq_capability')
 if (!storefrontSource.includes("supermega.ecommerce.storefront_preview.v1")
   || !storefrontSource.includes('readStorefrontCatalog')
   || !storefrontSource.includes('buildStorefrontPreview')
@@ -418,7 +425,7 @@ if (!ecommerceSource.includes('Prices and availability are read-only.')
   || !ecommerceCssSource.includes('.ecommerce-selection-warning')
   || !ecommerceCssSource.includes('font-size: 12px')
   || !coreSource.includes('<strong>Ecommerce</strong><small>Build a storefront from Shop</small>')
-  || !coreSource.includes('<h2>AI Agent Solutions</h2>')) fail('ecommerce_storefront_ui_boundary_missing')
+  || coreSource.includes('<h2>AI Agent Solutions</h2>')) fail('ecommerce_storefront_ui_boundary_missing')
 if (ecommerceSource.indexOf('Request an item') > ecommerceSource.indexOf('Preview verification')) {
   fail('ecommerce_technical_verification_precedes_primary_request_flow')
 }
@@ -1531,8 +1538,8 @@ if (coreSource.includes('>All apps</Link>')
   || !coreCssSource.includes('.order-row-actions .text-link { min-width: 44px; justify-content: center; }')
   || !coreCssSource.includes('.boundary-list a { min-height: 44px;')) fail('product_mobile_simplification_missing')
 let workflowProfiles = 0
-const solutionProducts = [...(manifest.products || []), ...(manifest.prototypeProducts || [])]
-if (solutionProducts.map((product) => product.id).join(',') !== 'commerce,production,website,ecommerce') fail('canonical_four_product_order_missing')
+const solutionProducts = manifest.customerProducts || []
+if (solutionProducts.map((product) => `${product.id}:${product.runtimeId}`).join(',') !== 'shop:commerce,plant:production,website:website,ecommerce:ecommerce') fail('canonical_four_product_order_missing')
 for (const product of solutionProducts) {
   if (product.templates?.length !== 3) fail(`wrong_template_count:${product.id}`)
   for (const template of product.templates || []) {
@@ -1543,7 +1550,7 @@ for (const product of solutionProducts) {
     }
   }
 }
-for (const route of ['/shop/', '/plant/', '/products/website/']) {
+for (const route of ['/shop/', '/plant/', '/website/', '/ecommerce/']) {
   if (!corpus.includes(route)) fail(`missing_canonical_module_route:${route}`)
 }
 for (const route of ['/operations/commerce/', '/operations/production/']) {
@@ -5815,4 +5822,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', primaryRoutes: 5, operatingModules: 2, prototypeRoutes: 2, compatibilityRedirects: 1, workflowProfiles, channelOrderRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceHandoffRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, channelOrderRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceHandoffRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))

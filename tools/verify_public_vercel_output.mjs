@@ -30,13 +30,16 @@ function walkFiles(directory) {
 }
 
 requireFile(configPath, 'config.json')
-if (manifest.schemaVersion !== 'supermega.site-context.v1') fail('manifest_schema_changed')
+if (manifest.schemaVersion !== 'supermega.site-context.v2') fail('manifest_schema_changed')
 if (manifest.company?.publicPricing !== false) fail('public_pricing_enabled')
 if (manifest.release?.sourceBranch !== 'main') fail('release_source_not_main')
-if (manifest.products?.map((product) => product.id).join(',') !== 'commerce,production') fail('runtime_catalog_not_commerce_and_production')
-if (manifest.products?.map((product) => `${product.publicId}:${product.name}`).join(',') !== 'shop:Shop,plant:Plant') fail('public_catalog_not_shop_and_plant')
-if (manifest.prototypeProducts?.map((product) => `${product.id}:${product.status}`).join(',') !== 'website:release-candidate-local,ecommerce:release-candidate-local') fail('maker_portfolio_drift')
-const ecommerce = manifest.prototypeProducts?.find((product) => product.id === 'ecommerce')
+if (manifest.customerProducts?.map((product) => `${product.id}:${product.runtimeId}:${product.name}`).join(',') !== 'shop:commerce:Shop,plant:production:Plant,website:website:Website,ecommerce:ecommerce:Ecommerce') fail('customer_product_portfolio_drift')
+if (manifest.customerProducts?.map((product) => product.appRoute).join(',') !== 'https://app.supermega.dev/shop/?tab=orders,https://app.supermega.dev/plant/?tab=production,https://app.supermega.dev/website/,https://app.supermega.dev/ecommerce/') fail('customer_product_routes_drift')
+const operatingProducts = manifest.customerProducts?.filter((product) => product.kind === 'operating-product') || []
+const makerProducts = manifest.customerProducts?.filter((product) => product.kind === 'maker-product') || []
+if (operatingProducts.map((product) => product.id).join(',') !== 'shop,plant') fail('operating_product_portfolio_drift')
+if (makerProducts.map((product) => `${product.id}:${product.status}`).join(',') !== 'website:release-candidate-local,ecommerce:release-candidate-local') fail('maker_product_portfolio_drift')
+const ecommerce = manifest.customerProducts?.find((product) => product.id === 'ecommerce')
 if (ecommerce?.views?.join(',') !== 'Storefront,Preview,Request receipt,Shop inbox,Shop review'
   || !ecommerce?.proof?.includes('Idempotent receipt and exact managed replay')
   || !ecommerce?.proof?.includes('Exact retained-ledger membership')
@@ -46,8 +49,8 @@ if (ecommerce?.views?.join(',') !== 'Storefront,Preview,Request receipt,Shop inb
   || !ecommerce?.boundaries?.includes('No isolated hosted tenant proof')
   || !ecommerce?.boundaries?.includes('Managed inbox uses a 100-entry revisioned Shop workspace pilot envelope; a normalized indexed queue is gated on measured scale')
   || !ecommerce?.boundaries?.includes('No Shop order or stock reservation before separate accountable confirmation')) fail('ecommerce_request_receipt_contract_drift')
-if (manifest.agentSolutions?.id !== 'agents' || manifest.agentSolutions?.status !== 'prototype-planned') fail('agent_solution_portfolio_drift')
-for (const product of manifest.products || []) {
+if (manifest.sharedCapabilities?.map((capability) => `${capability.id}:${capability.status}`).join(',') !== 'ai-assistance:gated-r-and-d') fail('shared_capability_drift')
+for (const product of manifest.customerProducts || []) {
   if (product.templates?.length !== 3) fail('public_template_count_wrong', { product: product.id })
   for (const template of product.templates || []) {
     if (!template.outcome?.trim() || !template.metric?.trim() || template.workflow?.length < 5 || template.entryPoints?.length < 3) fail('public_template_contract_incomplete', { product: product.id, template: template.id })
@@ -132,12 +135,13 @@ for (const token of [
   manifest.company.supporting,
   'One next action for the company',
   'Owners, evidence, review, and release',
-  'Shop, Plant, Website, Ecommerce, and Agents',
+  'Shop, Plant, Website, and Ecommerce',
   '<summary>What it covers</summary>',
   'min-height: 44px',
   'id="operations"',
-  'Shop and Plant run the work.',
-  'Both products use accountable browser-local records today.',
+  'Four focused products',
+  'Shop and Plant run the work. Website and Ecommerce reach customers.',
+  'All four share one accountable foundation.',
   'Explore the product workspace',
   'Start with one real workflow.',
   'Run browser-local orders, stock, fulfilment, payment status, exceptions, and daily close across common channels.',
@@ -153,14 +157,16 @@ for (const token of [
   'Available locally',
   'id="ecommerce"',
   'Create a Shop-backed storefront and hand customer intent to human review.',
-  'https://app.supermega.dev/products/ecommerce/',
+  'https://app.supermega.dev/ecommerce/',
   'id="agents"',
-  'Evaluation required',
-  'No demo button until this workflow passes.',
+  'Shared capability',
+  'AI assistance',
+  'It is embedded only after evaluation; it is not a fifth product.',
+  'Gated R&amp;D',
 ]) {
   if (!home.includes(token)) fail('homepage_contract_missing', { token })
 }
-for (const product of manifest.products) {
+for (const product of operatingProducts) {
   if (!home.includes(product.primaryCta.label)) fail('primary_cta_label_missing', { product: product.id, label: product.primaryCta.label })
   for (const module of product.modules) {
     if (!home.includes(module)) fail('module_catalog_missing', { product: product.id, module })
@@ -176,9 +182,10 @@ if (home.includes('Commerce and Production carry real records and actions.')) fa
 if ((home.match(/<a\b/g) || []).length > 8) fail('homepage_link_surface_too_large')
 
 const contact = pages.get('/contact/')?.html || ''
-for (const token of ['data-contact-form', 'action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="product"', 'value="shop"', 'value="plant"', 'value="website"', 'value="ecommerce"', 'value="agents"', 'name="template"', 'name="goal"', 'name="idempotency_key"', 'name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert', 'x-idempotency-key', 'rate_limited', 'Describe one real workflow or recurring handoff, and note any screenshot or spreadsheet you can share.', '>Shop<', '>Plant<', '>Website<', '>Ecommerce<', '>AI Agent Solutions<', 'No account, data connection, automation, or external action begins from this form.', 'swanhtet@supermega.dev']) {
+for (const token of ['data-contact-form', 'action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="product"', 'value="shop"', 'value="plant"', 'value="website"', 'value="ecommerce"', 'name="template"', 'name="goal"', 'name="idempotency_key"', 'name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert', 'x-idempotency-key', 'rate_limited', 'Describe one real workflow or recurring handoff, and note any screenshot or spreadsheet you can share.', '>Shop<', '>Plant<', '>Website<', '>Ecommerce<', 'No account, data connection, automation, or external action begins from this form.', 'swanhtet@supermega.dev']) {
   if (!contact.includes(token)) fail('contact_contract_missing', { token })
 }
+if (contact.includes('value="agents"') || contact.includes('>AI Agent Solutions<')) fail('shared_capability_listed_as_contact_product')
 
 const privacy = pages.get('/privacy/')?.html || ''
 for (const token of ['Contact requests', 'Product data', 'AI processing', 'Deletion']) {

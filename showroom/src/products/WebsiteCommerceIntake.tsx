@@ -187,7 +187,7 @@ export function WebsiteCommerceIntake({
       <section aria-label="Managed Website order intake" className="website-intake">
         <header className="website-intake-head">
           <div><span className="core-eyebrow">Website orders</span><strong>{pendingManaged ? `${pendingManagedIntakes.length} waiting` : 'No intake waiting'}</strong></div>
-          <div><Link className="text-link" to="/products/website/">Open Website</Link></div>
+          <div><Link className="text-link" to="/website/">Open Website</Link></div>
         </header>
 
         {pendingManaged ? (
@@ -217,7 +217,7 @@ export function WebsiteCommerceIntake({
     <section aria-label="Website order intake" className="website-intake">
       <header className="website-intake-head">
         <div><span className="core-eyebrow">Website orders</span><strong>{stateLabel}</strong></div>
-        <div><Link className="text-link" to="/products/website/">Open Website</Link></div>
+        <div><Link className="text-link" to="/website/">Open Website</Link></div>
       </header>
 
       {context && !item ? <p className="form-notice warning-text">SKU {context.handoff.intake.sku} does not match exactly one Shop stock item. Intake is blocked.</p> : null}

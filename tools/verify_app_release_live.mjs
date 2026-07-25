@@ -8,7 +8,7 @@ const expectedCommit = String(process.env.EXPECTED_RELEASE_COMMIT || '').trim().
 const protectedPreview = process.env.VERCEL_PROTECTED_PREVIEW === '1'
 const vercelToken = String(process.env.VERCEL_TOKEN || '').trim()
 const cliEnv = vercelToken ? { ...process.env, VERCEL_TOKEN: vercelToken } : process.env
-const canonicalProductRoutes = ['/shop/', '/plant/']
+const canonicalProductRoutes = ['/shop/', '/plant/', '/website/', '/ecommerce/']
 const routes = ['/', '/work/', '/operations/', ...canonicalProductRoutes, '/operations/commerce/', '/operations/production/', '/products/website/', '/products/ecommerce/', '/agents/', '/settings/']
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))

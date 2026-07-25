@@ -442,7 +442,7 @@ function collectLocalProductRecords(storage: Pick<Storage, 'getItem' | 'key' | '
 }
 
 function requireProductContract(id: SetupProductId): ProductContract {
-  const product = [...siteManifest.products, ...siteManifest.prototypeProducts].find((candidate) => candidate.id === id)
+  const product = siteManifest.customerProducts.find((candidate) => candidate.runtimeId === id)
   if (!product) throw new Error(`Missing ${id} product contract.`)
   return { id, templates: product.templates }
 }
@@ -1439,9 +1439,9 @@ export function CoreLayout() {
   const location = useLocation()
   const runtime = useRuntimeHealth()
   const workspaceMainRef = useRef<HTMLElement>(null)
-  const routeName = location.pathname.startsWith('/products/website/')
+  const routeName = location.pathname.startsWith('/website/')
     ? 'Website'
-    : location.pathname.startsWith('/products/ecommerce/')
+    : location.pathname.startsWith('/ecommerce/')
       ? 'Ecommerce'
     : location.pathname.startsWith('/settings/')
       ? 'Settings'
@@ -1452,7 +1452,8 @@ export function CoreLayout() {
           : navigation.find((item) => item.to !== '/' && location.pathname.startsWith(item.to))?.label ?? 'Home'
   const navigationClass = (to: string, isActive: boolean) => (
     isActive || (to === '/operations/' && (
-      location.pathname.startsWith('/products/')
+      location.pathname.startsWith('/website/')
+      || location.pathname.startsWith('/ecommerce/')
       || location.pathname.startsWith('/shop/')
       || location.pathname.startsWith('/plant/')
     )) ? 'active' : ''
@@ -1755,11 +1756,11 @@ export function OverviewPage() {
           <span><strong>Plant</strong><small>Jobs, output, and problems</small></span>
           <b>{openProductionIssues.length ? `${openProductionIssues.length} ${openProductionIssues.length === 1 ? 'issue' : 'issues'}` : 'Ready'}</b>
         </Link>
-        <Link to="/products/website/">
+        <Link to="/website/">
           <span><strong>Website</strong><small>Build and review a website</small></span>
           <b>Open</b>
         </Link>
-        <Link to="/products/ecommerce/">
+        <Link to="/ecommerce/">
           <span><strong>Ecommerce</strong><small>Build a Shop-backed storefront</small></span>
           <b>Open</b>
         </Link>
@@ -1837,13 +1838,9 @@ export function OperationsPage({ product }: { product?: ProductId }) {
       <nav aria-label="SuperMega apps" className="product-launcher product-catalog">
         <Link to="/shop/?tab=orders"><span><strong>Shop</strong><small>Orders, payments, and stock</small></span><b>Open</b></Link>
         <Link to="/plant/?tab=production"><span><strong>Plant</strong><small>Jobs, output, and problems</small></span><b>Open</b></Link>
-        <Link to="/products/website/"><span><strong>Website</strong><small>Build, preview, and review a site</small></span><b>Open</b></Link>
-        <Link to="/products/ecommerce/"><span><strong>Ecommerce</strong><small>Build a storefront from Shop</small></span><b>Preview</b></Link>
+        <Link to="/website/"><span><strong>Website</strong><small>Build, preview, and review a site</small></span><b>Open</b></Link>
+        <Link to="/ecommerce/"><span><strong>Ecommerce</strong><small>Build a storefront from Shop</small></span><b>Open</b></Link>
       </nav>
-      <section className="core-panel" id="planned">
-        <div className="panel-head"><div><span className="core-eyebrow">Building next</span><h2>AI Agent Solutions</h2></div><span className="status-pill bounded">Planned</span></div>
-        <p className="panel-copy">The first agent will prepare a source-backed order draft for human review. It has no demo button until recorded provider outputs pass the evaluation gate.</p>
-      </section>
     </div>
   }
 
@@ -4048,7 +4045,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
             <div><strong>{request.customerReference} · {request.line.name} × {request.line.quantity}</strong><small>{request.id} · {request.totalMmk.toLocaleString()} MMK · {request.fulfilment}</small></div>
             <button className="core-button compact" disabled={commerceControlsDisabled} onClick={() => void reviewStorefrontRequest(request.id)} ref={request.id === requestedRequestId ? ecommerceInboxTargetRef : undefined} type="button">Review</button>
           </div>) : <div className="website-intake-record"><strong>{managedIdentity ? 'No Ecommerce request needs Shop review.' : 'Connect a managed workspace to use the shared inbox.'}</strong><small>No request creates an order, reserves stock, starts payment, sends a message, or requests delivery.</small></div>}
-          <Link className="text-link" to="/products/ecommerce/">Open Ecommerce</Link>
+          <Link className="text-link" to="/ecommerce/">Open Ecommerce</Link>
         </section>
         {legacyWebsiteWorkWaiting ? <details className="legacy-website-intake"><summary>Older Website order needs review</summary><WebsiteCommerceIntake catalog={commerce.items} disabled={commerceControlsDisabled} importedSourceIds={importedWebsiteOrderIds} key={`${managedIdentity ? 'managed' : 'local'}:${websiteIntakes.find((intake) => intake.status === 'pending_confirmation')?.id ?? 'none'}`} managedIntakes={websiteIntakes} mode={managedIdentity ? 'managed' : 'local'} onQueueManagedIntake={queueManagedWebsiteIntake} onQueueReadyOrder={queueWebsiteOrder} /></details> : null}
       </div> : null}

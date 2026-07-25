@@ -70,9 +70,9 @@ async function verifyOnce() {
   assert(pages.get('/')?.includes(manifest.company.headline), 'homepage_headline_wrong')
   assert(pages.get('/')?.includes('href="https://app.supermega.dev/">Explore the product workspace</a>'), 'homepage_workspace_cta_missing')
   assert(pages.get('/')?.includes('Product is a working lifecycle, not another showcase page.'), 'product_team_workspace_missing')
-  assert(pages.get('/')?.includes(manifest.products.find((product) => product.publicId === 'shop')?.primaryCta.url), 'shop_workspace_wrong')
-  assert(pages.get('/')?.includes(manifest.products.find((product) => product.publicId === 'plant')?.primaryCta.url), 'plant_workspace_wrong')
-  for (const product of manifest.products) for (const template of product.templates) assert(pages.get('/')?.includes(template.name), 'template_catalog_missing', { template: template.id })
+  assert(pages.get('/')?.includes(manifest.customerProducts.find((product) => product.id === 'shop')?.appRoute), 'shop_workspace_wrong')
+  assert(pages.get('/')?.includes(manifest.customerProducts.find((product) => product.id === 'plant')?.appRoute), 'plant_workspace_wrong')
+  for (const product of manifest.customerProducts.filter((product) => product.kind === 'operating-product')) for (const template of product.templates) assert(pages.get('/')?.includes(template.name), 'template_catalog_missing', { template: template.id })
   assert(pages.get('/')?.includes('id="trust"'), 'control_boundary_missing')
 
   const [{ body: release, headers: releaseHeaders }, { body: health }, { body: contact }] = await Promise.all([

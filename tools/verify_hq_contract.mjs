@@ -20,26 +20,32 @@ const portfolio = JSON.parse(portfolioText)
 const databaseRehearsal = JSON.parse(databaseRehearsalText)
 const failures = []
 const requireContract = (name, condition) => { if (!condition) failures.push(name) }
-const product = (id) => portfolio.portfolio?.find((entry) => entry.id === id)
+const product = (id) => portfolio.products?.find((entry) => entry.id === id)
+const sharedCapability = (id) => portfolio.sharedCapabilities?.find((entry) => entry.id === id)
 const internalSystem = (id) => portfolio.internalSystems?.find((entry) => entry.id === id)
 
-requireContract('portfolio schema', portfolio.schemaVersion === 'supermega.hq.portfolio.v2')
+requireContract('portfolio schema', portfolio.schemaVersion === 'supermega.hq.portfolio.v3')
 requireContract('portfolio is current',
-  portfolio.updatedAt === '2026-07-25'
+  portfolio.updatedAt === '2026-07-26'
   && now.includes('Updated: 2026-07-26')
-  && current.includes('Last confirmed: 2026-07-25'))
+  && current.includes('Last confirmed: 2026-07-26'))
 requireContract('customer portfolio is explicit',
-  portfolio.portfolio?.map((entry) => entry.id).join(',') === 'shop,plant,website,ecommerce,agents')
+  portfolio.products?.map((entry) => entry.id).join(',') === 'shop,plant,website,ecommerce')
 requireContract('customer paths are canonical',
-  portfolio.portfolio?.map((entry) => entry.path).join(',') === '/shop/,/plant/,/products/website/,/products/ecommerce/,/agents/')
+  portfolio.products?.map((entry) => entry.path).join(',') === '/shop/,/plant/,/website/,/ecommerce/')
+requireContract('AI is shared infrastructure, not a fifth product',
+  portfolio.sharedCapabilities?.map((entry) => entry.id).join(',') === 'ai-assistance'
+  && sharedCapability('ai-assistance')?.kind === 'shared-capability'
+  && sharedCapability('ai-assistance')?.compatibilityPath === '/agents/'
+  && sharedCapability('ai-assistance')?.appAnchor === '/work/?view=agents')
 requireContract('product lifecycle is explicit',
   portfolio.productLifecycle?.join(',') === 'discover,define,build,release,learn')
 requireContract('product QA brief matches current portfolio',
   qaBrief.includes('Work item: `QA-003`')
   && qaBrief.includes('Mode: read-only')
   && qaBrief.includes('Website and Ecommerce are local release candidates')
-  && qaBrief.includes('AI Agent Solutions remains evaluation-gated')
-  && ['/shop/?tab=orders', '/shop/?tab=inventory', '/plant/?tab=production', '/plant/?tab=control', '/products/website/', '/products/ecommerce/', '/agents/']
+  && qaBrief.includes('AI assistance remains a shared, evaluation-gated capability')
+  && ['/shop/?tab=orders', '/shop/?tab=inventory', '/plant/?tab=production', '/plant/?tab=control', '/website/', '/ecommerce/', '/agents/']
     .every((route) => qaBrief.includes(`\`${route}\``))
   && qaBrief.includes('Do not edit files or browser data.')
   && !qaBrief.includes('Work item: `QA-002`')
@@ -65,7 +71,9 @@ requireContract('accepted core checkpoints lead directly to real work',
   && workboard.includes('| ENG-063 | Shop + Ecommerce UX Codex | done-local |')
   && workboard.includes('| ENG-064 | Shop + Ecommerce UX Codex | done-local |')
   && workboard.includes('| ENG-065 | Shop + Ecommerce UX Codex | done-local |')
-  && workboard.includes('| ENG-066 | Product Platform + Data UX Codex | ready-local |')
+  && workboard.includes('| ENG-066 | Product Platform + Data UX Codex | done-local |')
+  && workboard.includes('Checkpoint `ec98a12` supports Shop catalog, Plant jobs, Website pages, and Ecommerce merchandising')
+  && workboard.includes('All 44 client-onboarding runtime checks')
   && workboard.includes('The leading row states `4 below reorder`')
   && workboard.includes('centers the existing form, and focuses its Job selector')
   && workboard.includes('largest JavaScript chunk falls from 498,962 to 462,746 bytes')
@@ -132,43 +140,47 @@ requireContract('Plant uses the stable production runtime',
 requireContract('Website remains truthful',
   product('website')?.status === 'release-candidate-local'
   && product('website')?.surfaces?.join(',') === 'Site,Preview,Publish'
+  && product('website')?.templateContract?.productId === 'website'
   && product('website')?.nextGate?.includes('named-business brief'))
 requireContract('Ecommerce is separate and truthfully limited after local inbox completion and before hosted proof or Shop consequences',
   product('ecommerce')?.status === 'release-candidate-local'
   && product('ecommerce')?.job?.includes('read-only Shop catalogue')
   && product('ecommerce')?.surfaces?.join(',') === 'Storefront,Preview,Request receipt,Shop inbox,Shop review'
+  && product('ecommerce')?.templateContract?.productId === 'ecommerce'
   && product('ecommerce')?.nextGate?.includes('authenticated, revisioned, catalogue-bound')
   && product('ecommerce')?.nextGate?.includes('recoverable request retention')
   && product('ecommerce')?.nextGate?.includes('isolated non-production tenant')
   && product('ecommerce')?.nextGate?.includes('normalized indexed queue')
   && product('ecommerce')?.nextGate?.includes('payment'))
-requireContract('Agent Solutions starts with Order Intake',
-  product('agents')?.status === 'prototype-planned'
-  && product('agents')?.firstSolution === 'Order Intake Agent'
-  && product('agents')?.nextGate?.includes('zero side effects'))
+requireContract('shared AI assistance starts with Order Intake',
+  sharedCapability('ai-assistance')?.status === 'gated-r-and-d'
+  && sharedCapability('ai-assistance')?.firstWorkflow === 'Order Intake'
+  && sharedCapability('ai-assistance')?.nextGate?.includes('zero side effects'))
 requireContract('internal systems are not customer products',
   portfolio.internalSystems?.map((entry) => entry.id).join(',') === 'company-system,rnd-system'
   && internalSystem('company-system')?.name === 'SuperMega HQ'
   && internalSystem('rnd-system')?.public === false)
 
-requireContract('manifest preserves internal IDs and restores public names',
-  manifest.products?.map((entry) => `${entry.id}:${entry.publicId}:${entry.name}`).join(',')
-    === 'commerce:shop:Shop,production:plant:Plant')
-requireContract('manifest maker products are truthful',
-  manifest.prototypeProducts?.map((entry) => `${entry.id}:${entry.status}`).join(',')
-    === 'website:release-candidate-local,ecommerce:release-candidate-local')
-requireContract('manifest agent product is truthful',
-  manifest.agentSolutions?.id === 'agents'
-  && manifest.agentSolutions?.status === 'prototype-planned'
-  && manifest.agentSolutions?.firstSolution === 'Order Intake Agent')
+requireContract('manifest has one canonical four-product registry',
+  manifest.schemaVersion === 'supermega.site-context.v2'
+  && manifest.customerProducts?.map((entry) => `${entry.id}:${entry.runtimeId}:${entry.name}`).join(',')
+    === 'shop:commerce:Shop,plant:production:Plant,website:website:Website,ecommerce:ecommerce:Ecommerce')
+requireContract('manifest customer routes are canonical',
+  manifest.customerProducts?.map((entry) => entry.appRoute).join(',')
+    === 'https://app.supermega.dev/shop/?tab=orders,https://app.supermega.dev/plant/?tab=production,https://app.supermega.dev/website/,https://app.supermega.dev/ecommerce/')
+requireContract('manifest shared capability is separate from products',
+  manifest.sharedCapabilities?.map((entry) => `${entry.id}:${entry.status}:${entry.firstWorkflow}`).join(',')
+    === 'ai-assistance:gated-r-and-d:Order Intake')
 
 const expectedTemplateIds = {
   commerce: 'social-commerce,retail-wholesale,restaurant-ordering',
   production: 'production-control,maintenance-downtime,quality-traceability',
+  website: 'business-presence,lead-generation,catalog-showcase',
+  ecommerce: 'social-storefront,pickup-preorder,wholesale-request',
 }
 let workflowProfileCount = 0
 for (const runtimeSurface of Object.keys(expectedTemplateIds)) {
-  const manifestProduct = manifest.products?.find((entry) => entry.id === runtimeSurface)
+  const manifestProduct = manifest.customerProducts?.find((entry) => entry.runtimeId === runtimeSurface)
   requireContract(`${runtimeSurface} template set is supported`,
     manifestProduct?.templates?.map((entry) => entry.id).join(',') === expectedTemplateIds[runtimeSurface])
   requireContract(`${runtimeSurface} template profiles are executable`,
@@ -181,13 +193,17 @@ for (const runtimeSurface of Object.keys(expectedTemplateIds)) {
 }
 
 requireContract('current direction owns the corrected boundary',
-  current.includes('The customer portfolio is **Shop**, **Plant**, **Website**, **Ecommerce**')
+  current.includes('The customer portfolio is exactly **Shop**, **Plant**, **Website**, and **Ecommerce**')
+  && current.includes('AI assistance** is a shared capability inside those products, not a fifth product')
   && current.includes('`commerce` and `production` remain stable internal runtime')
   && current.includes('Ecommerce is not a second Shop back office')
   && current.includes('SuperMega HQ, R&D, agent coordination, Ops, Console, and machine coordination are internal'))
 requireContract('canonical product routes are stated',
-  ['/shop/', '/plant/', '/products/website/', '/products/ecommerce/', '/agents/']
+  ['/shop/', '/plant/', '/website/', '/ecommerce/']
     .every((route) => current.includes(`\`${route}\``)))
+requireContract('legacy Agents path resolves to internal coordination',
+  current.includes('`/agents/` — compatibility-only path to HQ')
+  && current.includes('it is not a product route or separate workspace'))
 requireContract('owner authority remains explicit',
   current.includes('External sends, payments, publishing, access changes, deployment, and production writes remain owner-approved')
   && now.includes('No external send, payment, refund, publish, domain change, connector write, merge, deployment, access change, production database write'))
@@ -264,7 +280,8 @@ if (failures.length) {
 console.log(JSON.stringify({
   ok: true,
   contract: 'supermega_hq',
-  products: portfolio.portfolio.map((entry) => entry.id),
+  products: portfolio.products.map((entry) => entry.id),
+  sharedCapabilities: portfolio.sharedCapabilities.map((entry) => entry.id),
   internalSystems: portfolio.internalSystems.map((entry) => entry.id),
   workflowProfiles: workflowProfileCount,
   researchGates: portfolio.researchGates.length,

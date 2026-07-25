@@ -1,9 +1,9 @@
 {
-  "schemaVersion": "supermega.hq.portfolio.v2",
-  "updatedAt": "2026-07-25",
+  "schemaVersion": "supermega.hq.portfolio.v3",
+  "updatedAt": "2026-07-26",
   "northStar": "One real workflow reaches a measurable outcome through an accountable operating record.",
   "productLifecycle": ["discover", "define", "build", "release", "learn"],
-  "portfolio": [
+  "products": [
     {
       "id": "shop",
       "name": "Shop",
@@ -35,9 +35,10 @@
       "name": "Website",
       "kind": "maker-product",
       "status": "release-candidate-local",
-      "path": "/products/website/",
+      "path": "/website/",
       "job": "Turn an approved business brief into a finite, reviewable website and one deterministic downloadable site file.",
       "surfaces": ["Site", "Preview", "Publish"],
+      "templateContract": { "file": "../site-manifest.json", "productId": "website" },
       "nextGate": "Complete one named-business brief through accepted responsive preview and retained managed artifact before connecting domain or publish authority."
     },
     {
@@ -45,21 +46,25 @@
       "name": "Ecommerce",
       "kind": "maker-product",
       "status": "release-candidate-local",
-      "path": "/products/ecommerce/",
+      "path": "/ecommerce/",
       "job": "Create a simple customer storefront from a read-only Shop catalogue, then add structured order intent without duplicating Shop back-office records.",
       "surfaces": ["Storefront", "Preview", "Request receipt", "Shop inbox", "Shop review"],
+      "templateContract": { "file": "../site-manifest.json", "productId": "ecommerce" },
       "nextGate": "Rehearse authenticated, revisioned, catalogue-bound storefront setup and recoverable request retention on one owner-approved isolated non-production tenant before adding cart, payment, delivery execution, external messaging, or a normalized indexed queue."
-    },
+    }
+  ],
+  "sharedCapabilities": [
     {
-      "id": "agents",
-      "name": "AI Agent Solutions",
-      "kind": "capability-product",
-      "status": "prototype-planned",
-      "path": "/agents/",
+      "id": "ai-assistance",
+      "name": "AI assistance",
+      "kind": "shared-capability",
+      "status": "gated-r-and-d",
+      "compatibilityPath": "/agents/",
+      "appAnchor": "/work/?view=agents",
       "job": "Prepare bounded, reviewable work inside Shop, Plant, Website, and Ecommerce from approved records.",
-      "surfaces": ["Choose task", "Review draft", "Approve or discard"],
-      "firstSolution": "Order Intake Agent",
-      "nextGate": "Pass the server-only golden-set evaluation for Order Intake with provenance, zero side effects, human review, and measured correction effort before making the Agents route a product demo."
+      "surfaces": ["Choose approved input", "Review source-backed draft", "Approve or discard"],
+      "firstWorkflow": "Order Intake",
+      "nextGate": "Pass the server-only golden-set evaluation for Order Intake with provenance, zero side effects, human review, and measured correction effort before exposing an interactive capability."
     }
   ],
   "internalSystems": [

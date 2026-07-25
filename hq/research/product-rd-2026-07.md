@@ -2,7 +2,7 @@
 
 Status: superseded in part by the founder's 2026-07-24 portfolio correction
 
-Current interpretation: this brief remains useful research and implementation evidence, but its decision to make Commerce and Production public product names and retire Ecommerce is no longer authority. The current customer map is Shop, Plant, Website, Ecommerce, and bounded AI Agent Solutions. Commerce and Production remain internal runtime identifiers; Ecommerce owns the customer storefront and order-intent experience while Shop owns the operating record.
+Current interpretation: this brief remains useful research and implementation evidence, but its decision to make Commerce and Production public product names and retire Ecommerce is no longer authority. The current customer map is Shop, Plant, Website, and Ecommerce. Bounded AI assistance is shared infrastructure, not a fifth product. Commerce and Production remain internal runtime identifiers; Ecommerce owns the customer storefront and order-intent experience while Shop owns the operating record.
 
 Evidence basis: released `7bb2c72973473d5cc10d9a89849065b22b9f18fa`, repository authority, and the shared “Curating Dev Resources” conversation
 
@@ -17,20 +17,20 @@ Build depth in this corrected order:
 1. **Shop and Plant identity and depth** — restore the founder-selected customer names and canonical slash routes while preserving the stable Commerce and Production runtime contracts.
 2. **Website product** — prove a repeatable, evidence-backed website-delivery workflow before claiming customer or production success.
 3. **Ecommerce product** — rebuild only the customer storefront, product, cart, and structured order-intent layer; hand accountable operations to Shop.
-4. **AI Agent Solutions** — make Order Intake the first bounded draft-and-review product experience, then add Website Brief and Plant Shift Handoff only after the same evaluation gate passes.
+4. **Shared AI assistance** — make Order Intake the first bounded draft-and-review capability inside the products, then add Website Brief and Plant Shift Handoff only after the same evaluation gate passes.
 
 This order preserves the current compact topology:
 
 | Concern | Keep | Do not add now |
 | --- | --- | --- |
 | Public surface | `supermega.dev`: `/`, `/contact/`, `/privacy/` | A page per feature, public agent pages, public pricing theatre |
-| Product app | One shell with `/shop/`, `/plant/`, `/products/website/`, `/products/ecommerce/`, and `/agents/` according to truthful availability | Separate domains, duplicate back offices, or a new deployment authority |
-| Product authority | Shop, Plant, Website, Ecommerce, and bounded AI Agent Solutions; internal HQ is not another customer product | Claims that a prototype is launched, managed, integrated, autonomous, or customer-proven |
+| Product app | One shell with `/shop/`, `/plant/`, `/website/`, and `/ecommerce/`; `/agents/` is compatibility-only for HQ delegated roles | Separate domains, duplicate back offices, or a new deployment authority |
+| Product authority | Shop, Plant, Website, and Ecommerce; bounded AI assistance is shared infrastructure and internal HQ is not another customer product | Claims that a prototype is launched, managed, integrated, autonomous, or customer-proven |
 | Data | Browser-local truthful demos; gated `/api/trial/v1`; private Postgres/Supabase state, events, approvals | A second CRM, database, queue, or direct browser-to-privileged database path |
 | Release | The paired public/app candidate, promotion, verification, and rollback workflow | Local production deploys, a third Vercel project, agent-owned promotion |
 | AI | Approved inputs, structured drafts, provenance, named human decisions | External sends, payments, publishing, access changes, machine control, production writes |
 
-The first implementation target is therefore not “launch five products.” It is **correct Shop and Plant identity, one truthful Website workflow, one focused Ecommerce-to-Shop handoff, and one evaluated Order Intake agent**.
+The implementation target is therefore **four complete products plus one evaluated Order Intake capability inside them**, not a fifth product or separate back office.
 
 ## Source availability and interpretation
 
@@ -76,7 +76,7 @@ These are product opportunities only when the demo and claims continue to state 
 
 | Priority | R&D product slice | Existing owner surface | First truthful demo | Graduation evidence |
 | --- | --- | --- | --- | --- |
-| 1 | Website delivery | `/products/website/` plus the existing Product lifecycle | Approved sample brief → finite local preview → QA/release packet | One named user accepts the workflow and a real preview against explicit criteria |
+| 1 | Website delivery | `/website/` plus the existing Product lifecycle | Approved sample brief → finite local preview → QA/release packet | One named user accepts the workflow and a real preview against explicit criteria |
 | 2 | Ecommerce and orders capability | `/operations/commerce/?tab=orders` | Approved website/chat order intent → operator-confirmed order → reserved stock → fulfilment close | Idempotent, transactional managed pilot with measured handling time and completion |
 | 3a | Shop depth (Commerce) | Existing Commerce tabs | Cancellation/release, reconciliation, exception, and daily-close evidence | One operator runs a full day with zero unexplained stock variance |
 | 3b | Plant depth (Production) | Existing Production tabs | Shift output, issue ownership, machine observation, and evidence-backed handoff | One shift closes with traceable output and all exceptions owned |
@@ -500,7 +500,7 @@ The founder corrected the portfolio on 2026-07-24:
 1. Shop and Plant are the canonical customer-facing operating products.
 2. Commerce and Production remain internal runtime identifiers during a compatibility-preserving migration.
 3. Website and Ecommerce are distinct maker products. Ecommerce owns the storefront and order-intent layer and feeds Shop; it does not duplicate Shop's stock, fulfilment, payment-status, refund, or close records.
-4. AI Agent Solutions is a bounded capability product. Order Intake remains the first demo and must pass provenance, structured-output, zero-side-effect, and human-review gates.
+4. AI assistance is a bounded shared capability, not a customer product. Order Intake remains the first workflow and must pass provenance, structured-output, zero-side-effect, and human-review gates.
 5. SuperMega HQ, R&D, Agent Teams, Ops, Console, and machine coordination are internal systems rather than public products.
 
 This decision authorizes local product implementation and validation. Schema changes, external data, API keys, managed activation, customer publishing, payment integration, connector writes, and production release each retain their existing separate gates.

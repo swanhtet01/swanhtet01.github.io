@@ -1,9 +1,9 @@
 # SuperMega current direction
 
-Last confirmed: 2026-07-25
+Last confirmed: 2026-07-26
 Authority: this file, `site-manifest.json`, and `hq/portfolio.json`
 
-SuperMega builds simple operating products for Myanmar businesses. The customer portfolio is **Shop**, **Plant**, **Website**, **Ecommerce**, and a bounded **AI Agent Solutions** layer. SuperMega HQ, R&D, agent coordination, Ops, Console, and machine coordination are internal company systems.
+SuperMega builds simple operating products for Myanmar businesses. The customer portfolio is exactly **Shop**, **Plant**, **Website**, and **Ecommerce**. Bounded **AI assistance** is a shared capability inside those products, not a fifth product. SuperMega HQ, R&D, agent coordination, Ops, Console, and machine coordination are internal company systems.
 
 ## Product map
 
@@ -11,7 +11,8 @@ SuperMega builds simple operating products for Myanmar businesses. The customer 
 2. **Plant** — jobs, output, materials, quality, equipment, maintenance, and shift exceptions.
 3. **Website** — an approved brief to a finite responsive website, review, and retained site artifact.
 4. **Ecommerce** — a simple storefront and ordering surface that sends structured order intent into Shop.
-5. **AI Agent Solutions** — bounded assistants that prepare work inside the four products and always expose their inputs, output, evidence, and approval boundary.
+
+AI assistance may prepare work inside these four products only when it exposes inputs, output, evidence, and the responsible human approval boundary.
 
 `commerce` and `production` remain stable internal runtime and database surface identifiers during migration. They are not customer-facing product names. Ecommerce is not a second Shop back office: it owns the customer storefront, product display, and order-intent experience; Shop owns the accountable order, stock, fulfilment, payment-status, and close records.
 
@@ -19,9 +20,9 @@ SuperMega builds simple operating products for Myanmar businesses. The customer 
 
 - **Shop** — implemented local release candidate at `/shop/` under the stable internal `commerce` runtime. `/operations/commerce/` is compatibility-only and resolves to the same records.
 - **Plant** — implemented local release candidate at `/plant/` under the stable internal `production` runtime. `/operations/production/` is compatibility-only and resolves to the same records.
-- **Website** — implemented local release candidate at `/products/website/`; it can produce a deterministic downloadable site artifact but cannot publish or change a domain.
-- **Ecommerce** — implemented local and managed storefront maker at `/products/ecommerce/`. It reads a Shop catalogue snapshot without changing it, lets the operator choose customer-visible products and copy, produces a deterministic preview digest, and creates an idempotent request receipt marked `pending_shop_review`. Browser-local mode saves setup only on that device. Authenticated managed mode saves the storefront configuration against the exact Shop catalogue digest in the revisioned tenant workspace, recovers it through bootstrap, preserves edits on version conflict, and can retain the exact request receipt in Shop. A Shop operator must still open and revalidate a source-locked draft; only Shop's separate accountable action gate can create an order or reserve stock.
-- **AI Agent Solutions** — planned real prototype at `/agents/`. The first solution is Order Intake: approved message or form input to a structured draft, with provenance, evaluation, human review, and zero side effects.
+- **Website** — implemented local release candidate at `/website/`; it can produce a deterministic downloadable site artifact but cannot publish or change a domain.
+- **Ecommerce** — implemented local and managed storefront maker at `/ecommerce/`. It reads a Shop catalogue snapshot without changing it, lets the operator choose customer-visible products and copy, produces a deterministic preview digest, and creates an idempotent request receipt marked `pending_shop_review`. Browser-local mode saves setup only on that device. Authenticated managed mode saves the storefront configuration against the exact Shop catalogue digest in the revisioned tenant workspace, recovers it through bootstrap, preserves edits on version conflict, and can retain the exact request receipt in Shop. A Shop operator must still open and revalidate a source-locked draft; only Shop's separate accountable action gate can create an order or reserve stock.
+- **AI assistance** — shared, gated R&D capability. `/agents/` is compatibility-only and resolves to HQ's delegated roles. The first workflow is Order Intake: approved message or form input to a structured draft, with provenance, evaluation, human review, and zero side effects.
 
 No local demo, passing test, healthy provider, or generated artifact is proof of a live customer system, revenue, production persistence, or autonomous operation.
 
@@ -29,12 +30,12 @@ No local demo, passing test, healthy provider, or generated artifact is proof of
 
 Canonical host: `app.supermega.dev`
 
-- `/` — compact home: one accountable next action and direct entry to Shop, Plant, Website, Ecommerce, and Agents according to truthful availability.
+- `/` — compact home: one accountable next action and direct entry to the four products according to truthful availability.
 - `/shop/` — Shop Orders first; Stock second.
 - `/plant/` — Plant Jobs first; Problems second.
-- `/products/website/` — Website Site, Preview, and Publish workflow.
-- `/products/ecommerce/` — Ecommerce storefront setup, responsive preview, local request receipt, optional authenticated Shop-inbox retention, and explicit handoff to a source-locked Shop draft; clearly non-publishing and without automatic operational consequences.
-- `/agents/` — reserved Agent Solutions workspace; do not present it as available until Order Intake passes evaluation and review gates.
+- `/website/` — Website Site, Preview, and Publish workflow.
+- `/ecommerce/` — Ecommerce storefront setup, responsive preview, local request receipt, optional authenticated Shop-inbox retention, and explicit handoff to a source-locked Shop draft; clearly non-publishing and without automatic operational consequences.
+- `/agents/` — compatibility-only path to HQ's delegated roles; it is not a product route or separate workspace.
 - `/work/` — internal SuperMega HQ work and agent-team coordination.
 - `/settings/` — setup, evidence export, reset, and managed-readiness utility.
 
@@ -68,8 +69,11 @@ Templates configure records, roles, vocabulary, starting data, and workflow step
 
 - Shop begins with Social commerce, Retail and wholesale, and Restaurant ordering.
 - Plant begins with Production control, Maintenance and downtime, and Quality and traceability.
-- Website and Ecommerce start with one validated base workflow before industry templates are added.
-- Agent solutions start with Order Intake. Website Brief and Plant Shift Handoff follow only if the first agent improves the accepted workflow.
+- Website begins with Business presence, Lead generation, and Catalog showcase.
+- Ecommerce begins with Social storefront, Pickup and preorder, and Wholesale request.
+- Shared AI assistance starts with Order Intake. Website Brief and Plant Shift Handoff follow only if the first workflow improves the accepted product workflow.
+
+All four products share one versioned browser-local CSV intake: downloadable template, explainable header mapping, row-level validation, Unicode handling, duplicate detection, deterministic digests, and a zero-write staging package. Product writes require a separate accountable confirmation.
 
 `site-manifest.json` remains the machine-readable public and template contract. Internal runtime IDs may remain `commerce` and `production` while names, routes, and customer language use Shop and Plant.
 

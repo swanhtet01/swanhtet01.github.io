@@ -1,7 +1,7 @@
 {
-  "schemaVersion": "supermega.site-context.v1",
-  "contextVersion": "2026-07-26.1",
-  "catalogVersion": "2026-07-26.1",
+  "schemaVersion": "supermega.site-context.v2",
+  "contextVersion": "2026-07-26.2",
+  "catalogVersion": "2026-07-26.2",
   "brand": {
     "name": "SuperMega",
     "domain": "supermega.dev",
@@ -20,19 +20,20 @@
     "supporting": "Run Shop and Plant, build Website and Ecommerce experiences, and add bounded AI assistance without forcing people through disconnected tools.",
     "publicPricing": false
   },
-  "products": [
+  "customerProducts": [
     {
-      "id": "commerce",
-      "publicId": "shop",
+      "id": "shop",
+      "runtimeId": "commerce",
+      "kind": "operating-product",
       "name": "Shop",
-      "route": "/#shop",
+      "publicAnchor": "/#shop",
+      "appRoute": "https://app.supermega.dev/shop/?tab=orders",
       "status": "available-in-app",
       "eyebrow": "Shop operations",
       "headline": "Keep every order and stock movement accountable.",
       "description": "Run browser-local orders, stock, fulfilment, payment status, exceptions, and daily close across common channels. No live channel, checkout, payment, delivery, customer send, or external write is connected.",
       "primaryCta": {
-        "label": "Open Shop",
-        "url": "https://app.supermega.dev/shop/?tab=orders"
+        "label": "Open Shop"
       },
       "secondaryCta": {
         "label": "Configure Shop",
@@ -71,17 +72,18 @@
       ]
     },
     {
-      "id": "production",
-      "publicId": "plant",
+      "id": "plant",
+      "runtimeId": "production",
+      "kind": "operating-product",
       "name": "Plant",
-      "route": "/#plant",
+      "publicAnchor": "/#plant",
+      "appRoute": "https://app.supermega.dev/plant/?tab=production",
       "status": "available-in-app",
       "eyebrow": "Plant operations",
       "headline": "Give the plant floor one operational memory.",
       "description": "Run recurring jobs, output, machine state, quality, maintenance, exceptions, and shift handoffs in a clearly labelled local demo. Authenticated tenant writes stay locked until managed activation gates pass. No machine telemetry, machine control, access change, or external write is connected.",
       "primaryCta": {
-        "label": "Open Plant",
-        "url": "https://app.supermega.dev/plant/?tab=production"
+        "label": "Open Plant"
       },
       "secondaryCta": {
         "label": "Configure Plant",
@@ -118,13 +120,14 @@
           "metric": "Exception closure time and trace completeness"
         }
       ]
-    }
-  ],
-  "prototypeProducts": [
+    },
     {
       "id": "website",
+      "runtimeId": "website",
+      "kind": "maker-product",
       "name": "Website",
-      "route": "https://app.supermega.dev/products/website/",
+      "publicAnchor": "/#website",
+      "appRoute": "https://app.supermega.dev/website/",
       "status": "release-candidate-local",
       "eyebrow": "Website maker",
       "headline": "Turn an approved brief into a reviewable website.",
@@ -162,8 +165,11 @@
     },
     {
       "id": "ecommerce",
+      "runtimeId": "ecommerce",
+      "kind": "maker-product",
       "name": "Ecommerce",
-      "route": "https://app.supermega.dev/products/ecommerce/",
+      "publicAnchor": "/#ecommerce",
+      "appRoute": "https://app.supermega.dev/ecommerce/",
       "status": "release-candidate-local",
       "eyebrow": "Ecommerce maker",
       "headline": "Create a Shop-backed storefront and hand customer intent to human review.",
@@ -199,16 +205,19 @@
       "boundaries": ["No duplicate stock ledger", "No isolated hosted tenant proof", "Managed inbox uses a 100-entry revisioned Shop workspace pilot envelope; a normalized indexed queue is gated on measured scale", "No Shop order or stock reservation before separate accountable confirmation", "No cart or payment initiation", "No delivery execution", "No customer send", "No publishing", "No external write"]
     }
   ],
-  "agentSolutions": {
-    "id": "agents",
-    "name": "AI Agent Solutions",
-    "route": "https://app.supermega.dev/agents/",
-    "status": "prototype-planned",
-    "firstSolution": "Order Intake Agent",
-    "headline": "Prepare bounded work, then let the responsible person decide.",
-    "workflow": ["Choose approved input", "Create structured draft", "Show provenance", "Review or edit", "Approve or discard"],
-    "boundaries": ["No autonomous send", "No payment", "No publish", "No deployment", "No access change", "No production or machine write"]
-  },
+  "sharedCapabilities": [
+    {
+      "id": "ai-assistance",
+      "anchor": "agents",
+      "name": "AI assistance",
+      "compatibilityRoute": "https://app.supermega.dev/agents/",
+      "status": "gated-r-and-d",
+      "firstWorkflow": "Order Intake",
+      "headline": "Prepare bounded work, then let the responsible person decide.",
+      "workflow": ["Choose approved input", "Create structured draft", "Show provenance", "Review or edit", "Approve or discard"],
+      "boundaries": ["No autonomous send", "No payment", "No publish", "No deployment", "No access change", "No production or machine write"]
+    }
+  ],
   "pages": [
     { "route": "/", "file": "index.html", "title": "SuperMega | Operating software for real company work" },
     { "route": "/contact/", "file": "contact/index.html", "title": "Contact | SuperMega" },

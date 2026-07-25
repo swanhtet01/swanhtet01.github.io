@@ -36,12 +36,14 @@ export default function App() {
           <Route element={<OperationsPage />} path="operations/*" />
           <Route element={<OperationsPage product="commerce" />} path="shop/*" />
           <Route element={<OperationsPage product="production" />} path="plant/*" />
-          <Route element={<Suspense fallback={<ProductLoading name="Website" />}><WebsiteProduct /></Suspense>} path="products/website/*" />
-          <Route element={<Suspense fallback={<ProductLoading name="Ecommerce" />}><EcommerceProduct /></Suspense>} path="products/ecommerce/*" />
+          <Route element={<Suspense fallback={<ProductLoading name="Website" />}><WebsiteProduct /></Suspense>} path="website/*" />
+          <Route element={<Suspense fallback={<ProductLoading name="Ecommerce" />}><EcommerceProduct /></Suspense>} path="ecommerce/*" />
+          <Route element={<Navigate replace to="/website/" />} path="products/website/*" />
+          <Route element={<Navigate replace to="/ecommerce/" />} path="products/ecommerce/*" />
           <Route element={<SettingsPage />} path="settings/*" />
           <Route element={<LegacyEntryRedirect />} path="legacy-entry" />
-          <Route element={<Navigate replace to="/operations/#planned" />} path="agents/*" />
-          <Route element={<Navigate replace to="/operations/#planned" />} path="assist/*" />
+          <Route element={<Navigate replace to="/work/?view=agents" />} path="agents/*" />
+          <Route element={<Navigate replace to="/work/?view=agents" />} path="assist/*" />
           <Route element={<Navigate replace to="/settings/" />} path="setup/*" />
           <Route element={<Navigate replace to="/settings/#controls" />} path="trust/*" />
           <Route element={<Navigate replace to="/" />} path="app/*" />

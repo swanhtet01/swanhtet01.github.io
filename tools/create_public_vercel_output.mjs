@@ -15,16 +15,17 @@ function assert(condition, message) {
   if (!condition) throw new Error(message)
 }
 
-assert(manifest.schemaVersion === 'supermega.site-context.v1', 'unsupported_site_manifest')
+assert(manifest.schemaVersion === 'supermega.site-context.v2', 'unsupported_site_manifest')
 assert(manifest.brand?.version && manifest.contextVersion && manifest.catalogVersion, 'site_manifest_versions_missing')
-assert(Array.isArray(manifest.products) && manifest.products.length === 2, 'site_manifest_requires_shop_and_plant')
-assert(manifest.products.map((product) => product.id).join(',') === 'commerce,production', 'site_manifest_product_order_changed')
-assert(manifest.products.map((product) => product.publicId).join(',') === 'shop,plant', 'site_manifest_public_product_identity_changed')
-assert(manifest.prototypeProducts?.map((product) => product.id).join(',') === 'website,ecommerce', 'site_manifest_maker_product_order_changed')
-assert(manifest.agentSolutions?.id === 'agents', 'site_manifest_agent_solutions_missing')
+assert(manifest.customerProducts?.map((product) => product.id).join(',') === 'shop,plant,website,ecommerce', 'site_manifest_customer_product_order_changed')
+assert(manifest.customerProducts?.map((product) => product.runtimeId).join(',') === 'commerce,production,website,ecommerce', 'site_manifest_runtime_identity_changed')
+assert(manifest.sharedCapabilities?.map((capability) => capability.id).join(',') === 'ai-assistance', 'site_manifest_shared_capability_missing')
 assert(manifest.company?.publicPricing === false, 'public_pricing_must_remain_hidden')
 
 const brand = manifest.brand
+const operatingProducts = manifest.customerProducts.filter((product) => product.kind === 'operating-product')
+const makerProducts = manifest.customerProducts.filter((product) => product.kind === 'maker-product')
+const aiAssistance = manifest.sharedCapabilities[0]
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -246,11 +247,15 @@ const sharedStyle = `
   .compact-solution { min-width: 0; border: 1px solid var(--line); border-radius: var(--radius); padding: 28px; background: var(--panel-solid); }
   .compact-solution h3 { margin: 20px 0 9px; font-size: 30px; }
   .compact-solution > p { min-height: 62px; color: var(--muted); font-size: 13px; }
-  .product-roadmap { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 14px; margin-top: 14px; }
+  .product-roadmap { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; margin-top: 14px; }
   .roadmap-solution { min-height: 228px; display: flex; flex-direction: column; }
   .roadmap-solution > p { min-height: 0; }
   .roadmap-solution .card-link, .roadmap-solution .status-note { margin-top: auto; }
   .status-note { display: inline-flex; min-height: 44px; align-items: center; color: var(--quiet); font-size: 11px; font-weight: 760; }
+  .shared-capability { display: grid; grid-template-columns: minmax(0,.35fr) minmax(0,1fr) auto; gap: 22px; align-items: center; margin-top: 14px; border: 1px solid rgba(11,116,94,.2); border-radius: var(--radius); padding: 20px 24px; background: var(--green-soft); scroll-margin-top: 92px; }
+  .shared-capability h3, .shared-capability p { margin: 0; }
+  .shared-capability h3 { font-size: 22px; }
+  .shared-capability p { color: var(--muted); font-size: 12px; }
   .module-tags { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 5px; margin-top: 18px; }
   .module-tags span { min-height: 34px; display: flex; align-items: center; border: 1px solid var(--line); border-radius: 4px; padding: 0 9px; color: var(--muted); font-size: 9px; }
   .template-line { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 16px; border-top: 1px solid var(--line); padding-top: 14px; }
@@ -268,7 +273,7 @@ const sharedStyle = `
   :focus-visible { outline: 3px solid rgba(11,116,94,.34); outline-offset: 3px; }
   @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { transition-duration: .01ms !important; } }
   @media (max-width: 980px) { .hero { grid-template-columns: 1fr; gap: 42px; padding-top: 60px; } .hero-copy { max-width: 820px; } .workspace { transform: none; } .split, .solution-block { grid-template-columns: 1fr; gap: 30px; } .sticky-copy { position: static; } .surface-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } .surface-card:last-child { grid-column: 1/-1; min-height: 210px; } .principle-grid, .trust-compact { grid-template-columns: repeat(2,minmax(0,1fr)); } .product-roadmap { grid-template-columns: 1fr; } .contact-layout { grid-template-columns: 1fr; gap: 42px; } }
-  @media (max-width: 760px) { .frame { width: min(calc(100% - 30px), 1200px); } .header-inner { min-height: 62px; gap: 10px; } .brand { gap: 8px; font-size: 11px; } .nav-link { padding-inline: 8px; } .nav-optional { display: none; } .header-cta { min-height: 42px; padding-inline: 13px; } .hero, .page-hero { padding-top: 46px; } .hero { padding-bottom: 52px; } .workspace-body { grid-template-columns: 1fr; min-height: 0; } .workspace-nav { display: none; } .workspace-main { padding: 16px; } .metric-grid { grid-template-columns: 1fr; } .metric { min-height: 76px; } .surface-grid, .product-grid, .template-grid, .module-grid, .principle-grid, .trust-compact, .case-grid, .compact-solutions, .product-roadmap { grid-template-columns: 1fr; } .surface-card, .surface-card:last-child { grid-column: auto; min-height: 220px; } .solution-block { padding: 24px; } .system-preview-body { padding: 18px; } .system-row { grid-template-columns: 28px 92px minmax(0, 1fr); } .system-row i { display: none; } .section { padding: 50px 0; } .control-line, .closing-strip { display: grid; grid-template-columns: 1fr; } .callout { grid-template-columns: 1fr; } .callout { padding: 26px; } .contact-form { padding: 20px; } .field-grid { grid-template-columns: 1fr; } label.wide { grid-column: auto; } .prose section { grid-template-columns: 1fr; gap: 6px; } .footer-inner { display: grid; } .footer-links { justify-content: flex-start; } }
+  @media (max-width: 760px) { .frame { width: min(calc(100% - 30px), 1200px); } .header-inner { min-height: 62px; gap: 10px; } .brand { gap: 8px; font-size: 11px; } .nav-link { padding-inline: 8px; } .nav-optional { display: none; } .header-cta { min-height: 42px; padding-inline: 13px; } .hero, .page-hero { padding-top: 46px; } .hero { padding-bottom: 52px; } .workspace-body { grid-template-columns: 1fr; min-height: 0; } .workspace-nav { display: none; } .workspace-main { padding: 16px; } .metric-grid { grid-template-columns: 1fr; } .metric { min-height: 76px; } .surface-grid, .product-grid, .template-grid, .module-grid, .principle-grid, .trust-compact, .case-grid, .compact-solutions, .product-roadmap, .shared-capability { grid-template-columns: 1fr; } .surface-card, .surface-card:last-child { grid-column: auto; min-height: 220px; } .solution-block { padding: 24px; } .system-preview-body { padding: 18px; } .system-row { grid-template-columns: 28px 92px minmax(0, 1fr); } .system-row i { display: none; } .section { padding: 50px 0; } .control-line, .closing-strip { display: grid; grid-template-columns: 1fr; } .callout { grid-template-columns: 1fr; } .callout { padding: 26px; } .contact-form { padding: 20px; } .field-grid { grid-template-columns: 1fr; } label.wide { grid-column: auto; } .prose section { grid-template-columns: 1fr; gap: 6px; } .footer-inner { display: grid; } .footer-links { justify-content: flex-start; } }
   @media (max-width: 420px) { .nav-link { display: none; } h1 { font-size: 38px; } .product-card { padding: 24px; } .compact-solution { padding: 22px; } }
   @media (min-width: 761px) { .detail-disclosure > summary { display: none; } details.detail-disclosure:not([open]) > .disclosure-body { display: block; } .detail-disclosure { margin-top: 0; border-top: 0; } .product-disclosure .disclosure-body { padding-top: 16px; } }
   @media (max-width: 760px) { .hero { gap: 28px; padding-top: 28px; padding-bottom: 32px; } .hero-note { display: none; } .section { padding: 32px 0; } .section-head { margin-bottom: 18px; } .section-head p { font-size: 16px; } .workspace-bar { min-height: 44px; } .system-preview-body { padding: 14px 16px; } .system-row { min-height: 44px; } .system-boundary { margin-top: 14px; } .compact-solution > p { min-height: 0; } .closing-strip { padding: 22px; } }
@@ -322,7 +327,7 @@ function workspacePreview() {
   const rows = [
     ['01', 'Home', 'One next action for the company'],
     ['02', 'Work', 'Owners, evidence, review, and release'],
-    ['03', 'Products', 'Shop, Plant, Website, Ecommerce, and Agents'],
+    ['03', 'Products', 'Shop, Plant, Website, and Ecommerce'],
   ]
   return `<div class="workspace system-preview" aria-label="SuperMega operating system preview">
     <div class="workspace-bar"><span>&gt;_ supermega / company-system</span><span class="live-pill">Local trial</span></div>
@@ -336,7 +341,7 @@ function workspacePreview() {
 
 function productCardHtml(product, index) {
   const [summary, boundary = ''] = product.description.split(/(?=No (?:live channel|machine telemetry))/)
-  return `<article class="compact-solution" id="${escapeHtml(product.publicId)}">
+  return `<article class="compact-solution" id="${escapeHtml(product.id)}">
     <span class="card-index">0${index + 1} / ${escapeHtml(product.eyebrow)}</span>
     <h3>${escapeHtml(product.name)}</h3>
     <p>${escapeHtml(summary.trim())}</p>
@@ -348,7 +353,7 @@ function productCardHtml(product, index) {
         <div class="template-line">${product.templates.map((template) => `<span>${escapeHtml(template.name)}</span>`).join('')}</div>
       </div>
     </details>
-    <a class="card-link" href="${escapeHtml(product.primaryCta.url)}">${escapeHtml(product.primaryCta.label)}</a>
+    <a class="card-link" href="${escapeHtml(product.appRoute)}">${escapeHtml(product.primaryCta.label)}</a>
   </article>`
 }
 
@@ -361,12 +366,18 @@ function roadmapCardHtml(product, index) {
     <p>${escapeHtml(product.headline)}</p>
     <span class="product-label">${escapeHtml(status)}</span>
     ${available
-      ? `<a class="card-link" href="${escapeHtml(product.route)}">Open ${escapeHtml(product.name)}</a>`
+      ? `<a class="card-link" href="${escapeHtml(product.appRoute)}">Open ${escapeHtml(product.name)}</a>`
       : `<span class="status-note">No demo button until this workflow passes.</span>`}
   </article>`
 }
 
-const roadmapProducts = [...manifest.prototypeProducts, manifest.agentSolutions]
+function sharedCapabilityHtml(capability) {
+  return `<aside class="shared-capability" id="${escapeHtml(capability.anchor)}">
+    <div><span class="eyebrow">Shared capability</span><h3>${escapeHtml(capability.name)}</h3></div>
+    <p>${escapeHtml(capability.headline)} It is embedded only after evaluation; it is not a fifth product.</p>
+    <span class="product-label">Gated R&amp;D</span>
+  </aside>`
+}
 
 const homeHtml = documentHtml({
   route: '/',
@@ -375,7 +386,7 @@ const homeHtml = documentHtml({
   content: `<main>
     <section class="frame hero"><div class="hero-copy"><span class="eyebrow">${escapeHtml(manifest.company.positioning)}</span><h1>${escapeHtml(manifest.company.headline)}</h1><p class="lede">${escapeHtml(manifest.company.supporting)}</p><div class="actions"><a class="button primary" href="https://app.supermega.dev/">Explore the product workspace</a></div><div class="hero-note"><span>Channels people already use</span><span>Evidence with the work</span><span>Human authority where it matters</span></div></div>${workspacePreview()}</section>
     <section class="frame trust-strip" id="trust" aria-label="Control boundary"><div class="control-line"><span class="eyebrow">Control boundary</span><p>Assistance may organize, inspect, summarize, and draft from approved records. Sends, payments, publishing, access changes, and production writes wait for the responsible owner.</p></div></section>
-    <section class="frame section" id="operations"><div class="section-head"><span class="eyebrow">Focused products</span><h2>Shop and Plant run the work.</h2><p>Both products use accountable browser-local records today. Templates change the starting workflow, not the brand or core controls.</p></div><div class="compact-solutions">${manifest.products.map(productCardHtml).join('')}</div><div class="product-roadmap" aria-label="Website, Ecommerce, and AI Agent Solutions">${roadmapProducts.map(roadmapCardHtml).join('')}</div><div class="closing-strip"><div><h2>Start with one real workflow.</h2><p>Send the channel, record, owner, and outcome. SuperMega will define the smallest useful implementation and acceptance test.</p></div><a class="button primary" href="/contact/">Contact SuperMega</a></div></section>
+    <section class="frame section" id="operations"><div class="section-head"><span class="eyebrow">Four focused products</span><h2>Shop and Plant run the work. Website and Ecommerce reach customers.</h2><p>All four share one accountable foundation. Templates change the starting workflow, not the brand or core controls.</p></div><div class="compact-solutions">${operatingProducts.map(productCardHtml).join('')}</div><div class="product-roadmap" aria-label="Website and Ecommerce">${makerProducts.map(roadmapCardHtml).join('')}</div>${sharedCapabilityHtml(aiAssistance)}<div class="closing-strip"><div><h2>Start with one real workflow.</h2><p>Send the channel, record, owner, and outcome. SuperMega will define the smallest useful implementation and acceptance test.</p></div><a class="button primary" href="/contact/">Contact SuperMega</a></div></section>
   </main>`,
 })
 
@@ -385,7 +396,7 @@ const contactHtml = documentHtml({
   route: '/contact/',
   title: 'Contact | SuperMega',
   description: 'Tell SuperMega which company workflow should run better.',
-  content: `<main class="frame"><section class="page-hero"><span class="eyebrow">Start a system</span><h1>What should run better?</h1><p class="lede">Describe one real workflow or recurring handoff, and note any screenshot or spreadsheet you can share. We will reply with the smallest useful system step.</p></section><section class="contact-layout"><div class="contact-copy"><h2>Start with the work.</h2><p>No account, data connection, automation, or external action begins from this form. We first identify the operating records, owner, acceptance test, and authority boundary.</p><div class="direct-links"><a href="mailto:swanhtet@supermega.dev"><span>Email</span><strong>swanhtet@supermega.dev &gt;</strong></a><a href="tel:+9595000721"><span>Phone</span><strong>+95 9 500 0721 &gt;</strong></a></div></div><form class="contact-form" action="/api/contact-submissions" method="post" data-contact-form><h3>Send the workflow</h3><div class="field-grid"><label>Name<input name="name" autocomplete="name" required maxlength="120" /></label><label>Work email<input name="email" type="email" autocomplete="email" required maxlength="180" /></label><label class="wide">Company<input name="company" autocomplete="organization" required maxlength="180" /></label><label>Starting point<select name="product"><option value="guide">Help me choose</option><option value="shop">Shop</option><option value="plant">Plant</option><option value="website">Website</option><option value="ecommerce">Ecommerce</option><option value="agents">AI Agent Solutions</option></select></label><label>Template, if known<input name="template" maxlength="120" /></label><label class="wide">What happens now, and what should be better?<textarea name="goal" required maxlength="4000"></textarea></label></div><input type="hidden" name="source_url" /><input type="hidden" name="referrer" /><input type="hidden" name="idempotency_key" /><input name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert style="position:absolute;left:-9999px" /><button class="button primary" type="submit">Send workflow</button><p class="form-note">Your note is used only to respond and prepare the agreed next step.</p><p class="form-status" data-form-status aria-live="polite"></p></form></section></main>${contactScript}`,
+  content: `<main class="frame"><section class="page-hero"><span class="eyebrow">Start a system</span><h1>What should run better?</h1><p class="lede">Describe one real workflow or recurring handoff, and note any screenshot or spreadsheet you can share. We will reply with the smallest useful system step.</p></section><section class="contact-layout"><div class="contact-copy"><h2>Start with the work.</h2><p>No account, data connection, automation, or external action begins from this form. We first identify the operating records, owner, acceptance test, and authority boundary.</p><div class="direct-links"><a href="mailto:swanhtet@supermega.dev"><span>Email</span><strong>swanhtet@supermega.dev &gt;</strong></a><a href="tel:+9595000721"><span>Phone</span><strong>+95 9 500 0721 &gt;</strong></a></div></div><form class="contact-form" action="/api/contact-submissions" method="post" data-contact-form><h3>Send the workflow</h3><div class="field-grid"><label>Name<input name="name" autocomplete="name" required maxlength="120" /></label><label>Work email<input name="email" type="email" autocomplete="email" required maxlength="180" /></label><label class="wide">Company<input name="company" autocomplete="organization" required maxlength="180" /></label><label>Starting point<select name="product"><option value="guide">Help me choose</option><option value="shop">Shop</option><option value="plant">Plant</option><option value="website">Website</option><option value="ecommerce">Ecommerce</option></select></label><label>Template, if known<input name="template" maxlength="120" /></label><label class="wide">What happens now, and what should be better?<textarea name="goal" required maxlength="4000"></textarea></label></div><input type="hidden" name="source_url" /><input type="hidden" name="referrer" /><input type="hidden" name="idempotency_key" /><input name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert style="position:absolute;left:-9999px" /><button class="button primary" type="submit">Send workflow</button><p class="form-note">Your note is used only to respond and prepare the agreed next step.</p><p class="form-status" data-form-status aria-live="polite"></p></form></section></main>${contactScript}`,
 })
 
 const privacyHtml = documentHtml({
