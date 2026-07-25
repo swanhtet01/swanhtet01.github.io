@@ -581,9 +581,10 @@ if (!ecommerceConfirmSource.includes('storefrontRequestLedgerContains')
   || ecommercePaymentPosition < 0
   || ecommerceReviewPosition < ecommercePaymentPosition
   || !ecommerceOrderSubmit.includes("data-ecommerce-payment={preparedEcommerceDraft ? 'true' : 'false'}")
-  || !ecommerceOrderSubmit.includes('form="commerce-manual-order-form" required value={payment}')
+  || !ecommerceOrderSubmit.includes('form="commerce-manual-order-form" ref={orderPaymentRef} required value={payment}')
   || !ecommerceOrderSubmit.includes('disabled={commerceControlsDisabled || resumedOrderNeedsReview || orderDraftConflict || Boolean(preparedEcommerceDraft && (!payment || !promisedAt))}')
   || !ecommerceOrderSubmit.includes("!promisedAt ? 'Choose promise' : !payment ? 'Choose payment' : resumedOrderNeedsReview ? 'Review current Shop values'")
+  || !coreSource.includes('orderPaymentRef.current?.focus({ preventScroll: true })')
   || !coreCssSource.includes('.order-ecommerce-payment')
   || !coreSource.includes("import('../products/ecommerce/ecommerce-shop-handoff')")
   || ['setItem(', 'removeItem(', 'localStorage', 'sessionStorage', 'fetch(', 'XMLHttpRequest', 'navigator.locks', 'convertCommerceWebsiteIntake', 'reserveCommerceOrder', 'mutateCommerceWorkspace'].some((marker) => ecommerceConfirmSource.includes(marker) || ecommerceHandoffSource.includes(marker))) fail('ecommerce_shop_handoff_contract_missing_or_mutating')
