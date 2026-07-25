@@ -2092,6 +2092,9 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const orderComposerRef = useRef<HTMLDialogElement>(null)
   const orderComposerHeadingRef = useRef<HTMLHeadingElement>(null)
   const orderComposerTriggerRef = useRef<HTMLButtonElement>(null)
+  const orderPromiseRef = useRef<HTMLInputElement>(null)
+  const orderOptionsRef = useRef<HTMLDetailsElement>(null)
+  const orderPaymentRef = useRef<HTMLSelectElement>(null)
   const catalogEditTriggerRefs = useRef(new Map<string, HTMLButtonElement>())
   const catalogEditEditorRef = useRef<HTMLFormElement>(null)
   const purchaseOrderTriggerRefs = useRef(new Map<string, HTMLButtonElement>())
@@ -2706,6 +2709,21 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     setResumedOrderDraft(null)
     setOrderDraftConflict(false)
     setOrderDraftIssue(orderDraftRead.error)
+  }
+
+  function focusNextOrderRequirement() {
+    if (!promisedAt) {
+      orderPromiseRef.current?.scrollIntoView({ block: 'center' })
+      orderPromiseRef.current?.focus({ preventScroll: true })
+      return
+    }
+    if (!payment) {
+      if (orderOptionsRef.current) orderOptionsRef.current.open = true
+      requestAnimationFrame(() => {
+        orderPaymentRef.current?.scrollIntoView({ block: 'center' })
+        orderPaymentRef.current?.focus({ preventScroll: true })
+      })
+    }
   }
 
   function resumeSavedOrderDraft() {
@@ -3869,7 +3887,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
                 setNotice('Fulfilment changed. The Ecommerce source link was removed; review this as a manual order.')
               }
             }}><option value="">Choose pickup or delivery</option><option value="pickup">Pickup</option><option value="delivery">Delivery</option></select></label>
-            <label>Promised for<input autoComplete="off" disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date())} onChange={(event) => setPromisedAt(event.target.value)} required type="datetime-local" value={promisedAt} /></label>
+            <label>Promised for<input autoComplete="off" disabled={commerceControlsDisabled} id="commerce-order-promise" min={localDateTimeInputValue(new Date())} onChange={(event) => setPromisedAt(event.target.value)} ref={orderPromiseRef} required type="datetime-local" value={promisedAt} /></label>
             <label>Handoff reference<input disabled={commerceControlsDisabled} maxLength={160} onChange={(event) => setFulfilmentReference(event.target.value)} placeholder="Pickup ticket or delivery route" required value={fulfilmentReference} /></label>
             <label>{extraOrderLines.length ? 'Item 1' : 'Item'}<select disabled={commerceControlsDisabled} value={selectedSku} onChange={(event) => { setSku(event.target.value); detachPreparedOrderSources() }}>{!commerce.items.some((item) => item.sku === selectedSku) && selectedSku ? <option disabled value={selectedSku}>{selectedSku} · no longer in Shop</option> : null}{commerce.items.map((item) => <option key={item.sku} value={item.sku}>{item.name} · {item.onHand} available</option>)}</select></label>
             <label>{extraOrderLines.length ? 'Quantity 1' : 'Quantity'}<input disabled={commerceControlsDisabled} min="1" max={selected?.onHand ?? 1} type="number" value={quantity} onChange={(event) => { setQuantity(Number(event.target.value)); detachPreparedOrderSources() }} /></label>
@@ -3885,18 +3903,18 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
             </div>
           })}
           <button className="core-button compact" disabled={commerceControlsDisabled || manualOrderLineDrafts.length >= commerce.items.length || manualOrderLineDrafts.length >= 20} onClick={addOrderLine} type="button">Add item</button>
-          {!preparedEcommerceDraft ? <details className="order-options">
+          {!preparedEcommerceDraft ? <details className="order-options" id="commerce-order-options" ref={orderOptionsRef}>
             <summary><span>Channel and payment</span><small>{channel} · {payment || 'Choose payment'}</small></summary>
             <div className="form-row order-options-fields">
               <label>Channel<select disabled={commerceControlsDisabled} value={channel} onChange={(event) => { setChannel(event.target.value); detachPreparedOrderSources() }}><option>Messenger</option><option>Viber</option><option>Phone</option><option>Website</option><option>Ecommerce</option><option>Walk-in</option></select></label>
-              <label>Payment<select disabled={commerceControlsDisabled} value={payment} onChange={(event) => { setPayment(event.target.value); detachPreparedOrderSources({ ecommerce: false }) }}><option value="">Choose payment</option><option>KBZPay</option><option>WavePay</option><option>Cash on delivery</option><option>Cash</option><option>Card</option></select></label>
+              <label>Payment<select disabled={commerceControlsDisabled} ref={orderPaymentRef} value={payment} onChange={(event) => { setPayment(event.target.value); detachPreparedOrderSources({ ecommerce: false }) }}><option value="">Choose payment</option><option>KBZPay</option><option>WavePay</option><option>Cash on delivery</option><option>Cash</option><option>Card</option></select></label>
             </div>
           </details> : null}
         </form>
         </div>
         <div className="order-submit-bar" data-ecommerce-payment={preparedEcommerceDraft ? 'true' : 'false'}>
           {preparedEcommerceDraft ? <label className="order-ecommerce-payment"><span>Payment</span><select disabled={commerceControlsDisabled} form="commerce-manual-order-form" required value={payment} onChange={(event) => { setPayment(event.target.value); setPreparedChannelDraft(null) }}><option value="">Choose payment</option><option>KBZPay</option><option>WavePay</option><option>Cash on delivery</option><option>Cash</option><option>Card</option></select></label> : null}
-          <button className="core-button primary" disabled={commerceControlsDisabled || !payment || !promisedAt || resumedOrderNeedsReview || orderDraftConflict} form="commerce-manual-order-form" type="submit">{!promisedAt ? 'Choose promise first' : !payment ? 'Choose payment first' : resumedOrderNeedsReview ? 'Review current Shop values' : orderDraftConflict ? 'Reload saved draft' : 'Review order'}</button>
+          <button aria-controls={!promisedAt ? 'commerce-order-promise' : !payment && !preparedEcommerceDraft ? 'commerce-order-options' : undefined} className="core-button primary" disabled={commerceControlsDisabled || resumedOrderNeedsReview || orderDraftConflict || Boolean(preparedEcommerceDraft && (!payment || !promisedAt))} form="commerce-manual-order-form" onClick={!preparedEcommerceDraft && (!promisedAt || !payment) ? focusNextOrderRequirement : undefined} type={!preparedEcommerceDraft && (!promisedAt || !payment) ? 'button' : 'submit'}>{!promisedAt ? 'Choose promise' : !payment ? 'Choose payment' : resumedOrderNeedsReview ? 'Review current Shop values' : orderDraftConflict ? 'Reload saved draft' : 'Review order'}</button>
         </div>
       </> : null}
     </dialog>
