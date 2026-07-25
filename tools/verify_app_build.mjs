@@ -1365,6 +1365,14 @@ const productionTabsContract = coreSource.slice(coreSource.indexOf('const produc
 if (productionTabsContract.includes("{ id: 'today', label: 'Today' }") || !productionTabsContract.includes("{ id: 'production', label: 'Jobs' }") || !productionTabsContract.includes("{ id: 'control', label: 'Problems' }") || (productionTabsContract.match(/^\s*\{ id:/gm) || []).length !== 2) fail('production_two_tab_contract_changed')
 const productionPageContract = coreSource.slice(coreSource.indexOf('function ProductionPage'), coreSource.indexOf('function JobList'))
 const productionJobsContract = productionPageContract.slice(productionPageContract.indexOf("if (tab === 'production')"), productionPageContract.indexOf("if (tab === 'control')"))
+const productionControlContract = productionPageContract.slice(productionPageContract.indexOf("if (tab === 'control')"))
+const productionProblemsPosition = productionControlContract.indexOf('<h2>Open problems</h2>')
+const productionEquipmentPosition = productionControlContract.indexOf('<h2>Recorded status</h2>')
+if (productionProblemsPosition < 0
+  || productionEquipmentPosition < 0
+  || productionProblemsPosition > productionEquipmentPosition
+  || !productionControlContract.includes('>Record problem</button>')
+  || productionControlContract.includes('>Open problem form</button>')) fail('production_problems_not_task_first')
 if (!productionJobsContract.includes('This shift:')
   || !productionJobsContract.includes('Shift reference')
   || !coreSource.includes("new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Yangon' })")
