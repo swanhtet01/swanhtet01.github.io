@@ -15,14 +15,16 @@ let commerceOrderDraftRuntimeChecks = 0
 let managedWebsiteRuntimeChecks = 0
 let managedStorefrontRuntimeChecks = 0
 let ecommerceHandoffRuntimeChecks = 0
+let catalogImportRuntimeChecks = 0
 let commerceRuntimeChecks = 0
 let productionRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
-const [manifestText, appPackageText, appSource, coreSource, commerceSource, commerceOrderDraftSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedTrialStoreRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, managedWebsiteSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, managedStorefrontSource, storefrontSource, storefrontDraftSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource] = await Promise.all([
+const [manifestText, appPackageText, appSource, coreSource, catalogImportSource, commerceSource, commerceOrderDraftSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedTrialStoreRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, managedWebsiteSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, managedStorefrontSource, storefrontSource, storefrontDraftSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource, schedulerSource] = await Promise.all([
   readFile(resolve(root, 'site-manifest.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'package.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'App.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'CoreApp.tsx'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'core', 'shop-catalog-import.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'commerce-order-draft.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'channel-order-intake.ts'), 'utf8'),
@@ -55,6 +57,7 @@ const [manifestText, appPackageText, appSource, coreSource, commerceSource, comm
   readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'ecommerce-shop-handoff.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'ecommerce-product.css'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'core-app.css'), 'utf8'),
+  readFile(resolve(root, 'tools', 'ensure_supermega_scheduler.ps1'), 'utf8'),
 ])
 const manifest = JSON.parse(manifestText)
 const appPackage = JSON.parse(appPackageText)
@@ -1107,6 +1110,48 @@ if (!commerceSource.includes('export type CommerceCatalogChange')
   || !managedCommerceRuntime.includes('def _validate_item_updated')
   || !managedCommerceRuntime.includes('commerce_catalog_baseline_digest')
   || !managedCommerceRuntime.includes('"commerce.item.updated"')) fail('commerce_catalog_update_contract_missing')
+const catalogImportUiContract = sourceBlock(coreSource, '  async function runCatalogImportPreview(', '\n  function openCatalogItemEditor')
+if (!catalogImportSource.includes("SHOP_CATALOG_IMPORT_SCHEMA = 'supermega.shop.catalog_import.v1'")
+  || !catalogImportSource.includes('SHOP_CATALOG_IMPORT_MAX_BYTES = 512 * 1024')
+  || !catalogImportSource.includes('SHOP_CATALOG_IMPORT_MAX_ROWS = 500')
+  || !catalogImportSource.includes("globalThis.crypto.subtle.digest('SHA-256'")
+  || !catalogImportSource.includes("code: 'duplicate_file_sku'")
+  || !catalogImportSource.includes("code: 'existing_sku_conflict'")
+  || !catalogImportSource.includes("code: 'mapping_reused_header'")
+  || !catalogImportSource.includes("code: `${field}_spreadsheet_formula`")
+  || !catalogImportSource.includes('sku_not_uppercase')
+  || !catalogImportSource.includes("row.status = 'already_exists'")
+  || !catalogImportSource.includes('shopCatalogImportErrorsCsv')) fail('shop_catalog_import_contract_missing')
+if (['fetch(', 'localStorage', 'sessionStorage', 'supabase', 'openai', 'anthropic'].some((marker) => catalogImportSource.toLowerCase().includes(marker.toLowerCase()))) fail('shop_catalog_import_external_or_persistent_side_effect_added')
+if (!catalogImportUiContract.includes("await import('./shop-catalog-import')")
+  || !catalogImportUiContract.includes('file.size > SHOP_CATALOG_IMPORT_MAX_BYTES')
+  || !catalogImportUiContract.includes('Zero Shop records were written.')
+  || !catalogImportUiContract.includes('The selected file was too large and was not read or uploaded.')
+  || ['mutateCommerce(', 'registerCommerceItem(', 'saveManagedCommerceCommand(', 'fetch('].some((marker) => catalogImportUiContract.includes(marker))) fail('shop_catalog_import_ui_not_dry_run_only')
+if (!coreSource.includes('Import catalog CSV')
+  || !coreSource.includes('Dry run · no writes')
+  || !coreSource.includes('It is not uploaded, saved to storage, sent to AI, or applied to Shop.')
+  || !coreSource.includes('it never silently fixes data.')
+  || !coreSource.includes('0 records written')
+  || !coreSource.includes('Export errors')
+  || !coreCssSource.includes('.catalog-import-table { max-height: 340px;')
+  || !coreCssSource.includes('.catalog-import-mapping { display: grid;')
+  || !coreCssSource.includes('.catalog-import-row { grid-template-columns: 36px minmax(0,1fr) auto;')) fail('shop_catalog_import_accessible_ui_missing')
+const cronTokenRotationContract = sourceBlock(schedulerSource, '$cronTokenChanged = ', '\n\nInvoke-Gcloud -CommandArgs @(')
+if (!schedulerSource.includes('[ValidateSet("unchanged", "demand-driven-canary", "polling")]')
+  || !schedulerSource.includes('supermega.agent_worker_canary.v1')
+  || !schedulerSource.includes('$evidence.task_dispatch_source -ne "cloud-tasks"')
+  || !schedulerSource.includes('$evidence.polling_job_paused_during_probe -ne $true')
+  || !schedulerSource.includes('$latencySeconds -gt 300')
+  || !schedulerSource.includes('$evidenceAge.TotalHours -gt 24')
+  || !schedulerSource.includes('"scheduler", "jobs", "pause", "supermega-agent-worker"')
+  || !schedulerSource.includes('"scheduler", "jobs", "resume", "supermega-agent-worker"')
+  || !schedulerSource.includes('nominal_scheduler_calls_per_day = if ($workerSchedulerState -eq "PAUSED") { 109 } else { 397 }')
+  || !schedulerSource.includes('worker_poll_calls_per_day = if ($workerSchedulerState -eq "PAUSED") { 0 } else { 288 }')
+  || !schedulerSource.includes('polling_rollback = "Run this script with -WorkerDispatchMode polling."')) fail('demand_driven_worker_canary_contract_missing')
+if (!cronTokenRotationContract.includes('if ($cronTokenChanged)')
+  || !cronTokenRotationContract.includes('Ensure-SecretVersion -Name "supermega-internal-cron-token" -Value $cronToken')
+  || (schedulerSource.match(/Ensure-SecretVersion -Name "supermega-internal-cron-token" -Value \$cronToken/g) || []).length !== 1) fail('scheduler_cron_token_rotation_not_bounded')
 if (!commerceSource.includes('commerceWebsiteIntakeSnapshotDigest')
   || !commerceSource.includes('snapshotDigest: commerceWebsiteIntakeSnapshotDigest(snapshot)')
   || !commerceSource.includes('if (!intake.snapshotDigest) return null')
@@ -1675,6 +1720,87 @@ async function verifyChannelOrderRuntime() {
     assert(commerce.reserveCommerceOrder(accepted, conflictingOrder, conflictingProof) === null, 'channel_order_conflicting_source_reuse_succeeded')
   } catch (error) {
     fail(`channel_order_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
+async function verifyCatalogImportRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    catalogImportRuntimeChecks += 1
+  }
+  const rejects = async (action, reason) => {
+    let rejected = false
+    try { await action() } catch { rejected = true }
+    assert(rejected, reason)
+  }
+  try {
+    const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'shop-catalog-import.ts')).href}?shop-catalog-import-verify=${Date.now()}`)
+    const existing = [{ sku: 'OLD-001', name: 'Existing item', onHand: 5, reorderAt: 2, price: 900 }]
+    const existingBefore = JSON.stringify(existing)
+    const aliasCsv = '\uFEFFStock Code,Product Name,Available Stock,Reorder Level,Selling Price\r\nTEA-001,"Green, tea",24,8,4500\r\nCOFFEE-002,မြန်မာ ကော်ဖီ,12,5,7000\r\n'
+    const aliasPreview = await model.createShopCatalogImportPreview(aliasCsv, existing, undefined, 'alias.csv')
+    assert(aliasPreview.schema === model.SHOP_CATALOG_IMPORT_SCHEMA, 'catalog_import_schema_missing')
+    assert(JSON.stringify(aliasPreview.mapping) === JSON.stringify({ sku: 'Stock Code', name: 'Product Name', onHand: 'Available Stock', reorderAt: 'Reorder Level', price: 'Selling Price' }), 'catalog_import_alias_mapping_wrong')
+    assert(aliasPreview.suggestions.every((suggestion) => suggestion.basis === 'alias'), 'catalog_import_alias_suggestions_not_explicit')
+    assert(aliasPreview.totals.rows === 2 && aliasPreview.totals.ready === 2 && aliasPreview.totals.issueRows === 0, 'catalog_import_valid_totals_wrong')
+    assert(aliasPreview.rows[0].item?.name === 'Green, tea', 'catalog_import_quoted_comma_lost')
+    assert(aliasPreview.rows[1].item?.name === 'မြန်မာ ကော်ဖီ', 'catalog_import_unicode_lost')
+    assert([aliasPreview.sourceDigest, aliasPreview.catalogDigest, aliasPreview.previewDigest].every((digest) => /^sha256:[a-f0-9]{64}$/.test(digest)), 'catalog_import_digests_not_sha256')
+    const aliasRetry = await model.createShopCatalogImportPreview(aliasCsv, existing, aliasPreview.mapping, 'renamed.csv')
+    assert(aliasRetry.previewDigest === aliasPreview.previewDigest && aliasRetry.sourceDigest === aliasPreview.sourceDigest, 'catalog_import_exact_retry_not_deterministic')
+    assert(JSON.stringify(existing) === existingBefore, 'catalog_import_preview_mutated_catalog')
+    assert(model.shopCatalogImportCatalogSignature([...existing, aliasPreview.rows[0].item].filter(Boolean)) === model.shopCatalogImportCatalogSignature([aliasPreview.rows[0].item, ...existing].filter(Boolean)), 'catalog_import_catalog_signature_depends_on_order')
+
+    const templatePreview = await model.createShopCatalogImportPreview(model.SHOP_CATALOG_IMPORT_TEMPLATE, [])
+    assert(templatePreview.totals.ready === 2 && templatePreview.headers.join(',') === 'sku,item_name,opening_stock,reorder_at,price_mmk', 'catalog_import_template_not_ready')
+    assert(templatePreview.suggestions.every((suggestion) => suggestion.basis === 'exact'), 'catalog_import_template_headers_not_exact')
+
+    const manualCsv = 'Code,Label,Qty,Minimum,MMK\nSKU-100,One,1,0,1000\n'
+    const unmapped = await model.createShopCatalogImportPreview(manualCsv, [])
+    assert(unmapped.fileIssues.length === 4 && unmapped.mapping.onHand === 'Qty' && unmapped.totals.invalid === 1, 'catalog_import_unmapped_columns_did_not_fail_closed')
+    const manualMapping = { sku: 'Code', name: 'Label', onHand: 'Qty', reorderAt: 'Minimum', price: 'MMK' }
+    const manuallyMapped = await model.createShopCatalogImportPreview(manualCsv, [], manualMapping)
+    assert(manuallyMapped.totals.ready === 1 && JSON.stringify(manuallyMapped.mapping) === JSON.stringify(manualMapping), 'catalog_import_manual_mapping_not_respected')
+
+    const duplicatePreview = await model.createShopCatalogImportPreview('sku,item_name,opening_stock,reorder_at,price_mmk\nDUP-1,One,1,0,100\nDUP-1,Two,2,1,200\n', [])
+    assert(duplicatePreview.totals.duplicates === 2 && duplicatePreview.rows.every((row) => row.issues.some((issue) => issue.code === 'duplicate_file_sku')), 'catalog_import_file_duplicates_not_all_flagged')
+    const exactExisting = await model.createShopCatalogImportPreview('sku,item_name,opening_stock,reorder_at,price_mmk\nOLD-001,Existing item,5,2,900\n', existing)
+    assert(exactExisting.totals.alreadyExists === 1 && exactExisting.totals.issueRows === 0, 'catalog_import_exact_existing_item_not_idempotent')
+    const conflictingExisting = await model.createShopCatalogImportPreview('sku,item_name,opening_stock,reorder_at,price_mmk\nOLD-001,Changed item,5,2,900\n', existing)
+    assert(conflictingExisting.totals.conflicts === 1 && conflictingExisting.rows[0].issues[0].code === 'existing_sku_conflict', 'catalog_import_existing_conflict_not_blocked')
+
+    const invalidCsv = 'sku,item_name,opening_stock,reorder_at,price_mmk\n=CMD(),Valid,1,0,100\nlower,Valid,1,0,100\nUPPER-1, Name,1,0,100\nUPPER-2,=CMD(),1,0,100\nUPPER-3,Valid,1.5,0,100\nUPPER-4,Cafe\u0301,1,0,100\nUPPER-5,Valid,1,0,100,extra\n'
+    const invalidPreview = await model.createShopCatalogImportPreview(invalidCsv, [])
+    const invalidCodes = new Set(invalidPreview.rows.flatMap((row) => row.issues.map((issue) => issue.code)))
+    assert(invalidPreview.totals.invalid === 7 && invalidPreview.totals.ready === 0, 'catalog_import_invalid_rows_count_wrong')
+    assert(invalidCodes.has('sku_not_uppercase'), 'catalog_import_lowercase_sku_silently_changed')
+    assert(invalidCodes.has('sku_spreadsheet_formula') && invalidCodes.has('name_spreadsheet_formula'), 'catalog_import_formula_cells_not_rejected')
+    assert(invalidCodes.has('name_not_canonical') && invalidCodes.has('name_unicode_normalization'), 'catalog_import_text_canonicalization_not_enforced')
+    assert(invalidCodes.has('onHand_whole_number'), 'catalog_import_decimal_quantity_accepted')
+    assert(invalidCodes.has('column_count'), 'catalog_import_extra_column_accepted')
+    const errorCsv = model.shopCatalogImportErrorsCsv(invalidPreview)
+    assert(errorCsv.startsWith('row,status,sku,issue_codes,issues\r\n') && errorCsv.endsWith('\r\n'), 'catalog_import_error_export_not_csv')
+    assert(errorCsv.includes("invalid,'=CMD()") && !errorCsv.includes('invalid,=CMD()'), 'catalog_import_error_export_formula_not_escaped')
+    assert(model.shopCatalogImportErrorsCsv(aliasPreview) === 'row,status,sku,issue_codes,issues\r\n', 'catalog_import_error_export_included_ready_rows')
+
+    const reusedMapping = { sku: 'Code', name: 'Code', onHand: 'Code', reorderAt: 'Code', price: 'Code' }
+    const reused = await model.createShopCatalogImportPreview(manualCsv, [], reusedMapping)
+    assert(reused.fileIssues.some((issue) => issue.code === 'mapping_reused_header') && reused.totals.invalid === 1, 'catalog_import_reused_mapping_not_blocked')
+    const fullCatalog = Array.from({ length: model.SHOP_CATALOG_IMPORT_MAX_ROWS }, (_, index) => ({ sku: `EXIST-${index}`, name: `Existing ${index}`, onHand: 0, reorderAt: 0, price: 1 }))
+    const atCapacity = await model.createShopCatalogImportPreview('sku,item_name,opening_stock,reorder_at,price_mmk\nNEW-1,New,0,0,1\n', fullCatalog)
+    assert(atCapacity.totals.invalid === 1 && atCapacity.rows[0].issues[0].code === 'catalog_capacity', 'catalog_import_capacity_not_enforced')
+    const blankInside = await model.createShopCatalogImportPreview('sku,item_name,opening_stock,reorder_at,price_mmk\nOK-1,Okay,0,0,1\n\nOK-2,Okay too,0,0,1\n', [])
+    assert(blankInside.totals.rows === 3 && blankInside.totals.invalid === 1 && blankInside.totals.ready === 2, 'catalog_import_inner_blank_row_hidden')
+
+    await rejects(() => model.createShopCatalogImportPreview('sku,item_name\n"broken,value\n', []), 'catalog_import_unclosed_quote_accepted')
+    await rejects(() => model.createShopCatalogImportPreview('sku,item_name,opening_stock,reorder_at,price_mmk\n"SKU-1"x,Item,0,0,1\n', []), 'catalog_import_text_after_closing_quote_accepted')
+    await rejects(() => model.createShopCatalogImportPreview('sku, SKU ,opening_stock,reorder_at,price_mmk\nA,B,1,0,1\n', []), 'catalog_import_equivalent_headers_accepted')
+    await rejects(() => model.createShopCatalogImportPreview('sku,item_name,opening_stock,reorder_at,price_mmk\nA\0,B,1,0,1\n', []), 'catalog_import_null_byte_accepted')
+    const tooManyRows = `sku,item_name,opening_stock,reorder_at,price_mmk\n${Array.from({ length: model.SHOP_CATALOG_IMPORT_MAX_ROWS + 1 }, (_, index) => `SKU-${index},Item ${index},0,0,1`).join('\n')}\n`
+    await rejects(() => model.createShopCatalogImportPreview(tooManyRows, []), 'catalog_import_row_limit_not_enforced')
+    await rejects(() => model.createShopCatalogImportPreview('x'.repeat(model.SHOP_CATALOG_IMPORT_MAX_BYTES + 1), []), 'catalog_import_byte_limit_not_enforced')
+  } catch (error) {
+    fail(`catalog_import_runtime:${error instanceof Error ? error.message : 'unknown'}`)
   }
 }
 
@@ -5567,6 +5693,7 @@ async function verifyProductionRuntime() {
 }
 
 await verifyChannelOrderRuntime()
+await verifyCatalogImportRuntime()
 await verifyWebsiteRuntime()
 await verifyWebsiteOrderCompletionRuntime()
 await verifyCommerceOrderDraftRuntime()
@@ -5583,10 +5710,11 @@ const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const largestJavascriptBytes = Math.max(...await Promise.all(javascriptFiles.map(async (path) => (await stat(path)).size)))
 if (largestJavascriptBytes > 500_000) fail(`javascript_chunk_budget:${largestJavascriptBytes}`)
 if (!javascriptFiles.some((path) => /[\\/]router-[^\\/]+\.js$/.test(path))) fail('router_chunk_artifact_missing')
+if (!javascriptFiles.some((path) => /[\\/]shop-catalog-import-[^\\/]+\.js$/.test(path))) fail('shop_catalog_import_chunk_artifact_missing')
 if (largestJavascriptBytes > 480_000) fail(`javascript_headroom_budget:${largestJavascriptBytes}`)
 
 if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', primaryRoutes: 5, operatingModules: 2, prototypeRoutes: 2, compatibilityRedirects: 1, workflowProfiles, channelOrderRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceHandoffRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', primaryRoutes: 5, operatingModules: 2, prototypeRoutes: 2, compatibilityRedirects: 1, workflowProfiles, channelOrderRuntimeChecks, catalogImportRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceHandoffRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))

@@ -92,6 +92,11 @@ import {
   type ChannelOrderField,
 } from './channel-order-intake'
 import type {
+  ShopCatalogImportField,
+  ShopCatalogImportMapping,
+  ShopCatalogImportPreview,
+} from './shop-catalog-import'
+import type {
   CommerceOrderDraft,
   CommerceOrderDraftInput,
   CommerceOrderDraftReadResult,
@@ -259,6 +264,16 @@ type CatalogItemEditDraft = {
   reorderAt: string
 }
 
+type CatalogImportState = {
+  sourceName: string
+  sourceText: string
+  catalogSnapshot: string
+  mapping: ShopCatalogImportMapping
+  preview: ShopCatalogImportPreview | null
+  busy: boolean
+  error: string
+}
+
 type CommerceReturnDraft = {
   orderId: string
   sku: string
@@ -293,6 +308,39 @@ type ActionDetails = Pick<AccountableAction, 'actor' | 'reason' | 'evidenceRefer
 
 class ShopReviewRequiredError extends Error {}
 class PlantReviewRequiredError extends Error {}
+
+const catalogImportFieldConfig: Array<{ field: ShopCatalogImportField; label: string }> = [
+  { field: 'sku', label: 'SKU' },
+  { field: 'name', label: 'Item name' },
+  { field: 'onHand', label: 'Opening stock' },
+  { field: 'reorderAt', label: 'Reorder at' },
+  { field: 'price', label: 'Price (MMK)' },
+]
+
+function blankCatalogImportMapping(): ShopCatalogImportMapping {
+  return { sku: '', name: '', onHand: '', reorderAt: '', price: '' }
+}
+
+function emptyCatalogImportState(): CatalogImportState {
+  return {
+    sourceName: '',
+    sourceText: '',
+    catalogSnapshot: '',
+    mapping: blankCatalogImportMapping(),
+    preview: null,
+    busy: false,
+    error: '',
+  }
+}
+
+function downloadCatalogCsv(filename: string, content: string) {
+  const url = URL.createObjectURL(new Blob(['\uFEFF', content], { type: 'text/csv;charset=utf-8' }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
+}
 
 type ProductId = 'commerce' | 'production'
 
@@ -2098,6 +2146,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const orderPaymentRef = useRef<HTMLSelectElement>(null)
   const catalogEditTriggerRefs = useRef(new Map<string, HTMLButtonElement>())
   const catalogEditEditorRef = useRef<HTMLFormElement>(null)
+  const catalogImportRequestRef = useRef(0)
   const purchaseOrderTriggerRefs = useRef(new Map<string, HTMLButtonElement>())
   const purchaseOrderEditorRef = useRef<HTMLFormElement>(null)
   const purchaseOrderHistoryRef = useRef<HTMLDetailsElement>(null)
@@ -2120,6 +2169,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const [catalogDraft, setCatalogDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '', price: '', reason: '', evidenceReference: '' })
   const [itemDraft, setItemDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '', price: '' })
   const [catalogEditDraft, setCatalogEditDraft] = useState<CatalogItemEditDraft | null>(null)
+  const [catalogImport, setCatalogImport] = useState<CatalogImportState>(emptyCatalogImportState)
   const [purchaseOrderDraft, setPurchaseOrderDraft] = useState<PurchaseOrderDraft | null>(null)
   const [stockCountDraft, setStockCountDraft] = useState<StockCountDraft | null>(null)
   const [returnDraft, setReturnDraft] = useState<CommerceReturnDraft | null>(null)
@@ -2190,6 +2240,14 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       const rightShortage = right.item.reorderAt - right.item.onHand
       return rightShortage - leftShortage || left.index - right.index
     })
+  const catalogImportStale = Boolean(catalogImport.preview
+    && catalogImport.catalogSnapshot !== JSON.stringify(commerce.items))
+  const catalogImportVisibleRows = catalogImport.preview
+    ? [
+        ...catalogImport.preview.rows.filter((row) => row.status !== 'ready'),
+        ...catalogImport.preview.rows.filter((row) => row.status === 'ready'),
+      ].slice(0, 40)
+    : []
   const openOrders = commerce.orders.filter((order) => order.status !== 'completed' && order.status !== 'cancelled')
   const paymentReview = commerce.orders.filter((order) => order.refundStatus === 'due' || (order.status !== 'cancelled' && order.paymentStatus === 'pending'))
   const actionOrders = commerce.orders.filter(commerceOrderNeedsAction).sort(compareCommerceOrderPromise)
@@ -2904,6 +2962,103 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         setSku(item.sku)
       },
     })
+  }
+
+  async function runCatalogImportPreview(
+    sourceName: string,
+    sourceText: string,
+    mapping?: ShopCatalogImportMapping,
+  ) {
+    const requestId = catalogImportRequestRef.current + 1
+    catalogImportRequestRef.current = requestId
+    setCatalogImport((current) => ({
+      ...current,
+      sourceName,
+      sourceText,
+      mapping: mapping ?? blankCatalogImportMapping(),
+      preview: mapping ? current.preview : null,
+      busy: true,
+      error: '',
+    }))
+    try {
+      const catalogSnapshot = JSON.stringify(commerce.items)
+      const { createShopCatalogImportPreview } = await import('./shop-catalog-import')
+      const preview = await createShopCatalogImportPreview(sourceText, commerce.items, mapping, sourceName)
+      if (catalogImportRequestRef.current !== requestId) return
+      setCatalogImport({
+        sourceName,
+        sourceText,
+        catalogSnapshot,
+        mapping: preview.mapping,
+        preview,
+        busy: false,
+        error: '',
+      })
+      setNotice(`${preview.totals.ready} catalog rows are ready; ${preview.totals.issueRows} need fixes. Zero Shop records were written.`)
+    } catch (error) {
+      if (catalogImportRequestRef.current !== requestId) return
+      setCatalogImport((current) => ({
+        ...current,
+        sourceName,
+        sourceText: mapping ? sourceText : '',
+        catalogSnapshot: mapping ? current.catalogSnapshot : '',
+        mapping: mapping ?? blankCatalogImportMapping(),
+        preview: mapping ? current.preview : null,
+        busy: false,
+        error: error instanceof Error ? error.message : 'The CSV could not be previewed.',
+      }))
+      setNotice('The CSV was rejected before any Shop record was written.')
+    }
+  }
+
+  async function previewCatalogImportFile(file: File | null) {
+    if (!file) return
+    try {
+      const { SHOP_CATALOG_IMPORT_MAX_BYTES } = await import('./shop-catalog-import')
+      if (!file.name.toLocaleLowerCase('en-US').endsWith('.csv') && file.type !== 'text/csv') {
+        setCatalogImport({ ...emptyCatalogImportState(), sourceName: file.name, error: 'Choose a CSV file, not an Excel workbook or another format.' })
+        setNotice('The selected file was rejected before it was read or uploaded.')
+        return
+      }
+      if (file.size > SHOP_CATALOG_IMPORT_MAX_BYTES) {
+        setCatalogImport({ ...emptyCatalogImportState(), sourceName: file.name, error: `Choose a CSV smaller than ${SHOP_CATALOG_IMPORT_MAX_BYTES / 1024} KB.` })
+        setNotice('The selected file was too large and was not read or uploaded.')
+        return
+      }
+      await runCatalogImportPreview(file.name, await file.text())
+    } catch {
+      setCatalogImport({ ...emptyCatalogImportState(), sourceName: file.name, error: 'The browser could not read this CSV.' })
+      setNotice('The CSV could not be read. No Shop record was written.')
+    }
+  }
+
+  function remapCatalogImport(field: ShopCatalogImportField, header: string) {
+    const mapping = { ...catalogImport.mapping, [field]: header }
+    void runCatalogImportPreview(catalogImport.sourceName, catalogImport.sourceText, mapping)
+  }
+
+  function recheckCatalogImport() {
+    if (!catalogImport.sourceText) return
+    void runCatalogImportPreview(catalogImport.sourceName, catalogImport.sourceText, catalogImport.mapping)
+  }
+
+  function clearCatalogImport() {
+    catalogImportRequestRef.current += 1
+    setCatalogImport(emptyCatalogImportState())
+    setNotice('Catalog import preview cleared. Shop data was not modified.')
+  }
+
+  async function downloadCatalogImportErrors() {
+    if (!catalogImport.preview) return
+    const { shopCatalogImportErrorsCsv } = await import('./shop-catalog-import')
+    downloadCatalogCsv('supermega-shop-catalog-errors.csv', shopCatalogImportErrorsCsv(catalogImport.preview))
+    setNotice('Downloaded the dry-run error report. Shop data was not modified.')
+  }
+
+  async function downloadCatalogImportTemplate() {
+    const { SHOP_CATALOG_IMPORT_TEMPLATE } = await import('./shop-catalog-import')
+    downloadCatalogCsv('supermega-shop-catalog-v1.csv', SHOP_CATALOG_IMPORT_TEMPLATE)
+    setNotice('Downloaded the versioned Shop catalog template. Shop data was not modified.')
   }
 
   function openCatalogItemEditor(itemSku: string) {
@@ -4051,6 +4206,47 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
             {progress.remaining > 0 && progress.status !== 'cancelled' ? <button aria-label={`Cancel remainder for ${purchaseOrder.id}`} className="text-link" disabled={commerceControlsDisabled} onClick={() => reviewPurchaseOrderCancellation(purchaseOrder.id)} type="button">Cancel remainder</button> : <small className="purchase-order-closed">{progress.status === 'received' ? 'Complete' : 'Closed'}</small>}
           </article>
         })}</div> : <p className="empty-state">No purchase orders yet. Use Order stock on an item when replenishment is needed.</p>}
+      </details>
+      <details className="compact-disclosure catalog-import-disclosure">
+        <summary><span>Import catalog CSV</span><small>Dry run · no writes</small></summary>
+        <div className="catalog-import-workspace">
+          <div className="catalog-import-intro">
+            <div><span className="core-eyebrow">Client onboarding</span><h3>Map and check the catalog</h3><p>Preview up to 500 rows before a separate accountable import. Smart mapping uses explicit header aliases and shows every choice; it never silently fixes data.</p></div>
+            <div className="catalog-import-file-actions">
+              <button className="core-button" onClick={() => void downloadCatalogImportTemplate()} type="button">Download template</button>
+              <label htmlFor="shop-catalog-import-file">Choose CSV<input accept=".csv,text/csv" aria-describedby="shop-catalog-import-boundary" disabled={catalogImport.busy} id="shop-catalog-import-file" onChange={(event) => { const file = event.currentTarget.files?.[0] ?? null; event.currentTarget.value = ''; void previewCatalogImportFile(file) }} type="file" /></label>
+            </div>
+          </div>
+          <p className="catalog-import-boundary" id="shop-catalog-import-boundary">The file stays in this browser tab. It is not uploaded, saved to storage, sent to AI, or applied to Shop.</p>
+          {catalogImport.busy ? <p className="form-notice" role="status">Checking headers, values, duplicates, conflicts, and Unicode…</p> : null}
+          {catalogImport.error ? <p className="form-error" role="alert">{catalogImport.error}</p> : null}
+          {catalogImport.preview ? <div className="catalog-import-preview">
+            <div className="catalog-import-source"><div><strong>{catalogImport.preview.sourceName}</strong><small>Preview {catalogImport.preview.previewDigest.slice(7, 19).toUpperCase()} · exact source and Shop snapshot</small></div><span className={`status-pill ${catalogImportStale ? 'pending' : 'bounded'}`}>{catalogImportStale ? 'Shop changed' : 'Current'}</span></div>
+            <fieldset className="catalog-import-mapping" disabled={catalogImport.busy}>
+              <legend>Column mapping</legend>
+              {catalogImportFieldConfig.map(({ field, label }) => {
+                const suggestion = catalogImport.preview?.suggestions.find((candidate) => candidate.field === field)
+                return <label htmlFor={`catalog-import-map-${field}`} key={field}><span>{label}</span><select id={`catalog-import-map-${field}`} onChange={(event) => remapCatalogImport(field, event.target.value)} value={catalogImport.mapping[field]}><option value="">Not mapped</option>{catalogImport.preview?.headers.map((header) => <option key={header} value={header}>{header}</option>)}</select><small>{suggestion?.basis === 'exact' ? 'Exact template header' : suggestion?.basis === 'alias' ? 'Suggested alias · review it' : suggestion?.basis === 'ambiguous' ? 'Multiple matches · choose one' : 'Choose the source column'}</small></label>
+              })}
+            </fieldset>
+            <div aria-label="Catalog import totals" className="catalog-import-totals">
+              <span><strong>{catalogImport.preview.totals.rows}</strong><small>CSV rows</small></span>
+              <span data-result="ready"><strong>{catalogImport.preview.totals.ready}</strong><small>ready</small></span>
+              <span data-result={catalogImport.preview.totals.issueRows ? 'issue' : 'clear'}><strong>{catalogImport.preview.totals.issueRows}</strong><small>need fixes</small></span>
+              <span><strong>{catalogImport.preview.totals.alreadyExists}</strong><small>already exact</small></span>
+            </div>
+            {catalogImport.preview.fileIssues.length ? <ul className="catalog-import-file-issues" aria-label="File issues">{catalogImport.preview.fileIssues.map((issue) => <li key={`${issue.field}:${issue.code}:${issue.message}`}>{issue.message}</li>)}</ul> : null}
+            <div aria-label="Catalog import row preview" className="catalog-import-table" role="table">
+              <div className="catalog-import-row catalog-import-head" role="row"><span role="columnheader">Row</span><span role="columnheader">SKU</span><span role="columnheader">Result</span><span role="columnheader">Details</span></div>
+              {catalogImportVisibleRows.map((row) => <div className="catalog-import-row" data-result={row.status} key={`${row.rowNumber}:${row.status}`} role="row"><span role="cell">{row.rowNumber}</span><strong role="cell">{row.item?.sku || row.source[catalogImport.mapping.sku] || '—'}</strong><span role="cell">{row.status.replaceAll('_', ' ')}</span><small role="cell">{row.issues.length ? row.issues.map((issue) => issue.message).join(' ') : `${row.item?.name} · ${row.item?.onHand.toLocaleString()} opening · ${formatMoney(row.item?.price ?? 0)}`}</small></div>)}
+            </div>
+            {catalogImport.preview.rows.length > catalogImportVisibleRows.length ? <p className="form-notice">Showing the first {catalogImportVisibleRows.length} rows, with issues first. Export the error report for the complete fix list.</p> : null}
+            <div className="catalog-import-footer">
+              <div><strong>0 records written</strong><small>{catalogImportStale ? 'Recheck against the current Shop catalog before relying on this preview.' : catalogImport.preview.totals.ready ? 'Ready rows can move to a separately reviewed import transaction.' : 'Fix the source file or mapping, then preview again.'}</small></div>
+              <div className="form-actions"><button className="core-button" disabled={!catalogImport.preview.totals.issueRows && !catalogImport.preview.fileIssues.length} onClick={() => void downloadCatalogImportErrors()} type="button">Export errors</button>{catalogImportStale ? <button className="core-button primary" disabled={catalogImport.busy} onClick={recheckCatalogImport} type="button">Recheck Shop</button> : null}<button className="core-button" disabled={catalogImport.busy} onClick={clearCatalogImport} type="button">Clear</button></div>
+            </div>
+          </div> : null}
+        </div>
       </details>
       <details className="compact-disclosure catalog-disclosure">
         <summary>Add catalog item</summary>
