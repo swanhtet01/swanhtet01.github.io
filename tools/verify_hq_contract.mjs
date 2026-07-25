@@ -44,8 +44,9 @@ requireContract('product QA brief matches current portfolio',
   && !qaBrief.includes('Work item: `QA-002`')
   && !qaBrief.includes('Ecommerce and AI Agent Solutions are visibly planned'))
 requireContract('product QA brief is discoverable from assignment authority',
-  workboard.includes('| QA-003 | Product / QA Codex | ready-read-only |')
-  && workboard.includes('use `hq/CODEX-PRODUCT-QA-BRIEF.md` for exact routes and evidence'))
+  workboard.includes('| QA-003 | Product / QA Codex | done-local |')
+  && workboard.includes('Checkpoint `dadb013` passes 10 routes at 390/1280 px')
+  && workboard.includes('focus lands on `#workspace-main`'))
 
 requireContract('Shop uses the stable commerce runtime',
   product('shop')?.name === 'Shop'
