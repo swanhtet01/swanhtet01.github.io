@@ -646,7 +646,8 @@ if (!coreSource.includes('id="commerce-manual-order-form"')
   || !managedCommerceRuntime.includes('"fulfilmentReference"')
   || !coreSource.includes('function ClosedOrderHistory')
   || !coreSource.includes('orders={actionOrders}')
-  || !coreSource.includes('<ClosedOrderHistory orders={closedOrders} />')
+  || !coreSource.includes('orders={closedOrders}')
+  || !coreSource.includes('onReviewReturn={reviewOrderReturn}')
   || !coreSource.includes('className="production-mode-banner commerce-mode-banner"')
   || !coreSource.includes("managedIdentity ? 'Managed records' : 'Sample data'")
   || !coreSource.includes('const commerceControlsDisabled = !commerceCanWrite || Boolean(pendingAction)')
@@ -667,7 +668,7 @@ if (!coreSource.includes('id="commerce-manual-order-form"')
   || !coreCssSource.includes('.order-entry-panel { min-width: 0; min-height: 0; flex: 1; overflow: auto; }')
   || coreCssSource.includes('.order-entry-panel[data-mode="manual"][data-notice="false"] { overflow: visible; }')
   || !coreCssSource.includes('.order-essential-fields { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr);')
-  || !coreCssSource.includes('.order-archive-list { max-height: 240px; overflow: auto;')
+  || !coreCssSource.includes('.order-archive-list { max-height: 360px; overflow: auto;')
   || !coreCssSource.includes('.order-entry-notice { flex: 0 0 auto; margin: 0; }')
   || !coreCssSource.includes('.order-submit-bar .core-button { width: 100%; }')
   || !coreCssSource.includes('.order-list strong, .order-list small { overflow: visible; text-overflow: clip; white-space: normal; overflow-wrap: anywhere; }')
@@ -737,6 +738,15 @@ if (!commerceSource.includes('export function settleCommerceRefund')
   || !commerceSource.includes('order.refundSettlementActionId === proof.actionId')
   || !commerceSource.includes('order.paymentReconciliationActionId === actionId || order.refundSettlementActionId === actionId')
   || !commerceSource.includes('...refundSettlementActionIds')) fail('commerce_refund_settlement_contract_missing')
+if (!commerceSource.includes('export type CommerceOrderReturn')
+  || !commerceSource.includes('completion?: CommerceActionProof')
+  || !commerceSource.includes('advancementActionIds?: string[]')
+  || !commerceSource.includes('movement.id === `MOV2:${encodeURIComponent(record.actionId)}`')
+  || !commerceSource.includes('export function commerceOrderReturnExpectation')
+  || !commerceSource.includes('export function recordCommerceOrderReturn')
+  || !commerceSource.includes("kind: 'return'")
+  || !managedCommerceRuntime.includes('def _validate_return_recorded')
+  || !managedCommerceRuntime.includes('"commerce.order.return_recorded"')) fail('commerce_order_return_contract_missing')
 if (!managedTrialSource.includes('saveManagedCommerceCommand')
   || !managedTrialSource.includes('expected_version: request.expectedVersion')
   || !managedTrialSource.includes("surface: 'commerce'")
@@ -746,7 +756,7 @@ if (!managedTrialSource.includes('saveManagedCommerceCommand')
   || !managedTrialSource.includes('request.identity')
   || !managedTrialSource.includes("code: 'managed_identity_changed'")) fail('managed_commerce_command_client_missing')
 const managedCommerceClientSources = `${coreSource}\n${websiteSource}\n${ecommerceSource}`
-for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.payment.reconciled', 'commerce.refund.settled', 'commerce.stock.counted', 'commerce.purchase_order.created', 'commerce.purchase_order.received', 'commerce.purchase_order.cancelled', 'commerce.close.saved', 'commerce.website_intake.converted', 'commerce.storefront.configuration.saved', 'commerce.storefront_request.received']) {
+for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.order.return_recorded', 'commerce.payment.reconciled', 'commerce.refund.settled', 'commerce.stock.counted', 'commerce.purchase_order.created', 'commerce.purchase_order.received', 'commerce.purchase_order.cancelled', 'commerce.close.saved', 'commerce.website_intake.converted', 'commerce.storefront.configuration.saved', 'commerce.storefront_request.received']) {
   if (!managedTrialSource.includes(eventType) || !managedCommerceClientSources.includes(eventType) || !managedCommerceRuntime.includes(eventType)) fail(`managed_commerce_event_missing:${eventType}`)
 }
 if (!managedTrialSource.includes('commerce.stock.received')
@@ -765,6 +775,14 @@ if (!coreSource.includes('Record a refund already completed with the external pa
 if (!coreSource.includes("'commerce.refund.settled'")
   || !coreSource.includes('settleCommerceRefund(current, orderId, commerceActionProof(action))')
   || !coreSource.includes("kind: 'refund_settle'")) fail('commerce_refund_settlement_gate_missing')
+if (!coreSource.includes("'commerce.order.return_recorded'")
+  || !coreSource.includes("kind: 'order_return'")
+  || !coreSource.includes('Record return')
+  || !coreSource.includes('Sellable · add to stock')
+  || !coreSource.includes('payment and order total unchanged')
+  || !coreSource.includes('Return unavailable: this older order has no attributable completion proof.')
+  || !coreSource.includes('Math.ceil(orders.length / pageSize)')
+  || !coreSource.includes('aria-label="Closed order pages"')) fail('commerce_order_return_ui_or_gate_missing')
 if (!coreSource.includes("mode: 'managed-unprovisioned'") || !coreSource.includes('No browser demo orders, customers, or stock records are copied') || !coreSource.includes('Create managed catalog') || !coreSource.includes('Opening balance reason') || !coreSource.includes('result.version !== current.version + 1') || !coreSource.includes('validateCommerceState(result.state)') || !coreSource.includes("error.code === 'trial_version_conflict'") || !coreSource.includes('class ShopReviewRequiredError') || !coreSource.includes('error instanceof ShopReviewRequiredError') || !coreSource.includes('const latest = loadCommerceWorkspace()') || !coreSource.includes('latest record is loaded for fresh review') || !coreSource.includes('managedIdentity ? null : <ActionHistory')) fail('managed_commerce_ui_not_fail_closed')
 if ((coreSource.match(/const conflict = \{ \.\.\.refreshed, error: '' \}/g) || []).length !== 2) fail('managed_conflict_refresh_remained_write_blocked')
 if (!coreSource.includes('confirmation?: AccountableAction') || !coreSource.includes('if (action.confirmation) return action.confirmation') || !coreSource.includes('Retry same confirmation') || !coreSource.includes('result.idempotent_replay') || !coreSource.includes('before the replay could be reconciled')) fail('managed_command_retry_not_frozen_or_reconciled')
@@ -2429,17 +2447,93 @@ async function verifyCommerceRuntime() {
     'multi_line_cancellation_not_atomic')
     assert(model.cancelCommerceOrder(multiCancelled, multiOrder.id, multiCancelProof) === multiCancelled, 'multi_line_cancellation_retry_not_idempotent')
 
-    const preparing = model.advanceCommerceOrder(reserved, order.id, 'confirmed')
-    const ready = model.advanceCommerceOrder(preparing, order.id, 'preparing')
-    assert(preparing?.orders[0].status === 'preparing' && ready?.orders[0].status === 'ready', 'fulfilment_progression_failed')
+    const preparingProof = proof('ACT-PREPARING', 500)
+    const readyProof = proof('ACT-READY', 750)
+    const preparing = model.advanceCommerceOrder(reserved, order.id, 'confirmed', preparingProof)
+    const ready = model.advanceCommerceOrder(preparing, order.id, 'preparing', readyProof)
+    assert(preparing?.orders[0].status === 'preparing'
+      && ready?.orders[0].status === 'ready'
+      && JSON.stringify(ready.orders[0].advancementActionIds) === JSON.stringify([preparingProof.actionId, readyProof.actionId]),
+    'fulfilment_progression_failed')
     assert(model.advanceCommerceOrder(ready, order.id, 'ready') === null, 'pending_payment_completed_order')
     const paymentProof = proof('ACT-PAYMENT', 1_000)
     const reconciled = model.reconcileCommercePayment(ready, order.id, paymentProof)
     assert(reconciled?.orders[0].paymentStatus === 'reconciled' && reconciled.orders[0].paymentReconciledBy === paymentProof.actor && reconciled.orders[0].paymentEvidenceReference === paymentProof.evidenceReference, 'payment_reconciliation_lost_human_evidence')
     assert(model.reconcileCommercePayment(reconciled, order.id, paymentProof) === reconciled, 'exact_payment_retry_not_idempotent')
     assert(model.reconcileCommercePayment(reconciled, order.id, { ...paymentProof, evidenceReference: 'EV-CONFLICT' }) === null, 'conflicting_payment_retry_succeeded')
-    const completed = model.advanceCommerceOrder(reconciled, order.id, 'ready')
-    assert(completed?.orders[0].status === 'completed' && model.cancelCommerceOrder(completed, order.id, proof('ACT-CANCEL-COMPLETED')) === null, 'completed_order_was_cancellable')
+    const completionProof = proof('ACT-COMPLETE', 2_000)
+    const completed = model.advanceCommerceOrder(reconciled, order.id, 'ready', completionProof)
+    assert(completed?.orders[0].status === 'completed'
+      && completed.orders[0].completion.actionId === completionProof.actionId
+      && model.cancelCommerceOrder(completed, order.id, proof('ACT-CANCEL-COMPLETED')) === null,
+    'completed_order_lost_proof_or_was_cancellable')
+    assert(model.advanceCommerceOrder(reconciled, order.id, 'ready') === null, 'completion_without_attribution_succeeded')
+    assert(model.advanceCommerceOrder(reconciled, order.id, 'ready', proof('ACT-COMPLETE-EARLY', 500)) === null, 'backdated_completion_succeeded')
+    assert(model.advanceCommerceOrder(reconciled, order.id, 'ready', readyProof) === null, 'advancement_action_id_reuse_succeeded')
+    const futurePaymentAt = proof('ACT-FUTURE-PAYMENT-BASIS', 5_000).capturedAt
+    const skewedReconciled = model.validateCommerceState({
+      ...reconciled,
+      orders: reconciled.orders.map((candidate) => candidate.id === order.id
+        ? { ...candidate, paymentReconciledAt: futurePaymentAt }
+        : candidate),
+    })
+    const skewedCompletionProof = proof('ACT-COMPLETE-SKEWED-CLIENT', 2_000)
+    assert(model.advanceCommerceOrder(skewedReconciled, order.id, 'ready', skewedCompletionProof) === null,
+      'local_clock_skew_bypassed_strict_chronology')
+    const managedSkewedCompletion = model.advanceCommerceOrder(
+      skewedReconciled,
+      order.id,
+      'ready',
+      skewedCompletionProof,
+      'managed-server',
+    )
+    assert(managedSkewedCompletion?.orders[0].completion.capturedAt === futurePaymentAt,
+      'managed_clock_skew_candidate_never_reached_server_authority')
+
+    const returnInput = { orderId: order.id, sku: 'SKU-1', quantity: 1, disposition: 'restock' }
+    const returnExpectation = model.commerceOrderReturnExpectation(completed, order.id, 'SKU-1', 'restock')
+    const returnProof = proof('ACT-RETURN-1', 3_000)
+    const returned = model.recordCommerceOrderReturn(completed, returnInput, returnProof, returnExpectation)
+    assert(returnExpectation?.soldQuantity === 2
+      && returnExpectation.returnedQuantity === 0
+      && returnExpectation.stockOnHand === 8
+      && returned?.items[0].onHand === 9
+      && returned.orders[0].total === completed.orders[0].total
+      && returned.orders[0].paymentStatus === completed.orders[0].paymentStatus
+      && returned.orders[0].returns[0].disposition === 'restock'
+      && returned.movements[0].kind === 'return'
+      && returned.movements[0].orderId === order.id,
+    'sellable_return_did_not_preserve_order_and_restock_exactly')
+    assert(model.recordCommerceOrderReturn(returned, returnInput, returnProof, returnExpectation) === returned, 'exact_return_retry_not_idempotent')
+    assert(model.recordCommerceOrderReturn(returned, { ...returnInput, disposition: 'not_restocked' }, returnProof, returnExpectation) === null, 'changed_return_retry_succeeded')
+    assert(model.recordCommerceOrderReturn(returned, returnInput, proof('ACT-RETURN-STALE', 4_000), returnExpectation) === null, 'stale_return_review_succeeded')
+    assert(model.recordCommerceOrderReturn(completed, returnInput, proof('ACT-RETURN-EARLY', 1_500), returnExpectation) === null, 'backdated_return_succeeded')
+
+    const secondReturnInput = { ...returnInput, disposition: 'not_restocked' }
+    const secondReturnExpectation = model.commerceOrderReturnExpectation(returned, order.id, 'SKU-1', 'not_restocked')
+    const secondReturned = model.recordCommerceOrderReturn(returned, secondReturnInput, proof('ACT-RETURN-2', 4_000), secondReturnExpectation)
+    assert(secondReturnExpectation?.returnedQuantity === 1
+      && secondReturnExpectation.stockOnHand === null
+      && secondReturned?.items[0].onHand === 9
+      && secondReturned.movements === returned.movements
+      && secondReturned.orders[0].returns.length === 2
+      && secondReturned.orders[0].returns[0].disposition === 'not_restocked',
+    'non_sellable_return_changed_stock_or_lost_history')
+    assert(model.commerceOrderReturnExpectation(secondReturned, order.id, 'SKU-1', 'restock') === null, 'fully_returned_line_remained_returnable')
+    assert(model.recordCommerceOrderReturn(returned, { ...returnInput, quantity: 2 }, proof('ACT-RETURN-OVER', 4_000), secondReturnExpectation) === null, 'cumulative_over_return_succeeded')
+    const legacyCompleted = model.validateCommerceState({
+      ...completed,
+      orders: completed.orders.map(({ completion: _completion, ...candidate }) => candidate),
+    })
+    assert(model.commerceOrderReturnExpectation(legacyCompleted, order.id, 'SKU-1', 'restock') === null, 'unproven_legacy_completion_became_returnable')
+    assertThrows(() => model.validateCommerceState({
+      ...returned,
+      movements: [{ ...returned.movements[0], quantityDelta: 2 }, ...returned.movements.slice(1)],
+    }), 'forged_return_stock_movement_succeeded')
+    assertThrows(() => model.validateCommerceState({
+      ...returned,
+      movements: [{ ...returned.movements[0], id: 'MOV2:FORGED-RETURN' }, ...returned.movements.slice(1)],
+    }), 'forged_return_stock_movement_id_succeeded')
 
     const cancelReserveProof = proof('ACT-RESERVE-CANCEL')
     const cancelOrder = { ...order, id: 'ORD-CANCEL', sourceRecordId: 'WEB-CANCEL', evidenceReference: cancelReserveProof.evidenceReference }

@@ -25,6 +25,10 @@ from supermega_runtime.trial_store import (
 
 NOW = "2026-07-23T09:00:00.000Z"
 CONVERTED_AT = "2026-07-23T09:15:00.000Z"
+PAYMENT_AT = "2026-07-23T09:10:00.000Z"
+COMPLETED_AT = "2026-07-23T09:20:00.000Z"
+RETURN_AT = "2026-07-23T09:30:00.000Z"
+RETURN_AT_2 = "2026-07-23T09:40:00.000Z"
 WEBSITE_INTAKE_ID = "WINT-12345678"
 CLOSE_ACTION_ID = "ACT-00000000-0000-4000-8000-000000000001"
 CLOSE_ID = "CLOSE-00000000-0000-4000-8000-000000000001"
@@ -369,6 +373,77 @@ def created_state(order_id: str = "ORD-1") -> dict[str, object]:
     return state
 
 
+def completed_state(order_id: str = "ORD-1") -> dict[str, object]:
+    state = created_state(order_id)
+    payment = action_evidence(
+        f"ACT-PAY-{order_id}",
+        captured_at=PAYMENT_AT,
+        reason="Matched the settlement record.",
+    )
+    completion = action_evidence(
+        f"ACT-COMPLETE-{order_id}",
+        captured_at=COMPLETED_AT,
+        reason="Confirmed fulfilment was handed over.",
+    )
+    state["orders"][0].update(  # type: ignore[index]
+        {
+            "paymentStatus": "reconciled",
+            "paymentReconciledAt": payment["capturedAt"],
+            "paymentReconciliationActionId": payment["actionId"],
+            "paymentReconciledBy": payment["actor"],
+            "paymentReconciliationReason": payment["reason"],
+            "paymentEvidenceReference": payment["evidenceReference"],
+            "status": "completed",
+            "completion": completion,
+        }
+    )
+    return state
+
+
+def returned_state(
+    current: dict[str, object],
+    *,
+    quantity: int = 1,
+    disposition: str = "restock",
+    action_id: str = "ACT-RETURN-1",
+    captured_at: str = RETURN_AT,
+    sku: str = "SKU-1",
+) -> dict[str, object]:
+    state = deepcopy(current)
+    order = state["orders"][0]  # type: ignore[index]
+    evidence = action_evidence(
+        action_id,
+        captured_at=captured_at,
+        reason="Inspected the returned item at intake.",
+    )
+    record = {
+        "actionId": evidence["actionId"],
+        "createdAt": evidence["capturedAt"],
+        "actor": evidence["actor"],
+        "reason": evidence["reason"],
+        "evidenceReference": evidence["evidenceReference"],
+        "sku": sku,
+        "quantity": quantity,
+        "disposition": disposition,
+    }
+    order["returns"] = [record, *order.get("returns", [])]
+    if disposition == "restock":
+        state["items"][0]["onHand"] += quantity  # type: ignore[index]
+        state["movements"] = [
+            movement(
+                "return",
+                action_id,
+                quantity,
+                order_id=str(order["id"]),
+                created_at=captured_at,
+                sku=sku,
+            ),
+            *state["movements"],  # type: ignore[misc]
+        ]
+        state["movements"][0]["reason"] = evidence["reason"]  # type: ignore[index]
+    return state
+
+
 def cancelled_due_state(
     order_ids: tuple[str, ...] = ("ORD-REFUND",),
 ) -> dict[str, object]:
@@ -452,6 +527,37 @@ def evidence_for(event_type: str, next_state: dict[str, object]) -> dict[str, st
         return storefront_evidence(next_state["storefrontRequests"][0])  # type: ignore[index,arg-type]
     if event_type == "commerce.storefront.configuration.saved":
         return dict(next_state["storefrontConfiguration"]["saved"])  # type: ignore[index,arg-type]
+    if event_type == "commerce.order.advanced":
+        completed_orders = [
+            order
+            for order in next_state["orders"]  # type: ignore[union-attr]
+            if "completion" in order
+        ]
+        if completed_orders:
+            return dict(completed_orders[0]["completion"])
+        advanced_orders = [
+            order
+            for order in next_state["orders"]  # type: ignore[union-attr]
+            if order.get("advancementActionIds")
+        ]
+        if advanced_orders:
+            return action_evidence(
+                advanced_orders[0]["advancementActionIds"][-1]
+            )
+    if event_type == "commerce.order.return_recorded":
+        returned_orders = [
+            order
+            for order in next_state["orders"]  # type: ignore[union-attr]
+            if order.get("returns")
+        ]
+        record = returned_orders[0]["returns"][0]
+        return {
+            "actionId": record["actionId"],
+            "capturedAt": record["createdAt"],
+            "actor": record["actor"],
+            "reason": record["reason"],
+            "evidenceReference": record["evidenceReference"],
+        }
     if event_type in {
         "commerce.item.created",
         "commerce.order.created",
@@ -1260,6 +1366,7 @@ class CommerceRuntimeTests(unittest.TestCase):
                     "commerce.order.created",
                     "commerce.order.advanced",
                     "commerce.order.cancelled",
+                    "commerce.order.return_recorded",
                     "commerce.payment.reconciled",
                     "commerce.refund.settled",
                     "commerce.stock.received",
@@ -2195,11 +2302,24 @@ class CommerceRuntimeTests(unittest.TestCase):
     def test_order_progress_payment_and_close_are_server_checked(self) -> None:
         current = created_state()
         preparing = deepcopy(current)
-        preparing["orders"][0]["status"] = "preparing"  # type: ignore[index]
+        preparing["orders"][0].update(  # type: ignore[index]
+            {
+                "status": "preparing",
+                "advancementActionIds": ["ACT-PREPARING"],
+            }
+        )
         current = apply_event(current, "commerce.order.advanced", preparing)
 
         ready = deepcopy(current)
-        ready["orders"][0]["status"] = "ready"  # type: ignore[index]
+        ready["orders"][0].update(  # type: ignore[index]
+            {
+                "status": "ready",
+                "advancementActionIds": [
+                    "ACT-PREPARING",
+                    "ACT-READY",
+                ],
+            }
+        )
         current = apply_event(current, "commerce.order.advanced", ready)
 
         completed_without_payment = deepcopy(current)
@@ -2220,8 +2340,27 @@ class CommerceRuntimeTests(unittest.TestCase):
         )
         current = apply_event(current, "commerce.payment.reconciled", reconciled)
 
+        reused_advancement = deepcopy(current)
+        reused_advancement["orders"][0].update(  # type: ignore[index]
+            {
+                "status": "completed",
+                "completion": action_evidence("ACT-READY"),
+            }
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "commerce.order.advanced",
+                reused_advancement,
+            )
+
         completed = deepcopy(current)
-        completed["orders"][0]["status"] = "completed"  # type: ignore[index]
+        completed["orders"][0].update(  # type: ignore[index]
+            {
+                "status": "completed",
+                "completion": action_evidence("ACT-COMPLETE"),
+            }
+        )
         current = apply_event(current, "commerce.order.advanced", completed)
 
         closed = deepcopy(current)
@@ -2281,6 +2420,137 @@ class CommerceRuntimeTests(unittest.TestCase):
         accepted_next_day = apply_event(result, "commerce.close.saved", next_day)
         self.assertEqual(accepted_next_day["closes"][0]["orders"], 0)  # type: ignore[index]
         self.assertEqual(accepted_next_day["closes"][1]["orderIds"], ["ORD-1"])  # type: ignore[index]
+
+    def test_completed_order_accepts_multiple_partial_returns_with_explicit_stock_disposition(self) -> None:
+        current = validate_commerce_state(completed_state())
+        original_order = deepcopy(current["orders"][0])
+        original_movement_count = len(current["movements"])
+
+        restocked_state = returned_state(current)
+        restocked = apply_event(
+            current,
+            "commerce.order.return_recorded",
+            restocked_state,
+        )
+        self.assertEqual(restocked["items"][0]["onHand"], 9)
+        self.assertEqual(restocked["movements"][0]["kind"], "return")
+        self.assertEqual(restocked["movements"][0]["orderId"], "ORD-1")
+        self.assertEqual(restocked["orders"][0]["returns"][0]["disposition"], "restock")
+
+        not_restocked_state = returned_state(
+            restocked,
+            disposition="not_restocked",
+            action_id="ACT-RETURN-2",
+            captured_at=RETURN_AT_2,
+        )
+        not_restocked = apply_event(
+            restocked,
+            "commerce.order.return_recorded",
+            not_restocked_state,
+        )
+        self.assertEqual(not_restocked["items"][0]["onHand"], 9)
+        self.assertEqual(
+            len(not_restocked["movements"]),
+            original_movement_count + 1,
+        )
+        self.assertEqual(
+            [record["disposition"] for record in not_restocked["orders"][0]["returns"]],
+            ["not_restocked", "restock"],
+        )
+        for field in (
+            "total",
+            "paymentStatus",
+            "refundStatus",
+            "paymentReconciliationActionId",
+            "completion",
+        ):
+            self.assertEqual(
+                not_restocked["orders"][0][field],
+                original_order[field],
+            )
+
+        over_return = returned_state(
+            not_restocked,
+            action_id="ACT-RETURN-3",
+            captured_at="2026-07-23T09:50:00.000Z",
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                not_restocked,
+                "commerce.order.return_recorded",
+                over_return,
+            )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                restocked,
+                "commerce.order.return_recorded",
+                restocked,
+            )
+
+    def test_return_transition_rejects_unproven_chronology_stock_and_command_evidence(self) -> None:
+        current = validate_commerce_state(completed_state())
+        accepted_candidate = returned_state(current)
+
+        forged_evidence = action_evidence(
+            "ACT-FORGED-RETURN",
+            captured_at=RETURN_AT,
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "commerce.order.return_recorded",
+                accepted_candidate,
+                forged_evidence,
+            )
+
+        legacy_completed = completed_state()
+        legacy_completed["orders"][0].pop("completion")  # type: ignore[index]
+        validate_commerce_state(legacy_completed)
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(returned_state(legacy_completed))
+
+        backdated_completion = completed_state()
+        backdated_completion["orders"][0]["completion"]["capturedAt"] = NOW  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(backdated_completion)
+
+        backdated_return = returned_state(current, captured_at=PAYMENT_AT)
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(backdated_return)
+
+        missing_restock = returned_state(current)
+        missing_restock["items"] = deepcopy(current["items"])
+        missing_restock["movements"] = deepcopy(current["movements"])
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(missing_restock)
+
+        no_stock_disposition = returned_state(
+            current,
+            disposition="not_restocked",
+        )
+        no_stock_disposition["items"][0]["onHand"] += 1  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "commerce.order.return_recorded",
+                no_stock_disposition,
+            )
+
+        changed_order_total = returned_state(current)
+        changed_order_total["orders"][0]["total"] += 1  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "commerce.order.return_recorded",
+                changed_order_total,
+            )
+
+        reused_completion_action = returned_state(
+            current,
+            action_id="ACT-COMPLETE-ORD-1",
+        )
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(reused_completion_action)
 
     def test_daily_close_snapshots_exact_exceptions_and_legacy_records_still_load(self) -> None:
         current = created_state("ORD-EXCEPTION")
@@ -2807,13 +3077,29 @@ class CommerceRuntimeTests(unittest.TestCase):
             expected_version=0,
             payload={"state": catalog_state(), "evidence": action_evidence("ACT-INITIALIZE")},
         )
+        forged_created_state = created_state()
+        forged_created_state["orders"][0]["createdAt"] = (  # type: ignore[index]
+            "2099-01-01T00:00:00.000Z"
+        )
+        forged_created_state["movements"][0].update(  # type: ignore[index]
+            {
+                "createdAt": "2099-01-01T00:00:00.000Z",
+                "actor": "Fabricated Order Bot",
+            }
+        )
         created = store.apply_command(
             principal,
             command_id=str(uuid4()),
             surface="commerce",
             event_type="commerce.order.created",
             expected_version=initialized.version,
-            payload={"state": created_state(), "evidence": evidence_for("commerce.order.created", created_state())},
+            payload={
+                "state": forged_created_state,
+                "evidence": evidence_for(
+                    "commerce.order.created",
+                    forged_created_state,
+                ),
+            },
         )
 
         self.assertEqual(initialized.version, 1)
@@ -2821,10 +3107,26 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertEqual(created.version, 2)
         stored = store.get_state(principal, "commerce")
         self.assertEqual(stored.updated_by, principal.actor_id)
-        self.assertEqual(stored.state, created_state())
+        self.assertNotEqual(
+            stored.state["orders"][0]["createdAt"],  # type: ignore[index]
+            "2099-01-01T00:00:00.000Z",
+        )
+        self.assertEqual(
+            stored.state["orders"][0]["createdAt"],  # type: ignore[index]
+            stored.state["movements"][0]["createdAt"],  # type: ignore[index]
+        )
+        self.assertEqual(
+            stored.state["movements"][0]["actor"],  # type: ignore[index]
+            principal.actor_id,
+        )
 
         preparing_state = deepcopy(created.state)
-        preparing_state["orders"][0]["status"] = "preparing"  # type: ignore[index]
+        preparing_state["orders"][0].update(  # type: ignore[index]
+            {
+                "status": "preparing",
+                "advancementActionIds": ["ACT-STORE-PREPARING"],
+            }
+        )
         preparing = store.apply_command(
             principal,
             command_id=str(uuid4()),
@@ -2840,9 +3142,9 @@ class CommerceRuntimeTests(unittest.TestCase):
         reconciled_state["orders"][0].update(  # type: ignore[index]
             {
                 "paymentStatus": "reconciled",
-                "paymentReconciledAt": NOW,
+                "paymentReconciledAt": "2099-01-01T00:00:00.000Z",
                 "paymentReconciliationActionId": "ACT-STORE-PAYMENT",
-                "paymentReconciledBy": "Accountable operator",
+                "paymentReconciledBy": "Fabricated Payments Bot",
                 "paymentReconciliationReason": "Matched the settlement record.",
                 "paymentEvidenceReference": "EV-STORE-PAYMENT",
             }
@@ -2861,8 +3163,24 @@ class CommerceRuntimeTests(unittest.TestCase):
                 ),
             },
         )
+        self.assertNotEqual(
+            reconciled.state["orders"][0]["paymentReconciledAt"],  # type: ignore[index]
+            "2099-01-01T00:00:00.000Z",
+        )
+        self.assertEqual(
+            reconciled.state["orders"][0]["paymentReconciledBy"],  # type: ignore[index]
+            principal.actor_id,
+        )
         ready_state = deepcopy(reconciled.state)
-        ready_state["orders"][0]["status"] = "ready"  # type: ignore[index]
+        ready_state["orders"][0].update(  # type: ignore[index]
+            {
+                "status": "ready",
+                "advancementActionIds": [
+                    "ACT-STORE-PREPARING",
+                    "ACT-STORE-READY",
+                ],
+            }
+        )
         ready = store.apply_command(
             principal,
             command_id=str(uuid4()),
@@ -2875,7 +3193,27 @@ class CommerceRuntimeTests(unittest.TestCase):
             },
         )
         completed_state = deepcopy(ready.state)
-        completed_state["orders"][0]["status"] = "completed"  # type: ignore[index]
+        completion_evidence = action_evidence("ACT-STORE-COMPLETED")
+        completed_state["orders"][0].update(  # type: ignore[index]
+            {
+                "status": "completed",
+                "completion": completion_evidence,
+            }
+        )
+        malformed_completion_state = deepcopy(completed_state)
+        malformed_completion_state["movements"] = None
+        with self.assertRaises(TrialValidationError):
+            store.apply_command(
+                principal,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.order.advanced",
+                expected_version=ready.version,
+                payload={
+                    "state": malformed_completion_state,
+                    "evidence": completion_evidence,
+                },
+            )
         completed = store.apply_command(
             principal,
             command_id=str(uuid4()),
@@ -2884,12 +3222,57 @@ class CommerceRuntimeTests(unittest.TestCase):
             expected_version=ready.version,
             payload={
                 "state": completed_state,
-                "evidence": action_evidence("ACT-STORE-COMPLETED"),
+                "evidence": completion_evidence,
             },
         )
-        forged_close_state = deepcopy(completed.state)
-        forged_close = close_record(
+        forged_return_state = returned_state(
             completed.state,
+            action_id="ACT-STORE-RETURN",
+            captured_at="2099-01-01T00:00:00.000Z",
+        )
+        forged_return = forged_return_state["orders"][0]["returns"][0]  # type: ignore[index]
+        forged_return_movement = forged_return_state["movements"][0]  # type: ignore[index]
+        forged_return["actor"] = "Fabricated Returns Bot"
+        forged_return_movement["actor"] = "Fabricated Returns Bot"
+        forged_return_payload = {
+            "state": forged_return_state,
+            "evidence": evidence_for(
+                "commerce.order.return_recorded",
+                forged_return_state,
+            ),
+        }
+        return_command_id = str(uuid4())
+        returned = store.apply_command(
+            principal,
+            command_id=return_command_id,
+            surface="commerce",
+            event_type="commerce.order.return_recorded",
+            expected_version=completed.version,
+            payload=forged_return_payload,
+        )
+        return_replay = store.apply_command(
+            principal,
+            command_id=return_command_id,
+            surface="commerce",
+            event_type="commerce.order.return_recorded",
+            expected_version=completed.version,
+            payload=forged_return_payload,
+        )
+        authoritative_return = returned.state["orders"][0]["returns"][0]  # type: ignore[index]
+        authoritative_return_movement = returned.state["movements"][0]  # type: ignore[index]
+        self.assertEqual(authoritative_return["actor"], principal.actor_id)
+        self.assertEqual(authoritative_return_movement["actor"], principal.actor_id)
+        self.assertNotEqual(
+            authoritative_return["createdAt"],
+            "2099-01-01T00:00:00.000Z",
+        )
+        self.assertEqual(returned.state["items"][0]["onHand"], 9)  # type: ignore[index]
+        self.assertTrue(return_replay.idempotent_replay)
+        self.assertEqual(return_replay.version, returned.version)
+
+        forged_close_state = deepcopy(returned.state)
+        forged_close = close_record(
+            returned.state,
             CLOSE_ACTION_ID,
             close_id=CLOSE_ID,
             captured_at="2099-01-01T00:00:00.000Z",
@@ -2906,7 +3289,7 @@ class CommerceRuntimeTests(unittest.TestCase):
             command_id=close_command_id,
             surface="commerce",
             event_type="commerce.close.saved",
-            expected_version=completed.version,
+            expected_version=returned.version,
             payload=forged_payload,
         )
         close_replay = store.apply_command(
@@ -2914,7 +3297,7 @@ class CommerceRuntimeTests(unittest.TestCase):
             command_id=close_command_id,
             surface="commerce",
             event_type="commerce.close.saved",
-            expected_version=completed.version,
+            expected_version=returned.version,
             payload=forged_payload,
         )
         authoritative_close = closed.state["closes"][0]  # type: ignore[index]

@@ -22,6 +22,7 @@ COMMERCE_EVENTS = frozenset(
         "commerce.order.created",
         "commerce.order.advanced",
         "commerce.order.cancelled",
+        "commerce.order.return_recorded",
         "commerce.payment.reconciled",
         "commerce.refund.settled",
         "commerce.stock.received",
@@ -43,6 +44,7 @@ COMMERCE_HUMAN_EVENTS = frozenset(
         "commerce.order.created",
         "commerce.order.advanced",
         "commerce.order.cancelled",
+        "commerce.order.return_recorded",
         "commerce.payment.reconciled",
         "commerce.refund.settled",
         "commerce.stock.received",
@@ -59,7 +61,8 @@ _ORDER_STATUSES = ("confirmed", "preparing", "ready", "completed", "cancelled")
 _NEXT_ORDER_STATUS = {"confirmed": "preparing", "preparing": "ready", "ready": "completed"}
 _PAYMENT_STATUSES = ("pending", "reconciled")
 _REFUND_STATUSES = ("none", "due", "settled")
-_MOVEMENT_KINDS = ("opening", "reserve", "release", "receipt", "count")
+_MOVEMENT_KINDS = ("opening", "reserve", "release", "receipt", "count", "return")
+_RETURN_DISPOSITIONS = ("restock", "not_restocked")
 _WEBSITE_INTAKE_STATUSES = ("pending_confirmation", "converted")
 _MAX_SAFE_INTEGER = 9_007_199_254_740_991
 _WEBSITE_FINGERPRINT_PATTERN = re.compile(r"web-[a-f0-9]{8}")
@@ -75,6 +78,7 @@ _STOREFRONT_PREVIEW_SCHEMA = "supermega.ecommerce.storefront_preview.v1"
 _MAX_STOREFRONT_REQUESTS = 100
 _MAX_PURCHASE_ORDERS = 100
 _MAX_ORDER_LINES = 20
+_MAX_RETURNS_PER_ORDER = 100
 _MAX_MOVEMENT_ID_LENGTH = 2_000
 _PURCHASE_ORDER_ID_PATTERN = re.compile(
     r"PO-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
@@ -119,10 +123,25 @@ _ORDER_OPTIONAL_FIELDS = frozenset(
         "sourceRecordId",
         "evidenceReference",
         "lines",
+        "advancementActionIds",
+        "completion",
+        "returns",
     }
 )
 _ORDER_LINE_REQUIRED_FIELDS = frozenset({"sku", "name", "quantity", "unitPriceMmk"})
 _ORDER_LINE_OPTIONAL_FIELDS = frozenset({"variant"})
+_ORDER_RETURN_FIELDS = frozenset(
+    {
+        "actionId",
+        "createdAt",
+        "actor",
+        "reason",
+        "evidenceReference",
+        "sku",
+        "quantity",
+        "disposition",
+    }
+)
 _RECONCILIATION_FIELDS = frozenset(
     {
         "paymentReconciledAt",
@@ -579,6 +598,10 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     source_record_ids: list[str] = []
     reconciliation_action_ids: list[str] = []
     refund_settlement_action_ids: list[str] = []
+    advancement_action_ids: list[str] = []
+    completion_action_ids: list[str] = []
+    return_action_ids: list[str] = []
+    order_returns: list[tuple[str, dict[str, Any]]] = []
     order_by_id: dict[str, dict[str, Any]] = {}
     for index, candidate in enumerate(orders):
         order = _object(candidate, f"orders[{index}]")
@@ -659,6 +682,37 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             raise TrialValidationError(f"orders[{index}].paymentStatus is invalid.")
         if order["refundStatus"] not in _REFUND_STATUSES:
             raise TrialValidationError(f"orders[{index}].refundStatus is invalid.")
+        if "advancementActionIds" in order:
+            order_advancement_action_ids = _list(
+                order["advancementActionIds"],
+                f"orders[{index}].advancementActionIds",
+            )
+            status_limit = {
+                "confirmed": 0,
+                "preparing": 1,
+                "ready": 2,
+                "completed": 2,
+                "cancelled": 2,
+            }[order["status"]]
+            if len(order_advancement_action_ids) > status_limit:
+                raise TrialValidationError(
+                    f"orders[{index}].advancementActionIds is invalid."
+                )
+            validated_advancement_action_ids = [
+                _text(
+                    action_id,
+                    f"orders[{index}].advancementActionIds[{action_index}]",
+                    maximum=160,
+                )
+                for action_index, action_id in enumerate(
+                    order_advancement_action_ids
+                )
+            ]
+            _unique(
+                validated_advancement_action_ids,
+                f"orders[{index}] advancement action ID",
+            )
+            advancement_action_ids.extend(validated_advancement_action_ids)
         for field in ("fulfilment", "fulfilmentReference", "sourceRecordId", "evidenceReference"):
             if field in order:
                 value_text = (
@@ -709,12 +763,113 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             and order["refundStatus"] not in {"due", "settled"}
         ):
             raise TrialValidationError(f"orders[{index}] must preserve a due or settled refund.")
+
+        completion: dict[str, Any] | None = None
+        if "completion" in order:
+            if order["status"] != "completed":
+                raise TrialValidationError(
+                    f"orders[{index}].completion requires a completed order."
+                )
+            completion = _action_proof(
+                order["completion"],
+                f"orders[{index}].completion",
+            )
+            completion_at = datetime.fromisoformat(
+                completion["capturedAt"].replace("Z", "+00:00")
+            )
+            order_created_at = datetime.fromisoformat(
+                str(order["createdAt"]).replace("Z", "+00:00")
+            )
+            payment_reconciled_at = (
+                datetime.fromisoformat(
+                    str(order["paymentReconciledAt"]).replace("Z", "+00:00")
+                )
+                if "paymentReconciledAt" in order
+                else order_created_at
+            )
+            if completion_at < max(order_created_at, payment_reconciled_at):
+                raise TrialValidationError(
+                    f"orders[{index}].completion is outside the order chronology."
+                )
+            completion_action_ids.append(completion["actionId"])
+
+        if "returns" in order:
+            records = _list(order["returns"], f"orders[{index}].returns")
+            if (
+                not 1 <= len(records) <= _MAX_RETURNS_PER_ORDER
+                or order["status"] != "completed"
+                or completion is None
+            ):
+                raise TrialValidationError(
+                    f"orders[{index}].returns requires 1 to "
+                    f"{_MAX_RETURNS_PER_ORDER} records and completion proof."
+                )
+            sold_by_sku = {
+                line["sku"]: line["quantity"]
+                for line in _reservation_lines(order)
+            }
+            returned_by_sku: dict[str, int] = {}
+            newer_return_at: datetime | None = None
+            completion_at = datetime.fromisoformat(
+                completion["capturedAt"].replace("Z", "+00:00")
+            )
+            for return_index, return_candidate in enumerate(records):
+                field = f"orders[{index}].returns[{return_index}]"
+                return_record = _object(return_candidate, field)
+                _exact_fields(return_record, field, required=_ORDER_RETURN_FIELDS)
+                action_id = _text(
+                    return_record["actionId"],
+                    f"{field}.actionId",
+                    maximum=160,
+                )
+                created_at = datetime.fromisoformat(
+                    _timestamp(
+                        return_record["createdAt"],
+                        f"{field}.createdAt",
+                    ).replace("Z", "+00:00")
+                )
+                for proof_field in ("actor", "reason", "evidenceReference"):
+                    _text(return_record[proof_field], f"{field}.{proof_field}")
+                sku = _text(return_record["sku"], f"{field}.sku", maximum=80)
+                quantity = _integer(
+                    return_record["quantity"],
+                    f"{field}.quantity",
+                    minimum=1,
+                )
+                if return_record["disposition"] not in _RETURN_DISPOSITIONS:
+                    raise TrialValidationError(f"{field}.disposition is invalid.")
+                if (
+                    created_at < completion_at
+                    or (
+                        newer_return_at is not None
+                        and created_at > newer_return_at
+                    )
+                ):
+                    raise TrialValidationError(
+                        f"{field}.createdAt is outside the order chronology."
+                    )
+                newer_return_at = created_at
+                returned = returned_by_sku.get(sku, 0) + quantity
+                if (
+                    sku not in sold_by_sku
+                    or returned > sold_by_sku[sku]
+                    or returned > _MAX_SAFE_INTEGER
+                ):
+                    raise TrialValidationError(
+                        f"orders[{index}].returns exceed the sold quantity for {sku}."
+                    )
+                returned_by_sku[sku] = returned
+                return_action_ids.append(action_id)
+                order_returns.append((order_id, return_record))
         order_ids.append(order_id)
         order_by_id[order_id] = order
     _unique(order_ids, "Order ID")
     _unique(source_record_ids, "Order source record ID")
     _unique(reconciliation_action_ids, "Payment reconciliation action ID")
     _unique(refund_settlement_action_ids, "Refund settlement action ID")
+    _unique(advancement_action_ids, "Order advancement action ID")
+    _unique(completion_action_ids, "Order completion action ID")
+    _unique(return_action_ids, "Order return action ID")
 
     movement_ids: list[str] = []
     movement_action_ids: list[str] = []
@@ -799,7 +954,9 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             if kind == "reserve" and signed_delta >= 0:
                 raise TrialValidationError(f"movements[{index}] reserve must be negative.")
             if kind != "reserve" and signed_delta <= 0:
-                raise TrialValidationError(f"movements[{index}] release or receipt must be positive.")
+                raise TrialValidationError(
+                    f"movements[{index}] release, receipt, or return must be positive."
+                )
         if kind in {"opening", "receipt", "count"}:
             if "orderId" in movement:
                 raise TrialValidationError(f"movements[{index}] {kind} cannot reference an order.")
@@ -862,29 +1019,155 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                     f"movements[{index}] sales movement cannot reference a purchase order."
                 )
             order_id = _text(movement.get("orderId"), f"movements[{index}].orderId", maximum=160)
-            order = order_by_id.get(order_id)
-            matching_lines = [
-                line
-                for line in (_reservation_lines(order) if order else [])
-                if line["sku"] == sku
-            ]
-            if not order or len(matching_lines) != 1 or quantity_delta != matching_lines[0]["quantity"]:
-                raise TrialValidationError(f"movements[{index}] does not match its order reservation.")
-            counter = reserve_by_order if kind == "reserve" else release_by_order
-            counter[order_id] = counter.get(order_id, 0) + 1
-            actions = (
-                reserve_actions_by_order
-                if kind == "reserve"
-                else release_actions_by_order
-            )
-            actions.setdefault(order_id, set()).add(action_id)
-            if kind == "reserve":
-                reserve_movement_by_order.setdefault(order_id, movement)
-            if kind == "release" and order["status"] != "cancelled":
-                raise TrialValidationError(f"movements[{index}] release requires a cancelled order.")
+            if kind == "return":
+                matching_returns = [
+                    record
+                    for return_order_id, record in order_returns
+                    if return_order_id == order_id
+                    and record["actionId"] == action_id
+                ]
+                if len(matching_returns) != 1:
+                    raise TrialValidationError(
+                        f"movements[{index}] does not match one order return."
+                    )
+                return_record = matching_returns[0]
+                if (
+                    return_record["disposition"] != "restock"
+                    or movement["sku"] != return_record["sku"]
+                    or movement["quantityDelta"] != return_record["quantity"]
+                    or movement["id"] != _movement_id(action_id)
+                    or movement["createdAt"] != return_record["createdAt"]
+                    or movement["actor"] != return_record["actor"]
+                    or movement["reason"] != return_record["reason"]
+                    or movement["evidenceReference"]
+                    != return_record["evidenceReference"]
+                ):
+                    raise TrialValidationError(
+                        f"movements[{index}] does not match one sellable order return."
+                    )
+            else:
+                order = order_by_id.get(order_id)
+                matching_lines = [
+                    line
+                    for line in (_reservation_lines(order) if order else [])
+                    if line["sku"] == sku
+                ]
+                if not order or len(matching_lines) != 1 or quantity_delta != matching_lines[0]["quantity"]:
+                    raise TrialValidationError(f"movements[{index}] does not match its order reservation.")
+                counter = reserve_by_order if kind == "reserve" else release_by_order
+                counter[order_id] = counter.get(order_id, 0) + 1
+                actions = (
+                    reserve_actions_by_order
+                    if kind == "reserve"
+                    else release_actions_by_order
+                )
+                actions.setdefault(order_id, set()).add(action_id)
+                if kind == "reserve":
+                    reserve_movement_by_order.setdefault(order_id, movement)
+                if kind == "release" and order["status"] != "cancelled":
+                    raise TrialValidationError(f"movements[{index}] release requires a cancelled order.")
         movement_ids.append(movement_id)
         movement_action_ids.append(action_id)
     _unique(movement_ids, "Stock movement ID")
+    for order_id, return_record in order_returns:
+        order = order_by_id.get(order_id)
+        lines = _reservation_lines(order) if order else []
+        reserves = [
+            movement
+            for movement in movements
+            if movement.get("kind") == "reserve"
+            and movement.get("orderId") == order_id
+        ]
+        releases = [
+            movement
+            for movement in movements
+            if movement.get("kind") == "release"
+            and movement.get("orderId") == order_id
+        ]
+        if (
+            order is None
+            or order["status"] != "completed"
+            or "completion" not in order
+            or not lines
+            or len(reserves) != len(lines)
+            or releases
+            or any(
+                len(
+                    [
+                        reserve
+                        for reserve in reserves
+                        if reserve["sku"] == line["sku"]
+                        and reserve["quantityDelta"] == -line["quantity"]
+                    ]
+                )
+                != 1
+                for line in lines
+            )
+        ):
+            raise TrialValidationError(
+                f"Order return {return_record['actionId']} is not bound "
+                "to one completed, reserved sale."
+            )
+        latest_basis = max(
+            [
+                datetime.fromisoformat(
+                    str(order["createdAt"]).replace("Z", "+00:00")
+                ),
+                datetime.fromisoformat(
+                    str(order["completion"]["capturedAt"]).replace("Z", "+00:00")
+                ),
+                *(
+                    [
+                        datetime.fromisoformat(
+                            str(order["paymentReconciledAt"]).replace(
+                                "Z",
+                                "+00:00",
+                            )
+                        )
+                    ]
+                    if "paymentReconciledAt" in order
+                    else []
+                ),
+                *[
+                    datetime.fromisoformat(
+                        str(reserve["createdAt"]).replace("Z", "+00:00")
+                    )
+                    for reserve in reserves
+                ],
+            ]
+        )
+        if datetime.fromisoformat(
+            str(return_record["createdAt"]).replace("Z", "+00:00")
+        ) < latest_basis:
+            raise TrialValidationError(
+                f"Order return {return_record['actionId']} predates its sale."
+            )
+        action_movements = movements_by_action.get(
+            str(return_record["actionId"]),
+            [],
+        )
+        matching_restock = (
+            len(action_movements) == 1
+            and action_movements[0]["kind"] == "return"
+            and action_movements[0].get("orderId") == order_id
+            and action_movements[0]["sku"] == return_record["sku"]
+            and action_movements[0]["quantityDelta"] == return_record["quantity"]
+            and action_movements[0]["createdAt"] == return_record["createdAt"]
+            and action_movements[0]["actor"] == return_record["actor"]
+            and action_movements[0]["reason"] == return_record["reason"]
+            and action_movements[0]["evidenceReference"]
+            == return_record["evidenceReference"]
+        )
+        if (
+            return_record["disposition"] == "restock"
+            and not matching_restock
+        ) or (
+            return_record["disposition"] == "not_restocked"
+            and action_movements
+        ):
+            raise TrialValidationError(
+                f"Order return {return_record['actionId']} has invalid stock linkage."
+            )
     for action_id, action_movements in movements_by_action.items():
         if len(action_movements) < 2:
             continue
@@ -1203,9 +1486,17 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     _unique(storefront_idempotency_keys, "Storefront request idempotency key")
     _unique(
         [
-            *(action_id for action_id in dict.fromkeys(movement_action_ids) if action_id not in conversion_action_ids),
+            *(
+                action_id
+                for action_id in dict.fromkeys(movement_action_ids)
+                if action_id not in conversion_action_ids
+                and action_id not in return_action_ids
+            ),
             *reconciliation_action_ids,
             *refund_settlement_action_ids,
+            *advancement_action_ids,
+            *completion_action_ids,
+            *return_action_ids,
             *intake_action_ids,
             *close_action_ids,
             *purchase_order_action_ids,
@@ -1301,6 +1592,54 @@ def _validate_event_evidence(
         ):
             raise TrialValidationError(
                 "command evidence must match the purchase order cancellation proof."
+            )
+    elif event_type == "commerce.order.advanced":
+        _, advanced_order = _one_changed(
+            current["orders"],
+            next_state["orders"],
+            "orders",
+        )
+        completion = advanced_order.get("completion")
+        if advanced_order["status"] == "completed":
+            if (
+                not isinstance(completion, Mapping)
+                or not _proof_matches_evidence(completion, evidence)
+            ):
+                raise TrialValidationError(
+                    "command evidence must match the order completion proof."
+                )
+        else:
+            advancement_action_ids = advanced_order.get(
+                "advancementActionIds"
+            )
+            if (
+                not isinstance(advancement_action_ids, list)
+                or not advancement_action_ids
+                or advancement_action_ids[-1] != evidence["actionId"]
+            ):
+                raise TrialValidationError(
+                    "command evidence must match the order advancement action ID."
+                )
+    elif event_type == "commerce.order.return_recorded":
+        _, returned_order = _one_changed(
+            current["orders"],
+            next_state["orders"],
+            "orders",
+        )
+        returns = returned_order.get("returns")
+        record = returns[0] if isinstance(returns, list) and returns else {}
+        if any(
+            record.get(record_field) != evidence[evidence_field]
+            for record_field, evidence_field in (
+                ("actionId", "actionId"),
+                ("createdAt", "capturedAt"),
+                ("actor", "actor"),
+                ("reason", "reason"),
+                ("evidenceReference", "evidenceReference"),
+            )
+        ):
+            raise TrialValidationError(
+                "command evidence must match the order return proof."
             )
 
     movement_kind = {
@@ -1643,12 +1982,61 @@ def _validate_advanced(current: Mapping[str, Any], next_state: Mapping[str, Any]
     _require_unchanged(current, next_state, "items", "movements", "closes")
     _require_website_intakes_unchanged(current, next_state)
     before, after = _one_changed(current["orders"], next_state["orders"], "orders")
-    if _without(before, frozenset({"status"})) != _without(after, frozenset({"status"})):
-        raise TrialValidationError("order advancement may change only status.")
     if _NEXT_ORDER_STATUS.get(before["status"]) != after["status"]:
         raise TrialValidationError("order status must advance exactly one lifecycle step.")
     if before["status"] == "ready" and before["paymentStatus"] != "reconciled":
         raise TrialValidationError("payment must be reconciled before order completion.")
+    if before["status"] == "ready":
+        if (
+            "completion" not in after
+            or _without(before, frozenset({"status"}))
+            != _without(after, frozenset({"status", "completion"}))
+        ):
+            raise TrialValidationError(
+                "order completion may add only status and attributable completion proof."
+            )
+        completion = _action_proof(after["completion"], "completed order.completion")
+        latest_basis = max(
+            [
+                datetime.fromisoformat(
+                    str(before["createdAt"]).replace("Z", "+00:00")
+                ),
+                datetime.fromisoformat(
+                    str(before["paymentReconciledAt"]).replace("Z", "+00:00")
+                ),
+                *[
+                    datetime.fromisoformat(
+                        str(movement["createdAt"]).replace("Z", "+00:00")
+                    )
+                    for movement in current["movements"]
+                    if movement.get("orderId") == before["id"]
+                ],
+            ]
+        )
+        if datetime.fromisoformat(
+            completion["capturedAt"].replace("Z", "+00:00")
+        ) < latest_basis:
+            raise TrialValidationError(
+                "order completion proof cannot predate its order activity."
+            )
+    else:
+        before_action_ids = list(before.get("advancementActionIds", []))
+        after_action_ids = list(after.get("advancementActionIds", []))
+        if (
+            len(after_action_ids) != len(before_action_ids) + 1
+            or after_action_ids[:-1] != before_action_ids
+            or _without(
+                before,
+                frozenset({"status", "advancementActionIds"}),
+            )
+            != _without(
+                after,
+                frozenset({"status", "advancementActionIds"}),
+            )
+        ):
+            raise TrialValidationError(
+                "order advancement must append one unique action ID."
+            )
 
 
 def _validate_cancelled(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
@@ -1726,6 +2114,85 @@ def _validate_cancelled(current: Mapping[str, Any], next_state: Mapping[str, Any
         raise TrialValidationError(
             "cancellation requires one unmatched reservation per order line."
         )
+
+
+def _validate_return_recorded(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    _require_storefront_configuration_unchanged(current, next_state)
+    _require_purchase_orders_unchanged(current, next_state)
+    before_order, after_order = _one_changed(
+        current["orders"],
+        next_state["orders"],
+        "orders",
+    )
+    if before_order["status"] != "completed" or "completion" not in before_order:
+        raise TrialValidationError(
+            "returns require an order with attributable completion proof."
+        )
+    before_returns = before_order.get("returns", [])
+    after_returns = after_order.get("returns")
+    if (
+        not isinstance(after_returns, list)
+        or len(after_returns) != len(before_returns) + 1
+        or after_returns[1:] != before_returns
+        or _without(before_order, frozenset({"returns"}))
+        != _without(after_order, frozenset({"returns"}))
+    ):
+        raise TrialValidationError(
+            "commerce.order.return_recorded must prepend exactly one immutable return."
+        )
+    record = after_returns[0]
+    if record["disposition"] == "restock":
+        before_item, after_item = _one_changed(
+            current["items"],
+            next_state["items"],
+            "items",
+        )
+        if (
+            before_item["sku"] != record["sku"]
+            or after_item
+            != {
+                **before_item,
+                "onHand": before_item["onHand"] + record["quantity"],
+            }
+        ):
+            raise TrialValidationError(
+                "a sellable return must increase only its matching stock item."
+            )
+        if (
+            len(next_state["movements"]) != len(current["movements"]) + 1
+            or next_state["movements"][1:] != current["movements"]
+        ):
+            raise TrialValidationError(
+                "a sellable return must prepend exactly one return movement."
+            )
+        movement = next_state["movements"][0]
+        if (
+            movement.get("kind") != "return"
+            or movement.get("orderId") != before_order["id"]
+            or movement.get("sku") != record["sku"]
+            or movement.get("quantityDelta") != record["quantity"]
+            or movement.get("actionId") != record["actionId"]
+            or movement.get("createdAt") != record["createdAt"]
+            or movement.get("actor") != record["actor"]
+            or movement.get("reason") != record["reason"]
+            or movement.get("evidenceReference")
+            != record["evidenceReference"]
+            or movement.get("id")
+            != _movement_id(str(record["actionId"]))
+        ):
+            raise TrialValidationError(
+                "a sellable return requires one exact attributable stock movement."
+            )
+    elif record["disposition"] == "not_restocked":
+        _require_unchanged(current, next_state, "items", "movements")
+    else:
+        raise TrialValidationError("return disposition is invalid.")
 
 
 def _validate_reconciled(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
@@ -2138,6 +2605,7 @@ _TRANSITION_VALIDATORS = {
     "commerce.order.created": _validate_created,
     "commerce.order.advanced": _validate_advanced,
     "commerce.order.cancelled": _validate_cancelled,
+    "commerce.order.return_recorded": _validate_return_recorded,
     "commerce.payment.reconciled": _validate_reconciled,
     "commerce.refund.settled": _validate_refund_settled,
     "commerce.stock.received": _validate_received,

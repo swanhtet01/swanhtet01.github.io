@@ -17,6 +17,7 @@ export type CommerceItem = {
 export type CommerceOrderStatus = 'confirmed' | 'preparing' | 'ready' | 'completed' | 'cancelled'
 export type CommercePaymentStatus = 'pending' | 'reconciled'
 export type CommerceRefundStatus = 'none' | 'due' | 'settled'
+export type CommerceReturnDisposition = 'restock' | 'not_restocked'
 
 export type CommerceOrderLine = {
   sku: string
@@ -24,6 +25,17 @@ export type CommerceOrderLine = {
   variant?: string
   quantity: number
   unitPriceMmk: number
+}
+
+export type CommerceOrderReturn = {
+  actionId: string
+  createdAt: string
+  actor: string
+  reason: string
+  evidenceReference: string
+  sku: string
+  quantity: number
+  disposition: CommerceReturnDisposition
 }
 
 export type CommerceOrder = {
@@ -52,11 +64,14 @@ export type CommerceOrder = {
   sourceRecordId?: string
   evidenceReference?: string
   lines?: CommerceOrderLine[]
+  advancementActionIds?: string[]
+  completion?: CommerceActionProof
+  returns?: CommerceOrderReturn[]
   total: number
   status: CommerceOrderStatus
 }
 
-export type CommerceStockMovementKind = 'opening' | 'reserve' | 'release' | 'receipt' | 'count'
+export type CommerceStockMovementKind = 'opening' | 'reserve' | 'release' | 'receipt' | 'count' | 'return'
 
 export type CommerceStockMovement = {
   id: string
@@ -194,6 +209,22 @@ export type CommerceActionProof = {
   evidenceReference: string
 }
 
+export type CommerceOrderReturnInput = {
+  orderId: string
+  sku: string
+  quantity: number
+  disposition: CommerceReturnDisposition
+}
+
+export type CommerceOrderReturnExpectation = {
+  orderId: string
+  sku: string
+  soldQuantity: number
+  returnedQuantity: number
+  stockOnHand: number | null
+  orderSnapshot: string
+}
+
 export type CommerceWebsiteIntakeInput = {
   id: string
   source: CommerceWebsiteSource
@@ -244,7 +275,8 @@ export type CommerceMutationResult =
 const orderStatuses: CommerceOrderStatus[] = ['confirmed', 'preparing', 'ready', 'completed', 'cancelled']
 const paymentStatuses: CommercePaymentStatus[] = ['pending', 'reconciled']
 const refundStatuses: CommerceRefundStatus[] = ['none', 'due', 'settled']
-const movementKinds: CommerceStockMovementKind[] = ['opening', 'reserve', 'release', 'receipt', 'count']
+const movementKinds: CommerceStockMovementKind[] = ['opening', 'reserve', 'release', 'receipt', 'count', 'return']
+const returnDispositions: CommerceReturnDisposition[] = ['restock', 'not_restocked']
 const websiteIntakeStatuses: CommerceWebsiteIntakeStatus[] = ['pending_confirmation', 'converted']
 const closeSnapshotFields = ['businessDate', 'orderIds', 'paymentExceptionOrderIds', 'stockExceptionSkus', 'actionId', 'operator', 'reason', 'evidenceReference'] as const
 const refundSettlementFields = ['refundSettledAt', 'refundSettlementActionId', 'refundSettledBy', 'refundSettlementReason', 'refundEvidenceReference'] as const
@@ -256,6 +288,7 @@ const sha256DigestPattern = /^sha256:[a-f0-9]{64}$/
 const maxStorefrontRequests = 100
 const maxPurchaseOrders = 100
 const maxOrderLines = 20
+const maxReturnsPerOrder = 100
 const closeIdPattern = /^CLOSE-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
 const closeActionIdPattern = /^ACT-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
 const businessDatePattern = /^\d{4}-\d{2}-\d{2}$/
@@ -358,6 +391,27 @@ function sameProof(movement: CommerceStockMovement, proof: CommerceActionProof) 
     && movement.evidenceReference === proof.evidenceReference
 }
 
+function sameReturnProof(record: CommerceOrderReturn, proof: CommerceActionProof) {
+  return record.actionId === proof.actionId
+    && record.createdAt === proof.capturedAt
+    && record.actor === proof.actor
+    && record.reason === proof.reason
+    && record.evidenceReference === proof.evidenceReference
+}
+
+function movementMatchesReturn(movement: CommerceStockMovement, record: CommerceOrderReturn, orderId: string) {
+  return movement.id === `MOV2:${encodeURIComponent(record.actionId)}`
+    && movement.kind === 'return'
+    && movement.orderId === orderId
+    && movement.sku === record.sku
+    && movement.quantityDelta === record.quantity
+    && movement.actionId === record.actionId
+    && movement.createdAt === record.createdAt
+    && movement.actor === record.actor
+    && movement.reason === record.reason
+    && movement.evidenceReference === record.evidenceReference
+}
+
 function myanmarBusinessDate(timestamp: string) {
   return new Date(Date.parse(timestamp) + myanmarUtcOffsetMs).toISOString().slice(0, 10)
 }
@@ -457,6 +511,10 @@ export function validateCommerceState(value: unknown): CommerceState {
   const movementActionIds: string[] = []
   const reconciliationActionIds: string[] = []
   const refundSettlementActionIds: string[] = []
+  const advancementActionIds: string[] = []
+  const completionActionIds: string[] = []
+  const returnActionIds: string[] = []
+  const orderReturns: Array<{ orderId: string; record: CommerceOrderReturn }> = []
   const closeActionIds: string[] = []
   const closeBusinessDates: string[] = []
   const closedOrderIds: string[] = []
@@ -608,6 +666,18 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (!orderStatuses.includes(candidate.status as CommerceOrderStatus)) throw new Error(`orders[${index}].status is invalid.`)
     if (!paymentStatuses.includes(candidate.paymentStatus as CommercePaymentStatus)) throw new Error(`orders[${index}].paymentStatus is invalid.`)
     if (!refundStatuses.includes(candidate.refundStatus as CommerceRefundStatus)) throw new Error(`orders[${index}].refundStatus is invalid.`)
+    if (candidate.advancementActionIds !== undefined) {
+      if (!Array.isArray(candidate.advancementActionIds)
+        || candidate.advancementActionIds.length > 2
+        || candidate.advancementActionIds.length > ({ confirmed: 0, preparing: 1, ready: 2, completed: 2, cancelled: 2 }[candidate.status as CommerceOrderStatus])) {
+        throw new Error(`orders[${index}].advancementActionIds is invalid.`)
+      }
+      const orderAdvancementActionIds = candidate.advancementActionIds.map((actionId, actionIndex) => (
+        canonicalText(actionId, `orders[${index}].advancementActionIds[${actionIndex}]`, 160)
+      ))
+      assertUnique(orderAdvancementActionIds, `orders[${index}] advancement action ID`)
+      advancementActionIds.push(...orderAdvancementActionIds)
+    }
     for (const field of ['fulfilment', 'fulfilmentReference', 'sourceRecordId', 'evidenceReference'] as const) {
       if (candidate[field] !== undefined) {
         const fieldValue = field === 'fulfilmentReference'
@@ -638,12 +708,78 @@ export function validateCommerceState(value: unknown): CommerceState {
     }
     if ((candidate.refundStatus === 'due' || candidate.refundStatus === 'settled') && (candidate.status !== 'cancelled' || candidate.paymentStatus !== 'reconciled')) throw new Error(`orders[${index}] has an invalid refund exception.`)
     if (candidate.status === 'cancelled' && candidate.paymentStatus === 'reconciled' && candidate.refundStatus !== 'due' && candidate.refundStatus !== 'settled') throw new Error(`orders[${index}] must preserve a due or settled refund.`)
+    if (candidate.completion !== undefined) {
+      if (candidate.status !== 'completed'
+        || !isRecord(candidate.completion)
+        || !hasExactKeys(candidate.completion, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+        || !validProof(candidate.completion as CommerceActionProof)) {
+        throw new Error(`orders[${index}].completion is invalid.`)
+      }
+      const completion = candidate.completion as CommerceActionProof
+      for (const field of ['actionId', 'actor', 'reason', 'evidenceReference'] as const) {
+        canonicalText(completion[field], `orders[${index}].completion.${field}`, field === 'actionId' ? 160 : 180)
+      }
+      if ((timestampMicros(completion.capturedAt) as bigint) < (timestampMicros(candidate.createdAt) as bigint)
+        || (candidate.paymentReconciledAt !== undefined
+          && (timestampMicros(completion.capturedAt) as bigint) < (timestampMicros(candidate.paymentReconciledAt) as bigint))) {
+        throw new Error(`orders[${index}].completion is outside the order chronology.`)
+      }
+      completionActionIds.push(completion.actionId)
+    } else if (candidate.returns !== undefined) {
+      throw new Error(`orders[${index}] cannot retain returns without completion proof.`)
+    }
+    if (candidate.returns !== undefined) {
+      if (!Array.isArray(candidate.returns)
+        || candidate.returns.length < 1
+        || candidate.returns.length > maxReturnsPerOrder
+        || candidate.status !== 'completed') {
+        throw new Error(`orders[${index}].returns requires 1 to ${maxReturnsPerOrder} records on a completed order.`)
+      }
+      const soldBySku = new Map(reservationLinesForOrder(candidate as unknown as CommerceOrder).map((line) => [line.sku, line.quantity]))
+      const returnedBySku = new Map<string, number>()
+      let newerReturnAt: bigint | null = null
+      for (const [returnIndex, returnCandidate] of candidate.returns.entries()) {
+        if (!isRecord(returnCandidate) || !hasExactKeys(
+          returnCandidate,
+          ['actionId', 'createdAt', 'actor', 'reason', 'evidenceReference', 'sku', 'quantity', 'disposition'],
+        )) throw new Error(`orders[${index}].returns[${returnIndex}] is invalid.`)
+        const returnRecord = returnCandidate as unknown as CommerceOrderReturn
+        const actionId = canonicalText(returnRecord.actionId, `orders[${index}].returns[${returnIndex}].actionId`, 160)
+        const createdAt = timestampMicros(returnRecord.createdAt)
+        if (createdAt === null
+          || createdAt < (timestampMicros((candidate.completion as CommerceActionProof).capturedAt) as bigint)
+          || (candidate.paymentReconciledAt !== undefined
+            && createdAt < (timestampMicros(candidate.paymentReconciledAt) as bigint))
+          || (newerReturnAt !== null && createdAt > newerReturnAt)) {
+          throw new Error(`orders[${index}].returns[${returnIndex}].createdAt is outside the order chronology.`)
+        }
+        newerReturnAt = createdAt
+        for (const field of ['actor', 'reason', 'evidenceReference'] as const) {
+          canonicalText(returnRecord[field], `orders[${index}].returns[${returnIndex}].${field}`)
+        }
+        const returnSku = canonicalText(returnRecord.sku, `orders[${index}].returns[${returnIndex}].sku`, 80)
+        const soldQuantity = soldBySku.get(returnSku)
+        assertSafeInteger(returnRecord.quantity, `orders[${index}].returns[${returnIndex}].quantity`, 1)
+        if (!returnDispositions.includes(returnRecord.disposition)) {
+          throw new Error(`orders[${index}].returns[${returnIndex}].disposition is invalid.`)
+        }
+        const returnedQuantity = (returnedBySku.get(returnSku) ?? 0) + returnRecord.quantity
+        if (!soldQuantity || !Number.isSafeInteger(returnedQuantity) || returnedQuantity > soldQuantity) {
+          throw new Error(`orders[${index}].returns exceed the sold quantity for ${returnSku}.`)
+        }
+        returnedBySku.set(returnSku, returnedQuantity)
+        returnActionIds.push(actionId)
+        orderReturns.push({ orderId: candidate.id as string, record: returnRecord })
+      }
+    }
     orderById.set(candidate.id as string, candidate)
   }
   assertUnique(orderIds, 'Order ID')
   assertUnique(sourceRecordIds, 'Order source record ID')
   assertUnique(reconciliationActionIds, 'Payment reconciliation action ID')
   assertUnique(refundSettlementActionIds, 'Refund settlement action ID')
+  assertUnique(completionActionIds, 'Order completion action ID')
+  assertUnique(returnActionIds, 'Order return action ID')
 
   const reserveByOrder = new Map<string, number>()
   const releaseByOrder = new Map<string, number>()
@@ -684,7 +820,7 @@ export function validateCommerceState(value: unknown): CommerceState {
     }
     if (!Number.isSafeInteger(candidate.quantityDelta) || candidate.quantityDelta === 0) throw new Error(`movements[${index}].quantityDelta is invalid.`)
     if (candidate.kind === 'reserve' && Number(candidate.quantityDelta) >= 0) throw new Error(`movements[${index}] reserve must be negative.`)
-    if (candidate.kind !== 'reserve' && Number(candidate.quantityDelta) <= 0) throw new Error(`movements[${index}] release or receipt must be positive.`)
+    if (candidate.kind !== 'reserve' && Number(candidate.quantityDelta) <= 0) throw new Error(`movements[${index}] release, receipt, or return must be positive.`)
     if (candidate.kind === 'receipt') {
       if (candidate.orderId !== undefined) throw new Error(`movements[${index}] receipt cannot reference an order.`)
       if (candidate.purchaseOrderId !== undefined) {
@@ -709,6 +845,17 @@ export function validateCommerceState(value: unknown): CommerceState {
     }
     if (candidate.purchaseOrderId !== undefined) throw new Error(`movements[${index}] sales movement cannot reference a purchase order.`)
     const orderId = requiredText(candidate.orderId, `movements[${index}].orderId`)
+    if (candidate.kind === 'return') {
+      const matchingReturns = orderReturns.filter(({ orderId: returnOrderId, record }) => (
+        returnOrderId === orderId && record.actionId === candidate.actionId
+      ))
+      if (matchingReturns.length !== 1
+        || matchingReturns[0].record.disposition !== 'restock'
+        || !movementMatchesReturn(candidate as unknown as CommerceStockMovement, matchingReturns[0].record, orderId)) {
+        throw new Error(`movements[${index}] does not match one sellable order return.`)
+      }
+      continue
+    }
     const order = orders.find((entry) => isRecord(entry) && entry.id === orderId) as Record<string, unknown> | undefined
     const orderLines = order ? reservationLinesForOrder(order as unknown as CommerceOrder) : []
     const matchingLines = orderLines.filter((line) => line.sku === candidate.sku)
@@ -722,6 +869,36 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (candidate.kind === 'release' && order.status !== 'cancelled') throw new Error(`movements[${index}] release requires a cancelled order.`)
   }
   assertUnique(movementIds, 'Stock movement ID')
+  const validatedMovements = movements as unknown as CommerceStockMovement[]
+  for (const { orderId, record } of orderReturns) {
+    const order = orderById.get(orderId) as unknown as CommerceOrder | undefined
+    const lines = order ? reservationLinesForOrder(order) : []
+    const reserves = validatedMovements.filter((movement) => movement.kind === 'reserve' && movement.orderId === orderId)
+    const releases = validatedMovements.filter((movement) => movement.kind === 'release' && movement.orderId === orderId)
+    const latestBasis = [
+      order?.createdAt,
+      order?.paymentReconciledAt,
+      order?.completion?.capturedAt,
+      ...reserves.map((movement) => movement.createdAt),
+    ].flatMap((timestamp) => timestamp ? [timestampMicros(timestamp) as bigint] : [])
+      .reduce((latest, timestamp) => timestamp > latest ? timestamp : latest, 0n)
+    const actionMovements = movementsByAction.get(record.actionId) ?? []
+    if (!order
+      || order.status !== 'completed'
+      || !order.completion
+      || !lines.length
+      || reserves.length !== lines.length
+      || releases.length
+      || lines.some((line) => reserves.filter((movement) => (
+        movement.sku === line.sku && movement.quantityDelta === -line.quantity
+      )).length !== 1)
+      || (timestampMicros(record.createdAt) as bigint) < latestBasis
+      || (record.disposition === 'restock'
+        ? actionMovements.length !== 1 || !movementMatchesReturn(actionMovements[0], record, orderId)
+        : actionMovements.length !== 0)) {
+      throw new Error(`Order return ${record.actionId} is not bound to one completed, reserved sale.`)
+    }
+  }
   for (const [actionId, actionMovements] of movementsByAction) {
     if (actionMovements.length < 2) continue
     const first = actionMovements[0]
@@ -972,9 +1149,12 @@ export function validateCommerceState(value: unknown): CommerceState {
   assertUnique(storefrontRequestIds, 'Storefront request ID')
   assertUnique(storefrontIdempotencyKeys, 'Storefront request idempotency key')
   assertUnique([
-    ...new Set(movementActionIds),
+    ...new Set(movementActionIds.filter((actionId) => !returnActionIds.includes(actionId))),
     ...reconciliationActionIds,
     ...refundSettlementActionIds,
+    ...advancementActionIds,
+    ...completionActionIds,
+    ...returnActionIds,
     ...websiteIntakeCreationActionIds,
     ...closeActionIds,
     ...purchaseOrderActionIds,
@@ -1170,6 +1350,9 @@ function movementFor(
 function actionIdIsUsed(state: CommerceState, actionId: string) {
   return state.movements.some((movement) => movement.actionId === actionId)
     || state.orders.some((order) => order.paymentReconciliationActionId === actionId || order.refundSettlementActionId === actionId)
+    || state.orders.some((order) => order.advancementActionIds?.includes(actionId))
+    || state.orders.some((order) => order.completion?.actionId === actionId)
+    || state.orders.some((order) => order.returns?.some((record) => record.actionId === actionId))
     || state.closes.some((close) => close.actionId === actionId)
     || commerceWebsiteIntakes(state).some((intake) => intake.creation.actionId === actionId || intake.conversion?.actionId === actionId)
     || commercePurchaseOrders(state).some((purchaseOrder) => purchaseOrder.creation.actionId === actionId || purchaseOrder.cancellation?.actionId === actionId)
@@ -1971,6 +2154,144 @@ export function settleCommerceRefund(state: CommerceState, orderId: string, proo
   })
 }
 
+function sameOrderReturnExpectation(
+  left: CommerceOrderReturnExpectation,
+  right: CommerceOrderReturnExpectation,
+) {
+  return left.orderId === right.orderId
+    && left.sku === right.sku
+    && left.soldQuantity === right.soldQuantity
+    && left.returnedQuantity === right.returnedQuantity
+    && left.stockOnHand === right.stockOnHand
+    && left.orderSnapshot === right.orderSnapshot
+}
+
+export function commerceOrderReturnExpectation(
+  state: CommerceState,
+  orderId: string,
+  sku: string,
+  disposition: CommerceReturnDisposition,
+): CommerceOrderReturnExpectation | null {
+  if (!returnDispositions.includes(disposition)) return null
+  const current = validateCommerceState(state)
+  const matchingOrders = current.orders.filter((order) => order.id === orderId)
+  const order = matchingOrders.length === 1 ? matchingOrders[0] : undefined
+  if (!order || order.status !== 'completed' || !order.completion) return null
+  const matchingLines = reservationLinesForOrder(order).filter((line) => line.sku === sku)
+  if (matchingLines.length !== 1) return null
+  const lines = reservationLinesForOrder(order)
+  const reserves = current.movements.filter((movement) => movement.kind === 'reserve' && movement.orderId === orderId)
+  const releases = current.movements.filter((movement) => movement.kind === 'release' && movement.orderId === orderId)
+  if (reserves.length !== lines.length
+    || releases.length
+    || lines.some((line) => reserves.filter((movement) => (
+      movement.sku === line.sku && movement.quantityDelta === -line.quantity
+    )).length !== 1)) return null
+  const returnedQuantity = (order.returns ?? [])
+    .filter((record) => record.sku === sku)
+    .reduce((sum, record) => sum + record.quantity, 0)
+  if (!Number.isSafeInteger(returnedQuantity) || returnedQuantity >= matchingLines[0].quantity) return null
+  const item = current.items.find((candidate) => candidate.sku === sku)
+  if (!item) return null
+  return {
+    orderId,
+    sku,
+    soldQuantity: matchingLines[0].quantity,
+    returnedQuantity,
+    stockOnHand: disposition === 'restock' ? item.onHand : null,
+    orderSnapshot: JSON.stringify(order),
+  }
+}
+
+export function recordCommerceOrderReturn(
+  state: CommerceState,
+  input: CommerceOrderReturnInput,
+  proof: CommerceActionProof,
+  expected: CommerceOrderReturnExpectation,
+) {
+  if (!validProof(proof)
+    || typeof input.orderId !== 'string'
+    || !input.orderId
+    || input.orderId !== input.orderId.trim()
+    || input.orderId.length > 160
+    || typeof input.sku !== 'string'
+    || !input.sku
+    || input.sku !== input.sku.trim()
+    || input.sku.length > 80
+    || !Number.isSafeInteger(input.quantity)
+    || input.quantity < 1
+    || !returnDispositions.includes(input.disposition)
+    || [proof.actionId, proof.actor, proof.reason, proof.evidenceReference].some((value) => value !== value.trim())) return null
+  const current = validateCommerceState(state)
+  const replayRecords = current.orders.flatMap((order) => (
+    (order.returns ?? [])
+      .filter((record) => record.actionId === proof.actionId)
+      .map((record) => ({ order, record }))
+  ))
+  if (replayRecords.length) {
+    if (replayRecords.length !== 1) return null
+    const { order, record } = replayRecords[0]
+    const replayMovements = current.movements.filter((movement) => movement.actionId === proof.actionId)
+    return order.id === input.orderId
+      && record.sku === input.sku
+      && record.quantity === input.quantity
+      && record.disposition === input.disposition
+      && sameReturnProof(record, proof)
+      && (record.disposition === 'restock'
+        ? replayMovements.length === 1 && movementMatchesReturn(replayMovements[0], record, order.id)
+        : replayMovements.length === 0) ? current : null
+  }
+  if (actionIdIsUsed(current, proof.actionId)) return null
+  const actual = commerceOrderReturnExpectation(current, input.orderId, input.sku, input.disposition)
+  if (!actual || !expected || !sameOrderReturnExpectation(actual, expected)) return null
+  const remaining = actual.soldQuantity - actual.returnedQuantity
+  if (input.quantity > remaining) return null
+  const order = current.orders.find((candidate) => candidate.id === input.orderId)
+  const item = current.items.find((candidate) => candidate.sku === input.sku)
+  if (!order || !item || !order.completion) return null
+  const latestBasis = [
+    order.createdAt,
+    order.paymentReconciledAt,
+    order.completion.capturedAt,
+    ...current.movements.filter((movement) => movement.orderId === order.id).map((movement) => movement.createdAt),
+    ...(order.returns ?? []).map((record) => record.createdAt),
+  ].flatMap((timestamp) => timestamp ? [timestampMicros(timestamp) as bigint] : [])
+    .reduce((latest, timestamp) => timestamp > latest ? timestamp : latest, 0n)
+  if ((timestampMicros(proof.capturedAt) as bigint) < latestBasis) return null
+  const record: CommerceOrderReturn = {
+    actionId: proof.actionId,
+    createdAt: proof.capturedAt,
+    actor: proof.actor,
+    reason: proof.reason,
+    evidenceReference: proof.evidenceReference,
+    sku: input.sku,
+    quantity: input.quantity,
+    disposition: input.disposition,
+  }
+  const nextBalance = input.disposition === 'restock'
+    ? safeBalance(item.onHand, input.quantity)
+    : item.onHand
+  if (nextBalance === null) return null
+  const movement = input.disposition === 'restock'
+    ? movementFor(proof, {
+        kind: 'return',
+        sku: input.sku,
+        quantityDelta: input.quantity,
+        orderId: input.orderId,
+      })
+    : null
+  return validateCommerceState({
+    ...current,
+    items: input.disposition === 'restock'
+      ? current.items.map((candidate) => candidate.sku === input.sku ? { ...candidate, onHand: nextBalance } : candidate)
+      : current.items,
+    orders: current.orders.map((candidate) => candidate.id === input.orderId
+      ? { ...candidate, returns: [record, ...(candidate.returns ?? [])] }
+      : candidate),
+    movements: movement ? [movement, ...current.movements] : current.movements,
+  })
+}
+
 function sameCloseExpectation(left: CommerceCloseExpectation, right: CommerceCloseExpectation) {
   return left.businessDate === right.businessDate
     && left.total === right.total
@@ -2045,14 +2366,48 @@ export function saveCommerceClose(
   return validateCommerceState({ ...current, closes: [close, ...current.closes] })
 }
 
-export function advanceCommerceOrder(state: CommerceState, orderId: string, expectedStatus: CommerceOrderStatus) {
-  const order = state.orders.find((candidate) => candidate.id === orderId)
+export function advanceCommerceOrder(
+  state: CommerceState,
+  orderId: string,
+  expectedStatus: CommerceOrderStatus,
+  proof?: CommerceActionProof,
+  timestampAuthority: 'client' | 'managed-server' = 'client',
+) {
+  const current = validateCommerceState(state)
+  const order = current.orders.find((candidate) => candidate.id === orderId)
   if (!order || order.status !== expectedStatus || order.status === 'completed' || order.status === 'cancelled') return null
   const currentStatus = order.status as 'confirmed' | 'preparing' | 'ready'
   if (order.status === 'ready' && order.paymentStatus !== 'reconciled') return null
+  if (!proof
+    || !validProof(proof)
+    || [proof.actionId, proof.actor, proof.reason, proof.evidenceReference].some((value) => value !== value.trim())
+    || actionIdIsUsed(current, proof.actionId)) return null
+  let retainedProof = proof
+  if (order.status === 'ready') {
+    const chronology = [
+      order.createdAt,
+      order.paymentReconciledAt,
+      ...current.movements.filter((movement) => movement.orderId === order.id).map((movement) => movement.createdAt),
+    ].flatMap((timestamp) => timestamp ? [{ timestamp, micros: timestampMicros(timestamp) as bigint }] : [])
+    const latestBasis = chronology.reduce(
+      (latest, candidate) => candidate.micros > latest.micros ? candidate : latest,
+      { timestamp: proof.capturedAt, micros: 0n },
+    )
+    if ((timestampMicros(proof.capturedAt) as bigint) < latestBasis.micros) {
+      if (timestampAuthority !== 'managed-server') return null
+      retainedProof = { ...proof, capturedAt: latestBasis.timestamp }
+    }
+  }
   const next: Record<'confirmed' | 'preparing' | 'ready', CommerceOrderStatus> = { confirmed: 'preparing', preparing: 'ready', ready: 'completed' }
   return validateCommerceState({
-    ...state,
-    orders: state.orders.map((candidate) => candidate.id === orderId ? { ...candidate, status: next[currentStatus] } : candidate),
+    ...current,
+    orders: current.orders.map((candidate) => candidate.id === orderId ? {
+      ...candidate,
+      status: next[currentStatus],
+      ...(currentStatus !== 'ready'
+        ? { advancementActionIds: [...(candidate.advancementActionIds ?? []), proof.actionId] }
+        : {}),
+      ...(currentStatus === 'ready' ? { completion: { ...retainedProof } } : {}),
+    } : candidate),
   })
 }

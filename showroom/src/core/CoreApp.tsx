@@ -41,6 +41,7 @@ import {
   cancelCommerceOrder,
   countCommerceStock,
   commerceCloseExpectation,
+  commerceOrderReturnExpectation,
   commerceOrderItemSummary,
   commerceOrderNeedsAction,
   commerceOrderHasReleasableReservation,
@@ -56,6 +57,7 @@ import {
   mutateCommerceWorkspace,
   receiveCommercePurchaseOrder,
   reconcileCommercePayment,
+  recordCommerceOrderReturn,
   registerCommerceItem,
   reserveCommerceOrder,
   saveCommerceClose,
@@ -66,6 +68,7 @@ import {
   type CommerceOrder,
   type CommerceOrderLine,
   type CommerceOrderStatus,
+  type CommerceReturnDisposition,
   type CommerceState,
   type CommerceStockMovement,
   type CommerceWebsiteOrderInput,
@@ -193,6 +196,7 @@ type ActionKind =
   | 'order_create'
   | 'order_status'
   | 'order_cancel'
+  | 'order_return'
   | 'payment_reconcile'
   | 'refund_settle'
   | 'catalog_item_create'
@@ -222,6 +226,13 @@ type PurchaseOrderDraft =
 type StockCountDraft = {
   sku: string
   quantity: string
+}
+
+type CommerceReturnDraft = {
+  orderId: string
+  sku: string
+  quantity: string
+  disposition: CommerceReturnDisposition
 }
 
 type AccountableAction = {
@@ -1144,6 +1155,14 @@ function fulfilmentLabel(value: string | undefined) {
   return value ?? ''
 }
 
+function commerceOrderReturnLines(order: CommerceOrder) {
+  return order.lines?.map((line) => ({
+    sku: line.sku,
+    name: line.variant ? `${line.name} · ${line.variant}` : line.name,
+    quantity: line.quantity,
+  })) ?? (order.itemSku ? [{ sku: order.itemSku, name: order.item, quantity: order.quantity }] : [])
+}
+
 function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm, returnFocus }: {
   action: PendingAccountableAction | null
   authenticatedActor?: { id: string; label: string }
@@ -1876,6 +1895,8 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const purchaseOrderEditorRef = useRef<HTMLFormElement>(null)
   const stockCountTriggerRef = useRef<HTMLButtonElement>(null)
   const stockCountEditorRef = useRef<HTMLFormElement>(null)
+  const returnTriggerRefs = useRef(new Map<string, HTMLButtonElement>())
+  const returnEditorRef = useRef<HTMLFormElement>(null)
   const ecommerceInboxTargetRef = useRef<HTMLButtonElement>(null)
   const preparedChannelRef = useRef<HTMLDivElement>(null)
   const consumedEcommerceDraftId = useRef('')
@@ -1886,6 +1907,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const [itemDraft, setItemDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '', price: '' })
   const [purchaseOrderDraft, setPurchaseOrderDraft] = useState<PurchaseOrderDraft | null>(null)
   const [stockCountDraft, setStockCountDraft] = useState<StockCountDraft | null>(null)
+  const [returnDraft, setReturnDraft] = useState<CommerceReturnDraft | null>(null)
   const [catalogBusy, setCatalogBusy] = useState(false)
   const [catalogError, setCatalogError] = useState('')
   const selectedSku = commerce.items.some((item) => item.sku === sku) ? sku : commerce.items[0]?.sku ?? ''
@@ -1966,6 +1988,28 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     && Number.isSafeInteger(stockCountQuantity)
     && stockCountQuantity >= 0
     ? stockCountQuantity
+    : null
+  const returnDraftOrder = returnDraft
+    ? commerce.orders.find((order) => order.id === returnDraft.orderId)
+    : undefined
+  const returnDraftLines = returnDraftOrder
+    ? commerceOrderReturnLines(returnDraftOrder).map((line) => {
+        const returned = (returnDraftOrder.returns ?? [])
+          .filter((record) => record.sku === line.sku)
+          .reduce((sum, record) => sum + record.quantity, 0)
+        return { ...line, returned, remaining: line.quantity - returned }
+      }).filter((line) => line.remaining > 0)
+    : []
+  const selectedReturnLine = returnDraftLines.find((line) => line.sku === returnDraft?.sku)
+  const returnQuantityText = returnDraft?.quantity.trim() ?? ''
+  const returnQuantity = /^[0-9]+$/.test(returnQuantityText)
+    ? Number(returnQuantityText)
+    : Number.NaN
+  const returnQuantityResult = selectedReturnLine
+    && Number.isSafeInteger(returnQuantity)
+    && returnQuantity > 0
+    && returnQuantity <= selectedReturnLine.remaining
+    ? returnQuantity
     : null
 
   useEffect(() => {
@@ -2504,7 +2548,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     }
     const next: Record<'confirmed' | 'preparing' | 'ready', CommerceOrderStatus> = { confirmed: 'preparing', preparing: 'ready', ready: 'completed' }
     const nextStatus = next[order.status]
-    queueAction({ kind: 'order_status', subjectId: orderId, summary: `Advance ${orderId} fulfilment`, before: order.status, after: nextStatus, apply: (action) => mutateCommerce('commerce.order.advanced', action.commandId, commerceActionProof(action), (current) => advanceCommerceOrder(current, orderId, order.status)) })
+    queueAction({ kind: 'order_status', subjectId: orderId, summary: `Advance ${orderId} fulfilment`, before: order.status, after: nextStatus, apply: (action) => mutateCommerce('commerce.order.advanced', action.commandId, commerceActionProof(action), (current) => advanceCommerceOrder(current, orderId, order.status, commerceActionProof(action), managedIdentity ? 'managed-server' : 'client')) })
   }
 
   function reconcilePayment(orderId: string) {
@@ -2536,6 +2580,93 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         (current) => settleCommerceRefund(current, orderId, commerceActionProof(action)),
       ),
     })
+  }
+
+  function canReturnOrder(orderId: string) {
+    const order = commerce.orders.find((candidate) => candidate.id === orderId)
+    return Boolean(order?.completion && commerceOrderReturnLines(order).some((line) => (
+      commerceOrderReturnExpectation(commerce, orderId, line.sku, 'not_restocked')
+    )))
+  }
+
+  function openReturnEditor(orderId: string) {
+    if (pendingAction) {
+      setNotice('Finish or cancel the current Shop action before recording a return.')
+      return
+    }
+    const order = commerce.orders.find((candidate) => candidate.id === orderId)
+    const line = order?.completion
+      ? commerceOrderReturnLines(order).find((candidate) => (
+          commerceOrderReturnExpectation(commerce, orderId, candidate.sku, 'not_restocked')
+        ))
+      : undefined
+    if (!order || order.status !== 'completed' || !line) {
+      setNotice(order?.status === 'completed' && !order.completion
+        ? `${order.id} predates attributable completion records, so its return workflow is read-only.`
+        : 'This order has no proven sold quantity left to return.')
+      return
+    }
+    setReturnDraft((current) => current?.orderId === orderId && current.sku === line.sku
+      ? current
+      : { orderId, sku: line.sku, quantity: '1', disposition: 'restock' })
+    requestAnimationFrame(() => returnEditorRef.current?.querySelector<HTMLElement>('#order-return-quantity')?.focus())
+  }
+
+  function cancelReturnEditor() {
+    const orderId = returnDraft?.orderId
+    setReturnDraft(null)
+    setNotice('Return draft closed. Shop data was not modified.')
+    requestAnimationFrame(() => orderId && returnTriggerRefs.current.get(orderId)?.focus())
+  }
+
+  function reviewOrderReturn(event: FormEvent) {
+    event.preventDefault()
+    if (!returnDraft || !returnDraftOrder || !selectedReturnLine || returnDraft.sku !== selectedReturnLine.sku || returnQuantityResult === null) {
+      setNotice('Choose an order item and a whole return quantity within the remaining sold quantity.')
+      return
+    }
+    const expected = commerceOrderReturnExpectation(
+      commerce,
+      returnDraft.orderId,
+      returnDraft.sku,
+      returnDraft.disposition,
+    )
+    if (!expected || returnQuantityResult > expected.soldQuantity - expected.returnedQuantity) {
+      setNotice('The order or its remaining return quantity changed. Review the latest order record.')
+      return
+    }
+    const item = commerce.items.find((candidate) => candidate.sku === returnDraft.sku)
+    if (!item) {
+      setNotice('The returned item is no longer in the Shop catalog. Nothing was queued.')
+      return
+    }
+    const nextReturned = expected.returnedQuantity + returnQuantityResult
+    const dispositionAfter = returnDraft.disposition === 'restock'
+      ? `${item.onHand} → ${item.onHand + returnQuantityResult} sellable units`
+      : `${item.onHand} sellable units unchanged · item not restocked`
+    const input = {
+      orderId: returnDraft.orderId,
+      sku: returnDraft.sku,
+      quantity: returnQuantityResult,
+      disposition: returnDraft.disposition,
+    } as const
+    queueAction({
+      kind: 'order_return',
+      subjectId: `${input.orderId}:${input.sku}`,
+      summary: `Record ${input.quantity} ${input.sku} returned from ${input.orderId}`,
+      before: `${expected.returnedQuantity} of ${expected.soldQuantity} returned · ${item.onHand} sellable units`,
+      after: `${nextReturned} of ${expected.soldQuantity} returned · ${dispositionAfter} · payment and order total unchanged`,
+      apply: async (action) => {
+        const proof = commerceActionProof(action)
+        await mutateCommerce(
+          'commerce.order.return_recorded',
+          action.commandId,
+          proof,
+          (current) => recordCommerceOrderReturn(current, input, proof, expected),
+        )
+        setReturnDraft(null)
+      },
+    }, returnTriggerRefs.current.get(input.orderId))
   }
 
   function cancelOrder(orderId: string) {
@@ -2789,7 +2920,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const actionGate = <AccountableActionGate authenticatedActor={managedIdentity ? { id: managedIdentity.userId, label: managedIdentity.email } : undefined} key={pendingAction?.id ?? 'commerce-idle'} action={pendingAction} onCancel={() => { setPendingAction(null); setNotice('Change cancelled. Shop data was not modified.') }} onConfirm={confirmAction} returnFocus={actionTrigger} />
   const actionHistory = managedIdentity ? null : <ActionHistory actions={actions} domain="commerce" />
 
-  if (tab === 'orders') return <div className="operation-module orders-module">
+  if (tab === 'orders') return <div className={`operation-module orders-module${returnDraft && selectedReturnLine ? ' has-return-draft' : ''}`}>
     {commerceBoundary}
     <section className="core-panel order-queue-panel order-workspace">
       <div className="panel-head"><div><span className="core-eyebrow">Orders</span><h2>{actionOrders.length} {actionOrders.length === 1 ? 'order needs' : 'orders need'} action</h2></div><div className="order-queue-actions"><span className="panel-note">{openOrders.length} in fulfilment</span><button className="core-button primary compact" disabled={!commerceCanWrite || Boolean(pendingAction)} onClick={openOrderComposer} ref={orderComposerTriggerRef} type="button">New order</button></div></div>
@@ -2862,8 +2993,23 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         <div className="order-submit-bar"><button className="core-button primary" disabled={commerceControlsDisabled} form="commerce-manual-order-form" type="submit">Review order</button></div>
       </> : null}
     </dialog>
+  <ClosedOrderHistory
+    canReturn={canReturnOrder}
+    disabled={commerceControlsDisabled}
+    onCancelReturn={cancelReturnEditor}
+    onChangeReturn={(patch) => setReturnDraft((current) => current ? { ...current, ...patch } : current)}
+    onOpenReturn={openReturnEditor}
+    onReviewReturn={reviewOrderReturn}
+    onReturnEditor={(node) => { returnEditorRef.current = node }}
+    onReturnTrigger={(orderId, node) => {
+      if (node) returnTriggerRefs.current.set(orderId, node)
+      else returnTriggerRefs.current.delete(orderId)
+    }}
+    orders={closedOrders}
+    returnDraft={returnDraft}
+  />
   <details className="core-panel today-more order-daily-controls">
-    <summary><span>Close and exceptions</span><small>{paymentReview.length + lowStock.length} items need attention</small></summary>
+    <summary><span>Close and exceptions</span><small>{paymentReview.length + lowStock.length} {paymentReview.length + lowStock.length === 1 ? 'item needs' : 'items need'} attention</small></summary>
     <div className="today-more-content">
       <div className="exception-summary"><span><strong>{paymentReview.length}</strong><small>payment review</small></span><span><strong>{lowStock.length}</strong><small>reorder boundaries</small></span></div>
       <div className="boundary-list">{lowStock.map((item) => <Link key={item.sku} to="/shop/?tab=inventory"><strong>{item.name}</strong><small>{item.onHand} on hand</small></Link>)}</div>
@@ -2875,7 +3021,6 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         <p className="form-notice">{latestClose.operator} · {formatTime(latestClose.createdAt)} · evidence {latestClose.evidenceReference}</p>
         <p className="form-notice">Orders: {latestClose.orderIds?.length ? latestClose.orderIds.join(', ') : 'none'} · Payment exceptions: {latestClose.paymentExceptionOrderIds?.length ? latestClose.paymentExceptionOrderIds.join(', ') : 'none'} · Stock exceptions: {latestClose.stockExceptionSkus?.length ? latestClose.stockExceptionSkus.join(', ') : 'none'}</p>
       </details> : null}
-      <ClosedOrderHistory orders={closedOrders} />
       {actionHistory}
     </div>
   </details>
@@ -3014,13 +3159,54 @@ function OrderList({
   })}</div>
 }
 
-function ClosedOrderHistory({ orders }: { orders: CommerceOrder[] }) {
+function ClosedOrderHistory({
+  canReturn,
+  disabled,
+  onCancelReturn,
+  onChangeReturn,
+  onOpenReturn,
+  onReviewReturn,
+  onReturnEditor,
+  onReturnTrigger,
+  orders,
+  returnDraft,
+}: {
+  canReturn: (orderId: string) => boolean
+  disabled: boolean
+  onCancelReturn: () => void
+  onChangeReturn: (patch: Partial<CommerceReturnDraft>) => void
+  onOpenReturn: (orderId: string) => void
+  onReviewReturn: (event: FormEvent) => void
+  onReturnEditor: (node: HTMLFormElement | null) => void
+  onReturnTrigger: (orderId: string, node: HTMLButtonElement | null) => void
+  orders: CommerceOrder[]
+  returnDraft: CommerceReturnDraft | null
+}) {
+  const [page, setPage] = useState(0)
   if (!orders.length) return null
-  const visibleOrders = orders.slice(0, 8)
+  const pageSize = 8
+  const pageCount = Math.ceil(orders.length / pageSize)
+  const currentPage = Math.min(page, pageCount - 1)
+  const visibleOrders = orders.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
   return <details className="order-archive">
-    <summary><span>Order history</span><small>{orders.length} closed</small></summary>
-    <div className="order-archive-list">{visibleOrders.map((order) => <article key={order.id}>
-      <div>
+    <summary><span>Completed and cancelled orders</span><small>{orders.length} {orders.length === 1 ? 'record' : 'records'} · returns here</small></summary>
+    <div className="order-archive-list">{visibleOrders.map((order) => {
+      const lines = commerceOrderReturnLines(order).map((line) => {
+        const returned = (order.returns ?? [])
+          .filter((record) => record.sku === line.sku)
+          .reduce((sum, record) => sum + record.quantity, 0)
+        return { ...line, returned, remaining: line.quantity - returned }
+      })
+      const availableLines = lines.filter((line) => line.remaining > 0)
+      const draftedLine = returnDraft?.orderId === order.id
+        ? availableLines.find((line) => line.sku === returnDraft.sku)
+        : undefined
+      const activeReturnDraft = draftedLine && returnDraft?.orderId === order.id ? returnDraft : null
+      const editing = activeReturnDraft !== null
+      const selectedLine = draftedLine ?? availableLines[0]
+      const returnable = canReturn(order.id)
+      return <article className={editing ? 'is-returning' : undefined} key={order.id}>
+      <div className="order-archive-main">
         <strong>{order.customer} · {order.lines
           ? order.lines.length === 1
             ? `${order.lines[0].name} × ${order.quantity}`
@@ -3029,10 +3215,40 @@ function ClosedOrderHistory({ orders }: { orders: CommerceOrder[] }) {
         {order.lines ? <small>{order.lines.map((line) => `${line.name} × ${line.quantity} @ ${line.unitPriceMmk.toLocaleString()} MMK`).join(' · ')}</small> : null}
         <small>{order.id} · {order.status} · payment {order.paymentStatus}{order.refundStatus !== 'none' ? ` · refund ${order.refundStatus}` : ''}{order.fulfilment ? ` · ${fulfilmentLabel(order.fulfilment)}` : ''}{order.fulfilmentReference ? ` · ${order.fulfilmentReference}` : ''} · {formatTime(order.createdAt)}</small>
         {order.refundStatus === 'settled' && order.refundSettledAt && order.refundSettledBy && order.refundEvidenceReference ? <small role="note">{order.refundSettledBy} · {formatTime(order.refundSettledAt)} · evidence {order.refundEvidenceReference}</small> : null}
+        {order.status === 'completed' && order.completion ? <small role="note">Completed by {order.completion.actor} · {formatTime(order.completion.capturedAt)} · evidence {order.completion.evidenceReference}</small> : null}
+        {order.status === 'completed' && !order.completion ? <small role="note">Return unavailable: this older order has no attributable completion proof.</small> : null}
+        {order.status === 'completed' && order.completion && availableLines.length > 0 && !returnable ? <small role="note">Return unavailable: the sold quantity cannot be matched to an attributable stock reservation.</small> : null}
       </div>
-      <b>{formatMoney(order.total)}</b>
-    </article>)}</div>
-    {orders.length > visibleOrders.length ? <p>Showing the latest {visibleOrders.length} closed orders.</p> : null}
+      <div className="order-archive-actions">
+        <b>{formatMoney(order.total)}</b>
+        {order.status === 'completed' && (returnable || editing) ? <button
+          aria-expanded={editing}
+          className="text-link"
+          disabled={disabled}
+          onClick={() => editing ? onCancelReturn() : onOpenReturn(order.id)}
+          ref={(node) => { onReturnTrigger(order.id, node) }}
+          type="button"
+        >{editing ? 'Close return' : 'Record return'}</button> : null}
+      </div>
+      {order.returns?.length ? <div className="order-return-records" role="list">
+        {order.returns.map((record) => <div key={record.actionId} role="listitem">
+          <strong>{record.quantity} {record.sku} returned · {record.disposition === 'restock' ? 'restocked' : 'not restocked'}</strong>
+          <small>{record.actor} · {formatTime(record.createdAt)} · evidence {record.evidenceReference}</small>
+        </div>)}
+      </div> : null}
+      {activeReturnDraft && selectedLine ? <form aria-label={`Return items from ${order.id}`} className="order-return-editor" onSubmit={onReviewReturn} ref={onReturnEditor}>
+        <div className="order-return-copy"><span className="core-eyebrow">Return</span><strong>{order.id}</strong><small>Record received goods only. Payment and order totals do not change.</small></div>
+        <label>Item<select disabled={disabled || availableLines.length === 1} onChange={(event) => onChangeReturn({ sku: event.target.value, quantity: '1' })} value={selectedLine.sku}>{availableLines.map((line) => <option key={line.sku} value={line.sku}>{line.name} · {line.remaining} left</option>)}</select></label>
+        <label>Quantity<input disabled={disabled} id="order-return-quantity" max={selectedLine.remaining} min="1" onChange={(event) => onChangeReturn({ quantity: event.target.value })} required step="1" type="number" value={activeReturnDraft.quantity} /></label>
+        <label>Stock result<select disabled={disabled} onChange={(event) => onChangeReturn({ disposition: event.target.value as CommerceReturnDisposition })} value={activeReturnDraft.disposition}><option value="restock">Sellable · add to stock</option><option value="not_restocked">Not sellable · stock unchanged</option></select></label>
+        <div className="form-actions"><button className="core-button primary compact" disabled={disabled} type="submit">Review return</button><button className="core-button compact" disabled={disabled} onClick={onCancelReturn} type="button">Cancel</button></div>
+      </form> : null}
+    </article>})}</div>
+    {pageCount > 1 ? <nav aria-label="Closed order pages" className="order-archive-pagination">
+      <button className="text-link" disabled={currentPage === 0} onClick={() => setPage((current) => Math.max(0, current - 1))} type="button">Previous</button>
+      <span>Page {currentPage + 1} of {pageCount}</span>
+      <button className="text-link" disabled={currentPage === pageCount - 1} onClick={() => setPage((current) => Math.min(pageCount - 1, current + 1))} type="button">Next</button>
+    </nav> : null}
   </details>
 }
 

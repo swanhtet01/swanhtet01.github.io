@@ -162,6 +162,7 @@ const expectedHumanCommerceEvents = [
   'commerce.order.advanced',
   'commerce.order.cancelled',
   'commerce.order.created',
+  'commerce.order.return_recorded',
   'commerce.payment.reconciled',
   'commerce.purchase_order.cancelled',
   'commerce.purchase_order.created',
@@ -218,6 +219,23 @@ requireContract('consequential Commerce events are human-only in router and stor
   && JSON.stringify(humanEventList(trialStore, 'HUMAN_COMMAND_EVENTS', 'SURFACE_WRITE_CAPABILITIES')) === JSON.stringify(expectedHumanCommerceEvents)
   && JSON.stringify(humanEventList(commerceRuntime, 'COMMERCE_HUMAN_EVENTS', '_ORDER_STATUSES')) === JSON.stringify(expectedHumanCommerceEvents)
   && /TrialHumanApprovalRequired/.test(trialStore))
+requireContract('Shop order and payment attribution is server authoritative',
+  /commerce\.order\.created/.test(trialStore)
+  && /authoritative_order\["createdAt"\] = captured_at/.test(trialStore)
+  && /authoritative_movement\["actor"\] = principal\.actor_id/.test(trialStore)
+  && /commerce\.payment\.reconciled/.test(trialStore)
+  && /authoritative_order\["paymentReconciledAt"\] = captured_at/.test(trialStore)
+  && /authoritative_order\["paymentReconciledBy"\] = principal\.actor_id/.test(trialStore))
+requireContract('Shop return and completion attribution is server authoritative and monotonic',
+  /commerce\.order\.return_recorded/.test(trialStore)
+  && /authoritative_return\["actor"\] = principal\.actor_id/.test(trialStore)
+  && /authoritative_return\["createdAt"\] = effective_captured_at/.test(trialStore)
+  && /effective_captured_at = _not_before\(/.test(trialStore)
+  && /authoritative_order\["completion"\] = deepcopy\(/.test(trialStore))
+requireContract('Shop lifecycle action IDs remain state-bound before completion',
+  /advancementActionIds/.test(commerceRuntime)
+  && /order advancement must append one unique action ID/.test(commerceRuntime)
+  && /advancementActionIds/.test(await read('showroom/src/core/commerce-workspace.ts')))
 requireContract('Commerce action IDs cannot be reused across immutable command history', trialStore.includes("payload_json #>> '{evidence,actionId}'")
   && trialStore.includes(':commerce-action:')
   && trialStore.includes('_commerce_action_ids')

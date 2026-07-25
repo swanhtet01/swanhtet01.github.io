@@ -517,6 +517,7 @@ class TrialRuntimeTests(unittest.TestCase):
             "commerce.order.created",
             "commerce.order.advanced",
             "commerce.order.cancelled",
+            "commerce.order.return_recorded",
             "commerce.payment.reconciled",
             "commerce.refund.settled",
             "commerce.stock.received",
