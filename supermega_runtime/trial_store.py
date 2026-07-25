@@ -694,6 +694,39 @@ def _authoritative_command_payload(
         authoritative["evidence"] = authoritative_evidence
         authoritative["state"] = authoritative_state
         return authoritative
+    if event_type == "commerce.purchase_order.created":
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        purchase_orders = (
+            state.get("purchaseOrders") if isinstance(state, Mapping) else None
+        )
+        if (
+            not isinstance(evidence, Mapping)
+            or not isinstance(state, Mapping)
+            or not isinstance(purchase_orders, list)
+            or not purchase_orders
+            or not isinstance(purchase_orders[0], Mapping)
+            or not isinstance(purchase_orders[0].get("creation"), Mapping)
+            or purchase_orders[0]["creation"].get("actionId")
+            != evidence.get("actionId")
+        ):
+            return authoritative
+        authoritative_evidence = dict(evidence)
+        authoritative_evidence["actor"] = principal.actor_id
+        authoritative_evidence["capturedAt"] = captured_at
+        authoritative_purchase_order = dict(purchase_orders[0])
+        authoritative_purchase_order["createdAt"] = captured_at
+        authoritative_purchase_order["creation"] = deepcopy(
+            authoritative_evidence
+        )
+        authoritative_state = dict(state)
+        authoritative_state["purchaseOrders"] = [
+            authoritative_purchase_order,
+            *deepcopy(purchase_orders[1:]),
+        ]
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
     if event_type == "commerce.payment.reconciled":
         evidence = authoritative.get("evidence")
         state = authoritative.get("state")

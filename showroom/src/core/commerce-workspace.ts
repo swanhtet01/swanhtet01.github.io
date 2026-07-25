@@ -188,6 +188,7 @@ export type CommerceStorefrontConfiguration = {
 export type CommercePurchaseOrder = {
   id: string
   createdAt: string
+  expectedAt?: string
   supplier: string
   sku: string
   quantityOrdered: number
@@ -280,6 +281,7 @@ export type CommerceWebsiteOrderInput = {
 
 export type CommercePurchaseOrderInput = {
   id: string
+  expectedAt: string
   supplier: string
   sku: string
   quantityOrdered: number
@@ -826,11 +828,16 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (!isRecord(candidate) || !hasExactKeys(
       candidate,
       ['id', 'createdAt', 'supplier', 'sku', 'quantityOrdered', 'creation'],
-      ['cancellation'],
+      ['expectedAt', 'cancellation'],
     )) throw new Error(`purchaseOrders[${index}] is invalid.`)
     const id = canonicalText(candidate.id, `purchaseOrders[${index}].id`, 80)
     if (!purchaseOrderIdPattern.test(id)) throw new Error(`purchaseOrders[${index}].id is invalid.`)
     if (!validTimestamp(candidate.createdAt)) throw new Error(`purchaseOrders[${index}].createdAt is invalid.`)
+    if (candidate.expectedAt !== undefined
+      && (!validTimestamp(candidate.expectedAt)
+        || (timestampMicros(candidate.expectedAt) as bigint) <= (timestampMicros(candidate.createdAt) as bigint))) {
+      throw new Error(`purchaseOrders[${index}].expectedAt is invalid.`)
+    }
     canonicalText(candidate.supplier, `purchaseOrders[${index}].supplier`, 120)
     const sku = canonicalText(candidate.sku, `purchaseOrders[${index}].sku`, 80)
     if (!itemSkus.includes(sku)) throw new Error(`purchaseOrders[${index}].sku is unknown.`)
@@ -1795,6 +1802,32 @@ export function commercePurchaseOrderProgress(state: CommerceState, purchaseOrde
   }
 }
 
+export function compareCommercePurchaseOrderAttention(
+  left: { purchaseOrder: CommercePurchaseOrder; progress: CommercePurchaseOrderProgress },
+  right: { purchaseOrder: CommercePurchaseOrder; progress: CommercePurchaseOrderProgress },
+) {
+  const leftActive = left.progress.status === 'open' || left.progress.status === 'partially_received'
+  const rightActive = right.progress.status === 'open' || right.progress.status === 'partially_received'
+  if (leftActive !== rightActive) return leftActive ? -1 : 1
+  if (leftActive) {
+    const leftExpectedAt = left.purchaseOrder.expectedAt ? timestampMicros(left.purchaseOrder.expectedAt) : null
+    const rightExpectedAt = right.purchaseOrder.expectedAt ? timestampMicros(right.purchaseOrder.expectedAt) : null
+    if (leftExpectedAt === null && rightExpectedAt !== null) return 1
+    if (leftExpectedAt !== null && rightExpectedAt === null) return -1
+    if (leftExpectedAt !== null && rightExpectedAt !== null && leftExpectedAt !== rightExpectedAt) {
+      return leftExpectedAt < rightExpectedAt ? -1 : 1
+    }
+  }
+  const leftCreatedAt = timestampMicros(left.purchaseOrder.createdAt) as bigint
+  const rightCreatedAt = timestampMicros(right.purchaseOrder.createdAt) as bigint
+  if (leftCreatedAt !== rightCreatedAt) {
+    return leftActive
+      ? leftCreatedAt < rightCreatedAt ? -1 : 1
+      : leftCreatedAt > rightCreatedAt ? -1 : 1
+  }
+  return compareCanonicalText(left.purchaseOrder.id, right.purchaseOrder.id)
+}
+
 export function commerceCatalogDigestSource(state: CommerceState) {
   const current = validateCommerceState(state)
   return JSON.stringify(
@@ -2346,6 +2379,8 @@ export function createCommercePurchaseOrder(
   const supplier = optionalText(input.supplier)
   if (!validProof(proof)
     || !purchaseOrderIdPattern.test(input.id)
+    || !validTimestamp(input.expectedAt)
+    || (timestampMicros(input.expectedAt) as bigint) <= (timestampMicros(proof.capturedAt) as bigint)
     || !supplier
     || supplier !== input.supplier
     || supplier.length > 120
@@ -2357,7 +2392,8 @@ export function createCommercePurchaseOrder(
   const current = validateCommerceState(state)
   const existing = commercePurchaseOrders(current).find((purchaseOrder) => purchaseOrder.id === input.id)
   if (existing) {
-    return existing.supplier === input.supplier
+    return existing.expectedAt === input.expectedAt
+      && existing.supplier === input.supplier
       && existing.sku === input.sku
       && existing.quantityOrdered === input.quantityOrdered
       && sameActionProof(existing.creation, proof) ? current : null
@@ -2373,6 +2409,7 @@ export function createCommercePurchaseOrder(
   const purchaseOrder: CommercePurchaseOrder = {
     id: input.id,
     createdAt: proof.capturedAt,
+    expectedAt: input.expectedAt,
     supplier,
     sku: input.sku,
     quantityOrdered: input.quantityOrdered,

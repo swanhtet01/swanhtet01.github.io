@@ -450,7 +450,7 @@ textarea { min-height: 72px; resize: vertical; }
 .stock-receipt-preview small { color: var(--core-quiet); font-size: 8px; text-transform: uppercase; }
 .stock-receipt-preview strong { color: var(--core-ink); font-size: 13px; }
 .stock-receipt-editor .form-actions { align-self: end; }
-.purchase-order-editor[data-mode="create"] { grid-template-columns: minmax(170px,1fr) repeat(2,minmax(135px,.55fr)) minmax(160px,.65fr) auto; }
+.purchase-order-editor[data-mode="create"] { grid-template-columns: minmax(145px,1fr) repeat(3,minmax(120px,.5fr)) minmax(145px,.6fr) auto; }
 .purchase-order-history { margin-top: 12px; }
 .purchase-order-history > summary { width: 100%; justify-content: space-between; }
 .purchase-order-history > summary > span { margin-left: 10px; }

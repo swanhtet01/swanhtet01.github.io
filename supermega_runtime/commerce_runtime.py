@@ -190,7 +190,7 @@ _MOVEMENT_FIELDS = frozenset(
 _PURCHASE_ORDER_REQUIRED_FIELDS = frozenset(
     {"id", "createdAt", "supplier", "sku", "quantityOrdered", "creation"}
 )
-_PURCHASE_ORDER_OPTIONAL_FIELDS = frozenset({"cancellation"})
+_PURCHASE_ORDER_OPTIONAL_FIELDS = frozenset({"expectedAt", "cancellation"})
 _CLOSE_REQUIRED_FIELDS = frozenset({"id", "createdAt", "total", "orders"})
 _CLOSE_SNAPSHOT_FIELDS = frozenset(
     {
@@ -650,6 +650,17 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         if _PURCHASE_ORDER_ID_PATTERN.fullmatch(purchase_order_id) is None:
             raise TrialValidationError(f"{field}.id is invalid.")
         created_at = _timestamp(purchase_order["createdAt"], f"{field}.createdAt")
+        if "expectedAt" in purchase_order:
+            expected_at = _timestamp(
+                purchase_order["expectedAt"],
+                f"{field}.expectedAt",
+            )
+            if datetime.fromisoformat(
+                expected_at.replace("Z", "+00:00")
+            ) <= datetime.fromisoformat(created_at.replace("Z", "+00:00")):
+                raise TrialValidationError(
+                    f"{field}.expectedAt must be later than creation."
+                )
         _text(purchase_order["supplier"], f"{field}.supplier", maximum=120)
         sku = _text(purchase_order["sku"], f"{field}.sku", maximum=80)
         if sku not in item_by_sku:
@@ -2785,6 +2796,10 @@ def _validate_purchase_order_created(
     if len(next_orders) != len(current_orders) + 1 or next_orders[1:] != current_orders:
         raise TrialValidationError(
             "commerce.purchase_order.created must prepend exactly one purchase order."
+        )
+    if "expectedAt" not in next_orders[0]:
+        raise TrialValidationError(
+            "a new purchase order requires an expected arrival."
         )
     if "cancellation" in next_orders[0]:
         raise TrialValidationError("a new purchase order cannot start cancelled.")

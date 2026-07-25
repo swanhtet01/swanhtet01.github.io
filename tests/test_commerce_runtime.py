@@ -3,6 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import unittest
+from unittest.mock import patch
 from urllib.parse import quote
 from uuid import uuid4
 
@@ -44,6 +45,7 @@ STOREFRONT_REQUEST_UUID = "00000000-0000-4000-8000-000000000010"
 STOREFRONT_CONFIGURATION_UUID = "00000000-0000-4000-8000-000000000011"
 PURCHASE_ORDER_UUID = "00000000-0000-4000-8000-000000000020"
 PURCHASE_ORDER_ID = f"PO-{PURCHASE_ORDER_UUID}"
+PURCHASE_ORDER_EXPECTED_AT = "2026-07-25T09:00:00.000Z"
 DEFAULT_STOREFRONT_PREVIEW_DIGEST = (
     "sha256:5708a10fcffa1df487bd93f88809e1cfb678f92888cdf6f22a7deabbaf24c34d"
 )
@@ -141,10 +143,12 @@ def purchase_order_record(
     action_id: str = "ACT-PURCHASE-CREATE",
     quantity: int = 10,
     captured_at: str = NOW,
+    expected_at: str = PURCHASE_ORDER_EXPECTED_AT,
 ) -> dict[str, object]:
     return {
         "id": purchase_order_id,
         "createdAt": captured_at,
+        "expectedAt": expected_at,
         "supplier": "Yangon Supply",
         "sku": "SKU-1",
         "quantityOrdered": quantity,
@@ -2702,6 +2706,139 @@ class CommerceRuntimeTests(unittest.TestCase):
                 cancellation,
             )
 
+    def test_purchase_order_creation_requires_future_arrival_but_legacy_records_remain_readable(self) -> None:
+        current = catalog_state()
+        legacy_purchase_order = purchase_order_record()
+        legacy_purchase_order.pop("expectedAt")
+        legacy = deepcopy(current)
+        legacy["purchaseOrders"] = [legacy_purchase_order]
+        self.assertEqual(
+            validate_commerce_state(legacy)["purchaseOrders"],
+            [legacy_purchase_order],
+        )
+        with self.assertRaisesRegex(
+            TrialValidationError,
+            "requires an expected arrival",
+        ):
+            apply_event(
+                current,
+                "commerce.purchase_order.created",
+                legacy,
+            )
+
+        for expected_at in (
+            NOW,
+            "2026-07-23T08:59:59.999Z",
+            "2026-07-23T11:00:00",
+            "not-a-time",
+        ):
+            invalid = deepcopy(current)
+            invalid["purchaseOrders"] = [
+                purchase_order_record(expected_at=expected_at)
+            ]
+            with self.subTest(expected_at=expected_at), self.assertRaises(
+                TrialValidationError
+            ):
+                validate_commerce_state(invalid)
+
+    def test_store_stamps_purchase_order_creation_and_rejects_expired_arrival(self) -> None:
+        store = InMemoryTrialStore(reducer=reduce_trial_state)
+        principal = TrialPrincipal("workspace-purchase", "shop-owner", "human")
+        store.provision_membership(
+            workspace_id=principal.workspace_id,
+            actor_id=principal.actor_id,
+            actor_kind=principal.actor_kind,
+            capabilities=("commerce.write",),
+        )
+        initialized = store.apply_command(
+            principal,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.workspace.initialized",
+            expected_version=0,
+            payload={
+                "state": catalog_state(),
+                "evidence": action_evidence("ACT-PURCHASE-INITIALIZE"),
+            },
+        )
+        server_now = "2026-07-23T09:30:00.000+00:00"
+        expired_state = deepcopy(initialized.state)
+        expired_state["purchaseOrders"] = [
+            purchase_order_record(
+                action_id="ACT-PURCHASE-EXPIRED",
+                expected_at="2026-07-23T09:15:00.000Z",
+            )
+        ]
+        with patch(
+            "supermega_runtime.trial_store._utc_now",
+            return_value=server_now,
+        ), self.assertRaises(TrialValidationError):
+            store.apply_command(
+                principal,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.purchase_order.created",
+                expected_version=initialized.version,
+                payload={
+                    "state": expired_state,
+                    "evidence": dict(
+                        expired_state["purchaseOrders"][0]["creation"]  # type: ignore[index,arg-type]
+                    ),
+                },
+            )
+        self.assertEqual(
+            store.get_state(principal, "commerce").version,
+            initialized.version,
+        )
+
+        accepted_state = deepcopy(initialized.state)
+        accepted_state["purchaseOrders"] = [
+            purchase_order_record(
+                action_id="ACT-PURCHASE-MANAGED",
+                expected_at="2026-07-23T11:00:00.000Z",
+            )
+        ]
+        accepted_state["purchaseOrders"][0]["creation"]["actor"] = (  # type: ignore[index]
+            "Fabricated purchasing bot"
+        )
+        payload = {
+            "state": accepted_state,
+            "evidence": dict(
+                accepted_state["purchaseOrders"][0]["creation"]  # type: ignore[index,arg-type]
+            ),
+        }
+        command_id = str(uuid4())
+        with patch(
+            "supermega_runtime.trial_store._utc_now",
+            return_value=server_now,
+        ):
+            accepted = store.apply_command(
+                principal,
+                command_id=command_id,
+                surface="commerce",
+                event_type="commerce.purchase_order.created",
+                expected_version=initialized.version,
+                payload=payload,
+            )
+            replay = store.apply_command(
+                principal,
+                command_id=command_id,
+                surface="commerce",
+                event_type="commerce.purchase_order.created",
+                expected_version=initialized.version,
+                payload=payload,
+            )
+        purchase_order = accepted.state["purchaseOrders"][0]  # type: ignore[index]
+        self.assertEqual(purchase_order["createdAt"], server_now)
+        self.assertEqual(purchase_order["creation"]["capturedAt"], server_now)  # type: ignore[index]
+        self.assertEqual(purchase_order["creation"]["actor"], principal.actor_id)  # type: ignore[index]
+        self.assertEqual(
+            purchase_order["expectedAt"],
+            "2026-07-23T11:00:00.000Z",
+        )
+        self.assertTrue(replay.idempotent_replay)
+        self.assertEqual(replay.state, accepted.state)
+
     def test_purchase_order_transitions_fail_closed_on_overreceipt_and_cross_event_mutation(self) -> None:
         current = catalog_state()
         created_state = deepcopy(current)
@@ -2742,7 +2879,9 @@ class CommerceRuntimeTests(unittest.TestCase):
             )
 
         cross_event_mutation = deepcopy(created)
-        cross_event_mutation["purchaseOrders"][0]["supplier"] = "Spoofed supplier"  # type: ignore[index]
+        cross_event_mutation["purchaseOrders"][0]["expectedAt"] = (  # type: ignore[index]
+            "2026-07-26T09:00:00.000Z"
+        )
         cross_event_mutation["items"][0]["onHand"] = 11  # type: ignore[index]
         cross_event_mutation["movements"] = [
             movement("receipt", "ACT-DIRECT-RECEIPT", 1)

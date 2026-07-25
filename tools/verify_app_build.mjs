@@ -1013,6 +1013,10 @@ const commercePageContract = coreSource.slice(coreSource.indexOf('function Comme
 if (!commercePageContract.includes('purchaseOrderDraft')
   || !commercePageContract.includes('Create an internal order')
   || !commercePageContract.includes('This does not contact a supplier or create a payment.')
+  || !commercePageContract.includes('Expected arrival')
+  || !commercePageContract.includes('Arrival not recorded · legacy order')
+  || !commercePageContract.includes('.sort(compareCommercePurchaseOrderAttention)')
+  || !commercePageContract.includes('defaultPurchaseOrderExpectedInput()')
   || !commercePageContract.includes('commercePurchaseOrderProgress(current, currentPurchaseOrder).remaining !== expectedRemaining')
   || !commercePageContract.includes("'commerce.purchase_order.created'")
   || !commercePageContract.includes("'commerce.purchase_order.received'")
@@ -3154,8 +3158,10 @@ async function verifyCommerceRuntime() {
 
     const purchaseOrderId = 'PO-00000000-0000-4000-8000-000000000020'
     const purchaseCreationProof = proof('ACT-PURCHASE-CREATE')
+    const purchaseExpectedAt = '2026-07-25T09:00:00.000Z'
     const purchaseCreated = model.createCommercePurchaseOrder(base, {
       id: purchaseOrderId,
+      expectedAt: purchaseExpectedAt,
       supplier: 'Yangon Supply',
       sku: 'SKU-1',
       quantityOrdered: 10,
@@ -3164,19 +3170,42 @@ async function verifyCommerceRuntime() {
       && purchaseCreated.items === base.items
       && purchaseCreated.movements === base.movements
       && purchaseCreated.purchaseOrders[0].id === purchaseOrderId
+      && purchaseCreated.purchaseOrders[0].expectedAt === purchaseExpectedAt
       && model.commercePurchaseOrderProgress(purchaseCreated, purchaseCreated.purchaseOrders[0]).status === 'open', 'purchase_order_creation_not_exact')
     assert(model.createCommercePurchaseOrder(purchaseCreated, {
       id: purchaseOrderId,
+      expectedAt: purchaseExpectedAt,
       supplier: 'Yangon Supply',
       sku: 'SKU-1',
       quantityOrdered: 10,
     }, purchaseCreationProof) === purchaseCreated, 'purchase_order_exact_retry_not_idempotent')
     assert(model.createCommercePurchaseOrder(purchaseCreated, {
       id: 'PO-00000000-0000-4000-8000-000000000021',
+      expectedAt: purchaseExpectedAt,
       supplier: 'Second supplier',
       sku: 'SKU-1',
       quantityOrdered: 5,
     }, proof('ACT-PURCHASE-CREATE-2')) === null, 'duplicate_active_purchase_order_succeeded')
+    assert(model.createCommercePurchaseOrder(base, {
+      id: purchaseOrderId,
+      expectedAt: purchaseCreationProof.capturedAt,
+      supplier: 'Yangon Supply',
+      sku: 'SKU-1',
+      quantityOrdered: 10,
+    }, purchaseCreationProof) === null, 'nonfuture_purchase_arrival_succeeded')
+    assert(model.createCommercePurchaseOrder(base, {
+      id: purchaseOrderId,
+      supplier: 'Yangon Supply',
+      sku: 'SKU-1',
+      quantityOrdered: 10,
+    }, purchaseCreationProof) === null, 'missing_purchase_arrival_succeeded')
+    assert(model.createCommercePurchaseOrder(purchaseCreated, {
+      id: purchaseOrderId,
+      expectedAt: '2026-07-26T09:00:00.000Z',
+      supplier: 'Yangon Supply',
+      sku: 'SKU-1',
+      quantityOrdered: 10,
+    }, purchaseCreationProof) === null, 'changed_purchase_arrival_retry_succeeded')
     const purchasePartialProof = proof('ACT-PURCHASE-RECEIVE-1', 60_000)
     const purchasePartial = model.receiveCommercePurchaseOrder(purchaseCreated, purchaseOrderId, 4, purchasePartialProof)
     const purchasePartialProgress = purchasePartial && model.commercePurchaseOrderProgress(purchasePartial, purchasePartial.purchaseOrders[0])
@@ -3214,6 +3243,7 @@ async function verifyCommerceRuntime() {
     const precisePurchaseOrderId = 'PO-00000000-0000-4000-8000-000000000022'
     const precisePurchaseCreated = model.createCommercePurchaseOrder(base, {
       id: precisePurchaseOrderId,
+      expectedAt: '2026-07-25T09:00:00.000001Z',
       supplier: 'Precision supplier',
       sku: 'SKU-1',
       quantityOrdered: 2,
@@ -3230,6 +3260,72 @@ async function verifyCommerceRuntime() {
         precisePurchaseOrderId,
         proof('ACT-PURCHASE-PRECISE-CANCEL', 0, { capturedAt: '2026-07-23T09:00:00.000100Z' }),
       ) === null, 'submillisecond_purchase_cancellation_ordering_collapsed')
+
+    const attentionCreation = (id, sku, actionId, expectedAt, cancellation) => ({
+      id,
+      createdAt: '2026-07-23T09:00:00.000Z',
+      ...(expectedAt ? { expectedAt } : {}),
+      supplier: 'Attention supplier',
+      sku,
+      quantityOrdered: 2,
+      creation: proof(actionId),
+      ...(cancellation ? { cancellation } : {}),
+    })
+    const attentionState = model.validateCommerceState({
+      ...model.createEmptyCommerce(),
+      items: ['SKU-1', 'SKU-2', 'SKU-3', 'SKU-4'].map((sku) => ({
+        sku,
+        name: sku,
+        onHand: 10,
+        reorderAt: 2,
+        price: 100,
+      })),
+      purchaseOrders: [
+        attentionCreation(
+          'PO-00000000-0000-4000-8000-000000000030',
+          'SKU-1',
+          'ACT-ATTENTION-CLOSED',
+          '2026-07-23T10:00:00.000Z',
+          proof('ACT-ATTENTION-CANCELLED', 60_000),
+        ),
+        attentionCreation(
+          'PO-00000000-0000-4000-8000-000000000031',
+          'SKU-2',
+          'ACT-ATTENTION-LEGACY',
+        ),
+        attentionCreation(
+          'PO-00000000-0000-4000-8000-000000000032',
+          'SKU-3',
+          'ACT-ATTENTION-LATER',
+          '2026-07-23T13:00:00.000Z',
+        ),
+        attentionCreation(
+          'PO-00000000-0000-4000-8000-000000000033',
+          'SKU-4',
+          'ACT-ATTENTION-SOONER',
+          '2026-07-23T11:00:00.000Z',
+        ),
+      ],
+    })
+    const attentionOrder = attentionState.purchaseOrders
+      .map((purchaseOrder) => ({
+        purchaseOrder,
+        progress: model.commercePurchaseOrderProgress(attentionState, purchaseOrder),
+      }))
+      .sort(model.compareCommercePurchaseOrderAttention)
+      .map(({ purchaseOrder }) => purchaseOrder.id)
+    assert(JSON.stringify(attentionOrder) === JSON.stringify([
+      'PO-00000000-0000-4000-8000-000000000033',
+      'PO-00000000-0000-4000-8000-000000000032',
+      'PO-00000000-0000-4000-8000-000000000031',
+      'PO-00000000-0000-4000-8000-000000000030',
+    ]), 'purchase_order_attention_order_not_operational')
+    const legacyPurchaseState = model.validateCommerceState({
+      ...model.createEmptyCommerce(),
+      items: attentionState.items,
+      purchaseOrders: [attentionState.purchaseOrders[1]],
+    })
+    assert(legacyPurchaseState.purchaseOrders[0].expectedAt === undefined, 'legacy_purchase_arrival_was_invented')
 
     const receiptProof = proof('ACT-RECEIPT')
     const received = model.receiveCommerceStock(base, 'SKU-1', 7, receiptProof)
