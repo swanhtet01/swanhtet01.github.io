@@ -1161,6 +1161,17 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                                 )
                             )
                         ]
+                    if "storage_audit_transaction_read_only" in q:
+                        return [
+                            _snapshot(
+                                storage_audit_transaction_read_only=(
+                                    scenario != "storage_audit_not_read_only"
+                                ),
+                                storage_audit_tls_active=(
+                                    scenario != "storage_audit_tls_missing"
+                                ),
+                            )
+                        ]
                     if "transaction_read_only" in q and "dedicated_login" in q:
                         return [
                             _snapshot(
@@ -1256,6 +1267,70 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                         return [
                             _snapshot(
                                 schema_version=0 if scenario == "wrong_version" else 5,
+                            )
+                        ]
+                    if "buckets_table_exists" in q and "objects_table_exists" in q:
+                        catalog_present = scenario != "missing_storage_catalog"
+                        return [
+                            _snapshot(
+                                buckets_table_exists=catalog_present,
+                                objects_table_exists=catalog_present,
+                                buckets_rls_enabled=(
+                                    catalog_present and scenario != "storage_buckets_rls_disabled"
+                                ),
+                                objects_rls_enabled=(
+                                    catalog_present and scenario != "storage_objects_rls_disabled"
+                                ),
+                                bucket_inventory_readable=(
+                                    catalog_present and scenario != "storage_bucket_inventory_denied"
+                                ),
+                            )
+                        ]
+                    if "from storage.buckets" in q:
+                        return [
+                            _snapshot(
+                                bucket_count=(
+                                    1 if scenario != "storage_invalid_bucket_inventory" else 0
+                                ),
+                                public_bucket_count=(
+                                    1
+                                    if scenario in {
+                                        "public_storage_bucket",
+                                        "storage_invalid_bucket_inventory",
+                                    }
+                                    else 0
+                                ),
+                            )
+                        ]
+                    if "from pg_policies" in q and "schemaname = 'storage'" in q:
+                        policy_by_scenario = {
+                            "storage_public_policy": ("PUBLIC", "true"),
+                            "storage_anon_policy": ("anon", "true"),
+                            "storage_authenticated_true_policy": ("authenticated", "true"),
+                            "storage_cross_tenant_policy": (
+                                "authenticated",
+                                "bucket_id = 'private-client-files'",
+                            ),
+                            "storage_unallowlisted_tenant_policy": (
+                                "authenticated",
+                                "bucket_id = 'private-client-files' and "
+                                "(storage.foldername(name))[1] = "
+                                "(select auth.jwt()->'app_metadata'->>'workspace_id')",
+                            ),
+                        }
+                        policy = policy_by_scenario.get(scenario)
+                        if policy is None:
+                            return []
+                        role, qual = policy
+                        return [
+                            _snapshot(
+                                table_name="objects",
+                                policy_name=f"fixture_{scenario}",
+                                permissive="PERMISSIVE",
+                                roles=[role],
+                                command="SELECT",
+                                qual=qual,
+                                with_check=None,
                             )
                         ]
                     if "pg_policies" in q:
@@ -1680,6 +1755,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
         *,
         scenario: str = "ready",
         database_url: str | None = DATABASE_URL,
+        storage_audit_database_url: str | None = DATABASE_URL,
     ) -> tuple[subprocess.CompletedProcess[str], Path]:
         log_path = self.fake_root / f"queries-{scenario}.log"
         log_path.unlink(missing_ok=True)
@@ -1700,6 +1776,8 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
         )
         if database_url is not None:
             environment["SUPERMEGA_TEST_DATABASE_URL"] = database_url
+        if storage_audit_database_url is not None:
+            environment["SUPERMEGA_STORAGE_AUDIT_DATABASE_URL"] = storage_audit_database_url
         result = subprocess.run(
             [
                 sys.executable,
@@ -1738,6 +1816,12 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
             "relrowsecurity",
             "relforcerowsecurity",
             "pg_policies",
+            "storage.buckets",
+            "storage.objects",
+            "supermega_storage_audit_database_url",
+            "supermega-storage-readiness-audit",
+            "bucket_inventory_readable",
+            "storage_policy_surface_empty_until_allowlisted",
             "pg_trigger",
             "pg_index",
             *EXPECTED_TABLES,
@@ -1836,6 +1920,12 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
             "private_acl_exact",
             "private_default_acl_empty",
             "browser_roles_not_backend_members",
+            "storage_audit_connection_read_only_encrypted",
+            "storage_catalog_present",
+            "storage_tables_rls_enabled",
+            "storage_bucket_inventory_readable",
+            "storage_public_buckets_absent",
+            "storage_policy_surface_empty_until_allowlisted",
         }
         self.assertTrue(expected_checks.issubset(checks))
         self.assertTrue(all(checks[name] is True for name in expected_checks), checks)
@@ -1887,6 +1977,18 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
         )
         self.assertEqual(evidence.get("triggers"), sorted(EXPECTED_TRIGGERS))
         self.assertEqual(evidence.get("indexes"), sorted(EXPECTED_INDEXES))
+        self.assertEqual(
+            evidence.get("storage"),
+            {
+                "baseline": "private_server_side_only",
+                "tables": ["buckets", "objects"],
+                "audit_connection_read_only_encrypted": True,
+                "bucket_inventory_readable": True,
+                "bucket_count": 1,
+                "public_bucket_count": 0,
+                "policy_count": 0,
+            },
+        )
 
         statements = log_path.read_text(encoding="utf-8").splitlines()
         self.assertTrue(any(line == "CONNECT" for line in statements))
@@ -1942,6 +2044,19 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
             "missing_table",
             "extra_private_view",
             "missing_rls",
+            "missing_storage_catalog",
+            "storage_audit_not_read_only",
+            "storage_audit_tls_missing",
+            "storage_buckets_rls_disabled",
+            "storage_objects_rls_disabled",
+            "storage_bucket_inventory_denied",
+            "storage_invalid_bucket_inventory",
+            "public_storage_bucket",
+            "storage_public_policy",
+            "storage_anon_policy",
+            "storage_authenticated_true_policy",
+            "storage_cross_tenant_policy",
+            "storage_unallowlisted_tenant_policy",
             "forbidden_grant",
             "backend_truncate",
             "custom_grantee",
@@ -1992,6 +2107,23 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
         ):
             with self.subTest(case=label):
                 result, log_path = self._run(database_url=database_url)
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertCredentialsAreSanitized(result)
+                if log_path.exists():
+                    self.assertNotIn("CONNECT", log_path.read_text(encoding="utf-8"))
+
+    def test_missing_or_invalid_storage_audit_url_fails_before_connecting(self) -> None:
+        for label, storage_audit_database_url in (
+            ("missing", None),
+            (
+                "invalid",
+                "https://trial_runtime:S3cr3t-activation-value@example.invalid/db",
+            ),
+        ):
+            with self.subTest(case=label):
+                result, log_path = self._run(
+                    storage_audit_database_url=storage_audit_database_url
+                )
                 self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertCredentialsAreSanitized(result)
                 if log_path.exists():

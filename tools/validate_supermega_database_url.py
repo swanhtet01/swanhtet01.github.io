@@ -40,6 +40,8 @@ EXPECTED_TABLES = frozenset(
 )
 TENANT_TABLES = frozenset(EXPECTED_TABLES - {"trial_schema_meta"})
 BROWSER_ROLES = frozenset({"anon", "authenticated", "service_role"})
+STORAGE_TABLES = frozenset({"buckets", "objects"})
+STORAGE_BASELINE = "private_server_side_only"
 EXPECTED_INDEXES = frozenset(
     {
         "trial_schema_meta_pkey",
@@ -413,6 +415,10 @@ class AuditConfigurationError(ValueError):
 
 def _bool(value: Any) -> bool:
     return value is True
+
+
+def _nonnegative_int(value: Any) -> int | None:
+    return value if type(value) is int and value >= 0 else None
 
 
 def _mapping(row: Any) -> dict[str, Any]:
@@ -1228,6 +1234,86 @@ def collect_snapshot(connection: Any) -> dict[str, Any]:
     }
 
 
+def collect_storage_snapshot(connection: Any) -> dict[str, Any]:
+    """Collect Storage posture through a separate read-only audit connection."""
+
+    with connection.cursor() as cursor:
+        cursor.execute("set transaction read only")
+        cursor.execute(
+            """
+            select
+              current_setting('transaction_read_only') = 'on'
+                as storage_audit_transaction_read_only,
+              coalesce((select ssl from pg_stat_ssl where pid = pg_backend_pid()), false)
+                as storage_audit_tls_active
+            """
+        )
+        storage_audit_connection = _mapping(cursor.fetchone())
+        cursor.execute(
+            """
+            select
+              to_regclass('storage.buckets') is not null as buckets_table_exists,
+              to_regclass('storage.objects') is not null as objects_table_exists,
+              coalesce((
+                select table_record.relrowsecurity
+                from pg_class table_record
+                join pg_namespace schema_record
+                  on schema_record.oid = table_record.relnamespace
+                where schema_record.nspname = 'storage'
+                  and table_record.relname = 'buckets'
+                  and table_record.relkind in ('r', 'p')
+              ), false) as buckets_rls_enabled,
+              coalesce((
+                select table_record.relrowsecurity
+                from pg_class table_record
+                join pg_namespace schema_record
+                  on schema_record.oid = table_record.relnamespace
+                where schema_record.nspname = 'storage'
+                  and table_record.relname = 'objects'
+                  and table_record.relkind in ('r', 'p')
+              ), false) as objects_rls_enabled,
+              coalesce(
+                has_table_privilege(
+                  current_user,
+                  to_regclass('storage.buckets'),
+                  'SELECT'
+                ),
+                false
+              ) as bucket_inventory_readable
+            """
+        )
+        storage_catalog = _mapping(cursor.fetchone())
+        storage_bucket_inventory: dict[str, Any] = {}
+        if _bool(storage_catalog.get("bucket_inventory_readable")):
+            cursor.execute(
+                """
+                select count(*)::integer as bucket_count,
+                       count(*) filter (where public is true)::integer
+                         as public_bucket_count
+                from storage.buckets
+                """
+            )
+            storage_bucket_inventory = _mapping(cursor.fetchone())
+        storage_policies = _execute_rows(
+            cursor,
+            """
+            select tablename as table_name, policyname as policy_name, permissive,
+                   roles, cmd as command, qual, with_check
+            from pg_policies
+            where schemaname = 'storage'
+              and tablename in ('buckets', 'objects')
+            order by tablename, policyname
+            """,
+        )
+
+    return {
+        "storage_audit_connection": storage_audit_connection,
+        "storage_catalog": storage_catalog,
+        "storage_bucket_inventory": storage_bucket_inventory,
+        "storage_policies": storage_policies,
+    }
+
+
 def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
     engine = _mapping(snapshot.get("engine", {}))
     identity = _mapping(snapshot.get("identity", {}))
@@ -1238,6 +1324,10 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
     schema = _mapping(snapshot.get("schema", {}))
     table_rows = [_mapping(row) for row in snapshot.get("tables", [])]
     policy_rows = [_mapping(row) for row in snapshot.get("policies", [])]
+    storage_audit_connection = _mapping(snapshot.get("storage_audit_connection", {}))
+    storage_catalog = _mapping(snapshot.get("storage_catalog", {}))
+    storage_bucket_inventory = _mapping(snapshot.get("storage_bucket_inventory", {}))
+    storage_policy_rows = [_mapping(row) for row in snapshot.get("storage_policies", [])]
     hardening_constraint_rows = [
         _mapping(row) for row in snapshot.get("hardening_constraints", [])
     ]
@@ -1303,6 +1393,35 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
     tenant_rls = exact_tables and all(
         _bool(tables[name].get("rls_enabled")) and _bool(tables[name].get("rls_forced"))
         for name in TENANT_TABLES
+    )
+    storage_catalog_present = all(
+        _bool(storage_catalog.get(key))
+        for key in ("buckets_table_exists", "objects_table_exists")
+    )
+    storage_rls_enabled = storage_catalog_present and all(
+        _bool(storage_catalog.get(key))
+        for key in ("buckets_rls_enabled", "objects_rls_enabled")
+    )
+    storage_bucket_count = _nonnegative_int(storage_bucket_inventory.get("bucket_count"))
+    public_bucket_count = _nonnegative_int(
+        storage_bucket_inventory.get("public_bucket_count")
+    )
+    storage_bucket_inventory_readable = (
+        _bool(storage_catalog.get("bucket_inventory_readable"))
+        and storage_bucket_count is not None
+        and public_bucket_count is not None
+        and public_bucket_count <= storage_bucket_count
+    )
+    storage_public_buckets_absent = (
+        storage_bucket_inventory_readable and public_bucket_count == 0
+    )
+    storage_policy_surface_empty = not storage_policy_rows
+    storage_audit_connection_safe = all(
+        _bool(storage_audit_connection.get(key))
+        for key in (
+            "storage_audit_transaction_read_only",
+            "storage_audit_tls_active",
+        )
     )
     functions = {str(row.get("function_name")): row for row in function_rows}
     exact_functions = (
@@ -1498,6 +1617,12 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
         "backend_acl_scope_exact": backend_acl_scope_exact,
         "private_default_acl_empty": not default_acl_rows,
         "browser_roles_not_backend_members": browser_roles_isolated,
+        "storage_audit_connection_read_only_encrypted": storage_audit_connection_safe,
+        "storage_catalog_present": storage_catalog_present,
+        "storage_tables_rls_enabled": storage_rls_enabled,
+        "storage_bucket_inventory_readable": storage_bucket_inventory_readable,
+        "storage_public_buckets_absent": storage_public_buckets_absent,
+        "storage_policy_surface_empty_until_allowlisted": storage_policy_surface_empty,
     }
     failed = [name for name, passed in checks.items() if not passed]
     return {
@@ -1541,6 +1666,15 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
             "hardening_constraints": sorted(EXPECTED_SECURITY_CONSTRAINTS),
             "triggers": sorted(EXPECTED_TRIGGERS),
             "indexes": sorted(EXPECTED_INDEXES),
+            "storage": {
+                "baseline": STORAGE_BASELINE,
+                "tables": sorted(STORAGE_TABLES),
+                "audit_connection_read_only_encrypted": storage_audit_connection_safe,
+                "bucket_inventory_readable": storage_bucket_inventory_readable,
+                "bucket_count": storage_bucket_count,
+                "public_bucket_count": public_bucket_count,
+                "policy_count": len(storage_policy_rows),
+            },
         },
         "mutation_statements_executed": 0,
         "secret_values_exposed": False,
@@ -1568,6 +1702,18 @@ def _open_connection(database_url: str) -> Any:
     )
 
 
+def _open_storage_audit_connection(database_url: str) -> Any:
+    psycopg, dict_row = _postgres_driver()
+    return psycopg.connect(
+        database_url,
+        row_factory=dict_row,
+        connect_timeout=5,
+        sslmode=_database_url_sslmode(database_url),
+        application_name="supermega-storage-readiness-audit",
+        options="-c default_transaction_read_only=on -c statement_timeout=5000 -c lock_timeout=1000",
+    )
+
+
 def _open_supabase_rehearsal_connection(
     database_url: str,
     ssl_root_cert_path: str,
@@ -1584,17 +1730,37 @@ def _open_supabase_rehearsal_connection(
     )
 
 
-def audit_database(database_url: str, *, connect_factory: Any = None) -> dict[str, Any]:
+def audit_database(
+    database_url: str,
+    *,
+    storage_audit_database_url: str,
+    connect_factory: Any = None,
+    storage_connect_factory: Any = None,
+) -> dict[str, Any]:
     validate_database_url(database_url)
+    try:
+        validate_database_url(storage_audit_database_url)
+    except AuditConfigurationError as exc:
+        raise AuditConfigurationError("storage_audit_database_url_invalid") from exc
     connection = (connect_factory or _open_connection)(database_url)
     try:
         snapshot = collect_snapshot(connection)
-        return evaluate_snapshot(snapshot)
     finally:
         try:
             connection.rollback()
         finally:
             connection.close()
+    storage_connection = (storage_connect_factory or _open_storage_audit_connection)(
+        storage_audit_database_url
+    )
+    try:
+        snapshot.update(collect_storage_snapshot(storage_connection))
+    finally:
+        try:
+            storage_connection.rollback()
+        finally:
+            storage_connection.close()
+    return evaluate_snapshot(snapshot)
 
 
 def _safe_failure(code: str, *, contract: str = CONTRACT) -> dict[str, Any]:
@@ -1621,6 +1787,14 @@ def _safe_failure(code: str, *, contract: str = CONTRACT) -> dict[str, Any]:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Audit the SuperMega trial database without mutating it.")
     parser.add_argument("--env-key", default="SUPERMEGA_DATABASE_URL")
+    parser.add_argument(
+        "--storage-audit-env-key",
+        default="SUPERMEGA_STORAGE_AUDIT_DATABASE_URL",
+        help=(
+            "Environment variable containing a separate read-only audit URL that can inspect "
+            "Supabase Storage bucket metadata."
+        ),
+    )
     parser.add_argument(
         "--ensure-schema",
         action="store_true",
@@ -1665,6 +1839,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.ssl_root_cert_env_key,
             ]
         )
+    else:
+        environment_keys.append(args.storage_audit_env_key)
     if not all(re.fullmatch(r"[A-Z][A-Z0-9_]{2,80}", key) for key in environment_keys):
         contract = REHEARSAL_PREFLIGHT_CONTRACT if args.rehearsal_preflight else CONTRACT
         print(json.dumps(_safe_failure("env_key_invalid", contract=contract), sort_keys=True))
@@ -1674,6 +1850,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         contract = REHEARSAL_PREFLIGHT_CONTRACT if args.rehearsal_preflight else CONTRACT
         print(json.dumps(_safe_failure("database_url_missing", contract=contract), sort_keys=True))
         return 2
+    storage_audit_database_url = ""
+    if not args.rehearsal_preflight:
+        storage_audit_database_url = str(
+            os.getenv(args.storage_audit_env_key, "")
+        ).strip()
+        if not storage_audit_database_url:
+            print(
+                json.dumps(
+                    _safe_failure("storage_audit_database_url_missing"),
+                    sort_keys=True,
+                )
+            )
+            return 2
 
     if args.rehearsal_preflight and (args.ensure_schema or args.require_ready):
         print(
@@ -1702,7 +1891,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 ),
             )
         else:
-            report = audit_database(database_url)
+            report = audit_database(
+                database_url,
+                storage_audit_database_url=storage_audit_database_url,
+            )
     except AuditConfigurationError as exc:
         contract = REHEARSAL_PREFLIGHT_CONTRACT if args.rehearsal_preflight else CONTRACT
         report = _safe_failure(exc.code, contract=contract)
