@@ -18,11 +18,13 @@ from fastapi.testclient import TestClient
 
 from supermega_runtime.cloud_runtime import DAILY_CRON_PATH, QUEUE_CRON_PATH, router
 from mark1_pilot.agent_governance import (
+    AGENT_CAPACITY_PLAN_CONTRACT,
     AGENT_BUDGET_ACCOUNTING_CONTRACT,
     AGENT_BUDGET_GRANT_CONTRACT,
     AgentGovernanceError,
     issue_agent_budget_grant,
     load_agent_workforce_policy,
+    plan_agent_capacity,
     verify_agent_budget_grant,
 )
 from mark1_pilot.enterprise_store import (
@@ -31,6 +33,7 @@ from mark1_pilot.enterprise_store import (
     create_agent_run,
     create_and_reserve_agent_run,
     ensure_workspace,
+    get_agent_capacity_plan,
     get_agent_run,
 )
 
@@ -149,9 +152,14 @@ class CloudRuntimeTests(unittest.TestCase):
     def test_queue_and_daily_routes_forward_fixed_meaningful_job_types(self) -> None:
         with patch("supermega_runtime.cloud_runtime._open_worker_request", side_effect=self._success_response) as open_worker:
             with self._client() as client:
+                status = client.get("/api/cloud-autonomy/status")
                 queue = client.get(QUEUE_CRON_PATH, headers={"authorization": "Bearer cron-secret"})
                 daily = client.get(DAILY_CRON_PATH, headers={"authorization": "Bearer cron-secret"})
 
+        self.assertEqual(status.json()["capacity"]["contract"], AGENT_CAPACITY_PLAN_CONTRACT)
+        self.assertEqual(status.json()["capacity"]["execution_model"], "ephemeral_demand_driven")
+        self.assertFalse(status.json()["capacity"]["registered_specialists_consume_compute"])
+        self.assertEqual(status.json()["scheduler"]["max_jobs_per_run"], 2)
         self.assertEqual(queue.json()["status"], "accepted")
         self.assertEqual(daily.json()["status"], "accepted")
         queue_request = open_worker.call_args_list[0].args[0]
@@ -161,7 +169,9 @@ class CloudRuntimeTests(unittest.TestCase):
         self.assertEqual(queue_payload["contract_version"], "supermega.hosted-agent-scheduler.v1")
         self.assertEqual(queue_payload["cycle"], "queue")
         self.assertEqual(queue_payload["job_types"], ["task_triage", "ops_watch"])
-        self.assertEqual(queue_payload["limit"], 8)
+        self.assertEqual(queue_payload["limit"], 2)
+        self.assertEqual(queue_payload["capacity_contract"], AGENT_CAPACITY_PLAN_CONTRACT)
+        self.assertEqual(queue_payload["execution_model"], "ephemeral_demand_driven")
         self.assertEqual(queue_payload["budget_grant"]["contract"], AGENT_BUDGET_GRANT_CONTRACT)
         self.assertEqual(queue_payload["budget_grant"]["job_types"], queue_payload["job_types"])
         self.assertEqual(queue_payload["budget_grant"]["max_runs"], 2)
@@ -172,7 +182,23 @@ class CloudRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(daily_payload["cycle"], "daily")
         self.assertEqual(daily_payload["job_types"], ["founder_brief", "github_release_watch"])
-        self.assertEqual(daily_payload["limit"], 4)
+        self.assertEqual(daily_payload["limit"], 2)
+
+    def test_scheduler_emits_one_bounded_structured_log_without_secrets(self) -> None:
+        with patch("supermega_runtime.cloud_runtime._open_worker_request", side_effect=self._success_response):
+            with self._client() as client:
+                with self.assertLogs("supermega.cloud_runtime", level="INFO") as captured:
+                    response = client.get(QUEUE_CRON_PATH, headers={"authorization": "Bearer cron-secret"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(captured.records), 1)
+        log_payload = json.loads(captured.records[0].getMessage())
+        self.assertEqual(log_payload["event"], "supermega_agent_scheduler_cycle")
+        self.assertEqual(log_payload["cycle"], "queue")
+        self.assertEqual(log_payload["status"], "accepted")
+        self.assertTrue(log_payload["worker_invoked"])
+        self.assertGreaterEqual(log_payload["duration_ms"], 0)
+        self.assertNotIn("worker-secret", captured.records[0].getMessage())
 
     def test_non_https_unlisted_and_query_worker_urls_are_rejected_without_network_access(self) -> None:
         cases = (
@@ -366,6 +392,65 @@ class AgentGovernanceTests(unittest.TestCase):
             with self.assertRaises(AgentGovernanceError) as policy_error:
                 load_agent_workforce_policy()
         self.assertEqual(policy_error.exception.code, "agent_policy_invalid")
+
+    def test_large_registered_roster_scales_to_zero_and_caps_real_execution(self) -> None:
+        idle = plan_agent_capacity(
+            queued_job_types=[],
+            running_job_types=[],
+            daily_job_types=[],
+            registered_specialists=175,
+        )
+        self.assertEqual(idle["contract"], AGENT_CAPACITY_PLAN_CONTRACT)
+        self.assertEqual(idle["decision"], "scale_to_zero")
+        self.assertEqual(idle["target_active_executions"], 0)
+        self.assertEqual(idle["idle_registered_specialists"], 175)
+        self.assertFalse(idle["registered_specialists_consume_compute"])
+
+        busy = plan_agent_capacity(
+            queued_job_types=self.job_types,
+            running_job_types=[],
+            daily_job_types=[],
+            registered_specialists=175,
+        )
+        self.assertEqual(busy["decision"], "scale_up")
+        self.assertEqual(busy["target_active_executions"], load_agent_workforce_policy().max_running)
+        self.assertEqual(len(busy["recommended_claim_job_types"]), load_agent_workforce_policy().max_running)
+        self.assertEqual(busy["idle_registered_specialists"], 171)
+
+    def test_capacity_plan_skips_expensive_work_that_cannot_fit_remaining_budget(self) -> None:
+        with patch.dict(os.environ, {"SUPERMEGA_AGENT_MAX_DAILY_UNITS": "4"}):
+            with self._database() as (database_url, workspace_id, _):
+                founder = create_and_reserve_agent_run(
+                    database_url,
+                    workspace_id=workspace_id,
+                    job_type="founder_brief",
+                )
+                complete_agent_run(
+                    database_url,
+                    workspace_id=workspace_id,
+                    run_id=founder["run_id"],
+                    claim_token=founder["claim_token"],
+                    status="ready",
+                )
+                expensive = create_agent_run(database_url, workspace_id=workspace_id, job_type="revenue_scout")
+                useful = create_agent_run(database_url, workspace_id=workspace_id, job_type="ops_watch")
+
+                capacity = get_agent_capacity_plan(
+                    database_url,
+                    workspace_id=workspace_id,
+                    registered_specialists=175,
+                )
+                self.assertEqual(capacity["recommended_claim_job_types"], ["ops_watch"])
+                self.assertEqual(capacity["target_active_executions"], 1)
+                self.assertEqual(capacity["idle_registered_specialists"], 174)
+                self.assertEqual(capacity["budget"]["daily_work_units_remaining"], 1)
+
+                claimed = claim_agent_runs(database_url, workspace_id=workspace_id, limit=5)
+                self.assertEqual([row["run_id"] for row in claimed], [useful["run_id"]])
+                self.assertEqual(
+                    get_agent_run(database_url, workspace_id=workspace_id, run_id=expensive["run_id"])["status"],
+                    "queued",
+                )
 
     def test_queue_deduplicates_and_completion_requires_one_live_claim(self) -> None:
         with self._database() as (database_url, workspace_id, _):

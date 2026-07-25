@@ -123,6 +123,7 @@ from mark1_pilot.enterprise_store import (  # noqa: E402
     ensure_user as enterprise_ensure_user,
     get_lead as enterprise_get_lead,
     get_lead_hunt_profile as enterprise_get_lead_hunt_profile,
+    get_agent_capacity_plan as enterprise_get_agent_capacity_plan,
     get_session as enterprise_get_session,
     get_workspace_profile as enterprise_get_workspace_profile,
     get_workspace_domain_by_hostname as enterprise_get_workspace_domain_by_hostname,
@@ -1454,12 +1455,29 @@ def _viewer_has_any_capability(viewer_capabilities: list[str], required_capabili
     return any(capability in allowed for capability in required)
 
 
+def _registered_specialist_count(teams: list[dict[str, Any]]) -> int:
+    registered: set[str] = set()
+    for team in teams:
+        team_id = str(team.get("team_id", "")).strip()
+        agents = team.get("agents", [])
+        if not isinstance(agents, list):
+            continue
+        for agent in agents:
+            if not isinstance(agent, dict):
+                continue
+            agent_id = str(agent.get("agent_id") or agent.get("unit_id") or agent.get("name") or "").strip()
+            if agent_id:
+                registered.add(f"{team_id}::{agent_id}")
+    return len(registered)
+
+
 def _build_agent_runtime_contract(
     *,
     manifest: dict[str, Any] | None,
     teams: list[dict[str, Any]],
     latest_runs_by_type: dict[str, dict[str, Any]],
     viewer_contract: dict[str, Any] | None = None,
+    capacity_plan: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     manifest_dict = manifest if isinstance(manifest, dict) else {}
     tool_lookup = {
@@ -1479,6 +1497,13 @@ def _build_agent_runtime_contract(
     scheduler_backed_team_count = 0
     guarded_team_count = 0
     viewer_dict = viewer_contract if isinstance(viewer_contract, dict) else {}
+    capacity_dict = capacity_plan if isinstance(capacity_plan, dict) else {}
+    registered_specialists = int(
+        capacity_dict.get("registered_specialists", _registered_specialist_count(teams)) or 0
+    )
+    capacity_limits = capacity_dict.get("limits", {}) if isinstance(capacity_dict.get("limits", {}), dict) else {}
+    max_active_executions = int(capacity_limits.get("max_running", load_agent_workforce_policy().max_running) or 0)
+    target_active_executions = int(capacity_dict.get("target_active_executions", 0) or 0)
     viewer_capabilities = [str(item).strip() for item in viewer_dict.get("capabilities", []) if str(item).strip()]
     crews: list[dict[str, Any]] = []
 
@@ -1580,7 +1605,12 @@ def _build_agent_runtime_contract(
             "connector_enabled_team_count": connector_enabled_team_count,
             "approval_gate_count": len(approval_gates_seen),
             "guarded_team_count": guarded_team_count,
+            "registered_specialists": registered_specialists,
+            "max_active_executions": max_active_executions,
+            "target_active_executions": target_active_executions,
+            "registered_specialists_consume_compute": False,
         },
+        "capacity": capacity_dict,
         "crews": crews,
     }
 
@@ -10815,6 +10845,11 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             teams=agent_team_rows,
             latest_runs_by_type=latest_by_type,
             viewer_contract=agent_runtime_viewer,
+            capacity_plan=enterprise_get_agent_capacity_plan(
+                enterprise_db_url,
+                workspace_id=workspace_id,
+                registered_specialists=_registered_specialist_count(agent_team_rows),
+            ),
         )
 
         return {
@@ -12451,6 +12486,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                 {"architect.view", "director.view", "tenant_admin.view", "platform_admin.view"},
             ),
         }
+        registered_specialists = _registered_specialist_count(team_rows)
         return {
             "status": "blocked" if bool(tenant_state.get("blocked")) else "ready",
             "tenant_state": tenant_state,
@@ -12469,6 +12505,11 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                 teams=team_rows,
                 latest_runs_by_type=latest_runs_by_type,
                 viewer_contract=viewer_contract,
+                capacity_plan=enterprise_get_agent_capacity_plan(
+                    enterprise_db_url,
+                    workspace_id=workspace_id,
+                    registered_specialists=registered_specialists,
+                ),
             ),
         }
 

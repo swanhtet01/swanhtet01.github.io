@@ -12,6 +12,7 @@ from typing import Any, Mapping, Sequence
 
 
 AGENT_WORKFORCE_POLICY_CONTRACT = "supermega.agent-workforce-policy.v1"
+AGENT_CAPACITY_PLAN_CONTRACT = "supermega.agent-capacity-plan.v1"
 AGENT_BUDGET_GRANT_CONTRACT = "supermega.agent-budget-grant.v1"
 AGENT_BUDGET_ACCOUNTING_CONTRACT = "supermega.agent-budget-accounting.v1"
 AGENT_BUDGET_AUDIENCE = "supermega-agent-runtime"
@@ -81,6 +82,10 @@ class AgentWorkforcePolicy:
             "job_units": dict(AGENT_JOB_UNITS),
             "job_daily_limits": dict(AGENT_JOB_DAILY_LIMITS),
             "in_flight_per_job": 1,
+            "capacity_plan_contract": AGENT_CAPACITY_PLAN_CONTRACT,
+            "execution_model": "ephemeral_demand_driven",
+            "registered_specialists_consume_compute": False,
+            "idle_active_execution_target": 0,
         }
 
 
@@ -148,6 +153,160 @@ def agent_job_daily_limit(job_type: str) -> int:
         return AGENT_JOB_DAILY_LIMITS[normalized]
     except KeyError as exc:
         raise AgentGovernanceError("agent_job_type_not_allowed", f"Unsupported agent job type: {normalized or 'blank'}.") from exc
+
+
+def _agent_job_sequence(values: Sequence[object] | None, *, field: str) -> list[str]:
+    if values is None:
+        return []
+    if len(values) > 10_000:
+        raise AgentGovernanceError("agent_capacity_state_invalid", f"{field} is too large to plan safely.")
+    normalized: list[str] = []
+    for raw in values:
+        job_type = str(raw or "").strip().lower()
+        if job_type not in AGENT_JOB_UNITS:
+            raise AgentGovernanceError(
+                "agent_job_type_not_allowed",
+                f"Unsupported agent job type in {field}: {job_type or 'blank'}.",
+            )
+        normalized.append(job_type)
+    return normalized
+
+
+def _capacity_limit(value: int | None, *, default: int, maximum: int, field: str) -> int:
+    candidate = default if value is None else value
+    if type(candidate) is not int or candidate < 0 or candidate > maximum:
+        raise AgentGovernanceError(
+            "agent_capacity_limit_invalid",
+            f"{field} must be a whole number between 0 and {maximum}.",
+        )
+    return candidate
+
+
+def plan_agent_capacity(
+    *,
+    queued_job_types: Sequence[object] | None,
+    running_job_types: Sequence[object] | None,
+    daily_job_types: Sequence[object] | None,
+    registered_specialists: int = 0,
+    max_claim_runs: int | None = None,
+    max_claim_work_units: int | None = None,
+    policy: AgentWorkforcePolicy | None = None,
+) -> dict[str, object]:
+    """Plan useful execution demand without treating a specialist roster as workers."""
+
+    active_policy = policy or load_agent_workforce_policy()
+    if type(registered_specialists) is not int or registered_specialists < 0 or registered_specialists > 100_000:
+        raise AgentGovernanceError(
+            "agent_capacity_state_invalid",
+            "registered_specialists must be a whole number between 0 and 100000.",
+        )
+
+    queued = _agent_job_sequence(queued_job_types, field="queued_job_types")
+    running = _agent_job_sequence(running_job_types, field="running_job_types")
+    daily = _agent_job_sequence(daily_job_types, field="daily_job_types")
+    if len(running) > active_policy.max_running or len(set(running)) != len(running):
+        raise AgentGovernanceError(
+            "agent_capacity_state_invalid",
+            "Active agent reservations exceed the concurrency or per-job policy.",
+        )
+
+    claim_run_limit = _capacity_limit(
+        max_claim_runs,
+        default=active_policy.max_batch_jobs,
+        maximum=active_policy.max_batch_jobs,
+        field="max_claim_runs",
+    )
+    claim_unit_limit = _capacity_limit(
+        max_claim_work_units,
+        default=active_policy.max_daily_units,
+        maximum=active_policy.max_daily_units,
+        field="max_claim_work_units",
+    )
+    daily_units_used = sum(agent_job_units(job_type) for job_type in daily)
+    daily_counts = {job_type: daily.count(job_type) for job_type in AGENT_JOB_UNITS}
+    remaining_daily_runs = max(0, active_policy.max_daily_runs - len(daily))
+    remaining_daily_units = max(0, active_policy.max_daily_units - daily_units_used)
+    available_slots = max(0, active_policy.max_running - len(running))
+    selection_limit = min(available_slots, remaining_daily_runs, claim_run_limit)
+    selection_unit_limit = min(remaining_daily_units, claim_unit_limit)
+
+    selected: list[str] = []
+    selected_units = 0
+    seen_queued: set[str] = set()
+    running_set = set(running)
+    deferred = {
+        "duplicate_job": 0,
+        "job_in_flight": 0,
+        "job_daily_budget": 0,
+        "run_or_concurrency_limit": 0,
+        "work_unit_budget": 0,
+    }
+    for job_type in queued:
+        if job_type in seen_queued:
+            deferred["duplicate_job"] += 1
+            continue
+        seen_queued.add(job_type)
+        if job_type in running_set:
+            deferred["job_in_flight"] += 1
+            continue
+        if daily_counts[job_type] >= agent_job_daily_limit(job_type):
+            deferred["job_daily_budget"] += 1
+            continue
+        if len(selected) >= selection_limit:
+            deferred["run_or_concurrency_limit"] += 1
+            continue
+        units = agent_job_units(job_type)
+        if selected_units + units > selection_unit_limit:
+            deferred["work_unit_budget"] += 1
+            continue
+        selected.append(job_type)
+        selected_units += units
+
+    target_active_executions = len(running) + len(selected)
+    if selected:
+        decision = "scale_up"
+    elif running:
+        decision = "hold_active"
+    elif not queued:
+        decision = "scale_to_zero"
+    elif remaining_daily_runs == 0 or remaining_daily_units == 0:
+        decision = "daily_budget_exhausted"
+    else:
+        decision = "deferred"
+
+    return {
+        "contract": AGENT_CAPACITY_PLAN_CONTRACT,
+        "status": "ready",
+        "decision": decision,
+        "execution_model": "ephemeral_demand_driven",
+        "registered_specialists": registered_specialists,
+        "registered_specialists_consume_compute": False,
+        "running_executions": len(running),
+        "queued_jobs": len(queued),
+        "eligible_unique_jobs": len(seen_queued - running_set),
+        "recommended_claim_job_types": selected,
+        "recommended_claim_limit": len(selected),
+        "recommended_claim_work_units": selected_units,
+        "target_active_executions": target_active_executions,
+        "idle_registered_specialists": max(0, registered_specialists - target_active_executions),
+        "scale_to_zero": target_active_executions == 0,
+        "deferred_jobs": len(queued) - len(selected),
+        "deferred_reasons": deferred,
+        "budget": {
+            "daily_runs_used": len(daily),
+            "daily_runs_remaining": remaining_daily_runs,
+            "daily_work_units_used": daily_units_used,
+            "daily_work_units_remaining": remaining_daily_units,
+        },
+        "limits": {
+            "max_running": active_policy.max_running,
+            "max_queued": active_policy.max_queued,
+            "max_batch_jobs": active_policy.max_batch_jobs,
+            "max_daily_runs": active_policy.max_daily_runs,
+            "max_daily_units": active_policy.max_daily_units,
+            "in_flight_per_job": 1,
+        },
+    }
 
 
 def _utc(value: datetime | None = None) -> datetime:

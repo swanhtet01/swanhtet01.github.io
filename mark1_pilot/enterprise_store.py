@@ -22,6 +22,7 @@ from mark1_pilot.agent_governance import (
     agent_job_units,
     load_agent_workforce_policy,
     normalize_agent_job_types,
+    plan_agent_capacity,
     verify_agent_budget_grant,
 )
 
@@ -2742,6 +2743,76 @@ def list_agent_runs(
     return [_agent_run_to_dict(row) for row in rows]
 
 
+def get_agent_capacity_plan(
+    database_url: str,
+    *,
+    workspace_id: str,
+    registered_specialists: int = 0,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Return the lock-consistent execution target for one workspace."""
+
+    ensure_schema(database_url)
+    policy = load_agent_workforce_policy()
+    now_value = _agent_utc_now(now)
+    now_text = _agent_timestamp(now_value)
+    engine = get_engine(database_url)
+    with Session(engine) as session:
+        _agent_workspace_lock(session, str(workspace_id))
+        reconciled_expired = _reconcile_expired_agent_reservations(
+            session,
+            workspace_id=str(workspace_id),
+            now=now_value,
+        )
+        queued_rows = list(
+            session.exec(
+                select(EnterpriseAgentRun)
+                .where(
+                    EnterpriseAgentRun.workspace_id == str(workspace_id),
+                    EnterpriseAgentRun.status == "queued",
+                )
+                .order_by(EnterpriseAgentRun.created_at.asc())
+                .limit(policy.max_queued)
+            ).all()
+        )
+        runnable_rows = [
+            row
+            for row in queued_rows
+            if row.job_type in policy.allowed_job_types
+            and int(row.attempt_count or 0) < int(row.max_attempts or 1)
+            and (not row.scheduled_for or row.scheduled_for <= now_text)
+        ]
+        active = _agent_active_reservations(session, workspace_id=str(workspace_id))
+        daily = _agent_daily_reservations(session, workspace_id=str(workspace_id), now=now_value)
+        plan = plan_agent_capacity(
+            queued_job_types=[row.job_type for row in runnable_rows],
+            running_job_types=[row.job_type for row in active],
+            daily_job_types=[row.job_type for row in daily],
+            registered_specialists=registered_specialists,
+            policy=policy,
+        )
+        plan.update(
+            {
+                "workspace_id": str(workspace_id),
+                "observed_at": now_text,
+                "queue_total": len(queued_rows),
+                "queue_runnable": len(runnable_rows),
+                "queue_scheduled": sum(
+                    1 for row in queued_rows if row.scheduled_for and row.scheduled_for > now_text
+                ),
+                "queue_invalid": sum(
+                    1
+                    for row in queued_rows
+                    if row.job_type not in policy.allowed_job_types
+                    or int(row.attempt_count or 0) >= int(row.max_attempts or 1)
+                ),
+                "expired_leases_reconciled": reconciled_expired,
+            }
+        )
+        session.commit()
+        return plan
+
+
 def start_agent_run(
     database_url: str,
     *,
@@ -2850,14 +2921,8 @@ def claim_agent_runs(
             statement = statement.with_for_update(skip_locked=True)
         rows = list(session.exec(statement).all())
 
-        claimed: list[tuple[EnterpriseAgentRun, str, EnterpriseAgentBudgetReservation]] = []
-        selected_job_types: set[str] = set()
-        selected_units = 0
+        eligible_rows: list[EnterpriseAgentRun] = []
         for row in rows:
-            if len(claimed) >= requested_limit:
-                break
-            if row.job_type in selected_job_types:
-                continue
             if row.job_type not in policy.allowed_job_types:
                 row.status = "error"
                 row.finished_at = now_text
@@ -2873,6 +2938,34 @@ def claim_agent_runs(
                 row.error_text = "The queued run cannot be claimed again."
                 row.updated_at = now_text
                 session.add(row)
+                continue
+            eligible_rows.append(row)
+
+        capacity_plan = plan_agent_capacity(
+            queued_job_types=[row.job_type for row in eligible_rows],
+            running_job_types=[
+                row.job_type for row in _agent_active_reservations(session, workspace_id=str(workspace_id))
+            ],
+            daily_job_types=[
+                row.job_type
+                for row in _agent_daily_reservations(session, workspace_id=str(workspace_id), now=now_value)
+            ],
+            max_claim_runs=requested_limit,
+            max_claim_work_units=(int(verified_grant["max_work_units"]) if verified_grant else None),
+            policy=policy,
+        )
+        recommended_job_types = set(capacity_plan["recommended_claim_job_types"])
+        requested_limit = int(capacity_plan["recommended_claim_limit"])
+
+        claimed: list[tuple[EnterpriseAgentRun, str, EnterpriseAgentBudgetReservation]] = []
+        selected_job_types: set[str] = set()
+        selected_units = 0
+        for row in eligible_rows:
+            if len(claimed) >= requested_limit:
+                break
+            if row.job_type not in recommended_job_types:
+                continue
+            if row.job_type in selected_job_types:
                 continue
             units = agent_job_units(row.job_type)
             if verified_grant and selected_units + units > int(verified_grant["max_work_units"]):

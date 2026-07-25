@@ -4,9 +4,11 @@ import hashlib
 import hmac
 import ipaddress
 import json
+import logging
 import math
 import os
 import re
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Mapping
@@ -17,14 +19,17 @@ from urllib.parse import urlsplit
 from fastapi import APIRouter, Header, HTTPException, Request
 
 from mark1_pilot.agent_governance import (
+    AGENT_CAPACITY_PLAN_CONTRACT,
     AGENT_BUDGET_ACCOUNTING_CONTRACT,
     AGENT_BUDGET_GRANT_CONTRACT,
     AgentGovernanceError,
     issue_agent_budget_grant,
+    load_agent_workforce_policy,
 )
 
 
 router = APIRouter()
+LOGGER = logging.getLogger("supermega.cloud_runtime")
 
 QUEUE_CRON_PATH = "/api/cron/supermega/agent-queue"
 DAILY_CRON_PATH = "/api/cron/supermega/daily"
@@ -62,12 +67,12 @@ _SCHEDULER_ROUTES: dict[str, dict[str, object]] = {
     QUEUE_CRON_PATH: {
         "cycle": "queue",
         "job_types": ("task_triage", "ops_watch"),
-        "limit": 8,
+        "limit": 2,
     },
     DAILY_CRON_PATH: {
         "cycle": "daily",
         "job_types": ("founder_brief", "github_release_watch"),
-        "limit": 4,
+        "limit": 2,
     },
 }
 
@@ -230,6 +235,12 @@ def _runtime_status() -> dict[str, object]:
     if worker_configuration_error:
         configuration_errors.append(worker_configuration_error)
 
+    try:
+        workforce_policy = load_agent_workforce_policy()
+    except AgentGovernanceError as exc:
+        workforce_policy = None
+        configuration_errors.append(exc.code)
+
     scheduler_ready = not configuration_errors and bool(worker_url) and bool(_worker_token())
     return {
         "status": "ready" if scheduler_ready else "degraded",
@@ -248,11 +259,19 @@ def _runtime_status() -> dict[str, object]:
             "daily_path": DAILY_CRON_PATH,
             "queue_job_types": list(_SCHEDULER_ROUTES[QUEUE_CRON_PATH]["job_types"]),
             "daily_job_types": list(_SCHEDULER_ROUTES[DAILY_CRON_PATH]["job_types"]),
-            "max_jobs_per_run": 8,
+            "max_jobs_per_run": max(int(route["limit"]) for route in _SCHEDULER_ROUTES.values()),
             "max_worker_response_bytes": _MAX_WORKER_RESPONSE_BYTES,
             "redirects_allowed": False,
             "budget_grant_contract": AGENT_BUDGET_GRANT_CONTRACT,
             "budget_grants_required": True,
+        },
+        "capacity": {
+            "contract": AGENT_CAPACITY_PLAN_CONTRACT,
+            "execution_model": "ephemeral_demand_driven",
+            "registered_specialists_consume_compute": False,
+            "idle_active_execution_target": 0,
+            "scale_to_zero_when_idle": True,
+            "max_active_executions": workforce_policy.max_running if workforce_policy else None,
         },
         "execution_policy": "review_gated_no_external_send_or_money_actions",
     }
@@ -471,6 +490,8 @@ def _cron_result(path: str) -> dict[str, object]:
             "limit": int(route["limit"]),
             "execution_policy": "review_gated_no_external_send_or_money_actions",
             "budget_grant": budget_grant,
+            "capacity_contract": AGENT_CAPACITY_PLAN_CONTRACT,
+            "execution_model": "ephemeral_demand_driven",
         },
         separators=(",", ":"),
     ).encode("utf-8")
@@ -556,6 +577,30 @@ def _cron_result(path: str) -> dict[str, object]:
     return result
 
 
+def _log_scheduler_result(result: Mapping[str, object], *, started_at: float) -> None:
+    side_effects = result.get("side_effects", {})
+    LOGGER.info(
+        json.dumps(
+            {
+                "event": "supermega_agent_scheduler_cycle",
+                "cycle": result.get("cycle"),
+                "path": result.get("path"),
+                "status": result.get("status"),
+                "execution": result.get("execution"),
+                "worker_invoked": (
+                    bool(side_effects.get("worker_invoked", False))
+                    if isinstance(side_effects, Mapping)
+                    else False
+                ),
+                "retryable": bool(result.get("retryable", False)),
+                "duration_ms": max(0, round((time.monotonic() - started_at) * 1_000)),
+            },
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+    )
+
+
 @router.get(QUEUE_CRON_PATH)
 def agent_queue_cron(
     request: Request,
@@ -563,7 +608,10 @@ def agent_queue_cron(
     x_cron_secret: str | None = Header(default=None),
 ) -> dict[str, object]:
     _require_cron_auth(authorization, x_cron_secret)
-    return _cron_result(str(request.url.path))
+    started_at = time.monotonic()
+    result = _cron_result(str(request.url.path))
+    _log_scheduler_result(result, started_at=started_at)
+    return result
 
 
 @router.get(DAILY_CRON_PATH)
@@ -573,4 +621,7 @@ def daily_cron(
     x_cron_secret: str | None = Header(default=None),
 ) -> dict[str, object]:
     _require_cron_auth(authorization, x_cron_secret)
-    return _cron_result(str(request.url.path))
+    started_at = time.monotonic()
+    result = _cron_result(str(request.url.path))
+    _log_scheduler_result(result, started_at=started_at)
+    return result
