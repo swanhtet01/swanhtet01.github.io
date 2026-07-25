@@ -41,15 +41,16 @@ SuperMega HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are
 
 ## Verified baseline
 
-- Checkpoint `dadb013` is the accepted local product and database-authority baseline.
+- Checkpoint `7f7cb79` is the accepted local product and database-authority baseline.
 - App lint/build, all local release/security/database/HQ contracts, and all 156 Python tests pass. Security coverage is 58 checks.
 - Dependency audit reports zero known vulnerabilities; React Router is patched v8 and Node is `>=22.22.0`.
-- HQ remains its own route chunk; the largest JavaScript chunk is 498,024 bytes, leaving 1,976 bytes under the hard gate.
+- HQ remains its own route chunk; the largest JavaScript chunk is 498,534 bytes, leaving 1,466 bytes under the hard gate.
 - Focused coverage: 202 Shop, 34 order-recovery, 250 Plant, 94 Website, 11 managed-Website, 27 storefront-draft, 14 storefront, 15 request, 17 managed-storefront, and 16 handoff checks.
 - Rendered QA covers products and redirects at 390/1280 px: canonical titles/tabs, 44 px controls, skip focus, lifecycle boundaries, and no overflow, errors, or data changes.
 - Rendered workflow QA covers Shop, Plant, Website, Ecommerce, Agents, and compatibility routes at 390/1280 px. Canonical tabs, 44 px actions, skip focus, lifecycle boundaries, reload behavior, and cross-tab invalidation pass without overflow, browser errors, or unintended data changes.
+- Shop Stock now leads with the below-boundary SKU, states the exact shortage, and exposes `Reorder`; 390 px has no overflow or undersized visible action, 1280 px remains tabular, and logs are empty.
 - PostgreSQL 17.10 passed 32 TLS checks, including exact approval/event restore and the trusted-server identity boundary.
-- Live reconciliation at implementation checkpoint `49b4e0e`: the branch is a fast-forward 134 commits beyond remote PR #258 head `338b6fd` and 180 beyond `main` `6885c320`; existing green checks cover only the remote head.
+- Current local `7f7cb79` is a fast-forward 136 commits beyond remote PR #258 head `338b6fd` and 182 beyond `main` `6885c320`; existing green checks cover only the remote head. The external mapping audit is anchored at `49b4e0e`; its later release packet and this Shop fix are not live.
 - `supermega.dev` (`supermega-public`) and `app.supermega.dev` (`megaos`) are healthy at `main` with no observed seven-day runtime error clusters. The old demo is a separate HTTP 200 surface; `shop.supermega.dev` has no DNS. Full evidence and the push-only decision are in `hq/research/release-reconciliation-2026-07-25.md`.
 
 ## Coordination
@@ -68,7 +69,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - Agent Teams is not a production runtime. Order Intake passed its 20-case evaluator, but no usable local OpenAI API key was found; the provider runner awaits a secure founder decision and still needs a three-minute human review workflow.
 - No isolated hosted Supabase branch or separate non-production project has repeated the local database proof.
 - Browser-local Website records cannot authenticate out-of-band storage edits; managed commands use the locked prior state and separate ledger. Hosted activation remains unproven.
-- Live GitHub `main` is 180 commits behind the audited implementation checkpoint, while draft PR #258 is 134 commits behind it. The live app cannot contain the validated local work until owner-approved integration and a later coordinated release.
+- Live GitHub `main` is 182 commits behind the accepted local product checkpoint, while draft PR #258 is 136 commits behind it. The live app cannot contain the validated local work until owner-approved integration and a later coordinated release.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
 
 ## Decisions in force

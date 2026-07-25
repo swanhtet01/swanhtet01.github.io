@@ -48,6 +48,13 @@ requireContract('product QA brief is discoverable from assignment authority',
   workboard.includes('| QA-003 | Product / QA Codex | done-local |')
   && workboard.includes('Checkpoint `dadb013` passes 10 routes at 390/1280 px')
   && workboard.includes('focus lands on `#workspace-main`'))
+requireContract('accepted Shop checkpoint leads stock with the real exception',
+  workboard.includes('Current accepted product checkpoint: `7f7cb79`')
+  && workboard.includes('| ENG-051 | Shop + Product UX Codex | done-local |')
+  && workboard.includes('The leading row states `4 below reorder`')
+  && now.includes('Checkpoint `7f7cb79` is the accepted local product')
+  && now.includes('Shop Stock now leads with the below-boundary SKU')
+  && now.includes('fast-forward 136 commits beyond remote PR #258 head `338b6fd`'))
 requireContract('release reconciliation is current and discoverable',
   workboard.includes('| OPS-006 | Release / Codex integrator | done-local |')
   && workboard.includes('fast-forward 134 commits beyond remote PR #258')
