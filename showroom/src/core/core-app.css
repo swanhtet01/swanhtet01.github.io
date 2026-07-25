@@ -474,6 +474,9 @@ textarea { min-height: 72px; resize: vertical; }
 .job-list .job-schedule { color: var(--core-green); font-family: var(--core-mono); font-size: 10px; font-weight: 760; letter-spacing: .02em; }
 .job-list .job-schedule[data-priority="urgent"], .job-list .job-schedule.overdue { color: var(--core-warn); }
 .job-list .job-schedule[data-priority="low"], .job-list .job-schedule[data-priority="legacy"] { color: var(--core-quiet); }
+.job-list .job-row-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.job-list .job-row-actions .text-link { min-width: 0; justify-content: center; }
+.job-list .job-row-actions .job-output-link { border: 1px solid rgba(11,116,94,.24); border-radius: 5px; padding-inline: 4px; background: var(--core-green-soft); }
 .job-progress > span { height: 5px; overflow: hidden; border-radius: 999px; background: rgba(255,255,255,.06); }
 .job-progress i { display: block; height: 100%; background: var(--core-green); }
 .production-mode-banner { min-height: 48px; display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 10px; border: 1px solid var(--core-line); border-radius: var(--core-radius); padding: 7px 11px; background: var(--core-panel); }
@@ -902,6 +905,8 @@ textarea { min-height: 72px; resize: vertical; }
   .evidence-disclosure .inline-evidence { grid-template-columns: 1fr; }
   .lifecycle-grid { grid-template-columns: 1fr; }
   .job-list article { grid-template-columns: 1fr; padding: 9px 0; }
+  .job-list .job-row-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .job-list .job-row-actions .text-link { width: 100%; }
   .channel-mapping-list { max-height: none; overflow: visible; }
   .channel-mapping-row { grid-template-columns: 1fr; }
   .channel-draft-result, .channel-source-ready { display: grid; align-items: start; }

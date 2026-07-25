@@ -4340,6 +4340,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const maintenanceTriggerRef = useRef<HTMLButtonElement>(null)
   const scheduleDialogRef = useRef<HTMLDialogElement>(null)
   const scheduleTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const outputJobSelectRef = useRef<HTMLSelectElement>(null)
   const openIssues = production.issues
     .filter((issue) => issue.status === 'open')
     .sort((left, right) => {
@@ -4592,6 +4593,14 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
           ? recordProductionScrap(current, recordedJobId, recordedQuantity, recordedShiftRef, productionActionProof(record))
           : recordProductionOutput(current, recordedJobId, recordedQuantity, recordedShiftRef, productionActionProof(record)))
       },
+    })
+  }
+
+  function openJobOutput(job: ProductionJob) {
+    setJobId(job.id)
+    requestAnimationFrame(() => {
+      outputJobSelectRef.current?.scrollIntoView({ block: 'center' })
+      outputJobSelectRef.current?.focus({ preventScroll: true })
     })
   }
 
@@ -5024,7 +5033,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     <div className="split-workspace production-view">
       <section className="core-panel job-panel">
         <div className="panel-head"><div><span className="core-eyebrow">Plant plan</span><h2>Jobs to finish</h2></div><span className="panel-note">{activeJobs.length} active · {completedJobs.length} finished</span></div>
-        <JobList disabled={!productionCanWrite || Boolean(pendingAction)} jobs={activeJobs} now={issueClock} onSchedule={openJobSchedule} />
+        <JobList disabled={!productionCanWrite || Boolean(pendingAction)} jobs={activeJobs} now={issueClock} onOutput={openJobOutput} onSchedule={openJobSchedule} />
         <CompletedJobHistory jobs={completedJobs} now={issueClock} />
         <details className="compact-disclosure catalog-disclosure">
           <summary>Add job</summary>
@@ -5040,8 +5049,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       </section>
       <section className="core-panel output-panel">
         <span className="core-eyebrow">Job output</span><h2>Record good or scrap</h2>
-        <form autoComplete="off" className="core-form compact-form" onSubmit={recordOutput}>
-          <label>Job<select disabled={!productionCanWrite || Boolean(pendingAction) || !activeJobs.length} value={selectedJobId} onChange={(event) => setJobId(event.target.value)}>{activeJobs.length ? activeJobs.map((job) => <option key={job.id} value={job.id}>{job.id} · {job.product} · {job.line} · {(job.target - job.output - (job.scrap ?? 0)).toLocaleString()} left{job.qualityHold ? ' · QUALITY HOLD' : ''}</option>) : <option value="">No active jobs</option>}</select></label>
+        <form autoComplete="off" className="core-form compact-form" id="plant-output-form" onSubmit={recordOutput}>
+          <label>Job<select disabled={!productionCanWrite || Boolean(pendingAction) || !activeJobs.length} ref={outputJobSelectRef} value={selectedJobId} onChange={(event) => setJobId(event.target.value)}>{activeJobs.length ? activeJobs.map((job) => <option key={job.id} value={job.id}>{job.id} · {job.product} · {job.line} · {(job.target - job.output - (job.scrap ?? 0)).toLocaleString()} left{job.qualityHold ? ' · QUALITY HOLD' : ''}</option>) : <option value="">No active jobs</option>}</select></label>
           <label>Result<select disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} value={outputKind} onChange={(event) => setOutputKind(event.target.value as ProductionOutputKind)}><option value="good">Good output</option><option value="scrap">Scrap</option></select></label>
           <div className="form-row"><label>Shift reference<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} maxLength={80} name="plant-output-shift-reference" placeholder={shiftReferencePlaceholder()} required value={shiftRef} onChange={(event) => setShiftRef(event.target.value)} /></label><label>{outputKind === 'scrap' ? 'Scrap units' : 'Good units'}<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} max={selectedRemaining} min="1" name="plant-output-quantity" step="1" type="number" value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} /></label></div>
           {selectedJob?.qualityHold ? <p className="form-notice" role="alert">QUALITY HOLD · Held by {selectedJob.qualityHold.heldBy}. Recording a result does not release this hold; verify the hold and evidence before review.</p> : null}
@@ -5192,7 +5201,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   return null
 }
 
-function JobList({ disabled = false, jobs, now, onSchedule }: { disabled?: boolean; jobs: ProductionJob[]; now: number; onSchedule?: (job: ProductionJob, trigger: HTMLButtonElement) => void }) {
+function JobList({ disabled = false, jobs, now, onOutput, onSchedule }: { disabled?: boolean; jobs: ProductionJob[]; now: number; onOutput?: (job: ProductionJob) => void; onSchedule?: (job: ProductionJob, trigger: HTMLButtonElement) => void }) {
   if (!jobs.length) return <Empty>No active jobs. Add a job below to start recording output.</Empty>
   return <div className="job-list">{jobs.map((job) => {
     const scrap = job.scrap ?? 0
@@ -5204,7 +5213,7 @@ function JobList({ disabled = false, jobs, now, onSchedule }: { disabled?: boole
       ? `${productionJobPriorityLabels[job.priority ?? 'normal']} · ${overdue ? 'OVERDUE ' : job.closure ? 'Was due ' : 'Due '}${formatIssueDue(job.dueAt ?? '')}`
       : 'Schedule not recorded · legacy job'
     const ownerLabel = job.owner ? `Owner ${job.owner}` : 'Owner not recorded · legacy job'
-    return <article key={job.id}><div><span>{job.id} · {job.line}{job.qualityHold ? ' · QUALITY HOLD' : ''}{job.closure ? ' · CLOSED SHORT' : ''}</span><strong>{job.product}</strong><small className={`job-schedule${overdue ? ' overdue' : ''}`} data-priority={job.priority ?? 'legacy'}>{ownerLabel} · {scheduleLabel}</small>{job.closure ? <small>Closed {formatIssueDue(job.closure.closedAt)} by {job.closure.closedBy} · Shift {job.closure.shiftRef} · {job.closure.remainingUnits.toLocaleString()} not produced</small> : null}{job.qualityHold ? <small>Held by {job.qualityHold.heldBy} · Evidence: {job.qualityHold.evidenceReference}</small> : null}{onSchedule && !job.closure && accounted < job.target ? <button className="text-link" disabled={disabled} onClick={(event) => onSchedule(job, event.currentTarget)} type="button">Change plan</button> : null}</div><div className="job-progress"><span><i style={{ width: `${progress}%` }} /></span><small>{job.output.toLocaleString()} good · {scrap.toLocaleString()} scrap · {accounted.toLocaleString()} / {job.target.toLocaleString()}{job.closure ? ` · ${job.closure.remainingUnits.toLocaleString()} closed short` : ''}</small></div></article>
+    return <article key={job.id}><div><span>{job.id} · {job.line}{job.qualityHold ? ' · QUALITY HOLD' : ''}{job.closure ? ' · CLOSED SHORT' : ''}</span><strong>{job.product}</strong><small className={`job-schedule${overdue ? ' overdue' : ''}`} data-priority={job.priority ?? 'legacy'}>{ownerLabel} · {scheduleLabel}</small>{job.closure ? <small>Closed {formatIssueDue(job.closure.closedAt)} by {job.closure.closedBy} · Shift {job.closure.shiftRef} · {job.closure.remainingUnits.toLocaleString()} not produced</small> : null}{job.qualityHold ? <small>Held by {job.qualityHold.heldBy} · Evidence: {job.qualityHold.evidenceReference}</small> : null}{!job.closure && accounted < job.target && (onOutput || onSchedule) ? <div className="job-row-actions">{onOutput ? <button aria-controls="plant-output-form" className="text-link job-output-link" disabled={disabled} onClick={() => onOutput(job)} type="button">Record output</button> : null}{onSchedule ? <button className="text-link" disabled={disabled} onClick={(event) => onSchedule(job, event.currentTarget)} type="button">Change plan</button> : null}</div> : null}</div><div className="job-progress"><span><i style={{ width: `${progress}%` }} /></span><small>{job.output.toLocaleString()} good · {scrap.toLocaleString()} scrap · {accounted.toLocaleString()} / {job.target.toLocaleString()}{job.closure ? ` · ${job.closure.remainingUnits.toLocaleString()} closed short` : ''}</small></div></article>
   })}</div>
 }
 
