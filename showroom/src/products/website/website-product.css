@@ -3543,25 +3543,6 @@
   opacity: .72;
 }
 
-.website-starter-errors {
-  border: 1px solid color-mix(in srgb, var(--website-danger) 42%, var(--website-line));
-  border-radius: 9px;
-  padding: 12px 14px;
-  background: color-mix(in srgb, var(--website-danger) 7%, var(--website-panel));
-  color: var(--website-danger);
-}
-
-.website-starter-errors > strong {
-  font-size: 14px;
-}
-
-.website-starter-errors > ul {
-  margin: 7px 0 0;
-  padding-left: 19px;
-  font-size: 13px;
-  line-height: 1.45;
-}
-
 .website-starter-actions {
   position: sticky;
   z-index: 2;

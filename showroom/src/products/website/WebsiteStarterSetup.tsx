@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 
 import {
   websiteStarterBriefIssues,
@@ -21,6 +21,7 @@ const EMPTY_BRIEF: WebsiteStarterBrief = {
 export function WebsiteStarterSetup({ onCreate, onViewSample }: WebsiteStarterSetupProps) {
   const [brief, setBrief] = useState(EMPTY_BRIEF)
   const [attempted, setAttempted] = useState(false)
+  const starterFormRef = useRef<HTMLFormElement>(null)
   const issues = websiteStarterBriefIssues(brief)
   const issueFor = (field: keyof WebsiteStarterBrief) => (
     attempted ? issues.find((issue) => issue.field === field) : undefined
@@ -38,7 +39,14 @@ export function WebsiteStarterSetup({ onCreate, onViewSample }: WebsiteStarterSe
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setAttempted(true)
-    if (issues.length > 0) return
+    if (issues.length > 0) {
+      requestAnimationFrame(() => {
+        const firstInvalidField = starterFormRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')
+        firstInvalidField?.scrollIntoView({ block: 'center' })
+        firstInvalidField?.focus({ preventScroll: true })
+      })
+      return
+    }
     onCreate(brief)
   }
 
@@ -53,7 +61,7 @@ export function WebsiteStarterSetup({ onCreate, onViewSample }: WebsiteStarterSe
         <span className="website-status is-draft">Not saved</span>
       </header>
 
-      <form className="website-editor-scroll website-starter-form" noValidate onSubmit={submit}>
+      <form className="website-editor-scroll website-starter-form" noValidate onSubmit={submit} ref={starterFormRef}>
         <div className="website-form-grid two-columns website-starter-identity-grid">
           <label>
             <span>Business name</span>
@@ -131,13 +139,6 @@ export function WebsiteStarterSetup({ onCreate, onViewSample }: WebsiteStarterSe
             {proofIssue ? <small className="website-field-error" id="website-starter-error-proof">{proofIssue.message}</small> : null}
           </label>
         </div>
-
-        {attempted && issues.length > 0 ? (
-          <div className="website-starter-errors" role="alert">
-            <strong>Review the brief</strong>
-            <ul>{issues.map((issue) => <li key={issue.field}>{issue.message}</li>)}</ul>
-          </div>
-        ) : null}
 
         <footer className="website-starter-actions">
           <button className="website-button is-secondary" onClick={onViewSample} type="button">View sample</button>
