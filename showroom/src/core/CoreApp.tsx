@@ -1476,6 +1476,7 @@ function ApprovalReviewDialog({ approval, onClose, onDecision }: { approval: App
 
 export function OverviewPage() {
   const runtime = useOutletContext<RuntimeHealth>()
+  const purchaseOrderClock = useMinuteClock()
   const [managedIdentity] = useManagedIdentity(runtime.status === 'enterprise')
   const [commerce] = useCommerceWorkspace(managedIdentity)
   const [production] = useProductionWorkspace(managedIdentity)
@@ -1493,6 +1494,26 @@ export function OverviewPage() {
   const homeWork = visibleWork.slice(0, 3)
   const pendingApprovals = approvals.filter((item) => item.status === 'pending')
   const lowStock = commerce.items.filter((item) => item.onHand <= item.reorderAt)
+  const activePurchaseOrderRows = commercePurchaseOrders(commerce)
+    .map((purchaseOrder) => ({
+      purchaseOrder,
+      progress: commercePurchaseOrderProgress(commerce, purchaseOrder),
+      item: commerce.items.find((item) => item.sku === purchaseOrder.sku),
+    }))
+    .filter(({ progress }) => progress.status === 'open' || progress.status === 'partially_received')
+    .sort(compareCommercePurchaseOrderAttention)
+  const activePurchaseOrderBySku = new Map(
+    activePurchaseOrderRows.map((row) => [row.purchaseOrder.sku, row]),
+  )
+  const uncoveredLowStock = lowStock.filter((item) => !activePurchaseOrderBySku.has(item.sku))
+  const purchaseArrivalAttention = activePurchaseOrderRows
+    .map((row) => ({
+      ...row,
+      urgency: commercePurchaseOrderArrivalUrgency(row.purchaseOrder, row.progress, purchaseOrderClock),
+    }))
+    .filter(({ urgency }) => urgency === 'late' || urgency === 'due_soon' || urgency === 'unrecorded')
+  const nextPurchaseArrivalProblem = purchaseArrivalAttention.find(({ urgency }) => urgency === 'late' || urgency === 'unrecorded')
+  const nextPurchaseArrivalDueSoon = purchaseArrivalAttention.find(({ urgency }) => urgency === 'due_soon')
   const openProductionIssues = production.issues.filter((issue) => issue.status === 'open')
   const openOrders = commerce.orders
     .filter((order) => order.status !== 'completed' && order.status !== 'cancelled')
@@ -1502,24 +1523,46 @@ export function OverviewPage() {
   const releaseComplete = workspace.release.checks.filter((check) => check.complete).length
   const releasePercent = Math.round((releaseComplete / workspace.release.checks.length) * 100)
   const isPilotReady = pilotReady(setup)
-  const operatingExceptions = lowStock.length + openProductionIssues.length
+  const stockPriorityCount = uncoveredLowStock.length + purchaseArrivalAttention.length
+  const operatingExceptions = stockPriorityCount + openProductionIssues.length
   const ownerAttention = blockedWork.length + pendingApprovals.length + agentHandoffs.length + operatingExceptions + (isPilotReady ? 0 : 1)
   const selectedApproval = pendingApprovals.find((approval) => approval.id === selectedApprovalId)
-  const nextPriority: { label: string; title: string; detail: string; action: string; href?: string; approvalId?: string } = lowStock[0]
-    ? { label: 'Shop stock', title: `Reorder ${lowStock[0].name}`, detail: `${lowStock[0].onHand} on hand; reorder at ${lowStock[0].reorderAt}.`, action: 'Open stock', href: '/shop/?tab=inventory' }
-    : openProductionIssues[0]
-      ? { label: 'Plant problem', title: openProductionIssues[0].summary, detail: `${openProductionIssues[0].area} needs review.`, action: 'Review problem', href: '/plant/?tab=control' }
-      : nextOperatingOrder
-        ? { label: 'Shop order', title: `Continue ${nextOperatingOrder.id}`, detail: `${nextOperatingOrder.customer} · ${nextOperatingOrder.status.replace('_', ' ')} · ${nextOperatingOrder.promisedAt ? `promised ${formatTime(nextOperatingOrder.promisedAt)}` : 'promise not recorded'}.`, action: 'Open orders', href: '/shop/?tab=orders' }
-        : !isPilotReady
-          ? { label: 'Setup', title: 'Define the measurable workflow', detail: `${pilotProgress(setup)}% complete; add the baseline and acceptance evidence.`, action: 'Finish setup', href: '/settings/' }
-          : pendingApprovals[0]
-            ? { label: 'HQ approval', title: pendingApprovals[0].title, detail: `${pendingApprovals[0].packet.claims.length} claims are ready for a human decision.`, action: 'Review now', approvalId: pendingApprovals[0].id }
-            : blockedWork[0]
-              ? { label: 'HQ blocker', title: blockedWork[0].title, detail: `${blockedWork[0].owner} needs a decision to continue.`, action: 'Open HQ', href: `/work/?team=${blockedWork[0].team}&view=work&item=${blockedWork[0].id}` }
-              : agentHandoffs[0]
-                ? { label: 'HQ handoff', title: `${agentHandoffs[0].name} needs review`, detail: `${agentHandoffs[0].humanOwner} owns the next decision.`, action: 'Open HQ', href: `/work/?team=${agentHandoffs[0].team}&view=agents&agent=${agentHandoffs[0].id}` }
-                : { label: 'Ready', title: 'Start with Shop', detail: 'No operating exception or owner decision is waiting.', action: 'Open Shop', href: '/shop/?tab=orders' }
+  function purchaseArrivalPriority(row: typeof purchaseArrivalAttention[number]) {
+    const itemName = row.item?.name ?? row.purchaseOrder.sku
+    const timing = row.urgency === 'unrecorded'
+      ? 'arrival time not recorded'
+      : `${row.urgency === 'late' ? 'late since' : 'due'} ${formatIssueDue(row.purchaseOrder.expectedAt as string)}`
+    return {
+      label: 'Shop purchase',
+      title: row.urgency === 'late'
+        ? `Check late ${itemName} arrival`
+        : row.urgency === 'due_soon'
+          ? `Prepare for ${itemName} arrival`
+          : `Review ${itemName} purchase`,
+      detail: `${row.progress.remaining.toLocaleString()} of ${row.purchaseOrder.quantityOrdered.toLocaleString()} units remaining · ${row.purchaseOrder.supplier} · ${timing}.`,
+      action: 'Open purchases',
+      href: '/shop/?tab=inventory#purchase-orders',
+    }
+  }
+  const nextPriority: { label: string; title: string; detail: string; action: string; href?: string; approvalId?: string } = nextPurchaseArrivalProblem
+    ? purchaseArrivalPriority(nextPurchaseArrivalProblem)
+    : uncoveredLowStock[0]
+      ? { label: 'Shop stock', title: `Reorder ${uncoveredLowStock[0].name}`, detail: `${uncoveredLowStock[0].onHand} on hand; reorder at ${uncoveredLowStock[0].reorderAt}.`, action: 'Open stock', href: '/shop/?tab=inventory' }
+      : nextPurchaseArrivalDueSoon
+        ? purchaseArrivalPriority(nextPurchaseArrivalDueSoon)
+        : openProductionIssues[0]
+          ? { label: 'Plant problem', title: openProductionIssues[0].summary, detail: `${openProductionIssues[0].area} needs review.`, action: 'Review problem', href: '/plant/?tab=control' }
+          : nextOperatingOrder
+            ? { label: 'Shop order', title: `Continue ${nextOperatingOrder.id}`, detail: `${nextOperatingOrder.customer} · ${nextOperatingOrder.status.replace('_', ' ')} · ${nextOperatingOrder.promisedAt ? `promised ${formatTime(nextOperatingOrder.promisedAt)}` : 'promise not recorded'}.`, action: 'Open orders', href: '/shop/?tab=orders' }
+            : !isPilotReady
+              ? { label: 'Setup', title: 'Define the measurable workflow', detail: `${pilotProgress(setup)}% complete; add the baseline and acceptance evidence.`, action: 'Finish setup', href: '/settings/' }
+              : pendingApprovals[0]
+                ? { label: 'HQ approval', title: pendingApprovals[0].title, detail: `${pendingApprovals[0].packet.claims.length} claims are ready for a human decision.`, action: 'Review now', approvalId: pendingApprovals[0].id }
+                : blockedWork[0]
+                  ? { label: 'HQ blocker', title: blockedWork[0].title, detail: `${blockedWork[0].owner} needs a decision to continue.`, action: 'Open HQ', href: `/work/?team=${blockedWork[0].team}&view=work&item=${blockedWork[0].id}` }
+                  : agentHandoffs[0]
+                    ? { label: 'HQ handoff', title: `${agentHandoffs[0].name} needs review`, detail: `${agentHandoffs[0].humanOwner} owns the next decision.`, action: 'Open HQ', href: `/work/?team=${agentHandoffs[0].team}&view=agents&agent=${agentHandoffs[0].id}` }
+                    : { label: 'Ready', title: 'Start with Shop', detail: 'No operating exception or owner decision is waiting.', action: 'Open Shop', href: '/shop/?tab=orders' }
 
   useEffect(() => {
     if (!managedIdentity) return undefined
@@ -1539,7 +1582,7 @@ export function OverviewPage() {
   function prepareCompanyBrief() {
     setBrief([
       `${openWork.length} company work items remain open; ${activeWork.length} are in delivery or review across ${workspace.agents.length} delegated role records.`,
-      `${openOrders.length} Shop orders, ${lowStock.length} stock exceptions, and ${openProductionIssues.length} Plant issues need operating attention.`,
+      `${openOrders.length} Shop orders, ${stockPriorityCount} stock priorities, and ${openProductionIssues.length} Plant issues need operating attention.`,
       `${workspace.release.name} is ${releasePercent}% ready from ${workspace.release.checks.length} explicit checks.`,
       isPilotReady ? `${setup.workspace} pilot starts from ${setup.entryPoint}; baseline: ${setup.baseline}; target: ${setup.targetOutcome}.` : `Pilot definition is ${pilotProgress(setup)}% complete and still needs a baseline, target, authority boundary, and acceptance evidence.`,
     ])
@@ -1671,7 +1714,8 @@ export function OverviewPage() {
             {blockedWork.map((item) => <Link key={item.id} to={`/work/?team=${item.team}&view=work&item=${item.id}`}><span>Work</span><strong>{item.title}</strong><small>{item.owner}</small></Link>)}
             {agentHandoffs.map((agent) => <Link key={agent.id} to={`/work/?team=${agent.team}&view=agents&agent=${agent.id}`}><span>Agent</span><strong>{agent.name} {agent.state === 'waiting_review' ? 'needs review' : 'is blocked'}</strong><small>{agent.humanOwner} / {agent.assignedWorkItemId ?? 'unassigned'}</small></Link>)}
             {pendingApprovals.map((approval) => <button className="attention-action" key={approval.id} onClick={() => setSelectedApprovalId(approval.id)} type="button"><span>{approval.managed ? 'Managed approval' : 'Approval'}</span><strong>{approval.title}</strong><small>{approval.packet.claims.length} claims · {formatTime(approval.createdAt)}</small><b>Review</b></button>)}
-            {lowStock.map((item) => <Link key={item.sku} to="/shop/?tab=inventory"><span>Stock</span><strong>{item.name}</strong><small>{item.onHand} on hand · reorder at {item.reorderAt}</small></Link>)}
+            {purchaseArrivalAttention.map((row) => { const priority = purchaseArrivalPriority(row); return <Link key={row.purchaseOrder.id} to={priority.href}><span>Purchase</span><strong>{priority.title}</strong><small>{priority.detail}</small></Link> })}
+            {uncoveredLowStock.map((item) => <Link key={item.sku} to="/shop/?tab=inventory"><span>Stock</span><strong>{item.name}</strong><small>{item.onHand} on hand · reorder at {item.reorderAt}</small></Link>)}
             {openProductionIssues.map((issue) => <Link key={issue.id} to="/plant/?tab=control"><span>{issue.kind}</span><strong>{issue.summary}</strong><small>{issue.area}</small></Link>)}
             {!ownerAttention ? <Empty>No owner decision needs attention.</Empty> : null}
           </div>
@@ -2018,6 +2062,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   tab: CommerceTab
 }) {
   const navigate = useNavigate()
+  const commerceLocation = useLocation()
   const purchaseOrderClock = useMinuteClock()
   const [commerce, mutateCommerce, commerceStorageError, workspaceMode, managedVersion, managedWorkspaceId, commerceCanWrite] = useCommerceWorkspace(managedIdentity)
   const orderDraftScope = localCommerceOrderDraftScope(managedIdentity?.workspaceId)
@@ -2050,6 +2095,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const catalogEditEditorRef = useRef<HTMLFormElement>(null)
   const purchaseOrderTriggerRefs = useRef(new Map<string, HTMLButtonElement>())
   const purchaseOrderEditorRef = useRef<HTMLFormElement>(null)
+  const purchaseOrderHistoryRef = useRef<HTMLDetailsElement>(null)
   const stockCountTriggerRef = useRef<HTMLButtonElement>(null)
   const stockCountEditorRef = useRef<HTMLFormElement>(null)
   const returnTriggerRefs = useRef(new Map<string, HTMLButtonElement>())
@@ -2248,6 +2294,17 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     && returnQuantity <= selectedReturnLine.remaining
     ? returnQuantity
     : null
+
+  useEffect(() => {
+    if (tab !== 'inventory' || commerceLocation.hash !== '#purchase-orders') return
+    const frame = window.requestAnimationFrame(() => {
+      const history = purchaseOrderHistoryRef.current
+      if (history) history.open = true
+      history?.scrollIntoView({ block: 'center' })
+      history?.querySelector('summary')?.focus({ preventScroll: true })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [commerceLocation.hash, tab])
 
   useEffect(() => {
     let current = true
@@ -3933,7 +3990,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
             : `${purchaseOrderDraftItem.onHand.toLocaleString()} → ${(purchaseOrderDraftItem.onHand + purchaseOrderQuantityResult).toLocaleString()}`}</strong></div>
         <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelPurchaseOrderEditor} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled || purchaseOrderQuantityResult === null || (purchaseOrderDraft.mode === 'create' && (!purchaseOrderDraft.supplier.trim() || purchaseOrderExpectedAtResult === null))} type="submit">{purchaseOrderDraft.mode === 'create' ? 'Review order' : 'Review receipt'}</button></div>
       </form> : null}
-      <details className="compact-disclosure purchase-order-history">
+      <details className="compact-disclosure purchase-order-history" id="purchase-orders" ref={purchaseOrderHistoryRef}>
         <summary><span>Purchase orders</span><strong>{purchaseOrderRows.filter(({ progress }) => progress.status === 'open' || progress.status === 'partially_received').length} active · {purchaseOrderRows.length} total</strong></summary>
         {purchaseOrderRows.length ? <div className="purchase-order-list">{purchaseOrderRows.map(({ purchaseOrder, progress, item }) => {
           const arrivalUrgency = commercePurchaseOrderArrivalUrgency(purchaseOrder, progress, purchaseOrderClock)
