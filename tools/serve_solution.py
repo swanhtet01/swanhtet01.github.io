@@ -111,6 +111,7 @@ from mark1_pilot.enterprise_store import (  # noqa: E402
     add_leads_with_tasks as enterprise_add_leads_with_tasks,
     claim_agent_runs as enterprise_claim_agent_runs,
     complete_agent_run as enterprise_complete_agent_run,
+    create_and_reserve_agent_run as enterprise_create_and_reserve_agent_run,
     create_agent_run as enterprise_create_agent_run,
     add_workspace_tasks as enterprise_add_workspace_tasks,
     authenticate_user as enterprise_authenticate_user,
@@ -144,12 +145,16 @@ from mark1_pilot.enterprise_store import (  # noqa: E402
     revoke_session as enterprise_revoke_session,
     save_lead_hunt_profile as enterprise_save_lead_hunt_profile,
     record_lead_hunt_run as enterprise_record_lead_hunt_run,
-    start_agent_run as enterprise_start_agent_run,
     update_lead as enterprise_update_lead,
     update_workspace_domain as enterprise_update_workspace_domain,
     update_workspace_module as enterprise_update_workspace_module,
     update_workspace_profile as enterprise_update_workspace_profile,
     update_workspace_task as enterprise_update_workspace_task,
+)
+from mark1_pilot.agent_governance import (  # noqa: E402
+    AGENT_BUDGET_ACCOUNTING_CONTRACT,
+    AgentGovernanceError,
+    load_agent_workforce_policy,
 )
 from mark1_pilot.lead_finder import run_lead_finder  # noqa: E402
 from mark1_pilot.lead_to_pilot import build_lead_to_pilot_pack  # noqa: E402
@@ -447,9 +452,13 @@ class AgentBatchRunRequest(BaseModel):
 
 
 class AgentQueueProcessRequest(BaseModel):
+    contract_version: str = ""
+    cycle: str = ""
     job_types: list[str] = Field(default_factory=list)
     source: str = "worker"
     limit: int = Field(default=8, ge=1, le=50)
+    execution_policy: str = ""
+    budget_grant: dict[str, Any] = Field(default_factory=dict)
 
 
 class AgentRunDefaultsRequest(BaseModel):
@@ -1576,6 +1585,39 @@ def _build_agent_runtime_contract(
     }
 
 
+def _agent_governance_row(job_type: str, error: AgentGovernanceError) -> dict[str, Any]:
+    return {
+        "run_id": "",
+        "job_type": str(job_type or "").strip().lower(),
+        "status": "throttled",
+        "summary": error.detail,
+        "error_text": "",
+        "execution_authorized": False,
+        "writes_performed": False,
+        "external_messages_sent": False,
+        "governance": error.as_dict(),
+    }
+
+
+def _agent_completion_rejected_row(
+    *,
+    run_id: str,
+    job_type: str,
+    error: AgentGovernanceError,
+) -> dict[str, Any]:
+    return {
+        "run_id": run_id,
+        "job_type": job_type,
+        "status": "completion_rejected",
+        "summary": "Execution finished but its lease no longer owns completion.",
+        "error_text": "",
+        "execution_authorized": False,
+        "writes_performed": None,
+        "external_messages_sent": None,
+        "governance": error.as_dict(),
+    }
+
+
 def _run_and_persist_agent_job(
     *,
     state_db: str,
@@ -1594,24 +1636,27 @@ def _run_and_persist_agent_job(
         (str(item.get("name", "")).strip() for item in AGENT_JOB_TEMPLATES if str(item.get("job_type", "")).strip() == str(job_type or "").strip()),
         str(job_type or "").replace("_", " ").title() or "Agent job",
     )
-    row = enterprise_create_agent_run(
-        enterprise_db_url,
-        workspace_id=workspace_id,
-        job_type=job_type,
-        source=source,
-        payload=payload,
-        idempotency_key=idempotency_key,
-        max_attempts=1,
-        triggered_by=triggered_by,
-        related_entity_type=related_entity_type,
-        related_entity_id=related_entity_id,
-    )
+    try:
+        row = enterprise_create_and_reserve_agent_run(
+            enterprise_db_url,
+            workspace_id=workspace_id,
+            job_type=job_type,
+            source=source,
+            payload=payload,
+            idempotency_key=idempotency_key,
+            max_attempts=1,
+            triggered_by=triggered_by,
+            related_entity_type=related_entity_type,
+            related_entity_id=related_entity_id,
+            claimed_by=str(source or "").strip() or "direct",
+        )
+    except AgentGovernanceError as exc:
+        return _agent_governance_row(job_type, exc)
+    if not bool(row.get("execution_authorized")):
+        return row
     run_id = str(row.get("run_id", "")).strip()
-    enterprise_start_agent_run(
-        enterprise_db_url,
-        workspace_id=workspace_id,
-        run_id=run_id,
-    )
+    claim_token = str(row.get("claim_token", "")).strip()
+    safe_row = {key: value for key, value in row.items() if key != "claim_token"}
     try:
         result = _execute_agent_job(
             state_db=state_db,
@@ -1620,47 +1665,24 @@ def _run_and_persist_agent_job(
             job_type=job_type,
             payload=payload,
         )
-        completed = enterprise_complete_agent_run(
-            enterprise_db_url,
-            workspace_id=workspace_id,
-            run_id=run_id,
-            status="ready",
-            summary=str(result.get("summary", "")).strip(),
-            result=result,
-        ) or row
-        if job_defaults:
-            _emit_connector_event(
-                enterprise_db_url=enterprise_db_url,
-                workspace_id=workspace_id,
-                actor=triggered_by,
-                connector_id=str(job_defaults.get("connector_id", "")).strip(),
-                title=str(completed.get("summary", "")).strip() or f"{job_label} completed.",
-                detail=f"Run {run_id or 'unknown'} completed via {str(source or '').strip() or 'manual'}.",
-                source=str(job_defaults.get("source", "")).strip() or "Agent runtime",
-                kind=str(job_type or "").strip() or "agent_run",
-                route=str(job_defaults.get("route", "")).strip(),
-                severity="info",
-                entity_type="agent_run",
-                entity_id=run_id,
-                payload={
-                    "job_type": job_type,
-                    "status": str(completed.get("status", "")).strip() or "ready",
-                    "source": str(source or "").strip() or "manual",
-                    "result": completed.get("result", {}),
-                },
-                created_at=_runtime_run_timestamp(completed),
-            )
-        return completed
     except Exception as exc:
-        failed = enterprise_complete_agent_run(
-            enterprise_db_url,
-            workspace_id=workspace_id,
-            run_id=run_id,
-            status="error",
-            summary=f"{job_type} failed",
-            result={"job_type": job_type},
-            error_text=str(exc),
-        ) or row
+        try:
+            failed = enterprise_complete_agent_run(
+                enterprise_db_url,
+                workspace_id=workspace_id,
+                run_id=run_id,
+                claim_token=claim_token,
+                status="error",
+                summary=f"{job_type} failed",
+                result={"job_type": job_type},
+                error_text=str(exc),
+            ) or safe_row
+        except AgentGovernanceError as completion_error:
+            return _agent_completion_rejected_row(
+                run_id=run_id,
+                job_type=job_type,
+                error=completion_error,
+            )
         if job_defaults:
             _emit_connector_event(
                 enterprise_db_url=enterprise_db_url,
@@ -1685,6 +1707,46 @@ def _run_and_persist_agent_job(
             )
         return failed
 
+    try:
+        completed = enterprise_complete_agent_run(
+            enterprise_db_url,
+            workspace_id=workspace_id,
+            run_id=run_id,
+            claim_token=claim_token,
+            status="ready",
+            summary=str(result.get("summary", "")).strip(),
+            result=result,
+        ) or safe_row
+    except AgentGovernanceError as completion_error:
+        return _agent_completion_rejected_row(
+            run_id=run_id,
+            job_type=job_type,
+            error=completion_error,
+        )
+    if job_defaults:
+        _emit_connector_event(
+            enterprise_db_url=enterprise_db_url,
+            workspace_id=workspace_id,
+            actor=triggered_by,
+            connector_id=str(job_defaults.get("connector_id", "")).strip(),
+            title=str(completed.get("summary", "")).strip() or f"{job_label} completed.",
+            detail=f"Run {run_id or 'unknown'} completed via {str(source or '').strip() or 'manual'}.",
+            source=str(job_defaults.get("source", "")).strip() or "Agent runtime",
+            kind=str(job_type or "").strip() or "agent_run",
+            route=str(job_defaults.get("route", "")).strip(),
+            severity="info",
+            entity_type="agent_run",
+            entity_id=run_id,
+            payload={
+                "job_type": job_type,
+                "status": str(completed.get("status", "")).strip() or "ready",
+                "source": str(source or "").strip() or "manual",
+                "result": completed.get("result", {}),
+            },
+            created_at=_runtime_run_timestamp(completed),
+        )
+    return completed
+
 
 def _complete_existing_agent_run(
     *,
@@ -1693,6 +1755,7 @@ def _complete_existing_agent_run(
     workspace_id: str,
     run_id: str,
     job_type: str,
+    claim_token: str,
     payload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     job_defaults = AGENT_JOB_CONNECTOR_MAP.get(str(job_type or "").strip(), {})
@@ -1705,46 +1768,24 @@ def _complete_existing_agent_run(
             job_type=job_type,
             payload=payload,
         )
-        completed = enterprise_complete_agent_run(
-            enterprise_db_url,
-            workspace_id=workspace_id,
-            run_id=run_id,
-            status="ready",
-            summary=str(result.get("summary", "")).strip(),
-            result=result,
-        ) or {"run_id": run_id, "job_type": job_type, "status": "ready"}
-        if job_defaults:
-            _emit_connector_event(
-                enterprise_db_url=enterprise_db_url,
-                workspace_id=workspace_id,
-                actor=triggered_by,
-                connector_id=str(job_defaults.get("connector_id", "")).strip(),
-                title=str(completed.get("summary", "")).strip() or f"{str(job_type or '').replace('_', ' ').title() or 'Agent job'} completed.",
-                detail=f"Queued run {run_id or 'unknown'} completed by worker.",
-                source=str(job_defaults.get("source", "")).strip() or "Agent runtime",
-                kind=str(job_type or "").strip() or "agent_run",
-                route=str(job_defaults.get("route", "")).strip(),
-                severity="info",
-                entity_type="agent_run",
-                entity_id=run_id,
-                payload={
-                    "job_type": job_type,
-                    "status": str(completed.get("status", "")).strip() or "ready",
-                    "mode": "queued",
-                },
-                created_at=_runtime_run_timestamp(completed),
-            )
-        return completed
     except Exception as exc:
-        failed = enterprise_complete_agent_run(
-            enterprise_db_url,
-            workspace_id=workspace_id,
-            run_id=run_id,
-            status="error",
-            summary=f"{job_type} failed",
-            result={"job_type": job_type},
-            error_text=str(exc),
-        ) or {"run_id": run_id, "job_type": job_type, "status": "error", "error_text": str(exc)}
+        try:
+            failed = enterprise_complete_agent_run(
+                enterprise_db_url,
+                workspace_id=workspace_id,
+                run_id=run_id,
+                claim_token=claim_token,
+                status="error",
+                summary=f"{job_type} failed",
+                result={"job_type": job_type},
+                error_text=str(exc),
+            ) or {"run_id": run_id, "job_type": job_type, "status": "error", "error_text": str(exc)}
+        except AgentGovernanceError as completion_error:
+            return _agent_completion_rejected_row(
+                run_id=run_id,
+                job_type=job_type,
+                error=completion_error,
+            )
         if job_defaults:
             _emit_connector_event(
                 enterprise_db_url=enterprise_db_url,
@@ -1769,6 +1810,45 @@ def _complete_existing_agent_run(
             )
         return failed
 
+    try:
+        completed = enterprise_complete_agent_run(
+            enterprise_db_url,
+            workspace_id=workspace_id,
+            run_id=run_id,
+            claim_token=claim_token,
+            status="ready",
+            summary=str(result.get("summary", "")).strip(),
+            result=result,
+        ) or {"run_id": run_id, "job_type": job_type, "status": "ready"}
+    except AgentGovernanceError as completion_error:
+        return _agent_completion_rejected_row(
+            run_id=run_id,
+            job_type=job_type,
+            error=completion_error,
+        )
+    if job_defaults:
+        _emit_connector_event(
+            enterprise_db_url=enterprise_db_url,
+            workspace_id=workspace_id,
+            actor=triggered_by,
+            connector_id=str(job_defaults.get("connector_id", "")).strip(),
+            title=str(completed.get("summary", "")).strip() or f"{str(job_type or '').replace('_', ' ').title() or 'Agent job'} completed.",
+            detail=f"Queued run {run_id or 'unknown'} completed by worker.",
+            source=str(job_defaults.get("source", "")).strip() or "Agent runtime",
+            kind=str(job_type or "").strip() or "agent_run",
+            route=str(job_defaults.get("route", "")).strip(),
+            severity="info",
+            entity_type="agent_run",
+            entity_id=run_id,
+            payload={
+                "job_type": job_type,
+                "status": str(completed.get("status", "")).strip() or "ready",
+                "mode": "queued",
+            },
+            created_at=_runtime_run_timestamp(completed),
+        )
+    return completed
+
 
 def _agent_jobs_payload(
     *,
@@ -1778,16 +1858,24 @@ def _agent_jobs_payload(
     status: str = "ready",
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    policy = load_agent_workforce_policy()
     latest_runs = enterprise_list_agent_runs(
         enterprise_db_url,
         workspace_id=workspace_id,
         limit=50,
     )
     latest_by_type = _group_agent_runs_by_job_type(latest_runs)
+    row_statuses = {str(row.get("status", "")).strip().lower() for row in rows if isinstance(row, dict)}
+    effective_status = status
+    if status == "ready" and row_statuses and row_statuses <= {"throttled", "completion_rejected"}:
+        effective_status = "throttled"
+    elif status == "ready" and row_statuses & {"throttled", "completion_rejected"}:
+        effective_status = "partial"
     payload: dict[str, Any] = {
-        "status": status,
+        "status": effective_status,
         "count": len(rows),
         "rows": rows,
+        "workforce_policy": policy.as_dict(),
         "jobs": [
             {
                 **template,
@@ -2732,7 +2820,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         if not internal_cron_token:
             raise HTTPException(status_code=503, detail="Internal cron token is not configured.")
         provided = str(request.headers.get("x-supermega-cron-token", "")).strip()
-        if not provided or provided != internal_cron_token:
+        if not provided or not secrets.compare_digest(provided, internal_cron_token):
             raise HTTPException(status_code=401, detail="Invalid internal cron token.")
 
     def _agent_queue_name(job_types: list[str]) -> str:
@@ -2817,30 +2905,42 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         job_types: list[str] | None = None,
     ) -> dict[str, Any]:
         normalized_job_types = _normalized_agent_job_types(job_types)
-        rows = [
-            enterprise_create_agent_run(
-                enterprise_db_url,
+        rows: list[dict[str, Any]] = []
+        accepted_job_types: list[str] = []
+        for job_type in normalized_job_types:
+            try:
+                row = enterprise_create_agent_run(
+                    enterprise_db_url,
+                    workspace_id=workspace_id,
+                    job_type=job_type,
+                    source=source,
+                    payload={},
+                    max_attempts=1,
+                    triggered_by=triggered_by,
+                )
+            except AgentGovernanceError as exc:
+                rows.append(_agent_governance_row(job_type, exc))
+                continue
+            rows.append(row)
+            if str(row.get("status", "")).strip() == "queued" and str(row.get("run_id", "")).strip():
+                accepted_job_types.append(job_type)
+        queue_result = (
+            _enqueue_agent_worker_task(
                 workspace_id=workspace_id,
-                job_type=job_type,
-                source=source,
-                payload={},
-                max_attempts=1,
-                triggered_by=triggered_by,
+                source="cloud_tasks_worker",
+                job_types=accepted_job_types,
+                limit=len(accepted_job_types),
             )
-            for job_type in normalized_job_types
-        ]
-        queue_result = _enqueue_agent_worker_task(
-            workspace_id=workspace_id,
-            source="cloud_tasks_worker",
-            job_types=normalized_job_types,
-            limit=len(rows) or 1,
+            if accepted_job_types
+            else {"status": "not_needed", "reason": "no_new_work"}
         )
         return _agent_jobs_payload(
             enterprise_db_url=enterprise_db_url,
             workspace_id=workspace_id,
             rows=rows,
             extra={
-                "queued_count": len(rows),
+                "queued_count": len(accepted_job_types),
+                "rejected_count": len(rows) - len(accepted_job_types),
                 "mode": "queued",
                 "dispatch": queue_result,
             },
@@ -2852,13 +2952,45 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         source: str,
         job_types: list[str] | None = None,
         limit: int = 8,
+        budget_grant: dict[str, Any] | None = None,
+        grant_secret: str = "",
+        require_budget_grant: bool = False,
     ) -> dict[str, Any]:
-        claimed_rows = enterprise_claim_agent_runs(
-            enterprise_db_url,
-            workspace_id=workspace_id,
-            job_types=_normalized_agent_job_types(job_types),
-            limit=limit,
-        )
+        try:
+            claimed_rows = enterprise_claim_agent_runs(
+                enterprise_db_url,
+                workspace_id=workspace_id,
+                job_types=_normalized_agent_job_types(job_types),
+                limit=limit,
+                claimed_by=str(source or "").strip() or "worker",
+                budget_grant=budget_grant,
+                grant_secret=grant_secret,
+                require_budget_grant=require_budget_grant,
+            )
+        except AgentGovernanceError as exc:
+            accounting = {
+                "contract": AGENT_BUDGET_ACCOUNTING_CONTRACT,
+                "grant_id": str((budget_grant or {}).get("grant_id", "")).strip().lower(),
+                "reserved_runs": 0,
+                "reserved_work_units": 0,
+                "consumed_runs": 0,
+                "consumed_work_units": 0,
+                "status": "rejected",
+                "error": exc.as_dict(),
+            }
+            return _agent_jobs_payload(
+                enterprise_db_url=enterprise_db_url,
+                workspace_id=workspace_id,
+                rows=[],
+                status="throttled",
+                extra={
+                    "claimed_count": 0,
+                    "processed_count": 0,
+                    "mode": source,
+                    "budget_accounting": accounting,
+                    "side_effects": {"writes_performed": False, "external_messages_sent": False},
+                },
+            )
         completed_rows = [
             _complete_existing_agent_run(
                 state_db=state_db,
@@ -2866,11 +2998,42 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                 workspace_id=workspace_id,
                 run_id=str(row.get("run_id", "")).strip(),
                 job_type=str(row.get("job_type", "")).strip(),
+                claim_token=str(row.get("claim_token", "")).strip(),
                 payload=row.get("payload", {}) if isinstance(row.get("payload", {}), dict) else {},
             )
             for row in claimed_rows
             if str(row.get("run_id", "")).strip() and str(row.get("job_type", "")).strip()
         ]
+        reserved_units = sum(
+            int((row.get("budget_reservation", {}) or {}).get("units", 0) or 0)
+            for row in claimed_rows
+            if isinstance(row.get("budget_reservation", {}), dict)
+        )
+        consumed_rows = [
+            row for row in completed_rows
+            if isinstance(row.get("budget_accounting", {}), dict)
+            and str((row.get("budget_accounting", {}) or {}).get("status", "")) == "consumed"
+        ]
+        consumed_units = sum(
+            int((row.get("budget_accounting", {}) or {}).get("consumed_work_units", 0) or 0)
+            for row in consumed_rows
+        )
+        reservation_grant_ids = {
+            str((row.get("budget_reservation", {}) or {}).get("grant_id", "")).strip().lower()
+            for row in claimed_rows
+            if isinstance(row.get("budget_reservation", {}), dict)
+        }
+        reservation_grant_ids.discard("")
+        expected_grant_id = str((budget_grant or {}).get("grant_id", "")).strip().lower()
+        accounting = {
+            "contract": AGENT_BUDGET_ACCOUNTING_CONTRACT,
+            "grant_id": expected_grant_id or (next(iter(reservation_grant_ids)) if len(reservation_grant_ids) == 1 else ""),
+            "reserved_runs": len(claimed_rows),
+            "reserved_work_units": reserved_units,
+            "consumed_runs": len(consumed_rows),
+            "consumed_work_units": consumed_units,
+            "status": "consumed" if len(consumed_rows) == len(claimed_rows) and consumed_units == reserved_units else "incomplete",
+        }
         return _agent_jobs_payload(
             enterprise_db_url=enterprise_db_url,
             workspace_id=workspace_id,
@@ -2879,6 +3042,11 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                 "claimed_count": len(claimed_rows),
                 "processed_count": len(completed_rows),
                 "mode": source,
+                "budget_accounting": accounting,
+                "side_effects": {
+                    "writes_performed": bool(completed_rows),
+                    "external_messages_sent": False,
+                },
             },
         )
 
@@ -10738,18 +10906,21 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
 
         triggered_by = str(session.get("display_name", session.get("username", "system")))
         if request.enqueue_only:
-            row = enterprise_create_agent_run(
-                enterprise_db_url,
-                workspace_id=workspace_id,
-                job_type=job_type,
-                source=str(request.source or "").strip() or "manual",
-                payload=request.payload,
-                idempotency_key=str(request.idempotency_key or "").strip() or None,
-                max_attempts=int(request.max_attempts or 1),
-                triggered_by=triggered_by,
-                related_entity_type=str(request.related_entity_type or "").strip(),
-                related_entity_id=str(request.related_entity_id or "").strip(),
-            )
+            try:
+                row = enterprise_create_agent_run(
+                    enterprise_db_url,
+                    workspace_id=workspace_id,
+                    job_type=job_type,
+                    source=str(request.source or "").strip() or "manual",
+                    payload=request.payload,
+                    idempotency_key=str(request.idempotency_key or "").strip() or None,
+                    max_attempts=int(request.max_attempts or 1),
+                    triggered_by=triggered_by,
+                    related_entity_type=str(request.related_entity_type or "").strip(),
+                    related_entity_id=str(request.related_entity_id or "").strip(),
+                )
+            except AgentGovernanceError as exc:
+                raise HTTPException(status_code=429, detail=exc.as_dict()) from exc
             payload = _agent_jobs_payload(
                 enterprise_db_url=enterprise_db_url,
                 workspace_id=workspace_id,
@@ -10883,11 +11054,17 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
     @app.post("/api/internal/agent-runs/process-queue")
     def process_internal_agent_run_queue(request_http: Request, request: AgentQueueProcessRequest) -> dict[str, Any]:
         _require_internal_cron_token(request_http)
+        normalized_source = str(request.source or "").strip() or "worker"
+        hosted_scheduler_contract = request.contract_version == "supermega.hosted-agent-scheduler.v1"
+        require_budget_grant = normalized_source == "vercel_cron" or hosted_scheduler_contract
         return _process_agent_run_queue(
             workspace_id=default_workspace_id,
-            source=str(request.source or "").strip() or "worker",
+            source=normalized_source,
             job_types=request.job_types,
             limit=int(request.limit or 8),
+            budget_grant=request.budget_grant,
+            grant_secret=internal_cron_token,
+            require_budget_grant=require_budget_grant,
         )
 
     @app.post("/api/tools/lead-finder")

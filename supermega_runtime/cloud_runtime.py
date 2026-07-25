@@ -16,6 +16,13 @@ from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Header, HTTPException, Request
 
+from mark1_pilot.agent_governance import (
+    AGENT_BUDGET_ACCOUNTING_CONTRACT,
+    AGENT_BUDGET_GRANT_CONTRACT,
+    AgentGovernanceError,
+    issue_agent_budget_grant,
+)
+
 
 router = APIRouter()
 
@@ -244,6 +251,8 @@ def _runtime_status() -> dict[str, object]:
             "max_jobs_per_run": 8,
             "max_worker_response_bytes": _MAX_WORKER_RESPONSE_BYTES,
             "redirects_allowed": False,
+            "budget_grant_contract": AGENT_BUDGET_GRANT_CONTRACT,
+            "budget_grants_required": True,
         },
         "execution_policy": "review_gated_no_external_send_or_money_actions",
     }
@@ -341,6 +350,44 @@ def _reported_side_effects(payload: Mapping[str, object]) -> tuple[bool | None, 
     return reported_boolean("writes_performed"), reported_boolean("external_messages_sent")
 
 
+def _reported_budget_accounting(
+    payload: Mapping[str, object],
+    grant: Mapping[str, object],
+) -> tuple[dict[str, object] | None, str | None]:
+    accounting = payload.get("budget_accounting")
+    if not isinstance(accounting, Mapping):
+        return None, "worker_budget_accounting_required"
+    if str(accounting.get("contract", "")) != AGENT_BUDGET_ACCOUNTING_CONTRACT:
+        return None, "worker_budget_accounting_contract_invalid"
+    if not hmac.compare_digest(str(accounting.get("grant_id", "")), str(grant.get("grant_id", ""))):
+        return None, "worker_budget_grant_mismatch"
+    integer_fields = ("reserved_runs", "reserved_work_units", "consumed_runs", "consumed_work_units")
+    if any(type(accounting.get(field)) is not int for field in integer_fields):
+        return None, "worker_budget_accounting_invalid"
+    reserved_runs = int(accounting["reserved_runs"])
+    reserved_units = int(accounting["reserved_work_units"])
+    consumed_runs = int(accounting["consumed_runs"])
+    consumed_units = int(accounting["consumed_work_units"])
+    if (
+        min(reserved_runs, reserved_units, consumed_runs, consumed_units) < 0
+        or reserved_runs > int(grant["max_runs"])
+        or reserved_units > int(grant["max_work_units"])
+        or consumed_runs != reserved_runs
+        or consumed_units != reserved_units
+        or str(accounting.get("status", "")) != "consumed"
+    ):
+        return None, "worker_budget_accounting_invalid"
+    return {
+        "contract": AGENT_BUDGET_ACCOUNTING_CONTRACT,
+        "grant_id": str(grant["grant_id"]),
+        "reserved_runs": reserved_runs,
+        "reserved_work_units": reserved_units,
+        "consumed_runs": consumed_runs,
+        "consumed_work_units": consumed_units,
+        "status": "consumed",
+    }, None
+
+
 def _read_worker_payload(response: Any) -> Mapping[str, object]:
     body = response.read(_MAX_WORKER_RESPONSE_BYTES + 1)
     if len(body) > _MAX_WORKER_RESPONSE_BYTES:
@@ -404,6 +451,17 @@ def _cron_result(path: str) -> dict[str, object]:
         result["configuration_errors"] = [worker_configuration_error or "worker_token_missing"]
         return result
 
+    try:
+        budget_grant = issue_agent_budget_grant(
+            secret=token,
+            cycle=str(route["cycle"]),
+            job_types=list(route["job_types"]),
+            max_runs=min(int(route["limit"]), len(tuple(route["job_types"]))),
+        )
+    except AgentGovernanceError as exc:
+        result["configuration_errors"] = [exc.code]
+        return result
+
     payload = json.dumps(
         {
             "contract_version": "supermega.hosted-agent-scheduler.v1",
@@ -412,6 +470,7 @@ def _cron_result(path: str) -> dict[str, object]:
             "source": "vercel_cron",
             "limit": int(route["limit"]),
             "execution_policy": "review_gated_no_external_send_or_money_actions",
+            "budget_grant": budget_grant,
         },
         separators=(",", ":"),
     ).encode("utf-8")
@@ -447,6 +506,7 @@ def _cron_result(path: str) -> dict[str, object]:
             worker_payload = _read_worker_payload(response)
 
         writes_performed, external_messages_sent = _reported_side_effects(worker_payload)
+        budget_accounting, budget_error = _reported_budget_accounting(worker_payload, budget_grant)
         result["worker_status"] = worker_status
         result["worker_result"] = _sanitize_worker_value(worker_payload)
         result["writes_performed"] = writes_performed
@@ -459,12 +519,24 @@ def _cron_result(path: str) -> dict[str, object]:
                 "reporting": "incomplete",
             }
             return result
+        if budget_error or budget_accounting is None:
+            result["execution"] = "worker_response_invalid"
+            result["worker_error"] = budget_error or "worker_budget_accounting_required"
+            result["side_effects"] = {
+                "worker_invoked": True,
+                "reporting": "incomplete",
+            }
+            return result
 
         result["status"] = "accepted"
         result["execution"] = "hosted_runtime_forwarded"
+        result["budget_accounting"] = budget_accounting
         result["side_effects"] = {
             "worker_invoked": True,
+            # Side effects remain worker assertions even when the separate
+            # signed budget ledger is cryptographically bound.
             "reporting": "worker_reported_unverified",
+            "budget_reporting": "worker_reported_budget_bound",
             "writes_performed": writes_performed,
             "external_messages_sent": external_messages_sent,
         }

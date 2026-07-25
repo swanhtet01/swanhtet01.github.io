@@ -2,16 +2,37 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
+import tempfile
 import unittest
 import urllib.error
-from contextlib import contextmanager
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing, contextmanager
 from collections.abc import Iterator
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from unittest.mock import patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from supermega_runtime.cloud_runtime import DAILY_CRON_PATH, QUEUE_CRON_PATH, router
+from mark1_pilot.agent_governance import (
+    AGENT_BUDGET_ACCOUNTING_CONTRACT,
+    AGENT_BUDGET_GRANT_CONTRACT,
+    AgentGovernanceError,
+    issue_agent_budget_grant,
+    load_agent_workforce_policy,
+    verify_agent_budget_grant,
+)
+from mark1_pilot.enterprise_store import (
+    claim_agent_runs,
+    complete_agent_run,
+    create_agent_run,
+    create_and_reserve_agent_run,
+    ensure_workspace,
+    get_agent_run,
+)
 
 
 class FakeWorkerResponse:
@@ -66,6 +87,27 @@ class CloudRuntimeTests(unittest.TestCase):
             **overrides,
         }
 
+    @classmethod
+    def _success_payload_for_request(cls, request: object, **overrides: object) -> dict[str, object]:
+        request_payload = json.loads(getattr(request, "data"))
+        grant = request_payload["budget_grant"]
+        return cls._success_payload(
+            budget_accounting={
+                "contract": AGENT_BUDGET_ACCOUNTING_CONTRACT,
+                "grant_id": grant["grant_id"],
+                "reserved_runs": grant["max_runs"],
+                "reserved_work_units": grant["max_work_units"],
+                "consumed_runs": grant["max_runs"],
+                "consumed_work_units": grant["max_work_units"],
+                "status": "consumed",
+            },
+            **overrides,
+        )
+
+    @classmethod
+    def _success_response(cls, request: object) -> FakeWorkerResponse:
+        return FakeWorkerResponse(cls._success_payload_for_request(request))
+
     def test_cron_auth_is_required_and_ambiguous_credentials_are_rejected(self) -> None:
         with self._client(SUPERMEGA_CLOUD_TASKS_WORKER_URL="", SUPERMEGA_CLOUD_TASKS_ALLOWED_HOSTS="") as client:
             missing = client.get(QUEUE_CRON_PATH)
@@ -105,11 +147,7 @@ class CloudRuntimeTests(unittest.TestCase):
         open_worker.assert_not_called()
 
     def test_queue_and_daily_routes_forward_fixed_meaningful_job_types(self) -> None:
-        responses = [
-            FakeWorkerResponse(self._success_payload()),
-            FakeWorkerResponse(self._success_payload()),
-        ]
-        with patch("supermega_runtime.cloud_runtime._open_worker_request", side_effect=responses) as open_worker:
+        with patch("supermega_runtime.cloud_runtime._open_worker_request", side_effect=self._success_response) as open_worker:
             with self._client() as client:
                 queue = client.get(QUEUE_CRON_PATH, headers={"authorization": "Bearer cron-secret"})
                 daily = client.get(DAILY_CRON_PATH, headers={"authorization": "Bearer cron-secret"})
@@ -124,6 +162,14 @@ class CloudRuntimeTests(unittest.TestCase):
         self.assertEqual(queue_payload["cycle"], "queue")
         self.assertEqual(queue_payload["job_types"], ["task_triage", "ops_watch"])
         self.assertEqual(queue_payload["limit"], 8)
+        self.assertEqual(queue_payload["budget_grant"]["contract"], AGENT_BUDGET_GRANT_CONTRACT)
+        self.assertEqual(queue_payload["budget_grant"]["job_types"], queue_payload["job_types"])
+        self.assertEqual(queue_payload["budget_grant"]["max_runs"], 2)
+        verify_agent_budget_grant(
+            queue_payload["budget_grant"],
+            secret="worker-secret",
+            requested_job_types=queue_payload["job_types"],
+        )
         self.assertEqual(daily_payload["cycle"], "daily")
         self.assertEqual(daily_payload["job_types"], ["founder_brief", "github_release_watch"])
         self.assertEqual(daily_payload["limit"], 4)
@@ -152,20 +198,22 @@ class CloudRuntimeTests(unittest.TestCase):
                 open_worker.assert_not_called()
 
     def test_successful_forwarding_sanitizes_and_bounds_worker_results(self) -> None:
-        worker_payload = self._success_payload(
-            processed_count=3,
-            summary=(" completed\u0000 " * 300),
-            token="must-not-leak",
-            nested={"authorization": "Bearer must-not-leak", "safe": "kept"},
-            jobs=[{"job_id": index, "status": "done"} for index in range(40)],
-            side_effects={
-                "writes_performed": True,
-                "external_messages_sent": False,
-            },
-        )
+        def worker_response(request: object) -> FakeWorkerResponse:
+            return FakeWorkerResponse(self._success_payload_for_request(
+                request,
+                processed_count=3,
+                summary=(" completed\u0000 " * 300),
+                token="must-not-leak",
+                nested={"authorization": "Bearer must-not-leak", "safe": "kept"},
+                jobs=[{"job_id": index, "status": "done"} for index in range(40)],
+                side_effects={
+                    "writes_performed": True,
+                    "external_messages_sent": False,
+                },
+            ))
         with patch(
             "supermega_runtime.cloud_runtime._open_worker_request",
-            return_value=FakeWorkerResponse(worker_payload),
+            side_effect=worker_response,
         ) as open_worker:
             with self._client() as client:
                 response = client.get(QUEUE_CRON_PATH, headers={"authorization": "Bearer cron-secret"})
@@ -177,6 +225,8 @@ class CloudRuntimeTests(unittest.TestCase):
         self.assertTrue(body["writes_performed"])
         self.assertFalse(body["external_messages_sent"])
         self.assertEqual(body["side_effects"]["reporting"], "worker_reported_unverified")
+        self.assertEqual(body["side_effects"]["budget_reporting"], "worker_reported_budget_bound")
+        self.assertEqual(body["budget_accounting"]["status"], "consumed")
         self.assertEqual(body["worker_result"]["token"], "[redacted]")
         self.assertEqual(body["worker_result"]["nested"]["authorization"], "[redacted]")
         self.assertLessEqual(len(body["worker_result"]["summary"]), 1_024)
@@ -204,6 +254,31 @@ class CloudRuntimeTests(unittest.TestCase):
         self.assertEqual(body["worker_error"], "worker_side_effect_report_required")
         self.assertIsNone(body["writes_performed"])
         self.assertIsNone(body["external_messages_sent"])
+
+    def test_missing_or_mismatched_budget_accounting_fails_closed(self) -> None:
+        def missing_accounting(_: object) -> FakeWorkerResponse:
+            return FakeWorkerResponse(self._success_payload())
+
+        with patch("supermega_runtime.cloud_runtime._open_worker_request", side_effect=missing_accounting):
+            with self._client() as client:
+                missing = client.get(QUEUE_CRON_PATH, headers={"authorization": "Bearer cron-secret"})
+
+        self.assertEqual(missing.json()["status"], "degraded")
+        self.assertEqual(missing.json()["worker_error"], "worker_budget_accounting_required")
+
+        def mismatched_accounting(request: object) -> FakeWorkerResponse:
+            payload = self._success_payload_for_request(request)
+            accounting = dict(payload["budget_accounting"])
+            accounting["grant_id"] = "0" * 32
+            payload["budget_accounting"] = accounting
+            return FakeWorkerResponse(payload)
+
+        with patch("supermega_runtime.cloud_runtime._open_worker_request", side_effect=mismatched_accounting):
+            with self._client() as client:
+                mismatched = client.get(QUEUE_CRON_PATH, headers={"authorization": "Bearer cron-secret"})
+
+        self.assertEqual(mismatched.json()["status"], "degraded")
+        self.assertEqual(mismatched.json()["worker_error"], "worker_budget_grant_mismatch")
 
     def test_worker_failure_reports_unknown_side_effects_without_leaking_details(self) -> None:
         with patch(
@@ -240,6 +315,209 @@ class CloudRuntimeTests(unittest.TestCase):
         self.assertEqual(body["worker_error"], "worker_response_too_large")
         self.assertIsNone(body["writes_performed"])
         self.assertIsNone(body["external_messages_sent"])
+
+
+class AgentGovernanceTests(unittest.TestCase):
+    job_types = [
+        "revenue_scout",
+        "list_clerk",
+        "task_triage",
+        "template_clerk",
+        "ops_watch",
+        "founder_brief",
+        "github_release_watch",
+    ]
+
+    @contextmanager
+    def _database(self) -> Iterator[tuple[str, str, Path]]:
+        with tempfile.TemporaryDirectory(prefix="supermega-agent-governance-") as directory:
+            database_path = Path(directory) / "agent-governance.db"
+            database_url = f"sqlite:///{database_path.as_posix()}"
+            workspace = ensure_workspace(database_url, slug="governance-test", name="Governance Test")
+            yield database_url, str(workspace["workspace_id"]), database_path
+
+    def test_signed_grants_are_bounded_tamper_evident_and_expiring(self) -> None:
+        observed_at = datetime(2026, 7, 26, 6, 0, tzinfo=timezone.utc)
+        grant = issue_agent_budget_grant(
+            secret="worker-secret",
+            cycle="queue",
+            job_types=["task_triage", "ops_watch"],
+            now=observed_at,
+        )
+        verified = verify_agent_budget_grant(
+            grant,
+            secret="worker-secret",
+            requested_job_types=["task_triage", "ops_watch"],
+            now=observed_at + timedelta(minutes=1),
+        )
+        self.assertEqual(verified["max_runs"], 2)
+        self.assertEqual(verified["max_work_units"], 2)
+
+        tampered = {**grant, "max_runs": 1}
+        with self.assertRaises(AgentGovernanceError) as tampered_error:
+            verify_agent_budget_grant(tampered, secret="worker-secret", now=observed_at)
+        self.assertEqual(tampered_error.exception.code, "budget_grant_signature_invalid")
+
+        with self.assertRaises(AgentGovernanceError) as expired_error:
+            verify_agent_budget_grant(grant, secret="worker-secret", now=observed_at + timedelta(minutes=6))
+        self.assertEqual(expired_error.exception.code, "budget_grant_expired")
+
+        with patch.dict(os.environ, {"SUPERMEGA_AGENT_MAX_RUNNING": "99"}):
+            with self.assertRaises(AgentGovernanceError) as policy_error:
+                load_agent_workforce_policy()
+        self.assertEqual(policy_error.exception.code, "agent_policy_invalid")
+
+    def test_queue_deduplicates_and_completion_requires_one_live_claim(self) -> None:
+        with self._database() as (database_url, workspace_id, _):
+            queued = create_agent_run(
+                database_url,
+                workspace_id=workspace_id,
+                job_type="revenue_scout",
+                idempotency_key="queue-once",
+            )
+            self.assertEqual(queued["status"], "queued")
+            with self.assertRaises(AgentGovernanceError) as duplicate_error:
+                create_agent_run(database_url, workspace_id=workspace_id, job_type="revenue_scout")
+            self.assertEqual(duplicate_error.exception.code, "agent_job_already_in_flight")
+
+            claimed = claim_agent_runs(database_url, workspace_id=workspace_id, limit=5)
+            self.assertEqual(len(claimed), 1)
+            self.assertTrue(claimed[0]["execution_authorized"])
+            self.assertNotEqual(claimed[0]["claim_token"], claimed[0]["budget_reservation"]["reservation_id"])
+
+            with self.assertRaises(AgentGovernanceError) as missing_claim:
+                complete_agent_run(
+                    database_url,
+                    workspace_id=workspace_id,
+                    run_id=queued["run_id"],
+                    status="ready",
+                )
+            self.assertEqual(missing_claim.exception.code, "agent_claim_required")
+
+            completed = complete_agent_run(
+                database_url,
+                workspace_id=workspace_id,
+                run_id=queued["run_id"],
+                claim_token=claimed[0]["claim_token"],
+                status="ready",
+                summary="done",
+            )
+            self.assertEqual(completed["status"], "ready")
+            self.assertEqual(completed["budget_accounting"]["status"], "consumed")
+            with self.assertRaises(AgentGovernanceError) as stale_claim:
+                complete_agent_run(
+                    database_url,
+                    workspace_id=workspace_id,
+                    run_id=queued["run_id"],
+                    claim_token=claimed[0]["claim_token"],
+                    status="error",
+                )
+            self.assertEqual(stale_claim.exception.code, "agent_claim_invalid")
+            self.assertEqual(get_agent_run(database_url, workspace_id=workspace_id, run_id=queued["run_id"])["status"], "ready")
+
+    def test_terminal_idempotency_key_cannot_reexecute(self) -> None:
+        with self._database() as (database_url, workspace_id, _):
+            first = create_and_reserve_agent_run(
+                database_url,
+                workspace_id=workspace_id,
+                job_type="founder_brief",
+                idempotency_key="daily-founder-brief",
+            )
+            complete_agent_run(
+                database_url,
+                workspace_id=workspace_id,
+                run_id=first["run_id"],
+                claim_token=first["claim_token"],
+                status="ready",
+            )
+            replay = create_and_reserve_agent_run(
+                database_url,
+                workspace_id=workspace_id,
+                job_type="founder_brief",
+                idempotency_key="daily-founder-brief",
+            )
+            self.assertEqual(replay["run_id"], first["run_id"])
+            self.assertEqual(replay["status"], "ready")
+            self.assertFalse(replay["execution_authorized"])
+            self.assertEqual(replay["governance"]["decision"], "idempotent_replay")
+
+    def test_concurrent_claimers_cannot_exceed_workspace_concurrency(self) -> None:
+        with self._database() as (database_url, workspace_id, _):
+            for job_type in self.job_types:
+                create_agent_run(database_url, workspace_id=workspace_id, job_type=job_type)
+
+            def claim() -> list[dict[str, object]]:
+                return claim_agent_runs(
+                    database_url,
+                    workspace_id=workspace_id,
+                    job_types=self.job_types,
+                    limit=5,
+                )
+
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                batches = list(executor.map(lambda _: claim(), range(2)))
+            claims = [row for batch in batches for row in batch]
+            self.assertEqual(len(claims), load_agent_workforce_policy().max_running)
+            self.assertEqual(len({row["run_id"] for row in claims}), len(claims))
+            self.assertEqual(len({row["claim_token"] for row in claims}), len(claims))
+
+    def test_signed_grant_is_consumed_once(self) -> None:
+        with self._database() as (database_url, workspace_id, _):
+            for job_type in ("task_triage", "ops_watch"):
+                create_agent_run(database_url, workspace_id=workspace_id, job_type=job_type)
+            grant = issue_agent_budget_grant(
+                secret="worker-secret",
+                cycle="queue",
+                job_types=["task_triage", "ops_watch"],
+            )
+            claimed = claim_agent_runs(
+                database_url,
+                workspace_id=workspace_id,
+                job_types=["task_triage", "ops_watch"],
+                limit=8,
+                budget_grant=grant,
+                grant_secret="worker-secret",
+                require_budget_grant=True,
+            )
+            self.assertEqual(len(claimed), 2)
+            self.assertEqual({row["budget_reservation"]["grant_id"] for row in claimed}, {grant["grant_id"]})
+            with self.assertRaises(AgentGovernanceError) as replay_error:
+                claim_agent_runs(
+                    database_url,
+                    workspace_id=workspace_id,
+                    job_types=["task_triage", "ops_watch"],
+                    limit=8,
+                    budget_grant=grant,
+                    grant_secret="worker-secret",
+                    require_budget_grant=True,
+                )
+            self.assertEqual(replay_error.exception.code, "budget_grant_replayed")
+
+    def test_expired_lease_rejects_stale_worker_completion(self) -> None:
+        with self._database() as (database_url, workspace_id, database_path):
+            claimed = create_and_reserve_agent_run(
+                database_url,
+                workspace_id=workspace_id,
+                job_type="github_release_watch",
+            )
+            with closing(sqlite3.connect(database_path)) as connection:
+                connection.execute(
+                    "UPDATE enterprise_agent_budget_reservations SET expires_at = ? WHERE run_id = ?",
+                    ("2000-01-01T00:00:00+00:00", claimed["run_id"]),
+                )
+                connection.commit()
+            with self.assertRaises(AgentGovernanceError) as stale_error:
+                complete_agent_run(
+                    database_url,
+                    workspace_id=workspace_id,
+                    run_id=claimed["run_id"],
+                    claim_token=claimed["claim_token"],
+                    status="ready",
+                )
+            self.assertEqual(stale_error.exception.code, "agent_claim_invalid")
+            row = get_agent_run(database_url, workspace_id=workspace_id, run_id=claimed["run_id"])
+            self.assertEqual(row["status"], "error")
+            self.assertIn("lease expired", row["error_text"].lower())
 
 
 if __name__ == "__main__":
