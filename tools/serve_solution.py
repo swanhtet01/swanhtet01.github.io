@@ -31,7 +31,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from google.cloud import tasks_v2
 from google.protobuf import timestamp_pb2
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 import sentry_sdk
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 
@@ -187,8 +187,10 @@ class LeadToPilotRequest(BaseModel):
 
 
 class NewsBriefRequest(BaseModel):
-    raw_text: str = Field(default="")
-    urls: list[str] = Field(default_factory=list)
+    model_config = ConfigDict(extra="forbid")
+
+    raw_text: str = Field(default="", max_length=50_000)
+    urls: list[str] = Field(default_factory=list, max_length=4)
 
 
 class ActionBoardRequest(BaseModel):
@@ -354,23 +356,25 @@ class DecisionJournalRequest(BaseModel):
 
 
 class ApprovalQueueRequest(BaseModel):
-    title: str
-    summary: str = ""
-    approval_gate: str = "general"
-    requested_by: str = "System"
-    owner: str = "Management"
-    status: str = "pending"
-    due: str = ""
-    related_route: str = "/app"
-    related_entity: str = ""
-    evidence_link: str = ""
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=1, max_length=200)
+    summary: str = Field(default="", max_length=2_000)
+    approval_gate: str = Field(default="general", max_length=80)
+    owner: str = Field(default="Management", max_length=120)
+    due: str = Field(default="", max_length=80)
+    related_route: str = Field(default="/app", max_length=240)
+    related_entity: str = Field(default="", max_length=200)
+    evidence_link: str = Field(default="", max_length=500)
     payload: dict[str, Any] = Field(default_factory=dict)
 
 
 class ApprovalQueueUpdateRequest(BaseModel):
-    status: str | None = None
-    owner: str | None = None
-    note: str | None = None
+    model_config = ConfigDict(extra="forbid")
+
+    status: str = Field(pattern=r"^(review|approved|rejected)$")
+    owner: str | None = Field(default=None, max_length=120)
+    note: str = Field(default="", max_length=1_000)
 
 
 class LeadPipelineImportRequest(BaseModel):
@@ -687,32 +691,9 @@ def _strip_html(value: str) -> str:
 
 
 def _fetch_url_brief_context(urls: list[str]) -> list[str]:
-    snippets: list[str] = []
-    for raw_url in urls[:4]:
-        normalized = str(raw_url or "").strip()
-        if not normalized:
-            continue
-        if not normalized.startswith(("http://", "https://")):
-            normalized = f"https://{normalized}"
-        try:
-            request = UrlRequest(
-                normalized,
-                headers={
-                    "User-Agent": "Mozilla/5.0",
-                    "Accept-Language": "en-US,en;q=0.9",
-                },
-            )
-            with urlopen(request, timeout=15) as response:
-                html = response.read(120_000).decode("utf-8", errors="ignore")
-        except Exception:
-            continue
-
-        title_match = re.search(r"<title[^>]*>(.*?)</title>", html, flags=re.I | re.S)
-        title = _strip_html(title_match.group(1)) if title_match else urlparse(normalized).netloc
-        body = _strip_html(html[:6000])
-        if body:
-            snippets.append(f"{title}. {body[:800]}")
-    return snippets
+    if any(str(raw_url or "").strip() for raw_url in urls):
+        raise ValueError("remote_url_fetch_disabled_use_reviewed_text_or_connector")
+    return []
 
 
 def _infer_owner(text: str) -> str:
@@ -852,7 +833,7 @@ def _build_operating_insights(
     quality_summary = load_quality_summary(state_db)
     receiving_summary = load_receiving_summary(state_db)
     inventory_summary = load_inventory_summary(state_db)
-    approval_summary = load_approval_summary(state_db)
+    approval_summary = load_approval_summary(state_db, workspace_id=workspace_id)
     decision_summary = load_decision_summary(state_db)
     lead_summary = enterprise_load_lead_summary(enterprise_db_url, workspace_id=workspace_id)
     exception_rows = _load_exception_rows(state_db, limit=8)
@@ -2109,7 +2090,7 @@ def _build_ops_watch_result(*, state_db: str, enterprise_db_url: str, workspace_
         if not completed_at or (now - completed_at).total_seconds() > threshold_hours * 3600:
             stale_jobs.append(job_type)
 
-    approvals = load_approval_summary(state_db)
+    approvals = load_approval_summary(state_db, workspace_id=workspace_id)
     pending_approvals = int(approvals.get("pending_count", 0) or 0)
     open_tasks = enterprise_list_workspace_tasks(enterprise_db_url, workspace_id=workspace_id, limit=500)
     open_count = sum(1 for row in open_tasks if str(row.get("status", "")).strip().lower() != "done")
@@ -2171,7 +2152,7 @@ def _build_founder_brief_result(*, state_db: str, enterprise_db_url: str, worksp
     lead_summary = enterprise_load_lead_summary(enterprise_db_url, workspace_id=workspace_id)
     tasks = enterprise_list_workspace_tasks(enterprise_db_url, workspace_id=workspace_id, limit=500)
     open_tasks = [row for row in tasks if str(row.get("status", "")).strip() != "done"]
-    approvals = load_approval_summary(state_db)
+    approvals = load_approval_summary(state_db, workspace_id=workspace_id)
     receiving = load_receiving_summary(state_db)
     inventory = load_inventory_summary(state_db)
     summary = (
@@ -3240,12 +3221,14 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "sales.view",
             "receiving.view",
             "approvals.view",
+            "approvals.request",
             "documents.view",
         }
     )
     MANAGER_CAPABILITIES = frozenset(
         {
             *OPERATOR_CAPABILITIES,
+            "approvals.manage",
             "agent_ops.view",
             "director.view",
             "architect.view",
@@ -3317,21 +3300,21 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                 "knowledge_admin.view",
             }
         ),
-        "tenant_operator": frozenset({"actions.view", "approvals.view", "agent_ops.view", "documents.view"}),
-        "director": frozenset({"director.view", "sales.view", "approvals.view", "actions.view"}),
+        "tenant_operator": frozenset({"actions.view", "approvals.view", "approvals.request", "agent_ops.view", "documents.view"}),
+        "director": frozenset({"director.view", "sales.view", "approvals.view", "approvals.manage", "actions.view"}),
         "plant_manager": frozenset(
-            {"actions.view", "receiving.view", "operations.view", "dqms.view", "maintenance.view", "approvals.view", "documents.view"}
+            {"actions.view", "receiving.view", "operations.view", "dqms.view", "maintenance.view", "approvals.view", "approvals.manage", "documents.view"}
         ),
-        "procurement_lead": frozenset({"receiving.view", "approvals.view", "documents.view", "actions.view"}),
-        "receiving_clerk": frozenset({"receiving.view", "operations.view", "actions.view", "documents.view"}),
-        "quality": frozenset({"dqms.view", "actions.view", "approvals.view", "documents.view", "knowledge_admin.view"}),
-        "quality_manager": frozenset({"dqms.view", "actions.view", "approvals.view", "documents.view", "knowledge_admin.view"}),
-        "finance_controller": frozenset({"approvals.view", "director.view", "sales.view", "documents.view"}),
+        "procurement_lead": frozenset({"receiving.view", "approvals.view", "approvals.manage", "documents.view", "actions.view"}),
+        "receiving_clerk": frozenset({"receiving.view", "operations.view", "actions.view", "approvals.request", "documents.view"}),
+        "quality": frozenset({"dqms.view", "actions.view", "approvals.view", "approvals.manage", "documents.view", "knowledge_admin.view"}),
+        "quality_manager": frozenset({"dqms.view", "actions.view", "approvals.view", "approvals.manage", "documents.view", "knowledge_admin.view"}),
+        "finance_controller": frozenset({"approvals.view", "approvals.manage", "director.view", "sales.view", "documents.view"}),
         "sales_lead": frozenset({"sales.view", "actions.view", "director.view"}),
-        "sales": frozenset({"sales.view", "actions.view", "approvals.view", "documents.view"}),
-        "maintenance": frozenset({"maintenance.view", "operations.view", "actions.view", "receiving.view", "approvals.view", "documents.view"}),
+        "sales": frozenset({"sales.view", "actions.view", "approvals.view", "approvals.request", "documents.view"}),
+        "maintenance": frozenset({"maintenance.view", "operations.view", "actions.view", "receiving.view", "approvals.view", "approvals.request", "documents.view"}),
         "operations": frozenset(
-            {"operations.view", "dqms.view", "actions.view", "receiving.view", "approvals.view", "documents.view", "agent_ops.view"}
+            {"operations.view", "dqms.view", "actions.view", "receiving.view", "approvals.view", "approvals.request", "documents.view", "agent_ops.view"}
         ),
         "ceo": frozenset({*PLATFORM_ADMIN_CAPABILITIES, "operations.view", "dqms.view", "maintenance.view"}),
         "admin": frozenset({*PLATFORM_ADMIN_CAPABILITIES, "operations.view", "dqms.view", "maintenance.view"}),
@@ -3370,6 +3353,33 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             request,
             capabilities={"tenant_admin.view", "platform_admin.view"},
             detail="Workspace admin access required.",
+        )
+
+    def _require_session_workspace_id(session: dict[str, Any]) -> str:
+        workspace_id = str(session.get("workspace_id", "")).strip()
+        if not workspace_id:
+            raise HTTPException(status_code=503, detail="Workspace identity is unavailable.")
+        return workspace_id
+
+    def _require_approval_view_access(request: Request) -> dict[str, Any]:
+        return _require_capability_access(
+            request,
+            capabilities={"approvals.view", "approvals.request", "approvals.manage", "tenant_admin.view", "platform_admin.view"},
+            detail="Approval queue access required.",
+        )
+
+    def _require_approval_request_access(request: Request) -> dict[str, Any]:
+        return _require_capability_access(
+            request,
+            capabilities={"approvals.request", "approvals.manage", "tenant_admin.view", "platform_admin.view"},
+            detail="Approval request access required.",
+        )
+
+    def _require_approval_manage_access(request: Request) -> dict[str, Any]:
+        return _require_capability_access(
+            request,
+            capabilities={"approvals.manage", "tenant_admin.view", "platform_admin.view"},
+            detail="Approval decision access required.",
         )
 
     def _require_solution_architect_access(request: Request) -> dict[str, Any]:
@@ -3907,7 +3917,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         connector_event_rows = enterprise_list_connector_events(enterprise_db_url, workspace_id=workspace_id, limit=160) if workspace_id else []
         audit_rows = enterprise_list_audit_events(enterprise_db_url, workspace_id=workspace_id, limit=120) if workspace_id else []
         latest_agent_runs_by_type = _group_agent_runs_by_job_type(latest_agent_runs)
-        approval_rows = list_approval_entries(state_db, limit=100)
+        approval_rows = list_approval_entries(state_db, workspace_id=workspace_id, limit=100)
         decision_rows = list_decision_entries(state_db, limit=100)
         quality_rows = list_quality_incidents(state_db, limit=200)
         supplier_rows = list_supplier_risks(state_db, limit=200)
@@ -3916,7 +3926,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         metric_rows = list_metric_entries(state_db, limit=200)
         inventory_rows = list_inventory_records(state_db, limit=200)
         action_summary = load_action_summary(state_db)
-        approval_summary = load_approval_summary(state_db)
+        approval_summary = load_approval_summary(state_db, workspace_id=workspace_id)
         metric_summary = load_metric_summary(state_db)
         feedback_summary = load_product_feedback_summary(state_db)
         quality_summary = load_quality_summary(state_db)
@@ -5161,7 +5171,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         connector_event_rows = enterprise_list_connector_events(enterprise_db_url, workspace_id=workspace_id, limit=160) if workspace_id else []
         latest_agent_runs_by_type = _group_agent_runs_by_job_type(latest_agent_runs)
         decision_rows = list_decision_entries(state_db, limit=200)
-        approval_rows = list_approval_entries(state_db, limit=200)
+        approval_rows = list_approval_entries(state_db, workspace_id=workspace_id, limit=200)
         capa_rows = list_capa_actions(state_db, limit=200)
         quality_rows = list_quality_incidents(state_db, limit=200)
         supplier_rows = list_supplier_risks(state_db, limit=200)
@@ -6555,7 +6565,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         latest_agent_runs = enterprise_list_agent_runs(enterprise_db_url, workspace_id=workspace_id, limit=50) if workspace_id else []
         latest_agent_runs_by_type = _group_agent_runs_by_job_type(latest_agent_runs)
         decision_rows = list_decision_entries(state_db, limit=200)
-        approval_rows = list_approval_entries(state_db, limit=200)
+        approval_rows = list_approval_entries(state_db, workspace_id=workspace_id, limit=200)
         quality_rows = list_quality_incidents(state_db, limit=200)
         capa_rows = list_capa_actions(state_db, limit=200)
         supplier_rows = list_supplier_risks(state_db, limit=200)
@@ -7083,7 +7093,10 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         receiving_summary = load_receiving_summary(state_db)
         inventory_summary = load_inventory_summary(state_db)
         maintenance_summary = load_maintenance_summary(state_db)
-        approval_summary = load_approval_summary(state_db)
+        approval_summary = load_approval_summary(
+            state_db,
+            workspace_id=str(session.get("workspace_id", "")).strip(),
+        )
         metric_summary = load_metric_summary(state_db)
         feedback_summary = load_product_feedback_summary(state_db)
         lead_pipeline_summary = enterprise_load_lead_summary(
@@ -10755,7 +10768,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             workspace_id=workspace_id,
             limit=12,
         )
-        approval_rows = list_approval_entries(state_db, limit=approval_limit)
+        approval_rows = list_approval_entries(state_db, workspace_id=workspace_id, limit=approval_limit)
 
         if limited_meta_view:
             runtime_payload: dict[str, Any] = {}
@@ -10894,7 +10907,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "latest_rollout": latest_rollout if isinstance(latest_rollout, dict) else None,
             "approval_queue": {
                 "count": len(approval_rows),
-                "summary": load_approval_summary(state_db),
+                "summary": load_approval_summary(state_db, workspace_id=workspace_id),
                 "rows": approval_rows,
             },
             "exceptions": exception_payload,
@@ -11121,13 +11134,22 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         }
 
     @app.post("/api/tools/news-brief")
-    def tool_news_brief(request: NewsBriefRequest) -> dict[str, Any]:
+    def tool_news_brief(request_http: Request, request: NewsBriefRequest) -> dict[str, Any]:
+        _require_capability_access(
+            request_http,
+            capabilities={"actions.view"},
+            detail="News brief access required.",
+        )
         hydrated_parts = [request.raw_text.strip()]
-        hydrated_parts.extend(_fetch_url_brief_context(request.urls))
+        try:
+            hydrated_parts.extend(_fetch_url_brief_context(request.urls))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         payload = "\n".join(part for part in hydrated_parts if part)
         return {
             "status": "ready",
-            "source_count": len([url for url in request.urls if str(url).strip()]),
+            "source_count": 0,
+            "remote_url_fetch": "disabled",
             **_build_news_brief(payload),
         }
 
@@ -12065,31 +12087,48 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
 
     @app.get("/api/approvals")
     def approval_entries(request: Request, status: str | None = None, owner: str | None = None, limit: int = 100) -> dict[str, Any]:
-        _require_session(request)
-        rows = list_approval_entries(state_db, status=status, owner=owner, limit=limit)
-        return {"status": "ready", "summary": load_approval_summary(state_db), "count": len(rows), "rows": rows}
+        session = _require_approval_view_access(request)
+        workspace_id = _require_session_workspace_id(session)
+        rows = list_approval_entries(state_db, workspace_id=workspace_id, status=status, owner=owner, limit=limit)
+        return {
+            "status": "ready",
+            "summary": load_approval_summary(state_db, workspace_id=workspace_id),
+            "count": len(rows),
+            "rows": rows,
+        }
 
     @app.post("/api/approvals")
     def create_approval_entry(request_http: Request, request: ApprovalQueueRequest) -> dict[str, Any]:
-        session = _require_session(request_http)
+        session = _require_approval_request_access(request_http)
+        workspace_id = _require_session_workspace_id(session)
+        actor = str(session.get("display_name", session.get("username", ""))).strip() or "authenticated_user"
+        title = request.title.strip()
+        related_route = request.related_route.strip() or "/app"
+        if not title:
+            raise HTTPException(status_code=422, detail="Approval title is required.")
+        if not related_route.startswith("/") or related_route.startswith("//"):
+            raise HTTPException(status_code=422, detail="Approval route must be an internal path.")
+        if len(json.dumps(request.payload, ensure_ascii=False).encode("utf-8")) > 16_384:
+            raise HTTPException(status_code=413, detail="Approval payload is too large.")
         row = add_approval_entry(
             state_db,
-            title=request.title.strip(),
+            workspace_id=workspace_id,
+            title=title,
             summary=request.summary.strip(),
             approval_gate=request.approval_gate.strip(),
-            requested_by=request.requested_by.strip(),
+            requested_by=actor,
             owner=request.owner.strip(),
-            status=request.status.strip(),
+            status="pending",
             due=request.due.strip(),
-            related_route=request.related_route.strip(),
+            related_route=related_route,
             related_entity=request.related_entity.strip(),
             evidence_link=request.evidence_link.strip(),
             payload=request.payload,
         )
         _record_audit_and_connector_event(
             enterprise_db_url=enterprise_db_url,
-            workspace_id=str(session.get("workspace_id", "")).strip(),
-            actor=str(session.get("display_name", session.get("username", "system"))).strip() or "system",
+            workspace_id=workspace_id,
+            actor=actor,
             event_type="approval.entry_created",
             entity_type="approval",
             entity_id=str(row.get("approval_id", "")).strip(),
@@ -12110,26 +12149,33 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "status": "ready",
             "message": "Approval saved.",
             "row": row,
-            "rows": list_approval_entries(state_db, limit=50),
-            "summary": load_approval_summary(state_db),
+            "rows": list_approval_entries(state_db, workspace_id=workspace_id, limit=50),
+            "summary": load_approval_summary(state_db, workspace_id=workspace_id),
         }
 
     @app.post("/api/approvals/{approval_id}/status")
     def update_approval_status(request_http: Request, approval_id: str, request: ApprovalQueueUpdateRequest) -> dict[str, Any]:
-        session = _require_session(request_http)
-        row = update_approval_entry(
-            state_db,
-            approval_id=approval_id,
-            status=(request.status or "").strip() or None,
-            owner=(request.owner or "").strip() or None,
-            note=(request.note or "").strip() or None,
-        )
+        session = _require_approval_manage_access(request_http)
+        workspace_id = _require_session_workspace_id(session)
+        actor = str(session.get("display_name", session.get("username", ""))).strip() or "authenticated_user"
+        try:
+            row = update_approval_entry(
+                state_db,
+                approval_id=approval_id,
+                workspace_id=workspace_id,
+                actor=actor,
+                status=request.status.strip(),
+                owner=(request.owner or "").strip() or None,
+                note=request.note.strip() or None,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         if not row:
             raise HTTPException(status_code=404, detail="Approval not found.")
         _record_audit_and_connector_event(
             enterprise_db_url=enterprise_db_url,
-            workspace_id=str(session.get("workspace_id", "")).strip(),
-            actor=str(session.get("display_name", session.get("username", "system"))).strip() or "system",
+            workspace_id=workspace_id,
+            actor=actor,
             event_type="approval.status_updated",
             entity_type="approval",
             entity_id=str(approval_id).strip(),
@@ -12149,8 +12195,8 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "status": "ready",
             "message": "Approval updated.",
             "row": row,
-            "rows": list_approval_entries(state_db, limit=50),
-            "summary": load_approval_summary(state_db),
+            "rows": list_approval_entries(state_db, workspace_id=workspace_id, limit=50),
+            "summary": load_approval_summary(state_db, workspace_id=workspace_id),
         }
 
     @app.get("/api/supermega/operating-model")

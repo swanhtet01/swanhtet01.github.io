@@ -6,12 +6,18 @@ param(
     [switch]$SkipRun,
     [switch]$NoOpen,
     [switch]$Serve,
-    [string]$BindHost = "0.0.0.0",
+    [string]$BindHost = "127.0.0.1",
     [int]$Port = 8787,
     [switch]$ServeBackground
 )
 
 $ErrorActionPreference = "Stop"
+
+$normalizedBindHost = $BindHost.Trim().ToLowerInvariant()
+$loopbackBindHosts = @("127.0.0.1", "localhost", "::1")
+if ($Serve -and ($loopbackBindHosts -notcontains $normalizedBindHost)) {
+    throw "Remote pilot binding is disabled. Use 127.0.0.1 and a reviewed authenticated gateway for any non-local access."
+}
 
 function Get-PreferredPythonExecutable {
     param([string]$RepoRoot)
