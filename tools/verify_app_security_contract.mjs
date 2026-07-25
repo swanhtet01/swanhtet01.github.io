@@ -167,6 +167,7 @@ const expectedHumanCommerceEvents = [
   'commerce.purchase_order.created',
   'commerce.purchase_order.received',
   'commerce.refund.settled',
+  'commerce.stock.counted',
   'commerce.stock.received',
   'commerce.storefront.configuration.saved',
   'commerce.website_intake.converted',

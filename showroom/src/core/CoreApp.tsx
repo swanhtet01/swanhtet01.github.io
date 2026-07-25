@@ -39,6 +39,7 @@ import {
   advanceCommerceOrder,
   cancelCommercePurchaseOrder,
   cancelCommerceOrder,
+  countCommerceStock,
   commerceCloseExpectation,
   commerceOrderItemSummary,
   commerceOrderNeedsAction,
@@ -195,6 +196,7 @@ type ActionKind =
   | 'refund_settle'
   | 'catalog_item_create'
   | 'inventory_receipt'
+  | 'inventory_count'
   | 'purchase_order_create'
   | 'purchase_order_receive'
   | 'purchase_order_cancel'
@@ -214,6 +216,11 @@ type ActionKind =
 type PurchaseOrderDraft =
   | { mode: 'create'; sku: string; supplier: string; quantity: string }
   | { mode: 'receive'; purchaseOrderId: string; quantity: string }
+
+type StockCountDraft = {
+  sku: string
+  quantity: string
+}
 
 type AccountableAction = {
   id: string
@@ -1865,6 +1872,8 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const orderComposerTriggerRef = useRef<HTMLButtonElement>(null)
   const purchaseOrderTriggerRefs = useRef(new Map<string, HTMLButtonElement>())
   const purchaseOrderEditorRef = useRef<HTMLFormElement>(null)
+  const stockCountTriggerRef = useRef<HTMLButtonElement>(null)
+  const stockCountEditorRef = useRef<HTMLFormElement>(null)
   const ecommerceInboxTargetRef = useRef<HTMLButtonElement>(null)
   const preparedChannelRef = useRef<HTMLDivElement>(null)
   const consumedEcommerceDraftId = useRef('')
@@ -1874,6 +1883,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const [catalogDraft, setCatalogDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '', price: '', reason: '', evidenceReference: '' })
   const [itemDraft, setItemDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '', price: '' })
   const [purchaseOrderDraft, setPurchaseOrderDraft] = useState<PurchaseOrderDraft | null>(null)
+  const [stockCountDraft, setStockCountDraft] = useState<StockCountDraft | null>(null)
   const [catalogBusy, setCatalogBusy] = useState(false)
   const [catalogError, setCatalogError] = useState('')
   const selectedSku = commerce.items.some((item) => item.sku === sku) ? sku : commerce.items[0]?.sku ?? ''
@@ -1942,6 +1952,18 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     && purchaseOrderQuantity > 0
     && purchaseOrderQuantity <= purchaseOrderQuantityLimit
     ? purchaseOrderQuantity
+    : null
+  const stockCountItem = stockCountDraft
+    ? commerce.items.find((item) => item.sku === stockCountDraft.sku)
+    : undefined
+  const stockCountQuantityText = stockCountDraft?.quantity.trim() ?? ''
+  const stockCountQuantity = /^[0-9]+$/.test(stockCountQuantityText)
+    ? Number(stockCountQuantityText)
+    : Number.NaN
+  const stockCountQuantityResult = stockCountItem
+    && Number.isSafeInteger(stockCountQuantity)
+    && stockCountQuantity >= 0
+    ? stockCountQuantity
     : null
 
   useEffect(() => {
@@ -2541,6 +2563,12 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   function openPurchaseOrder(itemSku: string) {
     const item = commerce.items.find((candidate) => candidate.sku === itemSku)
     if (!item) return
+    if (stockCountDraft) {
+      const selector = stockCountDraft.sku ? '#stock-count-quantity' : '#stock-count-sku'
+      requestAnimationFrame(() => stockCountEditorRef.current?.querySelector<HTMLElement>(selector)?.focus())
+      setNotice('Finish or cancel the stock count before opening a stock order. Your count draft was preserved.')
+      return
+    }
     const active = activePurchaseOrderBySku.get(itemSku)
     const alreadyEditing = purchaseOrderDraft?.mode === 'create'
       ? purchaseOrderDraft.sku === itemSku
@@ -2635,6 +2663,75 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         setPurchaseOrderDraft((current) => current?.mode === 'receive' && current.purchaseOrderId === purchaseOrder.id ? null : current)
       },
     }, purchaseOrderTriggerRefs.current.get(item.sku))
+  }
+
+  function openStockCount() {
+    if (stockCountDraft) {
+      const selector = stockCountDraft.sku ? '#stock-count-quantity' : '#stock-count-sku'
+      requestAnimationFrame(() => stockCountEditorRef.current?.querySelector<HTMLElement>(selector)?.focus())
+      setNotice('Continue the available-stock count below. Your draft was preserved.')
+      return
+    }
+    if (purchaseOrderDraft) {
+      requestAnimationFrame(() => purchaseOrderEditorRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus())
+      setNotice('Finish or cancel the stock order before starting a count. Your stock-order draft was preserved.')
+      return
+    }
+    setStockCountDraft({ sku: '', quantity: '' })
+    setNotice('Count sellable units after excluding anything already set aside for open orders. Nothing changes until confirmation.')
+    requestAnimationFrame(() => stockCountEditorRef.current?.querySelector<HTMLSelectElement>('#stock-count-sku')?.focus())
+  }
+
+  function cancelStockCount() {
+    setStockCountDraft(null)
+    setNotice('Stock count closed. Shop data was not modified.')
+    requestAnimationFrame(() => stockCountTriggerRef.current?.focus())
+  }
+
+  function reviewStockCount(event: FormEvent) {
+    event.preventDefault()
+    if (!stockCountDraft || !stockCountItem || stockCountQuantityResult === null) {
+      setNotice('Choose one item and enter a non-negative whole-unit available count.')
+      return
+    }
+    const item = stockCountItem
+    const countedQuantity = stockCountQuantityResult
+    const expectedOnHand = item.onHand
+    const variance = countedQuantity - expectedOnHand
+    const varianceLabel = variance === 0
+      ? 'no variance'
+      : `${variance > 0 ? '+' : ''}${variance.toLocaleString()} variance`
+    queueAction({
+      kind: 'inventory_count',
+      subjectId: item.sku,
+      summary: `Count available stock for ${item.name}`,
+      before: `${item.sku} · ${expectedOnHand.toLocaleString()} recorded available`,
+      after: `${countedQuantity.toLocaleString()} counted available · ${varianceLabel} · count evidence only`,
+      apply: async (action) => {
+        const proof = commerceActionProof(action)
+        let staleCount = false
+        try {
+          await mutateCommerce('commerce.stock.counted', action.commandId, proof, (current) => {
+            const replay = current.movements.find((movement) => movement.actionId === proof.actionId)
+            if (replay) return countCommerceStock(current, item.sku, countedQuantity, proof)
+            const currentItems = current.items.filter((candidate) => candidate.sku === item.sku)
+            if (currentItems.length !== 1 || currentItems[0].onHand !== expectedOnHand) {
+              staleCount = true
+              return null
+            }
+            return countCommerceStock(current, item.sku, countedQuantity, proof)
+          })
+          setStockCountDraft((current) => current?.sku === item.sku ? null : current)
+        } catch (error) {
+          if (staleCount || error instanceof ShopReviewRequiredError) {
+            setStockCountDraft({ sku: item.sku, quantity: '' })
+            requestAnimationFrame(() => stockCountEditorRef.current?.querySelector<HTMLInputElement>('#stock-count-quantity')?.focus())
+            throw new ShopReviewRequiredError(`Stock changed while you were reviewing. Nothing was applied. Recount ${item.sku} against the latest available-stock record.`)
+          }
+          throw error
+        }
+      },
+    }, stockCountTriggerRef.current)
   }
 
   function reviewPurchaseOrderCancellation(purchaseOrderId: string) {
@@ -2785,9 +2882,24 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   if (tab === 'inventory') return <div className="operation-module">
     {commerceBoundary}
     <section className="core-panel inventory-panel">
-      <div className="panel-head"><div><span className="core-eyebrow">Stock</span><h2>Know what you have and what is coming</h2></div><span className="panel-note">{lowStock.length} need attention</span></div>
+      <div className="panel-head"><div><span className="core-eyebrow">Stock</span><h2>Available stock</h2></div><div className="order-queue-actions"><span className="panel-note">{lowStock.length} need attention</span><button aria-controls="stock-count-editor" aria-expanded={Boolean(stockCountDraft)} className="core-button" disabled={commerceControlsDisabled} onClick={openStockCount} ref={stockCountTriggerRef} type="button">{stockCountDraft ? 'Continue count' : 'Count stock'}</button></div></div>
+      {stockCountDraft ? <form aria-labelledby="stock-count-title" className="stock-receipt-editor stock-count-editor" id="stock-count-editor" onSubmit={reviewStockCount} ref={stockCountEditorRef}>
+        <div className="stock-receipt-copy">
+          <span className="core-eyebrow">Stock check</span>
+          <h3 id="stock-count-title">Count available units</h3>
+          <small id="stock-count-help">Exclude units already set aside for open orders. This records count evidence only.</small>
+          <strong aria-live="polite" id="stock-count-preview">{!stockCountItem
+            ? 'Choose one item'
+            : stockCountQuantityResult === null
+              ? `${stockCountItem.onHand.toLocaleString()} recorded · enter counted units`
+              : `${stockCountItem.onHand.toLocaleString()} recorded → ${stockCountQuantityResult.toLocaleString()} counted · ${stockCountQuantityResult === stockCountItem.onHand ? 'no variance' : `${stockCountQuantityResult > stockCountItem.onHand ? '+' : ''}${(stockCountQuantityResult - stockCountItem.onHand).toLocaleString()} variance`}`}</strong>
+        </div>
+        <label>Item<select aria-describedby="stock-count-help" disabled={commerceControlsDisabled} id="stock-count-sku" onChange={(event) => setStockCountDraft((current) => current ? { sku: event.target.value, quantity: '' } : current)} required value={stockCountDraft.sku}><option value="">Choose an item</option>{commerce.items.map((item) => <option key={item.sku} value={item.sku}>{item.name} · {item.sku}</option>)}</select></label>
+        <label>Counted available units<input aria-describedby="stock-count-help stock-count-preview" aria-invalid={Boolean(stockCountQuantityText) && stockCountQuantityResult === null} disabled={commerceControlsDisabled || !stockCountItem} id="stock-count-quantity" inputMode="numeric" max={Number.MAX_SAFE_INTEGER} min="0" onChange={(event) => setStockCountDraft((current) => current ? { ...current, quantity: event.target.value } : current)} placeholder="0" required step="1" type="number" value={stockCountDraft.quantity} /></label>
+        <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelStockCount} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled || stockCountQuantityResult === null} type="submit">Review count</button></div>
+      </form> : null}
       <div className="data-table" role="table" aria-label="Shop stock">
-        <div className="data-row table-head" role="row"><span role="columnheader">Item</span><span role="columnheader">On hand</span><span role="columnheader">Reorder</span><span role="columnheader">Price</span><span role="columnheader">Next step</span></div>
+        <div className="data-row table-head" role="row"><span role="columnheader">Item</span><span role="columnheader">Available</span><span role="columnheader">Reorder</span><span role="columnheader">Price</span><span role="columnheader">Next step</span></div>
         {commerce.items.map((item) => {
           const active = activePurchaseOrderBySku.get(item.sku)
           const editing = purchaseOrderDraft?.mode === 'create'
@@ -2839,7 +2951,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
           <p className="panel-copy">The opening balance may be zero. A named operator, reason, and evidence are required before the SKU is recorded.</p>
         </form>
       </details>
-      <p className="form-notice" aria-live="polite">{notice || commerceStorageError || 'Stock orders, receipts, and cancellations require attributable confirmation. Supplier contact and payment remain outside this workflow.'}</p>
+      <p className="form-notice" aria-live="polite">{commerceStorageError || 'Counts, stock orders, receipts, and cancellations require attributable confirmation. Supplier contact, payment, and accounting remain outside this workflow.'}</p>
     </section>
     <StockMovementHistory movements={commerce.movements} />
     {actionGate}
@@ -2927,7 +3039,9 @@ function StockMovementHistory({ movements }: { movements: CommerceStockMovement[
     <summary><span>Stock movements</span><strong>{movements.length} attributable entries</strong></summary>
     {movements.length ? <div className="action-history-list">{movements.map((movement) => <article key={movement.id}>
       <div>
-        <strong>{movement.kind} · {movement.sku} · {movement.quantityDelta > 0 ? '+' : ''}{movement.quantityDelta}</strong>
+        <strong>{movement.kind === 'count'
+          ? `count · ${movement.sku} · ${movement.expectedQuantity} → ${movement.countedQuantity} · ${movement.quantityDelta === 0 ? 'no variance' : `${movement.quantityDelta > 0 ? '+' : ''}${movement.quantityDelta}`}`
+          : `${movement.kind} · ${movement.sku} · ${movement.quantityDelta > 0 ? '+' : ''}${movement.quantityDelta}`}</strong>
         <small>{movement.orderId ? `${movement.orderId} · ` : ''}{movement.actionId} · {movement.actor}</small>
         <p>{movement.reason} · Evidence: {movement.evidenceReference}</p>
       </div>

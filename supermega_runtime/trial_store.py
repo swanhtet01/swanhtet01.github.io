@@ -28,6 +28,7 @@ HUMAN_COMMAND_EVENTS = frozenset(
         "commerce.payment.reconciled",
         "commerce.refund.settled",
         "commerce.stock.received",
+        "commerce.stock.counted",
         "commerce.purchase_order.created",
         "commerce.purchase_order.received",
         "commerce.purchase_order.cancelled",
@@ -419,6 +420,32 @@ def _authoritative_command_payload(
 ) -> JsonObject:
     authoritative = deepcopy(dict(payload))
     if surface != "commerce":
+        return authoritative
+    if event_type == "commerce.stock.counted":
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        movements = state.get("movements") if isinstance(state, Mapping) else None
+        if (
+            not isinstance(evidence, Mapping)
+            or not isinstance(state, Mapping)
+            or not isinstance(movements, list)
+            or not movements
+            or not isinstance(movements[0], Mapping)
+        ):
+            return authoritative
+        authoritative_evidence = dict(evidence)
+        authoritative_evidence["actor"] = principal.actor_id
+        authoritative_evidence["capturedAt"] = captured_at
+        authoritative_movement = dict(movements[0])
+        authoritative_movement["actor"] = principal.actor_id
+        authoritative_movement["createdAt"] = captured_at
+        authoritative_state = dict(state)
+        authoritative_state["movements"] = [
+            authoritative_movement,
+            *deepcopy(movements[1:]),
+        ]
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
         return authoritative
     if event_type == "commerce.close.saved":
         evidence = authoritative.get("evidence")

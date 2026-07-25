@@ -798,7 +798,7 @@ textarea { min-height: 72px; resize: vertical; }
   .data-row > span:nth-child(5) { grid-column: 3; grid-row: 2; justify-self: end; }
   .data-row:not(.table-head) > span:nth-child(2), .data-row:not(.table-head) > span:nth-child(3), .data-row:not(.table-head) > span:nth-child(4) { display: grid; gap: 2px; justify-items: end; }
   .data-row:not(.table-head) > span:nth-child(2)::before, .data-row:not(.table-head) > span:nth-child(3)::before, .data-row:not(.table-head) > span:nth-child(4)::before { color: var(--core-quiet); font-family: var(--core-mono); font-size: 6px; text-transform: uppercase; }
-  .data-row:not(.table-head) > span:nth-child(2)::before { content: "On hand"; }
+  .data-row:not(.table-head) > span:nth-child(2)::before { content: "Available"; }
   .data-row:not(.table-head) > span:nth-child(3)::before { content: "Reorder"; }
   .data-row:not(.table-head) > span:nth-child(4)::before { content: "Price"; }
   .inventory-panel { overflow-x: hidden; }

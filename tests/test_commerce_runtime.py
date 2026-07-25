@@ -99,6 +99,8 @@ def movement(
     sku: str = "SKU-1",
     id_suffix: str | None = None,
     purchase_order_id: str | None = None,
+    expected_quantity: int | None = None,
+    counted_quantity: int | None = None,
 ) -> dict[str, object]:
     encoded_action_id = quote(action_id, safe="-_.!~*'()")
     record: dict[str, object] = {
@@ -116,6 +118,10 @@ def movement(
         record["orderId"] = order_id
     if purchase_order_id:
         record["purchaseOrderId"] = purchase_order_id
+    if expected_quantity is not None:
+        record["expectedQuantity"] = expected_quantity
+    if counted_quantity is not None:
+        record["countedQuantity"] = counted_quantity
     return record
 
 
@@ -451,6 +457,7 @@ def evidence_for(event_type: str, next_state: dict[str, object]) -> dict[str, st
         "commerce.order.created",
         "commerce.order.cancelled",
         "commerce.stock.received",
+        "commerce.stock.counted",
         "commerce.purchase_order.received",
     }:
         movement_record = next_state["movements"][0]  # type: ignore[index]
@@ -1256,6 +1263,7 @@ class CommerceRuntimeTests(unittest.TestCase):
                     "commerce.payment.reconciled",
                     "commerce.refund.settled",
                     "commerce.stock.received",
+                    "commerce.stock.counted",
                     "commerce.purchase_order.created",
                     "commerce.purchase_order.received",
                     "commerce.purchase_order.cancelled",
@@ -1496,6 +1504,323 @@ class CommerceRuntimeTests(unittest.TestCase):
         wrong_evidence = action_evidence("ACT-WRONG")
         with self.assertRaises(TrialValidationError):
             apply_event(current, "commerce.stock.received", received, wrong_evidence)
+
+    def test_stock_count_sets_one_exact_available_balance_with_evidence(self) -> None:
+        current = catalog_state()
+        counted = deepcopy(current)
+        counted["items"][0]["onHand"] = 7  # type: ignore[index]
+        counted["movements"] = [
+            movement(
+                "count",
+                "ACT-COUNT-LOW",
+                -3,
+                expected_quantity=10,
+                counted_quantity=7,
+            )
+        ]
+        accepted = apply_event(
+            current,
+            "commerce.stock.counted",
+            counted,
+            action_evidence("ACT-COUNT-LOW"),
+        )
+        self.assertEqual(accepted["items"][0]["onHand"], 7)  # type: ignore[index]
+        self.assertEqual(accepted["movements"][0]["kind"], "count")  # type: ignore[index]
+        self.assertEqual(accepted["movements"][0]["expectedQuantity"], 10)  # type: ignore[index]
+        self.assertEqual(accepted["movements"][0]["countedQuantity"], 7)  # type: ignore[index]
+
+        unchanged = deepcopy(accepted)
+        unchanged["movements"] = [
+            movement(
+                "count",
+                "ACT-COUNT-MATCH",
+                0,
+                created_at=CONVERTED_AT,
+                expected_quantity=7,
+                counted_quantity=7,
+            ),
+            *accepted["movements"],  # type: ignore[misc]
+        ]
+        matched = apply_event(
+            accepted,
+            "commerce.stock.counted",
+            unchanged,
+            action_evidence(
+                "ACT-COUNT-MATCH",
+                captured_at=CONVERTED_AT,
+            ),
+        )
+        self.assertEqual(matched["items"][0]["onHand"], 7)  # type: ignore[index]
+        self.assertEqual(matched["movements"][0]["quantityDelta"], 0)  # type: ignore[index]
+
+        raised = deepcopy(matched)
+        raised["items"][0]["onHand"] = 12  # type: ignore[index]
+        raised["movements"] = [
+            movement(
+                "count",
+                "ACT-COUNT-HIGH",
+                5,
+                created_at="2026-07-23T09:30:00.000Z",
+                expected_quantity=7,
+                counted_quantity=12,
+            ),
+            *matched["movements"],  # type: ignore[misc]
+        ]
+        accepted_raised = apply_event(
+            matched,
+            "commerce.stock.counted",
+            raised,
+            action_evidence(
+                "ACT-COUNT-HIGH",
+                captured_at="2026-07-23T09:30:00.000Z",
+            ),
+        )
+        self.assertEqual(accepted_raised["items"][0]["onHand"], 12)  # type: ignore[index]
+
+        for label, patch in (
+            ("expected", {"expectedQuantity": 9}),
+            ("counted", {"countedQuantity": 8}),
+            ("variance", {"quantityDelta": -2}),
+            ("order", {"orderId": "ORD-1"}),
+            ("purchase", {"purchaseOrderId": PURCHASE_ORDER_ID}),
+        ):
+            invalid = deepcopy(counted)
+            invalid["movements"][0].update(patch)  # type: ignore[index]
+            with self.subTest(label=label), self.assertRaises(
+                TrialValidationError
+            ):
+                apply_event(
+                    current,
+                    "commerce.stock.counted",
+                    invalid,
+                    action_evidence("ACT-COUNT-LOW"),
+                )
+
+        unrelated = deepcopy(counted)
+        unrelated["items"][0]["price"] = 101  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "commerce.stock.counted",
+                unrelated,
+                action_evidence("ACT-COUNT-LOW"),
+            )
+
+        forged_history = deepcopy(accepted_raised)
+        forged_history["movements"][1]["countedQuantity"] = 8  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(forged_history)
+
+        unicode_time = deepcopy(counted)
+        unicode_time["movements"][0]["createdAt"] = "٢٠٢٦-07-23T09:00:00.000Z"  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(unicode_time)
+
+    def test_stock_count_uses_available_balance_and_preserves_open_work(self) -> None:
+        current = created_state()
+        current["purchaseOrders"] = [purchase_order_record()]
+        current["items"][0]["onHand"] = 12  # type: ignore[index]
+        current["movements"] = [
+            movement(
+                "receipt",
+                "ACT-PURCHASE-RECEIVE-1",
+                4,
+                created_at="2026-07-23T09:10:00.000Z",
+                purchase_order_id=PURCHASE_ORDER_ID,
+            ),
+            *current["movements"],  # type: ignore[misc]
+        ]
+        validate_commerce_state(current)
+
+        counted = deepcopy(current)
+        counted["items"][0]["onHand"] = 11  # type: ignore[index]
+        counted["movements"] = [
+            movement(
+                "count",
+                "ACT-COUNT-AVAILABLE",
+                -1,
+                created_at=CONVERTED_AT,
+                expected_quantity=12,
+                counted_quantity=11,
+            ),
+            *current["movements"],  # type: ignore[misc]
+        ]
+        accepted = apply_event(
+            current,
+            "commerce.stock.counted",
+            counted,
+            action_evidence(
+                "ACT-COUNT-AVAILABLE",
+                captured_at=CONVERTED_AT,
+            ),
+        )
+        self.assertEqual(accepted["items"][0]["onHand"], 11)  # type: ignore[index]
+        self.assertEqual(accepted["orders"], current["orders"])
+        self.assertEqual(accepted["purchaseOrders"], current["purchaseOrders"])
+        self.assertEqual(accepted["movements"][1:], current["movements"])  # type: ignore[index]
+        forged_purchase_order = deepcopy(counted)
+        forged_purchase_order["purchaseOrders"][0]["supplier"] = "Forged supplier"  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "commerce.stock.counted",
+                forged_purchase_order,
+                action_evidence(
+                    "ACT-COUNT-AVAILABLE",
+                    captured_at=CONVERTED_AT,
+                ),
+            )
+
+        legacy = catalog_state()
+        legacy["movements"] = [
+            movement("receipt", f"ACT-LEGACY-{index}", 1)
+            for index in range(20)
+        ]
+        validate_commerce_state(legacy)
+        anchored = deepcopy(legacy)
+        anchored["movements"] = [
+            movement(
+                "count",
+                "ACT-LEGACY-COUNT",
+                0,
+                expected_quantity=10,
+                counted_quantity=10,
+            ),
+            *legacy["movements"],  # type: ignore[misc]
+        ]
+        accepted_anchor = apply_event(
+            legacy,
+            "commerce.stock.counted",
+            anchored,
+            action_evidence("ACT-LEGACY-COUNT"),
+        )
+        self.assertEqual(len(accepted_anchor["movements"]), 21)  # type: ignore[arg-type]
+
+    def test_store_stock_count_binds_human_replay_and_tenant_boundary(self) -> None:
+        store = InMemoryTrialStore(reducer=reduce_trial_state)
+        operator = TrialPrincipal("workspace-count", "operator-count", "human")
+        other = TrialPrincipal("workspace-other", "operator-other", "human")
+        agent = TrialPrincipal("workspace-count", "count-agent", "agent")
+        for principal in (operator, other, agent):
+            store.provision_membership(
+                workspace_id=principal.workspace_id,
+                actor_id=principal.actor_id,
+                actor_kind=principal.actor_kind,
+                capabilities=("commerce.write",),
+            )
+        initialized = store.apply_command(
+            operator,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.workspace.initialized",
+            expected_version=0,
+            payload={
+                "state": catalog_state(),
+                "evidence": action_evidence(actor=operator.actor_id),
+            },
+        )
+        other_initialized = store.apply_command(
+            other,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.workspace.initialized",
+            expected_version=0,
+            payload={
+                "state": catalog_state(),
+                "evidence": action_evidence(
+                    "ACT-OTHER-INITIALIZE",
+                    actor=other.actor_id,
+                ),
+            },
+        )
+        action_id = "ACT-STORE-COUNT"
+        spoofed_at = "2099-01-01T00:00:00.000Z"
+        counted = deepcopy(initialized.state)
+        counted["items"][0]["onHand"] = 7  # type: ignore[index]
+        counted["movements"] = [
+            movement(
+                "count",
+                action_id,
+                -3,
+                created_at=spoofed_at,
+                expected_quantity=10,
+                counted_quantity=7,
+            )
+        ]
+        payload = {
+            "state": counted,
+            "evidence": action_evidence(
+                action_id,
+                captured_at=spoofed_at,
+                actor="spoofed-operator",
+            ),
+        }
+        command_id = str(uuid4())
+        accepted = store.apply_command(
+            operator,
+            command_id=command_id,
+            surface="commerce",
+            event_type="commerce.stock.counted",
+            expected_version=initialized.version,
+            payload=payload,
+        )
+        replay = store.apply_command(
+            operator,
+            command_id=command_id,
+            surface="commerce",
+            event_type="commerce.stock.counted",
+            expected_version=initialized.version,
+            payload=payload,
+        )
+        recorded = accepted.state["movements"][0]  # type: ignore[index]
+        self.assertEqual(recorded["actor"], operator.actor_id)
+        self.assertNotEqual(recorded["createdAt"], spoofed_at)
+        self.assertEqual(accepted.version, 2)
+        self.assertTrue(replay.idempotent_replay)
+        self.assertEqual(replay.state, accepted.state)
+
+        conflicting = deepcopy(payload)
+        conflicting["evidence"]["reason"] = "Changed reason."  # type: ignore[index]
+        conflicting["state"]["movements"][0]["reason"] = "Changed reason."  # type: ignore[index]
+        with self.assertRaises(TrialIdempotencyConflict):
+            store.apply_command(
+                operator,
+                command_id=command_id,
+                surface="commerce",
+                event_type="commerce.stock.counted",
+                expected_version=initialized.version,
+                payload=conflicting,
+            )
+        with self.assertRaises(TrialVersionConflict):
+            store.apply_command(
+                operator,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.stock.counted",
+                expected_version=initialized.version,
+                payload=payload,
+            )
+        with self.assertRaises(TrialHumanApprovalRequired):
+            store.apply_command(
+                agent,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.stock.counted",
+                expected_version=accepted.version,
+                payload=payload,
+            )
+        with self.assertRaises(TrialValidationError):
+            store.apply_command(
+                operator,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.stock.counted",
+                expected_version=accepted.version,
+                payload=payload,
+            )
+        other_after = store.get_state(other, "commerce")
+        self.assertEqual(other_after.version, other_initialized.version)
+        self.assertEqual(other_after.state, other_initialized.state)
 
     def test_purchase_order_lifecycle_supports_partial_receipt_and_cancellation(self) -> None:
         current = catalog_state()

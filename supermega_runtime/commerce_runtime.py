@@ -25,6 +25,7 @@ COMMERCE_EVENTS = frozenset(
         "commerce.payment.reconciled",
         "commerce.refund.settled",
         "commerce.stock.received",
+        "commerce.stock.counted",
         "commerce.purchase_order.created",
         "commerce.purchase_order.received",
         "commerce.purchase_order.cancelled",
@@ -45,6 +46,7 @@ COMMERCE_HUMAN_EVENTS = frozenset(
         "commerce.payment.reconciled",
         "commerce.refund.settled",
         "commerce.stock.received",
+        "commerce.stock.counted",
         "commerce.purchase_order.created",
         "commerce.purchase_order.received",
         "commerce.purchase_order.cancelled",
@@ -57,7 +59,7 @@ _ORDER_STATUSES = ("confirmed", "preparing", "ready", "completed", "cancelled")
 _NEXT_ORDER_STATUS = {"confirmed": "preparing", "preparing": "ready", "ready": "completed"}
 _PAYMENT_STATUSES = ("pending", "reconciled")
 _REFUND_STATUSES = ("none", "due", "settled")
-_MOVEMENT_KINDS = ("opening", "reserve", "release", "receipt")
+_MOVEMENT_KINDS = ("opening", "reserve", "release", "receipt", "count")
 _WEBSITE_INTAKE_STATUSES = ("pending_confirmation", "converted")
 _MAX_SAFE_INTEGER = 9_007_199_254_740_991
 _WEBSITE_FINGERPRINT_PATTERN = re.compile(r"web-[a-f0-9]{8}")
@@ -78,8 +80,8 @@ _PURCHASE_ORDER_ID_PATTERN = re.compile(
     r"PO-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
 )
 _ISO_TIMESTAMP_PATTERN = re.compile(
-    r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}"
-    r"(?:\.\d{1,6})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)"
+    r"[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}:[0-9]{2}:[0-9]{2}"
+    r"(?:\.[0-9]{1,6})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])"
 )
 
 _STATE_FIELDS = frozenset({"schema", "items", "orders", "movements", "closes"})
@@ -143,6 +145,8 @@ _MOVEMENT_FIELDS = frozenset(
         "quantityDelta",
         "orderId",
         "purchaseOrderId",
+        "expectedQuantity",
+        "countedQuantity",
     }
 )
 _PURCHASE_ORDER_REQUIRED_FIELDS = frozenset(
@@ -177,7 +181,7 @@ _CLOSE_ID_PATTERN = re.compile(
 _CLOSE_ACTION_ID_PATTERN = re.compile(
     r"^ACT-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$"
 )
-_BUSINESS_DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_BUSINESS_DATE_PATTERN = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
 _EVIDENCE_FIELDS = frozenset({"actionId", "capturedAt", "actor", "reason", "evidenceReference"})
 _WEBSITE_SOURCE_FIELDS = frozenset({"fingerprint", "approvalId", "snapshotId", "pageId", "siteName", "pagePath"})
 _WEBSITE_INTAKE_REQUIRED_FIELDS = frozenset(
@@ -727,8 +731,21 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         _exact_fields(
             movement,
             f"movements[{index}]",
-            required=_MOVEMENT_FIELDS - {"orderId", "purchaseOrderId"},
-            optional=frozenset({"orderId", "purchaseOrderId"}),
+            required=_MOVEMENT_FIELDS
+            - {
+                "orderId",
+                "purchaseOrderId",
+                "expectedQuantity",
+                "countedQuantity",
+            },
+            optional=frozenset(
+                {
+                    "orderId",
+                    "purchaseOrderId",
+                    "expectedQuantity",
+                    "countedQuantity",
+                }
+            ),
         )
         movement_id = _text(
             movement["id"],
@@ -746,16 +763,44 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         if kind not in _MOVEMENT_KINDS:
             raise TrialValidationError(f"movements[{index}].kind is invalid.")
         movements_by_action.setdefault(action_id, []).append(movement)
+        if kind == "count":
+            if "orderId" in movement or "purchaseOrderId" in movement:
+                raise TrialValidationError(
+                    f"movements[{index}] count cannot reference an order."
+                )
+            expected_quantity = _integer(
+                movement.get("expectedQuantity"),
+                f"movements[{index}].expectedQuantity",
+            )
+            counted_quantity = _integer(
+                movement.get("countedQuantity"),
+                f"movements[{index}].countedQuantity",
+            )
+            signed_delta = movement["quantityDelta"]
+            if (
+                isinstance(signed_delta, bool)
+                or not isinstance(signed_delta, int)
+                or not -_MAX_SAFE_INTEGER <= signed_delta <= _MAX_SAFE_INTEGER
+                or signed_delta != counted_quantity - expected_quantity
+            ):
+                raise TrialValidationError(
+                    f"movements[{index}] count variance is invalid."
+                )
+        else:
+            if "expectedQuantity" in movement or "countedQuantity" in movement:
+                raise TrialValidationError(
+                    f"movements[{index}] count fields are unsupported for {kind}."
+                )
         if kind == "opening":
             quantity_delta = _integer(movement["quantityDelta"], f"movements[{index}].quantityDelta")
-        else:
+        elif kind != "count":
             quantity_delta = _integer(abs(movement["quantityDelta"]) if isinstance(movement["quantityDelta"], int) and not isinstance(movement["quantityDelta"], bool) else movement["quantityDelta"], f"movements[{index}].quantityDelta", minimum=1)
             signed_delta = movement["quantityDelta"]
             if kind == "reserve" and signed_delta >= 0:
                 raise TrialValidationError(f"movements[{index}] reserve must be negative.")
             if kind != "reserve" and signed_delta <= 0:
                 raise TrialValidationError(f"movements[{index}] release or receipt must be positive.")
-        if kind in {"opening", "receipt"}:
+        if kind in {"opening", "receipt", "count"}:
             if "orderId" in movement:
                 raise TrialValidationError(f"movements[{index}] {kind} cannot reference an order.")
             if kind == "opening" and "purchaseOrderId" in movement:
@@ -861,6 +906,38 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             raise TrialValidationError(
                 f"Stock movement action {action_id} is not one exact order reservation group."
             )
+    for sku, item in item_by_sku.items():
+        sku_movements = [
+            movement for movement in movements if movement["sku"] == sku
+        ]
+        count_indexes = [
+            index
+            for index, movement in enumerate(sku_movements)
+            if movement["kind"] == "count"
+        ]
+        if not count_indexes:
+            continue
+        balance = item["onHand"]
+        for movement in sku_movements[: count_indexes[-1] + 1]:
+            if (
+                movement["kind"] == "count"
+                and movement["countedQuantity"] != balance
+            ):
+                raise TrialValidationError(
+                    f"Stock count {movement['actionId']} does not match "
+                    f"the later movement history for {sku}."
+                )
+            prior_balance = balance - movement["quantityDelta"]
+            _integer(prior_balance, f"Stock movement history for {sku}")
+            if (
+                movement["kind"] == "count"
+                and movement["expectedQuantity"] != prior_balance
+            ):
+                raise TrialValidationError(
+                    f"Stock count {movement['actionId']} does not match "
+                    f"its expected balance for {sku}."
+                )
+            balance = prior_balance
     for order_id, count in reserve_by_order.items():
         order = order_by_id.get(order_id)
         if (
@@ -1231,6 +1308,7 @@ def _validate_event_evidence(
         "commerce.order.created": "reserve",
         "commerce.order.cancelled": "release",
         "commerce.stock.received": "receipt",
+        "commerce.stock.counted": "count",
         "commerce.purchase_order.received": "receipt",
         "commerce.website_intake.converted": "reserve",
     }.get(event_type)
@@ -1696,6 +1774,65 @@ def _validate_received(current: Mapping[str, Any], next_state: Mapping[str, Any]
         raise TrialValidationError("stock receipt must increase the matching item by its exact quantity.")
 
 
+def _validate_counted(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "orders", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    _require_storefront_configuration_unchanged(current, next_state)
+    _require_purchase_orders_unchanged(current, next_state)
+    if (
+        len(next_state["movements"]) != len(current["movements"]) + 1
+        or next_state["movements"][1:] != current["movements"]
+    ):
+        raise TrialValidationError(
+            "commerce.stock.counted must prepend exactly one count movement."
+        )
+    movement = next_state["movements"][0]
+    if (
+        movement.get("kind") != "count"
+        or "orderId" in movement
+        or "purchaseOrderId" in movement
+        or movement.get("id") != _movement_id(str(movement.get("actionId")))
+    ):
+        raise TrialValidationError(
+            "stock count requires one attributable count movement."
+        )
+    matching_indexes = [
+        index
+        for index, item in enumerate(current["items"])
+        if item["sku"] == movement["sku"]
+    ]
+    if len(matching_indexes) != 1 or len(next_state["items"]) != len(
+        current["items"]
+    ):
+        raise TrialValidationError("stock count must reference one existing item.")
+    item_index = matching_indexes[0]
+    before_item = current["items"][item_index]
+    expected_after = {
+        **before_item,
+        "onHand": movement["countedQuantity"],
+    }
+    if (
+        movement["expectedQuantity"] != before_item["onHand"]
+        or movement["quantityDelta"]
+        != movement["countedQuantity"] - before_item["onHand"]
+        or next_state["items"][item_index] != expected_after
+        or any(
+            before != after
+            for index, (before, after) in enumerate(
+                zip(current["items"], next_state["items"], strict=True)
+            )
+            if index != item_index
+        )
+    ):
+        raise TrialValidationError(
+            "stock count may only set one matching item to its exact counted quantity."
+        )
+
+
 def _validate_purchase_order_created(
     current: Mapping[str, Any],
     next_state: Mapping[str, Any],
@@ -2004,6 +2141,7 @@ _TRANSITION_VALIDATORS = {
     "commerce.payment.reconciled": _validate_reconciled,
     "commerce.refund.settled": _validate_refund_settled,
     "commerce.stock.received": _validate_received,
+    "commerce.stock.counted": _validate_counted,
     "commerce.purchase_order.created": _validate_purchase_order_created,
     "commerce.purchase_order.received": _validate_purchase_order_received,
     "commerce.purchase_order.cancelled": _validate_purchase_order_cancelled,

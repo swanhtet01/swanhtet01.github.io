@@ -56,7 +56,7 @@ export type CommerceOrder = {
   status: CommerceOrderStatus
 }
 
-export type CommerceStockMovementKind = 'opening' | 'reserve' | 'release' | 'receipt'
+export type CommerceStockMovementKind = 'opening' | 'reserve' | 'release' | 'receipt' | 'count'
 
 export type CommerceStockMovement = {
   id: string
@@ -70,6 +70,8 @@ export type CommerceStockMovement = {
   quantityDelta: number
   orderId?: string
   purchaseOrderId?: string
+  expectedQuantity?: number
+  countedQuantity?: number
 }
 
 export type CommerceClose = {
@@ -242,7 +244,7 @@ export type CommerceMutationResult =
 const orderStatuses: CommerceOrderStatus[] = ['confirmed', 'preparing', 'ready', 'completed', 'cancelled']
 const paymentStatuses: CommercePaymentStatus[] = ['pending', 'reconciled']
 const refundStatuses: CommerceRefundStatus[] = ['none', 'due', 'settled']
-const movementKinds: CommerceStockMovementKind[] = ['opening', 'reserve', 'release', 'receipt']
+const movementKinds: CommerceStockMovementKind[] = ['opening', 'reserve', 'release', 'receipt', 'count']
 const websiteIntakeStatuses: CommerceWebsiteIntakeStatus[] = ['pending_confirmation', 'converted']
 const closeSnapshotFields = ['businessDate', 'orderIds', 'paymentExceptionOrderIds', 'stockExceptionSkus', 'actionId', 'operator', 'reason', 'evidenceReference'] as const
 const refundSettlementFields = ['refundSettledAt', 'refundSettlementActionId', 'refundSettledBy', 'refundSettlementReason', 'refundEvidenceReference'] as const
@@ -651,7 +653,11 @@ export function validateCommerceState(value: unknown): CommerceState {
   const receiptQuantityByPurchaseOrder = new Map<string, number>()
   const latestReceiptAtByPurchaseOrder = new Map<string, bigint>()
   for (const [index, candidate] of movements.entries()) {
-    if (!isRecord(candidate)) throw new Error(`movements[${index}] is invalid.`)
+    if (!isRecord(candidate) || !hasExactKeys(
+      candidate,
+      ['id', 'actionId', 'createdAt', 'actor', 'reason', 'evidenceReference', 'kind', 'sku', 'quantityDelta'],
+      ['orderId', 'purchaseOrderId', 'expectedQuantity', 'countedQuantity'],
+    )) throw new Error(`movements[${index}] is invalid.`)
     movementIds.push(requiredText(candidate.id, `movements[${index}].id`))
     movementActionIds.push(requiredText(candidate.actionId, `movements[${index}].actionId`))
     if (!validTimestamp(candidate.createdAt)) throw new Error(`movements[${index}].createdAt is invalid.`)
@@ -661,6 +667,16 @@ export function validateCommerceState(value: unknown): CommerceState {
     const actionMovements = movementsByAction.get(candidate.actionId as string) ?? []
     actionMovements.push(candidate as unknown as CommerceStockMovement)
     movementsByAction.set(candidate.actionId as string, actionMovements)
+    if (candidate.kind === 'count') {
+      if (!Number.isSafeInteger(candidate.quantityDelta)
+        || candidate.orderId !== undefined
+        || candidate.purchaseOrderId !== undefined) throw new Error(`movements[${index}] count fields are invalid.`)
+      assertSafeInteger(candidate.expectedQuantity, `movements[${index}].expectedQuantity`)
+      assertSafeInteger(candidate.countedQuantity, `movements[${index}].countedQuantity`)
+      if (candidate.quantityDelta !== Number(candidate.countedQuantity) - Number(candidate.expectedQuantity)) throw new Error(`movements[${index}] count variance is invalid.`)
+      continue
+    }
+    if (candidate.expectedQuantity !== undefined || candidate.countedQuantity !== undefined) throw new Error(`movements[${index}] count fields are unsupported for ${String(candidate.kind)}.`)
     if (candidate.kind === 'opening') {
       assertSafeInteger(candidate.quantityDelta, `movements[${index}].quantityDelta`)
       if (candidate.orderId !== undefined || candidate.purchaseOrderId !== undefined) throw new Error(`movements[${index}] opening balance cannot reference an order.`)
@@ -718,6 +734,21 @@ export function validateCommerceState(value: unknown): CommerceState {
         || movement.actor !== first.actor
         || movement.reason !== first.reason
         || movement.evidenceReference !== first.evidenceReference)) throw new Error(`Stock movement action ${actionId} is not one exact order reservation group.`)
+  }
+  for (const [sku, item] of itemBySku) {
+    const skuMovements = movements.filter(
+      (movement): movement is CommerceStockMovement => isRecord(movement) && movement.sku === sku,
+    )
+    const oldestCountIndex = skuMovements.map((movement) => movement.kind === 'count').lastIndexOf(true)
+    if (oldestCountIndex < 0) continue
+    let balance = Number(item.onHand)
+    for (const movement of skuMovements.slice(0, oldestCountIndex + 1)) {
+      if (movement.kind === 'count' && movement.countedQuantity !== balance) throw new Error(`Stock count ${String(movement.actionId)} does not match the later movement history for ${sku}.`)
+      const priorBalance = balance - Number(movement.quantityDelta)
+      if (!Number.isSafeInteger(priorBalance) || priorBalance < 0) throw new Error(`Stock movement history for ${sku} has an invalid prior balance.`)
+      if (movement.kind === 'count' && movement.expectedQuantity !== priorBalance) throw new Error(`Stock count ${String(movement.actionId)} does not match its expected balance for ${sku}.`)
+      balance = priorBalance
+    }
   }
   for (const [orderId, count] of reserveByOrder) {
     const order = orderById.get(orderId)
@@ -1793,6 +1824,37 @@ export function receiveCommerceStock(state: CommerceState, sku: string, quantity
     ...state,
     items: state.items.map((candidate) => candidate.sku === sku ? { ...candidate, onHand: nextBalance } : candidate),
     movements: [movement, ...state.movements],
+  })
+}
+
+export function countCommerceStock(state: CommerceState, sku: string, countedQuantity: number, proof: CommerceActionProof) {
+  if (!validProof(proof) || !Number.isSafeInteger(countedQuantity) || countedQuantity < 0) return null
+  const current = validateCommerceState(state)
+  const replayMovement = current.movements.find((movement) => movement.actionId === proof.actionId)
+  if (replayMovement) {
+    return replayMovement.kind === 'count'
+      && replayMovement.sku === sku
+      && replayMovement.countedQuantity === countedQuantity
+      && replayMovement.quantityDelta === countedQuantity - Number(replayMovement.expectedQuantity)
+      && sameProof(replayMovement, proof) ? current : null
+  }
+  if (actionIdIsUsed(current, proof.actionId)) return null
+  const matchingItems = current.items.filter((candidate) => candidate.sku === sku)
+  const item = matchingItems.length === 1 ? matchingItems[0] : undefined
+  if (!item) return null
+  const quantityDelta = countedQuantity - item.onHand
+  if (!Number.isSafeInteger(quantityDelta)) return null
+  const movement = movementFor(proof, {
+    kind: 'count',
+    sku,
+    quantityDelta,
+    expectedQuantity: item.onHand,
+    countedQuantity,
+  })
+  return validateCommerceState({
+    ...current,
+    items: current.items.map((candidate) => candidate.sku === sku ? { ...candidate, onHand: countedQuantity } : candidate),
+    movements: [movement, ...current.movements],
   })
 }
 

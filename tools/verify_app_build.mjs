@@ -746,7 +746,7 @@ if (!managedTrialSource.includes('saveManagedCommerceCommand')
   || !managedTrialSource.includes('request.identity')
   || !managedTrialSource.includes("code: 'managed_identity_changed'")) fail('managed_commerce_command_client_missing')
 const managedCommerceClientSources = `${coreSource}\n${websiteSource}\n${ecommerceSource}`
-for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.payment.reconciled', 'commerce.refund.settled', 'commerce.purchase_order.created', 'commerce.purchase_order.received', 'commerce.purchase_order.cancelled', 'commerce.close.saved', 'commerce.website_intake.converted', 'commerce.storefront.configuration.saved', 'commerce.storefront_request.received']) {
+for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.payment.reconciled', 'commerce.refund.settled', 'commerce.stock.counted', 'commerce.purchase_order.created', 'commerce.purchase_order.received', 'commerce.purchase_order.cancelled', 'commerce.close.saved', 'commerce.website_intake.converted', 'commerce.storefront.configuration.saved', 'commerce.storefront_request.received']) {
   if (!managedTrialSource.includes(eventType) || !managedCommerceClientSources.includes(eventType) || !managedCommerceRuntime.includes(eventType)) fail(`managed_commerce_event_missing:${eventType}`)
 }
 if (!managedTrialSource.includes('commerce.stock.received')
@@ -770,6 +770,14 @@ if ((coreSource.match(/const conflict = \{ \.\.\.refreshed, error: '' \}/g) || [
 if (!coreSource.includes('confirmation?: AccountableAction') || !coreSource.includes('if (action.confirmation) return action.confirmation') || !coreSource.includes('Retry same confirmation') || !coreSource.includes('result.idempotent_replay') || !coreSource.includes('before the replay could be reconciled')) fail('managed_command_retry_not_frozen_or_reconciled')
 if (!managedCommerceRuntime.includes('commerce.workspace.initialized') || managedCommerceRuntime.includes('commerce.snapshot.saved') || !managedCommerceRuntime.includes('_one_changed') || !managedCommerceRuntime.includes('_validate_event_evidence') || !managedCommerceRuntime.includes('daily close totals must match completed, reconciled orders')) fail('managed_commerce_server_transition_contract_missing')
 if (!commerceSource.includes('registerCommerceItem') || !coreSource.includes('Add catalog item') || !coreSource.includes('Review catalog item') || !coreSource.includes('The opening balance may be zero.') || !managedCommerceRuntime.includes('one exact attributable opening balance')) fail('commerce_catalog_creation_contract_missing')
+if (!commerceSource.includes("export type CommerceStockMovementKind = 'opening' | 'reserve' | 'release' | 'receipt' | 'count'")
+  || !commerceSource.includes('export function countCommerceStock')
+  || !commerceSource.includes('expectedQuantity: item.onHand')
+  || !commerceSource.includes('countedQuantity')
+  || !commerceSource.includes('const oldestCountIndex')
+  || !managedCommerceRuntime.includes('def _validate_counted(')
+  || !managedCommerceRuntime.includes('expectedQuantity')
+  || !managedCommerceRuntime.includes('countedQuantity')) fail('commerce_stock_count_contract_missing')
 const commerceTabsContract = coreSource.slice(coreSource.indexOf('const commerceTabs'), coreSource.indexOf('const productionTabs'))
 if (commerceTabsContract.includes("{ id: 'today', label: 'Today' }") || !commerceTabsContract.includes("{ id: 'orders', label: 'Orders' }") || !commerceTabsContract.includes("{ id: 'inventory', label: 'Stock' }") || (commerceTabsContract.match(/^\s*\{ id:/gm) || []).length !== 2) fail('commerce_two_tab_contract_changed')
 const commercePageContract = coreSource.slice(coreSource.indexOf('function CommercePage'), coreSource.indexOf('function OrderList'))
@@ -801,6 +809,32 @@ if (!commercePageContract.includes('purchaseOrderDraft')
   || !coreCssSource.includes('.purchase-order-editor[data-mode="create"] { grid-template-columns: repeat(2,minmax(0,1fr)); }')) fail('commerce_purchase_order_ui_missing')
 const commerceOrdersContract = commercePageContract.slice(commercePageContract.indexOf("if (tab === 'orders')"), commercePageContract.indexOf("if (tab === 'inventory')"))
 if (!commerceOrdersContract.includes('order-daily-controls') || !commerceOrdersContract.includes('Save daily close') || !commerceOrdersContract.includes('Close and exceptions')) fail('commerce_daily_controls_not_inside_orders')
+const commerceInventoryContract = commercePageContract.slice(commercePageContract.indexOf("if (tab === 'inventory')"))
+const commerceStockTableHeadContract = commerceInventoryContract.slice(commerceInventoryContract.indexOf('data-row table-head'), commerceInventoryContract.indexOf('{commerce.items.map', commerceInventoryContract.indexOf('data-row table-head')))
+const openPurchaseOrderContract = commercePageContract.slice(commercePageContract.indexOf('function openPurchaseOrder'), commercePageContract.indexOf('function cancelPurchaseOrderEditor'))
+const openStockCountContract = commercePageContract.slice(commercePageContract.indexOf('function openStockCount'), commercePageContract.indexOf('function cancelStockCount'))
+if ((commerceInventoryContract.match(/'Count stock'/g) || []).length !== 1
+  || !commerceInventoryContract.includes('aria-controls="stock-count-editor"')
+  || !commerceInventoryContract.includes('aria-expanded={Boolean(stockCountDraft)}')
+  || !commerceInventoryContract.includes('id="stock-count-editor"')
+  || !commerceInventoryContract.includes('aria-labelledby="stock-count-title"')
+  || !commerceInventoryContract.includes('aria-describedby="stock-count-help stock-count-preview"')
+  || !commerceInventoryContract.includes('Counted available units')
+  || !commerceInventoryContract.includes('min="0"')
+  || !commerceInventoryContract.includes('max={Number.MAX_SAFE_INTEGER}')
+  || !commerceInventoryContract.includes('Review count')
+  || !commercePageContract.includes("kind: 'inventory_count'")
+  || !commercePageContract.includes("'commerce.stock.counted'")
+  || !commercePageContract.includes('currentItems[0].onHand !== expectedOnHand')
+  || !commercePageContract.includes('Stock changed while you were reviewing. Nothing was applied.')
+  || !commercePageContract.includes("setStockCountDraft({ sku: item.sku, quantity: '' })")
+  || (commerceStockTableHeadContract.match(/role="columnheader"/g) || []).length !== 5
+  || !coreCssSource.includes('content: "Available";')
+  || !coreCssSource.includes('.stock-receipt-editor { grid-template-columns: 1fr; }')) fail('commerce_stock_count_ui_missing_or_unsafe')
+if (!openPurchaseOrderContract.includes('Your count draft was preserved.')
+  || openPurchaseOrderContract.includes('setStockCountDraft(null)')
+  || !openStockCountContract.includes('Your stock-order draft was preserved.')
+  || openStockCountContract.includes('setPurchaseOrderDraft(null)')) fail('commerce_stock_editor_switch_discards_draft')
 if (!productionSource.includes("supermega.production.workspace.v2") || !productionSource.includes('mutateProductionWorkspace') || !productionSource.includes('productionWorkspaceCanWrite') || !productionSource.includes('.write-probe.') || !productionSource.includes('lockManager.request') || !productionSource.includes('next.revision !== current.revision + 1')) fail('production_v2_locked_store_missing')
 if (!productionSource.includes("'job_created' | 'output_recorded' | 'material_consumed' | 'issue_opened' | 'issue_resolved' | 'quality_hold_placed' | 'quality_hold_released' | 'machine_state_changed'") || !productionSource.includes('events: [event, ...state.events]') || !productionSource.includes('Production revision must equal the append-only event count.')) fail('production_append_only_record_missing')
 if (!productionSource.includes('productionShiftOutput')
@@ -1918,6 +1952,11 @@ async function verifyCommerceRuntime() {
       })),
     }
     assert(model.validateCommerceState(ledger501).movements.length === 501, 'ledger_was_silently_truncated')
+    const countedLegacyLedger = model.countCommerceStock(ledger501, 'SKU-1', 10, proof('ACT-LEGACY-COUNT'))
+    assert(countedLegacyLedger?.movements.length === 502
+      && countedLegacyLedger.movements[0].quantityDelta === 0
+      && model.validateCommerceState(countedLegacyLedger) === countedLegacyLedger,
+    'legacy_no_count_history_could_not_accept_new_count_anchor')
     assertThrows(() => model.validateCommerceState({ ...ledger501, items: [...ledger501.items, ledger501.items[0]] }), 'duplicate_sku_was_accepted')
     assertThrows(() => model.validateCommerceState({ ...ledger501, movements: [...ledger501.movements, ledger501.movements[0]] }), 'duplicate_movement_was_accepted')
 
@@ -2242,6 +2281,62 @@ async function verifyCommerceRuntime() {
     assert(model.reserveCommerceOrder(reserved, { ...order, quantity: 3, total: 300 }, reserveProof) === null, 'conflicting_reservation_retry_succeeded')
     assert(model.reserveCommerceOrder(reserved, { ...order, id: 'ORD-2' }, proof('ACT-RESERVE-2')) === null, 'duplicate_source_order_succeeded')
 
+    const countDownProof = proof('ACT-COUNT-DOWN', 1_000)
+    const countedReserved = model.countCommerceStock(reserved, 'SKU-1', 7, countDownProof)
+    assert(countedReserved
+      && countedReserved.items[0].onHand === 7
+      && countedReserved.movements[0].kind === 'count'
+      && countedReserved.movements[0].expectedQuantity === 8
+      && countedReserved.movements[0].countedQuantity === 7
+      && countedReserved.movements[0].quantityDelta === -1,
+    'stock_count_did_not_use_available_unallocated_balance')
+    assert(countedReserved.orders === reserved.orders
+      && countedReserved.purchaseOrders === reserved.purchaseOrders
+      && countedReserved.closes === reserved.closes
+      && countedReserved.websiteIntakes === reserved.websiteIntakes,
+    'stock_count_changed_unrelated_ledgers')
+    assert(model.countCommerceStock(countedReserved, 'SKU-1', 7, countDownProof) === countedReserved, 'stock_count_exact_retry_not_idempotent')
+    assert(model.countCommerceStock(countedReserved, 'SKU-1', 8, countDownProof) === null, 'stock_count_changed_quantity_retry_succeeded')
+    for (const [label, patch] of [
+      ['time', { capturedAt: '2026-07-23T09:00:02.000Z' }],
+      ['actor', { actor: 'OTHER' }],
+      ['reason', { reason: 'Changed reason.' }],
+      ['evidence', { evidenceReference: 'EV-CHANGED' }],
+    ]) {
+      assert(model.countCommerceStock(countedReserved, 'SKU-1', 7, { ...countDownProof, ...patch }) === null, `stock_count_changed_${label}_proof_succeeded`)
+    }
+    assert(model.countCommerceStock(reserved, 'UNKNOWN', 7, proof('ACT-COUNT-UNKNOWN')) === null, 'stock_count_unknown_sku_succeeded')
+    assert(model.countCommerceStock(reserved, 'SKU-1', -1, proof('ACT-COUNT-NEGATIVE')) === null, 'stock_count_negative_succeeded')
+    assert(model.countCommerceStock(reserved, 'SKU-1', 1.5, proof('ACT-COUNT-DECIMAL')) === null, 'stock_count_decimal_succeeded')
+    assert(model.countCommerceStock(reserved, 'SKU-1', Number.MAX_SAFE_INTEGER + 1, proof('ACT-COUNT-OVERFLOW')) === null, 'stock_count_overflow_succeeded')
+    assert(model.countCommerceStock(reserved, 'SKU-1', 7, reserveProof) === null, 'stock_count_reused_reservation_action_succeeded')
+    const countMatched = model.countCommerceStock(countedReserved, 'SKU-1', 7, proof('ACT-COUNT-MATCH', 2_000))
+    assert(countMatched
+      && countMatched.items[0].onHand === 7
+      && countMatched.movements[0].quantityDelta === 0,
+    'zero_variance_stock_count_was_not_recorded')
+    const countRaised = model.countCommerceStock(countMatched, 'SKU-1', 12, proof('ACT-COUNT-UP', 3_000))
+    assert(countRaised
+      && countRaised.items[0].onHand === 12
+      && countRaised.movements[0].expectedQuantity === 7
+      && countRaised.movements[0].quantityDelta === 5,
+    'positive_variance_stock_count_was_not_recorded')
+    assertThrows(() => model.validateCommerceState({
+      ...countedReserved,
+      movements: [{ ...countedReserved.movements[0], countedQuantity: 8 }, ...countedReserved.movements.slice(1)],
+    }), 'stock_count_history_tamper_succeeded')
+    assert(model.countCommerceStock(reserved, 'SKU-1', 7, {
+      ...proof('ACT-COUNT-UNICODE'),
+      capturedAt: '٢٠٢٦-07-23T09:00:00.000Z',
+    }) === null, 'stock_count_unicode_digit_timestamp_succeeded')
+    const cancelledAfterCount = model.cancelCommerceOrder(countedReserved, order.id, proof('ACT-CANCEL-AFTER-COUNT', 2_000))
+    const receivedAfterCount = model.receiveCommerceStock(cancelledAfterCount, 'SKU-1', 3, proof('ACT-RECEIPT-AFTER-COUNT', 3_000))
+    const recountedHistory = model.countCommerceStock(receivedAfterCount, 'SKU-1', 11, proof('ACT-RECOUNT-HISTORY', 4_000))
+    assert(recountedHistory
+      && recountedHistory.items[0].onHand === 11
+      && model.validateCommerceState(recountedHistory) === recountedHistory,
+    'count_reserve_release_receipt_history_did_not_reconstruct')
+
     const multiBase = {
       ...base,
       items: [
@@ -2456,6 +2551,13 @@ async function verifyCommerceRuntime() {
       && purchasePartialProgress?.received === 4
       && purchasePartialProgress.remaining === 6
       && purchasePartialProgress.status === 'partially_received', 'purchase_order_partial_receipt_not_exact')
+    const countedWithOpenPurchase = model.countCommerceStock(purchasePartial, 'SKU-1', 13, proof('ACT-COUNT-WITH-PO', 90_000))
+    assert(countedWithOpenPurchase
+      && countedWithOpenPurchase.items[0].onHand === 13
+      && countedWithOpenPurchase.purchaseOrders === purchasePartial.purchaseOrders
+      && model.commercePurchaseOrderProgress(countedWithOpenPurchase, countedWithOpenPurchase.purchaseOrders[0]).received === 4
+      && model.commercePurchaseOrderProgress(countedWithOpenPurchase, countedWithOpenPurchase.purchaseOrders[0]).remaining === 6,
+    'stock_count_changed_open_purchase_order_progress')
     assert(model.receiveCommercePurchaseOrder(purchasePartial, purchaseOrderId, 4, purchasePartialProof) === purchasePartial, 'purchase_order_receipt_retry_not_idempotent')
     assert(model.receiveCommercePurchaseOrder(purchasePartial, purchaseOrderId, 7, proof('ACT-PURCHASE-OVERRECEIPT', 120_000)) === null, 'purchase_order_overreceipt_succeeded')
     assert(model.cancelCommercePurchaseOrder(
