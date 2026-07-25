@@ -26,7 +26,7 @@ export type ClientImportObject = {
   description: string
   keyField: string
   fields: readonly ClientImportField[]
-  template: string
+  workflowTemplates: Readonly<Record<string, string>>
   activationBoundary: string
 }
 
@@ -55,6 +55,7 @@ export type ClientImportPreview = {
   schema: typeof CLIENT_IMPORT_SCHEMA
   product: ClientSolutionId
   object: string
+  workflowTemplateId: string
   sourceName: string
   sourceDigest: string
   previewDigest: string
@@ -88,11 +89,15 @@ const objects: Record<ClientSolutionId, ClientImportObject> = {
     description: 'Opening items, stock thresholds, and MMK selling prices.',
     keyField: 'sku',
     activationBoundary: 'A named Shop operator must separately confirm an accountable catalog import.',
-    template: 'sku,item_name,opening_stock,reorder_at,price_mmk\r\nSKU-001,Green tea,24,8,4500\r\nSKU-002,Myanmar coffee,12,5,7000\r\n',
+    workflowTemplates: {
+      'social-commerce': 'sku,item_name,opening_stock,reorder_at,price_mmk\r\nCOFFEE-250,Myanmar coffee 250g,24,8,7000\r\nTEA-20,Green tea 20 pack,36,12,4500\r\n',
+      'retail-wholesale': 'sku,item_name,opening_stock,reorder_at,price_mmk\r\nRICE-25KG,Premium rice 25kg,18,6,72000\r\nOIL-1L,Cooking oil 1L,48,16,9500\r\n',
+      'restaurant-ordering': 'sku,item_name,opening_stock,reorder_at,price_mmk\r\nMENU-MOHINGA,Mohinga,80,20,3500\r\nMENU-TEA,Myanmar milk tea,120,30,1800\r\n',
+    },
     fields: [
       { id: 'sku', label: 'SKU', required: true, kind: 'sku', aliases: ['sku', 'item_sku', 'product_sku', 'stock_code', 'item_code', 'product_code', 'ပစ္စည်းကုဒ်'], maximum: 80 },
       { id: 'name', label: 'Item name', required: true, kind: 'text', aliases: ['item_name', 'name', 'product_name', 'title', 'description', 'ပစ္စည်းအမည်'], maximum: 180 },
-      { id: 'onHand', label: 'Opening stock', required: true, kind: 'integer', aliases: ['opening_stock', 'on_hand', 'available_stock', 'stock', 'quantity', 'qty', 'လက်ကျန်'], minimum: 0 },
+      { id: 'onHand', label: 'Opening stock', required: true, kind: 'integer', aliases: ['opening_stock', 'on_hand', 'available_stock', 'stock', 'quantity', 'qty', 'opening_quantity', 'လက်ကျန်'], minimum: 0 },
       { id: 'reorderAt', label: 'Reorder at', required: true, kind: 'integer', aliases: ['reorder_at', 'reorder_level', 'reorder_point', 'low_stock_at', 'minimum_stock', 'min_stock'], minimum: 0 },
       { id: 'price', label: 'Price (MMK)', required: true, kind: 'integer', aliases: ['price_mmk', 'price', 'unit_price', 'selling_price', 'mmk_price', 'စျေးနှုန်း'], minimum: 1 },
     ],
@@ -103,7 +108,11 @@ const objects: Record<ClientSolutionId, ClientImportObject> = {
     description: 'Initial production jobs, targets, due dates, and line ownership.',
     keyField: 'jobCode',
     activationBoundary: 'A Plant owner must verify capacity, material, and safety before jobs enter the live schedule.',
-    template: 'job_code,product_name,target_quantity,due_date,production_line\r\nJOB-001,20 inch tyre,500,2026-08-15,Line A\r\nJOB-002,16 inch tyre,300,2026-08-16,Line B\r\n',
+    workflowTemplates: {
+      'production-control': 'job_code,product_name,target_quantity,due_date,production_line\r\nJOB-001,20 inch tyre,500,2026-08-15,Line A\r\nJOB-002,16 inch tyre,300,2026-08-16,Line B\r\n',
+      'maintenance-downtime': 'job_code,product_name,target_quantity,due_date,production_line\r\nMAINT-001,Compressor preventive service,1,2026-08-15,Utilities\r\nMAINT-002,Mixer bearing inspection,1,2026-08-16,Compounding\r\n',
+      'quality-traceability': 'job_code,product_name,target_quantity,due_date,production_line\r\nQC-001,Incoming rubber inspection,1,2026-08-15,Quality Lab\r\nQC-002,Finished tyre release check,1,2026-08-16,Final Inspection\r\n',
+    },
     fields: [
       { id: 'jobCode', label: 'Job code', required: true, kind: 'sku', aliases: ['job_code', 'job_id', 'work_order', 'work_order_id', 'order_number', 'အလုပ်ကုဒ်'], maximum: 80 },
       { id: 'productName', label: 'Product', required: true, kind: 'text', aliases: ['product_name', 'product', 'item_name', 'output', 'finished_good', 'ကုန်ပစ္စည်း'], maximum: 180 },
@@ -118,7 +127,11 @@ const objects: Record<ClientSolutionId, ClientImportObject> = {
     description: 'Finite page structure and approved source copy for a client website.',
     keyField: 'slug',
     activationBoundary: 'Imported copy remains a draft until a human reviews the responsive preview and approves the exact evidence set.',
-    template: 'page_slug,page_title,headline,body,contact_url\r\nhome,Home,Clear software for daily work,Explain the main offer and proof.,https://example.com/contact\r\nabout,About,Why customers trust us,Add the approved company story.,https://example.com/contact\r\n',
+    workflowTemplates: {
+      'business-presence': 'page_slug,page_title,headline,body,contact_url\r\nhome,Home,Clear help for your customers,Explain the main service and strongest proof.,https://example.com/contact\r\nabout,About,Why customers trust us,Add the approved company story and team.,https://example.com/contact\r\n',
+      'lead-generation': 'page_slug,page_title,headline,body,contact_url\r\nhome,Home,Solve one costly problem,State the offer and the next clear action.,https://example.com/contact\r\nproof,Results,See verified customer outcomes,Add approved results and supporting evidence.,https://example.com/contact\r\n',
+      'catalog-showcase': 'page_slug,page_title,headline,body,contact_url\r\nhome,Home,Explore the approved collection,Introduce the catalog and one enquiry path.,https://example.com/contact\r\nproducts,Products,Find the right product,Group approved products with useful buying details.,https://example.com/contact\r\n',
+    },
     fields: [
       { id: 'slug', label: 'Page slug', required: true, kind: 'slug', aliases: ['page_slug', 'slug', 'path', 'url_slug', 'စာမျက်နှာ'], maximum: 80 },
       { id: 'title', label: 'Page title', required: true, kind: 'text', aliases: ['page_title', 'title', 'seo_title', 'စာမျက်နှာခေါင်းစဉ်'], maximum: 120 },
@@ -133,7 +146,11 @@ const objects: Record<ClientSolutionId, ClientImportObject> = {
     description: 'Shop SKU references, collections, and storefront display copy without duplicating stock or price.',
     keyField: 'sku',
     activationBoundary: 'Every SKU must match the current Shop catalog before a storefront draft can be approved.',
-    template: 'sku,featured,collection,display_name,merchandising_note\r\nSKU-001,true,Best sellers,Green tea,Lead with the locally sourced proof.\r\nSKU-002,false,Coffee,Myanmar coffee,Show after the best sellers.\r\n',
+    workflowTemplates: {
+      'social-storefront': 'sku,featured,collection,display_name,merchandising_note\r\nCOFFEE-250,true,Best sellers,Myanmar coffee 250g,Lead with the locally sourced proof.\r\nTEA-20,false,Tea,Green tea 20 pack,Keep the Messenger order path visible.\r\n',
+      'pickup-preorder': 'sku,featured,collection,display_name,merchandising_note\r\nRICE-25KG,true,Pickup this week,Premium rice 25kg,Show the pickup promise before request.\r\nOIL-1L,false,Pantry,Cooking oil 1L,Confirm availability before collection.\r\n',
+      'wholesale-request': 'sku,featured,collection,display_name,merchandising_note\r\nCASE-COFFEE,true,Wholesale,Myanmar coffee case,Ask for quantity and delivery area.\r\nCASE-TEA,false,Wholesale,Green tea case,Keep trade pricing under review.\r\n',
+    },
     fields: [
       { id: 'sku', label: 'Shop SKU', required: true, kind: 'sku', aliases: ['sku', 'shop_sku', 'item_sku', 'product_code', 'ပစ္စည်းကုဒ်'], maximum: 80 },
       { id: 'featured', label: 'Featured', required: true, kind: 'boolean', aliases: ['featured', 'is_featured', 'highlight', 'promoted'] },
@@ -258,7 +275,7 @@ function suggestMapping(object: ClientImportObject, headers: string[], normalize
   const mapping: ClientImportMapping = {}
   const suggestions: ClientImportSuggestion[] = []
   for (const field of object.fields) {
-    const aliases = [field.id, ...field.aliases].map(normalizeHeader)
+    const aliases = [...new Set([...field.aliases, field.id].map(normalizeHeader))]
     const ranked = normalizedHeaders.flatMap((header, index) => {
       const rank = aliases.indexOf(header)
       return rank < 0 ? [] : [{ header: headers[index], rank }]
@@ -381,8 +398,21 @@ export function clientImportObject(product: ClientSolutionId) {
   return objects[product]
 }
 
-export function clientImportTemplate(product: ClientSolutionId) {
-  return objects[product].template
+export function clientImportWorkflowTemplateIds(product: ClientSolutionId) {
+  return Object.keys(objects[product].workflowTemplates)
+}
+
+function resolveWorkflowTemplateId(product: ClientSolutionId, workflowTemplateId?: string) {
+  const templates = objects[product].workflowTemplates
+  const requested = workflowTemplateId?.trim() || Object.keys(templates)[0]
+  if (!requested || !Object.hasOwn(templates, requested)) {
+    throw new Error(`Choose a supported ${objects[product].label} workflow template before importing data.`)
+  }
+  return requested
+}
+
+export function clientImportTemplate(product: ClientSolutionId, workflowTemplateId?: string) {
+  return objects[product].workflowTemplates[resolveWorkflowTemplateId(product, workflowTemplateId)]
 }
 
 export async function createClientImportPreview(
@@ -390,8 +420,10 @@ export async function createClientImportPreview(
   product: ClientSolutionId,
   selectedMapping?: ClientImportMapping,
   sourceName = 'client-data.csv',
+  workflowTemplateId?: string,
 ): Promise<ClientImportPreview> {
   const object = objects[product]
+  const resolvedWorkflowTemplateId = resolveWorkflowTemplateId(product, workflowTemplateId)
   const parsed = parseCsv(csvText)
   const headerRow = parsed.rows[0]
   if (!headerRow) throw new Error('The CSV has no header row.')
@@ -406,11 +438,12 @@ export async function createClientImportPreview(
   const totals = totalsFor(rows)
   const normalizedMapping = Object.fromEntries(object.fields.map((field) => [field.id, mapping[field.id] ?? '']))
   const sourceDigest = await sha256(parsed.source)
-  const previewDigest = await sha256(JSON.stringify({ schema: CLIENT_IMPORT_SCHEMA, product, object: object.id, sourceDigest, mapping: normalizedMapping }))
+  const previewDigest = await sha256(JSON.stringify({ schema: CLIENT_IMPORT_SCHEMA, product, object: object.id, workflowTemplateId: resolvedWorkflowTemplateId, sourceDigest, mapping: normalizedMapping }))
   return {
     schema: CLIENT_IMPORT_SCHEMA,
     product,
     object: object.id,
+    workflowTemplateId: resolvedWorkflowTemplateId,
     sourceName: safeSourceName(sourceName),
     sourceDigest,
     previewDigest,
@@ -440,6 +473,9 @@ export function buildClientImportStagingPackage(preview: ClientImportPreview, co
     throw new Error('Resolve every mapping and row issue before creating a staging package.')
   }
   const workflowTemplateId = boundedContext(context.workflowTemplateId, 'Workflow template')
+  if (workflowTemplateId !== preview.workflowTemplateId) {
+    throw new Error('The workflow template changed after this data preview. Preview the CSV again before staging.')
+  }
   const workspace = boundedContext(context.workspace, 'Workspace name')
   const owner = boundedContext(context.owner, 'Responsible owner')
   return {

@@ -53,7 +53,9 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
   const object = clientImportObject(product)
   const requestRef = useRef(0)
   const productRef = useRef(product)
+  const workflowTemplateRef = useRef(workflowTemplateId)
   productRef.current = product
+  workflowTemplateRef.current = workflowTemplateId
   const [state, setState] = useState<ImportState>(emptyImportState)
   const visibleRows = state.preview
     ? [
@@ -65,19 +67,25 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
   useEffect(() => {
     requestRef.current += 1
     setState(emptyImportState())
-  }, [product])
+  }, [product, workflowTemplateId])
 
-  async function runPreview(sourceName: string, sourceText: string, mapping?: ClientImportMapping, expectedProduct = product) {
-    if (productRef.current !== expectedProduct) return
+  async function runPreview(
+    sourceName: string,
+    sourceText: string,
+    mapping?: ClientImportMapping,
+    expectedProduct = product,
+    expectedWorkflowTemplateId = workflowTemplateId,
+  ) {
+    if (productRef.current !== expectedProduct || workflowTemplateRef.current !== expectedWorkflowTemplateId) return
     const requestId = requestRef.current + 1
     requestRef.current = requestId
     setState((current) => ({ ...current, sourceName, sourceText, busy: true, error: '' }))
     try {
-      const preview = await createClientImportPreview(sourceText, expectedProduct, mapping, sourceName)
-      if (requestRef.current !== requestId || productRef.current !== expectedProduct) return
+      const preview = await createClientImportPreview(sourceText, expectedProduct, mapping, sourceName, expectedWorkflowTemplateId)
+      if (requestRef.current !== requestId || productRef.current !== expectedProduct || workflowTemplateRef.current !== expectedWorkflowTemplateId) return
       setState({ sourceName, sourceText, preview, busy: false, error: '' })
     } catch (error) {
-      if (requestRef.current !== requestId || productRef.current !== expectedProduct) return
+      if (requestRef.current !== requestId || productRef.current !== expectedProduct || workflowTemplateRef.current !== expectedWorkflowTemplateId) return
       setState((current) => ({ ...current, busy: false, error: error instanceof Error ? error.message : 'The CSV could not be previewed.' }))
     }
   }
@@ -85,6 +93,7 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
   async function chooseFile(file: File | null) {
     if (!file) return
     const expectedProduct = product
+    const expectedWorkflowTemplateId = workflowTemplateId
     const requestId = requestRef.current + 1
     requestRef.current = requestId
     if (!file.name.toLocaleLowerCase('en-US').endsWith('.csv') && file.type !== 'text/csv') {
@@ -98,10 +107,10 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
     setState({ sourceName: file.name, sourceText: '', preview: null, busy: true, error: '' })
     try {
       const sourceText = await file.text()
-      if (requestRef.current !== requestId || productRef.current !== expectedProduct) return
-      await runPreview(file.name, sourceText, undefined, expectedProduct)
+      if (requestRef.current !== requestId || productRef.current !== expectedProduct || workflowTemplateRef.current !== expectedWorkflowTemplateId) return
+      await runPreview(file.name, sourceText, undefined, expectedProduct, expectedWorkflowTemplateId)
     } catch {
-      if (requestRef.current !== requestId || productRef.current !== expectedProduct) return
+      if (requestRef.current !== requestId || productRef.current !== expectedProduct || workflowTemplateRef.current !== expectedWorkflowTemplateId) return
       setState({ ...emptyImportState(), sourceName: file.name, error: 'The browser could not read this CSV.' })
     }
   }
@@ -118,8 +127,8 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
 
   function downloadTemplate() {
     downloadFile(
-      `supermega-${productSlugs[product]}-${object.id}-v1.csv`,
-      `\uFEFF${clientImportTemplate(product)}`,
+      `supermega-${productSlugs[product]}-${workflowTemplateId}-${object.id}-v1.csv`,
+      `\uFEFF${clientImportTemplate(product, workflowTemplateId)}`,
       'text/csv;charset=utf-8',
     )
   }
@@ -133,7 +142,7 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
         owner,
       })
       downloadFile(
-        `supermega-${productSlugs[product]}-client-import-staging-v1.json`,
+        `supermega-${productSlugs[product]}-${workflowTemplateId}-client-import-staging-v1.json`,
         `${JSON.stringify(stagingPackage, null, 2)}\n`,
         'application/json;charset=utf-8',
       )
@@ -145,7 +154,7 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
 
   return (
     <details className="compact-disclosure catalog-import-disclosure">
-      <summary><span>Bring existing data</span><small>{object.label}</small></summary>
+      <summary><span>Bring existing data</span><small>{object.label} · {workflowTemplateId.replaceAll('-', ' ')}</small></summary>
       <div className="catalog-import-workspace">
         <div className="catalog-import-intro">
           <div>
