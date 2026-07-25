@@ -1770,11 +1770,11 @@ export function OperationsPage({ product }: { product?: ProductId }) {
 
   if (!isProductRoute && !requestedView) {
     return <div className="workspace-screen product-catalog-screen">
-      <PageHeading eyebrow="Products" title="Choose a workspace" copy="Open the workspace for the job you need to do." />
+      <PageHeading eyebrow="Products" title="Choose a product" copy="Open the product for the job you need to do." />
       <nav aria-label="SuperMega apps" className="product-launcher product-catalog">
         <Link to="/shop/?tab=orders"><span><strong>Shop</strong><small>Orders, payments, and stock</small></span><b>Open</b></Link>
         <Link to="/plant/?tab=production"><span><strong>Plant</strong><small>Jobs, output, and problems</small></span><b>Open</b></Link>
-        <Link to="/products/website/"><span><strong>Website</strong><small>Edit, preview, and prepare to publish</small></span><b>Open</b></Link>
+        <Link to="/products/website/"><span><strong>Website</strong><small>Build, preview, and review a site</small></span><b>Open</b></Link>
         <Link to="/products/ecommerce/"><span><strong>Ecommerce</strong><small>Build a storefront from Shop</small></span><b>Preview</b></Link>
       </nav>
       <section className="core-panel" id="planned">
