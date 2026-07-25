@@ -18,7 +18,7 @@ let ecommerceHandoffRuntimeChecks = 0
 let commerceRuntimeChecks = 0
 let productionRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
-const [manifestText, appPackageText, appSource, coreSource, commerceSource, commerceOrderDraftSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, managedWebsiteSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, managedStorefrontSource, storefrontSource, storefrontDraftSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource] = await Promise.all([
+const [manifestText, appPackageText, appSource, coreSource, commerceSource, commerceOrderDraftSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedTrialStoreRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, managedWebsiteSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, managedStorefrontSource, storefrontSource, storefrontDraftSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource] = await Promise.all([
   readFile(resolve(root, 'site-manifest.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'package.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'App.tsx'), 'utf8'),
@@ -28,6 +28,7 @@ const [manifestText, appPackageText, appSource, coreSource, commerceSource, comm
   readFile(resolve(root, 'showroom', 'src', 'core', 'channel-order-intake.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'managed-trial.ts'), 'utf8'),
   readFile(resolve(root, 'supermega_runtime', 'commerce_runtime.py'), 'utf8'),
+  readFile(resolve(root, 'supermega_runtime', 'trial_store.py'), 'utf8'),
   readFile(resolve(root, 'supermega_runtime', 'production_runtime.py'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'production-workspace.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'TeamWorkspace.tsx'), 'utf8'),
@@ -893,10 +894,19 @@ if (!commerceSource.includes("CommercePaymentStatus = 'pending' | 'reconciled'")
   || !commerceSource.includes('refundEvidenceReference?: string')
   || commerceSource.includes("'unrecorded'")
   || commerceSource.includes("'refund_due'")) fail('commerce_payment_or_refund_contract_invalid')
+if (!commerceSource.includes('owner?: string')
+  || !commerceSource.includes('order.owner !== proof.actor')
+  || !commerceSource.includes('reservation?.actor !== order.owner')
+  || !coreSource.includes('owner: confirming operator')
+  || !coreSource.includes("'owner not recorded'")
+  || !managedCommerceRuntime.includes('"new order.owner"')
+  || !managedCommerceRuntime.includes('command evidence actor must be the new order owner')
+  || !managedTrialStoreRuntime.includes('authoritative_order["owner"] = principal.actor_id')
+  || !managedTrialStoreRuntime.includes('event_type == "commerce.website_intake.converted"')) fail('commerce_order_owner_contract_missing')
 if (!commerceSource.includes('commerceOrderHasReleasableReservation') || !commerceSource.includes("movement.kind === 'reserve'") || !commerceSource.includes("movement.kind === 'release'") || !commerceSource.includes("kind: 'receipt'") || !commerceSource.includes("kind: 'opening'")) fail('commerce_stock_ledger_contract_missing')
 if (!commerceSource.includes('export type CommerceOrderLine')
   || !commerceSource.includes('lines?: CommerceOrderLine[]')
-  || !commerceSource.includes('one reservation action covering every order line')
+  || !commerceSource.includes('one owner-bound reservation action covering every order line')
   || !commerceSource.includes('proofMovements.length === lines.length')
   || !managedCommerceRuntime.includes('one stock reservation per order line')
   || !managedCommerceRuntime.includes("line must freeze the current item name, variant, and MMK price")
@@ -1479,6 +1489,7 @@ async function verifyChannelOrderRuntime() {
       id: 'ORD-CHANNEL-RUNTIME-01',
       createdAt: proof.capturedAt,
       customer: drafts[0].customer,
+      owner: proof.actor,
       channel: drafts[0].channel,
       item: item.name,
       itemSku: item.sku,
@@ -2772,6 +2783,7 @@ async function verifyCommerceRuntime() {
       id: 'ORD-1',
       createdAt: '2026-07-23T09:00:00.000Z',
       customer: 'Customer',
+      owner: reserveProof.actor,
       channel: 'Website',
       item: 'Test item',
       itemSku: 'SKU-1',
@@ -2792,10 +2804,19 @@ async function verifyCommerceRuntime() {
     const legacyPromiselessOrder = { ...reserved.orders[0] }
     delete legacyPromiselessOrder.promisedAt
     assert(model.validateCommerceState({ ...reserved, orders: [legacyPromiselessOrder] }).orders[0].promisedAt === undefined, 'legacy_order_without_promise_not_readable')
+    const legacyUnownedOrder = { ...reserved.orders[0] }
+    delete legacyUnownedOrder.owner
+    assert(model.validateCommerceState({ ...reserved, orders: [legacyUnownedOrder] }).orders[0].owner === undefined, 'legacy_order_without_owner_not_readable')
     assertThrows(() => model.validateCommerceState({
       ...reserved,
       orders: [{ ...reserved.orders[0], promisedAt: reserved.orders[0].createdAt }],
     }), 'backdated_order_promise_loaded')
+    assertThrows(() => model.validateCommerceState({
+      ...reserved,
+      orders: [{ ...reserved.orders[0], owner: 'Different operator' }],
+    }), 'order_owner_history_rewrite_loaded')
+    assert(model.reserveCommerceOrder(base, { ...order, owner: undefined }, reserveProof) === null, 'new_order_without_owner_succeeded')
+    assert(model.reserveCommerceOrder(base, { ...order, owner: 'Different operator' }, reserveProof) === null, 'new_order_owner_mismatched_confirmation_actor')
     assert(model.reserveCommerceOrder(base, { ...order, fulfilment: undefined }, reserveProof) === null, 'order_without_fulfilment_succeeded')
     assert(model.reserveCommerceOrder(base, { ...order, fulfilmentReference: '' }, reserveProof) === null, 'order_without_fulfilment_reference_succeeded')
     assert(model.reserveCommerceOrder(base, { ...order, promisedAt: undefined }, reserveProof) === null, 'order_without_promised_time_succeeded')
@@ -2872,6 +2893,7 @@ async function verifyCommerceRuntime() {
       id: 'ORD-MULTI',
       createdAt: multiProof.capturedAt,
       customer: 'Counter A',
+      owner: multiProof.actor,
       channel: 'Walk-in',
       item: '2 items',
       quantity: 3,

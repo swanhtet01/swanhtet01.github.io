@@ -82,6 +82,7 @@ def order_record(order_id: str = "ORD-1") -> dict[str, object]:
         "id": order_id,
         "createdAt": NOW,
         "customer": "Customer ref",
+        "owner": "Accountable operator",
         "channel": "Website",
         "item": "Test item",
         "itemSku": "SKU-1",
@@ -1891,6 +1892,7 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertEqual(intake["status"], "converted")
         self.assertEqual(intake["conversion"]["orderId"], order["id"])  # type: ignore[index]
         self.assertEqual(order["sourceRecordId"], intake["id"])  # type: ignore[index]
+        self.assertEqual(order["owner"], intake["conversion"]["actor"])  # type: ignore[index]
         self.assertEqual(converted["items"][0]["onHand"], 8)  # type: ignore[index]
         self.assertEqual(stock_movement["kind"], "reserve")
         self.assertEqual(stock_movement["actionId"], intake["conversion"]["actionId"])  # type: ignore[index]
@@ -1901,6 +1903,67 @@ class CommerceRuntimeTests(unittest.TestCase):
                 converted_intake_state(current),
                 action_evidence("ACT-SPOOFED-CONVERSION", captured_at=CONVERTED_AT),
             )
+
+        store = InMemoryTrialStore(reducer=reduce_trial_state)
+        managed_owner = TrialPrincipal(
+            "workspace-intake-owner",
+            "managed-shop-owner",
+            "human",
+        )
+        store.provision_membership(
+            workspace_id=managed_owner.workspace_id,
+            actor_id=managed_owner.actor_id,
+            actor_kind=managed_owner.actor_kind,
+            capabilities=("commerce.write",),
+        )
+        initialized = store.apply_command(
+            managed_owner,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.workspace.initialized",
+            expected_version=0,
+            payload={
+                "state": catalog_state(),
+                "evidence": action_evidence("ACT-MANAGED-INTAKE-INITIALIZE"),
+            },
+        )
+        intake_created = store.apply_command(
+            managed_owner,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.website_intake.created",
+            expected_version=initialized.version,
+            payload={
+                "state": pending_intake_state(),
+                "evidence": action_evidence("ACT-WEB-INTAKE"),
+            },
+        )
+        managed_conversion = converted_intake_state(intake_created.state)
+        managed_conversion["orders"][0]["owner"] = "Fabricated intake owner"  # type: ignore[index]
+        managed_conversion["orders"][0]["promisedAt"] = "2099-01-02T00:00:00.000Z"  # type: ignore[index]
+        converted_managed = store.apply_command(
+            managed_owner,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.website_intake.converted",
+            expected_version=intake_created.version,
+            payload={
+                "state": managed_conversion,
+                "evidence": action_evidence(
+                    "ACT-WEB-CONVERT",
+                    captured_at=CONVERTED_AT,
+                    actor="Fabricated intake owner",
+                ),
+            },
+        )
+        converted_order = converted_managed.state["orders"][0]  # type: ignore[index]
+        converted_intake = converted_managed.state["websiteIntakes"][0]  # type: ignore[index]
+        converted_movement = converted_managed.state["movements"][0]  # type: ignore[index]
+        self.assertEqual(converted_order["owner"], managed_owner.actor_id)
+        self.assertEqual(converted_intake["conversion"]["actor"], managed_owner.actor_id)  # type: ignore[index]
+        self.assertEqual(converted_movement["actor"], managed_owner.actor_id)
+        self.assertEqual(converted_order["createdAt"], converted_movement["createdAt"])
+        self.assertEqual(converted_order["createdAt"], converted_intake["conversion"]["capturedAt"])  # type: ignore[index]
 
     def test_historical_website_intake_survives_catalog_update_but_stale_conversion_fails(self) -> None:
         pending = apply_event(
@@ -2051,6 +2114,10 @@ class CommerceRuntimeTests(unittest.TestCase):
         wrong_order_evidence["orders"][0]["evidenceReference"] = "EV-SPOOFED"  # type: ignore[index]
         invalid_states.append(("order evidence mismatch", wrong_order_evidence))
 
+        wrong_order_owner = converted_intake_state(current)
+        wrong_order_owner["orders"][0]["owner"] = "Different operator"  # type: ignore[index]
+        invalid_states.append(("order owner mismatch", wrong_order_owner))
+
         missing_reservation = converted_intake_state(current)
         missing_reservation["movements"] = []
         invalid_states.append(("missing reserve movement", missing_reservation))
@@ -2131,6 +2198,21 @@ class CommerceRuntimeTests(unittest.TestCase):
             validate_commerce_state(legacy_without_promise),
             legacy_without_promise,
         )
+        legacy_without_owner = created_state()
+        legacy_without_owner["orders"][0].pop("owner")  # type: ignore[index]
+        self.assertEqual(
+            validate_commerce_state(legacy_without_owner),
+            legacy_without_owner,
+        )
+        rewritten_owner = created_state()
+        rewritten_owner["orders"][0]["owner"] = "Different operator"  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(rewritten_owner)
+        for invalid_owner in (" Accountable operator", "x" * 121):
+            malformed_owner = created_state()
+            malformed_owner["orders"][0]["owner"] = invalid_owner  # type: ignore[index]
+            with self.subTest(invalid_order_owner=invalid_owner), self.assertRaises(TrialValidationError):
+                validate_commerce_state(malformed_owner)
         for promised_at in (
             "2026-07-23T11:00:00",
             NOW,
@@ -2140,11 +2222,20 @@ class CommerceRuntimeTests(unittest.TestCase):
             with self.subTest(invalid_promised_at=promised_at), self.assertRaises(TrialValidationError):
                 validate_commerce_state(invalid_promise)
 
-        for missing_field in ("fulfilment", "fulfilmentReference", "promisedAt"):
+        for missing_field in ("owner", "fulfilment", "fulfilmentReference", "promisedAt"):
             without_handoff = created_state()
             without_handoff["orders"][0].pop(missing_field)  # type: ignore[index]
             with self.subTest(missing_order_handoff=missing_field), self.assertRaises(TrialValidationError):
                 apply_event(current, "commerce.order.created", without_handoff)
+
+        mismatched_owner_evidence = created_state()
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "commerce.order.created",
+                mismatched_owner_evidence,
+                action_evidence("ACT-ORD-1", actor="Different operator"),
+            )
 
         stale_promise = created_state()
         stale_promise["orders"][0]["promisedAt"] = "2026-07-23T09:10:00.000Z"  # type: ignore[index]
@@ -2699,6 +2790,7 @@ class CommerceRuntimeTests(unittest.TestCase):
             "id": "ORD-MULTI",
             "createdAt": NOW,
             "customer": "Counter A",
+            "owner": "Accountable operator",
             "channel": "Walk-in",
             "item": "2 items",
             "quantity": 3,
@@ -3661,6 +3753,7 @@ class CommerceRuntimeTests(unittest.TestCase):
         forged_created_state["orders"][0]["promisedAt"] = (  # type: ignore[index]
             "2099-01-02T00:00:00.000Z"
         )
+        forged_created_state["orders"][0]["owner"] = "Fabricated Order Bot"  # type: ignore[index]
         forged_created_state["movements"][0].update(  # type: ignore[index]
             {
                 "createdAt": "2099-01-01T00:00:00.000Z",
@@ -3697,6 +3790,10 @@ class CommerceRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(
             stored.state["movements"][0]["actor"],  # type: ignore[index]
+            principal.actor_id,
+        )
+        self.assertEqual(
+            stored.state["orders"][0]["owner"],  # type: ignore[index]
             principal.actor_id,
         )
 

@@ -138,6 +138,7 @@ _ORDER_OPTIONAL_FIELDS = frozenset(
         "fulfilment",
         "fulfilmentReference",
         "promisedAt",
+        "owner",
         "sourceRecordId",
         "evidenceReference",
         "lines",
@@ -777,6 +778,8 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         _timestamp(order["createdAt"], f"orders[{index}].createdAt")
         for field in ("customer", "channel", "item", "payment"):
             _text(order[field], f"orders[{index}].{field}")
+        if "owner" in order:
+            _text(order["owner"], f"orders[{index}].owner", maximum=120)
         item_sku = order.get("itemSku")
         if item_sku is not None:
             item_sku = _text(item_sku, f"orders[{index}].itemSku", maximum=80)
@@ -1404,13 +1407,18 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             balance = prior_balance
     for order_id, count in reserve_by_order.items():
         order = order_by_id.get(order_id)
+        reservation = reserve_movement_by_order.get(order_id)
         if (
             not order
             or count != len(_reservation_lines(order))
             or len(reserve_actions_by_order.get(order_id, set())) != 1
+            or (
+                "owner" in order
+                and (not reservation or reservation["actor"] != order["owner"])
+            )
         ):
             raise TrialValidationError(
-                f"{order_id} does not have one reservation action covering every order line."
+                f"{order_id} does not have one owner-bound reservation action covering every order line."
             )
     for order_id, count in release_by_order.items():
         order = order_by_id.get(order_id)
@@ -1803,6 +1811,14 @@ def _validate_event_evidence(
     next_state: Mapping[str, Any],
     evidence: Mapping[str, str],
 ) -> None:
+    if (
+        event_type
+        in {"commerce.order.created", "commerce.website_intake.converted"}
+        and next_state["orders"][0].get("owner") != evidence["actor"]
+    ):
+        raise TrialValidationError(
+            "command evidence actor must be the new order owner."
+        )
     if event_type == "commerce.item.updated":
         changes = _catalog_changes(next_state)
         proof = changes[0]["proof"] if changes else {}
@@ -2235,6 +2251,7 @@ def _validate_new_order_and_reservation(
         raise TrialValidationError("a new order must start confirmed with pending payment and no refund exception.")
     if order.get("fulfilment") not in {"pickup", "delivery"}:
         raise TrialValidationError("a new order requires pickup or delivery fulfilment.")
+    _text(order.get("owner"), "new order.owner", maximum=120)
     _text(order.get("fulfilmentReference"), "new order.fulfilmentReference", maximum=160)
     promised_at = datetime.fromisoformat(
         _timestamp(order.get("promisedAt"), "new order.promisedAt").replace(

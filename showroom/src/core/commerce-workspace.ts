@@ -42,6 +42,7 @@ export type CommerceOrder = {
   id: string
   createdAt: string
   customer: string
+  owner?: string
   channel: string
   item: string
   itemSku?: string
@@ -633,8 +634,8 @@ export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
     schema: COMMERCE_WORKSPACE_SCHEMA,
     items,
     orders: [
-      { id: 'ORD-1042', createdAt: firstOrderAt, customer: 'May', channel: 'Messenger', item: 'Daily essentials basket', itemSku: 'SM-1001', quantity: 2, payment: 'KBZPay', paymentStatus: 'pending', refundStatus: 'none', promisedAt: new Date(now + 60 * 60 * 1000).toISOString(), total: 37000, status: 'preparing' },
-      { id: 'ORD-1041', createdAt: secondOrderAt, customer: 'Ko Aung', channel: 'Phone', item: 'Household refill', itemSku: 'SM-1003', quantity: 1, payment: 'Cash on delivery', paymentStatus: 'pending', refundStatus: 'none', promisedAt: new Date(now + 90 * 60 * 1000).toISOString(), total: 12000, status: 'ready' },
+      { id: 'ORD-1042', createdAt: firstOrderAt, customer: 'May', owner: 'Demo operator', channel: 'Messenger', item: 'Daily essentials basket', itemSku: 'SM-1001', quantity: 2, payment: 'KBZPay', paymentStatus: 'pending', refundStatus: 'none', promisedAt: new Date(now + 60 * 60 * 1000).toISOString(), total: 37000, status: 'preparing' },
+      { id: 'ORD-1041', createdAt: secondOrderAt, customer: 'Ko Aung', owner: 'Demo operator', channel: 'Phone', item: 'Household refill', itemSku: 'SM-1003', quantity: 1, payment: 'Cash on delivery', paymentStatus: 'pending', refundStatus: 'none', promisedAt: new Date(now + 90 * 60 * 1000).toISOString(), total: 12000, status: 'ready' },
     ],
     movements: [
       { id: 'MOV-ACT-DEMO-1042', actionId: 'ACT-DEMO-1042', createdAt: firstOrderAt, actor: 'Demo operator', reason: 'Seed the local Commerce walkthrough.', evidenceReference: 'DEMO-SEED-ORD-1042', kind: 'reserve', sku: 'SM-1001', quantityDelta: -2, orderId: 'ORD-1042' },
@@ -904,6 +905,7 @@ export function validateCommerceState(value: unknown): CommerceState {
     orderIds.push(requiredText(candidate.id, `orders[${index}].id`))
     if (!validTimestamp(candidate.createdAt)) throw new Error(`orders[${index}].createdAt is invalid.`)
     for (const field of ['customer', 'channel', 'item', 'payment'] as const) requiredText(candidate[field], `orders[${index}].${field}`)
+    if (candidate.owner !== undefined) canonicalText(candidate.owner, `orders[${index}].owner`, 120)
     if (candidate.itemSku !== undefined && !itemSkus.includes(requiredText(candidate.itemSku, `orders[${index}].itemSku`))) throw new Error(`orders[${index}].itemSku is unknown.`)
     assertSafeInteger(candidate.quantity, `orders[${index}].quantity`, 1)
     assertSafeInteger(candidate.total, `orders[${index}].total`)
@@ -1065,6 +1067,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   const releaseByOrder = new Map<string, number>()
   const reserveActionsByOrder = new Map<string, Set<string>>()
   const releaseActionsByOrder = new Map<string, Set<string>>()
+  const reserveMovementByOrder = new Map<string, CommerceStockMovement>()
   const movementsByAction = new Map<string, CommerceStockMovement[]>()
   const receiptQuantityByPurchaseOrder = new Map<string, number>()
   const latestReceiptAtByPurchaseOrder = new Map<string, bigint>()
@@ -1146,6 +1149,9 @@ export function validateCommerceState(value: unknown): CommerceState {
     const orderActions = actions.get(orderId) ?? new Set<string>()
     orderActions.add(candidate.actionId as string)
     actions.set(orderId, orderActions)
+    if (candidate.kind === 'reserve' && !reserveMovementByOrder.has(orderId)) {
+      reserveMovementByOrder.set(orderId, candidate as unknown as CommerceStockMovement)
+    }
     if (candidate.kind === 'release' && order.status !== 'cancelled') throw new Error(`movements[${index}] release requires a cancelled order.`)
   }
   assertUnique(movementIds, 'Stock movement ID')
@@ -1209,9 +1215,11 @@ export function validateCommerceState(value: unknown): CommerceState {
   }
   for (const [orderId, count] of reserveByOrder) {
     const order = orderById.get(orderId)
+    const reservation = reserveMovementByOrder.get(orderId)
     if (!order
       || count !== reservationLinesForOrder(order as unknown as CommerceOrder).length
-      || reserveActionsByOrder.get(orderId)?.size !== 1) throw new Error(`${orderId} does not have one reservation action covering every order line.`)
+      || reserveActionsByOrder.get(orderId)?.size !== 1
+      || (order.owner !== undefined && reservation?.actor !== order.owner)) throw new Error(`${orderId} does not have one owner-bound reservation action covering every order line.`)
   }
   for (const [orderId, count] of releaseByOrder) {
     const order = orderById.get(orderId)
@@ -2064,6 +2072,7 @@ export function convertCommerceWebsiteIntake(
     const order = current.orders.find((candidate) => candidate.id === intake.conversion?.orderId)
     return intake.conversion
       && order?.customer === input.customer
+      && order.owner === proof.actor
       && order.fulfilment === (input.fulfilmentMethod === 'pickup' ? 'pickup' : 'delivery')
       && order.fulfilmentReference === intake.id
       && order.promisedAt === input.promisedAt
@@ -2092,6 +2101,7 @@ export function convertCommerceWebsiteIntake(
     id: orderId,
     createdAt: proof.capturedAt,
     customer: input.customer,
+    owner: proof.actor,
     channel: 'Website',
     item: intake.itemName,
     itemSku: intake.sku,
@@ -2246,6 +2256,7 @@ export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder,
   const confirmedAt = timestampMicros(proof.capturedAt)
   if (!validProof(proof)
     || order.status !== 'confirmed'
+    || order.owner !== proof.actor
     || !['pickup', 'delivery'].includes(order.fulfilment ?? '')
     || typeof order.fulfilmentReference !== 'string'
     || !order.fulfilmentReference.trim()

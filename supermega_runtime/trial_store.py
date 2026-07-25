@@ -578,6 +578,72 @@ def _authoritative_command_payload(
         ]
         authoritative["state"] = authoritative_state
         return authoritative
+    if event_type == "commerce.website_intake.converted":
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        orders = state.get("orders") if isinstance(state, Mapping) else None
+        movements = state.get("movements") if isinstance(state, Mapping) else None
+        intakes = state.get("websiteIntakes") if isinstance(state, Mapping) else None
+        if (
+            not isinstance(evidence, Mapping)
+            or not isinstance(state, Mapping)
+            or not isinstance(orders, list)
+            or not isinstance(movements, list)
+            or not isinstance(intakes, list)
+        ):
+            return authoritative
+        action_id = evidence.get("actionId")
+        target = next(
+            (
+                (index, intake["conversion"])
+                for index, intake in enumerate(intakes)
+                if isinstance(intake, Mapping)
+                and isinstance(intake.get("conversion"), Mapping)
+                and intake["conversion"].get("actionId") == action_id
+                and isinstance(intake["conversion"].get("orderId"), str)
+            ),
+            None,
+        )
+        if target is None:
+            return authoritative
+        intake_index, conversion = target
+        order_id = conversion["orderId"]
+        authoritative_evidence = dict(evidence)
+        authoritative_evidence["actor"] = principal.actor_id
+        authoritative_evidence["capturedAt"] = captured_at
+        authoritative_intakes = deepcopy(intakes)
+        authoritative_intake = dict(authoritative_intakes[intake_index])
+        authoritative_intake["conversion"] = {
+            **authoritative_evidence,
+            "orderId": order_id,
+        }
+        authoritative_intakes[intake_index] = authoritative_intake
+        authoritative_orders = deepcopy(orders)
+        for order_index, order in enumerate(authoritative_orders):
+            if isinstance(order, Mapping) and order.get("id") == order_id:
+                authoritative_order = dict(order)
+                authoritative_order["createdAt"] = captured_at
+                authoritative_order["owner"] = principal.actor_id
+                authoritative_orders[order_index] = authoritative_order
+        authoritative_movements = deepcopy(movements)
+        for movement_index, movement in enumerate(authoritative_movements):
+            if (
+                isinstance(movement, Mapping)
+                and movement.get("kind") == "reserve"
+                and movement.get("actionId") == action_id
+                and movement.get("orderId") == order_id
+            ):
+                authoritative_movement = dict(movement)
+                authoritative_movement["actor"] = principal.actor_id
+                authoritative_movement["createdAt"] = captured_at
+                authoritative_movements[movement_index] = authoritative_movement
+        authoritative_state = dict(state)
+        authoritative_state["websiteIntakes"] = authoritative_intakes
+        authoritative_state["orders"] = authoritative_orders
+        authoritative_state["movements"] = authoritative_movements
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
     if event_type == "commerce.order.created":
         evidence = authoritative.get("evidence")
         state = authoritative.get("state")
@@ -609,6 +675,7 @@ def _authoritative_command_payload(
             ):
                 authoritative_order = dict(order)
                 authoritative_order["createdAt"] = captured_at
+                authoritative_order["owner"] = principal.actor_id
                 authoritative_orders[order_index] = authoritative_order
         authoritative_movements = deepcopy(movements)
         for movement_index, movement in enumerate(authoritative_movements):
