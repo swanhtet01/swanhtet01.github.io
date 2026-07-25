@@ -41,15 +41,15 @@ SuperMega HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are
 
 ## Verified baseline
 
-- Checkpoint `99d108f` is the accepted local product and database-authority baseline.
+- Checkpoint `8970424` is the accepted local product and database-authority baseline.
 - App lint/build, all local release/security/database/HQ contracts, and all 156 Python tests pass. Security coverage is 58 checks.
 - Dependency audit reports zero known vulnerabilities; React Router is patched v8 and Node is `>=22.22.0`.
 - React Router is isolated in a 43,870-byte cacheable chunk; the largest JavaScript chunk is 462,746 bytes, leaving 37,254 bytes under the hard gate.
 - Focused coverage: 202 Shop, 34 order-recovery, 250 Plant, 94 Website, 11 managed-Website, 27 storefront-draft, 14 storefront, 15 request, 17 managed-storefront, and 16 handoff checks.
-- Rendered 390/1280 px QA covers all five products and compatibility routes: 44 px actions, lifecycle, reload, and cross-tab checks pass without overflow or unintended data changes. Ecommerce has no error overlay; its unconfigured local `/api/health` probe remains 500.
+- Rendered 390/1280 px QA covers all five products and compatibility routes: 44 px actions, lifecycle, reload, and cross-tab checks pass without overflow or unintended data changes. Local Vite health now reports `attention`, `isolated_demo`, and locked writes without a failed request or console error.
 - Core first-action QA leads Shop Stock with the exact shortage and `Reorder`, while each active Plant job now selects and focuses the existing output form. At 390 px actions are at least 44 px with no overflow; 1280 px stays compact; logs are empty; the Plant shortcut creates no event.
 - PostgreSQL 17.10 passed 32 TLS checks, including exact approval/event restore and the trusted-server identity boundary.
-- Current local `99d108f` is a fast-forward 142 commits beyond remote PR #258 head `338b6fd` and 188 beyond `main` `6885c320`; existing green checks cover only the remote head. The external mapping audit is anchored at `49b4e0e`; its later local checkpoints are not live.
+- Current local `8970424` is a fast-forward 144 commits beyond remote PR #258 head `338b6fd` and 190 beyond `main` `6885c320`; existing green checks cover only the remote head. The external mapping audit is anchored at `49b4e0e`; its later local checkpoints are not live.
 - `supermega.dev` (`supermega-public`) and `app.supermega.dev` (`megaos`) are healthy at `main` with no observed seven-day runtime error clusters. The old demo is a separate HTTP 200 surface; `shop.supermega.dev` has no DNS. Full evidence and the push-only decision are in `hq/research/release-reconciliation-2026-07-25.md`.
 
 ## Coordination
@@ -68,7 +68,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - Agent Teams is not a production runtime. Order Intake passed its 20-case evaluator, but no usable local OpenAI API key was found; the provider runner awaits a secure founder decision and still needs a three-minute human review workflow.
 - No isolated hosted Supabase branch or separate non-production project has repeated the local database proof.
 - Browser-local Website records cannot authenticate out-of-band storage edits; managed commands use the locked prior state and separate ledger. Hosted activation remains unproven.
-- Live GitHub `main` is 188 commits behind the accepted local product checkpoint, while draft PR #258 is 142 commits behind it. The live app cannot contain the validated local work until owner-approved integration and a later coordinated release.
+- Live GitHub `main` is 190 commits behind the accepted local product checkpoint, while draft PR #258 is 144 commits behind it. The live app cannot contain the validated local work until owner-approved integration and a later coordinated release.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
 
 ## Decisions in force
@@ -83,7 +83,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Next evidence
 
-1. Diagnose the local `/api/health` 500 and either restore a configured local backend or make offline status explicit without a console failure.
+1. Add and verify one canonical local full-stack command that starts FastAPI plus Vite while managed writes remain disabled.
 2. Obtain explicit owner approval for one fast-forward-only update of draft PR #258, then require fresh checks and human review before any separate merge or release decision.
 3. Rehearse revisioned Ecommerce setup persistence and request retention on an owner-approved isolated non-production tenant and capture cross-device, replay, tenant-isolation, conflict, recovery, and zero-conversion evidence.
 4. Generate server-only Order Intake results with no operational tools, score all 20 fixtures, and expose a human review demo only after every quality and zero-side-effect gate passes.
