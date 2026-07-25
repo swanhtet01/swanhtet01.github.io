@@ -16,6 +16,16 @@ export type ProductionQualityHold = {
   evidenceReference: string
 }
 
+export type ProductionJobClosure = {
+  actionId: string
+  closedAt: string
+  closedBy: string
+  reason: string
+  evidenceReference: string
+  shiftRef: string
+  remainingUnits: number
+}
+
 export type ProductionJob = {
   id: string
   line: string
@@ -24,6 +34,7 @@ export type ProductionJob = {
   output: number
   scrap?: number
   qualityHold?: ProductionQualityHold
+  closure?: ProductionJobClosure
 }
 
 export type ProductionIssueResolution = {
@@ -54,7 +65,7 @@ export type ProductionMachine = {
   state: ProductionMachineState
 }
 
-export type ProductionEventKind = 'job_created' | 'output_recorded' | 'material_consumed' | 'issue_opened' | 'issue_resolved' | 'quality_hold_placed' | 'quality_hold_released' | 'machine_state_changed' | 'downtime_started' | 'downtime_ended'
+export type ProductionEventKind = 'job_created' | 'job_closed' | 'output_recorded' | 'material_consumed' | 'issue_opened' | 'issue_resolved' | 'quality_hold_placed' | 'quality_hold_released' | 'machine_state_changed' | 'downtime_started' | 'downtime_ended'
 export type ProductionOutputKind = 'good' | 'scrap'
 
 export type ProductionEvent = {
@@ -68,6 +79,7 @@ export type ProductionEvent = {
   subjectId: string
   summary: string
   quantity?: number
+  remainingQuantity?: number
   shiftRef?: string
   outputKind?: ProductionOutputKind
   materialRef?: string
@@ -160,6 +172,19 @@ export type ProductionShiftHandoff = {
     quantity: number
     entryCount: number
   }>
+  shortCloses: Array<{
+    actionId: string
+    jobId: string
+    product: string
+    shiftRef: string
+    goodUnits: number
+    scrapUnits: number
+    remainingUnits: number
+    recordedAt: string
+    recordedBy: string
+    reason: string
+    evidenceReference: string
+  }>
   unfinishedJobs: Array<{
     id: string
     line: string
@@ -229,8 +254,9 @@ const issueKinds: ProductionIssueKind[] = ['quality', 'maintenance', 'materials'
 export const productionIssueSeverities: ProductionIssueSeverity[] = ['critical', 'high', 'medium', 'low']
 export const productionMachineStates: ProductionMachineState[] = ['running', 'attention', 'stopped']
 export const productionMaterialUnits: ProductionMaterialUnit[] = ['kg', 'g', 'l', 'ml', 'pcs', 'pack', 'bag', 'roll', 'sheet', 'm', 'cm']
-const eventKinds: ProductionEventKind[] = ['job_created', 'output_recorded', 'material_consumed', 'issue_opened', 'issue_resolved', 'quality_hold_placed', 'quality_hold_released', 'machine_state_changed', 'downtime_started', 'downtime_ended']
+const eventKinds: ProductionEventKind[] = ['job_created', 'job_closed', 'output_recorded', 'material_consumed', 'issue_opened', 'issue_resolved', 'quality_hold_placed', 'quality_hold_released', 'machine_state_changed', 'downtime_started', 'downtime_ended']
 const baseEventFields = ['id', 'actionId', 'createdAt', 'actor', 'reason', 'evidenceReference', 'kind', 'subjectId', 'summary']
+const jobClosedEventFields = [...baseEventFields, 'shiftRef', 'remainingQuantity']
 const qualityHoldEventFields = baseEventFields
 const materialEventFields = [...baseEventFields, 'quantity', 'shiftRef', 'materialRef', 'materialUnit']
 const materialOptionalEventFields = ['materialLot']
@@ -455,6 +481,20 @@ export function validateProductionState(value: unknown): ProductionState {
       canonicalText(qualityHold.reason, `jobs[${index}].qualityHold.reason`)
       canonicalText(qualityHold.evidenceReference, `jobs[${index}].qualityHold.evidenceReference`)
     }
+    if (candidate.closure !== undefined) {
+      if (!isRecord(candidate.closure)) throw new Error(`jobs[${index}].closure is invalid.`)
+      const closure = candidate.closure
+      const closureFields = ['actionId', 'closedAt', 'closedBy', 'reason', 'evidenceReference', 'shiftRef', 'remainingUnits']
+      if (JSON.stringify(Object.keys(closure).sort()) !== JSON.stringify([...closureFields].sort())) throw new Error(`jobs[${index}].closure fields are invalid.`)
+      canonicalText(closure.actionId, `jobs[${index}].closure.actionId`, 160)
+      if (!validTimestamp(closure.closedAt)) throw new Error(`jobs[${index}].closure.closedAt is invalid.`)
+      canonicalText(closure.closedBy, `jobs[${index}].closure.closedBy`)
+      canonicalText(closure.reason, `jobs[${index}].closure.reason`)
+      canonicalText(closure.evidenceReference, `jobs[${index}].closure.evidenceReference`)
+      canonicalText(closure.shiftRef, `jobs[${index}].closure.shiftRef`, 80)
+      assertSafeInteger(closure.remainingUnits, `jobs[${index}].closure.remainingUnits`, 1)
+      if (Number(closure.remainingUnits) !== Number(candidate.target) - accounted) throw new Error(`jobs[${index}].closure remaining units do not match its output.`)
+    }
   }
   assertUnique(jobIds, 'Production job ID')
 
@@ -514,7 +554,12 @@ export function validateProductionState(value: unknown): ProductionState {
     const materialFieldCount = ['materialRef', 'materialLot', 'materialUnit'].filter((field) => candidate[field] !== undefined).length
     if (candidate.kind === 'job_created') {
       if (!jobIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown job.`)
-      if (candidate.quantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || materialFieldCount || issueSnapshotFieldCount || candidate.fromState !== undefined || candidate.toState !== undefined || candidate.downtimeStartActionId !== undefined) throw new Error(`events[${index}] job event has unrelated fields.`)
+      if (candidate.quantity !== undefined || candidate.remainingQuantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || materialFieldCount || issueSnapshotFieldCount || candidate.fromState !== undefined || candidate.toState !== undefined || candidate.downtimeStartActionId !== undefined) throw new Error(`events[${index}] job event has unrelated fields.`)
+    } else if (candidate.kind === 'job_closed') {
+      if (!jobIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown job.`)
+      if (JSON.stringify(Object.keys(candidate).sort()) !== JSON.stringify([...jobClosedEventFields].sort())) throw new Error(`events[${index}] job close event fields are invalid.`)
+      canonicalText(candidate.shiftRef, `events[${index}].shiftRef`, 80)
+      assertSafeInteger(candidate.remainingQuantity, `events[${index}].remainingQuantity`, 1)
     } else if (candidate.kind === 'output_recorded') {
       if (!jobIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown job.`)
       assertSafeInteger(candidate.quantity, `events[${index}].quantity`, 1)
@@ -530,7 +575,7 @@ export function validateProductionState(value: unknown): ProductionState {
           [outputKind === 'scrap' ? 'scrapUnits' : 'goodUnits']: nextShiftTotal,
         })
       }
-      if (materialFieldCount || issueSnapshotFieldCount || candidate.fromState !== undefined || candidate.toState !== undefined || candidate.downtimeStartActionId !== undefined) throw new Error(`events[${index}] output event has unrelated fields.`)
+      if (candidate.remainingQuantity !== undefined || materialFieldCount || issueSnapshotFieldCount || candidate.fromState !== undefined || candidate.toState !== undefined || candidate.downtimeStartActionId !== undefined) throw new Error(`events[${index}] output event has unrelated fields.`)
     } else if (candidate.kind === 'material_consumed') {
       if (!jobIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown job.`)
       const expectedFields = candidate.materialLot === undefined ? materialEventFields : [...materialEventFields, ...materialOptionalEventFields]
@@ -548,12 +593,12 @@ export function validateProductionState(value: unknown): ProductionState {
     } else if (candidate.kind === 'quality_hold_placed' || candidate.kind === 'quality_hold_released') {
       if (!jobIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown job.`)
       if (JSON.stringify(Object.keys(candidate).sort()) !== JSON.stringify([...qualityHoldEventFields].sort())) throw new Error(`events[${index}] quality hold event fields are invalid.`)
-      if (candidate.quantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || materialFieldCount || issueSnapshotFieldCount || candidate.fromState !== undefined || candidate.toState !== undefined) throw new Error(`events[${index}] quality hold event has unrelated fields.`)
+      if (candidate.quantity !== undefined || candidate.remainingQuantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || materialFieldCount || issueSnapshotFieldCount || candidate.fromState !== undefined || candidate.toState !== undefined) throw new Error(`events[${index}] quality hold event has unrelated fields.`)
     } else if (candidate.kind === 'machine_state_changed') {
       if (!machineIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown machine.`)
       if (!productionMachineStates.includes(candidate.fromState as ProductionMachineState) || !productionMachineStates.includes(candidate.toState as ProductionMachineState)) throw new Error(`events[${index}] has invalid machine states.`)
       if (candidate.fromState === candidate.toState) throw new Error(`events[${index}] must record a distinct machine observation.`)
-      if (candidate.quantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || materialFieldCount || issueSnapshotFieldCount || candidate.downtimeStartActionId !== undefined) throw new Error(`events[${index}] machine event has unrelated fields.`)
+      if (candidate.quantity !== undefined || candidate.remainingQuantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || materialFieldCount || issueSnapshotFieldCount || candidate.downtimeStartActionId !== undefined) throw new Error(`events[${index}] machine event has unrelated fields.`)
     } else if (candidate.kind === 'downtime_started' || candidate.kind === 'downtime_ended') {
       if (!machineIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown machine.`)
       if (!validDowntimeTimestamp(candidate.createdAt)) throw new Error(`events[${index}].createdAt must be a canonical UTC millisecond timestamp for downtime.`)
@@ -562,7 +607,7 @@ export function validateProductionState(value: unknown): ProductionState {
       if (candidate.kind === 'downtime_ended') canonicalText(candidate.downtimeStartActionId, `events[${index}].downtimeStartActionId`, 160)
     } else if (candidate.kind === 'issue_opened') {
       if (!issueIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown issue.`)
-      if (candidate.quantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || materialFieldCount || candidate.fromState !== undefined || candidate.toState !== undefined || candidate.downtimeStartActionId !== undefined) throw new Error(`events[${index}] issue event has unrelated fields.`)
+      if (candidate.quantity !== undefined || candidate.remainingQuantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || materialFieldCount || candidate.fromState !== undefined || candidate.toState !== undefined || candidate.downtimeStartActionId !== undefined) throw new Error(`events[${index}] issue event has unrelated fields.`)
       if (issueSnapshotFieldCount !== 0 && issueSnapshotFieldCount !== issueSnapshotFields.length) throw new Error(`events[${index}] issue snapshot fields must be complete or absent for legacy events.`)
       if (issueSnapshotFieldCount === issueSnapshotFields.length) {
         if (!productionIssueSeverities.includes(candidate.issueSeverity as ProductionIssueSeverity)) throw new Error(`events[${index}].issueSeverity is invalid.`)
@@ -573,7 +618,7 @@ export function validateProductionState(value: unknown): ProductionState {
       }
     } else {
       if (!issueIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown issue.`)
-      if (candidate.quantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || materialFieldCount || issueSnapshotFieldCount || candidate.fromState !== undefined || candidate.toState !== undefined || candidate.downtimeStartActionId !== undefined) throw new Error(`events[${index}] issue event has unrelated fields.`)
+      if (candidate.quantity !== undefined || candidate.remainingQuantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || materialFieldCount || issueSnapshotFieldCount || candidate.fromState !== undefined || candidate.toState !== undefined || candidate.downtimeStartActionId !== undefined) throw new Error(`events[${index}] issue event has unrelated fields.`)
     }
   }
   assertUnique(eventIds, 'Production event ID')
@@ -642,6 +687,48 @@ export function validateProductionState(value: unknown): ProductionState {
     }, 0)
     if (!isRecord(job) || recordedGood > Number(job.output)) throw new Error(`Good output events exceed the stored output for ${jobId}.`)
     if (recordedScrap !== Number(job.scrap ?? 0)) throw new Error(`Scrap events do not match the stored scrap for ${jobId}.`)
+  }
+  for (const jobId of jobIds) {
+    const job = jobs.find((candidate): candidate is Record<string, unknown> => isRecord(candidate) && candidate.id === jobId)
+    if (!job) continue
+    const closeEvents = events.filter((candidate): candidate is Record<string, unknown> => isRecord(candidate) && candidate.kind === 'job_closed' && candidate.subjectId === jobId)
+    if (!isRecord(job.closure)) {
+      if (closeEvents.length) throw new Error(`Job ${jobId} has a close event without closure proof.`)
+      continue
+    }
+    const closure = job.closure
+    const matchingEvents = closeEvents.filter((event) => event.actionId === closure.actionId)
+    if (closeEvents.length !== 1 || matchingEvents.length !== 1) throw new Error(`Job ${jobId} closure is not backed by exactly one event.`)
+    const closeEvent = matchingEvents[0]
+    if (closeEvent.createdAt !== closure.closedAt
+      || closeEvent.actor !== closure.closedBy
+      || closeEvent.reason !== closure.reason
+      || closeEvent.evidenceReference !== closure.evidenceReference
+      || closeEvent.shiftRef !== closure.shiftRef
+      || closeEvent.remainingQuantity !== closure.remainingUnits) {
+      throw new Error(`Job ${jobId} closure proof does not match its immutable event.`)
+    }
+    if (closeEvent.summary !== `Closed ${String(job.product)} short with ${Number(closure.remainingUnits)} units remaining`) throw new Error(`Job ${jobId} close summary is not canonical.`)
+    const closeIndex = events.indexOf(closeEvent)
+    const creationEvent = events.find((candidate): candidate is Record<string, unknown> => isRecord(candidate) && candidate.kind === 'job_created' && candidate.subjectId === jobId)
+    if (creationEvent && closeIndex >= events.indexOf(creationEvent)) throw new Error(`Job ${jobId} closure predates job creation.`)
+    if (creationEvent && timestampBefore(closeEvent.createdAt as string, creationEvent.createdAt as string)) throw new Error(`Job ${jobId} closure timestamp predates job creation.`)
+    const laterActivity = events.some((candidate, eventIndex) => isRecord(candidate)
+      && eventIndex < closeIndex
+      && candidate.subjectId === jobId
+      && (candidate.kind === 'output_recorded' || candidate.kind === 'material_consumed' || candidate.kind === 'quality_hold_placed'))
+    if (laterActivity) throw new Error(`Job ${jobId} has output, material use, or a new quality hold after closure.`)
+    const laterEventHasEarlierTimestamp = events.some((candidate, eventIndex) => isRecord(candidate)
+      && eventIndex < closeIndex
+      && candidate.subjectId === jobId
+      && timestampBefore(candidate.createdAt as string, closeEvent.createdAt as string))
+    if (laterEventHasEarlierTimestamp) throw new Error(`Job ${jobId} activity appended after closure predates the close timestamp.`)
+    const priorActivityHasLaterTimestamp = events.some((candidate, eventIndex) => isRecord(candidate)
+      && eventIndex > closeIndex
+      && candidate.subjectId === jobId
+      && candidate.kind !== 'job_created'
+      && timestampBefore(closeEvent.createdAt as string, candidate.createdAt as string))
+    if (priorActivityHasLaterTimestamp) throw new Error(`Job ${jobId} closure timestamp contradicts earlier activity.`)
   }
   for (const event of events) {
     if (!isRecord(event) || event.kind !== 'material_consumed') continue
@@ -1015,8 +1102,27 @@ export function buildProductionShiftHandoff(state: ProductionState, shiftRef: st
       quantity: entry.quantityMilli / 1_000,
       entryCount: entry.entryCount,
     }))
+  const shortCloses = current.events
+    .filter((event) => event.kind === 'job_closed' && event.shiftRef === shiftRef)
+    .map((event) => {
+      const job = current.jobs.find((candidate) => candidate.id === event.subjectId)
+      if (!job?.closure) throw new Error(`Short close for ${event.subjectId} has no matching job closure.`)
+      return {
+        actionId: event.actionId,
+        jobId: job.id,
+        product: job.product,
+        shiftRef: job.closure.shiftRef,
+        goodUnits: job.output,
+        scrapUnits: job.scrap ?? 0,
+        remainingUnits: job.closure.remainingUnits,
+        recordedAt: event.createdAt,
+        recordedBy: event.actor,
+        reason: event.reason,
+        evidenceReference: event.evidenceReference,
+      }
+    })
   const unfinishedJobs = current.jobs
-    .filter((job) => job.output + (job.scrap ?? 0) < job.target)
+    .filter((job) => !job.closure && job.output + (job.scrap ?? 0) < job.target)
     .map((job) => ({
       id: job.id,
       line: job.line,
@@ -1094,6 +1200,7 @@ export function buildProductionShiftHandoff(state: ProductionState, shiftRef: st
     shiftEntries,
     materialEntries,
     materialTotals,
+    shortCloses,
     unfinishedJobs,
     activeHolds,
     priorityProblems,
@@ -1126,6 +1233,11 @@ export function formatProductionShiftHandoff(handoff: ProductionShiftHandoff) {
   if (!handoff.materialEntries.length) lines.push('- None')
   for (const entry of handoff.materialEntries) {
     lines.push(`- ${materialQuantityText(entry.quantity)} ${entry.materialUnit} ${handoffLine(entry.materialRef)}${entry.materialLot ? ` · lot ${handoffLine(entry.materialLot)}` : ''} · ${handoffLine(entry.jobId)} · ${handoffLine(entry.product)} · recorded ${entry.recordedAt} by ${handoffLine(entry.recordedBy)} · ${handoffLine(entry.reason)} · evidence ${handoffLine(entry.evidenceReference)} · action ${handoffLine(entry.actionId)}`)
+  }
+  lines.push('', `Closed short (${handoff.shortCloses.length})`)
+  if (!handoff.shortCloses.length) lines.push('- None')
+  for (const entry of handoff.shortCloses) {
+    lines.push(`- ${handoffLine(entry.jobId)} · ${handoffLine(entry.product)} · ${entry.goodUnits} good · ${entry.scrapUnits} scrap · ${entry.remainingUnits} not produced · closed ${entry.recordedAt} by ${handoffLine(entry.recordedBy)} · ${handoffLine(entry.reason)} · evidence ${handoffLine(entry.evidenceReference)} · action ${handoffLine(entry.actionId)}`)
   }
   lines.push(
     '',
@@ -1167,7 +1279,8 @@ export function registerProductionJob(state: ProductionState, job: ProductionJob
     || job.target < 1
     || job.output !== 0
     || job.scrap !== undefined
-    || job.qualityHold !== undefined) return null
+    || job.qualityHold !== undefined
+    || job.closure !== undefined) return null
   const existing = state.events.find((event) => event.actionId === proof.actionId)
   if (existing) {
     const storedJob = state.jobs.find((candidate) => candidate.id === job.id)
@@ -1186,6 +1299,49 @@ export function registerProductionJob(state: ProductionState, job: ProductionJob
   })
 }
 
+export function closeProductionJob(state: ProductionState, jobId: string, shiftRef: string, proof: ProductionActionProof) {
+  if (!validProof(proof) || !validCanonicalText(jobId, 80) || !validCanonicalText(shiftRef, 80)) return null
+  const existing = state.events.find((event) => event.actionId === proof.actionId)
+  const job = state.jobs.find((candidate) => candidate.id === jobId)
+  if (existing) return existing.kind === 'job_closed'
+    && existing.subjectId === jobId
+    && existing.shiftRef === shiftRef
+    && existing.remainingQuantity === job?.closure?.remainingUnits
+    && job?.closure?.actionId === proof.actionId
+    && sameProof(existing, proof) ? state : null
+  const remainingUnits = job ? job.target - job.output - (job.scrap ?? 0) : 0
+  const latestJobEvent = state.events.find((event) => event.subjectId === jobId)
+  if (!job
+    || job.closure
+    || !Number.isSafeInteger(remainingUnits)
+    || remainingUnits < 1
+    || (latestJobEvent && timestampBefore(proof.capturedAt, latestJobEvent.createdAt))
+    || actionIdIsUsed(state, proof.actionId)
+    || state.revision >= Number.MAX_SAFE_INTEGER) return null
+  const closure: ProductionJobClosure = {
+    actionId: proof.actionId,
+    closedAt: proof.capturedAt,
+    closedBy: proof.actor,
+    reason: proof.reason,
+    evidenceReference: proof.evidenceReference,
+    shiftRef,
+    remainingUnits,
+  }
+  const event = eventFor(proof, {
+    kind: 'job_closed',
+    subjectId: jobId,
+    summary: `Closed ${job.product} short with ${remainingUnits} units remaining`,
+    shiftRef,
+    remainingQuantity: remainingUnits,
+  })
+  return validateProductionState({
+    ...state,
+    revision: state.revision + 1,
+    jobs: state.jobs.map((candidate) => candidate.id === jobId ? { ...candidate, closure } : candidate),
+    events: [event, ...state.events],
+  })
+}
+
 export function recordProductionOutput(state: ProductionState, jobId: string, quantity: number, shiftRef: string, proof: ProductionActionProof) {
   if (!validProof(proof) || !validCanonicalText(shiftRef, 80) || !Number.isSafeInteger(quantity) || quantity < 1) return null
   const existing = state.events.find((event) => event.actionId === proof.actionId)
@@ -1193,7 +1349,7 @@ export function recordProductionOutput(state: ProductionState, jobId: string, qu
   if (actionIdIsUsed(state, proof.actionId)) return null
   const matchingJobs = state.jobs.filter((job) => job.id === jobId)
   const job = matchingJobs.length === 1 ? matchingJobs[0] : undefined
-  if (!job) return null
+  if (!job || job.closure) return null
   const nextOutput = job.output + quantity
   const scrap = job.scrap ?? 0
   const shiftOutput = productionShiftOutput(state, shiftRef)
@@ -1222,7 +1378,7 @@ export function recordProductionScrap(state: ProductionState, jobId: string, qua
   if (actionIdIsUsed(state, proof.actionId)) return null
   const matchingJobs = state.jobs.filter((job) => job.id === jobId)
   const job = matchingJobs.length === 1 ? matchingJobs[0] : undefined
-  if (!job) return null
+  if (!job || job.closure) return null
   const currentScrap = job.scrap ?? 0
   const nextScrap = currentScrap + quantity
   const shiftOutput = productionShiftOutput(state, shiftRef)
@@ -1268,7 +1424,7 @@ export function recordProductionMaterialConsumption(
   if (actionIdIsUsed(state, proof.actionId) || state.revision >= Number.MAX_SAFE_INTEGER) return null
   const matchingJobs = state.jobs.filter((job) => job.id === jobId)
   const job = matchingJobs.length === 1 ? matchingJobs[0] : undefined
-  if (!job || job.output + (job.scrap ?? 0) >= job.target) return null
+  if (!job || job.closure || job.output + (job.scrap ?? 0) >= job.target) return null
   const creationEvent = state.events.find((event) => event.kind === 'job_created' && event.subjectId === jobId)
   if (creationEvent && timestampBefore(proof.capturedAt, creationEvent.createdAt)) return null
   const event = eventFor(proof, {
@@ -1299,6 +1455,7 @@ export function placeProductionQualityHold(state: ProductionState, jobId: string
     && (event.kind === 'job_created' || event.kind === 'quality_hold_placed' || event.kind === 'quality_hold_released'))
   if (!job
     || job.qualityHold
+    || job.closure
     || (latestLifecycleEvent && timestampBefore(proof.capturedAt, latestLifecycleEvent.createdAt))
     || actionIdIsUsed(state, proof.actionId)
     || state.revision >= Number.MAX_SAFE_INTEGER) return null
@@ -1322,11 +1479,13 @@ export function releaseProductionQualityHold(state: ProductionState, jobId: stri
   if (!validProof(proof)) return null
   const existing = state.events.find((event) => event.actionId === proof.actionId)
   const job = state.jobs.find((candidate) => candidate.id === jobId)
+  const latestJobEvent = state.events.find((event) => event.subjectId === jobId)
   if (existing) return existing.kind === 'quality_hold_released'
     && existing.subjectId === jobId
     && sameProof(existing, proof) ? state : null
   if (!job?.qualityHold
     || timestampBefore(proof.capturedAt, job.qualityHold.heldAt)
+    || (latestJobEvent && timestampBefore(proof.capturedAt, latestJobEvent.createdAt))
     || actionIdIsUsed(state, proof.actionId)
     || state.revision >= Number.MAX_SAFE_INTEGER) return null
   const event = eventFor(proof, { kind: 'quality_hold_released', subjectId: jobId, summary: `Released ${job.product} from quality hold` })

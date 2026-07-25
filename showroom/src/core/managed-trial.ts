@@ -72,6 +72,7 @@ export type ManagedWebsiteEvent =
 export type ManagedProductionEvent =
   | 'production.workspace.initialized'
   | 'production.job.created'
+  | 'production.job.closed'
   | 'production.output.recorded'
   | 'production.material.consumed'
   | 'production.issue.opened'

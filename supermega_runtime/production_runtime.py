@@ -17,6 +17,7 @@ PRODUCTION_EVENTS = frozenset(
     {
         "production.workspace.initialized",
         "production.job.created",
+        "production.job.closed",
         "production.output.recorded",
         "production.material.consumed",
         "production.issue.opened",
@@ -39,6 +40,7 @@ _MATERIAL_UNITS = frozenset(
 )
 _EVENT_KIND_BY_TYPE = {
     "production.job.created": "job_created",
+    "production.job.closed": "job_closed",
     "production.output.recorded": "output_recorded",
     "production.material.consumed": "material_consumed",
     "production.issue.opened": "issue_opened",
@@ -56,9 +58,20 @@ _MAX_MACHINES = 100
 
 _STATE_FIELDS = frozenset({"schema", "revision", "jobs", "issues", "machines", "events"})
 _JOB_REQUIRED_FIELDS = frozenset({"id", "line", "product", "target", "output"})
-_JOB_OPTIONAL_FIELDS = frozenset({"scrap", "qualityHold"})
+_JOB_OPTIONAL_FIELDS = frozenset({"scrap", "qualityHold", "closure"})
 _QUALITY_HOLD_FIELDS = frozenset(
     {"actionId", "heldAt", "heldBy", "reason", "evidenceReference"}
+)
+_JOB_CLOSURE_FIELDS = frozenset(
+    {
+        "actionId",
+        "closedAt",
+        "closedBy",
+        "reason",
+        "evidenceReference",
+        "shiftRef",
+        "remainingUnits",
+    }
 )
 _ISSUE_REQUIRED_FIELDS = frozenset({"id", "createdAt", "area", "kind", "summary", "status"})
 _ISSUE_ACTION_FIELDS = frozenset({"severity", "owner", "dueAt", "containment"})
@@ -80,6 +93,7 @@ _EVENT_FIELDS = frozenset(
     }
 )
 _OUTPUT_EVENT_OPTIONAL_FIELDS = frozenset({"shiftRef", "outputKind"})
+_JOB_CLOSE_EVENT_FIELDS = frozenset({"shiftRef", "remainingQuantity"})
 _MATERIAL_EVENT_FIELDS = frozenset(
     {"materialRef", "quantity", "materialUnit", "shiftRef"}
 )
@@ -275,6 +289,19 @@ def _quality_hold(value: object, field: str) -> dict[str, Any]:
     return quality_hold
 
 
+def _job_closure(value: object, field: str) -> dict[str, Any]:
+    closure = _object(value, field)
+    _exact_fields(closure, field, required=_JOB_CLOSURE_FIELDS)
+    _text(closure["actionId"], f"{field}.actionId", maximum=160)
+    _timestamp(closure["closedAt"], f"{field}.closedAt")
+    _text(closure["closedBy"], f"{field}.closedBy")
+    _text(closure["reason"], f"{field}.reason")
+    _text(closure["evidenceReference"], f"{field}.evidenceReference")
+    _text(closure["shiftRef"], f"{field}.shiftRef", maximum=80)
+    _integer(closure["remainingUnits"], f"{field}.remainingUnits", minimum=1)
+    return closure
+
+
 def _validate_job(candidate: object, index: int) -> dict[str, Any]:
     field = f"jobs[{index}]"
     job = _object(candidate, field)
@@ -294,6 +321,12 @@ def _validate_job(candidate: object, index: int) -> dict[str, Any]:
         raise TrialValidationError(f"{field} good plus scrap cannot exceed its target.")
     if "qualityHold" in job:
         _quality_hold(job["qualityHold"], f"{field}.qualityHold")
+    if "closure" in job:
+        closure = _job_closure(job["closure"], f"{field}.closure")
+        if closure["remainingUnits"] != target - output - scrap:
+            raise TrialValidationError(
+                f"{field}.closure remaining units must match its output."
+            )
     return job
 
 
@@ -372,7 +405,9 @@ def _validate_event(
     kind = event.get("kind")
     if not isinstance(kind, str):
         raise TrialValidationError(f"{field}.kind is unsupported.")
-    if kind == "output_recorded":
+    if kind == "job_closed":
+        required = _EVENT_FIELDS | _JOB_CLOSE_EVENT_FIELDS
+    elif kind == "output_recorded":
         required = _EVENT_FIELDS | {"quantity"}
     elif kind == "material_consumed":
         required = _EVENT_FIELDS | _MATERIAL_EVENT_FIELDS
@@ -425,6 +460,15 @@ def _validate_event(
             raise TrialValidationError(f"{field}.outputKind is unsupported.")
         if "shiftRef" in event:
             _text(event["shiftRef"], f"{field}.shiftRef", maximum=80)
+    elif kind == "job_closed":
+        if subject_id not in job_ids:
+            raise TrialValidationError(f"{field} references an unknown job.")
+        _text(event["shiftRef"], f"{field}.shiftRef", maximum=80)
+        _integer(
+            event["remainingQuantity"],
+            f"{field}.remainingQuantity",
+            minimum=1,
+        )
     elif kind == "material_consumed":
         if subject_id not in job_ids:
             raise TrialValidationError(f"{field} references an unknown job.")
@@ -707,6 +751,7 @@ def _validate_job_history(
             for event in events
             if event["kind"]
             in {
+                "job_closed",
                 "output_recorded",
                 "material_consumed",
                 "quality_hold_placed",
@@ -726,6 +771,108 @@ def _validate_job_history(
         ):
             raise TrialValidationError(
                 f"jobs[{index}] material use timestamp cannot predate its creation event."
+            )
+
+
+def _validate_job_closure_history(
+    jobs: Sequence[dict[str, Any]],
+    events: Sequence[dict[str, Any]],
+) -> None:
+    for index, job in enumerate(jobs):
+        close_events = [
+            event
+            for event in events
+            if event["kind"] == "job_closed" and event["subjectId"] == job["id"]
+        ]
+        closure = job.get("closure")
+        if closure is None:
+            if close_events:
+                raise TrialValidationError(
+                    f"jobs[{index}] has a close event without closure proof."
+                )
+            continue
+        if len(close_events) != 1 or close_events[0]["actionId"] != closure["actionId"]:
+            raise TrialValidationError(
+                f"jobs[{index}] closure must be backed by exactly one event."
+            )
+        event = close_events[0]
+        expected_closure = {
+            "actionId": event["actionId"],
+            "closedAt": event["createdAt"],
+            "closedBy": event["actor"],
+            "reason": event["reason"],
+            "evidenceReference": event["evidenceReference"],
+            "shiftRef": event["shiftRef"],
+            "remainingUnits": event["remainingQuantity"],
+        }
+        if closure != expected_closure:
+            raise TrialValidationError(
+                f"jobs[{index}] closure does not match its immutable event."
+            )
+        if event["summary"] != (
+            f"Closed {job['product']} short with "
+            f"{closure['remainingUnits']} units remaining"
+        ):
+            raise TrialValidationError(
+                f"jobs[{index}] close summary is not canonical."
+            )
+        close_index = events.index(event)
+        creation_event = next(
+            (
+                candidate
+                for candidate in events
+                if candidate["kind"] == "job_created"
+                and candidate["subjectId"] == job["id"]
+            ),
+            None,
+        )
+        if creation_event is not None and (
+            close_index >= events.index(creation_event)
+            or datetime.fromisoformat(event["createdAt"].replace("Z", "+00:00"))
+            < datetime.fromisoformat(
+                creation_event["createdAt"].replace("Z", "+00:00")
+            )
+        ):
+            raise TrialValidationError(
+                f"jobs[{index}] closure predates job creation."
+            )
+        if any(
+            event_index < close_index
+            and candidate["subjectId"] == job["id"]
+            and candidate["kind"]
+            in {"output_recorded", "material_consumed", "quality_hold_placed"}
+            for event_index, candidate in enumerate(events)
+        ):
+            raise TrialValidationError(
+                f"jobs[{index}] has output, material use, or a new quality hold "
+                "after closure."
+            )
+        closed_at = datetime.fromisoformat(event["createdAt"].replace("Z", "+00:00"))
+        if any(
+            event_index < close_index
+            and candidate["subjectId"] == job["id"]
+            and datetime.fromisoformat(
+                candidate["createdAt"].replace("Z", "+00:00")
+            )
+            < closed_at
+            for event_index, candidate in enumerate(events)
+        ):
+            raise TrialValidationError(
+                f"jobs[{index}] activity appended after closure predates the "
+                "close timestamp."
+            )
+        if any(
+            event_index > close_index
+            and candidate["subjectId"] == job["id"]
+            and candidate["kind"] != "job_created"
+            and datetime.fromisoformat(
+                candidate["createdAt"].replace("Z", "+00:00")
+            )
+            > closed_at
+            for event_index, candidate in enumerate(events)
+        ):
+            raise TrialValidationError(
+                f"jobs[{index}] closure timestamp contradicts earlier activity."
             )
 
 
@@ -964,6 +1111,7 @@ def validate_production_state(value: object) -> dict[str, Any]:
         )
 
     _validate_job_history(jobs, events)
+    _validate_job_closure_history(jobs, events)
     _validate_output_history(jobs, events)
     _validate_material_history(jobs, events)
     _validate_quality_hold_history(jobs, events)
@@ -1074,6 +1222,8 @@ def _validate_output_recorded(
             "new output events require one canonical shift reference."
         )
     before, after = _one_changed(current["jobs"], next_state["jobs"], "jobs")
+    if "closure" in before:
+        raise TrialValidationError("closed Production jobs cannot receive output.")
     quantity = event["quantity"]
     if event["subjectId"] != before["id"]:
         raise TrialValidationError(
@@ -1105,7 +1255,7 @@ def _validate_material_consumed(
     )
     if job is None:
         raise TrialValidationError("material use must reference one existing job.")
-    if job["output"] + job.get("scrap", 0) >= job["target"]:
+    if "closure" in job or job["output"] + job.get("scrap", 0) >= job["target"]:
         raise TrialValidationError("material use can only be recorded for an active job.")
     _, quantity_text = _material_quantity(
         event["quantity"],
@@ -1118,6 +1268,41 @@ def _validate_material_consumed(
     )
     if event["summary"] != expected_summary:
         raise TrialValidationError("material use event summary is not canonical.")
+
+
+def _validate_job_closed(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+    event: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "issues", "machines")
+    before, after = _one_changed(current["jobs"], next_state["jobs"], "jobs")
+    remaining = before["target"] - before["output"] - before.get("scrap", 0)
+    if "closure" in before or remaining < 1:
+        raise TrialValidationError("only an unfinished open job can close short.")
+    closure = {
+        "actionId": event["actionId"],
+        "closedAt": event["createdAt"],
+        "closedBy": event["actor"],
+        "reason": event["reason"],
+        "evidenceReference": event["evidenceReference"],
+        "shiftRef": event["shiftRef"],
+        "remainingUnits": event["remainingQuantity"],
+    }
+    if event["subjectId"] != before["id"]:
+        raise TrialValidationError("job close event must reference the one changed job.")
+    if event["remainingQuantity"] != remaining:
+        raise TrialValidationError(
+            "job close must freeze the exact remaining quantity."
+        )
+    if after != {**before, "closure": closure}:
+        raise TrialValidationError(
+            "job close may add only exact command evidence to one job."
+        )
+    if event["summary"] != (
+        f"Closed {before['product']} short with {remaining} units remaining"
+    ):
+        raise TrialValidationError("job close summary is not canonical.")
 
 
 def _validate_job_created(
@@ -1134,9 +1319,15 @@ def _validate_job_created(
             "production.job.created must prepend exactly one job."
         )
     job = next_state["jobs"][0]
-    if job["output"] != 0 or "scrap" in job or "qualityHold" in job:
+    if (
+        job["output"] != 0
+        or "scrap" in job
+        or "qualityHold" in job
+        or "closure" in job
+    ):
         raise TrialValidationError(
-            "a new Production job must begin at zero good and scrap output without a quality hold."
+            "a new Production job must begin at zero good and scrap output "
+            "without a quality hold or closure."
         )
     if event["subjectId"] != job["id"]:
         raise TrialValidationError("job creation event must reference the new job.")
@@ -1234,7 +1425,7 @@ def _validate_quality_hold_placed(
 ) -> None:
     _require_unchanged(current, next_state, "issues", "machines")
     before, after = _one_changed(current["jobs"], next_state["jobs"], "jobs")
-    if "qualityHold" in before:
+    if "qualityHold" in before or "closure" in before:
         raise TrialValidationError("only an unheld job can receive a quality hold.")
     quality_hold = {
         "actionId": event["actionId"],
@@ -1388,6 +1579,7 @@ _TRANSITION_VALIDATORS: dict[
     ],
 ] = {
     "production.job.created": _validate_job_created,
+    "production.job.closed": _validate_job_closed,
     "production.output.recorded": _validate_output_recorded,
     "production.material.consumed": _validate_material_consumed,
     "production.issue.opened": _validate_issue_opened,
@@ -1424,6 +1616,7 @@ def reduce_production_state(
             or next_state["jobs"][0]["output"] != 0
             or "scrap" in next_state["jobs"][0]
             or "qualityHold" in next_state["jobs"][0]
+            or "closure" in next_state["jobs"][0]
             or next_state["machines"][0]["state"] != "running"
         ):
             raise TrialValidationError(

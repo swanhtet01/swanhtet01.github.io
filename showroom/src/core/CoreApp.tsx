@@ -86,6 +86,7 @@ import {
   LEGACY_PRODUCTION_KEYS,
   PRODUCTION_KEY,
   buildProductionShiftHandoff,
+  closeProductionJob,
   createEmptyProduction,
   endProductionDowntime,
   formatProductionShiftHandoff,
@@ -202,6 +203,7 @@ type ActionKind =
   | 'purchase_order_cancel'
   | 'daily_close'
   | 'production_job'
+  | 'production_job_close'
   | 'production_output'
   | 'production_scrap'
   | 'production_material'
@@ -3052,6 +3054,7 @@ function StockMovementHistory({ movements }: { movements: CommerceStockMovement[
 
 const productionEventLabels: Record<ProductionEvent['kind'], string> = {
   job_created: 'Job created',
+  job_closed: 'Job closed short',
   output_recorded: 'Output recorded',
   material_consumed: 'Material used',
   issue_opened: 'Issue opened',
@@ -3093,7 +3096,7 @@ function ProductionEventHistory({ events }: { events: ProductionEvent[] }) {
     {visibleEvents.length ? <div className="action-history-list">{visibleEvents.map((event) => <article key={event.id}>
       <div>
         <strong>{event.kind === 'output_recorded' ? event.outputKind === 'scrap' ? 'Scrap recorded' : 'Good output recorded' : productionEventLabels[event.kind]} - {event.summary}</strong>
-        <small>{event.subjectId} - {event.actionId} - {event.actor}{event.kind === 'output_recorded' ? ` - Shift: ${event.shiftRef ?? 'Unassigned (legacy)'}` : event.kind === 'material_consumed' ? ` - Shift: ${event.shiftRef} - ${event.quantity} ${event.materialUnit} ${event.materialRef}${event.materialLot ? ` - Lot: ${event.materialLot}` : ''}` : ''}</small>
+        <small>{event.subjectId} - {event.actionId} - {event.actor}{event.kind === 'output_recorded' ? ` - Shift: ${event.shiftRef ?? 'Unassigned (legacy)'}` : event.kind === 'material_consumed' ? ` - Shift: ${event.shiftRef} - ${event.quantity} ${event.materialUnit} ${event.materialRef}${event.materialLot ? ` - Lot: ${event.materialLot}` : ''}` : event.kind === 'job_closed' ? ` - Shift: ${event.shiftRef} - ${event.remainingQuantity} not produced` : ''}</small>
         <p>{event.reason} - Evidence: {event.evidenceReference}</p>
       </div>
       <small>{formatTime(event.createdAt)}</small>
@@ -3107,14 +3110,14 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const [, setActions] = useStoredState<AccountableAction[]>(ACTION_KEY, [], normalizeActions)
   const [pendingAction, setPendingAction] = useState<PendingAccountableAction | null>(null)
   const [jobId, setJobId] = useState(production.jobs[0]?.id ?? '')
-  const [holdJobId, setHoldJobId] = useState(production.jobs.find((job) => !job.qualityHold)?.id ?? '')
+  const [holdJobId, setHoldJobId] = useState(production.jobs.find((job) => !job.qualityHold && !job.closure)?.id ?? '')
   const [handoffShiftRef, setHandoffShiftRef] = useState('')
   const [shiftHandoff, setShiftHandoff] = useState<ProductionShiftHandoff | null>(null)
   const [quantity, setQuantity] = useState(1)
   const [outputKind, setOutputKind] = useState<ProductionOutputKind>('good')
   const [shiftRef, setShiftRef] = useState('')
   const [materialDraft, setMaterialDraft] = useState({
-    jobId: production.jobs.find((job) => job.output + (job.scrap ?? 0) < job.target)?.id ?? '',
+    jobId: production.jobs.find((job) => !job.closure && job.output + (job.scrap ?? 0) < job.target)?.id ?? '',
     materialRef: '',
     materialLot: '',
     quantity: '1',
@@ -3156,11 +3159,11 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const resolvedIssues = production.issues.filter((issue) => issue.status === 'resolved')
   const urgentIssueCount = openIssues.filter((issue) => issue.severity === 'critical' || issue.severity === 'high').length
   const heldJobs = production.jobs.filter((job) => Boolean(job.qualityHold))
-  const holdableJobs = production.jobs.filter((job) => !job.qualityHold)
+  const holdableJobs = production.jobs.filter((job) => !job.qualityHold && !job.closure)
   const selectedHoldJobId = holdableJobs.some((job) => job.id === holdJobId) ? holdJobId : holdableJobs[0]?.id ?? ''
   const selectedHoldJob = holdableJobs.find((job) => job.id === selectedHoldJobId)
-  const activeJobs = production.jobs.filter((job) => job.output + (job.scrap ?? 0) < job.target)
-  const completedJobs = production.jobs.filter((job) => job.output + (job.scrap ?? 0) >= job.target)
+  const activeJobs = production.jobs.filter((job) => !job.closure && job.output + (job.scrap ?? 0) < job.target)
+  const completedJobs = production.jobs.filter((job) => Boolean(job.closure) || job.output + (job.scrap ?? 0) >= job.target)
   const selectedJobId = activeJobs.some((job) => job.id === jobId) ? jobId : activeJobs[0]?.id ?? ''
   const selectedJob = activeJobs.find((job) => job.id === selectedJobId)
   const selectedRemaining = selectedJob ? selectedJob.target - selectedJob.output - (selectedJob.scrap ?? 0) : 0
@@ -3362,6 +3365,38 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
           : recordProductionOutput(current, recordedJobId, recordedQuantity, recordedShiftRef, productionActionProof(record)))
       },
     })
+  }
+
+  function closeSelectedJobShort(trigger: HTMLButtonElement) {
+    const recordedShiftRef = shiftRef.trim()
+    if (!recordedShiftRef || recordedShiftRef.length > 80) return setNotice('Enter a shift reference of 1 to 80 characters before closing a job short.')
+    if (!selectedJob) return setNotice('Choose an active job before reviewing a short close.')
+    const recordedJobId = selectedJob.id
+    const expectedRevision = production.revision
+    const expectedGood = selectedJob.output
+    const expectedScrap = selectedJob.scrap ?? 0
+    const expectedRemaining = selectedJob.target - expectedGood - expectedScrap
+    if (expectedRemaining < 1) return setNotice(`${recordedJobId} has no remaining units to close short.`)
+    setShiftRef(recordedShiftRef)
+    queueAction({
+      kind: 'production_job_close',
+      subjectId: recordedJobId,
+      summary: `Close ${recordedJobId} short · ${recordedShiftRef}`,
+      before: `${expectedGood.toLocaleString()} good · ${expectedScrap.toLocaleString()} scrap · ${expectedRemaining.toLocaleString()} remaining`,
+      after: `Closed short · ${expectedRemaining.toLocaleString()} not produced · target and output unchanged${selectedJob.qualityHold ? ' · quality hold remains' : ''}`,
+      apply: async (record) => {
+        await mutateProduction('production.job.closed', record.commandId, productionActionProof(record), (current) => {
+          const currentJob = current.jobs.find((candidate) => candidate.id === recordedJobId)
+          if (current.revision !== expectedRevision
+            || !currentJob
+            || currentJob.closure
+            || currentJob.output !== expectedGood
+            || (currentJob.scrap ?? 0) !== expectedScrap
+            || currentJob.target - currentJob.output - (currentJob.scrap ?? 0) !== expectedRemaining) return null
+          return closeProductionJob(current, recordedJobId, recordedShiftRef, productionActionProof(record))
+        })
+      },
+    }, trigger)
   }
 
   function recordMaterialUse(event: FormEvent) {
@@ -3642,7 +3677,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     {productionBoundary}
     <div className="split-workspace production-view">
       <section className="core-panel job-panel">
-        <div className="panel-head"><div><span className="core-eyebrow">Plant plan</span><h2>Jobs to finish</h2></div><span className="panel-note">{activeJobs.length} active · {completedJobs.length} completed</span></div>
+        <div className="panel-head"><div><span className="core-eyebrow">Plant plan</span><h2>Jobs to finish</h2></div><span className="panel-note">{activeJobs.length} active · {completedJobs.length} finished</span></div>
         <JobList jobs={activeJobs} />
         <CompletedJobHistory jobs={completedJobs} />
         <details className="compact-disclosure catalog-disclosure">
@@ -3663,8 +3698,11 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
           <div className="form-row"><label>Shift reference<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} maxLength={80} name="plant-output-shift-reference" placeholder={shiftReferencePlaceholder()} required value={shiftRef} onChange={(event) => setShiftRef(event.target.value)} /></label><label>{outputKind === 'scrap' ? 'Scrap units' : 'Good units'}<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} max={selectedRemaining} min="1" name="plant-output-quantity" step="1" type="number" value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} /></label></div>
           {selectedJob?.qualityHold ? <p className="form-notice" role="alert">QUALITY HOLD · Held by {selectedJob.qualityHold.heldBy}. Recording a result does not release this hold; verify the hold and evidence before review.</p> : null}
           <p className="form-notice" role="status">{canonicalShiftRef && canonicalShiftRef.length <= 80 ? `This shift: ${currentShiftOutput.goodUnits.toLocaleString()} good · ${currentShiftOutput.scrapUnits.toLocaleString()} scrap across ${currentShiftOutput.entryCount} ${currentShiftOutput.entryCount === 1 ? 'entry' : 'entries'}.` : 'Enter a shift reference to see its recorded subtotal.'}</p>
-          <button className="core-button primary" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > selectedRemaining || selectedRemaining < 1 || !canonicalShiftRef || canonicalShiftRef.length > 80} type="submit">Review {outputKind === 'scrap' ? 'scrap' : 'good output'}</button>
-          <p className="panel-copy">{selectedJob ? `${selectedJob.id} · ${selectedJob.product} · ${selectedJob.line} · ${selectedJob.output.toLocaleString()} good · ${(selectedJob.scrap ?? 0).toLocaleString()} scrap · ${selectedRemaining.toLocaleString()} left.` : 'Add or choose an active job.'} Results are append-only in this trial; verify the job, result, and quantity before review.</p>
+          <div className="form-actions">
+            <button className="core-button primary" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > selectedRemaining || selectedRemaining < 1 || !canonicalShiftRef || canonicalShiftRef.length > 80} type="submit">Review {outputKind === 'scrap' ? 'scrap' : 'good output'}</button>
+            <button aria-describedby="plant-short-close-boundary" className="core-button" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob || selectedRemaining < 1 || !canonicalShiftRef || canonicalShiftRef.length > 80} onClick={(event) => closeSelectedJobShort(event.currentTarget)} type="button">Review short close</button>
+          </div>
+          <p className="panel-copy" id="plant-short-close-boundary">{selectedJob ? `${selectedJob.id} · ${selectedJob.product} · ${selectedJob.line} · ${selectedJob.output.toLocaleString()} good · ${(selectedJob.scrap ?? 0).toLocaleString()} scrap · ${selectedRemaining.toLocaleString()} left.` : 'Add or choose an active job.'} Results are append-only. Short close ends the selected job without changing its target, output, hold, inventory, costing, or accounting.</p>
         </form>
         <details className="compact-disclosure production-history">
           <summary>Material use <span>{materialEntries.length}</span></summary>
@@ -3784,14 +3822,14 @@ function JobList({ jobs }: { jobs: ProductionJob[] }) {
     const scrap = job.scrap ?? 0
     const accounted = job.output + scrap
     const progress = Math.min(100, Math.round((accounted / job.target) * 100))
-    return <article key={job.id}><div><span>{job.id} · {job.line}{job.qualityHold ? ' · QUALITY HOLD' : ''}</span><strong>{job.product}</strong>{job.qualityHold ? <small>Held by {job.qualityHold.heldBy} · Evidence: {job.qualityHold.evidenceReference}</small> : null}</div><div className="job-progress"><span><i style={{ width: `${progress}%` }} /></span><small>{job.output.toLocaleString()} good · {scrap.toLocaleString()} scrap · {accounted.toLocaleString()} / {job.target.toLocaleString()}</small></div></article>
+    return <article key={job.id}><div><span>{job.id} · {job.line}{job.qualityHold ? ' · QUALITY HOLD' : ''}{job.closure ? ' · CLOSED SHORT' : ''}</span><strong>{job.product}</strong>{job.closure ? <small>Closed {formatIssueDue(job.closure.closedAt)} by {job.closure.closedBy} · Shift {job.closure.shiftRef} · {job.closure.remainingUnits.toLocaleString()} not produced</small> : null}{job.qualityHold ? <small>Held by {job.qualityHold.heldBy} · Evidence: {job.qualityHold.evidenceReference}</small> : null}</div><div className="job-progress"><span><i style={{ width: `${progress}%` }} /></span><small>{job.output.toLocaleString()} good · {scrap.toLocaleString()} scrap · {accounted.toLocaleString()} / {job.target.toLocaleString()}{job.closure ? ` · ${job.closure.remainingUnits.toLocaleString()} closed short` : ''}</small></div></article>
   })}</div>
 }
 
 function CompletedJobHistory({ jobs }: { jobs: ProductionJob[] }) {
   if (!jobs.length) return null
   return <details className="compact-disclosure production-history">
-    <summary>Completed jobs <span>{jobs.length}</span></summary>
+    <summary>Finished jobs <span>{jobs.length}</span></summary>
     <JobList jobs={jobs.slice(0, 8)} />
     {jobs.length > 8 ? <p>Showing the latest 8 completed jobs.</p> : null}
   </details>
@@ -3849,7 +3887,7 @@ function QualityHoldList({ disabled, jobs, onRelease }: { disabled: boolean; job
 function ShiftHandoffView({ handoff, onCopy }: { handoff: ProductionShiftHandoff; onCopy: () => void }) {
   const visibleMaterialEntries = handoff.materialEntries.slice(0, 8)
   return <div>
-    <p className="form-notice" role="status">{handoff.shiftRef} · revision {handoff.sourceRevision} · {handoff.shiftOutput.goodUnits.toLocaleString()} good · {handoff.shiftOutput.scrapUnits.toLocaleString()} scrap · {handoff.materialTotals.length} material totals · {handoff.unfinishedJobs.length} unfinished · {handoff.activeHolds.length} held · {handoff.priorityProblems.length} critical/high.</p>
+    <p className="form-notice" role="status">{handoff.shiftRef} · revision {handoff.sourceRevision} · {handoff.shiftOutput.goodUnits.toLocaleString()} good · {handoff.shiftOutput.scrapUnits.toLocaleString()} scrap · {handoff.materialTotals.length} material totals · {handoff.shortCloses.length} closed short · {handoff.unfinishedJobs.length} unfinished · {handoff.activeHolds.length} held · {handoff.priorityProblems.length} critical/high.</p>
     <details className="compact-disclosure production-history">
       <summary>Shift entries <span>{handoff.shiftEntries.length}</span></summary>
       <div className="issue-list">
@@ -3875,6 +3913,16 @@ function ShiftHandoffView({ handoff, onCopy }: { handoff: ProductionShiftHandoff
         <div><strong>{entry.quantity.toLocaleString(undefined, { maximumFractionDigits: 3 })} {entry.materialUnit} · {entry.materialRef}{entry.materialLot ? ` · lot ${entry.materialLot}` : ''}</strong><small style={wrappedIssueDetail}>{entry.jobId} · {entry.product} · {formatIssueDue(entry.recordedAt)} · {entry.recordedBy}</small><small style={wrappedIssueDetail}>Reason: {entry.reason}</small><small style={wrappedIssueDetail}>Evidence: {entry.evidenceReference} · Action: {entry.actionId}</small></div>
       </article>)}</div></> : null}
       {handoff.materialEntries.length > visibleMaterialEntries.length ? <p className="panel-copy">Showing the latest {visibleMaterialEntries.length} of {handoff.materialEntries.length} entries. Copy handoff retains every attributed entry.</p> : null}
+    </details>
+    <details className="compact-disclosure production-history">
+      <summary>Closed short <span>{handoff.shortCloses.length}</span></summary>
+      <div className="issue-list">
+        {handoff.shortCloses.map((entry) => <article key={entry.actionId}>
+          <span aria-hidden="true" className="issue-mark resolved">C</span>
+          <div><strong>{entry.product} · {entry.jobId}</strong><small style={wrappedIssueDetail}>{entry.goodUnits.toLocaleString()} good · {entry.scrapUnits.toLocaleString()} scrap · {entry.remainingUnits.toLocaleString()} not produced</small><small style={wrappedIssueDetail}>Closed {formatIssueDue(entry.recordedAt)} by {entry.recordedBy} · Shift {entry.shiftRef}</small><small style={wrappedIssueDetail}>Reason: {entry.reason}</small><small style={wrappedIssueDetail}>Evidence: {entry.evidenceReference} · Action: {entry.actionId}</small></div>
+        </article>)}
+        {!handoff.shortCloses.length ? <Empty>No job was closed short in this shift.</Empty> : null}
+      </div>
     </details>
     <details className="compact-disclosure production-history">
       <summary>Unfinished jobs <span>{handoff.unfinishedJobs.length}</span></summary>

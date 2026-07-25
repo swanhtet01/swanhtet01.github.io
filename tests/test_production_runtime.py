@@ -178,6 +178,41 @@ def material_state(
     return state
 
 
+def closed_job_state(
+    current: dict[str, object],
+    evidence: dict[str, str],
+    *,
+    shift_ref: str = "2026-07-24 Day",
+) -> dict[str, object]:
+    state = deepcopy(current)
+    job = state["jobs"][0]
+    remaining = job["target"] - job["output"] - job.get("scrap", 0)
+    job["closure"] = {
+        "actionId": evidence["actionId"],
+        "closedAt": evidence["capturedAt"],
+        "closedBy": evidence["actor"],
+        "reason": evidence["reason"],
+        "evidenceReference": evidence["evidenceReference"],
+        "shiftRef": shift_ref,
+        "remainingUnits": remaining,
+    }
+    state["revision"] += 1
+    state["events"] = [
+        production_event(
+            evidence,
+            kind="job_closed",
+            subject_id=job["id"],
+            summary=(
+                f"Closed {job['product']} short with {remaining} units remaining"
+            ),
+            shiftRef=shift_ref,
+            remainingQuantity=remaining,
+        ),
+        *state["events"],
+    ]
+    return state
+
+
 def held_job_state(
     current: dict[str, object],
     evidence: dict[str, str],
@@ -397,6 +432,7 @@ class ProductionRuntimeTests(unittest.TestCase):
         expected_events = {
             "production.workspace.initialized",
             "production.job.created",
+            "production.job.closed",
             "production.output.recorded",
             "production.material.consumed",
             "production.issue.opened",
@@ -427,6 +463,168 @@ class ProductionRuntimeTests(unittest.TestCase):
             len(validate_production_state(retained_history)["events"]),
             501,
         )
+
+    def test_short_close_is_evidence_backed_terminal_and_fail_closed(self) -> None:
+        current = output_state(
+            starting_workspace(target=100),
+            40,
+            action_evidence("ACT-JOB-CLOSE-OUTPUT-BASE", captured_at=NOW),
+        )
+        close_evidence = action_evidence("ACT-JOB-CLOSE", captured_at=LATER)
+        proposed = closed_job_state(current, close_evidence, shift_ref="Day A")
+        accepted = apply_event(
+            current,
+            "production.job.closed",
+            proposed,
+            close_evidence,
+        )
+
+        self.assertEqual(
+            accepted["jobs"][0]["closure"],
+            {
+                "actionId": "ACT-JOB-CLOSE",
+                "closedAt": LATER,
+                "closedBy": ACTOR,
+                "reason": close_evidence["reason"],
+                "evidenceReference": close_evidence["evidenceReference"],
+                "shiftRef": "Day A",
+                "remainingUnits": 60,
+            },
+        )
+        self.assertEqual(accepted["events"][0]["remainingQuantity"], 60)
+        self.assertEqual(
+            accepted["events"][0]["summary"],
+            "Closed Customer batch 001 short with 60 units remaining",
+        )
+
+        output_evidence = action_evidence("ACT-AFTER-CLOSE-OUTPUT", captured_at=LATEST)
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                accepted,
+                "production.output.recorded",
+                output_state(accepted, 1, output_evidence),
+                output_evidence,
+            )
+
+        material_evidence = action_evidence(
+            "ACT-AFTER-CLOSE-MATERIAL",
+            captured_at=LATEST,
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                accepted,
+                "production.material.consumed",
+                material_state(accepted, 1, material_evidence),
+                material_evidence,
+            )
+
+        forged_hold_evidence = action_evidence(
+            "ACT-AFTER-CLOSE-HOLD",
+            captured_at=LATEST,
+        )
+        with self.assertRaises(TrialValidationError):
+            validate_production_state(
+                held_job_state(accepted, forged_hold_evidence)
+            )
+
+        held_base = output_state(
+            starting_workspace(target=100),
+            10,
+            action_evidence("ACT-HELD-CLOSE-OUTPUT", captured_at=NOW),
+        )
+        hold_evidence = action_evidence(
+            "ACT-HELD-CLOSE-HOLD",
+            captured_at=LATER,
+        )
+        held = apply_event(
+            held_base,
+            "production.quality_hold.placed",
+            held_job_state(held_base, hold_evidence),
+            hold_evidence,
+        )
+        held_close_evidence = action_evidence(
+            "ACT-HELD-CLOSE",
+            captured_at=LATEST,
+        )
+        held_closed = apply_event(
+            held,
+            "production.job.closed",
+            closed_job_state(held, held_close_evidence),
+            held_close_evidence,
+        )
+        backdated_release_evidence = action_evidence(
+            "ACT-HELD-CLOSE-BACKDATED-RELEASE",
+            captured_at="2026-07-24T09:20:00.000Z",
+        )
+        with self.assertRaises(TrialValidationError):
+            validate_production_state(
+                released_job_state(held_closed, backdated_release_evidence)
+            )
+        release_evidence = action_evidence(
+            "ACT-HELD-CLOSE-RELEASE",
+            captured_at="2026-07-24T09:45:00.000Z",
+        )
+        released_after_close = apply_event(
+            held_closed,
+            "production.quality_hold.released",
+            released_job_state(held_closed, release_evidence),
+            release_evidence,
+        )
+        self.assertNotIn("qualityHold", released_after_close["jobs"][0])
+        self.assertEqual(
+            released_after_close["jobs"][0]["closure"]["actionId"],
+            "ACT-HELD-CLOSE",
+        )
+
+        duplicate_close = closed_job_state(
+            accepted,
+            action_evidence("ACT-JOB-CLOSE-SECOND", captured_at=LATEST),
+            shift_ref="Day B",
+        )
+        with self.assertRaises(TrialValidationError):
+            validate_production_state(duplicate_close)
+
+        tampered_remaining = deepcopy(accepted)
+        tampered_remaining["jobs"][0]["closure"]["remainingUnits"] = 59
+        tampered_remaining["events"][0]["remainingQuantity"] = 59
+        with self.assertRaises(TrialValidationError):
+            validate_production_state(tampered_remaining)
+
+        tampered_actor = deepcopy(accepted)
+        tampered_actor["jobs"][0]["closure"]["closedBy"] = "forged-operator"
+        with self.assertRaises(TrialValidationError):
+            validate_production_state(tampered_actor)
+
+        completed = output_state(
+            starting_workspace(target=40),
+            40,
+            action_evidence("ACT-JOB-CLOSE-COMPLETE-BASE", captured_at=NOW),
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                completed,
+                "production.job.closed",
+                closed_job_state(completed, close_evidence),
+                close_evidence,
+            )
+
+        prior_output_evidence = action_evidence(
+            "ACT-PRIOR-OUTPUT",
+            captured_at=LATER,
+        )
+        with_prior_output = output_state(
+            starting_workspace(target=100),
+            10,
+            prior_output_evidence,
+        )
+        backdated_close_evidence = action_evidence(
+            "ACT-BACKDATED-CLOSE",
+            captured_at=NOW,
+        )
+        with self.assertRaises(TrialValidationError):
+            validate_production_state(
+                closed_job_state(with_prior_output, backdated_close_evidence)
+            )
 
         initial = starting_workspace()
         evidence = action_evidence("ACT-INIT-REAL")
@@ -1891,6 +2089,32 @@ class ProductionRuntimeTests(unittest.TestCase):
                 "evidence": material_evidence,
             },
         )
+        close_evidence = action_evidence(
+            "ACT-STORE-JOB-CLOSE",
+            captured_at="2026-07-24T10:00:00.000Z",
+        )
+        close_next_state = closed_job_state(
+            dict(material_recorded.state),
+            close_evidence,
+            shift_ref="2026-07-24 Day",
+        )
+        close_command_id = str(uuid4())
+        job_closed = store.apply_command(
+            principal,
+            command_id=close_command_id,
+            surface="production",
+            event_type="production.job.closed",
+            expected_version=material_recorded.version,
+            payload={"state": close_next_state, "evidence": close_evidence},
+        )
+        close_replay = store.apply_command(
+            principal,
+            command_id=close_command_id,
+            surface="production",
+            event_type="production.job.closed",
+            expected_version=material_recorded.version,
+            payload={"state": close_next_state, "evidence": close_evidence},
+        )
 
         self.assertEqual(initialized.version, 1)
         self.assertTrue(replay.idempotent_replay)
@@ -1899,9 +2123,30 @@ class ProductionRuntimeTests(unittest.TestCase):
         self.assertEqual(recorded.version, 3)
         self.assertEqual(material_recorded.version, 4)
         self.assertTrue(material_replay.idempotent_replay)
+        self.assertEqual(job_closed.version, 5)
+        self.assertTrue(close_replay.idempotent_replay)
+        self.assertEqual(job_closed.state["jobs"][0]["closure"]["closedBy"], ACTOR)
         stored = store.get_state(principal, "production")
         self.assertEqual(stored.updated_by, principal.actor_id)
-        self.assertEqual(stored.state, material_next_state)
+        self.assertEqual(stored.state, close_next_state)
+
+        conflicting_close_state = closed_job_state(
+            dict(material_recorded.state),
+            close_evidence,
+            shift_ref="Changed shift",
+        )
+        with self.assertRaises(TrialIdempotencyConflict):
+            store.apply_command(
+                principal,
+                command_id=close_command_id,
+                surface="production",
+                event_type="production.job.closed",
+                expected_version=material_recorded.version,
+                payload={
+                    "state": conflicting_close_state,
+                    "evidence": close_evidence,
+                },
+            )
 
         conflicting_job_state = deepcopy(job_state)
         conflicting_job_state["jobs"][0]["target"] = 51
