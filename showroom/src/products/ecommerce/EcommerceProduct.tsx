@@ -262,6 +262,7 @@ export function EcommerceProduct() {
       setDraftReadStatus(latest.status)
       setDraftIssue(latest.error)
       setMissingSelectionReviewed(false)
+      setHandoffConfirmed(false)
       setDraftNotice('Saved storefront setup changed in another tab. Current edits were kept; Discard loads the latest saved version.')
     }
     window.addEventListener('storage', refreshSavedDraft)
@@ -357,6 +358,7 @@ export function EcommerceProduct() {
 
   function toggleSku(sku: string) {
     setDraftNotice('')
+    setHandoffConfirmed(false)
     if (missingSavedSkus.length) setMissingSelectionReviewed(true)
     setSelectedSkus((current) => (
       current.includes(sku)
@@ -384,6 +386,7 @@ export function EcommerceProduct() {
         ? sku
         : view.availableSku
     ))
+    setHandoffConfirmed(false)
     setMissingSelectionReviewed(false)
     if (!replaceEdits) return
     setStoreName(view.fields.storeName)
@@ -483,6 +486,8 @@ export function EcommerceProduct() {
     try {
       if (managedIdentity) {
         await saveManagedStorefront(managedIdentity)
+        setHandoffConfirmed(false)
+        showMobileWorkspace('preview')
         return
       }
       const saved = await saveStorefrontDraft(
@@ -497,7 +502,9 @@ export function EcommerceProduct() {
       setSummary(saved.summary)
       setSelectedSkus(saved.selectedSkus)
       setMissingSelectionReviewed(false)
+      setHandoffConfirmed(false)
       setDraftNotice(`Storefront saved on this device as revision ${saved.revision}.`)
+      showMobileWorkspace('preview')
     } catch (error) {
       if (managedIdentity && error instanceof ManagedTrialError && error.code === 'trial_version_conflict') {
         try {
@@ -537,6 +544,7 @@ export function EcommerceProduct() {
     setSummary(savedDraft?.summary ?? DEFAULT_STORE_SUMMARY)
     setSelectedSkus(selected)
     setMissingSelectionReviewed(false)
+    setHandoffConfirmed(false)
     setDraftNotice(savedDraft
       ? savedSelectionReconciliation.missingSkus.length === 0
         ? 'Unsaved storefront changes were discarded.'
@@ -545,7 +553,10 @@ export function EcommerceProduct() {
   }
 
   function openRequestFor(sku: string) {
-    if (catalogHydrating) return
+    if (catalogHydrating || !savedDraftIsCurrent) {
+      setRequestNotice('Save this storefront before receiving a customer request.')
+      return
+    }
     setRequestSku(sku)
     setRequestOpen(true)
     setHandoffConfirmed(false)
@@ -559,8 +570,8 @@ export function EcommerceProduct() {
   async function createRequestReceipt(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!previewResult.preview || !digest || catalogHydrating || requestBusy) return
-    if (managedIdentity && !savedDraftIsCurrent) {
-      setRequestNotice('Save this storefront against the current Shop catalog before creating a managed request receipt.')
+    if (!savedDraftIsCurrent) {
+      setRequestNotice('Save this storefront before receiving a customer request.')
       return
     }
     if (!globalThis.crypto?.randomUUID) {
@@ -606,7 +617,7 @@ export function EcommerceProduct() {
   }
 
   async function sendToShopReview() {
-    if (!latestRequest || !previewResult.preview || !digest || !handoffConfirmed || handoffBusy) return
+    if (!latestRequestIsCurrent || !latestRequest || !previewResult.preview || !digest || !handoffConfirmed || handoffBusy) return
     setHandoffBusy(true)
     setRequestNotice('')
     try {
@@ -630,7 +641,7 @@ export function EcommerceProduct() {
   }
 
   async function retainInManagedInbox() {
-    if (!latestRequest || !handoffConfirmed || handoffBusy) return
+    if (!latestRequestIsCurrent || !latestRequest || !handoffConfirmed || handoffBusy) return
     setHandoffBusy(true)
     setRequestNotice('')
     try {
@@ -728,6 +739,10 @@ export function EcommerceProduct() {
     ? requestSku
     : previewResult.preview?.items[0]?.sku ?? ''
   const latestRequest = requestLedger.requests[0]
+  const latestRequestIsCurrent = Boolean(latestRequest
+    && savedDraftIsCurrent
+    && digest
+    && latestRequest.sourcePreviewDigest === digest)
 
   return (
     <div className="workspace-screen ecommerce-product">
@@ -760,11 +775,11 @@ export function EcommerceProduct() {
           <div className="ecommerce-copy-fields">
             <label>
               <span>Store name</span>
-              <input disabled={catalogHydrating || draftBusy} maxLength={60} onChange={(event) => { setStoreName(event.target.value); setDraftNotice('') }} value={storeName} />
+              <input disabled={catalogHydrating || draftBusy} maxLength={60} onChange={(event) => { setStoreName(event.target.value); setDraftNotice(''); setHandoffConfirmed(false) }} value={storeName} />
             </label>
             <label>
               <span>Short description</span>
-              <textarea disabled={catalogHydrating || draftBusy} maxLength={180} onChange={(event) => { setSummary(event.target.value); setDraftNotice('') }} rows={3} value={summary} />
+              <textarea disabled={catalogHydrating || draftBusy} maxLength={180} onChange={(event) => { setSummary(event.target.value); setDraftNotice(''); setHandoffConfirmed(false) }} rows={3} value={summary} />
             </label>
           </div>
 
@@ -897,13 +912,17 @@ export function EcommerceProduct() {
                       <b>{available ? 'Available' : 'Sold out'}</b>
                       <button
                         aria-controls="ecommerce-request-form"
-                        aria-label={available ? `Request ${item.name}` : `${item.name} is sold out`}
+                        aria-label={!available
+                          ? `${item.name} is sold out`
+                          : savedDraftIsCurrent
+                            ? `Request ${item.name}`
+                            : `Save storefront before requesting ${item.name}`}
                         className="storefront-request-button"
-                        disabled={!available || catalogHydrating}
+                        disabled={!available || catalogHydrating || !savedDraftIsCurrent}
                         onClick={() => openRequestFor(item.sku)}
                         type="button"
                       >
-                        {available ? 'Request' : 'Sold out'}
+                        {available ? savedDraftIsCurrent ? 'Request' : 'Save first' : 'Sold out'}
                       </button>
                     </article>
                     )
@@ -927,17 +946,19 @@ export function EcommerceProduct() {
             ref={requestPanelRef}
           >
             <summary>
-              <span><strong>Request an item</strong><small>Choose quantity and pickup or delivery</small></span>
-              <b>{requestLedger.requests.length ? `${requestLedger.requests.length} pending` : 'Start'}</b>
+              <span><strong>Request an item</strong><small>{savedDraftIsCurrent
+                ? 'Choose quantity and pickup or delivery'
+                : 'Save storefront before receiving requests'}</small></span>
+              <b>{requestLedger.requests.length ? `${requestLedger.requests.length} pending` : savedDraftIsCurrent ? 'Start' : 'Save first'}</b>
             </summary>
             <div className="ecommerce-request-body" id="ecommerce-request-form">
               <form onSubmit={(event) => void createRequestReceipt(event)}>
                 <label>
-                  <span>Customer reference</span>
+                  <span>{requestFulfilment === 'delivery' ? 'Delivery phone / area' : 'Pickup name / phone'}</span>
                   <input
                     maxLength={80}
                     onChange={(event) => setRequestCustomer(event.target.value)}
-                    placeholder="Name or counter reference"
+                    placeholder={requestFulfilment === 'delivery' ? 'e.g. 09… · Hlaing' : 'e.g. Ma Su · 09…'}
                     ref={requestCustomerRef}
                     required
                     value={requestCustomer}
@@ -960,7 +981,7 @@ export function EcommerceProduct() {
                     <option value="delivery">Delivery request</option>
                   </select>
                 </label>
-                <button className="core-button primary" disabled={!previewResult.preview || !digest || catalogHydrating || requestBusy} type="submit">
+                <button className="core-button primary" disabled={!savedDraftIsCurrent || !previewResult.preview || !digest || catalogHydrating || requestBusy} type="submit">
                   {requestBusy ? 'Recording…' : 'Create request'}
                 </button>
               </form>
@@ -976,16 +997,20 @@ export function EcommerceProduct() {
               ) : null}
               {latestRequest ? <>
                 <label className="website-intake-confirm">
-                  <input checked={handoffConfirmed} onChange={(event) => setHandoffConfirmed(event.target.checked)} type="checkbox" />
+                  <input checked={handoffConfirmed} disabled={!latestRequestIsCurrent || handoffBusy} onChange={(event) => setHandoffConfirmed(event.target.checked)} type="checkbox" />
                   <span>I reviewed the SKU, quantity, MMK price, and current availability.</span>
                 </label>
-                <button className="core-button primary" disabled={!handoffConfirmed || !digest || catalogHydrating || handoffBusy} onClick={() => void (managedIdentity ? retainInManagedInbox() : sendToShopReview())} type="button">
+                <button className="core-button primary" disabled={!latestRequestIsCurrent || !handoffConfirmed || !digest || catalogHydrating || handoffBusy} onClick={() => void (managedIdentity ? retainInManagedInbox() : sendToShopReview())} type="button">
                   {handoffBusy ? 'Checking…' : managedIdentity ? 'Save to Shop inbox' : 'Open draft in Shop'}
                 </button>
               </> : null}
-              <p className="form-notice" aria-live="polite">{requestNotice || (managedIdentity
-                ? 'Confirm the exact receipt, then retain it in the managed Shop inbox. It remains request intent only.'
-                : 'This local receipt is not a Shop order. Connect a managed workspace for shared, recoverable retention.')}</p>
+              <p className="form-notice" aria-live="polite">{latestRequest && !latestRequestIsCurrent
+                ? 'This receipt no longer matches the current saved storefront. Save changes and create a new request.'
+                : requestNotice || (!savedDraftIsCurrent
+                    ? 'Save this storefront before receiving a customer request.'
+                    : managedIdentity
+                      ? 'Confirm the exact receipt, then retain it in the managed Shop inbox. It remains request intent only.'
+                      : 'This local receipt is not a Shop order. Connect a managed workspace for shared, recoverable retention.')}</p>
             </div>
           </details>
 

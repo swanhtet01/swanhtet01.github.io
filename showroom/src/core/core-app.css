@@ -326,6 +326,7 @@ textarea { min-height: 72px; resize: vertical; }
 .order-submit-bar { flex: 0 0 auto; border-top: 1px solid var(--core-line); padding-top: 11px; background: var(--core-panel); }
 .order-entry-notice { flex: 0 0 auto; margin: 0; }
 .order-submit-bar .core-button { width: 100%; }
+.order-submit-bar[data-ecommerce-payment="true"] { display: grid; grid-template-columns: minmax(0,1fr) minmax(180px,.55fr); align-items: end; gap: 8px; }
 .commerce-order-form { gap: 8px; }
 .order-essential-fields { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); align-items: end; gap: 8px; }
 .order-options { overflow: hidden; border: 1px solid var(--core-line); border-radius: 10px; background: var(--core-panel-raised); }
@@ -337,6 +338,8 @@ textarea { min-height: 72px; resize: vertical; }
 .order-options[open] > summary { border-bottom: 1px solid var(--core-line); }
 .order-options[open] > summary::after { content: "−"; }
 .order-options-fields { padding: 11px 12px 12px; }
+.order-ecommerce-payment { grid-template-columns: auto minmax(0,1fr); align-items: center; gap: 8px; }
+.order-ecommerce-payment > span { color: var(--core-ink); }
 .order-entry-panel > .website-intake { border-color: var(--core-line); box-shadow: none; }
 .channel-intake-panel { display: grid; gap: 12px; }
 .channel-intake-heading { display: grid; gap: 4px; border-bottom: 1px solid var(--core-line); padding-bottom: 11px; }
@@ -870,6 +873,7 @@ textarea { min-height: 72px; resize: vertical; }
   .operations-toolbar-actions { min-width: 0; align-items: center; justify-content: space-between; overflow: visible; }
   .operations-toolbar-actions .view-tabs { min-width: 0; overflow-x: auto; }
   .form-row, .record-controls, .order-essential-fields { grid-template-columns: 1fr; }
+  .order-submit-bar[data-ecommerce-payment="true"] { grid-template-columns: 1fr; }
   .decision-dialog { inset: auto 0 0; width: 100%; max-height: 92svh; margin: 0 auto; border-radius: 10px 10px 0 0; padding: 15px; }
   .accountable-action-gate { inset: auto 0 0; width: 100%; max-height: 92svh; margin: 0 auto; border-radius: 16px 16px 0 0; padding: 18px; }
   .production-issue-dialog { inset: auto 0 0; width: 100%; max-height: 92svh; margin: 0 auto; border-radius: 16px 16px 0 0; padding: 18px; }

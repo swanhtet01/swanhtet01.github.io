@@ -2988,16 +2988,19 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
             </div>
           })}
           <button className="core-button compact" disabled={commerceControlsDisabled || manualOrderLineDrafts.length >= commerce.items.length || manualOrderLineDrafts.length >= 20} onClick={addOrderLine} type="button">Add item</button>
-          <details className="order-options">
+          {!preparedEcommerceDraft ? <details className="order-options">
             <summary><span>Channel and payment</span><small>{channel} · {payment}</small></summary>
             <div className="form-row order-options-fields">
               <label>Channel<select disabled={commerceControlsDisabled} value={channel} onChange={(event) => { setChannel(event.target.value); setPreparedChannelDraft(null); setPreparedEcommerceDraft(null) }}><option>Messenger</option><option>Viber</option><option>Phone</option><option>Website</option><option>Ecommerce</option><option>Walk-in</option></select></label>
               <label>Payment<select disabled={commerceControlsDisabled} value={payment} onChange={(event) => { setPayment(event.target.value); setPreparedChannelDraft(null) }}><option value="">Choose payment</option><option>KBZPay</option><option>WavePay</option><option>Cash on delivery</option><option>Cash</option><option>Card</option></select></label>
             </div>
-          </details>
+          </details> : null}
         </form>
         </div>
-        <div className="order-submit-bar"><button className="core-button primary" disabled={commerceControlsDisabled} form="commerce-manual-order-form" type="submit">Review order</button></div>
+        <div className="order-submit-bar" data-ecommerce-payment={preparedEcommerceDraft ? 'true' : 'false'}>
+          {preparedEcommerceDraft ? <label className="order-ecommerce-payment"><span>Payment</span><select disabled={commerceControlsDisabled} form="commerce-manual-order-form" required value={payment} onChange={(event) => { setPayment(event.target.value); setPreparedChannelDraft(null) }}><option value="">Choose payment</option><option>KBZPay</option><option>WavePay</option><option>Cash on delivery</option><option>Cash</option><option>Card</option></select></label> : null}
+          <button className="core-button primary" disabled={commerceControlsDisabled || (Boolean(preparedEcommerceDraft) && !payment)} form="commerce-manual-order-form" type="submit">{preparedEcommerceDraft && !payment ? 'Choose payment first' : 'Review order'}</button>
+        </div>
       </> : null}
     </dialog>
   <ClosedOrderHistory

@@ -324,15 +324,41 @@ if (!ecommerceSource.includes("useState<'setup' | 'preview'>('setup')")
 const directRequestStart = ecommerceSource.indexOf('function openRequestFor')
 const directRequestEnd = ecommerceSource.indexOf('async function createRequestReceipt', directRequestStart)
 const directRequestAction = ecommerceSource.slice(directRequestStart, directRequestEnd)
+const storefrontSaveStart = ecommerceSource.indexOf('async function saveCurrentStorefront')
+const storefrontSaveEnd = ecommerceSource.indexOf('function discardStorefrontChanges', storefrontSaveStart)
+const storefrontSaveAction = ecommerceSource.slice(storefrontSaveStart, storefrontSaveEnd)
+const storefrontSavePreviewAdvanceCount = (storefrontSaveAction.match(/showMobileWorkspace\('preview'\)/g) ?? []).length
+const managedStorefrontSave = storefrontSaveAction.indexOf('await saveManagedStorefront(managedIdentity)')
+const localStorefrontSave = storefrontSaveAction.indexOf('const saved = await saveStorefrontDraft(')
+const firstSavePreviewAdvance = storefrontSaveAction.indexOf("showMobileWorkspace('preview')")
+const lastSavePreviewAdvance = storefrontSaveAction.lastIndexOf("showMobileWorkspace('preview')")
 if (directRequestStart < 0
   || directRequestEnd < 0
+  || storefrontSaveStart < 0
+  || storefrontSaveEnd < 0
   || !ecommerceSource.includes('onClick={() => openRequestFor(item.sku)}')
   || !ecommerceSource.includes('aria-controls="ecommerce-request-form"')
-  || !ecommerceSource.includes('aria-label={available ? `Request ${item.name}`')
-  || !ecommerceSource.includes("disabled={!available || catalogHydrating}")
+  || !ecommerceSource.includes('Save storefront before requesting ${item.name}')
+  || !ecommerceSource.includes("disabled={!available || catalogHydrating || !savedDraftIsCurrent}")
   || !ecommerceSource.includes('requestCustomerRef.current?.focus')
   || !ecommerceSource.includes('open={requestOpen}')
-  || !ecommerceSource.includes('placeholder="Name or counter reference"')
+  || !ecommerceSource.includes("'Delivery phone / area' : 'Pickup name / phone'")
+  || !ecommerceSource.includes("'e.g. 09… · Hlaing' : 'e.g. Ma Su · 09…'")
+  || !ecommerceSource.includes('Save this storefront before receiving a customer request.')
+  || !ecommerceSource.includes('disabled={!savedDraftIsCurrent || !previewResult.preview')
+  || storefrontSavePreviewAdvanceCount !== 2
+  || managedStorefrontSave < 0
+  || localStorefrontSave < 0
+  || firstSavePreviewAdvance < managedStorefrontSave
+  || lastSavePreviewAdvance < localStorefrontSave
+  || !directRequestAction.includes('catalogHydrating || !savedDraftIsCurrent')
+  || !ecommerceSource.includes('const latestRequestIsCurrent = Boolean(latestRequest')
+  || !ecommerceSource.includes('latestRequest.sourcePreviewDigest === digest')
+  || !ecommerceSource.includes("setStoreName(event.target.value); setDraftNotice(''); setHandoffConfirmed(false)")
+  || !ecommerceSource.includes("setSummary(event.target.value); setDraftNotice(''); setHandoffConfirmed(false)")
+  || !ecommerceSource.includes('disabled={!latestRequestIsCurrent || handoffBusy}')
+  || !ecommerceSource.includes('disabled={!latestRequestIsCurrent || !handoffConfirmed')
+  || !ecommerceSource.includes('This receipt no longer matches the current saved storefront.')
   || !ecommerceSource.includes("useState('')")
   || ['createRequestReceipt', 'sendToShopReview', 'retainInManagedInbox', 'navigate(', 'saveManagedCommerceCommand', 'localStorage', 'sessionStorage', 'fetch('].some((marker) => directRequestAction.includes(marker))
   || !ecommerceCssSource.includes('.storefront-request-button')
@@ -349,6 +375,11 @@ if (!storefrontRequestSource.includes("supermega.ecommerce.order_request.v1")
   || !storefrontRequestSource.includes('storefrontRequestLedgerContains')
   || !storefrontRequestSource.includes('await storefrontPreviewDigest(preview) !== sourcePreviewDigest')
   || ['setItem(', 'removeItem(', 'fetch(', 'XMLHttpRequest', 'navigator.locks'].some((marker) => storefrontRequestSource.includes(marker))) fail('ecommerce_request_contract_missing_or_mutating')
+const ecommerceOrderSubmitStart = coreSource.indexOf('<div className="order-submit-bar" data-ecommerce-payment=')
+const ecommerceOrderSubmitEnd = coreSource.indexOf('</div>', ecommerceOrderSubmitStart)
+const ecommerceOrderSubmit = coreSource.slice(ecommerceOrderSubmitStart, ecommerceOrderSubmitEnd)
+const ecommercePaymentPosition = ecommerceOrderSubmit.indexOf('preparedEcommerceDraft ? <label className="order-ecommerce-payment">')
+const ecommerceReviewPosition = ecommerceOrderSubmit.indexOf('<button className="core-button primary"')
 if (!ecommerceConfirmSource.includes('storefrontRequestLedgerContains')
   || !ecommerceConfirmSource.includes('await storefrontPreviewDigest(preview)')
   || !ecommerceConfirmSource.includes('await storefrontPreviewDigest(currentPreview)')
@@ -364,6 +395,15 @@ if (!ecommerceConfirmSource.includes('storefrontRequestLedgerContains')
   || !ecommerceSource.includes('state: { ecommerceShopDraft: draft }')
   || !coreSource.includes('Ecommerce request')
   || !coreSource.includes('Choose how payment will be reviewed before preparing this order.')
+  || ecommerceOrderSubmitStart < 0
+  || ecommerceOrderSubmitEnd < 0
+  || ecommercePaymentPosition < 0
+  || ecommerceReviewPosition < ecommercePaymentPosition
+  || !ecommerceOrderSubmit.includes("data-ecommerce-payment={preparedEcommerceDraft ? 'true' : 'false'}")
+  || !ecommerceOrderSubmit.includes('form="commerce-manual-order-form" required value={payment}')
+  || !ecommerceOrderSubmit.includes("disabled={commerceControlsDisabled || (Boolean(preparedEcommerceDraft) && !payment)}")
+  || !ecommerceOrderSubmit.includes("preparedEcommerceDraft && !payment ? 'Choose payment first' : 'Review order'")
+  || !coreCssSource.includes('.order-ecommerce-payment')
   || !coreSource.includes("import('../products/ecommerce/ecommerce-shop-handoff')")
   || ['setItem(', 'removeItem(', 'localStorage', 'sessionStorage', 'fetch(', 'XMLHttpRequest', 'navigator.locks', 'convertCommerceWebsiteIntake', 'reserveCommerceOrder', 'mutateCommerceWorkspace'].some((marker) => ecommerceConfirmSource.includes(marker) || ecommerceHandoffSource.includes(marker))) fail('ecommerce_shop_handoff_contract_missing_or_mutating')
 if (!commerceSource.includes('recordCommerceStorefrontRequest')
