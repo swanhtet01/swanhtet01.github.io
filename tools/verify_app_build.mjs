@@ -476,11 +476,11 @@ const storefrontSaveAction = ecommerceSource.slice(storefrontSaveStart, storefro
 const finishStorefrontSetupStart = ecommerceSource.indexOf('function finishStorefrontSetup')
 const finishStorefrontSetupEnd = ecommerceSource.indexOf('function applyManagedView', finishStorefrontSetupStart)
 const finishStorefrontSetupAction = ecommerceSource.slice(finishStorefrontSetupStart, finishStorefrontSetupEnd)
-const storefrontSavePreviewAdvanceCount = (storefrontSaveAction.match(/showMobileWorkspace\('preview'\)/g) ?? []).length
+const storefrontSavePreviewAdvanceCount = (storefrontSaveAction.match(/showSavedStorefrontPreview\(\)/g) ?? []).length
 const managedStorefrontSave = storefrontSaveAction.indexOf('await saveManagedStorefront(managedIdentity)')
 const localStorefrontSave = storefrontSaveAction.indexOf('const saved = await saveStorefrontDraft(')
-const firstSavePreviewAdvance = storefrontSaveAction.indexOf("showMobileWorkspace('preview')")
-const lastSavePreviewAdvance = storefrontSaveAction.lastIndexOf("showMobileWorkspace('preview')")
+const firstSavePreviewAdvance = storefrontSaveAction.indexOf('showSavedStorefrontPreview()')
+const lastSavePreviewAdvance = storefrontSaveAction.lastIndexOf('showSavedStorefrontPreview()')
 if (directRequestStart < 0
   || directRequestEnd < 0
   || storefrontSaveStart < 0
@@ -490,12 +490,18 @@ if (directRequestStart < 0
   || !ecommerceSource.includes('onClick={() => openRequestFor(item.sku)}')
   || !ecommerceSource.includes('aria-controls="ecommerce-request-form"')
   || !ecommerceSource.includes('const storefrontSaveRef = useRef<HTMLButtonElement>(null)')
+  || !ecommerceSource.includes('const storefrontPreviewHeadingRef = useRef<HTMLHeadingElement>(null)')
+  || !ecommerceSource.includes('const requestReviewRef = useRef<HTMLInputElement>(null)')
   || !ecommerceSource.includes('function finishStorefrontSetup()')
+  || !finishStorefrontSetupAction.includes('function showSavedStorefrontPreview()')
+  || !finishStorefrontSetupAction.includes("showMobileWorkspace('preview')")
+  || !finishStorefrontSetupAction.includes('storefrontPreviewHeadingRef.current?.focus({ preventScroll: true })')
   || !ecommerceSource.includes("showMobileWorkspace('setup')")
   || !ecommerceSource.includes("storefrontSaveRef.current?.scrollIntoView({ block: 'center' })")
   || !ecommerceSource.includes("storefrontSaveRef.current?.focus({ preventScroll: true })")
   || !ecommerceSource.includes('id="ecommerce-save-storefront"')
   || !ecommerceSource.includes('ref={storefrontSaveRef}')
+  || !ecommerceSource.includes('ref={storefrontPreviewHeadingRef} tabIndex={-1}')
   || !ecommerceSource.includes('className="ecommerce-preview-gate"')
   || !ecommerceSource.includes('aria-controls="ecommerce-setup-panel"')
   || !ecommerceSource.includes('onClick={finishStorefrontSetup}')
@@ -507,6 +513,9 @@ if (directRequestStart < 0
   || ecommerceSource.includes('Save storefront before requesting ${item.name}')
   || ecommerceSource.includes("disabled={!available || catalogHydrating || !savedDraftIsCurrent}")
   || !ecommerceSource.includes('requestCustomerRef.current?.focus')
+  || !ecommerceSource.includes("requestReviewRef.current?.scrollIntoView({ block: 'center' })")
+  || !ecommerceSource.includes('requestReviewRef.current?.focus({ preventScroll: true })')
+  || !ecommerceSource.includes('ref={requestReviewRef} type="checkbox"')
   || !ecommerceSource.includes('open={requestOpen}')
   || !ecommerceSource.includes("'Delivery phone / area' : 'Pickup name / phone'")
   || !ecommerceSource.includes("'e.g. 09… · Hlaing' : 'e.g. Ma Su · 09…'")

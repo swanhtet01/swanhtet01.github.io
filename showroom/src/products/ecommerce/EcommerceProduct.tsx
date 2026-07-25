@@ -180,8 +180,10 @@ export function EcommerceProduct() {
   const [handoffConfirmed, setHandoffConfirmed] = useState(false)
   const [handoffBusy, setHandoffBusy] = useState(false)
   const storefrontSaveRef = useRef<HTMLButtonElement>(null)
+  const storefrontPreviewHeadingRef = useRef<HTMLHeadingElement>(null)
   const requestPanelRef = useRef<HTMLDetailsElement>(null)
   const requestCustomerRef = useRef<HTMLInputElement>(null)
+  const requestReviewRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     let current = true
@@ -430,6 +432,13 @@ export function EcommerceProduct() {
     })
   }
 
+  function showSavedStorefrontPreview() {
+    showMobileWorkspace('preview')
+    requestAnimationFrame(() => {
+      storefrontPreviewHeadingRef.current?.focus({ preventScroll: true })
+    })
+  }
+
   function applyManagedView(view: ManagedStorefrontView, replaceEdits: boolean) {
     setManagedInbox(view.inbox)
     setCatalog({ source: 'managed-shop', items: view.inbox.state.items, error: '' })
@@ -544,7 +553,7 @@ export function EcommerceProduct() {
       if (managedIdentity) {
         await saveManagedStorefront(managedIdentity)
         setHandoffConfirmed(false)
-        showMobileWorkspace('preview')
+        showSavedStorefrontPreview()
         return
       }
       const saved = await saveStorefrontDraft(
@@ -561,7 +570,7 @@ export function EcommerceProduct() {
       setMissingSelectionReviewed(false)
       setHandoffConfirmed(false)
       setDraftNotice(`Storefront saved on this device as revision ${saved.revision}.`)
-      showMobileWorkspace('preview')
+      showSavedStorefrontPreview()
     } catch (error) {
       if (managedIdentity && error instanceof ManagedTrialError && error.code === 'trial_version_conflict') {
         try {
@@ -666,6 +675,10 @@ export function EcommerceProduct() {
       setRequestLedger(nextLedger)
       setHandoffConfirmed(false)
       setRequestNotice(`${request.id} is awaiting Shop handoff. No Shop record or stock changed.`)
+      requestAnimationFrame(() => {
+        requestReviewRef.current?.scrollIntoView({ block: 'center' })
+        requestReviewRef.current?.focus({ preventScroll: true })
+      })
     } catch (error) {
       setRequestNotice(error instanceof Error ? error.message : 'Request receipt failed closed.')
     } finally {
@@ -942,7 +955,7 @@ export function EcommerceProduct() {
 
         <section className="core-panel ecommerce-preview-panel" aria-labelledby="ecommerce-preview-title" id="ecommerce-preview-panel">
           <div className="panel-head ecommerce-preview-head">
-            <div><span className="core-eyebrow">2 · Preview</span><h2 id="ecommerce-preview-title">Customer view</h2></div>
+            <div><span className="core-eyebrow">2 · Preview</span><h2 id="ecommerce-preview-title" ref={storefrontPreviewHeadingRef} tabIndex={-1}>Customer view</h2></div>
             <div className="segmented-control" role="group" aria-label="Preview size">
               <button aria-pressed={device === 'phone'} onClick={() => setDevice('phone')} type="button">Phone</button>
               <button aria-pressed={device === 'desktop'} onClick={() => setDevice('desktop')} type="button">Desktop</button>
@@ -1076,7 +1089,7 @@ export function EcommerceProduct() {
               ) : null}
               {latestRequest ? <>
                 <label className="website-intake-confirm">
-                  <input checked={handoffConfirmed} disabled={!latestRequestIsCurrent || handoffBusy} onChange={(event) => setHandoffConfirmed(event.target.checked)} type="checkbox" />
+                  <input checked={handoffConfirmed} disabled={!latestRequestIsCurrent || handoffBusy} onChange={(event) => setHandoffConfirmed(event.target.checked)} ref={requestReviewRef} type="checkbox" />
                   <span>I reviewed the SKU, quantity, MMK price, and current availability.</span>
                 </label>
                 <button className="core-button primary" disabled={!latestRequestIsCurrent || !handoffConfirmed || !digest || catalogHydrating || handoffBusy} onClick={() => void (managedIdentity ? retainInManagedInbox() : sendToShopReview())} type="button">
