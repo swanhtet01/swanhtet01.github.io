@@ -438,6 +438,8 @@ textarea { min-height: 72px; resize: vertical; }
 .data-row strong { color: var(--core-ink); }
 .data-row small { color: var(--core-quiet); font-size: 8px; }
 .data-row.table-head { min-height: 34px; color: var(--core-quiet); font-family: var(--core-mono); font-size: 8px; text-transform: uppercase; }
+.data-row[data-stock-attention="true"] { margin-inline: -8px; border-radius: 8px; padding-inline: 8px; background: rgba(148,98,0,.07); }
+.data-row .stock-attention-label { color: var(--core-warn); font-size: 9px; font-weight: 760; }
 .data-row[data-receiving="true"] { margin-inline: -8px; border-radius: 8px; padding-inline: 8px; background: var(--core-green-soft); }
 .data-row .text-link, .purchase-order-list .text-link { min-height: 44px; }
 .catalog-row-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
@@ -831,6 +833,7 @@ textarea { min-height: 72px; resize: vertical; }
   .data-row:not(.table-head) > span:nth-child(2)::before { content: "Available"; }
   .data-row:not(.table-head) > span:nth-child(3)::before { content: "Reorder"; }
   .data-row:not(.table-head) > span:nth-child(4)::before { content: "Price"; }
+  .data-row[data-stock-attention="true"] { padding-inline: 8px; }
   .inventory-panel { overflow-x: hidden; }
   .stock-receipt-editor { grid-template-columns: 1fr; }
   .order-return-editor { grid-template-columns: 1fr; }

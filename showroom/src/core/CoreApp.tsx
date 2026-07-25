@@ -2175,6 +2175,17 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const closableOrders = commerce.orders.filter((order) => closePreviewOrderIds.has(order.id))
   const reconciledValue = closePreview?.total ?? 0
   const lowStock = commerce.items.filter((item) => item.onHand <= item.reorderAt)
+  const stockRows = commerce.items
+    .map((item, index) => ({ item, index }))
+    .sort((left, right) => {
+      const leftNeedsAttention = left.item.onHand <= left.item.reorderAt
+      const rightNeedsAttention = right.item.onHand <= right.item.reorderAt
+      if (leftNeedsAttention !== rightNeedsAttention) return leftNeedsAttention ? -1 : 1
+      if (!leftNeedsAttention) return left.index - right.index
+      const leftShortage = left.item.reorderAt - left.item.onHand
+      const rightShortage = right.item.reorderAt - right.item.onHand
+      return rightShortage - leftShortage || left.index - right.index
+    })
   const openOrders = commerce.orders.filter((order) => order.status !== 'completed' && order.status !== 'cancelled')
   const paymentReview = commerce.orders.filter((order) => order.refundStatus === 'due' || (order.status !== 'cancelled' && order.paymentStatus === 'pending'))
   const actionOrders = commerce.orders.filter(commerceOrderNeedsAction).sort(compareCommerceOrderPromise)
@@ -3943,7 +3954,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       </form> : null}
       <div className="data-table" role="table" aria-label="Shop stock">
         <div className="data-row table-head" role="row"><span role="columnheader">Item</span><span role="columnheader">Available</span><span role="columnheader">Reorder</span><span role="columnheader">Price</span><span role="columnheader">Next step</span></div>
-        {commerce.items.map((item) => {
+        {stockRows.map(({ item }) => {
           const active = activePurchaseOrderBySku.get(item.sku)
           const catalogEditing = catalogEditDraft?.sku === item.sku
           const editing = purchaseOrderDraft?.mode === 'create'
@@ -3951,14 +3962,18 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
             : purchaseOrderDraft?.mode === 'receive'
               ? purchaseOrderDraft.purchaseOrderId === active?.purchaseOrder.id
               : false
-          return <div className="data-row" data-receiving={editing || catalogEditing} role="row" key={item.sku}>
-            <span role="rowheader"><strong>{item.name}</strong><small>{item.sku}</small></span>
-            <span className={item.onHand <= item.reorderAt ? 'warning-text' : ''} role="cell">{item.onHand}</span>
+          const stockNeedsAttention = item.onHand <= item.reorderAt
+          const stockAttentionLabel = stockNeedsAttention
+            ? item.onHand === item.reorderAt ? 'At reorder level' : `${item.reorderAt - item.onHand} below reorder`
+            : null
+          return <div className="data-row" data-receiving={editing || catalogEditing} data-stock-attention={stockNeedsAttention ? 'true' : 'false'} role="row" key={item.sku}>
+            <span role="rowheader"><strong>{item.name}</strong>{stockAttentionLabel ? <small className="stock-attention-label">{stockAttentionLabel}</small> : null}<small>{item.sku}</small></span>
+            <span className={stockNeedsAttention ? 'warning-text' : ''} role="cell">{item.onHand}</span>
             <span role="cell">{item.reorderAt}</span>
             <span role="cell">{formatMoney(item.price)}</span>
             <span className="catalog-row-actions" role="cell">
               <button aria-controls="catalog-item-editor" aria-expanded={catalogEditing} aria-label={`Edit price and reorder level for ${item.name}`} className="text-link" disabled={commerceControlsDisabled} ref={(node) => { if (node) catalogEditTriggerRefs.current.set(item.sku, node); else catalogEditTriggerRefs.current.delete(item.sku) }} type="button" onClick={() => openCatalogItemEditor(item.sku)}>{catalogEditing ? 'Editing' : 'Edit'}</button>
-              <button aria-expanded={editing} aria-label={active ? `Receive stock for ${item.name}` : `Order stock for ${item.name}`} className="text-link" disabled={commerceControlsDisabled} ref={(node) => { if (node) purchaseOrderTriggerRefs.current.set(item.sku, node); else purchaseOrderTriggerRefs.current.delete(item.sku) }} type="button" onClick={() => openPurchaseOrder(item.sku)}>{editing ? 'Continue' : active ? 'Receive' : 'Order'}</button>
+              <button aria-expanded={editing} aria-label={active ? `Receive stock for ${item.name}` : `Order stock for ${item.name}`} className="text-link" disabled={commerceControlsDisabled} ref={(node) => { if (node) purchaseOrderTriggerRefs.current.set(item.sku, node); else purchaseOrderTriggerRefs.current.delete(item.sku) }} type="button" onClick={() => openPurchaseOrder(item.sku)}>{editing ? 'Continue' : active ? 'Receive' : stockNeedsAttention ? 'Reorder' : 'Order'}</button>
             </span>
           </div>
         })}
