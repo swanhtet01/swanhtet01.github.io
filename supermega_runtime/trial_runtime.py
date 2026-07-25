@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
+import json
 from typing import Any, Literal, TypeVar
 from uuid import UUID
 
@@ -8,6 +9,11 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from supermega_runtime.commerce_runtime import COMMERCE_HUMAN_EVENTS
+from supermega_runtime.client_import_runtime import (
+    CLIENT_IMPORT_MAX_PACKAGE_BYTES,
+    ClientImportValidationError,
+    validate_client_import_staging_package,
+)
 from supermega_runtime.production_runtime import PRODUCTION_HUMAN_EVENTS
 from supermega_runtime.trial_store import (
     APPROVAL_DECIDE_CAPABILITY,
@@ -52,6 +58,19 @@ _CLIENT_IDENTITY_FIELDS = frozenset(
         "workspace_id",
     }
 )
+
+
+def _strict_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    for key, nested in pairs:
+        if key in value:
+            raise ValueError("duplicate JSON object key")
+        value[key] = nested
+    return value
+
+
+def _reject_json_constant(value: str) -> None:
+    raise ValueError(f"unsupported JSON constant: {value}")
 
 
 class _StrictRequest(BaseModel):
@@ -209,6 +228,51 @@ def _reject_client_identity(value: Any, *, path: str) -> None:
             _reject_client_identity(nested, path=f"{path}[{index}]")
 
 
+async def _bounded_json_body(request: Request) -> object:
+    """Read one JSON package without trusting Content-Length or buffering unbounded input."""
+
+    content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    if content_type != "application/json":
+        raise _error(415, "client_import_json_required")
+
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            declared_size = int(content_length)
+        except ValueError as exc:
+            raise _error(400, "client_import_invalid_content_length") from exc
+        if declared_size < 0:
+            raise _error(400, "client_import_invalid_content_length")
+        if declared_size > CLIENT_IMPORT_MAX_PACKAGE_BYTES:
+            raise _error(
+                413,
+                "client_import_too_large",
+                maximum_bytes=CLIENT_IMPORT_MAX_PACKAGE_BYTES,
+            )
+
+    chunks: list[bytes] = []
+    total = 0
+    try:
+        async for chunk in request.stream():
+            total += len(chunk)
+            if total > CLIENT_IMPORT_MAX_PACKAGE_BYTES:
+                raise _error(
+                    413,
+                    "client_import_too_large",
+                    maximum_bytes=CLIENT_IMPORT_MAX_PACKAGE_BYTES,
+                )
+            chunks.append(chunk)
+        return json.loads(
+            b"".join(chunks),
+            object_pairs_hook=_strict_json_object,
+            parse_constant=_reject_json_constant,
+        )
+    except HTTPException:
+        raise
+    except (ValueError, UnicodeDecodeError, RecursionError) as exc:
+        raise _error(422, "client_import_invalid_json") from exc
+
+
 def _invoke(operation: Callable[[], ResultT]) -> ResultT:
     try:
         return operation()
@@ -324,6 +388,33 @@ def create_trial_router(*, store: TrialStore, resolve_principal: PrincipalResolv
             "readiness": readiness.to_dict(),
             "states": states,
             "approvals": [approval.to_dict() for approval in approvals],
+        }
+
+    @router.post("/imports/validate")
+    async def trial_import_validation(request: Request) -> dict[str, Any]:
+        principal = _resolve_principal(request, resolve_principal)
+        readiness = _readiness(store, principal)
+        _require_read_ready(readiness)
+        if not has_surface_read_capability(readiness.capabilities, "setup"):
+            raise _error(
+                403,
+                "trial_capability_required",
+                required_capability="setup.read",
+            )
+        package = await _bounded_json_body(request)
+        try:
+            validation = validate_client_import_staging_package(package)
+        except ClientImportValidationError as exc:
+            raise _error(
+                422,
+                "client_import_validation_error",
+                message=str(exc),
+            ) from exc
+        return {
+            "validation": {
+                **validation.to_dict(),
+                "workspace_id": principal.workspace_id,
+            }
         }
 
     @router.post("/commands")
