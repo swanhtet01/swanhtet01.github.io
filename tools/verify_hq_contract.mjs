@@ -2,9 +2,11 @@ import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
 const root = resolve(import.meta.dirname, '..')
-const [readme, now, current, manifestText, portfolioText, research, databaseRehearsalText] = await Promise.all([
+const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, research, databaseRehearsalText] = await Promise.all([
   readFile(resolve(root, 'hq', 'README.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'NOW.md'), 'utf8'),
+  readFile(resolve(root, 'hq', 'CODEX-PRODUCT-QA-BRIEF.md'), 'utf8'),
+  readFile(resolve(root, 'hq', 'WORKBOARD.md'), 'utf8'),
   readFile(resolve(root, 'CURRENT.md'), 'utf8'),
   readFile(resolve(root, 'site-manifest.json'), 'utf8'),
   readFile(resolve(root, 'hq', 'portfolio.json'), 'utf8'),
@@ -31,6 +33,19 @@ requireContract('customer paths are canonical',
   portfolio.portfolio?.map((entry) => entry.path).join(',') === '/shop/,/plant/,/products/website/,/products/ecommerce/,/agents/')
 requireContract('product lifecycle is explicit',
   portfolio.productLifecycle?.join(',') === 'discover,define,build,release,learn')
+requireContract('product QA brief matches current portfolio',
+  qaBrief.includes('Work item: `QA-003`')
+  && qaBrief.includes('Mode: read-only')
+  && qaBrief.includes('Website and Ecommerce are local release candidates')
+  && qaBrief.includes('AI Agent Solutions remains evaluation-gated')
+  && ['/shop/?tab=orders', '/shop/?tab=inventory', '/plant/?tab=production', '/plant/?tab=control', '/products/website/', '/products/ecommerce/', '/agents/']
+    .every((route) => qaBrief.includes(`\`${route}\``))
+  && qaBrief.includes('Do not edit files or browser data.')
+  && !qaBrief.includes('Work item: `QA-002`')
+  && !qaBrief.includes('Ecommerce and AI Agent Solutions are visibly planned'))
+requireContract('product QA brief is discoverable from assignment authority',
+  workboard.includes('| QA-003 | Product / QA Codex | ready-read-only |')
+  && workboard.includes('use `hq/CODEX-PRODUCT-QA-BRIEF.md` for exact routes and evidence'))
 
 requireContract('Shop uses the stable commerce runtime',
   product('shop')?.name === 'Shop'
@@ -155,6 +170,7 @@ requireContract('source provenance retained',
 requireContract('HQ stays concise',
   readme.length < 7000
   && now.length < 9000
+  && qaBrief.length < 6000
   && current.length < 14000
   && portfolioText.length < 16000)
 requireContract('research remains gated',

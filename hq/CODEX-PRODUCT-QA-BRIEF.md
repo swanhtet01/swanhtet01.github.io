@@ -1,46 +1,45 @@
-# Codex task brief: verify the corrected SuperMega product map
+# Codex task brief: verify the current SuperMega product map
 
-Work item: `QA-002`
+Work item: `QA-003`
 Role: Product / QA Codex
-Base: current integration branch
+Base: current release-candidate branch
 Mode: read-only
 Token mode: lean
 
 ## Objective
 
-Prove that Shop and Plant are the clear canonical products, Website remains truthful, Ecommerce and AI Agent Solutions are visibly planned without fake buttons, and old operation routes preserve the same underlying records.
+Prove that the app presents one coherent five-product portfolio without inventing production readiness: Shop and Plant are the operating products; Website and Ecommerce are local release candidates; AI Agent Solutions remains evaluation-gated.
 
-## In-scope paths
+## Authority and scope
 
-1. `showroom/src/App.tsx`
-2. `showroom/src/core/CoreApp.tsx`
-3. `site-manifest.json`
-4. `tools/verify_app_build.mjs`
-5. `tools/verify_public_vercel_output.mjs`
+Use only:
 
-## Out of scope
+1. `hq/NOW.md`
+2. `hq/portfolio.json`
+3. `showroom/src/App.tsx`
+4. `showroom/src/core/CoreApp.tsx`
+5. `tools/verify_app_build.mjs`
 
-- No file edits, branches, commits, pushes, deployments, connector writes, or hosted mutations.
-- No YTF, POS, Claude, lead-ledger, payment, external message, or production database work.
-- No new product modules or visual redesign.
+Do not edit files or browser data. Do not create records, confirm actions, sign in, push, merge, deploy, change domains, call providers, send messages, or touch hosted storage. YTF, POS, Claude, lead-ledger, payments, and production systems are out of scope.
 
-## Journeys
+## Read-only journeys
 
-1. Open `/` and confirm the first actionable products are Shop, Plant, and Website.
-2. Open `/shop/?tab=orders`, change only browser-local sample state, and confirm the route and UI stay Shop.
-3. Open `/plant/?tab=production`, review Jobs and Problems, and confirm the route and UI stay Plant.
-4. Open `/operations/commerce/?tab=orders` and `/operations/production/?tab=production`; confirm each canonicalizes to Shop or Plant without resetting its current record.
-5. Open Products and confirm Ecommerce and AI Agent Solutions are one compact planned block with no demo button.
-6. Open Website Publish and confirm the optional handoff says Shop and returns to `/shop/?tab=orders`.
+Run each journey at 390 × 844 and 1280 × 900:
 
-Run at 1280 px and 375 px.
+1. Open `/`. Confirm one clear next operator task appears before internal HQ work, then confirm Shop, Plant, Website, and Ecommerce are the visible product launchers.
+2. Open `/shop/?tab=orders` and `/shop/?tab=inventory`. Confirm the two customer tabs are Orders and Stock; sample-data and managed-workspace boundaries remain explicit.
+3. Open `/plant/?tab=production` and `/plant/?tab=control`. Confirm the two customer tabs are Jobs and Problems; equipment records are observations, never control claims.
+4. Open `/products/website/`. Confirm the local Site → Preview → Publish lifecycle creates reviewable output and does not claim deployment.
+5. Open `/products/ecommerce/`. Confirm Ecommerce builds a Shop-backed storefront and structured request path without duplicating Shop fulfilment, payment, stock, refund, or close.
+6. Open `/agents/`. Confirm it canonicalizes to the compact AI Agent Solutions plan with no active demo button and states the provider-output evaluation gate.
+7. Open `/operations/commerce/?tab=orders` and `/operations/production/?tab=production`. Confirm each canonicalizes to Shop or Plant without changing stored records.
 
-## Acceptance
+## Acceptance evidence
 
-- No horizontal overflow, error overlay, console error, or broken focus.
-- Shop and Plant are the only customer-facing names for the two implemented operating runtimes.
-- Internal `commerce` and `production` IDs remain intact and no local data migration occurs.
-- Ecommerce clearly owns future storefront/order intent; Shop owns order, stock, fulfilment, payment-status, and close.
-- Agents clearly prepare work for human review and have no active demo button.
-- Visible controls are at least 44 px high on mobile.
-- Return one compact evidence packet with exact routes, measurements, and any remaining blocker.
+- Exact final URL, page title, customer-visible product name, and tab labels for every route.
+- No horizontal overflow, error overlay, console error, broken focus, or visible control below 44 px on mobile.
+- Shop, Plant, Website, Ecommerce, and AI Agent Solutions are the only customer products; HQ, Work, R&D, Ops, Console, and agent teams remain internal.
+- Internal `commerce` and `production` IDs remain compatibility details and no data migration occurs.
+- Browser-local, managed, evaluation-gated, and owner-gated boundaries are visible and accurately worded.
+- Website never claims publish/deploy success; Ecommerce never claims an order before Shop confirmation; Agent Solutions never claims provider quality or autonomy.
+- Return one compact evidence packet with route measurements, failures, remaining blockers, and the single next safe integration action.
