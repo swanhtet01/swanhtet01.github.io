@@ -31,7 +31,7 @@ SuperMega HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are
 
 ## Implemented reality
 
-- Shop runs at `/shop/` with guarded Orders and Stock: multi-item intake/recovery, promised pickup/delivery, reservation, fulfilment, payment/refund, counts, purchasing, close, partial returns, and review-gated catalog edits. Promises are immutable and drive queue order; legacy records remain readable without invented deadlines. Every edit has accountable proof.
+- Shop runs at `/shop/` with guarded Orders and Stock: multi-item intake/recovery, owner- and promise-bound fulfilment, payment/refund, counts, purchasing, close, returns, and review-gated catalog edits. The confirming operator becomes the visible owner; promises drive queue order. Legacy records remain readable without invented owners or deadlines. Every edit has proof.
 - Plant runs at `/plant/` with Jobs and Problems; the old operations URL is compatibility-only. It covers owned and scheduled jobs, short closes, output, materials, quality, equipment observations, downtime, maintenance, and handoff. Owner, priority, and due time form one evidence-bound plan; owner grants no access or dispatch, and no equipment, purchasing, costing, or accounting is controlled.
 - Website runs at `/products/website/` with a named-business starter, Preview, and gated Review. Five business fields become one unsaved page, then Preview and Save. Review stays hidden until the saved page is ready and creates a deterministic site file, never a deployment. Draft recovery and stale-overwrite protection remain.
 - Ecommerce reads Shop data. Save advances to Preview; requests stay disabled until saved and current, stale receipts cannot hand off, and Shop shows payment before Review. Website request snapshots are digest-bound; legacy unbound records remain readable but cannot convert. Shop revalidates every consequence.
@@ -41,17 +41,17 @@ SuperMega HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are
 
 ## Verified baseline
 
-- Checkpoint `c213c25` is the accepted local product and database-authority baseline.
+- Checkpoint `5a98691` is the accepted local product and database-authority baseline.
 - App lint/build, all local release/security/database/HQ contracts, and all 154 Python tests pass. Security coverage is 58 checks.
-- The Showroom dependency audit reports zero known vulnerabilities; React Router is on patched v8 and Node is `>=22.22.0`.
-- HQ remains its own route chunk; the largest JavaScript chunk is 494,474 bytes, leaving 5,526 bytes under the hard gate.
-- Focused coverage includes 183 Shop, 34 order-recovery, 250 Plant, 94 Website, 11 managed-Website, 27 storefront-draft, 14 storefront, 15 request, 17 managed-storefront, and 16 Ecommerce handoff checks.
-- Rendered Shop QA covers purchasing, counts, returns, recovery, catalog editing, and promised handoff. A 390 px journey proves exact review, promise-first order, reload persistence, 44 px controls, and no overflow; 1280 px is clean and error-free.
+- Dependency audit reports zero known vulnerabilities; React Router is patched v8 and Node is `>=22.22.0`.
+- HQ remains its own route chunk; the largest JavaScript chunk is 494,726 bytes, leaving 5,274 bytes under the hard gate.
+- Focused coverage: 187 Shop, 34 order-recovery, 250 Plant, 94 Website, 11 managed-Website, 27 storefront-draft, 14 storefront, 15 request, 17 managed-storefront, and 16 handoff checks.
+- Rendered Shop QA covers purchasing, counts, returns, recovery, catalog edits, promises, and owners. A 390 px journey proves confirmer-to-owner binding, reload, 44 px controls, and no overflow; 1280 px is clean and error-free.
 - Rendered Plant QA covers material use, closing, maintenance, creation, and `JOB-201` planning. A 390 px owner-only change proves one 44 px action, exact old/new review, legacy schedule migration, reload, no-op block, and focus return; 1280 px has no overflow and logs are clean.
 - Website QA proves named setup → preview → Save → ready → 6/6 Review at 390/1280 px, with 44 px actions, attached errors, and no horizontal overflow. Device-local and managed records are labelled separately.
 - Ecommerce QA proves v1 → v2 upgrade, reload, unsaved → Save → Preview → request → Shop payment → accountable confirmation, plus real cross-tab Shop availability invalidation. No order or stock change was confirmed outside the reset QA origin; actions are at least 44 px, with no horizontal overflow or browser errors.
 - PostgreSQL 17.10 passed 32 TLS checks, including exact approval/event restore and the trusted-server identity boundary.
-- Local `c213c25` is +166 over cached `origin/main` `6885c320` and +120 over cached release-candidate tracking `338b6fd`. Live GitHub/Vercel state was not refreshed; no push, merge, or deployment occurred.
+- Local `5a98691` is +168 over cached `origin/main` `6885c320` and +122 over cached release-candidate tracking `338b6fd`. Live GitHub/Vercel state was not refreshed; no push, merge, or deployment occurred.
 - Last live audit: canonical domains matched `supermega-public`; `demo.supermega.dev` was 404, `shop.supermega.dev` had no DNS, and `supermegabase` lacked `app_private` plus the six trial migrations.
 
 ## Coordination
@@ -70,7 +70,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - Agent Teams is not a production runtime. Order Intake passed its 20-case evaluator, but no usable local OpenAI API key was found; the provider runner awaits a secure founder decision and still needs a three-minute human review workflow.
 - No isolated hosted Supabase branch or separate non-production project has repeated the local database proof.
 - Browser-local Website records cannot authenticate out-of-band storage edits; managed commands use the locked prior state and separate ledger. Hosted activation remains unproven.
-- Cached GitHub `main` is 166 commits behind this product checkpoint. The live app cannot contain the validated local work until an owner-approved integration and coordinated release.
+- Cached GitHub `main` is 168 commits behind this product checkpoint. The live app cannot contain the validated local work until an owner-approved integration and coordinated release.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
 
 ## Decisions in force
