@@ -5,6 +5,7 @@ Authority: founder / CEO
 Canonical repository: `C:\Users\thesw\Projects\supermega-platform`
 Integration branch: `agent/supermega-release-candidate`
 Current accepted product checkpoint: `5d7b217`
+Current accepted operating checkpoint: `69dfb09`
 
 ## One operating model
 
@@ -18,7 +19,7 @@ Add a worker only when its assignment has:
 4. one explicit acceptance check; and
 5. a named integrator.
 
-Visible Codex sidebar task creation is not exposed in the current session. Do not claim a task was created there. Until that control becomes available, this board is assignment authority and internal subagents are used only for bounded work.
+Visible Codex tasks are user-owned and are created only when the founder explicitly requests one. This board remains assignment authority; internal subagents are used only for bounded work inside the current task.
 
 Claude coordination is paused by founder direction.
 
@@ -27,6 +28,7 @@ Claude coordination is paused by founder direction.
 | ID | Team / worker | Status | Outcome | Write authority | Acceptance |
 | --- | --- | --- | --- | --- | --- |
 | CEO-006 | CEO / Codex integrator | done-local | Correct the portfolio to Shop, Plant, Website, and Ecommerce, with AI assistance as shared infrastructure while preserving stable runtime data. | Authority, manifest, app shell, public generator, and verifiers in bounded slices | HQ, app-build, and public-output contracts passed; desktop/mobile routes preserved existing state; no push or deploy. |
+| OPS-007 | CEO + Agent Operations Codex | done-local | Replace the obsolete always-on AgentOS prototype with one lean, governed AI-company control plane. | `agent_os`, runtime governance, HQ Agent Teams, focused cloud tests, and HQ evidence only | Checkpoint `69dfb09` defines Product, Engineering, Growth, and Finance / Risk; caps the local roster at 12 and active company assignments at 4; scales an idle queue to zero; fails stale, duplicate, over-capacity, and weak-grant states closed; retires permissive gateway/finance launch paths; passes 18 focused runtime tests, all 167 Python tests, the full app gate, and 390/1280 px HQ QA with no overflow or browser warnings. No model call, external write, push, merge, deployment, domain, payment, or access change occurred. |
 | QA-002 | Product / QA Codex | done-local | Prove `/shop/` and `/plant/` are canonical, understandable, mobile-safe, and compatibility-preserving. | Read-only browser and contract checks | 1280 px and 375 px journeys passed; old operation paths canonicalized to the same records; no overflow, browser errors, or state reset. |
 | QA-003 | Product / QA Codex | done-local | Verify the current four-product map, shared AI-assistance boundary, truthful lifecycle states, canonical routes, and mobile/desktop usability without changing product data. | Read-only route matrix plus the smallest focused accessibility fix found by that matrix | Checkpoint `dadb013` passes 10 routes at 390/1280 px: canonical titles, Shop Orders/Stock, Plant Jobs/Problems, both compatibility redirects, Website no-deployment copy, Ecommerce pre-order/payment boundary, and the gated HQ Agents view. The audit found and fixed four sub-44 px secondary controls plus skip-link focus; all mobile targets now pass and focus lands on `#workspace-main`. Logs are empty, no browser data changed, and full local gates plus all 156 Python tests pass. No sign-in, record action, hosted write, push, merge, or deployment occurred. |
 | UX-003 | Product UX Codex | done-local | Make Home operationally useful before exposing internal company machinery. | Shared shell, app metadata, focused verifier, and authority only | Shop stock, Plant problems, and Shop orders outrank HQ work; internal work is labelled HQ and collapsed; installed/link metadata uses current Shop, Plant, Website, and Ecommerce language; 375 px browser review passes. |
@@ -160,8 +162,9 @@ Every worker handoff contains:
 
 ## Execution order
 
-1. Keep product checkpoint `5d7b217` and the immediately following HQ evidence checkpoint; review the current 210-commit local product delta before any owner-approved push, merge, deployment, or domain change.
-2. Run ENG-066 with one named company across the four templates; measure correction and review effort before proposing any accountable write adapter.
-3. Run OPS-001 only against a newly approved isolated non-production Supabase target; do not reuse the existing legacy public-schema project as the rehearsal target.
-4. Start ENG-005 only after the four active products pass onboarding/import gates and the owner securely provides the missing OpenAI key.
-5. Run PILOT-001 only after one named Shop operator, safe tenant, baseline, and five-day evidence plan are recorded.
+1. Keep product checkpoint `5d7b217` and the immediately following HQ evidence checkpoint; the recorded current 210-commit local product delta is historical until refreshed. Preserve operating checkpoint `69dfb09` and close legacy SSRF/approval findings before any network-bound pilot.
+2. Split agent view, execute, and deploy capabilities; secure or retire unsafe development exposure and arbitrary worker destinations.
+3. Run ENG-066 with one named company across all four templates and measure correction/review effort before any write adapter.
+4. Run OPS-001 only on a newly approved isolated Supabase target, including Storage listing/object denial; do not reuse the legacy public-schema project.
+5. Start ENG-005 only after four-product onboarding gates pass and the owner securely provides the missing OpenAI key.
+6. Run PILOT-001 only after one named Shop operator, safe tenant, baseline, and five-day evidence plan are recorded.
