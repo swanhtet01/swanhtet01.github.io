@@ -67,6 +67,9 @@ if (!viteConfigSource.includes("id.includes('/src/core/channel-order-intake.ts')
   || !viteConfigSource.includes("id.includes('/src/core/managed-trial.ts')")
   || !viteConfigSource.includes("id.includes('/src/core/team-work.ts')")
   || !viteConfigSource.includes("return 'operating-models'")) fail('shop_order_intake_chunk_headroom_missing')
+if (!viteConfigSource.includes("id.includes('/node_modules/react-router/')")
+  || !viteConfigSource.includes("id.includes('/node_modules/react-router-dom/')")
+  || !viteConfigSource.includes("return 'router'")) fail('router_chunk_isolation_missing')
 
 async function exists(path) {
   try { await stat(path); return true } catch { return false }
@@ -5483,6 +5486,8 @@ if (bytes > 2_500_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const largestJavascriptBytes = Math.max(...await Promise.all(javascriptFiles.map(async (path) => (await stat(path)).size)))
 if (largestJavascriptBytes > 500_000) fail(`javascript_chunk_budget:${largestJavascriptBytes}`)
+if (!javascriptFiles.some((path) => /[\\/]router-[^\\/]+\.js$/.test(path))) fail('router_chunk_artifact_missing')
+if (largestJavascriptBytes > 480_000) fail(`javascript_headroom_budget:${largestJavascriptBytes}`)
 
 if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))

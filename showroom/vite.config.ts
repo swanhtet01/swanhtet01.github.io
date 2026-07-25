@@ -20,6 +20,10 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
+          if (id.includes('/node_modules/react-router/')
+            || id.includes('/node_modules/react-router-dom/')) {
+            return 'router'
+          }
           if (id.includes('/src/core/commerce-workspace.ts')
             || id.includes('/src/core/production-workspace.ts')
             || id.includes('/src/core/channel-order-intake.ts')
