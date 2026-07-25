@@ -920,6 +920,7 @@ if (!productionSource.includes('buildProductionShiftHandoff')
   || !productionSource.includes('activeHolds')
   || !productionSource.includes('materialEntries')
   || !productionSource.includes('shortCloses')
+  || !productionSource.includes('activeMaintenance')
   || !productionSource.includes('Priority problem ${issue.id} has no immutable opening evidence.')
   || !productionSource.includes('no attributed observation recorded')
   || productionSource.includes("'completed output'")
@@ -930,6 +931,7 @@ if (!productionSource.includes('buildProductionShiftHandoff')
   || !coreSource.includes('shiftHandoff.sourceCanonical === currentProductionCanonical')
   || !coreSource.includes('shiftHandoff.shiftRef === handoffShiftRef.trim()')
   || !coreSource.includes('Active quality holds')
+  || !coreSource.includes('Active maintenance')
   || !coreSource.includes('material entries')
   || !coreSource.includes('Shift entries')
   || !coreSource.includes('No job was closed short in this shift.')
@@ -979,8 +981,28 @@ if (!productionSource.includes('startProductionDowntime')
   || !coreSource.includes('Review start')
   || !coreSource.includes('Review end')
   || !coreSource.includes('This human record is separate from machine status. It sends no equipment command and changes no job or output.')) fail('production_bounded_downtime_contract_missing')
-if (!managedTrialSource.includes('saveManagedProductionCommand') || !managedTrialSource.includes("surface: 'production'") || !managedTrialSource.includes('eventType: ManagedProductionEvent') || !managedTrialSource.includes('payload: { state: request.state, evidence: request.evidence }')) fail('managed_production_command_client_missing')
-for (const eventType of ['production.workspace.initialized', 'production.job.created', 'production.job.closed', 'production.output.recorded', 'production.material.consumed', 'production.issue.opened', 'production.issue.resolved', 'production.quality_hold.placed', 'production.quality_hold.released', 'production.machine_state.changed', 'production.downtime.started', 'production.downtime.ended']) {
+if (!productionSource.includes('startProductionMaintenance')
+  || !productionSource.includes('completeProductionMaintenance')
+  || !productionSource.includes('productionMaintenanceRecords')
+  || !productionSource.includes('maintenanceOwner')
+  || !productionSource.includes('maintenanceStartActionId')
+  || (productionSource.match(/const next = structuredClone\(state\)/g) || []).length < 2
+  || !productionSource.includes('Maintenance timestamps for ${machine.id} contradict lifecycle order.')
+  || !managedProductionRuntime.includes('_validate_maintenance_history')
+  || !managedProductionRuntime.includes('_validate_maintenance_started')
+  || !managedProductionRuntime.includes('_validate_maintenance_completed')
+  || !managedProductionRuntime.includes('production.maintenance.started')
+  || !managedProductionRuntime.includes('production.maintenance.completed')
+  || !coreSource.includes('Machine maintenance')
+  || !coreSource.includes('Review complete')
+  || !coreSource.includes('The accountable review records work scope or completion outcome. It does not control equipment, change machine status, open downtime, buy parts, or change jobs.')) fail('production_bounded_maintenance_contract_missing')
+const managedProductionCommandContract = managedTrialSource.slice(managedTrialSource.indexOf('export async function saveManagedProductionCommand'), managedTrialSource.indexOf('export async function saveManagedWebsiteCommand'))
+if (!managedProductionCommandContract.includes("surface: 'production'")
+  || !managedProductionCommandContract.includes('eventType: ManagedProductionEvent')
+  || !managedProductionCommandContract.includes('payload: { state: request.state, evidence: request.evidence }')
+  || !managedProductionCommandContract.includes('request.identity')
+  || !coreSource.includes('identity: managedIdentity')) fail('managed_production_command_client_missing')
+for (const eventType of ['production.workspace.initialized', 'production.job.created', 'production.job.closed', 'production.output.recorded', 'production.material.consumed', 'production.issue.opened', 'production.issue.resolved', 'production.quality_hold.placed', 'production.quality_hold.released', 'production.machine_state.changed', 'production.downtime.started', 'production.downtime.ended', 'production.maintenance.started', 'production.maintenance.completed']) {
   if (!coreSource.includes(eventType) || !managedProductionRuntime.includes(eventType)) fail(`managed_production_event_missing:${eventType}`)
 }
 if (managedProductionRuntime.includes('production.snapshot.saved')
@@ -995,6 +1017,8 @@ if (managedProductionRuntime.includes('production.snapshot.saved')
   || !managedProductionRuntime.includes('_validate_machine_state_changed')
   || !managedProductionRuntime.includes('_validate_downtime_started')
   || !managedProductionRuntime.includes('_validate_downtime_ended')
+  || !managedProductionRuntime.includes('_validate_maintenance_started')
+  || !managedProductionRuntime.includes('_validate_maintenance_completed')
   || !managedProductionRuntime.includes('Production event must prepend exactly one record and preserve history.')) fail('managed_production_server_transition_contract_missing')
 if (!coreSource.includes("mode: 'managed-unprovisioned'")
   || !coreSource.includes('No browser demo jobs, issues, equipment, or output are copied')
@@ -3858,8 +3882,10 @@ async function verifyProductionRuntime() {
     const handoffMachineFirst = model.recordProductionMachineState(handoffWithProblems, 'MC-1', 'running', 'attention', handoffMachineFirstProof)
     const handoffMachineLatestProof = proof('ACT-HANDOFF-MACHINE-LATEST', 3_190)
     const handoffMachineLatest = model.recordProductionMachineState(handoffMachineFirst, 'MC-1', 'attention', 'stopped', handoffMachineLatestProof)
+    const handoffMaintenanceProof = proof('ACT-HANDOFF-MAINTENANCE', 3_195)
+    const handoffWithMaintenance = model.startProductionMaintenance(handoffMachineLatest, 'MC-1', 'Maintenance lead', handoffMaintenanceProof)
     const completedHoldProof = proof('ACT-HANDOFF-COMPLETED-HOLD', 3_200)
-    const handoffState = model.placeProductionQualityHold(handoffMachineLatest, completedHeldJob.id, completedHoldProof)
+    const handoffState = model.placeProductionQualityHold(handoffWithMaintenance, completedHeldJob.id, completedHoldProof)
     const handoffStateBefore = JSON.stringify(handoffState)
     const handoff = model.buildProductionShiftHandoff(handoffState, shiftRef)
     assert(handoff?.shiftRef === shiftRef
@@ -3889,6 +3915,12 @@ async function verifyProductionRuntime() {
       && handoff.priorityProblems[0].openedBy === handoffCriticalProof.actor
       && handoff.priorityProblems[0].evidenceReference === handoffCriticalProof.evidenceReference,
     'production_shift_handoff_priority_problem_wrong')
+    assert(handoff.activeMaintenance.length === 1
+      && handoff.activeMaintenance[0].machineId === 'MC-1'
+      && handoff.activeMaintenance[0].owner === 'Maintenance lead'
+      && handoff.activeMaintenance[0].startedAt === handoffMaintenanceProof.capturedAt
+      && handoff.activeMaintenance[0].startEvidenceReference === handoffMaintenanceProof.evidenceReference,
+    'production_shift_handoff_active_maintenance_wrong')
     assert(handoff.machineObservations.length === 2
       && handoff.machineObservations[0].state === 'stopped'
       && handoff.machineObservations[0].observation?.actionId === handoffMachineLatestProof.actionId
@@ -3920,6 +3952,8 @@ async function verifyProductionRuntime() {
       && handoffText.includes(completedHoldProof.evidenceReference)
       && handoffText.includes(handoffCriticalProof.capturedAt)
       && handoffText.includes(handoffCriticalProof.actor)
+      && handoffText.includes('Active maintenance (1)')
+      && handoffText.includes(handoffMaintenanceProof.evidenceReference)
       && handoffText.includes(handoffMachineLatestProof.evidenceReference)
       && handoffText.includes(handoffMachineLatestProof.reason)
       && handoffText.includes('target 10 · 10 good · 0 scrap · 0 remaining')
@@ -4051,6 +4085,128 @@ async function verifyProductionRuntime() {
       events: [{ ...downtimeStarted.events[0], unexpected: true }],
     }), 'production_downtime_extra_field_accepted')
     assert(JSON.stringify(base) === downtimeBaseBefore, 'production_downtime_derivation_mutated_source_state')
+
+    const maintenanceBaseBefore = JSON.stringify(base)
+    assert(model.productionMaintenanceRecords(base).length === 0, 'production_legacy_workspace_invented_maintenance')
+    const maintenanceStartProof = proof('ACT-MAINTENANCE-START', 7_000)
+    const maintenanceStarted = model.startProductionMaintenance(base, 'MC-1', 'Maintenance lead', maintenanceStartProof)
+    assert(maintenanceStarted
+      && maintenanceStarted.revision === base.revision + 1
+      && maintenanceStarted.events[0].kind === 'maintenance_started'
+      && maintenanceStarted.events[0].subjectId === 'MC-1'
+      && maintenanceStarted.events[0].maintenanceOwner === 'Maintenance lead'
+      && maintenanceStarted.events[0].actor === maintenanceStartProof.actor
+      && maintenanceStarted.events[0].reason === maintenanceStartProof.reason
+      && maintenanceStarted.events[0].evidenceReference === maintenanceStartProof.evidenceReference
+      && JSON.stringify(maintenanceStarted.jobs) === JSON.stringify(base.jobs)
+      && JSON.stringify(maintenanceStarted.issues) === JSON.stringify(base.issues)
+      && JSON.stringify(maintenanceStarted.machines) === JSON.stringify(base.machines)
+      && maintenanceStarted.jobs !== base.jobs
+      && maintenanceStarted.jobs[0] !== base.jobs[0]
+      && maintenanceStarted.issues !== base.issues
+      && maintenanceStarted.machines !== base.machines
+      && maintenanceStarted.machines[0] !== base.machines[0],
+    'production_maintenance_start_not_exact_or_changed_collections')
+    const openMaintenance = model.productionMaintenanceRecords(maintenanceStarted)
+    assert(openMaintenance.length === 1
+      && openMaintenance[0].machineId === 'MC-1'
+      && openMaintenance[0].machineName === 'Test machine'
+      && openMaintenance[0].startActionId === maintenanceStartProof.actionId
+      && openMaintenance[0].owner === 'Maintenance lead'
+      && openMaintenance[0].startedAt === maintenanceStartProof.capturedAt
+      && openMaintenance[0].startedBy === maintenanceStartProof.actor
+      && openMaintenance[0].scope === maintenanceStartProof.reason
+      && openMaintenance[0].startEvidenceReference === maintenanceStartProof.evidenceReference
+      && openMaintenance[0].completion === undefined,
+    'production_open_maintenance_not_derived_exactly')
+    assert(model.startProductionMaintenance(maintenanceStarted, 'MC-1', 'Maintenance lead', maintenanceStartProof) === maintenanceStarted, 'production_maintenance_start_retry_not_idempotent')
+    assertThrows(() => model.startProductionMaintenance(
+      { ...maintenanceStarted, revision: maintenanceStarted.revision + 1 },
+      'MC-1',
+      'Maintenance lead',
+      maintenanceStartProof,
+    ), 'production_maintenance_start_replay_bypassed_state_validation')
+    assert(model.startProductionMaintenance(maintenanceStarted, 'MC-1', 'Different owner', maintenanceStartProof) === null, 'production_maintenance_start_conflicting_retry_succeeded')
+    assert(model.startProductionMaintenance(maintenanceStarted, 'MC-1', 'Maintenance lead', proof('ACT-MAINTENANCE-SECOND', 7_100)) === null, 'production_second_open_maintenance_succeeded')
+    assert(model.startProductionMaintenance(base, 'MC-MISSING', 'Maintenance lead', proof('ACT-MAINTENANCE-MISSING', 7_000)) === null, 'production_missing_machine_maintenance_succeeded')
+    assert(model.startProductionMaintenance(base, 'MC-1', ' Maintenance lead', proof('ACT-MAINTENANCE-OWNER', 7_000)) === null, 'production_noncanonical_maintenance_owner_succeeded')
+    assert(model.startProductionMaintenance(downtimeStarted, 'MC-1', 'Maintenance lead', downtimeStartProof) === null, 'production_maintenance_reused_downtime_action_id')
+    const parallelMaintenance = model.startProductionMaintenance(downtimeStarted, 'MC-1', 'Maintenance lead', proof('ACT-MAINTENANCE-PARALLEL', 7_000))
+    assert(parallelMaintenance
+      && model.productionDowntimeIntervals(parallelMaintenance)[0].end === undefined
+      && model.productionMaintenanceRecords(parallelMaintenance)[0].owner === 'Maintenance lead',
+    'production_maintenance_changed_or_depended_on_downtime')
+    assert(model.completeProductionMaintenance(maintenanceStarted, 'MC-1', maintenanceStartProof.actionId, proof('ACT-MAINTENANCE-EARLY', 6_999)) === null, 'production_maintenance_completion_predated_start')
+    assert(model.completeProductionMaintenance(maintenanceStarted, 'MC-1', 'ACT-NOT-OPEN', proof('ACT-MAINTENANCE-WRONG-START', 8_000)) === null, 'production_maintenance_completion_wrong_start_succeeded')
+    const maintenanceCompleteProof = proof('ACT-MAINTENANCE-COMPLETE', 8_000)
+    const maintenanceCompleted = model.completeProductionMaintenance(maintenanceStarted, 'MC-1', maintenanceStartProof.actionId, maintenanceCompleteProof)
+    const completedMaintenance = model.productionMaintenanceRecords(maintenanceCompleted)
+    assert(maintenanceCompleted
+      && maintenanceCompleted.events[0].kind === 'maintenance_completed'
+      && maintenanceCompleted.events[0].maintenanceStartActionId === maintenanceStartProof.actionId
+      && JSON.stringify(maintenanceCompleted.jobs) === JSON.stringify(base.jobs)
+      && JSON.stringify(maintenanceCompleted.issues) === JSON.stringify(base.issues)
+      && JSON.stringify(maintenanceCompleted.machines) === JSON.stringify(base.machines)
+      && maintenanceCompleted.jobs !== maintenanceStarted.jobs
+      && maintenanceCompleted.events[1] !== maintenanceStarted.events[0]
+      && completedMaintenance[0].completion?.actionId === maintenanceCompleteProof.actionId
+      && completedMaintenance[0].completion?.completedAt === maintenanceCompleteProof.capturedAt
+      && completedMaintenance[0].completion?.completedBy === maintenanceCompleteProof.actor
+      && completedMaintenance[0].completion?.outcome === maintenanceCompleteProof.reason
+      && completedMaintenance[0].completion?.evidenceReference === maintenanceCompleteProof.evidenceReference,
+    'production_maintenance_completion_not_exact')
+    const completedMaintenanceHandoff = model.buildProductionShiftHandoff(maintenanceCompleted, shiftRef)
+    assert(completedMaintenanceHandoff?.activeMaintenance.length === 0
+      && !model.formatProductionShiftHandoff(completedMaintenanceHandoff).includes(maintenanceStartProof.evidenceReference),
+    'production_completed_maintenance_remained_in_active_handoff')
+    assert(model.completeProductionMaintenance(maintenanceCompleted, 'MC-1', maintenanceStartProof.actionId, maintenanceCompleteProof) === maintenanceCompleted, 'production_maintenance_completion_retry_not_idempotent')
+    assertThrows(() => model.completeProductionMaintenance(
+      { ...maintenanceCompleted, unexpected: true },
+      'MC-1',
+      maintenanceStartProof.actionId,
+      maintenanceCompleteProof,
+    ), 'production_maintenance_completion_replay_bypassed_state_validation')
+    assert(model.completeProductionMaintenance(maintenanceCompleted, 'MC-1', maintenanceStartProof.actionId, { ...maintenanceCompleteProof, reason: 'Changed outcome' }) === null, 'production_maintenance_completion_conflicting_retry_succeeded')
+    assert(model.startProductionMaintenance(maintenanceCompleted, 'MC-1', 'Maintenance lead', proof('ACT-MAINTENANCE-RESTART-EARLY', 7_999)) === null, 'production_maintenance_restart_predated_completion')
+    const maintenanceRestarted = model.startProductionMaintenance(maintenanceCompleted, 'MC-1', 'Second shift lead', proof('ACT-MAINTENANCE-RESTART', 9_000))
+    assert(maintenanceRestarted
+      && model.productionMaintenanceRecords(maintenanceRestarted).length === 2
+      && model.productionMaintenanceRecords(maintenanceRestarted)[0].owner === 'Second shift lead'
+      && model.productionMaintenanceRecords(maintenanceRestarted)[0].completion === undefined,
+    'production_maintenance_restart_after_completion_failed')
+    assertThrows(() => model.validateProductionState({
+      ...maintenanceStarted,
+      revision: maintenanceStarted.revision + 1,
+      events: [{
+        ...maintenanceStarted.events[0],
+        id: 'EVT-ACT-MAINTENANCE-DUPLICATE',
+        actionId: 'ACT-MAINTENANCE-DUPLICATE',
+        createdAt: proof('ACT-MAINTENANCE-DUPLICATE', 7_500).capturedAt,
+      }, ...maintenanceStarted.events],
+    }), 'production_duplicate_open_maintenance_history_accepted')
+    assertThrows(() => model.validateProductionState({
+      ...maintenanceCompleted,
+      events: [{ ...maintenanceCompleted.events[0], maintenanceStartActionId: 'ACT-NOT-OPEN' }, ...maintenanceCompleted.events.slice(1)],
+    }), 'production_maintenance_wrong_linkage_accepted')
+    assertThrows(() => model.validateProductionState({
+      ...maintenanceCompleted,
+      events: [{ ...maintenanceCompleted.events[0], createdAt: proof('ACT-MAINTENANCE-BACKWARD', 6_999).capturedAt }, ...maintenanceCompleted.events.slice(1)],
+    }), 'production_backward_maintenance_history_accepted')
+    assertThrows(() => model.validateProductionState({
+      ...maintenanceStarted,
+      events: [{ ...maintenanceStarted.events[0], unexpected: true }],
+    }), 'production_maintenance_extra_field_accepted')
+    assertThrows(() => model.validateProductionState({ ...base, unexpected: true }), 'production_extra_state_field_accepted')
+    assertThrows(() => model.validateProductionState({ ...base, jobs: [{ ...base.jobs[0], unexpected: true }] }), 'production_extra_job_field_accepted')
+    assertThrows(() => model.validateProductionState({ ...base, issues: [{ id: 'ISS-X', createdAt: proof('ACT-ISSUE-X').capturedAt, area: 'Line 01', kind: 'maintenance', summary: 'Inspect', status: 'open', unexpected: true }] }), 'production_extra_issue_field_accepted')
+    assertThrows(() => model.validateProductionState({
+      ...resolved,
+      issues: resolved.issues.map((issue, index) => index === 0
+        ? { ...issue, resolution: { ...issue.resolution, unexpected: true } }
+        : issue),
+    }), 'production_extra_issue_resolution_field_accepted')
+    assertThrows(() => model.validateProductionState({ ...base, machines: [{ ...base.machines[0], unexpected: true }] }), 'production_extra_machine_field_accepted')
+    assert(JSON.stringify(base) === maintenanceBaseBefore, 'production_maintenance_derivation_mutated_source_state')
 
     values.clear()
     const currentState = model.createSeedProduction()

@@ -83,6 +83,8 @@ export type ManagedProductionEvent =
   | 'production.machine_state.changed'
   | 'production.downtime.started'
   | 'production.downtime.ended'
+  | 'production.maintenance.started'
+  | 'production.maintenance.completed'
 
 export type ManagedCommandResult = {
   command_id: string
@@ -442,18 +444,24 @@ export async function saveManagedProductionCommand(request: {
   evidence: ManagedCommandEvidence
   eventType: ManagedProductionEvent
   expectedVersion: number
+  identity?: ManagedIdentity
   state: Record<string, unknown>
 }) {
-  const response = await authorizedRequest<{ result: ManagedProductionCommandResult }>('/api/trial/v1/commands', {
-    method: 'POST',
-    body: JSON.stringify({
-      command_id: request.commandId,
-      surface: 'production',
-      event_type: request.eventType,
-      expected_version: request.expectedVersion,
-      payload: { state: request.state, evidence: request.evidence },
-    }),
-  })
+  const response = await authorizedRequest<{ result: ManagedProductionCommandResult }>(
+    '/api/trial/v1/commands',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        command_id: request.commandId,
+        surface: 'production',
+        event_type: request.eventType,
+        expected_version: request.expectedVersion,
+        payload: { state: request.state, evidence: request.evidence },
+      }),
+    },
+    true,
+    request.identity,
+  )
   return response.result
 }
 

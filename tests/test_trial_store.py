@@ -282,6 +282,42 @@ class TrialStoreTests(unittest.TestCase):
                 )
         self.assertEqual(self.reducer.calls, calls_before_rejection)
 
+    def test_store_enforces_human_only_production_lifecycle_events(self) -> None:
+        self.store.provision_membership(
+            workspace_id="workspace-a",
+            actor_id="actor-agent-manager",
+            actor_kind="agent",
+            capabilities=("production.write",),
+        )
+        calls_before_rejection = self.reducer.calls
+        human_only_events = (
+            "production.workspace.initialized",
+            "production.job.created",
+            "production.job.closed",
+            "production.output.recorded",
+            "production.material.consumed",
+            "production.issue.opened",
+            "production.issue.resolved",
+            "production.quality_hold.placed",
+            "production.quality_hold.released",
+            "production.machine_state.changed",
+            "production.downtime.started",
+            "production.downtime.ended",
+            "production.maintenance.started",
+            "production.maintenance.completed",
+        )
+        for event_type in human_only_events:
+            with self.subTest(event_type=event_type), self.assertRaises(TrialHumanApprovalRequired):
+                self.store.apply_command(
+                    self.agent_manager,
+                    command_id=str(uuid4()),
+                    surface="production",
+                    event_type=event_type,
+                    expected_version=0,
+                    payload={"changes": {"status": "agent-write-blocked"}},
+                )
+        self.assertEqual(self.reducer.calls, calls_before_rejection)
+
     def test_write_requires_explicit_surface_capability(self) -> None:
         self.store.provision_membership(
             workspace_id="workspace-a",

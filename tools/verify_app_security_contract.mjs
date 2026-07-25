@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url'
 const root = resolve(import.meta.dirname, '..')
 const read = (path) => readFile(resolve(root, path), 'utf8')
 const commerceWorkspace = await import(pathToFileURL(resolve(root, 'showroom/src/core/commerce-workspace.ts')).href)
-const [runtime, supabaseAuth, cloudRuntime, vercelEntry, portableEntry, trialRuntime, trialStore, commerceRuntime, websiteRuntime, managedTrialClient, coreApp, websiteWorkspaceHook, rolePreflight, foundationMigration, decisionMigration, websiteMigration, hardeningMigration, readCapabilityMigration, databaseValidator, databaseActivator, liveVerifier, workflow, requirements, dockerfile, appEnvironment] = await Promise.all([
+const [runtime, supabaseAuth, cloudRuntime, vercelEntry, portableEntry, trialRuntime, trialStore, commerceRuntime, productionRuntime, websiteRuntime, managedTrialClient, coreApp, websiteWorkspaceHook, rolePreflight, foundationMigration, decisionMigration, websiteMigration, hardeningMigration, readCapabilityMigration, databaseValidator, databaseActivator, liveVerifier, workflow, requirements, dockerfile, appEnvironment] = await Promise.all([
   read('supermega_runtime/runtime.py'),
   read('supermega_runtime/supabase_auth.py'),
   read('supermega_runtime/cloud_runtime.py'),
@@ -14,6 +14,7 @@ const [runtime, supabaseAuth, cloudRuntime, vercelEntry, portableEntry, trialRun
   read('supermega_runtime/trial_runtime.py'),
   read('supermega_runtime/trial_store.py'),
   read('supermega_runtime/commerce_runtime.py'),
+  read('supermega_runtime/production_runtime.py'),
   read('supermega_runtime/website_runtime.py'),
   read('showroom/src/core/managed-trial.ts'),
   read('showroom/src/core/CoreApp.tsx'),
@@ -174,9 +175,26 @@ const expectedHumanCommerceEvents = [
   'commerce.website_intake.converted',
   'commerce.workspace.initialized',
 ]
-const humanEventList = (source, start, end) => {
+const expectedHumanProductionEvents = [
+  'production.downtime.ended',
+  'production.downtime.started',
+  'production.issue.opened',
+  'production.issue.resolved',
+  'production.job.closed',
+  'production.job.created',
+  'production.machine_state.changed',
+  'production.maintenance.completed',
+  'production.maintenance.started',
+  'production.material.consumed',
+  'production.output.recorded',
+  'production.quality_hold.placed',
+  'production.quality_hold.released',
+  'production.workspace.initialized',
+]
+const humanEventList = (source, start, end, domain = 'commerce') => {
   const contract = source.slice(source.indexOf(start), source.indexOf(end))
-  return [...contract.matchAll(/"(commerce\.[^"]+)"/g)].map((match) => match[1]).sort()
+  const pattern = new RegExp(`"(${domain}\\.[^"]+)"`, 'g')
+  return [...contract.matchAll(pattern)].map((match) => match[1]).sort()
 }
 
 requireContract('Vercel entrypoint uses canonical runtime', /from supermega_runtime\.runtime import app/.test(vercelEntry) && !/serve_solution/.test(vercelEntry))
@@ -218,6 +236,11 @@ requireContract('Website Commerce intake source is transactionally verified with
 requireContract('consequential Commerce events are human-only in router and store', /COMMERCE_HUMAN_EVENTS/.test(trialRuntime)
   && JSON.stringify(humanEventList(trialStore, 'HUMAN_COMMAND_EVENTS', 'SURFACE_WRITE_CAPABILITIES')) === JSON.stringify(expectedHumanCommerceEvents)
   && JSON.stringify(humanEventList(commerceRuntime, 'COMMERCE_HUMAN_EVENTS', '_ORDER_STATUSES')) === JSON.stringify(expectedHumanCommerceEvents)
+  && /TrialHumanApprovalRequired/.test(trialStore))
+requireContract('consequential Production events are human-only in router and store', /PRODUCTION_HUMAN_EVENTS/.test(trialRuntime)
+  && JSON.stringify(humanEventList(trialStore, 'HUMAN_COMMAND_EVENTS', 'SURFACE_WRITE_CAPABILITIES', 'production')) === JSON.stringify(expectedHumanProductionEvents)
+  && /PRODUCTION_HUMAN_EVENTS = PRODUCTION_EVENTS/.test(productionRuntime)
+  && JSON.stringify(humanEventList(productionRuntime, 'PRODUCTION_EVENTS', 'PRODUCTION_HUMAN_EVENTS', 'production')) === JSON.stringify(expectedHumanProductionEvents)
   && /TrialHumanApprovalRequired/.test(trialStore))
 requireContract('Shop order and payment attribution is server authoritative',
   /commerce\.order\.created/.test(trialStore)

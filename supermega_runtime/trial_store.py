@@ -38,11 +38,18 @@ HUMAN_COMMAND_EVENTS = frozenset(
         "commerce.storefront.configuration.saved",
         "production.workspace.initialized",
         "production.job.created",
+        "production.job.closed",
         "production.output.recorded",
         "production.material.consumed",
         "production.issue.opened",
         "production.issue.resolved",
+        "production.quality_hold.placed",
+        "production.quality_hold.released",
         "production.machine_state.changed",
+        "production.downtime.started",
+        "production.downtime.ended",
+        "production.maintenance.started",
+        "production.maintenance.completed",
     }
 )
 SURFACE_WRITE_CAPABILITIES = {

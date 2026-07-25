@@ -299,6 +299,49 @@ def ended_downtime_state(
     return state
 
 
+def started_maintenance_state(
+    current: dict[str, object],
+    evidence: dict[str, str],
+    *,
+    owner: str = "Maintenance lead",
+) -> dict[str, object]:
+    state = deepcopy(current)
+    machine = state["machines"][0]
+    state["revision"] += 1
+    state["events"] = [
+        production_event(
+            evidence,
+            kind="maintenance_started",
+            subject_id=machine["id"],
+            summary=f"Started maintenance for {machine['name']}",
+            maintenanceOwner=owner,
+        ),
+        *state["events"],
+    ]
+    return state
+
+
+def completed_maintenance_state(
+    current: dict[str, object],
+    start_evidence: dict[str, str],
+    completion_evidence: dict[str, str],
+) -> dict[str, object]:
+    state = deepcopy(current)
+    machine = state["machines"][0]
+    state["revision"] += 1
+    state["events"] = [
+        production_event(
+            completion_evidence,
+            kind="maintenance_completed",
+            subject_id=machine["id"],
+            summary=f"Completed maintenance for {machine['name']}",
+            maintenanceStartActionId=start_evidence["actionId"],
+        ),
+        *state["events"],
+    ]
+    return state
+
+
 def opened_issue_state(
     current: dict[str, object],
     evidence: dict[str, str],
@@ -442,6 +485,8 @@ class ProductionRuntimeTests(unittest.TestCase):
             "production.machine_state.changed",
             "production.downtime.started",
             "production.downtime.ended",
+            "production.maintenance.started",
+            "production.maintenance.completed",
         }
         self.assertEqual(PRODUCTION_EVENTS, expected_events)
         self.assertEqual(PRODUCTION_HUMAN_EVENTS, expected_events)
@@ -1954,6 +1999,389 @@ class ProductionRuntimeTests(unittest.TestCase):
                 current,
                 "production.downtime.started",
                 unrelated_start,
+                start_evidence,
+            )
+
+    def test_maintenance_lifecycle_is_human_gated_and_side_effect_free(self) -> None:
+        maintenance_events = {
+            "production.maintenance.started",
+            "production.maintenance.completed",
+        }
+        self.assertTrue(maintenance_events.issubset(PRODUCTION_EVENTS))
+        self.assertTrue(maintenance_events.issubset(PRODUCTION_HUMAN_EVENTS))
+
+        current = starting_workspace()
+        original_collections = deepcopy(
+            {
+                "jobs": current["jobs"],
+                "issues": current["issues"],
+                "machines": current["machines"],
+            }
+        )
+        start_evidence = action_evidence("ACT-MAINTENANCE-START")
+        started = apply_event(
+            current,
+            "production.maintenance.started",
+            started_maintenance_state(current, start_evidence),
+            start_evidence,
+        )
+        start_event = started["events"][0]
+        self.assertEqual(
+            set(start_event),
+            {
+                "id",
+                "actionId",
+                "createdAt",
+                "actor",
+                "reason",
+                "evidenceReference",
+                "kind",
+                "subjectId",
+                "summary",
+                "maintenanceOwner",
+            },
+        )
+        self.assertEqual(start_event["kind"], "maintenance_started")
+        self.assertEqual(start_event["maintenanceOwner"], "Maintenance lead")
+        self.assertEqual(start_event["actor"], start_evidence["actor"])
+        self.assertEqual(start_event["createdAt"], start_evidence["capturedAt"])
+        self.assertEqual(
+            start_event["evidenceReference"],
+            start_evidence["evidenceReference"],
+        )
+        self.assertEqual(
+            {
+                "jobs": started["jobs"],
+                "issues": started["issues"],
+                "machines": started["machines"],
+            },
+            original_collections,
+        )
+        self.assertEqual(len(started["events"]), len(current["events"]) + 1)
+
+        completion_evidence = action_evidence(
+            "ACT-MAINTENANCE-COMPLETE",
+            captured_at=LATER,
+        )
+        completed = apply_event(
+            started,
+            "production.maintenance.completed",
+            completed_maintenance_state(
+                started,
+                start_evidence,
+                completion_evidence,
+            ),
+            completion_evidence,
+        )
+        completion_event = completed["events"][0]
+        self.assertEqual(
+            set(completion_event),
+            {
+                "id",
+                "actionId",
+                "createdAt",
+                "actor",
+                "reason",
+                "evidenceReference",
+                "kind",
+                "subjectId",
+                "summary",
+                "maintenanceStartActionId",
+            },
+        )
+        self.assertEqual(completion_event["kind"], "maintenance_completed")
+        self.assertEqual(
+            completion_event["maintenanceStartActionId"],
+            start_evidence["actionId"],
+        )
+        self.assertEqual(
+            {
+                "jobs": completed["jobs"],
+                "issues": completed["issues"],
+                "machines": completed["machines"],
+            },
+            original_collections,
+        )
+        self.assertEqual(len(completed["events"]), len(started["events"]) + 1)
+        self.assertEqual(
+            [event["kind"] for event in completed["events"][:2]],
+            ["maintenance_completed", "maintenance_started"],
+        )
+
+    def test_maintenance_lifecycle_rejects_invalid_transitions_and_history(
+        self,
+    ) -> None:
+        current = starting_workspace()
+        start_evidence = action_evidence("ACT-MAINTENANCE-START")
+        started = apply_event(
+            current,
+            "production.maintenance.started",
+            started_maintenance_state(current, start_evidence),
+            start_evidence,
+        )
+
+        for owner in (" Maintenance lead", "x" * 121):
+            invalid_owner_evidence = action_evidence(
+                f"ACT-MAINTENANCE-OWNER-{len(owner)}"
+            )
+            with self.subTest(owner=owner), self.assertRaises(
+                TrialValidationError
+            ):
+                apply_event(
+                    current,
+                    "production.maintenance.started",
+                    started_maintenance_state(
+                        current,
+                        invalid_owner_evidence,
+                        owner=owner,
+                    ),
+                    invalid_owner_evidence,
+                )
+
+        missing_owner_evidence = action_evidence("ACT-MAINTENANCE-NO-OWNER")
+        missing_owner = started_maintenance_state(
+            current,
+            missing_owner_evidence,
+        )
+        missing_owner["events"][0].pop("maintenanceOwner")
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "production.maintenance.started",
+                missing_owner,
+                missing_owner_evidence,
+            )
+
+        unrelated_field_evidence = action_evidence(
+            "ACT-MAINTENANCE-UNRELATED-FIELD"
+        )
+        unrelated_field = started_maintenance_state(
+            current,
+            unrelated_field_evidence,
+        )
+        unrelated_field["events"][0]["maintenanceStartActionId"] = (
+            start_evidence["actionId"]
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "production.maintenance.started",
+                unrelated_field,
+                unrelated_field_evidence,
+            )
+
+        duplicate_start_evidence = action_evidence(
+            "ACT-MAINTENANCE-DUPLICATE",
+            captured_at=LATER,
+        )
+        duplicate_start = started_maintenance_state(
+            started,
+            duplicate_start_evidence,
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                started,
+                "production.maintenance.started",
+                duplicate_start,
+                duplicate_start_evidence,
+            )
+        with self.assertRaises(TrialValidationError):
+            validate_production_state(duplicate_start)
+
+        unknown_machine_evidence = action_evidence("ACT-MAINTENANCE-UNKNOWN")
+        unknown_machine = started_maintenance_state(
+            current,
+            unknown_machine_evidence,
+        )
+        unknown_machine["events"][0]["subjectId"] = "MACHINE-UNKNOWN"
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "production.maintenance.started",
+                unknown_machine,
+                unknown_machine_evidence,
+            )
+
+        detached_completion_evidence = action_evidence(
+            "ACT-MAINTENANCE-DETACHED-COMPLETE",
+            captured_at=LATER,
+        )
+        detached_completion = completed_maintenance_state(
+            current,
+            start_evidence,
+            detached_completion_evidence,
+        )
+        with self.assertRaises(TrialValidationError):
+            validate_production_state(detached_completion)
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "production.maintenance.completed",
+                detached_completion,
+                detached_completion_evidence,
+            )
+
+        early_completion_evidence = action_evidence(
+            "ACT-MAINTENANCE-EARLY-COMPLETE",
+            captured_at="2026-07-24T08:59:00.000Z",
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                started,
+                "production.maintenance.completed",
+                completed_maintenance_state(
+                    started,
+                    start_evidence,
+                    early_completion_evidence,
+                ),
+                early_completion_evidence,
+            )
+
+        wrong_reference_evidence = action_evidence(
+            "ACT-MAINTENANCE-WRONG-REFERENCE",
+            captured_at=LATER,
+        )
+        wrong_reference = completed_maintenance_state(
+            started,
+            start_evidence,
+            wrong_reference_evidence,
+        )
+        wrong_reference["events"][0]["maintenanceStartActionId"] = (
+            "ACT-NOT-OPEN"
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                started,
+                "production.maintenance.completed",
+                wrong_reference,
+                wrong_reference_evidence,
+            )
+
+        forged_time_evidence = action_evidence("ACT-MAINTENANCE-FORGED-TIME")
+        forged_time = started_maintenance_state(current, forged_time_evidence)
+        forged_time["events"][0]["createdAt"] = LATER
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "production.maintenance.started",
+                forged_time,
+                forged_time_evidence,
+            )
+
+        submillisecond_evidence = action_evidence(
+            "ACT-MAINTENANCE-SUBMILLISECOND",
+            captured_at="2026-07-24T09:00:00.000500Z",
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "production.maintenance.started",
+                started_maintenance_state(current, submillisecond_evidence),
+                submillisecond_evidence,
+            )
+
+        unrelated_mutation_evidence = action_evidence(
+            "ACT-MAINTENANCE-UNRELATED-MUTATION"
+        )
+        unrelated_mutation = started_maintenance_state(
+            current,
+            unrelated_mutation_evidence,
+        )
+        unrelated_mutation["jobs"][0]["line"] = "Unauthorized line change"
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "production.maintenance.started",
+                unrelated_mutation,
+                unrelated_mutation_evidence,
+            )
+
+        completion_evidence = action_evidence(
+            "ACT-MAINTENANCE-COMPLETE",
+            captured_at=LATER,
+        )
+        completed = apply_event(
+            started,
+            "production.maintenance.completed",
+            completed_maintenance_state(
+                started,
+                start_evidence,
+                completion_evidence,
+            ),
+            completion_evidence,
+        )
+
+        second_completion_evidence = action_evidence(
+            "ACT-MAINTENANCE-COMPLETE-AGAIN",
+            captured_at=LATEST,
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                completed,
+                "production.maintenance.completed",
+                completed_maintenance_state(
+                    completed,
+                    start_evidence,
+                    second_completion_evidence,
+                ),
+                second_completion_evidence,
+            )
+
+        duplicate_action = started_maintenance_state(completed, start_evidence)
+        with self.assertRaises(TrialValidationError):
+            validate_production_state(duplicate_action)
+
+        out_of_order_restart_evidence = action_evidence(
+            "ACT-MAINTENANCE-OUT-OF-ORDER-RESTART",
+            captured_at="2026-07-24T09:14:00.000Z",
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                completed,
+                "production.maintenance.started",
+                started_maintenance_state(
+                    completed,
+                    out_of_order_restart_evidence,
+                ),
+                out_of_order_restart_evidence,
+            )
+
+        restart_evidence = action_evidence(
+            "ACT-MAINTENANCE-RESTART",
+            captured_at=LATEST,
+        )
+        restarted = apply_event(
+            completed,
+            "production.maintenance.started",
+            started_maintenance_state(completed, restart_evidence),
+            restart_evidence,
+        )
+        replay_reference_evidence = action_evidence(
+            "ACT-MAINTENANCE-REPLAY-REFERENCE",
+            captured_at="2026-07-24T09:45:00.000Z",
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                restarted,
+                "production.maintenance.completed",
+                completed_maintenance_state(
+                    restarted,
+                    start_evidence,
+                    replay_reference_evidence,
+                ),
+                replay_reference_evidence,
+            )
+
+        two_event_transition = completed_maintenance_state(
+            started,
+            start_evidence,
+            completion_evidence,
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "production.maintenance.started",
+                two_event_transition,
                 start_evidence,
             )
 

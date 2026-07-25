@@ -90,6 +90,7 @@ import {
   PRODUCTION_KEY,
   buildProductionShiftHandoff,
   closeProductionJob,
+  completeProductionMaintenance,
   createEmptyProduction,
   endProductionDowntime,
   formatProductionShiftHandoff,
@@ -100,6 +101,7 @@ import {
   placeProductionQualityHold,
   productionDowntimeIntervals,
   productionIssueSeverities,
+  productionMaintenanceRecords,
   productionMaterialUnits,
   productionMachineStates,
   productionShiftOutput,
@@ -113,6 +115,7 @@ import {
   releaseProductionQualityHold,
   resolveProductionIssue,
   startProductionDowntime,
+  startProductionMaintenance,
   validateProductionState,
   type ProductionActionProof,
   type ProductionDowntimeInterval,
@@ -120,6 +123,7 @@ import {
   type ProductionIssue,
   type ProductionIssueSeverity,
   type ProductionJob,
+  type ProductionMaintenanceRecord,
   type ProductionMaterialUnit,
   type ProductionMachineState,
   type ProductionOutputKind,
@@ -218,6 +222,8 @@ type ActionKind =
   | 'machine_state'
   | 'downtime_start'
   | 'downtime_end'
+  | 'maintenance_start'
+  | 'maintenance_complete'
 
 type PurchaseOrderDraft =
   | { mode: 'create'; sku: string; supplier: string; quantity: string }
@@ -1058,6 +1064,7 @@ function useProductionWorkspace(managedIdentity: ManagedIdentity | null = null) 
         evidence,
         eventType,
         expectedVersion: current.version,
+        identity: managedIdentity,
         state: candidate as unknown as Record<string, unknown>,
       })
       if (!identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) throw new Error('The managed workspace changed before the write was confirmed.')
@@ -3280,6 +3287,8 @@ const productionEventLabels: Record<ProductionEvent['kind'], string> = {
   machine_state_changed: 'Machine state changed',
   downtime_started: 'Downtime started',
   downtime_ended: 'Downtime ended',
+  maintenance_started: 'Maintenance started',
+  maintenance_completed: 'Maintenance completed',
 }
 
 const productionMaterialUnitLabels: Record<ProductionMaterialUnit, string> = {
@@ -3312,7 +3321,7 @@ function ProductionEventHistory({ events }: { events: ProductionEvent[] }) {
     {visibleEvents.length ? <div className="action-history-list">{visibleEvents.map((event) => <article key={event.id}>
       <div>
         <strong>{event.kind === 'output_recorded' ? event.outputKind === 'scrap' ? 'Scrap recorded' : 'Good output recorded' : productionEventLabels[event.kind]} - {event.summary}</strong>
-        <small>{event.subjectId} - {event.actionId} - {event.actor}{event.kind === 'output_recorded' ? ` - Shift: ${event.shiftRef ?? 'Unassigned (legacy)'}` : event.kind === 'material_consumed' ? ` - Shift: ${event.shiftRef} - ${event.quantity} ${event.materialUnit} ${event.materialRef}${event.materialLot ? ` - Lot: ${event.materialLot}` : ''}` : event.kind === 'job_closed' ? ` - Shift: ${event.shiftRef} - ${event.remainingQuantity} not produced` : ''}</small>
+        <small>{event.subjectId} - {event.actionId} - {event.actor}{event.kind === 'output_recorded' ? ` - Shift: ${event.shiftRef ?? 'Unassigned (legacy)'}` : event.kind === 'material_consumed' ? ` - Shift: ${event.shiftRef} - ${event.quantity} ${event.materialUnit} ${event.materialRef}${event.materialLot ? ` - Lot: ${event.materialLot}` : ''}` : event.kind === 'job_closed' ? ` - Shift: ${event.shiftRef} - ${event.remainingQuantity} not produced` : event.kind === 'maintenance_started' ? ` - Owner: ${event.maintenanceOwner}` : event.kind === 'maintenance_completed' ? ` - Start action: ${event.maintenanceStartActionId}` : ''}</small>
         <p>{event.reason} - Evidence: {event.evidenceReference}</p>
       </div>
       <small>{formatTime(event.createdAt)}</small>
@@ -3351,6 +3360,9 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const [machineObservation, setMachineObservation] = useState<{ machineId: string; toState: ProductionMachineState } | null>(null)
   const [downtimeDialogOpen, setDowntimeDialogOpen] = useState(false)
   const [downtimeMachineId, setDowntimeMachineId] = useState(production.machines[0]?.id ?? '')
+  const [maintenanceDialogOpen, setMaintenanceDialogOpen] = useState(false)
+  const [maintenanceMachineId, setMaintenanceMachineId] = useState(production.machines[0]?.id ?? '')
+  const [maintenanceOwner, setMaintenanceOwner] = useState('')
   const [jobDraft, setJobDraft] = useState({ id: '', line: '', product: '', target: '' })
   const [notice, setNotice] = useState('')
   const [actionTrigger, setActionTrigger] = useState<HTMLElement | null>(null)
@@ -3363,6 +3375,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const machineTriggerRef = useRef<HTMLButtonElement | null>(null)
   const downtimeDialogRef = useRef<HTMLDialogElement>(null)
   const downtimeTriggerRef = useRef<HTMLButtonElement>(null)
+  const maintenanceDialogRef = useRef<HTMLDialogElement>(null)
+  const maintenanceTriggerRef = useRef<HTMLButtonElement>(null)
   const openIssues = production.issues
     .filter((issue) => issue.status === 'open')
     .sort((left, right) => {
@@ -3413,6 +3427,15 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ? downtimeMachineId
     : availableDowntimeMachines[0]?.id ?? ''
   const selectedDowntimeMachine = availableDowntimeMachines.find((machine) => machine.id === selectedDowntimeMachineId)
+  const maintenanceRecords = productionMaintenanceRecords(production)
+  const openMaintenanceRecords = maintenanceRecords.filter((record) => !record.completion)
+  const recentMaintenanceRecords = maintenanceRecords.filter((record) => record.completion).slice(0, 3)
+  const maintenanceMachineIds = new Set(openMaintenanceRecords.map((record) => record.machineId))
+  const availableMaintenanceMachines = production.machines.filter((machine) => !maintenanceMachineIds.has(machine.id))
+  const selectedMaintenanceMachineId = availableMaintenanceMachines.some((machine) => machine.id === maintenanceMachineId)
+    ? maintenanceMachineId
+    : availableMaintenanceMachines[0]?.id ?? ''
+  const selectedMaintenanceMachine = availableMaintenanceMachines.find((machine) => machine.id === selectedMaintenanceMachineId)
 
   useEffect(() => {
     const timer = window.setInterval(() => setIssueClock(Date.now()), 60_000)
@@ -3448,6 +3471,16 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     }
     if (!downtimeDialogOpen && dialog.open) dialog.close()
   }, [downtimeDialogOpen, tab])
+
+  useEffect(() => {
+    const dialog = maintenanceDialogRef.current
+    if (!dialog) return
+    if (maintenanceDialogOpen && !dialog.open) {
+      dialog.showModal()
+      requestAnimationFrame(() => dialog.querySelector<HTMLElement>('[data-maintenance-primary]')?.focus())
+    }
+    if (!maintenanceDialogOpen && dialog.open) dialog.close()
+  }, [maintenanceDialogOpen, tab])
 
   async function initializeManagedProduction(event: FormEvent) {
     event.preventDefault()
@@ -3872,6 +3905,52 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     requestAnimationFrame(() => downtimeTriggerRef.current?.focus())
   }
 
+  function reviewMaintenanceStart(event: FormEvent) {
+    event.preventDefault()
+    const owner = maintenanceOwner.trim()
+    if (!selectedMaintenanceMachine || !owner || owner.length > 120) {
+      setNotice('Choose one recorded machine and a named maintenance owner.')
+      return
+    }
+    const machine = selectedMaintenanceMachine
+    maintenanceDialogRef.current?.close()
+    setMaintenanceDialogOpen(false)
+    queueAction({
+      kind: 'maintenance_start',
+      subjectId: machine.id,
+      summary: `Start maintenance for ${machine.name}`,
+      before: `${machine.name} · no open maintenance work · machine status and downtime records unchanged`,
+      after: `${machine.name} · maintenance owned by ${owner} with scope and evidence · no equipment command`,
+      apply: async (record) => {
+        await mutateProduction('production.maintenance.started', record.commandId, productionActionProof(record), (current) => startProductionMaintenance(current, machine.id, owner, productionActionProof(record)))
+        setMaintenanceMachineId('')
+        setMaintenanceOwner('')
+      },
+    }, maintenanceTriggerRef.current)
+  }
+
+  function reviewMaintenanceCompletion(record: ProductionMaintenanceRecord) {
+    const machine = production.machines.find((candidate) => candidate.id === record.machineId)
+    if (!machine || record.completion) return
+    maintenanceDialogRef.current?.close()
+    setMaintenanceDialogOpen(false)
+    queueAction({
+      kind: 'maintenance_complete',
+      subjectId: machine.id,
+      summary: `Complete maintenance for ${machine.name}`,
+      before: `${machine.name} · open maintenance owned by ${record.owner} since ${formatTime(record.startedAt)}`,
+      after: `${machine.name} · maintenance completed with outcome and evidence · machine status and downtime records unchanged`,
+      apply: async (action) => {
+        await mutateProduction('production.maintenance.completed', action.commandId, productionActionProof(action), (current) => completeProductionMaintenance(current, machine.id, record.startActionId, productionActionProof(action)))
+      },
+    }, maintenanceTriggerRef.current)
+  }
+
+  function closeMaintenanceDialog() {
+    setMaintenanceDialogOpen(false)
+    requestAnimationFrame(() => maintenanceTriggerRef.current?.focus())
+  }
+
   const productionBoundary = <div className="production-mode-banner" data-write={productionCanWrite ? 'ready' : 'blocked'} role={productionCanWrite ? 'status' : 'alert'}>
     <span className={`status-pill ${productionCanWrite ? 'bounded' : 'pending'}`}>{managedIdentity ? 'Managed records' : 'Local sample'}</span>
     <p>{productionStorageError
@@ -3960,6 +4039,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
           <div className="panel-head"><div><span className="core-eyebrow">Equipment</span><h2>Recorded status</h2></div></div>
           <p className="panel-copy production-control-boundary" style={{ fontSize: 11, lineHeight: 1.35, marginTop: 6 }}>Records operator observations only. No equipment control.</p>
           <button aria-label={`Review downtime records; ${openDowntimeIntervals.length} open`} className="core-button" onClick={() => setDowntimeDialogOpen(true)} ref={downtimeTriggerRef} style={{ justifyContent: 'space-between', margin: '8px 0', width: '100%' }} type="button"><span>Downtime</span><small>{openDowntimeIntervals.length ? `${openDowntimeIntervals.length} open` : `${recentDowntimeIntervals.length} recent`}</small></button>
+          <button aria-label={`Review maintenance work; ${openMaintenanceRecords.length} open`} className="core-button" onClick={() => setMaintenanceDialogOpen(true)} ref={maintenanceTriggerRef} style={{ justifyContent: 'space-between', margin: '0 0 8px', width: '100%' }} type="button"><span>Maintenance</span><small>{openMaintenanceRecords.length ? `${openMaintenanceRecords.length} open` : `${recentMaintenanceRecords.length} recent`}</small></button>
           {production.machines.length ? <div className="machine-list">{production.machines.map((machine) => <button aria-label={`Review recorded status for ${machine.name}; currently ${productionMachineStateLabels[machine.state]}`} disabled={!productionCanWrite || Boolean(pendingAction)} key={machine.id} type="button" onClick={(event) => openMachineObservation(machine.id, event.currentTarget)}><span className={`machine-dot ${machine.state}`} /><span><strong>{machine.name}</strong><small>{machine.id} - Recorded: {productionMachineStateLabels[machine.state]}</small></span><b>Record status</b></button>)}</div> : <Empty>No equipment records exist in this workspace.</Empty>}
         </section>
         <section className="core-panel production-issue-launcher">
@@ -4002,6 +4082,21 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       </form> : <p className="panel-copy">Every recorded machine already has open downtime.</p>}
       {recentDowntimeIntervals.length ? <><p className="panel-copy"><strong>Recent closed intervals</strong></p><div className="action-history-list">{recentDowntimeIntervals.map((interval) => <article key={interval.startActionId}><div><strong>{interval.machineName} · {formatDowntimeDuration(interval.durationMs ?? 0)}</strong><small style={wrappedIssueDetail}>{formatTime(interval.startedAt)} to {formatTime(interval.end?.endedAt ?? interval.startedAt)}</small><small style={wrappedIssueDetail}>Start: {interval.startedBy} · {interval.startReason} · {interval.startEvidenceReference}</small><small style={wrappedIssueDetail}>End: {interval.end?.endedBy} · {interval.end?.reason} · {interval.end?.evidenceReference}</small></div></article>)}</div></> : null}
       <p className="panel-copy">This human record is separate from machine status. It sends no equipment command and changes no job or output.</p>
+    </dialog>
+    <dialog aria-labelledby="maintenance-dialog-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); closeMaintenanceDialog() }} ref={maintenanceDialogRef}>
+      <div className="panel-head"><div><span className="core-eyebrow">Owned work</span><h2 id="maintenance-dialog-title">Machine maintenance</h2></div><button aria-label="Close maintenance work" className="text-link" onClick={closeMaintenanceDialog} style={{ minHeight: 44, minWidth: 44 }} type="button">Close</button></div>
+      {openMaintenanceRecords.length ? <div className="issue-list">{openMaintenanceRecords.map((record, index) => <article key={record.startActionId}>
+        <span aria-hidden="true" className="issue-mark">MX</span>
+        <div><strong>{record.machineName} · {record.owner}</strong><small style={wrappedIssueDetail}>Started {formatTime(record.startedAt)} by {record.startedBy}</small><small style={wrappedIssueDetail}>Scope: {record.scope}</small><small style={wrappedIssueDetail}>Evidence: {record.startEvidenceReference} · Action: {record.startActionId}</small></div>
+        <button className="core-button" data-maintenance-primary={index === 0 ? true : undefined} disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => reviewMaintenanceCompletion(record)} type="button">Review complete</button>
+      </article>)}</div> : <p className="panel-copy">No machine has open maintenance work.</p>}
+      {availableMaintenanceMachines.length ? <form autoComplete="off" className="core-form compact-form" onSubmit={reviewMaintenanceStart}>
+        <label>Machine<select data-maintenance-primary={!openMaintenanceRecords.length ? true : undefined} disabled={!productionCanWrite || Boolean(pendingAction)} onChange={(event) => setMaintenanceMachineId(event.target.value)} value={selectedMaintenanceMachineId}>{availableMaintenanceMachines.map((machine) => <option key={machine.id} value={machine.id}>{machine.name} · {machine.id} · recorded {productionMachineStateLabels[machine.state]}</option>)}</select></label>
+        <label>Owner<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={120} onChange={(event) => setMaintenanceOwner(event.target.value)} placeholder="Named person or role" required value={maintenanceOwner} /></label>
+        <button className="core-button" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaintenanceMachine || !maintenanceOwner.trim() || maintenanceOwner.trim().length > 120} type="submit">Review start</button>
+      </form> : <p className="panel-copy">Every recorded machine already has open maintenance work.</p>}
+      {recentMaintenanceRecords.length ? <><p className="panel-copy"><strong>Recent completed work</strong></p><div className="action-history-list">{recentMaintenanceRecords.map((record) => <article key={record.startActionId}><div><strong>{record.machineName} · {record.owner}</strong><small style={wrappedIssueDetail}>Started: {record.startedBy} · {record.scope} · {record.startEvidenceReference}</small><small style={wrappedIssueDetail}>Completed: {record.completion?.completedBy} · {record.completion?.outcome} · {record.completion?.evidenceReference}</small><small style={wrappedIssueDetail}>{formatTime(record.startedAt)} to {formatTime(record.completion?.completedAt ?? record.startedAt)}</small></div></article>)}</div></> : null}
+      <p className="panel-copy">The accountable review records work scope or completion outcome. It does not control equipment, change machine status, open downtime, buy parts, or change jobs.</p>
     </dialog>
     <dialog aria-labelledby="machine-observation-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); closeMachineObservation() }} ref={machineDialogRef}>
       {observedMachine && machineObservation ? <>
@@ -4103,7 +4198,7 @@ function QualityHoldList({ disabled, jobs, onRelease }: { disabled: boolean; job
 function ShiftHandoffView({ handoff, onCopy }: { handoff: ProductionShiftHandoff; onCopy: () => void }) {
   const visibleMaterialEntries = handoff.materialEntries.slice(0, 8)
   return <div>
-    <p className="form-notice" role="status">{handoff.shiftRef} · revision {handoff.sourceRevision} · {handoff.shiftOutput.goodUnits.toLocaleString()} good · {handoff.shiftOutput.scrapUnits.toLocaleString()} scrap · {handoff.materialTotals.length} material totals · {handoff.shortCloses.length} closed short · {handoff.unfinishedJobs.length} unfinished · {handoff.activeHolds.length} held · {handoff.priorityProblems.length} critical/high.</p>
+    <p className="form-notice" role="status">{handoff.shiftRef} · revision {handoff.sourceRevision} · {handoff.shiftOutput.goodUnits.toLocaleString()} good · {handoff.shiftOutput.scrapUnits.toLocaleString()} scrap · {handoff.materialTotals.length} material totals · {handoff.shortCloses.length} closed short · {handoff.unfinishedJobs.length} unfinished · {handoff.activeHolds.length} held · {handoff.priorityProblems.length} critical/high · {handoff.activeMaintenance.length} maintenance open.</p>
     <details className="compact-disclosure production-history">
       <summary>Shift entries <span>{handoff.shiftEntries.length}</span></summary>
       <div className="issue-list">
@@ -4168,6 +4263,16 @@ function ShiftHandoffView({ handoff, onCopy }: { handoff: ProductionShiftHandoff
           <div><strong>{problem.summary}</strong><small style={wrappedIssueDetail}>{productionIssueSeverityLabels[problem.severity]} · {problem.area} · Opened {formatIssueDue(problem.openedAt)} by {problem.openedBy}</small><small style={wrappedIssueDetail}>Owner {problem.owner} · Due {formatIssueDue(problem.dueAt)}</small><small style={wrappedIssueDetail}>Next: {problem.containment}</small><small style={wrappedIssueDetail}>Evidence: {problem.evidenceReference} · Action: {problem.actionId}</small></div>
         </article>)}
         {!handoff.priorityProblems.length ? <Empty>No open critical or high problem is recorded.</Empty> : null}
+      </div>
+    </details>
+    <details className="compact-disclosure production-history">
+      <summary>Active maintenance <span>{handoff.activeMaintenance.length}</span></summary>
+      <div className="issue-list">
+        {handoff.activeMaintenance.map((record) => <article key={record.startActionId}>
+          <span className="issue-mark open">MX</span>
+          <div><strong>{record.machineName} · {record.owner}</strong><small style={wrappedIssueDetail}>{record.machineId} · Started {formatIssueDue(record.startedAt)} by {record.startedBy}</small><small style={wrappedIssueDetail}>Scope: {record.scope}</small><small style={wrappedIssueDetail}>Evidence: {record.startEvidenceReference} · Action: {record.startActionId}</small></div>
+        </article>)}
+        {!handoff.activeMaintenance.length ? <Empty>No active maintenance work is recorded.</Empty> : null}
       </div>
     </details>
     <details className="compact-disclosure production-history">
