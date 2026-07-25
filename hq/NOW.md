@@ -43,8 +43,8 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 
 ## Verified baseline
 
-- Checkpoint `5d7b217` is the accepted local product and database-authority baseline; `89a3505` aligns that baseline to the four products, and `69dfb09` is the accepted local agent-operations checkpoint.
-- App lint/build, all local release/security/database/HQ contracts, and all 167 Python tests pass. Security coverage is 58 checks; the focused cloud/runtime slice contributes 18 passing tests.
+- Checkpoint `5d7b217` is the accepted local product baseline; `89a3505` aligns four products, `69dfb09` governs agent operations, and `98b8044` closes the critical local legacy-pilot gaps.
+- App lint/build, all local release/security/database/HQ contracts, and all 173 Python tests pass. Security coverage is 58 checks, plus 18 cloud/runtime and six legacy-pilot tests.
 - Dependency audit previously reported zero known vulnerabilities; this slice did not refresh external package or hosted-state inventories.
 - React Router is isolated in a 43,870-byte cacheable chunk. The accepted product baseline's largest JavaScript chunk is 463,892 bytes; checkpoint `69dfb09` is 478,287 bytes and remains below the build gate.
 - Focused coverage: 202 Shop, 34 order-recovery, 250 Plant, 94 Website, 11 managed-Website, 44 client-onboarding, 27 storefront-draft, 14 storefront, 15 request, 17 managed-storefront, and 16 handoff checks.
@@ -66,7 +66,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 ## Blockers
 
 - Ecommerce lacks an isolated hosted/cross-device rehearsal. Local v2 now binds saved setup to a currentness fingerprint, upgrades v1 additively, and invalidates on cross-tab Shop changes; that fingerprint is not authenticated approval evidence. Managed setup remains digest-bound.
-- Agent Teams is a governed local control plane, not a proven hosted worker runtime. Network-bound pilot work is blocked by legacy SSRF, unscoped approval authority, unsafe development-stack exposure, over-broad queue/deploy permissions, and unconstrained credential forwarding. See the agent-operations security brief.
+- Agent Teams is not a proven hosted runtime. `98b8044` removes remote URL hydration, locks the legacy launcher to loopback, and scopes approval authority; unsafe development-stack exposure, broad queue/deploy permissions, and older credential forwarding remain blocked. See the security brief.
 - No isolated hosted Supabase branch or separate non-production project has repeated the local database proof.
 - Storage privacy is local-contract evidence only; hosted bucket inventory and object-listing denial remain required.
 - Browser-local Website records cannot authenticate out-of-band storage edits; managed commands use the locked prior state and separate ledger. Hosted activation remains unproven.
@@ -86,8 +86,8 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Next evidence
 
-1. Close legacy SSRF and approval-authority findings; test redirects, private addresses, cross-workspace access, forged actors, and invalid transitions.
-2. Separate view/execute/deploy permissions; retire unsafe development exposure and constrain worker destinations to HTTPS allowlists.
+1. Separate agent view/execute/deploy permissions and require human deployment approval.
+2. Retire unsafe development exposure and constrain worker destinations to bounded HTTPS allowlists.
 3. Run all four client-data templates with one named company and measure correction, review time, and recovery before any write adapter.
 4. On one approved isolated Supabase target, prove private Storage, RLS, Ecommerce replay/isolation, and database recovery.
 5. Refresh GitHub/Vercel/DNS read-only, then run the gated 20-case Order Intake provider review only after owner-approved credentials and four-product onboarding evidence.
