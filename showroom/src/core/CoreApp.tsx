@@ -2092,6 +2092,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const orderComposerRef = useRef<HTMLDialogElement>(null)
   const orderComposerHeadingRef = useRef<HTMLHeadingElement>(null)
   const orderComposerTriggerRef = useRef<HTMLButtonElement>(null)
+  const orderReviewRef = useRef<HTMLButtonElement>(null)
   const orderPromiseRef = useRef<HTMLInputElement>(null)
   const orderOptionsRef = useRef<HTMLDetailsElement>(null)
   const orderPaymentRef = useRef<HTMLSelectElement>(null)
@@ -2860,7 +2861,9 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     const trigger = returnFocus?.isConnected
       ? returnFocus
       : action.kind === 'order_create'
-        ? orderComposerTriggerRef.current
+        ? preparedEcommerceDraft && orderReviewRef.current?.isConnected
+          ? orderReviewRef.current
+          : orderComposerTriggerRef.current
         : document.activeElement instanceof HTMLElement ? document.activeElement : null
     setActionTrigger(trigger)
     if (action.kind === 'order_create' && orderComposerRef.current?.open) orderComposerRef.current.close()
@@ -3785,14 +3788,26 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     })
   }
 
-  const actionGate = <AccountableActionGate authenticatedActor={managedIdentity ? { id: managedIdentity.userId, label: managedIdentity.email } : undefined} key={pendingAction?.id ?? 'commerce-idle'} action={pendingAction} onCancel={() => {
-    if (pendingAction?.kind === 'order_create') {
+  function cancelCommerceActionReview() {
+    const restorePreparedEcommerce = pendingAction?.kind === 'order_create' && Boolean(preparedEcommerceDraft)
+    if (pendingAction?.kind === 'order_create' && !restorePreparedEcommerce) {
       setOrderDraftActive(false)
       setResumedOrderDraft(null)
     }
     setPendingAction(null)
-    setNotice('Change cancelled. Shop data was not modified.')
-  }} onConfirm={confirmAction} returnFocus={actionTrigger} />
+    if (!restorePreparedEcommerce) {
+      setNotice('Change cancelled. Shop data was not modified.')
+      return
+    }
+    setNotice('Review cancelled. The prepared Ecommerce request and Payment are unchanged; Shop data was not modified.')
+    requestAnimationFrame(() => {
+      const dialog = orderComposerRef.current
+      if (dialog && !dialog.open) dialog.showModal()
+      orderReviewRef.current?.focus({ preventScroll: true })
+    })
+  }
+
+  const actionGate = <AccountableActionGate authenticatedActor={managedIdentity ? { id: managedIdentity.userId, label: managedIdentity.email } : undefined} key={pendingAction?.id ?? 'commerce-idle'} action={pendingAction} onCancel={cancelCommerceActionReview} onConfirm={confirmAction} returnFocus={actionTrigger} />
   const actionHistory = managedIdentity ? null : <ActionHistory actions={actions} domain="commerce" />
   const orderDraftRecoveryWarning = orderDraftRead.status === 'ready'
     && orderDraftIssue.startsWith('Order confirmed, but its local recovery copy remains:')
@@ -3914,7 +3929,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         </div>
         <div className="order-submit-bar" data-ecommerce-payment={preparedEcommerceDraft ? 'true' : 'false'}>
           {preparedEcommerceDraft ? <label className="order-ecommerce-payment"><span>Payment</span><select disabled={commerceControlsDisabled} form="commerce-manual-order-form" ref={orderPaymentRef} required value={payment} onChange={(event) => { setPayment(event.target.value); setPreparedChannelDraft(null) }}><option value="">Choose payment</option><option>KBZPay</option><option>WavePay</option><option>Cash on delivery</option><option>Cash</option><option>Card</option></select></label> : null}
-          <button aria-controls={!promisedAt ? 'commerce-order-promise' : !payment && !preparedEcommerceDraft ? 'commerce-order-options' : undefined} className="core-button primary" disabled={commerceControlsDisabled || resumedOrderNeedsReview || orderDraftConflict || Boolean(preparedEcommerceDraft && (!payment || !promisedAt))} form="commerce-manual-order-form" onClick={!preparedEcommerceDraft && (!promisedAt || !payment) ? focusNextOrderRequirement : undefined} type={!preparedEcommerceDraft && (!promisedAt || !payment) ? 'button' : 'submit'}>{!promisedAt ? 'Choose promise' : !payment ? 'Choose payment' : resumedOrderNeedsReview ? 'Review current Shop values' : orderDraftConflict ? 'Reload saved draft' : 'Review order'}</button>
+          <button aria-controls={!promisedAt ? 'commerce-order-promise' : !payment && !preparedEcommerceDraft ? 'commerce-order-options' : undefined} className="core-button primary" disabled={commerceControlsDisabled || resumedOrderNeedsReview || orderDraftConflict || Boolean(preparedEcommerceDraft && (!payment || !promisedAt))} form="commerce-manual-order-form" onClick={!preparedEcommerceDraft && (!promisedAt || !payment) ? focusNextOrderRequirement : undefined} ref={orderReviewRef} type={!preparedEcommerceDraft && (!promisedAt || !payment) ? 'button' : 'submit'}>{!promisedAt ? 'Choose promise' : !payment ? 'Choose payment' : resumedOrderNeedsReview ? 'Review current Shop values' : orderDraftConflict ? 'Reload saved draft' : 'Review order'}</button>
         </div>
       </> : null}
     </dialog>
