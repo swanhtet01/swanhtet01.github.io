@@ -452,6 +452,9 @@ const directRequestAction = ecommerceSource.slice(directRequestStart, directRequ
 const storefrontSaveStart = ecommerceSource.indexOf('async function saveCurrentStorefront')
 const storefrontSaveEnd = ecommerceSource.indexOf('function discardStorefrontChanges', storefrontSaveStart)
 const storefrontSaveAction = ecommerceSource.slice(storefrontSaveStart, storefrontSaveEnd)
+const finishStorefrontSetupStart = ecommerceSource.indexOf('function finishStorefrontSetup')
+const finishStorefrontSetupEnd = ecommerceSource.indexOf('function applyManagedView', finishStorefrontSetupStart)
+const finishStorefrontSetupAction = ecommerceSource.slice(finishStorefrontSetupStart, finishStorefrontSetupEnd)
 const storefrontSavePreviewAdvanceCount = (storefrontSaveAction.match(/showMobileWorkspace\('preview'\)/g) ?? []).length
 const managedStorefrontSave = storefrontSaveAction.indexOf('await saveManagedStorefront(managedIdentity)')
 const localStorefrontSave = storefrontSaveAction.indexOf('const saved = await saveStorefrontDraft(')
@@ -461,10 +464,27 @@ if (directRequestStart < 0
   || directRequestEnd < 0
   || storefrontSaveStart < 0
   || storefrontSaveEnd < 0
+  || finishStorefrontSetupStart < 0
+  || finishStorefrontSetupEnd < 0
   || !ecommerceSource.includes('onClick={() => openRequestFor(item.sku)}')
   || !ecommerceSource.includes('aria-controls="ecommerce-request-form"')
-  || !ecommerceSource.includes('Save storefront before requesting ${item.name}')
-  || !ecommerceSource.includes("disabled={!available || catalogHydrating || !savedDraftIsCurrent}")
+  || !ecommerceSource.includes('const storefrontSaveRef = useRef<HTMLButtonElement>(null)')
+  || !ecommerceSource.includes('function finishStorefrontSetup()')
+  || !ecommerceSource.includes("showMobileWorkspace('setup')")
+  || !ecommerceSource.includes("storefrontSaveRef.current?.scrollIntoView({ block: 'center' })")
+  || !ecommerceSource.includes("storefrontSaveRef.current?.focus({ preventScroll: true })")
+  || !ecommerceSource.includes('id="ecommerce-save-storefront"')
+  || !ecommerceSource.includes('ref={storefrontSaveRef}')
+  || !ecommerceSource.includes('className="ecommerce-preview-gate"')
+  || !ecommerceSource.includes('aria-controls="ecommerce-setup-panel"')
+  || !ecommerceSource.includes('onClick={finishStorefrontSetup}')
+  || !ecommerceSource.includes('Finish setup first')
+  || !ecommerceSource.includes("className={available && savedDraftIsCurrent ? 'has-request-action' : undefined}")
+  || !ecommerceSource.includes('{available && savedDraftIsCurrent ? (')
+  || !ecommerceSource.includes('{savedDraftIsCurrent ? (\n            <details\n              className="ecommerce-request-lab"')
+  || !ecommerceSource.includes("<b>{requestLedger.requests.length ? `${requestLedger.requests.length} pending` : 'Start'}</b>")
+  || ecommerceSource.includes('Save storefront before requesting ${item.name}')
+  || ecommerceSource.includes("disabled={!available || catalogHydrating || !savedDraftIsCurrent}")
   || !ecommerceSource.includes('requestCustomerRef.current?.focus')
   || !ecommerceSource.includes('open={requestOpen}')
   || !ecommerceSource.includes("'Delivery phone / area' : 'Pickup name / phone'")
@@ -476,6 +496,10 @@ if (directRequestStart < 0
   || localStorefrontSave < 0
   || firstSavePreviewAdvance < managedStorefrontSave
   || lastSavePreviewAdvance < localStorefrontSave
+  || !finishStorefrontSetupAction.includes("showMobileWorkspace('setup')")
+  || !finishStorefrontSetupAction.includes("storefrontSaveRef.current?.scrollIntoView({ block: 'center' })")
+  || !finishStorefrontSetupAction.includes("storefrontSaveRef.current?.focus({ preventScroll: true })")
+  || ['saveCurrentStorefront', 'saveManagedCommerceCommand', 'saveStorefrontDraft', 'createRequestReceipt', 'setStoreName', 'setSelectedSkus', 'fetch('].some((marker) => finishStorefrontSetupAction.includes(marker))
   || !directRequestAction.includes('catalogHydrating || !savedDraftIsCurrent')
   || !ecommerceSource.includes('const latestRequestIsCurrent = Boolean(latestRequest')
   || !ecommerceSource.includes('latestRequest.sourcePreviewDigest === digest')
@@ -486,6 +510,8 @@ if (directRequestStart < 0
   || !ecommerceSource.includes('This receipt no longer matches the current saved storefront.')
   || !ecommerceSource.includes("useState('')")
   || ['createRequestReceipt', 'sendToShopReview', 'retainInManagedInbox', 'navigate(', 'saveManagedCommerceCommand', 'localStorage', 'sessionStorage', 'fetch('].some((marker) => directRequestAction.includes(marker))
+  || !ecommerceCssSource.includes('.ecommerce-preview-gate')
+  || !ecommerceCssSource.includes('.ecommerce-preview-gate .core-button')
   || !ecommerceCssSource.includes('.storefront-request-button')
   || !ecommerceCssSource.includes('min-height: 44px')
   || !ecommerceCssSource.includes('@media (max-width: 560px)')) fail('ecommerce_direct_request_action_missing_or_consequential')

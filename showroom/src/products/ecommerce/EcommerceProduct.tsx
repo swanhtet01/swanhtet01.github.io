@@ -179,6 +179,7 @@ export function EcommerceProduct() {
   const [requestNotice, setRequestNotice] = useState('')
   const [handoffConfirmed, setHandoffConfirmed] = useState(false)
   const [handoffBusy, setHandoffBusy] = useState(false)
+  const storefrontSaveRef = useRef<HTMLButtonElement>(null)
   const requestPanelRef = useRef<HTMLDetailsElement>(null)
   const requestCustomerRef = useRef<HTMLInputElement>(null)
 
@@ -418,6 +419,14 @@ export function EcommerceProduct() {
     if (!window.matchMedia('(max-width: 840px)').matches) return
     requestAnimationFrame(() => {
       document.getElementById(`ecommerce-${view}-panel`)?.scrollIntoView({ block: 'start' })
+    })
+  }
+
+  function finishStorefrontSetup() {
+    showMobileWorkspace('setup')
+    requestAnimationFrame(() => {
+      storefrontSaveRef.current?.scrollIntoView({ block: 'center' })
+      storefrontSaveRef.current?.focus({ preventScroll: true })
     })
   }
 
@@ -919,7 +928,9 @@ export function EcommerceProduct() {
                   || draftStorageBlocked
                   || managedCatalogDigestPending
                   || Boolean(managedCatalogDigestError)}
+                id="ecommerce-save-storefront"
                 onClick={() => void saveCurrentStorefront()}
+                ref={storefrontSaveRef}
                 type="button"
               >
                 {draftBusy ? 'Saving…' : localFingerprintUpgradeRequired ? 'Upgrade storefront' : catalogRebindRequired ? 'Rebind storefront' : 'Save storefront'}
@@ -938,6 +949,23 @@ export function EcommerceProduct() {
             </div>
           </div>
 
+          {!savedDraftIsCurrent ? (
+            <div className="ecommerce-preview-gate">
+              <span>
+                <strong>Finish setup first</strong>
+                <small>Save this storefront before customer requests are available.</small>
+              </span>
+              <button
+                aria-controls="ecommerce-setup-panel"
+                className="core-button primary"
+                onClick={finishStorefrontSetup}
+                type="button"
+              >
+                Finish setup
+              </button>
+            </div>
+          ) : null}
+
           <div className={`ecommerce-preview-frame is-${device}`}>
             {previewResult.preview ? (
               <div className="storefront-preview">
@@ -955,7 +983,7 @@ export function EcommerceProduct() {
                     const available = item.availability === 'available'
                     return (
                     <article
-                      className="has-request-action"
+                      className={available && savedDraftIsCurrent ? 'has-request-action' : undefined}
                       data-requested={requestOpen && currentRequestSku === item.sku ? 'true' : 'false'}
                       key={item.sku}
                     >
@@ -964,20 +992,18 @@ export function EcommerceProduct() {
                       <strong>{item.name}</strong>
                       <span>{formatMmk(item.unitPriceMmk)}</span>
                       <b>{available ? 'Available' : 'Sold out'}</b>
-                      <button
-                        aria-controls="ecommerce-request-form"
-                        aria-label={!available
-                          ? `${item.name} is sold out`
-                          : savedDraftIsCurrent
-                            ? `Request ${item.name}`
-                            : `Save storefront before requesting ${item.name}`}
-                        className="storefront-request-button"
-                        disabled={!available || catalogHydrating || !savedDraftIsCurrent}
-                        onClick={() => openRequestFor(item.sku)}
-                        type="button"
-                      >
-                        {available ? savedDraftIsCurrent ? 'Request' : 'Save first' : 'Sold out'}
-                      </button>
+                      {available && savedDraftIsCurrent ? (
+                        <button
+                          aria-controls="ecommerce-request-form"
+                          aria-label={`Request ${item.name}`}
+                          className="storefront-request-button"
+                          disabled={catalogHydrating}
+                          onClick={() => openRequestFor(item.sku)}
+                          type="button"
+                        >
+                          Request
+                        </button>
+                      ) : null}
                     </article>
                     )
                   })}
@@ -993,19 +1019,18 @@ export function EcommerceProduct() {
             )}
           </div>
 
-          <details
-            className="ecommerce-request-lab"
-            onToggle={(event) => setRequestOpen(event.currentTarget.open)}
-            open={requestOpen}
-            ref={requestPanelRef}
-          >
-            <summary>
-              <span><strong>Request an item</strong><small>{savedDraftIsCurrent
-                ? 'Choose quantity and pickup or delivery'
-                : 'Save storefront before receiving requests'}</small></span>
-              <b>{requestLedger.requests.length ? `${requestLedger.requests.length} pending` : savedDraftIsCurrent ? 'Start' : 'Save first'}</b>
-            </summary>
-            <div className="ecommerce-request-body" id="ecommerce-request-form">
+          {savedDraftIsCurrent ? (
+            <details
+              className="ecommerce-request-lab"
+              onToggle={(event) => setRequestOpen(event.currentTarget.open)}
+              open={requestOpen}
+              ref={requestPanelRef}
+            >
+              <summary>
+                <span><strong>Request an item</strong><small>Choose quantity and pickup or delivery</small></span>
+                <b>{requestLedger.requests.length ? `${requestLedger.requests.length} pending` : 'Start'}</b>
+              </summary>
+              <div className="ecommerce-request-body" id="ecommerce-request-form">
               <form onSubmit={(event) => void createRequestReceipt(event)}>
                 <label>
                   <span>{requestFulfilment === 'delivery' ? 'Delivery phone / area' : 'Pickup name / phone'}</span>
@@ -1065,8 +1090,9 @@ export function EcommerceProduct() {
                     : managedIdentity
                       ? 'Confirm the exact receipt, then retain it in the managed Shop inbox. It remains request intent only.'
                       : 'This local receipt is not a Shop order. Connect a managed workspace for shared, recoverable retention.')}</p>
-            </div>
-          </details>
+              </div>
+            </details>
+          ) : null}
 
           <details className="ecommerce-verification" open={digestError ? true : undefined}>
             <summary>
