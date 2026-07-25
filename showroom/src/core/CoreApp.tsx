@@ -1688,9 +1688,9 @@ export function OverviewPage() {
           <span><strong>Shop</strong><small>Orders, payments, and stock</small></span>
           <b>{openOrders.length ? `${openOrders.length} open` : 'Ready'}</b>
         </Link>
-        <Link to="/plant/?tab=production">
+        <Link to={openProductionIssues.length ? '/plant/?tab=control' : '/plant/?tab=production'}>
           <span><strong>Plant</strong><small>Jobs, output, and problems</small></span>
-          <b>{openProductionIssues.length ? `${openProductionIssues.length} issue` : 'Ready'}</b>
+          <b>{openProductionIssues.length ? `${openProductionIssues.length} ${openProductionIssues.length === 1 ? 'issue' : 'issues'}` : 'Ready'}</b>
         </Link>
         <Link to="/products/website/">
           <span><strong>Website</strong><small>Build and review a website</small></span>
