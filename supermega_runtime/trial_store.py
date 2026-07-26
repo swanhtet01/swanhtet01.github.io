@@ -787,6 +787,65 @@ def _authoritative_command_payload(
         authoritative["evidence"] = authoritative_evidence
         authoritative["state"] = authoritative_state
         return authoritative
+    if event_type == "commerce.purchase_order.received":
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        movements = state.get("movements") if isinstance(state, Mapping) else None
+        purchase_orders = (
+            state.get("purchaseOrders") if isinstance(state, Mapping) else None
+        )
+        if (
+            not isinstance(evidence, Mapping)
+            or not isinstance(state, Mapping)
+            or not isinstance(movements, list)
+            or not movements
+            or not isinstance(movements[0], Mapping)
+            or not isinstance(purchase_orders, list)
+        ):
+            return authoritative
+        receipt = movements[0]
+        purchase_order_id = receipt.get("purchaseOrderId")
+        purchase_order = next(
+            (
+                candidate
+                for candidate in purchase_orders
+                if isinstance(candidate, Mapping)
+                and candidate.get("id") == purchase_order_id
+            ),
+            None,
+        )
+        if (
+            receipt.get("kind") != "receipt"
+            or receipt.get("actionId") != evidence.get("actionId")
+            or not isinstance(purchase_order_id, str)
+            or not isinstance(purchase_order, Mapping)
+        ):
+            return authoritative
+        effective_captured_at = _not_before(
+            captured_at,
+            purchase_order.get("createdAt"),
+            *(
+                prior.get("createdAt")
+                for prior in movements[1:]
+                if isinstance(prior, Mapping)
+                and prior.get("kind") == "receipt"
+                and prior.get("purchaseOrderId") == purchase_order_id
+            ),
+        )
+        authoritative_evidence = dict(evidence)
+        authoritative_evidence["actor"] = principal.actor_id
+        authoritative_evidence["capturedAt"] = effective_captured_at
+        authoritative_movement = dict(receipt)
+        authoritative_movement["actor"] = principal.actor_id
+        authoritative_movement["createdAt"] = effective_captured_at
+        authoritative_state = dict(state)
+        authoritative_state["movements"] = [
+            authoritative_movement,
+            *deepcopy(movements[1:]),
+        ]
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
     if event_type == "commerce.payment.reconciled":
         evidence = authoritative.get("evidence")
         state = authoritative.get("state")

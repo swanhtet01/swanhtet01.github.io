@@ -3073,6 +3073,173 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertTrue(replay.idempotent_replay)
         self.assertEqual(replay.state, accepted.state)
 
+    def test_store_stamps_purchase_receipt_actor_time_and_replay(self) -> None:
+        store = InMemoryTrialStore(reducer=reduce_trial_state)
+        operator = TrialPrincipal("workspace-receiving", "shop-receiver", "human")
+        agent = TrialPrincipal("workspace-receiving", "receiving-agent", "agent")
+        for principal in (operator, agent):
+            store.provision_membership(
+                workspace_id=principal.workspace_id,
+                actor_id=principal.actor_id,
+                actor_kind=principal.actor_kind,
+                capabilities=("commerce.write",),
+            )
+        initialized = store.apply_command(
+            operator,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.workspace.initialized",
+            expected_version=0,
+            payload={
+                "state": catalog_state(),
+                "evidence": action_evidence("ACT-RECEIVING-INITIALIZE"),
+            },
+        )
+        created_state = deepcopy(initialized.state)
+        created_state["purchaseOrders"] = [
+            purchase_order_record(
+                action_id="ACT-RECEIVING-ORDER",
+                expected_at="2026-07-23T11:00:00.000Z",
+            )
+        ]
+        created_payload = {
+            "state": created_state,
+            "evidence": dict(
+                created_state["purchaseOrders"][0]["creation"]  # type: ignore[index,arg-type]
+            ),
+        }
+        purchase_created_at = "2026-07-23T09:00:00.000+00:00"
+        with patch(
+            "supermega_runtime.trial_store._utc_now",
+            return_value=purchase_created_at,
+        ):
+            created = store.apply_command(
+                operator,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.purchase_order.created",
+                expected_version=initialized.version,
+                payload=created_payload,
+            )
+
+        action_id = "ACT-RECEIVING-PARTIAL"
+        spoofed_at = "2099-01-01T00:00:00.000Z"
+        receipt_state = deepcopy(created.state)
+        receipt_state["items"][0]["onHand"] = 14  # type: ignore[index]
+        receipt_state["movements"] = [
+            movement(
+                "receipt",
+                action_id,
+                4,
+                created_at=spoofed_at,
+                purchase_order_id=PURCHASE_ORDER_ID,
+            )
+        ]
+        receipt_state["movements"][0]["actor"] = "Fabricated receiving bot"  # type: ignore[index]
+        receipt_payload = {
+            "state": receipt_state,
+            "evidence": action_evidence(
+                action_id,
+                captured_at=spoofed_at,
+                actor="Fabricated receiving bot",
+            ),
+        }
+        command_id = str(uuid4())
+        with patch(
+            "supermega_runtime.trial_store._utc_now",
+            return_value="2026-07-23T08:30:00.000+00:00",
+        ):
+            received = store.apply_command(
+                operator,
+                command_id=command_id,
+                surface="commerce",
+                event_type="commerce.purchase_order.received",
+                expected_version=created.version,
+                payload=receipt_payload,
+            )
+            replay = store.apply_command(
+                operator,
+                command_id=command_id,
+                surface="commerce",
+                event_type="commerce.purchase_order.received",
+                expected_version=created.version,
+                payload=receipt_payload,
+            )
+
+        receipt = received.state["movements"][0]  # type: ignore[index]
+        self.assertEqual(receipt["actor"], operator.actor_id)
+        self.assertEqual(
+            datetime.fromisoformat(str(receipt["createdAt"])),
+            datetime.fromisoformat(purchase_created_at),
+        )
+        self.assertNotEqual(receipt["createdAt"], spoofed_at)
+        self.assertEqual(receipt["purchaseOrderId"], PURCHASE_ORDER_ID)
+        self.assertEqual(received.state["items"][0]["onHand"], 14)  # type: ignore[index]
+        self.assertTrue(replay.idempotent_replay)
+        self.assertEqual(replay.state, received.state)
+
+        conflicting = deepcopy(receipt_payload)
+        conflicting["evidence"]["reason"] = "Changed replay reason."  # type: ignore[index]
+        conflicting["state"]["movements"][0]["reason"] = "Changed replay reason."  # type: ignore[index]
+        with self.assertRaises(TrialIdempotencyConflict):
+            store.apply_command(
+                operator,
+                command_id=command_id,
+                surface="commerce",
+                event_type="commerce.purchase_order.received",
+                expected_version=created.version,
+                payload=conflicting,
+            )
+
+        second_action_id = "ACT-RECEIVING-FINAL"
+        second_state = deepcopy(received.state)
+        second_state["items"][0]["onHand"] = 16  # type: ignore[index]
+        second_state["movements"] = [
+            movement(
+                "receipt",
+                second_action_id,
+                2,
+                created_at=spoofed_at,
+                purchase_order_id=PURCHASE_ORDER_ID,
+            ),
+            *received.state["movements"],  # type: ignore[misc]
+        ]
+        second_payload = {
+            "state": second_state,
+            "evidence": action_evidence(
+                second_action_id,
+                captured_at=spoofed_at,
+                actor="Another fabricated receiver",
+            ),
+        }
+        second_state["movements"][0]["actor"] = "Another fabricated receiver"  # type: ignore[index]
+        with patch(
+            "supermega_runtime.trial_store._utc_now",
+            return_value="2026-07-23T08:00:00.000+00:00",
+        ):
+            final_receipt = store.apply_command(
+                operator,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.purchase_order.received",
+                expected_version=received.version,
+                payload=second_payload,
+            )
+        final_movement = final_receipt.state["movements"][0]  # type: ignore[index]
+        self.assertEqual(final_movement["actor"], operator.actor_id)
+        self.assertEqual(final_movement["createdAt"], receipt["createdAt"])
+        self.assertEqual(final_receipt.state["items"][0]["onHand"], 16)  # type: ignore[index]
+
+        with self.assertRaises(TrialHumanApprovalRequired):
+            store.apply_command(
+                agent,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.purchase_order.received",
+                expected_version=final_receipt.version,
+                payload=receipt_payload,
+            )
+
     def test_purchase_order_transitions_fail_closed_on_overreceipt_and_cross_event_mutation(self) -> None:
         current = catalog_state()
         created_state = deepcopy(current)
