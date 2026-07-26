@@ -109,7 +109,7 @@ const objects: Record<ClientSolutionId, ClientImportObject> = {
     label: 'Plant jobs',
     description: 'Initial production jobs, targets, due dates, and line ownership.',
     keyField: 'jobCode',
-    maximumRows: CLIENT_IMPORT_MAX_ROWS,
+    maximumRows: 100,
     activationBoundary: 'A Plant owner must verify capacity, material, and safety before jobs enter the live schedule.',
     workflowTemplates: {
       'production-control': 'job_code,product_name,target_quantity,due_date,production_line\r\nJOB-001,20 inch tyre,500,2026-08-15,Line A\r\nJOB-002,16 inch tyre,300,2026-08-16,Line B\r\n',

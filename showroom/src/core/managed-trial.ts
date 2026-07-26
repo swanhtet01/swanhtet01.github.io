@@ -161,8 +161,8 @@ export type ManagedClientImportValidation = {
 export type ManagedClientImportActivation = {
   contract: 'supermega.client_import_activation.v1'
   status: 'applied'
-  product: 'commerce' | 'website'
-  object: 'shop_catalog' | 'website_pages'
+  product: 'commerce' | 'production' | 'website'
+  object: 'shop_catalog' | 'plant_jobs' | 'website_pages'
   workflow_template_id: string
   package_digest: string
   row_count: number
@@ -234,11 +234,14 @@ const CLIENT_IMPORT_ACTIVATION = {
 } as const
 
 const CLIENT_IMPORT_COMMAND_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-const WEBSITE_IMPORT_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
+const MANAGED_IMPORT_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
 
 function clientImportAtomicAdapter(product: ManagedClientImportPackage['product']) {
   if (product === 'commerce') {
     return { eventType: 'commerce.workspace.initialized', surface: 'commerce' } as const
+  }
+  if (product === 'production') {
+    return { eventType: 'production.workspace.initialized', surface: 'production' } as const
   }
   if (product === 'website') {
     return { eventType: 'website.workspace.initialized', surface: 'website' } as const
@@ -377,10 +380,104 @@ export function assertManagedShopImportState(
   return state
 }
 
-function isCanonicalWebsiteImportTimestamp(value: unknown) {
-  if (typeof value !== 'string' || !WEBSITE_IMPORT_TIMESTAMP.test(value)) return false
+function isCanonicalManagedImportTimestamp(value: unknown) {
+  if (typeof value !== 'string' || !MANAGED_IMPORT_TIMESTAMP.test(value)) return false
   const parsed = new Date(value)
   return Number.isFinite(parsed.getTime()) && parsed.toISOString() === value
+}
+
+function plantImportDueAt(value: unknown) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return ''
+  const parsed = new Date(`${value}T00:00:00.000Z`)
+  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) return ''
+  return `${value}T17:29:59.999Z`
+}
+
+export function assertManagedPlantImportState(
+  state: unknown,
+  stagingPackage: ManagedClientImportPackage,
+  expectedPackageDigest: string,
+) {
+  const stateKeys = ['events', 'issues', 'jobs', 'machines', 'openingPlan', 'revision', 'schema'] as const
+  const jobKeys = ['dueAt', 'id', 'line', 'output', 'owner', 'priority', 'product', 'target'] as const
+  const machineKeys = ['id', 'name', 'state'] as const
+  const openingPlanKeys = ['confirmedAt', 'contract', 'jobIds', 'machineIds', 'packageDigest'] as const
+  if (stagingPackage.product !== 'production'
+    || !/^sha256:[0-9a-f]{64}$/.test(expectedPackageDigest)
+    || !isRecord(state)
+    || !hasExactKeys(state, stateKeys)
+    || state.schema !== 'supermega.production.workspace.v2'
+    || state.revision !== 0
+    || !Array.isArray(state.jobs)
+    || state.jobs.length !== stagingPackage.rows.length
+    || !Array.isArray(state.issues)
+    || state.issues.length !== 0
+    || !Array.isArray(state.machines)
+    || !Array.isArray(state.events)
+    || state.events.length !== 0
+    || !isRecord(state.openingPlan)
+    || !hasExactKeys(state.openingPlan, openingPlanKeys)
+    || state.openingPlan.contract !== 'supermega.production.opening-plan.v1'
+    || state.openingPlan.packageDigest !== expectedPackageDigest
+    || !isCanonicalManagedImportTimestamp(state.openingPlan.confirmedAt)
+    || !Array.isArray(state.openingPlan.jobIds)
+    || !Array.isArray(state.openingPlan.machineIds)) {
+    throw new ManagedTrialError('The managed workspace returned an invalid Plant opening plan.', {
+      code: 'managed_client_import_activation_invalid',
+    })
+  }
+  const confirmedAt = state.openingPlan.confirmedAt as string
+  for (const [index, row] of stagingPackage.rows.entries()) {
+    const job = state.jobs[index]
+    const target = Number(row.values.targetQuantity)
+    const dueAt = plantImportDueAt(row.values.dueDate)
+    if (!isRecord(job)
+      || !hasExactKeys(job, jobKeys)
+      || !Number.isSafeInteger(target)
+      || target < 1
+      || !dueAt
+      || Date.parse(dueAt) <= Date.parse(confirmedAt)
+      || job.id !== row.values.jobCode
+      || job.line !== row.values.line
+      || job.product !== row.values.productName
+      || job.target !== target
+      || job.output !== 0
+      || job.owner !== stagingPackage.owner
+      || job.priority !== 'normal'
+      || job.dueAt !== dueAt
+      || state.openingPlan.jobIds[index] !== row.values.jobCode) {
+      throw new ManagedTrialError('The managed Plant import does not match the checked jobs.', {
+        code: 'managed_client_import_activation_invalid',
+      })
+    }
+  }
+  if (state.openingPlan.jobIds.length !== stagingPackage.rows.length) {
+    throw new ManagedTrialError('The managed Plant opening plan has mismatched job evidence.', {
+      code: 'managed_client_import_activation_invalid',
+    })
+  }
+  const expectedLines = [...new Set(stagingPackage.rows.map((row) => row.values.line))]
+  if (state.machines.length !== expectedLines.length
+    || state.openingPlan.machineIds.length !== expectedLines.length) {
+    throw new ManagedTrialError('The managed Plant opening plan has mismatched machine evidence.', {
+      code: 'managed_client_import_activation_invalid',
+    })
+  }
+  for (const [index, line] of expectedLines.entries()) {
+    const machine = state.machines[index]
+    const machineId = `machine-import-${index + 1}`
+    if (!isRecord(machine)
+      || !hasExactKeys(machine, machineKeys)
+      || machine.id !== machineId
+      || machine.name !== line
+      || machine.state !== 'running'
+      || state.openingPlan.machineIds[index] !== machineId) {
+      throw new ManagedTrialError('The managed Plant import does not match its production lines.', {
+        code: 'managed_client_import_activation_invalid',
+      })
+    }
+  }
+  return state
 }
 
 export function assertManagedWebsiteImportState(
@@ -448,7 +545,7 @@ export function assertManagedWebsiteImportState(
       || !hasExactKeys(page.seo, ['description', 'title'])
       || page.seo.title !== row.values.title
       || page.seo.description !== ''
-      || !isCanonicalWebsiteImportTimestamp(page.updatedAt)
+      || !isCanonicalManagedImportTimestamp(page.updatedAt)
       || (serverTimestamp && page.updatedAt !== serverTimestamp)) {
       throw new ManagedTrialError('The managed Website import does not match the checked rows.', {
         code: 'managed_client_import_activation_invalid',
@@ -462,8 +559,10 @@ export function assertManagedWebsiteImportState(
 export function assertManagedClientImportState(
   state: unknown,
   stagingPackage: ManagedClientImportPackage,
+  expectedPackageDigest: string,
 ) {
   if (stagingPackage.product === 'commerce') return assertManagedShopImportState(state, stagingPackage)
+  if (stagingPackage.product === 'production') return assertManagedPlantImportState(state, stagingPackage, expectedPackageDigest)
   if (stagingPackage.product === 'website') return assertManagedWebsiteImportState(state, stagingPackage)
   throw new ManagedTrialError('This managed import does not have an atomic product adapter.', {
     code: 'managed_client_import_activation_invalid',
@@ -524,7 +623,7 @@ export function assertManagedClientImportActivation(
       code: 'managed_client_import_activation_invalid',
     })
   }
-  assertManagedClientImportState(result.state, stagingPackage)
+  assertManagedClientImportState(result.state, stagingPackage, validation.package_digest)
   return response as unknown as ManagedClientImportActivationResult
 }
 

@@ -1163,6 +1163,7 @@ if (!clientOnboardingSource.includes("CLIENT_IMPORT_SCHEMA = 'supermega.client_i
   || !clientOnboardingSource.includes("'production-control':")
   || !clientOnboardingSource.includes("'business-presence':")
   || !clientOnboardingSource.includes("'social-storefront':")
+  || !clientOnboardingSource.includes('maximumRows: 100')
   || !clientOnboardingSource.includes('maximumRows: 4')
   || !clientOnboardingSource.includes("preview.product === 'website' ? 60 : 120")
   || !clientOnboardingSource.includes('globalThis.crypto.subtle.digest')
@@ -1199,8 +1200,9 @@ if (!managedTrialSource.includes('export async function validateManagedClientImp
   || !managedTrialSource.includes("'/api/trial/v1/imports/apply'")
   || !managedTrialSource.includes('confirmation: `APPLY ${request.validation.package_digest}`')
   || !managedTrialSource.includes('assertManagedClientImportActivation(')
+  || !managedTrialSource.includes('export function assertManagedPlantImportState')
   || !managedTrialSource.includes('export function assertManagedWebsiteImportState')
-  || !managedTrialSource.includes('assertManagedClientImportState(result.state, stagingPackage)')
+  || !managedTrialSource.includes('assertManagedClientImportState(result.state, stagingPackage, validation.package_digest)')
   || !managedTrialSource.includes('expectedIdentity,')
   || !coreSource.includes('<ClientDataOnboarding managedIdentity={managedIdentity}')
   || !clientOnboardingUiSource.includes('Only the checked import package is sent to')
@@ -1208,10 +1210,11 @@ if (!managedTrialSource.includes('export async function validateManagedClientImp
   || !clientOnboardingUiSource.includes('Download validated import')
   || !clientOnboardingUiSource.includes("reviewLabel: 'Website pages'")
   || !clientOnboardingUiSource.includes('Create Shop catalog')
+  || !clientOnboardingUiSource.includes('Create Plant opening plan')
   || !clientOnboardingUiSource.includes('Create Website drafts')
   || !clientOnboardingUiSource.includes('applyManagedClientImport({')
   || !clientOnboardingUiSource.includes('const bootstrap = await loadManagedBootstrap(expectedIdentity)')
-  || !clientOnboardingUiSource.includes('assertManagedClientImportState(confirmed.state, validated.stagingPackage)')
+  || !clientOnboardingUiSource.includes('validated.receipt.package_digest,')
   || !clientOnboardingUiSource.includes('creation waits for the separate review above.')
   || !managedClientImportUiContract.includes('validateManagedClientImport(stagingPackage, expectedIdentity)')
   || !managedClientImportUiContract.includes('validationRequestRef.current !== validationRequestId')
@@ -1323,6 +1326,12 @@ if (!openPurchaseOrderContract.includes('Your count draft was preserved.')
   || !openStockCountContract.includes('Your stock-order draft was preserved.')
   || openStockCountContract.includes('setPurchaseOrderDraft(null)')) fail('commerce_stock_editor_switch_discards_draft')
 if (!productionSource.includes("supermega.production.workspace.v2") || !productionSource.includes('mutateProductionWorkspace') || !productionSource.includes('productionWorkspaceCanWrite') || !productionSource.includes('.write-probe.') || !productionSource.includes('lockManager.request') || !productionSource.includes('next.revision !== current.revision + 1')) fail('production_v2_locked_store_missing')
+if (!productionSource.includes('export type ProductionOpeningPlan')
+  || !productionSource.includes("contract: 'supermega.production.opening-plan.v1'")
+  || !productionSource.includes("/^sha256:[0-9a-f]{64}$/")
+  || !productionSource.includes('Every job after the Production opening plan requires one creation event.')
+  || !managedProductionRuntime.includes('supermega.production.opening-plan.v1')
+  || !managedProductionRuntime.includes('Production opening plan evidence is immutable after initialization.')) fail('production_opening_plan_contract_missing')
 if (!productionSource.includes("'job_created' | 'job_schedule_updated' | 'job_closed' | 'output_recorded' | 'material_consumed' | 'issue_opened' | 'issue_resolved' | 'quality_hold_placed' | 'quality_hold_released' | 'machine_state_changed'") || !productionSource.includes('events: [event, ...state.events]') || !productionSource.includes('Production revision must equal the append-only event count.')) fail('production_append_only_record_missing')
 if (!productionSource.includes('productionShiftOutput')
   || !productionSource.includes('existing.shiftRef === shiftRef')
@@ -1966,6 +1975,11 @@ async function verifyClientOnboardingRuntime() {
     const websiteRows = Array.from({ length: 5 }, (_, index) => `${index === 0 ? 'home' : `page-${index + 1}`},Page ${index + 1},Headline ${index + 1},Body ${index + 1},https://example.com/contact`).join('\n')
     const tooManyWebsitePages = await model.createClientImportPreview(`page_slug,page_title,headline,body,contact_url\n${websiteRows}\n`, 'website')
     assert(!tooManyWebsitePages.readyForStaging && tooManyWebsitePages.fileIssues.some((issue) => issue.code === 'object_row_limit'), 'client_import_website_page_limit_not_enforced')
+    const plantObject = model.clientImportObject('production')
+    assert(plantObject.maximumRows === 100, 'client_import_plant_adapter_limit_drifted')
+    const plantRows = Array.from({ length: 101 }, (_, index) => `JOB-${index},Product ${index},1,2099-12-31,Line ${index % 4}`).join('\n')
+    const tooManyPlantJobs = await model.createClientImportPreview(`job_code,product_name,target_quantity,due_date,production_line\n${plantRows}\n`, 'production')
+    assert(!tooManyPlantJobs.readyForStaging && tooManyPlantJobs.fileIssues.some((issue) => issue.code === 'object_row_limit'), 'client_import_plant_job_limit_not_enforced')
     const websitePreview = await model.createClientImportPreview(model.clientImportTemplate('website', 'business-presence'), 'website', undefined, 'website.csv', 'business-presence')
     rejectsSync(() => model.buildClientImportStagingPackage(websitePreview, { workflowTemplateId: 'business-presence', workspace: 'W'.repeat(61), owner: 'Owner' }), 'client_import_website_workspace_limit_not_enforced')
 
@@ -2117,6 +2131,119 @@ async function verifyManagedClientImportRuntime() {
       rejects(
         () => managedTrial.assertManagedClientImportActivation(response, staged, receipt, identity, commandId, 0),
         `managed_client_import_activation_${label}_tamper_accepted`,
+      )
+    }
+
+    const plantPreview = await onboarding.createClientImportPreview(
+      onboarding.clientImportTemplate('production', 'production-control'),
+      'production',
+      undefined,
+      'plant.csv',
+      'production-control',
+    )
+    const plantStaged = onboarding.buildClientImportStagingPackage(plantPreview, {
+      workflowTemplateId: 'production-control',
+      workspace: 'Example Plant',
+      owner: 'Plant owner',
+    })
+    const plantPackageDigest = await managedTrial.managedClientImportPackageDigest(plantStaged)
+    const plantReceipt = {
+      contract: 'supermega.client_import_validation.v1',
+      status: 'valid',
+      product: 'production',
+      object: 'plant_jobs',
+      workflow_template_id: plantStaged.workflowTemplateId,
+      preview_digest: plantStaged.source.previewDigest,
+      package_digest: plantPackageDigest,
+      row_count: plantStaged.rows.length,
+      checks: receipt.checks,
+      workspace_id: identity.workspaceId,
+      activation: {
+        status: 'not_applied',
+        target_surface: 'production',
+        required_capability: 'production.write',
+        human_approval_required: true,
+        atomic_adapter_ready: true,
+        external_writes_performed: false,
+      },
+    }
+    const acceptedPlant = managedTrial.assertManagedClientImportValidation(
+      { validation: plantReceipt },
+      plantStaged,
+      identity,
+      plantPackageDigest,
+    )
+    assert(acceptedPlant === plantReceipt, 'managed_client_import_plant_receipt_rejected')
+    const plantTimestamp = '2026-07-26T04:30:00.000Z'
+    const plantLines = [...new Set(plantStaged.rows.map((row) => row.values.line))]
+    const plantState = {
+      schema: 'supermega.production.workspace.v2',
+      revision: 0,
+      jobs: plantStaged.rows.map((row) => ({
+        id: row.values.jobCode,
+        line: row.values.line,
+        product: row.values.productName,
+        target: Number(row.values.targetQuantity),
+        output: 0,
+        owner: plantStaged.owner,
+        priority: 'normal',
+        dueAt: `${row.values.dueDate}T17:29:59.999Z`,
+      })),
+      issues: [],
+      machines: plantLines.map((line, index) => ({ id: `machine-import-${index + 1}`, name: line, state: 'running' })),
+      events: [],
+      openingPlan: {
+        contract: 'supermega.production.opening-plan.v1',
+        packageDigest: plantPackageDigest,
+        confirmedAt: plantTimestamp,
+        jobIds: plantStaged.rows.map((row) => row.values.jobCode),
+        machineIds: plantLines.map((_, index) => `machine-import-${index + 1}`),
+      },
+    }
+    const plantCommandId = '00000000-0000-4000-8000-000000000203'
+    const plantActivationResponse = {
+      activation: {
+        contract: 'supermega.client_import_activation.v1',
+        status: 'applied',
+        product: 'production',
+        object: 'plant_jobs',
+        workflow_template_id: plantStaged.workflowTemplateId,
+        package_digest: plantPackageDigest,
+        row_count: plantStaged.rows.length,
+        workspace_id: identity.workspaceId,
+        external_writes_performed: true,
+      },
+      result: {
+        command_id: plantCommandId,
+        surface: 'production',
+        event_type: 'production.workspace.initialized',
+        version: 1,
+        state: plantState,
+        idempotent_replay: false,
+      },
+    }
+    const activatedPlant = managedTrial.assertManagedClientImportActivation(
+      plantActivationResponse,
+      plantStaged,
+      plantReceipt,
+      identity,
+      plantCommandId,
+      0,
+    )
+    assert(activatedPlant === plantActivationResponse, 'managed_client_import_valid_plant_activation_rejected')
+    assert(managedTrial.assertManagedPlantImportState(plantState, plantStaged, plantPackageDigest) === plantState, 'managed_client_import_valid_plant_state_rejected')
+    for (const [label, response] of [
+      ['surface', { ...plantActivationResponse, result: { ...plantActivationResponse.result, surface: 'commerce' } }],
+      ['history', { ...plantActivationResponse, result: { ...plantActivationResponse.result, state: { ...plantState, events: [{}] } } }],
+      ['job', { ...plantActivationResponse, result: { ...plantActivationResponse.result, state: { ...plantState, jobs: [{ ...plantState.jobs[0], target: plantState.jobs[0].target + 1 }, ...plantState.jobs.slice(1)] } } }],
+      ['machine', { ...plantActivationResponse, result: { ...plantActivationResponse.result, state: { ...plantState, machines: [{ ...plantState.machines[0], state: 'stopped' }, ...plantState.machines.slice(1)] } } }],
+      ['digest', { ...plantActivationResponse, result: { ...plantActivationResponse.result, state: { ...plantState, openingPlan: { ...plantState.openingPlan, packageDigest: `sha256:${'0'.repeat(64)}` } } } }],
+      ['timestamp', { ...plantActivationResponse, result: { ...plantActivationResponse.result, state: { ...plantState, openingPlan: { ...plantState.openingPlan, confirmedAt: 'server-assigned' } } } }],
+      ['job_ids', { ...plantActivationResponse, result: { ...plantActivationResponse.result, state: { ...plantState, openingPlan: { ...plantState.openingPlan, jobIds: [...plantState.openingPlan.jobIds].reverse() } } } }],
+    ]) {
+      rejects(
+        () => managedTrial.assertManagedClientImportActivation(response, plantStaged, plantReceipt, identity, plantCommandId, 0),
+        `managed_client_import_plant_${label}_tamper_accepted`,
       )
     }
 
@@ -5198,6 +5325,33 @@ async function verifyProductionRuntime() {
       dueAt: '2026-07-24T10:00:00.000Z',
     }
     const jobProof = proof('ACT-JOB-CREATE')
+    const openingPlanState = {
+      ...model.createEmptyProduction(),
+      jobs: [
+        { id: 'JOB-OPEN-1', line: 'Line 01', product: 'Opening batch 1', target: 100, output: 0, owner: 'Plant owner', priority: 'normal', dueAt: '2026-07-24T17:29:59.999Z' },
+        { id: 'JOB-OPEN-2', line: 'Line 02', product: 'Opening batch 2', target: 50, output: 0, owner: 'Plant owner', priority: 'normal', dueAt: '2026-07-25T17:29:59.999Z' },
+      ],
+      machines: [
+        { id: 'machine-import-1', name: 'Line 01', state: 'running' },
+        { id: 'machine-import-2', name: 'Line 02', state: 'running' },
+      ],
+      openingPlan: {
+        contract: 'supermega.production.opening-plan.v1',
+        packageDigest: `sha256:${'a'.repeat(64)}`,
+        confirmedAt: '2026-07-23T09:00:00.000Z',
+        jobIds: ['JOB-OPEN-1', 'JOB-OPEN-2'],
+        machineIds: ['machine-import-1', 'machine-import-2'],
+      },
+    }
+    assert(model.validateProductionState(openingPlanState) === openingPlanState, 'production_opening_plan_rejected')
+    assertThrows(() => model.validateProductionState({ ...openingPlanState, openingPlan: { ...openingPlanState.openingPlan, packageDigest: 'sha256:bad' } }), 'production_opening_plan_bad_digest_accepted')
+    assertThrows(() => model.validateProductionState({ ...openingPlanState, openingPlan: { ...openingPlanState.openingPlan, jobIds: [...openingPlanState.openingPlan.jobIds].reverse() } }), 'production_opening_plan_job_tamper_accepted')
+    assertThrows(() => model.validateProductionState({ ...openingPlanState, openingPlan: { ...openingPlanState.openingPlan, machineIds: [...openingPlanState.openingPlan.machineIds].reverse() } }), 'production_opening_plan_machine_tamper_accepted')
+    assertThrows(() => model.validateProductionState({ ...openingPlanState, openingPlan: { ...openingPlanState.openingPlan, confirmedAt: '2026-07-23T09:00:00Z' } }), 'production_opening_plan_noncanonical_time_accepted')
+    const openingPlanWithJob = model.registerProductionJob(openingPlanState, newJob, jobProof)
+    assert(openingPlanWithJob?.jobs[0].id === newJob.id
+      && openingPlanWithJob.openingPlan === openingPlanState.openingPlan
+      && openingPlanWithJob.events[0].kind === 'job_created', 'production_opening_plan_did_not_retain_new_job_history')
     const withJob = model.registerProductionJob(base, newJob, jobProof)
     assert(withJob?.jobs[0].id === newJob.id && withJob.jobs[0].output === 0 && withJob.revision === 1 && withJob.events[0].kind === 'job_created', 'production_job_not_created_once')
     assert(withJob.events[0].jobPriority === newJob.priority

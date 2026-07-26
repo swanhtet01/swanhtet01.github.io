@@ -192,7 +192,19 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
         actionLabel: 'Create Shop catalog',
         failure: 'The managed Shop catalog was not created. The checked import is still available.',
       }
-    : product === 'website'
+    : product === 'production'
+      ? {
+          surface: 'production' as const,
+          reviewLabel: 'Plant jobs',
+          createdLabel: 'Plant opening jobs',
+          completedLabel: 'Plant jobs',
+          productLabel: 'Plant',
+          progressLabel: 'Creating one Plant opening plan and confirming the durable resultâ€¦',
+          busyLabel: 'Creating planâ€¦',
+          actionLabel: 'Create Plant opening plan',
+          failure: 'The managed Plant opening plan was not created. The checked import is still available.',
+        }
+      : product === 'website'
       ? {
           surface: 'website' as const,
           reviewLabel: 'Website pages',
@@ -428,7 +440,11 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
         || confirmed.updated_by !== expectedIdentity.userId) {
         throw new Error(`${managedActivation.productLabel} accepted the import, but its durable revision could not be confirmed. Retry uses the same command and cannot duplicate it.`)
       }
-      assertManagedClientImportState(confirmed.state, validated.stagingPackage)
+      assertManagedClientImportState(
+        confirmed.state,
+        validated.stagingPackage,
+        validated.receipt.package_digest,
+      )
       setState((current) => current.preview?.previewDigest === expectedPreviewDigest
         && current.validation?.commandId === validated.commandId
         ? {

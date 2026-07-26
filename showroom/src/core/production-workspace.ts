@@ -69,6 +69,14 @@ export type ProductionMachine = {
   state: ProductionMachineState
 }
 
+export type ProductionOpeningPlan = {
+  contract: 'supermega.production.opening-plan.v1'
+  packageDigest: string
+  confirmedAt: string
+  jobIds: string[]
+  machineIds: string[]
+}
+
 export type ProductionEventKind = 'job_created' | 'job_schedule_updated' | 'job_closed' | 'output_recorded' | 'material_consumed' | 'issue_opened' | 'issue_resolved' | 'quality_hold_placed' | 'quality_hold_released' | 'machine_state_changed' | 'downtime_started' | 'downtime_ended' | 'maintenance_started' | 'maintenance_completed'
 export type ProductionOutputKind = 'good' | 'scrap'
 
@@ -113,6 +121,7 @@ export type ProductionState = {
   issues: ProductionIssue[]
   machines: ProductionMachine[]
   events: ProductionEvent[]
+  openingPlan?: ProductionOpeningPlan
 }
 
 export type ProductionActionProof = {
@@ -300,7 +309,8 @@ const materialOptionalEventFields = ['materialLot']
 const downtimeEndEventFields = [...baseEventFields, 'downtimeStartActionId']
 const maintenanceStartEventFields = [...baseEventFields, 'maintenanceOwner']
 const maintenanceCompleteEventFields = [...baseEventFields, 'maintenanceStartActionId']
-const productionStateFields = ['schema', 'revision', 'jobs', 'issues', 'machines', 'events']
+const productionStateFields = ['schema', 'revision', 'jobs', 'issues', 'machines', 'events', 'openingPlan']
+const productionOpeningPlanFields = ['contract', 'packageDigest', 'confirmedAt', 'jobIds', 'machineIds']
 const productionJobFields = ['id', 'line', 'product', 'target', 'output', 'owner', 'priority', 'dueAt', 'scrap', 'qualityHold', 'closure']
 const productionIssueFields = ['id', 'createdAt', 'area', 'kind', 'summary', 'status', 'severity', 'owner', 'dueAt', 'containment', 'resolution']
 const productionIssueResolutionFields = ['actionId', 'resolvedAt', 'resolvedBy', 'reason', 'evidenceReference']
@@ -543,6 +553,7 @@ export function validateProductionState(value: unknown): ProductionState {
   const machineIds: string[] = []
   const eventIds: string[] = []
   const actionIds: string[] = []
+  let openingJobIds: string[] | null = null
   const shiftTotals = new Map<string, { goodUnits: number; scrapUnits: number }>()
   const materialShiftTotals = new Map<string, number>()
 
@@ -634,6 +645,28 @@ export function validateProductionState(value: unknown): ProductionState {
     if (!productionMachineStates.includes(candidate.state as ProductionMachineState)) throw new Error(`machines[${index}].state is invalid.`)
   }
   assertUnique(machineIds, 'Production machine ID')
+
+  if (Object.hasOwn(value, 'openingPlan')) {
+    if (!isRecord(value.openingPlan)) throw new Error('Production opening plan is invalid.')
+    const openingPlan = value.openingPlan
+    assertOnlyFields(openingPlan, productionOpeningPlanFields, 'Production opening plan')
+    if (openingPlan.contract !== 'supermega.production.opening-plan.v1') throw new Error('Production opening plan contract is invalid.')
+    if (typeof openingPlan.packageDigest !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(openingPlan.packageDigest)) throw new Error('Production opening plan package digest is invalid.')
+    if (!validDowntimeTimestamp(openingPlan.confirmedAt)) throw new Error('Production opening plan confirmation time is invalid.')
+    if (!Array.isArray(openingPlan.jobIds)
+      || !openingPlan.jobIds.length
+      || openingPlan.jobIds.length > 100
+      || !Array.isArray(openingPlan.machineIds)
+      || !openingPlan.machineIds.length
+      || openingPlan.machineIds.length > 100) throw new Error('Production opening plan record IDs are invalid.')
+    const planJobIds = openingPlan.jobIds.map((id, index) => canonicalText(id, `openingPlan.jobIds[${index}]`, 80))
+    const planMachineIds = openingPlan.machineIds.map((id, index) => canonicalText(id, `openingPlan.machineIds[${index}]`, 80))
+    assertUnique(planJobIds, 'Production opening job ID')
+    assertUnique(planMachineIds, 'Production opening machine ID')
+    if (JSON.stringify(jobIds.slice(-planJobIds.length)) !== JSON.stringify(planJobIds)) throw new Error('Production opening jobs are not the immutable job suffix.')
+    if (JSON.stringify(machineIds) !== JSON.stringify(planMachineIds)) throw new Error('Production opening machines do not match the retained machines.')
+    openingJobIds = planJobIds
+  }
 
   for (const [index, candidate] of events.entries()) {
     if (!isRecord(candidate)) throw new Error(`events[${index}] is invalid.`)
@@ -759,6 +792,15 @@ export function validateProductionState(value: unknown): ProductionState {
   assertUnique(eventIds, 'Production event ID')
   assertUnique(actionIds, 'Production action ID')
   if (Number(value.revision) !== events.length) throw new Error('Production revision must equal the append-only event count.')
+  if (openingJobIds) {
+    const openingJobIdSet = new Set(openingJobIds)
+    const creationEvents = events.filter((event): event is Record<string, unknown> => isRecord(event) && event.kind === 'job_created')
+    if (creationEvents.length !== jobs.length - openingJobIds.length) throw new Error('Every job after the Production opening plan requires one creation event.')
+    for (const jobId of jobIds) {
+      const matches = creationEvents.filter((event) => event.subjectId === jobId)
+      if (openingJobIdSet.has(jobId) ? matches.length !== 0 : matches.length !== 1) throw new Error(`Production job ${jobId} does not match its opening history.`)
+    }
+  }
 
   for (const [index, candidate] of jobs.entries()) {
     if (!isRecord(candidate)) continue
