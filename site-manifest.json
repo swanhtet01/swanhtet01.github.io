@@ -51,7 +51,125 @@
           "outcome": "Convert trusted chat channels into structured orders, stock movement, fulfilment, and follow-up.",
           "workflow": ["Capture conversation", "Confirm order", "Reserve stock", "Fulfil", "Collect payment", "Follow up"],
           "entryPoints": ["Messenger", "Viber", "Phone"],
-          "metric": "Order handling time and completion rate"
+          "metric": "Order handling time and completion rate",
+          "provisioningRecipe": {
+            "contract": "supermega.client_provisioning_recipe.v1",
+            "recipeId": "shop.social-commerce",
+            "recipeVersion": 1,
+            "productId": "shop",
+            "runtimeProductId": "commerce",
+            "templateId": "social-commerce",
+            "compatibleFromVersions": [0, 1],
+            "roles": [
+              {
+                "id": "owner",
+                "label": "Shop owner",
+                "actorKind": "human",
+                "capabilities": ["setup.read", "setup.write", "commerce.read", "commerce.write", "approvals.read", "approvals.request", "approvals.decide"]
+              },
+              {
+                "id": "order-operator",
+                "label": "Order operator",
+                "actorKind": "human",
+                "capabilities": ["commerce.read", "commerce.write", "approvals.request"]
+              },
+              {
+                "id": "stock-keeper",
+                "label": "Stock keeper",
+                "actorKind": "human",
+                "capabilities": ["commerce.read", "commerce.write"]
+              }
+            ],
+            "objects": [
+              {
+                "id": "shop-catalog",
+                "surface": "commerce",
+                "keyField": "sku",
+                "source": "client-import",
+                "requiredCapability": "commerce.write"
+              },
+              {
+                "id": "shop-orders",
+                "surface": "commerce",
+                "keyField": "id",
+                "source": "runtime",
+                "requiredCapability": "commerce.write"
+              },
+              {
+                "id": "shop-evidence",
+                "surface": "commerce",
+                "keyField": "actionId",
+                "source": "immutable-events",
+                "requiredCapability": "commerce.read"
+              }
+            ],
+            "stateMachines": [
+              {
+                "id": "order-fulfilment",
+                "initialState": "confirmed",
+                "terminalStates": ["completed", "cancelled"],
+                "transitions": [
+                  {"id": "start-preparation", "fromState": "confirmed", "toState": "preparing", "event": "commerce.order.advanced", "approval": "named-human"},
+                  {"id": "mark-ready", "fromState": "preparing", "toState": "ready", "event": "commerce.order.advanced", "approval": "named-human"},
+                  {"id": "complete-paid-order", "fromState": "ready", "toState": "completed", "event": "commerce.order.advanced", "approval": "named-human"},
+                  {"id": "cancel-confirmed", "fromState": "confirmed", "toState": "cancelled", "event": "commerce.order.cancelled", "approval": "named-human"},
+                  {"id": "cancel-preparing", "fromState": "preparing", "toState": "cancelled", "event": "commerce.order.cancelled", "approval": "named-human"},
+                  {"id": "cancel-ready", "fromState": "ready", "toState": "cancelled", "event": "commerce.order.cancelled", "approval": "named-human"}
+                ]
+              }
+            ],
+            "importMappings": [
+              {
+                "id": "opening-catalog",
+                "objectId": "shop-catalog",
+                "workflowTemplateId": "social-commerce",
+                "fields": [
+                  {"target": "sku", "sourceAliases": ["sku", "item_code", "product_code"]},
+                  {"target": "name", "sourceAliases": ["name", "item_name", "product_name"]},
+                  {"target": "onHand", "sourceAliases": ["on_hand", "opening_stock", "quantity"]},
+                  {"target": "reorderAt", "sourceAliases": ["reorder_at", "minimum_stock", "reorder_level"]},
+                  {"target": "price", "sourceAliases": ["price", "price_mmk", "selling_price"]}
+                ],
+                "previewRequired": true,
+                "humanConfirmationRequired": true
+              }
+            ],
+            "dashboard": {
+              "id": "shop-today",
+              "primaryAction": "Review the earliest promised order",
+              "maxVisiblePanels": 3,
+              "panels": [
+                {"id": "orders-next", "sourceId": "shop-orders", "label": "Orders needing the next step"},
+                {"id": "stock-exceptions", "sourceId": "shop-catalog", "label": "Stock below reorder"},
+                {"id": "evidence-gaps", "sourceId": "shop-evidence", "label": "Actions missing evidence"}
+              ]
+            },
+            "acceptanceChecks": [
+              {"id": "deterministic-plan", "kind": "contract", "required": true},
+              {"id": "compatible-upgrade", "kind": "migration", "required": true},
+              {"id": "digest-bound-rollback", "kind": "rollback", "required": true},
+              {"id": "zero-unapproved-writes", "kind": "security", "required": true},
+              {"id": "task-first-mobile-flow", "kind": "usability", "required": true}
+            ],
+            "migrations": [
+              {
+                "fromVersion": 0,
+                "toVersion": 1,
+                "steps": [
+                  {"id": "introduce-social-commerce-recipe", "operation": "plan-create-resources"}
+                ]
+              }
+            ],
+            "rollback": {
+              "strategy": "restore-pre-provision-snapshot",
+              "requiresExactPlanDigest": true,
+              "requiresHumanApproval": true,
+              "steps": [
+                {"id": "verify-plan-identity", "operation": "assert-plan-digest"},
+                {"id": "restore-reviewed-snapshot", "operation": "plan-restore-snapshot"}
+              ]
+            }
+          }
         },
         {
           "id": "retail-wholesale",
