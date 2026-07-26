@@ -63,4 +63,4 @@ The selected Instagram security slide warns that storage buckets may remain enum
 
 ## Next bounded slice
 
-Audit the existing managed Shop Stock boundary, then implement the smallest missing end-to-end receiving or stock-count lifecycle inside the current Stock page. Reuse the current tenant command, human authority, revision/idempotency, import, and recovery contracts; add no page, product, automatic consequence, provider call, or live write.
+Bind managed purchase-order cancellation proof to the authenticated human and a server-monotonic timestamp, mirroring the accepted receipt boundary. Preserve partial-receipt history, outstanding quantity, idempotent replay, tenant isolation, human-only authority, and the existing Stock page; add no page, product, provider call, or live write.
