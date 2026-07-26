@@ -1,7 +1,7 @@
 # Agent operations and security brief
 
 Updated: 2026-07-27
-Agent-operations checkpoint: `78f2297`
+Agent-operations checkpoint: `07dd959`
 Legacy-security checkpoint: `98b8044`
 Mode: local evidence only; no hosted or production claim
 
@@ -42,9 +42,10 @@ Runtime work is limited by job family, queue depth, concurrent runs, daily runs,
 10. A future approved preview pulls only preview settings, stamps the reviewed commit, builds once, rechecks the canonical project, requires `.vercel/output`, and deploys that artifact with pinned `--prebuilt`. It never selects production, mutates aliases, passes the token in argv, returns raw CLI failures, or accepts a deceptive URL.
 11. Kernel company cycles now acquire one of four atomic durable capacity claims before model work. The fifth cycle is rejected, work orders return to planned for safe retry, claims release on completed and failed crews, stale claims can transfer after 120 seconds, and owner-bound release prevents an expired process from deleting its successor.
 12. The old Google Cloud Scheduler entry point is now a read-only compatibility shim: it accepts no credentials, invokes no provider CLI, performs no provider read or write, and reports that GCP scheduler mutation is retired.
-13. Vercel remains the sole permitted recurring scheduler, but authority v2 is dormant: the generated project defines zero crons and zero scheduled invocations. A second server-side flag blocks worker dispatch even if stale credentials remain. The activation plan is hourly plus daily, capped at 25 invocations/day instead of 97, and requires five managed-security, worker, recovery, rollback, and owner-decision evidence gates. The exact old schedule is accepted only during preflight cleanup; post-deploy verification rejects every surviving cron.
+13. Vercel remains the sole permitted recurring scheduler, but authority v2 is dormant: the generated project defines zero crons and zero scheduled invocations. The activation plan is hourly plus daily, capped at 25 invocations/day instead of 97. The exact old schedule is accepted only during preflight cleanup; post-deploy verification rejects every surviving cron.
 14. The SuperMega CEO brief now follows `supermega.ceo-outcome-authority.v1`: one deterministic priority-then-ID selection and at most one outcome per cycle. Storage privacy proof, exact protected preview, and named pilot evidence remain blocked. The ready owner brief uses exact leads, pipeline, FX, and platform-status reads plus one synthesis call, removing the planner model call. Completed, in-flight, durable-claim duplicate, malformed, smuggled, and unauthorized-action outcomes stop before model work or notification.
 15. CEO outcome evidence now follows `supermega.ceo-outcome-operation.v1` plus `supermega.ceo-outcome-evaluation.v1`. Completion metadata is durable before notification and excludes brief text, prompts, tool rows, provider, and model identity. An owner/operator separately records immutable acceptance or revision. Efficiency remains unavailable unless the tenant-bound records are durable, integrity-valid, fully evaluated, and fully measured in `bulk_equivalent_tokens`.
+16. Hosted scheduler activation now follows `supermega.scheduler-activation-evidence.v1`. `SUPERMEGA_HOSTED_SCHEDULER_ENABLED=1` is insufficient by itself: an HMAC-signed exact-shape bundle must bind the scheduler-authority digest, canonical `megaos` project, production environment, exact deployed commit, managed tenant, owner decision, all five required proof digests, and a maximum seven-day lifetime. Duplicate keys, tampering, missing or failed proof, stale or expired evidence, preview scope, wrong project or commit, plaintext activation variables, and dormant environment remnants fail before worker invocation. Runtime status exposes only contract, digest, release, expiry, and count metadata.
 
 These are local code and test results. They do not prove a hosted deployment, live credentials, or production data migration.
 
@@ -54,10 +55,10 @@ These are local code and test results. They do not prove a hosted deployment, li
 2. Hosted proof is missing for Supabase Storage privacy, Security Advisor, Vercel observability/alerts, queue recovery, and cross-device human review.
 3. Read-only Vercel inventory confirms canonical app project `megaos` and public project `supermega-public`; similarly named projects are not release authority. This checkout has no canonical `.vercel/project.json` link and lacks exact org/project environment values and `VERCEL_TOKEN`, so preview deployment is deliberately blocked.
 4. Read-only Vercel Agent Runs observability reports no production or preview project activity over 90 days. The canonical `megaos` project has a ready production deployment, but grouped runtime-log reads timed out and then returned 403; live cron and environment state remain unproven.
-5. Local authority now emits no crons, but hosted cleanup still requires a protected deployment and may require removal of dormant scheduler environment variables. No provider state was changed here.
+5. Local authority emits no crons and no activation bundle was issued. Hosted cleanup still requires a protected deployment and may require removal of dormant scheduler environment variables. No provider state was changed here.
 
 The selected Instagram security slide warns that storage buckets may remain enumerable even when individual object links appear private. SuperMega therefore requires bucket inventory, anonymous-list denial, cross-tenant-list denial, and short-lived authorized object access before managed activation. This is a release gate, not hosted proof.
 
 ## Next bounded slice
 
-Add one read-only Ally runtime preflight to the existing operating evidence: report Codex/helper resident memory, loaded local models, and duplicate SuperMega dev/worker listeners; fail closed on ambiguous ownership and never kill a process automatically. Keep subagents at zero by default, serialize heavyweight checks, and preserve external sends, provider writes, push, merge, deployment, promotion, and alias mutation behind their existing gates.
+Add one provider-neutral, read-only managed-storage privacy verifier for an owner-approved isolated target. It must prove anonymous listing denial, cross-tenant listing and object denial, and short-lived authorized object access; fix the target and bucket allowlist, bound every response, redact all tokens and object contents, perform no write, and ship an offline adversarial self-test before any credentialed run.

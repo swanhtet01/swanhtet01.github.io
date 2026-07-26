@@ -29,7 +29,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 - Kernel has four owner-bound slots with 120-second stale recovery; a fifth cycle stops before model use and failed work returns for retry (`ca5070e`).
 - Ally audit after a non-terminating trim: RAM 77.8%, Codex 1.16 GB, zero models, one worker, no dev/duplicate/ambiguous listener; OS data cannot prove subagents. The 30-second worker keeps unchanged evidence-bound direct missions reuse for 24 hours (`72853ac`).
 - All seven company jobs use SuperMega Agent Operations or core GitHub. Catalogs are exact-tenant scoped, so YTF identities cannot render in core operations (`b46c386`).
-- Hosted scheduling is dormant with zero registered crons and a second runtime activation gate. After five managed-security proofs, the reviewed plan is hourly plus daily, at most 25 invocations/day instead of 97 (`2472c2f`).
+- Hosted scheduling is dormant with zero registered crons. A signed seven-day bundle now binds five proof digests, tenant, owner decision, canonical project, production, and exact commit; flag-only, preview, stale, incomplete, or tampered attempts stop before worker invocation (`07dd959`).
 - Each SuperMega CEO cycle selects at most one HQ-authorized outcome. Storage proof, protected preview, and named pilot work remain explicitly blocked; completed, in-flight, duplicate, or invalid work stops before claims, models, or sends. The one ready owner brief uses four fixed read-only tools and one synthesis call (`cdd925a`).
 - CEO completion metadata persists before notification; acceptance is a separate immutable owner/operator verdict. Reports store no brief/provider rows and publish efficiency only with durable, complete, valid usage and evaluation coverage (`78f2297`).
 - Shop covers guarded orders, stock, purchasing, fulfilment, payments, returns, and close at `/shop/`.
@@ -45,8 +45,8 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 
 ## Verified baseline
 
-- Current local checkpoints: product `52917c5`, agent operations `72853ac`, operations `63a245f`, and security `98b8044`.
-- App and local contracts pass: 275 Python tests, frontend lint/build, 14 Ecommerce buying checks, 16 Shop-handoff checks, and the guarded release suite. Kernel retains 277 tests, 69 connectors/993 calls, and 15 crews/214 checks.
+- Current local checkpoints: product `52917c5`, agent operations `07dd959`, operations `63a245f`, and security `98b8044`.
+- App and local contracts pass: 279 Python tests, frontend lint/build, 14 Ecommerce buying checks, 16 Shop-handoff checks, 20 Vercel environment checks, and the guarded release suite. Kernel retains 277 tests, 69 connectors/993 calls, and 15 crews/214 checks.
 - Rendered setup and four phone-width product routes have no horizontal overflow or error overlay. Plant additionally passes a seven-step 1280x720 lifecycle, reload persistence, and a 390x844 first-run/released-state audit with its primary action visible.
 - Core first-action QA leads Shop Stock, incomplete orders to Promise or Payment, Plant alerts to Problems or output, and invalid Website briefs to their first error. Mobile controls are at least 44 px with focus-safe fixed navigation (`36fa7dd`); guide and review actions create no record.
 - Product checkpoint `52917c5` is on a clean fast-forward descendant of open draft PR #258 head `338b6fd`. Vercel `supermega-public` serves both domains at live `6885c320`; it is healthy but intentionally reports `isolated_demo`, zero managed coverage, and database/schema/audit/writes disabled. No grouped seven-day runtime errors were reported; remote checks exclude the local delta.
@@ -64,8 +64,8 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - The candidate is not on GitHub or Vercel; live remains `6885c320` and PR #258 remains `338b6fd`. The next external action is an approved fast-forward-only push of the clean release branch.
 - Preview remains blocked until the exact `supermega-public` project is linked to the clean candidate commit; no fallback project or domain is allowed.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
-- Local scheduler authority now emits no crons. Live `megaos` cron/environment cleanup remains unverified because grouped log reads timed out then returned 403; no provider state changed.
-- The products target SAP-grade accountability, not feature parity. Shop still needs managed proof, receiving/count reconciliation, pricing/tax, and accounting adapters; Plant needs managed persistence, multi-material import UI, warehouse/cost/accounting adapters, calibration, and OEE; Website needs versioned content/release operations; Ecommerce needs catalog, checkout, tax, shipping, payment, and returns depth.
+- Local scheduler authority emits no crons and no signed activation bundle exists. Live `megaos` cron/environment cleanup remains unverified because grouped log reads timed out then returned 403; no provider state changed.
+- SAP-grade gaps remain: Shop managed receiving/count, pricing/tax, and accounting; Plant managed persistence, multi-material import, warehouse/cost, calibration, and OEE; Website versioned content/releases; Ecommerce checkout, tax, shipping, payment, and returns.
 
 ## Decisions in force
 
