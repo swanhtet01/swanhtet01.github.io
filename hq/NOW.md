@@ -43,8 +43,8 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 
 ## Verified baseline
 
-- `7447d07` remains the product baseline; operating checkpoint `ff2007d` locks 12 roles, four slots, priority/cadence, split authority, fixed destinations, and job-safe recovery; legacy-security checkpoint `98b8044` remains.
-- App lint/build and all local contracts pass with 23 cloud/governance, 12 legacy-security, and 208 total Python tests. Four-product rehearsal remains 12 profiles, 24 rows, four recovery paths, and 58 security checks.
+- `7447d07` remains the product baseline; operating checkpoint `ee34358` locks 12 roles, four slots, cadence, split authority, fixed destinations, safe recovery, and one-use deploy approval; legacy-security checkpoint `98b8044` remains.
+- App lint/build and all local contracts pass with 23 cloud/governance, 14 legacy-security, and 210 total Python tests. Four-product rehearsal remains 12 profiles, 24 rows, four recovery paths, and 58 security checks.
 - Dependency audit previously reported zero known vulnerabilities; this slice did not refresh external package or hosted-state inventories.
 - React Router is isolated in a 43,870-byte cacheable chunk. The accepted product baseline's largest JavaScript chunk is 478,469 bytes and remains below the build gate.
 - Focused coverage: 202 Shop, 34 order-recovery, 250 Plant, 94 Website, 11 managed-Website, 103 client-onboarding, 27 storefront-draft, 14 storefront, 15 request, 17 managed-storefront, and 16 handoff checks.

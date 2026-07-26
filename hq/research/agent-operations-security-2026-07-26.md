@@ -1,7 +1,7 @@
 # Agent operations and security brief
 
 Updated: 2026-07-26
-Agent-operations checkpoint: `ff2007d`
+Agent-operations checkpoint: `ee34358`
 Legacy-security checkpoint: `98b8044`
 Mode: local evidence only; no hosted or production claim
 
@@ -14,7 +14,7 @@ Runtime work is limited by job family, queue depth, concurrent runs, daily runs,
 ## Verified locally
 
 - Full app lint/build and release/security/database/Vercel/HQ contracts pass.
-- All 208 Python tests pass; the focused cloud/runtime slice has 23 and the legacy-security slice has 12 passing tests.
+- All 210 Python tests pass; the focused cloud/runtime slice has 23 and the legacy-security slice has 14 passing tests.
 - The retired AgentOS gateway reports not-ready and writes-disabled; old log/status routes return HTTP 410 and OpenAPI is disabled.
 - The retired finance launcher reports payments-disabled and exits nonzero.
 - HQ Agent Teams at 390 and 1280 px has no horizontal overflow or browser warnings/errors; visible mobile controls are at least 44 px.
@@ -36,6 +36,7 @@ Runtime work is limited by job family, queue depth, concurrent runs, daily runs,
 4. The durable runner fixes its endpoint paths, rejects redirects and non-HTTPS remote URLs, bounds JSON responses, and keeps credentials out of CLI arguments.
 5. Runtime host configuration may only narrow the compiled `app.supermega.dev` and canonical Cloud Run destinations. An environment value cannot add a third credential destination.
 6. Expired leases may reclaim the same run once only for the four read-only jobs. Task-writing and release-watch jobs remain single-attempt; callers cannot expand the server policy, stale claim tokens are rejected, and every reservation remains charged to daily capacity.
+7. Preview deployment approval is atomically reserved before a deploy subprocess starts. The exact action and target are single-use; concurrent requests, replay after success or failure, and stale claims fail closed, while internal claim material is redacted from API output.
 
 These are local code and test results. They do not prove a hosted deployment, live credentials, or production data migration.
 
@@ -48,4 +49,4 @@ A previously shared social post remains a threat-model prompt only. Its exact co
 
 ## Next bounded slice
 
-Rehearse human release review in isolation while preserving due-only admission, bounded lease recovery, split capabilities, and fixed credential destinations. Do not start a public listener, use production credentials, or deploy while validating.
+Bind human release review to the exact candidate, target environment, verification evidence, and rollback boundary while preserving one-use approval. Do not start a public listener, use production credentials, or deploy while validating.
