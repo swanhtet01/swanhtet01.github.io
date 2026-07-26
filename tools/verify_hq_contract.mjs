@@ -17,7 +17,7 @@ import {
 } from '../kernel/agent-company-operations.mjs'
 
 const root = resolve(import.meta.dirname, '..')
-const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation] = await Promise.all([
+const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, packageText] = await Promise.all([
   readFile(resolve(root, 'hq', 'README.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'NOW.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'CODEX-PRODUCT-QA-BRIEF.md'), 'utf8'),
@@ -31,6 +31,8 @@ const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, wo
   readFile(resolve(root, 'hq', 'research', 'agent-operations-security-2026-07-26.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'research', 'postgres17-rehearsal.json'), 'utf8'),
   readFile(resolve(root, 'hq', 'research', 'release-reconciliation-2026-07-26.md'), 'utf8'),
+  readFile(resolve(root, 'tools', 'audit_ally_runtime.ps1'), 'utf8'),
+  readFile(resolve(root, 'package.json'), 'utf8'),
 ])
 
 const manifest = JSON.parse(manifestText)
@@ -413,6 +415,19 @@ requireContract('research remains gated',
 requireContract('research uses official sources',
   portfolio.researchGates?.every((entry) =>
     /^https:\/\/(?:vercel\.com|tanstack\.com|supabase\.com|platform\.openai\.com)\//.test(entry.source || '')))
+requireContract('Ally runtime audit is read-only and bounded',
+  allyAuditText.includes("supermega.ally-runtime-audit.v1")
+  && allyAuditText.includes("subagentObservation = 'not_os_observable'")
+  && allyAuditText.includes('commandLinesInspectedForOwnership = $true')
+  && allyAuditText.includes('commandLinesReturned = $false')
+  && allyAuditText.includes('secretValuesReturned = $false')
+  && allyAuditText.includes('environmentRead = $false')
+  && allyAuditText.includes('automaticCleanup = $false')
+  && allyAuditText.includes("http://127.0.0.1:11434/api/ps")
+  && allyAuditText.includes('Get-NetTCPConnection -State Listen')
+  && packageText.includes('"audit:ally"')
+  && packageText.includes('"audit:ally:self-test"')
+  && !/\b(?:Stop-Process|Start-Process|taskkill|kill|Remove-Item|EmptyWorkingSet|SetProcessWorkingSetSize)\b/i.test(allyAuditText))
 
 for (const forbidden of ['Yangon Tyre', 'ytf.supermega.dev', 'pos.supermega.dev', 'twelve product']) {
   requireContract(`retired HQ context absent: ${forbidden}`,
