@@ -1,7 +1,7 @@
 # Agent operations and security brief
 
 Updated: 2026-07-26
-Agent-operations checkpoint: `69dfb09`
+Agent-operations checkpoint: `e9751c4`
 Legacy-security checkpoint: `98b8044`
 Mode: local evidence only; no hosted or production claim
 
@@ -13,8 +13,8 @@ Runtime work is limited by job family, queue depth, concurrent runs, daily runs,
 
 ## Verified locally
 
-- Full app lint/build and release/security/database/HQ contracts pass.
-- All 173 Python tests pass; the focused cloud/runtime slice has 18 and the legacy-security slice has six passing tests.
+- Full app lint/build and release/security/database/Vercel/HQ contracts pass.
+- All 206 Python tests pass; the focused cloud/runtime slice has 21 and the legacy-security slice has 12 passing tests.
 - The retired AgentOS gateway reports not-ready and writes-disabled; old log/status routes return HTTP 410 and OpenAPI is disabled.
 - The retired finance launcher reports payments-disabled and exits nonzero.
 - HQ Agent Teams at 390 and 1280 px has no horizontal overflow or browser warnings/errors; visible mobile controls are at least 44 px.
@@ -28,18 +28,23 @@ Runtime work is limited by job family, queue depth, concurrent runs, daily runs,
 4. Request and decision capabilities are separate. Terminal decisions require a note, record the server-resolved actor in bounded history, and cannot be reversed.
 5. SQLite connections now close deterministically; the full 173-test suite passes on Windows.
 
+## Closed locally after `98b8044`
+
+1. Agent visibility, execution, and preview deployment use separate capabilities. Managers can inspect but cannot run or deploy; execution and deployment require owner authority.
+2. Preview deployment additionally requires an approved workspace-bound decision for the exact mode and clean Git revision before any deploy process starts.
+3. The root development Compose entry point is retired as `services: {}`; it exposes no ports, floating service images, default credentials, or Docker socket.
+4. The durable runner fixes its endpoint paths, rejects redirects and non-HTTPS remote URLs, bounds JSON responses, and keeps credentials out of CLI arguments.
+5. Runtime host configuration may only narrow the compiled `app.supermega.dev` and canonical Cloud Run destinations. An environment value cannot add a third credential destination.
+
 These are local code and test results. They do not prove a hosted deployment, live credentials, or production data migration.
 
 ## Remaining release blockers
 
-1. Critical if launched: the root development compose publishes services with weak/default controls, floating images, and a Docker socket. Retire it or close ports, pin images, remove socket authority, and provision server-only secrets.
-2. High: queue viewing can authorize processing or preview deployment. Split `view`, `execute`, and `deploy` capabilities and require human approval for deployment.
-3. High: an older worker runner can forward credentials to an arbitrary base URL. Require bounded HTTPS allowlists, no token CLI arguments, response limits, and secret-safe logs.
-4. High: payment-event data and public contact side effects need explicit RLS/revokes, durable idempotency, rate/origin controls, and replay evidence before hosted use.
-5. Hosted proof is missing for Supabase Storage privacy, Security Advisor, Vercel observability/alerts, queue recovery, and cross-device human review.
+1. High: payment-event data and public contact side effects need explicit RLS/revokes, durable idempotency, rate/origin controls, and replay evidence before hosted use.
+2. Hosted proof is missing for Supabase Storage privacy, Security Advisor, Vercel observability/alerts, queue recovery, and cross-device human review.
 
-The linked Instagram example warns that a polished AI app may still expose an enumerable storage bucket. It was used as a threat-model prompt only, not as authoritative evidence about SuperMega.
+A previously shared social post remains a threat-model prompt only. Its exact content was not independently verified and is not evidence about SuperMega.
 
 ## Next bounded slice
 
-Split agent `view`, `execute`, and `deploy` capabilities first, then retire or close the root development compose exposure and constrain worker destinations. Do not start a public listener, use production credentials, or deploy while validating.
+Rehearse queue lease expiry, retry, recovery, due-only admission, and human release review in isolation. Do not start a public listener, use production credentials, or deploy while validating.

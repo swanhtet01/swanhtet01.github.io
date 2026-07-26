@@ -43,8 +43,8 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 
 ## Verified baseline
 
-- Checkpoint `7447d07` is the accepted local product baseline; `ae6b67d` aligns the Kernel to 12 registered roles and 15 crew capabilities, `98b8044` closes legacy gaps, and `fb2ae3e` enforces absolute workforce limits.
-- App lint/build, all local contracts, eight focused governor tests, and all 192 Python tests pass. The four-product rehearsal covers all 12 profiles, 24 staged rows, four recovery paths, exact server-side profile coverage, and one-workspace identity. Security coverage is 58 checks.
+- `7447d07` remains the product baseline; operating checkpoint `e9751c4` enforces 12 roles, four active slots, priority/cadence gates, split authority, and fixed worker destinations; `98b8044` remains the legacy-security checkpoint.
+- App lint/build, every local contract, 21 cloud/governance tests, 12 legacy-security tests, and all 206 Python tests pass. Four-product rehearsal remains 12 profiles, 24 staged rows, four recovery paths, and 58 security checks.
 - Dependency audit previously reported zero known vulnerabilities; this slice did not refresh external package or hosted-state inventories.
 - React Router is isolated in a 43,870-byte cacheable chunk. The accepted product baseline's largest JavaScript chunk is 478,469 bytes and remains below the build gate.
 - Focused coverage: 202 Shop, 34 order-recovery, 250 Plant, 94 Website, 11 managed-Website, 103 client-onboarding, 27 storefront-draft, 14 storefront, 15 request, 17 managed-storefront, and 16 handoff checks.
@@ -66,7 +66,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 ## Blockers
 
 - Ecommerce lacks an isolated hosted/cross-device rehearsal. Local v2 now binds saved setup to a currentness fingerprint, upgrades v1 additively, and invalidates on cross-tab Shop changes; that fingerprint is not authenticated approval evidence. Managed setup remains digest-bound.
-- Agent Teams is not proven hosted. Vercel reports zero Agent Runs in 30 days; Kernel logged one `/api/brief` request in 24 hours and no seven-day runtime errors. Scheduler recovery remains unproven.
+- Agent Teams has no hosted proof. Local authority, cadence, destination, budget, and lease boundaries pass; Vercel reports zero Agent Runs in 30 days. Hosted scheduler recovery is unproven.
 - No isolated hosted Supabase branch or separate non-production project has repeated the local database proof.
 - Storage privacy is local-contract evidence only; hosted bucket inventory and object-listing denial remain required.
 - Browser-local Website records cannot authenticate out-of-band storage edits; managed commands use the locked prior state and separate ledger. Hosted activation remains unproven.

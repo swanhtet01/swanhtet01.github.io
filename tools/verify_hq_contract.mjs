@@ -8,7 +8,7 @@ import {
 } from '../kernel/agent-company.mjs'
 
 const root = resolve(import.meta.dirname, '..')
-const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, databaseRehearsalText, releaseReconciliation] = await Promise.all([
+const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation] = await Promise.all([
   readFile(resolve(root, 'hq', 'README.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'NOW.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'CODEX-PRODUCT-QA-BRIEF.md'), 'utf8'),
@@ -19,6 +19,7 @@ const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, wo
   readFile(resolve(root, 'agent_os', 'workforce', 'supermega_build_workforce.json'), 'utf8'),
   readFile(resolve(root, 'agent_os', 'resources', 'supermega_core_agent_workspace.json'), 'utf8'),
   readFile(resolve(root, 'hq', 'research', 'product-rd-2026-07.md'), 'utf8'),
+  readFile(resolve(root, 'hq', 'research', 'agent-operations-security-2026-07-26.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'research', 'postgres17-rehearsal.json'), 'utf8'),
   readFile(resolve(root, 'hq', 'research', 'release-reconciliation-2026-07-26.md'), 'utf8'),
 ])
@@ -93,7 +94,7 @@ requireContract('workspace storage release gate denies bucket enumeration',
     && entry.rule.includes('bucket listing are denied')
     && entry.release_evidence?.join(',') === 'bucket inventory,anonymous listing denied,cross-tenant listing denied,short-lived authorized object access'))
 requireContract('agent roster consolidation is recorded',
-  workboard.includes('Current accepted operating checkpoint: `4527994`')
+  workboard.includes('Current accepted operating checkpoint: `e9751c4`')
   && workboard.includes('| OPS-011 | CEO + Agent Operations Codex | done-local |')
   && workboard.includes('12 active specialist identities while preserving all 15 validated crew capabilities')
   && workboard.includes('all eight fixed playbooks')
@@ -106,7 +107,19 @@ requireContract('agent roster consolidation is recorded',
   && workboard.includes('automated admission due-only')
   && workboard.includes('before either a run or reservation is written')
   && workboard.includes('explicit manual runs remain available')
+  && workboard.includes('| OPS-016 | CEO + Security Codex | done-local |')
+  && workboard.includes('narrowing-only over the compiled app and canonical Cloud Run hosts')
+  && workboard.includes('arbitrary, mixed, URL-shaped, and empty overrides fail before any request')
+  && now.includes('operating checkpoint `e9751c4`')
   && now.includes('default workspace no longer duplicates a 256-role ceiling'))
+requireContract('agent security brief is reconciled to current controls',
+  agentSecurity.includes('Agent-operations checkpoint: `e9751c4`')
+  && agentSecurity.includes('Agent visibility, execution, and preview deployment use separate capabilities')
+  && agentSecurity.includes('The root development Compose entry point is retired as `services: {}`')
+  && agentSecurity.includes('An environment value cannot add a third credential destination')
+  && agentSecurity.includes('Rehearse queue lease expiry, retry, recovery, due-only admission, and human release review in isolation')
+  && !agentSecurity.includes('queue viewing can authorize processing or preview deployment')
+  && !agentSecurity.includes('root development compose publishes services'))
 requireContract('product QA brief matches current portfolio',
   qaBrief.includes('Work item: `QA-003`')
   && qaBrief.includes('Mode: read-only')
@@ -161,8 +174,8 @@ requireContract('accepted core checkpoints lead directly to real work',
   && workboard.includes('one-tap sample preview through the exact Shop, Plant, Website, or Ecommerce template')
   && workboard.includes('keeps the checked-import download disabled until workspace and owner are present')
   && workboard.includes('Keep product checkpoint `7447d07`')
-  && workboard.includes('current 192-commit fast-forward delta')
-  && now.includes('Checkpoint `7447d07` is the accepted local product')
+  && workboard.includes('192-commit fast-forward audit snapshot')
+  && now.includes('`7447d07` remains the product baseline')
   && now.includes('Core first-action QA leads Shop Stock')
   && now.includes('The active delivery focus is:')
   && now.includes('Setup, Save, receipt, and handoff focus the next step')
