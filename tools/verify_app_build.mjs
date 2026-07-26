@@ -1163,6 +1163,8 @@ if (!clientOnboardingSource.includes("CLIENT_IMPORT_SCHEMA = 'supermega.client_i
   || !clientOnboardingSource.includes("'production-control':")
   || !clientOnboardingSource.includes("'business-presence':")
   || !clientOnboardingSource.includes("'social-storefront':")
+  || !clientOnboardingSource.includes('maximumRows: 4')
+  || !clientOnboardingSource.includes("preview.product === 'website' ? 60 : 120")
   || !clientOnboardingSource.includes('globalThis.crypto.subtle.digest')
   || !clientOnboardingSource.includes("activationStatus: 'staged_not_applied'")
   || !clientOnboardingSource.includes('humanReviewRequired: true')
@@ -1197,18 +1199,20 @@ if (!managedTrialSource.includes('export async function validateManagedClientImp
   || !managedTrialSource.includes("'/api/trial/v1/imports/apply'")
   || !managedTrialSource.includes('confirmation: `APPLY ${request.validation.package_digest}`')
   || !managedTrialSource.includes('assertManagedClientImportActivation(')
-  || !managedTrialSource.includes('assertManagedShopImportState(result.state, stagingPackage)')
+  || !managedTrialSource.includes('export function assertManagedWebsiteImportState')
+  || !managedTrialSource.includes('assertManagedClientImportState(result.state, stagingPackage)')
   || !managedTrialSource.includes('expectedIdentity,')
   || !coreSource.includes('<ClientDataOnboarding managedIdentity={managedIdentity}')
   || !clientOnboardingUiSource.includes('Only the checked import package is sent to')
   || !clientOnboardingUiSource.includes("managedIdentity ? 'Validate import'")
   || !clientOnboardingUiSource.includes('Download validated import')
-  || !clientOnboardingUiSource.includes('I reviewed all {state.validation.stagingPackage.rows.length} Shop items')
+  || !clientOnboardingUiSource.includes("reviewLabel: 'Website pages'")
   || !clientOnboardingUiSource.includes('Create Shop catalog')
+  || !clientOnboardingUiSource.includes('Create Website drafts')
   || !clientOnboardingUiSource.includes('applyManagedClientImport({')
   || !clientOnboardingUiSource.includes('const bootstrap = await loadManagedBootstrap(expectedIdentity)')
-  || !clientOnboardingUiSource.includes('assertManagedShopImportState(confirmed.state, validated.stagingPackage)')
-  || !clientOnboardingUiSource.includes('zero product records were written; Shop activation waits for the separate review above.')
+  || !clientOnboardingUiSource.includes('assertManagedClientImportState(confirmed.state, validated.stagingPackage)')
+  || !clientOnboardingUiSource.includes('creation waits for the separate review above.')
   || !managedClientImportUiContract.includes('validateManagedClientImport(stagingPackage, expectedIdentity)')
   || !managedClientImportUiContract.includes('validationRequestRef.current !== validationRequestId')
   || !managedClientImportUiContract.includes('sameManagedIdentity(managedIdentityRef.current, expectedIdentity)')
@@ -1953,6 +1957,17 @@ async function verifyClientOnboardingRuntime() {
     assert(badDate.rows[0].issues.some((issue) => issue.code === 'date_not_canonical'), 'client_import_impossible_date_accepted')
     const badUrl = await model.createClientImportPreview('page_slug,page_title,headline,body,contact_url\nhome,Home,Hello,Body,javascript:alert(1)\n', 'website')
     assert(badUrl.rows[0].issues.some((issue) => issue.code === 'url_not_allowed'), 'client_import_unsafe_url_accepted')
+    const websiteObject = model.clientImportObject('website')
+    assert(websiteObject.maximumRows === 4
+      && websiteObject.fields.find((field) => field.id === 'title')?.maximum === 40
+      && websiteObject.fields.find((field) => field.id === 'headline')?.maximum === 140
+      && websiteObject.fields.find((field) => field.id === 'body')?.maximum === 360
+      && websiteObject.fields.find((field) => field.id === 'contactUrl')?.maximum === 160, 'client_import_website_adapter_limits_drifted')
+    const websiteRows = Array.from({ length: 5 }, (_, index) => `${index === 0 ? 'home' : `page-${index + 1}`},Page ${index + 1},Headline ${index + 1},Body ${index + 1},https://example.com/contact`).join('\n')
+    const tooManyWebsitePages = await model.createClientImportPreview(`page_slug,page_title,headline,body,contact_url\n${websiteRows}\n`, 'website')
+    assert(!tooManyWebsitePages.readyForStaging && tooManyWebsitePages.fileIssues.some((issue) => issue.code === 'object_row_limit'), 'client_import_website_page_limit_not_enforced')
+    const websitePreview = await model.createClientImportPreview(model.clientImportTemplate('website', 'business-presence'), 'website', undefined, 'website.csv', 'business-presence')
+    rejectsSync(() => model.buildClientImportStagingPackage(websitePreview, { workflowTemplateId: 'business-presence', workspace: 'W'.repeat(61), owner: 'Owner' }), 'client_import_website_workspace_limit_not_enforced')
 
     rejectsSync(() => model.buildClientImportStagingPackage(unmapped, { workflowTemplateId: 'x', workspace: 'Client', owner: 'Owner' }), 'client_import_invalid_preview_staged')
     rejectsSync(() => model.buildClientImportStagingPackage(manuallyMapped, { workflowTemplateId: manuallyMapped.workflowTemplateId, workspace: '', owner: 'Owner' }), 'client_import_missing_workspace_staged')
@@ -2102,6 +2117,122 @@ async function verifyManagedClientImportRuntime() {
       rejects(
         () => managedTrial.assertManagedClientImportActivation(response, staged, receipt, identity, commandId, 0),
         `managed_client_import_activation_${label}_tamper_accepted`,
+      )
+    }
+
+    const websitePreview = await onboarding.createClientImportPreview(
+      onboarding.clientImportTemplate('website', 'business-presence'),
+      'website',
+      undefined,
+      'website.csv',
+      'business-presence',
+    )
+    const websiteStaged = onboarding.buildClientImportStagingPackage(websitePreview, {
+      workflowTemplateId: 'business-presence',
+      workspace: 'Example Website',
+      owner: 'Website owner',
+    })
+    const websitePackageDigest = await managedTrial.managedClientImportPackageDigest(websiteStaged)
+    const websiteReceipt = {
+      contract: 'supermega.client_import_validation.v1',
+      status: 'valid',
+      product: 'website',
+      object: 'website_pages',
+      workflow_template_id: websiteStaged.workflowTemplateId,
+      preview_digest: websiteStaged.source.previewDigest,
+      package_digest: websitePackageDigest,
+      row_count: websiteStaged.rows.length,
+      checks: receipt.checks,
+      workspace_id: identity.workspaceId,
+      activation: {
+        status: 'not_applied',
+        target_surface: 'website',
+        required_capability: 'website.write',
+        human_approval_required: true,
+        atomic_adapter_ready: true,
+        external_writes_performed: false,
+      },
+    }
+    const acceptedWebsite = managedTrial.assertManagedClientImportValidation(
+      { validation: websiteReceipt },
+      websiteStaged,
+      identity,
+      websitePackageDigest,
+    )
+    assert(acceptedWebsite === websiteReceipt, 'managed_client_import_website_receipt_rejected')
+    const websiteTimestamp = '2026-07-26T04:30:00.000Z'
+    const websiteState = {
+      schema: 'supermega.website.workspace.v2',
+      version: 2,
+      revision: 0,
+      contentRevision: 0,
+      siteName: websiteStaged.workspace,
+      pages: websiteStaged.rows.map((row, index) => ({
+        id: `page-import-${index + 1}`,
+        internalName: row.values.title,
+        slug: row.values.slug === 'home' ? '/' : `/${row.values.slug}`,
+        stage: 'draft',
+        navigation: { label: row.values.title, visible: false },
+        hero: {
+          eyebrow: '',
+          headline: row.values.headline,
+          summary: '',
+          ctaLabel: row.values.contactUrl ? 'Contact' : '',
+          ctaHref: row.values.contactUrl,
+        },
+        sections: [{ id: `section-import-${index + 1}`, eyebrow: '', title: row.values.title, body: row.values.body }],
+        seo: { title: row.values.title, description: '' },
+        updatedAt: websiteTimestamp,
+      })),
+      selectedPageId: 'page-import-1',
+      evidence: [],
+      approvals: [],
+      localPublishes: [],
+      events: [],
+    }
+    const websiteCommandId = '00000000-0000-4000-8000-000000000202'
+    const websiteActivationResponse = {
+      activation: {
+        contract: 'supermega.client_import_activation.v1',
+        status: 'applied',
+        product: 'website',
+        object: 'website_pages',
+        workflow_template_id: websiteStaged.workflowTemplateId,
+        package_digest: websitePackageDigest,
+        row_count: websiteStaged.rows.length,
+        workspace_id: identity.workspaceId,
+        external_writes_performed: true,
+      },
+      result: {
+        command_id: websiteCommandId,
+        surface: 'website',
+        event_type: 'website.workspace.initialized',
+        version: 1,
+        state: websiteState,
+        idempotent_replay: false,
+      },
+    }
+    const activatedWebsite = managedTrial.assertManagedClientImportActivation(
+      websiteActivationResponse,
+      websiteStaged,
+      websiteReceipt,
+      identity,
+      websiteCommandId,
+      0,
+    )
+    assert(activatedWebsite === websiteActivationResponse, 'managed_client_import_valid_website_activation_rejected')
+    assert(managedTrial.assertManagedWebsiteImportState(websiteState, websiteStaged) === websiteState, 'managed_client_import_valid_website_state_rejected')
+    for (const [label, response] of [
+      ['surface', { ...websiteActivationResponse, result: { ...websiteActivationResponse.result, surface: 'commerce' } }],
+      ['history', { ...websiteActivationResponse, result: { ...websiteActivationResponse.result, state: { ...websiteState, evidence: [{}] } } }],
+      ['stage', { ...websiteActivationResponse, result: { ...websiteActivationResponse.result, state: { ...websiteState, pages: [{ ...websiteState.pages[0], stage: 'ready' }, ...websiteState.pages.slice(1)] } } }],
+      ['timestamp', { ...websiteActivationResponse, result: { ...websiteActivationResponse.result, state: { ...websiteState, pages: [{ ...websiteState.pages[0], updatedAt: 'server-assigned' }, ...websiteState.pages.slice(1)] } } }],
+      ['copy', { ...websiteActivationResponse, result: { ...websiteActivationResponse.result, state: { ...websiteState, pages: [{ ...websiteState.pages[0], sections: [{ ...websiteState.pages[0].sections[0], body: 'Changed' }] }, ...websiteState.pages.slice(1)] } } }],
+      ['extra', { ...websiteActivationResponse, result: { ...websiteActivationResponse.result, state: { ...websiteState, untrusted: true } } }],
+    ]) {
+      rejects(
+        () => managedTrial.assertManagedClientImportActivation(response, websiteStaged, websiteReceipt, identity, websiteCommandId, 0),
+        `managed_client_import_website_${label}_tamper_accepted`,
       )
     }
   } catch (error) {

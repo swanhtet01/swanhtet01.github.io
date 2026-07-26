@@ -12,7 +12,7 @@ import {
 } from './client-onboarding'
 import {
   applyManagedClientImport,
-  assertManagedShopImportState,
+  assertManagedClientImportState,
   loadManagedBootstrap,
   sameManagedIdentity,
   validateManagedClientImport,
@@ -180,9 +180,34 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
       ].slice(0, 20)
     : []
   const importContextReady = Boolean(workspace.trim() && owner.trim())
+  const managedActivation = product === 'commerce'
+    ? {
+        surface: 'commerce' as const,
+        reviewLabel: 'Shop items',
+        createdLabel: 'Shop catalog items',
+        completedLabel: 'Shop items',
+        productLabel: 'Shop',
+        progressLabel: 'Creating one revisioned Shop catalog and confirming the durable result…',
+        busyLabel: 'Creating catalog…',
+        actionLabel: 'Create Shop catalog',
+        failure: 'The managed Shop catalog was not created. The checked import is still available.',
+      }
+    : product === 'website'
+      ? {
+          surface: 'website' as const,
+          reviewLabel: 'Website pages',
+          createdLabel: 'Website page drafts',
+          completedLabel: 'Website drafts',
+          productLabel: 'Website',
+          progressLabel: 'Creating one revisioned Website draft workspace and confirming the durable result…',
+          busyLabel: 'Creating drafts…',
+          actionLabel: 'Create Website drafts',
+          failure: 'The managed Website drafts were not created. The checked import is still available.',
+        }
+      : null
   const canPrepareImport = Boolean(state.preview?.readyForStaging && importContextReady && !state.busy && !state.validating && !state.applying)
-  const canApplyManagedShop = Boolean(
-    product === 'commerce'
+  const canApplyManagedImport = Boolean(
+    managedActivation
     && managedIdentity
     && validationIsCurrent
     && state.validation?.receipt.activation.atomic_adapter_ready
@@ -365,11 +390,11 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
     }
   }
 
-  async function activateManagedShopImport() {
+  async function activateManagedImport() {
     const expectedIdentity = managedIdentity
     const validated = state.validation
     if (!expectedIdentity
-      || product !== 'commerce'
+      || !managedActivation
       || !validationIsCurrent
       || !validated
       || !validated.receipt.activation.atomic_adapter_ready
@@ -397,13 +422,13 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
       if (contextChanged()) return
       const bootstrap = await loadManagedBootstrap(expectedIdentity)
       if (contextChanged()) return
-      const confirmed = bootstrap.states.commerce
+      const confirmed = bootstrap.states[managedActivation.surface]
       if (!confirmed
         || confirmed.version !== receipt.result.version
         || confirmed.updated_by !== expectedIdentity.userId) {
-        throw new Error('Shop accepted the import, but its durable revision could not be confirmed. Retry uses the same command and cannot duplicate it.')
+        throw new Error(`${managedActivation.productLabel} accepted the import, but its durable revision could not be confirmed. Retry uses the same command and cannot duplicate it.`)
       }
-      assertManagedShopImportState(confirmed.state, validated.stagingPackage)
+      assertManagedClientImportState(confirmed.state, validated.stagingPackage)
       setState((current) => current.preview?.previewDigest === expectedPreviewDigest
         && current.validation?.commandId === validated.commandId
         ? {
@@ -420,7 +445,7 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
         ...current,
         applying: false,
         applied: null,
-        error: error instanceof Error ? error.message : 'The managed Shop catalog was not created. The checked import is still available.',
+        error: error instanceof Error ? error.message : managedActivation.failure,
       }))
     }
   }
@@ -441,13 +466,13 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
           </div>
         </div>
         <p className="catalog-import-boundary">{appliedIsCurrent && state.applied
-          ? `The exact checked package created ${state.applied.receipt.activation.row_count} Shop catalog items in ${managedIdentity?.workspaceId}. The source CSV was not uploaded or sent to AI. `
+          ? `The exact checked package created ${state.applied.receipt.activation.row_count} ${managedActivation?.createdLabel ?? 'product records'} in ${managedIdentity?.workspaceId}. The source CSV was not uploaded or sent to AI. `
           : managedIdentity
           ? `The source CSV stays in this tab. Only the checked import package is sent to ${managedIdentity.workspaceId} for validation; nothing is sent to AI or added to a product before your final confirmation. `
           : `The CSV stays in this browser. Nothing is sent to AI or added to ${productNames[product]} while you preview it. `}{appliedIsCurrent ? '' : object.activationBoundary}</p>
         {state.busy ? <p className="form-notice" role="status">Checking columns, required values, duplicates, dates, URLs, and Unicode…</p> : null}
         {state.validating ? <p className="form-notice" role="status">Validating the exact package with the authenticated workspace…</p> : null}
-        {state.applying ? <p className="form-notice" role="status">Creating one revisioned Shop catalog and confirming the durable result…</p> : null}
+        {state.applying ? <p className="form-notice" role="status">{managedActivation?.progressLabel ?? 'Confirming the durable import result…'}</p> : null}
         {state.error ? <p className="form-error" role="alert">{state.error}</p> : null}
         {state.preview ? <div className="catalog-import-preview" ref={previewRef} tabIndex={-1}>
           <div className="catalog-import-source">
@@ -475,21 +500,21 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
             {visibleRows.map((row) => <div className="catalog-import-row" data-result={row.status} key={row.rowNumber} role="row"><span>{row.rowNumber}</span><strong>{row.key || '—'}</strong><span>{rowStatusLabels[row.status] ?? row.status}</span><small>{row.issues.map((issue) => issue.message).join(' · ') || 'Mapped and checked'}</small></div>)}
           </div>
           {state.preview.rows.length > visibleRows.length ? <p className="panel-copy">Showing the first {visibleRows.length} rows; the staging package retains all {state.preview.rows.length} checked rows.</p> : null}
-          {validationIsCurrent && state.validation?.receipt.activation.atomic_adapter_ready && product === 'commerce' && !appliedIsCurrent ? <>
-            <label className="website-intake-confirm"><input checked={state.applyConfirmed} disabled={state.applying} onChange={(event) => setState((current) => ({ ...current, applyConfirmed: event.target.checked, error: '' }))} type="checkbox" /><span>I reviewed all {state.validation.stagingPackage.rows.length} Shop items and validation receipt {state.validation.receipt.package_digest.slice(7, 19).toUpperCase()}.</span></label>
-            <div className="form-actions"><button className="core-button primary" disabled={!canApplyManagedShop} onClick={() => void activateManagedShopImport()} type="button">{state.applying ? 'Creating catalog…' : 'Create Shop catalog'}</button></div>
+          {validationIsCurrent && state.validation?.receipt.activation.atomic_adapter_ready && managedActivation && !appliedIsCurrent ? <>
+            <label className="website-intake-confirm"><input checked={state.applyConfirmed} disabled={state.applying} onChange={(event) => setState((current) => ({ ...current, applyConfirmed: event.target.checked, error: '' }))} type="checkbox" /><span>I reviewed all {state.validation.stagingPackage.rows.length} {managedActivation.reviewLabel} and validation receipt {state.validation.receipt.package_digest.slice(7, 19).toUpperCase()}.</span></label>
+            <div className="form-actions"><button className="core-button primary" disabled={!canApplyManagedImport} onClick={() => void activateManagedImport()} type="button">{state.applying ? managedActivation.busyLabel : managedActivation.actionLabel}</button></div>
           </> : null}
           <div className="catalog-import-footer">
-            <div><strong>{appliedIsCurrent && state.applied ? `${state.applied.receipt.activation.row_count} Shop items created in revision ${state.applied.receipt.result.version}.` : validationIsCurrent ? `Validated by ${managedIdentity?.workspaceId}.` : state.preview.readyForStaging && !importContextReady ? 'Add workspace and owner above.' : state.preview.readyForStaging ? 'Data check passed.' : 'Fix the highlighted rows first.'}</strong><small>{appliedIsCurrent && state.applied
-              ? `Receipt ${state.applied.receipt.activation.package_digest.slice(7, 19).toUpperCase()} · durable Shop state confirmed with one idempotent command.`
+            <div><strong>{appliedIsCurrent && state.applied ? `${state.applied.receipt.activation.row_count} ${managedActivation?.completedLabel ?? 'records'} created in revision ${state.applied.receipt.result.version}.` : validationIsCurrent ? `Validated by ${managedIdentity?.workspaceId}.` : state.preview.readyForStaging && !importContextReady ? 'Add workspace and owner above.' : state.preview.readyForStaging ? 'Data check passed.' : 'Fix the highlighted rows first.'}</strong><small>{appliedIsCurrent && state.applied
+              ? `Receipt ${state.applied.receipt.activation.package_digest.slice(7, 19).toUpperCase()} · durable ${managedActivation?.productLabel ?? 'product'} state confirmed with one idempotent command.`
               : validationIsCurrent && state.validation
-              ? `Receipt ${state.validation.receipt.package_digest.slice(7, 19).toUpperCase()} · zero product records were written; Shop activation waits for the separate review above.`
+              ? `Receipt ${state.validation.receipt.package_digest.slice(7, 19).toUpperCase()} · zero product records were written; ${managedActivation?.productLabel ?? 'product'} creation waits for the separate review above.`
               : state.preview.readyForStaging && !importContextReady
                 ? 'These details bind the checked rows to one accountable client workspace before download.'
               : managedIdentity
                 ? 'The exact template, mapping, checked rows, owner, and workspace label must pass the tenant API before download.'
                 : 'The checked import records its template, mapping, source fingerprint, owner, and rows. It performs zero product writes.'}</small></div>
-            <div className="form-actions"><button className="core-button" disabled={state.applying} onClick={clearPreview} type="button">Clear</button>{!appliedIsCurrent && !(validationIsCurrent && state.validation?.receipt.activation.atomic_adapter_ready && product === 'commerce') ? <button className="core-button primary" disabled={!canPrepareImport} onClick={() => void validateOrDownloadStagingPackage()} type="button">{state.validating ? 'Validating…' : !importContextReady ? 'Add workspace and owner' : validationIsCurrent ? 'Download validated import' : managedIdentity ? 'Validate import' : 'Download checked import'}</button> : null}</div>
+            <div className="form-actions"><button className="core-button" disabled={state.applying} onClick={clearPreview} type="button">Clear</button>{!appliedIsCurrent && !(validationIsCurrent && state.validation?.receipt.activation.atomic_adapter_ready && managedActivation) ? <button className="core-button primary" disabled={!canPrepareImport} onClick={() => void validateOrDownloadStagingPackage()} type="button">{state.validating ? 'Validating…' : !importContextReady ? 'Add workspace and owner' : validationIsCurrent ? 'Download validated import' : managedIdentity ? 'Validate import' : 'Download checked import'}</button> : null}</div>
           </div>
         </div> : null}
       </div>

@@ -25,6 +25,7 @@ export type ClientImportObject = {
   label: string
   description: string
   keyField: string
+  maximumRows: number
   fields: readonly ClientImportField[]
   workflowTemplates: Readonly<Record<string, string>>
   activationBoundary: string
@@ -88,6 +89,7 @@ const objects: Record<ClientSolutionId, ClientImportObject> = {
     label: 'Shop catalog',
     description: 'Opening items, stock thresholds, and MMK selling prices.',
     keyField: 'sku',
+    maximumRows: CLIENT_IMPORT_MAX_ROWS,
     activationBoundary: 'A named Shop operator must separately confirm an accountable catalog import.',
     workflowTemplates: {
       'social-commerce': 'sku,item_name,opening_stock,reorder_at,price_mmk\r\nCOFFEE-250,Myanmar coffee 250g,24,8,7000\r\nTEA-20,Green tea 20 pack,36,12,4500\r\n',
@@ -107,6 +109,7 @@ const objects: Record<ClientSolutionId, ClientImportObject> = {
     label: 'Plant jobs',
     description: 'Initial production jobs, targets, due dates, and line ownership.',
     keyField: 'jobCode',
+    maximumRows: CLIENT_IMPORT_MAX_ROWS,
     activationBoundary: 'A Plant owner must verify capacity, material, and safety before jobs enter the live schedule.',
     workflowTemplates: {
       'production-control': 'job_code,product_name,target_quantity,due_date,production_line\r\nJOB-001,20 inch tyre,500,2026-08-15,Line A\r\nJOB-002,16 inch tyre,300,2026-08-16,Line B\r\n',
@@ -126,6 +129,7 @@ const objects: Record<ClientSolutionId, ClientImportObject> = {
     label: 'Website pages',
     description: 'Finite page structure and approved source copy for a client website.',
     keyField: 'slug',
+    maximumRows: 4,
     activationBoundary: 'Imported copy remains a draft until a human reviews the responsive preview and approves the exact evidence set.',
     workflowTemplates: {
       'business-presence': 'page_slug,page_title,headline,body,contact_url\r\nhome,Home,Clear help for your customers,Explain the main service and strongest proof.,https://example.com/contact\r\nabout,About,Why customers trust us,Add the approved company story and team.,https://example.com/contact\r\n',
@@ -134,10 +138,10 @@ const objects: Record<ClientSolutionId, ClientImportObject> = {
     },
     fields: [
       { id: 'slug', label: 'Page slug', required: true, kind: 'slug', aliases: ['page_slug', 'slug', 'path', 'url_slug', 'စာမျက်နှာ'], maximum: 80 },
-      { id: 'title', label: 'Page title', required: true, kind: 'text', aliases: ['page_title', 'title', 'seo_title', 'စာမျက်နှာခေါင်းစဉ်'], maximum: 120 },
-      { id: 'headline', label: 'Headline', required: true, kind: 'text', aliases: ['headline', 'heading', 'hero_title', 'ခေါင်းစဉ်'], maximum: 180 },
-      { id: 'body', label: 'Body copy', required: true, kind: 'text', aliases: ['body', 'body_copy', 'content', 'description', 'စာသား'], maximum: 1200 },
-      { id: 'contactUrl', label: 'Contact URL', required: false, kind: 'url', aliases: ['contact_url', 'cta_url', 'contact_link', 'call_to_action'] },
+      { id: 'title', label: 'Page title', required: true, kind: 'text', aliases: ['page_title', 'title', 'seo_title', 'စာမျက်နှာခေါင်းစဉ်'], maximum: 40 },
+      { id: 'headline', label: 'Headline', required: true, kind: 'text', aliases: ['headline', 'heading', 'hero_title', 'ခေါင်းစဉ်'], maximum: 140 },
+      { id: 'body', label: 'Body copy', required: true, kind: 'text', aliases: ['body', 'body_copy', 'content', 'description', 'စာသား'], maximum: 360 },
+      { id: 'contactUrl', label: 'Contact URL', required: false, kind: 'url', aliases: ['contact_url', 'cta_url', 'contact_link', 'call_to_action'], maximum: 160 },
     ],
   },
   ecommerce: {
@@ -145,6 +149,7 @@ const objects: Record<ClientSolutionId, ClientImportObject> = {
     label: 'Ecommerce merchandising',
     description: 'Shop SKU references, collections, and storefront display copy without duplicating stock or price.',
     keyField: 'sku',
+    maximumRows: CLIENT_IMPORT_MAX_ROWS,
     activationBoundary: 'Every SKU must match the current Shop catalog before a storefront draft can be approved.',
     workflowTemplates: {
       'social-storefront': 'sku,featured,collection,display_name,merchandising_note\r\nCOFFEE-250,true,Best sellers,Myanmar coffee 250g,Lead with the locally sourced proof.\r\nTEA-20,false,Tea,Green tea 20 pack,Keep the Messenger order path visible.\r\n',
@@ -434,6 +439,7 @@ export async function createClientImportPreview(
   const fileIssues = mappingIssues(object, headers, mapping)
   const rows = parsed.rows.slice(1).map((row) => rowFromMapping(row, object, headers, mapping, fileIssues))
   if (!rows.length) fileIssues.push({ code: 'data_rows_required', field: 'file', message: 'Add at least one data row below the header.' })
+  if (rows.length > object.maximumRows) fileIssues.push({ code: 'object_row_limit', field: 'file', message: `${object.label} accepts at most ${object.maximumRows} rows in one accountable import.` })
   classifyDuplicates(rows)
   const totals = totalsFor(rows)
   const normalizedMapping = Object.fromEntries(object.fields.map((field) => [field.id, mapping[field.id] ?? '']))
@@ -458,9 +464,10 @@ export async function createClientImportPreview(
   }
 }
 
-function boundedContext(value: string, label: string) {
+function boundedContext(value: string, label: string, maximum = 120) {
   const normalized = value.trim()
-  if (!normalized || normalized.length > 120 || hasControlCharacter(normalized)) throw new Error(`${label} is required before staging.`)
+  if (!normalized || hasControlCharacter(normalized)) throw new Error(`${label} is required before staging.`)
+  if (normalized.length > maximum) throw new Error(`${label} must be ${maximum} characters or fewer.`)
   return normalized
 }
 
@@ -476,7 +483,7 @@ export function buildClientImportStagingPackage(preview: ClientImportPreview, co
   if (workflowTemplateId !== preview.workflowTemplateId) {
     throw new Error('The workflow template changed after this data preview. Preview the CSV again before staging.')
   }
-  const workspace = boundedContext(context.workspace, 'Workspace name')
+  const workspace = boundedContext(context.workspace, 'Workspace name', preview.product === 'website' ? 60 : 120)
   const owner = boundedContext(context.owner, 'Responsible owner')
   return {
     contract: CLIENT_STAGING_SCHEMA,

@@ -161,8 +161,8 @@ export type ManagedClientImportValidation = {
 export type ManagedClientImportActivation = {
   contract: 'supermega.client_import_activation.v1'
   status: 'applied'
-  product: 'commerce'
-  object: 'shop_catalog'
+  product: 'commerce' | 'website'
+  object: 'shop_catalog' | 'website_pages'
   workflow_template_id: string
   package_digest: string
   row_count: number
@@ -234,6 +234,17 @@ const CLIENT_IMPORT_ACTIVATION = {
 } as const
 
 const CLIENT_IMPORT_COMMAND_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const WEBSITE_IMPORT_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
+
+function clientImportAtomicAdapter(product: ManagedClientImportPackage['product']) {
+  if (product === 'commerce') {
+    return { eventType: 'commerce.workspace.initialized', surface: 'commerce' } as const
+  }
+  if (product === 'website') {
+    return { eventType: 'website.workspace.initialized', surface: 'website' } as const
+  }
+  return null
+}
 
 async function sha256Text(value: string) {
   if (!globalThis.crypto?.subtle) {
@@ -293,7 +304,7 @@ export function assertManagedClientImportValidation(
     || activation.target_surface !== expectedActivation.target
     || activation.required_capability !== expectedActivation.capability
     || activation.human_approval_required !== true
-    || activation.atomic_adapter_ready !== (stagingPackage.product === 'commerce')
+    || activation.atomic_adapter_ready !== Boolean(clientImportAtomicAdapter(stagingPackage.product))
     || activation.external_writes_performed !== false) {
     throw new ManagedTrialError('The managed workspace returned a mismatched import validation.', {
       code: 'managed_client_import_validation_invalid',
@@ -366,6 +377,99 @@ export function assertManagedShopImportState(
   return state
 }
 
+function isCanonicalWebsiteImportTimestamp(value: unknown) {
+  if (typeof value !== 'string' || !WEBSITE_IMPORT_TIMESTAMP.test(value)) return false
+  const parsed = new Date(value)
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString() === value
+}
+
+export function assertManagedWebsiteImportState(
+  state: unknown,
+  stagingPackage: ManagedClientImportPackage,
+) {
+  const stateKeys = ['approvals', 'contentRevision', 'events', 'evidence', 'localPublishes', 'pages', 'revision', 'schema', 'selectedPageId', 'siteName', 'version'] as const
+  const pageKeys = ['hero', 'id', 'internalName', 'navigation', 'sections', 'seo', 'slug', 'stage', 'updatedAt'] as const
+  const heroKeys = ['ctaHref', 'ctaLabel', 'eyebrow', 'headline', 'summary'] as const
+  if (stagingPackage.product !== 'website'
+    || !isRecord(state)
+    || !hasExactKeys(state, stateKeys)
+    || state.schema !== 'supermega.website.workspace.v2'
+    || state.version !== 2
+    || state.revision !== 0
+    || state.contentRevision !== 0
+    || state.siteName !== stagingPackage.workspace
+    || state.selectedPageId !== 'page-import-1'
+    || !Array.isArray(state.pages)
+    || state.pages.length !== stagingPackage.rows.length
+    || !Array.isArray(state.evidence)
+    || state.evidence.length !== 0
+    || !Array.isArray(state.approvals)
+    || state.approvals.length !== 0
+    || !Array.isArray(state.localPublishes)
+    || state.localPublishes.length !== 0
+    || !Array.isArray(state.events)
+    || state.events.length !== 0) {
+    throw new ManagedTrialError('The managed workspace returned an invalid Website import state.', {
+      code: 'managed_client_import_activation_invalid',
+    })
+  }
+  let serverTimestamp = ''
+  for (const [index, row] of stagingPackage.rows.entries()) {
+    const page = state.pages[index]
+    const expectedId = `page-import-${index + 1}`
+    const expectedSlug = row.values.slug === 'home' ? '/' : `/${row.values.slug}`
+    const contactUrl = row.values.contactUrl
+    if (!isRecord(page)
+      || !hasExactKeys(page, pageKeys)
+      || page.id !== expectedId
+      || page.internalName !== row.values.title
+      || page.slug !== expectedSlug
+      || page.stage !== 'draft'
+      || !isRecord(page.navigation)
+      || !hasExactKeys(page.navigation, ['label', 'visible'])
+      || page.navigation.label !== row.values.title
+      || page.navigation.visible !== false
+      || !isRecord(page.hero)
+      || !hasExactKeys(page.hero, heroKeys)
+      || page.hero.eyebrow !== ''
+      || page.hero.headline !== row.values.headline
+      || page.hero.summary !== ''
+      || page.hero.ctaLabel !== (contactUrl ? 'Contact' : '')
+      || page.hero.ctaHref !== contactUrl
+      || !Array.isArray(page.sections)
+      || page.sections.length !== 1
+      || !isRecord(page.sections[0])
+      || !hasExactKeys(page.sections[0], ['body', 'eyebrow', 'id', 'title'])
+      || page.sections[0].id !== `section-import-${index + 1}`
+      || page.sections[0].eyebrow !== ''
+      || page.sections[0].title !== row.values.title
+      || page.sections[0].body !== row.values.body
+      || !isRecord(page.seo)
+      || !hasExactKeys(page.seo, ['description', 'title'])
+      || page.seo.title !== row.values.title
+      || page.seo.description !== ''
+      || !isCanonicalWebsiteImportTimestamp(page.updatedAt)
+      || (serverTimestamp && page.updatedAt !== serverTimestamp)) {
+      throw new ManagedTrialError('The managed Website import does not match the checked rows.', {
+        code: 'managed_client_import_activation_invalid',
+      })
+    }
+    serverTimestamp = page.updatedAt as string
+  }
+  return state
+}
+
+export function assertManagedClientImportState(
+  state: unknown,
+  stagingPackage: ManagedClientImportPackage,
+) {
+  if (stagingPackage.product === 'commerce') return assertManagedShopImportState(state, stagingPackage)
+  if (stagingPackage.product === 'website') return assertManagedWebsiteImportState(state, stagingPackage)
+  throw new ManagedTrialError('This managed import does not have an atomic product adapter.', {
+    code: 'managed_client_import_activation_invalid',
+  })
+}
+
 export function assertManagedClientImportActivation(
   response: unknown,
   stagingPackage: ManagedClientImportPackage,
@@ -374,8 +478,9 @@ export function assertManagedClientImportActivation(
   commandId: string,
   expectedVersion: number,
 ): ManagedClientImportActivationResult {
-  if (stagingPackage.product !== 'commerce'
-    || validation.product !== 'commerce'
+  const adapter = clientImportAtomicAdapter(stagingPackage.product)
+  if (!adapter
+    || validation.product !== stagingPackage.product
     || validation.activation.atomic_adapter_ready !== true
     || validation.package_digest.length !== 71
     || expectedVersion !== 0
@@ -383,7 +488,7 @@ export function assertManagedClientImportActivation(
     || !isRecord(response)
     || !isRecord(response.activation)
     || !isRecord(response.result)) {
-    throw new ManagedTrialError('The managed Shop import activation is invalid.', {
+    throw new ManagedTrialError('The managed import activation is invalid.', {
       code: 'managed_client_import_activation_invalid',
     })
   }
@@ -411,15 +516,15 @@ export function assertManagedClientImportActivation(
     || activation.external_writes_performed !== true
     || !hasExactKeys(result, ['command_id', 'event_type', 'idempotent_replay', 'state', 'surface', 'version'])
     || result.command_id !== commandId
-    || result.surface !== 'commerce'
-    || result.event_type !== 'commerce.workspace.initialized'
+    || result.surface !== adapter.surface
+    || result.event_type !== adapter.eventType
     || result.version !== expectedVersion + 1
     || typeof result.idempotent_replay !== 'boolean') {
-    throw new ManagedTrialError('The managed Shop import response does not match the reviewed package.', {
+    throw new ManagedTrialError('The managed import response does not match the reviewed package.', {
       code: 'managed_client_import_activation_invalid',
     })
   }
-  assertManagedShopImportState(result.state, stagingPackage)
+  assertManagedClientImportState(result.state, stagingPackage)
   return response as unknown as ManagedClientImportActivationResult
 }
 
@@ -686,12 +791,13 @@ export async function applyManagedClientImport(request: {
   const body = serializeManagedClientImportPackage(request.stagingPackage)
   const submittedPackage = JSON.parse(body) as ManagedClientImportPackage
   const currentDigest = await sha256Text(body)
-  if (request.validation.product !== 'commerce'
+  if (!clientImportAtomicAdapter(request.stagingPackage.product)
+    || request.validation.product !== request.stagingPackage.product
     || request.validation.activation.atomic_adapter_ready !== true
     || request.validation.workspace_id !== request.identity.workspaceId
     || request.validation.package_digest !== currentDigest
     || !CLIENT_IMPORT_COMMAND_ID.test(request.commandId)) {
-    throw new ManagedTrialError('The validated Shop import changed before activation.', {
+    throw new ManagedTrialError('The validated import changed before activation.', {
       code: 'managed_client_import_package_changed',
     })
   }
