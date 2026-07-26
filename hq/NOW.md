@@ -48,8 +48,8 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 - Vercel inventory confirms canonical `megaos` and `supermega-public`. Local link and credentials are absent, so preview stays blocked; any future approved launch must build once and deploy that exact prebuilt artifact.
 - React Router is isolated in a 43,870-byte cacheable chunk. The accepted product baseline's largest JavaScript chunk is 478,469 bytes and remains below the build gate.
 - Focused coverage: 202 Shop, 34 order-recovery, 250 Plant, 94 Website, 11 managed-Website, 103 client-onboarding, 27 storefront-draft, 14 storefront, 15 request, 17 managed-storefront, and 16 handoff checks.
-- Existing 390/1280 px product QA remains valid. Fresh 390x844 and 1280x900 import QA has no overflow, overlay, or browser warning/error; one tap checks the two-row Shop sample and keeps download gated by workspace and owner.
-- Core first-action QA leads Shop Stock with the exact shortage, guides incomplete orders to Promise or Payment, sends Plant alerts to Problems and jobs to output, puts open Problems before Equipment, and moves invalid Website briefs to their first error. Mobile actions are at least 44 px with no overflow; guide actions create no record.
+- Fresh 390x844 and 1280x900 QA covers all four products: meaningful content, no overflow, overlay, or browser errors, and zero WCAG A/AA violations.
+- Core first-action QA leads Shop Stock with the exact shortage, guides incomplete orders to Promise or Payment, sends Plant alerts to Problems and jobs to output, puts open Problems before Equipment, and moves invalid Website briefs to their first error. Mobile controls are at least 44 px; fixed navigation now preserves focus and click clearance (`36fa7dd`), and guide or review actions create no record.
 - PostgreSQL 17.10 passed 32 TLS checks, including exact approval/event restore and the trusted-server identity boundary.
 - Last remote release snapshot: `784379e` was 0 behind / 192 ahead of draft PR #258 head `338b6fd`; both domains served `6885c320`; remote checks exclude the local delta and later commits. See `hq/research/release-reconciliation-2026-07-26.md`.
 
