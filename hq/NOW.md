@@ -44,7 +44,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 ## Verified baseline
 
 - `7447d07` remains the product baseline; operating checkpoint `63a245f` adds bounded agents, exact review, single-use approval, and pinned prebuilt preview deployment; security checkpoint `98b8044` remains.
-- App lint/build and all local contracts pass with 23 cloud/governance, 17 legacy-security, 213 total Python tests, 61 release checks, and 58 security checks. Four-product rehearsal remains 12 profiles and four recovery paths.
+- App lint/build and all local contracts pass. Kernel checkpoint `851992d` passes 259 tests, 69 connectors/993 calls, and 15 crews/214 checks; four-product rehearsal remains 12 profiles and four recovery paths.
 - Vercel inventory confirms canonical `megaos` and `supermega-public`. Local link and credentials are absent, so preview stays blocked; any future approved launch must build once and deploy that exact prebuilt artifact.
 - React Router is isolated in a 43,870-byte cacheable chunk. The accepted product baseline's largest JavaScript chunk is 478,469 bytes and remains below the build gate.
 - Focused coverage: 202 Shop, 34 order-recovery, 250 Plant, 94 Website, 11 managed-Website, 103 client-onboarding, 27 storefront-draft, 14 storefront, 15 request, 17 managed-storefront, and 16 handoff checks.
@@ -66,7 +66,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 ## Blockers
 
 - Ecommerce lacks hosted cross-device proof. Local v2 invalidates stale setup after Shop changes, but its fingerprint is not authenticated approval evidence; managed setup stays digest-bound.
-- Agent Teams has no hosted proof. Local authority, cadence, destination, budget, and lease boundaries pass; Vercel reports zero Agent Runs in 30 days. Hosted scheduler recovery is unproven.
+- Agent Teams has no hosted proof. Local authority, cadence, destination, budget, lease, and daily-brief admission pass; Vercel reports zero Agent Runs in 30 days. Hosted scheduler recovery is unproven.
 - No isolated hosted Supabase branch or separate non-production project has repeated the local database proof.
 - Storage privacy is local-contract evidence only; hosted bucket inventory and object-listing denial remain required.
 - Browser-local Website records cannot authenticate out-of-band storage edits; managed commands use the locked prior state and separate ledger. Hosted activation remains unproven.
@@ -87,7 +87,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Next evidence
 
-1. Prove the one daily Kernel brief produces a useful owner outcome before retaining its schedule.
+1. Run one owner-approved isolated Kernel brief and verify its outcome before retaining the schedule; local duplicate and retry safety is proven.
 2. After an approved fast-forward push and exact Vercel link, generate one owner review for that clean commit; do not deploy or mutate aliases in the same decision.
 3. Repeat the 12-profile synthetic rehearsal with one founder-approved named pilot company and measure human correction and review time before any write adapter.
 4. On one approved isolated Supabase target, prove private Storage, RLS, Ecommerce replay/isolation, and database recovery.
