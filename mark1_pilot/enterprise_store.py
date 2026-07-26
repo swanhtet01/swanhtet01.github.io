@@ -2954,16 +2954,28 @@ def claim_agent_runs(
             max_claim_work_units=(int(verified_grant["max_work_units"]) if verified_grant else None),
             policy=policy,
         )
-        recommended_job_types = set(capacity_plan["recommended_claim_job_types"])
+        recommended_job_types = list(capacity_plan["recommended_claim_job_types"])
+        recommended_job_type_set = set(recommended_job_types)
+        recommended_job_rank = {
+            job_type: index for index, job_type in enumerate(recommended_job_types)
+        }
         requested_limit = int(capacity_plan["recommended_claim_limit"])
 
         claimed: list[tuple[EnterpriseAgentRun, str, EnterpriseAgentBudgetReservation]] = []
         selected_job_types: set[str] = set()
         selected_units = 0
-        for row in eligible_rows:
+        ordered_eligible_rows = sorted(
+            eligible_rows,
+            key=lambda row: (
+                recommended_job_rank.get(row.job_type, len(recommended_job_rank)),
+                row.created_at,
+                row.run_id,
+            ),
+        )
+        for row in ordered_eligible_rows:
             if len(claimed) >= requested_limit:
                 break
-            if row.job_type not in recommended_job_types:
+            if row.job_type not in recommended_job_type_set:
                 continue
             if row.job_type in selected_job_types:
                 continue

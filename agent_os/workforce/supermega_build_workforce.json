@@ -18,7 +18,17 @@
     "max_daily_runs": 64,
     "max_daily_work_units": 96,
     "in_flight_per_job": 1,
-    "specialist_job_types": ["revenue_scout", "list_clerk", "task_triage", "template_clerk", "ops_watch", "founder_brief", "github_release_watch"]
+    "specialist_job_types": ["revenue_scout", "list_clerk", "task_triage", "template_clerk", "ops_watch", "founder_brief", "github_release_watch"],
+    "dispatch_policy": "fixed_priority_then_work_unit_efficiency_then_fifo",
+    "job_priorities": {
+      "revenue_scout": 50,
+      "list_clerk": 40,
+      "task_triage": 80,
+      "template_clerk": 60,
+      "ops_watch": 100,
+      "founder_brief": 70,
+      "github_release_watch": 90
+    }
   },
   "manager_moves": [
     "Assign one outcome to one accountable team; reuse a specialist before adding a role.",

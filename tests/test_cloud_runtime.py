@@ -22,6 +22,7 @@ from mark1_pilot.agent_governance import (
     AGENT_CAPACITY_PLAN_CONTRACT,
     AGENT_BUDGET_ACCOUNTING_CONTRACT,
     AGENT_BUDGET_GRANT_CONTRACT,
+    AGENT_JOB_PRIORITIES,
     AGENT_ROSTER_LIMIT,
     AgentGovernanceError,
     AgentWorkforcePolicy,
@@ -426,6 +427,11 @@ class AgentGovernanceTests(unittest.TestCase):
         self.assertEqual(runtime_policy["max_batch_jobs"], policy.max_batch_jobs)
         self.assertEqual(runtime_policy["max_registered_specialists"], policy.max_registered_specialists)
         self.assertEqual(runtime_policy["specialist_job_types"], list(policy.allowed_job_types))
+        self.assertEqual(runtime_policy["job_priorities"], AGENT_JOB_PRIORITIES)
+        self.assertEqual(
+            runtime_policy["dispatch_policy"],
+            "fixed_priority_then_work_unit_efficiency_then_fifo",
+        )
 
         for unsafe_policy in (
             AgentWorkforcePolicy(max_running=AGENT_ACTIVE_ASSIGNMENT_LIMIT + 1),
@@ -477,8 +483,47 @@ class AgentGovernanceTests(unittest.TestCase):
         )
         self.assertEqual(busy["decision"], "scale_up")
         self.assertEqual(busy["target_active_executions"], load_agent_workforce_policy().max_running)
-        self.assertEqual(len(busy["recommended_claim_job_types"]), load_agent_workforce_policy().max_running)
+        self.assertEqual(
+            busy["recommended_claim_job_types"],
+            ["ops_watch", "github_release_watch", "task_triage", "founder_brief"],
+        )
+        self.assertEqual(
+            busy["recommended_claims"],
+            [
+                {"job_type": "ops_watch", "priority": 100, "work_units": 1},
+                {"job_type": "github_release_watch", "priority": 90, "work_units": 2},
+                {"job_type": "task_triage", "priority": 80, "work_units": 1},
+                {"job_type": "founder_brief", "priority": 70, "work_units": 3},
+            ],
+        )
         self.assertEqual(busy["idle_registered_specialists"], AGENT_ROSTER_LIMIT - AGENT_ACTIVE_ASSIGNMENT_LIMIT)
+
+    def test_capacity_plan_is_priority_stable_and_budget_efficient(self) -> None:
+        plan = plan_agent_capacity(
+            queued_job_types=list(reversed(self.job_types)),
+            running_job_types=[],
+            daily_job_types=[],
+            registered_specialists=AGENT_ROSTER_LIMIT,
+            max_claim_runs=4,
+            max_claim_work_units=4,
+        )
+        self.assertEqual(plan["selection_policy"], "fixed_priority_then_work_unit_efficiency_then_fifo")
+        self.assertEqual(
+            plan["recommended_claim_job_types"],
+            ["ops_watch", "github_release_watch", "task_triage"],
+        )
+        self.assertEqual(plan["recommended_claim_work_units"], 4)
+        self.assertEqual(plan["target_active_executions"], 3)
+        self.assertEqual(plan["deferred_reasons"]["work_unit_budget"], 4)
+
+        with self._database() as (database_url, workspace_id, _):
+            for job_type in self.job_types:
+                create_agent_run(database_url, workspace_id=workspace_id, job_type=job_type)
+            claimed = claim_agent_runs(database_url, workspace_id=workspace_id, limit=4)
+            self.assertEqual(
+                [row["job_type"] for row in claimed],
+                ["ops_watch", "github_release_watch", "task_triage", "founder_brief"],
+            )
 
     def test_capacity_plan_skips_expensive_work_that_cannot_fit_remaining_budget(self) -> None:
         with patch.dict(os.environ, {"SUPERMEGA_AGENT_MAX_DAILY_UNITS": "4"}):

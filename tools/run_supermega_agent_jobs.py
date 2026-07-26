@@ -13,13 +13,13 @@ from urllib.request import HTTPRedirectHandler, HTTPCookieProcessor, Request, bu
 
 
 DEFAULT_JOB_TYPES = [
+    "ops_watch",
+    "github_release_watch",
+    "task_triage",
+    "founder_brief",
+    "template_clerk",
     "revenue_scout",
     "list_clerk",
-    "template_clerk",
-    "task_triage",
-    "ops_watch",
-    "founder_brief",
-    "github_release_watch",
 ]
 DEFAULT_DEPLOYED_BASE_URL = "https://supermega-app-453184845544.asia-southeast1.run.app"
 DEFAULT_BASE_URL = os.getenv("SUPERMEGA_RUNTIME_BASE_URL", DEFAULT_DEPLOYED_BASE_URL).strip() or DEFAULT_DEPLOYED_BASE_URL

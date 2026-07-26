@@ -11,8 +11,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping, Sequence
 
 
-AGENT_WORKFORCE_POLICY_CONTRACT = "supermega.agent-workforce-policy.v1"
-AGENT_CAPACITY_PLAN_CONTRACT = "supermega.agent-capacity-plan.v1"
+AGENT_WORKFORCE_POLICY_CONTRACT = "supermega.agent-workforce-policy.v2"
+AGENT_CAPACITY_PLAN_CONTRACT = "supermega.agent-capacity-plan.v2"
 AGENT_BUDGET_GRANT_CONTRACT = "supermega.agent-budget-grant.v1"
 AGENT_BUDGET_ACCOUNTING_CONTRACT = "supermega.agent-budget-accounting.v1"
 AGENT_BUDGET_AUDIENCE = "supermega-agent-runtime"
@@ -38,6 +38,23 @@ AGENT_JOB_DAILY_LIMITS: dict[str, int] = {
     "founder_brief": 1,
     "github_release_watch": 6,
 }
+
+# Higher numbers win scarce execution slots. This is deliberately fixed in
+# reviewed code rather than caller input so a queued growth task cannot outrank
+# operational safety, release integrity, or company coordination by tampering
+# with its payload.
+AGENT_JOB_PRIORITIES: dict[str, int] = {
+    "revenue_scout": 50,
+    "list_clerk": 40,
+    "task_triage": 80,
+    "template_clerk": 60,
+    "ops_watch": 100,
+    "founder_brief": 70,
+    "github_release_watch": 90,
+}
+
+if set(AGENT_JOB_UNITS) != set(AGENT_JOB_DAILY_LIMITS) or set(AGENT_JOB_UNITS) != set(AGENT_JOB_PRIORITIES):
+    raise RuntimeError("agent_job_policy_contract_invalid")
 
 _GRANT_ID = re.compile(r"^[a-f0-9]{32}$")
 _GRANT_SIGNATURE = re.compile(r"^[a-f0-9]{64}$")
@@ -85,6 +102,7 @@ class AgentWorkforcePolicy:
             "lease_seconds": self.lease_seconds,
             "job_units": dict(AGENT_JOB_UNITS),
             "job_daily_limits": dict(AGENT_JOB_DAILY_LIMITS),
+            "job_priorities": dict(AGENT_JOB_PRIORITIES),
             "in_flight_per_job": 1,
             "capacity_plan_contract": AGENT_CAPACITY_PLAN_CONTRACT,
             "execution_model": "ephemeral_demand_driven",
@@ -190,6 +208,14 @@ def agent_job_daily_limit(job_type: str) -> int:
         raise AgentGovernanceError("agent_job_type_not_allowed", f"Unsupported agent job type: {normalized or 'blank'}.") from exc
 
 
+def agent_job_priority(job_type: str) -> int:
+    normalized = str(job_type or "").strip().lower()
+    try:
+        return AGENT_JOB_PRIORITIES[normalized]
+    except KeyError as exc:
+        raise AgentGovernanceError("agent_job_type_not_allowed", f"Unsupported agent job type: {normalized or 'blank'}.") from exc
+
+
 def _agent_job_sequence(values: Sequence[object] | None, *, field: str) -> list[str]:
     if values is None:
         return []
@@ -271,7 +297,7 @@ def plan_agent_capacity(
 
     selected: list[str] = []
     selected_units = 0
-    seen_queued: set[str] = set()
+    first_queued_index: dict[str, int] = {}
     running_set = set(running)
     deferred = {
         "duplicate_job": 0,
@@ -280,11 +306,25 @@ def plan_agent_capacity(
         "run_or_concurrency_limit": 0,
         "work_unit_budget": 0,
     }
-    for job_type in queued:
-        if job_type in seen_queued:
+    for index, job_type in enumerate(queued):
+        if job_type in first_queued_index:
             deferred["duplicate_job"] += 1
             continue
-        seen_queued.add(job_type)
+        first_queued_index[job_type] = index
+
+    # Deterministic priority is followed by work-unit efficiency and then FIFO.
+    # The fixed priority table protects control-plane work; the final FIFO key
+    # prevents callers from reordering equal-policy jobs unpredictably.
+    ordered_queued = sorted(
+        first_queued_index,
+        key=lambda job_type: (
+            -agent_job_priority(job_type),
+            agent_job_units(job_type),
+            first_queued_index[job_type],
+            job_type,
+        ),
+    )
+    for job_type in ordered_queued:
         if job_type in running_set:
             deferred["job_in_flight"] += 1
             continue
@@ -322,8 +362,17 @@ def plan_agent_capacity(
         "registered_specialists_consume_compute": False,
         "running_executions": len(running),
         "queued_jobs": len(queued),
-        "eligible_unique_jobs": len(seen_queued - running_set),
+        "eligible_unique_jobs": len(set(first_queued_index) - running_set),
+        "selection_policy": "fixed_priority_then_work_unit_efficiency_then_fifo",
         "recommended_claim_job_types": selected,
+        "recommended_claims": [
+            {
+                "job_type": job_type,
+                "priority": agent_job_priority(job_type),
+                "work_units": agent_job_units(job_type),
+            }
+            for job_type in selected
+        ],
         "recommended_claim_limit": len(selected),
         "recommended_claim_work_units": selected_units,
         "target_active_executions": target_active_executions,
@@ -347,6 +396,7 @@ def plan_agent_capacity(
             "max_daily_units": active_policy.max_daily_units,
             "max_registered_specialists": active_policy.max_registered_specialists,
             "in_flight_per_job": 1,
+            "job_priorities": dict(AGENT_JOB_PRIORITIES),
         },
     }
 
