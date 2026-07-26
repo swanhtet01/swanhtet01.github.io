@@ -16,6 +16,9 @@ const databaseValidator = await readFile(resolve(root, 'tools/validate_supermega
 const migrationVerifier = await readFile(resolve(root, 'tools/verify_private_trial_migrations.mjs'), 'utf8')
 const rollbackResolver = await readFile(resolve(root, 'tools/resolve_vercel_rollback_target.mjs'), 'utf8')
 const retiredAliasVerifier = await readFile(resolve(root, 'tools/verify_retired_vercel_alias_state.mjs'), 'utf8')
+const previewServer = await readFile(resolve(root, 'tools/serve_solution.py'), 'utf8')
+const previewLauncher = await readFile(resolve(root, 'tools/deploy_preview.sh'), 'utf8')
+const retiredClaimableLauncher = await readFile(resolve(root, 'tools/deploy_claimable_preview.sh'), 'utf8')
 const config = JSON.parse(await readFile(resolve(root, 'vercel.json'), 'utf8'))
 const kernelConfig = JSON.parse(await readFile(resolve(root, 'kernel/vercel.json'), 'utf8'))
 const failures = []
@@ -178,6 +181,19 @@ requireContract('orphan enterprise and free-mode gates are retired',
   !existsSync(resolve(root, '.github/workflows/supermega-enterprise-gate.yml'))
   && !existsSync(resolve(root, 'tools/smoke_free_mode_health.mjs'))
   && ![workflow, appWorkflow, ciWorkflow].some((source) => source.includes('SuperMega App Build and Deploy')))
+requireContract('unlinked preview deployment is retired',
+  previewServer.includes('PREVIEW_DEPLOY_MODE = "canonical_preview"')
+  && previewServer.includes('CANONICAL_VERCEL_TEAM_ID = "team_wI4l7ZgSxcEztQPSlCCYVeJ5"')
+  && previewServer.includes('CANONICAL_APP_VERCEL_PROJECT_ID = "prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG"')
+  && previewServer.includes('_require_canonical_preview_deploy_target()')
+  && previewServer.includes('vercel@56.1.0')
+  && !previewServer.includes('deploy_claimable_preview.sh')
+  && !previewServer.includes('claimable_preview')
+  && [previewLauncher, retiredClaimableLauncher].every((source) =>
+    source.includes('Retired:')
+    && source.includes('exit 78')
+    && !source.includes('codex-deploy-skills.vercel.sh')
+    && !source.includes('curl ')))
 
 const expectedCrons = ['/api/cron/supermega/agent-queue', '/api/cron/supermega/daily'].sort()
 const actualCrons = (config.crons || []).map((cron) => cron.path).sort()

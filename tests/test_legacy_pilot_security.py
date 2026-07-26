@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import importlib.util
+import json
 import os
 import sqlite3
 import unittest
@@ -31,6 +32,8 @@ LAUNCHER_PATH = REPO_ROOT / "tools" / "run_solution.ps1"
 AGENT_RUNNER_PATH = REPO_ROOT / "tools" / "run_supermega_agent_jobs.py"
 FOUNDER_CYCLE_PATH = REPO_ROOT / "tools" / "run_supermega_founder_cycle.ps1"
 COMPOSE_PATH = REPO_ROOT / "docker-compose.yml"
+PREVIEW_LAUNCHER_PATH = REPO_ROOT / "tools" / "deploy_preview.sh"
+CLAIMABLE_LAUNCHER_PATH = REPO_ROOT / "tools" / "deploy_claimable_preview.sh"
 
 
 def _isolated_function(path: Path, name: str) -> FunctionType:
@@ -46,6 +49,10 @@ def _isolated_function(path: Path, name: str) -> FunctionType:
         "Any": Any,
         "PREVIEW_DEPLOY_APPROVAL_GATE": "deployment.preview",
         "PREVIEW_DEPLOY_APPROVAL_ROUTE": "/api/cloud/deployments/preview",
+        "PREVIEW_DEPLOY_MODE": "canonical_preview",
+        "CANONICAL_VERCEL_TEAM_ID": "team_wI4l7ZgSxcEztQPSlCCYVeJ5",
+        "CANONICAL_APP_VERCEL_PROJECT_ID": "prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG",
+        "CANONICAL_APP_VERCEL_PROJECT_NAME": "megaos",
     }
     exec(compile(module, str(path), "exec", dont_inherit=True), namespace)
     return namespace[name]  # type: ignore[return-value]
@@ -171,12 +178,17 @@ class LegacyPilotSecurityTests(unittest.TestCase):
         self.assertIn("_validate_preview_deploy_approval", deploy_source)
         self.assertIn("reserve_approval_action", deploy_source)
         self.assertIn("complete_approval_action", deploy_source)
+        self.assertIn("_require_canonical_preview_deploy_target", deploy_source)
         self.assertLess(
             deploy_source.index("_validate_preview_deploy_approval"),
             deploy_source.index("_run_preview_deploy"),
         )
         self.assertLess(
             deploy_source.index("_require_clean_preview_deploy_revision"),
+            deploy_source.index("_require_canonical_preview_deploy_target"),
+        )
+        self.assertLess(
+            deploy_source.index("_require_canonical_preview_deploy_target"),
             deploy_source.index("reserve_approval_action"),
         )
         self.assertLess(
@@ -193,13 +205,14 @@ class LegacyPilotSecurityTests(unittest.TestCase):
         revision = "a" * 40
         valid_row = {
             "approval_id": "APR-DEPLOY-1",
+            "source": "system:preview_release_review",
             "workspace_id": "workspace-a",
             "status": "approved",
             "approval_gate": "deployment.preview",
             "related_route": "/api/cloud/deployments/preview",
-            "related_entity": f"cloud-preview:claimable_preview:{revision}",
+            "related_entity": f"cloud-preview:canonical_preview:{revision}",
             "payload": {
-                "deployment_mode": "claimable_preview",
+                "deployment_mode": "canonical_preview",
                 "deployment_revision": revision,
                 "_approval_authority": {"workspace_id": "workspace-a", "requested_by": "Alice"},
                 "decision_history": [
@@ -216,7 +229,7 @@ class LegacyPilotSecurityTests(unittest.TestCase):
                 [valid_row],
                 workspace_id="workspace-a",
                 approval_id="APR-DEPLOY-1",
-                mode="claimable_preview",
+                mode="canonical_preview",
                 revision=revision,
             ),
             valid_row,
@@ -225,10 +238,11 @@ class LegacyPilotSecurityTests(unittest.TestCase):
         invalid_rows = {
             "workspace": {**valid_row, "workspace_id": "workspace-b"},
             "status": {**valid_row, "status": "pending"},
+            "source": {**valid_row, "source": "app:approval_queue"},
             "gate": {**valid_row, "approval_gate": "general"},
             "route": {**valid_row, "related_route": "/app/approvals"},
             "target": {**valid_row, "related_entity": f"cloud-preview:direct:{revision}"},
-            "mode": {**valid_row, "payload": {**valid_row["payload"], "deployment_mode": "direct"}},
+            "mode": {**valid_row, "payload": {**valid_row["payload"], "deployment_mode": "vercel_cli"}},
             "revision": {
                 **valid_row,
                 "payload": {**valid_row["payload"], "deployment_revision": "b" * 40},
@@ -258,19 +272,66 @@ class LegacyPilotSecurityTests(unittest.TestCase):
                     [row],
                     workspace_id="workspace-a",
                     approval_id="APR-DEPLOY-1",
-                    mode="claimable_preview",
+                    mode="canonical_preview",
                     revision=revision,
                 )
 
         request_model = _isolated_model(SERVER_PATH, "CloudPreviewDeployRequest")
         with self.assertRaises(ValidationError):
-            request_model(mode="claimable_preview", revision=revision)
+            request_model(mode="canonical_preview", revision=revision)
         with self.assertRaises(ValidationError):
             request_model(approval_id="APR-DEPLOY-1", mode="unbounded", revision=revision)
         with self.assertRaises(ValidationError):
             request_model(approval_id="APR-DEPLOY-1", revision=revision, forged=True)
         with self.assertRaises(ValidationError):
             request_model(approval_id="APR-DEPLOY-1", revision="main")
+        with self.assertRaises(ValidationError):
+            request_model(approval_id="APR-DEPLOY-1", mode="claimable_preview", revision=revision)
+        self.assertEqual(
+            request_model(approval_id="APR-DEPLOY-1", revision=revision).mode,
+            "canonical_preview",
+        )
+
+    def test_preview_target_is_exact_and_unlinked_launchers_fail_closed(self) -> None:
+        target_state = _isolated_function(SERVER_PATH, "_canonical_preview_target_state")
+        valid_link = {
+            "orgId": "team_wI4l7ZgSxcEztQPSlCCYVeJ5",
+            "projectId": "prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG",
+        }
+        valid_environment = {
+            "VERCEL_ORG_ID": "team_wI4l7ZgSxcEztQPSlCCYVeJ5",
+            "VERCEL_PROJECT_ID": "prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG",
+            "VERCEL_TOKEN": "secret-not-returned",
+        }
+        ready = target_state(valid_link, valid_environment)
+        self.assertTrue(ready["ready"])
+        self.assertEqual(ready["project_name"], "megaos")
+        self.assertFalse(ready["production_alias_mutation"])
+        self.assertNotIn("secret-not-returned", json.dumps(ready))
+
+        invalid_cases = {
+            "link-team": ({**valid_link, "orgId": "team_wrong"}, valid_environment, "canonical_vercel_team_link_missing"),
+            "link-project": ({**valid_link, "projectId": "prj_wrong"}, valid_environment, "canonical_vercel_project_link_missing"),
+            "env-team": (valid_link, {**valid_environment, "VERCEL_ORG_ID": "team_wrong"}, "canonical_vercel_team_environment_missing"),
+            "env-project": (valid_link, {**valid_environment, "VERCEL_PROJECT_ID": "prj_wrong"}, "canonical_vercel_project_environment_missing"),
+            "token": (valid_link, {**valid_environment, "VERCEL_TOKEN": ""}, "vercel_token_missing"),
+        }
+        for label, (project_link, environment, blocker) in invalid_cases.items():
+            with self.subTest(label=label):
+                blocked = target_state(project_link, environment)
+                self.assertFalse(blocked["ready"])
+                self.assertIn(blocker, blocked["blockers"])
+
+        server = SERVER_PATH.read_text(encoding="utf-8")
+        self.assertIn('vercel@56.1.0', server)
+        self.assertNotIn("claimable_preview", server)
+        self.assertNotIn("deploy_claimable_preview.sh", server)
+        for launcher_path in (PREVIEW_LAUNCHER_PATH, CLAIMABLE_LAUNCHER_PATH):
+            launcher = launcher_path.read_text(encoding="utf-8")
+            self.assertIn("Retired:", launcher)
+            self.assertIn("exit 78", launcher)
+            self.assertNotIn("codex-deploy-skills.vercel.sh", launcher)
+            self.assertNotIn("curl ", launcher)
 
     def test_agent_runner_rejects_untrusted_destinations_and_unbounded_responses(self) -> None:
         runner = _load_module(AGENT_RUNNER_PATH, "supermega_agent_runner_security_test")
@@ -558,7 +619,7 @@ class LegacyPilotSecurityTests(unittest.TestCase):
             )
 
     def test_approved_action_is_atomically_single_use_and_claim_bound(self) -> None:
-        target = f"cloud-preview:claimable_preview:{'a' * 40}"
+        target = f"cloud-preview:canonical_preview:{'a' * 40}"
         row = self._add_approval(
             "workspace-a",
             requested_by="Alice",
@@ -581,7 +642,7 @@ class LegacyPilotSecurityTests(unittest.TestCase):
                 workspace_id="workspace-a",
                 actor="Owner",
                 action="deployment.preview",
-                target=f"cloud-preview:claimable_preview:{'c' * 40}",
+                target=f"cloud-preview:canonical_preview:{'c' * 40}",
             )
 
         def reserve() -> tuple[str, object]:
@@ -647,7 +708,7 @@ class LegacyPilotSecurityTests(unittest.TestCase):
             )
 
     def test_failed_approved_action_remains_consumed_for_fresh_review(self) -> None:
-        target = f"cloud-preview:claimable_preview:{'b' * 40}"
+        target = f"cloud-preview:canonical_preview:{'b' * 40}"
         row = self._add_approval(
             "workspace-a",
             requested_by="Alice",

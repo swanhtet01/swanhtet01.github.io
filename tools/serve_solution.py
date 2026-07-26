@@ -590,14 +590,50 @@ class CloudPreviewDeployRequest(BaseModel):
 
     approval_id: str = Field(min_length=1, max_length=120)
     mode: str = Field(
-        default="claimable_preview",
-        pattern=r"^(claimable_preview|preview|direct|vercel|vercel_cli)$",
+        default="canonical_preview",
+        pattern=r"^canonical_preview$",
     )
     revision: str = Field(pattern=r"^[0-9a-fA-F]{40}$")
 
 
 PREVIEW_DEPLOY_APPROVAL_GATE = "deployment.preview"
 PREVIEW_DEPLOY_APPROVAL_ROUTE = "/api/cloud/deployments/preview"
+PREVIEW_DEPLOY_MODE = "canonical_preview"
+CANONICAL_VERCEL_TEAM_ID = "team_wI4l7ZgSxcEztQPSlCCYVeJ5"
+CANONICAL_APP_VERCEL_PROJECT_ID = "prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG"
+CANONICAL_APP_VERCEL_PROJECT_NAME = "megaos"
+
+
+def _canonical_preview_target_state(
+    project_link: dict[str, Any],
+    environment: dict[str, Any],
+) -> dict[str, Any]:
+    observed_org_id = str(project_link.get("orgId", "")).strip()
+    observed_project_id = str(project_link.get("projectId", "")).strip()
+    environment_org_id = str(environment.get("VERCEL_ORG_ID", "")).strip()
+    environment_project_id = str(environment.get("VERCEL_PROJECT_ID", "")).strip()
+    blockers: list[str] = []
+    if observed_org_id != CANONICAL_VERCEL_TEAM_ID:
+        blockers.append("canonical_vercel_team_link_missing")
+    if observed_project_id != CANONICAL_APP_VERCEL_PROJECT_ID:
+        blockers.append("canonical_vercel_project_link_missing")
+    if environment_org_id != CANONICAL_VERCEL_TEAM_ID:
+        blockers.append("canonical_vercel_team_environment_missing")
+    if environment_project_id != CANONICAL_APP_VERCEL_PROJECT_ID:
+        blockers.append("canonical_vercel_project_environment_missing")
+    if not str(environment.get("VERCEL_TOKEN", "")).strip():
+        blockers.append("vercel_token_missing")
+    return {
+        "contract": "supermega.canonical-preview-target.v1",
+        "ready": not blockers,
+        "status": "ready" if not blockers else "blocked",
+        "team_id": CANONICAL_VERCEL_TEAM_ID,
+        "project_id": CANONICAL_APP_VERCEL_PROJECT_ID,
+        "project_name": CANONICAL_APP_VERCEL_PROJECT_NAME,
+        "environment": "preview",
+        "production_alias_mutation": False,
+        "blockers": blockers,
+    }
 
 
 def _validate_preview_deploy_approval(
@@ -610,7 +646,7 @@ def _validate_preview_deploy_approval(
 ) -> dict[str, Any]:
     normalized_workspace_id = str(workspace_id or "").strip()
     normalized_approval_id = str(approval_id or "").strip()
-    normalized_mode = str(mode or "claimable_preview").strip().lower()
+    normalized_mode = str(mode or PREVIEW_DEPLOY_MODE).strip().lower()
     normalized_revision = str(revision or "").strip().lower()
     expected_entity = f"cloud-preview:{normalized_mode}:{normalized_revision}"
     row = next(
@@ -627,6 +663,8 @@ def _validate_preview_deploy_approval(
         raise ValueError("preview_deploy_approval_workspace_mismatch")
     if str(row.get("status", "")).strip().lower() != "approved":
         raise ValueError("preview_deploy_approval_not_approved")
+    if str(row.get("source", "")).strip() != "system:preview_release_review":
+        raise ValueError("preview_deploy_approval_source_mismatch")
     if str(row.get("approval_gate", "")).strip().lower() != PREVIEW_DEPLOY_APPROVAL_GATE:
         raise ValueError("preview_deploy_approval_gate_mismatch")
     if str(row.get("related_route", "")).strip() != PREVIEW_DEPLOY_APPROVAL_ROUTE:
@@ -7552,8 +7590,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         api_entrypoint: Path,
         jobs_script: Path,
         local_smoke_script: Path,
-        deploy_preview_script: Path,
-        claimable_preview_script: Path,
+        canonical_preview_target: dict[str, Any],
         scheduler_script: Path,
         showroom_dir: Path,
     ) -> list[dict[str, Any]]:
@@ -7665,20 +7702,20 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
 
         automation_pack_status = (
             "ready"
-            if scheduler_script.exists() and deploy_preview_script.exists() and claimable_preview_script.exists()
+            if scheduler_script.exists() and bool(canonical_preview_target.get("ready"))
             else "attention"
-            if scheduler_script.exists() or deploy_preview_script.exists() or claimable_preview_script.exists()
+            if scheduler_script.exists() or bool(canonical_preview_target.get("ready"))
             else "blocked"
         )
         automation_pack_detail = (
-            "Scheduler, deploy, and preview scripts are present for the autonomous runtime lane outside the interactive session."
+            "The scheduler and canonical Vercel preview target are ready for the guarded runtime lane."
             if automation_pack_status == "ready"
-            else "Autonomous scheduler or deploy script coverage is incomplete on this host."
+            else "The scheduler or canonical Vercel preview target is incomplete on this host."
         )
         automation_pack_chips = [
             "scheduler ready" if scheduler_script.exists() else "scheduler missing",
-            "preview deploy ready" if deploy_preview_script.exists() else "preview deploy missing",
-            "claimable preview ready" if claimable_preview_script.exists() else "claimable preview missing",
+            "canonical preview ready" if bool(canonical_preview_target.get("ready")) else "canonical preview blocked",
+            str(canonical_preview_target.get("project_name", "megaos")),
         ]
 
         return [
@@ -7795,28 +7832,23 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             else "The control plane is missing one or more foundations: app base URL, state store, or enterprise database."
         )
 
-        deploy_preview_script = REPO_ROOT / "tools" / "deploy_preview.sh"
-        claimable_preview_script = REPO_ROOT / "tools" / "deploy_claimable_preview.sh"
-        package_preview_script = REPO_ROOT / "tools" / "package_preview_bundle.py"
         jobs_script = REPO_ROOT / "tools" / "run_supermega_agent_jobs.py"
         local_smoke_script = REPO_ROOT / "tools" / "run_local_smoke.sh"
         scheduler_script = REPO_ROOT / "tools" / "ensure_supermega_scheduler.ps1"
         api_entrypoint = REPO_ROOT / "api_app.py"
         vercel_config = REPO_ROOT / "vercel.json"
         showroom_dir = REPO_ROOT / "showroom"
-        vercel_cli_available = bool(shutil.which("vercel"))
-        deploy_ready = all(
-            item.exists()
-            for item in (deploy_preview_script, claimable_preview_script, package_preview_script, vercel_config)
+        vercel_cli_available = bool(shutil.which("npx"))
+        canonical_preview_target = _canonical_preview_target_state(
+            _load_json(REPO_ROOT / ".vercel" / "project.json"),
+            dict(os.environ),
         )
-        deploy_status = "ready" if deploy_ready else "attention" if any(
-            item.exists()
-            for item in (deploy_preview_script, claimable_preview_script, package_preview_script, vercel_config)
-        ) else "blocked"
+        deploy_ready = bool(canonical_preview_target.get("ready")) and vercel_config.exists()
+        deploy_status = "ready" if deploy_ready else "blocked"
         deploy_detail = (
-            "Preview deploy scripts and Vercel config are present, so the repo can ship a cloud preview from its current bundle path."
+            "The exact megaos project and Vercel team are linked for approval-gated preview deployment."
             if deploy_ready
-            else "The preview deploy path is only partially wired. The repo needs the deploy scripts and Vercel config present together."
+            else "Preview deployment is blocked until this checkout is linked to the exact megaos project and team with owner-provided credentials."
         )
 
         tooling_ready = all(item.exists() for item in (jobs_script, local_smoke_script, api_entrypoint))
@@ -7931,8 +7963,8 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                 detail=deploy_detail,
                 chips=[
                     "vercel cli ready" if vercel_cli_available else "vercel cli missing",
-                    "preview script ready" if deploy_preview_script.exists() else "preview script missing",
-                    "claimable deploy ready" if claimable_preview_script.exists() else "claimable deploy missing",
+                    "canonical project linked" if bool(canonical_preview_target.get("ready")) else "canonical project link blocked",
+                    str(canonical_preview_target.get("project_name", "megaos")),
                     "vercel.json ready" if vercel_config.exists() else "vercel.json missing",
                 ],
                 route="/app/factory",
@@ -8040,8 +8072,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             api_entrypoint=api_entrypoint,
             jobs_script=jobs_script,
             local_smoke_script=local_smoke_script,
-            deploy_preview_script=deploy_preview_script,
-            claimable_preview_script=claimable_preview_script,
+            canonical_preview_target=canonical_preview_target,
             scheduler_script=scheduler_script,
             showroom_dir=showroom_dir,
         )
@@ -8108,30 +8139,13 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                     "detail": "Boot the local service and verify the authenticated portal, runtime, and queue paths.",
                 }
             )
-        if deploy_preview_script.exists():
-            commands.append(
-                {
-                    "id": "deploy-preview",
-                    "label": "Deploy preview",
-                    "command": "bash tools/deploy_preview.sh",
-                    "detail": "Package the current repo and push a preview deployment through the configured Vercel fallback.",
-                }
-            )
         if vercel_config.exists():
             commands.append(
                 {
                     "id": "vercel-build",
                     "label": "Build for Vercel",
-                    "command": "npx vercel build --yes",
-                    "detail": "Build the repo in Vercel-compatible mode before deploying a prebuilt artifact.",
-                }
-            )
-            commands.append(
-                {
-                    "id": "vercel-prebuilt-preview",
-                    "label": "Deploy prebuilt preview",
-                    "command": "npx vercel deploy --prebuilt -y",
-                    "detail": "Ship a linked-project preview deployment using the repo-root Vercel configuration.",
+                    "command": "npx --yes vercel@56.1.0 build",
+                    "detail": "Build against the exact linked Vercel project; deployment remains approval-gated.",
                 }
             )
         if str(gmail_client.get("recommended_command", "")).strip() and gmail_status != "ready":
@@ -8156,7 +8170,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         if coverage_score < 70:
             next_moves.append("Improve the data coverage score before expanding autonomy so the agents work from canonical records instead of partial evidence.")
         if deploy_status != "ready":
-            next_moves.append("Close the preview deploy path gaps so product and runtime changes can ship to cloud without manual packaging detours.")
+            next_moves.append("Link this checkout to the exact megaos Vercel project and team before requesting any preview deployment.")
         if domain_blocker_count:
             next_moves.append("Verify and repair blocked domain rows so the public host, shared app host, and tenant portals stop relying on implicit DNS assumptions.")
         elif domain_attention_count:
@@ -8494,7 +8508,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         npx_path = shutil.which("npx")
         if not npx_path:
             raise HTTPException(status_code=503, detail="npx is not available on this host.")
-        command = [npx_path, "vercel", "deploy", "-y", "--no-wait"]
+        command = [npx_path, "--yes", "vercel@56.1.0", "deploy", "-y", "--no-wait"]
         try:
             completed = subprocess.run(
                 command,
@@ -8524,10 +8538,29 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "url": deployment_url,
             "inspectUrl": inspect_url,
             "urls": urls,
-            "output": combined_output[-4000:],
             "previewUrl": deployment_url,
+            "target": {
+                "team_id": CANONICAL_VERCEL_TEAM_ID,
+                "project_id": CANONICAL_APP_VERCEL_PROJECT_ID,
+                "project_name": CANONICAL_APP_VERCEL_PROJECT_NAME,
+                "environment": "preview",
+            },
         }
         return payload
+
+    def _require_canonical_preview_deploy_target() -> dict[str, Any]:
+        target = _canonical_preview_target_state(
+            _load_json(REPO_ROOT / ".vercel" / "project.json"),
+            dict(os.environ),
+        )
+        if not bool(target.get("ready")):
+            blockers = target.get("blockers", []) if isinstance(target.get("blockers"), list) else []
+            detail = ",".join(str(item) for item in blockers if str(item).strip())
+            raise HTTPException(
+                status_code=503,
+                detail=f"canonical_preview_target_not_ready:{detail or 'unknown'}",
+            )
+        return target
 
     def _require_clean_preview_deploy_revision(requested_revision: str) -> str:
         normalized_requested_revision = str(requested_revision or "").strip().lower()
@@ -8567,59 +8600,11 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             raise HTTPException(status_code=409, detail="Preview deploy requires a clean approved worktree.")
         return current_revision
 
-    def _run_preview_deploy(mode: str = "claimable_preview") -> dict[str, Any]:
-        normalized_mode = str(mode or "claimable_preview").strip().lower()
-        deploy_script = REPO_ROOT / "tools" / "deploy_claimable_preview.sh"
-        fallback_errors: list[str] = []
-        if normalized_mode not in {"preview", "direct", "vercel", "vercel_cli"}:
-            if not deploy_script.exists():
-                fallback_errors.append("Claimable preview deploy script is not available on this host.")
-            else:
-                bash_path = shutil.which("bash")
-                if not bash_path:
-                    fallback_errors.append("Bash is not available on this host.")
-                else:
-                    try:
-                        completed = subprocess.run(
-                            [bash_path, str(deploy_script)],
-                            cwd=str(REPO_ROOT),
-                            capture_output=True,
-                            text=True,
-                            timeout=600,
-                            check=False,
-                        )
-                    except subprocess.TimeoutExpired as exc:
-                        fallback_errors.append(f"Claimable preview deploy timed out after {int(exc.timeout or 600)} seconds.")
-                    else:
-                        if completed.returncode == 0:
-                            output_text = (completed.stdout or "").strip()
-                            try:
-                                payload = json.loads(output_text)
-                            except Exception as exc:
-                                raise HTTPException(status_code=502, detail="Preview deploy completed but returned invalid JSON.") from exc
-                            if not isinstance(payload, dict):
-                                raise HTTPException(status_code=502, detail="Preview deploy completed but returned an invalid payload.")
-                            payload.setdefault("provider", "claimable-preview")
-                            payload.setdefault("mode", "preview")
-                            payload.setdefault("status", "ready")
-                            return payload
-                        detail = (completed.stderr or completed.stdout or "Preview deploy failed.").strip()
-                        fallback_errors.append(detail[:1200])
-        try:
-            payload = _run_vercel_cli_preview()
-        except HTTPException as exc:
-            if fallback_errors:
-                detail = "; ".join(item for item in fallback_errors if item)
-                detail = f"{detail}; {exc.detail}" if detail else str(exc.detail)
-                raise HTTPException(status_code=exc.status_code, detail=detail[:1200]) from exc
-            raise
-        if fallback_errors:
-            payload["fallback"] = {
-                "status": "used",
-                "reason": fallback_errors[0],
-                "details": fallback_errors[:3],
-            }
-        return payload
+    def _run_preview_deploy(mode: str = PREVIEW_DEPLOY_MODE) -> dict[str, Any]:
+        normalized_mode = str(mode or PREVIEW_DEPLOY_MODE).strip().lower()
+        if normalized_mode != PREVIEW_DEPLOY_MODE:
+            raise HTTPException(status_code=400, detail="preview_deploy_mode_not_allowed")
+        return _run_vercel_cli_preview()
 
     def _record_workspace_preview(session: dict[str, Any], deploy_result: dict[str, Any]) -> None:
         actor = str(session.get("display_name", session.get("username", "system"))).strip() or "system"
@@ -8878,27 +8863,20 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         root_report = _safe_domain_report(root_domain, public_routes, cached_rows=workspace_domain_rows)
         shared_app_domain = _find_domain_row(topology_rows, shared_app_host) or _find_domain_row(workspace_domain_rows, shared_app_host)
         site_root = _default_site_root_path()
-        deployment_scripts = [
+        deployment_controls = [
             _path_resource_payload(
-                item_id="deploy-preview-script",
-                label="Preview deploy launcher",
+                item_id="coordinated-release-workflow",
+                label="Coordinated release workflow",
                 category="deployment",
-                path=REPO_ROOT / "tools" / "deploy_preview.sh",
-                detail="Checks the deploy endpoint and launches the preview bundle upload.",
+                path=REPO_ROOT / ".github" / "workflows" / "supermega-public-release.yml",
+                detail="Builds isolated candidates, verifies both products, and controls promotion and rollback.",
             ),
             _path_resource_payload(
-                item_id="claimable-preview-script",
-                label="Claimable preview deploy",
+                item_id="release-verifier",
+                label="Release workflow verifier",
                 category="deployment",
-                path=REPO_ROOT / "tools" / "deploy_claimable_preview.sh",
-                detail="Packages and uploads a claimable preview bundle for the current repo state.",
-            ),
-            _path_resource_payload(
-                item_id="preview-bundle-script",
-                label="Preview bundle packager",
-                category="deployment",
-                path=REPO_ROOT / "tools" / "package_preview_bundle.py",
-                detail="Curates the deployment bundle used for preview deploys.",
+                path=REPO_ROOT / "tools" / "verify_app_deploy_workflow.mjs",
+                detail="Fails release verification when project identity, promotion, or rollback controls drift.",
             ),
             _path_resource_payload(
                 item_id="vercel-config",
@@ -8939,7 +8917,14 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             ),
         ]
         resource_groups = _supermega_dev_resource_groups()
-        deployment_ready = all(bool(item.get("exists")) for item in deployment_scripts)
+        canonical_preview_target = _canonical_preview_target_state(
+            _load_json(REPO_ROOT / ".vercel" / "project.json"),
+            dict(os.environ),
+        )
+        deployment_ready = (
+            all(bool(item.get("exists")) for item in deployment_controls)
+            and bool(canonical_preview_target.get("ready"))
+        )
         smoke_ready = all(bool(item.get("exists")) for item in smoke_scripts)
         topology_summary = topology.get("summary", {}) if isinstance(topology.get("summary"), dict) else {}
         cloud_summary = cloud_control.get("summary", {}) if isinstance(cloud_control.get("summary"), dict) else {}
@@ -8961,20 +8946,6 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                 "kind": "build",
                 "command": "npm --prefix .\\showroom run build",
                 "detail": "Build the public and app bundles from the repo root and refresh api-static routes.",
-            },
-            {
-                "id": "preview-deploy",
-                "label": "Deploy preview",
-                "kind": "deploy",
-                "command": "bash tools/deploy_preview.sh",
-                "detail": "Ship the current repo into a preview deployment path.",
-            },
-            {
-                "id": "package-preview",
-                "label": "Package preview bundle",
-                "kind": "deploy",
-                "command": "python .\\tools\\package_preview_bundle.py",
-                "detail": "Create the curated bundle before a claimable preview upload.",
             },
             {
                 "id": "local-smoke",
@@ -9109,7 +9080,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "deployment": {
                 "preview_ready": deployment_ready,
                 "vercel_cli_available": bool(shutil.which("vercel")),
-                "scripts": deployment_scripts,
+                "scripts": deployment_controls,
                 "commands": [item for item in commands if str(item.get("kind", "")).strip() in {"ops", "build", "deploy"}],
             },
             "smoke": {
@@ -10888,6 +10859,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
         approved_revision = _require_clean_preview_deploy_revision(payload.revision)
+        _require_canonical_preview_deploy_target()
         approval_target = str(approval.get("related_entity", "")).strip().lower()
         try:
             action_claim = reserve_approval_action(
