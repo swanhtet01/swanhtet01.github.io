@@ -74,6 +74,7 @@ CLIENT_IMPORT_OBJECTS: dict[str, ClientImportObjectSpec] = {
         key_field="jobCode",
         target_surface="production",
         required_capability="production.write",
+        maximum_rows=100,
         fields=(
             ClientImportFieldSpec("jobCode", "sku", maximum=80),
             ClientImportFieldSpec("productName", "text", maximum=180),
@@ -153,7 +154,8 @@ class ClientImportValidationResult:
                 "target_surface": self.target_surface,
                 "required_capability": self.required_capability,
                 "human_approval_required": True,
-                "atomic_adapter_ready": self.product in {"commerce", "website"},
+                "atomic_adapter_ready": self.product
+                in {"commerce", "production", "website"},
                 "external_writes_performed": False,
             },
         }

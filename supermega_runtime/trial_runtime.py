@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
+from datetime import date
 import json
 from typing import Any, Literal, TypeVar
 from uuid import UUID
@@ -380,6 +381,86 @@ def _shop_catalog_import_payload(
     }
 
 
+def _plant_jobs_import_payload(
+    package: Mapping[str, Any],
+    *,
+    actor_id: str,
+    command_id: UUID,
+    package_digest: str,
+) -> dict[str, Any]:
+    rows = package.get("rows")
+    owner = package.get("owner")
+    if not isinstance(rows, list) or not rows or not isinstance(owner, str):
+        raise _error(422, "client_import_activation_invalid")
+    jobs: list[dict[str, Any]] = []
+    machines: list[dict[str, str]] = []
+    machine_ids_by_line: dict[str, str] = {}
+    try:
+        for row in rows:
+            if not isinstance(row, Mapping) or not isinstance(row.get("values"), Mapping):
+                raise ValueError("invalid row")
+            values = row["values"]
+            job_code = values["jobCode"]
+            product_name = values["productName"]
+            due_date = values["dueDate"]
+            line = values["line"]
+            if not all(
+                isinstance(value, str)
+                for value in (job_code, product_name, due_date, line)
+            ):
+                raise ValueError("invalid row value")
+            canonical_due_date = date.fromisoformat(due_date).isoformat()
+            jobs.append(
+                {
+                    "id": job_code,
+                    "line": line,
+                    "product": product_name,
+                    "target": int(values["targetQuantity"]),
+                    "output": 0,
+                    "owner": owner,
+                    "priority": "normal",
+                    # 23:59:59.999 in Myanmar is 17:29:59.999 UTC.
+                    "dueAt": f"{canonical_due_date}T17:29:59.999Z",
+                }
+            )
+            if line not in machine_ids_by_line:
+                machine_id = f"machine-import-{len(machines) + 1}"
+                machine_ids_by_line[line] = machine_id
+                machines.append(
+                    {
+                        "id": machine_id,
+                        "name": line,
+                        "state": "running",
+                    }
+                )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise _error(422, "client_import_activation_invalid") from exc
+    return {
+        "state": {
+            "schema": "supermega.production.workspace.v2",
+            "revision": 0,
+            "jobs": jobs,
+            "issues": [],
+            "machines": machines,
+            "events": [],
+            "openingPlan": {
+                "contract": "supermega.production.opening-plan.v1",
+                "packageDigest": package_digest,
+                "confirmedAt": "server-assigned",
+                "jobIds": [job["id"] for job in jobs],
+                "machineIds": [machine["id"] for machine in machines],
+            },
+        },
+        "evidence": {
+            "actionId": f"ACT-IMPORT-{command_id}",
+            "capturedAt": "server-assigned",
+            "actor": actor_id,
+            "reason": "Initialize Plant jobs from the reviewed opening plan.",
+            "evidenceReference": package_digest,
+        },
+    }
+
+
 def _website_pages_import_payload(
     package: Mapping[str, Any],
     *,
@@ -572,7 +653,7 @@ def create_trial_router(*, store: TrialStore, resolve_principal: PrincipalResolv
                 "client_import_validation_error",
                 message=str(exc),
             ) from exc
-        if validation.product not in {"commerce", "website"}:
+        if validation.product not in {"commerce", "production", "website"}:
             raise _error(
                 409,
                 "client_import_activation_not_ready",
@@ -585,6 +666,15 @@ def create_trial_router(*, store: TrialStore, resolve_principal: PrincipalResolv
             surface = "commerce"
             event_type = "commerce.workspace.initialized"
             payload = _shop_catalog_import_payload(
+                body.package,
+                actor_id=principal.actor_id,
+                command_id=body.command_id,
+                package_digest=validation.package_digest,
+            )
+        elif validation.product == "production":
+            surface = "production"
+            event_type = "production.workspace.initialized"
+            payload = _plant_jobs_import_payload(
                 body.package,
                 actor_id=principal.actor_id,
                 command_id=body.command_id,

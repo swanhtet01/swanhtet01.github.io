@@ -187,7 +187,7 @@ class ClientImportValidatorTests(unittest.TestCase):
                     self.assertTrue(response["activation"]["human_approval_required"])
                     self.assertEqual(
                         response["activation"]["atomic_adapter_ready"],
-                        product in {"commerce", "website"},
+                        product in {"commerce", "production", "website"},
                     )
                     self.assertFalse(response["activation"]["external_writes_performed"])
 
@@ -387,6 +387,20 @@ class ClientImportValidatorTests(unittest.TestCase):
         too_many["controls"]["rowCount"] = len(rows)
         self.assert_invalid(too_many)
 
+        self.assertEqual(CLIENT_IMPORT_OBJECTS["production"].maximum_rows, 100)
+        too_many_jobs = _package("production")
+        job_template = deepcopy(too_many_jobs["rows"][0])
+        jobs = []
+        for index in range(101):
+            row = deepcopy(job_template)
+            row["sourceRow"] = index + 2
+            row["key"] = f"JOB-{index:03d}"
+            row["values"]["jobCode"] = row["key"]
+            jobs.append(row)
+        too_many_jobs["rows"] = jobs
+        too_many_jobs["controls"]["rowCount"] = len(jobs)
+        self.assert_invalid(too_many_jobs)
+
     def test_website_adapter_limits_match_the_managed_workspace(self) -> None:
         too_many_pages = _package("website")
         template = deepcopy(too_many_pages["rows"][0])
@@ -466,7 +480,12 @@ class ClientImportRouteTests(unittest.TestCase):
             workspace_id="workspace-b",
             actor_id="setup-writer",
             actor_kind="human",
-            capabilities=("setup.write", "commerce.write", "website.write"),
+            capabilities=(
+                "setup.write",
+                "commerce.write",
+                "production.write",
+                "website.write",
+            ),
         )
         self.store.provision_membership(
             workspace_id="workspace-c",
@@ -826,6 +845,148 @@ class ClientImportRouteTests(unittest.TestCase):
         self.assertEqual(self.reducer.calls, 1)
         self.assertEqual(len(self.store._events), 1)
 
+    def test_reviewed_plant_import_applies_once_as_one_opening_plan(self) -> None:
+        package = _package("production", "production-control")
+        package["rows"][0]["values"]["dueDate"] = "2099-08-15"
+        second_row = deepcopy(package["rows"][0])
+        second_row["sourceRow"] = 3
+        second_row["key"] = "JOB-002"
+        second_row["values"] = {
+            "jobCode": "JOB-002",
+            "productName": "18 inch tyre",
+            "targetQuantity": "300",
+            "dueDate": "2099-08-16",
+            "line": "Line B",
+        }
+        third_row = deepcopy(package["rows"][0])
+        third_row["sourceRow"] = 4
+        third_row["key"] = "JOB-003"
+        third_row["values"] = {
+            "jobCode": "JOB-003",
+            "productName": "16 inch tyre",
+            "targetQuantity": "200",
+            "dueDate": "2099-08-17",
+            "line": "Line A",
+        }
+        package["rows"].extend((second_row, third_row))
+        package["controls"]["rowCount"] = 3
+        package = _resign(package)
+        validation = validate_client_import_staging_package(package)
+        body = {
+            "command_id": "00000000-0000-4000-8000-000000000104",
+            "expected_version": 0,
+            "confirmation": f"APPLY {validation.package_digest}",
+            "package": package,
+        }
+
+        applied = self.client.post(
+            "/api/trial/v1/imports/apply",
+            headers=self._headers("writer"),
+            json=body,
+        )
+        self.assertEqual(applied.status_code, 200, applied.text)
+        response = applied.json()
+        self.assertEqual(
+            response["activation"],
+            {
+                "contract": "supermega.client_import_activation.v1",
+                "status": "applied",
+                "product": "production",
+                "object": "plant_jobs",
+                "workflow_template_id": "production-control",
+                "package_digest": validation.package_digest,
+                "row_count": 3,
+                "workspace_id": "workspace-b",
+                "external_writes_performed": True,
+            },
+        )
+        self.assertEqual(response["result"]["surface"], "production")
+        self.assertEqual(
+            response["result"]["event_type"],
+            "production.workspace.initialized",
+        )
+        self.assertEqual(response["result"]["version"], 1)
+        self.assertFalse(response["result"]["idempotent_replay"])
+
+        state = response["result"]["state"]
+        self.assertEqual(state["schema"], "supermega.production.workspace.v2")
+        self.assertEqual(state["revision"], 0)
+        self.assertEqual(state["issues"], [])
+        self.assertEqual(state["events"], [])
+        self.assertEqual(
+            state["jobs"],
+            [
+                {
+                    "id": "JOB-001",
+                    "line": "Line A",
+                    "product": "20 inch tyre",
+                    "target": 500,
+                    "output": 0,
+                    "owner": "Accountable owner",
+                    "priority": "normal",
+                    "dueAt": "2099-08-15T17:29:59.999Z",
+                },
+                {
+                    "id": "JOB-002",
+                    "line": "Line B",
+                    "product": "18 inch tyre",
+                    "target": 300,
+                    "output": 0,
+                    "owner": "Accountable owner",
+                    "priority": "normal",
+                    "dueAt": "2099-08-16T17:29:59.999Z",
+                },
+                {
+                    "id": "JOB-003",
+                    "line": "Line A",
+                    "product": "16 inch tyre",
+                    "target": 200,
+                    "output": 0,
+                    "owner": "Accountable owner",
+                    "priority": "normal",
+                    "dueAt": "2099-08-17T17:29:59.999Z",
+                },
+            ],
+        )
+        self.assertEqual(
+            state["machines"],
+            [
+                {"id": "machine-import-1", "name": "Line A", "state": "running"},
+                {"id": "machine-import-2", "name": "Line B", "state": "running"},
+            ],
+        )
+        stored = self.store._states[("workspace-b", "production")]
+        canonical_confirmed_at = (
+            datetime.fromisoformat(stored.updated_at.replace("Z", "+00:00"))
+            .astimezone(timezone.utc)
+            .isoformat(timespec="milliseconds")
+            .replace("+00:00", "Z")
+        )
+        self.assertEqual(
+            state["openingPlan"],
+            {
+                "contract": "supermega.production.opening-plan.v1",
+                "packageDigest": validation.package_digest,
+                "confirmedAt": canonical_confirmed_at,
+                "jobIds": ["JOB-001", "JOB-002", "JOB-003"],
+                "machineIds": ["machine-import-1", "machine-import-2"],
+            },
+        )
+        self.assertNotEqual(canonical_confirmed_at, "server-assigned")
+        self.assertEqual(self.reducer.calls, 1)
+        self.assertEqual(len(self.store._events), 1)
+
+        replay = self.client.post(
+            "/api/trial/v1/imports/apply",
+            headers=self._headers("writer"),
+            json=body,
+        )
+        self.assertEqual(replay.status_code, 200, replay.text)
+        self.assertTrue(replay.json()["result"]["idempotent_replay"])
+        self.assertEqual(replay.json()["result"]["state"], state)
+        self.assertEqual(self.reducer.calls, 1)
+        self.assertEqual(len(self.store._events), 1)
+
     def test_import_activation_fails_closed_before_every_product_write(self) -> None:
         package = _package("commerce")
         validation = validate_client_import_staging_package(package)
@@ -867,15 +1028,15 @@ class ClientImportRouteTests(unittest.TestCase):
         self.assertEqual(nonhuman.status_code, 403)
         self.assertEqual(nonhuman.json()["detail"]["code"], "trial_human_approval_required")
 
-        production_package = _package("production")
-        production_validation = validate_client_import_staging_package(production_package)
+        ecommerce_package = _package("ecommerce")
+        ecommerce_validation = validate_client_import_staging_package(ecommerce_package)
         unsupported = self.client.post(
             "/api/trial/v1/imports/apply",
             headers=self._headers("writer"),
             json={
                 **body,
-                "confirmation": f"APPLY {production_validation.package_digest}",
-                "package": production_package,
+                "confirmation": f"APPLY {ecommerce_validation.package_digest}",
+                "package": ecommerce_package,
             },
         )
         self.assertEqual(unsupported.status_code, 409)

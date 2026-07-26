@@ -413,6 +413,15 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _canonical_millisecond_utc(timestamp: str) -> str:
+    return (
+        datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+        .astimezone(timezone.utc)
+        .isoformat(timespec="milliseconds")
+        .replace("+00:00", "Z")
+    )
+
+
 def _not_before(captured_at: str, *timestamps: object) -> str:
     latest = datetime.fromisoformat(captured_at.replace("Z", "+00:00"))
     for timestamp in timestamps:
@@ -444,12 +453,7 @@ def _authoritative_command_payload(
 ) -> JsonObject:
     authoritative = deepcopy(dict(payload))
     if surface == "website" and event_type == "website.workspace.initialized":
-        website_captured_at = (
-            datetime.fromisoformat(captured_at.replace("Z", "+00:00"))
-            .astimezone(timezone.utc)
-            .isoformat(timespec="milliseconds")
-            .replace("+00:00", "Z")
-        )
+        website_captured_at = _canonical_millisecond_utc(captured_at)
         evidence = authoritative.get("evidence")
         state = authoritative.get("state")
         pages = state.get("pages") if isinstance(state, Mapping) else None
@@ -467,6 +471,25 @@ def _authoritative_command_payload(
             **dict(evidence),
             "actor": principal.actor_id,
             "capturedAt": website_captured_at,
+        }
+        return authoritative
+    if surface == "production" and event_type == "production.workspace.initialized":
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        opening_plan = state.get("openingPlan") if isinstance(state, Mapping) else None
+        if not isinstance(evidence, Mapping) or not isinstance(opening_plan, Mapping):
+            return authoritative
+        production_captured_at = _canonical_millisecond_utc(captured_at)
+        authoritative_state = dict(state)
+        authoritative_state["openingPlan"] = {
+            **dict(opening_plan),
+            "confirmedAt": production_captured_at,
+        }
+        authoritative["state"] = authoritative_state
+        authoritative["evidence"] = {
+            **dict(evidence),
+            "actor": principal.actor_id,
+            "capturedAt": production_captured_at,
         }
         return authoritative
     if surface != "commerce":
