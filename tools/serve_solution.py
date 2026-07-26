@@ -1497,28 +1497,43 @@ CONNECTOR_EVENT_DIRECTORY: dict[str, dict[str, str]] = {
         "tenant": "core",
         "route": "/app/teams",
     },
+    "core-agent-operations": {
+        "connector_name": "SuperMega Agent Operations",
+        "tenant": "core",
+        "route": "/work/?team=engineering&view=agents",
+    },
 }
 
 AGENT_JOB_CONNECTOR_MAP: dict[str, dict[str, str]] = {
     "revenue_scout": {
-        "connector_id": "ytf-sales-gmail",
-        "source": "Agent runtime",
-        "route": "/app/revenue",
+        "connector_id": "core-agent-operations",
+        "source": "SuperMega Growth agent",
+        "route": "/work/?team=growth&view=work",
+    },
+    "list_clerk": {
+        "connector_id": "core-agent-operations",
+        "source": "SuperMega Growth agent",
+        "route": "/work/?team=growth&view=work",
+    },
+    "template_clerk": {
+        "connector_id": "core-agent-operations",
+        "source": "SuperMega Growth agent",
+        "route": "/work/?team=growth&view=work",
     },
     "founder_brief": {
-        "connector_id": "ytf-markdown-vault",
-        "source": "Agent runtime",
-        "route": "/app/director",
+        "connector_id": "core-agent-operations",
+        "source": "SuperMega CEO agent",
+        "route": "/work/",
     },
     "ops_watch": {
-        "connector_id": "ytf-shopfloor-entry",
-        "source": "Agent runtime",
-        "route": "/app/adoption-command",
+        "connector_id": "core-agent-operations",
+        "source": "SuperMega Agent Operations",
+        "route": "/work/?team=engineering&view=agents",
     },
     "task_triage": {
-        "connector_id": "ytf-shopfloor-entry",
-        "source": "Agent runtime",
-        "route": "/app/adoption-command",
+        "connector_id": "core-agent-operations",
+        "source": "SuperMega Agent Operations",
+        "route": "/work/?team=engineering&view=work",
     },
     "github_release_watch": {
         "connector_id": "core-github-build",
@@ -1526,6 +1541,18 @@ AGENT_JOB_CONNECTOR_MAP: dict[str, dict[str, str]] = {
         "route": "/app/teams",
     },
 }
+
+
+def _scope_connector_catalog(connectors: list[dict[str, Any]], tenant_key: str) -> list[dict[str, Any]]:
+    normalized_tenant = str(tenant_key or "").strip().lower()
+    if not normalized_tenant:
+        return []
+    catalog_tenant = "core" if normalized_tenant == "default" else normalized_tenant
+    return [
+        item for item in connectors
+        if isinstance(item, dict)
+        and str(item.get("tenant", "")).strip().lower() == catalog_tenant
+    ]
 
 AGENT_TEAM_RUNTIME_JOB_MAP: dict[str, tuple[str, ...]] = {
     "command_office": ("founder_brief",),
@@ -4393,6 +4420,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         erp_signal_at = _latest_signal([receiving_latest, inventory_latest, metric_latest])
         markdown_signal_at = _latest_signal([agent_snapshot_generated_at, latest_decision_at, founder_run_at])
         github_signal_at = _latest_signal([github_latest_run_updated_at, github_release_watch_run_at, founder_run_at, ops_watch_run_at, portfolio_generated_at])
+        core_agent_signal_at = _latest_signal([sales_run_at, founder_run_at, task_run_at, ops_watch_run_at, github_release_watch_run_at])
 
         sales_gmail_status = (
             _runtime_status_from_timestamp(sales_signal_at, "hourly", missing="Warning" if lead_count else "Needs wiring")
@@ -4419,6 +4447,13 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             core_github_status = "Warning" if core_github_status == "Healthy" else core_github_status
         elif github_probe_status == "local_only" and not github_repo_slug and not portfolio_manifest:
             core_github_status = "Needs wiring"
+        core_agent_status = _runtime_status_from_timestamp(
+            core_agent_signal_at,
+            "daily",
+            missing="Needs wiring",
+        )
+        if any(str(row.get("status", "")).strip().lower() in {"error", "completion_rejected"} for row in latest_agent_runs):
+            core_agent_status = "Degraded"
         core_human_entry_status = "Healthy" if workspace_id else "Warning"
 
         connectors = [
@@ -4591,6 +4626,33 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                 ],
             },
             {
+                "id": "core-agent-operations",
+                "name": "SuperMega Agent Operations",
+                "tenant": "core",
+                "system": "Internal runtime",
+                "status": core_agent_status,
+                "installState": "Live" if core_agent_signal_at else "Needs wiring",
+                "credentialMode": "Workspace-scoped queue with signed execution budgets",
+                "cursorMode": "durable agent-run ledger",
+                "lastSuccessAt": core_agent_signal_at or "No bounded company run recorded yet",
+                "replayMode": "Idempotent run review; consequential actions require a new approval",
+                "blastRadius": "Current SuperMega workspace only",
+                "freshness": _runtime_freshness_label(
+                    core_agent_signal_at,
+                    fallback="No company automation run recorded yet",
+                ),
+                "owner": "Agent Operations",
+                "workspace": "core/company-operations",
+                "inputs": ["workspace tasks", "approvals", "lead pipeline", "release evidence"],
+                "outputs": ["bounded run evidence", "CEO brief", "operations exceptions"],
+                "backlog": f"{len(open_workspace_tasks)} open tasks, {pending_approval_count} pending approvals, {len(latest_agent_runs)} recent agent runs.",
+                "writeBack": "Internal records only; external sends, release, access, payment, and production actions remain approval-gated",
+                "nextAutomation": "Activate one unique job only when its reviewed cadence and workspace budget permit it.",
+                "risks": [
+                    "Hosted runtime and tenant-security evidence must pass before managed automation is enabled.",
+                ],
+            },
+            {
                 "id": "core-github-build",
                 "name": "SuperMega Build GitHub Feed",
                 "tenant": "core",
@@ -4674,6 +4736,8 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                 ],
             },
         ]
+
+        connectors = _scope_connector_catalog(connectors, expected_tenant_key)
 
         connector_lookup = {
             str(item.get("id", "")).strip(): item

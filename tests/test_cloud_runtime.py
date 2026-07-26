@@ -285,6 +285,42 @@ class CloudRuntimeTests(unittest.TestCase):
         self.assertEqual(result["metrics"]["suppressed_duplicate_task_count"], 1)
         self.assertEqual(added, [])
 
+    def test_company_agent_connectors_are_core_only_and_catalogs_are_tenant_scoped(self) -> None:
+        server_path = Path(__file__).resolve().parents[1] / "tools" / "serve_solution.py"
+        tree = ast.parse(server_path.read_text(encoding="utf-8"))
+        mapping_assignment = next(
+            node for node in tree.body
+            if isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == "AGENT_JOB_CONNECTOR_MAP"
+        )
+        mapping = ast.literal_eval(mapping_assignment.value)
+        self.assertEqual(set(mapping), set(AGENT_JOB_PRIORITIES))
+        self.assertEqual(
+            {str(item.get("connector_id", "")) for item in mapping.values()},
+            {"core-agent-operations", "core-github-build"},
+        )
+        self.assertFalse(any("ytf-" in str(item) for item in mapping.values()))
+
+        function = next(
+            node for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "_scope_connector_catalog"
+        )
+        module = ast.Module(body=[function], type_ignores=[])
+        ast.fix_missing_locations(module)
+        namespace: dict[str, object] = {"Any": Any}
+        exec(compile(module, str(server_path), "exec", dont_inherit=True), namespace)
+        scope_catalog = namespace["_scope_connector_catalog"]
+        catalog = [
+            {"id": "core", "tenant": "core"},
+            {"id": "ytf", "tenant": "yangon-tyre"},
+            {"id": "client", "tenant": "client-a"},
+        ]
+        self.assertEqual([row["id"] for row in scope_catalog(catalog, "default")], ["core"])
+        self.assertEqual([row["id"] for row in scope_catalog(catalog, "yangon-tyre")], ["ytf"])
+        self.assertEqual([row["id"] for row in scope_catalog(catalog, "client-a")], ["client"])
+        self.assertEqual(scope_catalog(catalog, ""), [])
+
     def test_scheduler_emits_one_bounded_structured_log_without_secrets(self) -> None:
         with patch("supermega_runtime.cloud_runtime._open_worker_request", side_effect=self._success_response):
             with self._client() as client:

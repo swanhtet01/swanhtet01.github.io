@@ -23,6 +23,10 @@ const retiredClaimableLauncher = await readFile(resolve(root, 'tools/deploy_clai
 const config = JSON.parse(await readFile(resolve(root, 'vercel.json'), 'utf8'))
 const schedulerAuthority = JSON.parse(await readFile(resolve(root, 'tools/supermega_scheduler_authority.json'), 'utf8'))
 const kernelConfig = JSON.parse(await readFile(resolve(root, 'kernel/vercel.json'), 'utf8'))
+const agentConnectorMap = previewServer.slice(
+  previewServer.indexOf('AGENT_JOB_CONNECTOR_MAP:'),
+  previewServer.indexOf('AGENT_TEAM_RUNTIME_JOB_MAP:'),
+)
 const failures = []
 const checks = []
 
@@ -284,6 +288,14 @@ requireContract('single production scheduler authority',
   && schedulerAuthority.retired_authority?.provider === 'google-cloud-scheduler'
   && schedulerAuthority.retired_authority?.mutation_allowed === false)
 requireContract('canonical cron path and cadence contract', JSON.stringify(actualCrons) === JSON.stringify(expectedCrons))
+requireContract('company automation events stay tenant-scoped and off YTF connectors',
+  agentConnectorMap.startsWith('AGENT_JOB_CONNECTOR_MAP:')
+  && agentConnectorMap.includes('"core-agent-operations"')
+  && agentConnectorMap.includes('"core-github-build"')
+  && !agentConnectorMap.includes('"ytf-')
+  && previewServer.includes('def _scope_connector_catalog(')
+  && previewServer.includes('connectors = _scope_connector_catalog(connectors, expected_tenant_key)')
+  && previewServer.indexOf('connectors = _scope_connector_catalog(connectors, expected_tenant_key)') < previewServer.indexOf('connector_lookup = {'))
 requireContract('Vercel config is generated from scheduler authority',
   generator.includes("readFileSync('tools/supermega_scheduler_authority.json'")
   && generator.includes('const canonicalCrons = schedulerAuthority.crons.map'))
