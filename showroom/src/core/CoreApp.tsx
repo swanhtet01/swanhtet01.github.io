@@ -355,6 +355,13 @@ function productDisplayName(product: SetupProductId) {
   return 'Ecommerce'
 }
 
+function setupProductPreviewPath(product: SetupProductId) {
+  if (product === 'commerce') return '/shop/?tab=orders'
+  if (product === 'production') return '/plant/?tab=production'
+  if (product === 'website') return '/website/'
+  return '/ecommerce/'
+}
+
 function productCanonicalPath(product: ProductId) {
   return product === 'commerce' ? '/shop/' : '/plant/'
 }
@@ -5773,6 +5780,7 @@ export function SettingsPage() {
           <div className="readiness-list"><span><small>Pilot definition</small><strong>{isPilotReady ? 'Ready' : `${completion}% complete`}</strong></span><span><small>Runtime</small><strong>{runtime.serviceStatus}</strong></span><span><small>Operating mode</small><strong>{runtime.operatingMode.replace('_', ' ')}</strong></span><span><small>Managed data</small><strong>{runtime.enterpriseDbReady ? 'Ready' : 'Not connected'}</strong></span><span><small>Security</small><strong>{runtime.securityReady ? 'Ready' : 'Not ready'}</strong></span><span><small>Write path</small><strong>{runtime.writesReady ? 'Enabled' : 'Locked'}</strong></span><span><small>Source coverage</small><strong>{runtime.coverageScore}%</strong></span><span><small>External action</small><strong>Owner controlled</strong></span></div>
           {runtime.status !== 'enterprise' ? <ul className="requirement-list">{(runtime.requirements.length ? runtime.requirements : ['Configure managed tenant persistence.', 'Verify production identity and source coverage.']).map((requirement) => <li key={requirement}>{requirement}</li>)}</ul> : null}
           <p className="authority-note">External sends, payments, publishing, access changes, and production writes remain owner-approved and auditable.</p>
+          {setup.savedAt ? <div className="settings-step-actions"><span>Pilot saved locally. Product preview stays on sample data until reviewed records are applied in managed mode.</span><Link className="core-button primary" to={setupProductPreviewPath(setup.product)}>Open {productDisplayName(setup.product)} preview</Link></div> : null}
         </section> : null}
       </div>
       {settingsStep === 'system' ? <section className="core-panel trial-control-panel"><div><span className="core-eyebrow">Local evidence</span><h2>Export or reset deliberately.</h2><p>Export the pilot definition and full browser workspace for review. Reset clears Company, Shop, unfinished order drafts, Plant, Website, Ecommerce setup, and handoff records only after confirmation.</p></div><div className="trial-actions"><a className="core-button" download={evidenceFilename} href={evidenceHref}>Export evidence</a>{resetArmed ? <><button className="text-link" disabled={resetBusy} onClick={() => setResetArmed(false)} type="button">Cancel</button><button className="core-button danger" disabled={resetBusy} onClick={() => void resetDemoWorkspace()} type="button">{resetBusy ? 'Resetting…' : 'Confirm reset'}</button></> : <button className="text-link danger-text" onClick={() => setResetArmed(true)} type="button">Reset local trial</button>}</div></section> : null}
