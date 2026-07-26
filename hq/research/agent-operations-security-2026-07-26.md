@@ -1,7 +1,7 @@
 # Agent operations and security brief
 
 Updated: 2026-07-27
-Agent-operations checkpoint: `07dd959`
+Agent-operations checkpoint: `f642962`
 Legacy-security checkpoint: `98b8044`
 Mode: local evidence only; no hosted or production claim
 
@@ -14,7 +14,7 @@ Runtime work is limited by job family, queue depth, concurrent runs, daily runs,
 ## Verified locally
 
 - Full app lint/build and release/security/database/Vercel/HQ contracts pass.
-- All 275 Python tests pass; the focused cloud/runtime slice has 27, the Kernel has 277, and the coordinated-release verifier has 67 passing checks. All 69 connectors survive 993 adversarial calls and all 15 crews pass 214 checks.
+- All 291 Python tests pass; the focused Storage slice has 12, its offline self-test has 11 adversarial cases, the Kernel has 277, and the coordinated-release verifier has 67 passing checks. All 69 connectors survive 993 adversarial calls and all 15 crews pass 214 checks.
 - The retired AgentOS gateway reports not-ready and writes-disabled; old log/status routes return HTTP 410 and OpenAPI is disabled.
 - The retired finance launcher reports payments-disabled and exits nonzero.
 - HQ Agent Teams at 390 and 1280 px has no horizontal overflow or browser warnings/errors; visible mobile controls are at least 44 px.
@@ -46,6 +46,7 @@ Runtime work is limited by job family, queue depth, concurrent runs, daily runs,
 14. The SuperMega CEO brief now follows `supermega.ceo-outcome-authority.v1`: one deterministic priority-then-ID selection and at most one outcome per cycle. Storage privacy proof, exact protected preview, and named pilot evidence remain blocked. The ready owner brief uses exact leads, pipeline, FX, and platform-status reads plus one synthesis call, removing the planner model call. Completed, in-flight, durable-claim duplicate, malformed, smuggled, and unauthorized-action outcomes stop before model work or notification.
 15. CEO outcome evidence now follows `supermega.ceo-outcome-operation.v1` plus `supermega.ceo-outcome-evaluation.v1`. Completion metadata is durable before notification and excludes brief text, prompts, tool rows, provider, and model identity. An owner/operator separately records immutable acceptance or revision. Efficiency remains unavailable unless the tenant-bound records are durable, integrity-valid, fully evaluated, and fully measured in `bulk_equivalent_tokens`.
 16. Hosted scheduler activation now follows `supermega.scheduler-activation-evidence.v1`. `SUPERMEGA_HOSTED_SCHEDULER_ENABLED=1` is insufficient by itself: an HMAC-signed exact-shape bundle must bind the scheduler-authority digest, canonical `megaos` project, production environment, exact deployed commit, managed tenant, owner decision, all five required proof digests, and a maximum seven-day lifetime. Duplicate keys, tampering, missing or failed proof, stale or expired evidence, preview scope, wrong project or commit, plaintext activation variables, and dormant environment remnants fail before worker invocation. Runtime status exposes only contract, digest, release, expiry, and count metadata.
+17. Managed Storage privacy now has `supermega.private-storage-privacy.v1` and a current Supabase Storage REST v2 adapter. Live mode requires one exact owner-approval ID, HTTPS host allowlist, publishable or anon key, and two distinct unexpired user JWTs; service-role/secret credentials are forbidden. The fixed six-request sequence proves explicit anonymous-list denial, one positive-control sentinel, cross-tenant list/object denial, and 60-second signed access. Redirects and proxies are disabled, responses and JSON complexity are bounded, and evidence exposes only digests, status classes, proof IDs, counts, and zero-mutation/redaction flags. The 11-case self-test makes zero network requests. This is verifier evidence, not hosted Storage proof.
 
 These are local code and test results. They do not prove a hosted deployment, live credentials, or production data migration.
 
@@ -61,4 +62,4 @@ The selected Instagram security slide warns that storage buckets may remain enum
 
 ## Next bounded slice
 
-Add one provider-neutral, read-only managed-storage privacy verifier for an owner-approved isolated target. It must prove anonymous listing denial, cross-tenant listing and object denial, and short-lived authorized object access; fix the target and bucket allowlist, bound every response, redact all tokens and object contents, perform no write, and ship an offline adversarial self-test before any credentialed run.
+Prepare one redacted, owner-ready isolated-target audit handoff for this verifier. It must pin the target and bucket, explain how to create two disposable tenant sentinels and short-lived user sessions without a service key, expose no credential value, and keep the live command blocked until the founder names the isolated target and exact approval ID. Do not run a credentialed request against `supermegabase` or any production bucket.

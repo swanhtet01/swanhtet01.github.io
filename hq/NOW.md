@@ -25,29 +25,30 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 
 ## Implemented reality
 
-- HQ uses four teams. One contract caps 12 roles, four active/batch jobs, two Kernel agents per cycle, and zero idle compute; overrides fail closed, and the default workspace no longer duplicates a 256-role ceiling.
+- HQ caps 12 dormant roles, four active/batch jobs, two Kernel agents per cycle, and zero idle compute; overrides fail closed and duplicate ceilings are removed.
 - Kernel has four owner-bound slots with 120-second stale recovery; a fifth cycle stops before model use and failed work returns for retry (`ca5070e`).
-- Ally audit after a non-terminating trim: RAM 77.8%, Codex 1.16 GB, zero models, one worker, no dev/duplicate/ambiguous listener; OS data cannot prove subagents. The 30-second worker keeps unchanged evidence-bound direct missions reuse for 24 hours (`72853ac`).
+- Ally audit after a non-terminating trim: RAM 77.8%, Codex 1.16 GB, zero models, one worker, and no duplicate listener. OS data cannot prove subagents; unchanged evidence-bound missions reuse for 24 hours (`72853ac`).
 - All seven company jobs use SuperMega Agent Operations or core GitHub. Catalogs are exact-tenant scoped, so YTF identities cannot render in core operations (`b46c386`).
 - Hosted scheduling is dormant with zero registered crons. A signed seven-day bundle now binds five proof digests, tenant, owner decision, canonical project, production, and exact commit; flag-only, preview, stale, incomplete, or tampered attempts stop before worker invocation (`07dd959`).
-- Each SuperMega CEO cycle selects at most one HQ-authorized outcome. Storage proof, protected preview, and named pilot work remain explicitly blocked; completed, in-flight, duplicate, or invalid work stops before claims, models, or sends. The one ready owner brief uses four fixed read-only tools and one synthesis call (`cdd925a`).
+- A provider-neutral Storage verifier now proves explicit anonymous-list denial, a tenant positive control, cross-tenant list/object denial, and 60-second signed access in six bounded requests. It rejects service keys, redirects, proxies, oversized/duplicate JSON, and unconfirmed targets; its 11-case self-test makes zero network requests (`f642962`). Hosted proof remains blocked.
+- Each CEO cycle selects at most one HQ-authorized outcome. Hosted Storage proof, protected preview, and named pilot work remain blocked; completed, in-flight, duplicate, or invalid work stops before claims, models, or sends. The owner brief uses four fixed reads and one synthesis call (`cdd925a`).
 - CEO completion metadata persists before notification; acceptance is a separate immutable owner/operator verdict. Reports store no brief/provider rows and publish efficiency only with durable, complete, valid usage and evaluation coverage (`78f2297`).
 - Shop covers guarded orders, stock, purchasing, fulfilment, payments, returns, and close at `/shop/`.
 - Plant is task-first at `/plant/` and controls no equipment.
 - Website turns a brief into a guarded preview and release plan at `/website/`; it never deploys.
 - Ecommerce uses versioned Shop data for a recoverable cart, deterministic quote, and duplicate-safe Shop handoff; only accountable Shop confirmation can create an order (`52917c5`).
 - AI remains gated; Order Intake passed 20 local cases, but provider execution still needs credentials.
-- Client setup uses a manifest-backed two-step flow and one smart-import path; exact matches collapse, exceptions open for review, and the duplicate importer is gone (`ab9a89e`).
+- Client setup is two steps with one manifest-backed smart import; exact matches collapse and exceptions open for review (`ab9a89e`).
 - Shop Stock adds two-location masters, lot/serial evidence, transfers, reservations, ATP, replay, locked writes, and rollback in its existing tab (`5fa93a9`, `2790f9d`).
 - Plant Jobs now has a lazy order-execution layer: immutable plan, shortfall gate, lot genealogy, quality hold/reinspection, human release, exact replay, and locked write/rollback (`0831ad7`, `920c13d`).
 - Home keeps Shop and Plant exceptions above collapsed HQ work. Purchases suppress duplicate stock tasks; a Plant issue badge links to Problems and otherwise the card opens Jobs. `/work/` stays labelled HQ; bottom navigation reads Home, HQ, and Products.
-- `npm run dev` starts canonical FastAPI plus Vite on loopback while clearing database, hosted-auth, model, worker, and write authority; the full local command proxies canonical FastAPI while keeping managed data disconnected and writes locked. Records stay browser-local by default; hosted production activation is not proven.
+- `npm run dev` starts canonical FastAPI plus Vite on loopback with database, hosted-auth, model, worker, and write authority cleared. Records stay browser-local; hosted activation is not proven.
 
 ## Verified baseline
 
-- Current local checkpoints: product `52917c5`, agent operations `07dd959`, operations `63a245f`, and security `98b8044`.
-- App and local contracts pass: 279 Python tests, frontend lint/build, 14 Ecommerce buying checks, 16 Shop-handoff checks, 20 Vercel environment checks, and the guarded release suite. Kernel retains 277 tests, 69 connectors/993 calls, and 15 crews/214 checks.
-- Rendered setup and four phone-width product routes have no horizontal overflow or error overlay. Plant additionally passes a seven-step 1280x720 lifecycle, reload persistence, and a 390x844 first-run/released-state audit with its primary action visible.
+- Current local checkpoints: product `52917c5`, agent operations `f642962`, operations `63a245f`, and security `98b8044`.
+- App and local contracts pass: 291 Python tests, frontend lint/build, 11 Storage self-test cases, 60 security checks, 20 Vercel environment checks, and the guarded release suite. Kernel retains 277 tests, 69 connectors/993 calls, and 15 crews/214 checks.
+- Rendered setup and four phone-width products have no overflow or error overlay. Plant also passes desktop lifecycle, reload, and phone first-run/released-state checks.
 - Core first-action QA leads Shop Stock, incomplete orders to Promise or Payment, Plant alerts to Problems or output, and invalid Website briefs to their first error. Mobile controls are at least 44 px with focus-safe fixed navigation (`36fa7dd`); guide and review actions create no record.
 - Product checkpoint `52917c5` is on a clean fast-forward descendant of open draft PR #258 head `338b6fd`. Vercel `supermega-public` serves both domains at live `6885c320`; it is healthy but intentionally reports `isolated_demo`, zero managed coverage, and database/schema/audit/writes disabled. No grouped seven-day runtime errors were reported; remote checks exclude the local delta.
 
