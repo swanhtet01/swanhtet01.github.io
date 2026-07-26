@@ -91,7 +91,7 @@ test('Vercel serves the guarded workcell function before the generic API route',
   assert.ok(workcellRoute >= 0 && workcellRoute < catchAll)
   assert.ok(evidenceRoute >= 0 && evidenceRoute < catchAll)
   assert.ok(approvalRoute >= 0 && approvalRoute < catchAll)
-  assert.deepEqual(config.crons, [{ path: '/api/brief', schedule: '30 1 * * *' }])
+  assert.equal(config.crons, undefined, 'the shared console must not schedule client work by default')
 })
 
 test('Vercel upload excludes test suites and browser QA artifacts', async () => {

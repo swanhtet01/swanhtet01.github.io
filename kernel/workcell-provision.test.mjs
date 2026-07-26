@@ -299,7 +299,7 @@ async function fixtureSource() {
   const source = await mkdtemp(join(tmpdir(), 'workcell-source-'))
   await mkdir(join(source, 'public'))
   await writeFile(join(source, 'public', 'index.html'), '<!doctype html><title>Workcell</title>')
-  await writeFile(join(source, 'vercel.json'), JSON.stringify({ crons: [{ path: '/api/brief', schedule: '30 1 * * *' }], routes: [] }))
+  await writeFile(join(source, 'vercel.json'), JSON.stringify({ routes: [] }))
   return source
 }
 

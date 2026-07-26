@@ -90,9 +90,11 @@ bounded read tool supplies text to Owner Command inside the isolated client runt
 6. Trigger the scheduled route twice for the same local date and confirm the second result is
    `duplicate:true` with no second message.
 
-The default production cron remains `01:30 UTC` (08:00 Myanmar). Because each client has an isolated
-deployment, set that deployment's `vercel.json` schedule to the client's desired UTC delivery time
-before release. Vercel cron schedules are UTC and only production deployments register them.
+The shared Kernel console has no default cron. A schedule is added only while provisioning an
+isolated client deployment, after that client's `CRON_SECRET`, workcells, data spine, and owner
+delivery channel have been configured. The provisioner converts the manifest's `deliveryUtc` value
+into the deployment's `/api/brief` cron. Vercel cron schedules are UTC and only production
+deployments register them.
 
 ## Provisioner
 
