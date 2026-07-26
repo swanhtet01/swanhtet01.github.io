@@ -31,7 +31,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 
 ## Implemented reality
 
-- HQ uses four teams. Roster cap 12, active cap four, idle scales to zero; stale/duplicate ownership and weak signed grants fail closed. Details: `hq/research/agent-operations-security-2026-07-26.md`.
+- HQ uses four teams. At `d2900ad`, runtime and environment policy cap the roster at 12, active work at four, and idle work at zero; 13 and 175 fail closed.
 - Shop runs at `/shop/`: guarded multi-item orders, stock, purchasing, fulfilment, payment/refund, returns, and close, with accountable owner/promise, recovery, and evidence.
 - Plant runs at `/plant/`: jobs, output/material evidence, problems, holds, handoff, equipment observations, downtime, and maintenance. It dispatches nothing and controls no equipment.
 - Website runs at `/website/`: one brief becomes an unsaved Preview, guarded Save, and deterministic Review artifact, never a deployment; recovery and stale-write denial remain.
@@ -43,8 +43,8 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 
 ## Verified baseline
 
-- Checkpoint `5d7b217` is the accepted local product baseline; `89a3505` aligns four products, `69dfb09` governs agent operations, and `98b8044` closes the critical local legacy-pilot gaps.
-- App lint/build, all local release/security/database/HQ contracts, and all 173 Python tests pass. Security coverage is 58 checks, plus 18 cloud/runtime and six legacy-pilot tests.
+- Checkpoint `5d7b217` is the accepted local product baseline; `69dfb09` governs agents, `98b8044` closes legacy gaps, and `d2900ad` enforces the roster cap.
+- App lint/build, all local contracts, eight focused governor tests, and all 189 Python tests pass. Security coverage is 58 checks.
 - Dependency audit previously reported zero known vulnerabilities; this slice did not refresh external package or hosted-state inventories.
 - React Router is isolated in a 43,870-byte cacheable chunk. The accepted product baseline's largest JavaScript chunk is 463,892 bytes; checkpoint `69dfb09` is 478,287 bytes and remains below the build gate.
 - Focused coverage: 202 Shop, 34 order-recovery, 250 Plant, 94 Website, 11 managed-Website, 44 client-onboarding, 27 storefront-draft, 14 storefront, 15 request, 17 managed-storefront, and 16 handoff checks.
@@ -66,7 +66,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 ## Blockers
 
 - Ecommerce lacks an isolated hosted/cross-device rehearsal. Local v2 now binds saved setup to a currentness fingerprint, upgrades v1 additively, and invalidates on cross-tab Shop changes; that fingerprint is not authenticated approval evidence. Managed setup remains digest-bound.
-- Agent Teams is not a proven hosted runtime. `98b8044` removes remote URL hydration, locks the legacy launcher to loopback, and scopes approval authority; unsafe development-stack exposure, broad queue/deploy permissions, and older credential forwarding remain blocked. See the security brief.
+- Agent Teams is not proven hosted. Local authority, destination, roster, and idle controls pass; hosted scheduler, recovery, and observability proof is missing.
 - No isolated hosted Supabase branch or separate non-production project has repeated the local database proof.
 - Storage privacy is local-contract evidence only; hosted bucket inventory and object-listing denial remain required.
 - Browser-local Website records cannot authenticate out-of-band storage edits; managed commands use the locked prior state and separate ledger. Hosted activation remains unproven.
@@ -86,8 +86,8 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Next evidence
 
-1. Separate agent view/execute/deploy permissions and require human deployment approval.
-2. Retire unsafe development exposure and constrain worker destinations to bounded HTTPS allowlists.
+1. Audit hosted agent configuration read-only for idle schedules or oversized rosters.
+2. Rehearse lease expiry, retry, recovery, and human release review in isolation.
 3. Run all four client-data templates with one named company and measure correction, review time, and recovery before any write adapter.
 4. On one approved isolated Supabase target, prove private Storage, RLS, Ecommerce replay/isolation, and database recovery.
 5. Refresh GitHub/Vercel/DNS read-only, then run the gated 20-case Order Intake provider review only after owner-approved credentials and four-product onboarding evidence.
