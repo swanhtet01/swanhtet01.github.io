@@ -43,9 +43,9 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 
 ## Verified baseline
 
-- `7447d07` remains the product baseline; operating checkpoint `afb4bdf` adds bounded agents, single-use approval, canonical preview targeting, and exact candidate review; legacy-security checkpoint `98b8044` remains.
-- App lint/build and all local contracts pass with 23 cloud/governance, 16 legacy-security, 212 total Python tests, 60 release checks, and 58 security checks. Four-product rehearsal remains 12 profiles and four recovery paths.
-- Read-only Vercel inventory confirms canonical `megaos` and `supermega-public` projects. The local link, exact org/project environment, and token are absent, so preview launch fails closed; unlinked claimable previews are retired.
+- `7447d07` remains the product baseline; operating checkpoint `63a245f` adds bounded agents, exact review, single-use approval, and pinned prebuilt preview deployment; security checkpoint `98b8044` remains.
+- App lint/build and all local contracts pass with 23 cloud/governance, 17 legacy-security, 213 total Python tests, 61 release checks, and 58 security checks. Four-product rehearsal remains 12 profiles and four recovery paths.
+- Vercel inventory confirms canonical `megaos` and `supermega-public`. Local link and credentials are absent, so preview stays blocked; any future approved launch must build once and deploy that exact prebuilt artifact.
 - React Router is isolated in a 43,870-byte cacheable chunk. The accepted product baseline's largest JavaScript chunk is 478,469 bytes and remains below the build gate.
 - Focused coverage: 202 Shop, 34 order-recovery, 250 Plant, 94 Website, 11 managed-Website, 103 client-onboarding, 27 storefront-draft, 14 storefront, 15 request, 17 managed-storefront, and 16 handoff checks.
 - Existing 390/1280 px product QA remains valid. Fresh 390x844 and 1280x900 import QA has no overflow, overlay, or browser warning/error; one tap checks the two-row Shop sample and keeps download gated by workspace and owner.

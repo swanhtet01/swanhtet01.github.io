@@ -1,7 +1,7 @@
 # Agent operations and security brief
 
 Updated: 2026-07-26
-Agent-operations checkpoint: `afb4bdf`
+Agent-operations checkpoint: `63a245f`
 Legacy-security checkpoint: `98b8044`
 Mode: local evidence only; no hosted or production claim
 
@@ -14,7 +14,7 @@ Runtime work is limited by job family, queue depth, concurrent runs, daily runs,
 ## Verified locally
 
 - Full app lint/build and release/security/database/Vercel/HQ contracts pass.
-- All 212 Python tests pass; the focused cloud/runtime slice has 23, the legacy-security slice has 16, and the coordinated-release verifier has 60 passing checks.
+- All 213 Python tests pass; the focused cloud/runtime slice has 23, the legacy-security slice has 17, and the coordinated-release verifier has 61 passing checks.
 - The retired AgentOS gateway reports not-ready and writes-disabled; old log/status routes return HTTP 410 and OpenAPI is disabled.
 - The retired finance launcher reports payments-disabled and exits nonzero.
 - HQ Agent Teams at 390 and 1280 px has no horizontal overflow or browser warnings/errors; visible mobile controls are at least 44 px.
@@ -39,6 +39,7 @@ Runtime work is limited by job family, queue depth, concurrent runs, daily runs,
 7. Preview deployment approval is atomically reserved before a deploy subprocess starts. The exact action and target are single-use; concurrent requests, replay after success or failure, and stale claims fail closed, while internal claim material is redacted from API output.
 8. The unlinked claimable-preview service is retired. Both legacy launchers fail closed; only Vercel team `team_wI4l7ZgSxcEztQPSlCCYVeJ5` and app project `prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG` (`megaos`) are accepted, with no production alias mutation.
 9. Human review is bound to one clean commit by a server-owned, digest-checked packet. It fixes the release identity, canonical preview target, nine required verification contracts, human-review status, and discard-preview rollback. Open reviews deduplicate; generic approval requests, packet drift, used approvals, and revision drift fail closed.
+10. A future approved preview pulls only preview settings, stamps the reviewed commit, builds once, rechecks the canonical project, requires `.vercel/output`, and deploys that artifact with pinned `--prebuilt`. It never selects production, mutates aliases, passes the token in argv, returns raw CLI failures, or accepts a deceptive URL.
 
 These are local code and test results. They do not prove a hosted deployment, live credentials, or production data migration.
 
