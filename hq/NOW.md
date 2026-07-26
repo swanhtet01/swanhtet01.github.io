@@ -25,7 +25,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 
 ## Current outcomes
 
-1. **Four client templates** — versioned, explainable dry-run imports for Shop catalog, Plant jobs, Website pages, and Ecommerce merchandising; no silent writes.
+1. **Twelve client profiles** — one coherent synthetic company stages 24 rows across Shop, Plant, Website, and Ecommerce; four deliberately messy sources recover through explicit mapping and value correction, and every trusted package remains not applied.
 2. **Maker flow** — Website and Ecommerce use starters, Preview, Review, and deterministic handoff.
 3. **Shared controls** — roles, audit/recovery, imports, and gated AI suggestions only after evaluation.
 
@@ -44,7 +44,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 ## Verified baseline
 
 - Checkpoint `5d7b217` is the accepted local product baseline; `69dfb09` governs agents, `98b8044` closes legacy gaps, and `fb2ae3e` enforces absolute workforce limits.
-- App lint/build, all local contracts, eight focused governor tests, and all 189 Python tests pass. Security coverage is 58 checks.
+- App lint/build, all local contracts, eight focused governor tests, and all 192 Python tests pass. The four-product rehearsal covers all 12 profiles, 24 staged rows, four recovery paths, exact server-side profile coverage, and one-workspace identity. Security coverage is 58 checks.
 - Dependency audit previously reported zero known vulnerabilities; this slice did not refresh external package or hosted-state inventories.
 - React Router is isolated in a 43,870-byte cacheable chunk. The accepted product baseline's largest JavaScript chunk is 463,892 bytes; checkpoint `69dfb09` is 478,287 bytes and remains below the build gate.
 - Focused coverage: 202 Shop, 34 order-recovery, 250 Plant, 94 Website, 11 managed-Website, 44 client-onboarding, 27 storefront-draft, 14 storefront, 15 request, 17 managed-storefront, and 16 handoff checks.
@@ -88,6 +88,6 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 1. Audit hosted agent configuration read-only for idle schedules or oversized rosters.
 2. Rehearse lease expiry, retry, recovery, and human release review in isolation.
-3. Run all four client-data templates with one named company and measure correction, review time, and recovery before any write adapter.
+3. Repeat the 12-profile synthetic rehearsal with one founder-approved named pilot company and measure human correction and review time before any write adapter.
 4. On one approved isolated Supabase target, prove private Storage, RLS, Ecommerce replay/isolation, and database recovery.
 5. Refresh GitHub/Vercel/DNS read-only, then run the gated 20-case Order Intake provider review only after owner-approved credentials and four-product onboarding evidence.
