@@ -30,7 +30,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 - One manifest makes Vercel production the sole recurring `megaos` scheduler: a 15-minute queue plus a 00:45 UTC daily run, capped at 97/day. Cloud Tasks stays on-demand; Google Scheduler mutation is retired. Protected credentials, exact cadence, and conflicting state are release-gated (`6c19084`).
 - Shop covers guarded orders, stock, purchasing, fulfilment, payment/refund, returns, and close at `/shop/`.
 - Plant stays task-first at `/plant/` and controls no equipment.
-- Website turns one brief into Preview, guarded Save, and Review at `/website/`; it never deploys.
+- Website turns a brief into Preview, guarded Save/Review, a release package, and an owner-gated plan at `/website/`; it never deploys.
 - Ecommerce reads versioned Shop data. Setup, Save, receipt, and handoff focus the next step. Review exposes source and consequence; Cancel restores the exact prepared draft. Only accountable Shop confirmation can create an order.
 - AI assistance remains gated shared infrastructure; Order Intake passed 20 local cases, but the provider runner remains at the credential gate.
 - Client setup now uses one manifest-backed two-step flow, stable template IDs, detail-preserving switches/deep links, and one smart-import path. Exact matches collapse detail; exceptions open for review; the duplicate Shop importer is gone (`ab9a89e`).
@@ -42,9 +42,9 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 
 ## Verified baseline
 
-- Current local checkpoints: product `920c13d`, agent operations `6c19084`, operations `63a245f`, and security `98b8044`.
-- App and local contracts pass; Kernel passes 262 tests, 69 connectors/993 calls, and 15 crews/214 checks. Shop and Plant foundations each pass 11 focused tests plus 24 and 25 browser-model checks; all Python coverage passes 249 tests.
-- React Router is isolated in a 43,870-byte cacheable chunk; Shop inventory and Plant execution are 27,160- and 41,075-byte on-demand chunks. The largest JavaScript chunk is 476,450 bytes and remains below the build gate.
+- Current local checkpoints: product `03e1f1b`, agent operations `6c19084`, operations `63a245f`, and security `98b8044`.
+- App and local contracts pass; Kernel passes 262 tests, 69 connectors/993 calls, and 15 crews/214 checks. Shop, Plant, and Website foundations pass 11, 11, and 13 focused tests plus 24, 25, and 23 browser-model checks; all Python coverage passes 262 tests.
+- React Router is isolated in a 43,870-byte cacheable chunk; Shop inventory, Plant execution, and Website release are 27,160-, 41,075-, and 31,770-byte on-demand chunks. The largest JavaScript chunk is 476,450 bytes and remains below the build gate.
 - Focused coverage includes 205 Shop, 256 Plant, 94 Website, 109 client-onboarding, 54 managed-import, and 17 trusted-server import tests.
 - Rendered setup and four phone-width product routes have no horizontal overflow or error overlay. Plant additionally passes a seven-step 1280x720 lifecycle, reload persistence, and a 390x844 first-run/released-state audit with its primary action visible.
 - Core first-action QA leads Shop Stock, incomplete orders to Promise or Payment, Plant alerts to Problems or output, and invalid Website briefs to their first error. Mobile controls are at least 44 px with focus-safe fixed navigation (`36fa7dd`); guide and review actions create no record.
@@ -85,7 +85,7 @@ Each slice must keep the interface task-first: one primary action, progressive d
 
 ## Next evidence
 
-1. Prove ENG-077's versioned Website template, content upgrade, role review, responsive release artifact, deploy plan, and rollback evidence without publishing or domain authority.
+1. Execute ENG-078: deterministic quote, adapter gates, Shop review, returns, and duplicate-safe recovery; no charge or second order authority.
 2. Repeat the 12-profile rehearsal with one founder-approved named pilot company and measure import correction, setup, and human review time.
 3. After an approved push and exact Vercel link, review that clean commit without deploying or mutating aliases.
 4. On an approved isolated Supabase target, prove private Storage, RLS, replay/isolation, and recovery.
