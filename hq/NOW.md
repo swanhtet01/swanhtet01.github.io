@@ -25,7 +25,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 
 ## Current outcomes
 
-1. **Twelve client profiles** — one coherent synthetic company stages 24 rows across Shop, Plant, Website, and Ecommerce; four deliberately messy sources recover through explicit mapping and value correction, and every trusted package remains not applied.
+1. **Twelve client profiles** — 24 rows span four products; four messy sources recover through explicit correction; no trusted package is applied.
 2. **Maker flow** — Website and Ecommerce use starters, Preview, Review, and deterministic handoff.
 3. **Shared controls** — roles, audit/recovery, imports, and gated AI suggestions only after evaluation.
 
@@ -43,20 +43,20 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 
 ## Verified baseline
 
-- `7447d07` remains the product baseline; operating checkpoint `ee34358` locks 12 roles, four slots, cadence, split authority, fixed destinations, safe recovery, and one-use deploy approval; legacy-security checkpoint `98b8044` remains.
-- App lint/build and all local contracts pass with 23 cloud/governance, 14 legacy-security, and 210 total Python tests. Four-product rehearsal remains 12 profiles, 24 rows, four recovery paths, and 58 security checks.
-- Dependency audit previously reported zero known vulnerabilities; this slice did not refresh external package or hosted-state inventories.
+- `7447d07` remains the product baseline; operating checkpoint `afb4bdf` adds bounded agents, single-use approval, canonical preview targeting, and exact candidate review; legacy-security checkpoint `98b8044` remains.
+- App lint/build and all local contracts pass with 23 cloud/governance, 16 legacy-security, 212 total Python tests, 60 release checks, and 58 security checks. Four-product rehearsal remains 12 profiles and four recovery paths.
+- Read-only Vercel inventory confirms canonical `megaos` and `supermega-public` projects. The local link, exact org/project environment, and token are absent, so preview launch fails closed; unlinked claimable previews are retired.
 - React Router is isolated in a 43,870-byte cacheable chunk. The accepted product baseline's largest JavaScript chunk is 478,469 bytes and remains below the build gate.
 - Focused coverage: 202 Shop, 34 order-recovery, 250 Plant, 94 Website, 11 managed-Website, 103 client-onboarding, 27 storefront-draft, 14 storefront, 15 request, 17 managed-storefront, and 16 handoff checks.
 - Existing 390/1280 px product QA remains valid. Fresh 390x844 and 1280x900 import QA has no overflow, overlay, or browser warning/error; one tap checks the two-row Shop sample and keeps download gated by workspace and owner.
 - Core first-action QA leads Shop Stock with the exact shortage, guides incomplete orders to Promise or Payment, sends Plant alerts to Problems and jobs to output, puts open Problems before Equipment, and moves invalid Website briefs to their first error. Mobile actions are at least 44 px with no overflow; guide actions create no record.
 - PostgreSQL 17.10 passed 32 TLS checks, including exact approval/event restore and the trusted-server identity boundary.
-- Release audit: `784379e` is 0 behind / 192 ahead of draft PR #258 head `338b6fd`; both domains still serve `6885c320`, and remote checks exclude the local delta. See `hq/research/release-reconciliation-2026-07-26.md`.
+- Last remote release snapshot: `784379e` was 0 behind / 192 ahead of draft PR #258 head `338b6fd`; both domains served `6885c320`; remote checks exclude the local delta and later commits. See `hq/research/release-reconciliation-2026-07-26.md`.
 
 ## Coordination
 
 - This task owns portfolio/integration; bounded subagents get one disjoint outcome and no owner-gated authority.
-- Four standing AI teams share one work board. A role is added only for a concrete assignment, one owner, bounded capabilities, acceptance evidence, and an explicit approval boundary; idle specialists do not consume runtime capacity.
+- Four teams share one board; roles require one owner, bounded authority, acceptance evidence, and no idle runtime.
 - `hq/WORKBOARD.md` remains assignment authority.
 
 ## Owner-gated actions
@@ -65,12 +65,13 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Blockers
 
-- Ecommerce lacks an isolated hosted/cross-device rehearsal. Local v2 now binds saved setup to a currentness fingerprint, upgrades v1 additively, and invalidates on cross-tab Shop changes; that fingerprint is not authenticated approval evidence. Managed setup remains digest-bound.
+- Ecommerce lacks hosted cross-device proof. Local v2 invalidates stale setup after Shop changes, but its fingerprint is not authenticated approval evidence; managed setup stays digest-bound.
 - Agent Teams has no hosted proof. Local authority, cadence, destination, budget, and lease boundaries pass; Vercel reports zero Agent Runs in 30 days. Hosted scheduler recovery is unproven.
 - No isolated hosted Supabase branch or separate non-production project has repeated the local database proof.
 - Storage privacy is local-contract evidence only; hosted bucket inventory and object-listing denial remain required.
 - Browser-local Website records cannot authenticate out-of-band storage edits; managed commands use the locked prior state and separate ledger. Hosted activation remains unproven.
 - The validated local candidate is not on GitHub or Vercel: live domains remain at `6885c320` and draft PR #258 at `338b6fd`. Its single next external action is an explicitly approved fast-forward-only push for fresh checks.
+- Canonical preview is deliberately unavailable until the owner supplies or links the exact `megaos` Vercel project and credentials; no fallback domain is allowed.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
 
 ## Decisions in force
@@ -80,14 +81,14 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - Delivery stays on Shop, Plant, Website, and Ecommerce; AI assistance remains gated R&D until these four pass client onboarding and pilot gates.
 - Internal technical IDs may remain `commerce` and `production` until a separately tested data migration is justified.
 - One app, one identity foundation, one evidence/approval model, and one coordinated release path.
-- One lean AI company model: four standing teams, at most twelve local roster roles, at most four active company assignments, and zero worker compute while idle. Add specialists only when measured demand and acceptance evidence justify them.
+- Lean company model: four teams, twelve roster roles, four active assignments, zero idle compute; add specialists only for measured demand.
 - New modules require a real user job, an implemented state transition, a failure/recovery path, and an acceptance test.
 - R&D resources become verified implementation assets, not public directory pages.
 
 ## Next evidence
 
 1. Prove the one daily Kernel brief produces a useful owner outcome before retaining its schedule.
-2. Rehearse human release review in isolation; keep the locally proven lease-recovery boundary unchanged.
+2. After an approved fast-forward push and exact Vercel link, generate one owner review for that clean commit; do not deploy or mutate aliases in the same decision.
 3. Repeat the 12-profile synthetic rehearsal with one founder-approved named pilot company and measure human correction and review time before any write adapter.
 4. On one approved isolated Supabase target, prove private Storage, RLS, Ecommerce replay/isolation, and database recovery.
 5. After an approved fast-forward PR update and fresh checks, review the exact candidate before any separate merge or release decision; keep provider review behind approved credentials.
