@@ -15,6 +15,7 @@ let commerceOrderDraftRuntimeChecks = 0
 let managedWebsiteRuntimeChecks = 0
 let managedStorefrontRuntimeChecks = 0
 let ecommerceHandoffRuntimeChecks = 0
+let ecommerceBuyingRuntimeChecks = 0
 let catalogImportRuntimeChecks = 0
 let clientOnboardingRuntimeChecks = 0
 let managedClientImportRuntimeChecks = 0
@@ -5598,6 +5599,7 @@ async function verifyStorefrontRuntime() {
     const nonce = Date.now()
     const storefront = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'storefront-model.ts')).href}?storefront-verify=${nonce}`)
     const requestModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'storefront-request.ts')).href}?storefront-request=${nonce}`)
+    const buyingModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'ecommerce-buying-lifecycle.ts')).href}?ecommerce-buying=${nonce}`)
     const confirmModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'ecommerce-shop-confirm.ts')).href}?ecommerce-confirm=${nonce}`)
     const handoffModel = await import(pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'ecommerce-shop-handoff.ts')).href)
     const commerce = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?storefront-commerce=${nonce}`)
@@ -5845,6 +5847,178 @@ async function verifyStorefrontRuntime() {
     handoffAssert(earlyConfirmationRejected, 'ecommerce_handoff_confirmation_before_receipt_accepted')
     handoffAssert(!handoffModel.ecommerceShopDraftMatchesCatalog({ ...draft, unexpected: true }, catalog), 'ecommerce_handoff_extra_field_accepted')
     handoffAssert(handoffModel.dismissEcommerceShopDraft(draft.id) && handoffModel.readLatestEcommerceShopDraft() === null, 'ecommerce_handoff_memory_draft_not_dismissed')
+
+    const buyingAssert = (condition, reason) => {
+      if (!condition) throw new Error(reason)
+      ecommerceBuyingRuntimeChecks += 1
+    }
+    const buyingScope = 'ecommerce:runtime-client'
+    const pim = await buyingModel.buildEcommercePimProjection(buyingScope, firstDigest, preview)
+    const pimRetry = await buyingModel.buildEcommercePimProjection(buyingScope, firstDigest, reordered)
+    buyingAssert(pim.schema === 'supermega.ecommerce.pim_projection.v1'
+      && JSON.stringify(pim) === JSON.stringify(pimRetry)
+      && pim.items.find((item) => item.sku === 'SM-CARE-01')?.variant === 'Standard bundle',
+    'ecommerce_buying_pim_not_deterministic_or_variant_bound')
+    const buyingQuote = await buyingModel.buildEcommerceCheckoutQuote({
+      pim,
+      cart: [
+        { sku: 'SM-CARE-01', quantity: 1 },
+        { sku: 'SM-1001', quantity: 2 },
+      ],
+      customerReference: 'Ma Su · 09 123 456',
+      fulfilment: 'delivery',
+      paymentAdapter: 'kbzpay_manual',
+      promotionCode: 'WELCOME',
+      idempotencyKey: 'ECI-22345678-1234-4ABC-8ABC-1234567890AB',
+      quotedAt: '2026-07-24T09:00:00.000Z',
+      expiresAt: '2026-07-24T09:15:00.000Z',
+    })
+    const quoteRetry = await buyingModel.buildEcommerceCheckoutQuote({
+      pim,
+      cart: [
+        { sku: 'SM-1001', quantity: 2 },
+        { sku: 'SM-CARE-01', quantity: 1 },
+      ],
+      customerReference: 'Ma Su · 09 123 456',
+      fulfilment: 'delivery',
+      paymentAdapter: 'kbzpay_manual',
+      promotionCode: 'WELCOME',
+      idempotencyKey: 'ECI-22345678-1234-4ABC-8ABC-1234567890AB',
+      quotedAt: '2026-07-24T09:00:00.000Z',
+      expiresAt: '2026-07-24T09:15:00.000Z',
+    })
+    buyingAssert(JSON.stringify(buyingQuote) === JSON.stringify(quoteRetry)
+      && buyingQuote.lines.length === 2
+      && buyingQuote.totalMmk === buyingQuote.lines.reduce((total, line) => total + line.lineTotalMmk, 0),
+    'ecommerce_buying_quote_not_canonical_multi_line')
+    buyingAssert(buyingQuote.promotion.status === 'pending_shop_review'
+      && buyingQuote.promotion.amountMmk === 0
+      && buyingQuote.tax.status === 'included'
+      && buyingQuote.shipping.status === 'pending_shop_review'
+      && buyingQuote.payment.status === 'not_authorized'
+      && buyingQuote.payment.amountMmk === 0,
+    'ecommerce_buying_adapter_boundary_became_consequential')
+    const buyingRequest = await buyingModel.buildEcommerceOrderRequestV2(buyingQuote, {
+      revision: 2,
+      actionId: 'ACT-STOREFRONT-R2',
+    })
+    buyingAssert(buyingRequest.schema === 'supermega.ecommerce.order_request.v2'
+      && buyingRequest.scope === buyingScope
+      && buyingRequest.id === 'ECR-22345678-1234-4ABC-8ABC-1234567890AB'
+      && JSON.stringify(buyingRequest.lines) === JSON.stringify(buyingQuote.lines),
+    'ecommerce_buying_request_lost_quote_or_scope')
+    const emptyBuying = buyingModel.createEmptyEcommerceBuyingState(buyingScope)
+    const recordedBuying = await buyingModel.recordEcommerceOrderRequestV2(emptyBuying, buyingRequest, emptyBuying.headDigest)
+    const replayedBuying = await buyingModel.recordEcommerceOrderRequestV2(recordedBuying, structuredClone(buyingRequest), recordedBuying.headDigest)
+    buyingAssert(JSON.stringify(recordedBuying) === JSON.stringify(replayedBuying)
+      && recordedBuying.revision === 1
+      && recordedBuying.events.length === 1,
+    'ecommerce_buying_request_replay_advanced_or_lost_history')
+    let conflictingBuyingRejected = false
+    try {
+      await buyingModel.recordEcommerceOrderRequestV2(recordedBuying, {
+        ...buyingRequest,
+        customerReference: 'Conflicting customer',
+      }, recordedBuying.headDigest)
+    } catch { conflictingBuyingRejected = true }
+    buyingAssert(conflictingBuyingRejected, 'ecommerce_buying_conflicting_idempotency_replay_accepted')
+    const buyingDraft = await buyingModel.prepareEcommerceShopDraftV2({
+      request: buyingRequest,
+      state: recordedBuying,
+      currentCatalog: catalog,
+      confirmedAt: '2026-07-24T09:10:00.000Z',
+    })
+    buyingAssert(buyingDraft.schema === 'supermega.ecommerce.shop_draft.v2'
+      && buyingDraft.lines.length === 2
+      && buyingDraft.pricing.payment.status === 'not_authorized'
+      && buyingModel.ecommerceShopDraftV2MatchesCatalog(buyingDraft, catalog),
+    'ecommerce_buying_shop_draft_not_review_only_or_catalog_bound')
+    let expiredBuyingRejected = false
+    try {
+      await buyingModel.prepareEcommerceShopDraftV2({
+        request: buyingRequest,
+        state: recordedBuying,
+        currentCatalog: catalog,
+        confirmedAt: '2026-07-24T09:15:01.000Z',
+      })
+    } catch { expiredBuyingRejected = true }
+    buyingAssert(expiredBuyingRejected, 'ecommerce_buying_expired_quote_reached_shop')
+    let repricedBuyingRejected = false
+    try {
+      await buyingModel.prepareEcommerceShopDraftV2({
+        request: buyingRequest,
+        state: recordedBuying,
+        currentCatalog: catalog.map((item) => item.sku === 'SM-1001' ? { ...item, price: item.price + 1 } : item),
+        confirmedAt: '2026-07-24T09:10:00.000Z',
+      })
+    } catch { repricedBuyingRejected = true }
+    buyingAssert(repricedBuyingRejected, 'ecommerce_buying_repriced_catalog_reached_shop')
+
+    const buyingValues = new Map()
+    let buyingLockRequests = 0
+    const buyingStorage = {
+      getItem: (key) => buyingValues.get(key) ?? null,
+      setItem: (key, value) => { buyingValues.set(key, String(value)) },
+      removeItem: (key) => { buyingValues.delete(key) },
+    }
+    const buyingLocks = {
+      request: async (_name, options, callback) => {
+        buyingAssert(options?.mode === 'exclusive', 'ecommerce_buying_storage_lock_not_exclusive')
+        buyingLockRequests += 1
+        return callback()
+      },
+    }
+    const savedBuying = await buyingModel.saveEcommerceOrderRequestV2(
+      buyingScope,
+      buyingRequest,
+      emptyBuying.headDigest,
+      { storage: buyingStorage, locks: buyingLocks },
+    )
+    const recoveredBuying = await buyingModel.readEcommerceBuyingState(buyingScope, buyingStorage)
+    buyingAssert(buyingLockRequests === 1
+      && recoveredBuying.status === 'ready'
+      && recoveredBuying.state?.headDigest === savedBuying.headDigest
+      && buyingModel.ecommerceBuyingStateContains(recoveredBuying.state, buyingRequest),
+    'ecommerce_buying_request_not_locked_or_recoverable')
+    const buyingKey = buyingModel.ecommerceBuyingStateStorageKey(buyingScope)
+    const recoveredRaw = buyingValues.get(buyingKey)
+    buyingValues.set(buyingKey, '{broken')
+    const malformedBuying = await buyingModel.readEcommerceBuyingState(buyingScope, buyingStorage)
+    buyingAssert(malformedBuying.status === 'invalid' && buyingValues.get(buyingKey) === '{broken', 'ecommerce_buying_malformed_recovery_replaced')
+    buyingValues.set(buyingKey, recoveredRaw)
+    let mismatchedWrite = true
+    const mismatchBuyingStorage = {
+      getItem: buyingStorage.getItem,
+      setItem: (key, value) => {
+        buyingValues.set(key, mismatchedWrite ? `${value}x` : String(value))
+        mismatchedWrite = false
+      },
+      removeItem: buyingStorage.removeItem,
+    }
+    let failedConfirmationRejected = false
+    try {
+      const secondQuote = await buyingModel.buildEcommerceCheckoutQuote({
+        ...{
+          pim,
+          cart: [{ sku: 'SM-1003', quantity: 1 }],
+          customerReference: 'Customer B',
+          fulfilment: 'pickup',
+          paymentAdapter: 'pay_on_pickup',
+          promotionCode: null,
+          idempotencyKey: 'ECI-22345678-1234-4ABC-8ABC-1234567890AC',
+          quotedAt: '2026-07-24T09:01:00.000Z',
+          expiresAt: '2026-07-24T09:16:00.000Z',
+        },
+      })
+      const secondRequest = await buyingModel.buildEcommerceOrderRequestV2(secondQuote)
+      await buyingModel.saveEcommerceOrderRequestV2(
+        buyingScope,
+        secondRequest,
+        savedBuying.headDigest,
+        { storage: mismatchBuyingStorage, locks: buyingLocks },
+      )
+    } catch { failedConfirmationRejected = true }
+    buyingAssert(failedConfirmationRejected && buyingValues.get(buyingKey) === recoveredRaw, 'ecommerce_buying_unconfirmed_write_not_rolled_back')
   } catch (error) {
     fail(`storefront_runtime:${error instanceof Error ? error.message : 'unknown'}`)
   }
@@ -7201,4 +7375,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceHandoffRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
