@@ -13,6 +13,7 @@ from typing import Any, Mapping, Sequence
 
 AGENT_WORKFORCE_POLICY_CONTRACT = "supermega.agent-workforce-policy.v2"
 AGENT_CAPACITY_PLAN_CONTRACT = "supermega.agent-capacity-plan.v2"
+AGENT_CADENCE_ADMISSION_CONTRACT = "supermega.agent-cadence-admission.v1"
 AGENT_BUDGET_GRANT_CONTRACT = "supermega.agent-budget-grant.v1"
 AGENT_BUDGET_ACCOUNTING_CONTRACT = "supermega.agent-budget-accounting.v1"
 AGENT_BUDGET_AUDIENCE = "supermega-agent-runtime"
@@ -53,7 +54,21 @@ AGENT_JOB_PRIORITIES: dict[str, int] = {
     "github_release_watch": 90,
 }
 
-if set(AGENT_JOB_UNITS) != set(AGENT_JOB_DAILY_LIMITS) or set(AGENT_JOB_UNITS) != set(AGENT_JOB_PRIORITIES):
+AGENT_JOB_CADENCE_SECONDS: dict[str, int] = {
+    "revenue_scout": 3_600,
+    "list_clerk": 86_400,
+    "task_triage": 3_600,
+    "template_clerk": 3_600,
+    "ops_watch": 900,
+    "founder_brief": 86_400,
+    "github_release_watch": 3_600,
+}
+
+if (
+    set(AGENT_JOB_UNITS) != set(AGENT_JOB_DAILY_LIMITS)
+    or set(AGENT_JOB_UNITS) != set(AGENT_JOB_PRIORITIES)
+    or set(AGENT_JOB_UNITS) != set(AGENT_JOB_CADENCE_SECONDS)
+):
     raise RuntimeError("agent_job_policy_contract_invalid")
 
 _GRANT_ID = re.compile(r"^[a-f0-9]{32}$")
@@ -103,6 +118,8 @@ class AgentWorkforcePolicy:
             "job_units": dict(AGENT_JOB_UNITS),
             "job_daily_limits": dict(AGENT_JOB_DAILY_LIMITS),
             "job_priorities": dict(AGENT_JOB_PRIORITIES),
+            "job_cadence_seconds": dict(AGENT_JOB_CADENCE_SECONDS),
+            "cadence_admission_contract": AGENT_CADENCE_ADMISSION_CONTRACT,
             "in_flight_per_job": 1,
             "capacity_plan_contract": AGENT_CAPACITY_PLAN_CONTRACT,
             "execution_model": "ephemeral_demand_driven",
@@ -212,6 +229,14 @@ def agent_job_priority(job_type: str) -> int:
     normalized = str(job_type or "").strip().lower()
     try:
         return AGENT_JOB_PRIORITIES[normalized]
+    except KeyError as exc:
+        raise AgentGovernanceError("agent_job_type_not_allowed", f"Unsupported agent job type: {normalized or 'blank'}.") from exc
+
+
+def agent_job_cadence_seconds(job_type: str) -> int:
+    normalized = str(job_type or "").strip().lower()
+    try:
+        return AGENT_JOB_CADENCE_SECONDS[normalized]
     except KeyError as exc:
         raise AgentGovernanceError("agent_job_type_not_allowed", f"Unsupported agent job type: {normalized or 'blank'}.") from exc
 
@@ -406,6 +431,50 @@ def _utc(value: datetime | None = None) -> datetime:
     if current.tzinfo is None:
         raise AgentGovernanceError("agent_time_invalid", "Agent governance timestamps must include a timezone.")
     return current.astimezone(timezone.utc)
+
+
+def agent_job_cadence_state(
+    *,
+    job_type: str,
+    last_finished_at: datetime | None,
+    now: datetime | None = None,
+) -> dict[str, object]:
+    """Return a deterministic due-only admission decision for automation."""
+
+    normalized_job_type = normalize_agent_job_types([job_type])[0]
+    observed_at = _utc(now)
+    cadence_seconds = agent_job_cadence_seconds(normalized_job_type)
+    if last_finished_at is None:
+        return {
+            "contract": AGENT_CADENCE_ADMISSION_CONTRACT,
+            "decision": "due_never_run",
+            "due": True,
+            "job_type": normalized_job_type,
+            "cadence_seconds": cadence_seconds,
+            "observed_at": observed_at.isoformat(),
+            "last_finished_at": None,
+            "next_due_at": observed_at.isoformat(),
+        }
+
+    finished_at = _utc(last_finished_at)
+    if finished_at > observed_at + timedelta(minutes=5):
+        raise AgentGovernanceError(
+            "agent_cadence_state_invalid",
+            "The latest agent completion is too far in the future for safe cadence admission.",
+            job_type=normalized_job_type,
+        )
+    next_due_at = finished_at + timedelta(seconds=cadence_seconds)
+    due = observed_at >= next_due_at
+    return {
+        "contract": AGENT_CADENCE_ADMISSION_CONTRACT,
+        "decision": "due_cadence_elapsed" if due else "deferred_cadence_not_elapsed",
+        "due": due,
+        "job_type": normalized_job_type,
+        "cadence_seconds": cadence_seconds,
+        "observed_at": observed_at.isoformat(),
+        "last_finished_at": finished_at.isoformat(),
+        "next_due_at": next_due_at.isoformat(),
+    }
 
 
 def _parse_timestamp(value: object, field: str) -> datetime:

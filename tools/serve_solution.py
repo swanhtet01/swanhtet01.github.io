@@ -1679,7 +1679,7 @@ def _agent_governance_row(job_type: str, error: AgentGovernanceError) -> dict[st
     return {
         "run_id": "",
         "job_type": str(job_type or "").strip().lower(),
-        "status": "throttled",
+        "status": "deferred" if error.code == "agent_cadence_not_elapsed" else "throttled",
         "summary": error.detail,
         "error_text": "",
         "execution_authorized": False,
@@ -1720,6 +1720,7 @@ def _run_and_persist_agent_job(
     idempotency_key: str | None = None,
     related_entity_type: str = "",
     related_entity_id: str = "",
+    respect_cadence: bool = False,
 ) -> dict[str, Any]:
     job_defaults = AGENT_JOB_CONNECTOR_MAP.get(str(job_type or "").strip(), {})
     job_label = next(
@@ -1739,6 +1740,7 @@ def _run_and_persist_agent_job(
             related_entity_type=related_entity_type,
             related_entity_id=related_entity_id,
             claimed_by=str(source or "").strip() or "direct",
+            respect_cadence=respect_cadence,
         )
     except AgentGovernanceError as exc:
         return _agent_governance_row(job_type, exc)
@@ -2983,6 +2985,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                     job_type=job_type,
                     source=source,
                     payload={},
+                    respect_cadence=True,
                 )
             )
         return _agent_jobs_payload(enterprise_db_url=enterprise_db_url, workspace_id=workspace_id, rows=results)
@@ -2997,6 +3000,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         normalized_job_types = _normalized_agent_job_types(job_types)
         rows: list[dict[str, Any]] = []
         accepted_job_types: list[str] = []
+        deferred_count = 0
         for job_type in normalized_job_types:
             try:
                 row = enterprise_create_agent_run(
@@ -3007,9 +3011,13 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                     payload={},
                     max_attempts=1,
                     triggered_by=triggered_by,
+                    respect_cadence=True,
                 )
             except AgentGovernanceError as exc:
-                rows.append(_agent_governance_row(job_type, exc))
+                governance_row = _agent_governance_row(job_type, exc)
+                rows.append(governance_row)
+                if governance_row["status"] == "deferred":
+                    deferred_count += 1
                 continue
             rows.append(row)
             if str(row.get("status", "")).strip() == "queued" and str(row.get("run_id", "")).strip():
@@ -3022,7 +3030,10 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                 limit=len(accepted_job_types),
             )
             if accepted_job_types
-            else {"status": "not_needed", "reason": "no_new_work"}
+            else {
+                "status": "not_needed",
+                "reason": "cadence_not_elapsed" if deferred_count else "no_new_work",
+            }
         )
         return _agent_jobs_payload(
             enterprise_db_url=enterprise_db_url,
@@ -3030,7 +3041,8 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             rows=rows,
             extra={
                 "queued_count": len(accepted_job_types),
-                "rejected_count": len(rows) - len(accepted_job_types),
+                "deferred_count": deferred_count,
+                "rejected_count": len(rows) - len(accepted_job_types) - deferred_count,
                 "mode": "queued",
                 "dispatch": queue_result,
             },

@@ -20,6 +20,7 @@
     "in_flight_per_job": 1,
     "specialist_job_types": ["revenue_scout", "list_clerk", "task_triage", "template_clerk", "ops_watch", "founder_brief", "github_release_watch"],
     "dispatch_policy": "fixed_priority_then_work_unit_efficiency_then_fifo",
+    "cadence_admission_contract": "supermega.agent-cadence-admission.v1",
     "job_priorities": {
       "revenue_scout": 50,
       "list_clerk": 40,
@@ -28,6 +29,15 @@
       "ops_watch": 100,
       "founder_brief": 70,
       "github_release_watch": 90
+    },
+    "job_cadence_seconds": {
+      "revenue_scout": 3600,
+      "list_clerk": 86400,
+      "task_triage": 3600,
+      "template_clerk": 3600,
+      "ops_watch": 900,
+      "founder_brief": 86400,
+      "github_release_watch": 3600
     }
   },
   "manager_moves": [

@@ -19,13 +19,16 @@ from fastapi.testclient import TestClient
 from supermega_runtime.cloud_runtime import DAILY_CRON_PATH, QUEUE_CRON_PATH, router
 from mark1_pilot.agent_governance import (
     AGENT_ACTIVE_ASSIGNMENT_LIMIT,
-    AGENT_CAPACITY_PLAN_CONTRACT,
     AGENT_BUDGET_ACCOUNTING_CONTRACT,
     AGENT_BUDGET_GRANT_CONTRACT,
+    AGENT_CADENCE_ADMISSION_CONTRACT,
+    AGENT_CAPACITY_PLAN_CONTRACT,
+    AGENT_JOB_CADENCE_SECONDS,
     AGENT_JOB_PRIORITIES,
     AGENT_ROSTER_LIMIT,
     AgentGovernanceError,
     AgentWorkforcePolicy,
+    agent_job_cadence_state,
     issue_agent_budget_grant,
     load_agent_workforce_policy,
     plan_agent_capacity,
@@ -428,6 +431,8 @@ class AgentGovernanceTests(unittest.TestCase):
         self.assertEqual(runtime_policy["max_registered_specialists"], policy.max_registered_specialists)
         self.assertEqual(runtime_policy["specialist_job_types"], list(policy.allowed_job_types))
         self.assertEqual(runtime_policy["job_priorities"], AGENT_JOB_PRIORITIES)
+        self.assertEqual(runtime_policy["job_cadence_seconds"], AGENT_JOB_CADENCE_SECONDS)
+        self.assertEqual(runtime_policy["cadence_admission_contract"], AGENT_CADENCE_ADMISSION_CONTRACT)
         self.assertEqual(
             runtime_policy["dispatch_policy"],
             "fixed_priority_then_work_unit_efficiency_then_fifo",
@@ -497,6 +502,145 @@ class AgentGovernanceTests(unittest.TestCase):
             ],
         )
         self.assertEqual(busy["idle_registered_specialists"], AGENT_ROSTER_LIMIT - AGENT_ACTIVE_ASSIGNMENT_LIMIT)
+
+    def test_cadence_state_is_deterministic_and_fails_closed(self) -> None:
+        observed_at = datetime(2026, 7, 26, 6, 0, tzinfo=timezone.utc)
+        never_run = agent_job_cadence_state(
+            job_type="ops_watch",
+            last_finished_at=None,
+            now=observed_at,
+        )
+        self.assertEqual(never_run["contract"], AGENT_CADENCE_ADMISSION_CONTRACT)
+        self.assertEqual(never_run["decision"], "due_never_run")
+        self.assertTrue(never_run["due"])
+        self.assertEqual(never_run["cadence_seconds"], 900)
+
+        deferred = agent_job_cadence_state(
+            job_type="ops_watch",
+            last_finished_at=observed_at,
+            now=observed_at + timedelta(minutes=14, seconds=59),
+        )
+        self.assertFalse(deferred["due"])
+        self.assertEqual(deferred["decision"], "deferred_cadence_not_elapsed")
+
+        due = agent_job_cadence_state(
+            job_type="ops_watch",
+            last_finished_at=observed_at,
+            now=observed_at + timedelta(minutes=15),
+        )
+        self.assertTrue(due["due"])
+        self.assertEqual(due["decision"], "due_cadence_elapsed")
+
+        precise_finished_at = observed_at.replace(microsecond=750_000)
+        precise_early = agent_job_cadence_state(
+            job_type="ops_watch",
+            last_finished_at=precise_finished_at,
+            now=observed_at + timedelta(minutes=15),
+        )
+        self.assertFalse(precise_early["due"])
+        self.assertTrue(
+            agent_job_cadence_state(
+                job_type="ops_watch",
+                last_finished_at=precise_finished_at,
+                now=precise_finished_at + timedelta(minutes=15),
+            )["due"]
+        )
+
+        with self.assertRaises(AgentGovernanceError) as future_error:
+            agent_job_cadence_state(
+                job_type="ops_watch",
+                last_finished_at=observed_at + timedelta(minutes=6),
+                now=observed_at,
+            )
+        self.assertEqual(future_error.exception.code, "agent_cadence_state_invalid")
+
+        with self.assertRaises(AgentGovernanceError) as naive_error:
+            agent_job_cadence_state(
+                job_type="ops_watch",
+                last_finished_at=observed_at,
+                now=datetime(2026, 7, 26, 6, 0),
+            )
+        self.assertEqual(naive_error.exception.code, "agent_time_invalid")
+
+    def test_automated_cadence_admission_is_atomic_and_manual_runs_remain_available(self) -> None:
+        with self._database() as (database_url, workspace_id, database_path):
+            initial = create_and_reserve_agent_run(
+                database_url,
+                workspace_id=workspace_id,
+                job_type="ops_watch",
+            )
+            completed = complete_agent_run(
+                database_url,
+                workspace_id=workspace_id,
+                run_id=initial["run_id"],
+                claim_token=initial["claim_token"],
+                status="ready",
+            )
+            self.assertIsNotNone(completed)
+
+            with closing(sqlite3.connect(database_path)) as connection:
+                run_count_before = connection.execute("SELECT COUNT(*) FROM enterprise_agent_runs").fetchone()[0]
+                reservation_count_before = connection.execute(
+                    "SELECT COUNT(*) FROM enterprise_agent_budget_reservations"
+                ).fetchone()[0]
+
+            with self.assertRaises(AgentGovernanceError) as queued_error:
+                create_agent_run(
+                    database_url,
+                    workspace_id=workspace_id,
+                    job_type="ops_watch",
+                    respect_cadence=True,
+                )
+            self.assertEqual(queued_error.exception.code, "agent_cadence_not_elapsed")
+
+            with self.assertRaises(AgentGovernanceError) as direct_error:
+                create_and_reserve_agent_run(
+                    database_url,
+                    workspace_id=workspace_id,
+                    job_type="ops_watch",
+                    respect_cadence=True,
+                )
+            self.assertEqual(direct_error.exception.code, "agent_cadence_not_elapsed")
+
+            with closing(sqlite3.connect(database_path)) as connection:
+                self.assertEqual(
+                    connection.execute("SELECT COUNT(*) FROM enterprise_agent_runs").fetchone()[0],
+                    run_count_before,
+                )
+                self.assertEqual(
+                    connection.execute("SELECT COUNT(*) FROM enterprise_agent_budget_reservations").fetchone()[0],
+                    reservation_count_before,
+                )
+
+            finished_at = datetime.fromisoformat(str((completed or {})["finished_at"]))
+            due = create_agent_run(
+                database_url,
+                workspace_id=workspace_id,
+                job_type="ops_watch",
+                respect_cadence=True,
+                now=finished_at + timedelta(minutes=15),
+            )
+            self.assertEqual(due["status"], "queued")
+
+        with self._database() as (database_url, workspace_id, _):
+            initial = create_and_reserve_agent_run(
+                database_url,
+                workspace_id=workspace_id,
+                job_type="task_triage",
+            )
+            complete_agent_run(
+                database_url,
+                workspace_id=workspace_id,
+                run_id=initial["run_id"],
+                claim_token=initial["claim_token"],
+                status="ready",
+            )
+            manual = create_agent_run(
+                database_url,
+                workspace_id=workspace_id,
+                job_type="task_triage",
+            )
+            self.assertEqual(manual["status"], "queued")
 
     def test_capacity_plan_is_priority_stable_and_budget_efficient(self) -> None:
         plan = plan_agent_capacity(

@@ -18,6 +18,7 @@ from mark1_pilot.agent_governance import (
     AGENT_BUDGET_ACCOUNTING_CONTRACT,
     AgentGovernanceError,
     AgentWorkforcePolicy,
+    agent_job_cadence_state,
     agent_job_daily_limit,
     agent_job_units,
     load_agent_workforce_policy,
@@ -2469,6 +2470,49 @@ def _assert_agent_queue_admission(
         raise AgentGovernanceError("agent_job_already_in_flight", f"{job_type} is already queued or running.")
 
 
+def _assert_agent_cadence_admission(
+    session: Session,
+    *,
+    workspace_id: str,
+    job_type: str,
+    now: datetime,
+) -> None:
+    latest = session.exec(
+        select(EnterpriseAgentRun)
+        .where(
+            EnterpriseAgentRun.workspace_id == str(workspace_id),
+            EnterpriseAgentRun.job_type == job_type,
+            EnterpriseAgentRun.status.in_(["ready", "error", "cancelled"]),
+        )
+        .order_by(EnterpriseAgentRun.finished_at.desc(), EnterpriseAgentRun.updated_at.desc())
+        .limit(1)
+    ).first()
+    if latest is None:
+        return
+    raw_finished_at = str(latest.finished_at or latest.updated_at or latest.created_at).strip()
+    normalized_finished_at = raw_finished_at[:-1] + "+00:00" if raw_finished_at.endswith("Z") else raw_finished_at
+    try:
+        finished_at = datetime.fromisoformat(normalized_finished_at)
+    except ValueError as exc:
+        raise AgentGovernanceError(
+            "agent_cadence_state_invalid",
+            "The latest agent completion timestamp is malformed.",
+            job_type=job_type,
+        ) from exc
+    admission = agent_job_cadence_state(
+        job_type=job_type,
+        last_finished_at=finished_at,
+        now=now,
+    )
+    if not bool(admission["due"]):
+        raise AgentGovernanceError(
+            "agent_cadence_not_elapsed",
+            f"{job_type} is not due for another automated run.",
+            job_type=job_type,
+            cadence=admission,
+        )
+
+
 def _reserve_agent_run_in_session(
     session: Session,
     *,
@@ -2550,15 +2594,19 @@ def create_agent_run(
     triggered_by: str = "system",
     related_entity_type: str = "",
     related_entity_id: str = "",
+    respect_cadence: bool = False,
+    now: datetime | None = None,
 ) -> dict[str, Any]:
     ensure_schema(database_url)
     policy = load_agent_workforce_policy()
     normalized_job_type = normalize_agent_job_types([job_type])[0]
     normalized_key = str(idempotency_key or "").strip() or None
+    if type(respect_cadence) is not bool:
+        raise AgentGovernanceError("agent_cadence_mode_invalid", "respect_cadence must be a boolean.")
+    now_value = _agent_utc_now(now)
     engine = get_engine(database_url)
     with Session(engine) as session:
         _agent_workspace_lock(session, str(workspace_id))
-        now_value = _agent_utc_now()
         _reconcile_expired_agent_reservations(session, workspace_id=str(workspace_id), now=now_value)
         if normalized_key:
             existing = session.exec(
@@ -2584,6 +2632,13 @@ def create_agent_run(
             job_type=normalized_job_type,
             policy=policy,
         )
+        if respect_cadence:
+            _assert_agent_cadence_admission(
+                session,
+                workspace_id=str(workspace_id),
+                job_type=normalized_job_type,
+                now=now_value,
+            )
         now = _agent_timestamp(now_value)
         row = EnterpriseAgentRun(
             run_id=secrets.token_urlsafe(16),
@@ -2634,15 +2689,19 @@ def create_and_reserve_agent_run(
     related_entity_type: str = "",
     related_entity_id: str = "",
     claimed_by: str = "direct",
+    respect_cadence: bool = False,
+    now: datetime | None = None,
 ) -> dict[str, Any]:
     ensure_schema(database_url)
     policy = load_agent_workforce_policy()
     normalized_job_type = normalize_agent_job_types([job_type])[0]
     normalized_key = str(idempotency_key or "").strip() or None
+    if type(respect_cadence) is not bool:
+        raise AgentGovernanceError("agent_cadence_mode_invalid", "respect_cadence must be a boolean.")
+    now_value = _agent_utc_now(now)
     engine = get_engine(database_url)
     with Session(engine) as session:
         _agent_workspace_lock(session, str(workspace_id))
-        now_value = _agent_utc_now()
         _reconcile_expired_agent_reservations(session, workspace_id=str(workspace_id), now=now_value)
         if normalized_key:
             existing = session.exec(
@@ -2668,6 +2727,13 @@ def create_and_reserve_agent_run(
             job_type=normalized_job_type,
             policy=policy,
         )
+        if respect_cadence:
+            _assert_agent_cadence_admission(
+                session,
+                workspace_id=str(workspace_id),
+                job_type=normalized_job_type,
+                now=now_value,
+            )
         now_text = _agent_timestamp(now_value)
         row = EnterpriseAgentRun(
             run_id=secrets.token_urlsafe(16),
