@@ -6,7 +6,7 @@ from typing import Any, Literal, TypeVar
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from supermega_runtime.commerce_runtime import COMMERCE_HUMAN_EVENTS
 from supermega_runtime.client_import_runtime import (
@@ -83,6 +83,17 @@ class TrialCommandRequest(_StrictRequest):
     event_type: str = Field(min_length=1, max_length=80)
     expected_version: int = Field(ge=0)
     payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class TrialClientImportApplyRequest(_StrictRequest):
+    command_id: UUID
+    expected_version: int = Field(ge=0)
+    confirmation: str = Field(
+        min_length=77,
+        max_length=77,
+        pattern=r"^APPLY sha256:[0-9a-f]{64}$",
+    )
+    package: dict[str, Any]
 
 
 class TrialDecisionSubject(_StrictRequest):
@@ -228,7 +239,11 @@ def _reject_client_identity(value: Any, *, path: str) -> None:
             _reject_client_identity(nested, path=f"{path}[{index}]")
 
 
-async def _bounded_json_body(request: Request) -> object:
+async def _bounded_json_body(
+    request: Request,
+    *,
+    maximum_bytes: int = CLIENT_IMPORT_MAX_PACKAGE_BYTES,
+) -> object:
     """Read one JSON package without trusting Content-Length or buffering unbounded input."""
 
     content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
@@ -243,11 +258,11 @@ async def _bounded_json_body(request: Request) -> object:
             raise _error(400, "client_import_invalid_content_length") from exc
         if declared_size < 0:
             raise _error(400, "client_import_invalid_content_length")
-        if declared_size > CLIENT_IMPORT_MAX_PACKAGE_BYTES:
+        if declared_size > maximum_bytes:
             raise _error(
                 413,
                 "client_import_too_large",
-                maximum_bytes=CLIENT_IMPORT_MAX_PACKAGE_BYTES,
+                maximum_bytes=maximum_bytes,
             )
 
     chunks: list[bytes] = []
@@ -255,11 +270,11 @@ async def _bounded_json_body(request: Request) -> object:
     try:
         async for chunk in request.stream():
             total += len(chunk)
-            if total > CLIENT_IMPORT_MAX_PACKAGE_BYTES:
+            if total > maximum_bytes:
                 raise _error(
                     413,
                     "client_import_too_large",
-                    maximum_bytes=CLIENT_IMPORT_MAX_PACKAGE_BYTES,
+                    maximum_bytes=maximum_bytes,
                 )
             chunks.append(chunk)
         return json.loads(
@@ -318,6 +333,51 @@ def _approval_response(approval: ApprovalRecord) -> dict[str, Any]:
 
 def _command_response(result: CommandResult) -> dict[str, Any]:
     return {"result": result.to_dict()}
+
+
+def _shop_catalog_import_payload(
+    package: Mapping[str, Any],
+    *,
+    actor_id: str,
+    command_id: UUID,
+    package_digest: str,
+) -> dict[str, Any]:
+    rows = package.get("rows")
+    if not isinstance(rows, list) or not rows:
+        raise _error(422, "client_import_activation_invalid")
+    items: list[dict[str, Any]] = []
+    try:
+        for row in rows:
+            if not isinstance(row, Mapping) or not isinstance(row.get("values"), Mapping):
+                raise ValueError("invalid row")
+            values = row["values"]
+            items.append(
+                {
+                    "sku": values["sku"],
+                    "name": values["name"],
+                    "onHand": int(values["onHand"]),
+                    "reorderAt": int(values["reorderAt"]),
+                    "price": int(values["price"]),
+                }
+            )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise _error(422, "client_import_activation_invalid") from exc
+    return {
+        "state": {
+            "schema": "supermega.commerce.workspace.v2",
+            "items": items,
+            "orders": [],
+            "movements": [],
+            "closes": [],
+        },
+        "evidence": {
+            "actionId": f"ACT-IMPORT-{command_id}",
+            "capturedAt": "server-assigned",
+            "actor": actor_id,
+            "reason": "Apply the reviewed Shop catalog import.",
+            "evidenceReference": package_digest,
+        },
+    }
 
 
 def _website_source_identity(value: object) -> tuple[str, str, str, str] | None:
@@ -415,6 +475,69 @@ def create_trial_router(*, store: TrialStore, resolve_principal: PrincipalResolv
                 **validation.to_dict(),
                 "workspace_id": principal.workspace_id,
             }
+        }
+
+    @router.post("/imports/apply")
+    async def trial_import_apply(request: Request) -> dict[str, Any]:
+        principal = _resolve_principal(request, resolve_principal)
+        readiness = _readiness(store, principal)
+        _require_write_ready(readiness, "setup.write")
+        if principal.actor_kind != "human":
+            raise _error(403, "trial_human_approval_required")
+        raw_body = await _bounded_json_body(
+            request,
+            maximum_bytes=CLIENT_IMPORT_MAX_PACKAGE_BYTES + 2048,
+        )
+        try:
+            body = TrialClientImportApplyRequest.model_validate(raw_body)
+        except ValidationError as exc:
+            raise _error(422, "client_import_apply_invalid") from exc
+        try:
+            validation = validate_client_import_staging_package(body.package)
+        except ClientImportValidationError as exc:
+            raise _error(
+                422,
+                "client_import_validation_error",
+                message=str(exc),
+            ) from exc
+        if validation.product != "commerce":
+            raise _error(
+                409,
+                "client_import_activation_not_ready",
+                product=validation.product,
+            )
+        _require_write_ready(readiness, validation.required_capability)
+        if body.confirmation != f"APPLY {validation.package_digest}":
+            raise _error(409, "client_import_confirmation_mismatch")
+        payload = _shop_catalog_import_payload(
+            body.package,
+            actor_id=principal.actor_id,
+            command_id=body.command_id,
+            package_digest=validation.package_digest,
+        )
+        result = _invoke(
+            lambda: store.apply_command(
+                principal,
+                command_id=body.command_id,
+                surface="commerce",
+                event_type="commerce.workspace.initialized",
+                expected_version=body.expected_version,
+                payload=payload,
+            )
+        )
+        return {
+            "activation": {
+                "contract": "supermega.client_import_activation.v1",
+                "status": "applied",
+                "product": validation.product,
+                "object": validation.object_id,
+                "workflow_template_id": validation.workflow_template_id,
+                "package_digest": validation.package_digest,
+                "row_count": validation.row_count,
+                "workspace_id": principal.workspace_id,
+                "external_writes_performed": True,
+            },
+            **_command_response(result),
         }
 
     @router.post("/commands")

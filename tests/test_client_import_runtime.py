@@ -19,6 +19,7 @@ from supermega_runtime.client_import_runtime import (
     ClientImportValidationError,
     validate_client_import_staging_package,
 )
+from supermega_runtime.runtime import reduce_trial_state
 from supermega_runtime.trial_runtime import create_trial_router
 from supermega_runtime.trial_store import InMemoryTrialStore, TrialPrincipal
 
@@ -389,7 +390,7 @@ class CounterReducer:
 
     def __call__(self, surface: str, event_type: str, current: object, payload: object) -> dict[str, object]:
         self.calls += 1
-        return {}
+        return dict(reduce_trial_state(surface, event_type, current, payload))
 
 
 class ClientImportRouteTests(unittest.TestCase):
@@ -398,11 +399,15 @@ class ClientImportRouteTests(unittest.TestCase):
         self.store = InMemoryTrialStore(reducer=self.reducer)
         self.setup_reader = TrialPrincipal("workspace-a", "setup-reader", "human")
         self.setup_writer = TrialPrincipal("workspace-b", "setup-writer", "human")
+        self.setup_only = TrialPrincipal("workspace-c", "setup-only", "human")
+        self.setup_agent = TrialPrincipal("workspace-d", "setup-agent", "agent")
         self.other_reader = TrialPrincipal("workspace-a", "commerce-reader", "human")
         self.missing_member = TrialPrincipal("workspace-a", "missing-member", "human")
         self.sessions = {
             "reader": self.setup_reader,
             "writer": self.setup_writer,
+            "setup-only": self.setup_only,
+            "agent": self.setup_agent,
             "other": self.other_reader,
             "missing": self.missing_member,
         }
@@ -416,7 +421,19 @@ class ClientImportRouteTests(unittest.TestCase):
             workspace_id="workspace-b",
             actor_id="setup-writer",
             actor_kind="human",
+            capabilities=("setup.write", "commerce.write"),
+        )
+        self.store.provision_membership(
+            workspace_id="workspace-c",
+            actor_id="setup-only",
+            actor_kind="human",
             capabilities=("setup.write",),
+        )
+        self.store.provision_membership(
+            workspace_id="workspace-d",
+            actor_id="setup-agent",
+            actor_kind="agent",
+            capabilities=("setup.write", "commerce.write"),
         )
         self.store.provision_membership(
             workspace_id="workspace-a",
@@ -575,6 +592,150 @@ class ClientImportRouteTests(unittest.TestCase):
             )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["validation"]["activation"]["status"], "not_applied")
+        self.assertEqual(self.reducer.calls, 0)
+
+    def test_reviewed_shop_import_applies_once_as_one_revisioned_catalog(self) -> None:
+        package = _package("commerce", "retail-wholesale")
+        second_row = deepcopy(package["rows"][0])
+        second_row["sourceRow"] = 3
+        second_row["key"] = "TEA-100"
+        second_row["values"] = {
+            "sku": "TEA-100",
+            "name": "Myanmar green tea",
+            "onHand": "12",
+            "reorderAt": "4",
+            "price": "4500",
+        }
+        package["rows"].append(second_row)
+        package["controls"]["rowCount"] = 2
+        package = _resign(package)
+        validation = validate_client_import_staging_package(package)
+        body = {
+            "command_id": "00000000-0000-4000-8000-000000000101",
+            "expected_version": 0,
+            "confirmation": f"APPLY {validation.package_digest}",
+            "package": package,
+        }
+
+        applied = self.client.post(
+            "/api/trial/v1/imports/apply",
+            headers=self._headers("writer"),
+            json=body,
+        )
+        self.assertEqual(applied.status_code, 200)
+        response = applied.json()
+        self.assertEqual(
+            response["activation"],
+            {
+                "contract": "supermega.client_import_activation.v1",
+                "status": "applied",
+                "product": "commerce",
+                "object": "shop_catalog",
+                "workflow_template_id": "retail-wholesale",
+                "package_digest": validation.package_digest,
+                "row_count": 2,
+                "workspace_id": "workspace-b",
+                "external_writes_performed": True,
+            },
+        )
+        self.assertEqual(response["result"]["version"], 1)
+        self.assertFalse(response["result"]["idempotent_replay"])
+        self.assertEqual(
+            response["result"]["state"],
+            {
+                "schema": "supermega.commerce.workspace.v2",
+                "items": [
+                    {
+                        "sku": "COFFEE-250",
+                        "name": "Myanmar coffee 250g",
+                        "onHand": 24,
+                        "reorderAt": 8,
+                        "price": 7000,
+                    },
+                    {
+                        "sku": "TEA-100",
+                        "name": "Myanmar green tea",
+                        "onHand": 12,
+                        "reorderAt": 4,
+                        "price": 4500,
+                    },
+                ],
+                "orders": [],
+                "movements": [],
+                "closes": [],
+            },
+        )
+        self.assertEqual(self.reducer.calls, 1)
+        self.assertEqual(len(self.store._events), 1)
+
+        replay = self.client.post(
+            "/api/trial/v1/imports/apply",
+            headers=self._headers("writer"),
+            json=body,
+        )
+        self.assertEqual(replay.status_code, 200)
+        self.assertTrue(replay.json()["result"]["idempotent_replay"])
+        self.assertEqual(self.reducer.calls, 1)
+        self.assertEqual(len(self.store._events), 1)
+
+    def test_import_activation_fails_closed_before_every_product_write(self) -> None:
+        package = _package("commerce")
+        validation = validate_client_import_staging_package(package)
+        body = {
+            "command_id": "00000000-0000-4000-8000-000000000102",
+            "expected_version": 0,
+            "confirmation": f"APPLY {validation.package_digest}",
+            "package": package,
+        }
+        baseline = (deepcopy(self.store._states), deepcopy(self.store._events))
+
+        wrong_confirmation = self.client.post(
+            "/api/trial/v1/imports/apply",
+            headers=self._headers("writer"),
+            json={**body, "confirmation": "APPLY sha256:" + "0" * 64},
+        )
+        self.assertEqual(wrong_confirmation.status_code, 409)
+        self.assertEqual(
+            wrong_confirmation.json()["detail"]["code"],
+            "client_import_confirmation_mismatch",
+        )
+
+        missing_product_capability = self.client.post(
+            "/api/trial/v1/imports/apply",
+            headers=self._headers("setup-only"),
+            json=body,
+        )
+        self.assertEqual(missing_product_capability.status_code, 403)
+        self.assertEqual(
+            missing_product_capability.json()["detail"]["required_capability"],
+            "commerce.write",
+        )
+
+        nonhuman = self.client.post(
+            "/api/trial/v1/imports/apply",
+            headers=self._headers("agent"),
+            json=body,
+        )
+        self.assertEqual(nonhuman.status_code, 403)
+        self.assertEqual(nonhuman.json()["detail"]["code"], "trial_human_approval_required")
+
+        website_package = _package("website")
+        website_validation = validate_client_import_staging_package(website_package)
+        unsupported = self.client.post(
+            "/api/trial/v1/imports/apply",
+            headers=self._headers("writer"),
+            json={
+                **body,
+                "confirmation": f"APPLY {website_validation.package_digest}",
+                "package": website_package,
+            },
+        )
+        self.assertEqual(unsupported.status_code, 409)
+        self.assertEqual(
+            unsupported.json()["detail"]["code"],
+            "client_import_activation_not_ready",
+        )
+        self.assertEqual((self.store._states, self.store._events), baseline)
         self.assertEqual(self.reducer.calls, 0)
 
 

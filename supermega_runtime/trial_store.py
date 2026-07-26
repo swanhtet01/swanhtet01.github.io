@@ -445,6 +445,16 @@ def _authoritative_command_payload(
     authoritative = deepcopy(dict(payload))
     if surface != "commerce":
         return authoritative
+    if event_type == "commerce.workspace.initialized":
+        evidence = authoritative.get("evidence")
+        if not isinstance(evidence, Mapping):
+            return authoritative
+        authoritative["evidence"] = {
+            **dict(evidence),
+            "actor": principal.actor_id,
+            "capturedAt": captured_at,
+        }
+        return authoritative
     if event_type == "commerce.item.updated":
         evidence = authoritative.get("evidence")
         state = authoritative.get("state")
