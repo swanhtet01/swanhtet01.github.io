@@ -11,11 +11,15 @@ import {
   type ClientSolutionId,
 } from './client-onboarding'
 import {
+  ManagedTrialError,
   applyManagedClientImport,
   assertManagedClientImportState,
   loadManagedBootstrap,
+  managedClientImportActivationContext,
+  sameManagedClientImportState,
   sameManagedIdentity,
   validateManagedClientImport,
+  type ManagedClientImportActivationContext,
   type ManagedClientImportActivationResult,
   type ManagedClientImportPackage,
   type ManagedClientImportValidation,
@@ -31,6 +35,7 @@ type ClientDataOnboardingProps = {
 }
 
 type ValidatedImport = {
+  activationContext: ManagedClientImportActivationContext
   commandId: string
   contextKey: string
   receipt: ManagedClientImportValidation
@@ -187,6 +192,8 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
         createdLabel: 'Shop catalog items',
         completedLabel: 'Shop items',
         productLabel: 'Shop',
+        resultVerb: 'created',
+        pendingNoun: 'creation',
         progressLabel: 'Creating one revisioned Shop catalog and confirming the durable result…',
         busyLabel: 'Creating catalog…',
         actionLabel: 'Create Shop catalog',
@@ -199,6 +206,8 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
           createdLabel: 'Plant opening jobs',
           completedLabel: 'Plant jobs',
           productLabel: 'Plant',
+          resultVerb: 'created',
+          pendingNoun: 'creation',
           progressLabel: 'Creating one Plant opening plan and confirming the durable resultâ€¦',
           busyLabel: 'Creating planâ€¦',
           actionLabel: 'Create Plant opening plan',
@@ -211,12 +220,28 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
           createdLabel: 'Website page drafts',
           completedLabel: 'Website drafts',
           productLabel: 'Website',
+          resultVerb: 'created',
+          pendingNoun: 'creation',
           progressLabel: 'Creating one revisioned Website draft workspace and confirming the durable result…',
           busyLabel: 'Creating drafts…',
           actionLabel: 'Create Website drafts',
           failure: 'The managed Website drafts were not created. The checked import is still available.',
         }
-      : null
+      : product === 'ecommerce'
+        ? {
+            surface: 'commerce' as const,
+            reviewLabel: 'Ecommerce display rows',
+            createdLabel: 'Ecommerce display rows',
+            completedLabel: 'Ecommerce display rows',
+            productLabel: 'Ecommerce',
+            resultVerb: 'applied',
+            pendingNoun: 'update',
+            progressLabel: 'Applying reviewed display details to the saved storefront and confirming the durable result…',
+            busyLabel: 'Applying details…',
+            actionLabel: 'Apply Ecommerce display details',
+            failure: 'The Ecommerce display details were not applied. The checked import is still available.',
+          }
+        : null
   const canPrepareImport = Boolean(state.preview?.readyForStaging && importContextReady && !state.busy && !state.validating && !state.applying)
   const canApplyManagedImport = Boolean(
     managedActivation
@@ -373,6 +398,11 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
       setState((current) => ({ ...current, validating: true, validation: null, error: '' }))
       const receipt = await validateManagedClientImport(stagingPackage, expectedIdentity)
       if (validationRequestRef.current !== validationRequestId || validationContextChanged()) return
+      const activationBootstrap = stagingPackage.product === 'ecommerce'
+        ? await loadManagedBootstrap(expectedIdentity)
+        : undefined
+      if (validationRequestRef.current !== validationRequestId || validationContextChanged()) return
+      const activationContext = managedClientImportActivationContext(stagingPackage, activationBootstrap)
       const commandId = receipt.activation.atomic_adapter_ready ? importCommandId() : ''
       setState((current) => current.preview?.previewDigest === expectedPreviewDigest
         ? {
@@ -382,6 +412,7 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
             applyConfirmed: false,
             applied: null,
             validation: {
+              activationContext,
               commandId,
               contextKey: expectedContextKey,
               receipt,
@@ -426,8 +457,9 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
     try {
       const receipt = await applyManagedClientImport({
         commandId: validated.commandId,
-        expectedVersion: 0,
+        expectedVersion: validated.activationContext.expectedVersion,
         identity: expectedIdentity,
+        priorState: validated.activationContext.priorState,
         stagingPackage: validated.stagingPackage,
         validation: validated.receipt,
       })
@@ -437,13 +469,18 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
       const confirmed = bootstrap.states[managedActivation.surface]
       if (!confirmed
         || confirmed.version !== receipt.result.version
-        || confirmed.updated_by !== expectedIdentity.userId) {
+        || confirmed.updated_by !== expectedIdentity.userId
+        || !sameManagedClientImportState(confirmed.state, receipt.result.state)) {
         throw new Error(`${managedActivation.productLabel} accepted the import, but its durable revision could not be confirmed. Retry uses the same command and cannot duplicate it.`)
       }
-      assertManagedClientImportState(
+      await assertManagedClientImportState(
         confirmed.state,
         validated.stagingPackage,
         validated.receipt.package_digest,
+        {
+          expectedIdentity,
+          priorState: validated.activationContext.priorState,
+        },
       )
       setState((current) => current.preview?.previewDigest === expectedPreviewDigest
         && current.validation?.commandId === validated.commandId
@@ -457,11 +494,18 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
         : current)
     } catch (error) {
       if (contextChanged()) return
+      const ecommerceNeedsRefresh = validated.stagingPackage.product === 'ecommerce'
+        && error instanceof ManagedTrialError
+        && (error.code === 'trial_version_conflict' || error.code === 'trial_invalid_transition')
       setState((current) => ({
         ...current,
         applying: false,
+        applyConfirmed: ecommerceNeedsRefresh ? false : current.applyConfirmed,
         applied: null,
-        error: error instanceof Error ? error.message : managedActivation.failure,
+        validation: ecommerceNeedsRefresh ? null : current.validation,
+        error: ecommerceNeedsRefresh
+          ? 'Shop or Ecommerce changed after this validation, or these display details are already current. Review the preview and validate again.'
+          : error instanceof Error ? error.message : managedActivation.failure,
       }))
     }
   }
@@ -482,7 +526,7 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
           </div>
         </div>
         <p className="catalog-import-boundary">{appliedIsCurrent && state.applied
-          ? `The exact checked package created ${state.applied.receipt.activation.row_count} ${managedActivation?.createdLabel ?? 'product records'} in ${managedIdentity?.workspaceId}. The source CSV was not uploaded or sent to AI. `
+          ? `The exact checked package ${managedActivation?.resultVerb ?? 'created'} ${state.applied.receipt.activation.row_count} ${managedActivation?.createdLabel ?? 'product records'} in ${managedIdentity?.workspaceId}. The source CSV was not uploaded or sent to AI. `
           : managedIdentity
           ? `The source CSV stays in this tab. Only the checked import package is sent to ${managedIdentity.workspaceId} for validation; nothing is sent to AI or added to a product before your final confirmation. `
           : `The CSV stays in this browser. Nothing is sent to AI or added to ${productNames[product]} while you preview it. `}{appliedIsCurrent ? '' : object.activationBoundary}</p>
@@ -521,10 +565,10 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
             <div className="form-actions"><button className="core-button primary" disabled={!canApplyManagedImport} onClick={() => void activateManagedImport()} type="button">{state.applying ? managedActivation.busyLabel : managedActivation.actionLabel}</button></div>
           </> : null}
           <div className="catalog-import-footer">
-            <div><strong>{appliedIsCurrent && state.applied ? `${state.applied.receipt.activation.row_count} ${managedActivation?.completedLabel ?? 'records'} created in revision ${state.applied.receipt.result.version}.` : validationIsCurrent ? `Validated by ${managedIdentity?.workspaceId}.` : state.preview.readyForStaging && !importContextReady ? 'Add workspace and owner above.' : state.preview.readyForStaging ? 'Data check passed.' : 'Fix the highlighted rows first.'}</strong><small>{appliedIsCurrent && state.applied
+            <div><strong>{appliedIsCurrent && state.applied ? `${state.applied.receipt.activation.row_count} ${managedActivation?.completedLabel ?? 'records'} ${managedActivation?.resultVerb ?? 'created'} in revision ${state.applied.receipt.result.version}.` : validationIsCurrent ? `Validated by ${managedIdentity?.workspaceId}.` : state.preview.readyForStaging && !importContextReady ? 'Add workspace and owner above.' : state.preview.readyForStaging ? 'Data check passed.' : 'Fix the highlighted rows first.'}</strong><small>{appliedIsCurrent && state.applied
               ? `Receipt ${state.applied.receipt.activation.package_digest.slice(7, 19).toUpperCase()} · durable ${managedActivation?.productLabel ?? 'product'} state confirmed with one idempotent command.`
               : validationIsCurrent && state.validation
-              ? `Receipt ${state.validation.receipt.package_digest.slice(7, 19).toUpperCase()} · zero product records were written; ${managedActivation?.productLabel ?? 'product'} creation waits for the separate review above.`
+              ? `Receipt ${state.validation.receipt.package_digest.slice(7, 19).toUpperCase()} · zero product records were written; ${managedActivation?.productLabel ?? 'product'} ${managedActivation?.pendingNoun ?? 'creation'} waits for the separate review above.`
               : state.preview.readyForStaging && !importContextReady
                 ? 'These details bind the checked rows to one accountable client workspace before download.'
               : managedIdentity

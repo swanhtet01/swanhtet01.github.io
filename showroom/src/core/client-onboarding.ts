@@ -149,7 +149,7 @@ const objects: Record<ClientSolutionId, ClientImportObject> = {
     label: 'Ecommerce merchandising',
     description: 'Shop SKU references, collections, and storefront display copy without duplicating stock or price.',
     keyField: 'sku',
-    maximumRows: CLIENT_IMPORT_MAX_ROWS,
+    maximumRows: 8,
     activationBoundary: 'Every SKU must match the current Shop catalog before a storefront draft can be approved.',
     workflowTemplates: {
       'social-storefront': 'sku,featured,collection,display_name,merchandising_note\r\nCOFFEE-250,true,Best sellers,Myanmar coffee 250g,Lead with the locally sourced proof.\r\nTEA-20,false,Tea,Green tea 20 pack,Keep the Messenger order path visible.\r\n',

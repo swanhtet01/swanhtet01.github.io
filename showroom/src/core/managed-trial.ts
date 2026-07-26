@@ -1,5 +1,11 @@
 import type { Session, SupabaseClient } from '@supabase/supabase-js'
 import type { buildClientImportStagingPackage } from './client-onboarding'
+import {
+  commerceCatalogDigest,
+  commerceStorefrontConfigurationActionId,
+  validateCommerceState,
+  type CommerceState,
+} from './commerce-workspace.ts'
 
 
 const WORKSPACE_STORAGE_KEY = 'supermega.managed.workspace.v1'
@@ -50,6 +56,7 @@ export type ManagedCommerceEvent =
   | 'commerce.website_intake.created'
   | 'commerce.website_intake.converted'
   | 'commerce.storefront.configuration.saved'
+  | 'commerce.storefront.merchandising.imported'
   | 'commerce.storefront_request.received'
   | 'commerce.order.created'
   | 'commerce.order.advanced'
@@ -161,8 +168,8 @@ export type ManagedClientImportValidation = {
 export type ManagedClientImportActivation = {
   contract: 'supermega.client_import_activation.v1'
   status: 'applied'
-  product: 'commerce' | 'production' | 'website'
-  object: 'shop_catalog' | 'plant_jobs' | 'website_pages'
+  product: 'commerce' | 'production' | 'website' | 'ecommerce'
+  object: 'shop_catalog' | 'plant_jobs' | 'website_pages' | 'storefront_merchandising'
   workflow_template_id: string
   package_digest: string
   row_count: number
@@ -173,6 +180,11 @@ export type ManagedClientImportActivation = {
 export type ManagedClientImportActivationResult = {
   activation: ManagedClientImportActivation
   result: ManagedCommandResult
+}
+
+export type ManagedClientImportActivationContext = {
+  expectedVersion: number
+  priorState?: CommerceState
 }
 
 type ManagedApprovalRequest = {
@@ -246,7 +258,68 @@ function clientImportAtomicAdapter(product: ManagedClientImportPackage['product'
   if (product === 'website') {
     return { eventType: 'website.workspace.initialized', surface: 'website' } as const
   }
+  if (product === 'ecommerce') {
+    return { eventType: 'commerce.storefront.merchandising.imported', surface: 'commerce' } as const
+  }
   return null
+}
+
+function compareManagedImportText(left: string, right: string) {
+  const leftCodePoints = Array.from(left, (character) => character.codePointAt(0) as number)
+  const rightCodePoints = Array.from(right, (character) => character.codePointAt(0) as number)
+  const sharedLength = Math.min(leftCodePoints.length, rightCodePoints.length)
+  for (let index = 0; index < sharedLength; index += 1) {
+    if (leftCodePoints[index] !== rightCodePoints[index]) return leftCodePoints[index] - rightCodePoints[index]
+  }
+  return leftCodePoints.length - rightCodePoints.length
+}
+
+function expectedEcommerceMerchandising(stagingPackage: ManagedClientImportPackage) {
+  return stagingPackage.rows
+    .map((row) => ({
+      sku: row.values.sku,
+      featured: row.values.featured === 'true',
+      collection: row.values.collection,
+      displayName: row.values.displayName,
+      note: row.values.note,
+    }))
+    .sort((left, right) => compareManagedImportText(left.sku, right.sku))
+}
+
+export function managedClientImportActivationContext(
+  stagingPackage: ManagedClientImportPackage,
+  bootstrap?: ManagedBootstrap,
+): ManagedClientImportActivationContext {
+  if (stagingPackage.product !== 'ecommerce') return { expectedVersion: 0 }
+  const record = bootstrap?.states.commerce
+  if (!record
+    || record.surface !== 'commerce'
+    || !Number.isSafeInteger(record.version)
+    || record.version < 1) {
+    throw new ManagedTrialError('Create the managed Shop catalog before applying Ecommerce display details.', {
+      code: 'managed_client_import_activation_invalid',
+    })
+  }
+  let priorState: CommerceState
+  try {
+    priorState = validateCommerceState(record.state)
+  } catch {
+    throw new ManagedTrialError('The managed Shop catalog is not valid for an Ecommerce import.', {
+      code: 'managed_client_import_activation_invalid',
+    })
+  }
+  if (!priorState.storefrontConfiguration) {
+    throw new ManagedTrialError('Save the Ecommerce storefront name and summary before applying display details.', {
+      code: 'managed_client_import_activation_invalid',
+    })
+  }
+  const currentSkus = new Set(priorState.items.map((item) => item.sku))
+  if (stagingPackage.rows.some((row) => !currentSkus.has(row.values.sku))) {
+    throw new ManagedTrialError('Every Ecommerce import SKU must exist in the current managed Shop catalog.', {
+      code: 'managed_client_import_activation_invalid',
+    })
+  }
+  return { expectedVersion: record.version, priorState }
 }
 
 async function sha256Text(value: string) {
@@ -329,6 +402,20 @@ export function assertManagedClientImportValidation(
 function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]) {
   const actual = Object.keys(value).sort()
   return actual.length === expected.length && expected.every((key, index) => actual[index] === key)
+}
+
+function canonicalManagedStateValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalManagedStateValue)
+  if (!isRecord(value)) return value
+  return Object.fromEntries(
+    Object.keys(value)
+      .sort()
+      .map((key) => [key, canonicalManagedStateValue(value[key])]),
+  )
+}
+
+export function sameManagedClientImportState(left: unknown, right: unknown) {
+  return JSON.stringify(canonicalManagedStateValue(left)) === JSON.stringify(canonicalManagedStateValue(right))
 }
 
 export function assertManagedShopImportState(
@@ -556,33 +643,124 @@ export function assertManagedWebsiteImportState(
   return state
 }
 
-export function assertManagedClientImportState(
+export async function assertManagedEcommerceImportState(
+  state: unknown,
+  priorState: unknown,
+  stagingPackage: ManagedClientImportPackage,
+  expectedIdentity: ManagedIdentity,
+) {
+  if (stagingPackage.product !== 'ecommerce') {
+    throw new ManagedTrialError('The Ecommerce import state has the wrong product boundary.', {
+      code: 'managed_client_import_activation_invalid',
+    })
+  }
+  let accepted: CommerceState
+  let previous: CommerceState
+  try {
+    accepted = validateCommerceState(state)
+    previous = validateCommerceState(priorState)
+  } catch {
+    throw new ManagedTrialError('The managed workspace returned an invalid Ecommerce import state.', {
+      code: 'managed_client_import_activation_invalid',
+    })
+  }
+  const previousConfiguration = previous.storefrontConfiguration
+  const acceptedConfiguration = accepted.storefrontConfiguration
+  if (!previousConfiguration || !acceptedConfiguration) {
+    throw new ManagedTrialError('The managed Ecommerce import is missing its saved storefront identity.', {
+      code: 'managed_client_import_activation_invalid',
+    })
+  }
+  const unchangedKeys = [
+    'schema',
+    'items',
+    'orders',
+    'movements',
+    'closes',
+    'catalogBaselines',
+    'catalogChanges',
+    'websiteIntakes',
+    'storefrontRequests',
+    'purchaseOrders',
+  ] as const
+  const acceptedRecord = accepted as unknown as Record<string, unknown>
+  const previousRecord = previous as unknown as Record<string, unknown>
+  if (unchangedKeys.some((key) => JSON.stringify(acceptedRecord[key]) !== JSON.stringify(previousRecord[key]))) {
+    throw new ManagedTrialError('The managed Ecommerce receipt changed Shop records and was rejected.', {
+      code: 'managed_client_import_activation_invalid',
+    })
+  }
+  let catalogDigest: string
+  try {
+    catalogDigest = await commerceCatalogDigest(previous)
+  } catch {
+    throw new ManagedTrialError('The managed Shop catalog fingerprint could not be verified.', {
+      code: 'managed_client_import_digest_unavailable',
+    })
+  }
+  const expectedMerchandising = expectedEcommerceMerchandising(stagingPackage)
+  const expectedSelectedSkus = expectedMerchandising.map((row) => row.sku)
+  const expectedRevision = previousConfiguration.revision + 1
+  const expectedCatalogRevision = previousConfiguration.shopCatalogDigest === catalogDigest
+    ? previousConfiguration.shopCatalogSnapshotRevision
+    : previousConfiguration.shopCatalogSnapshotRevision + 1
+  const saved = acceptedConfiguration.saved
+  if (acceptedConfiguration.revision !== expectedRevision
+    || acceptedConfiguration.shopCatalogSnapshotRevision !== expectedCatalogRevision
+    || acceptedConfiguration.shopCatalogDigest !== catalogDigest
+    || acceptedConfiguration.storeName !== previousConfiguration.storeName
+    || acceptedConfiguration.summary !== previousConfiguration.summary
+    || JSON.stringify(acceptedConfiguration.selectedSkus) !== JSON.stringify(expectedSelectedSkus)
+    || JSON.stringify(acceptedConfiguration.merchandising) !== JSON.stringify(expectedMerchandising)
+    || saved.actionId !== commerceStorefrontConfigurationActionId(expectedRevision, catalogDigest)
+    || saved.actor !== expectedIdentity.userId
+    || saved.reason !== 'Apply the reviewed Ecommerce merchandising import.'
+    || saved.evidenceReference !== `ECOMMERCE-STOREFRONT:${catalogDigest}:R${expectedRevision}`) {
+    throw new ManagedTrialError('The managed Ecommerce import does not match the reviewed display details.', {
+      code: 'managed_client_import_activation_invalid',
+    })
+  }
+  return state
+}
+
+export async function assertManagedClientImportState(
   state: unknown,
   stagingPackage: ManagedClientImportPackage,
   expectedPackageDigest: string,
+  context?: {
+    expectedIdentity?: ManagedIdentity
+    priorState?: unknown
+  },
 ) {
   if (stagingPackage.product === 'commerce') return assertManagedShopImportState(state, stagingPackage)
   if (stagingPackage.product === 'production') return assertManagedPlantImportState(state, stagingPackage, expectedPackageDigest)
   if (stagingPackage.product === 'website') return assertManagedWebsiteImportState(state, stagingPackage)
+  if (stagingPackage.product === 'ecommerce' && context?.expectedIdentity && context.priorState) {
+    return assertManagedEcommerceImportState(state, context.priorState, stagingPackage, context.expectedIdentity)
+  }
   throw new ManagedTrialError('This managed import does not have an atomic product adapter.', {
     code: 'managed_client_import_activation_invalid',
   })
 }
 
-export function assertManagedClientImportActivation(
+export async function assertManagedClientImportActivation(
   response: unknown,
   stagingPackage: ManagedClientImportPackage,
   validation: ManagedClientImportValidation,
   expectedIdentity: ManagedIdentity,
   commandId: string,
   expectedVersion: number,
-): ManagedClientImportActivationResult {
+  priorState?: unknown,
+): Promise<ManagedClientImportActivationResult> {
   const adapter = clientImportAtomicAdapter(stagingPackage.product)
+  const activationVersionIsValid = stagingPackage.product === 'ecommerce'
+    ? Number.isSafeInteger(expectedVersion) && expectedVersion >= 1 && Boolean(priorState)
+    : expectedVersion === 0 && priorState === undefined
   if (!adapter
     || validation.product !== stagingPackage.product
     || validation.activation.atomic_adapter_ready !== true
     || validation.package_digest.length !== 71
-    || expectedVersion !== 0
+    || !activationVersionIsValid
     || !CLIENT_IMPORT_COMMAND_ID.test(commandId)
     || !isRecord(response)
     || !isRecord(response.activation)
@@ -623,7 +801,10 @@ export function assertManagedClientImportActivation(
       code: 'managed_client_import_activation_invalid',
     })
   }
-  assertManagedClientImportState(result.state, stagingPackage, validation.package_digest)
+  await assertManagedClientImportState(result.state, stagingPackage, validation.package_digest, {
+    expectedIdentity,
+    priorState,
+  })
   return response as unknown as ManagedClientImportActivationResult
 }
 
@@ -882,16 +1063,31 @@ export async function validateManagedClientImport(
 
 export async function applyManagedClientImport(request: {
   commandId: string
-  expectedVersion: 0
+  expectedVersion: number
   identity: ManagedIdentity
+  priorState?: CommerceState
   stagingPackage: ManagedClientImportPackage
   validation: ManagedClientImportValidation
 }) {
   const body = serializeManagedClientImportPackage(request.stagingPackage)
   const submittedPackage = JSON.parse(body) as ManagedClientImportPackage
+  let priorStateSnapshot: unknown
+  if (submittedPackage.product === 'ecommerce') {
+    try {
+      priorStateSnapshot = structuredClone(request.priorState)
+    } catch {
+      throw new ManagedTrialError('The managed Shop state could not be retained for Ecommerce activation.', {
+        code: 'managed_client_import_activation_invalid',
+      })
+    }
+  }
   const currentDigest = await sha256Text(body)
-  if (!clientImportAtomicAdapter(request.stagingPackage.product)
-    || request.validation.product !== request.stagingPackage.product
+  const activationVersionIsValid = submittedPackage.product === 'ecommerce'
+    ? Number.isSafeInteger(request.expectedVersion) && request.expectedVersion >= 1 && Boolean(request.priorState)
+    : request.expectedVersion === 0 && request.priorState === undefined
+  if (!clientImportAtomicAdapter(submittedPackage.product)
+    || !activationVersionIsValid
+    || request.validation.product !== submittedPackage.product
     || request.validation.activation.atomic_adapter_ready !== true
     || request.validation.workspace_id !== request.identity.workspaceId
     || request.validation.package_digest !== currentDigest
@@ -899,6 +1095,23 @@ export async function applyManagedClientImport(request: {
     throw new ManagedTrialError('The validated import changed before activation.', {
       code: 'managed_client_import_package_changed',
     })
+  }
+  let submittedPriorState: CommerceState | undefined
+  if (submittedPackage.product === 'ecommerce') {
+    try {
+      submittedPriorState = validateCommerceState(priorStateSnapshot)
+    } catch {
+      throw new ManagedTrialError('The managed Shop state changed before Ecommerce activation.', {
+        code: 'managed_client_import_activation_invalid',
+      })
+    }
+    const currentSkus = new Set(submittedPriorState.items.map((item) => item.sku))
+    if (!submittedPriorState.storefrontConfiguration
+      || submittedPackage.rows.some((row) => !currentSkus.has(row.values.sku))) {
+      throw new ManagedTrialError('The managed Ecommerce prerequisites changed before activation.', {
+        code: 'managed_client_import_activation_invalid',
+      })
+    }
   }
   const response = await authorizedRequest<unknown>(
     '/api/trial/v1/imports/apply',
@@ -914,13 +1127,14 @@ export async function applyManagedClientImport(request: {
     true,
     request.identity,
   )
-  return assertManagedClientImportActivation(
+  return await assertManagedClientImportActivation(
     response,
     submittedPackage,
     request.validation,
     request.identity,
     request.commandId,
     request.expectedVersion,
+    submittedPriorState,
   )
 }
 

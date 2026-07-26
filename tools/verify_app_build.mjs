@@ -1207,7 +1207,10 @@ if (!managedTrialSource.includes('export async function validateManagedClientImp
   || !managedTrialSource.includes('assertManagedClientImportActivation(')
   || !managedTrialSource.includes('export function assertManagedPlantImportState')
   || !managedTrialSource.includes('export function assertManagedWebsiteImportState')
-  || !managedTrialSource.includes('assertManagedClientImportState(result.state, stagingPackage, validation.package_digest)')
+  || !managedTrialSource.includes('export async function assertManagedEcommerceImportState')
+  || !managedTrialSource.includes("eventType: 'commerce.storefront.merchandising.imported'")
+  || !managedTrialSource.includes('export function managedClientImportActivationContext')
+  || !managedTrialSource.includes('await assertManagedClientImportState(result.state, stagingPackage, validation.package_digest, {')
   || !managedTrialSource.includes('expectedIdentity,')
   || !coreSource.includes('<ClientDataOnboarding managedIdentity={managedIdentity}')
   || !clientOnboardingUiSource.includes('Only the checked import package is sent to')
@@ -1217,10 +1220,15 @@ if (!managedTrialSource.includes('export async function validateManagedClientImp
   || !clientOnboardingUiSource.includes('Create Shop catalog')
   || !clientOnboardingUiSource.includes('Create Plant opening plan')
   || !clientOnboardingUiSource.includes('Create Website drafts')
+  || !clientOnboardingUiSource.includes('Apply Ecommerce display details')
   || !clientOnboardingUiSource.includes('applyManagedClientImport({')
+  || !clientOnboardingUiSource.includes('activationContext,')
+  || !clientOnboardingUiSource.includes('priorState: validated.activationContext.priorState')
+  || !clientOnboardingUiSource.includes("error.code === 'trial_version_conflict'")
+  || !clientOnboardingUiSource.includes('validation: ecommerceNeedsRefresh ? null : current.validation')
   || !clientOnboardingUiSource.includes('const bootstrap = await loadManagedBootstrap(expectedIdentity)')
   || !clientOnboardingUiSource.includes('validated.receipt.package_digest,')
-  || !clientOnboardingUiSource.includes('creation waits for the separate review above.')
+  || !clientOnboardingUiSource.includes("pendingNoun ?? 'creation'")
   || !managedClientImportUiContract.includes('validateManagedClientImport(stagingPackage, expectedIdentity)')
   || !managedClientImportUiContract.includes('validationRequestRef.current !== validationRequestId')
   || !managedClientImportUiContract.includes('sameManagedIdentity(managedIdentityRef.current, expectedIdentity)')
@@ -1977,6 +1985,7 @@ async function verifyClientOnboardingRuntime() {
       && websiteObject.fields.find((field) => field.id === 'headline')?.maximum === 140
       && websiteObject.fields.find((field) => field.id === 'body')?.maximum === 360
       && websiteObject.fields.find((field) => field.id === 'contactUrl')?.maximum === 160, 'client_import_website_adapter_limits_drifted')
+    assert(model.clientImportObject('ecommerce').maximumRows === 8, 'client_import_ecommerce_adapter_limit_drifted')
     const websiteRows = Array.from({ length: 5 }, (_, index) => `${index === 0 ? 'home' : `page-${index + 1}`},Page ${index + 1},Headline ${index + 1},Body ${index + 1},https://example.com/contact`).join('\n')
     const tooManyWebsitePages = await model.createClientImportPreview(`page_slug,page_title,headline,body,contact_url\n${websiteRows}\n`, 'website')
     assert(!tooManyWebsitePages.readyForStaging && tooManyWebsitePages.fileIssues.some((issue) => issue.code === 'object_row_limit'), 'client_import_website_page_limit_not_enforced')
@@ -2009,10 +2018,15 @@ async function verifyManagedClientImportRuntime() {
     try { action() } catch { managedClientImportRuntimeChecks += 1; return }
     throw new Error(reason)
   }
+  const rejectsAsync = async (action, reason) => {
+    try { await action() } catch { managedClientImportRuntimeChecks += 1; return }
+    throw new Error(reason)
+  }
   try {
     const nonce = Date.now()
     const onboarding = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'client-onboarding.ts')).href}?managed-client-import-onboarding=${nonce}`)
     const managedTrial = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'managed-trial.ts')).href}?managed-client-import-trial=${nonce}`)
+    const commerceWorkspace = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?managed-client-import-commerce=${nonce}`)
     const identity = { userId: 'OP-IMPORT', email: 'operator@example.test', workspaceId: 'workspace-import' }
     const preview = await onboarding.createClientImportPreview(
       onboarding.clientImportTemplate('commerce', 'social-commerce'),
@@ -2114,7 +2128,7 @@ async function verifyManagedClientImportRuntime() {
         idempotent_replay: false,
       },
     }
-    const activated = managedTrial.assertManagedClientImportActivation(
+    const activated = await managedTrial.assertManagedClientImportActivation(
       activationResponse,
       staged,
       receipt,
@@ -2133,7 +2147,7 @@ async function verifyManagedClientImportRuntime() {
       ['item', { ...activationResponse, result: { ...activationResponse.result, state: { ...importedState, items: [{ ...importedState.items[0], price: importedState.items[0].price + 1 }, ...importedState.items.slice(1)] } } }],
       ['extra', { ...activationResponse, activation: { ...activationResponse.activation, untrusted: true } }],
     ]) {
-      rejects(
+      await rejectsAsync(
         () => managedTrial.assertManagedClientImportActivation(response, staged, receipt, identity, commandId, 0),
         `managed_client_import_activation_${label}_tamper_accepted`,
       )
@@ -2227,7 +2241,7 @@ async function verifyManagedClientImportRuntime() {
         idempotent_replay: false,
       },
     }
-    const activatedPlant = managedTrial.assertManagedClientImportActivation(
+    const activatedPlant = await managedTrial.assertManagedClientImportActivation(
       plantActivationResponse,
       plantStaged,
       plantReceipt,
@@ -2246,7 +2260,7 @@ async function verifyManagedClientImportRuntime() {
       ['timestamp', { ...plantActivationResponse, result: { ...plantActivationResponse.result, state: { ...plantState, openingPlan: { ...plantState.openingPlan, confirmedAt: 'server-assigned' } } } }],
       ['job_ids', { ...plantActivationResponse, result: { ...plantActivationResponse.result, state: { ...plantState, openingPlan: { ...plantState.openingPlan, jobIds: [...plantState.openingPlan.jobIds].reverse() } } } }],
     ]) {
-      rejects(
+      await rejectsAsync(
         () => managedTrial.assertManagedClientImportActivation(response, plantStaged, plantReceipt, identity, plantCommandId, 0),
         `managed_client_import_plant_${label}_tamper_accepted`,
       )
@@ -2344,7 +2358,7 @@ async function verifyManagedClientImportRuntime() {
         idempotent_replay: false,
       },
     }
-    const activatedWebsite = managedTrial.assertManagedClientImportActivation(
+    const activatedWebsite = await managedTrial.assertManagedClientImportActivation(
       websiteActivationResponse,
       websiteStaged,
       websiteReceipt,
@@ -2362,11 +2376,207 @@ async function verifyManagedClientImportRuntime() {
       ['copy', { ...websiteActivationResponse, result: { ...websiteActivationResponse.result, state: { ...websiteState, pages: [{ ...websiteState.pages[0], sections: [{ ...websiteState.pages[0].sections[0], body: 'Changed' }] }, ...websiteState.pages.slice(1)] } } }],
       ['extra', { ...websiteActivationResponse, result: { ...websiteActivationResponse.result, state: { ...websiteState, untrusted: true } } }],
     ]) {
-      rejects(
+      await rejectsAsync(
         () => managedTrial.assertManagedClientImportActivation(response, websiteStaged, websiteReceipt, identity, websiteCommandId, 0),
         `managed_client_import_website_${label}_tamper_accepted`,
       )
     }
+
+    const ecommercePreview = await onboarding.createClientImportPreview(
+      onboarding.clientImportTemplate('ecommerce', 'social-storefront'),
+      'ecommerce',
+      undefined,
+      'ecommerce.csv',
+      'social-storefront',
+    )
+    const ecommerceStaged = onboarding.buildClientImportStagingPackage(ecommercePreview, {
+      workflowTemplateId: 'social-storefront',
+      workspace: 'Example Storefront',
+      owner: 'Ecommerce owner',
+    })
+    const ecommercePackageDigest = await managedTrial.managedClientImportPackageDigest(ecommerceStaged)
+    const ecommerceReceipt = {
+      contract: 'supermega.client_import_validation.v1',
+      status: 'valid',
+      product: 'ecommerce',
+      object: 'storefront_merchandising',
+      workflow_template_id: ecommerceStaged.workflowTemplateId,
+      preview_digest: ecommerceStaged.source.previewDigest,
+      package_digest: ecommercePackageDigest,
+      row_count: ecommerceStaged.rows.length,
+      checks: receipt.checks,
+      workspace_id: identity.workspaceId,
+      activation: {
+        status: 'not_applied',
+        target_surface: 'commerce',
+        required_capability: 'commerce.write',
+        human_approval_required: true,
+        atomic_adapter_ready: true,
+        external_writes_performed: false,
+      },
+    }
+    assert(managedTrial.assertManagedClientImportValidation(
+      { validation: ecommerceReceipt },
+      ecommerceStaged,
+      identity,
+      ecommercePackageDigest,
+    ) === ecommerceReceipt, 'managed_client_import_ecommerce_receipt_rejected')
+    const priorCommerceBase = {
+      ...importedState,
+      catalogBaselines: [],
+      catalogChanges: [],
+      websiteIntakes: [],
+      storefrontRequests: [],
+      purchaseOrders: [],
+    }
+    const ecommerceCatalogDigest = await commerceWorkspace.commerceCatalogDigest(priorCommerceBase)
+    const priorCommerceState = commerceWorkspace.validateCommerceState({
+      ...priorCommerceBase,
+      storefrontConfiguration: {
+        schema: 'supermega.ecommerce.storefront.v1',
+        revision: 1,
+        shopCatalogSnapshotRevision: 1,
+        shopCatalogDigest: ecommerceCatalogDigest,
+        storeName: 'Example Storefront',
+        summary: 'Reviewed products for direct customer requests.',
+        selectedSkus: ecommerceStaged.rows.map((row) => row.values.sku).sort(),
+        saved: {
+          actionId: commerceWorkspace.commerceStorefrontConfigurationActionId(1, ecommerceCatalogDigest),
+          capturedAt: '2026-07-26T04:00:00.000Z',
+          actor: identity.userId,
+          reason: 'Save the accountable Ecommerce storefront.',
+          evidenceReference: `ECOMMERCE-STOREFRONT:${ecommerceCatalogDigest}:R1`,
+        },
+      },
+    })
+    const commerceRecord = {
+      surface: 'commerce',
+      version: 4,
+      state: priorCommerceState,
+      updated_by: identity.userId,
+      updated_at: '2026-07-26T04:00:00.000Z',
+    }
+    const ecommerceContext = managedTrial.managedClientImportActivationContext(
+      ecommerceStaged,
+      { states: { commerce: commerceRecord } },
+    )
+    assert(ecommerceContext.expectedVersion === 4 && ecommerceContext.priorState === priorCommerceState, 'managed_client_import_ecommerce_context_invalid')
+    assert(managedTrial.sameManagedClientImportState(
+      { rows: [{ sku: 'A', detail: { active: true } }], revision: 1 },
+      { revision: 1, rows: [{ detail: { active: true }, sku: 'A' }] },
+    ) && !managedTrial.sameManagedClientImportState({ revision: 1 }, { revision: 2 }), 'managed_client_import_state_confirmation_not_canonical')
+    rejects(
+      () => managedTrial.managedClientImportActivationContext(ecommerceStaged, { states: {} }),
+      'managed_client_import_ecommerce_missing_shop_accepted',
+    )
+    rejects(
+      () => managedTrial.managedClientImportActivationContext(ecommerceStaged, { states: { commerce: { ...commerceRecord, state: priorCommerceBase } } }),
+      'managed_client_import_ecommerce_missing_storefront_accepted',
+    )
+    rejects(
+      () => managedTrial.managedClientImportActivationContext({
+        ...ecommerceStaged,
+        rows: [{ ...ecommerceStaged.rows[0], values: { ...ecommerceStaged.rows[0].values, sku: 'SKU-MISSING' } }, ...ecommerceStaged.rows.slice(1)],
+      }, { states: { commerce: commerceRecord } }),
+      'managed_client_import_ecommerce_unknown_shop_sku_accepted',
+    )
+    const ecommerceMerchandising = ecommerceStaged.rows
+      .map((row) => ({
+        sku: row.values.sku,
+        featured: row.values.featured === 'true',
+        collection: row.values.collection,
+        displayName: row.values.displayName,
+        note: row.values.note,
+      }))
+      .sort((left, right) => left.sku.localeCompare(right.sku, 'en'))
+    const ecommerceTimestamp = '2026-07-26T04:30:00.000Z'
+    const ecommerceState = commerceWorkspace.validateCommerceState({
+      ...priorCommerceState,
+      storefrontConfiguration: {
+        ...priorCommerceState.storefrontConfiguration,
+        revision: 2,
+        selectedSkus: ecommerceMerchandising.map((row) => row.sku),
+        merchandising: ecommerceMerchandising,
+        saved: {
+          actionId: commerceWorkspace.commerceStorefrontConfigurationActionId(2, ecommerceCatalogDigest),
+          capturedAt: ecommerceTimestamp,
+          actor: identity.userId,
+          reason: 'Apply the reviewed Ecommerce merchandising import.',
+          evidenceReference: `ECOMMERCE-STOREFRONT:${ecommerceCatalogDigest}:R2`,
+        },
+      },
+    })
+    const ecommerceCommandId = '00000000-0000-4000-8000-000000000204'
+    const ecommerceActivationResponse = {
+      activation: {
+        contract: 'supermega.client_import_activation.v1',
+        status: 'applied',
+        product: 'ecommerce',
+        object: 'storefront_merchandising',
+        workflow_template_id: ecommerceStaged.workflowTemplateId,
+        package_digest: ecommercePackageDigest,
+        row_count: ecommerceStaged.rows.length,
+        workspace_id: identity.workspaceId,
+        external_writes_performed: true,
+      },
+      result: {
+        command_id: ecommerceCommandId,
+        surface: 'commerce',
+        event_type: 'commerce.storefront.merchandising.imported',
+        version: 5,
+        state: ecommerceState,
+        idempotent_replay: false,
+      },
+    }
+    const activatedEcommerce = await managedTrial.assertManagedClientImportActivation(
+      ecommerceActivationResponse,
+      ecommerceStaged,
+      ecommerceReceipt,
+      identity,
+      ecommerceCommandId,
+      ecommerceContext.expectedVersion,
+      ecommerceContext.priorState,
+    )
+    assert(activatedEcommerce === ecommerceActivationResponse, 'managed_client_import_valid_ecommerce_activation_rejected')
+    assert(await managedTrial.assertManagedEcommerceImportState(
+      ecommerceState,
+      priorCommerceState,
+      ecommerceStaged,
+      identity,
+    ) === ecommerceState, 'managed_client_import_valid_ecommerce_state_rejected')
+    for (const [label, response] of [
+      ['version', { ...ecommerceActivationResponse, result: { ...ecommerceActivationResponse.result, version: 6 } }],
+      ['event', { ...ecommerceActivationResponse, result: { ...ecommerceActivationResponse.result, event_type: 'commerce.storefront.configuration.saved' } }],
+      ['item', { ...ecommerceActivationResponse, result: { ...ecommerceActivationResponse.result, state: { ...ecommerceState, items: [{ ...ecommerceState.items[0], price: ecommerceState.items[0].price + 1 }, ...ecommerceState.items.slice(1)] } } }],
+      ['history', { ...ecommerceActivationResponse, result: { ...ecommerceActivationResponse.result, state: { ...ecommerceState, orders: [{}] } } }],
+      ['actor', { ...ecommerceActivationResponse, result: { ...ecommerceActivationResponse.result, state: { ...ecommerceState, storefrontConfiguration: { ...ecommerceState.storefrontConfiguration, saved: { ...ecommerceState.storefrontConfiguration.saved, actor: 'OP-OTHER' } } } } }],
+      ['merchandising', { ...ecommerceActivationResponse, result: { ...ecommerceActivationResponse.result, state: { ...ecommerceState, storefrontConfiguration: { ...ecommerceState.storefrontConfiguration, merchandising: [{ ...ecommerceMerchandising[0], collection: 'Changed' }, ...ecommerceMerchandising.slice(1)] } } } }],
+      ['extra', { ...ecommerceActivationResponse, activation: { ...ecommerceActivationResponse.activation, untrusted: true } }],
+    ]) {
+      await rejectsAsync(
+        () => managedTrial.assertManagedClientImportActivation(
+          response,
+          ecommerceStaged,
+          ecommerceReceipt,
+          identity,
+          ecommerceCommandId,
+          ecommerceContext.expectedVersion,
+          ecommerceContext.priorState,
+        ),
+        `managed_client_import_ecommerce_${label}_tamper_accepted`,
+      )
+    }
+    await rejectsAsync(
+      () => managedTrial.assertManagedClientImportActivation(
+        ecommerceActivationResponse,
+        ecommerceStaged,
+        ecommerceReceipt,
+        identity,
+        ecommerceCommandId,
+        ecommerceContext.expectedVersion,
+      ),
+      'managed_client_import_ecommerce_prior_state_missing',
+    )
   } catch (error) {
     fail(`managed_client_import_runtime:${error instanceof Error ? error.message : 'unknown'}`)
   }
