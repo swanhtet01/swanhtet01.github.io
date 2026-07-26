@@ -1,11 +1,11 @@
 // Scheduled owner brief. When workcell slugs are configured, run those fixed products;
-// otherwise preserve the existing SuperMega CEO brief. Every delivery is owner-only and
-// protected by a durable daily claim because Vercel cron events can be delivered twice.
+// otherwise preserve the existing SuperMega CEO brief. Every run is admitted by a durable
+// hourly execution claim, and every owner-only delivery has a durable daily claim.
 
 import crypto from 'node:crypto'
 import { runOperator } from './operator.mjs'
 import { notify } from '../alert.mjs'
-import { claimWorkcellDelivery, formatWorkcellNotification, releaseWorkcellDelivery, runWorkcell } from '../workcell-run.mjs'
+import { claimWorkcellDelivery, claimWorkcellExecution, formatWorkcellNotification, releaseWorkcellDelivery, runWorkcell } from '../workcell-run.mjs'
 import { resolveWorkcellConfig, scheduledWorkcellSlugs } from '../workcells.mjs'
 
 const BRIEF_GOAL =
@@ -21,10 +21,21 @@ function claimAccepted(claim) {
   return Boolean(claim?.fresh && claim?.durable)
 }
 
+async function claimSafely(claim, slug, options, failureReason) {
+  try { return await claim(slug, options) }
+  catch { return { fresh: false, durable: false, reason: failureReason } }
+}
+
+async function releaseClaimSafely(releaseClaim, claim) {
+  try { return Boolean(await releaseClaim(claim)) }
+  catch { return false }
+}
+
 export async function runScheduledBrief(options = {}) {
   const env = options.env || process.env
   const now = options.now || new Date()
   const send = options.notify || notify
+  const claimExecution = options.claimWorkcellExecution || claimWorkcellExecution
   const claimDelivery = options.claimWorkcellDelivery || claimWorkcellDelivery
   const releaseDelivery = options.releaseWorkcellDelivery || releaseWorkcellDelivery
   const slugs = scheduledWorkcellSlugs(env)
@@ -33,28 +44,47 @@ export async function runScheduledBrief(options = {}) {
     const run = options.runWorkcell || runWorkcell
     const results = []
     for (const slug of slugs) {
-      const workcell = await run(slug, { env, now })
-      if (!workcell.ok) {
-        results.push({ slug, ok: false, reason: workcell.reason, missing: workcell.missing || undefined })
+      const executionClaim = await claimSafely(claimExecution, slug, { env, now }, 'durable_execution_claim_unavailable')
+      if (!executionClaim?.fresh && executionClaim?.durable) {
+        results.push({ slug, ok: true, duplicate: true, sent: false })
         continue
       }
-      const claim = await claimDelivery(slug, { env, now })
-      if (!claim?.fresh && claim?.durable) {
+      if (!claimAccepted(executionClaim)) {
+        results.push({ slug, ok: false, reason: executionClaim?.reason || 'durable_execution_claim_unavailable' })
+        continue
+      }
+      let workcell
+      try { workcell = await run(slug, { env, now }) }
+      catch { workcell = { ok: false, slug, reason: 'workcell_execution_failed' } }
+      if (!workcell.ok) {
+        const retryable = await releaseClaimSafely(releaseDelivery, executionClaim)
+        results.push({ slug, ok: false, reason: workcell.reason, missing: workcell.missing || undefined, retryable })
+        continue
+      }
+      const deliveryClaim = await claimSafely(claimDelivery, slug, { env, now }, 'durable_delivery_claim_unavailable')
+      if (!deliveryClaim?.fresh && deliveryClaim?.durable) {
         results.push({ slug, ok: true, duplicate: true, sent: false, sources: workcell.sources })
         continue
       }
-      if (!claimAccepted(claim)) {
-        results.push({ slug, ok: false, reason: claim?.reason || 'durable_delivery_claim_unavailable' })
+      if (!claimAccepted(deliveryClaim)) {
+        const retryable = await releaseClaimSafely(releaseDelivery, executionClaim)
+        results.push({ slug, ok: false, reason: deliveryClaim?.reason || 'durable_delivery_claim_unavailable', retryable })
         continue
       }
       let sent = false
       try { sent = await send(formatWorkcellNotification(workcell)) } catch { sent = false }
-      if (!sent) await releaseDelivery(claim)
+      let retryable
+      if (!sent) {
+        const deliveryReleased = await releaseClaimSafely(releaseDelivery, deliveryClaim)
+        const executionReleased = await releaseClaimSafely(releaseDelivery, executionClaim)
+        retryable = deliveryReleased && executionReleased
+      }
       results.push({
         slug,
         ok: Boolean(sent),
         sent: Boolean(sent),
         reason: sent ? undefined : 'owner_delivery_failed',
+        retryable,
         sources: workcell.sources,
       })
     }
@@ -67,19 +97,36 @@ export async function runScheduledBrief(options = {}) {
   }
 
   const run = options.runOperator || runOperator
-  const result = await run({ goal: BRIEF_GOAL })
-  if (!result.ok) return { ok: false, mode: 'legacy', reason: result.reason || 'brief_failed' }
-  const claim = await claimDelivery('legacy-ceo-brief', { env, now })
-  if (!claim?.fresh && claim?.durable) return { ok: true, mode: 'legacy', duplicate: true, sent: false }
-  if (!claimAccepted(claim)) return { ok: false, mode: 'legacy', reason: claim?.reason || 'durable_delivery_claim_unavailable' }
+  const executionClaim = await claimSafely(claimExecution, 'legacy-ceo-brief', { env, now }, 'durable_execution_claim_unavailable')
+  if (!executionClaim?.fresh && executionClaim?.durable) return { ok: true, mode: 'legacy', duplicate: true, sent: false }
+  if (!claimAccepted(executionClaim)) return { ok: false, mode: 'legacy', reason: executionClaim?.reason || 'durable_execution_claim_unavailable' }
+  let result
+  try { result = await run({ goal: BRIEF_GOAL }) }
+  catch { result = { ok: false, reason: 'brief_failed' } }
+  if (!result.ok) {
+    const retryable = await releaseClaimSafely(releaseDelivery, executionClaim)
+    return { ok: false, mode: 'legacy', reason: result.reason || 'brief_failed', retryable }
+  }
+  const deliveryClaim = await claimSafely(claimDelivery, 'legacy-ceo-brief', { env, now }, 'durable_delivery_claim_unavailable')
+  if (!deliveryClaim?.fresh && deliveryClaim?.durable) return { ok: true, mode: 'legacy', duplicate: true, sent: false }
+  if (!claimAccepted(deliveryClaim)) {
+    const retryable = await releaseClaimSafely(releaseDelivery, executionClaim)
+    return { ok: false, mode: 'legacy', reason: deliveryClaim?.reason || 'durable_delivery_claim_unavailable', retryable }
+  }
   let sent = false
   try { sent = await send(`SuperMega | Daily brief\n\n${result.answer}`) } catch { sent = false }
-  if (!sent) await releaseDelivery(claim)
+  let retryable
+  if (!sent) {
+    const deliveryReleased = await releaseClaimSafely(releaseDelivery, deliveryClaim)
+    const executionReleased = await releaseClaimSafely(releaseDelivery, executionClaim)
+    retryable = deliveryReleased && executionReleased
+  }
   return {
     ok: Boolean(sent),
     mode: 'legacy',
     sent: Boolean(sent),
     reason: sent ? undefined : 'owner_delivery_failed',
+    retryable,
     toolsUsed: (result.results || []).map((item) => item.tool),
     answer: result.answer,
   }
