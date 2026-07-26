@@ -20,6 +20,7 @@ from mark1_pilot.agent_governance import (
     AgentWorkforcePolicy,
     agent_job_cadence_state,
     agent_job_daily_limit,
+    agent_job_max_attempts,
     agent_job_units,
     load_agent_workforce_policy,
     normalize_agent_job_types,
@@ -2581,6 +2582,18 @@ def _claimed_agent_run_to_dict(
     }
 
 
+def _resolve_agent_max_attempts(job_type: str, requested: int | None) -> int:
+    policy_max_attempts = agent_job_max_attempts(job_type)
+    if requested is None:
+        return policy_max_attempts
+    if type(requested) is not int:
+        raise AgentGovernanceError(
+            "agent_attempt_budget_invalid",
+            "Agent max_attempts must be a whole number.",
+        )
+    return min(policy_max_attempts, max(1, requested))
+
+
 def create_agent_run(
     database_url: str,
     *,
@@ -2589,7 +2602,7 @@ def create_agent_run(
     source: str = "manual",
     payload: dict[str, Any] | None = None,
     idempotency_key: str | None = None,
-    max_attempts: int = 1,
+    max_attempts: int | None = None,
     scheduled_for: str = "",
     triggered_by: str = "system",
     related_entity_type: str = "",
@@ -2600,6 +2613,7 @@ def create_agent_run(
     ensure_schema(database_url)
     policy = load_agent_workforce_policy()
     normalized_job_type = normalize_agent_job_types([job_type])[0]
+    resolved_max_attempts = _resolve_agent_max_attempts(normalized_job_type, max_attempts)
     normalized_key = str(idempotency_key or "").strip() or None
     if type(respect_cadence) is not bool:
         raise AgentGovernanceError("agent_cadence_mode_invalid", "respect_cadence must be a boolean.")
@@ -2651,7 +2665,7 @@ def create_agent_run(
             result_json="{}",
             error_text="",
             attempt_count=0,
-            max_attempts=min(3, max(1, int(max_attempts or 1))),
+            max_attempts=resolved_max_attempts,
             scheduled_for=str(scheduled_for or "").strip(),
             started_at="",
             finished_at="",
@@ -2684,7 +2698,7 @@ def create_and_reserve_agent_run(
     source: str = "manual",
     payload: dict[str, Any] | None = None,
     idempotency_key: str | None = None,
-    max_attempts: int = 1,
+    max_attempts: int | None = None,
     triggered_by: str = "system",
     related_entity_type: str = "",
     related_entity_id: str = "",
@@ -2695,6 +2709,7 @@ def create_and_reserve_agent_run(
     ensure_schema(database_url)
     policy = load_agent_workforce_policy()
     normalized_job_type = normalize_agent_job_types([job_type])[0]
+    resolved_max_attempts = _resolve_agent_max_attempts(normalized_job_type, max_attempts)
     normalized_key = str(idempotency_key or "").strip() or None
     if type(respect_cadence) is not bool:
         raise AgentGovernanceError("agent_cadence_mode_invalid", "respect_cadence must be a boolean.")
@@ -2746,7 +2761,7 @@ def create_and_reserve_agent_run(
             result_json="{}",
             error_text="",
             attempt_count=0,
-            max_attempts=min(3, max(1, int(max_attempts or 1))),
+            max_attempts=resolved_max_attempts,
             scheduled_for="",
             started_at="",
             finished_at="",

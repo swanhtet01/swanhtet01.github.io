@@ -24,7 +24,9 @@ from mark1_pilot.agent_governance import (
     AGENT_CADENCE_ADMISSION_CONTRACT,
     AGENT_CAPACITY_PLAN_CONTRACT,
     AGENT_JOB_CADENCE_SECONDS,
+    AGENT_JOB_MAX_ATTEMPTS,
     AGENT_JOB_PRIORITIES,
+    AGENT_RETRY_POLICY_CONTRACT,
     AGENT_ROSTER_LIMIT,
     AgentGovernanceError,
     AgentWorkforcePolicy,
@@ -433,6 +435,8 @@ class AgentGovernanceTests(unittest.TestCase):
         self.assertEqual(runtime_policy["job_priorities"], AGENT_JOB_PRIORITIES)
         self.assertEqual(runtime_policy["job_cadence_seconds"], AGENT_JOB_CADENCE_SECONDS)
         self.assertEqual(runtime_policy["cadence_admission_contract"], AGENT_CADENCE_ADMISSION_CONTRACT)
+        self.assertEqual(runtime_policy["job_max_attempts"], AGENT_JOB_MAX_ATTEMPTS)
+        self.assertEqual(runtime_policy["retry_policy_contract"], AGENT_RETRY_POLICY_CONTRACT)
         self.assertEqual(
             runtime_policy["dispatch_policy"],
             "fixed_priority_then_work_unit_efficiency_then_fifo",
@@ -752,6 +756,38 @@ class AgentGovernanceTests(unittest.TestCase):
             self.assertEqual(stale_claim.exception.code, "agent_claim_invalid")
             self.assertEqual(get_agent_run(database_url, workspace_id=workspace_id, run_id=queued["run_id"])["status"], "ready")
 
+    def test_retry_allowance_is_server_owned_and_narrowing_only(self) -> None:
+        with self._database() as (database_url, workspace_id, _):
+            retryable = create_agent_run(
+                database_url,
+                workspace_id=workspace_id,
+                job_type="task_triage",
+            )
+            narrowed = create_agent_run(
+                database_url,
+                workspace_id=workspace_id,
+                job_type="list_clerk",
+                max_attempts=1,
+            )
+            mutating = create_agent_run(
+                database_url,
+                workspace_id=workspace_id,
+                job_type="ops_watch",
+                max_attempts=3,
+            )
+
+            self.assertEqual(retryable["max_attempts"], 2)
+            self.assertEqual(narrowed["max_attempts"], 1)
+            self.assertEqual(mutating["max_attempts"], 1)
+            with self.assertRaises(AgentGovernanceError) as invalid_error:
+                create_agent_run(
+                    database_url,
+                    workspace_id=workspace_id,
+                    job_type="revenue_scout",
+                    max_attempts=True,
+                )
+            self.assertEqual(invalid_error.exception.code, "agent_attempt_budget_invalid")
+
     def test_terminal_idempotency_key_cannot_reexecute(self) -> None:
         with self._database() as (database_url, workspace_id, _):
             first = create_and_reserve_agent_run(
@@ -855,6 +891,88 @@ class AgentGovernanceTests(unittest.TestCase):
             row = get_agent_run(database_url, workspace_id=workspace_id, run_id=claimed["run_id"])
             self.assertEqual(row["status"], "error")
             self.assertIn("lease expired", row["error_text"].lower())
+
+    def test_expired_read_only_lease_requeues_once_with_a_new_claim(self) -> None:
+        with self._database() as (database_url, workspace_id, database_path):
+            first = create_and_reserve_agent_run(
+                database_url,
+                workspace_id=workspace_id,
+                job_type="task_triage",
+            )
+            self.assertEqual(first["attempt_count"], 1)
+            self.assertEqual(first["max_attempts"], 2)
+            with closing(sqlite3.connect(database_path)) as connection:
+                connection.execute(
+                    "UPDATE enterprise_agent_budget_reservations SET expires_at = ? WHERE run_id = ?",
+                    ("2000-01-01T00:00:00+00:00", first["run_id"]),
+                )
+                connection.commit()
+
+            capacity = get_agent_capacity_plan(
+                database_url,
+                workspace_id=workspace_id,
+            )
+            self.assertEqual(capacity["expired_leases_reconciled"], 1)
+            self.assertEqual(capacity["queue_total"], 1)
+            self.assertEqual(capacity["queue_runnable"], 1)
+            requeued = get_agent_run(
+                database_url,
+                workspace_id=workspace_id,
+                run_id=first["run_id"],
+            )
+            self.assertEqual(requeued["status"], "queued")
+            self.assertEqual(requeued["attempt_count"], 1)
+            self.assertEqual(requeued["max_attempts"], 2)
+            self.assertIn("previous execution lease expired", requeued["error_text"].lower())
+
+            with self.assertRaises(AgentGovernanceError) as stale_error:
+                complete_agent_run(
+                    database_url,
+                    workspace_id=workspace_id,
+                    run_id=first["run_id"],
+                    claim_token=first["claim_token"],
+                    status="ready",
+                )
+            self.assertEqual(stale_error.exception.code, "agent_claim_invalid")
+
+            reclaimed = claim_agent_runs(
+                database_url,
+                workspace_id=workspace_id,
+                job_types=["task_triage"],
+                limit=1,
+            )
+            self.assertEqual(len(reclaimed), 1)
+            second = reclaimed[0]
+            self.assertEqual(second["run_id"], first["run_id"])
+            self.assertEqual(second["attempt_count"], 2)
+            self.assertNotEqual(second["claim_token"], first["claim_token"])
+            self.assertNotEqual(
+                second["budget_reservation"]["reservation_id"],
+                first["budget_reservation"]["reservation_id"],
+            )
+
+            completed = complete_agent_run(
+                database_url,
+                workspace_id=workspace_id,
+                run_id=second["run_id"],
+                claim_token=second["claim_token"],
+                status="ready",
+            )
+            self.assertEqual(completed["status"], "ready")
+            with closing(sqlite3.connect(database_path)) as connection:
+                run_count = connection.execute(
+                    "SELECT COUNT(*) FROM enterprise_agent_runs WHERE run_id = ?",
+                    (first["run_id"],),
+                ).fetchone()[0]
+                reservation_statuses = sorted(
+                    row[0]
+                    for row in connection.execute(
+                        "SELECT status FROM enterprise_agent_budget_reservations WHERE run_id = ?",
+                        (first["run_id"],),
+                    ).fetchall()
+                )
+            self.assertEqual(run_count, 1)
+            self.assertEqual(reservation_statuses, ["consumed", "expired"])
 
 
 if __name__ == "__main__":

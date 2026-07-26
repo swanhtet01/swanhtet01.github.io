@@ -3009,7 +3009,6 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                     job_type=job_type,
                     source=source,
                     payload={},
-                    max_attempts=1,
                     triggered_by=triggered_by,
                     respect_cadence=True,
                 )

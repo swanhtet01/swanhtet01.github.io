@@ -14,6 +14,7 @@ from typing import Any, Mapping, Sequence
 AGENT_WORKFORCE_POLICY_CONTRACT = "supermega.agent-workforce-policy.v2"
 AGENT_CAPACITY_PLAN_CONTRACT = "supermega.agent-capacity-plan.v2"
 AGENT_CADENCE_ADMISSION_CONTRACT = "supermega.agent-cadence-admission.v1"
+AGENT_RETRY_POLICY_CONTRACT = "supermega.agent-retry-policy.v1"
 AGENT_BUDGET_GRANT_CONTRACT = "supermega.agent-budget-grant.v1"
 AGENT_BUDGET_ACCOUNTING_CONTRACT = "supermega.agent-budget-accounting.v1"
 AGENT_BUDGET_AUDIENCE = "supermega-agent-runtime"
@@ -64,10 +65,25 @@ AGENT_JOB_CADENCE_SECONDS: dict[str, int] = {
     "github_release_watch": 3_600,
 }
 
+# A second execution is allowed only when the job result is a read-only
+# snapshot. Jobs that can create tasks or other durable business state remain
+# single-attempt until those writes have an independently verified idempotency
+# key. This is server policy: callers may narrow it, but never expand it.
+AGENT_JOB_MAX_ATTEMPTS: dict[str, int] = {
+    "revenue_scout": 2,
+    "list_clerk": 2,
+    "task_triage": 2,
+    "template_clerk": 1,
+    "ops_watch": 1,
+    "founder_brief": 2,
+    "github_release_watch": 1,
+}
+
 if (
     set(AGENT_JOB_UNITS) != set(AGENT_JOB_DAILY_LIMITS)
     or set(AGENT_JOB_UNITS) != set(AGENT_JOB_PRIORITIES)
     or set(AGENT_JOB_UNITS) != set(AGENT_JOB_CADENCE_SECONDS)
+    or set(AGENT_JOB_UNITS) != set(AGENT_JOB_MAX_ATTEMPTS)
 ):
     raise RuntimeError("agent_job_policy_contract_invalid")
 
@@ -120,6 +136,8 @@ class AgentWorkforcePolicy:
             "job_priorities": dict(AGENT_JOB_PRIORITIES),
             "job_cadence_seconds": dict(AGENT_JOB_CADENCE_SECONDS),
             "cadence_admission_contract": AGENT_CADENCE_ADMISSION_CONTRACT,
+            "job_max_attempts": dict(AGENT_JOB_MAX_ATTEMPTS),
+            "retry_policy_contract": AGENT_RETRY_POLICY_CONTRACT,
             "in_flight_per_job": 1,
             "capacity_plan_contract": AGENT_CAPACITY_PLAN_CONTRACT,
             "execution_model": "ephemeral_demand_driven",
@@ -237,6 +255,14 @@ def agent_job_cadence_seconds(job_type: str) -> int:
     normalized = str(job_type or "").strip().lower()
     try:
         return AGENT_JOB_CADENCE_SECONDS[normalized]
+    except KeyError as exc:
+        raise AgentGovernanceError("agent_job_type_not_allowed", f"Unsupported agent job type: {normalized or 'blank'}.") from exc
+
+
+def agent_job_max_attempts(job_type: str) -> int:
+    normalized = str(job_type or "").strip().lower()
+    try:
+        return AGENT_JOB_MAX_ATTEMPTS[normalized]
     except KeyError as exc:
         raise AgentGovernanceError("agent_job_type_not_allowed", f"Unsupported agent job type: {normalized or 'blank'}.") from exc
 
