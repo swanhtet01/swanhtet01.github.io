@@ -27,6 +27,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 
 - HQ uses four teams. One contract caps 12 roles, four active/batch jobs, two Kernel agents per cycle, and zero idle compute; overrides fail closed, and the default workspace no longer duplicates a 256-role ceiling.
 - Kernel company execution now uses four atomic, owner-bound capacity claims with 120-second stale recovery. A fifth cycle stops before model use, queued work returns to planned for retry, and every admitted path releases its slot. Scheduler command failures capture raw native streams and never interpolate secret-bearing arguments (`ca5070e`).
+- One checked manifest now makes Vercel production the sole recurring scheduler for `megaos`: a 15-minute queue route plus a 00:45 UTC daily route, bounded to 97 invocations/day. Cloud Tasks dispatches only on demand; Google Cloud Scheduler mutation is retired. Production-only protected credentials, exact path/cadence, and duplicate/conflicting/retired state are enforced before release (`6c19084`).
 - Shop covers guarded orders, stock, purchasing, fulfilment, payment/refund, returns, and close at `/shop/`.
 - Plant covers jobs, output/material evidence, problems, holds, handoff, equipment, downtime, and maintenance at `/plant/`; it controls no equipment.
 - Website turns one brief into Preview, guarded Save, and Review at `/website/`; it never deploys.
@@ -38,7 +39,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 
 ## Verified baseline
 
-- `ab9a89e` is the current local product checkpoint; agent-operations checkpoint `ca5070e` enforces distributed capacity and secret-safe scheduler failures; operating checkpoint `63a245f` and security checkpoint `98b8044` remain.
+- `ab9a89e` is the current local product checkpoint; agent-operations checkpoint `6c19084` combines the existing distributed-capacity ceiling with one bounded scheduler authority; operating checkpoint `63a245f` and security checkpoint `98b8044` remain.
 - App build and all local contracts pass; the Kernel passes 262 tests, 69 connectors/993 calls, and 15 crews/214 checks. The focused cloud slice passes 25 tests and all Python coverage passes 215 tests.
 - React Router is isolated in a 43,870-byte cacheable chunk. The current product checkpoint's largest JavaScript chunk is 471,580 bytes and remains below the build gate.
 - Focused coverage includes 205 Shop, 256 Plant, 94 Website, 109 client-onboarding, 54 managed-import, and 17 trusted-server import tests.
@@ -59,7 +60,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - The candidate is not on GitHub or Vercel; live remains `6885c320` and PR #258 remains `338b6fd`. The next external action is an approved fast-forward-only push.
 - Preview remains blocked until the exact `megaos` project and credentials are linked; no fallback domain is allowed.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
-- Read-only Vercel observability reports zero production Agent Run projects in both 30 and 90 days. This supports keeping hosted agents at zero while idle, but does not prove GCP scheduler state. Local contracts still permit overlapping Vercel and GCP scheduling authorities; choose one before hosted automation.
+- Read-only Vercel observability reports zero production Agent Run projects in both 30 and 90 days. Local contracts now select Vercel production alone and retire Google Cloud Scheduler mutation, but the available connector did not expose live cron definitions or environment metadata. Hosted cadence and production-only secret scope therefore remain unverified until an owner-approved credentialed read; no provider state was changed.
 - The products have SAP-grade accountability goals, not SAP feature parity. Shop still needs multi-location/master-data depth; Plant needs BOM, routing, planning, genealogy, quality, and maintenance depth; Website needs versioned content and release operations; Ecommerce needs full catalog, checkout, tax, shipping, payment, and order lifecycle.
 
 ## Decisions in force
@@ -85,4 +86,4 @@ Each slice must keep the interface task-first: one primary action, progressive d
 2. Repeat the 12-profile rehearsal with one founder-approved named pilot company and measure import correction, setup, and human review time.
 3. After an approved push and exact Vercel link, review that clean commit without deploying or mutating aliases.
 4. On an approved isolated Supabase target, prove private Storage, RLS, replay/isolation, and recovery.
-5. Make one scheduler authority explicit, validate exact cadence and production-only credential scope, and keep any provider mutation behind a separate owner decision.
+5. With owner-approved credentialed read access, compare live `megaos` cron and environment metadata against checkpoint `6c19084`; keep every provider mutation behind a separate owner decision.
