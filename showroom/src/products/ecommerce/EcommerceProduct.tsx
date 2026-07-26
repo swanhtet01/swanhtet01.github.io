@@ -12,6 +12,7 @@ import {
   validateCommerceState,
   type CommerceItem,
   type CommerceState,
+  type CommerceStorefrontMerchandising,
 } from '../../core/commerce-workspace'
 import {
   currentManagedIdentity,
@@ -38,6 +39,7 @@ import {
   buildStorefrontPreview,
   readStorefrontCatalog,
   storefrontPreviewDigest,
+  type StorefrontPreviewItem,
 } from './storefront-model'
 import {
   LOCAL_STOREFRONT_DRAFT_SCOPE,
@@ -73,6 +75,7 @@ type ManagedStorefrontView = {
     storeName: string
     summary: string
     selectedSkus: string[]
+    merchandising: CommerceStorefrontMerchandising[] | null
   }
   availableSku: string
 }
@@ -86,6 +89,14 @@ function formatMmk(value: number) {
 
 function defaultSelection(items: CommerceItem[]) {
   return items.filter((item) => item.onHand > 0).slice(0, 4).map((item) => item.sku)
+}
+
+function cloneMerchandising(value: CommerceStorefrontMerchandising[] | undefined) {
+  return value?.map((entry) => ({ ...entry })) ?? null
+}
+
+function storefrontDisplayName(item: StorefrontPreviewItem) {
+  return item.merchandising?.displayName || item.name
 }
 
 function savedLocalDraft(draft: StorefrontDraft | LegacyStorefrontDraft | null): SavedStorefrontState | null {
@@ -106,13 +117,21 @@ function draftFieldsForCatalog(saved: SavedStorefrontState | null, items: Commer
       storeName: DEFAULT_STORE_NAME,
       summary: DEFAULT_STORE_SUMMARY,
       selectedSkus: defaultSelection(items),
+      merchandising: null,
     }
   }
   const reconciliation = reconcileStorefrontSelection(saved.selectedSkus, items.map((item) => item.sku))
+  const retainedMerchandising = saved.merchandising
+    ?.filter((entry) => reconciliation.selectedSkus.includes(entry.sku))
+    .map((entry) => ({ ...entry }))
   return {
     storeName: saved.storeName,
     summary: saved.summary,
     selectedSkus: reconciliation.selectedSkus,
+    merchandising: retainedMerchandising?.length === reconciliation.selectedSkus.length
+      && reconciliation.selectedSkus.length > 0
+      ? retainedMerchandising
+      : null,
   }
 }
 
@@ -142,6 +161,7 @@ function initialEcommerceState() {
     storeName: DEFAULT_STORE_NAME,
     summary: DEFAULT_STORE_SUMMARY,
     selectedSkus: defaultSelection(catalog.items),
+    merchandising: null,
   }
 }
 
@@ -161,6 +181,7 @@ export function EcommerceProduct() {
   const [storeName, setStoreName] = useState(initialState.storeName)
   const [summary, setSummary] = useState(initialState.summary)
   const [selectedSkus, setSelectedSkus] = useState(initialState.selectedSkus)
+  const [merchandising, setMerchandising] = useState<CommerceStorefrontMerchandising[] | null>(initialState.merchandising)
   const [device, setDevice] = useState<PreviewDevice>('phone')
   const [mobileWorkspace, setMobileWorkspace] = useState<'setup' | 'preview'>('setup')
   const [digestState, setDigestState] = useState({ previewJson: '', value: '', error: '' })
@@ -200,6 +221,7 @@ export function EcommerceProduct() {
           setStoreName(fields.storeName)
           setSummary(fields.summary)
           setSelectedSkus(fields.selectedSkus)
+          setMerchandising(fields.merchandising)
           setRequestSku((sku) => fields.selectedSkus.includes(sku) ? sku : fields.selectedSkus[0] ?? '')
           setMissingSelectionReviewed(false)
           setCatalogHydrating(false)
@@ -220,6 +242,7 @@ export function EcommerceProduct() {
           setStoreName(DEFAULT_STORE_NAME)
           setSummary(DEFAULT_STORE_SUMMARY)
           setSelectedSkus([])
+          setMerchandising(null)
           setCatalog({ source: 'unavailable', items: [], error: 'Create the managed Shop catalog before opening its Ecommerce storefront.' })
           setRequestSku('')
           setRequestLedger(createEmptyStorefrontRequestLedger())
@@ -234,6 +257,7 @@ export function EcommerceProduct() {
         setStoreName(view.fields.storeName)
         setSummary(view.fields.summary)
         setSelectedSkus(view.fields.selectedSkus)
+        setMerchandising(view.fields.merchandising)
         setRequestSku(view.availableSku)
         setRequestLedger(createEmptyStorefrontRequestLedger())
         setHandoffConfirmed(false)
@@ -252,6 +276,7 @@ export function EcommerceProduct() {
           error: error instanceof Error ? error.message : 'The authenticated Shop catalog could not be loaded.',
         })
         setSelectedSkus([])
+        setMerchandising(null)
         setRequestSku('')
         setRequestLedger(createEmptyStorefrontRequestLedger())
         setHandoffConfirmed(false)
@@ -286,6 +311,7 @@ export function EcommerceProduct() {
       const latest = readStorefrontDraft(LOCAL_STOREFRONT_DRAFT_SCOPE)
       if (event.key === legacyDraftKey && latest.status === 'ready') return
       setSavedDraft(savedLocalDraft(latest.draft))
+      setMerchandising(null)
       setDraftReadStatus(latest.status)
       setDraftIssue(latest.error)
       setMissingSelectionReviewed(false)
@@ -299,7 +325,12 @@ export function EcommerceProduct() {
   const previewResult = useMemo(() => {
     try {
       return {
-        preview: buildStorefrontPreview(catalog.items, { storeName, summary, selectedSkus }),
+        preview: buildStorefrontPreview(catalog.items, {
+          storeName,
+          summary,
+          selectedSkus,
+          ...(merchandising ? { merchandising } : {}),
+        }),
         error: '',
       }
     } catch (error) {
@@ -308,7 +339,7 @@ export function EcommerceProduct() {
         error: error instanceof Error ? error.message : 'Storefront preview is invalid.',
       }
     }
-  }, [catalog.items, selectedSkus, storeName, summary])
+  }, [catalog.items, merchandising, selectedSkus, storeName, summary])
   const previewJson = previewResult.preview ? JSON.stringify(previewResult.preview) : ''
   const digest = digestState.previewJson === previewJson ? digestState.value : ''
   const digestError = digestState.previewJson === previewJson ? digestState.error : ''
@@ -328,7 +359,8 @@ export function EcommerceProduct() {
     && savedDraft.storeName === storeName
     && savedDraft.summary === summary
     && savedDraft.selectedSkus.length === selectedSkus.length
-    && savedDraft.selectedSkus.every((sku) => selectedSkus.includes(sku)))
+    && savedDraft.selectedSkus.every((sku) => selectedSkus.includes(sku))
+    && JSON.stringify(savedDraft.merchandising ?? null) === JSON.stringify(merchandising))
   const savedCatalogIsCurrent = managedIdentity
     ? Boolean(savedDraft?.shopCatalogDigest
       && managedCatalogDigest
@@ -406,7 +438,10 @@ export function EcommerceProduct() {
   }, [managedCatalogSource, managedInbox])
 
   function toggleSku(sku: string) {
-    setDraftNotice('')
+    setDraftNotice(merchandising
+      ? 'Product selection changed. Imported display details were cleared; save to confirm.'
+      : '')
+    setMerchandising(null)
     setHandoffConfirmed(false)
     if (missingSavedSkus.length) setMissingSelectionReviewed(true)
     setSelectedSkus((current) => (
@@ -456,6 +491,7 @@ export function EcommerceProduct() {
     setStoreName(view.fields.storeName)
     setSummary(view.fields.summary)
     setSelectedSkus(view.fields.selectedSkus)
+    setMerchandising(view.fields.merchandising)
   }
 
   async function saveManagedStorefront(identity: ManagedIdentity) {
@@ -481,7 +517,7 @@ export function EcommerceProduct() {
     }
     const plan = await prepareManagedStorefrontSave(
       view.inbox.state,
-      { storeName, summary, selectedSkus },
+      { storeName, summary, selectedSkus, merchandising },
       identity.userId,
       new Date().toISOString(),
     )
@@ -499,6 +535,7 @@ export function EcommerceProduct() {
       setStoreName(saved.storeName)
       setSummary(saved.summary)
       setSelectedSkus(saved.selectedSkus)
+      setMerchandising(cloneMerchandising(saved.merchandising))
       setDraftNotice(`Already saved in ${identity.workspaceId} as revision ${saved.revision}.`)
       return
     }
@@ -533,6 +570,7 @@ export function EcommerceProduct() {
     setStoreName(saved.storeName)
     setSummary(saved.summary)
     setSelectedSkus(saved.selectedSkus)
+    setMerchandising(cloneMerchandising(saved.merchandising))
     setMissingSelectionReviewed(false)
     setDraftNotice(`Saved to ${identity.workspaceId} as revision ${saved.revision}.`)
   }
@@ -567,6 +605,7 @@ export function EcommerceProduct() {
       setStoreName(saved.storeName)
       setSummary(saved.summary)
       setSelectedSkus(saved.selectedSkus)
+      setMerchandising(null)
       setMissingSelectionReviewed(false)
       setHandoffConfirmed(false)
       setDraftNotice(`Storefront saved on this device as revision ${saved.revision}.`)
@@ -595,6 +634,7 @@ export function EcommerceProduct() {
       } else {
         const latest = readStorefrontDraft(LOCAL_STOREFRONT_DRAFT_SCOPE)
         setSavedDraft(savedLocalDraft(latest.draft))
+        setMerchandising(null)
         setDraftReadStatus(latest.status)
         setDraftIssue(latest.error)
         setDraftNotice(error instanceof Error ? error.message : 'Storefront setup was not saved.')
@@ -605,10 +645,11 @@ export function EcommerceProduct() {
   }
 
   function discardStorefrontChanges() {
-    const selected = savedDraft ? savedSelectionReconciliation.selectedSkus : defaultSelection(catalog.items)
-    setStoreName(savedDraft?.storeName ?? DEFAULT_STORE_NAME)
-    setSummary(savedDraft?.summary ?? DEFAULT_STORE_SUMMARY)
-    setSelectedSkus(selected)
+    const fields = draftFieldsForCatalog(savedDraft, catalog.items)
+    setStoreName(fields.storeName)
+    setSummary(fields.summary)
+    setSelectedSkus(fields.selectedSkus)
+    setMerchandising(fields.merchandising)
     setMissingSelectionReviewed(false)
     setHandoffConfirmed(false)
     setDraftNotice(savedDraft
@@ -811,6 +852,14 @@ export function EcommerceProduct() {
     && savedDraftIsCurrent
     && digest
     && latestRequest.sourcePreviewDigest === digest)
+  const customerPreviewItems = previewResult.preview
+    ? [...previewResult.preview.items].sort((left, right) => {
+      const featuredDifference = Number(Boolean(right.merchandising?.featured)) - Number(Boolean(left.merchandising?.featured))
+      if (featuredDifference) return featuredDifference
+      const collectionDifference = (left.merchandising?.collection ?? '').localeCompare(right.merchandising?.collection ?? '')
+      return collectionDifference || left.sku.localeCompare(right.sku)
+    })
+    : []
 
   return (
     <div className="workspace-screen ecommerce-product">
@@ -851,6 +900,13 @@ export function EcommerceProduct() {
             </label>
           </div>
 
+          {merchandising ? (
+            <div className="ecommerce-merchandising-status" role="status">
+              <span><strong>Imported display details</strong><small>{merchandising.length} products use reviewed names, collections, and featured order.</small></span>
+              <b>Active</b>
+            </div>
+          ) : null}
+
           {missingSavedSkus.length ? (
             <p className="ecommerce-selection-warning" role="status">
               Saved products no longer in this Shop: <strong>{missingSavedSkus.join(', ')}</strong>. {missingSelectionReviewed
@@ -867,6 +923,7 @@ export function EcommerceProduct() {
           <div className="ecommerce-catalog-list">
             {catalog.items.map((item) => {
               const selected = selectedSkus.includes(item.sku)
+              const presentation = merchandising?.find((entry) => entry.sku === item.sku)
               return (
                 <button
                   aria-pressed={selected}
@@ -876,7 +933,7 @@ export function EcommerceProduct() {
                   onClick={() => toggleSku(item.sku)}
                   type="button"
                 >
-                  <span><strong>{item.name}</strong><small>{item.variant || item.sku}</small></span>
+                  <span><strong>{presentation?.displayName || item.name}</strong><small>{presentation ? `${presentation.featured ? 'Featured · ' : ''}${presentation.collection}` : item.variant || item.sku}</small></span>
                   <span><b>{formatMmk(item.price)}</b><small>{item.onHand > 0 ? 'Available' : 'Sold out'}</small></span>
                   <i aria-hidden="true">{selected ? '✓' : '+'}</i>
                 </button>
@@ -992,23 +1049,25 @@ export function EcommerceProduct() {
                   <p>{previewResult.preview.summary}</p>
                 </section>
                 <div className="storefront-grid">
-                  {previewResult.preview.items.map((item) => {
+                  {customerPreviewItems.map((item) => {
                     const available = item.availability === 'available'
+                    const displayName = storefrontDisplayName(item)
                     return (
                     <article
                       className={available && savedDraftIsCurrent ? 'has-request-action' : undefined}
+                      data-featured={item.merchandising?.featured ? 'true' : 'false'}
                       data-requested={requestOpen && currentRequestSku === item.sku ? 'true' : 'false'}
                       key={item.sku}
                     >
-                      <div aria-hidden="true">{item.name.slice(0, 1).toUpperCase()}</div>
-                      <small>{item.variant || item.sku}</small>
-                      <strong>{item.name}</strong>
+                      <div aria-hidden="true">{displayName.slice(0, 1).toUpperCase()}</div>
+                      <small>{item.merchandising ? `${item.merchandising.featured ? 'Featured · ' : ''}${item.merchandising.collection}` : item.variant || item.sku}</small>
+                      <strong>{displayName}</strong>
                       <span>{formatMmk(item.unitPriceMmk)}</span>
                       <b>{available ? 'Available' : 'Sold out'}</b>
                       {available && savedDraftIsCurrent ? (
                         <button
                           aria-controls="ecommerce-request-form"
-                          aria-label={`Request ${item.name}`}
+                          aria-label={`Request ${displayName}`}
                           className="storefront-request-button"
                           disabled={catalogHydrating}
                           onClick={() => openRequestFor(item.sku)}
@@ -1059,7 +1118,7 @@ export function EcommerceProduct() {
                 <label>
                   <span>Product</span>
                   <select onChange={(event) => setRequestSku(event.target.value)} required value={currentRequestSku}>
-                    {previewResult.preview?.items.map((item) => <option key={item.sku} value={item.sku}>{item.name} · {formatMmk(item.unitPriceMmk)}</option>)}
+                    {customerPreviewItems.map((item) => <option key={item.sku} value={item.sku}>{storefrontDisplayName(item)} · {formatMmk(item.unitPriceMmk)}</option>)}
                   </select>
                 </label>
                 <label>

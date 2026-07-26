@@ -77,6 +77,46 @@
   overflow-wrap: anywhere;
 }
 
+.ecommerce-merchandising-status {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 8px 0;
+  border: 1px solid rgba(11, 116, 94, .22);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: rgba(11, 116, 94, .05);
+}
+
+.ecommerce-merchandising-status > span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.ecommerce-merchandising-status strong {
+  font-size: 12px;
+}
+
+.ecommerce-merchandising-status small {
+  color: #66746b;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.ecommerce-merchandising-status > b {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 4px 7px;
+  background: rgba(11, 116, 94, .1);
+  color: #075c4b;
+  font-size: 9px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
 .ecommerce-preview-gate {
   display: flex;
   align-items: center;
@@ -117,6 +157,11 @@
 .storefront-grid article.has-request-action[data-requested="true"] {
   border-color: rgba(11, 116, 94, .48);
   box-shadow: 0 0 0 2px rgba(11, 116, 94, .08);
+}
+
+.storefront-grid article[data-featured="true"] {
+  border-color: rgba(11, 116, 94, .35);
+  background: linear-gradient(145deg, rgba(11, 116, 94, .07), #fff 62%);
 }
 
 .storefront-grid article.has-request-action > small {
