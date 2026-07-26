@@ -51,7 +51,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 - Fresh 390x844 and 1280x900 QA covers all four products: meaningful content, no overflow, overlay, or browser errors, and zero WCAG A/AA violations.
 - Core first-action QA leads Shop Stock with the exact shortage, guides incomplete orders to Promise or Payment, sends Plant alerts to Problems and jobs to output, puts open Problems before Equipment, and moves invalid Website briefs to their first error. Mobile controls are at least 44 px; fixed navigation now preserves focus and click clearance (`36fa7dd`), and guide or review actions create no record.
 - PostgreSQL 17.10 passed 32 TLS checks, including exact approval/event restore and the trusted-server identity boundary.
-- Last remote release snapshot: `784379e` was 0 behind / 192 ahead of draft PR #258 head `338b6fd`; both domains served `6885c320`; remote checks exclude the local delta and later commits. See `hq/research/release-reconciliation-2026-07-26.md`.
+- Last remote release snapshot: `b67db94` is 0 behind / 230 ahead of open draft PR #258 head `338b6fd`; `megaos` production is READY at `6885c320` with no 24-hour runtime errors; remote checks exclude the local delta. See `hq/research/release-reconciliation-2026-07-26.md`.
 
 ## Coordination
 

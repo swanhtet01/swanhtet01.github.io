@@ -22,13 +22,13 @@ Both live domains still serve GitHub `main` checkpoint `6885c3201d523d42d176c3dc
 - State: open draft, mergeable, unmerged; base `main`; head `agent/supermega-release-candidate`.
 - Live `main`: `6885c3201d523d42d176c3dcd91de28dc1e17f6f`.
 - Remote pull-request head: `338b6fd11bc27da9b7aa42bee2c293a5c0e3a9ef`.
-- Audited implementation checkpoint: `784379e3a13e1ad9366cca70816675b692063702`.
+- Audited implementation checkpoint: `b67db9422b523df0c1707f8dc39082ffa1c7a8dd`.
 - Local checkout at audit time: clean on the integration branch.
-- Fast-forward relation to the remote pull-request head: 0 commits behind and 192 commits ahead.
-- Fast-forward relation to live `main`: 0 commits behind and 238 commits ahead.
-- Change surface from the remote pull-request head: 120 files changed, 39,567 insertions, and 4,132 deletions.
-- `git ls-remote` independently confirmed the same `main` and pull-request branch SHAs.
-- PR #258 currently reports passing `validate` and GitGuardian checks. Those checks cover remote checkpoint `338b6fd`, not the 192 local commits.
+- Fast-forward relation to the remote pull-request head: 0 commits behind and 230 commits ahead.
+- Fast-forward relation to live `main`: 0 commits behind and 276 commits ahead.
+- Change surface from the remote pull-request head: 129 files changed, 45,291 insertions, and 4,455 deletions.
+- The connected GitHub app independently confirmed the same `main` and pull-request branch SHAs.
+- The combined-status endpoint returned no status contexts for remote checkpoint `338b6fd`; any PR checks shown remotely still exclude the 230 local commits.
 
 The draft PR metadata still describes the older three-product naming and checkpoint. It should be updated only after the candidate is pushed and fresh checks establish the exact review surface.
 
@@ -40,6 +40,8 @@ The draft PR metadata still describes the older three-product naming and checkpo
 | `app.supermega.dev` | 200; `Today \| SuperMega` | `megaos` | `dpl_FL5eESWF2vGJffydGAVNA4vPQzdp` | `6885c320` |
 
 Both deployments are `READY`, target production, were created on 2026-07-23, and identify repository `swanhtet01/swanhtet01.github.io`, ref `main`, and exact commit `6885c320`.
+
+The refreshed canonical `megaos` query found no runtime errors in the preceding 24 hours. This proves only that the stale production checkpoint is quiet; it does not validate the local candidate.
 
 The Vercel account also contains similarly named projects. They are not customer release authority:
 
