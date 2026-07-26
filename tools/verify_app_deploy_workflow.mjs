@@ -51,6 +51,7 @@ async function verifyCanonicalPythonBundle() {
       'supermega_runtime/__init__.py',
       'supermega_runtime/agent_governance.py',
       'supermega_runtime/cloud_runtime.py',
+      'supermega_runtime/scheduler_activation.py',
     ]) {
       await copyFile(resolve(root, relativePath), resolve(bundleRoot, relativePath))
     }

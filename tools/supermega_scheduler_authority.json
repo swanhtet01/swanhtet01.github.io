@@ -14,12 +14,17 @@
     "state": "dormant",
     "runtime_environment_key": "SUPERMEGA_HOSTED_SCHEDULER_ENABLED",
     "enabled_value": "1",
+    "evidence_contract": "supermega.scheduler-activation-evidence.v1",
+    "evidence_environment_key": "SUPERMEGA_SCHEDULER_ACTIVATION_EVIDENCE",
+    "signing_secret_environment_key": "SUPERMEGA_SCHEDULER_ACTIVATION_SIGNING_SECRET",
+    "maximum_bundle_ttl_seconds": 604800,
+    "maximum_evidence_age_seconds": 604800,
     "required_evidence": [
-      "isolated managed database and tenant isolation pass",
-      "private storage listing and object access pass",
-      "production-only protected worker URL allowlist and tokens pass",
-      "hosted queue recovery idempotency and side-effect accounting pass",
-      "protected candidate rollback and named owner activation decision pass"
+      "managed-database-tenant-isolation",
+      "private-storage-privacy",
+      "protected-worker-egress",
+      "queue-recovery-side-effect-accounting",
+      "protected-release-rollback-owner-decision"
     ]
   },
   "crons": [],

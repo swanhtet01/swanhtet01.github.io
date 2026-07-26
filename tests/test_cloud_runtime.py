@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 import json
 import os
 import shutil
@@ -21,6 +22,15 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from supermega_runtime.cloud_runtime import DAILY_CRON_PATH, QUEUE_CRON_PATH, router
+from supermega_runtime.scheduler_activation import (
+    CANONICAL_SCHEDULER_PROJECT_ID,
+    REQUIRED_SCHEDULER_ACTIVATION_EVIDENCE_IDS,
+    SCHEDULER_ACTIVATION_EVIDENCE_CONTRACT,
+    SCHEDULER_ACTIVATION_EVIDENCE_ENV,
+    SCHEDULER_ACTIVATION_SIGNING_SECRET_ENV,
+    SCHEDULER_AUTHORITY_DIGEST,
+    sign_scheduler_activation_evidence,
+)
 from mark1_pilot.agent_governance import (
     AGENT_ACTIVE_ASSIGNMENT_LIMIT,
     AGENT_AUTOMATED_JOB_TYPES,
@@ -74,15 +84,57 @@ class FakeWorkerResponse:
 class CloudRuntimeTests(unittest.TestCase):
     worker_url = "https://worker.supermega.dev/api/internal/agent-runs/process-queue"
     worker_secret = "0123456789abcdef0123456789abcdef"
+    activation_secret = "scheduler-activation-secret-0123456789abcdef"
+    release_commit = "a" * 40
 
-    @staticmethod
-    def _environment(**overrides: str) -> dict[str, str]:
+    @classmethod
+    def _signed_activation_evidence(
+        cls,
+        *,
+        issued_at: datetime | None = None,
+        expires_at: datetime | None = None,
+        **overrides: object,
+    ) -> str:
+        issued = (issued_at or datetime.now(timezone.utc) - timedelta(minutes=1)).replace(microsecond=0)
+        expires = (expires_at or issued + timedelta(days=1)).replace(microsecond=0)
+        captured_at = issued.strftime("%Y-%m-%dT%H:%M:%SZ")
+        bundle: dict[str, object] = {
+            "contract": SCHEDULER_ACTIVATION_EVIDENCE_CONTRACT,
+            "authority_digest": SCHEDULER_AUTHORITY_DIGEST,
+            "project_id": CANONICAL_SCHEDULER_PROJECT_ID,
+            "environment": "production",
+            "release_commit": cls.release_commit,
+            "managed_tenant_id": "supermega-managed-pilot",
+            "issued_at": issued.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "expires_at": expires.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "owner_decision_id": "owner-scheduler-activation-001",
+            "evidence": [
+                {
+                    "id": evidence_id,
+                    "status": "passed",
+                    "captured_at": captured_at,
+                    "digest": f"sha256:{hashlib.sha256(evidence_id.encode()).hexdigest()}",
+                }
+                for evidence_id in REQUIRED_SCHEDULER_ACTIVATION_EVIDENCE_IDS
+            ],
+            **overrides,
+        }
+        signed = sign_scheduler_activation_evidence(bundle, secret=cls.activation_secret)
+        return json.dumps(signed, separators=(",", ":"), sort_keys=True)
+
+    @classmethod
+    def _environment(cls, **overrides: str) -> dict[str, str]:
         return {
             "CRON_SECRET": "cron-secret",
-            "SUPERMEGA_INTERNAL_CRON_TOKEN": CloudRuntimeTests.worker_secret,
-            "SUPERMEGA_CLOUD_TASKS_WORKER_URL": CloudRuntimeTests.worker_url,
+            "SUPERMEGA_INTERNAL_CRON_TOKEN": cls.worker_secret,
+            "SUPERMEGA_CLOUD_TASKS_WORKER_URL": cls.worker_url,
             "SUPERMEGA_CLOUD_TASKS_ALLOWED_HOSTS": "worker.supermega.dev",
             "SUPERMEGA_HOSTED_SCHEDULER_ENABLED": "1",
+            SCHEDULER_ACTIVATION_EVIDENCE_ENV: cls._signed_activation_evidence(),
+            SCHEDULER_ACTIVATION_SIGNING_SECRET_ENV: cls.activation_secret,
+            "VERCEL_ENV": "production",
+            "VERCEL_PROJECT_ID": CANONICAL_SCHEDULER_PROJECT_ID,
+            "VERCEL_GIT_COMMIT_SHA": cls.release_commit,
             **overrides,
         }
 
@@ -155,6 +207,30 @@ class CloudRuntimeTests(unittest.TestCase):
             self.skipTest("PowerShell is unavailable")
 
         scheduler_path = Path(__file__).resolve().parents[1] / "tools" / "ensure_supermega_scheduler.ps1"
+        authority_path = scheduler_path.with_name("supermega_scheduler_authority.json")
+        authority = json.loads(authority_path.read_text(encoding="utf-8"))
+        authority_digest = "sha256:" + hashlib.sha256(
+            json.dumps(authority, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode("utf-8")
+        ).hexdigest()
+        self.assertEqual(authority_digest, SCHEDULER_AUTHORITY_DIGEST)
+        self.assertEqual(
+            authority["activation"]["evidence_contract"],
+            SCHEDULER_ACTIVATION_EVIDENCE_CONTRACT,
+        )
+        self.assertEqual(
+            authority["activation"]["evidence_environment_key"],
+            SCHEDULER_ACTIVATION_EVIDENCE_ENV,
+        )
+        self.assertEqual(
+            authority["activation"]["signing_secret_environment_key"],
+            SCHEDULER_ACTIVATION_SIGNING_SECRET_ENV,
+        )
+        self.assertEqual(
+            tuple(authority["activation"]["required_evidence"]),
+            REQUIRED_SCHEDULER_ACTIVATION_EVIDENCE_IDS,
+        )
+        self.assertEqual(authority["activation"]["maximum_bundle_ttl_seconds"], 604800)
+        self.assertEqual(authority["activation"]["maximum_evidence_age_seconds"], 604800)
         scheduler_source = scheduler_path.read_text(encoding="utf-8")
         for retired_marker in (
             "gcloud",
@@ -218,6 +294,79 @@ class CloudRuntimeTests(unittest.TestCase):
         self.assertEqual(run.json()["execution"], "hosted_runtime_not_configured")
         self.assertFalse(run.json()["side_effects"]["worker_invoked"])
         open_worker.assert_not_called()
+
+    def test_activation_flag_alone_cannot_invoke_a_worker(self) -> None:
+        with patch("supermega_runtime.cloud_runtime._open_worker_request") as open_worker:
+            with self._client(**{SCHEDULER_ACTIVATION_EVIDENCE_ENV: ""}) as client:
+                status = client.get("/api/cloud-autonomy/status")
+                run = client.get(QUEUE_CRON_PATH, headers={"authorization": "Bearer cron-secret"})
+
+        scheduler = status.json()["scheduler"]
+        self.assertTrue(scheduler["activation_requested"])
+        self.assertFalse(scheduler["activation_enabled"])
+        self.assertFalse(scheduler["activation_evidence_valid"])
+        self.assertIn("activation_evidence_missing", scheduler["configuration_errors"])
+        self.assertEqual(run.json()["execution"], "hosted_runtime_not_configured")
+        self.assertFalse(run.json()["side_effects"]["worker_invoked"])
+        open_worker.assert_not_called()
+
+    def test_signed_activation_evidence_is_exact_release_and_provider_bound(self) -> None:
+        cases = (
+            ({"VERCEL_ENV": "preview"}, "activation_runtime_environment_invalid"),
+            ({"VERCEL_PROJECT_ID": "prj_wrong"}, "activation_runtime_project_invalid"),
+            ({"VERCEL_GIT_COMMIT_SHA": "b" * 40}, "activation_evidence_release_mismatch"),
+        )
+        for overrides, expected_error in cases:
+            with self.subTest(expected_error=expected_error):
+                with patch("supermega_runtime.cloud_runtime._open_worker_request") as open_worker:
+                    with self._client(**overrides) as client:
+                        status = client.get("/api/cloud-autonomy/status")
+                        run = client.get(QUEUE_CRON_PATH, headers={"authorization": "Bearer cron-secret"})
+                self.assertIn(expected_error, status.json()["scheduler"]["configuration_errors"])
+                self.assertFalse(run.json()["side_effects"]["worker_invoked"])
+                open_worker.assert_not_called()
+
+    def test_tampered_incomplete_and_expired_activation_evidence_fail_closed(self) -> None:
+        tampered = json.loads(self._signed_activation_evidence())
+        tampered["signature"] = f"hmac-sha256:{'0' * 64}"
+        incomplete = self._signed_activation_evidence(evidence=[])
+        issued = datetime.now(timezone.utc).replace(microsecond=0) - timedelta(days=2)
+        expired = self._signed_activation_evidence(
+            issued_at=issued,
+            expires_at=issued + timedelta(days=1),
+        )
+        cases = (
+            (json.dumps(tampered, separators=(",", ":"), sort_keys=True), "activation_evidence_signature_invalid"),
+            (incomplete, "activation_evidence_incomplete"),
+            (expired, "activation_evidence_expired"),
+        )
+        for evidence, expected_error in cases:
+            with self.subTest(expected_error=expected_error):
+                with patch("supermega_runtime.cloud_runtime._open_worker_request") as open_worker:
+                    with self._client(**{SCHEDULER_ACTIVATION_EVIDENCE_ENV: evidence}) as client:
+                        status = client.get("/api/cloud-autonomy/status")
+                        run = client.get(QUEUE_CRON_PATH, headers={"authorization": "Bearer cron-secret"})
+                self.assertIn(expected_error, status.json()["scheduler"]["configuration_errors"])
+                self.assertFalse(run.json()["side_effects"]["worker_invoked"])
+                open_worker.assert_not_called()
+
+    def test_activation_status_exposes_metadata_only(self) -> None:
+        raw_evidence = self._signed_activation_evidence()
+        with self._client(**{SCHEDULER_ACTIVATION_EVIDENCE_ENV: raw_evidence}) as client:
+            status = client.get("/api/cloud-autonomy/status")
+
+        scheduler = status.json()["scheduler"]
+        serialized = json.dumps(scheduler, sort_keys=True)
+        self.assertEqual(status.json()["status"], "ready")
+        self.assertTrue(scheduler["activation_requested"])
+        self.assertTrue(scheduler["activation_enabled"])
+        self.assertTrue(scheduler["activation_evidence_valid"])
+        self.assertEqual(scheduler["activation_evidence_count"], 5)
+        self.assertRegex(scheduler["activation_evidence_digest"], r"^sha256:[a-f0-9]{64}$")
+        self.assertEqual(scheduler["activation_evidence_release_commit"], self.release_commit)
+        self.assertNotIn(self.activation_secret, serialized)
+        self.assertNotIn(raw_evidence, serialized)
+        self.assertNotIn("hmac-sha256", serialized)
 
     def test_queue_and_daily_routes_forward_fixed_meaningful_job_types(self) -> None:
         with patch("supermega_runtime.cloud_runtime._open_worker_request", side_effect=self._success_response) as open_worker:

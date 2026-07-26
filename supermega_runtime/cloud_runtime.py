@@ -27,6 +27,14 @@ from .agent_governance import (
     issue_agent_budget_grant,
     load_agent_workforce_policy,
 )
+from .scheduler_activation import (
+    CANONICAL_SCHEDULER_PROJECT_ID,
+    SCHEDULER_ACTIVATION_EVIDENCE_CONTRACT,
+    SCHEDULER_ACTIVATION_EVIDENCE_ENV,
+    SCHEDULER_ACTIVATION_SIGNING_SECRET_ENV,
+    SchedulerActivationEvidenceResult,
+    verify_scheduler_activation_evidence,
+)
 
 
 router = APIRouter()
@@ -115,13 +123,21 @@ def _worker_token() -> str:
     return _text(os.getenv("SUPERMEGA_INTERNAL_CRON_TOKEN")) or _text(os.getenv("CRON_SECRET"))
 
 
-def _scheduler_activation_state() -> tuple[bool, str | None]:
+def _scheduler_activation_state(
+) -> tuple[bool, bool, str | None, SchedulerActivationEvidenceResult | None]:
     raw = _text(os.getenv(SCHEDULER_ENABLED_ENV))
     if not raw or raw == "0":
-        return False, "scheduler_activation_disabled"
+        return False, False, "scheduler_activation_disabled", None
     if raw != "1":
-        return False, "scheduler_activation_invalid"
-    return True, None
+        return False, False, "scheduler_activation_invalid", None
+    evidence = verify_scheduler_activation_evidence(
+        os.getenv(SCHEDULER_ACTIVATION_EVIDENCE_ENV),
+        secret=os.getenv(SCHEDULER_ACTIVATION_SIGNING_SECRET_ENV),
+        expected_release_commit=_text(os.getenv("VERCEL_GIT_COMMIT_SHA")),
+        expected_project_id=_text(os.getenv("VERCEL_PROJECT_ID")),
+        expected_environment=_text(os.getenv("VERCEL_ENV")),
+    )
+    return True, evidence.valid, evidence.error, evidence
 
 
 def _authorized(authorization: str | None, x_cron_secret: str | None) -> bool:
@@ -233,7 +249,9 @@ def _validated_worker_url() -> tuple[str | None, str | None, int]:
 
 
 def _runtime_status() -> dict[str, object]:
-    activation_enabled, activation_error = _scheduler_activation_state()
+    activation_requested, activation_enabled, activation_error, activation_evidence = (
+        _scheduler_activation_state()
+    )
     token_configured = bool(_configured_tokens())
     cron_secret_configured = bool(_text(os.getenv("CRON_SECRET")))
     worker_url_configured = bool(_text(os.getenv(WORKER_URL_ENV)))
@@ -264,7 +282,26 @@ def _runtime_status() -> dict[str, object]:
             "configured": scheduler_ready,
             "activation_required": True,
             "activation_environment_key": SCHEDULER_ENABLED_ENV,
+            "activation_requested": activation_requested,
             "activation_enabled": activation_enabled,
+            "activation_evidence_required": True,
+            "activation_evidence_contract": SCHEDULER_ACTIVATION_EVIDENCE_CONTRACT,
+            "activation_evidence_environment_key": SCHEDULER_ACTIVATION_EVIDENCE_ENV,
+            "activation_evidence_signing_secret_environment_key": SCHEDULER_ACTIVATION_SIGNING_SECRET_ENV,
+            "activation_evidence_valid": bool(activation_evidence and activation_evidence.valid),
+            "activation_evidence_digest": (
+                activation_evidence.evidence_digest if activation_evidence else None
+            ),
+            "activation_evidence_release_commit": (
+                activation_evidence.release_commit if activation_evidence else None
+            ),
+            "activation_evidence_expires_at": (
+                activation_evidence.expires_at if activation_evidence else None
+            ),
+            "activation_evidence_count": (
+                activation_evidence.evidence_count if activation_evidence else 0
+            ),
+            "canonical_project_id": CANONICAL_SCHEDULER_PROJECT_ID,
             "token_configured": token_configured,
             "cron_secret_configured": cron_secret_configured,
             "worker_url_configured": worker_url_configured,
