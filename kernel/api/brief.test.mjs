@@ -188,7 +188,87 @@ test('legacy CEO brief remains available and is also duplicate-safe', async () =
   })
   assert.equal(result.ok, true)
   assert.equal(result.mode, 'legacy')
+  assert.equal(result.companyMode, 'supermega_hq')
   assert.equal(result.duplicate, true)
+  assert.equal(result.declined, true)
+  assert.equal(result.reason, 'ceo_outcome_duplicate')
+  assert.equal(result.outcome.id, 'daily-company-control')
   assert.equal(sends, 0)
   assert.equal(runs, 0)
+})
+
+test('SuperMega CEO cycle selects one HQ outcome and uses its fixed evidence plan', async () => {
+  const executions = durableClaimStore('execution')
+  const deliveries = durableClaimStore('delivery')
+  const operatorInputs = []
+  const sent = []
+  const result = await runScheduledBrief({
+    env: {},
+    now: NOW,
+    runOperator: async (input) => {
+      operatorInputs.push(input)
+      return {
+        ok: true,
+        planningMode: 'hq_authority_fixed',
+        answer: 'One decision',
+        results: input.approvedPlan.map((step) => ({ tool: step.tool, ok: true })),
+      }
+    },
+    claimWorkcellExecution: executions.claim,
+    claimWorkcellDelivery: deliveries.claim,
+    releaseWorkcellDelivery: async (claim) => (await executions.release(claim)) || deliveries.release(claim),
+    notify: async (message) => { sent.push(message); return true },
+  })
+
+  assert.equal(result.ok, true)
+  assert.equal(result.companyMode, 'supermega_hq')
+  assert.equal(result.outcome.id, 'daily-company-control')
+  assert.equal(result.planningMode, 'hq_authority_fixed')
+  assert.equal(operatorInputs.length, 1)
+  assert.deepEqual(operatorInputs[0].approvedPlan.map((step) => step.tool), [
+    'leads_overview',
+    'pipeline_overview',
+    'fx_rate',
+    'platform_status',
+  ])
+  assert.match(operatorInputs[0].goal, /Blocked context only - never execute/)
+  assert.equal(sent.length, 1)
+  assert.match(sent[0], /Prepare one evidence-backed owner decision/)
+})
+
+test('blocked or completed HQ outcomes decline before claims, models, or sends', async () => {
+  let claims = 0
+  let runs = 0
+  let sends = 0
+  const result = await runScheduledBrief({
+    env: {},
+    now: NOW,
+    completedOutcomeIds: ['daily-company-control'],
+    runOperator: async () => { runs += 1; return { ok: true, answer: 'unused', results: [] } },
+    claimWorkcellExecution: async () => { claims += 1; return { fresh: true, durable: true } },
+    claimWorkcellDelivery: async () => { claims += 1; return { fresh: true, durable: true } },
+    notify: async () => { sends += 1; return true },
+  })
+  assert.equal(result.ok, true)
+  assert.equal(result.declined, true)
+  assert.equal(result.reason, 'no_authorized_ceo_outcome')
+  assert.equal(result.skipped.filter((item) => item.reason === 'authority_blocked').length, 3)
+  assert.equal(claims, 0)
+  assert.equal(runs, 0)
+  assert.equal(sends, 0)
+})
+
+test('invalid HQ authority fails closed before claims, models, or sends', async () => {
+  let work = 0
+  const result = await runScheduledBrief({
+    env: {},
+    now: NOW,
+    ceoAuthority: {},
+    runOperator: async () => { work += 1; return { ok: true } },
+    claimWorkcellExecution: async () => { work += 1; return { fresh: true, durable: true } },
+    notify: async () => { work += 1; return true },
+  })
+  assert.equal(result.ok, false)
+  assert.equal(result.reason, 'ceo_outcome_authority_invalid')
+  assert.equal(work, 0)
 })

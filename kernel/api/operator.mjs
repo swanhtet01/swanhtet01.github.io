@@ -47,7 +47,28 @@ function safeJson(value) {
   }
 }
 
-export async function runOperator({ goal }, options = {}) {
+function approvedToolPlan(value, tools) {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 4) return null
+  const available = new Set(tools.map((tool) => tool.name))
+  const steps = []
+  for (const item of value) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return null
+    if (Object.keys(item).some((field) => !['tool', 'args'].includes(field))) return null
+    const tool = String(item.tool || '').trim()
+    const args = item.args
+    if (!available.has(tool) || !args || typeof args !== 'object' || Array.isArray(args)) return null
+    let safeArgs
+    try {
+      const serialized = JSON.stringify(args)
+      if (!serialized || Buffer.byteLength(serialized, 'utf8') > 1000) return null
+      safeArgs = JSON.parse(serialized)
+    } catch { return null }
+    steps.push({ tool, args: safeArgs, reason: 'hq_authority_fixed_evidence' })
+  }
+  return steps
+}
+
+export async function runOperator({ goal, approvedPlan }, options = {}) {
   const complete = options.complete || gateway.complete
   const executeTool = options.runTool || runTool
   const listTools = options.availableTools || availableTools
@@ -55,19 +76,27 @@ export async function runOperator({ goal }, options = {}) {
   if (!g) return { ok: false, reason: 'missing_goal' }
   const tools = listTools()
 
-  // 1) PLAN — pick read-only tools to gather what the goal needs.
-  const catalog = tools.map((t) => `- ${t.name}: ${t.description} args=${JSON.stringify(t.input_schema.properties || {})}`).join('\n')
+  // 1) PLAN — use checked HQ evidence steps when present; otherwise plan from the read-only catalog.
   let plan
-  try {
-    const r = await complete({
-      system: `You are SuperMega's operations agent. Decide which READ-ONLY tools to call to answer the goal. Use ONLY tools from this catalog; if none help, return an empty steps array. Max 4 steps.\n\nTOOLS\n${catalog || '(none available)'}`,
-      messages: [{ role: 'user', content: `Goal: ${g}` }],
-      tier: 'bulk',
-      schema: PLAN_SCHEMA,
-    })
-    plan = r.data
-  } catch (e) {
-    return { ok: false, reason: 'plan_failed', detail: String((e && e.message) || 'gateway_error').slice(0, 160) }
+  let planningMode = 'model_planned'
+  if (approvedPlan !== undefined) {
+    const steps = approvedToolPlan(approvedPlan, tools)
+    if (!steps) return { ok: false, reason: 'approved_plan_invalid' }
+    plan = { steps }
+    planningMode = 'hq_authority_fixed'
+  } else {
+    const catalog = tools.map((t) => `- ${t.name}: ${t.description} args=${JSON.stringify(t.input_schema.properties || {})}`).join('\n')
+    try {
+      const r = await complete({
+        system: `You are SuperMega's operations agent. Decide which READ-ONLY tools to call to answer the goal. Use ONLY tools from this catalog; if none help, return an empty steps array. Max 4 steps.\n\nTOOLS\n${catalog || '(none available)'}`,
+        messages: [{ role: 'user', content: `Goal: ${g}` }],
+        tier: 'bulk',
+        schema: PLAN_SCHEMA,
+      })
+      plan = r.data
+    } catch (e) {
+      return { ok: false, reason: 'plan_failed', detail: String((e && e.message) || 'gateway_error').slice(0, 160) }
+    }
   }
 
   // 2) EXECUTE — validated, bounded, read-only.
@@ -106,7 +135,7 @@ export async function runOperator({ goal }, options = {}) {
     answer = `(synthesis unavailable: ${String((e && e.message) || 'gateway_error').slice(0, 120)})`
   }
 
-  return { ok: true, goal: g, plan, results, answer }
+  return { ok: true, goal: g, planningMode, plan, results, answer }
 }
 
 export default async function handler(req, res) {

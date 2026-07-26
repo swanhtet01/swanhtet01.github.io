@@ -1,5 +1,5 @@
 // Scheduled owner brief. When workcell slugs are configured, run those fixed products;
-// otherwise preserve the existing SuperMega CEO brief. Every run is admitted by a durable
+// otherwise run the authority-bound SuperMega CEO outcome. Every run is admitted by a durable
 // hourly execution claim, and every owner-only delivery has a durable daily claim.
 
 import crypto from 'node:crypto'
@@ -7,9 +7,7 @@ import { runOperator } from './operator.mjs'
 import { notify } from '../alert.mjs'
 import { claimWorkcellDelivery, claimWorkcellExecution, formatWorkcellNotification, releaseWorkcellDelivery, runWorkcell } from '../workcell-run.mjs'
 import { resolveWorkcellConfig, scheduledWorkcellSlugs } from '../workcells.mjs'
-
-const BRIEF_GOAL =
-  "Give the SuperMega CEO a concise daily brief - max 6 short lines. Include: inbound leads (total and by stage), the sales pipeline (projects by status + number of deals), today's USD/MMK reference rate, and flag anything that needs attention. Use the available tools to get the REAL numbers; never invent."
+import { buildCeoOutcomeGoal, selectCeoOutcome } from '../supermega-hq-authority.mjs'
 
 function safeEq(a, b) {
   const left = crypto.createHash('sha256').update(String(a)).digest()
@@ -29,6 +27,18 @@ async function claimSafely(claim, slug, options, failureReason) {
 async function releaseClaimSafely(releaseClaim, claim) {
   try { return Boolean(await releaseClaim(claim)) }
   catch { return false }
+}
+
+function ceoOutcomeView(selection) {
+  const selected = selection?.selected
+  return selected ? {
+    authorityId: selection.authorityId,
+    authorityDigest: selection.authorityDigest,
+    id: selected.id,
+    title: selected.title,
+    team: selected.team,
+    actionMode: selected.actionMode,
+  } : null
 }
 
 export async function runScheduledBrief(options = {}) {
@@ -96,25 +106,68 @@ export async function runScheduledBrief(options = {}) {
     }
   }
 
+  const select = options.selectCeoOutcome || selectCeoOutcome
+  const selection = select({
+    authority: options.ceoAuthority,
+    completedOutcomeIds: options.completedOutcomeIds,
+    inFlightOutcomeIds: options.inFlightOutcomeIds,
+  })
+  if (!selection?.ok) return { ok: false, mode: 'legacy', companyMode: 'supermega_hq', reason: selection?.reason || 'ceo_outcome_authority_invalid' }
+  if (selection.declined || !selection.selected) {
+    return {
+      ok: true,
+      mode: 'legacy',
+      companyMode: 'supermega_hq',
+      declined: true,
+      sent: false,
+      reason: selection.reason || 'no_authorized_ceo_outcome',
+      authorityId: selection.authorityId,
+      authorityDigest: selection.authorityDigest,
+      skipped: selection.skipped,
+    }
+  }
+
+  const outcome = ceoOutcomeView(selection)
+  const claimSlug = `ceo-${selection.selected.id}`
   const run = options.runOperator || runOperator
-  const executionClaim = await claimSafely(claimExecution, 'legacy-ceo-brief', { env, now }, 'durable_execution_claim_unavailable')
-  if (!executionClaim?.fresh && executionClaim?.durable) return { ok: true, mode: 'legacy', duplicate: true, sent: false }
-  if (!claimAccepted(executionClaim)) return { ok: false, mode: 'legacy', reason: executionClaim?.reason || 'durable_execution_claim_unavailable' }
+  const executionClaim = await claimSafely(claimExecution, claimSlug, { env, now }, 'durable_execution_claim_unavailable')
+  if (!executionClaim?.fresh && executionClaim?.durable) {
+    return {
+      ok: true,
+      mode: 'legacy',
+      companyMode: 'supermega_hq',
+      declined: true,
+      duplicate: true,
+      sent: false,
+      reason: 'ceo_outcome_duplicate',
+      outcome,
+    }
+  }
+  if (!claimAccepted(executionClaim)) {
+    return { ok: false, mode: 'legacy', companyMode: 'supermega_hq', reason: executionClaim?.reason || 'durable_execution_claim_unavailable', outcome }
+  }
   let result
-  try { result = await run({ goal: BRIEF_GOAL }) }
+  try {
+    result = await run({
+      goal: buildCeoOutcomeGoal(selection),
+      approvedPlan: selection.selected.evidencePlan,
+    })
+  }
   catch { result = { ok: false, reason: 'brief_failed' } }
   if (!result.ok) {
     const retryable = await releaseClaimSafely(releaseDelivery, executionClaim)
-    return { ok: false, mode: 'legacy', reason: result.reason || 'brief_failed', retryable }
+    return { ok: false, mode: 'legacy', companyMode: 'supermega_hq', reason: result.reason || 'brief_failed', retryable, outcome }
   }
-  const deliveryClaim = await claimSafely(claimDelivery, 'legacy-ceo-brief', { env, now }, 'durable_delivery_claim_unavailable')
-  if (!deliveryClaim?.fresh && deliveryClaim?.durable) return { ok: true, mode: 'legacy', duplicate: true, sent: false }
+  const deliveryClaim = await claimSafely(claimDelivery, claimSlug, { env, now }, 'durable_delivery_claim_unavailable')
+  if (!deliveryClaim?.fresh && deliveryClaim?.durable) {
+    return { ok: true, mode: 'legacy', companyMode: 'supermega_hq', declined: true, duplicate: true, sent: false, reason: 'ceo_outcome_duplicate', outcome }
+  }
   if (!claimAccepted(deliveryClaim)) {
     const retryable = await releaseClaimSafely(releaseDelivery, executionClaim)
-    return { ok: false, mode: 'legacy', reason: deliveryClaim?.reason || 'durable_delivery_claim_unavailable', retryable }
+    return { ok: false, mode: 'legacy', companyMode: 'supermega_hq', reason: deliveryClaim?.reason || 'durable_delivery_claim_unavailable', retryable, outcome }
   }
   let sent = false
-  try { sent = await send(`SuperMega | Daily brief\n\n${result.answer}`) } catch { sent = false }
+  try { sent = await send(`SuperMega | ${selection.selected.title}\n\n${result.answer}`) } catch { sent = false }
   let retryable
   if (!sent) {
     const deliveryReleased = await releaseClaimSafely(releaseDelivery, deliveryClaim)
@@ -124,9 +177,12 @@ export async function runScheduledBrief(options = {}) {
   return {
     ok: Boolean(sent),
     mode: 'legacy',
+    companyMode: 'supermega_hq',
     sent: Boolean(sent),
     reason: sent ? undefined : 'owner_delivery_failed',
     retryable,
+    outcome,
+    planningMode: result.planningMode || null,
     toolsUsed: (result.results || []).map((item) => item.tool),
     answer: result.answer,
   }
