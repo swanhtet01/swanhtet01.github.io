@@ -8,9 +8,22 @@ const schedulerAuthority = JSON.parse(await readFile(
   resolve(import.meta.dirname, 'supermega_scheduler_authority.json'),
   'utf8',
 ))
+const requiredSchedulerEvidence = [
+  'managed-database-tenant-isolation',
+  'private-storage-privacy',
+  'protected-worker-egress',
+  'queue-recovery-side-effect-accounting',
+  'protected-release-rollback-owner-decision',
+]
 if (schedulerAuthority.contract !== 'supermega.scheduler-authority.v2'
   || !['dormant', 'active'].includes(schedulerAuthority.activation?.state)
-  || schedulerAuthority.activation?.runtime_environment_key !== 'SUPERMEGA_HOSTED_SCHEDULER_ENABLED') {
+  || schedulerAuthority.activation?.runtime_environment_key !== 'SUPERMEGA_HOSTED_SCHEDULER_ENABLED'
+  || schedulerAuthority.activation?.evidence_contract !== 'supermega.scheduler-activation-evidence.v1'
+  || schedulerAuthority.activation?.evidence_environment_key !== 'SUPERMEGA_SCHEDULER_ACTIVATION_EVIDENCE'
+  || schedulerAuthority.activation?.signing_secret_environment_key !== 'SUPERMEGA_SCHEDULER_ACTIVATION_SIGNING_SECRET'
+  || schedulerAuthority.activation?.maximum_bundle_ttl_seconds !== 604800
+  || schedulerAuthority.activation?.maximum_evidence_age_seconds !== 604800
+  || JSON.stringify(schedulerAuthority.activation?.required_evidence) !== JSON.stringify(requiredSchedulerEvidence)) {
   throw new Error('scheduler_authority_contract_invalid')
 }
 const schedulerActive = schedulerAuthority.activation.state === 'active'
@@ -69,10 +82,15 @@ let deliveryModes = []
 let allowed = new Set()
 
 if (kind === 'app') {
-  const schedulerEnvironment = [
-    'SUPERMEGA_HOSTED_SCHEDULER_ENABLED',
+  const schedulerProtectedEnvironment = [
+    'SUPERMEGA_SCHEDULER_ACTIVATION_EVIDENCE',
+    'SUPERMEGA_SCHEDULER_ACTIVATION_SIGNING_SECRET',
     'CRON_SECRET',
     'SUPERMEGA_INTERNAL_CRON_TOKEN',
+  ]
+  const schedulerEnvironment = [
+    'SUPERMEGA_HOSTED_SCHEDULER_ENABLED',
+    ...schedulerProtectedEnvironment,
     'SUPERMEGA_CLOUD_TASKS_WORKER_URL',
     'SUPERMEGA_CLOUD_TASKS_ALLOWED_HOSTS',
   ]
@@ -95,6 +113,10 @@ if (kind === 'app') {
   }
   if (!schedulerActive && schedulerEnvironment.some((key) => productionKeys.has(key))) {
     addFailure('dormant_scheduler_environment_present')
+  }
+  if (schedulerActive && schedulerProtectedEnvironment.some((key) =>
+    entriesByKey.get(key)?.some((entry) => !protectedTypes.has(entry.type)))) {
+    addFailure('scheduler_activation_environment_not_protected')
   }
   operatingMode = managedCount === managedTrial.length ? 'managed_trial' : 'isolated_demo'
   allowed = new Set([...core, ...managedTrial, ...optional])

@@ -1352,6 +1352,13 @@ const expectedSchedulerActivationPlan = [
   { path: '/api/cron/supermega/agent-queue', schedule: '5 * * * *' },
   { path: '/api/cron/supermega/daily', schedule: '45 0 * * *' },
 ]
+const expectedSchedulerActivationEvidence = [
+  'managed-database-tenant-isolation',
+  'private-storage-privacy',
+  'protected-worker-egress',
+  'queue-recovery-side-effect-accounting',
+  'protected-release-rollback-owner-decision',
+]
 if (schedulerAuthority.contract !== 'supermega.scheduler-authority.v2'
   || schedulerAuthority.authority !== 'vercel'
   || schedulerAuthority.environment !== 'production'
@@ -1360,7 +1367,12 @@ if (schedulerAuthority.contract !== 'supermega.scheduler-authority.v2'
   || schedulerAuthority.activation?.state !== 'dormant'
   || schedulerAuthority.activation?.runtime_environment_key !== 'SUPERMEGA_HOSTED_SCHEDULER_ENABLED'
   || schedulerAuthority.activation?.enabled_value !== '1'
-  || schedulerAuthority.activation?.required_evidence?.length !== 5
+  || schedulerAuthority.activation?.evidence_contract !== 'supermega.scheduler-activation-evidence.v1'
+  || schedulerAuthority.activation?.evidence_environment_key !== 'SUPERMEGA_SCHEDULER_ACTIVATION_EVIDENCE'
+  || schedulerAuthority.activation?.signing_secret_environment_key !== 'SUPERMEGA_SCHEDULER_ACTIVATION_SIGNING_SECRET'
+  || schedulerAuthority.activation?.maximum_bundle_ttl_seconds !== 604800
+  || schedulerAuthority.activation?.maximum_evidence_age_seconds !== 604800
+  || JSON.stringify(schedulerAuthority.activation?.required_evidence) !== JSON.stringify(expectedSchedulerActivationEvidence)
   || JSON.stringify(schedulerAuthority.crons?.map(({ path, schedule }) => ({ path, schedule }))) !== JSON.stringify(expectedSchedulerCrons)
   || schedulerAuthority.maximum_scheduler_invocations_per_day !== 0
   || JSON.stringify(schedulerAuthority.activation_plan?.crons?.map(({ path, schedule }) => ({ path, schedule }))) !== JSON.stringify(expectedSchedulerActivationPlan)

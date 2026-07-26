@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { resolve } from 'node:path'
+import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 
 const verifier = resolve(import.meta.dirname, 'verify_vercel_environment_state.mjs')
 const env = (key, options = {}) => {
@@ -18,7 +20,7 @@ function run(kind, entries, options = {}) {
   delete childEnv.VERIFY_ENV_CLEANUP_STRICT
   if (options.strictCleanup === false) childEnv.VERIFY_ENV_CLEANUP_STRICT = '0'
   if (options.strictCleanup === true) childEnv.VERIFY_ENV_CLEANUP_STRICT = '1'
-  return spawnSync(process.execPath, [verifier, kind], {
+  return spawnSync(process.execPath, [options.verifier ?? verifier, kind], {
     input: JSON.stringify({ envs: entries }),
     encoding: 'utf8',
     env: childEnv,
@@ -31,6 +33,8 @@ function parse(result) {
 
 const dormantSchedulerEnvironment = [
   env('SUPERMEGA_HOSTED_SCHEDULER_ENABLED', { type: 'plain' }),
+  env('SUPERMEGA_SCHEDULER_ACTIVATION_EVIDENCE'),
+  env('SUPERMEGA_SCHEDULER_ACTIVATION_SIGNING_SECRET'),
   env('CRON_SECRET'),
   env('SUPERMEGA_INTERNAL_CRON_TOKEN', { type: 'encrypted' }),
   env('SUPERMEGA_CLOUD_TASKS_WORKER_URL', { type: 'plain' }),
@@ -58,6 +62,53 @@ assert.ok(parse(partialManaged).failures.includes('managed_trial_environment_inc
 const dormantScheduler = run('app', dormantSchedulerEnvironment)
 assert.notEqual(dormantScheduler.status, 0, 'dormant_scheduler_environment_allowed')
 assert.ok(parse(dormantScheduler).failures.includes('dormant_scheduler_environment_present'))
+
+const activeFixtureDirectory = mkdtempSync(join(tmpdir(), 'supermega-vercel-env-active-'))
+const activeVerifier = join(activeFixtureDirectory, 'verify_vercel_environment_state.mjs')
+const activeAuthorityPath = join(activeFixtureDirectory, 'supermega_scheduler_authority.json')
+copyFileSync(verifier, activeVerifier)
+const activeAuthority = JSON.parse(readFileSync(resolve(import.meta.dirname, 'supermega_scheduler_authority.json'), 'utf8'))
+activeAuthority.activation.state = 'active'
+writeFileSync(activeAuthorityPath, JSON.stringify(activeAuthority))
+try {
+  const activeScheduler = run('app', [...managedTrial, ...dormantSchedulerEnvironment], { verifier: activeVerifier })
+  assert.equal(activeScheduler.status, 0, 'active_scheduler_environment_rejected')
+  assert.equal(parse(activeScheduler).schedulerActivation, 'active')
+
+  const missingActivationEvidence = run(
+    'app',
+    [...managedTrial, ...dormantSchedulerEnvironment.filter((entry) => entry.key !== 'SUPERMEGA_SCHEDULER_ACTIVATION_EVIDENCE')],
+    { verifier: activeVerifier },
+  )
+  assert.notEqual(missingActivationEvidence.status, 0, 'missing_activation_evidence_allowed')
+  assert.ok(parse(missingActivationEvidence).missing.includes('SUPERMEGA_SCHEDULER_ACTIVATION_EVIDENCE'))
+
+  const plainActivationEvidence = run(
+    'app',
+    [
+      ...managedTrial,
+      ...dormantSchedulerEnvironment.filter((entry) => entry.key !== 'SUPERMEGA_SCHEDULER_ACTIVATION_EVIDENCE'),
+      env('SUPERMEGA_SCHEDULER_ACTIVATION_EVIDENCE', { type: 'plain' }),
+    ],
+    { verifier: activeVerifier },
+  )
+  assert.notEqual(plainActivationEvidence.status, 0, 'plain_activation_evidence_allowed')
+  assert.ok(parse(plainActivationEvidence).failures.includes('scheduler_activation_environment_not_protected'))
+
+  const previewActivationSecret = run(
+    'app',
+    [
+      ...managedTrial,
+      ...dormantSchedulerEnvironment.filter((entry) => entry.key !== 'SUPERMEGA_SCHEDULER_ACTIVATION_SIGNING_SECRET'),
+      env('SUPERMEGA_SCHEDULER_ACTIVATION_SIGNING_SECRET', { target: ['production', 'preview'] }),
+    ],
+    { verifier: activeVerifier },
+  )
+  assert.notEqual(previewActivationSecret.status, 0, 'preview_activation_secret_allowed')
+  assert.ok(parse(previewActivationSecret).invalidScopeVariables.includes('SUPERMEGA_SCHEDULER_ACTIVATION_SIGNING_SECRET'))
+} finally {
+  rmSync(activeFixtureDirectory, { recursive: true, force: true })
+}
 
 const publicReady = run('public', [
   env('SUPERMEGA_CONTACT_IDEMPOTENCY_SECRET'),
@@ -128,4 +179,4 @@ const redaction = run('app', [
 assert.equal(redaction.status, 0, 'redaction_fixture_failed')
 assert.equal(`${redaction.stdout}${redaction.stderr}`.includes(sentinel), false, 'environment_value_disclosed')
 
-console.log(JSON.stringify({ ok: true, contract: 'supermega_vercel_environment_state_tests', checks: 16 }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_vercel_environment_state_tests', checks: 20 }, null, 2))
