@@ -1742,7 +1742,7 @@ export function OverviewPage() {
     <div className="workspace-screen command-screen">
       <PageHeading copy="Continue the most important operating record, or choose a product below." eyebrow="Home" title="Start here" />
       <section className="core-panel next-task-card">
-        <div><span className="core-eyebrow">{nextPriority.label}</span><h2>{nextPriority.title}</h2><p>{nextPriority.detail}</p></div>
+        <div><div className="next-task-source"><span className="core-eyebrow">{nextPriority.label}</span><span className={`status-pill ${managedIdentity ? 'bounded' : 'pending'}`}>{managedIdentity ? 'Managed records' : 'Sample data'}</span></div><h2>{nextPriority.title}</h2><p>{nextPriority.detail}</p></div>
         {nextPriority.approvalId
           ? <button className="core-button primary" onClick={() => setSelectedApprovalId(nextPriority.approvalId ?? '')} type="button">{nextPriority.action}</button>
           : <Link className="core-button primary" to={nextPriority.href ?? '/'}>{nextPriority.action}</Link>}
