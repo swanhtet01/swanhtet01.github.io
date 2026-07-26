@@ -20,6 +20,7 @@ let clientOnboardingRuntimeChecks = 0
 let managedClientImportRuntimeChecks = 0
 let shopInventoryRuntimeChecks = 0
 let plantOrderRuntimeChecks = 0
+let websiteReleaseRuntimeChecks = 0
 let commerceRuntimeChecks = 0
 let productionRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
@@ -76,6 +77,32 @@ const shopInventorySource = await readFile(resolve(root, 'showroom', 'src', 'cor
 const shopInventoryUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopInventoryFoundation.tsx'), 'utf8')
 const plantOrderSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'plant-order-foundation.ts'), 'utf8')
 const plantOrderUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'PlantOrderFoundation.tsx'), 'utf8')
+const websiteReleaseSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-release-foundation.ts'), 'utf8')
+const websiteReleaseUiSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'WebsiteReleaseFoundation.tsx'), 'utf8')
+
+if (!websiteReleaseSource.includes("supermega.website.release_foundation.v1")
+  || !websiteReleaseSource.includes('buildWebsiteReleasePackage')
+  || !websiteReleaseSource.includes('upgradeWebsiteReleasePackage')
+  || !websiteReleaseSource.includes('approveWebsiteReleasePackage')
+  || !websiteReleaseSource.includes('prepareWebsiteDeployPlan')
+  || !websiteReleaseSource.includes("status: 'not_executed'")
+  || !websiteReleaseSource.includes("protection: 'required'")
+  || !websiteReleaseSource.includes('ownerApprovalRequired: true')
+  || !websiteReleaseSource.includes('exclusive browser lock')
+  || !websiteReleaseSource.includes('Website release write verification failed.')) fail('website_release_foundation_contract_missing')
+if (['fetch(', 'XMLHttpRequest', 'process.env', 'import.meta.env', 'vercel.com/api', 'api.vercel.com'].some((marker) => websiteReleaseSource.includes(marker))) fail('website_release_foundation_crossed_provider_boundary')
+if (!publishSource.includes("lazy(() => import('./WebsiteReleaseFoundation'))")
+  || !publishSource.includes('<WebsiteReleaseFoundation')
+  || !publishSource.includes('website-publish-history-disclosure')
+  || !websiteReleaseUiSource.includes('Record release review')
+  || !websiteReleaseUiSource.includes('Prepare rollout plan')
+  || !websiteReleaseUiSource.includes('Download release record')
+  || !websiteReleaseUiSource.includes('No deployment, domain, credential, or provider change happens here.')
+  || !websiteReleaseUiSource.includes("projectRef: 'owner-bound-at-execution'")
+  || !websiteReleaseUiSource.includes('previousDeployment: null')
+  || !publishCssSource.includes('.website-release-foundation')
+  || !publishCssSource.includes('.website-release-action .website-button')) fail('website_release_progressive_ui_missing')
+if (['fetch(', 'XMLHttpRequest', 'WebSocket(', 'EventSource(', 'api.vercel.com'].some((marker) => websiteReleaseUiSource.includes(marker))) fail('website_release_ui_crossed_provider_boundary')
 
 if (!viteConfigSource.includes("id.includes('/src/core/channel-order-intake.ts')")
   || !viteConfigSource.includes("id.includes('/src/core/managed-trial.ts')")
@@ -2205,6 +2232,160 @@ async function verifyPlantOrderRuntime() {
     assert(!unconfirmed.ok && values.get(storageKey) === beforeUnlocked, 'plant_order_unconfirmed_write_not_rolled_back')
   } catch (error) {
     fail(`plant_order_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
+async function verifyWebsiteReleaseRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    websiteReleaseRuntimeChecks += 1
+  }
+  const assertThrows = (action, reason) => {
+    try { action() } catch { websiteReleaseRuntimeChecks += 1; return }
+    throw new Error(reason)
+  }
+  try {
+    const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-release-foundation.ts')).href}?website-release-verify=${Date.now()}`)
+    const scope = 'website:client-demo'
+    const digest = (label) => model.websiteReleaseEvidenceDigest({ label })
+    const proof = (sequence, actor, label) => ({
+      actionId: `ACT-WEB-20260726-${String(sequence).padStart(3, '0')}`,
+      capturedAt: `2026-07-26T10:00:${String(sequence).padStart(2, '0')}+06:30`,
+      actor,
+      reason: label,
+      evidenceReference: `WEB-RELEASE-20260726-${String(sequence).padStart(3, '0')}`,
+    })
+    const source = (sourceScope = scope) => ({
+      scope: sourceScope,
+      snapshotId: 'snapshot-approved-001',
+      websiteFingerprint: 'web-1a2b3c4d',
+      artifactDigest: digest('approved-site-artifact'),
+      contentRevision: 7,
+      contentApprovalId: 'approval-content-001',
+      contentApprovalActor: 'Content owner',
+      contentApprovalAt: '2026-07-26T09:30:00+06:30',
+      evidence: [
+        { id: 'evidence-content-001', kind: 'content', reference: 'review://content/001', verifiedBy: 'Content owner', verifiedAt: '2026-07-26T09:10:00+06:30' },
+        { id: 'evidence-links-001', kind: 'links', reference: 'test://links/001', verifiedBy: 'QA reviewer', verifiedAt: '2026-07-26T09:15:00+06:30' },
+        { id: 'evidence-responsive-001', kind: 'responsive', reference: 'test://responsive/390-1280', verifiedBy: 'QA reviewer', verifiedAt: '2026-07-26T09:20:00+06:30' },
+      ],
+    })
+    const brand = {
+      schema: model.WEBSITE_BRAND_TOKEN_CONTRACT,
+      palette: { accent: '#087f5b', ink: '#17211b', surface: '#f7f8f4' },
+      typography: { body: 'noto-sans-myanmar', heading: 'system-sans' },
+      radiusPx: 12,
+    }
+    const locales = [
+      { locale: 'en', isDefault: true, status: 'approved', contentDigest: digest('approved-English-content') },
+      { locale: 'my', isDefault: false, status: 'draft', contentDigest: digest('draft-Myanmar-content') },
+    ]
+    const media = [{
+      assetId: 'asset-hero-001', kind: 'image', digest: digest('hero-image'), bytes: 240_000, decorative: false,
+      alt: [{ locale: 'en', text: 'Team preparing a customer order at the counter' }],
+    }]
+    const roles = [
+      { role: 'content_owner', actor: 'Content owner' },
+      { role: 'release_manager', actor: 'Release manager' },
+      { role: 'release_reviewer', actor: 'Release reviewer' },
+    ]
+    const buildPackage = (version = 1, sourceScope = scope) => model.buildWebsiteReleasePackage({
+      packageId: `package-business-v${version}-001`, source: source(sourceScope), template: model.websiteReleaseTemplate(version), brand, locales, media, roles,
+    })
+
+    const candidate = buildPackage()
+    assert(candidate.packageDigest === 'sha256:91d8360005aef757da99d129a53d48b58cba97dc1ca1c00df3fbe900a7c63454'
+      && candidate.source.scope === scope
+      && candidate.source.evidence.map((row) => row.kind).join(',') === 'content,links,responsive',
+    'website_release_python_browser_package_digest_drifted')
+    const wrongScope = model.createEmptyWebsiteReleaseState('website:other-client')
+    assertThrows(() => model.prepareWebsiteReleasePackage(wrongScope, candidate, proof(1, 'Release manager', 'cross-scope attempt'), wrongScope.headDigest), 'website_release_cross_scope_package_succeeded')
+
+    const empty = model.createEmptyWebsiteReleaseState(scope)
+    let result = model.prepareWebsiteReleasePackage(empty, candidate, proof(1, 'Release manager', 'prepared approved Website release package'), empty.headDigest)
+    assert(result.state.headDigest === 'sha256:041aa00af3bc5a66e4d5a693fca19398bb8040bafd205dc27c72bb64468d2cd2', 'website_release_prepare_head_drifted')
+    const prepared = result.state
+    const retry = model.prepareWebsiteReleasePackage(prepared, candidate, proof(1, 'Release manager', 'prepared approved Website release package'), empty.headDigest)
+    assert(retry.replayed && JSON.stringify(retry.state) === JSON.stringify(prepared), 'website_release_exact_retry_not_idempotent')
+
+    const upgradedPackage = model.upgradeWebsiteReleasePackage(candidate, { packageId: 'package-business-v2-001', migrationId: 'migration-business-v1-v2-001' })
+    assert(upgradedPackage.packageDigest === 'sha256:6c51dbb2fa70a7730a7f4fef41756ce8f457f25cebce0e029f20a5017874813a'
+      && upgradedPackage.template.version === 2
+      && ['source', 'brand', 'locales', 'media', 'roles'].every((field) => JSON.stringify(upgradedPackage[field]) === JSON.stringify(candidate[field])),
+    'website_release_template_migration_drifted')
+    result = model.applyWebsiteTemplateUpgrade(prepared, upgradedPackage, proof(2, 'Release manager', 'upgraded the reviewed client template'), prepared.headDigest)
+    assert(result.state.headDigest === 'sha256:2b1f4363410aad34f1f933c36c83461331dcf60d6631314699ac7a461e62dadf', 'website_release_upgrade_head_drifted')
+    const upgraded = result.state
+    const upgradedProjection = model.projectWebsiteRelease(upgraded)
+    assert(upgradedProjection.approvedLocales.join(',') === 'en' && upgradedProjection.draftLocales.join(',') === 'my', 'website_release_draft_locale_was_claimed')
+    assertThrows(() => model.approveWebsiteReleasePackage(upgraded, {
+      approvalId: 'release-approval-wrong-actor', packageDigest: upgradedPackage.packageDigest, note: 'Wrong reviewer',
+      proof: proof(3, 'Release manager', 'wrong role'), expectedHeadDigest: upgraded.headDigest,
+    }), 'website_release_wrong_reviewer_succeeded')
+
+    result = model.approveWebsiteReleasePackage(upgraded, {
+      approvalId: 'release-approval-001', packageDigest: upgradedPackage.packageDigest,
+      note: 'Template, brand, languages, media, and rollback boundary reviewed.',
+      proof: proof(3, 'Release reviewer', 'approved the exact Website release package'), expectedHeadDigest: upgraded.headDigest,
+    })
+    assert(result.state.headDigest === 'sha256:5835e912eea3731080aae004d499a4fbe7d6575dec2aa88c17f2744da552a379', 'website_release_approval_head_drifted')
+    const approved = result.state
+    result = model.prepareWebsiteDeployPlan(approved, {
+      planId: 'deploy-plan-001', packageDigest: upgradedPackage.packageDigest, approvalId: 'release-approval-001',
+      target: { provider: 'vercel', projectRef: 'owner-bound-project', environment: 'production', protection: 'required' },
+      previousDeployment: { deploymentId: 'deployment-known-good-001', packageDigest: digest('previous-release-package'), artifactDigest: digest('previous-release-artifact') },
+      proof: proof(4, 'Release manager', 'prepared an owner-gated deploy plan'), expectedHeadDigest: approved.headDigest,
+    })
+    const planned = model.projectWebsiteRelease(result.state)
+    assert(result.state.headDigest === 'sha256:19b00a7d85eb69085e50dfe97c08cab9f10877319722b14bb713916ab8ff486f'
+      && planned.status === 'plan_ready'
+      && planned.deployPlan.status === 'not_executed'
+      && planned.deployPlan.ownerApprovalRequired
+      && planned.deployPlan.rollback.deploymentId === 'deployment-known-good-001'
+      && !JSON.stringify(planned.deployPlan).toLowerCase().includes('token'),
+    'website_release_exact_plan_or_rollback_drifted')
+
+    const noBaseline = model.prepareWebsiteDeployPlan(approved, {
+      planId: 'deploy-plan-no-baseline-001', packageDigest: upgradedPackage.packageDigest, approvalId: 'release-approval-001',
+      target: { provider: 'vercel', projectRef: 'owner-bound-project', environment: 'production', protection: 'required' }, previousDeployment: null,
+      proof: proof(4, 'Release manager', 'recorded missing rollback baseline'), expectedHeadDigest: approved.headDigest,
+    })
+    assert(model.projectWebsiteRelease(noBaseline.state).deployPlan.rollback.mode === 'blocked_until_previous_deployment_bound', 'website_release_missing_rollback_baseline_not_blocked')
+    assertThrows(() => model.prepareWebsiteDeployPlan(upgraded, {
+      planId: 'deploy-plan-unreviewed', packageDigest: upgradedPackage.packageDigest, approvalId: 'missing-approval',
+      target: { provider: 'vercel', projectRef: 'owner-bound-project', environment: 'production', protection: 'required' }, previousDeployment: null,
+      proof: proof(3, 'Release manager', 'unreviewed plan'), expectedHeadDigest: upgraded.headDigest,
+    }), 'website_release_unreviewed_plan_succeeded')
+    assertThrows(() => model.applyWebsiteTemplateUpgrade(prepared, upgradedPackage, proof(2, 'Release manager', 'stale upgrade'), empty.headDigest), 'website_release_stale_head_succeeded')
+
+    const invalidLocale = structuredClone(locales); invalidLocale[0].locale = 'EN_us'
+    assertThrows(() => model.buildWebsiteReleasePackage({ packageId: 'package-invalid-locale', source: source(), template: model.websiteReleaseTemplate(), brand, locales: invalidLocale, media, roles }), 'website_release_invalid_locale_succeeded')
+    const missingAlt = structuredClone(media); missingAlt[0].alt = []
+    assertThrows(() => model.buildWebsiteReleasePackage({ packageId: 'package-missing-alt', source: source(), template: model.websiteReleaseTemplate(), brand, locales, media: missingAlt, roles }), 'website_release_missing_alt_succeeded')
+    const wrongOwner = structuredClone(roles); wrongOwner[0].actor = 'Different owner'
+    assertThrows(() => model.buildWebsiteReleasePackage({ packageId: 'package-wrong-owner', source: source(), template: model.websiteReleaseTemplate(), brand, locales, media, roles: wrongOwner }), 'website_release_wrong_content_owner_succeeded')
+    const tampered = structuredClone(upgraded); tampered.commands[0].payload.package.brand.radiusPx = 31
+    assertThrows(() => model.validateWebsiteReleaseState(tampered), 'website_release_tampered_chain_validated')
+
+    const values = new Map()
+    const storage = { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, String(value)), removeItem: (key) => values.delete(key) }
+    const storageKey = model.websiteReleaseStorageKey(scope)
+    values.set(storageKey, '{malformed')
+    const recovery = model.loadWebsiteReleaseWorkspace(storage, scope)
+    assert(recovery.source === 'recovery' && values.get(storageKey) === '{malformed', 'website_release_malformed_storage_was_overwritten')
+    values.clear(); let lockRequests = 0
+    const locks = { request: async (name, options, callback) => { lockRequests += 1; assert(name === storageKey && options?.mode === 'exclusive', 'website_release_wrong_lock_contract'); return callback() } }
+    const saved = await model.mutateWebsiteReleaseWorkspace(scope, (current) => model.prepareWebsiteReleasePackage(current, candidate, proof(1, 'Release manager', 'prepared approved Website release package'), current.headDigest), storage, locks)
+    assert(saved.ok && lockRequests === 1 && JSON.parse(values.get(storageKey)).headDigest === prepared.headDigest, 'website_release_locked_write_not_confirmed')
+    const beforeUnlocked = values.get(storageKey)
+    const unlocked = await model.mutateWebsiteReleaseWorkspace(scope, (current) => model.applyWebsiteTemplateUpgrade(current, upgradedPackage, proof(2, 'Release manager', 'upgraded the reviewed client template'), current.headDigest), storage, null)
+    assert(!unlocked.ok && values.get(storageKey) === beforeUnlocked, 'website_release_unlocked_write_succeeded')
+    let corruptNextWrite = true
+    const unconfirmedStorage = { getItem: storage.getItem, setItem: (key, value) => { values.set(key, corruptNextWrite ? `${value}x` : String(value)); corruptNextWrite = false }, removeItem: storage.removeItem }
+    const unconfirmed = await model.mutateWebsiteReleaseWorkspace(scope, (current) => model.applyWebsiteTemplateUpgrade(current, upgradedPackage, proof(2, 'Release manager', 'upgraded the reviewed client template'), current.headDigest), unconfirmedStorage, locks)
+    assert(!unconfirmed.ok && values.get(storageKey) === beforeUnlocked, 'website_release_unconfirmed_write_not_rolled_back')
+  } catch (error) {
+    fail(`website_release_runtime:${error instanceof Error ? error.message : 'unknown'}`)
   }
 }
 
@@ -6993,6 +7174,7 @@ async function verifyProductionRuntime() {
 await verifyChannelOrderRuntime()
 await verifyShopInventoryRuntime()
 await verifyPlantOrderRuntime()
+await verifyWebsiteReleaseRuntime()
 await verifyCatalogImportRuntime()
 await verifyClientOnboardingRuntime()
 await verifyManagedClientImportRuntime()
@@ -7019,4 +7201,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, plantOrderRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceHandoffRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceHandoffRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))

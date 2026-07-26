@@ -1,4 +1,4 @@
-import { type FormEvent, useRef, useState } from 'react'
+import { lazy, Suspense, type FormEvent, useRef, useState } from 'react'
 
 import {
   evidenceRequirements,
@@ -8,6 +8,8 @@ import {
   type WebsiteWorkspace,
 } from './website-model'
 import './publish-workspace.css'
+
+const WebsiteReleaseFoundation = lazy(() => import('./WebsiteReleaseFoundation'))
 
 type EvidenceInput = {
   kind: EvidenceKind
@@ -482,28 +484,38 @@ export function PublishWorkspace({
               </div>
             </div>
 
+            <Suspense fallback={<div className="website-release-loading">Loading client release controls...</div>}>
+              <WebsiteReleaseFoundation
+                managedActorId={managedActorId}
+                publishIsCurrent={publishIsCurrent}
+                workspace={workspace}
+              />
+            </Suspense>
+
             {workspace.localPublishes.length ? (
-              <div className="website-publish-history">
-                <small>Showing {Math.min(3, workspace.localPublishes.length)} of {workspace.localPublishes.length} retained site records</small>
-                {workspace.localPublishes.slice(0, 3).map((record) => (
-                  <article key={record.id}>
-                    <span aria-hidden="true">&gt;_</span>
-                    <div>
-                      <strong>{record.id}</strong>
-                      <small>{record.readyPageIds.length} page{record.readyPageIds.length === 1 ? '' : 's'} · {record.recordedBy} · {formatTimestamp(record.recordedAt)}</small>
-                    </div>
-                    {record.artifact ? (
-                      <button
-                        className="website-button is-secondary is-compact website-history-download"
-                        onClick={() => onDownloadPublish(record.id)}
-                        type="button"
-                      >
-                        Download
-                      </button>
-                    ) : <code>File unavailable</code>}
-                  </article>
-                ))}
-              </div>
+              <details className="website-publish-history-disclosure">
+                <summary>Site file history ({workspace.localPublishes.length})</summary>
+                <div className="website-publish-history">
+                  {workspace.localPublishes.slice(0, 3).map((record) => (
+                    <article key={record.id}>
+                      <span aria-hidden="true">&gt;_</span>
+                      <div>
+                        <strong>{record.id}</strong>
+                        <small>{record.readyPageIds.length} page{record.readyPageIds.length === 1 ? '' : 's'} · {record.recordedBy} · {formatTimestamp(record.recordedAt)}</small>
+                      </div>
+                      {record.artifact ? (
+                        <button
+                          className="website-button is-secondary is-compact website-history-download"
+                          onClick={() => onDownloadPublish(record.id)}
+                          type="button"
+                        >
+                          Download
+                        </button>
+                      ) : <code>File unavailable</code>}
+                    </article>
+                  ))}
+                </div>
+              </details>
             ) : (
               <div className="website-empty compact">
                 <span aria-hidden="true">&gt;_</span>
