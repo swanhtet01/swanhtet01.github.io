@@ -64,7 +64,7 @@ class AgentWorkforcePolicy:
     max_daily_runs: int = 64
     max_daily_units: int = 96
     max_batch_jobs: int = 5
-    max_registered_specialists: int = 256
+    max_registered_specialists: int = 12
     lease_seconds: int = 300
 
     @property
@@ -114,7 +114,7 @@ def load_agent_workforce_policy() -> AgentWorkforcePolicy:
         max_daily_runs=_bounded_environment_int("SUPERMEGA_AGENT_MAX_DAILY_RUNS", 64, 1, 128),
         max_daily_units=_bounded_environment_int("SUPERMEGA_AGENT_MAX_DAILY_UNITS", 96, 1, 256),
         max_batch_jobs=_bounded_environment_int("SUPERMEGA_AGENT_MAX_BATCH_JOBS", 5, 1, 7),
-        max_registered_specialists=_bounded_environment_int("SUPERMEGA_AGENT_MAX_REGISTERED_SPECIALISTS", 256, 4, 10_000),
+        max_registered_specialists=_bounded_environment_int("SUPERMEGA_AGENT_MAX_REGISTERED_SPECIALISTS", 12, 4, 12),
         lease_seconds=_bounded_environment_int("SUPERMEGA_AGENT_LEASE_SECONDS", 300, 30, 900),
     )
     if policy.max_daily_runs < policy.max_running:
@@ -126,6 +126,11 @@ def load_agent_workforce_policy() -> AgentWorkforcePolicy:
         raise AgentGovernanceError(
             "agent_policy_invalid",
             "SUPERMEGA_AGENT_MAX_DAILY_UNITS cannot be lower than SUPERMEGA_AGENT_MAX_RUNNING.",
+        )
+    if policy.max_registered_specialists < policy.max_running:
+        raise AgentGovernanceError(
+            "agent_policy_invalid",
+            "SUPERMEGA_AGENT_MAX_REGISTERED_SPECIALISTS cannot be lower than SUPERMEGA_AGENT_MAX_RUNNING.",
         )
     return policy
 
@@ -296,7 +301,8 @@ def plan_agent_capacity(
         "recommended_claim_work_units": selected_units,
         "target_active_executions": target_active_executions,
         "idle_registered_specialists": max(0, registered_specialists - target_active_executions),
-        "registry_attention": registered_specialists > max(active_policy.max_running * 16, 64),
+        "registry_attention": registered_specialists >= active_policy.max_registered_specialists,
+        "registry_slots_remaining": active_policy.max_registered_specialists - registered_specialists,
         "scale_to_zero": target_active_executions == 0,
         "deferred_jobs": len(queued) - len(selected),
         "deferred_reasons": deferred,

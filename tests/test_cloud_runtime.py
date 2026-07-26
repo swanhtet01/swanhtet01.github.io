@@ -404,31 +404,55 @@ class AgentGovernanceTests(unittest.TestCase):
                 load_agent_workforce_policy()
         self.assertEqual(policy_error.exception.code, "agent_policy_invalid")
 
-    def test_large_registered_roster_scales_to_zero_and_caps_real_execution(self) -> None:
+        with patch.dict(os.environ, {"SUPERMEGA_AGENT_MAX_REGISTERED_SPECIALISTS": "13"}):
+            with self.assertRaises(AgentGovernanceError) as roster_policy_error:
+                load_agent_workforce_policy()
+        self.assertEqual(roster_policy_error.exception.code, "agent_policy_invalid")
+
+    def test_roster_cap_rejects_agent_sprawl_and_valid_roster_scales_to_zero(self) -> None:
+        workforce_path = Path(__file__).resolve().parents[1] / "agent_os" / "workforce" / "supermega_build_workforce.json"
+        workforce = json.loads(workforce_path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            workforce["runtime_policy"]["max_registered_specialists"],
+            load_agent_workforce_policy().max_registered_specialists,
+        )
+
         idle = plan_agent_capacity(
             queued_job_types=[],
             running_job_types=[],
             daily_job_types=[],
-            registered_specialists=175,
+            registered_specialists=12,
         )
         self.assertEqual(idle["contract"], AGENT_CAPACITY_PLAN_CONTRACT)
         self.assertEqual(idle["decision"], "scale_to_zero")
         self.assertEqual(idle["target_active_executions"], 0)
-        self.assertEqual(idle["idle_registered_specialists"], 175)
+        self.assertEqual(idle["idle_registered_specialists"], 12)
         self.assertFalse(idle["registered_specialists_consume_compute"])
         self.assertTrue(idle["registry_attention"])
-        self.assertEqual(idle["limits"]["max_registered_specialists"], 256)
+        self.assertEqual(idle["registry_slots_remaining"], 0)
+        self.assertEqual(idle["limits"]["max_registered_specialists"], 12)
+
+        for roster_size in (13, 175):
+            with self.subTest(roster_size=roster_size):
+                with self.assertRaises(AgentGovernanceError) as roster_error:
+                    plan_agent_capacity(
+                        queued_job_types=[],
+                        running_job_types=[],
+                        daily_job_types=[],
+                        registered_specialists=roster_size,
+                    )
+                self.assertEqual(roster_error.exception.code, "agent_capacity_state_invalid")
 
         busy = plan_agent_capacity(
             queued_job_types=self.job_types,
             running_job_types=[],
             daily_job_types=[],
-            registered_specialists=175,
+            registered_specialists=12,
         )
         self.assertEqual(busy["decision"], "scale_up")
         self.assertEqual(busy["target_active_executions"], load_agent_workforce_policy().max_running)
         self.assertEqual(len(busy["recommended_claim_job_types"]), load_agent_workforce_policy().max_running)
-        self.assertEqual(busy["idle_registered_specialists"], 171)
+        self.assertEqual(busy["idle_registered_specialists"], 8)
 
     def test_capacity_plan_skips_expensive_work_that_cannot_fit_remaining_budget(self) -> None:
         with patch.dict(os.environ, {"SUPERMEGA_AGENT_MAX_DAILY_UNITS": "4"}):
@@ -451,11 +475,11 @@ class AgentGovernanceTests(unittest.TestCase):
                 capacity = get_agent_capacity_plan(
                     database_url,
                     workspace_id=workspace_id,
-                    registered_specialists=175,
+                    registered_specialists=12,
                 )
                 self.assertEqual(capacity["recommended_claim_job_types"], ["ops_watch"])
                 self.assertEqual(capacity["target_active_executions"], 1)
-                self.assertEqual(capacity["idle_registered_specialists"], 174)
+                self.assertEqual(capacity["idle_registered_specialists"], 11)
                 self.assertEqual(capacity["budget"]["daily_work_units_remaining"], 1)
 
                 claimed = claim_agent_runs(database_url, workspace_id=workspace_id, limit=5)

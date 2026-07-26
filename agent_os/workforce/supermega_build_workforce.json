@@ -11,6 +11,7 @@
     "execution_model": "ephemeral_demand_driven",
     "scale_to_zero": true,
     "registered_specialists_consume_compute": false,
+    "max_registered_specialists": 12,
     "max_running": 4,
     "max_queued": 24,
     "max_batch_jobs": 5,
@@ -124,7 +125,7 @@
       "name": "Agent Capacity Pack",
       "audience": "All teams",
       "workspace": "/work/?team=engineering&view=agents",
-      "instructions": ["Registry records are dormant until work is queued.", "Keep at most four unique active assignments and one in-flight run per job family.", "Pause stale work and require evidence before review."],
+      "instructions": ["Registry records are dormant until work is queued.", "Keep at most twelve registered roles, four unique active assignments, and one in-flight run per job family.", "Pause stale work and require evidence before review."],
       "done_when": "No idle execution is running and each active job has one owner, budget, lease, and acceptance target."
     },
     {
