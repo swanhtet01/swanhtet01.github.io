@@ -27,7 +27,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 
 - HQ caps 12 dormant roles, four active/batch jobs, two Kernel agents per cycle, and zero idle compute; overrides fail closed and duplicate ceilings are removed.
 - Kernel has four owner-bound slots with 120-second stale recovery; a fifth cycle stops before model use and failed work returns for retry (`ca5070e`).
-- Ally audit after a non-terminating trim: RAM 77.8%, Codex 1.16 GB, zero models, one worker, and no duplicate listener. OS data cannot prove subagents; unchanged evidence-bound missions reuse for 24 hours (`72853ac`).
+- Ally audit after a non-terminating trim: RAM 77.1%, Codex 1.21 GB, zero models, one worker, no dev server/duplicate listener, and no stopped process. Multi-agent remains disabled; dormant plugins are off for next restart (`72853ac`).
 - All seven company jobs use SuperMega Agent Operations or core GitHub. Catalogs are exact-tenant scoped, so YTF identities cannot render in core operations (`b46c386`).
 - Hosted scheduling is dormant with zero registered crons. A signed seven-day bundle now binds five proof digests, tenant, owner decision, canonical project, production, and exact commit; flag-only, preview, stale, incomplete, or tampered attempts stop before worker invocation (`07dd959`).
 - Storage privacy now has a six-request owner-confirmed verifier, zero-network configuration preflight, and secret-free owner handoff. It rejects privileged keys, redirects, proxies, oversized/duplicate JSON, and unconfirmed targets; 13 focused tests and an 11-case self-test pass (`be78a02`). Hosted proof remains blocked.
