@@ -602,6 +602,19 @@ PREVIEW_DEPLOY_MODE = "canonical_preview"
 CANONICAL_VERCEL_TEAM_ID = "team_wI4l7ZgSxcEztQPSlCCYVeJ5"
 CANONICAL_APP_VERCEL_PROJECT_ID = "prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG"
 CANONICAL_APP_VERCEL_PROJECT_NAME = "megaos"
+PREVIEW_RELEASE_REVIEW_SOURCE = "system:preview_release_review"
+PREVIEW_RELEASE_REVIEW_CONTRACT = "supermega.preview-release-review.v1"
+PREVIEW_RELEASE_REQUIRED_CONTRACTS = (
+    "supermega_python_tests",
+    "supermega_app_build",
+    "supermega_local_full_stack",
+    "supermega_coordinated_release_workflow",
+    "supermega_app_security",
+    "supermega_private_trial_migrations",
+    "supermega_vercel_environment_state_tests",
+    "supermega_vercel_domain_state_tests",
+    "supermega_hq",
+)
 
 
 def _canonical_preview_target_state(
@@ -636,6 +649,194 @@ def _canonical_preview_target_state(
     }
 
 
+def _build_preview_release_review_packet(
+    *,
+    revision: str,
+    generated_at: str,
+    release_identity: dict[str, Any],
+) -> dict[str, Any]:
+    normalized_revision = str(revision or "").strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{40}", normalized_revision):
+        raise ValueError("preview_release_revision_invalid")
+    normalized_generated_at = str(generated_at or "").strip()
+    if not normalized_generated_at:
+        raise ValueError("preview_release_generated_at_missing")
+    identity = {
+        "service": str(release_identity.get("service", "supermega-app")).strip() or "supermega-app",
+        "brand_version": str(release_identity.get("brand_version", "")).strip(),
+        "context_version": str(release_identity.get("context_version", "")).strip(),
+        "catalog_version": str(release_identity.get("catalog_version", "")).strip(),
+    }
+    if not all(identity.values()):
+        raise ValueError("preview_release_identity_incomplete")
+    packet: dict[str, Any] = {
+        "contract": PREVIEW_RELEASE_REVIEW_CONTRACT,
+        "generated_at": normalized_generated_at,
+        "candidate": {
+            "repository": "supermega-platform",
+            "revision": normalized_revision,
+            "worktree_clean": True,
+            "release_identity": identity,
+        },
+        "target": {
+            "provider": "vercel",
+            "mode": PREVIEW_DEPLOY_MODE,
+            "team_id": CANONICAL_VERCEL_TEAM_ID,
+            "project_id": CANONICAL_APP_VERCEL_PROJECT_ID,
+            "project_name": CANONICAL_APP_VERCEL_PROJECT_NAME,
+            "environment": "preview",
+            "canonical_domain": "https://app.supermega.dev",
+            "production_alias_mutation": False,
+        },
+        "verification": {
+            "status": "human_review_required",
+            "required_contracts": list(PREVIEW_RELEASE_REQUIRED_CONTRACTS),
+            "evidence_rule": "Review fresh local or CI output for this exact revision before approval.",
+        },
+        "rollback": {
+            "strategy": "discard_preview",
+            "production_aliases_unchanged": True,
+            "production_rollback_target_required": False,
+        },
+    }
+    canonical = json.dumps(packet, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    packet["packet_digest"] = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return packet
+
+
+def _validate_preview_release_review_packet(
+    release_review: dict[str, Any],
+    *,
+    mode: str,
+    revision: str,
+) -> dict[str, Any]:
+    normalized_mode = str(mode or PREVIEW_DEPLOY_MODE).strip().lower()
+    normalized_revision = str(revision or "").strip().lower()
+    if normalized_mode != PREVIEW_DEPLOY_MODE:
+        raise ValueError("preview_release_mode_mismatch")
+    if not re.fullmatch(r"[0-9a-f]{40}", normalized_revision):
+        raise ValueError("preview_release_revision_invalid")
+    if not isinstance(release_review, dict):
+        raise ValueError("preview_release_review_missing")
+
+    packet_digest = str(release_review.get("packet_digest", "")).strip().lower()
+    unsigned_packet = dict(release_review)
+    unsigned_packet.pop("packet_digest", None)
+    expected_digest = hashlib.sha256(
+        json.dumps(
+            unsigned_packet,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    if not re.fullmatch(r"[0-9a-f]{64}", packet_digest) or not secrets.compare_digest(
+        packet_digest,
+        expected_digest,
+    ):
+        raise ValueError("preview_release_review_digest_mismatch")
+    if str(release_review.get("contract", "")).strip() != PREVIEW_RELEASE_REVIEW_CONTRACT:
+        raise ValueError("preview_release_review_contract_mismatch")
+    if not str(release_review.get("generated_at", "")).strip():
+        raise ValueError("preview_release_generated_at_missing")
+
+    candidate = release_review.get("candidate", {})
+    if not isinstance(candidate, dict):
+        raise ValueError("preview_release_candidate_missing")
+    if str(candidate.get("repository", "")).strip() != "supermega-platform":
+        raise ValueError("preview_release_repository_mismatch")
+    if str(candidate.get("revision", "")).strip().lower() != normalized_revision:
+        raise ValueError("preview_release_revision_mismatch")
+    if candidate.get("worktree_clean") is not True:
+        raise ValueError("preview_release_worktree_evidence_missing")
+    identity = candidate.get("release_identity", {})
+    if not isinstance(identity, dict) or any(
+        not str(identity.get(field, "")).strip()
+        for field in ("service", "brand_version", "context_version", "catalog_version")
+    ):
+        raise ValueError("preview_release_identity_incomplete")
+
+    target = release_review.get("target", {})
+    expected_target = {
+        "provider": "vercel",
+        "mode": PREVIEW_DEPLOY_MODE,
+        "team_id": CANONICAL_VERCEL_TEAM_ID,
+        "project_id": CANONICAL_APP_VERCEL_PROJECT_ID,
+        "project_name": CANONICAL_APP_VERCEL_PROJECT_NAME,
+        "environment": "preview",
+        "canonical_domain": "https://app.supermega.dev",
+        "production_alias_mutation": False,
+    }
+    if not isinstance(target, dict) or target != expected_target:
+        raise ValueError("preview_release_target_mismatch")
+
+    verification = release_review.get("verification", {})
+    if not isinstance(verification, dict):
+        raise ValueError("preview_release_verification_missing")
+    if str(verification.get("status", "")).strip() != "human_review_required":
+        raise ValueError("preview_release_review_status_mismatch")
+    if verification.get("required_contracts") != list(PREVIEW_RELEASE_REQUIRED_CONTRACTS):
+        raise ValueError("preview_release_required_contracts_mismatch")
+    if str(verification.get("evidence_rule", "")).strip() != (
+        "Review fresh local or CI output for this exact revision before approval."
+    ):
+        raise ValueError("preview_release_evidence_rule_mismatch")
+
+    rollback = release_review.get("rollback", {})
+    expected_rollback = {
+        "strategy": "discard_preview",
+        "production_aliases_unchanged": True,
+        "production_rollback_target_required": False,
+    }
+    if not isinstance(rollback, dict) or rollback != expected_rollback:
+        raise ValueError("preview_release_rollback_mismatch")
+    return release_review
+
+
+def _find_reusable_preview_release_review(
+    approval_rows: list[dict[str, Any]],
+    *,
+    workspace_id: str,
+    mode: str,
+    revision: str,
+) -> dict[str, Any] | None:
+    normalized_workspace_id = str(workspace_id or "").strip()
+    normalized_mode = str(mode or PREVIEW_DEPLOY_MODE).strip().lower()
+    normalized_revision = str(revision or "").strip().lower()
+    expected_entity = f"cloud-preview:{normalized_mode}:{normalized_revision}"
+    for row in approval_rows:
+        if str(row.get("workspace_id", "")).strip() != normalized_workspace_id:
+            continue
+        if str(row.get("source", "")).strip() != PREVIEW_RELEASE_REVIEW_SOURCE:
+            continue
+        if str(row.get("status", "")).strip().lower() not in {"pending", "review", "approved"}:
+            continue
+        if str(row.get("approval_gate", "")).strip().lower() != PREVIEW_DEPLOY_APPROVAL_GATE:
+            continue
+        if str(row.get("related_route", "")).strip() != PREVIEW_DEPLOY_APPROVAL_ROUTE:
+            continue
+        if str(row.get("related_entity", "")).strip().lower() != expected_entity:
+            continue
+        payload = row.get("payload", {}) if isinstance(row.get("payload"), dict) else {}
+        if "_approval_action" in payload:
+            continue
+        if str(payload.get("deployment_mode", "")).strip().lower() != normalized_mode:
+            continue
+        if str(payload.get("deployment_revision", "")).strip().lower() != normalized_revision:
+            continue
+        release_review = payload.get("release_review", {})
+        try:
+            _validate_preview_release_review_packet(
+                release_review if isinstance(release_review, dict) else {},
+                mode=normalized_mode,
+                revision=normalized_revision,
+            )
+        except ValueError:
+            continue
+        return row
+    return None
+
+
 def _validate_preview_deploy_approval(
     approval_rows: list[dict[str, Any]],
     *,
@@ -663,7 +864,7 @@ def _validate_preview_deploy_approval(
         raise ValueError("preview_deploy_approval_workspace_mismatch")
     if str(row.get("status", "")).strip().lower() != "approved":
         raise ValueError("preview_deploy_approval_not_approved")
-    if str(row.get("source", "")).strip() != "system:preview_release_review":
+    if str(row.get("source", "")).strip() != PREVIEW_RELEASE_REVIEW_SOURCE:
         raise ValueError("preview_deploy_approval_source_mismatch")
     if str(row.get("approval_gate", "")).strip().lower() != PREVIEW_DEPLOY_APPROVAL_GATE:
         raise ValueError("preview_deploy_approval_gate_mismatch")
@@ -676,6 +877,12 @@ def _validate_preview_deploy_approval(
         raise ValueError("preview_deploy_approval_mode_mismatch")
     if str(payload.get("deployment_revision", "")).strip().lower() != normalized_revision:
         raise ValueError("preview_deploy_approval_revision_mismatch")
+    release_review = payload.get("release_review", {})
+    _validate_preview_release_review_packet(
+        release_review if isinstance(release_review, dict) else {},
+        mode=normalized_mode,
+        revision=normalized_revision,
+    )
     if "_approval_action" in payload:
         raise ValueError("preview_deploy_approval_already_used")
     authority = (
@@ -2852,6 +3059,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
     _init_sentry_runtime()
     state_db = resolve_state_db(pilot_data)
     enterprise_db_url = resolve_enterprise_database_url(pilot_data)
+    preview_release_review_lock = threading.Lock()
     sync_state_from_output_dir(pilot_data)
     runtime_environment = str(os.getenv("SUPERMEGA_ENV", "production")).strip().lower() or "production"
     production_mode = runtime_environment in {"production", "prod"}
@@ -8581,7 +8789,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         current_revision = str(revision_result.stdout or "").strip().lower()
         if revision_result.returncode != 0 or not re.fullmatch(r"[0-9a-f]{40}", current_revision):
             raise HTTPException(status_code=503, detail="Preview deploy revision could not be verified.")
-        if current_revision != normalized_requested_revision:
+        if normalized_requested_revision and current_revision != normalized_requested_revision:
             raise HTTPException(status_code=409, detail="Preview deploy revision does not match the approved artifact.")
         try:
             status_result = subprocess.run(
@@ -10836,6 +11044,83 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "row": updated,
             "control_plane": _control_plane_payload(session),
             "cloud_control": _cloud_control_payload(session),
+        }
+
+    @app.post("/api/cloud/deployments/preview/reviews")
+    def create_preview_deploy_review(request: Request) -> dict[str, Any]:
+        session = _require_approval_request_access(request)
+        workspace_id = _require_session_workspace_id(session)
+        actor = str(session.get("display_name", session.get("username", "system"))).strip() or "system"
+        revision = _require_clean_preview_deploy_revision("")
+        manifest = _load_json(REPO_ROOT / "site-manifest.json")
+        brand = manifest.get("brand", {}) if isinstance(manifest.get("brand"), dict) else {}
+        try:
+            release_review = _build_preview_release_review_packet(
+                revision=revision,
+                generated_at=datetime.now().astimezone().isoformat(),
+                release_identity={
+                    "service": "supermega-app",
+                    "brand_version": brand.get("version", ""),
+                    "context_version": manifest.get("contextVersion", ""),
+                    "catalog_version": manifest.get("catalogVersion", ""),
+                },
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        target = f"cloud-preview:{PREVIEW_DEPLOY_MODE}:{revision}"
+
+        with preview_release_review_lock:
+            existing = _find_reusable_preview_release_review(
+                list_approval_entries(state_db, workspace_id=workspace_id, limit=500),
+                workspace_id=workspace_id,
+                mode=PREVIEW_DEPLOY_MODE,
+                revision=revision,
+            )
+            if existing:
+                existing_payload = (
+                    existing.get("payload", {})
+                    if isinstance(existing.get("payload"), dict)
+                    else {}
+                )
+                existing_review = existing_payload.get("release_review", {})
+                return {
+                    "status": (
+                        "approval_ready"
+                        if str(existing.get("status", "")).strip().lower() == "approved"
+                        else "review_required"
+                    ),
+                    "row": existing,
+                    "release_review": existing_review,
+                    "idempotent_replay": True,
+                }
+            row = add_approval_entry(
+                state_db,
+                workspace_id=workspace_id,
+                title=f"Review canonical preview {revision[:12]}",
+                summary=(
+                    "Review the exact clean candidate, canonical megaos preview target, required checks, "
+                    "and no-production-alias rollback boundary."
+                ),
+                approval_gate=PREVIEW_DEPLOY_APPROVAL_GATE,
+                requested_by=actor,
+                owner="Owner",
+                status="pending",
+                due="",
+                related_route=PREVIEW_DEPLOY_APPROVAL_ROUTE,
+                related_entity=target,
+                evidence_link=f"git:{revision}",
+                payload={
+                    "deployment_mode": PREVIEW_DEPLOY_MODE,
+                    "deployment_revision": revision,
+                    "release_review": release_review,
+                },
+                source=PREVIEW_RELEASE_REVIEW_SOURCE,
+            )
+        return {
+            "status": "review_required",
+            "row": row,
+            "release_review": release_review,
+            "idempotent_replay": False,
         }
 
     @app.post("/api/cloud/deployments/preview")

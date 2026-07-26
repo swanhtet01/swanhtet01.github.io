@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 import importlib.util
 import json
 import os
+import re
+import secrets
 import sqlite3
 import unittest
 from concurrent.futures import ThreadPoolExecutor
@@ -53,7 +56,29 @@ def _isolated_function(path: Path, name: str) -> FunctionType:
         "CANONICAL_VERCEL_TEAM_ID": "team_wI4l7ZgSxcEztQPSlCCYVeJ5",
         "CANONICAL_APP_VERCEL_PROJECT_ID": "prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG",
         "CANONICAL_APP_VERCEL_PROJECT_NAME": "megaos",
+        "PREVIEW_RELEASE_REVIEW_SOURCE": "system:preview_release_review",
+        "PREVIEW_RELEASE_REVIEW_CONTRACT": "supermega.preview-release-review.v1",
+        "PREVIEW_RELEASE_REQUIRED_CONTRACTS": (
+            "supermega_python_tests",
+            "supermega_app_build",
+            "supermega_local_full_stack",
+            "supermega_coordinated_release_workflow",
+            "supermega_app_security",
+            "supermega_private_trial_migrations",
+            "supermega_vercel_environment_state_tests",
+            "supermega_vercel_domain_state_tests",
+            "supermega_hq",
+        ),
+        "hashlib": hashlib,
+        "json": json,
+        "re": re,
+        "secrets": secrets,
     }
+    if name in {"_find_reusable_preview_release_review", "_validate_preview_deploy_approval"}:
+        namespace["_validate_preview_release_review_packet"] = _isolated_function(
+            path,
+            "_validate_preview_release_review_packet",
+        )
     exec(compile(module, str(path), "exec", dont_inherit=True), namespace)
     return namespace[name]  # type: ignore[return-value]
 
@@ -87,6 +112,14 @@ def _isolated_model(path: Path, name: str) -> type[BaseModel]:
     }
     exec(compile(module, str(path), "exec", dont_inherit=True), namespace)
     return namespace[name]  # type: ignore[return-value]
+
+
+def _resign_release_review(review: dict[str, Any]) -> dict[str, Any]:
+    packet = json.loads(json.dumps(review))
+    packet.pop("packet_digest", None)
+    canonical = json.dumps(packet, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    packet["packet_digest"] = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return packet
 
 
 class LegacyPilotSecurityTests(unittest.TestCase):
@@ -199,10 +232,31 @@ class LegacyPilotSecurityTests(unittest.TestCase):
         revision_source = _nested_function_source(SERVER_PATH, "_require_clean_preview_deploy_revision")
         self.assertIn('"rev-parse", "--verify", "HEAD"', revision_source)
         self.assertIn('"status", "--porcelain=v1", "--untracked-files=all"', revision_source)
+        self.assertIn("if normalized_requested_revision", revision_source)
+        review_source = _nested_function_source(SERVER_PATH, "create_preview_deploy_review")
+        self.assertIn("_require_approval_request_access", review_source)
+        self.assertIn("_require_clean_preview_deploy_revision", review_source)
+        self.assertIn("_build_preview_release_review_packet", review_source)
+        self.assertIn("_find_reusable_preview_release_review", review_source)
+        self.assertIn("preview_release_review_lock", review_source)
+        self.assertIn("add_approval_entry", review_source)
+        self.assertIn("PREVIEW_RELEASE_REVIEW_SOURCE", review_source)
+        self.assertNotIn("_run_preview_deploy", review_source)
 
     def test_preview_deploy_requires_exact_workspace_bound_approval(self) -> None:
         validate = _isolated_function(SERVER_PATH, "_validate_preview_deploy_approval")
+        build_review = _isolated_function(SERVER_PATH, "_build_preview_release_review_packet")
         revision = "a" * 40
+        release_review = build_review(
+            revision=revision,
+            generated_at="2026-07-26T12:00:00+06:30",
+            release_identity={
+                "service": "supermega-app",
+                "brand_version": "jade-v1-2026-07",
+                "context_version": "2026-07-26.2",
+                "catalog_version": "2026-07-26.2",
+            },
+        )
         valid_row = {
             "approval_id": "APR-DEPLOY-1",
             "source": "system:preview_release_review",
@@ -214,6 +268,7 @@ class LegacyPilotSecurityTests(unittest.TestCase):
             "payload": {
                 "deployment_mode": "canonical_preview",
                 "deployment_revision": revision,
+                "release_review": release_review,
                 "_approval_authority": {"workspace_id": "workspace-a", "requested_by": "Alice"},
                 "decision_history": [
                     {
@@ -266,6 +321,52 @@ class LegacyPilotSecurityTests(unittest.TestCase):
                 },
             },
         }
+        tampered_digest_review = json.loads(json.dumps(release_review))
+        tampered_digest_review["candidate"]["repository"] = "forged-repository"
+        wrong_revision_review = json.loads(json.dumps(release_review))
+        wrong_revision_review["candidate"]["revision"] = "b" * 40
+        wrong_target_review = json.loads(json.dumps(release_review))
+        wrong_target_review["target"]["project_id"] = "prj_wrong"
+        wrong_contracts_review = json.loads(json.dumps(release_review))
+        wrong_contracts_review["verification"]["required_contracts"] = ["supermega_app_build"]
+        wrong_rollback_review = json.loads(json.dumps(release_review))
+        wrong_rollback_review["rollback"]["production_aliases_unchanged"] = False
+        invalid_rows.update(
+            {
+                "review-digest": {
+                    **valid_row,
+                    "payload": {**valid_row["payload"], "release_review": tampered_digest_review},
+                },
+                "review-revision": {
+                    **valid_row,
+                    "payload": {
+                        **valid_row["payload"],
+                        "release_review": _resign_release_review(wrong_revision_review),
+                    },
+                },
+                "review-target": {
+                    **valid_row,
+                    "payload": {
+                        **valid_row["payload"],
+                        "release_review": _resign_release_review(wrong_target_review),
+                    },
+                },
+                "review-contracts": {
+                    **valid_row,
+                    "payload": {
+                        **valid_row["payload"],
+                        "release_review": _resign_release_review(wrong_contracts_review),
+                    },
+                },
+                "review-rollback": {
+                    **valid_row,
+                    "payload": {
+                        **valid_row["payload"],
+                        "release_review": _resign_release_review(wrong_rollback_review),
+                    },
+                },
+            }
+        )
         for label, row in invalid_rows.items():
             with self.subTest(label=label), self.assertRaises(ValueError):
                 validate(
@@ -291,6 +392,91 @@ class LegacyPilotSecurityTests(unittest.TestCase):
             request_model(approval_id="APR-DEPLOY-1", revision=revision).mode,
             "canonical_preview",
         )
+
+    def test_preview_release_review_packet_binds_candidate_target_checks_and_rollback(self) -> None:
+        build_review = _isolated_function(SERVER_PATH, "_build_preview_release_review_packet")
+        validate_review = _isolated_function(SERVER_PATH, "_validate_preview_release_review_packet")
+        find_reusable = _isolated_function(SERVER_PATH, "_find_reusable_preview_release_review")
+        revision = "c" * 40
+        review = build_review(
+            revision=revision,
+            generated_at="2026-07-26T12:00:00+06:30",
+            release_identity={
+                "service": "supermega-app",
+                "brand_version": "jade-v1-2026-07",
+                "context_version": "2026-07-26.2",
+                "catalog_version": "2026-07-26.2",
+            },
+        )
+        self.assertIs(validate_review(review, mode="canonical_preview", revision=revision), review)
+        self.assertEqual(review["candidate"]["revision"], revision)
+        self.assertTrue(review["candidate"]["worktree_clean"])
+        self.assertEqual(review["target"]["project_name"], "megaos")
+        self.assertEqual(review["target"]["environment"], "preview")
+        self.assertFalse(review["target"]["production_alias_mutation"])
+        self.assertEqual(review["verification"]["status"], "human_review_required")
+        self.assertEqual(review["rollback"]["strategy"], "discard_preview")
+        self.assertTrue(review["rollback"]["production_aliases_unchanged"])
+        self.assertRegex(review["packet_digest"], r"^[0-9a-f]{64}$")
+
+        pending_row = {
+            "approval_id": "APR-REVIEW-1",
+            "source": "system:preview_release_review",
+            "workspace_id": "workspace-a",
+            "status": "pending",
+            "approval_gate": "deployment.preview",
+            "related_route": "/api/cloud/deployments/preview",
+            "related_entity": f"cloud-preview:canonical_preview:{revision}",
+            "payload": {
+                "deployment_mode": "canonical_preview",
+                "deployment_revision": revision,
+                "release_review": review,
+            },
+        }
+        self.assertEqual(
+            find_reusable(
+                [pending_row],
+                workspace_id="workspace-a",
+                mode="canonical_preview",
+                revision=revision,
+            ),
+            pending_row,
+        )
+        self.assertIsNone(
+            find_reusable(
+                [{**pending_row, "status": "rejected"}],
+                workspace_id="workspace-a",
+                mode="canonical_preview",
+                revision=revision,
+            )
+        )
+        self.assertIsNone(
+            find_reusable(
+                [
+                    {
+                        **pending_row,
+                        "payload": {**pending_row["payload"], "_approval_action": {"status": "failed"}},
+                    }
+                ],
+                workspace_id="workspace-a",
+                mode="canonical_preview",
+                revision=revision,
+            )
+        )
+        with self.assertRaisesRegex(ValueError, "preview_release_revision_invalid"):
+            build_review(revision="main", generated_at="now", release_identity={})
+        with self.assertRaisesRegex(ValueError, "preview_release_generated_at_missing"):
+            build_review(
+                revision=revision,
+                generated_at="",
+                release_identity={
+                    "brand_version": "jade",
+                    "context_version": "context",
+                    "catalog_version": "catalog",
+                },
+            )
+        with self.assertRaisesRegex(ValueError, "preview_release_identity_incomplete"):
+            build_review(revision=revision, generated_at="now", release_identity={})
 
     def test_preview_target_is_exact_and_unlinked_launchers_fail_closed(self) -> None:
         target_state = _isolated_function(SERVER_PATH, "_canonical_preview_target_state")

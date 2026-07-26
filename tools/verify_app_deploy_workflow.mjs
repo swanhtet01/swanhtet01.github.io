@@ -194,6 +194,18 @@ requireContract('unlinked preview deployment is retired',
     && source.includes('exit 78')
     && !source.includes('codex-deploy-skills.vercel.sh')
     && !source.includes('curl ')))
+requireContract('preview release review is exact and server-owned',
+  previewServer.includes('PREVIEW_RELEASE_REVIEW_CONTRACT = "supermega.preview-release-review.v1"')
+  && previewServer.includes('PREVIEW_RELEASE_REVIEW_SOURCE = "system:preview_release_review"')
+  && previewServer.includes('@app.post("/api/cloud/deployments/preview/reviews")')
+  && previewServer.includes('def _build_preview_release_review_packet(')
+  && previewServer.includes('def _validate_preview_release_review_packet(')
+  && previewServer.includes('def _find_reusable_preview_release_review(')
+  && previewServer.includes('"status": "human_review_required"')
+  && previewServer.includes('"strategy": "discard_preview"')
+  && previewServer.includes('"production_alias_mutation": False')
+  && previewServer.includes('with preview_release_review_lock:')
+  && previewServer.indexOf('_validate_preview_deploy_approval(') < previewServer.indexOf('_run_preview_deploy(payload.mode)'))
 
 const expectedCrons = ['/api/cron/supermega/agent-queue', '/api/cron/supermega/daily'].sort()
 const actualCrons = (config.crons || []).map((cron) => cron.path).sort()
