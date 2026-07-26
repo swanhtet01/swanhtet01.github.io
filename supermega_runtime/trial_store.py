@@ -846,6 +846,61 @@ def _authoritative_command_payload(
         authoritative["evidence"] = authoritative_evidence
         authoritative["state"] = authoritative_state
         return authoritative
+    if event_type == "commerce.purchase_order.cancelled":
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        movements = state.get("movements") if isinstance(state, Mapping) else None
+        purchase_orders = (
+            state.get("purchaseOrders") if isinstance(state, Mapping) else None
+        )
+        if (
+            not isinstance(evidence, Mapping)
+            or not isinstance(state, Mapping)
+            or not isinstance(movements, list)
+            or not isinstance(purchase_orders, list)
+        ):
+            return authoritative
+        cancellation_matches = [
+            (purchase_order_index, purchase_order)
+            for purchase_order_index, purchase_order in enumerate(purchase_orders)
+            if isinstance(purchase_order, Mapping)
+            and isinstance(purchase_order.get("cancellation"), Mapping)
+            and purchase_order["cancellation"].get("actionId")
+            == evidence.get("actionId")
+        ]
+        if len(cancellation_matches) != 1:
+            return authoritative
+        purchase_order_index, purchase_order = cancellation_matches[0]
+        purchase_order_id = purchase_order.get("id")
+        if not isinstance(purchase_order_id, str):
+            return authoritative
+        effective_captured_at = _not_before(
+            captured_at,
+            purchase_order.get("createdAt"),
+            *(
+                movement.get("createdAt")
+                for movement in movements
+                if isinstance(movement, Mapping)
+                and movement.get("kind") == "receipt"
+                and movement.get("purchaseOrderId") == purchase_order_id
+            ),
+        )
+        authoritative_evidence = dict(evidence)
+        authoritative_evidence["actor"] = principal.actor_id
+        authoritative_evidence["capturedAt"] = effective_captured_at
+        authoritative_purchase_order = dict(purchase_order)
+        authoritative_purchase_order["cancellation"] = deepcopy(
+            authoritative_evidence
+        )
+        authoritative_purchase_orders = deepcopy(purchase_orders)
+        authoritative_purchase_orders[purchase_order_index] = (
+            authoritative_purchase_order
+        )
+        authoritative_state = dict(state)
+        authoritative_state["purchaseOrders"] = authoritative_purchase_orders
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
     if event_type == "commerce.payment.reconciled":
         evidence = authoritative.get("evidence")
         state = authoritative.get("state")

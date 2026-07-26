@@ -39,6 +39,10 @@ const [runtime, supabaseAuth, cloudRuntime, schedulerActivation, agentGovernance
 const migration = `${rolePreflight}\n${foundationMigration}\n${decisionMigration}\n${websiteMigration}\n${hardeningMigration}\n${readCapabilityMigration}`
 const managedPurchaseReceiptAuthority = trialStore.slice(
   trialStore.indexOf('if event_type == "commerce.purchase_order.received":'),
+  trialStore.indexOf('if event_type == "commerce.purchase_order.cancelled":'),
+)
+const managedPurchaseCancellationAuthority = trialStore.slice(
+  trialStore.indexOf('if event_type == "commerce.purchase_order.cancelled":'),
   trialStore.indexOf('if event_type == "commerce.payment.reconciled":'),
 )
 const apiSourceEntries = (await readdir(resolve(root, 'api'), { withFileTypes: true }))
@@ -360,6 +364,14 @@ requireContract('managed Shop purchase receipts are server attributable and mono
   && /authoritative_movement\["actor"\] = principal\.actor_id/.test(managedPurchaseReceiptAuthority)
   && /authoritative_movement\["createdAt"\] = effective_captured_at/.test(managedPurchaseReceiptAuthority)
   && /authoritative\["evidence"\] = authoritative_evidence/.test(managedPurchaseReceiptAuthority))
+requireContract('managed Shop purchase cancellations are server attributable and monotonic',
+  /purchase_order\["cancellation"\]\.get\("actionId"\)/.test(managedPurchaseCancellationAuthority)
+  && /movement\.get\("kind"\) == "receipt"/.test(managedPurchaseCancellationAuthority)
+  && /movement\.get\("purchaseOrderId"\) == purchase_order_id/.test(managedPurchaseCancellationAuthority)
+  && /effective_captured_at = _not_before\(/.test(managedPurchaseCancellationAuthority)
+  && /authoritative_evidence\["actor"\] = principal\.actor_id/.test(managedPurchaseCancellationAuthority)
+  && /authoritative_evidence\["capturedAt"\] = effective_captured_at/.test(managedPurchaseCancellationAuthority)
+  && /authoritative_purchase_order\["cancellation"\] = deepcopy\(/.test(managedPurchaseCancellationAuthority))
 requireContract('Shop return and completion attribution is server authoritative and monotonic',
   /commerce\.order\.return_recorded/.test(trialStore)
   && /authoritative_return\["actor"\] = principal\.actor_id/.test(trialStore)

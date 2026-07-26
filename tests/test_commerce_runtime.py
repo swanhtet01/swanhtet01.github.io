@@ -3240,6 +3240,173 @@ class CommerceRuntimeTests(unittest.TestCase):
                 payload=receipt_payload,
             )
 
+    def test_store_stamps_purchase_cancellation_actor_time_and_replay(self) -> None:
+        store = InMemoryTrialStore(reducer=reduce_trial_state)
+        operator = TrialPrincipal(
+            "workspace-purchase-cancel",
+            "shop-purchasing-lead",
+            "human",
+        )
+        agent = TrialPrincipal(
+            "workspace-purchase-cancel",
+            "purchasing-agent",
+            "agent",
+        )
+        for principal in (operator, agent):
+            store.provision_membership(
+                workspace_id=principal.workspace_id,
+                actor_id=principal.actor_id,
+                actor_kind=principal.actor_kind,
+                capabilities=("commerce.write",),
+            )
+        initialized = store.apply_command(
+            operator,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.workspace.initialized",
+            expected_version=0,
+            payload={
+                "state": catalog_state(),
+                "evidence": action_evidence("ACT-CANCELLATION-INITIALIZE"),
+            },
+        )
+        created_state = deepcopy(initialized.state)
+        created_state["purchaseOrders"] = [
+            purchase_order_record(
+                action_id="ACT-CANCELLATION-ORDER",
+                expected_at="2026-07-23T11:00:00.000Z",
+            )
+        ]
+        created_payload = {
+            "state": created_state,
+            "evidence": dict(
+                created_state["purchaseOrders"][0]["creation"]  # type: ignore[index,arg-type]
+            ),
+        }
+        with patch(
+            "supermega_runtime.trial_store._utc_now",
+            return_value="2026-07-23T09:00:00.000+00:00",
+        ):
+            created = store.apply_command(
+                operator,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.purchase_order.created",
+                expected_version=initialized.version,
+                payload=created_payload,
+            )
+
+        receipt_action_id = "ACT-CANCELLATION-PARTIAL-RECEIPT"
+        receipt_state = deepcopy(created.state)
+        receipt_state["items"][0]["onHand"] = 14  # type: ignore[index]
+        receipt_state["movements"] = [
+            movement(
+                "receipt",
+                receipt_action_id,
+                4,
+                created_at="2099-01-01T00:00:00.000Z",
+                purchase_order_id=PURCHASE_ORDER_ID,
+            )
+        ]
+        receipt_payload = {
+            "state": receipt_state,
+            "evidence": action_evidence(
+                receipt_action_id,
+                captured_at="2099-01-01T00:00:00.000Z",
+                actor="Fabricated receiver",
+            ),
+        }
+        receipt_state["movements"][0]["actor"] = "Fabricated receiver"  # type: ignore[index]
+        receipt_at = "2026-07-23T09:10:00.000+00:00"
+        with patch(
+            "supermega_runtime.trial_store._utc_now",
+            return_value=receipt_at,
+        ):
+            partially_received = store.apply_command(
+                operator,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.purchase_order.received",
+                expected_version=created.version,
+                payload=receipt_payload,
+            )
+
+        action_id = "ACT-PURCHASE-CANCEL-AUTHORITATIVE"
+        spoofed_at = "2099-01-01T00:00:00.000Z"
+        cancellation_state = deepcopy(partially_received.state)
+        forged_cancellation = action_evidence(
+            action_id,
+            captured_at=spoofed_at,
+            actor="Fabricated purchasing bot",
+        )
+        cancellation_state["purchaseOrders"][0]["cancellation"] = (  # type: ignore[index]
+            forged_cancellation
+        )
+        cancellation_payload = {
+            "state": cancellation_state,
+            "evidence": dict(forged_cancellation),
+        }
+        command_id = str(uuid4())
+        with patch(
+            "supermega_runtime.trial_store._utc_now",
+            return_value="2026-07-23T08:00:00.000+00:00",
+        ):
+            cancelled = store.apply_command(
+                operator,
+                command_id=command_id,
+                surface="commerce",
+                event_type="commerce.purchase_order.cancelled",
+                expected_version=partially_received.version,
+                payload=cancellation_payload,
+            )
+            replay = store.apply_command(
+                operator,
+                command_id=command_id,
+                surface="commerce",
+                event_type="commerce.purchase_order.cancelled",
+                expected_version=partially_received.version,
+                payload=cancellation_payload,
+            )
+
+        cancellation = cancelled.state["purchaseOrders"][0]["cancellation"]  # type: ignore[index]
+        self.assertEqual(cancellation["actor"], operator.actor_id)
+        self.assertEqual(
+            datetime.fromisoformat(str(cancellation["capturedAt"])),
+            datetime.fromisoformat(receipt_at),
+        )
+        self.assertNotEqual(cancellation["capturedAt"], spoofed_at)
+        self.assertEqual(cancelled.state["items"], partially_received.state["items"])
+        self.assertEqual(
+            cancelled.state["movements"],
+            partially_received.state["movements"],
+        )
+        self.assertTrue(replay.idempotent_replay)
+        self.assertEqual(replay.state, cancelled.state)
+
+        conflicting = deepcopy(cancellation_payload)
+        conflicting["evidence"]["reason"] = "Changed replay reason."  # type: ignore[index]
+        conflicting["state"]["purchaseOrders"][0]["cancellation"]["reason"] = (  # type: ignore[index]
+            "Changed replay reason."
+        )
+        with self.assertRaises(TrialIdempotencyConflict):
+            store.apply_command(
+                operator,
+                command_id=command_id,
+                surface="commerce",
+                event_type="commerce.purchase_order.cancelled",
+                expected_version=partially_received.version,
+                payload=conflicting,
+            )
+        with self.assertRaises(TrialHumanApprovalRequired):
+            store.apply_command(
+                agent,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.purchase_order.cancelled",
+                expected_version=cancelled.version,
+                payload=cancellation_payload,
+            )
+
     def test_purchase_order_transitions_fail_closed_on_overreceipt_and_cross_event_mutation(self) -> None:
         current = catalog_state()
         created_state = deepcopy(current)
