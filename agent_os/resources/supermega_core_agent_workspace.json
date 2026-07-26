@@ -1,6 +1,8 @@
 {
-  "resource_id": "supermega-core-agent-workspace-v2",
+  "resource_id": "supermega-core-agent-workspace-v3",
   "tenant_key": "default",
+  "title": "SuperMega AI company command",
+  "capacity_authority": "repository://agent_os/workforce/supermega_build_workforce.json",
   "company": {
     "name": "SuperMega",
     "public_label": "supermega.dev",
@@ -12,21 +14,6 @@
     "thesis": "Use a small reusable specialist registry to operate the company with evidence.",
     "antithesis": "A large always-on roster creates cost, clutter, duplicated ownership, and unsafe autonomy.",
     "synthesis": "Keep four accountable teams, scale execution from zero only for queued work, and gate every consequential action."
-  },
-  "runtime_policy": {
-    "contract": "supermega.agent-workforce-policy.v1",
-    "execution_model": "ephemeral_demand_driven",
-    "registered_specialists_consume_compute": false,
-    "idle_active_execution_target": 0,
-    "max_running": 4,
-    "max_queued": 24,
-    "max_daily_runs": 64,
-    "max_daily_work_units": 96,
-    "max_batch_jobs": 5,
-    "max_registered_specialists": 256,
-    "in_flight_per_job": 1,
-    "budget_grant_secret_minimum_utf8_bytes": 32,
-    "human_gates": ["external_send", "payment", "access_change", "customer_data_export", "publish", "merge", "deploy", "domain_change", "production_write", "equipment_control"]
   },
   "workspaces": [
     {
@@ -138,6 +125,7 @@
     {"id": "hq-now", "name": "HQ now", "reference": "repository://hq/NOW.md", "authority": "current operating state"},
     {"id": "hq-board", "name": "Work board", "reference": "repository://hq/WORKBOARD.md", "authority": "assignment and evidence"},
     {"id": "portfolio", "name": "Portfolio", "reference": "repository://hq/portfolio.json", "authority": "four customer products"},
+    {"id": "workforce", "name": "Workforce policy", "reference": "repository://agent_os/workforce/supermega_build_workforce.json", "authority": "sole agent capacity and team contract"},
     {"id": "site-contract", "name": "Site manifest", "reference": "repository://site-manifest.json", "authority": "public routes and brand"}
   ],
   "trust_boundaries": [
@@ -151,7 +139,8 @@
       "id": "private-storage",
       "name": "Private object storage",
       "rule": "Anonymous and broad authenticated bucket listing are denied; object access is authorized and short lived.",
-      "surfaces": ["Supabase Storage", "S3-compatible storage", "client uploads"]
+      "surfaces": ["Supabase Storage", "S3-compatible storage", "client uploads"],
+      "release_evidence": ["bucket inventory", "anonymous listing denied", "cross-tenant listing denied", "short-lived authorized object access"]
     },
     {
       "id": "autonomy-gate",
@@ -248,6 +237,7 @@
   ],
   "references": [
     "repository://agent_os/agent_os_architecture.md",
+    "repository://agent_os/workforce/supermega_build_workforce.json",
     "repository://mark1_pilot/agent_governance.py",
     "repository://hq/NOW.md",
     "repository://hq/WORKBOARD.md"

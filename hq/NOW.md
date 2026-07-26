@@ -31,7 +31,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 
 ## Implemented reality
 
-- HQ uses four teams. At `fb2ae3e`, absolute runtime limits cap the roster at 12, active work at four, and idle work at zero; environment and caller policy overrides fail closed.
+- HQ uses four teams. One contract caps 12 roles, four active/batch jobs, two Kernel agents per cycle, and zero idle compute; overrides fail closed, and the default workspace no longer duplicates a 256-role ceiling.
 - Shop runs at `/shop/`: guarded multi-item orders, stock, purchasing, fulfilment, payment/refund, returns, and close, with accountable owner/promise, recovery, and evidence.
 - Plant runs at `/plant/`: jobs, output/material evidence, problems, holds, handoff, equipment observations, downtime, and maintenance. It dispatches nothing and controls no equipment.
 - Website runs at `/website/`: one brief becomes an unsaved Preview, guarded Save, and deterministic Review artifact, never a deployment; recovery and stale-write denial remain.
@@ -51,7 +51,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 - Existing 390/1280 px product QA remains valid. Fresh 390x844 and 1280x900 import QA has no overflow, overlay, or browser warning/error; one tap checks the two-row Shop sample and keeps download gated by workspace and owner.
 - Core first-action QA leads Shop Stock with the exact shortage, guides incomplete orders to Promise or Payment, sends Plant alerts to Problems and jobs to output, puts open Problems before Equipment, and moves invalid Website briefs to their first error. Mobile actions are at least 44 px with no overflow; guide actions create no record.
 - PostgreSQL 17.10 passed 32 TLS checks, including exact approval/event restore and the trusted-server identity boundary.
-- The 2026-07-26 release audit anchors implementation at `784379e`: 0 behind / 192 ahead of draft PR #258 head `338b6fd` and 0 / 238 versus live `main` `6885c320`. Both canonical domains still serve `main`; passing remote checks do not cover the local delta. See `hq/research/release-reconciliation-2026-07-26.md`.
+- Release audit: `784379e` is 0 behind / 192 ahead of draft PR #258 head `338b6fd`; both domains still serve `6885c320`, and remote checks exclude the local delta. See `hq/research/release-reconciliation-2026-07-26.md`.
 
 ## Coordination
 
@@ -66,7 +66,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 ## Blockers
 
 - Ecommerce lacks an isolated hosted/cross-device rehearsal. Local v2 now binds saved setup to a currentness fingerprint, upgrades v1 additively, and invalidates on cross-tab Shop changes; that fingerprint is not authenticated approval evidence. Managed setup remains digest-bound.
-- Agent Teams is not proven hosted. Local authority, destination, roster, and idle controls pass; hosted scheduler, recovery, and observability proof is missing.
+- Agent Teams is not proven hosted. Vercel reports zero Agent Runs in 30 days; Kernel logged one `/api/brief` request in 24 hours and no seven-day runtime errors. Scheduler recovery remains unproven.
 - No isolated hosted Supabase branch or separate non-production project has repeated the local database proof.
 - Storage privacy is local-contract evidence only; hosted bucket inventory and object-listing denial remain required.
 - Browser-local Website records cannot authenticate out-of-band storage edits; managed commands use the locked prior state and separate ledger. Hosted activation remains unproven.
@@ -86,7 +86,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Next evidence
 
-1. Audit hosted agent configuration read-only for idle schedules or oversized rosters.
+1. Prove the one daily Kernel brief produces a useful owner outcome before retaining its schedule.
 2. Rehearse lease expiry, retry, recovery, and human release review in isolation.
 3. Repeat the 12-profile synthetic rehearsal with one founder-approved named pilot company and measure human correction and review time before any write adapter.
 4. On one approved isolated Supabase target, prove private Storage, RLS, Ecommerce replay/isolation, and database recovery.

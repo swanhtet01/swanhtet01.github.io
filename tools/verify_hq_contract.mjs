@@ -8,7 +8,7 @@ import {
 } from '../kernel/agent-company.mjs'
 
 const root = resolve(import.meta.dirname, '..')
-const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, research, databaseRehearsalText, releaseReconciliation] = await Promise.all([
+const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, databaseRehearsalText, releaseReconciliation] = await Promise.all([
   readFile(resolve(root, 'hq', 'README.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'NOW.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'CODEX-PRODUCT-QA-BRIEF.md'), 'utf8'),
@@ -17,6 +17,7 @@ const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, wo
   readFile(resolve(root, 'site-manifest.json'), 'utf8'),
   readFile(resolve(root, 'hq', 'portfolio.json'), 'utf8'),
   readFile(resolve(root, 'agent_os', 'workforce', 'supermega_build_workforce.json'), 'utf8'),
+  readFile(resolve(root, 'agent_os', 'resources', 'supermega_core_agent_workspace.json'), 'utf8'),
   readFile(resolve(root, 'hq', 'research', 'product-rd-2026-07.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'research', 'postgres17-rehearsal.json'), 'utf8'),
   readFile(resolve(root, 'hq', 'research', 'release-reconciliation-2026-07-26.md'), 'utf8'),
@@ -25,6 +26,7 @@ const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, wo
 const manifest = JSON.parse(manifestText)
 const portfolio = JSON.parse(portfolioText)
 const workforce = JSON.parse(workforceText)
+const agentWorkspace = JSON.parse(agentWorkspaceText)
 const databaseRehearsal = JSON.parse(databaseRehearsalText)
 const kernelRoster = listCompanyAgents()
 const kernelCrewCapabilities = kernelRoster.flatMap((agent) => [agent.crew, ...agent.capabilityCrews])
@@ -76,11 +78,28 @@ requireContract('agent capacity agrees across HQ, coordinator, and Kernel',
   && MAX_CYCLE_AGENTS === portfolio.agentOperatingModel?.maxAgentsPerCycle
   && kernelCrewCapabilities.length === portfolio.agentOperatingModel?.validatedCrewCapabilities
   && new Set(kernelCrewCapabilities).size === kernelCrewCapabilities.length)
+requireContract('workspace consumes one capacity authority without repeating ceilings',
+  agentWorkspace.resource_id === 'supermega-core-agent-workspace-v3'
+  && agentWorkspace.capacity_authority === 'repository://agent_os/workforce/supermega_build_workforce.json'
+  && !Object.hasOwn(agentWorkspace, 'runtime_policy')
+  && agentWorkspace.knowledge_resources?.some((entry) =>
+    entry.id === 'workforce'
+    && entry.reference === agentWorkspace.capacity_authority
+    && entry.authority === 'sole agent capacity and team contract')
+  && !/\b(?:175|256)\b/.test(agentWorkspaceText))
+requireContract('workspace storage release gate denies bucket enumeration',
+  agentWorkspace.trust_boundaries?.some((entry) =>
+    entry.id === 'private-storage'
+    && entry.rule.includes('bucket listing are denied')
+    && entry.release_evidence?.join(',') === 'bucket inventory,anonymous listing denied,cross-tenant listing denied,short-lived authorized object access'))
 requireContract('agent roster consolidation is recorded',
   workboard.includes('Current accepted operating checkpoint: `ae6b67d`')
   && workboard.includes('| OPS-011 | CEO + Agent Operations Codex | done-local |')
   && workboard.includes('12 active specialist identities while preserving all 15 validated crew capabilities')
-  && workboard.includes('all eight fixed playbooks'))
+  && workboard.includes('all eight fixed playbooks')
+  && workboard.includes('| OPS-012 | CEO + Agent Operations Codex | done-local |')
+  && workboard.includes('zero Agent Runs in 30 days')
+  && now.includes('default workspace no longer duplicates a 256-role ceiling'))
 requireContract('product QA brief matches current portfolio',
   qaBrief.includes('Work item: `QA-003`')
   && qaBrief.includes('Mode: read-only')
@@ -153,7 +172,7 @@ requireContract('release reconciliation is current and discoverable',
   workboard.includes('| OPS-006 | Release / Codex integrator | done-local |')
   && workboard.includes('fast-forward 192 commits beyond draft PR #258 head `338b6fd`')
   && now.includes('release-reconciliation-2026-07-26.md')
-  && now.includes('passing remote checks do not cover the local delta'))
+  && now.includes('remote checks exclude the local delta'))
 requireContract('release reconciliation binds exact Git and Vercel evidence',
   releaseReconciliation.includes('Audited implementation checkpoint: `784379e3a13e1ad9366cca70816675b692063702`')
   && releaseReconciliation.includes('Live `main`: `6885c3201d523d42d176c3dcd91de28dc1e17f6f`')

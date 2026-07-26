@@ -16,7 +16,7 @@ Registry size and execution capacity are separate:
 - every worker claim receives a short-lived signed budget grant and one consumable reservation;
 - idempotency, lease expiry, audit records, and human approval boundaries fail closed.
 
-A registry containing 175 specialists is therefore dormant unless work is queued. It is still an information-design warning: duplicate or unused roles should be reused, paused, or removed from the active roster instead of being presented as a 175-person company.
+`agent_os/workforce/supermega_build_workforce.json` is the sole machine-readable company capacity contract. The default workspace links to it instead of repeating limits. The active ceiling is twelve registered roles, four active or batch jobs, and two Kernel agents per cycle; historical 175- or 256-role manifests are rejected rather than treated as a dormant company.
 
 ## Small company model
 
@@ -39,7 +39,7 @@ Every consequential action requires an attributed human decision with scope, evi
 
 - Secrets stay server-side and budget-signing secrets contain at least 32 UTF-8 bytes.
 - Customer and operational data are tenant-scoped with deny-by-default authorization.
-- Storage buckets are private by default; anonymous or broad authenticated listing is forbidden. Downloads use short-lived, purpose-bound access after authorization.
+- Storage buckets are private by default; anonymous, broad authenticated, and cross-tenant listing are forbidden. A working individual file URL is not privacy proof: release evidence must include bucket inventory, listing denial, and short-lived purpose-bound access after authorization.
 - Untrusted files, webpages, prompts, and connector content never become instructions or canonical memory without validation and provenance.
 - Logs are structured and bounded; they exclude credentials and raw customer payloads.
 - Vercel releases require immutable commit identity, preflight checks, rollback evidence, and a bounded post-deploy error scan. Observability configuration is an owner-gated infrastructure change.
