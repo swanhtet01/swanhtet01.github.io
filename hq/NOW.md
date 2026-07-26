@@ -26,8 +26,8 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 ## Implemented reality
 
 - HQ uses four teams. One contract caps 12 roles, four active/batch jobs, two Kernel agents per cycle, and zero idle compute; overrides fail closed, and the default workspace no longer duplicates a 256-role ceiling.
-- Kernel company execution now uses four atomic, owner-bound capacity claims with 120-second stale recovery. A fifth cycle stops before model use, queued work returns to planned for retry, and every admitted path releases its slot. Scheduler command failures capture raw native streams and never interpolate secret-bearing arguments (`ca5070e`).
-- One checked manifest now makes Vercel production the sole recurring scheduler for `megaos`: a 15-minute queue route plus a 00:45 UTC daily route, bounded to 97 invocations/day. Cloud Tasks dispatches only on demand; Google Cloud Scheduler mutation is retired. Production-only protected credentials, exact path/cadence, and duplicate/conflicting/retired state are enforced before release (`6c19084`).
+- Kernel uses four owner-bound capacity claims with 120-second stale recovery. A fifth cycle stops before model use; failed work returns for retry; every path releases its slot. Scheduler failures retain raw streams without interpolating secret-bearing arguments (`ca5070e`).
+- One manifest makes Vercel production the sole recurring `megaos` scheduler: a 15-minute queue plus a 00:45 UTC daily run, capped at 97/day. Cloud Tasks stays on-demand; Google Scheduler mutation is retired. Protected credentials, exact cadence, and conflicting state are release-gated (`6c19084`).
 - Shop covers guarded orders, stock, purchasing, fulfilment, payment/refund, returns, and close at `/shop/`.
 - Plant covers jobs, output/material evidence, problems, holds, handoff, equipment, downtime, and maintenance at `/plant/`; it controls no equipment.
 - Website turns one brief into Preview, guarded Save, and Review at `/website/`; it never deploys.
@@ -35,17 +35,18 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 - AI assistance remains gated shared infrastructure; Order Intake passed 20 local cases, but the provider runner remains at the credential gate.
 - Client setup now uses one manifest-backed two-step flow, stable template IDs, detail-preserving switches/deep links, and one smart-import path. Exact matches collapse detail; exceptions open for review; the duplicate Shop importer is gone (`ab9a89e`).
 - Shop `social-commerce` now has a deterministic, versioned recipe bound to the trusted importer and human-approved Commerce lifecycle. Fresh, upgrade, and rollback plans perform no writes (`9ba8569`).
+- Shop Stock now has a lazy-loaded two-location layer in its existing tab: masters, lot/serial evidence, paired transfers, reservations, ATP, exact replay, digest validation, locked writes, and rollback (`5fa93a9`, `2790f9d`).
 - Home keeps Shop and Plant exceptions above collapsed HQ work. Purchases suppress duplicate stock tasks; a Plant issue badge links to Problems and otherwise the card opens Jobs. `/work/` stays labelled HQ; bottom navigation reads Home, HQ, and Products.
 - `npm run dev` starts canonical FastAPI plus Vite on loopback while clearing database, hosted-auth, model, worker, and write authority; the full local command proxies canonical FastAPI while keeping managed data disconnected and writes locked. Records stay browser-local by default; hosted production activation is not proven.
 
 ## Verified baseline
 
-- Current local checkpoints: product `9ba8569`, agent operations `6c19084`, operations `63a245f`, and security `98b8044`.
-- App build and all local contracts pass; the Kernel passes 262 tests, 69 connectors/993 calls, and 15 crews/214 checks. The provisioning contract passes 12 focused adversarial tests and all Python coverage passes 227 tests.
-- React Router is isolated in a 43,870-byte cacheable chunk. The current product checkpoint's largest JavaScript chunk is 471,580 bytes and remains below the build gate.
+- Current local checkpoints: product `2790f9d`, agent operations `6c19084`, operations `63a245f`, and security `98b8044`.
+- App build and all local contracts pass; the Kernel passes 262 tests, 69 connectors/993 calls, and 15 crews/214 checks. Provisioning passes 12 focused adversarial tests; Shop inventory passes 11 focused tests and 24 browser-model runtime checks; all Python coverage passes 238 tests.
+- React Router is isolated in a 43,870-byte cacheable chunk. Shop inventory is isolated in a 27,160-byte on-demand chunk; the current product checkpoint's largest JavaScript chunk is 476,008 bytes and remains below the build gate.
 - Focused coverage includes 205 Shop, 256 Plant, 94 Website, 109 client-onboarding, 54 managed-import, and 17 trusted-server import tests.
 - Rendered 390x844/1440x900 setup and all four phone-width product routes have no horizontal overflow or error overlay; switches preserve client details and exact imports collapse review detail.
-- Core first-action QA leads Shop Stock with the exact shortage, guides incomplete orders to Promise or Payment, sends Plant alerts to Problems and jobs to output, puts open Problems before Equipment, and moves invalid Website briefs to their first error. Mobile controls are at least 44 px; fixed navigation now preserves focus and click clearance (`36fa7dd`), and guide or review actions create no record.
+- Core first-action QA leads Shop Stock, incomplete orders to Promise or Payment, Plant alerts to Problems or output, and invalid Website briefs to their first error. Mobile controls are at least 44 px with focus-safe fixed navigation (`36fa7dd`); guide and review actions create no record.
 - Last remote release snapshot: `b67db94` is 0 behind / 230 ahead of open draft PR #258 head `338b6fd`; `megaos` production is READY at `6885c320` with no 24-hour runtime errors; remote checks exclude the local delta. See `hq/research/release-reconciliation-2026-07-26.md`.
 
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
@@ -61,8 +62,8 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - The candidate is not on GitHub or Vercel; live remains `6885c320` and PR #258 remains `338b6fd`. The next external action is an approved fast-forward-only push.
 - Preview remains blocked until the exact `megaos` project and credentials are linked; no fallback domain is allowed.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
-- Read-only Vercel observability reports zero production Agent Run projects in both 30 and 90 days. Local contracts now select Vercel production alone and retire Google Cloud Scheduler mutation, but the available connector did not expose live cron definitions or environment metadata. Hosted cadence and production-only secret scope therefore remain unverified until an owner-approved credentialed read; no provider state was changed.
-- The products have SAP-grade accountability goals, not SAP feature parity. Shop still needs multi-location/master-data depth; Plant needs BOM, routing, planning, genealogy, quality, and maintenance depth; Website needs versioned content and release operations; Ecommerce needs full catalog, checkout, tax, shipping, payment, and order lifecycle.
+- Hosted scheduler cadence and protected-secret scope remain unverified because the connector exposed no live cron or environment metadata. An owner-approved credentialed read is required; no provider state changed.
+- The products target SAP-grade accountability, not feature parity. Shop still needs managed proof, receiving/count reconciliation, pricing/tax, and accounting adapters; Plant needs BOM/routing, planning, genealogy, quality, and maintenance; Website needs versioned content/release operations; Ecommerce needs catalog, checkout, tax, shipping, payment, and returns depth.
 
 ## Decisions in force
 
@@ -83,7 +84,7 @@ Each slice must keep the interface task-first: one primary action, progressive d
 
 ## Next evidence
 
-1. Prove ENG-075's two-location stock lifecycle, then extend the accepted recipe to the other eleven profiles without new setup pages.
+1. Prove ENG-076's production-order planning and traceability lifecycle through the existing Plant tasks without a new setup page or equipment-control authority.
 2. Repeat the 12-profile rehearsal with one founder-approved named pilot company and measure import correction, setup, and human review time.
 3. After an approved push and exact Vercel link, review that clean commit without deploying or mutating aliases.
 4. On an approved isolated Supabase target, prove private Storage, RLS, replay/isolation, and recovery.
