@@ -533,6 +533,26 @@ def _website_pages_import_payload(
     }
 
 
+def _ecommerce_merchandising_import_payload(
+    package: Mapping[str, Any],
+    *,
+    actor_id: str,
+    command_id: UUID,
+    package_digest: str,
+) -> dict[str, Any]:
+    return {
+        "commandId": str(command_id),
+        "package": package,
+        "evidence": {
+            "actionId": f"ACT-IMPORT-{command_id}",
+            "capturedAt": "server-assigned",
+            "actor": actor_id,
+            "reason": "Apply the reviewed Ecommerce merchandising import.",
+            "evidenceReference": package_digest,
+        },
+    }
+
+
 def _website_source_identity(value: object) -> tuple[str, str, str, str] | None:
     if not isinstance(value, Mapping):
         return None
@@ -653,7 +673,7 @@ def create_trial_router(*, store: TrialStore, resolve_principal: PrincipalResolv
                 "client_import_validation_error",
                 message=str(exc),
             ) from exc
-        if validation.product not in {"commerce", "production", "website"}:
+        if validation.product not in {"commerce", "production", "website", "ecommerce"}:
             raise _error(
                 409,
                 "client_import_activation_not_ready",
@@ -680,10 +700,19 @@ def create_trial_router(*, store: TrialStore, resolve_principal: PrincipalResolv
                 command_id=body.command_id,
                 package_digest=validation.package_digest,
             )
-        else:
+        elif validation.product == "website":
             surface = "website"
             event_type = "website.workspace.initialized"
             payload = _website_pages_import_payload(
+                body.package,
+                actor_id=principal.actor_id,
+                command_id=body.command_id,
+                package_digest=validation.package_digest,
+            )
+        else:
+            surface = "commerce"
+            event_type = "commerce.storefront.merchandising.imported"
+            payload = _ecommerce_merchandising_import_payload(
                 body.package,
                 actor_id=principal.actor_id,
                 command_id=body.command_id,

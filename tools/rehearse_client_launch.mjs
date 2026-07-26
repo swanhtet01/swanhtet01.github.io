@@ -225,7 +225,7 @@ async function buildRehearsal() {
     item.status === 'valid'
     && item.activation.status === 'not_applied'
     && item.activation.human_approval_required === true
-    && item.activation.atomic_adapter_ready === ['commerce', 'production', 'website'].includes(item.product)
+    && item.activation.atomic_adapter_ready === ['commerce', 'production', 'website', 'ecommerce'].includes(item.product)
     && item.activation.external_writes_performed === false
   )), 'A trusted validation result exposed the wrong adapter or crossed the activation boundary.')
 

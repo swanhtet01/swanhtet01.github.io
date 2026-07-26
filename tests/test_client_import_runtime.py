@@ -20,6 +20,7 @@ from supermega_runtime.client_import_runtime import (
     ClientImportValidationError,
     validate_client_import_staging_package,
 )
+from supermega_runtime.commerce_runtime import commerce_catalog_digest
 from supermega_runtime.runtime import reduce_trial_state
 from supermega_runtime.trial_runtime import create_trial_router
 from supermega_runtime.trial_store import InMemoryTrialStore, TrialPrincipal
@@ -187,7 +188,7 @@ class ClientImportValidatorTests(unittest.TestCase):
                     self.assertTrue(response["activation"]["human_approval_required"])
                     self.assertEqual(
                         response["activation"]["atomic_adapter_ready"],
-                        product in {"commerce", "production", "website"},
+                        product in {"commerce", "production", "website", "ecommerce"},
                     )
                     self.assertFalse(response["activation"]["external_writes_performed"])
 
@@ -400,6 +401,20 @@ class ClientImportValidatorTests(unittest.TestCase):
         too_many_jobs["rows"] = jobs
         too_many_jobs["controls"]["rowCount"] = len(jobs)
         self.assert_invalid(too_many_jobs)
+
+        self.assertEqual(CLIENT_IMPORT_OBJECTS["ecommerce"].maximum_rows, 8)
+        too_many_storefront_rows = _package("ecommerce")
+        storefront_template = deepcopy(too_many_storefront_rows["rows"][0])
+        storefront_rows = []
+        for index in range(9):
+            row = deepcopy(storefront_template)
+            row["sourceRow"] = index + 2
+            row["key"] = f"SKU-{index:03d}"
+            row["values"]["sku"] = row["key"]
+            storefront_rows.append(row)
+        too_many_storefront_rows["rows"] = storefront_rows
+        too_many_storefront_rows["controls"]["rowCount"] = len(storefront_rows)
+        self.assert_invalid(too_many_storefront_rows)
 
     def test_website_adapter_limits_match_the_managed_workspace(self) -> None:
         too_many_pages = _package("website")
@@ -987,6 +1002,147 @@ class ClientImportRouteTests(unittest.TestCase):
         self.assertEqual(self.reducer.calls, 1)
         self.assertEqual(len(self.store._events), 1)
 
+    def test_reviewed_ecommerce_import_updates_existing_storefront_once(self) -> None:
+        shop_package = _package("commerce", "social-commerce")
+        shop_validation = validate_client_import_staging_package(shop_package)
+        shop_applied = self.client.post(
+            "/api/trial/v1/imports/apply",
+            headers=self._headers("writer"),
+            json={
+                "command_id": "00000000-0000-4000-8000-000000000105",
+                "expected_version": 0,
+                "confirmation": f"APPLY {shop_validation.package_digest}",
+                "package": shop_package,
+            },
+        )
+        self.assertEqual(shop_applied.status_code, 200, shop_applied.text)
+        shop_state = shop_applied.json()["result"]["state"]
+        catalog_digest = commerce_catalog_digest(shop_state)
+        storefront_action_id = (
+            f"ACT-STOREFRONT-R1-{catalog_digest.removeprefix('sha256:')}"
+        )
+        storefront_proof = {
+            "actionId": storefront_action_id,
+            "capturedAt": "2026-07-26T08:00:00.000Z",
+            "actor": "setup-writer",
+            "reason": "Save the storefront identity before importing merchandising.",
+            "evidenceReference": f"ECOMMERCE-STOREFRONT:{catalog_digest}:R1",
+        }
+        configured_state = deepcopy(shop_state)
+        configured_state["storefrontConfiguration"] = {
+            "schema": "supermega.ecommerce.storefront.v1",
+            "revision": 1,
+            "shopCatalogSnapshotRevision": 1,
+            "shopCatalogDigest": catalog_digest,
+            "storeName": "Mingalar Shop",
+            "summary": "Clear products and one reviewed request path.",
+            "selectedSkus": ["COFFEE-250"],
+            "saved": storefront_proof,
+        }
+        configured = self.store.apply_command(
+            self.setup_writer,
+            command_id="00000000-0000-4000-8000-000000000106",
+            surface="commerce",
+            event_type="commerce.storefront.configuration.saved",
+            expected_version=1,
+            payload={"state": configured_state, "evidence": storefront_proof},
+        )
+        self.assertEqual(configured.version, 2)
+
+        ecommerce_package = _package("ecommerce", "social-storefront")
+        ecommerce_validation = validate_client_import_staging_package(ecommerce_package)
+        body = {
+            "command_id": "00000000-0000-4000-8000-000000000107",
+            "expected_version": 2,
+            "confirmation": f"APPLY {ecommerce_validation.package_digest}",
+            "package": ecommerce_package,
+        }
+        applied = self.client.post(
+            "/api/trial/v1/imports/apply",
+            headers=self._headers("writer"),
+            json=body,
+        )
+        self.assertEqual(applied.status_code, 200, applied.text)
+        response = applied.json()
+        self.assertEqual(
+            response["activation"],
+            {
+                "contract": "supermega.client_import_activation.v1",
+                "status": "applied",
+                "product": "ecommerce",
+                "object": "storefront_merchandising",
+                "workflow_template_id": "social-storefront",
+                "package_digest": ecommerce_validation.package_digest,
+                "row_count": 1,
+                "workspace_id": "workspace-b",
+                "external_writes_performed": True,
+            },
+        )
+        self.assertEqual(response["result"]["surface"], "commerce")
+        self.assertEqual(
+            response["result"]["event_type"],
+            "commerce.storefront.merchandising.imported",
+        )
+        self.assertEqual(response["result"]["version"], 3)
+        self.assertFalse(response["result"]["idempotent_replay"])
+        state = response["result"]["state"]
+        configuration = state["storefrontConfiguration"]
+        self.assertEqual(configuration["revision"], 2)
+        self.assertEqual(configuration["shopCatalogSnapshotRevision"], 1)
+        self.assertEqual(configuration["shopCatalogDigest"], catalog_digest)
+        self.assertEqual(configuration["storeName"], "Mingalar Shop")
+        self.assertEqual(
+            configuration["summary"],
+            "Clear products and one reviewed request path.",
+        )
+        self.assertEqual(configuration["selectedSkus"], ["COFFEE-250"])
+        self.assertEqual(
+            configuration["merchandising"],
+            [
+                {
+                    "sku": "COFFEE-250",
+                    "featured": True,
+                    "collection": "Best sellers",
+                    "displayName": "Myanmar coffee 250g",
+                    "note": "Lead with the locally sourced proof.",
+                }
+            ],
+        )
+        self.assertEqual(configuration["saved"]["actor"], "setup-writer")
+        self.assertRegex(
+            configuration["saved"]["capturedAt"],
+            r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$",
+        )
+        for field in ("items", "orders", "movements", "closes"):
+            self.assertEqual(state[field], configured.state[field])
+        self.assertEqual(self.reducer.calls, 3)
+        self.assertEqual(len(self.store._events), 3)
+
+        replay = self.client.post(
+            "/api/trial/v1/imports/apply",
+            headers=self._headers("writer"),
+            json=body,
+        )
+        self.assertEqual(replay.status_code, 200, replay.text)
+        self.assertTrue(replay.json()["result"]["idempotent_replay"])
+        self.assertEqual(replay.json()["result"]["state"], state)
+        self.assertEqual(self.reducer.calls, 3)
+        self.assertEqual(len(self.store._events), 3)
+
+        stale = self.client.post(
+            "/api/trial/v1/imports/apply",
+            headers=self._headers("writer"),
+            json={
+                **body,
+                "command_id": "00000000-0000-4000-8000-000000000108",
+            },
+        )
+        self.assertEqual(stale.status_code, 409)
+        self.assertEqual(stale.json()["detail"]["code"], "trial_version_conflict")
+        self.assertEqual(stale.json()["detail"]["current_version"], 3)
+        self.assertEqual(self.reducer.calls, 3)
+        self.assertEqual(len(self.store._events), 3)
+
     def test_import_activation_fails_closed_before_every_product_write(self) -> None:
         package = _package("commerce")
         validation = validate_client_import_staging_package(package)
@@ -1030,7 +1186,7 @@ class ClientImportRouteTests(unittest.TestCase):
 
         ecommerce_package = _package("ecommerce")
         ecommerce_validation = validate_client_import_staging_package(ecommerce_package)
-        unsupported = self.client.post(
+        missing_prerequisites = self.client.post(
             "/api/trial/v1/imports/apply",
             headers=self._headers("writer"),
             json={
@@ -1039,13 +1195,13 @@ class ClientImportRouteTests(unittest.TestCase):
                 "package": ecommerce_package,
             },
         )
-        self.assertEqual(unsupported.status_code, 409)
+        self.assertEqual(missing_prerequisites.status_code, 422)
         self.assertEqual(
-            unsupported.json()["detail"]["code"],
-            "client_import_activation_not_ready",
+            missing_prerequisites.json()["detail"]["code"],
+            "trial_validation_error",
         )
         self.assertEqual((self.store._states, self.store._events), baseline)
-        self.assertEqual(self.reducer.calls, 0)
+        self.assertEqual(self.reducer.calls, 1)
 
 
 if __name__ == "__main__":

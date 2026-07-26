@@ -102,6 +102,7 @@ CLIENT_IMPORT_OBJECTS: dict[str, ClientImportObjectSpec] = {
         key_field="sku",
         target_surface="commerce",
         required_capability="commerce.write",
+        maximum_rows=8,
         fields=(
             ClientImportFieldSpec("sku", "sku", maximum=80),
             ClientImportFieldSpec("featured", "boolean"),
@@ -155,7 +156,7 @@ class ClientImportValidationResult:
                 "required_capability": self.required_capability,
                 "human_approval_required": True,
                 "atomic_adapter_ready": self.product
-                in {"commerce", "production", "website"},
+                in {"commerce", "production", "website", "ecommerce"},
                 "external_writes_performed": False,
             },
         }

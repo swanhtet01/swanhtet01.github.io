@@ -1005,6 +1005,16 @@ def _authoritative_command_payload(
         authoritative["evidence"] = authoritative_evidence
         authoritative["state"] = authoritative_state
         return authoritative
+    if event_type == "commerce.storefront.merchandising.imported":
+        evidence = authoritative.get("evidence")
+        if not isinstance(evidence, Mapping):
+            return authoritative
+        authoritative["evidence"] = {
+            **dict(evidence),
+            "actor": principal.actor_id,
+            "capturedAt": _canonical_millisecond_utc(captured_at),
+        }
+        return authoritative
     if event_type != "commerce.storefront.configuration.saved":
         return authoritative
     evidence = authoritative.get("evidence")
