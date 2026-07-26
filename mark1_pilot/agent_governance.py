@@ -21,6 +21,17 @@ AGENT_BUDGET_AUDIENCE = "supermega-agent-runtime"
 AGENT_ACTIVE_ASSIGNMENT_LIMIT = 4
 AGENT_ROSTER_LIMIT = 12
 
+# Registered jobs are reusable capabilities; only these reviewed lanes are
+# scheduled automatically. Keeping this authority beside capacity policy stops
+# health checks and schedulers from treating dormant capabilities as workers.
+AGENT_AUTOMATION_LANES: dict[str, tuple[str, ...]] = {
+    "queue": ("task_triage", "ops_watch"),
+    "daily": ("founder_brief", "github_release_watch"),
+}
+AGENT_AUTOMATED_JOB_TYPES = tuple(
+    dict.fromkeys(job_type for lane in AGENT_AUTOMATION_LANES.values() for job_type in lane)
+)
+
 AGENT_JOB_UNITS: dict[str, int] = {
     "revenue_scout": 3,
     "list_clerk": 1,
@@ -86,6 +97,13 @@ if (
     or set(AGENT_JOB_UNITS) != set(AGENT_JOB_MAX_ATTEMPTS)
 ):
     raise RuntimeError("agent_job_policy_contract_invalid")
+if (
+    not AGENT_AUTOMATED_JOB_TYPES
+    or len(AGENT_AUTOMATED_JOB_TYPES) != sum(len(lane) for lane in AGENT_AUTOMATION_LANES.values())
+    or any(not lane or len(lane) > AGENT_ACTIVE_ASSIGNMENT_LIMIT for lane in AGENT_AUTOMATION_LANES.values())
+    or not set(AGENT_AUTOMATED_JOB_TYPES).issubset(AGENT_JOB_UNITS)
+):
+    raise RuntimeError("agent_automation_lane_contract_invalid")
 
 _GRANT_ID = re.compile(r"^[a-f0-9]{32}$")
 _GRANT_SIGNATURE = re.compile(r"^[a-f0-9]{64}$")
@@ -137,6 +155,8 @@ class AgentWorkforcePolicy:
             "job_cadence_seconds": dict(AGENT_JOB_CADENCE_SECONDS),
             "cadence_admission_contract": AGENT_CADENCE_ADMISSION_CONTRACT,
             "job_max_attempts": dict(AGENT_JOB_MAX_ATTEMPTS),
+            "automation_lanes": {name: list(job_types) for name, job_types in AGENT_AUTOMATION_LANES.items()},
+            "automated_job_types": list(AGENT_AUTOMATED_JOB_TYPES),
             "retry_policy_contract": AGENT_RETRY_POLICY_CONTRACT,
             "in_flight_per_job": 1,
             "capacity_plan_contract": AGENT_CAPACITY_PLAN_CONTRACT,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import json
 import os
 import sqlite3
@@ -11,6 +12,7 @@ from contextlib import closing, contextmanager
 from collections.abc import Iterator
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 from fastapi import FastAPI
@@ -19,6 +21,8 @@ from fastapi.testclient import TestClient
 from supermega_runtime.cloud_runtime import DAILY_CRON_PATH, QUEUE_CRON_PATH, router
 from mark1_pilot.agent_governance import (
     AGENT_ACTIVE_ASSIGNMENT_LIMIT,
+    AGENT_AUTOMATED_JOB_TYPES,
+    AGENT_AUTOMATION_LANES,
     AGENT_BUDGET_ACCOUNTING_CONTRACT,
     AGENT_BUDGET_GRANT_CONTRACT,
     AGENT_CADENCE_ADMISSION_CONTRACT,
@@ -193,6 +197,54 @@ class CloudRuntimeTests(unittest.TestCase):
         self.assertEqual(daily_payload["cycle"], "daily")
         self.assertEqual(daily_payload["job_types"], ["founder_brief", "github_release_watch"])
         self.assertEqual(daily_payload["limit"], 2)
+        self.assertEqual(tuple(queue_payload["job_types"]), AGENT_AUTOMATION_LANES["queue"])
+        self.assertEqual(tuple(daily_payload["job_types"]), AGENT_AUTOMATION_LANES["daily"])
+        self.assertEqual(
+            tuple(dict.fromkeys([*queue_payload["job_types"], *daily_payload["job_types"]])),
+            AGENT_AUTOMATED_JOB_TYPES,
+        )
+
+    def test_ops_watch_monitors_only_automated_jobs_and_suppresses_open_task_rewrites(self) -> None:
+        server_path = Path(__file__).resolve().parents[1] / "tools" / "serve_solution.py"
+        tree = ast.parse(server_path.read_text(encoding="utf-8"))
+        function = next(
+            node for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "_build_ops_watch_result"
+        )
+        module = ast.Module(body=[function], type_ignores=[])
+        ast.fix_missing_locations(module)
+        namespace: dict[str, object] = {"Any": Any}
+        exec(compile(module, str(server_path), "exec", dont_inherit=True), namespace)
+        watch = namespace["_build_ops_watch_result"]
+        added: list[list[dict[str, object]]] = []
+        existing_tasks = [{"template": "ops_watch", "status": "open", "title": "Review agent runtime health"}]
+        watch.__globals__.update(
+            {
+                "AGENT_AUTOMATED_JOB_TYPES": AGENT_AUTOMATED_JOB_TYPES,
+                "AGENT_JOB_TEMPLATES": [
+                    {"job_type": job_type, "cadence": "hourly"}
+                    for job_type in (*AGENT_AUTOMATED_JOB_TYPES, "revenue_scout", "list_clerk", "template_clerk")
+                ],
+                "datetime": datetime,
+                "_group_agent_runs_by_job_type": lambda rows: {},
+                "_parse_iso_datetime": lambda value: None,
+                "_cadence_threshold_hours": lambda cadence: 1,
+                "enterprise_list_agent_runs": lambda *args, **kwargs: [],
+                "load_approval_summary": lambda *args, **kwargs: {"pending_count": 0},
+                "enterprise_list_workspace_tasks": lambda *args, **kwargs: existing_tasks,
+                "enterprise_add_workspace_tasks": lambda *args, **kwargs: added.append(kwargs["rows"]) or {"saved_count": 1},
+            }
+        )
+
+        result = watch(state_db="state.db", enterprise_db_url="sqlite://", workspace_id="supermega")
+
+        self.assertEqual(result["monitored_jobs"], list(AGENT_AUTOMATED_JOB_TYPES))
+        self.assertEqual(set(result["stale_jobs"]), set(AGENT_AUTOMATED_JOB_TYPES))
+        self.assertNotIn("revenue_scout", result["stale_jobs"])
+        self.assertEqual(result["metrics"]["monitored_job_count"], 4)
+        self.assertEqual(result["metrics"]["saved_watch_task_count"], 0)
+        self.assertEqual(result["metrics"]["suppressed_duplicate_task_count"], 1)
+        self.assertEqual(added, [])
 
     def test_scheduler_emits_one_bounded_structured_log_without_secrets(self) -> None:
         with patch("supermega_runtime.cloud_runtime._open_worker_request", side_effect=self._success_response):

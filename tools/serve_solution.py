@@ -155,6 +155,7 @@ from mark1_pilot.enterprise_store import (  # noqa: E402
     update_workspace_task as enterprise_update_workspace_task,
 )
 from mark1_pilot.agent_governance import (  # noqa: E402
+    AGENT_AUTOMATED_JOB_TYPES,
     AGENT_BUDGET_ACCOUNTING_CONTRACT,
     AgentGovernanceError,
     load_agent_workforce_policy,
@@ -2409,8 +2410,11 @@ def _build_ops_watch_result(*, state_db: str, enterprise_db_url: str, workspace_
     stale_jobs: list[str] = []
     errored_jobs: list[str] = []
 
+    automated_job_types = set(AGENT_AUTOMATED_JOB_TYPES)
     for template in AGENT_JOB_TEMPLATES:
         job_type = str(template.get("job_type", "")).strip()
+        if job_type not in automated_job_types:
+            continue
         row = latest_by_type.get(job_type, {})
         status = str(row.get("status", "")).strip().lower()
         if status == "error":
@@ -2424,6 +2428,14 @@ def _build_ops_watch_result(*, state_db: str, enterprise_db_url: str, workspace_
     pending_approvals = int(approvals.get("pending_count", 0) or 0)
     open_tasks = enterprise_list_workspace_tasks(enterprise_db_url, workspace_id=workspace_id, limit=500)
     open_count = sum(1 for row in open_tasks if str(row.get("status", "")).strip().lower() != "done")
+    existing_watch_task = next(
+        (
+            row for row in open_tasks
+            if str(row.get("template", "")).strip() == "ops_watch"
+            and str(row.get("status", "")).strip().lower() != "done"
+        ),
+        None,
+    )
 
     notes: list[str] = []
     if stale_jobs:
@@ -2436,7 +2448,7 @@ def _build_ops_watch_result(*, state_db: str, enterprise_db_url: str, workspace_
         notes.append(f"Open task pressure: {open_count}")
 
     saved = {"saved_count": 0}
-    if notes:
+    if notes and existing_watch_task is None:
         saved = enterprise_add_workspace_tasks(
             enterprise_db_url,
             workspace_id=workspace_id,
@@ -2452,6 +2464,7 @@ def _build_ops_watch_result(*, state_db: str, enterprise_db_url: str, workspace_
                 }
             ],
         )
+    suppressed_duplicate_task = bool(notes and existing_watch_task is not None)
 
     if not notes:
         summary = "Agent runtime is healthy. Core loops are running on cadence."
@@ -2467,7 +2480,10 @@ def _build_ops_watch_result(*, state_db: str, enterprise_db_url: str, workspace_
             "pending_approval_count": pending_approvals,
             "open_task_count": open_count,
             "saved_watch_task_count": int(saved.get("saved_count", 0) or 0),
+            "suppressed_duplicate_task_count": 1 if suppressed_duplicate_task else 0,
+            "monitored_job_count": len(AGENT_AUTOMATED_JOB_TYPES),
         },
+        "monitored_jobs": list(AGENT_AUTOMATED_JOB_TYPES),
         "stale_jobs": stale_jobs,
         "errored_jobs": errored_jobs,
         "next_actions": [

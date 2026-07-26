@@ -19,6 +19,7 @@ from urllib.parse import urlsplit
 from fastapi import APIRouter, Header, HTTPException, Request
 
 from mark1_pilot.agent_governance import (
+    AGENT_AUTOMATION_LANES,
     AGENT_CAPACITY_PLAN_CONTRACT,
     AGENT_BUDGET_ACCOUNTING_CONTRACT,
     AGENT_BUDGET_GRANT_CONTRACT,
@@ -66,13 +67,13 @@ _SENSITIVE_KEY_PARTS = frozenset(
 _SCHEDULER_ROUTES: dict[str, dict[str, object]] = {
     QUEUE_CRON_PATH: {
         "cycle": "queue",
-        "job_types": ("task_triage", "ops_watch"),
-        "limit": 2,
+        "job_types": AGENT_AUTOMATION_LANES["queue"],
+        "limit": len(AGENT_AUTOMATION_LANES["queue"]),
     },
     DAILY_CRON_PATH: {
         "cycle": "daily",
-        "job_types": ("founder_brief", "github_release_watch"),
-        "limit": 2,
+        "job_types": AGENT_AUTOMATION_LANES["daily"],
+        "limit": len(AGENT_AUTOMATION_LANES["daily"]),
     },
 }
 
