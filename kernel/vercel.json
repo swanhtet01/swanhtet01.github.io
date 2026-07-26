@@ -1,5 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "git": {
+    "deploymentEnabled": false
+  },
   "functions": {
     "api/index.mjs": { "maxDuration": 30 },
     "api/stripe-webhook.mjs": { "maxDuration": 15 },

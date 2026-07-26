@@ -1,4 +1,4 @@
-name: Kernel Console - Test & Deploy
+name: Kernel Console - Verify & Owner-Gated Release
 
 on:
   push:
@@ -7,53 +7,203 @@ on:
     paths:
       - 'kernel/**'
       - 'tools/test_connector_resilience.mjs'
+      - 'tools/test_crew_resilience.mjs'
+      - 'tools/resolve_vercel_rollback_target.mjs'
       - '.github/workflows/kernel-deploy.yml'
   pull_request:
     paths:
       - 'kernel/**'
       - 'tools/test_connector_resilience.mjs'
+      - 'tools/test_crew_resilience.mjs'
+      - 'tools/resolve_vercel_rollback_target.mjs'
       - '.github/workflows/kernel-deploy.yml'
   workflow_dispatch:
+    inputs:
+      release_sha:
+        description: Exact 40-character SHA at the current main tip
+        required: true
+        type: string
+      confirmation:
+        description: Type RELEASE KERNEL followed by the exact SHA
+        required: true
+        type: string
+
+permissions:
+  contents: read
 
 concurrency:
   group: kernel-console-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
-  verify-and-deploy:
+  verify:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: .
+    timeout-minutes: 20
     steps:
-      - name: Checkout
+      - name: Checkout the reviewed commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
 
       - name: Setup Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 22
+          node-version: 24
+          cache: npm
+          cache-dependency-path: kernel/package-lock.json
 
       - name: Install kernel dependencies
         run: npm --prefix kernel ci --no-audit --no-fund
 
-      - name: Kernel unit tests
-        run: npm --prefix kernel test
+      - name: Verify kernel and release contract
+        run: npm --prefix kernel run verify
 
-      - name: Connector resilience gate
-        run: node tools/test_connector_resilience.mjs
-
-      - name: Crew resilience gate
-        run: node tools/test_crew_resilience.mjs
-
-      - name: Deploy kernel to Vercel production
-        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+  release:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.repository == 'swanhtet01/swanhtet01.github.io' }}
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: kernel-production
+    defaults:
+      run:
         working-directory: kernel
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+    steps:
+      - name: Checkout the exact release commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: kernel/package-lock.json
+
+      - name: Require exact current-main release intent
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          ACTUAL_SHA="$(git rev-parse HEAD)"
+          if ! [[ "$RELEASE_SHA" =~ ^[a-f0-9]{40}$ ]] || [ "$RELEASE_SHA" != "$ACTUAL_SHA" ]; then
+            echo "::error::release_sha must equal the checked-out 40-character commit SHA."
+            exit 1
+          fi
+          if [ "$RELEASE_CONFIRMATION" != "RELEASE KERNEL $ACTUAL_SHA" ]; then
+            echo "::error::The exact kernel release confirmation is required."
+            exit 1
+          fi
+          git fetch --no-tags --depth=1 origin main
+          if [ "$(git rev-parse origin/main)" != "$ACTUAL_SHA" ]; then
+            echo "::error::The selected commit is no longer the current main tip."
+            exit 1
+          fi
+
+      - name: Install and reverify the immutable kernel source
+        run: |
+          npm ci --no-audit --no-fund
+          npm run verify
+
+      - name: Require the protected Vercel project credentials
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
-          if [ -z "$VERCEL_TOKEN" ]; then
-            echo "::error::VERCEL_TOKEN is not set. Kernel deploy cannot run."
+          if [ -z "$VERCEL_TOKEN" ] || [ -z "$VERCEL_ORG_ID" ] || [ -z "$VERCEL_PROJECT_ID" ]; then
+            echo "::error::VERCEL_TOKEN, VERCEL_ORG_ID, and VERCEL_PROJECT_ID must be configured on kernel-production."
             exit 1
           fi
-          npx vercel deploy --prod --yes --token="$VERCEL_TOKEN"
+
+      - name: Pull and verify production project settings
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          npx --yes vercel@56.1.0 pull --yes --environment=production --token="$VERCEL_TOKEN"
+          npx --yes vercel@56.1.0 api "/v9/projects/$VERCEL_PROJECT_ID" --raw --token="$VERCEL_TOKEN" | node -e "let input='';process.stdin.on('data',chunk=>input+=chunk);process.stdin.on('end',()=>{const value=JSON.parse(input);if(value.id!==process.env.VERCEL_PROJECT_ID)process.exit(1)})"
+
+      - name: Build the immutable production-configured artifact
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: npx --yes vercel@56.1.0 build --prod --yes --token="$VERCEL_TOKEN"
+
+      - name: Capture the exact production rollback target
+        id: rollback-target
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          ROLLBACK_TARGET="$(npx --yes vercel@56.1.0 api "/now/aliases/console.supermega.dev" --raw --token="$VERCEL_TOKEN" | node ../tools/resolve_vercel_rollback_target.mjs alias console.supermega.dev "$VERCEL_PROJECT_ID")"
+          read -r PREVIOUS_URL PREVIOUS_ID <<< "$ROLLBACK_TARGET"
+          PREVIOUS_URL="$(npx --yes vercel@56.1.0 inspect "$PREVIOUS_URL" --format=json --token="$VERCEL_TOKEN" | node ../tools/resolve_vercel_rollback_target.mjs deployment "$PREVIOUS_URL" "$PREVIOUS_ID")"
+          printf 'url=%s\n' "$PREVIOUS_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy an isolated production candidate
+        id: deploy-candidate
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          DEPLOYMENT_URL="$(npx --yes vercel@56.1.0 deploy --prebuilt --prod --skip-domain --yes --token="$VERCEL_TOKEN" --meta "githubCommitSha=${{ github.sha }}" --meta "githubCommitRef=${{ github.ref_name }}")"
+          if ! [[ "$DEPLOYMENT_URL" =~ ^https://[A-Za-z0-9.-]+\.vercel\.app$ ]]; then
+            echo "::error::Vercel did not return one isolated kernel deployment URL."
+            exit 1
+          fi
+          printf 'url=%s\n' "$DEPLOYMENT_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Inspect and smoke the exact candidate
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          CANDIDATE_URL: ${{ steps.deploy-candidate.outputs.url }}
+        run: |
+          npx --yes vercel@56.1.0 inspect "$CANDIDATE_URL" --token="$VERCEL_TOKEN"
+          npx --yes vercel@56.1.0 curl /api/status --deployment "$CANDIDATE_URL" --yes --token="$VERCEL_TOKEN" | node -e "let input='';process.stdin.on('data',chunk=>input+=chunk);process.stdin.on('end',()=>{const value=JSON.parse(input);if(value.ok!==true||value.service!=='supermega-kernel'||value.agentCompany?.plannerReady!==true||value.agentCompany?.externalWrites!==false)process.exit(1)})"
+
+      - name: Reconfirm current main before promotion
+        run: |
+          git fetch --no-tags --depth=1 origin main
+          if [ "$(git rev-parse origin/main)" != "$(git rev-parse HEAD)" ]; then
+            echo "::error::main advanced after candidate creation; dispatch a new exact release."
+            exit 1
+          fi
+
+      - name: Promote the exact verified candidate
+        id: promote
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          CANDIDATE_URL: ${{ steps.deploy-candidate.outputs.url }}
+        run: |
+          printf 'attempted=true\n' >> "$GITHUB_OUTPUT"
+          npx --yes vercel@56.1.0 promote "$CANDIDATE_URL" --yes --token="$VERCEL_TOKEN"
+
+      - name: Verify the production alias and kernel health
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          CANDIDATE_URL: ${{ steps.deploy-candidate.outputs.url }}
+        run: |
+          PROMOTED_TARGET="$(npx --yes vercel@56.1.0 api "/now/aliases/console.supermega.dev" --raw --token="$VERCEL_TOKEN" | node ../tools/resolve_vercel_rollback_target.mjs alias console.supermega.dev "$VERCEL_PROJECT_ID")"
+          read -r PROMOTED_URL PROMOTED_ID <<< "$PROMOTED_TARGET"
+          if [ "$PROMOTED_URL" != "$CANDIDATE_URL" ] || [ -z "$PROMOTED_ID" ]; then
+            echo "::error::console.supermega.dev does not resolve to the verified candidate."
+            exit 1
+          fi
+          curl --fail --silent --show-error --max-time 20 https://console.supermega.dev/api/status | node -e "let input='';process.stdin.on('data',chunk=>input+=chunk);process.stdin.on('end',()=>{const value=JSON.parse(input);if(value.ok!==true||value.service!=='supermega-kernel'||value.agentCompany?.plannerReady!==true||value.agentCompany?.externalWrites!==false)process.exit(1)})"
+
+      - name: Roll back a failed production verification
+        if: ${{ failure() && steps.promote.outputs.attempted == 'true' }}
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          PREVIOUS_URL: ${{ steps.rollback-target.outputs.url }}
+        run: |
+          set +e
+          ROLLBACK_FAILED=0
+          npx --yes vercel@56.1.0 rollback "$PREVIOUS_URL" --yes --token="$VERCEL_TOKEN" || ROLLBACK_FAILED=1
+          npx --yes vercel@56.1.0 rollback status --token="$VERCEL_TOKEN" || ROLLBACK_FAILED=1
+          RESTORED_TARGET="$(npx --yes vercel@56.1.0 api "/now/aliases/console.supermega.dev" --raw --token="$VERCEL_TOKEN" | node ../tools/resolve_vercel_rollback_target.mjs alias console.supermega.dev "$VERCEL_PROJECT_ID")" || ROLLBACK_FAILED=1
+          read -r RESTORED_URL RESTORED_ID <<< "$RESTORED_TARGET"
+          if [ "$RESTORED_URL" != "$PREVIOUS_URL" ] || [ -z "$RESTORED_ID" ]; then ROLLBACK_FAILED=1; fi
+          curl --fail --silent --show-error --max-time 20 https://console.supermega.dev/api/status >/dev/null || ROLLBACK_FAILED=1
+          exit "$ROLLBACK_FAILED"

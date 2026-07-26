@@ -16,6 +16,7 @@ const databaseValidator = await readFile(resolve(root, 'tools/validate_supermega
 const migrationVerifier = await readFile(resolve(root, 'tools/verify_private_trial_migrations.mjs'), 'utf8')
 const rollbackResolver = await readFile(resolve(root, 'tools/resolve_vercel_rollback_target.mjs'), 'utf8')
 const config = JSON.parse(await readFile(resolve(root, 'vercel.json'), 'utf8'))
+const kernelConfig = JSON.parse(await readFile(resolve(root, 'kernel/vercel.json'), 'utf8'))
 const failures = []
 const checks = []
 
@@ -136,14 +137,33 @@ requireContract('rollback alias resolver fixtures', validAliasResolution.status 
 requireContract('rollback deployment resolver fixtures', validDeploymentResolution.status === 0 && validDeploymentResolution.stdout === fixtureUrl && invalidDeploymentResolution.status !== 0 && invalidDeploymentResolution.stderr.includes('deployment_identity'))
 requireContract('only coordinated workflow can promote app or public', (workflow.match(/vercel@56\.1\.0 promote/g) || []).length === 2 && !/vercel@56\.1\.0\s+promote\b/.test(appWorkflow))
 requireContract('failed paired verification rolls back every attempted promotion', workflow.includes("failure() && (steps.promote-app.outputs.attempted == 'true' || steps.promote.outputs.attempted == 'true')") && (workflow.match(/attempted=true/g) || []).length === 2 && workflow.includes('APP_PROMOTION_ATTEMPTED') && workflow.includes('PUBLIC_PROMOTION_ATTEMPTED') && workflow.includes('steps.app-rollback-target.outputs.url') && workflow.includes('steps.rollback-target.outputs.url') && workflow.includes('VERIFY_RELEASE_PAIR_ONLY=1 node tools/verify_coordinated_release_live.mjs'))
+requireContract('kernel native Git deployment is disabled', kernelConfig.git?.deploymentEnabled === false)
+requireContract('kernel release is manual current-main and environment gated',
+  kernelWorkflow.includes("github.event_name == 'workflow_dispatch'")
+  && kernelWorkflow.includes("github.ref == 'refs/heads/main'")
+  && kernelWorkflow.includes("github.repository == 'swanhtet01/swanhtet01.github.io'")
+  && kernelWorkflow.includes('environment: kernel-production')
+  && kernelWorkflow.includes('RELEASE KERNEL $ACTUAL_SHA')
+  && kernelWorkflow.includes('git rev-parse origin/main'))
+requireContract('kernel release promotes one exact isolated artifact',
+  (kernelWorkflow.match(/vercel@56\.1\.0 deploy --prebuilt --prod --skip-domain --yes/g) || []).length === 1
+  && (kernelWorkflow.match(/vercel@56\.1\.0 promote "\$CANDIDATE_URL"/g) || []).length === 1
+  && kernelWorkflow.includes('vercel@56.1.0 curl /api/status --deployment "$CANDIDATE_URL"')
+  && kernelWorkflow.indexOf('Reconfirm current main before promotion') < kernelWorkflow.indexOf('Promote the exact verified candidate')
+  && !kernelWorkflow.includes('npx vercel deploy --prod -y'))
+requireContract('kernel failed production verification restores the exact prior alias',
+  kernelWorkflow.includes("failure() && steps.promote.outputs.attempted == 'true'")
+  && kernelWorkflow.includes('resolve_vercel_rollback_target.mjs deployment "$PREVIOUS_URL" "$PREVIOUS_ID"')
+  && kernelWorkflow.includes('vercel@56.1.0 rollback "$PREVIOUS_URL" --yes')
+  && kernelWorkflow.includes('[ "$RESTORED_URL" != "$PREVIOUS_URL" ]'))
 requireContract('production environment gate', /environment:\s*production/.test(workflow))
 requireContract('production is main-only in the canonical repository', workflow.includes("if: ${{ github.ref == 'refs/heads/main' && github.repository == 'swanhtet01/swanhtet01.github.io' }}"))
 requireContract('deployment metadata uses the guarded runtime ref', (workflow.match(/githubCommitRef=\$\{\{ github\.ref_name \}\}/g) || []).length === 2 && !workflow.includes('githubCommitRef=main'))
 const coreWorkflowActions = `${workflow}\n${appWorkflow}\n${ciWorkflow}\n${publicHealthWorkflow}\n${kernelWorkflow}`
 requireContract('core actions are commit-pinned', !/uses:\s+[^\s#]+@v\d+/m.test(coreWorkflowActions) && /uses:\s+actions\/checkout@[0-9a-f]{40}/.test(workflow))
 requireContract('core workflows use Node 24 action revisions',
-  (coreWorkflowActions.match(/actions\/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1/g) || []).length === 5
-  && (coreWorkflowActions.match(/actions\/setup-node@820762786026740c76f36085b0efc47a31fe5020/g) || []).length === 5
+  (coreWorkflowActions.match(/actions\/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1/g) || []).length === 6
+  && (coreWorkflowActions.match(/actions\/setup-node@820762786026740c76f36085b0efc47a31fe5020/g) || []).length === 6
   && (coreWorkflowActions.match(/actions\/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97/g) || []).length === 3
   && !/(?:11d5960a326750d5838078e36cf38b85af677262|49933ea5288caeca8642d1e84afbd3f7d6820020|a26af69be951a213d495a4c3e4e4022e16d87065)/.test(coreWorkflowActions))
 requireContract('uv build tool is immutable', workflow.includes('astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9') && workflow.includes("version: '0.11.30'"))
