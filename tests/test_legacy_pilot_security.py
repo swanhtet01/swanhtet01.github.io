@@ -5,6 +5,7 @@ import importlib.util
 import os
 import sqlite3
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -14,9 +15,12 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from mark1_pilot.state_store import (
+    APPROVAL_ACTION_RESERVATION_CONTRACT,
     add_approval_entry,
+    complete_approval_action,
     list_approval_entries,
     load_approval_summary,
+    reserve_approval_action,
     update_approval_entry,
 )
 
@@ -89,6 +93,8 @@ class LegacyPilotSecurityTests(unittest.TestCase):
         workspace_id: str,
         *,
         requested_by: str = "Requester",
+        approval_gate: str = "general",
+        related_entity: str = "",
         payload: dict[str, object] | None = None,
     ) -> dict[str, object]:
         return add_approval_entry(
@@ -96,13 +102,13 @@ class LegacyPilotSecurityTests(unittest.TestCase):
             workspace_id=workspace_id,
             title=f"Approval for {workspace_id}",
             summary="Bounded approval request",
-            approval_gate="general",
+            approval_gate=approval_gate,
             requested_by=requested_by,
             owner="Management",
             status="pending",
             due="",
             related_route="/app/approvals",
-            related_entity="",
+            related_entity=related_entity,
             evidence_link="",
             payload=payload,
         )
@@ -163,10 +169,21 @@ class LegacyPilotSecurityTests(unittest.TestCase):
         self.assertIn("_require_agent_ops_deploy_access", deploy_source)
         self.assertIn("_require_clean_preview_deploy_revision", deploy_source)
         self.assertIn("_validate_preview_deploy_approval", deploy_source)
+        self.assertIn("reserve_approval_action", deploy_source)
+        self.assertIn("complete_approval_action", deploy_source)
         self.assertLess(
             deploy_source.index("_validate_preview_deploy_approval"),
             deploy_source.index("_run_preview_deploy"),
         )
+        self.assertLess(
+            deploy_source.index("_require_clean_preview_deploy_revision"),
+            deploy_source.index("reserve_approval_action"),
+        )
+        self.assertLess(
+            deploy_source.index("reserve_approval_action"),
+            deploy_source.index("_run_preview_deploy"),
+        )
+        self.assertIn('status="failed"', deploy_source)
         revision_source = _nested_function_source(SERVER_PATH, "_require_clean_preview_deploy_revision")
         self.assertIn('"rev-parse", "--verify", "HEAD"', revision_source)
         self.assertIn('"status", "--porcelain=v1", "--untracked-files=all"', revision_source)
@@ -226,6 +243,13 @@ class LegacyPilotSecurityTests(unittest.TestCase):
             "evidence": {
                 **valid_row,
                 "payload": {**valid_row["payload"], "decision_history": []},
+            },
+            "used": {
+                **valid_row,
+                "payload": {
+                    **valid_row["payload"],
+                    "_approval_action": {"status": "reserved"},
+                },
             },
         }
         for label, row in invalid_rows.items():
@@ -474,12 +498,14 @@ class LegacyPilotSecurityTests(unittest.TestCase):
             payload={
                 "_approval_authority": {"workspace_id": "workspace-b", "requested_by": "Mallory"},
                 "decision_history": [{"actor": "Mallory", "to_status": "approved"}],
+                "_approval_action": {"status": "succeeded"},
                 "business_context": "preserved",
             },
         )
         authority = row["payload"]["_approval_authority"]  # type: ignore[index]
         self.assertEqual(authority, {"workspace_id": "workspace-a", "requested_by": "Alice"})
         self.assertNotIn("decision_history", row["payload"])  # type: ignore[operator]
+        self.assertNotIn("_approval_action", row["payload"])  # type: ignore[operator]
 
         with self.assertRaisesRegex(ValueError, "approval_actor_required"):
             update_approval_entry(
@@ -529,6 +555,139 @@ class LegacyPilotSecurityTests(unittest.TestCase):
                 actor="Manager",
                 status="rejected",
                 note="Cannot reverse a terminal decision.",
+            )
+
+    def test_approved_action_is_atomically_single_use_and_claim_bound(self) -> None:
+        target = f"cloud-preview:claimable_preview:{'a' * 40}"
+        row = self._add_approval(
+            "workspace-a",
+            requested_by="Alice",
+            approval_gate="deployment.preview",
+            related_entity=target,
+        )
+        approved = update_approval_entry(
+            self.db_path,
+            approval_id=str(row["approval_id"]),
+            workspace_id="workspace-a",
+            actor="Owner",
+            status="approved",
+            note="Reviewed exact preview revision and recovery boundary.",
+        )
+        self.assertIsNotNone(approved)
+        with self.assertRaisesRegex(ValueError, "approval_action_scope_mismatch"):
+            reserve_approval_action(
+                self.db_path,
+                approval_id=str(row["approval_id"]),
+                workspace_id="workspace-a",
+                actor="Owner",
+                action="deployment.preview",
+                target=f"cloud-preview:claimable_preview:{'c' * 40}",
+            )
+
+        def reserve() -> tuple[str, object]:
+            try:
+                return (
+                    "ready",
+                    reserve_approval_action(
+                        self.db_path,
+                        approval_id=str(row["approval_id"]),
+                        workspace_id="workspace-a",
+                        actor="Owner",
+                        action="deployment.preview",
+                        target=target,
+                    ),
+                )
+            except ValueError as exc:
+                return "error", str(exc)
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            attempts = list(executor.map(lambda _: reserve(), range(2)))
+        winners = [payload for status, payload in attempts if status == "ready"]
+        failures = [payload for status, payload in attempts if status == "error"]
+        self.assertEqual(len(winners), 1)
+        self.assertEqual(failures, ["approval_action_already_reserved"])
+        claim = winners[0]
+        self.assertIsInstance(claim, dict)
+        assert isinstance(claim, dict)
+        self.assertEqual(claim["contract"], APPROVAL_ACTION_RESERVATION_CONTRACT)
+        self.assertEqual(claim["status"], "reserved")
+
+        listed = list_approval_entries(self.db_path, workspace_id="workspace-a")
+        action = listed[0]["payload"]["_approval_action"]
+        self.assertEqual(action["status"], "reserved")
+        self.assertNotIn("claim_token_digest", action)
+        with self.assertRaisesRegex(ValueError, "approval_action_claim_invalid"):
+            complete_approval_action(
+                self.db_path,
+                approval_id=str(row["approval_id"]),
+                workspace_id="workspace-a",
+                claim_token="wrong-token",
+                status="succeeded",
+            )
+
+        receipt = complete_approval_action(
+            self.db_path,
+            approval_id=str(row["approval_id"]),
+            workspace_id="workspace-a",
+            claim_token=str(claim["claim_token"]),
+            status="succeeded",
+            outcome="preview_launch_accepted",
+        )
+        self.assertEqual(receipt["status"], "succeeded")
+        self.assertEqual(receipt["outcome"], "preview_launch_accepted")
+        self.assertNotIn("claim_token", receipt)
+        with self.assertRaisesRegex(ValueError, "approval_action_already_reserved"):
+            reserve_approval_action(
+                self.db_path,
+                approval_id=str(row["approval_id"]),
+                workspace_id="workspace-a",
+                actor="Owner",
+                action="deployment.preview",
+                target=target,
+            )
+
+    def test_failed_approved_action_remains_consumed_for_fresh_review(self) -> None:
+        target = f"cloud-preview:claimable_preview:{'b' * 40}"
+        row = self._add_approval(
+            "workspace-a",
+            requested_by="Alice",
+            approval_gate="deployment.preview",
+            related_entity=target,
+        )
+        update_approval_entry(
+            self.db_path,
+            approval_id=str(row["approval_id"]),
+            workspace_id="workspace-a",
+            actor="Owner",
+            status="approved",
+            note="Reviewed exact preview revision and recovery boundary.",
+        )
+        claim = reserve_approval_action(
+            self.db_path,
+            approval_id=str(row["approval_id"]),
+            workspace_id="workspace-a",
+            actor="Owner",
+            action="deployment.preview",
+            target=target,
+        )
+        receipt = complete_approval_action(
+            self.db_path,
+            approval_id=str(row["approval_id"]),
+            workspace_id="workspace-a",
+            claim_token=str(claim["claim_token"]),
+            status="failed",
+            outcome="http_502",
+        )
+        self.assertEqual(receipt["status"], "failed")
+        self.assertEqual(receipt["outcome"], "http_502")
+        with self.assertRaisesRegex(ValueError, "approval_action_already_reserved"):
+            reserve_approval_action(
+                self.db_path,
+                approval_id=str(row["approval_id"]),
+                workspace_id="workspace-a",
+                actor="Owner",
+                action="deployment.preview",
+                target=target,
             )
 
 

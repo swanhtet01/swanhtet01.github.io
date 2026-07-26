@@ -2214,6 +2214,19 @@ _APPROVAL_TRANSITIONS: dict[str, frozenset[str]] = {
     "rejected": frozenset({"rejected"}),
 }
 
+APPROVAL_ACTION_RESERVATION_CONTRACT = "supermega.approval-action-reservation.v1"
+_APPROVAL_ACTION_FIELD = "_approval_action"
+
+
+def _approval_payload_for_output(payload: dict[str, Any]) -> dict[str, Any]:
+    output = dict(payload)
+    action = output.get(_APPROVAL_ACTION_FIELD)
+    if isinstance(action, dict):
+        public_action = dict(action)
+        public_action.pop("claim_token_digest", None)
+        output[_APPROVAL_ACTION_FIELD] = public_action
+    return output
+
 
 def add_approval_entry(
     db_path: Path,
@@ -2250,6 +2263,7 @@ def add_approval_entry(
     normalized_payload = dict(payload or {})
     normalized_payload.pop("_approval_authority", None)
     normalized_payload.pop("decision_history", None)
+    normalized_payload.pop(_APPROVAL_ACTION_FIELD, None)
     normalized_payload["_approval_authority"] = {
         "workspace_id": normalized_workspace_id,
         "requested_by": normalized_requested_by,
@@ -2314,7 +2328,7 @@ def add_approval_entry(
         "related_route": normalized_route,
         "related_entity": normalized_entity,
         "evidence_link": normalized_evidence,
-        "payload": normalized_payload,
+        "payload": _approval_payload_for_output(normalized_payload),
     }
 
 
@@ -2575,8 +2589,165 @@ def update_approval_entry(
             "related_route": row["related_route"],
             "related_entity": row["related_entity"],
             "evidence_link": row["evidence_link"],
-            "payload": payload,
+            "payload": _approval_payload_for_output(payload),
         }
+
+
+def reserve_approval_action(
+    db_path: Path,
+    *,
+    approval_id: str,
+    workspace_id: str,
+    actor: str,
+    action: str,
+    target: str,
+) -> dict[str, Any]:
+    """Atomically reserve one approved consequential action exactly once."""
+
+    ensure_schema(db_path)
+    normalized_id = str(approval_id or "").strip()
+    normalized_workspace_id = str(workspace_id or "").strip()
+    normalized_actor = str(actor or "").strip()
+    normalized_action = str(action or "").strip().lower()
+    normalized_target = str(target or "").strip().lower()
+    if not normalized_id or not normalized_workspace_id:
+        raise ValueError("approval_action_identity_required")
+    if not normalized_actor:
+        raise ValueError("approval_action_actor_required")
+    if not normalized_action or len(normalized_action) > 100:
+        raise ValueError("approval_action_type_invalid")
+    if not normalized_target or len(normalized_target) > 240:
+        raise ValueError("approval_action_target_invalid")
+
+    reserved_at = datetime.now().astimezone().isoformat()
+    claim_token = secrets.token_urlsafe(24)
+    reservation = {
+        "contract": APPROVAL_ACTION_RESERVATION_CONTRACT,
+        "reservation_id": secrets.token_urlsafe(18),
+        "action": normalized_action,
+        "target": normalized_target,
+        "status": "reserved",
+        "reserved_by": normalized_actor,
+        "reserved_at": reserved_at,
+        "claim_token_digest": hashlib.sha256(claim_token.encode("utf-8")).hexdigest(),
+    }
+    with _connect(db_path) as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        row = connection.execute(
+            """
+            SELECT status, approval_gate, related_entity, payload_json
+            FROM approval_queue
+            WHERE approval_id = ? AND workspace_id = ?
+            """,
+            (normalized_id, normalized_workspace_id),
+        ).fetchone()
+        if not row:
+            raise ValueError("approval_action_not_found")
+        if str(row["status"] or "").strip().lower() != "approved":
+            raise ValueError("approval_action_not_approved")
+        if (
+            str(row["approval_gate"] or "").strip().lower() != normalized_action
+            or str(row["related_entity"] or "").strip().lower() != normalized_target
+        ):
+            raise ValueError("approval_action_scope_mismatch")
+        payload = json.loads(row["payload_json"]) if row["payload_json"] else {}
+        if not isinstance(payload, dict):
+            raise ValueError("approval_action_payload_invalid")
+        if _APPROVAL_ACTION_FIELD in payload:
+            raise ValueError("approval_action_already_reserved")
+        payload[_APPROVAL_ACTION_FIELD] = reservation
+        updated = connection.execute(
+            """
+            UPDATE approval_queue
+            SET payload_json = ?
+            WHERE approval_id = ? AND workspace_id = ? AND status = 'approved' AND payload_json = ?
+            """,
+            (
+                json.dumps(payload, ensure_ascii=False),
+                normalized_id,
+                normalized_workspace_id,
+                row["payload_json"],
+            ),
+        )
+        if updated.rowcount != 1:
+            raise ValueError("approval_action_reservation_conflict")
+        connection.commit()
+    return {
+        **_approval_payload_for_output({_APPROVAL_ACTION_FIELD: reservation})[_APPROVAL_ACTION_FIELD],
+        "approval_id": normalized_id,
+        "claim_token": claim_token,
+    }
+
+
+def complete_approval_action(
+    db_path: Path,
+    *,
+    approval_id: str,
+    workspace_id: str,
+    claim_token: str,
+    status: str,
+    outcome: str = "",
+) -> dict[str, Any]:
+    """Finalize a reserved approval action without making the approval reusable."""
+
+    ensure_schema(db_path)
+    normalized_id = str(approval_id or "").strip()
+    normalized_workspace_id = str(workspace_id or "").strip()
+    normalized_claim_token = str(claim_token or "").strip()
+    normalized_status = str(status or "").strip().lower()
+    if not normalized_id or not normalized_workspace_id or not normalized_claim_token:
+        raise ValueError("approval_action_claim_required")
+    if normalized_status not in {"succeeded", "failed"}:
+        raise ValueError("approval_action_status_invalid")
+
+    with _connect(db_path) as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        row = connection.execute(
+            """
+            SELECT payload_json
+            FROM approval_queue
+            WHERE approval_id = ? AND workspace_id = ?
+            """,
+            (normalized_id, normalized_workspace_id),
+        ).fetchone()
+        if not row:
+            raise ValueError("approval_action_not_found")
+        payload = json.loads(row["payload_json"]) if row["payload_json"] else {}
+        if not isinstance(payload, dict):
+            raise ValueError("approval_action_payload_invalid")
+        reservation = payload.get(_APPROVAL_ACTION_FIELD)
+        if not isinstance(reservation, dict) or str(reservation.get("status", "")).strip() != "reserved":
+            raise ValueError("approval_action_claim_invalid")
+        expected_digest = str(reservation.get("claim_token_digest", "")).strip().lower()
+        observed_digest = hashlib.sha256(normalized_claim_token.encode("utf-8")).hexdigest()
+        if not expected_digest or not secrets.compare_digest(expected_digest, observed_digest):
+            raise ValueError("approval_action_claim_invalid")
+        completed = dict(reservation)
+        completed["status"] = normalized_status
+        completed["completed_at"] = datetime.now().astimezone().isoformat()
+        completed["outcome"] = str(outcome or "").strip()[:160]
+        completed.pop("claim_token_digest", None)
+        payload[_APPROVAL_ACTION_FIELD] = completed
+        updated = connection.execute(
+            """
+            UPDATE approval_queue
+            SET payload_json = ?
+            WHERE approval_id = ? AND workspace_id = ? AND payload_json = ?
+            """,
+            (
+                json.dumps(payload, ensure_ascii=False),
+                normalized_id,
+                normalized_workspace_id,
+                row["payload_json"],
+            ),
+        )
+        if updated.rowcount != 1:
+            raise ValueError("approval_action_completion_conflict")
+        connection.commit()
+    return {
+        **_approval_payload_for_output({_APPROVAL_ACTION_FIELD: completed})[_APPROVAL_ACTION_FIELD],
+        "approval_id": normalized_id,
+    }
 
 
 def list_approval_entries(
@@ -2641,7 +2812,9 @@ def list_approval_entries(
             "related_route": row["related_route"],
             "related_entity": row["related_entity"],
             "evidence_link": row["evidence_link"],
-            "payload": json.loads(row["payload_json"]) if row["payload_json"] else {},
+            "payload": _approval_payload_for_output(
+                json.loads(row["payload_json"]) if row["payload_json"] else {}
+            ),
         }
         for row in rows
     ]

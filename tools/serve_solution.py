@@ -65,6 +65,7 @@ from mark1_pilot.state_store import (  # noqa: E402
     add_maintenance_record,
     add_product_feedback,
     add_receiving_record,
+    complete_approval_action,
     grant_workspace_access,
     list_actions,
     list_agent_teams,
@@ -98,6 +99,7 @@ from mark1_pilot.state_store import (  # noqa: E402
     load_supplier_risk_summary,
     load_workspace_member_summary,
     resolve_state_db,
+    reserve_approval_action,
     sync_state_from_output_dir,
     upsert_snapshot,
     update_contact_submission_handoff,
@@ -636,6 +638,8 @@ def _validate_preview_deploy_approval(
         raise ValueError("preview_deploy_approval_mode_mismatch")
     if str(payload.get("deployment_revision", "")).strip().lower() != normalized_revision:
         raise ValueError("preview_deploy_approval_revision_mismatch")
+    if "_approval_action" in payload:
+        raise ValueError("preview_deploy_approval_already_used")
     authority = (
         payload.get("_approval_authority", {})
         if isinstance(payload.get("_approval_authority"), dict)
@@ -10867,6 +10871,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
     def cloud_preview_deploy(request: Request, payload: CloudPreviewDeployRequest) -> dict[str, Any]:
         session = _require_agent_ops_deploy_access(request)
         workspace_id = _require_session_workspace_id(session)
+        actor = str(session.get("display_name", session.get("username", "system"))).strip() or "system"
         try:
             approval = _validate_preview_deploy_approval(
                 list_approval_entries(
@@ -10883,7 +10888,43 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
         approved_revision = _require_clean_preview_deploy_revision(payload.revision)
-        deploy_result = _run_preview_deploy(payload.mode)
+        approval_target = str(approval.get("related_entity", "")).strip().lower()
+        try:
+            action_claim = reserve_approval_action(
+                state_db,
+                approval_id=payload.approval_id,
+                workspace_id=workspace_id,
+                actor=actor,
+                action=PREVIEW_DEPLOY_APPROVAL_GATE,
+                target=approval_target,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        try:
+            deploy_result = _run_preview_deploy(payload.mode)
+        except Exception as exc:
+            failure_outcome = (
+                f"http_{exc.status_code}"
+                if isinstance(exc, HTTPException)
+                else f"internal_{type(exc).__name__}"
+            )
+            complete_approval_action(
+                state_db,
+                approval_id=payload.approval_id,
+                workspace_id=workspace_id,
+                claim_token=str(action_claim.get("claim_token", "")),
+                status="failed",
+                outcome=failure_outcome,
+            )
+            raise
+        action_receipt = complete_approval_action(
+            state_db,
+            approval_id=payload.approval_id,
+            workspace_id=workspace_id,
+            claim_token=str(action_claim.get("claim_token", "")),
+            status="succeeded",
+            outcome="preview_launch_accepted",
+        )
         approval_payload = approval.get("payload", {}) if isinstance(approval.get("payload"), dict) else {}
         decision_history = (
             approval_payload.get("decision_history", [])
@@ -10905,6 +10946,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "gate": str(approval.get("approval_gate", "")).strip(),
             "target": str(approval.get("related_entity", "")).strip(),
             "revision": approved_revision,
+            "action_reservation": action_receipt,
         }
         _record_workspace_preview(session, deploy_result)
         return {
