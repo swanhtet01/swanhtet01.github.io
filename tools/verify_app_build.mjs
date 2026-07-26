@@ -1193,12 +1193,22 @@ if (!managedTrialSource.includes('export async function validateManagedClientImp
   || !managedTrialSource.includes('assertManagedClientImportValidation(')
   || !managedTrialSource.includes("activation.status !== 'not_applied'")
   || !managedTrialSource.includes("code: 'managed_client_import_package_changed'")
+  || !managedTrialSource.includes('export async function applyManagedClientImport')
+  || !managedTrialSource.includes("'/api/trial/v1/imports/apply'")
+  || !managedTrialSource.includes('confirmation: `APPLY ${request.validation.package_digest}`')
+  || !managedTrialSource.includes('assertManagedClientImportActivation(')
+  || !managedTrialSource.includes('assertManagedShopImportState(result.state, stagingPackage)')
   || !managedTrialSource.includes('expectedIdentity,')
   || !coreSource.includes('<ClientDataOnboarding managedIdentity={managedIdentity}')
   || !clientOnboardingUiSource.includes('Only the checked import package is sent to')
   || !clientOnboardingUiSource.includes("managedIdentity ? 'Validate import'")
   || !clientOnboardingUiSource.includes('Download validated import')
-  || !clientOnboardingUiSource.includes('activation remains not applied and zero product records were written.')
+  || !clientOnboardingUiSource.includes('I reviewed all {state.validation.stagingPackage.rows.length} Shop items')
+  || !clientOnboardingUiSource.includes('Create Shop catalog')
+  || !clientOnboardingUiSource.includes('applyManagedClientImport({')
+  || !clientOnboardingUiSource.includes('const bootstrap = await loadManagedBootstrap(expectedIdentity)')
+  || !clientOnboardingUiSource.includes('assertManagedShopImportState(confirmed.state, validated.stagingPackage)')
+  || !clientOnboardingUiSource.includes('zero product records were written; Shop activation waits for the separate review above.')
   || !managedClientImportUiContract.includes('validateManagedClientImport(stagingPackage, expectedIdentity)')
   || !managedClientImportUiContract.includes('validationRequestRef.current !== validationRequestId')
   || !managedClientImportUiContract.includes('sameManagedIdentity(managedIdentityRef.current, expectedIdentity)')
@@ -1999,7 +2009,7 @@ async function verifyManagedClientImportRuntime() {
         target_surface: 'commerce',
         required_capability: 'commerce.write',
         human_approval_required: true,
-        atomic_adapter_ready: false,
+        atomic_adapter_ready: true,
         external_writes_performed: false,
       },
     }
@@ -2019,7 +2029,7 @@ async function verifyManagedClientImportRuntime() {
       ['product', { ...receipt, product: 'website' }],
       ['row_count', { ...receipt, row_count: staged.rows.length + 1 }],
       ['checks', { ...receipt, checks: receipt.checks.slice(0, -1) }],
-      ['activation', { ...receipt, activation: { ...receipt.activation, atomic_adapter_ready: true } }],
+      ['activation', { ...receipt, activation: { ...receipt.activation, atomic_adapter_ready: false } }],
     ]) {
       rejects(
         () => managedTrial.assertManagedClientImportValidation(
@@ -2035,6 +2045,65 @@ async function verifyManagedClientImportRuntime() {
       () => managedTrial.assertManagedClientImportValidation({}, staged, identity, packageDigest),
       'managed_client_import_malformed_receipt_accepted',
     )
+    const commandId = '00000000-0000-4000-8000-000000000201'
+    const importedState = {
+      schema: 'supermega.commerce.workspace.v2',
+      items: staged.rows.map((row) => ({
+        sku: row.values.sku,
+        name: row.values.name,
+        onHand: Number(row.values.onHand),
+        reorderAt: Number(row.values.reorderAt),
+        price: Number(row.values.price),
+      })),
+      orders: [],
+      movements: [],
+      closes: [],
+    }
+    const activationResponse = {
+      activation: {
+        contract: 'supermega.client_import_activation.v1',
+        status: 'applied',
+        product: 'commerce',
+        object: 'shop_catalog',
+        workflow_template_id: staged.workflowTemplateId,
+        package_digest: packageDigest,
+        row_count: staged.rows.length,
+        workspace_id: identity.workspaceId,
+        external_writes_performed: true,
+      },
+      result: {
+        command_id: commandId,
+        surface: 'commerce',
+        event_type: 'commerce.workspace.initialized',
+        version: 1,
+        state: importedState,
+        idempotent_replay: false,
+      },
+    }
+    const activated = managedTrial.assertManagedClientImportActivation(
+      activationResponse,
+      staged,
+      receipt,
+      identity,
+      commandId,
+      0,
+    )
+    assert(activated === activationResponse, 'managed_client_import_valid_activation_rejected')
+    assert(managedTrial.assertManagedShopImportState(importedState, staged) === importedState, 'managed_client_import_valid_state_rejected')
+    for (const [label, response] of [
+      ['workspace', { ...activationResponse, activation: { ...activationResponse.activation, workspace_id: 'workspace-other' } }],
+      ['digest', { ...activationResponse, activation: { ...activationResponse.activation, package_digest: `sha256:${'0'.repeat(64)}` } }],
+      ['version', { ...activationResponse, result: { ...activationResponse.result, version: 2 } }],
+      ['event', { ...activationResponse, result: { ...activationResponse.result, event_type: 'commerce.item.created' } }],
+      ['history', { ...activationResponse, result: { ...activationResponse.result, state: { ...importedState, orders: [{}] } } }],
+      ['item', { ...activationResponse, result: { ...activationResponse.result, state: { ...importedState, items: [{ ...importedState.items[0], price: importedState.items[0].price + 1 }, ...importedState.items.slice(1)] } } }],
+      ['extra', { ...activationResponse, activation: { ...activationResponse.activation, untrusted: true } }],
+    ]) {
+      rejects(
+        () => managedTrial.assertManagedClientImportActivation(response, staged, receipt, identity, commandId, 0),
+        `managed_client_import_activation_${label}_tamper_accepted`,
+      )
+    }
   } catch (error) {
     fail(`managed_client_import_runtime:${error instanceof Error ? error.message : 'unknown'}`)
   }

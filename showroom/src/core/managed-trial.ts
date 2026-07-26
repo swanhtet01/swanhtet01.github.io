@@ -153,9 +153,26 @@ export type ManagedClientImportValidation = {
     target_surface: 'commerce' | 'production' | 'website'
     required_capability: 'commerce.write' | 'production.write' | 'website.write'
     human_approval_required: true
-    atomic_adapter_ready: false
+    atomic_adapter_ready: boolean
     external_writes_performed: false
   }
+}
+
+export type ManagedClientImportActivation = {
+  contract: 'supermega.client_import_activation.v1'
+  status: 'applied'
+  product: 'commerce'
+  object: 'shop_catalog'
+  workflow_template_id: string
+  package_digest: string
+  row_count: number
+  workspace_id: string
+  external_writes_performed: true
+}
+
+export type ManagedClientImportActivationResult = {
+  activation: ManagedClientImportActivation
+  result: ManagedCommandResult
 }
 
 type ManagedApprovalRequest = {
@@ -216,6 +233,8 @@ const CLIENT_IMPORT_ACTIVATION = {
   ecommerce: { target: 'commerce', capability: 'commerce.write' },
 } as const
 
+const CLIENT_IMPORT_COMMAND_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
 async function sha256Text(value: string) {
   if (!globalThis.crypto?.subtle) {
     throw new ManagedTrialError('Secure package verification is unavailable in this browser.', {
@@ -274,7 +293,7 @@ export function assertManagedClientImportValidation(
     || activation.target_surface !== expectedActivation.target
     || activation.required_capability !== expectedActivation.capability
     || activation.human_approval_required !== true
-    || activation.atomic_adapter_ready !== false
+    || activation.atomic_adapter_ready !== (stagingPackage.product === 'commerce')
     || activation.external_writes_performed !== false) {
     throw new ManagedTrialError('The managed workspace returned a mismatched import validation.', {
       code: 'managed_client_import_validation_invalid',
@@ -291,6 +310,117 @@ export function assertManagedClientImportValidation(
     })
   }
   return validation as unknown as ManagedClientImportValidation
+}
+
+function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]) {
+  const actual = Object.keys(value).sort()
+  return actual.length === expected.length && expected.every((key, index) => actual[index] === key)
+}
+
+export function assertManagedShopImportState(
+  state: unknown,
+  stagingPackage: ManagedClientImportPackage,
+) {
+  const stateKeys = ['closes', 'items', 'movements', 'orders', 'schema'] as const
+  const itemKeys = ['name', 'onHand', 'price', 'reorderAt', 'sku'] as const
+  if (stagingPackage.product !== 'commerce'
+    || !isRecord(state)
+    || !hasExactKeys(state, stateKeys)
+    || state.schema !== 'supermega.commerce.workspace.v2'
+    || !Array.isArray(state.items)
+    || !Array.isArray(state.orders)
+    || !Array.isArray(state.movements)
+    || !Array.isArray(state.closes)
+    || state.orders.length !== 0
+    || state.movements.length !== 0
+    || state.closes.length !== 0
+    || state.items.length !== stagingPackage.rows.length) {
+    throw new ManagedTrialError('The managed workspace returned an invalid Shop import state.', {
+      code: 'managed_client_import_activation_invalid',
+    })
+  }
+  for (const [index, row] of stagingPackage.rows.entries()) {
+    const item = state.items[index]
+    const expected = {
+      sku: row.values.sku,
+      name: row.values.name,
+      onHand: Number(row.values.onHand),
+      reorderAt: Number(row.values.reorderAt),
+      price: Number(row.values.price),
+    }
+    if (!isRecord(item)
+      || !hasExactKeys(item, itemKeys)
+      || !Number.isSafeInteger(expected.onHand)
+      || !Number.isSafeInteger(expected.reorderAt)
+      || !Number.isSafeInteger(expected.price)
+      || item.sku !== expected.sku
+      || item.name !== expected.name
+      || item.onHand !== expected.onHand
+      || item.reorderAt !== expected.reorderAt
+      || item.price !== expected.price) {
+      throw new ManagedTrialError('The managed Shop import does not match the checked rows.', {
+        code: 'managed_client_import_activation_invalid',
+      })
+    }
+  }
+  return state
+}
+
+export function assertManagedClientImportActivation(
+  response: unknown,
+  stagingPackage: ManagedClientImportPackage,
+  validation: ManagedClientImportValidation,
+  expectedIdentity: ManagedIdentity,
+  commandId: string,
+  expectedVersion: number,
+): ManagedClientImportActivationResult {
+  if (stagingPackage.product !== 'commerce'
+    || validation.product !== 'commerce'
+    || validation.activation.atomic_adapter_ready !== true
+    || validation.package_digest.length !== 71
+    || expectedVersion !== 0
+    || !CLIENT_IMPORT_COMMAND_ID.test(commandId)
+    || !isRecord(response)
+    || !isRecord(response.activation)
+    || !isRecord(response.result)) {
+    throw new ManagedTrialError('The managed Shop import activation is invalid.', {
+      code: 'managed_client_import_activation_invalid',
+    })
+  }
+  const activation = response.activation
+  const result = response.result
+  if (!hasExactKeys(activation, [
+    'contract',
+    'external_writes_performed',
+    'object',
+    'package_digest',
+    'product',
+    'row_count',
+    'status',
+    'workflow_template_id',
+    'workspace_id',
+  ])
+    || activation.contract !== 'supermega.client_import_activation.v1'
+    || activation.status !== 'applied'
+    || activation.product !== stagingPackage.product
+    || activation.object !== stagingPackage.object
+    || activation.workflow_template_id !== stagingPackage.workflowTemplateId
+    || activation.package_digest !== validation.package_digest
+    || activation.row_count !== stagingPackage.rows.length
+    || activation.workspace_id !== expectedIdentity.workspaceId
+    || activation.external_writes_performed !== true
+    || !hasExactKeys(result, ['command_id', 'event_type', 'idempotent_replay', 'state', 'surface', 'version'])
+    || result.command_id !== commandId
+    || result.surface !== 'commerce'
+    || result.event_type !== 'commerce.workspace.initialized'
+    || result.version !== expectedVersion + 1
+    || typeof result.idempotent_replay !== 'boolean') {
+    throw new ManagedTrialError('The managed Shop import response does not match the reviewed package.', {
+      code: 'managed_client_import_activation_invalid',
+    })
+  }
+  assertManagedShopImportState(result.state, stagingPackage)
+  return response as unknown as ManagedClientImportActivationResult
 }
 
 export function assertManagedBootstrapIdentity(
@@ -543,6 +673,49 @@ export async function validateManagedClientImport(
     submittedPackage,
     expectedIdentity,
     expectedPackageDigest,
+  )
+}
+
+export async function applyManagedClientImport(request: {
+  commandId: string
+  expectedVersion: 0
+  identity: ManagedIdentity
+  stagingPackage: ManagedClientImportPackage
+  validation: ManagedClientImportValidation
+}) {
+  const body = serializeManagedClientImportPackage(request.stagingPackage)
+  const submittedPackage = JSON.parse(body) as ManagedClientImportPackage
+  const currentDigest = await sha256Text(body)
+  if (request.validation.product !== 'commerce'
+    || request.validation.activation.atomic_adapter_ready !== true
+    || request.validation.workspace_id !== request.identity.workspaceId
+    || request.validation.package_digest !== currentDigest
+    || !CLIENT_IMPORT_COMMAND_ID.test(request.commandId)) {
+    throw new ManagedTrialError('The validated Shop import changed before activation.', {
+      code: 'managed_client_import_package_changed',
+    })
+  }
+  const response = await authorizedRequest<unknown>(
+    '/api/trial/v1/imports/apply',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        command_id: request.commandId,
+        expected_version: request.expectedVersion,
+        confirmation: `APPLY ${request.validation.package_digest}`,
+        package: submittedPackage,
+      }),
+    },
+    true,
+    request.identity,
+  )
+  return assertManagedClientImportActivation(
+    response,
+    submittedPackage,
+    request.validation,
+    request.identity,
+    request.commandId,
+    request.expectedVersion,
   )
 }
 
