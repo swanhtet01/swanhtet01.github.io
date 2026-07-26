@@ -3094,6 +3094,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
     auth_workspace_plan = str(os.getenv("SUPERMEGA_WORKSPACE_PLAN", "pilot")).strip() or "pilot"
     session_ttl_hours = int(os.getenv("SUPERMEGA_SESSION_HOURS", str(24 * 14)) or (24 * 14))
     internal_cron_token = str(os.getenv("SUPERMEGA_INTERNAL_CRON_TOKEN", "")).strip()
+    cron_secret = str(os.getenv("CRON_SECRET", "")).strip()
     app_base_url = str(os.getenv("VITE_WORKSPACE_APP_BASE", "")).strip()
     gcp_project_id = str(os.getenv("SUPERMEGA_GCP_PROJECT_ID", os.getenv("GOOGLE_CLOUD_PROJECT", "supermega-468612"))).strip() or "supermega-468612"
     cloud_tasks_location = str(os.getenv("SUPERMEGA_CLOUD_TASKS_LOCATION", "")).strip() or "asia-southeast1"
@@ -7807,6 +7808,45 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             ),
         ]
 
+    def _scheduler_authority_state(authority_path: Path) -> dict[str, Any]:
+        authority = _load_json(authority_path)
+        crons = authority.get("crons", []) if isinstance(authority, dict) else []
+        cron_contract = sorted(
+            (
+                str(cron.get("path", "")).strip(),
+                str(cron.get("schedule", "")).strip(),
+            )
+            for cron in crons
+            if isinstance(cron, dict)
+        )
+        expected_crons = sorted(
+            [
+                ("/api/cron/supermega/agent-queue", "*/15 * * * *"),
+                ("/api/cron/supermega/daily", "45 0 * * *"),
+            ]
+        )
+        ready = bool(
+            authority.get("contract") == "supermega.scheduler-authority.v1"
+            and authority.get("authority") == "vercel"
+            and authority.get("environment") == "production"
+            and authority.get("project_id") == "prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG"
+            and cron_contract == expected_crons
+            and int(authority.get("maximum_scheduler_invocations_per_day", 0) or 0) == 97
+            and authority.get("worker_dispatch", {}).get("mode") == "enqueue-on-demand"
+            and authority.get("worker_dispatch", {}).get("polling_allowed") is False
+            and authority.get("retired_authority", {}).get("provider") == "google-cloud-scheduler"
+            and authority.get("retired_authority", {}).get("mutation_allowed") is False
+        )
+        return {
+            "ready": ready,
+            "authority": str(authority.get("authority", "")).strip(),
+            "environment": str(authority.get("environment", "")).strip(),
+            "cron_count": len(cron_contract),
+            "maximum_scheduler_invocations_per_day": int(
+                authority.get("maximum_scheduler_invocations_per_day", 0) or 0
+            ),
+        }
+
     def _cloud_workspace_resource_cards(
         *,
         config: dict[str, Any],
@@ -7815,7 +7855,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         jobs_script: Path,
         local_smoke_script: Path,
         canonical_preview_target: dict[str, Any],
-        scheduler_script: Path,
+        scheduler_authority_path: Path,
         showroom_dir: Path,
     ) -> list[dict[str, Any]]:
         sources = config.get("sources", {}) if isinstance(config, dict) else {}
@@ -7924,20 +7964,24 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             str(WORKFORCE_RESOURCE_DIR.name),
         ]
 
+        scheduler_authority = _scheduler_authority_state(scheduler_authority_path)
+        scheduler_contract_ready = bool(scheduler_authority.get("ready"))
         automation_pack_status = (
             "ready"
-            if scheduler_script.exists() and bool(canonical_preview_target.get("ready"))
+            if scheduler_contract_ready and bool(canonical_preview_target.get("ready"))
             else "attention"
-            if scheduler_script.exists() or bool(canonical_preview_target.get("ready"))
+            if scheduler_contract_ready or bool(canonical_preview_target.get("ready"))
             else "blocked"
         )
         automation_pack_detail = (
-            "The scheduler and canonical Vercel preview target are ready for the guarded runtime lane."
+            "The single Vercel production scheduler contract and canonical preview target are ready for the guarded runtime lane."
             if automation_pack_status == "ready"
-            else "The scheduler or canonical Vercel preview target is incomplete on this host."
+            else "The Vercel scheduler authority contract or canonical preview target is incomplete on this host."
         )
         automation_pack_chips = [
-            "scheduler ready" if scheduler_script.exists() else "scheduler missing",
+            "Vercel production scheduler" if scheduler_contract_ready else "scheduler authority invalid",
+            f"{scheduler_authority.get('cron_count', 0)} bounded crons",
+            f"max {scheduler_authority.get('maximum_scheduler_invocations_per_day', 0)} invocations/day",
             "canonical preview ready" if bool(canonical_preview_target.get("ready")) else "canonical preview blocked",
             str(canonical_preview_target.get("project_name", "megaos")),
         ]
@@ -8058,7 +8102,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
 
         jobs_script = REPO_ROOT / "tools" / "run_supermega_agent_jobs.py"
         local_smoke_script = REPO_ROOT / "tools" / "run_local_smoke.sh"
-        scheduler_script = REPO_ROOT / "tools" / "ensure_supermega_scheduler.ps1"
+        scheduler_authority_path = REPO_ROOT / "tools" / "supermega_scheduler_authority.json"
         api_entrypoint = REPO_ROOT / "api_app.py"
         vercel_config = REPO_ROOT / "vercel.json"
         showroom_dir = REPO_ROOT / "showroom"
@@ -8215,7 +8259,15 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             if queue_ready and (cloud_tasks_queue_brief or cloud_tasks_queue_browser)
             else "blocked"
         )
-        scheduler_status = "ready" if internal_cron_token and runtime_base_url else "attention" if internal_cron_token or runtime_base_url else "blocked"
+        scheduler_authority = _scheduler_authority_state(scheduler_authority_path)
+        scheduler_contract_ready = bool(scheduler_authority.get("ready"))
+        scheduler_status = (
+            "ready"
+            if scheduler_contract_ready and cron_secret
+            else "attention"
+            if scheduler_contract_ready or cron_secret
+            else "blocked"
+        )
         infrastructure = [
             _cloud_control_card(
                 item_id="deployment-target",
@@ -8270,19 +8322,19 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             ),
             _cloud_control_card(
                 item_id="scheduler-cadence",
-                name="Scheduler cadence and worker drain",
+                name="Vercel production scheduler",
                 status=scheduler_status,
                 detail=(
-                    "Cloud Scheduler should enqueue the default families, ops watch, founder brief, and worker drain cadence against the live runtime host."
-                    if internal_cron_token and runtime_base_url
-                    else "The scheduler contract is still partial because the cron token or runtime base URL is missing."
+                    "Vercel production owns two bounded cron routes; Cloud Tasks dispatches work only when those routes enqueue it."
+                    if scheduler_status == "ready"
+                    else "The scheduler stays blocked until the checked Vercel authority contract and production-only CRON_SECRET are both present."
                 ),
                 chips=[
-                    "cron token ready" if internal_cron_token else "cron token missing",
-                    "2h default batch",
-                    "15m ops watch",
-                    "daily founder brief",
-                    "5m worker drain",
+                    "CRON_SECRET ready" if cron_secret else "CRON_SECRET missing",
+                    "15m queue",
+                    "00:45 UTC daily",
+                    "Cloud Tasks on demand",
+                    "GCP Scheduler retired",
                 ],
                 route="/app/runtime",
             ),
@@ -8297,7 +8349,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             jobs_script=jobs_script,
             local_smoke_script=local_smoke_script,
             canonical_preview_target=canonical_preview_target,
-            scheduler_script=scheduler_script,
+            scheduler_authority_path=scheduler_authority_path,
             showroom_dir=showroom_dir,
         )
         topology = _cloud_topology_payload(session)

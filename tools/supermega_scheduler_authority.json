@@ -1,0 +1,47 @@
+{
+  "contract": "supermega.scheduler-authority.v1",
+  "authority": "vercel",
+  "environment": "production",
+  "timezone": "UTC",
+  "team_id": "team_wI4l7ZgSxcEztQPSlCCYVeJ5",
+  "project_id": "prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG",
+  "project_name": "megaos",
+  "authentication": {
+    "scheme": "Bearer",
+    "secret_environment_key": "CRON_SECRET"
+  },
+  "crons": [
+    {
+      "id": "agent-queue",
+      "path": "/api/cron/supermega/agent-queue",
+      "schedule": "*/15 * * * *",
+      "job_types": ["task_triage", "ops_watch"],
+      "max_claims_per_invocation": 2,
+      "maximum_invocations_per_day": 96
+    },
+    {
+      "id": "daily",
+      "path": "/api/cron/supermega/daily",
+      "schedule": "45 0 * * *",
+      "job_types": ["founder_brief", "github_release_watch"],
+      "max_claims_per_invocation": 2,
+      "maximum_invocations_per_day": 1
+    }
+  ],
+  "maximum_scheduler_invocations_per_day": 97,
+  "worker_dispatch": {
+    "provider": "google-cloud-tasks",
+    "mode": "enqueue-on-demand",
+    "polling_allowed": false
+  },
+  "retired_authority": {
+    "provider": "google-cloud-scheduler",
+    "mutation_allowed": false,
+    "job_names": [
+      "supermega-default-agent-jobs",
+      "supermega-ops-watch",
+      "supermega-founder-brief-daily",
+      "supermega-agent-worker"
+    ]
+  }
+}

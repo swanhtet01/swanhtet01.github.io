@@ -21,6 +21,7 @@ const previewServer = await readFile(resolve(root, 'tools/serve_solution.py'), '
 const previewLauncher = await readFile(resolve(root, 'tools/deploy_preview.sh'), 'utf8')
 const retiredClaimableLauncher = await readFile(resolve(root, 'tools/deploy_claimable_preview.sh'), 'utf8')
 const config = JSON.parse(await readFile(resolve(root, 'vercel.json'), 'utf8'))
+const schedulerAuthority = JSON.parse(await readFile(resolve(root, 'tools/supermega_scheduler_authority.json'), 'utf8'))
 const kernelConfig = JSON.parse(await readFile(resolve(root, 'kernel/vercel.json'), 'utf8'))
 const failures = []
 const checks = []
@@ -267,9 +268,33 @@ requireContract('canonical preview deploys one pinned prebuilt artifact',
   && previewServer.indexOf('["pull", "--yes", "--environment=preview"]') < previewServer.indexOf('["build", "--yes"]')
   && previewServer.indexOf('["build", "--yes"]') < previewServer.indexOf('"deploy",\n                "--prebuilt"'))
 
-const expectedCrons = ['/api/cron/supermega/agent-queue', '/api/cron/supermega/daily'].sort()
-const actualCrons = (config.crons || []).map((cron) => cron.path).sort()
-requireContract('canonical cron contract', JSON.stringify(actualCrons) === JSON.stringify(expectedCrons))
+const normalizeCrons = (crons) => (crons || [])
+  .map(({ path, schedule }) => ({ path, schedule }))
+  .sort((left, right) => left.path.localeCompare(right.path))
+const expectedCrons = normalizeCrons(schedulerAuthority.crons)
+const actualCrons = normalizeCrons(config.crons)
+requireContract('single production scheduler authority',
+  schedulerAuthority.contract === 'supermega.scheduler-authority.v1'
+  && schedulerAuthority.authority === 'vercel'
+  && schedulerAuthority.environment === 'production'
+  && schedulerAuthority.project_id === 'prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG'
+  && schedulerAuthority.maximum_scheduler_invocations_per_day === 97
+  && schedulerAuthority.worker_dispatch?.mode === 'enqueue-on-demand'
+  && schedulerAuthority.worker_dispatch?.polling_allowed === false
+  && schedulerAuthority.retired_authority?.provider === 'google-cloud-scheduler'
+  && schedulerAuthority.retired_authority?.mutation_allowed === false)
+requireContract('canonical cron path and cadence contract', JSON.stringify(actualCrons) === JSON.stringify(expectedCrons))
+requireContract('Vercel config is generated from scheduler authority',
+  generator.includes("readFileSync('tools/supermega_scheduler_authority.json'")
+  && generator.includes('const canonicalCrons = schedulerAuthority.crons.map'))
+requireContract('public live health follows the canonical release workflow',
+  publicHealthWorkflow.includes('SuperMega - Coordinated Verified Release')
+  && !publicHealthWorkflow.includes('SuperMega Public - Verified Prebuilt Release'))
+requireContract('scheduler authority changes trigger every release gate',
+  [workflow, appWorkflow, ciWorkflow].every((source) =>
+    source.includes('tools/supermega_scheduler_authority.json')
+    && source.includes('tools/verify_vercel_project_state.mjs')
+    && source.includes('tools/test_vercel_project_state.mjs')))
 
 const combined = `${workflow}\n${appWorkflow}\n${generator}\n${JSON.stringify(config)}`
 requireContract('no POS route', !/\/pos\/login/i.test(combined))

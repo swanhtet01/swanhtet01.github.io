@@ -1,5 +1,22 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 
+const schedulerAuthority = JSON.parse(readFileSync('tools/supermega_scheduler_authority.json', 'utf8'))
+if (
+  schedulerAuthority.contract !== 'supermega.scheduler-authority.v1'
+  || schedulerAuthority.authority !== 'vercel'
+  || schedulerAuthority.environment !== 'production'
+  || schedulerAuthority.team_id !== 'team_wI4l7ZgSxcEztQPSlCCYVeJ5'
+  || schedulerAuthority.project_id !== 'prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG'
+  || schedulerAuthority.project_name !== 'megaos'
+  || schedulerAuthority.worker_dispatch?.mode !== 'enqueue-on-demand'
+  || schedulerAuthority.worker_dispatch?.polling_allowed !== false
+  || schedulerAuthority.retired_authority?.provider !== 'google-cloud-scheduler'
+  || schedulerAuthority.retired_authority?.mutation_allowed !== false
+) {
+  throw new Error('supermega_scheduler_authority_invalid')
+}
+const canonicalCrons = schedulerAuthority.crons.map(({ path, schedule }) => ({ path, schedule }))
+
 const appProjectLink = {
   projectId: 'prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG',
   orgId: 'team_wI4l7ZgSxcEztQPSlCCYVeJ5',
@@ -39,10 +56,7 @@ const appConfig = {
     { handle: 'filesystem' },
     { src: '/(.*)', dest: '/index.html' },
   ],
-  crons: [
-    { path: '/api/cron/supermega/agent-queue', schedule: '*/15 * * * *' },
-    { path: '/api/cron/supermega/daily', schedule: '45 0 * * *' },
-  ],
+  crons: canonicalCrons,
 }
 
 writeFileSync('vercel.json', `${JSON.stringify(appConfig, null, 2)}\n`)
@@ -90,4 +104,10 @@ const nextIgnore = [...new Set([...existingIgnore, ...generatedIgnore])]
   .filter((line) => !requiredBuildInputs.has(line))
 writeFileSync('.vercelignore', `${nextIgnore.join('\n')}\n`)
 
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_vercel', project: appProjectLink.projectName, crons: appConfig.crons.map((cron) => cron.path) }))
+console.log(JSON.stringify({
+  ok: true,
+  contract: 'supermega_app_vercel',
+  project: appProjectLink.projectName,
+  schedulerAuthority: schedulerAuthority.authority,
+  crons: appConfig.crons,
+}))

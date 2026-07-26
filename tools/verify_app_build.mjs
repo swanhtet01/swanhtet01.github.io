@@ -65,6 +65,7 @@ const [manifestText, appPackageText, appSource, coreSource, catalogImportSource,
 ])
 const manifest = JSON.parse(manifestText)
 const appPackage = JSON.parse(appPackageText)
+const schedulerAuthority = JSON.parse(await readFile(resolve(root, 'tools', 'supermega_scheduler_authority.json'), 'utf8'))
 const indexSource = await readFile(resolve(root, 'showroom', 'index.html'), 'utf8')
 const viteConfigSource = await readFile(resolve(root, 'showroom', 'vite.config.ts'), 'utf8')
 const websiteStarterSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-starter.ts'), 'utf8')
@@ -1251,25 +1252,28 @@ if (!managedTrialSource.includes('export async function validateManagedClientImp
   || !managedClientImportUiContract.includes('validationRequestRef.current !== validationRequestId')
   || !managedClientImportUiContract.includes('sameManagedIdentity(managedIdentityRef.current, expectedIdentity)')
   || ['fetch(', 'localStorage', 'sessionStorage', 'saveManagedCommerceCommand', 'saveManagedProductionCommand', 'saveManagedWebsiteCommand', 'createManagedApproval'].some((marker) => managedClientImportUiContract.includes(marker))) fail('managed_client_import_ui_or_authority_contract_missing')
-const cronTokenRotationContract = sourceBlock(schedulerSource, '$cronTokenChanged = ', '\n\nInvoke-Gcloud -CommandArgs @(')
-if (!schedulerSource.includes('[ValidateSet("unchanged", "demand-driven-canary", "polling")]')
-  || !schedulerSource.includes('supermega.agent_worker_canary.v1')
-  || !schedulerSource.includes('$evidence.task_dispatch_source -ne "cloud-tasks"')
-  || !schedulerSource.includes('$evidence.polling_job_paused_during_probe -ne $true')
-  || !schedulerSource.includes('$latencySeconds -gt 300')
-  || !schedulerSource.includes('$evidenceAge.TotalHours -gt 24')
-  || !schedulerSource.includes('"scheduler", "jobs", "pause", "supermega-agent-worker"')
-  || !schedulerSource.includes('"scheduler", "jobs", "resume", "supermega-agent-worker"')
-  || !schedulerSource.includes('nominal_scheduler_calls_per_day = if ($workerSchedulerState -eq "PAUSED") { 109 } else { 397 }')
-  || !schedulerSource.includes('worker_poll_calls_per_day = if ($workerSchedulerState -eq "PAUSED") { 0 } else { 288 }')
-  || !schedulerSource.includes('polling_rollback = "Run this script with -WorkerDispatchMode polling."')) fail('demand_driven_worker_canary_contract_missing')
-if (!cronTokenRotationContract.includes('if ($cronTokenChanged)')
-  || !cronTokenRotationContract.includes('Ensure-SecretVersion -Name "supermega-internal-cron-token" -Value $cronToken')
-  || (schedulerSource.match(/Ensure-SecretVersion -Name "supermega-internal-cron-token" -Value \$cronToken/g) || []).length !== 1) fail('scheduler_cron_token_rotation_not_bounded')
-if (!schedulerSource.includes('$commandOutput = @(& gcloud @CommandArgs 2>&1)')
-  || !schedulerSource.includes("throw \"gcloud operation '$operation' failed with exit code $exitCode.\"")
-  || schedulerSource.includes("$CommandArgs -join ' '")
-  || schedulerSource.includes('$CommandArgs -join " "')) fail('scheduler_gcloud_failure_redaction_missing')
+const expectedSchedulerCrons = [
+  { path: '/api/cron/supermega/agent-queue', schedule: '*/15 * * * *' },
+  { path: '/api/cron/supermega/daily', schedule: '45 0 * * *' },
+]
+if (schedulerAuthority.contract !== 'supermega.scheduler-authority.v1'
+  || schedulerAuthority.authority !== 'vercel'
+  || schedulerAuthority.environment !== 'production'
+  || schedulerAuthority.project_id !== 'prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG'
+  || schedulerAuthority.project_name !== 'megaos'
+  || JSON.stringify(schedulerAuthority.crons?.map(({ path, schedule }) => ({ path, schedule }))) !== JSON.stringify(expectedSchedulerCrons)
+  || schedulerAuthority.maximum_scheduler_invocations_per_day !== 97
+  || schedulerAuthority.worker_dispatch?.provider !== 'google-cloud-tasks'
+  || schedulerAuthority.worker_dispatch?.mode !== 'enqueue-on-demand'
+  || schedulerAuthority.worker_dispatch?.polling_allowed !== false
+  || schedulerAuthority.retired_authority?.provider !== 'google-cloud-scheduler'
+  || schedulerAuthority.retired_authority?.mutation_allowed !== false) fail('single_scheduler_authority_contract_missing')
+if (!schedulerSource.includes('$authority.authority -ne "vercel"')
+  || !schedulerSource.includes('status = "retired_compatibility_entrypoint"')
+  || !schedulerSource.includes('gcp_scheduler_mutation_allowed = $false')
+  || !schedulerSource.includes('provider_reads_performed = $false')
+  || !schedulerSource.includes('provider_writes_performed = $false')
+  || /\bgcloud\b|Invoke-Gcloud|Ensure-SchedulerJob|SUPERMEGA_INTERNAL_CRON_TOKEN|x-supermega-cron-token/i.test(schedulerSource)) fail('retired_gcp_scheduler_mutation_contract_missing')
 if (!commerceSource.includes('commerceWebsiteIntakeSnapshotDigest')
   || !commerceSource.includes('snapshotDigest: commerceWebsiteIntakeSnapshotDigest(snapshot)')
   || !commerceSource.includes('if (!intake.snapshotDigest) return null')
