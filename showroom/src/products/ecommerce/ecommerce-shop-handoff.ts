@@ -3,10 +3,17 @@ import {
   validateStorefrontOrderRequest,
   type StorefrontOrderRequest,
 } from './storefront-request.ts'
+import {
+  ECOMMERCE_SHOP_DRAFT_SCHEMA_V2,
+  ecommercePaymentLabel,
+  ecommerceShopDraftV2MatchesCatalog,
+  validateEcommerceShopDraftV2,
+  type EcommerceShopDraftV2,
+} from './ecommerce-buying-lifecycle.ts'
 
 export const ECOMMERCE_SHOP_DRAFT_SCHEMA = 'supermega.ecommerce.shop_draft.v1' as const
 
-export type EcommerceShopDraft = {
+export type LegacyEcommerceShopDraft = {
   schema: typeof ECOMMERCE_SHOP_DRAFT_SCHEMA
   mode: 'browser-memory-shop-draft'
   state: 'review_required'
@@ -29,10 +36,12 @@ export type EcommerceShopDraft = {
   evidenceReference: string
 }
 
+export type EcommerceShopDraft = LegacyEcommerceShopDraft | EcommerceShopDraftV2
+
 const draftIdPattern = /^ESD-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
 const requestIdPattern = /^ECR-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
 const digestPattern = /^sha256:[a-f0-9]{64}$/
-let drafts: EcommerceShopDraft[] = []
+let drafts: LegacyEcommerceShopDraft[] = []
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -56,7 +65,7 @@ function isCanonicalText(value: unknown, maximum: number) {
     && value.length <= maximum
 }
 
-function parseEcommerceShopDraft(value: unknown): EcommerceShopDraft | null {
+function parseEcommerceShopDraft(value: unknown): LegacyEcommerceShopDraft | null {
   if (!isRecord(value)
     || !hasExactKeys(value, ['schema', 'mode', 'state', 'id', 'sourceRequestId', 'sourcePreviewDigest', 'createdAt', 'confirmedAt', 'customerReference', 'fulfilment', 'currency', 'line', 'totalMmk', 'evidenceReference'])
     || value.schema !== ECOMMERCE_SHOP_DRAFT_SCHEMA
@@ -89,10 +98,10 @@ function parseEcommerceShopDraft(value: unknown): EcommerceShopDraft | null {
     || Number(value.totalMmk) !== Number(value.line.quantity) * Number(value.line.unitPriceMmk)
     || typeof value.evidenceReference !== 'string'
     || value.evidenceReference !== `ECOMMERCE:${value.sourceRequestId}:${value.sourcePreviewDigest}`) return null
-  return value as EcommerceShopDraft
+  return value as LegacyEcommerceShopDraft
 }
 
-function sameRequestIntent(draft: EcommerceShopDraft, request: StorefrontOrderRequest) {
+function sameRequestIntent(draft: LegacyEcommerceShopDraft, request: StorefrontOrderRequest) {
   return draft.sourceRequestId === request.id
     && draft.sourcePreviewDigest === request.sourcePreviewDigest
     && draft.createdAt === request.createdAt
@@ -107,7 +116,7 @@ function sameRequestIntent(draft: EcommerceShopDraft, request: StorefrontOrderRe
     && draft.totalMmk === request.totalMmk
 }
 
-function matchingCatalogItem(draft: EcommerceShopDraft, catalog: CommerceItem[]) {
+function matchingCatalogItem(draft: LegacyEcommerceShopDraft, catalog: CommerceItem[]) {
   const matches = catalog.filter((item) => item.sku === draft.line.sku)
   if (matches.length !== 1) return null
   const item = matches[0]
@@ -162,8 +171,31 @@ export function readLatestEcommerceShopDraft() {
 }
 
 export function ecommerceShopDraftMatchesCatalog(value: unknown, catalog: CommerceItem[]): value is EcommerceShopDraft {
+  if (isRecord(value) && value.schema === ECOMMERCE_SHOP_DRAFT_SCHEMA_V2) {
+    return ecommerceShopDraftV2MatchesCatalog(value, catalog)
+  }
   const draft = parseEcommerceShopDraft(value)
   return Boolean(draft && matchingCatalogItem(draft, catalog))
+}
+
+export function ecommerceShopDraftLines(value: EcommerceShopDraft) {
+  if (value.schema === ECOMMERCE_SHOP_DRAFT_SCHEMA_V2) {
+    return validateEcommerceShopDraftV2(value).lines.map((line) => ({
+      sku: line.sku,
+      name: line.name,
+      variant: line.variant,
+      quantity: line.quantity,
+      unitPriceMmk: line.unitPriceMmk,
+    }))
+  }
+  const draft = parseEcommerceShopDraft(value)
+  if (!draft) throw new Error('The Ecommerce Shop draft is invalid.')
+  return [{ ...draft.line }]
+}
+
+export function ecommerceShopDraftPayment(value: EcommerceShopDraft) {
+  if (value.schema !== ECOMMERCE_SHOP_DRAFT_SCHEMA_V2) return ''
+  return ecommercePaymentLabel(validateEcommerceShopDraftV2(value).pricing.payment.adapter)
 }
 
 export function dismissEcommerceShopDraft(id: string) {

@@ -2546,10 +2546,12 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   ])
 
   useEffect(() => {
-    if (!ecommerceNavigationDraft || managedIdentity || consumedEcommerceDraftId.current === ecommerceNavigationDraft.id) return
+    if (!ecommerceNavigationDraft
+      || managedIdentity && workspaceMode !== 'managed-ready'
+      || consumedEcommerceDraftId.current === ecommerceNavigationDraft.id) return
     let current = true
     void import('../products/ecommerce/ecommerce-shop-handoff')
-      .then(({ ecommerceShopDraftMatchesCatalog }) => {
+      .then(({ ecommerceShopDraftLines, ecommerceShopDraftMatchesCatalog, ecommerceShopDraftPayment }) => {
         if (!current) return
         const navigationDraftId = ecommerceNavigationDraft.id
         if (!ecommerceShopDraftMatchesCatalog(ecommerceNavigationDraft, commerce.items)) {
@@ -2566,10 +2568,11 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         setPreparedEcommerceDraft(ecommerceNavigationDraft)
         setCustomer(ecommerceNavigationDraft.customerReference)
         setChannel('Ecommerce')
-        setSku(ecommerceNavigationDraft.line.sku)
-        setQuantity(ecommerceNavigationDraft.line.quantity)
-        setExtraOrderLines([])
-        setPayment('')
+        const draftLines = ecommerceShopDraftLines(ecommerceNavigationDraft)
+        setSku(draftLines[0].sku)
+        setQuantity(draftLines[0].quantity)
+        setExtraOrderLines(draftLines.slice(1).map((line) => ({ sku: line.sku, quantity: line.quantity })))
+        setPayment(ecommerceShopDraftPayment(ecommerceNavigationDraft))
         setFulfilment(ecommerceNavigationDraft.fulfilment)
         setFulfilmentReference(ecommerceNavigationDraft.sourceRequestId)
         setPromisedAt(defaultOrderPromiseInput())
@@ -2577,7 +2580,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         setOrderDraftActive(true)
         setResumedOrderDraft(null)
         setOrderDraftConflict(false)
-        setNotice(`${ecommerceNavigationDraft.id} is ready for Shop review. Confirm the promise and payment, then review the order.`)
+        setNotice(`${ecommerceNavigationDraft.id} is ready for Shop review. Confirm the quote, promise, and payment before the accountable order gate.`)
         requestAnimationFrame(() => {
           const dialog = orderComposerRef.current
           if (dialog && !dialog.open) dialog.showModal()
@@ -2588,7 +2591,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         if (current) setNotice('The Ecommerce request guard could not load. Nothing was prepared.')
       })
     return () => { current = false }
-  }, [commerce.items, ecommerceNavigationDraft, managedIdentity, navigate, preparedEcommerceDraft])
+  }, [commerce.items, ecommerceNavigationDraft, managedIdentity, navigate, preparedEcommerceDraft, workspaceMode])
 
   useEffect(() => {
     const sourceKey = requestedRequestId || 'ecommerce-inbox'
@@ -3223,9 +3226,9 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       setNotice('Add at least one available catalog item before reviewing the order.')
       return
     }
-    if ((sourceDraft || ecommerceDraft) && orderLines.length !== 1) {
-      detachPreparedOrderSources()
-      setNotice('Source-backed requests contain one reviewed item. The source link was removed; review this as a manual multi-item order.')
+    if (sourceDraft && orderLines.length !== 1) {
+      detachPreparedOrderSources({ ecommerce: false })
+      setNotice('This channel source contains one reviewed item. Its source link was removed; review the multi-item order manually.')
       return
     }
     if (sourceDraft && (customer.trim() !== sourceDraft.customer
@@ -3237,14 +3240,32 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       setNotice('The structured order changed after source review. Review the channel mapping again or continue as a manual order.')
       return
     }
+    const ecommerceLines = ecommerceDraft
+      ? ecommerceDraft.schema === 'supermega.ecommerce.shop_draft.v2'
+        ? ecommerceDraft.lines
+        : [ecommerceDraft.line]
+      : []
+    const ecommercePayment = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v2'
+      ? ecommerceDraft.pricing.payment.adapter === 'cash_on_delivery'
+        ? 'Cash on delivery'
+        : ecommerceDraft.pricing.payment.adapter === 'kbzpay_manual'
+          ? 'KBZPay'
+          : 'Cash'
+      : ''
     if (ecommerceDraft && (customer.trim() !== ecommerceDraft.customerReference
       || channel !== 'Ecommerce'
       || fulfilment !== ecommerceDraft.fulfilment
-      || selectedLine.sku !== ecommerceDraft.line.sku
-      || selectedLine.quantity !== ecommerceDraft.line.quantity
-      || selectedLine.name !== ecommerceDraft.line.name
-      || (selectedLine.variant ?? null) !== ecommerceDraft.line.variant
-      || selectedLine.unitPriceMmk !== ecommerceDraft.line.unitPriceMmk
+      || Boolean(ecommercePayment && payment !== ecommercePayment)
+      || orderLines.length !== ecommerceLines.length
+      || orderLines.some((line, index) => {
+        const expected = ecommerceLines[index]
+        return !expected
+          || line.sku !== expected.sku
+          || line.quantity !== expected.quantity
+          || line.name !== expected.name
+          || (line.variant ?? null) !== expected.variant
+          || line.unitPriceMmk !== expected.unitPriceMmk
+      })
       || orderTotal !== ecommerceDraft.totalMmk)) {
       detachPreparedOrderSources({ channel: false })
       setNotice('The Ecommerce request changed after confirmation. Return to Ecommerce or continue as a manual order.')
@@ -3266,8 +3287,8 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       createdAt: reviewedAt.toISOString(),
       customer: customer.trim() || 'Guest',
       channel,
-      item: sourceBacked ? selectedLine.name : commerceOrderItemSummary(orderLines),
-      ...(sourceBacked || orderLines.length === 1 ? { itemSku: selectedLine.sku } : {}),
+      item: orderLines.length === 1 ? selectedLine.name : commerceOrderItemSummary(orderLines),
+      ...(orderLines.length === 1 ? { itemSku: selectedLine.sku } : {}),
       quantity: orderQuantity,
       payment,
       paymentStatus: 'pending',
@@ -3277,7 +3298,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       promisedAt: canonicalPromisedAt,
       sourceRecordId,
       evidenceReference: sourceEvidence,
-      ...(!sourceBacked ? { lines: orderLines } : {}),
+      ...(!sourceBacked || orderLines.length > 1 ? { lines: orderLines } : {}),
       total: orderTotal,
       status: 'confirmed',
     }
