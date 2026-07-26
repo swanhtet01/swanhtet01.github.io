@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+from hashlib import sha256
+import json
 import unittest
 from unittest.mock import patch
 from urllib.parse import quote
@@ -15,6 +17,11 @@ from supermega_runtime.commerce_runtime import (
     commerce_storefront_preview_digest,
     commerce_website_intake_snapshot_digest,
     validate_commerce_state,
+)
+from supermega_runtime.client_import_runtime import (
+    CLIENT_IMPORT_PREVIEW_SCHEMA,
+    CLIENT_IMPORT_STAGING_SCHEMA,
+    validate_client_import_staging_package,
 )
 from supermega_runtime.runtime import reduce_trial_state
 from supermega_runtime.trial_store import (
@@ -405,6 +412,65 @@ def storefront_configuration(
     if merchandising is not None:
         configuration["merchandising"] = deepcopy(merchandising)
     return configuration
+
+
+def ecommerce_merchandising_import_package(
+    *,
+    sku: str = "SKU-1",
+) -> dict[str, object]:
+    mapping = {
+        "sku": "sku",
+        "featured": "featured",
+        "collection": "collection",
+        "displayName": "display_name",
+        "note": "merchandising_note",
+    }
+    source_digest = "sha256:" + "1" * 64
+    preview_source = json.dumps(
+        {
+            "schema": CLIENT_IMPORT_PREVIEW_SCHEMA,
+            "product": "ecommerce",
+            "object": "storefront_merchandising",
+            "workflowTemplateId": "social-storefront",
+            "sourceDigest": source_digest,
+            "mapping": mapping,
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return {
+        "contract": CLIENT_IMPORT_STAGING_SCHEMA,
+        "product": "ecommerce",
+        "object": "storefront_merchandising",
+        "workflowTemplateId": "social-storefront",
+        "workspace": "Mingalar Shop",
+        "owner": "Accountable operator",
+        "source": {
+            "name": "social-storefront.csv",
+            "digest": source_digest,
+            "previewDigest": f"sha256:{sha256(preview_source).hexdigest()}",
+        },
+        "mapping": mapping,
+        "rows": [
+            {
+                "sourceRow": 2,
+                "key": sku,
+                "values": {
+                    "sku": sku,
+                    "featured": "true",
+                    "collection": "Best sellers",
+                    "displayName": "Customer display name",
+                    "note": "Lead with approved proof.",
+                },
+            }
+        ],
+        "controls": {
+            "rowCount": 1,
+            "humanReviewRequired": True,
+            "externalWritesPerformed": False,
+            "activationStatus": "staged_not_applied",
+        },
+    }
 
 
 def pending_intake_state() -> dict[str, object]:
@@ -1454,6 +1520,96 @@ class CommerceRuntimeTests(unittest.TestCase):
             with self.assertRaises(TrialValidationError):
                 validate_commerce_state(candidate)
 
+    def test_reviewed_ecommerce_import_derives_one_locked_storefront_revision(self) -> None:
+        current = catalog_state()
+        current["storefrontConfiguration"] = storefront_configuration(current)
+        package = ecommerce_merchandising_import_package()
+        validation = validate_client_import_staging_package(package)
+        command_id = "00000000-0000-4000-8000-000000000031"
+        payload = {
+            "commandId": command_id,
+            "package": package,
+            "evidence": {
+                "actionId": f"ACT-IMPORT-{command_id}",
+                "capturedAt": "2026-07-23T09:05:00.000Z",
+                "actor": "Accountable operator",
+                "reason": "Apply the reviewed Ecommerce merchandising import.",
+                "evidenceReference": validation.package_digest,
+            },
+        }
+
+        accepted = reduce_trial_state(
+            "commerce",
+            "commerce.storefront.merchandising.imported",
+            current,
+            payload,
+        )
+        configuration = accepted["storefrontConfiguration"]
+        self.assertEqual(configuration["revision"], 2)
+        self.assertEqual(configuration["shopCatalogSnapshotRevision"], 1)
+        self.assertEqual(configuration["selectedSkus"], ["SKU-1"])
+        self.assertEqual(
+            configuration["merchandising"],
+            [
+                {
+                    "sku": "SKU-1",
+                    "featured": True,
+                    "collection": "Best sellers",
+                    "displayName": "Customer display name",
+                    "note": "Lead with approved proof.",
+                }
+            ],
+        )
+        self.assertEqual(configuration["storeName"], "Mingalar Shop")
+        self.assertEqual(configuration["summary"], "Clear prices and a small customer-ready catalog.")
+        self.assertEqual(configuration["saved"]["capturedAt"], "2026-07-23T09:05:00.000Z")
+        self.assertEqual(configuration["saved"]["actor"], "Accountable operator")
+        for field in ("items", "orders", "movements", "closes"):
+            self.assertEqual(accepted[field], current[field])
+        self.assertNotEqual(
+            commerce_storefront_preview_digest(accepted),
+            commerce_storefront_preview_digest(current),
+        )
+
+        unchanged_command_id = "00000000-0000-4000-8000-000000000032"
+        with self.assertRaises(TrialValidationError):
+            reduce_trial_state(
+                "commerce",
+                "commerce.storefront.merchandising.imported",
+                accepted,
+                {
+                    **payload,
+                    "commandId": unchanged_command_id,
+                    "evidence": {
+                        **payload["evidence"],
+                        "actionId": f"ACT-IMPORT-{unchanged_command_id}",
+                    },
+                },
+            )
+        unknown_package = ecommerce_merchandising_import_package(sku="UNKNOWN")
+        unknown_validation = validate_client_import_staging_package(unknown_package)
+        with self.assertRaises(TrialValidationError):
+            reduce_trial_state(
+                "commerce",
+                "commerce.storefront.merchandising.imported",
+                current,
+                {
+                    **payload,
+                    "package": unknown_package,
+                    "evidence": {
+                        **payload["evidence"],
+                        "evidenceReference": unknown_validation.package_digest,
+                    },
+                },
+            )
+        with self.assertRaises(TrialValidationError):
+            reduce_trial_state(
+                "commerce",
+                "commerce.storefront.merchandising.imported",
+                catalog_state(),
+                payload,
+            )
+
     def test_legacy_storefront_request_without_provenance_remains_readable(self) -> None:
         legacy_request = storefront_request()
         legacy_request.pop("sourceStorefrontRevision")
@@ -1855,10 +2011,12 @@ class CommerceRuntimeTests(unittest.TestCase):
                     "commerce.close.saved",
                     "commerce.website_intake.converted",
                     "commerce.storefront.configuration.saved",
+                    "commerce.storefront.merchandising.imported",
                 }
             ),
         )
         self.assertIn("commerce.item.updated", COMMERCE_EVENTS)
+        self.assertIn("commerce.storefront.merchandising.imported", COMMERCE_EVENTS)
 
     def test_website_intake_creation_records_no_order_or_stock_movement(self) -> None:
         current = catalog_state()

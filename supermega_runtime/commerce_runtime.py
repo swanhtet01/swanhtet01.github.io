@@ -11,6 +11,10 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import quote
 
+from supermega_runtime.client_import_runtime import (
+    ClientImportValidationError,
+    validate_client_import_staging_package,
+)
 from supermega_runtime.trial_store import TrialValidationError
 
 
@@ -35,6 +39,7 @@ COMMERCE_EVENTS = frozenset(
         "commerce.website_intake.created",
         "commerce.website_intake.converted",
         "commerce.storefront.configuration.saved",
+        "commerce.storefront.merchandising.imported",
         "commerce.storefront_request.received",
     }
 )
@@ -57,6 +62,7 @@ COMMERCE_HUMAN_EVENTS = frozenset(
         "commerce.close.saved",
         "commerce.website_intake.converted",
         "commerce.storefront.configuration.saved",
+        "commerce.storefront.merchandising.imported",
     }
 )
 _ORDER_STATUSES = ("confirmed", "preparing", "ready", "completed", "cancelled")
@@ -76,6 +82,9 @@ _STOREFRONT_IDEMPOTENCY_PATTERN = re.compile(
     r"ECI-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
 )
 _SHA256_DIGEST_PATTERN = re.compile(r"sha256:[a-f0-9]{64}")
+_COMMAND_ID_PATTERN = re.compile(
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+)
 _STOREFRONT_PREVIEW_SCHEMA = "supermega.ecommerce.storefront_preview.v1"
 _MAX_STOREFRONT_REQUESTS = 100
 _MAX_PURCHASE_ORDERS = 100
@@ -1866,6 +1875,115 @@ def _payload(payload: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, str]
     return validate_commerce_state(payload.get("state")), validated_evidence
 
 
+def _apply_storefront_merchandising_import(
+    current: Mapping[str, Any],
+    payload: Mapping[str, Any],
+) -> dict[str, Any]:
+    if set(payload) != {"commandId", "package", "evidence"}:
+        raise TrialValidationError(
+            "Ecommerce merchandising import must contain exactly commandId, package, and evidence."
+        )
+    command_id = _text(payload.get("commandId"), "commandId", maximum=36)
+    if _COMMAND_ID_PATTERN.fullmatch(command_id) is None:
+        raise TrialValidationError("commandId must be a canonical UUID.")
+    try:
+        validation = validate_client_import_staging_package(payload.get("package"))
+    except ClientImportValidationError as exc:
+        raise TrialValidationError("Ecommerce merchandising import package is invalid.") from exc
+    if validation.product != "ecommerce" or validation.object_id != "storefront_merchandising":
+        raise TrialValidationError("Ecommerce merchandising import package has the wrong product boundary.")
+    if not 1 <= validation.row_count <= 8:
+        raise TrialValidationError("Ecommerce merchandising import must contain 1 to 8 Shop SKUs.")
+
+    evidence = _object(payload.get("evidence"), "evidence")
+    _exact_fields(evidence, "evidence", required=_EVIDENCE_FIELDS)
+    validated_evidence = {
+        "actionId": _text(evidence["actionId"], "evidence.actionId", maximum=160),
+        "capturedAt": _timestamp(evidence["capturedAt"], "evidence.capturedAt"),
+        "actor": _text(evidence["actor"], "evidence.actor"),
+        "reason": _text(evidence["reason"], "evidence.reason"),
+        "evidenceReference": _text(
+            evidence["evidenceReference"],
+            "evidence.evidenceReference",
+        ),
+    }
+    if (
+        validated_evidence["actionId"] != f"ACT-IMPORT-{command_id}"
+        or validated_evidence["reason"]
+        != "Apply the reviewed Ecommerce merchandising import."
+        or validated_evidence["evidenceReference"] != validation.package_digest
+    ):
+        raise TrialValidationError(
+            "Ecommerce merchandising import evidence does not match the reviewed package."
+        )
+
+    current_state = validate_commerce_state(current)
+    configuration = _storefront_configuration(current_state)
+    if configuration is None:
+        raise TrialValidationError(
+            "Save the Ecommerce storefront name and summary before importing merchandising."
+        )
+    if configuration["revision"] >= _MAX_SAFE_INTEGER:
+        raise TrialValidationError("Ecommerce storefront revision is exhausted.")
+
+    package = payload["package"]
+    rows = package["rows"]
+    merchandising = sorted(
+        (
+            {
+                "sku": row["values"]["sku"],
+                "featured": row["values"]["featured"] == "true",
+                "collection": row["values"]["collection"],
+                "displayName": row["values"]["displayName"],
+                "note": row["values"]["note"],
+            }
+            for row in rows
+        ),
+        key=lambda row: row["sku"],
+    )
+    selected_skus = [row["sku"] for row in merchandising]
+    item_skus = {item["sku"] for item in current_state["items"]}
+    if any(sku not in item_skus for sku in selected_skus):
+        raise TrialValidationError(
+            "Every imported Ecommerce SKU must exist in the current Shop catalog."
+        )
+
+    catalog_digest = commerce_catalog_digest(current_state)
+    if (
+        configuration["shopCatalogDigest"] == catalog_digest
+        and configuration["selectedSkus"] == selected_skus
+        and configuration.get("merchandising") == merchandising
+    ):
+        raise TrialValidationError(
+            "The reviewed Ecommerce merchandising import does not change the storefront."
+        )
+    revision = configuration["revision"] + 1
+    catalog_revision = configuration["shopCatalogSnapshotRevision"]
+    if configuration["shopCatalogDigest"] != catalog_digest:
+        if catalog_revision >= _MAX_SAFE_INTEGER:
+            raise TrialValidationError("Shop catalog snapshot revision is exhausted.")
+        catalog_revision += 1
+    next_state = deepcopy(current_state)
+    next_state["storefrontConfiguration"] = {
+        "schema": "supermega.ecommerce.storefront.v1",
+        "revision": revision,
+        "shopCatalogSnapshotRevision": catalog_revision,
+        "shopCatalogDigest": catalog_digest,
+        "storeName": configuration["storeName"],
+        "summary": configuration["summary"],
+        "selectedSkus": selected_skus,
+        "merchandising": merchandising,
+        "saved": {
+            "actionId": _storefront_configuration_action_id(revision, catalog_digest),
+            "capturedAt": validated_evidence["capturedAt"],
+            "actor": validated_evidence["actor"],
+            "reason": validated_evidence["reason"],
+            "evidenceReference": f"ECOMMERCE-STOREFRONT:{catalog_digest}:R{revision}",
+        },
+    }
+    return validate_commerce_state(next_state)
+
+
 def _proof_matches_evidence(proof: Mapping[str, Any], evidence: Mapping[str, str]) -> bool:
     return all(
         proof.get(proof_field) == evidence[evidence_field]
@@ -3236,6 +3354,8 @@ def reduce_commerce_state(
 
     if event_type not in COMMERCE_EVENTS:
         raise TrialValidationError("event_type must be a supported Commerce lifecycle event.")
+    if event_type == "commerce.storefront.merchandising.imported":
+        return _apply_storefront_merchandising_import(current, payload)
     next_state, evidence = _payload(payload)
     if event_type == "commerce.workspace.initialized":
         if dict(current):
