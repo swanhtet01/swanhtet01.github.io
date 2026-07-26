@@ -18,6 +18,8 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - 'tools/validate_supermega_database_url.py'
+      - 'tools/verify_private_storage_privacy.py'
+      - 'tools/verify_app_security_contract.mjs'
       - 'tools/rehearse_supermega_postgres17.py'
       - 'tools/run_postgres17_rehearsal.mjs'
       - 'tools/verify_private_trial_migrations.mjs'
@@ -75,6 +77,8 @@ jobs:
       - name: Verify delegated release and RLS guards
         run: |
           python tools/validate_supermega_database_url.py --self-test
+          python tools/verify_private_storage_privacy.py --self-test
+          node tools/verify_app_security_contract.mjs
           node tools/verify_private_trial_migrations.mjs
           node tools/verify_coordinated_release_live.mjs --self-test
           node tools/verify_app_deploy_workflow.mjs

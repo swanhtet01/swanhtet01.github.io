@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url'
 const root = resolve(import.meta.dirname, '..')
 const read = (path) => readFile(resolve(root, path), 'utf8')
 const commerceWorkspace = await import(pathToFileURL(resolve(root, 'showroom/src/core/commerce-workspace.ts')).href)
-const [runtime, supabaseAuth, cloudRuntime, schedulerActivation, agentGovernance, vercelEntry, portableEntry, trialRuntime, trialStore, commerceRuntime, productionRuntime, websiteRuntime, managedTrialClient, coreApp, websiteWorkspaceHook, rolePreflight, foundationMigration, decisionMigration, websiteMigration, hardeningMigration, readCapabilityMigration, databaseValidator, databaseActivator, liveVerifier, workflow, requirements, dockerfile, appEnvironment] = await Promise.all([
+const [runtime, supabaseAuth, cloudRuntime, schedulerActivation, agentGovernance, vercelEntry, portableEntry, trialRuntime, trialStore, commerceRuntime, productionRuntime, websiteRuntime, managedTrialClient, coreApp, websiteWorkspaceHook, rolePreflight, foundationMigration, decisionMigration, websiteMigration, hardeningMigration, readCapabilityMigration, databaseValidator, databaseActivator, liveVerifier, workflow, requirements, dockerfile, appEnvironment, storagePrivacyVerifier] = await Promise.all([
   read('supermega_runtime/runtime.py'),
   read('supermega_runtime/supabase_auth.py'),
   read('supermega_runtime/cloud_runtime.py'),
@@ -34,6 +34,7 @@ const [runtime, supabaseAuth, cloudRuntime, schedulerActivation, agentGovernance
   read('requirements.txt'),
   read('Dockerfile'),
   read('.env.app.example'),
+  read('tools/verify_private_storage_privacy.py'),
 ])
 const migration = `${rolePreflight}\n${foundationMigration}\n${decisionMigration}\n${websiteMigration}\n${hardeningMigration}\n${readCapabilityMigration}`
 const apiSourceEntries = (await readdir(resolve(root, 'api'), { withFileTypes: true }))
@@ -386,6 +387,24 @@ requireContract('managed database activation audit is read-only and fail closed'
 requireContract('managed database runtime is Supavisor transaction-pool safe', /autocommit": False/.test(trialStore) && /prepare_threshold": None/.test(trialStore) && /with connection\.transaction\(\)/.test(trialStore) && /set_config\('app\.workspace_id', %s, true\)/.test(trialStore) && /sslmode/.test(trialStore) && /supermega-trial-runtime/.test(trialStore))
 requireContract('managed database runtime revalidates role and TLS per connection', /_assert_runtime_role/.test(trialStore) && /rolbypassrls/.test(trialStore) && /pg_stat_ssl/.test(trialStore) && /"role_ready": readiness\.role_ready/.test(runtime) && /managed_trial_runtime_role_unsafe/.test(liveVerifier))
 requireContract('managed database secret handoff is atomic and sensitive', /--force/.test(databaseActivator) && /--sensitive/.test(databaseActivator) && /--project megaos/.test(databaseActivator) && !/vercel env rm/.test(databaseActivator))
+requireContract('managed storage privacy proof is bounded, read-only, owner-confirmed, and redacted',
+  /supermega\.private-storage-privacy\.v1/.test(storagePrivacyVerifier)
+  && /supabase_storage_rest_v2/.test(storagePrivacyVerifier)
+  && /--confirm-read-only-audit/.test(storagePrivacyVerifier)
+  && /ProxyHandler\(\{\}\)/.test(storagePrivacyVerifier)
+  && /_NoRedirectHandler/.test(storagePrivacyVerifier)
+  && /MAX_RESPONSE_BYTES = 32_768/.test(storagePrivacyVerifier)
+  && /MAX_REQUESTS = 6/.test(storagePrivacyVerifier)
+  && /SIGNED_URL_TTL_SECONDS = 60/.test(storagePrivacyVerifier)
+  && /READ_ONLY_METHODS = frozenset\(\{"GET", "HEAD", "POST"\}\)/.test(storagePrivacyVerifier)
+  && /service_role_key_forbidden/.test(storagePrivacyVerifier)
+  && /persistent_mutations_performed": 0/.test(storagePrivacyVerifier)
+  && /secrets_exposed": False/.test(storagePrivacyVerifier)
+  && workflow.includes('python tools/verify_private_storage_privacy.py --self-test')
+  && workflow.includes('node tools/verify_app_security_contract.mjs')
+  && workflow.includes("- 'tools/verify_private_storage_privacy.py'")
+  && workflow.includes("- 'tools/verify_app_security_contract.mjs'")
+  && rootPackage.scripts?.['storage:privacy:self-test'] === 'python tools/verify_private_storage_privacy.py --self-test')
 
 if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_security', failures }, null, 2))
