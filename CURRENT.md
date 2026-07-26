@@ -1,6 +1,6 @@
 # SuperMega current direction
 
-Last confirmed: 2026-07-26
+Last confirmed: 2026-07-27
 Authority: this file, `site-manifest.json`, and `hq/portfolio.json`
 
 SuperMega builds simple operating products for Myanmar businesses. The customer portfolio is exactly **Shop**, **Plant**, **Website**, and **Ecommerce**. Bounded **AI assistance** is a shared capability inside those products, not a fifth product. SuperMega HQ, R&D, agent coordination, Ops, Console, and machine coordination are internal company systems.
@@ -21,7 +21,7 @@ AI assistance may prepare work inside these four products only when it exposes i
 - **Shop** — implemented local release candidate at `/shop/` under the stable internal `commerce` runtime. `/operations/commerce/` is compatibility-only and resolves to the same records.
 - **Plant** — implemented local release candidate at `/plant/` under the stable internal `production` runtime. `/operations/production/` is compatibility-only and resolves to the same records.
 - **Website** — implemented local release candidate at `/website/`; it can produce a deterministic downloadable site artifact but cannot publish or change a domain.
-- **Ecommerce** — implemented local and managed storefront maker at `/ecommerce/`. It reads a Shop catalogue snapshot without changing it, lets the operator choose customer-visible products and copy, produces a deterministic preview digest, and creates an idempotent request receipt marked `pending_shop_review`. Browser-local mode saves setup only on that device. Authenticated managed mode saves the storefront configuration against the exact Shop catalogue digest in the revisioned tenant workspace, recovers it through bootstrap, preserves edits on version conflict, and can retain the exact request receipt in Shop. A Shop operator must still open and revalidate a source-locked draft; only Shop's separate accountable action gate can create an order or reserve stock.
+- **Ecommerce** — implemented local release candidate at `/ecommerce/`. It reads versioned Shop catalogue data, builds a multi-item cart, produces a deterministic 15-minute quote, recovers across reload, and sends one duplicate-safe multi-line handoff into Shop. Tax, shipping, and payment remain explicit adapter boundaries; no charge occurs. Only Shop's accountable confirmation can create an order or reserve stock. Hosted managed persistence is not yet proven.
 - **AI assistance** — shared, gated R&D capability. `/agents/` is compatibility-only and resolves to HQ's delegated roles. The first workflow is Order Intake: approved message or form input to a structured draft, with provenance, evaluation, human review, and zero side effects.
 
 No local demo, passing test, healthy provider, or generated artifact is proof of a live customer system, revenue, production persistence, or autonomous operation.
@@ -105,15 +105,15 @@ AI and delegated agents may not independently send customer messages, charge or 
 ## Release authority
 
 - Source branch: `main`
-- App Vercel project: `megaos`
-- Public Vercel project: `supermega-public`
+- Customer-facing Vercel project: `supermega-public` for both production domains
+- Internal hosted runtime project: `megaos`; it is not public domain authority
 - Coordinated workflow: `.github/workflows/supermega-public-release.yml`
 - Both production domains must expose matching `__release.json` metadata for the reviewed commit and context versions.
 - Direct local production deployment is blocked. The coordinated GitHub workflow is the only production release path.
 
 ## Current execution order
 
-1. Rehearse authenticated Ecommerce setup persistence and request-inbox retention on one owner-approved isolated non-production tenant; preserve the separate Shop action gate and collect cross-device, replay, conflict, recovery, and zero-conversion evidence.
-2. Run Order Intake through a real server-only provider and expose review UI only if the completed evaluator passes.
-3. Validate Website with one named business and accepted artifact.
-4. Repeat Shop and Plant on one isolated hosted tenant before any production write activation.
+1. Fast-forward the exact clean candidate to draft PR #258 only after owner authorization, run fresh checks, and review a protected `supermega-public` preview without changing production aliases.
+2. Prove the four products on a genuinely isolated managed tenant with RLS, recovery, server-only credentials, and no cross-tenant access.
+3. Run one named Shop design-partner pilot, then validate Website and Ecommerce with the same accountable onboarding and evidence rules.
+4. Add provider-backed AI, payment, shipping, tax, publishing, and broader marketing only after their product gate has measured pilot evidence.

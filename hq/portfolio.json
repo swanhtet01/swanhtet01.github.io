@@ -1,6 +1,6 @@
 {
   "schemaVersion": "supermega.hq.portfolio.v3",
-  "updatedAt": "2026-07-26",
+  "updatedAt": "2026-07-27",
   "northStar": "One real workflow reaches a measurable outcome through an accountable operating record.",
   "productLifecycle": ["discover", "define", "build", "release", "learn"],
   "agentOperatingModel": {
@@ -62,10 +62,10 @@
       "kind": "maker-product",
       "status": "release-candidate-local",
       "path": "/ecommerce/",
-      "job": "Create a simple customer storefront from a read-only Shop catalogue, then add structured order intent without duplicating Shop back-office records.",
-      "surfaces": ["Storefront", "Preview", "Request receipt", "Shop inbox", "Shop review"],
+      "job": "Create a simple customer storefront from a read-only Shop catalogue, quote a recoverable cart, and send structured order intent into Shop without duplicating back-office records.",
+      "surfaces": ["Storefront", "Cart", "Quote", "Request receipt", "Shop review"],
       "templateContract": { "file": "../site-manifest.json", "productId": "ecommerce" },
-      "nextGate": "Rehearse authenticated, revisioned, catalogue-bound storefront setup and recoverable request retention on one owner-approved isolated non-production tenant before adding cart, payment, delivery execution, external messaging, or a normalized indexed queue."
+      "nextGate": "Prove the completed cart-to-Shop handoff on a protected preview and isolated managed tenant, then add real tax, shipping, and payment adapters only behind accountable approval and duplicate-safe recovery."
     }
   ],
   "sharedCapabilities": [

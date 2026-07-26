@@ -27,14 +27,12 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 
 - HQ uses four teams. One contract caps 12 roles, four active/batch jobs, two Kernel agents per cycle, and zero idle compute; overrides fail closed, and the default workspace no longer duplicates a 256-role ceiling.
 - Kernel has four owner-bound slots with 120-second stale recovery; a fifth cycle stops before model use and failed work returns for retry (`ca5070e`).
-- One manifest makes Vercel production the sole recurring `megaos` scheduler: a 15-minute queue plus a 00:45 UTC daily run, capped at 97/day. Cloud Tasks stays on-demand; Google Scheduler mutation is retired. Protected credentials, exact cadence, and conflicting state are release-gated (`6c19084`).
 - Shop covers guarded orders, stock, purchasing, fulfilment, payment/refund, returns, and close at `/shop/`.
 - Plant stays task-first at `/plant/` and controls no equipment.
 - Website turns a brief into Preview, guarded Save/Review, a release package, and an owner-gated plan at `/website/`; it never deploys.
 - Ecommerce reads versioned Shop data and now provides a multi-item cart, deterministic 15-minute quote, explicit tax/shipping/payment boundaries, reload recovery, and a duplicate-safe multi-line Shop handoff. Only accountable Shop confirmation can create an order (`52917c5`).
 - AI assistance remains gated shared infrastructure; Order Intake passed 20 local cases, but the provider runner remains at the credential gate.
 - Client setup now uses one manifest-backed two-step flow, stable template IDs, detail-preserving switches/deep links, and one smart-import path. Exact matches collapse detail; exceptions open for review; the duplicate Shop importer is gone (`ab9a89e`).
-- Shop `social-commerce` now has a deterministic, versioned recipe bound to the trusted importer and human-approved Commerce lifecycle. Fresh, upgrade, and rollback plans perform no writes (`9ba8569`).
 - Shop Stock now has a lazy-loaded two-location layer in its existing tab: masters, lot/serial evidence, paired transfers, reservations, ATP, exact replay, digest validation, locked writes, and rollback (`5fa93a9`, `2790f9d`).
 - Plant Jobs now has a lazy order-execution layer: immutable plan, shortfall gate, lot genealogy, quality hold/reinspection, human release, exact replay, and locked write/rollback (`0831ad7`, `920c13d`).
 - Home keeps Shop and Plant exceptions above collapsed HQ work. Purchases suppress duplicate stock tasks; a Plant issue badge links to Problems and otherwise the card opens Jobs. `/work/` stays labelled HQ; bottom navigation reads Home, HQ, and Products.
@@ -43,12 +41,10 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 ## Verified baseline
 
 - Current local checkpoints: product `52917c5`, agent operations `6c19084`, operations `63a245f`, and security `98b8044`.
-- App and local contracts pass; the full Python suite passes 273 tests, frontend lint/build pass, and the Ecommerce verifier covers 14 buying-lifecycle plus 16 Shop-handoff runtime checks. Kernel retains 262 tests, 69 connectors/993 calls, and 15 crews/214 checks.
-- React Router is isolated in a 43,870-byte cacheable chunk; Shop inventory, Plant execution, and Website release are 27,160-, 41,075-, and 31,770-byte on-demand chunks. The largest JavaScript chunk is 476,450 bytes and remains below the build gate.
-- Focused coverage includes 205 Shop, 256 Plant, 94 Website, 109 client-onboarding, 54 managed-import, and 17 trusted-server import tests.
+- App and local contracts pass: 273 Python tests, frontend lint/build, 14 Ecommerce buying checks, 16 Shop-handoff checks, and the guarded release suite. Kernel retains 262 tests, 69 connectors/993 calls, and 15 crews/214 checks.
 - Rendered setup and four phone-width product routes have no horizontal overflow or error overlay. Plant additionally passes a seven-step 1280x720 lifecycle, reload persistence, and a 390x844 first-run/released-state audit with its primary action visible.
 - Core first-action QA leads Shop Stock, incomplete orders to Promise or Payment, Plant alerts to Problems or output, and invalid Website briefs to their first error. Mobile controls are at least 44 px with focus-safe fixed navigation (`36fa7dd`); guide and review actions create no record.
-- Current local release candidate `52917c5` is 255 commits ahead of open draft PR #258's remote branch. Vercel `supermega-public` serves both `supermega.dev` and `app.supermega.dev` at `6885c320`; the release is healthy but intentionally reports `isolated_demo`, zero managed coverage, and database/schema/audit/writes disabled. No grouped runtime errors were reported in the last seven days; remote checks exclude the local delta.
+- Product checkpoint `52917c5` is on a clean fast-forward descendant of open draft PR #258 head `338b6fd`. Vercel `supermega-public` serves both domains at live `6885c320`; it is healthy but intentionally reports `isolated_demo`, zero managed coverage, and database/schema/audit/writes disabled. No grouped seven-day runtime errors were reported; remote checks exclude the local delta.
 
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
 
@@ -73,15 +69,9 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - Keep four teams, twelve roster roles, four active assignments, and zero idle compute.
 - New modules require a real user job, an implemented state transition, a failure/recovery path, and an acceptance test.
 
-## Enterprise quality sequence
+## Build rule
 
-1. **Provisioning** — version roles, objects, states, mappings, permissions, checks, upgrades, and rollback.
-2. **Shop** — masters, locations, lots/serials, available-to-promise, purchasing, pricing/tax, and accounting boundaries.
-3. **Plant** — managed orders, multi-level BOM/MRP, inventory/cost adapters, maintenance, calibration, and OEE.
-4. **Website** — versioned blocks/tokens, CMS/media/localisation, roles, forms/leads/analytics, deploy and rollback evidence.
-5. **Ecommerce** — PIM, cart/checkout, tax/payment/shipping boundaries, order/return lifecycle, and Shop handoff.
-
-Each slice must keep the interface task-first: one primary action, progressive disclosure, mobile acceptance, import/recovery evidence, tenant isolation, and no consequential AI action without human approval.
+Every slice must keep one primary action, progressive disclosure, mobile acceptance, import/recovery evidence, tenant isolation, and human approval for consequential actions. Enterprise depth is added inside the four products, not as more pages or products.
 
 ## Next evidence
 
