@@ -1,7 +1,7 @@
 # Agent operations and security brief
 
 Updated: 2026-07-27
-Agent-operations checkpoint: `cdd925a`
+Agent-operations checkpoint: `78f2297`
 Legacy-security checkpoint: `98b8044`
 Mode: local evidence only; no hosted or production claim
 
@@ -14,7 +14,7 @@ Runtime work is limited by job family, queue depth, concurrent runs, daily runs,
 ## Verified locally
 
 - Full app lint/build and release/security/database/Vercel/HQ contracts pass.
-- All 275 Python tests pass; the focused cloud/runtime slice has 27, the Kernel has 272, and the coordinated-release verifier has 67 passing checks. All 69 connectors survive 993 adversarial calls and all 15 crews pass 214 checks.
+- All 275 Python tests pass; the focused cloud/runtime slice has 27, the Kernel has 277, and the coordinated-release verifier has 67 passing checks. All 69 connectors survive 993 adversarial calls and all 15 crews pass 214 checks.
 - The retired AgentOS gateway reports not-ready and writes-disabled; old log/status routes return HTTP 410 and OpenAPI is disabled.
 - The retired finance launcher reports payments-disabled and exits nonzero.
 - HQ Agent Teams at 390 and 1280 px has no horizontal overflow or browser warnings/errors; visible mobile controls are at least 44 px.
@@ -44,6 +44,7 @@ Runtime work is limited by job family, queue depth, concurrent runs, daily runs,
 12. The old Google Cloud Scheduler entry point is now a read-only compatibility shim: it accepts no credentials, invokes no provider CLI, performs no provider read or write, and reports that GCP scheduler mutation is retired.
 13. Vercel remains the sole permitted recurring scheduler, but authority v2 is dormant: the generated project defines zero crons and zero scheduled invocations. A second server-side flag blocks worker dispatch even if stale credentials remain. The activation plan is hourly plus daily, capped at 25 invocations/day instead of 97, and requires five managed-security, worker, recovery, rollback, and owner-decision evidence gates. The exact old schedule is accepted only during preflight cleanup; post-deploy verification rejects every surviving cron.
 14. The SuperMega CEO brief now follows `supermega.ceo-outcome-authority.v1`: one deterministic priority-then-ID selection and at most one outcome per cycle. Storage privacy proof, exact protected preview, and named pilot evidence remain blocked. The ready owner brief uses exact leads, pipeline, FX, and platform-status reads plus one synthesis call, removing the planner model call. Completed, in-flight, durable-claim duplicate, malformed, smuggled, and unauthorized-action outcomes stop before model work or notification.
+15. CEO outcome evidence now follows `supermega.ceo-outcome-operation.v1` plus `supermega.ceo-outcome-evaluation.v1`. Completion metadata is durable before notification and excludes brief text, prompts, tool rows, provider, and model identity. An owner/operator separately records immutable acceptance or revision. Efficiency remains unavailable unless the tenant-bound records are durable, integrity-valid, fully evaluated, and fully measured in `bulk_equivalent_tokens`.
 
 These are local code and test results. They do not prove a hosted deployment, live credentials, or production data migration.
 
@@ -59,4 +60,4 @@ The selected Instagram security slide warns that storage buckets may remain enum
 
 ## Next bounded slice
 
-Attach the selected outcome ID and authority digest to the existing metadata-only Agent Company operations report, then measure accepted outcomes per work unit without exposing brief text or provider rows. Keep external sends, provider writes, push, merge, deployment, promotion, and alias mutation behind their existing gates.
+Add one read-only Ally runtime preflight to the existing operating evidence: report Codex/helper resident memory, loaded local models, and duplicate SuperMega dev/worker listeners; fail closed on ambiguous ownership and never kill a process automatically. Keep subagents at zero by default, serialize heavyweight checks, and preserve external sends, provider writes, push, merge, deployment, promotion, and alias mutation behind their existing gates.

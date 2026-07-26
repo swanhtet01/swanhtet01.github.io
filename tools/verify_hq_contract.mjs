@@ -10,6 +10,11 @@ import {
   MAX_RUNNING_COMPANY_CYCLES,
 } from '../kernel/agent-company.mjs'
 import { SUPERMEGA_HQ_AUTHORITY, selectCeoOutcome } from '../kernel/supermega-hq-authority.mjs'
+import {
+  CEO_OUTCOME_EVALUATION_CONTRACT,
+  CEO_OUTCOME_OPERATION_CONTRACT,
+  COMPANY_USAGE_UNITS,
+} from '../kernel/agent-company-operations.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation] = await Promise.all([
@@ -68,9 +73,17 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.agentOperatingModel?.maxAgentsPerCycle === 2
   && portfolio.agentOperatingModel?.validatedCrewCapabilities === 15
   && portfolio.agentOperatingModel?.ceoOutcomeAuthority === 'supermega.ceo-outcome-authority.v1'
+  && portfolio.agentOperatingModel?.ceoOutcomeOperationsContract === CEO_OUTCOME_OPERATION_CONTRACT
+  && portfolio.agentOperatingModel?.ceoOutcomeEvaluationContract === CEO_OUTCOME_EVALUATION_CONTRACT
   && portfolio.agentOperatingModel?.maxOutcomesPerCeoCycle === 1
   && portfolio.agentOperatingModel?.fixedReadOnlyEvidencePlan === true
   && portfolio.agentOperatingModel?.blockedOrDuplicateOutcomesConsumeModelCalls === false
+  && portfolio.agentOperatingModel?.completionMustBeDurableBeforeNotification === true
+  && portfolio.agentOperatingModel?.explicitOwnerOutcomeAcceptance === true
+  && portfolio.agentOperatingModel?.acceptedOutcomeEfficiencyUnits === COMPANY_USAGE_UNITS
+  && portfolio.agentOperatingModel?.incompleteOutcomeCoverageProducesEfficiency === false
+  && portfolio.agentOperatingModel?.ceoBriefTextStoredInOperations === false
+  && portfolio.agentOperatingModel?.providerRowsStoredInOperations === false
   && portfolio.agentOperatingModel?.scaleToZero === true
   && portfolio.agentOperatingModel?.idleCapabilitiesConsumeCompute === false
   && portfolio.agentOperatingModel?.dynamicDelegation === false
@@ -166,8 +179,11 @@ requireContract('agent roster consolidation is recorded',
   && workboard.includes('| OPS-027 | CEO + Agent Operations / Security Codex | done-local |')
   && workboard.includes('adds `supermega.ceo-outcome-authority.v1`')
   && workboard.includes('removing the planner model call')
-  && workboard.includes('Current accepted agent-operations checkpoint: `cdd925a`')
-  && now.includes('agent operations `cdd925a`')
+  && workboard.includes('| OPS-028 | CEO + Agent Operations / Security Codex | done-local |')
+  && workboard.includes('adds `supermega.ceo-outcome-operation.v1` and `supermega.ceo-outcome-evaluation.v1`')
+  && workboard.includes('Acceptance or revision is a separate immutable owner/operator decision')
+  && workboard.includes('Current accepted agent-operations checkpoint: `78f2297`')
+  && now.includes('agent operations `78f2297`')
   && now.includes('operations `63a245f`')
   && now.includes('unchanged evidence-bound direct missions reuse for 24 hours')
   && now.includes('YTF identities cannot render in core operations')
@@ -175,7 +191,7 @@ requireContract('agent roster consolidation is recorded',
   && now.includes('Each SuperMega CEO cycle selects at most one HQ-authorized outcome')
   && now.includes('default workspace no longer duplicates a 256-role ceiling'))
 requireContract('agent security brief is reconciled to current controls',
-  agentSecurity.includes('Agent-operations checkpoint: `cdd925a`')
+  agentSecurity.includes('Agent-operations checkpoint: `78f2297`')
   && agentSecurity.includes('Agent visibility, execution, and preview deployment use separate capabilities')
   && agentSecurity.includes('The root development Compose entry point is retired as `services: {}`')
   && agentSecurity.includes('An environment value cannot add a third credential destination')
@@ -185,6 +201,8 @@ requireContract('agent security brief is reconciled to current controls',
   && agentSecurity.includes('zero crons and zero scheduled invocations')
   && agentSecurity.includes('capped at 25 invocations/day instead of 97')
   && agentSecurity.includes('post-deploy verification rejects every surviving cron')
+  && agentSecurity.includes('CEO outcome evidence now follows `supermega.ceo-outcome-operation.v1`')
+  && agentSecurity.includes('Efficiency remains unavailable unless the tenant-bound records are durable')
   && agentSecurity.includes('hosted cleanup still requires a protected deployment')
   && agentSecurity.includes('The unlinked claimable-preview service is retired')
   && agentSecurity.includes('Human review is bound to one clean commit')
@@ -196,7 +214,7 @@ requireContract('agent security brief is reconciled to current controls',
   && agentSecurity.includes('prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG')
   && agentSecurity.includes('SuperMega CEO brief now follows `supermega.ceo-outcome-authority.v1`')
   && agentSecurity.includes('removing the planner model call')
-  && agentSecurity.includes('Attach the selected outcome ID and authority digest')
+  && agentSecurity.includes('Add one read-only Ally runtime preflight')
   && !agentSecurity.includes('queue viewing can authorize processing or preview deployment')
   && !agentSecurity.includes('root development compose publishes services'))
 requireContract('product QA brief matches current portfolio',
