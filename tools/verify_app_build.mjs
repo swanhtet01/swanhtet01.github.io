@@ -18,6 +18,7 @@ let ecommerceHandoffRuntimeChecks = 0
 let catalogImportRuntimeChecks = 0
 let clientOnboardingRuntimeChecks = 0
 let managedClientImportRuntimeChecks = 0
+let shopInventoryRuntimeChecks = 0
 let commerceRuntimeChecks = 0
 let productionRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
@@ -70,6 +71,8 @@ const indexSource = await readFile(resolve(root, 'showroom', 'index.html'), 'utf
 const viteConfigSource = await readFile(resolve(root, 'showroom', 'vite.config.ts'), 'utf8')
 const websiteStarterSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-starter.ts'), 'utf8')
 const websiteStarterSetupSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'WebsiteStarterSetup.tsx'), 'utf8')
+const shopInventorySource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-inventory-foundation.ts'), 'utf8')
+const shopInventoryUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopInventoryFoundation.tsx'), 'utf8')
 
 if (!viteConfigSource.includes("id.includes('/src/core/channel-order-intake.ts')")
   || !viteConfigSource.includes("id.includes('/src/core/managed-trial.ts')")
@@ -1154,6 +1157,24 @@ if (coreSource.includes("await import('./shop-catalog-import')")
   || !coreCssSource.includes('.catalog-import-table { max-height: 340px;')
   || !coreCssSource.includes('.catalog-import-mapping { display: grid;')
   || !coreCssSource.includes('.catalog-import-row { grid-template-columns: 36px minmax(0,1fr) auto;')) fail('shared_catalog_onboarding_bridge_missing_or_duplicate_shop_import_returned')
+if (!shopInventorySource.includes("SHOP_INVENTORY_STATE_SCHEMA = 'supermega.shop.inventory_foundation.v1'")
+  || !shopInventorySource.includes("SHOP_INVENTORY_IMPORT_CONTRACT = 'supermega.shop.inventory_import.v1'")
+  || !shopInventorySource.includes('export function applyShopInventoryImport')
+  || !shopInventorySource.includes('export function transferShopInventory')
+  || !shopInventorySource.includes('export function reserveShopInventory')
+  || !shopInventorySource.includes('export function releaseShopInventoryReservation')
+  || !shopInventorySource.includes('export function fulfilShopInventoryReservation')
+  || !shopInventorySource.includes('export async function mutateShopInventoryWorkspace')
+  || !shopInventorySource.includes("mode: 'exclusive'")
+  || !shopInventorySource.includes('Location stock write verification failed.')) fail('shop_inventory_foundation_contract_missing')
+if (['fetch(', 'supabase', 'openai', 'anthropic'].some((marker) => shopInventorySource.toLowerCase().includes(marker))) fail('shop_inventory_foundation_external_side_effect_added')
+if (!coreSource.includes('<ShopInventoryFoundation')
+  || !shopInventoryUiSource.includes('Set up two locations')
+  || !shopInventoryUiSource.includes('available to promise')
+  || !shopInventoryUiSource.includes('No supplier or accounting action')
+  || !shopInventoryUiSource.includes('Review the exact source, destination, and quantity. Nothing has moved yet.')
+  || !shopInventoryUiSource.includes('navigator.locks')
+  || shopInventoryUiSource.includes('fetch(')) fail('shop_inventory_foundation_ui_boundary_missing')
 if (!clientOnboardingSource.includes("CLIENT_IMPORT_SCHEMA = 'supermega.client_import_preview.v1'")
   || !clientOnboardingSource.includes("CLIENT_STAGING_SCHEMA = 'supermega.client_import_staging.v1'")
   || !clientOnboardingSource.includes('CLIENT_IMPORT_MAX_BYTES = 512 * 1024')
@@ -1850,6 +1871,197 @@ async function verifyChannelOrderRuntime() {
     assert(commerce.reserveCommerceOrder(accepted, conflictingOrder, conflictingProof) === null, 'channel_order_conflicting_source_reuse_succeeded')
   } catch (error) {
     fail(`channel_order_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
+async function verifyShopInventoryRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    shopInventoryRuntimeChecks += 1
+  }
+  const assertThrows = (action, reason) => {
+    try { action() } catch { shopInventoryRuntimeChecks += 1; return }
+    throw new Error(reason)
+  }
+  try {
+    const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'shop-inventory-foundation.ts')).href}?shop-inventory-verify=${Date.now()}`)
+    const catalogSkus = ['SM-1001', 'SM-1002']
+    const proof = (sequence, label) => ({
+      actionId: `ACT-${String(sequence).padStart(3, '0')}-${label.toUpperCase()}`,
+      capturedAt: `2026-07-26T0${sequence}:00:00+06:30`,
+      actor: 'Daw Mya',
+      reason: `Review and record ${label}.`,
+      evidenceReference: `EVIDENCE-${String(sequence).padStart(3, '0')}`,
+    })
+    const sourceDigest = 'sha256:2b3fdf05c4dda454998927370bf2cf20b0c17bcf1e3d3f294a550e341033ed61'
+    const importPackage = model.buildShopInventoryImportPackage({
+      importId: 'IMP-OPENING-001',
+      sourceDigest,
+      catalogSkus,
+      clients: [{ id: 'CLI-RETAIL-001', name: 'ရွှေဆိုင် customer' }],
+      vendors: [{ id: 'VEN-YANGON-001', name: 'Yangon Supply' }],
+      locations: [
+        { id: 'LOC-BRANCH', name: 'Branch' },
+        { id: 'LOC-MAIN', name: 'Main store' },
+      ],
+      stockUnits: [
+        { id: 'LOT-SM1001-BATCH-A', sku: 'SM-1001', tracking: 'lot', trackingCode: 'BATCH-A' },
+        { id: 'SER-SM1002-UNIT-001', sku: 'SM-1002', tracking: 'serial', trackingCode: 'UNIT-001' },
+      ],
+      openings: [
+        { stockUnitId: 'LOT-SM1001-BATCH-A', locationId: 'LOC-MAIN', vendorId: 'VEN-YANGON-001', quantity: 5 },
+        { stockUnitId: 'SER-SM1002-UNIT-001', locationId: 'LOC-MAIN', vendorId: 'VEN-YANGON-001', quantity: 1 },
+      ],
+    })
+    const evidenceDigest = model.shopInventoryEvidenceDigest({ source: 'opening', rows: 2 })
+    assert(/^sha256:[0-9a-f]{64}$/.test(evidenceDigest)
+      && evidenceDigest === model.shopInventoryEvidenceDigest({ rows: 2, source: 'opening' }),
+    'shop_inventory_evidence_digest_not_canonical')
+    assert(importPackage.packageDigest === 'sha256:3bf243c00d7f6d6c8c3a1abc9fecee8986db74c1e01f0926318b9812036df483', 'shop_inventory_package_digest_drifted')
+
+    const opening = model.applyShopInventoryImport(
+      model.createEmptyShopInventoryState(),
+      importPackage,
+      proof(1, 'opening'),
+      catalogSkus,
+      model.EMPTY_SHOP_INVENTORY_DIGEST,
+    )
+    assert(!opening.replayed && opening.state.revision === 1 && opening.state.headDigest === 'sha256:5d2058da7701350b7acb27256808ea2881df4f7537b2728f0d54e81b1ce92ab2', 'shop_inventory_opening_head_drifted')
+    const openingProjection = model.projectShopInventory(opening.state, catalogSkus)
+    assert(openingProjection.locations.length === 2
+      && openingProjection.clients.length === 1
+      && openingProjection.vendors.length === 1
+      && openingProjection.stockUnits.length === 2
+      && openingProjection.metrics.totalOnHand === 6
+      && openingProjection.metrics.totalAvailableToPromise === 6,
+    'shop_inventory_opening_projection_wrong')
+    const openingReplay = model.applyShopInventoryImport(opening.state, importPackage, proof(1, 'opening'), catalogSkus, model.EMPTY_SHOP_INVENTORY_DIGEST)
+    assert(openingReplay.replayed && JSON.stringify(openingReplay.state) === JSON.stringify(opening.state), 'shop_inventory_opening_retry_not_idempotent')
+
+    const transferred = model.transferShopInventory(opening.state, {
+      transferId: 'TRF-MAIN-BRANCH-001',
+      stockUnitId: 'LOT-SM1001-BATCH-A',
+      fromLocationId: 'LOC-MAIN',
+      toLocationId: 'LOC-BRANCH',
+      quantity: 2,
+      proof: proof(2, 'transfer'),
+      catalogSkus,
+      expectedHeadDigest: opening.state.headDigest,
+    })
+    assert(transferred.state.headDigest === 'sha256:b7160ca723121a1b4066819ab6bf8356663b8d11a0ade6e171430b3e22d9dfbe', 'shop_inventory_transfer_head_drifted')
+    const transferProjection = model.projectShopInventory(transferred.state, catalogSkus)
+    const transferPair = transferProjection.ledger.slice(-2)
+    assert(transferProjection.metrics.totalOnHand === 6
+      && transferPair.map((row) => row.kind).join(',') === 'transfer-out,transfer-in'
+      && transferPair.reduce((total, row) => total + row.onHandDelta, 0) === 0
+      && transferPair.every((row) => row.actionId === 'ACT-002-TRANSFER'),
+    'shop_inventory_transfer_not_paired_or_attributable')
+    const transferReplay = model.transferShopInventory(transferred.state, {
+      transferId: 'TRF-MAIN-BRANCH-001', stockUnitId: 'LOT-SM1001-BATCH-A', fromLocationId: 'LOC-MAIN', toLocationId: 'LOC-BRANCH', quantity: 2,
+      proof: proof(2, 'transfer'), catalogSkus, expectedHeadDigest: model.EMPTY_SHOP_INVENTORY_DIGEST,
+    })
+    assert(transferReplay.replayed && JSON.stringify(transferReplay.state) === JSON.stringify(transferred.state), 'shop_inventory_transfer_retry_not_idempotent')
+    assertThrows(() => model.transferShopInventory(transferred.state, {
+      transferId: 'TRF-STALE-001', stockUnitId: 'LOT-SM1001-BATCH-A', fromLocationId: 'LOC-MAIN', toLocationId: 'LOC-BRANCH', quantity: 1,
+      proof: proof(3, 'stale'), catalogSkus, expectedHeadDigest: opening.state.headDigest,
+    }), 'shop_inventory_stale_transfer_succeeded')
+    assertThrows(() => model.transferShopInventory(transferred.state, {
+      transferId: 'TRF-OVER-001', stockUnitId: 'LOT-SM1001-BATCH-A', fromLocationId: 'LOC-MAIN', toLocationId: 'LOC-BRANCH', quantity: 4,
+      proof: proof(3, 'over'), catalogSkus, expectedHeadDigest: transferred.state.headDigest,
+    }), 'shop_inventory_over_transfer_succeeded')
+
+    const reserved = model.reserveShopInventory(transferred.state, {
+      reservationId: 'RES-BRANCH-001', clientId: 'CLI-RETAIL-001', stockUnitId: 'LOT-SM1001-BATCH-A', locationId: 'LOC-BRANCH', quantity: 1,
+      proof: proof(3, 'reserve'), catalogSkus, expectedHeadDigest: transferred.state.headDigest,
+    })
+    assert(reserved.state.headDigest === 'sha256:5b651a4ae2a9ac5504946522f3a5ae15036f67a6032cfc43c6b37c37287cb9bc', 'shop_inventory_reservation_head_drifted')
+    const reservedProjection = model.projectShopInventory(reserved.state, catalogSkus)
+    const branchBalance = reservedProjection.balances.find((row) => row.stockUnitId === 'LOT-SM1001-BATCH-A' && row.locationId === 'LOC-BRANCH')
+    assert(branchBalance?.onHand === 2 && branchBalance.reserved === 1 && branchBalance.availableToPromise === 1 && reservedProjection.reservations[0].status === 'active', 'shop_inventory_reservation_atp_wrong')
+    const fulfilled = model.fulfilShopInventoryReservation(reserved.state, {
+      fulfilmentId: 'FUL-BRANCH-001', reservationId: 'RES-BRANCH-001', proof: proof(4, 'fulfil'), catalogSkus, expectedHeadDigest: reserved.state.headDigest,
+    })
+    const fulfilledProjection = model.projectShopInventory(fulfilled.state, catalogSkus)
+    const fulfilledBranch = fulfilledProjection.balances.find((row) => row.stockUnitId === 'LOT-SM1001-BATCH-A' && row.locationId === 'LOC-BRANCH')
+    assert(fulfilledBranch?.onHand === 1 && fulfilledBranch.reserved === 0 && fulfilledProjection.reservations[0].status === 'fulfilled', 'shop_inventory_fulfilment_not_atomic')
+    const released = model.releaseShopInventoryReservation(reserved.state, {
+      releaseId: 'REL-BRANCH-001', reservationId: 'RES-BRANCH-001', proof: proof(4, 'release'), catalogSkus, expectedHeadDigest: reserved.state.headDigest,
+    })
+    const releasedProjection = model.projectShopInventory(released.state, catalogSkus)
+    const releasedBranch = releasedProjection.balances.find((row) => row.stockUnitId === 'LOT-SM1001-BATCH-A' && row.locationId === 'LOC-BRANCH')
+    assert(releasedBranch?.onHand === 2 && releasedBranch.reserved === 0 && releasedProjection.reservations[0].status === 'released', 'shop_inventory_release_did_not_restore_atp')
+    assertThrows(() => model.fulfilShopInventoryReservation(released.state, {
+      fulfilmentId: 'FUL-CLOSED-001', reservationId: 'RES-BRANCH-001', proof: proof(5, 'fulfil'), catalogSkus, expectedHeadDigest: released.state.headDigest,
+    }), 'shop_inventory_closed_reservation_fulfilled')
+
+    const tampered = JSON.parse(JSON.stringify(transferred.state))
+    tampered.commands[1].payload.quantity = 1
+    assertThrows(() => model.validateShopInventoryState(tampered, catalogSkus), 'shop_inventory_tampered_chain_validated')
+    assertThrows(() => model.applyShopInventoryImport(model.createEmptyShopInventoryState(), importPackage, proof(1, 'opening'), [...catalogSkus, 'SM-1003'], model.EMPTY_SHOP_INVENTORY_DIGEST), 'shop_inventory_stale_catalog_import_succeeded')
+    assert(model.validateShopInventoryState(opening.state, [...catalogSkus, 'SM-1003']).headDigest === opening.state.headDigest, 'shop_inventory_safe_catalog_addition_invalidated_history')
+
+    const values = new Map()
+    const storage = {
+      getItem: (key) => values.get(key) ?? null,
+      setItem: (key, value) => values.set(key, String(value)),
+      removeItem: (key) => values.delete(key),
+    }
+    const scope = 'shop-runtime-verifier'
+    const storageKey = model.shopInventoryStorageKey(scope)
+    values.set(storageKey, '{malformed')
+    const recovery = model.loadShopInventoryWorkspace(storage, scope, catalogSkus)
+    assert(recovery.source === 'recovery' && values.get(storageKey) === '{malformed', 'shop_inventory_malformed_storage_was_overwritten')
+    values.clear()
+    let lockRequests = 0
+    const locks = {
+      request: async (name, options, callback) => {
+        lockRequests += 1
+        assert(name === storageKey && options?.mode === 'exclusive', 'shop_inventory_wrong_lock_contract')
+        return callback()
+      },
+    }
+    const saved = await model.mutateShopInventoryWorkspace(
+      scope,
+      catalogSkus,
+      (current) => model.applyShopInventoryImport(current, importPackage, proof(1, 'opening'), catalogSkus, current.headDigest),
+      storage,
+      locks,
+    )
+    assert(saved.ok && lockRequests === 1 && JSON.parse(values.get(storageKey)).headDigest === opening.state.headDigest, 'shop_inventory_locked_write_not_confirmed')
+    const beforeUnlocked = values.get(storageKey)
+    const unlocked = await model.mutateShopInventoryWorkspace(
+      scope,
+      catalogSkus,
+      (current) => model.transferShopInventory(current, {
+        transferId: 'TRF-NO-LOCK-001', stockUnitId: 'LOT-SM1001-BATCH-A', fromLocationId: 'LOC-MAIN', toLocationId: 'LOC-BRANCH', quantity: 1,
+        proof: proof(2, 'transfer'), catalogSkus, expectedHeadDigest: current.headDigest,
+      }),
+      storage,
+      null,
+    )
+    assert(!unlocked.ok && values.get(storageKey) === beforeUnlocked, 'shop_inventory_unlocked_write_succeeded')
+    let corruptNextWrite = true
+    const unconfirmedStorage = {
+      getItem: storage.getItem,
+      setItem: (key, value) => {
+        values.set(key, corruptNextWrite ? `${value}x` : String(value))
+        corruptNextWrite = false
+      },
+      removeItem: storage.removeItem,
+    }
+    const unconfirmed = await model.mutateShopInventoryWorkspace(
+      scope,
+      catalogSkus,
+      (current) => model.transferShopInventory(current, {
+        transferId: 'TRF-UNCONFIRMED-001', stockUnitId: 'LOT-SM1001-BATCH-A', fromLocationId: 'LOC-MAIN', toLocationId: 'LOC-BRANCH', quantity: 1,
+        proof: proof(2, 'transfer'), catalogSkus, expectedHeadDigest: current.headDigest,
+      }),
+      unconfirmedStorage,
+      locks,
+    )
+    assert(!unconfirmed.ok && values.get(storageKey) === beforeUnlocked, 'shop_inventory_unconfirmed_write_not_rolled_back')
+  } catch (error) {
+    fail(`shop_inventory_runtime:${error instanceof Error ? error.message : 'unknown'}`)
   }
 }
 
@@ -6636,6 +6848,7 @@ async function verifyProductionRuntime() {
 }
 
 await verifyChannelOrderRuntime()
+await verifyShopInventoryRuntime()
 await verifyCatalogImportRuntime()
 await verifyClientOnboardingRuntime()
 await verifyManagedClientImportRuntime()
@@ -6662,4 +6875,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, channelOrderRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceHandoffRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceHandoffRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
