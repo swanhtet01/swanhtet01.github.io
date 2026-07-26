@@ -1,6 +1,19 @@
+import { readFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
+
 const kind = String(process.argv[2] || '').trim()
 const strictCleanup = process.env.VERIFY_ENV_CLEANUP_STRICT !== '0'
 const protectedTypes = new Set(['sensitive', 'encrypted', 'secret'])
+const schedulerAuthority = JSON.parse(await readFile(
+  resolve(import.meta.dirname, 'supermega_scheduler_authority.json'),
+  'utf8',
+))
+if (schedulerAuthority.contract !== 'supermega.scheduler-authority.v2'
+  || !['dormant', 'active'].includes(schedulerAuthority.activation?.state)
+  || schedulerAuthority.activation?.runtime_environment_key !== 'SUPERMEGA_HOSTED_SCHEDULER_ENABLED') {
+  throw new Error('scheduler_authority_contract_invalid')
+}
+const schedulerActive = schedulerAuthority.activation.state === 'active'
 
 if (!['app', 'public'].includes(kind)) throw new Error('environment_kind_must_be_app_or_public')
 
@@ -56,12 +69,14 @@ let deliveryModes = []
 let allowed = new Set()
 
 if (kind === 'app') {
-  const core = [
+  const schedulerEnvironment = [
+    'SUPERMEGA_HOSTED_SCHEDULER_ENABLED',
     'CRON_SECRET',
     'SUPERMEGA_INTERNAL_CRON_TOKEN',
     'SUPERMEGA_CLOUD_TASKS_WORKER_URL',
     'SUPERMEGA_CLOUD_TASKS_ALLOWED_HOSTS',
   ]
+  const core = schedulerActive ? schedulerEnvironment : []
   const managedTrial = [
     'SUPERMEGA_DATABASE_URL',
     'SUPERMEGA_TRIAL_IDENTITY_SECRET',
@@ -73,6 +88,13 @@ if (kind === 'app') {
   if (managedCount > 0 && managedCount < managedTrial.length) {
     addFailure('managed_trial_environment_incomplete')
     for (const key of managedTrial) if (!productionKeys.has(key)) missing.push(key)
+  }
+  if (schedulerActive && managedCount !== managedTrial.length) {
+    addFailure('scheduler_activation_requires_managed_trial')
+    for (const key of managedTrial) if (!productionKeys.has(key)) missing.push(key)
+  }
+  if (!schedulerActive && schedulerEnvironment.some((key) => productionKeys.has(key))) {
+    addFailure('dormant_scheduler_environment_present')
   }
   operatingMode = managedCount === managedTrial.length ? 'managed_trial' : 'isolated_demo'
   allowed = new Set([...core, ...managedTrial, ...optional])
@@ -141,6 +163,7 @@ const result = {
   productionVariableCount: productionKeys.size,
   environmentVariableCount: environmentKeys.length,
   operatingMode,
+  schedulerActivation: kind === 'app' ? schedulerAuthority.activation.state : null,
   deliveryModes,
   missing: [...new Set(missing)].sort(),
   duplicateEnvironmentKeys,

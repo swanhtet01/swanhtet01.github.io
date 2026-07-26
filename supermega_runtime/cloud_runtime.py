@@ -36,6 +36,7 @@ QUEUE_CRON_PATH = "/api/cron/supermega/agent-queue"
 DAILY_CRON_PATH = "/api/cron/supermega/daily"
 WORKER_ALLOWLIST_ENV = "SUPERMEGA_CLOUD_TASKS_ALLOWED_HOSTS"
 WORKER_URL_ENV = "SUPERMEGA_CLOUD_TASKS_WORKER_URL"
+SCHEDULER_ENABLED_ENV = "SUPERMEGA_HOSTED_SCHEDULER_ENABLED"
 
 _WORKER_TIMEOUT_SECONDS = 12
 _MAX_WORKER_URL_CHARS = 2_048
@@ -112,6 +113,15 @@ def _configured_tokens() -> tuple[str, ...]:
 
 def _worker_token() -> str:
     return _text(os.getenv("SUPERMEGA_INTERNAL_CRON_TOKEN")) or _text(os.getenv("CRON_SECRET"))
+
+
+def _scheduler_activation_state() -> tuple[bool, str | None]:
+    raw = _text(os.getenv(SCHEDULER_ENABLED_ENV))
+    if not raw or raw == "0":
+        return False, "scheduler_activation_disabled"
+    if raw != "1":
+        return False, "scheduler_activation_invalid"
+    return True, None
 
 
 def _authorized(authorization: str | None, x_cron_secret: str | None) -> bool:
@@ -223,12 +233,15 @@ def _validated_worker_url() -> tuple[str | None, str | None, int]:
 
 
 def _runtime_status() -> dict[str, object]:
+    activation_enabled, activation_error = _scheduler_activation_state()
     token_configured = bool(_configured_tokens())
     cron_secret_configured = bool(_text(os.getenv("CRON_SECRET")))
     worker_url_configured = bool(_text(os.getenv(WORKER_URL_ENV)))
     worker_url, worker_configuration_error, allowed_host_count = _validated_worker_url()
 
     configuration_errors: list[str] = []
+    if activation_error:
+        configuration_errors.append(activation_error)
     if not token_configured:
         configuration_errors.append("cron_token_missing")
     if not cron_secret_configured:
@@ -242,13 +255,16 @@ def _runtime_status() -> dict[str, object]:
         workforce_policy = None
         configuration_errors.append(exc.code)
 
-    scheduler_ready = not configuration_errors and bool(worker_url) and bool(_worker_token())
+    scheduler_ready = activation_enabled and not configuration_errors and bool(worker_url) and bool(_worker_token())
     return {
         "status": "ready" if scheduler_ready else "degraded",
         "runtime_target": "hosted_vercel_api",
         "pc_dependency": False,
         "scheduler": {
             "configured": scheduler_ready,
+            "activation_required": True,
+            "activation_environment_key": SCHEDULER_ENABLED_ENV,
+            "activation_enabled": activation_enabled,
             "token_configured": token_configured,
             "cron_secret_configured": cron_secret_configured,
             "worker_url_configured": worker_url_configured,

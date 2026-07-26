@@ -7885,17 +7885,50 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         )
         expected_crons = sorted(
             [
-                ("/api/cron/supermega/agent-queue", "*/15 * * * *"),
+                ("/api/cron/supermega/agent-queue", "5 * * * *"),
                 ("/api/cron/supermega/daily", "45 0 * * *"),
             ]
         )
+        activation = authority.get("activation", {}) if isinstance(authority, dict) else {}
+        activation_plan = authority.get("activation_plan", {}) if isinstance(authority, dict) else {}
+        migration = authority.get("migration", {}) if isinstance(authority, dict) else {}
+        activation_crons = activation_plan.get("crons", []) if isinstance(activation_plan, dict) else []
+        retiring_crons = migration.get("preflight_retiring_crons", []) if isinstance(migration, dict) else []
+        activation_cron_contract = sorted(
+            (
+                str(cron.get("path", "")).strip(),
+                str(cron.get("schedule", "")).strip(),
+            )
+            for cron in activation_crons
+            if isinstance(cron, dict)
+        )
+        retiring_cron_contract = sorted(
+            (
+                str(cron.get("path", "")).strip(),
+                str(cron.get("schedule", "")).strip(),
+            )
+            for cron in retiring_crons
+            if isinstance(cron, dict)
+        )
         ready = bool(
-            authority.get("contract") == "supermega.scheduler-authority.v1"
+            authority.get("contract") == "supermega.scheduler-authority.v2"
             and authority.get("authority") == "vercel"
             and authority.get("environment") == "production"
             and authority.get("project_id") == "prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG"
-            and cron_contract == expected_crons
-            and int(authority.get("maximum_scheduler_invocations_per_day", 0) or 0) == 97
+            and activation.get("state") == "dormant"
+            and activation.get("runtime_environment_key") == "SUPERMEGA_HOSTED_SCHEDULER_ENABLED"
+            and len(activation.get("required_evidence", [])) == 5
+            and cron_contract == []
+            and int(authority.get("maximum_scheduler_invocations_per_day", 0) or 0) == 0
+            and activation_cron_contract == expected_crons
+            and int(activation_plan.get("maximum_scheduler_invocations_per_day", 0) or 0) == 25
+            and retiring_cron_contract == sorted(
+                [
+                    ("/api/cron/supermega/agent-queue", "*/15 * * * *"),
+                    ("/api/cron/supermega/daily", "45 0 * * *"),
+                ]
+            )
+            and migration.get("post_deploy_retiring_crons_allowed") is False
             and authority.get("worker_dispatch", {}).get("mode") == "enqueue-on-demand"
             and authority.get("worker_dispatch", {}).get("polling_allowed") is False
             and authority.get("retired_authority", {}).get("provider") == "google-cloud-scheduler"
@@ -7905,9 +7938,14 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "ready": ready,
             "authority": str(authority.get("authority", "")).strip(),
             "environment": str(authority.get("environment", "")).strip(),
+            "activation_state": str(activation.get("state", "")).strip(),
             "cron_count": len(cron_contract),
             "maximum_scheduler_invocations_per_day": int(
                 authority.get("maximum_scheduler_invocations_per_day", 0) or 0
+            ),
+            "activation_plan_cron_count": len(activation_cron_contract),
+            "activation_plan_maximum_invocations_per_day": int(
+                activation_plan.get("maximum_scheduler_invocations_per_day", 0) or 0
             ),
         }
 
@@ -8030,9 +8068,10 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
 
         scheduler_authority = _scheduler_authority_state(scheduler_authority_path)
         scheduler_contract_ready = bool(scheduler_authority.get("ready"))
+        scheduler_active = str(scheduler_authority.get("activation_state", "")).strip() == "active"
         automation_pack_status = (
             "ready"
-            if scheduler_contract_ready and bool(canonical_preview_target.get("ready"))
+            if scheduler_contract_ready and scheduler_active and bool(canonical_preview_target.get("ready"))
             else "attention"
             if scheduler_contract_ready or bool(canonical_preview_target.get("ready"))
             else "blocked"
@@ -8040,12 +8079,15 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         automation_pack_detail = (
             "The single Vercel production scheduler contract and canonical preview target are ready for the guarded runtime lane."
             if automation_pack_status == "ready"
+            else "The Vercel scheduler is safely dormant until managed security, worker, preview, rollback, and owner evidence pass."
+            if scheduler_contract_ready and not scheduler_active
             else "The Vercel scheduler authority contract or canonical preview target is incomplete on this host."
         )
         automation_pack_chips = [
-            "Vercel production scheduler" if scheduler_contract_ready else "scheduler authority invalid",
+            "scheduler safely dormant" if scheduler_contract_ready and not scheduler_active else "Vercel production scheduler" if scheduler_contract_ready else "scheduler authority invalid",
             f"{scheduler_authority.get('cron_count', 0)} bounded crons",
             f"max {scheduler_authority.get('maximum_scheduler_invocations_per_day', 0)} invocations/day",
+            f"active plan max {scheduler_authority.get('activation_plan_maximum_invocations_per_day', 0)} per day",
             "canonical preview ready" if bool(canonical_preview_target.get("ready")) else "canonical preview blocked",
             str(canonical_preview_target.get("project_name", "megaos")),
         ]

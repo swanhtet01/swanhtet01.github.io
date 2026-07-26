@@ -2,10 +2,7 @@ import { spawnSync } from 'node:child_process'
 import { resolve } from 'node:path'
 
 const verifier = resolve(import.meta.dirname, 'verify_vercel_project_state.mjs')
-const appCrons = [
-  { path: '/api/cron/supermega/agent-queue', schedule: '*/15 * * * *' },
-  { path: '/api/cron/supermega/daily', schedule: '45 0 * * *' },
-]
+const appCrons = []
 const project = (kind, patch = {}) => ({
   id: kind === 'app' ? 'prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG' : 'prj_Yaf0cZYbiFXcLkMcKaAm4alPWMhR',
   name: kind === 'app' ? 'megaos' : 'supermega-public',
@@ -16,10 +13,14 @@ const project = (kind, patch = {}) => ({
   ...patch,
 })
 
-function run(kind, payload) {
+function run(kind, payload, { deployed = false } = {}) {
+  const childEnv = { ...process.env }
+  delete childEnv.VERIFY_DEPLOYED_STATE
+  if (deployed) childEnv.VERIFY_DEPLOYED_STATE = '1'
   return spawnSync(process.execPath, [verifier, kind], {
     input: JSON.stringify(payload),
     encoding: 'utf8',
+    env: childEnv,
   })
 }
 
@@ -30,27 +31,41 @@ function parse(result) {
 const validApp = run('app', project('app'))
 if (validApp.status !== 0
   || parse(validApp).schedulerAuthority !== 'vercel'
-  || parse(validApp).deployedCronCount !== 2) throw new Error('valid_app_project_rejected')
+  || parse(validApp).deployedCronCount !== 0) throw new Error('valid_app_project_rejected')
 
 const validPublic = run('public', project('public'))
 if (validPublic.status !== 0 || parse(validPublic).deployedCronCount !== 0) throw new Error('valid_public_project_rejected')
 
+const retiringCrons = [
+  { path: '/api/cron/supermega/agent-queue', schedule: '*/15 * * * *' },
+  { path: '/api/cron/supermega/daily', schedule: '45 0 * * *' },
+]
+const retiringPreflight = run('app', project('app', { crons: { definitions: retiringCrons } }))
+if (retiringPreflight.status !== 0 || parse(retiringPreflight).cronTransitionState !== 'retiring') {
+  throw new Error('exact_retiring_crons_rejected_before_cleanup_deployment')
+}
+const retiringDeployed = run('app', project('app', { crons: { definitions: retiringCrons } }), { deployed: true })
+if (retiringDeployed.status === 0 || !parse(retiringDeployed).failures.includes('app_cron_contract_wrong')) {
+  throw new Error('retiring_crons_allowed_after_cleanup_deployment')
+}
+
+const unapprovedCron = { path: '/api/cron/supermega/agent-queue', schedule: '* * * * *' }
 const wrongSchedule = run('app', project('app', {
-  crons: { definitions: appCrons.map((cron, index) => index === 0 ? { ...cron, schedule: '* * * * *' } : cron) },
+  crons: { definitions: [unapprovedCron] },
 }))
 if (wrongSchedule.status === 0 || !parse(wrongSchedule).failures.includes('app_cron_contract_wrong')) {
   throw new Error('high_frequency_cron_allowed')
 }
 
 const duplicateCron = run('app', project('app', {
-  crons: { definitions: [...appCrons, appCrons[0]] },
+  crons: { definitions: [unapprovedCron, unapprovedCron] },
 }))
 if (duplicateCron.status === 0 || !parse(duplicateCron).failures.includes('duplicate_cron_path_live')) {
   throw new Error('duplicate_cron_allowed')
 }
 
 const retiredCron = run('app', project('app', {
-  crons: { definitions: [...appCrons, { path: '/api/cron/pos/daily', schedule: '0 0 * * *' }] },
+  crons: { definitions: [{ path: '/api/cron/pos/daily', schedule: '0 0 * * *' }] },
 }))
 if (retiredCron.status === 0 || !parse(retiredCron).failures.includes('retired_cron_context_live')) {
   throw new Error('retired_cron_allowed')
@@ -76,4 +91,4 @@ if (missingBypass.status === 0 || !parse(missingBypass).failures.includes('autom
   throw new Error('missing_automation_bypass_allowed')
 }
 
-console.log(JSON.stringify({ ok: true, contract: 'supermega_vercel_project_state_tests', checks: 9 }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_vercel_project_state_tests', checks: 11 }, null, 2))

@@ -29,7 +29,8 @@ function parse(result) {
   return JSON.parse(result.status === 0 ? result.stdout : result.stderr)
 }
 
-const appCore = [
+const dormantSchedulerEnvironment = [
+  env('SUPERMEGA_HOSTED_SCHEDULER_ENABLED', { type: 'plain' }),
   env('CRON_SECRET'),
   env('SUPERMEGA_INTERNAL_CRON_TOKEN', { type: 'encrypted' }),
   env('SUPERMEGA_CLOUD_TASKS_WORKER_URL', { type: 'plain' }),
@@ -41,17 +42,22 @@ const managedTrial = [
   env('SUPERMEGA_TRIAL_WRITES_ENABLED', { type: 'plain' }),
 ]
 
-const isolated = run('app', appCore)
+const isolated = run('app', [])
 assert.equal(isolated.status, 0, 'isolated_app_contract_failed')
 assert.equal(parse(isolated).operatingMode, 'isolated_demo', 'isolated_app_mode_failed')
+assert.equal(parse(isolated).schedulerActivation, 'dormant', 'dormant_scheduler_state_missing')
 
-const managed = run('app', [...appCore, ...managedTrial])
+const managed = run('app', managedTrial)
 assert.equal(managed.status, 0, 'managed_app_contract_failed')
 assert.equal(parse(managed).operatingMode, 'managed_trial', 'managed_app_mode_failed')
 
-const partialManaged = run('app', [...appCore, managedTrial[0]])
+const partialManaged = run('app', [managedTrial[0]])
 assert.notEqual(partialManaged.status, 0, 'partial_managed_app_allowed')
 assert.ok(parse(partialManaged).failures.includes('managed_trial_environment_incomplete'))
+
+const dormantScheduler = run('app', dormantSchedulerEnvironment)
+assert.notEqual(dormantScheduler.status, 0, 'dormant_scheduler_environment_allowed')
+assert.ok(parse(dormantScheduler).failures.includes('dormant_scheduler_environment_present'))
 
 const publicReady = run('public', [
   env('SUPERMEGA_CONTACT_IDEMPOTENCY_SECRET'),
@@ -65,61 +71,61 @@ const publicNoDelivery = run('public', [env('SUPERMEGA_CONTACT_IDEMPOTENCY_SECRE
 assert.notEqual(publicNoDelivery.status, 0, 'public_without_delivery_allowed')
 assert.ok(parse(publicNoDelivery).failures.includes('contact_delivery_environment_missing'))
 
-const browserSecret = run('app', [...appCore, env('VITE_SUPABASE_SERVICE_ROLE_KEY')], { strictCleanup: false })
+const browserSecret = run('app', [env('VITE_SUPABASE_SERVICE_ROLE_KEY')], { strictCleanup: false })
 assert.notEqual(browserSecret.status, 0, 'browser_secret_allowed')
 assert.ok(parse(browserSecret).failures.includes('browser_exposed_secret_name_present'))
 
 const previewLeakage = run('app', [
-  ...appCore.filter((entry) => entry.key !== 'CRON_SECRET'),
-  env('CRON_SECRET', { target: ['production', 'preview'] }),
+  ...managedTrial.filter((entry) => entry.key !== 'SUPERMEGA_TRIAL_IDENTITY_SECRET'),
+  env('SUPERMEGA_TRIAL_IDENTITY_SECRET', { target: ['production', 'preview'] }),
 ])
 assert.notEqual(previewLeakage.status, 0, 'preview_scope_leakage_allowed')
 assert.ok(parse(previewLeakage).failures.includes('allowed_environment_scope_not_production_only'))
-assert.deepEqual(parse(previewLeakage).invalidScopeVariables, ['CRON_SECRET'])
+assert.deepEqual(parse(previewLeakage).invalidScopeVariables, ['SUPERMEGA_TRIAL_IDENTITY_SECRET'])
 
 const plainCredential = run('app', [
-  ...appCore.filter((entry) => entry.key !== 'CRON_SECRET'),
-  env('CRON_SECRET', { type: 'plain' }),
+  ...managedTrial.filter((entry) => entry.key !== 'SUPERMEGA_TRIAL_IDENTITY_SECRET'),
+  env('SUPERMEGA_TRIAL_IDENTITY_SECRET', { type: 'plain' }),
 ])
 assert.notEqual(plainCredential.status, 0, 'plain_credential_allowed')
 assert.ok(parse(plainCredential).failures.includes('credential_environment_type_not_protected'))
 
 const missingCredentialType = run('app', [
-  ...appCore.filter((entry) => entry.key !== 'CRON_SECRET'),
-  env('CRON_SECRET', { omitType: true }),
+  ...managedTrial.filter((entry) => entry.key !== 'SUPERMEGA_TRIAL_IDENTITY_SECRET'),
+  env('SUPERMEGA_TRIAL_IDENTITY_SECRET', { omitType: true }),
 ])
 assert.notEqual(missingCredentialType.status, 0, 'missing_credential_type_allowed')
-assert.ok(parse(missingCredentialType).unprotectedCredentialVariables.includes('CRON_SECRET'))
+assert.ok(parse(missingCredentialType).unprotectedCredentialVariables.includes('SUPERMEGA_TRIAL_IDENTITY_SECRET'))
 
-const duplicate = run('app', [...appCore, env('CRON_SECRET')])
+const duplicate = run('app', [...managedTrial, env('SUPERMEGA_TRIAL_IDENTITY_SECRET')])
 assert.notEqual(duplicate.status, 0, 'duplicate_environment_definition_allowed')
 assert.ok(parse(duplicate).failures.includes('duplicate_environment_variables_present'))
-assert.deepEqual(parse(duplicate).duplicateEnvironmentKeys, ['CRON_SECRET'])
+assert.deepEqual(parse(duplicate).duplicateEnvironmentKeys, ['SUPERMEGA_TRIAL_IDENTITY_SECRET'])
 
-const conflicting = run('app', [...appCore, env('CRON_SECRET', { target: ['preview'], type: 'plain' })])
+const conflicting = run('app', [...managedTrial, env('SUPERMEGA_TRIAL_IDENTITY_SECRET', { target: ['preview'], type: 'plain' })])
 assert.notEqual(conflicting.status, 0, 'conflicting_environment_definition_allowed')
 assert.ok(parse(conflicting).failures.includes('conflicting_environment_definitions_present'))
-assert.deepEqual(parse(conflicting).conflictingEnvironmentKeys, ['CRON_SECRET'])
+assert.deepEqual(parse(conflicting).conflictingEnvironmentKeys, ['SUPERMEGA_TRIAL_IDENTITY_SECRET'])
 
-const validPlainConfig = run('app', [...appCore, env('SUPERMEGA_CORS_ORIGINS', { type: 'plain' })])
+const validPlainConfig = run('app', [env('SUPERMEGA_CORS_ORIGINS', { type: 'plain' })])
 assert.equal(validPlainConfig.status, 0, 'plain_non_secret_config_rejected')
 
-const strictCleanup = run('app', [...appCore, env('LEGACY_FLAG', { type: 'plain' })])
+const strictCleanup = run('app', [env('LEGACY_FLAG', { type: 'plain' })])
 assert.notEqual(strictCleanup.status, 0, 'strict_cleanup_not_enabled_by_default')
 assert.equal(parse(strictCleanup).strictCleanup, true)
 assert.ok(parse(strictCleanup).failures.includes('legacy_environment_variables_present'))
 
-const diagnosticCleanup = run('app', [...appCore, env('LEGACY_FLAG', { type: 'plain' })], { strictCleanup: false })
+const diagnosticCleanup = run('app', [env('LEGACY_FLAG', { type: 'plain' })], { strictCleanup: false })
 assert.equal(diagnosticCleanup.status, 0, 'diagnostic_cleanup_disable_failed')
 assert.equal(parse(diagnosticCleanup).strictCleanup, false)
 assert.deepEqual(parse(diagnosticCleanup).cleanupCandidates, ['LEGACY_FLAG'])
 
 const sentinel = 'must-never-appear-in-verifier-output'
 const redaction = run('app', [
-  ...appCore.filter((entry) => entry.key !== 'CRON_SECRET'),
-  env('CRON_SECRET', { value: sentinel }),
+  ...managedTrial.filter((entry) => entry.key !== 'SUPERMEGA_TRIAL_IDENTITY_SECRET'),
+  env('SUPERMEGA_TRIAL_IDENTITY_SECRET', { value: sentinel }),
 ])
 assert.equal(redaction.status, 0, 'redaction_fixture_failed')
 assert.equal(`${redaction.stdout}${redaction.stderr}`.includes(sentinel), false, 'environment_value_disclosed')
 
-console.log(JSON.stringify({ ok: true, contract: 'supermega_vercel_environment_state_tests', checks: 15 }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_vercel_environment_state_tests', checks: 16 }, null, 2))

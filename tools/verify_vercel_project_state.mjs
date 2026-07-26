@@ -14,12 +14,18 @@ const schedulerAuthority = JSON.parse(await readFile(
   resolve(import.meta.dirname, 'supermega_scheduler_authority.json'),
   'utf8',
 ))
+const verifyDeployedState = process.env.VERIFY_DEPLOYED_STATE === '1'
 if (
-  schedulerAuthority.contract !== 'supermega.scheduler-authority.v1'
+  schedulerAuthority.contract !== 'supermega.scheduler-authority.v2'
   || schedulerAuthority.authority !== 'vercel'
   || schedulerAuthority.environment !== 'production'
   || schedulerAuthority.project_id !== 'prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG'
   || schedulerAuthority.project_name !== 'megaos'
+  || schedulerAuthority.activation?.state !== 'dormant'
+  || schedulerAuthority.crons?.length !== 0
+  || schedulerAuthority.maximum_scheduler_invocations_per_day !== 0
+  || schedulerAuthority.activation_plan?.maximum_scheduler_invocations_per_day !== 25
+  || schedulerAuthority.migration?.post_deploy_retiring_crons_allowed !== false
   || schedulerAuthority.retired_authority?.provider !== 'google-cloud-scheduler'
   || schedulerAuthority.retired_authority?.mutation_allowed !== false
 ) {
@@ -50,7 +56,12 @@ if (kind === 'app') {
   const expectedCrons = schedulerAuthority.crons
     .map(({ path, schedule }) => ({ path, schedule }))
     .sort((left, right) => left.path.localeCompare(right.path))
-  if (JSON.stringify(normalizedCrons) !== JSON.stringify(expectedCrons)) failures.push('app_cron_contract_wrong')
+  const retiringCrons = (schedulerAuthority.migration?.preflight_retiring_crons || [])
+    .map(({ path, schedule }) => ({ path, schedule }))
+    .sort((left, right) => left.path.localeCompare(right.path))
+  const exactCurrent = JSON.stringify(normalizedCrons) === JSON.stringify(expectedCrons)
+  const exactRetiring = JSON.stringify(normalizedCrons) === JSON.stringify(retiringCrons)
+  if (!exactCurrent && (verifyDeployedState || !exactRetiring)) failures.push('app_cron_contract_wrong')
 } else if (definitions.length !== 0) {
   failures.push('public_project_must_not_run_crons')
 }
@@ -71,4 +82,5 @@ console.log(JSON.stringify({
   schedulerEnvironment: kind === 'app' ? schedulerAuthority.environment : null,
   deployedCronsChecked: true,
   deployedCronCount: definitions.length,
+  cronTransitionState: kind === 'app' && definitions.length ? 'retiring' : 'current',
 }, null, 2))

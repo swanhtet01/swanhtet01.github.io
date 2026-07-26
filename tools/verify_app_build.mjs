@@ -1347,17 +1347,29 @@ if (!managedTrialSource.includes('export async function validateManagedClientImp
   || !managedClientImportUiContract.includes('validationRequestRef.current !== validationRequestId')
   || !managedClientImportUiContract.includes('sameManagedIdentity(managedIdentityRef.current, expectedIdentity)')
   || ['fetch(', 'localStorage', 'sessionStorage', 'saveManagedCommerceCommand', 'saveManagedProductionCommand', 'saveManagedWebsiteCommand', 'createManagedApproval'].some((marker) => managedClientImportUiContract.includes(marker))) fail('managed_client_import_ui_or_authority_contract_missing')
-const expectedSchedulerCrons = [
-  { path: '/api/cron/supermega/agent-queue', schedule: '*/15 * * * *' },
+const expectedSchedulerCrons = []
+const expectedSchedulerActivationPlan = [
+  { path: '/api/cron/supermega/agent-queue', schedule: '5 * * * *' },
   { path: '/api/cron/supermega/daily', schedule: '45 0 * * *' },
 ]
-if (schedulerAuthority.contract !== 'supermega.scheduler-authority.v1'
+if (schedulerAuthority.contract !== 'supermega.scheduler-authority.v2'
   || schedulerAuthority.authority !== 'vercel'
   || schedulerAuthority.environment !== 'production'
   || schedulerAuthority.project_id !== 'prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG'
   || schedulerAuthority.project_name !== 'megaos'
+  || schedulerAuthority.activation?.state !== 'dormant'
+  || schedulerAuthority.activation?.runtime_environment_key !== 'SUPERMEGA_HOSTED_SCHEDULER_ENABLED'
+  || schedulerAuthority.activation?.enabled_value !== '1'
+  || schedulerAuthority.activation?.required_evidence?.length !== 5
   || JSON.stringify(schedulerAuthority.crons?.map(({ path, schedule }) => ({ path, schedule }))) !== JSON.stringify(expectedSchedulerCrons)
-  || schedulerAuthority.maximum_scheduler_invocations_per_day !== 97
+  || schedulerAuthority.maximum_scheduler_invocations_per_day !== 0
+  || JSON.stringify(schedulerAuthority.activation_plan?.crons?.map(({ path, schedule }) => ({ path, schedule }))) !== JSON.stringify(expectedSchedulerActivationPlan)
+  || schedulerAuthority.activation_plan?.maximum_scheduler_invocations_per_day !== 25
+  || JSON.stringify(schedulerAuthority.migration?.preflight_retiring_crons?.map(({ path, schedule }) => ({ path, schedule }))) !== JSON.stringify([
+    { path: '/api/cron/supermega/agent-queue', schedule: '*/15 * * * *' },
+    { path: '/api/cron/supermega/daily', schedule: '45 0 * * *' },
+  ])
+  || schedulerAuthority.migration?.post_deploy_retiring_crons_allowed !== false
   || schedulerAuthority.worker_dispatch?.provider !== 'google-cloud-tasks'
   || schedulerAuthority.worker_dispatch?.mode !== 'enqueue-on-demand'
   || schedulerAuthority.worker_dispatch?.polling_allowed !== false

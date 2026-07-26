@@ -71,7 +71,7 @@ AGENT_JOB_CADENCE_SECONDS: dict[str, int] = {
     "list_clerk": 86_400,
     "task_triage": 3_600,
     "template_clerk": 3_600,
-    "ops_watch": 900,
+    "ops_watch": 3_600,
     "founder_brief": 86_400,
     "github_release_watch": 3_600,
 }

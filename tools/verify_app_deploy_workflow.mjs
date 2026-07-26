@@ -278,11 +278,26 @@ const normalizeCrons = (crons) => (crons || [])
 const expectedCrons = normalizeCrons(schedulerAuthority.crons)
 const actualCrons = normalizeCrons(config.crons)
 requireContract('single production scheduler authority',
-  schedulerAuthority.contract === 'supermega.scheduler-authority.v1'
+  schedulerAuthority.contract === 'supermega.scheduler-authority.v2'
   && schedulerAuthority.authority === 'vercel'
   && schedulerAuthority.environment === 'production'
   && schedulerAuthority.project_id === 'prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG'
-  && schedulerAuthority.maximum_scheduler_invocations_per_day === 97
+  && schedulerAuthority.activation?.state === 'dormant'
+  && schedulerAuthority.activation?.runtime_environment_key === 'SUPERMEGA_HOSTED_SCHEDULER_ENABLED'
+  && schedulerAuthority.activation?.enabled_value === '1'
+  && schedulerAuthority.activation?.required_evidence?.length === 5
+  && schedulerAuthority.crons?.length === 0
+  && schedulerAuthority.maximum_scheduler_invocations_per_day === 0
+  && schedulerAuthority.activation_plan?.maximum_scheduler_invocations_per_day === 25
+  && JSON.stringify(normalizeCrons(schedulerAuthority.activation_plan?.crons)) === JSON.stringify(normalizeCrons([
+    { path: '/api/cron/supermega/agent-queue', schedule: '5 * * * *' },
+    { path: '/api/cron/supermega/daily', schedule: '45 0 * * *' },
+  ]))
+  && JSON.stringify(normalizeCrons(schedulerAuthority.migration?.preflight_retiring_crons)) === JSON.stringify(normalizeCrons([
+    { path: '/api/cron/supermega/agent-queue', schedule: '*/15 * * * *' },
+    { path: '/api/cron/supermega/daily', schedule: '45 0 * * *' },
+  ]))
+  && schedulerAuthority.migration?.post_deploy_retiring_crons_allowed === false
   && schedulerAuthority.worker_dispatch?.mode === 'enqueue-on-demand'
   && schedulerAuthority.worker_dispatch?.polling_allowed === false
   && schedulerAuthority.retired_authority?.provider === 'google-cloud-scheduler'
@@ -298,7 +313,9 @@ requireContract('company automation events stay tenant-scoped and off YTF connec
   && previewServer.indexOf('connectors = _scope_connector_catalog(connectors, expected_tenant_key)') < previewServer.indexOf('connector_lookup = {'))
 requireContract('Vercel config is generated from scheduler authority',
   generator.includes("readFileSync('tools/supermega_scheduler_authority.json'")
-  && generator.includes('const canonicalCrons = schedulerAuthority.crons.map'))
+  && generator.includes('const canonicalCrons = schedulerAuthority.crons.map')
+  && generator.includes("schedulerAuthority.activation?.state !== 'dormant'")
+  && generator.includes('schedulerAuthority.activation_plan?.maximum_scheduler_invocations_per_day !== 25'))
 requireContract('public live health follows the canonical release workflow',
   publicHealthWorkflow.includes('SuperMega - Coordinated Verified Release')
   && !publicHealthWorkflow.includes('SuperMega Public - Verified Prebuilt Release'))

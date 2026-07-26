@@ -82,6 +82,7 @@ class CloudRuntimeTests(unittest.TestCase):
             "SUPERMEGA_INTERNAL_CRON_TOKEN": CloudRuntimeTests.worker_secret,
             "SUPERMEGA_CLOUD_TASKS_WORKER_URL": CloudRuntimeTests.worker_url,
             "SUPERMEGA_CLOUD_TASKS_ALLOWED_HOSTS": "worker.supermega.dev",
+            "SUPERMEGA_HOSTED_SCHEDULER_ENABLED": "1",
             **overrides,
         }
 
@@ -174,12 +175,15 @@ class CloudRuntimeTests(unittest.TestCase):
         diagnostics = f"{completed.stdout}\n{completed.stderr}"
         self.assertEqual(completed.returncode, 0, diagnostics)
         result = json.loads(completed.stdout)
-        self.assertEqual(result["contract"], "supermega.scheduler-authority.v1")
+        self.assertEqual(result["contract"], "supermega.scheduler-authority.v2")
         self.assertEqual(result["status"], "retired_compatibility_entrypoint")
         self.assertEqual(result["scheduler_authority"], "vercel")
         self.assertEqual(result["environment"], "production")
-        self.assertEqual(result["cron_count"], 2)
-        self.assertEqual(result["maximum_scheduler_invocations_per_day"], 97)
+        self.assertEqual(result["activation_state"], "dormant")
+        self.assertEqual(result["cron_count"], 0)
+        self.assertEqual(result["maximum_scheduler_invocations_per_day"], 0)
+        self.assertEqual(result["activation_plan_cron_count"], 2)
+        self.assertEqual(result["activation_plan_maximum_invocations_per_day"], 25)
         self.assertEqual(result["worker_dispatch"], "enqueue-on-demand")
         self.assertFalse(result["gcp_scheduler_mutation_allowed"])
         self.assertFalse(result["provider_reads_performed"])
@@ -200,6 +204,19 @@ class CloudRuntimeTests(unittest.TestCase):
         self.assertFalse(run.json()["side_effects"]["worker_invoked"])
         self.assertFalse(run.json()["writes_performed"])
         self.assertFalse(run.json()["external_messages_sent"])
+        open_worker.assert_not_called()
+
+    def test_dormant_scheduler_cannot_invoke_a_fully_configured_worker(self) -> None:
+        with patch("supermega_runtime.cloud_runtime._open_worker_request") as open_worker:
+            with self._client(SUPERMEGA_HOSTED_SCHEDULER_ENABLED="0") as client:
+                status = client.get("/api/cloud-autonomy/status")
+                run = client.get(QUEUE_CRON_PATH, headers={"authorization": "Bearer cron-secret"})
+
+        self.assertEqual(status.json()["status"], "degraded")
+        self.assertFalse(status.json()["scheduler"]["activation_enabled"])
+        self.assertIn("scheduler_activation_disabled", status.json()["scheduler"]["configuration_errors"])
+        self.assertEqual(run.json()["execution"], "hosted_runtime_not_configured")
+        self.assertFalse(run.json()["side_effects"]["worker_invoked"])
         open_worker.assert_not_called()
 
     def test_queue_and_daily_routes_forward_fixed_meaningful_job_types(self) -> None:
@@ -644,12 +661,12 @@ class AgentGovernanceTests(unittest.TestCase):
         self.assertEqual(never_run["contract"], AGENT_CADENCE_ADMISSION_CONTRACT)
         self.assertEqual(never_run["decision"], "due_never_run")
         self.assertTrue(never_run["due"])
-        self.assertEqual(never_run["cadence_seconds"], 900)
+        self.assertEqual(never_run["cadence_seconds"], 3600)
 
         deferred = agent_job_cadence_state(
             job_type="ops_watch",
             last_finished_at=observed_at,
-            now=observed_at + timedelta(minutes=14, seconds=59),
+            now=observed_at + timedelta(minutes=59, seconds=59),
         )
         self.assertFalse(deferred["due"])
         self.assertEqual(deferred["decision"], "deferred_cadence_not_elapsed")
@@ -657,7 +674,7 @@ class AgentGovernanceTests(unittest.TestCase):
         due = agent_job_cadence_state(
             job_type="ops_watch",
             last_finished_at=observed_at,
-            now=observed_at + timedelta(minutes=15),
+            now=observed_at + timedelta(hours=1),
         )
         self.assertTrue(due["due"])
         self.assertEqual(due["decision"], "due_cadence_elapsed")
@@ -666,14 +683,14 @@ class AgentGovernanceTests(unittest.TestCase):
         precise_early = agent_job_cadence_state(
             job_type="ops_watch",
             last_finished_at=precise_finished_at,
-            now=observed_at + timedelta(minutes=15),
+            now=observed_at + timedelta(hours=1),
         )
         self.assertFalse(precise_early["due"])
         self.assertTrue(
             agent_job_cadence_state(
                 job_type="ops_watch",
                 last_finished_at=precise_finished_at,
-                now=precise_finished_at + timedelta(minutes=15),
+                now=precise_finished_at + timedelta(hours=1),
             )["due"]
         )
 
@@ -749,7 +766,7 @@ class AgentGovernanceTests(unittest.TestCase):
                 workspace_id=workspace_id,
                 job_type="ops_watch",
                 respect_cadence=True,
-                now=finished_at + timedelta(minutes=15),
+                now=finished_at + timedelta(hours=1),
             )
             self.assertEqual(due["status"], "queued")
 

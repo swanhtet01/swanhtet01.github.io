@@ -1,13 +1,33 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 
 const schedulerAuthority = JSON.parse(readFileSync('tools/supermega_scheduler_authority.json', 'utf8'))
+const activationPlanCrons = schedulerAuthority.activation_plan?.crons?.map(({ path, schedule }) => ({ path, schedule })) || []
+const retiringCrons = schedulerAuthority.migration?.preflight_retiring_crons?.map(({ path, schedule }) => ({ path, schedule })) || []
 if (
-  schedulerAuthority.contract !== 'supermega.scheduler-authority.v1'
+  schedulerAuthority.contract !== 'supermega.scheduler-authority.v2'
   || schedulerAuthority.authority !== 'vercel'
   || schedulerAuthority.environment !== 'production'
   || schedulerAuthority.team_id !== 'team_wI4l7ZgSxcEztQPSlCCYVeJ5'
   || schedulerAuthority.project_id !== 'prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG'
   || schedulerAuthority.project_name !== 'megaos'
+  || schedulerAuthority.activation?.state !== 'dormant'
+  || schedulerAuthority.activation?.runtime_environment_key !== 'SUPERMEGA_HOSTED_SCHEDULER_ENABLED'
+  || schedulerAuthority.activation?.enabled_value !== '1'
+  || !Array.isArray(schedulerAuthority.activation?.required_evidence)
+  || schedulerAuthority.activation.required_evidence.length !== 5
+  || !Array.isArray(schedulerAuthority.crons)
+  || schedulerAuthority.crons.length !== 0
+  || schedulerAuthority.maximum_scheduler_invocations_per_day !== 0
+  || JSON.stringify(activationPlanCrons) !== JSON.stringify([
+    { path: '/api/cron/supermega/agent-queue', schedule: '5 * * * *' },
+    { path: '/api/cron/supermega/daily', schedule: '45 0 * * *' },
+  ])
+  || schedulerAuthority.activation_plan?.maximum_scheduler_invocations_per_day !== 25
+  || JSON.stringify(retiringCrons) !== JSON.stringify([
+    { path: '/api/cron/supermega/agent-queue', schedule: '*/15 * * * *' },
+    { path: '/api/cron/supermega/daily', schedule: '45 0 * * *' },
+  ])
+  || schedulerAuthority.migration?.post_deploy_retiring_crons_allowed !== false
   || schedulerAuthority.worker_dispatch?.mode !== 'enqueue-on-demand'
   || schedulerAuthority.worker_dispatch?.polling_allowed !== false
   || schedulerAuthority.retired_authority?.provider !== 'google-cloud-scheduler'
@@ -109,5 +129,6 @@ console.log(JSON.stringify({
   contract: 'supermega_app_vercel',
   project: appProjectLink.projectName,
   schedulerAuthority: schedulerAuthority.authority,
+  schedulerActivation: schedulerAuthority.activation.state,
   crons: appConfig.crons,
 }))

@@ -38,7 +38,7 @@
       "list_clerk": 86400,
       "task_triage": 3600,
       "template_clerk": 3600,
-      "ops_watch": 900,
+      "ops_watch": 3600,
       "founder_brief": 86400,
       "github_release_watch": 3600
     },

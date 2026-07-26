@@ -1,5 +1,5 @@
 {
-  "contract": "supermega.scheduler-authority.v1",
+  "contract": "supermega.scheduler-authority.v2",
   "authority": "vercel",
   "environment": "production",
   "timezone": "UTC",
@@ -10,25 +10,54 @@
     "scheme": "Bearer",
     "secret_environment_key": "CRON_SECRET"
   },
-  "crons": [
-    {
-      "id": "agent-queue",
-      "path": "/api/cron/supermega/agent-queue",
-      "schedule": "*/15 * * * *",
-      "job_types": ["task_triage", "ops_watch"],
-      "max_claims_per_invocation": 2,
-      "maximum_invocations_per_day": 96
-    },
-    {
-      "id": "daily",
-      "path": "/api/cron/supermega/daily",
-      "schedule": "45 0 * * *",
-      "job_types": ["founder_brief", "github_release_watch"],
-      "max_claims_per_invocation": 2,
-      "maximum_invocations_per_day": 1
-    }
-  ],
-  "maximum_scheduler_invocations_per_day": 97,
+  "activation": {
+    "state": "dormant",
+    "runtime_environment_key": "SUPERMEGA_HOSTED_SCHEDULER_ENABLED",
+    "enabled_value": "1",
+    "required_evidence": [
+      "isolated managed database and tenant isolation pass",
+      "private storage listing and object access pass",
+      "production-only protected worker URL allowlist and tokens pass",
+      "hosted queue recovery idempotency and side-effect accounting pass",
+      "protected candidate rollback and named owner activation decision pass"
+    ]
+  },
+  "crons": [],
+  "maximum_scheduler_invocations_per_day": 0,
+  "activation_plan": {
+    "crons": [
+      {
+        "id": "agent-queue",
+        "path": "/api/cron/supermega/agent-queue",
+        "schedule": "5 * * * *",
+        "job_types": ["task_triage", "ops_watch"],
+        "max_claims_per_invocation": 2,
+        "maximum_invocations_per_day": 24
+      },
+      {
+        "id": "daily",
+        "path": "/api/cron/supermega/daily",
+        "schedule": "45 0 * * *",
+        "job_types": ["founder_brief", "github_release_watch"],
+        "max_claims_per_invocation": 2,
+        "maximum_invocations_per_day": 1
+      }
+    ],
+    "maximum_scheduler_invocations_per_day": 25
+  },
+  "migration": {
+    "preflight_retiring_crons": [
+      {
+        "path": "/api/cron/supermega/agent-queue",
+        "schedule": "*/15 * * * *"
+      },
+      {
+        "path": "/api/cron/supermega/daily",
+        "schedule": "45 0 * * *"
+      }
+    ],
+    "post_deploy_retiring_crons_allowed": false
+  },
   "worker_dispatch": {
     "provider": "google-cloud-tasks",
     "mode": "enqueue-on-demand",
