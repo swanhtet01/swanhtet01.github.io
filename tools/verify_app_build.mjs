@@ -19,6 +19,7 @@ let catalogImportRuntimeChecks = 0
 let clientOnboardingRuntimeChecks = 0
 let managedClientImportRuntimeChecks = 0
 let shopInventoryRuntimeChecks = 0
+let plantOrderRuntimeChecks = 0
 let commerceRuntimeChecks = 0
 let productionRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
@@ -73,6 +74,8 @@ const websiteStarterSource = await readFile(resolve(root, 'showroom', 'src', 'pr
 const websiteStarterSetupSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'WebsiteStarterSetup.tsx'), 'utf8')
 const shopInventorySource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-inventory-foundation.ts'), 'utf8')
 const shopInventoryUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopInventoryFoundation.tsx'), 'utf8')
+const plantOrderSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'plant-order-foundation.ts'), 'utf8')
+const plantOrderUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'PlantOrderFoundation.tsx'), 'utf8')
 
 if (!viteConfigSource.includes("id.includes('/src/core/channel-order-intake.ts')")
   || !viteConfigSource.includes("id.includes('/src/core/managed-trial.ts')")
@@ -1175,6 +1178,24 @@ if (!coreSource.includes('<ShopInventoryFoundation')
   || !shopInventoryUiSource.includes('Review the exact source, destination, and quantity. Nothing has moved yet.')
   || !shopInventoryUiSource.includes('navigator.locks')
   || shopInventoryUiSource.includes('fetch(')) fail('shop_inventory_foundation_ui_boundary_missing')
+if (!plantOrderSource.includes("PLANT_ORDER_STATE_SCHEMA = 'supermega.plant.order_foundation.v1'")
+  || !plantOrderSource.includes("PLANT_ORDER_PLAN_CONTRACT = 'supermega.plant.reviewed_plan.v1'")
+  || !plantOrderSource.includes('export function checkPlantOrderAvailability')
+  || !plantOrderSource.includes('export function releasePlantOrder')
+  || !plantOrderSource.includes('export function issuePlantOrderMaterial')
+  || !plantOrderSource.includes('export function inspectPlantOrderOutput')
+  || !plantOrderSource.includes('export function releasePlantOrderBatch')
+  || !plantOrderSource.includes('export async function mutatePlantOrderWorkspace')
+  || !plantOrderSource.includes("mode: 'exclusive'")
+  || !plantOrderSource.includes('Plant order write verification failed.')) fail('plant_order_foundation_contract_missing')
+if (['fetch(', 'supabase', 'openai', 'anthropic'].some((marker) => plantOrderSource.toLowerCase().includes(marker))) fail('plant_order_foundation_external_side_effect_added')
+if (!coreSource.includes('<PlantOrderFoundation')
+  || !coreSource.includes("lazy(() => import('./PlantOrderFoundation')")
+  || !plantOrderUiSource.includes('Run one controlled batch')
+  || !plantOrderUiSource.includes('No machine command')
+  || !plantOrderUiSource.includes('Shop receipt, delivery, costing, and accounting are not posted automatically.')
+  || !plantOrderUiSource.includes('navigator.locks')
+  || plantOrderUiSource.includes('fetch(')) fail('plant_order_foundation_ui_boundary_missing')
 if (!clientOnboardingSource.includes("CLIENT_IMPORT_SCHEMA = 'supermega.client_import_preview.v1'")
   || !clientOnboardingSource.includes("CLIENT_STAGING_SCHEMA = 'supermega.client_import_staging.v1'")
   || !clientOnboardingSource.includes('CLIENT_IMPORT_MAX_BYTES = 512 * 1024')
@@ -2062,6 +2083,128 @@ async function verifyShopInventoryRuntime() {
     assert(!unconfirmed.ok && values.get(storageKey) === beforeUnlocked, 'shop_inventory_unconfirmed_write_not_rolled_back')
   } catch (error) {
     fail(`shop_inventory_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
+async function verifyPlantOrderRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    plantOrderRuntimeChecks += 1
+  }
+  const assertThrows = (action, reason) => {
+    try { action() } catch { plantOrderRuntimeChecks += 1; return }
+    throw new Error(reason)
+  }
+  try {
+    const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'plant-order-foundation.ts')).href}?plant-order-verify=${Date.now()}`)
+    const proof = (sequence, label) => ({
+      actionId: `ACT-20260726-${String(sequence).padStart(3, '0')}`,
+      capturedAt: `2026-07-26T09:${String(Math.floor(sequence / 60)).padStart(2, '0')}:${String(sequence % 60).padStart(2, '0')}+06:30`,
+      actor: 'Plant supervisor',
+      reason: label,
+      evidenceReference: `WO-2026-0726-${String(sequence).padStart(3, '0')}`,
+    })
+    const plan = model.buildPlantOrderPlan({
+      planId: 'PLN-20260726-001',
+      sourceDigest: model.plantOrderEvidenceDigest({ jobId: 'JOB-401', revision: 12, target: 10 }),
+      job: { jobId: 'JOB-401', product: 'Premium water filter', targetQuantity: 10, outputBatchId: 'BATCH-20260726-401' },
+      materials: [
+        { materialId: 'MAT-FILTER-001', name: 'Filter media', unit: 'kg', quantityPerUnitMilli: 1_500 },
+        { materialId: 'MAT-SHELL-001', name: 'Outer shell', unit: 'pcs', quantityPerUnitMilli: 2_000 },
+      ],
+      workCentres: [
+        { workCentreId: 'WC-ASSEMBLY-01', name: 'Assembly bench' },
+        { workCentreId: 'WC-TEST-01', name: 'Pressure test' },
+      ],
+      routing: [
+        { operationId: 'OP-ASSEMBLY-10', sequence: 1, name: 'Assemble', workCentreId: 'WC-ASSEMBLY-01', minutesPerUnitMilli: 500 },
+        { operationId: 'OP-TEST-20', sequence: 2, name: 'Pressure test', workCentreId: 'WC-TEST-01', minutesPerUnitMilli: 1_000 },
+      ],
+    })
+    assert(plan.sourceDigest === 'sha256:9415e4d6d6dda852c2014d611c1f93e385d31c40df2b4ec30d293b12991ba519'
+      && plan.packageDigest === 'sha256:4f34743417e89e3ffcfa6c889fe2b55c14fd48f51926f4f198913cf4ec3d0a5b',
+    'plant_order_python_browser_plan_digest_drifted')
+    let result = model.applyPlantOrderPlan(model.createEmptyPlantOrderState(), plan, proof(1, 'approved BOM and routing'), model.EMPTY_PLANT_ORDER_DIGEST)
+    assert(!result.replayed && result.state.headDigest === 'sha256:c809f3f30d1df11b3bbed4df8ac7d12ea4afc6f245830059270c32bd14ca1ab1', 'plant_order_plan_head_drifted')
+    const plannedState = result.state
+    const plannedProjection = model.projectPlantOrder(plannedState)
+    assert(plannedProjection.status === 'planned' && plannedProjection.materials[0].requiredQuantityMilli === 15_000 && plannedProjection.materials[1].requiredQuantityMilli === 20_000, 'plant_order_bom_projection_wrong')
+    const replay = model.applyPlantOrderPlan(plannedState, plan, proof(1, 'approved BOM and routing'), model.EMPTY_PLANT_ORDER_DIGEST)
+    assert(replay.replayed && JSON.stringify(replay.state) === JSON.stringify(plannedState), 'plant_order_plan_retry_not_idempotent')
+
+    const availabilityMaterials = [
+      { materialId: 'MAT-FILTER-001', inputLotId: 'LOT-FILTER-2407', availableQuantityMilli: 15_000 },
+      { materialId: 'MAT-SHELL-001', inputLotId: 'LOT-SHELL-2407', availableQuantityMilli: 20_000 },
+    ]
+    const availabilityCentres = [
+      { workCentreId: 'WC-ASSEMBLY-01', availableMinutes: 5 },
+      { workCentreId: 'WC-TEST-01', availableMinutes: 10 },
+    ]
+    result = model.checkPlantOrderAvailability(plannedState, {
+      checkId: 'CHK-20260726-001', sourceDigest: model.plantOrderEvidenceDigest({ filter: 15_000, shell: 20_000, assembly: 5, test: 10 }),
+      materials: availabilityMaterials, workCentres: availabilityCentres, proof: proof(2, 'checked material and work-centre availability'), expectedHeadDigest: plannedState.headDigest,
+    })
+    assert(result.state.headDigest === 'sha256:d94e3902a9cf53e834d9863bda60727be67196bee23c4eed14e4a229efa39446'
+      && model.projectPlantOrder(result.state).status === 'ready'
+      && model.projectPlantOrder(result.state).latestAvailability.passed,
+    'plant_order_availability_projection_or_head_drifted')
+    const checkedState = result.state
+    assertThrows(() => model.checkPlantOrderAvailability(plannedState, {
+      checkId: 'CHK-STALE-001', sourceDigest: model.plantOrderEvidenceDigest({ stale: true }), materials: availabilityMaterials, workCentres: availabilityCentres,
+      proof: proof(3, 'stale check'), expectedHeadDigest: model.EMPTY_PLANT_ORDER_DIGEST,
+    }), 'plant_order_stale_check_succeeded')
+
+    const short = model.checkPlantOrderAvailability(plannedState, {
+      checkId: 'CHK-SHORT-001', sourceDigest: model.plantOrderEvidenceDigest({ short: true }),
+      materials: [{ ...availabilityMaterials[0], availableQuantityMilli: 14_999 }, availabilityMaterials[1]], workCentres: availabilityCentres,
+      proof: proof(2, 'checked material shortfall'), expectedHeadDigest: plannedState.headDigest,
+    })
+    assert(model.projectPlantOrder(short.state).status === 'shortfall' && model.projectPlantOrder(short.state).latestAvailability.shortfalls[0].subjectId === 'MAT-FILTER-001', 'plant_order_material_shortfall_not_explicit')
+    assertThrows(() => model.releasePlantOrder(short.state, { releaseId: 'REL-SHORT-001', availabilityCheckId: 'CHK-SHORT-001', proof: proof(3, 'invalid shortfall release'), expectedHeadDigest: short.state.headDigest }), 'plant_order_shortfall_release_succeeded')
+
+    result = model.releasePlantOrder(checkedState, { releaseId: 'REL-20260726-001', availabilityCheckId: 'CHK-20260726-001', proof: proof(3, 'released order after reviewed availability'), expectedHeadDigest: checkedState.headDigest })
+    assert(result.state.headDigest === 'sha256:2160181bf56037fdb8d9357af5eb308632065d0f74a40cd01bf2f154889453a6' && model.projectPlantOrder(result.state).status === 'released', 'plant_order_human_release_head_drifted')
+    const releasedState = result.state
+    assertThrows(() => model.recordPlantOrderOutput(releasedState, { outputId: 'OUT-NO-MATERIAL-001', outputBatchId: 'BATCH-20260726-401', quantity: 1, proof: proof(4, 'output without issue'), expectedHeadDigest: releasedState.headDigest }), 'plant_order_output_without_material_succeeded')
+    assertThrows(() => model.issuePlantOrderMaterial(releasedState, { issueId: 'ISSUE-WRONG-LOT-001', materialId: 'MAT-FILTER-001', inputLotId: 'LOT-WRONG-001', quantityMilli: 1, proof: proof(4, 'wrong lot issue'), expectedHeadDigest: releasedState.headDigest }), 'plant_order_wrong_lot_issue_succeeded')
+
+    result = model.issuePlantOrderMaterial(releasedState, { issueId: 'ISSUE-20260726-001', materialId: 'MAT-FILTER-001', inputLotId: 'LOT-FILTER-2407', quantityMilli: 15_000, proof: proof(4, 'issued reviewed filter-media lot'), expectedHeadDigest: releasedState.headDigest })
+    assert(result.state.headDigest === 'sha256:a19d6e95326a41ca77bb6f68d39879e5ce6415af030a8e77c55e1948722e5331', 'plant_order_first_issue_head_drifted')
+    result = model.issuePlantOrderMaterial(result.state, { issueId: 'ISSUE-20260726-002', materialId: 'MAT-SHELL-001', inputLotId: 'LOT-SHELL-2407', quantityMilli: 20_000, proof: proof(5, 'issued reviewed shell lot'), expectedHeadDigest: result.state.headDigest })
+    assert(result.state.headDigest === 'sha256:ca49b1df908aeaeb4278d24d6610d41e2eab3c78d13d154cb023196520da30f7' && model.projectPlantOrder(result.state).genealogy.length === 2, 'plant_order_genealogy_or_issue_head_drifted')
+    const issuedState = result.state
+
+    const heldOutput = model.recordPlantOrderOutput(issuedState, { outputId: 'OUT-HOLD-001', outputBatchId: 'BATCH-20260726-401', quantity: 5, proof: proof(6, 'partial output for hold test'), expectedHeadDigest: issuedState.headDigest })
+    const held = model.inspectPlantOrderOutput(heldOutput.state, { inspectionId: 'INSP-HOLD-001', outputBatchId: 'BATCH-20260726-401', inspectedQuantity: 5, acceptedQuantity: 4, rejectedQuantity: 1, result: 'fail', proof: proof(7, 'held failed batch'), expectedHeadDigest: heldOutput.state.headDigest })
+    assert(model.projectPlantOrder(held.state).status === 'quality_hold' && model.projectPlantOrder(held.state).qualityHold.rejectedQuantity === 1, 'plant_order_failed_inspection_did_not_hold')
+    assertThrows(() => model.recordPlantOrderOutput(held.state, { outputId: 'OUT-HELD-002', outputBatchId: 'BATCH-20260726-401', quantity: 5, proof: proof(8, 'blocked held output'), expectedHeadDigest: held.state.headDigest }), 'plant_order_quality_hold_did_not_block_output')
+
+    result = model.recordPlantOrderOutput(issuedState, { outputId: 'OUT-20260726-001', outputBatchId: 'BATCH-20260726-401', quantity: 10, proof: proof(6, 'confirmed produced batch quantity'), expectedHeadDigest: issuedState.headDigest })
+    assert(result.state.headDigest === 'sha256:0752ecd3614bef4972961f7ef7511ddfe1034055ed32ab1e0654d564b52c3bcc' && model.projectPlantOrder(result.state).status === 'inspection_due', 'plant_order_output_head_or_status_drifted')
+    result = model.inspectPlantOrderOutput(result.state, { inspectionId: 'INSP-20260726-001', outputBatchId: 'BATCH-20260726-401', inspectedQuantity: 10, acceptedQuantity: 10, rejectedQuantity: 0, result: 'pass', proof: proof(7, 'accepted complete inspected batch'), expectedHeadDigest: result.state.headDigest })
+    assert(result.state.headDigest === 'sha256:497e85c3cfeaadecff38b73a589cf1f5ea548359b1a237ab2d9d14617006a31a' && model.projectPlantOrder(result.state).status === 'ready_to_release', 'plant_order_inspection_head_or_status_drifted')
+    result = model.releasePlantOrderBatch(result.state, { qualityReleaseId: 'QREL-20260726-001', outputBatchId: 'BATCH-20260726-401', inspectionId: 'INSP-20260726-001', proof: proof(8, 'authorized batch release to stock'), expectedHeadDigest: result.state.headDigest })
+    const finalProjection = model.projectPlantOrder(result.state)
+    assert(result.state.headDigest === 'sha256:471e2d9f9bfe735f78e22759fc604be26c2307a282b61a392923a2317d5f2743' && finalProjection.status === 'released_to_stock' && finalProjection.metrics.acceptedQuantity === 10, 'plant_order_batch_release_head_or_status_drifted')
+    const tampered = JSON.parse(JSON.stringify(result.state)); tampered.commands[3].payload.quantityMilli = 1
+    assertThrows(() => model.validatePlantOrderState(tampered), 'plant_order_tampered_chain_validated')
+
+    const values = new Map(); const storage = { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, String(value)), removeItem: (key) => values.delete(key) }
+    const scope = 'plant-runtime-verifier'; const storageKey = model.plantOrderStorageKey(scope)
+    values.set(storageKey, '{malformed'); const recovery = model.loadPlantOrderWorkspace(storage, scope)
+    assert(recovery.source === 'recovery' && values.get(storageKey) === '{malformed', 'plant_order_malformed_storage_was_overwritten')
+    values.clear(); let lockRequests = 0
+    const locks = { request: async (name, options, callback) => { lockRequests += 1; assert(name === storageKey && options?.mode === 'exclusive', 'plant_order_wrong_lock_contract'); return callback() } }
+    const saved = await model.mutatePlantOrderWorkspace(scope, (current) => model.applyPlantOrderPlan(current, plan, proof(1, 'approved BOM and routing'), current.headDigest), storage, locks)
+    assert(saved.ok && lockRequests === 1 && JSON.parse(values.get(storageKey)).headDigest === plannedState.headDigest, 'plant_order_locked_write_not_confirmed')
+    const beforeUnlocked = values.get(storageKey); const unlocked = await model.mutatePlantOrderWorkspace(scope, (current) => model.checkPlantOrderAvailability(current, { checkId: 'CHK-NO-LOCK-001', sourceDigest: model.plantOrderEvidenceDigest({ source: 'count' }), materials: availabilityMaterials, workCentres: availabilityCentres, proof: proof(2, 'unlocked check'), expectedHeadDigest: current.headDigest }), storage, null)
+    assert(!unlocked.ok && values.get(storageKey) === beforeUnlocked, 'plant_order_unlocked_write_succeeded')
+    let corruptNextWrite = true
+    const unconfirmedStorage = { getItem: storage.getItem, setItem: (key, value) => { values.set(key, corruptNextWrite ? `${value}x` : String(value)); corruptNextWrite = false }, removeItem: storage.removeItem }
+    const unconfirmed = await model.mutatePlantOrderWorkspace(scope, (current) => model.checkPlantOrderAvailability(current, { checkId: 'CHK-UNCONFIRMED-001', sourceDigest: model.plantOrderEvidenceDigest({ source: 'count' }), materials: availabilityMaterials, workCentres: availabilityCentres, proof: proof(2, 'unconfirmed check'), expectedHeadDigest: current.headDigest }), unconfirmedStorage, locks)
+    assert(!unconfirmed.ok && values.get(storageKey) === beforeUnlocked, 'plant_order_unconfirmed_write_not_rolled_back')
+  } catch (error) {
+    fail(`plant_order_runtime:${error instanceof Error ? error.message : 'unknown'}`)
   }
 }
 
@@ -6849,6 +6992,7 @@ async function verifyProductionRuntime() {
 
 await verifyChannelOrderRuntime()
 await verifyShopInventoryRuntime()
+await verifyPlantOrderRuntime()
 await verifyCatalogImportRuntime()
 await verifyClientOnboardingRuntime()
 await verifyManagedClientImportRuntime()
@@ -6875,4 +7019,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceHandoffRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, plantOrderRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceHandoffRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
