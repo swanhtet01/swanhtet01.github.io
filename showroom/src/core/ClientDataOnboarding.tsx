@@ -28,6 +28,8 @@ import {
 
 type ClientDataOnboardingProps = {
   product: ClientSolutionId
+  productName: string
+  productSlug: string
   workflowTemplateId: string
   workspace: string
   owner: string
@@ -58,20 +60,6 @@ type ImportState = {
   applied: AppliedImport | null
   validation: ValidatedImport | null
   error: string
-}
-
-const productSlugs: Record<ClientSolutionId, string> = {
-  commerce: 'shop',
-  production: 'plant',
-  website: 'website',
-  ecommerce: 'ecommerce',
-}
-
-const productNames: Record<ClientSolutionId, string> = {
-  commerce: 'Shop',
-  production: 'Plant',
-  website: 'Website',
-  ecommerce: 'Ecommerce',
 }
 
 const mappingBasisLabels: Record<string, string> = {
@@ -144,7 +132,7 @@ function downloadFile(filename: string, content: string, type: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 0)
 }
 
-export function ClientDataOnboarding({ product, workflowTemplateId, workspace, owner, managedIdentity }: ClientDataOnboardingProps) {
+export function ClientDataOnboarding({ product, productName, productSlug, workflowTemplateId, workspace, owner, managedIdentity }: ClientDataOnboardingProps) {
   const object = clientImportObject(product)
   const requestRef = useRef(0)
   const validationRequestRef = useRef(0)
@@ -182,8 +170,12 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
     ? [
         ...state.preview.rows.filter((row) => row.status !== 'ready'),
         ...state.preview.rows.filter((row) => row.status === 'ready'),
-      ].slice(0, 20)
+      ].slice(0, 12)
     : []
+  const matchedFieldCount = state.preview
+    ? state.preview.fields.filter((field) => Boolean(state.preview?.mapping[field.id])).length
+    : 0
+  const mappingNeedsReview = Boolean(state.preview?.fields.some((field) => field.required && !state.preview?.mapping[field.id]))
   const importContextReady = Boolean(workspace.trim() && owner.trim())
   const managedActivation = product === 'commerce'
     ? {
@@ -193,10 +185,8 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
         completedLabel: 'Shop items',
         productLabel: 'Shop',
         resultVerb: 'created',
-        pendingNoun: 'creation',
         progressLabel: 'Creating one revisioned Shop catalog and confirming the durable result…',
         busyLabel: 'Creating catalog…',
-        actionLabel: 'Create Shop catalog',
         failure: 'The managed Shop catalog was not created. The checked import is still available.',
       }
     : product === 'production'
@@ -207,10 +197,8 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
           completedLabel: 'Plant jobs',
           productLabel: 'Plant',
           resultVerb: 'created',
-          pendingNoun: 'creation',
-          progressLabel: 'Creating one Plant opening plan and confirming the durable resultâ€¦',
-          busyLabel: 'Creating planâ€¦',
-          actionLabel: 'Create Plant opening plan',
+          progressLabel: 'Creating one Plant opening plan and confirming the durable result…',
+          busyLabel: 'Creating plan…',
           failure: 'The managed Plant opening plan was not created. The checked import is still available.',
         }
       : product === 'website'
@@ -221,10 +209,8 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
           completedLabel: 'Website drafts',
           productLabel: 'Website',
           resultVerb: 'created',
-          pendingNoun: 'creation',
           progressLabel: 'Creating one revisioned Website draft workspace and confirming the durable result…',
           busyLabel: 'Creating drafts…',
-          actionLabel: 'Create Website drafts',
           failure: 'The managed Website drafts were not created. The checked import is still available.',
         }
       : product === 'ecommerce'
@@ -235,10 +221,8 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
             completedLabel: 'Ecommerce display rows',
             productLabel: 'Ecommerce',
             resultVerb: 'applied',
-            pendingNoun: 'update',
             progressLabel: 'Applying reviewed display details to the saved storefront and confirming the durable result…',
             busyLabel: 'Applying details…',
-            actionLabel: 'Apply Ecommerce display details',
             failure: 'The Ecommerce display details were not applied. The checked import is still available.',
           }
         : null
@@ -326,7 +310,7 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
 
   function downloadTemplate() {
     downloadFile(
-      `supermega-${productSlugs[product]}-${workflowTemplateId}-${object.id}-sample-v1.csv`,
+      `supermega-${productSlug}-${workflowTemplateId}-${object.id}-sample-v1.csv`,
       `\uFEFF${clientImportTemplate(product, workflowTemplateId)}`,
       'text/csv;charset=utf-8',
     )
@@ -336,7 +320,7 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
     const expectedProduct = product
     const expectedWorkflowTemplateId = workflowTemplateId
     void runPreview(
-      `supermega-${productSlugs[expectedProduct]}-${expectedWorkflowTemplateId}-${object.id}-sample-v1.csv`,
+      `supermega-${productSlug}-${expectedWorkflowTemplateId}-${object.id}-sample-v1.csv`,
       clientImportTemplate(expectedProduct, expectedWorkflowTemplateId),
       undefined,
       expectedProduct,
@@ -355,7 +339,7 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
 
   function downloadStagingPackage(stagingPackage: ManagedClientImportPackage) {
     downloadFile(
-      `supermega-${productSlugs[product]}-${workflowTemplateId}-client-import-staging-v1.json`,
+      `supermega-${productSlug}-${workflowTemplateId}-client-import-staging-v1.json`,
       `${JSON.stringify(stagingPackage, null, 2)}\n`,
       'application/json;charset=utf-8',
     )
@@ -512,42 +496,45 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
 
   return (
     <details className="compact-disclosure catalog-import-disclosure">
-      <summary><span>Import data (optional)</span><small>{object.label} · {workflowTemplateId.replaceAll('-', ' ')}</small></summary>
+      <summary><span>Bring existing data</span><small>Optional for {productName}</small></summary>
       <div className="catalog-import-workspace">
         <div className="catalog-import-intro">
           <div>
-            <span className="core-eyebrow">Existing data</span>
-            <h3>Try a sample or upload CSV</h3>
-            <p>{object.description} Clear columns match automatically; ambiguous columns wait for your choice instead of being guessed.</p>
+            <span className="core-eyebrow">Smart import</span>
+            <h3>Upload a CSV</h3>
+            <p>{object.description} SuperMega matches clear columns and asks before using anything uncertain.</p>
           </div>
           <div className="catalog-import-file-actions">
-            <div className="catalog-import-template-actions"><button className="core-button primary" disabled={state.busy} onClick={previewSample} type="button">Preview sample data</button><button className="core-button" disabled={state.busy} onClick={downloadTemplate} type="button">Download sample CSV</button></div>
-            <label htmlFor={`client-import-${product}`}>Upload your CSV<input accept=".csv,text/csv" disabled={state.busy} id={`client-import-${product}`} onChange={(event) => { const file = event.currentTarget.files?.[0] ?? null; event.currentTarget.value = ''; void chooseFile(file) }} type="file" /></label>
+            <label htmlFor={`client-import-${product}`}>Choose your CSV<input accept=".csv,text/csv" disabled={state.busy} id={`client-import-${product}`} onChange={(event) => { const file = event.currentTarget.files?.[0] ?? null; event.currentTarget.value = ''; void chooseFile(file) }} type="file" /></label>
+            <div className="catalog-import-template-actions"><button className="core-button" disabled={state.busy} onClick={previewSample} type="button">Try sample</button><button className="core-button" disabled={state.busy} onClick={downloadTemplate} type="button">Download template</button></div>
           </div>
         </div>
         <p className="catalog-import-boundary">{appliedIsCurrent && state.applied
-          ? `The exact checked package ${managedActivation?.resultVerb ?? 'created'} ${state.applied.receipt.activation.row_count} ${managedActivation?.createdLabel ?? 'product records'} in ${managedIdentity?.workspaceId}. The source CSV was not uploaded or sent to AI. `
+          ? `${state.applied.receipt.activation.row_count} ${managedActivation?.createdLabel ?? 'records'} were imported into ${managedIdentity?.workspaceId}. Your source CSV was not uploaded or sent to AI.`
           : managedIdentity
-          ? `The source CSV stays in this tab. Only the checked import package is sent to ${managedIdentity.workspaceId} for validation; nothing is sent to AI or added to a product before your final confirmation. `
-          : `The CSV stays in this browser. Nothing is sent to AI or added to ${productNames[product]} while you preview it. `}{appliedIsCurrent ? '' : object.activationBoundary}</p>
-        {state.busy ? <p className="form-notice" role="status">Checking columns, required values, duplicates, dates, URLs, and Unicode…</p> : null}
-        {state.validating ? <p className="form-notice" role="status">Validating the exact package with the authenticated workspace…</p> : null}
-        {state.applying ? <p className="form-notice" role="status">{managedActivation?.progressLabel ?? 'Confirming the durable import result…'}</p> : null}
+          ? `Your CSV stays in this tab. Only prepared rows are checked with ${managedIdentity.workspaceId}; nothing is written until you confirm the import.`
+          : `Your CSV stays in this browser. Nothing is sent to AI or added to ${productName} while you review it.`}</p>
+        {state.busy ? <p className="form-notice" role="status">Matching columns and checking every row...</p> : null}
+        {state.validating ? <p className="form-notice" role="status">Checking the prepared import with your workspace...</p> : null}
+        {state.applying ? <p className="form-notice" role="status">{managedActivation?.progressLabel ?? 'Confirming the import...'}</p> : null}
         {state.error ? <p className="form-error" role="alert">{state.error}</p> : null}
         {state.preview ? <div className="catalog-import-preview" ref={previewRef} tabIndex={-1}>
           <div className="catalog-import-source">
-            <div><strong>{state.preview.sourceName}</strong><small>Preview {state.preview.previewDigest.slice(7, 19).toUpperCase()} · source fingerprint retained</small></div>
+            <div><strong>{state.preview.sourceName}</strong><small>{state.preview.totals.rows} rows found, {matchedFieldCount} of {state.preview.fields.length} columns matched</small></div>
             <span className={`status-pill ${appliedIsCurrent || validationIsCurrent || state.preview.readyForStaging ? 'approved' : 'pending'}`}>{appliedIsCurrent ? 'Applied' : validationIsCurrent ? 'Server checked' : state.preview.readyForStaging ? 'Ready to prepare' : 'Review needed'}</span>
           </div>
-          <fieldset className="catalog-import-mapping" disabled={state.busy}>
-            <legend>Match spreadsheet columns</legend>
-            {state.preview.fields.map((field) => {
-              const suggestion = state.preview?.suggestions.find((candidate) => candidate.field === field.id)
-              const selected = state.preview?.mapping[field.id] ?? ''
-              const basis = suggestion?.header === selected ? suggestion.basis : selected ? 'reviewed' : field.required ? 'required' : 'optional'
-              return <label key={field.id}>{field.label}{field.required ? ' *' : ''}<select onChange={(event) => remap(field.id, event.target.value)} value={selected}><option value="">{field.required ? 'Choose column' : 'Do not import'}</option>{state.preview?.headers.map((header) => <option key={header}>{header}</option>)}</select><small>{mappingBasisLabels[basis] ?? basis}</small></label>
-            })}
-          </fieldset>
+          <details className="catalog-import-mapping-review" open={mappingNeedsReview || undefined}>
+            <summary><span>Column matching</span><small>{mappingNeedsReview ? 'Needs your review' : `${matchedFieldCount} of ${state.preview.fields.length} matched`}</small></summary>
+            <fieldset className="catalog-import-mapping" disabled={state.busy}>
+              <legend>Match spreadsheet columns</legend>
+              {state.preview.fields.map((field) => {
+                const suggestion = state.preview?.suggestions.find((candidate) => candidate.field === field.id)
+                const selected = state.preview?.mapping[field.id] ?? ''
+                const basis = suggestion?.header === selected ? suggestion.basis : selected ? 'reviewed' : field.required ? 'required' : 'optional'
+                return <label key={field.id}>{field.label}{field.required ? ' *' : ''}<select onChange={(event) => remap(field.id, event.target.value)} value={selected}><option value="">{field.required ? 'Choose column' : 'Do not import'}</option>{state.preview?.headers.map((header) => <option key={header}>{header}</option>)}</select><small>{mappingBasisLabels[basis] ?? basis}</small></label>
+              })}
+            </fieldset>
+          </details>
           <div className="catalog-import-totals">
             <span><strong>{state.preview.totals.rows}</strong><small>Rows</small></span>
             <span data-result="ready"><strong>{state.preview.totals.ready}</strong><small>Ready</small></span>
@@ -555,26 +542,31 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
             <span><strong>{state.preview.totals.duplicates}</strong><small>Duplicates</small></span>
           </div>
           {state.preview.fileIssues.length ? <ul className="catalog-import-file-issues">{state.preview.fileIssues.map((issue) => <li key={`${issue.code}-${issue.field}`}>{issue.message}</li>)}</ul> : null}
-          <div className="catalog-import-table" role="table" aria-label={`${object.label} import preview`}>
-            <div className="catalog-import-row catalog-import-head" role="row"><span>Row</span><span>Key</span><span>Status</span><span>What to fix</span></div>
-            {visibleRows.map((row) => <div className="catalog-import-row" data-result={row.status} key={row.rowNumber} role="row"><span>{row.rowNumber}</span><strong>{row.key || '—'}</strong><span>{rowStatusLabels[row.status] ?? row.status}</span><small>{row.issues.map((issue) => issue.message).join(' · ') || 'Mapped and checked'}</small></div>)}
-          </div>
-          {state.preview.rows.length > visibleRows.length ? <p className="panel-copy">Showing the first {visibleRows.length} rows; the staging package retains all {state.preview.rows.length} checked rows.</p> : null}
+          <details className="catalog-import-row-review" open={state.preview.totals.issueRows > 0 || undefined}>
+            <summary><span>Review rows</span><small>{state.preview.totals.issueRows ? `${state.preview.totals.issueRows} need attention` : 'All rows passed'}</small></summary>
+            <div className="catalog-import-table" role="table" aria-label={`${object.label} import preview`}>
+              <div className="catalog-import-row catalog-import-head" role="row"><span>Row</span><span>Key</span><span>Status</span><span>What to fix</span></div>
+              {visibleRows.map((row) => <div className="catalog-import-row" data-result={row.status} key={row.rowNumber} role="row"><span>{row.rowNumber}</span><strong>{row.key || '-'}</strong><span>{rowStatusLabels[row.status] ?? row.status}</span><small>{row.issues.map((issue) => issue.message).join(' / ') || 'Mapped and checked'}</small></div>)}
+            </div>
+            {state.preview.rows.length > visibleRows.length ? <p className="panel-copy">Showing {visibleRows.length} of {state.preview.rows.length} checked rows.</p> : null}
+          </details>
           {validationIsCurrent && state.validation?.receipt.activation.atomic_adapter_ready && managedActivation && !appliedIsCurrent ? <>
-            <label className="website-intake-confirm"><input checked={state.applyConfirmed} disabled={state.applying} onChange={(event) => setState((current) => ({ ...current, applyConfirmed: event.target.checked, error: '' }))} type="checkbox" /><span>I reviewed all {state.validation.stagingPackage.rows.length} {managedActivation.reviewLabel} and validation receipt {state.validation.receipt.package_digest.slice(7, 19).toUpperCase()}.</span></label>
-            <div className="form-actions"><button className="core-button primary" disabled={!canApplyManagedImport} onClick={() => void activateManagedImport()} type="button">{state.applying ? managedActivation.busyLabel : managedActivation.actionLabel}</button></div>
+            <label className="website-intake-confirm"><input checked={state.applyConfirmed} disabled={state.applying} onChange={(event) => setState((current) => ({ ...current, applyConfirmed: event.target.checked, error: '' }))} type="checkbox" /><span>I reviewed all {state.validation.stagingPackage.rows.length} {managedActivation.reviewLabel} and approve this import.</span></label>
+            <div className="form-actions"><button className="core-button primary" disabled={!canApplyManagedImport} onClick={() => void activateManagedImport()} type="button">{state.applying ? managedActivation.busyLabel : `Import ${state.validation.stagingPackage.rows.length} ${managedActivation.reviewLabel}`}</button></div>
           </> : null}
           <div className="catalog-import-footer">
             <div><strong>{appliedIsCurrent && state.applied ? `${state.applied.receipt.activation.row_count} ${managedActivation?.completedLabel ?? 'records'} ${managedActivation?.resultVerb ?? 'created'} in revision ${state.applied.receipt.result.version}.` : validationIsCurrent ? `Validated by ${managedIdentity?.workspaceId}.` : state.preview.readyForStaging && !importContextReady ? 'Add workspace and owner above.' : state.preview.readyForStaging ? 'Data check passed.' : 'Fix the highlighted rows first.'}</strong><small>{appliedIsCurrent && state.applied
-              ? `Receipt ${state.applied.receipt.activation.package_digest.slice(7, 19).toUpperCase()} · durable ${managedActivation?.productLabel ?? 'product'} state confirmed with one idempotent command.`
-              : validationIsCurrent && state.validation
-              ? `Receipt ${state.validation.receipt.package_digest.slice(7, 19).toUpperCase()} · zero product records were written; ${managedActivation?.productLabel ?? 'product'} ${managedActivation?.pendingNoun ?? 'creation'} waits for the separate review above.`
+              ? `The ${managedActivation?.productLabel ?? 'product'} import is confirmed.`
+              : validationIsCurrent
+              ? 'Checked successfully. Review and confirm above before records are written.'
               : state.preview.readyForStaging && !importContextReady
-                ? 'These details bind the checked rows to one accountable client workspace before download.'
+                ? 'These details connect the prepared rows to one accountable client workspace.'
               : managedIdentity
-                ? 'The exact template, mapping, checked rows, owner, and workspace label must pass the tenant API before download.'
-                : 'The checked import records its template, mapping, source fingerprint, owner, and rows. It performs zero product writes.'}</small></div>
-            <div className="form-actions"><button className="core-button" disabled={state.applying} onClick={clearPreview} type="button">Clear</button>{!appliedIsCurrent && !(validationIsCurrent && state.validation?.receipt.activation.atomic_adapter_ready && managedActivation) ? <button className="core-button primary" disabled={!canPrepareImport} onClick={() => void validateOrDownloadStagingPackage()} type="button">{state.validating ? 'Validating…' : !importContextReady ? 'Add workspace and owner' : validationIsCurrent ? 'Download validated import' : managedIdentity ? 'Validate import' : 'Download checked import'}</button> : null}</div>
+                ? 'Ready to check with your workspace.'
+                : 'Ready to prepare an accountable import file.'}</small>
+              {appliedIsCurrent && state.applied ? <details className="catalog-import-technical"><summary>Technical receipt</summary><p>{state.applied.receipt.activation.package_digest.slice(7, 19).toUpperCase()} / revision {state.applied.receipt.result.version} / idempotent command confirmed</p></details> : validationIsCurrent && state.validation ? <details className="catalog-import-technical"><summary>Technical receipt</summary><p>{state.validation.receipt.package_digest.slice(7, 19).toUpperCase()} / zero records written / {object.activationBoundary}</p></details> : null}
+            </div>
+            <div className="form-actions"><button className="core-button" disabled={state.applying} onClick={clearPreview} type="button">Clear</button>{!appliedIsCurrent && !(validationIsCurrent && state.validation?.receipt.activation.atomic_adapter_ready && managedActivation) ? <button className="core-button primary" disabled={!canPrepareImport} onClick={() => void validateOrDownloadStagingPackage()} type="button">{state.validating ? 'Checking...' : !importContextReady ? 'Add workspace and owner' : validationIsCurrent ? 'Download checked file' : managedIdentity ? 'Check with workspace' : 'Prepare import file'}</button> : null}</div>
           </div>
         </div> : null}
       </div>

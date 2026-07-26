@@ -91,11 +91,6 @@ import {
   type ChannelOrderDraft,
   type ChannelOrderField,
 } from './channel-order-intake'
-import type {
-  ShopCatalogImportField,
-  ShopCatalogImportMapping,
-  ShopCatalogImportPreview,
-} from './shop-catalog-import'
 import type { ClientSolutionId } from './client-onboarding'
 import type {
   CommerceOrderDraft,
@@ -267,16 +262,6 @@ type CatalogItemEditDraft = {
   reorderAt: string
 }
 
-type CatalogImportState = {
-  sourceName: string
-  sourceText: string
-  catalogSnapshot: string
-  mapping: ShopCatalogImportMapping
-  preview: ShopCatalogImportPreview | null
-  busy: boolean
-  error: string
-}
-
 type CommerceReturnDraft = {
   orderId: string
   sku: string
@@ -312,47 +297,11 @@ type ActionDetails = Pick<AccountableAction, 'actor' | 'reason' | 'evidenceRefer
 class ShopReviewRequiredError extends Error {}
 class PlantReviewRequiredError extends Error {}
 
-const catalogImportFieldConfig: Array<{ field: ShopCatalogImportField; label: string }> = [
-  { field: 'sku', label: 'SKU' },
-  { field: 'name', label: 'Item name' },
-  { field: 'onHand', label: 'Opening stock' },
-  { field: 'reorderAt', label: 'Reorder at' },
-  { field: 'price', label: 'Price (MMK)' },
-]
-
-function blankCatalogImportMapping(): ShopCatalogImportMapping {
-  return { sku: '', name: '', onHand: '', reorderAt: '', price: '' }
-}
-
-function emptyCatalogImportState(): CatalogImportState {
-  return {
-    sourceName: '',
-    sourceText: '',
-    catalogSnapshot: '',
-    mapping: blankCatalogImportMapping(),
-    preview: null,
-    busy: false,
-    error: '',
-  }
-}
-
-function downloadCatalogCsv(filename: string, content: string) {
-  const url = URL.createObjectURL(new Blob(['\uFEFF', content], { type: 'text/csv;charset=utf-8' }))
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  link.click()
-  URL.revokeObjectURL(url)
-}
-
 type ProductId = 'commerce' | 'production'
 type SetupProductId = ClientSolutionId
 
 function productDisplayName(product: SetupProductId) {
-  if (product === 'commerce') return 'Shop'
-  if (product === 'production') return 'Plant'
-  if (product === 'website') return 'Website'
-  return 'Ecommerce'
+  return productContracts[product].name
 }
 
 function setupProductPreviewPath(product: SetupProductId) {
@@ -377,12 +326,16 @@ type WorkflowTemplate = {
 
 type ProductContract = {
   id: SetupProductId
+  slug: string
+  name: string
+  status: string
+  headline: string
   templates: WorkflowTemplate[]
 }
 
 type SetupState = {
   product: SetupProductId
-  template: string
+  templateId: string
   workspace: string
   owner: string
   entryPoint: string
@@ -451,7 +404,14 @@ function collectLocalProductRecords(storage: Pick<Storage, 'getItem' | 'key' | '
 function requireProductContract(id: SetupProductId): ProductContract {
   const product = siteManifest.customerProducts.find((candidate) => candidate.runtimeId === id)
   if (!product) throw new Error(`Missing ${id} product contract.`)
-  return { id, templates: product.templates }
+  return {
+    id,
+    slug: product.id,
+    name: product.name,
+    status: product.status,
+    headline: product.headline,
+    templates: product.templates,
+  }
 }
 
 const productContracts: Record<SetupProductId, ProductContract> = {
@@ -469,14 +429,14 @@ function templateFor(product: SetupProductId, name: string) {
   const templates = templatesFor(product)
   const fallback = templates[0]
   if (!fallback) throw new Error(`Missing ${product} workflow templates.`)
-  return templates.find((template) => template.name === name) ?? fallback
+  return templates.find((template) => template.id === name || template.name === name) ?? fallback
 }
 
 const seedCommerceTemplate = templateFor('commerce', '')
 
 const seedSetup: SetupState = {
   product: 'commerce',
-  template: seedCommerceTemplate.name,
+  templateId: seedCommerceTemplate.id,
   workspace: '',
   owner: '',
   entryPoint: seedCommerceTemplate.entryPoints[0] ?? '',
@@ -490,7 +450,7 @@ const seedSetup: SetupState = {
 const pilotRequiredFields = ['workspace', 'owner', 'entryPoint', 'currentRecord', 'baseline', 'targetOutcome', 'authorityBoundary', 'acceptanceEvidence'] as const
 
 function normalizeSetup(value: SetupState) {
-  const source = (value && typeof value === 'object' ? value : seedSetup) as Omit<Partial<SetupState>, 'product'> & { product?: string }
+  const source = (value && typeof value === 'object' ? value : seedSetup) as Omit<Partial<SetupState>, 'product'> & { product?: string; template?: string }
   const product: SetupProductId = source.product === 'production' || source.product === 'plant'
     ? 'production'
     : source.product === 'website'
@@ -498,16 +458,31 @@ function normalizeSetup(value: SetupState) {
       : source.product === 'ecommerce'
         ? 'ecommerce'
         : 'commerce'
-  const template = templateFor(product, String(source.template || ''))
+  const template = templateFor(product, String(source.templateId || source.template || ''))
   const sourceEntryPoint = String(source.entryPoint || '')
   const normalized: SetupState = {
-    ...seedSetup,
-    ...source,
     product,
-    template: template.name,
+    templateId: template.id,
+    workspace: typeof source.workspace === 'string' ? source.workspace : '',
+    owner: typeof source.owner === 'string' ? source.owner : '',
     entryPoint: template.entryPoints.includes(sourceEntryPoint) ? sourceEntryPoint : template.entryPoints[0] ?? '',
+    currentRecord: typeof source.currentRecord === 'string' ? source.currentRecord : '',
+    baseline: typeof source.baseline === 'string' ? source.baseline : '',
+    targetOutcome: typeof source.targetOutcome === 'string' ? source.targetOutcome : '',
+    authorityBoundary: typeof source.authorityBoundary === 'string' ? source.authorityBoundary : '',
+    acceptanceEvidence: typeof source.acceptanceEvidence === 'string' ? source.acceptanceEvidence : '',
+    ...(typeof source.savedAt === 'string' && source.savedAt ? { savedAt: source.savedAt } : {}),
   }
   return JSON.stringify(normalized) === JSON.stringify(value) ? value : normalized
+}
+
+function setupProductFromQuery(value: string | null): SetupProductId | null {
+  if (!value) return null
+  return Object.values(productContracts).find((product) => product.slug === value || product.id === value)?.id ?? null
+}
+
+function clientSetupPath(product: SetupProductId) {
+  return `/settings/?product=${encodeURIComponent(productContracts[product].slug)}`
 }
 
 function pilotProgress(setup: SetupState) {
@@ -1451,7 +1426,7 @@ export function CoreLayout() {
     : location.pathname.startsWith('/ecommerce/')
       ? 'Ecommerce'
     : location.pathname.startsWith('/settings/')
-      ? 'Settings'
+      ? 'Client setup'
       : location.pathname.startsWith('/shop/') || location.pathname.startsWith('/operations/commerce/')
         ? 'Shop'
         : location.pathname.startsWith('/plant/') || location.pathname.startsWith('/operations/production/')
@@ -1479,10 +1454,10 @@ export function CoreLayout() {
         <nav className="core-nav" aria-label="Application">
           {navigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={item.end} key={item.to} to={item.to}>{item.label}</NavLink>)}
         </nav>
-        <div className="sidebar-foot"><RuntimeBadge status={runtime.status} /><NavLink to="/settings/">Settings</NavLink></div>
+        <div className="sidebar-foot"><RuntimeBadge status={runtime.status} /><NavLink to="/settings/">Client setup</NavLink></div>
       </aside>
       <div className="core-stage">
-        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>{location.pathname.startsWith('/work/') ? 'SuperMega HQ' : 'SuperMega'}</span></div><div className="topbar-meta"><NavLink to="/settings/">Settings</NavLink><RuntimeBadge status={runtime.status} /></div></header>
+        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>{location.pathname.startsWith('/work/') ? 'SuperMega HQ' : 'SuperMega'}</span></div><div className="topbar-meta"><NavLink to="/settings/">Setup</NavLink><RuntimeBadge status={runtime.status} /></div></header>
         <nav className="mobile-nav" aria-label="Mobile application">{navigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={item.end} key={item.to} to={item.to}>{item.label}</NavLink>)}</nav>
         <main id="workspace-main" className="core-main" ref={workspaceMainRef} tabIndex={-1}><Outlet context={runtime} /></main>
       </div>
@@ -1841,7 +1816,7 @@ export function OperationsPage({ product }: { product?: ProductId }) {
 
   if (!isProductRoute && !requestedView) {
     return <div className="workspace-screen product-catalog-screen">
-      <PageHeading eyebrow="Products" title="Choose a product" copy="Open the product for the job you need to do." />
+      <PageHeading eyebrow="Products" title="Choose a product" copy="Open the product for the job you need to do." actions={<Link className="core-button" to="/settings/">Set up a client</Link>} />
       <nav aria-label="SuperMega apps" className="product-launcher product-catalog">
         <Link to="/shop/?tab=orders"><span><strong>Shop</strong><small>Orders, payments, and stock</small></span><b>Open</b></Link>
         <Link to="/plant/?tab=production"><span><strong>Plant</strong><small>Jobs, output, and problems</small></span><b>Open</b></Link>
@@ -2165,7 +2140,6 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const orderPaymentRef = useRef<HTMLSelectElement>(null)
   const catalogEditTriggerRefs = useRef(new Map<string, HTMLButtonElement>())
   const catalogEditEditorRef = useRef<HTMLFormElement>(null)
-  const catalogImportRequestRef = useRef(0)
   const purchaseOrderTriggerRefs = useRef(new Map<string, HTMLButtonElement>())
   const purchaseOrderEditorRef = useRef<HTMLFormElement>(null)
   const purchaseOrderHistoryRef = useRef<HTMLDetailsElement>(null)
@@ -2188,7 +2162,6 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const [catalogDraft, setCatalogDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '', price: '', reason: '', evidenceReference: '' })
   const [itemDraft, setItemDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '', price: '' })
   const [catalogEditDraft, setCatalogEditDraft] = useState<CatalogItemEditDraft | null>(null)
-  const [catalogImport, setCatalogImport] = useState<CatalogImportState>(emptyCatalogImportState)
   const [purchaseOrderDraft, setPurchaseOrderDraft] = useState<PurchaseOrderDraft | null>(null)
   const [stockCountDraft, setStockCountDraft] = useState<StockCountDraft | null>(null)
   const [returnDraft, setReturnDraft] = useState<CommerceReturnDraft | null>(null)
@@ -2259,14 +2232,6 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       const rightShortage = right.item.reorderAt - right.item.onHand
       return rightShortage - leftShortage || left.index - right.index
     })
-  const catalogImportStale = Boolean(catalogImport.preview
-    && catalogImport.catalogSnapshot !== JSON.stringify(commerce.items))
-  const catalogImportVisibleRows = catalogImport.preview
-    ? [
-        ...catalogImport.preview.rows.filter((row) => row.status !== 'ready'),
-        ...catalogImport.preview.rows.filter((row) => row.status === 'ready'),
-      ].slice(0, 40)
-    : []
   const openOrders = commerce.orders.filter((order) => order.status !== 'completed' && order.status !== 'cancelled')
   const paymentReview = commerce.orders.filter((order) => order.refundStatus === 'due' || (order.status !== 'cancelled' && order.paymentStatus === 'pending'))
   const actionOrders = commerce.orders.filter(commerceOrderNeedsAction).sort(compareCommerceOrderPromise)
@@ -2981,103 +2946,6 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         setSku(item.sku)
       },
     })
-  }
-
-  async function runCatalogImportPreview(
-    sourceName: string,
-    sourceText: string,
-    mapping?: ShopCatalogImportMapping,
-  ) {
-    const requestId = catalogImportRequestRef.current + 1
-    catalogImportRequestRef.current = requestId
-    setCatalogImport((current) => ({
-      ...current,
-      sourceName,
-      sourceText,
-      mapping: mapping ?? blankCatalogImportMapping(),
-      preview: mapping ? current.preview : null,
-      busy: true,
-      error: '',
-    }))
-    try {
-      const catalogSnapshot = JSON.stringify(commerce.items)
-      const { createShopCatalogImportPreview } = await import('./shop-catalog-import')
-      const preview = await createShopCatalogImportPreview(sourceText, commerce.items, mapping, sourceName)
-      if (catalogImportRequestRef.current !== requestId) return
-      setCatalogImport({
-        sourceName,
-        sourceText,
-        catalogSnapshot,
-        mapping: preview.mapping,
-        preview,
-        busy: false,
-        error: '',
-      })
-      setNotice(`${preview.totals.ready} catalog rows are ready; ${preview.totals.issueRows} need fixes. Zero Shop records were written.`)
-    } catch (error) {
-      if (catalogImportRequestRef.current !== requestId) return
-      setCatalogImport((current) => ({
-        ...current,
-        sourceName,
-        sourceText: mapping ? sourceText : '',
-        catalogSnapshot: mapping ? current.catalogSnapshot : '',
-        mapping: mapping ?? blankCatalogImportMapping(),
-        preview: mapping ? current.preview : null,
-        busy: false,
-        error: error instanceof Error ? error.message : 'The CSV could not be previewed.',
-      }))
-      setNotice('The CSV was rejected before any Shop record was written.')
-    }
-  }
-
-  async function previewCatalogImportFile(file: File | null) {
-    if (!file) return
-    try {
-      const { SHOP_CATALOG_IMPORT_MAX_BYTES } = await import('./shop-catalog-import')
-      if (!file.name.toLocaleLowerCase('en-US').endsWith('.csv') && file.type !== 'text/csv') {
-        setCatalogImport({ ...emptyCatalogImportState(), sourceName: file.name, error: 'Choose a CSV file, not an Excel workbook or another format.' })
-        setNotice('The selected file was rejected before it was read or uploaded.')
-        return
-      }
-      if (file.size > SHOP_CATALOG_IMPORT_MAX_BYTES) {
-        setCatalogImport({ ...emptyCatalogImportState(), sourceName: file.name, error: `Choose a CSV smaller than ${SHOP_CATALOG_IMPORT_MAX_BYTES / 1024} KB.` })
-        setNotice('The selected file was too large and was not read or uploaded.')
-        return
-      }
-      await runCatalogImportPreview(file.name, await file.text())
-    } catch {
-      setCatalogImport({ ...emptyCatalogImportState(), sourceName: file.name, error: 'The browser could not read this CSV.' })
-      setNotice('The CSV could not be read. No Shop record was written.')
-    }
-  }
-
-  function remapCatalogImport(field: ShopCatalogImportField, header: string) {
-    const mapping = { ...catalogImport.mapping, [field]: header }
-    void runCatalogImportPreview(catalogImport.sourceName, catalogImport.sourceText, mapping)
-  }
-
-  function recheckCatalogImport() {
-    if (!catalogImport.sourceText) return
-    void runCatalogImportPreview(catalogImport.sourceName, catalogImport.sourceText, catalogImport.mapping)
-  }
-
-  function clearCatalogImport() {
-    catalogImportRequestRef.current += 1
-    setCatalogImport(emptyCatalogImportState())
-    setNotice('Catalog import preview cleared. Shop data was not modified.')
-  }
-
-  async function downloadCatalogImportErrors() {
-    if (!catalogImport.preview) return
-    const { shopCatalogImportErrorsCsv } = await import('./shop-catalog-import')
-    downloadCatalogCsv('supermega-shop-catalog-errors.csv', shopCatalogImportErrorsCsv(catalogImport.preview))
-    setNotice('Downloaded the dry-run error report. Shop data was not modified.')
-  }
-
-  async function downloadCatalogImportTemplate() {
-    const { SHOP_CATALOG_IMPORT_TEMPLATE } = await import('./shop-catalog-import')
-    downloadCatalogCsv('supermega-shop-catalog-v1.csv', SHOP_CATALOG_IMPORT_TEMPLATE)
-    setNotice('Downloaded the versioned Shop catalog template. Shop data was not modified.')
   }
 
   function openCatalogItemEditor(itemSku: string) {
@@ -4226,47 +4094,10 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
           </article>
         })}</div> : <p className="empty-state">No purchase orders yet. Use Order stock on an item when replenishment is needed.</p>}
       </details>
-      <details className="compact-disclosure catalog-import-disclosure">
-        <summary><span>Import catalog CSV</span><small>Dry run · no writes</small></summary>
-        <div className="catalog-import-workspace">
-          <div className="catalog-import-intro">
-            <div><span className="core-eyebrow">Client onboarding</span><h3>Map and check the catalog</h3><p>Preview up to 500 rows before a separate accountable import. Smart mapping uses explicit header aliases and shows every choice; it never silently fixes data.</p></div>
-            <div className="catalog-import-file-actions">
-              <button className="core-button" onClick={() => void downloadCatalogImportTemplate()} type="button">Download template</button>
-              <label htmlFor="shop-catalog-import-file">Choose CSV<input accept=".csv,text/csv" aria-describedby="shop-catalog-import-boundary" disabled={catalogImport.busy} id="shop-catalog-import-file" onChange={(event) => { const file = event.currentTarget.files?.[0] ?? null; event.currentTarget.value = ''; void previewCatalogImportFile(file) }} type="file" /></label>
-            </div>
-          </div>
-          <p className="catalog-import-boundary" id="shop-catalog-import-boundary">The file stays in this browser tab. It is not uploaded, saved to storage, sent to AI, or applied to Shop.</p>
-          {catalogImport.busy ? <p className="form-notice" role="status">Checking headers, values, duplicates, conflicts, and Unicode…</p> : null}
-          {catalogImport.error ? <p className="form-error" role="alert">{catalogImport.error}</p> : null}
-          {catalogImport.preview ? <div className="catalog-import-preview">
-            <div className="catalog-import-source"><div><strong>{catalogImport.preview.sourceName}</strong><small>Preview {catalogImport.preview.previewDigest.slice(7, 19).toUpperCase()} · exact source and Shop snapshot</small></div><span className={`status-pill ${catalogImportStale ? 'pending' : 'bounded'}`}>{catalogImportStale ? 'Shop changed' : 'Current'}</span></div>
-            <fieldset className="catalog-import-mapping" disabled={catalogImport.busy}>
-              <legend>Column mapping</legend>
-              {catalogImportFieldConfig.map(({ field, label }) => {
-                const suggestion = catalogImport.preview?.suggestions.find((candidate) => candidate.field === field)
-                return <label htmlFor={`catalog-import-map-${field}`} key={field}><span>{label}</span><select id={`catalog-import-map-${field}`} onChange={(event) => remapCatalogImport(field, event.target.value)} value={catalogImport.mapping[field]}><option value="">Not mapped</option>{catalogImport.preview?.headers.map((header) => <option key={header} value={header}>{header}</option>)}</select><small>{suggestion?.basis === 'exact' ? 'Exact template header' : suggestion?.basis === 'alias' ? 'Suggested alias · review it' : suggestion?.basis === 'ambiguous' ? 'Multiple matches · choose one' : 'Choose the source column'}</small></label>
-              })}
-            </fieldset>
-            <div aria-label="Catalog import totals" className="catalog-import-totals">
-              <span><strong>{catalogImport.preview.totals.rows}</strong><small>CSV rows</small></span>
-              <span data-result="ready"><strong>{catalogImport.preview.totals.ready}</strong><small>ready</small></span>
-              <span data-result={catalogImport.preview.totals.issueRows ? 'issue' : 'clear'}><strong>{catalogImport.preview.totals.issueRows}</strong><small>need fixes</small></span>
-              <span><strong>{catalogImport.preview.totals.alreadyExists}</strong><small>already exact</small></span>
-            </div>
-            {catalogImport.preview.fileIssues.length ? <ul className="catalog-import-file-issues" aria-label="File issues">{catalogImport.preview.fileIssues.map((issue) => <li key={`${issue.field}:${issue.code}:${issue.message}`}>{issue.message}</li>)}</ul> : null}
-            <div aria-label="Catalog import row preview" className="catalog-import-table" role="table">
-              <div className="catalog-import-row catalog-import-head" role="row"><span role="columnheader">Row</span><span role="columnheader">SKU</span><span role="columnheader">Result</span><span role="columnheader">Details</span></div>
-              {catalogImportVisibleRows.map((row) => <div className="catalog-import-row" data-result={row.status} key={`${row.rowNumber}:${row.status}`} role="row"><span role="cell">{row.rowNumber}</span><strong role="cell">{row.item?.sku || row.source[catalogImport.mapping.sku] || '—'}</strong><span role="cell">{row.status.replaceAll('_', ' ')}</span><small role="cell">{row.issues.length ? row.issues.map((issue) => issue.message).join(' ') : `${row.item?.name} · ${row.item?.onHand.toLocaleString()} opening · ${formatMoney(row.item?.price ?? 0)}`}</small></div>)}
-            </div>
-            {catalogImport.preview.rows.length > catalogImportVisibleRows.length ? <p className="form-notice">Showing the first {catalogImportVisibleRows.length} rows, with issues first. Export the error report for the complete fix list.</p> : null}
-            <div className="catalog-import-footer">
-              <div><strong>0 records written</strong><small>{catalogImportStale ? 'Recheck against the current Shop catalog before relying on this preview.' : catalogImport.preview.totals.ready ? 'Ready rows can move to a separately reviewed import transaction.' : 'Fix the source file or mapping, then preview again.'}</small></div>
-              <div className="form-actions"><button className="core-button" disabled={!catalogImport.preview.totals.issueRows && !catalogImport.preview.fileIssues.length} onClick={() => void downloadCatalogImportErrors()} type="button">Export errors</button>{catalogImportStale ? <button className="core-button primary" disabled={catalogImport.busy} onClick={recheckCatalogImport} type="button">Recheck Shop</button> : null}<button className="core-button" disabled={catalogImport.busy} onClick={clearCatalogImport} type="button">Clear</button></div>
-            </div>
-          </div> : null}
-        </div>
-      </details>
+      <section className="catalog-onboarding-bridge">
+        <div><span className="core-eyebrow">Client setup</span><strong>Bring in a catalog through the shared import flow.</strong><p>Use one checked, accountable path for Shop, Plant, Website, and Ecommerce instead of a second Shop-only dry run.</p></div>
+        <Link className="core-button" to={clientSetupPath('commerce')}>Set up Shop data</Link>
+      </section>
       <details className="compact-disclosure catalog-disclosure">
         <summary>Add catalog item</summary>
         <form className="core-form compact-form catalog-create-form" onSubmit={queueCatalogItem}>
@@ -5621,6 +5452,7 @@ export function SettingsPage() {
   const runtime = useOutletContext<RuntimeHealth>()
   const location = useLocation()
   const navigate = useNavigate()
+  const [setupSearchParams] = useSearchParams()
   const [setup, setSetup] = useSetupWorkspace()
   const [commerce] = useCommerceWorkspace()
   const [production] = useProductionWorkspace()
@@ -5630,7 +5462,7 @@ export function SettingsPage() {
   const [notice, setNotice] = useState('')
   const [resetArmed, setResetArmed] = useState(false)
   const [resetBusy, setResetBusy] = useState(false)
-  const [settingsStepState, setSettingsStepState] = useState<'workflow' | 'success' | 'system'>('workflow')
+  const [settingsStep, setSettingsStep] = useState<'workflow' | 'success'>('workflow')
   const [managedIdentity, setManagedIdentity] = useManagedIdentity(runtime.status === 'enterprise')
   const [managedEmail, setManagedEmail] = useState('')
   const [managedPassword, setManagedPassword] = useState('')
@@ -5640,32 +5472,54 @@ export function SettingsPage() {
   const completion = pilotProgress(setup)
   const isPilotReady = pilotReady(setup)
   const workflowReady = Boolean(setup.workspace.trim() && setup.owner.trim() && setup.entryPoint.trim())
-  const settingsStep = location.hash === '#controls' ? 'system' : settingsStepState
-  const selectedTemplate = templateFor(setup.product, setup.template)
+  const requestedProduct = setupProductFromQuery(setupSearchParams.get('product'))
+  const selectedProduct = productContracts[setup.product]
+  const selectedTemplate = templateFor(setup.product, setup.templateId)
   const evidenceDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Yangon' }).format(new Date())
   const evidenceFilename = `supermega-trial-evidence-${evidenceDate}.json`
   const managedApprovalRequests = approvals.map(toManagedApprovalRequest).filter((request): request is NonNullable<typeof request> => Boolean(request))
   const localProductRecords = collectLocalProductRecords(window.localStorage)
   const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 10, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady, setup, workflowProfile: selectedTemplate, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords }, null, 2))}`
 
+  useEffect(() => {
+    if (!requestedProduct || requestedProduct === setup.product) return
+    const template = templateFor(requestedProduct, '')
+    setSetup((current) => ({
+      ...current,
+      product: requestedProduct,
+      templateId: template.id,
+      entryPoint: template.entryPoints.includes(current.entryPoint) ? current.entryPoint : template.entryPoints[0] ?? '',
+      savedAt: undefined,
+    }))
+    setSettingsStep('workflow')
+    setNotice(`Selected ${productDisplayName(requestedProduct)}. Your client details were kept.`)
+  }, [requestedProduct, setSetup, setup.product])
+
   function updateSetup(patch: Partial<SetupState>) {
     setSetup((current) => ({ ...current, ...patch, savedAt: undefined }))
   }
 
-  function chooseSettingsStep(step: 'workflow' | 'success' | 'system') {
-    setSettingsStepState(step)
+  function chooseSettingsStep(step: 'workflow' | 'success') {
+    setSettingsStep(step)
     if (location.hash) navigate('/settings/', { replace: true })
   }
 
   function changeProduct(product: SetupState['product']) {
     const template = templateFor(product, '')
-    setSetup({ ...seedSetup, product, template: template.name, entryPoint: template.entryPoints[0] ?? '' })
-    setNotice(`Started a new ${productDisplayName(product)} pilot draft. Workflow-specific fields were cleared.`)
+    navigate(clientSetupPath(product), { replace: true })
+    setSetup((current) => ({
+      ...current,
+      product,
+      templateId: template.id,
+      entryPoint: template.entryPoints.includes(current.entryPoint) ? current.entryPoint : template.entryPoints[0] ?? '',
+      savedAt: undefined,
+    }))
+    setNotice(`Selected ${productDisplayName(product)}. Your client details were kept.`)
   }
 
-  function changeTemplate(name: string) {
-    const template = templateFor(setup.product, name)
-    updateSetup({ template: template.name, entryPoint: template.entryPoints.includes(setup.entryPoint) ? setup.entryPoint : template.entryPoints[0] ?? '' })
+  function changeTemplate(templateId: string) {
+    const template = templateFor(setup.product, templateId)
+    updateSetup({ templateId: template.id, entryPoint: template.entryPoints.includes(setup.entryPoint) ? setup.entryPoint : template.entryPoints[0] ?? '' })
   }
 
   function save(event: FormEvent) {
@@ -5676,8 +5530,7 @@ export function SettingsPage() {
       return
     }
     setSetup((current) => ({ ...current, savedAt: new Date().toISOString() }))
-    setNotice('Pilot definition saved in this browser. No source, account, or external action was connected.')
-    chooseSettingsStep('system')
+    setNotice('Client setup saved in this browser. No source, account, or external action was connected.')
   }
 
   async function resetDemoWorkspace() {
@@ -5746,44 +5599,48 @@ export function SettingsPage() {
 
   return (
     <div className="workspace-screen settings-screen">
-      <PageHeading eyebrow="Settings" title="Set up one client solution" copy="Start from a proven template, bring existing data safely, then define success and activation boundaries." />
+      <PageHeading eyebrow="Client setup" title="Set up one client solution" copy="Choose a proven workflow, bring existing data safely, and define what success means." />
       <nav aria-label="Setup steps" className="settings-step-nav">
-        <button aria-current={settingsStep === 'workflow' ? 'step' : undefined} onClick={() => chooseSettingsStep('workflow')} type="button"><span>1</span>Workflow</button>
+        <button aria-current={settingsStep === 'workflow' ? 'step' : undefined} onClick={() => chooseSettingsStep('workflow')} type="button"><span>1</span>Solution</button>
         <button aria-current={settingsStep === 'success' ? 'step' : undefined} onClick={() => chooseSettingsStep('success')} type="button"><span>2</span>Success</button>
-        <button aria-current={settingsStep === 'system' ? 'step' : undefined} onClick={() => chooseSettingsStep('system')} type="button"><span>3</span>System</button>
       </nav>
       <div className="settings-grid settings-step-content">
-        {settingsStep !== 'system' ? <form className="core-panel setup-form" onSubmit={save}>
-          <div className="panel-head"><div><span className="core-eyebrow">Pilot definition</span><h2>{settingsStep === 'workflow' ? 'Choose the workflow' : 'Define success and authority'}</h2></div><span className={`status-pill ${isPilotReady ? 'approved' : 'bounded'}`}>{isPilotReady ? 'ready' : `${completion}%`}</span></div>
-          <div className="pilot-progress"><div className="progress-track"><i style={{ width: `${completion}%` }} /></div><small>{settingsStep === 'workflow' ? 'Product · template · entry point · owner' : 'Current record · baseline · target · authority · evidence'}</small></div>
+        <form className="core-panel setup-form" onSubmit={save}>
+          <div className="panel-head"><div><span className="core-eyebrow">Client solution</span><h2>{settingsStep === 'workflow' ? 'Choose what to set up' : 'Define success and authority'}</h2></div><span className={`status-pill ${isPilotReady ? 'approved' : 'bounded'}`}>{isPilotReady ? 'ready' : `${completion}%`}</span></div>
+          <div className="pilot-progress"><div className="progress-track"><i style={{ width: `${completion}%` }} /></div><small>{settingsStep === 'workflow' ? 'Solution · template · starting point · owner' : 'Current record · baseline · target · authority · evidence'}</small></div>
           <fieldset className="settings-step-fields" disabled={settingsStep !== 'workflow'} hidden={settingsStep !== 'workflow'}>
-          <div className="segmented-control wide"><button aria-pressed={setup.product === 'commerce'} type="button" onClick={() => changeProduct('commerce')}>Shop</button><button aria-pressed={setup.product === 'production'} type="button" onClick={() => changeProduct('production')}>Plant</button><button aria-pressed={setup.product === 'website'} type="button" onClick={() => changeProduct('website')}>Website</button><button aria-pressed={setup.product === 'ecommerce'} type="button" onClick={() => changeProduct('ecommerce')}>Ecommerce</button></div>
-          <div className="form-row"><label>Starting template<select value={setup.template} onChange={(event) => changeTemplate(event.target.value)}>{templatesFor(setup.product).map((template) => <option key={template.id} value={template.name}>{template.name}</option>)}</select></label><label>Entry point<select value={setup.entryPoint} onChange={(event) => updateSetup({ entryPoint: event.target.value })}>{selectedTemplate.entryPoints.map((entryPoint) => <option key={entryPoint}>{entryPoint}</option>)}</select></label></div>
-          <div className="template-contract"><span>Workflow</span><strong>{selectedTemplate.workflow.join(' → ')}</strong><small>Measure · {selectedTemplate.metric}</small></div>
+          <div aria-label="Choose solution" className="setup-product-grid" role="group">{Object.values(productContracts).map((product) => <button aria-pressed={setup.product === product.id} key={product.id} onClick={() => changeProduct(product.id)} type="button"><span><strong>{product.name}</strong><small>{product.headline}</small></span><b>{product.templates.length} templates</b></button>)}</div>
+          <div className="form-row"><label>Starting template<select value={setup.templateId} onChange={(event) => changeTemplate(event.target.value)}>{templatesFor(setup.product).map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select></label><label>Starting point<select value={setup.entryPoint} onChange={(event) => updateSetup({ entryPoint: event.target.value })}>{selectedTemplate.entryPoints.map((entryPoint) => <option key={entryPoint}>{entryPoint}</option>)}</select></label></div>
+          <div className="setup-template-summary"><div><span>Outcome</span><strong>{selectedTemplate.outcome}</strong></div><ol aria-label={`${selectedTemplate.name} workflow`}>{selectedTemplate.workflow.map((step) => <li key={step}>{step}</li>)}</ol><small>Measure success with {selectedTemplate.metric.toLowerCase()}.</small></div>
           <div className="form-row"><label>Workspace name<input maxLength={80} required value={setup.workspace} onChange={(event) => updateSetup({ workspace: event.target.value })} placeholder={setup.product === 'commerce' ? 'Example: Social sales team' : setup.product === 'production' ? 'Example: Main plant' : setup.product === 'website' ? 'Example: Company website' : 'Example: Online order desk'} /></label><label>Responsible owner<input maxLength={80} required value={setup.owner} onChange={(event) => updateSetup({ owner: event.target.value })} placeholder="Name or role" /></label></div>
-          <Suspense fallback={<p className="form-notice" role="status">Loading the client data template…</p>}><ClientDataOnboarding managedIdentity={managedIdentity} owner={setup.owner} product={setup.product} workflowTemplateId={selectedTemplate.id} workspace={setup.workspace} /></Suspense>
-          <div className="settings-step-actions"><span>Step 1 of 3</span><button className="core-button primary" disabled={!workflowReady} onClick={() => chooseSettingsStep('success')} type="button">Continue to success</button></div>
+          <Suspense fallback={<p className="form-notice" role="status">Loading the client data template…</p>}><ClientDataOnboarding managedIdentity={managedIdentity} owner={setup.owner} product={setup.product} productName={selectedProduct.name} productSlug={selectedProduct.slug} workflowTemplateId={selectedTemplate.id} workspace={setup.workspace} /></Suspense>
+          <div className="settings-step-actions"><span>Step 1 of 2</span><button className="core-button primary" disabled={!workflowReady} onClick={() => chooseSettingsStep('success')} type="button">Continue to success</button></div>
           </fieldset>
           <fieldset className="settings-step-fields" disabled={settingsStep !== 'success'} hidden={settingsStep !== 'success'}>
           <div className="template-contract settings-workflow-summary"><span>{productDisplayName(setup.product)}</span><strong>{setup.workspace || 'Unnamed workspace'}</strong><small>{selectedTemplate.name} · {setup.owner || 'Owner needed'}</small></div>
           <label>Current record<input maxLength={180} required value={setup.currentRecord} onChange={(event) => updateSetup({ currentRecord: event.target.value })} placeholder="What is used today: chat, paper, spreadsheet, system, or machine log?" /></label>
           <div className="form-row pilot-text-row"><label>Baseline<textarea maxLength={240} required value={setup.baseline} onChange={(event) => updateSetup({ baseline: event.target.value })} placeholder="Current time, error rate, backlog, or output." /></label><label>Target outcome<textarea maxLength={240} required value={setup.targetOutcome} onChange={(event) => updateSetup({ targetOutcome: event.target.value })} placeholder={`Set a target for ${selectedTemplate.metric.toLowerCase()}.`} /></label></div>
           <div className="form-row pilot-text-row"><label>Human authority boundary<textarea maxLength={240} required value={setup.authorityBoundary} onChange={(event) => updateSetup({ authorityBoundary: event.target.value })} placeholder="Which sends, payments, approvals, or production changes require an owner?" /></label><label>Acceptance evidence<textarea maxLength={240} required value={setup.acceptanceEvidence} onChange={(event) => updateSetup({ acceptanceEvidence: event.target.value })} placeholder="What record or result proves the pilot works?" /></label></div>
-          <div className="settings-step-actions"><button className="text-link" onClick={() => chooseSettingsStep('workflow')} type="button">Back</button><button className="core-button primary" type="submit">Save and review system</button></div>
+          <div className="settings-step-actions"><button className="text-link" onClick={() => chooseSettingsStep('workflow')} type="button">Back</button><button className="core-button primary" type="submit">Save client setup</button></div>
+          {setup.savedAt ? <div className="setup-complete"><div><strong>Client setup saved.</strong><small>Reviewed records stay separate from sample data until a managed import is confirmed.</small></div><Link className="core-button" to={setupProductPreviewPath(setup.product)}>Open {productDisplayName(setup.product)}</Link></div> : null}
           </fieldset>
           <p className="form-notice" aria-live="polite">{notice || (setup.savedAt ? `Last saved ${formatTime(setup.savedAt)}` : 'The draft stays in this browser until exported or managed mode is activated.')}</p>
-        </form> : null}
-        {settingsStep === 'system' ? <section className="core-panel system-boundary-panel" id="controls">
-          <div className="panel-head"><div><span className="core-eyebrow">System boundary</span><h2>{runtime.status === 'enterprise' ? 'Managed mode ready' : 'Managed mode locked'}</h2></div><RuntimeBadge status={runtime.status} /></div>
-          {runtime.status === 'enterprise' && managedTrialAuthConfigured() ? managedIdentity ? <div className="template-contract"><span>Managed account</span><strong>{managedIdentity.email}</strong><small>{managedIdentity.workspaceId} · membership and capabilities are checked by the API</small><button className="text-link" disabled={managedBusy} onClick={() => void disconnectManagedWorkspace()} type="button">Disconnect</button></div> : <form className="core-form compact-form" onSubmit={(event) => void connectManagedWorkspace(event)}><span className="core-eyebrow">Managed workspace</span><div className="form-row"><label>Email<input autoComplete="username" maxLength={160} onChange={(event) => setManagedEmail(event.target.value)} required type="email" value={managedEmail} /></label><label>Password<input autoComplete="current-password" minLength={8} onChange={(event) => setManagedPassword(event.target.value)} required type="password" value={managedPassword} /></label></div><label>Workspace ID<input maxLength={128} onChange={(event) => setManagedWorkspace(event.target.value)} placeholder="Your provisioned workspace" required value={managedWorkspace} /></label><button className="core-button primary" disabled={managedBusy} type="submit">{managedBusy ? 'Checking…' : 'Connect workspace'}</button></form> : null}
-          {managedNotice ? <p className="form-notice" role="status">{managedNotice}</p> : null}
-          <div className="readiness-list"><span><small>Pilot definition</small><strong>{isPilotReady ? 'Ready' : `${completion}% complete`}</strong></span><span><small>Runtime</small><strong>{runtime.serviceStatus}</strong></span><span><small>Operating mode</small><strong>{runtime.operatingMode.replace('_', ' ')}</strong></span><span><small>Managed data</small><strong>{runtime.enterpriseDbReady ? 'Ready' : 'Not connected'}</strong></span><span><small>Security</small><strong>{runtime.securityReady ? 'Ready' : 'Not ready'}</strong></span><span><small>Write path</small><strong>{runtime.writesReady ? 'Enabled' : 'Locked'}</strong></span><span><small>Source coverage</small><strong>{runtime.coverageScore}%</strong></span><span><small>External action</small><strong>Owner controlled</strong></span></div>
-          {runtime.status !== 'enterprise' ? <ul className="requirement-list">{(runtime.requirements.length ? runtime.requirements : ['Configure managed tenant persistence.', 'Verify production identity and source coverage.']).map((requirement) => <li key={requirement}>{requirement}</li>)}</ul> : null}
-          <p className="authority-note">External sends, payments, publishing, access changes, and production writes remain owner-approved and auditable.</p>
-          {setup.savedAt ? <div className="settings-step-actions"><span>Pilot saved locally. Product preview stays on sample data until reviewed records are applied in managed mode.</span><Link className="core-button primary" to={setupProductPreviewPath(setup.product)}>Open {productDisplayName(setup.product)} preview</Link></div> : null}
-        </section> : null}
+        </form>
       </div>
-      {settingsStep === 'system' ? <section className="core-panel trial-control-panel"><div><span className="core-eyebrow">Local evidence</span><h2>Export or reset deliberately.</h2><p>Export the pilot definition and full browser workspace for review. Reset clears Company, Shop, unfinished order drafts, Plant, Website, Ecommerce setup, and handoff records only after confirmation.</p></div><div className="trial-actions"><a className="core-button" download={evidenceFilename} href={evidenceHref}>Export evidence</a>{resetArmed ? <><button className="text-link" disabled={resetBusy} onClick={() => setResetArmed(false)} type="button">Cancel</button><button className="core-button danger" disabled={resetBusy} onClick={() => void resetDemoWorkspace()} type="button">{resetBusy ? 'Resetting…' : 'Confirm reset'}</button></> : <button className="text-link danger-text" onClick={() => setResetArmed(true)} type="button">Reset local trial</button>}</div></section> : null}
+      <details className="settings-advanced" id="controls" open={location.hash === '#controls' || undefined}>
+        <summary><span>Advanced controls</span><small>Managed account, security, evidence, and reset</small></summary>
+        <div className="settings-advanced-content">
+          <section className="core-panel system-boundary-panel">
+            <div className="panel-head"><div><span className="core-eyebrow">System boundary</span><h2>{runtime.status === 'enterprise' ? 'Managed mode ready' : 'Managed mode locked'}</h2></div><RuntimeBadge status={runtime.status} /></div>
+            {runtime.status === 'enterprise' && managedTrialAuthConfigured() ? managedIdentity ? <div className="template-contract"><span>Managed account</span><strong>{managedIdentity.email}</strong><small>{managedIdentity.workspaceId} · membership and capabilities are checked by the API</small><button className="text-link" disabled={managedBusy} onClick={() => void disconnectManagedWorkspace()} type="button">Disconnect</button></div> : <form className="core-form compact-form" onSubmit={(event) => void connectManagedWorkspace(event)}><span className="core-eyebrow">Managed workspace</span><div className="form-row"><label>Email<input autoComplete="username" maxLength={160} onChange={(event) => setManagedEmail(event.target.value)} required type="email" value={managedEmail} /></label><label>Password<input autoComplete="current-password" minLength={8} onChange={(event) => setManagedPassword(event.target.value)} required type="password" value={managedPassword} /></label></div><label>Workspace ID<input maxLength={128} onChange={(event) => setManagedWorkspace(event.target.value)} placeholder="Your provisioned workspace" required value={managedWorkspace} /></label><button className="core-button primary" disabled={managedBusy} type="submit">{managedBusy ? 'Checking…' : 'Connect workspace'}</button></form> : null}
+            {managedNotice ? <p className="form-notice" role="status">{managedNotice}</p> : null}
+            <div className="readiness-list"><span><small>Client setup</small><strong>{isPilotReady ? 'Ready' : `${completion}% complete`}</strong></span><span><small>Runtime</small><strong>{runtime.serviceStatus}</strong></span><span><small>Operating mode</small><strong>{runtime.operatingMode.replace('_', ' ')}</strong></span><span><small>Managed data</small><strong>{runtime.enterpriseDbReady ? 'Ready' : 'Not connected'}</strong></span><span><small>Security</small><strong>{runtime.securityReady ? 'Ready' : 'Not ready'}</strong></span><span><small>Write path</small><strong>{runtime.writesReady ? 'Enabled' : 'Locked'}</strong></span><span><small>Source coverage</small><strong>{runtime.coverageScore}%</strong></span><span><small>External action</small><strong>Owner controlled</strong></span></div>
+            {runtime.status !== 'enterprise' ? <ul className="requirement-list">{(runtime.requirements.length ? runtime.requirements : ['Configure managed tenant persistence.', 'Verify production identity and source coverage.']).map((requirement) => <li key={requirement}>{requirement}</li>)}</ul> : null}
+            <p className="authority-note">External sends, payments, publishing, access changes, and production writes remain owner-approved and auditable.</p>
+          </section>
+          <section className="core-panel trial-control-panel"><div><span className="core-eyebrow">Local evidence</span><h2>Export or reset deliberately.</h2><p>Export the client setup and browser workspace for review. Reset clears Company, Shop, unfinished order drafts, Plant, Website, Ecommerce setup, and handoff records only after confirmation.</p></div><div className="trial-actions"><a className="core-button" download={evidenceFilename} href={evidenceHref}>Export evidence</a>{resetArmed ? <><button className="text-link" disabled={resetBusy} onClick={() => setResetArmed(false)} type="button">Cancel</button><button className="core-button danger" disabled={resetBusy} onClick={() => void resetDemoWorkspace()} type="button">{resetBusy ? 'Resetting…' : 'Confirm reset'}</button></> : <button className="text-link danger-text" onClick={() => setResetArmed(true)} type="button">Reset local trial</button>}</div></section>
+        </div>
+      </details>
     </div>
   )
 }
