@@ -1,8 +1,14 @@
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
+import {
+  listCompanyAgents,
+  MAX_CYCLE_AGENTS,
+  MAX_REGISTERED_COMPANY_AGENTS,
+} from '../kernel/agent-company.mjs'
+
 const root = resolve(import.meta.dirname, '..')
-const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, research, databaseRehearsalText, releaseReconciliation] = await Promise.all([
+const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, research, databaseRehearsalText, releaseReconciliation] = await Promise.all([
   readFile(resolve(root, 'hq', 'README.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'NOW.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'CODEX-PRODUCT-QA-BRIEF.md'), 'utf8'),
@@ -10,6 +16,7 @@ const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, re
   readFile(resolve(root, 'CURRENT.md'), 'utf8'),
   readFile(resolve(root, 'site-manifest.json'), 'utf8'),
   readFile(resolve(root, 'hq', 'portfolio.json'), 'utf8'),
+  readFile(resolve(root, 'agent_os', 'workforce', 'supermega_build_workforce.json'), 'utf8'),
   readFile(resolve(root, 'hq', 'research', 'product-rd-2026-07.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'research', 'postgres17-rehearsal.json'), 'utf8'),
   readFile(resolve(root, 'hq', 'research', 'release-reconciliation-2026-07-25.md'), 'utf8'),
@@ -17,7 +24,10 @@ const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, re
 
 const manifest = JSON.parse(manifestText)
 const portfolio = JSON.parse(portfolioText)
+const workforce = JSON.parse(workforceText)
 const databaseRehearsal = JSON.parse(databaseRehearsalText)
+const kernelRoster = listCompanyAgents()
+const kernelCrewCapabilities = kernelRoster.flatMap((agent) => [agent.crew, ...agent.capabilityCrews])
 const failures = []
 const requireContract = (name, condition) => { if (!condition) failures.push(name) }
 const product = (id) => portfolio.products?.find((entry) => entry.id === id)
@@ -40,6 +50,37 @@ requireContract('AI is shared infrastructure, not a fifth product',
   && sharedCapability('ai-assistance')?.appAnchor === '/work/?view=agents')
 requireContract('product lifecycle is explicit',
   portfolio.productLifecycle?.join(',') === 'discover,define,build,release,learn')
+requireContract('one bounded agent operating model is authoritative',
+  portfolio.agentOperatingModel?.mode === 'bounded-demand-driven'
+  && portfolio.agentOperatingModel?.manager === 'CEO / Codex integrator'
+  && portfolio.agentOperatingModel?.buildTeams?.join(',') === 'product,engineering,growth,finance-risk'
+  && portfolio.agentOperatingModel?.registeredRoleLimit === 12
+  && portfolio.agentOperatingModel?.activeAssignmentLimit === 4
+  && portfolio.agentOperatingModel?.batchJobLimit === 4
+  && portfolio.agentOperatingModel?.maxAgentsPerCycle === 2
+  && portfolio.agentOperatingModel?.validatedCrewCapabilities === 15
+  && portfolio.agentOperatingModel?.scaleToZero === true
+  && portfolio.agentOperatingModel?.idleCapabilitiesConsumeCompute === false
+  && portfolio.agentOperatingModel?.dynamicDelegation === false
+  && portfolio.agentOperatingModel?.recursiveDelegation === false
+  && portfolio.agentOperatingModel?.consequentialAuthority === 'founder')
+requireContract('agent capacity agrees across HQ, coordinator, and Kernel',
+  workforce.runtime_policy?.max_registered_specialists === portfolio.agentOperatingModel?.registeredRoleLimit
+  && workforce.runtime_policy?.max_running === portfolio.agentOperatingModel?.activeAssignmentLimit
+  && workforce.runtime_policy?.max_batch_jobs === portfolio.agentOperatingModel?.batchJobLimit
+  && workforce.runtime_policy?.scale_to_zero === portfolio.agentOperatingModel?.scaleToZero
+  && workforce.runtime_policy?.registered_specialists_consume_compute === portfolio.agentOperatingModel?.idleCapabilitiesConsumeCompute
+  && workforce.build_teams?.map((entry) => entry.id).join(',') === portfolio.agentOperatingModel?.buildTeams?.join(',')
+  && MAX_REGISTERED_COMPANY_AGENTS === portfolio.agentOperatingModel?.registeredRoleLimit
+  && kernelRoster.length === MAX_REGISTERED_COMPANY_AGENTS
+  && MAX_CYCLE_AGENTS === portfolio.agentOperatingModel?.maxAgentsPerCycle
+  && kernelCrewCapabilities.length === portfolio.agentOperatingModel?.validatedCrewCapabilities
+  && new Set(kernelCrewCapabilities).size === kernelCrewCapabilities.length)
+requireContract('agent roster consolidation is recorded',
+  workboard.includes('Current accepted operating checkpoint: `ae6b67d`')
+  && workboard.includes('| OPS-011 | CEO + Agent Operations Codex | done-local |')
+  && workboard.includes('12 active specialist identities while preserving all 15 validated crew capabilities')
+  && workboard.includes('all eight fixed playbooks'))
 requireContract('product QA brief matches current portfolio',
   qaBrief.includes('Work item: `QA-003`')
   && qaBrief.includes('Mode: read-only')
@@ -283,6 +324,12 @@ console.log(JSON.stringify({
   products: portfolio.products.map((entry) => entry.id),
   sharedCapabilities: portfolio.sharedCapabilities.map((entry) => entry.id),
   internalSystems: portfolio.internalSystems.map((entry) => entry.id),
+  agentOperatingModel: {
+    registeredRoles: portfolio.agentOperatingModel.registeredRoleLimit,
+    activeAssignments: portfolio.agentOperatingModel.activeAssignmentLimit,
+    crewCapabilities: portfolio.agentOperatingModel.validatedCrewCapabilities,
+    scaleToZero: portfolio.agentOperatingModel.scaleToZero,
+  },
   workflowProfiles: workflowProfileCount,
   researchGates: portfolio.researchGates.length,
 }, null, 2))

@@ -14,7 +14,7 @@ broader system boundaries.
 | `workcells.mjs` + `workcell-run.mjs` | Cash Close, Pipeline Control, and Owner Command products | live |
 | `owner-evidence.mjs` + `api/owner-evidence.mjs` | Reviewed LINE/Viber evidence preview, immutable storage, and bounded read | live |
 | `approval-actions.mjs` + `api/approvals.mjs` | Immutable owner approval and idempotent ClickUp execution | live |
-| `crews/` + `crew-run.mjs` | Contract-enforced, draft-only multi-role tasks | 15 live |
+| `crews/` + `crew-run.mjs` | Contract-enforced, draft-only multi-role capabilities | 15 validated; idle by default |
 | `agent-company.mjs` + `agent-company-work-orders.mjs` | Bounded supervisor cycles and durable reviewed delegation | live |
 | `agent-company-playbooks.mjs` + `agent-company-missions.mjs` | Fixed sellable outcomes with durable server-verified stages | live |
 | `agent-company-operations.mjs` | Immutable outcome review and metadata-only operating targets | live |
@@ -60,11 +60,17 @@ The agent receives only the bounded read tool and cannot write to the inbox.
 
 ## Agent Company Cycles
 
-`POST /api/agent-company` is the protected manager layer over fifteen validated crews. Callers must
+`POST /api/agent-company` is the protected manager layer over twelve fixed specialist identities
+backed by fifteen validated crew capability contracts. Callers must
 choose `action: "plan"` or `action: "run"`, a stable client and cycle id, one or two allowlisted
 specialists, and separate evidence for each specialist. A plan reports the exact role-call budget
 before any model call. A run atomically claims the cycle in durable storage, then executes the crews
 sequentially through the existing gateway.
+
+Crew contracts are capability definitions, not always-running employees, and consume no work while
+idle. Analytics is an allowlisted Operations capability, document extraction is an allowlisted
+Knowledge capability, and meeting capture is an allowlisted Project Control capability. Fixed
+playbook stages can select those secondary crews; ad-hoc cycles keep each specialist's primary crew.
 
 The supervisor is deliberately not another model. It cannot invent agents, delegate recursively,
 share one specialist's output with another, or call a connector. It preserves partial results in one

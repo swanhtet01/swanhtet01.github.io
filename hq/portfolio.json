@@ -3,6 +3,21 @@
   "updatedAt": "2026-07-26",
   "northStar": "One real workflow reaches a measurable outcome through an accountable operating record.",
   "productLifecycle": ["discover", "define", "build", "release", "learn"],
+  "agentOperatingModel": {
+    "mode": "bounded-demand-driven",
+    "manager": "CEO / Codex integrator",
+    "buildTeams": ["product", "engineering", "growth", "finance-risk"],
+    "registeredRoleLimit": 12,
+    "activeAssignmentLimit": 4,
+    "batchJobLimit": 4,
+    "maxAgentsPerCycle": 2,
+    "validatedCrewCapabilities": 15,
+    "scaleToZero": true,
+    "idleCapabilitiesConsumeCompute": false,
+    "dynamicDelegation": false,
+    "recursiveDelegation": false,
+    "consequentialAuthority": "founder"
+  },
   "products": [
     {
       "id": "shop",

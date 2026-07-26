@@ -6,10 +6,14 @@ spend, internal evaluation, delivery proof, and a separately recorded customer d
 
 ## What Is Available
 
-- 15 fixed specialists across operations, finance, revenue, growth, delivery, assurance, insights,
-  service, knowledge, and procurement.
+- 12 fixed registered specialist identities across operations, finance, revenue, growth, delivery,
+  assurance, service, knowledge, and procurement.
 - 8 fixed outcome playbooks.
-- 15 validated crew contracts with structured outputs and no send, pay, or external-write tool.
+- 15 validated crew capability contracts with structured outputs and no send, pay, or
+  external-write tool. Analytics is owned by Operations, document extraction by Knowledge, and
+  meeting capture by Project Control instead of creating three duplicate identities.
+- Demand-driven execution that scales to zero, allows at most four active company assignments, and
+  allows at most two registered specialists in one Kernel cycle.
 - An all-crew adversarial security evaluation that poisons both owner intake and model-to-model
   handoffs before every release.
 - Durable client-bound work orders with exact plan hashes and evidence fingerprints.
