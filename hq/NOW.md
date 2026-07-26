@@ -31,7 +31,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 
 ## Implemented reality
 
-- HQ uses four teams. At `d2900ad`, runtime and environment policy cap the roster at 12, active work at four, and idle work at zero; 13 and 175 fail closed.
+- HQ uses four teams. At `fb2ae3e`, absolute runtime limits cap the roster at 12, active work at four, and idle work at zero; environment and caller policy overrides fail closed.
 - Shop runs at `/shop/`: guarded multi-item orders, stock, purchasing, fulfilment, payment/refund, returns, and close, with accountable owner/promise, recovery, and evidence.
 - Plant runs at `/plant/`: jobs, output/material evidence, problems, holds, handoff, equipment observations, downtime, and maintenance. It dispatches nothing and controls no equipment.
 - Website runs at `/website/`: one brief becomes an unsaved Preview, guarded Save, and deterministic Review artifact, never a deployment; recovery and stale-write denial remain.
@@ -43,7 +43,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 
 ## Verified baseline
 
-- Checkpoint `5d7b217` is the accepted local product baseline; `69dfb09` governs agents, `98b8044` closes legacy gaps, and `d2900ad` enforces the roster cap.
+- Checkpoint `5d7b217` is the accepted local product baseline; `69dfb09` governs agents, `98b8044` closes legacy gaps, and `fb2ae3e` enforces absolute workforce limits.
 - App lint/build, all local contracts, eight focused governor tests, and all 189 Python tests pass. Security coverage is 58 checks.
 - Dependency audit previously reported zero known vulnerabilities; this slice did not refresh external package or hosted-state inventories.
 - React Router is isolated in a 43,870-byte cacheable chunk. The accepted product baseline's largest JavaScript chunk is 463,892 bytes; checkpoint `69dfb09` is 478,287 bytes and remains below the build gate.
