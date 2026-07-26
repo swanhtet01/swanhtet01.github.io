@@ -93,12 +93,15 @@ requireContract('workspace storage release gate denies bucket enumeration',
     && entry.rule.includes('bucket listing are denied')
     && entry.release_evidence?.join(',') === 'bucket inventory,anonymous listing denied,cross-tenant listing denied,short-lived authorized object access'))
 requireContract('agent roster consolidation is recorded',
-  workboard.includes('Current accepted operating checkpoint: `ae6b67d`')
+  workboard.includes('Current accepted operating checkpoint: `0124303`')
   && workboard.includes('| OPS-011 | CEO + Agent Operations Codex | done-local |')
   && workboard.includes('12 active specialist identities while preserving all 15 validated crew capabilities')
   && workboard.includes('all eight fixed playbooks')
   && workboard.includes('| OPS-012 | CEO + Agent Operations Codex | done-local |')
   && workboard.includes('zero Agent Runs in 30 days')
+  && workboard.includes('| OPS-014 | CEO + Agent Operations Codex | done-local |')
+  && workboard.includes('workforce and capacity contracts to v2')
+  && workboard.includes('execution follows the same order instead of reverting to FIFO')
   && now.includes('default workspace no longer duplicates a 256-role ceiling'))
 requireContract('product QA brief matches current portfolio',
   qaBrief.includes('Work item: `QA-003`')
