@@ -33,7 +33,11 @@ test('GET returns the protected fixed roster and hard limits', async () => {
   assert.equal(result.json.auth.mode, 'owner')
   assert.equal(result.json.auth.role, 'owner')
   assert.deepEqual(result.json.auth.allowedActions, ['*'])
-  assert.equal(result.json.agents.length, 15)
+  assert.equal(result.json.agents.length, 12)
+  assert.equal(
+    new Set(result.json.agents.flatMap((agent) => [agent.crew, ...agent.capabilityCrews])).size,
+    15,
+  )
   assert.equal(result.json.agents.every((agent) => agent.evidenceHint), true)
   assert.equal(result.json.limits.maxAgents, 2)
   assert.equal(result.json.limits.maxRoleBudget, 8)

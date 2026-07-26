@@ -5,9 +5,11 @@ import {
   listCompanyAgents,
   MAX_CYCLE_AGENTS,
   MAX_CYCLE_ROLE_BUDGET,
+  MAX_REGISTERED_COMPANY_AGENTS,
   planCompanyCycle,
   runCompanyCycle,
 } from './agent-company.mjs'
+import { loadCrew } from './crew-runner.mjs'
 
 const cycle = (patch = {}) => ({
   clientId: 'client-acme',
@@ -23,23 +25,36 @@ const cycle = (patch = {}) => ({
 
 test('agent roster is fixed, bounded, and backed by validated crews', async () => {
   const roster = listCompanyAgents()
-  assert.equal(roster.length, 15)
+  assert.equal(roster.length, 12)
+  assert.equal(MAX_REGISTERED_COMPANY_AGENTS, 12)
   assert.equal(MAX_CYCLE_AGENTS, 2)
   assert.equal(MAX_CYCLE_ROLE_BUDGET, 8)
   assert.equal(new Set(roster.map((agent) => agent.id)).size, roster.length)
+  assert.equal(roster.every((agent) => Array.isArray(agent.capabilityCrews)), true)
   assert.equal(roster.every((agent) => typeof agent.evidenceHint === 'string' && agent.evidenceHint.length > 20), true)
   assert.deepEqual(
-    roster.slice(-7).map((agent) => agent.id),
+    roster.map((agent) => agent.id),
     [
-      'data-insights-analyst',
+      'operations-analyst',
+      'cash-reconciler',
+      'receivables-agent',
+      'evidence-organizer',
+      'proof-builder',
+      'sales-qualifier',
+      'delivery-planner',
+      'quality-reviewer',
       'customer-support-operator',
       'knowledge-manager',
       'project-controller',
-      'document-processor',
-      'meeting-actions-coordinator',
       'procurement-analyst',
     ],
   )
+  const capabilityCrews = roster.flatMap((agent) => [agent.crew, ...agent.capabilityCrews])
+  assert.equal(capabilityCrews.length, 15)
+  assert.equal(new Set(capabilityCrews).size, 15)
+  for (const crewSlug of capabilityCrews) {
+    assert.equal((await loadCrew(crewSlug)).slug, crewSlug, `${crewSlug} remains a validated capability`)
+  }
   const plan = await planCompanyCycle(cycle())
   assert.equal(plan.ok, true)
   assert.equal(plan.actionMode, 'draft_only')
@@ -61,45 +76,39 @@ test('agent roster is fixed, bounded, and backed by validated crews', async () =
   }
 })
 
-test('new general-use specialists plan through fixed validated crews under the same budget', async () => {
+test('general-use specialists plan through primary fixed crews under the same budget', async () => {
   const plan = await planCompanyCycle({
     clientId: 'client-acme',
     cycleId: '2026-07-14-general-work',
-    agents: ['data-insights-analyst', 'customer-support-operator'],
+    agents: ['operations-analyst', 'customer-support-operator'],
     evidence: {
-      'data-insights-analyst': 'Approved sales export, field dictionary, January to June, explain repeat purchase decline.',
+      'operations-analyst': 'Approved sales export, field dictionary, January to June, explain repeat purchase decline.',
       'customer-support-operator': 'Approved ticket 42, order facts, returns policy, and prior support actions.',
     },
     roleBudget: 6,
   })
   assert.equal(plan.ok, true)
-  assert.deepEqual(plan.assignments.map((assignment) => assignment.crew), ['data-insights-desk', 'customer-support-desk'])
+  assert.deepEqual(plan.assignments.map((assignment) => assignment.crew), ['daily-operator-brief', 'customer-support-desk'])
   assert.equal(plan.budget.plannedRoles, 6)
   assert.equal(plan.controls.execution, 'sequential')
   assert.equal(plan.controls.dynamicDelegation, false)
   assert.equal(plan.controls.externalWrites, false)
 })
 
-test('document, meeting, and procurement workers remain isolated fixed crews', async () => {
-  const cases = [
-    ['document-processor', 'document-processing-desk'],
-    ['meeting-actions-coordinator', 'meeting-actions-desk'],
-    ['procurement-analyst', 'procurement-review-desk'],
-  ]
-  for (const [agentId, crew] of cases) {
+test('specialized capabilities are consolidated without registering duplicate agents', async () => {
+  const roster = new Map(listCompanyAgents().map((agent) => [agent.id, agent]))
+  assert.deepEqual(roster.get('operations-analyst').capabilityCrews, ['data-insights-desk'])
+  assert.deepEqual(roster.get('knowledge-manager').capabilityCrews, ['document-processing-desk'])
+  assert.deepEqual(roster.get('project-controller').capabilityCrews, ['meeting-actions-desk'])
+  for (const removedId of ['data-insights-analyst', 'document-processor', 'meeting-actions-coordinator']) {
     const plan = await planCompanyCycle({
       clientId: 'client-acme',
-      cycleId: `general-${agentId}`,
-      agents: [agentId],
-      evidence: { [agentId]: `Approved evidence fixture for ${agentId}.` },
+      cycleId: `removed-${removedId}`,
+      agents: [removedId],
+      evidence: { [removedId]: `Approved evidence fixture for ${removedId}.` },
       roleBudget: 3,
     })
-    assert.equal(plan.ok, true)
-    assert.equal(plan.assignments[0].crew, crew)
-    assert.equal(plan.assignments[0].roleCount, 3)
-    assert.equal(plan.controls.dynamicDelegation, false)
-    assert.equal(plan.controls.crossAgentContext, false)
-    assert.equal(plan.controls.externalWrites, false)
+    assert.equal(plan.reason, 'company_unknown_agent')
   }
 })
 
