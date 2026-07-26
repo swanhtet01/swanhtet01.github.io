@@ -799,6 +799,7 @@ textarea { min-height: 72px; resize: vertical; }
 }
 
 @media (max-width: 840px) {
+  html { scroll-padding-block: 64px calc(80px + env(safe-area-inset-bottom)); }
   body { height: auto; min-height: 100%; overflow: auto; }
   .core-shell { height: auto; min-height: 100svh; display: block; }
   .core-sidebar { display: none; }
@@ -812,6 +813,7 @@ textarea { min-height: 72px; resize: vertical; }
   .mobile-nav a { display: grid; place-items: center; border-top: 2px solid transparent; color: var(--core-quiet); font-size: 11px; font-weight: 740; text-decoration: none; }
   .mobile-nav a.active { border-top-color: var(--core-green); color: var(--core-green); }
   .core-main { width: min(calc(100% - 24px),760px); height: auto; min-height: 0; padding: 18px 0 calc(88px + env(safe-area-inset-bottom)); overflow: visible; }
+  .core-main :is(a, button, input, select, textarea, summary, [tabindex="0"]) { scroll-margin-block: 64px calc(80px + env(safe-area-inset-bottom)); }
   .workspace-screen { height: auto; min-height: calc(100svh - 142px); }
   .page-heading { align-items: flex-start; }
   .page-heading p { white-space: normal; }
