@@ -63,4 +63,4 @@ The selected Instagram security slide warns that storage buckets may remain enum
 
 ## Next bounded slice
 
-Bind managed purchase-order cancellation proof to the authenticated human and a server-monotonic timestamp, mirroring the accepted receipt boundary. Preserve partial-receipt history, outstanding quantity, idempotent replay, tenant isolation, human-only authority, and the existing Stock page; add no page, product, provider call, or live write.
+Audit managed Shop order pricing and tax boundaries, then implement only the smallest missing server-authoritative calculation foundation. Preserve immutable catalog price snapshots, idempotent replay, tenant isolation, human-only authority, zero-tax legacy compatibility, and the existing Orders page; add no route, product, provider call, legal tax-rate claim, or live write.
