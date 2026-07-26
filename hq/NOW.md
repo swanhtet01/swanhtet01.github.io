@@ -1,6 +1,6 @@
 # HQ now
 
-Updated: 2026-07-26
+Updated: 2026-07-27
 Owner: founder / CEO
 Mode: Codex-only guarded release candidate; production remains isolated
 
@@ -31,7 +31,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 - Shop covers guarded orders, stock, purchasing, fulfilment, payment/refund, returns, and close at `/shop/`.
 - Plant stays task-first at `/plant/` and controls no equipment.
 - Website turns a brief into Preview, guarded Save/Review, a release package, and an owner-gated plan at `/website/`; it never deploys.
-- Ecommerce reads versioned Shop data. Setup, Save, receipt, and handoff focus the next step. Review exposes source and consequence; Cancel restores the exact prepared draft. Only accountable Shop confirmation can create an order.
+- Ecommerce reads versioned Shop data and now provides a multi-item cart, deterministic 15-minute quote, explicit tax/shipping/payment boundaries, reload recovery, and a duplicate-safe multi-line Shop handoff. Only accountable Shop confirmation can create an order (`52917c5`).
 - AI assistance remains gated shared infrastructure; Order Intake passed 20 local cases, but the provider runner remains at the credential gate.
 - Client setup now uses one manifest-backed two-step flow, stable template IDs, detail-preserving switches/deep links, and one smart-import path. Exact matches collapse detail; exceptions open for review; the duplicate Shop importer is gone (`ab9a89e`).
 - Shop `social-commerce` now has a deterministic, versioned recipe bound to the trusted importer and human-approved Commerce lifecycle. Fresh, upgrade, and rollback plans perform no writes (`9ba8569`).
@@ -42,13 +42,13 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 
 ## Verified baseline
 
-- Current local checkpoints: product `03e1f1b`, agent operations `6c19084`, operations `63a245f`, and security `98b8044`.
-- App and local contracts pass; Kernel passes 262 tests, 69 connectors/993 calls, and 15 crews/214 checks. Shop, Plant, and Website foundations pass 11, 11, and 13 focused tests plus 24, 25, and 23 browser-model checks; all Python coverage passes 262 tests.
+- Current local checkpoints: product `52917c5`, agent operations `6c19084`, operations `63a245f`, and security `98b8044`.
+- App and local contracts pass; the full Python suite passes 273 tests, frontend lint/build pass, and the Ecommerce verifier covers 14 buying-lifecycle plus 16 Shop-handoff runtime checks. Kernel retains 262 tests, 69 connectors/993 calls, and 15 crews/214 checks.
 - React Router is isolated in a 43,870-byte cacheable chunk; Shop inventory, Plant execution, and Website release are 27,160-, 41,075-, and 31,770-byte on-demand chunks. The largest JavaScript chunk is 476,450 bytes and remains below the build gate.
 - Focused coverage includes 205 Shop, 256 Plant, 94 Website, 109 client-onboarding, 54 managed-import, and 17 trusted-server import tests.
 - Rendered setup and four phone-width product routes have no horizontal overflow or error overlay. Plant additionally passes a seven-step 1280x720 lifecycle, reload persistence, and a 390x844 first-run/released-state audit with its primary action visible.
 - Core first-action QA leads Shop Stock, incomplete orders to Promise or Payment, Plant alerts to Problems or output, and invalid Website briefs to their first error. Mobile controls are at least 44 px with focus-safe fixed navigation (`36fa7dd`); guide and review actions create no record.
-- Last remote release snapshot: `b67db94` is 0 behind / 230 ahead of open draft PR #258 head `338b6fd`; `megaos` production is READY at `6885c320` with no 24-hour runtime errors; remote checks exclude the local delta. See `hq/research/release-reconciliation-2026-07-26.md`.
+- Current local release candidate `52917c5` is 255 commits ahead of open draft PR #258's remote branch. Vercel `supermega-public` serves both `supermega.dev` and `app.supermega.dev` at `6885c320`; the release is healthy but intentionally reports `isolated_demo`, zero managed coverage, and database/schema/audit/writes disabled. No grouped runtime errors were reported in the last seven days; remote checks exclude the local delta.
 
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
 
@@ -60,10 +60,10 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 - Ecommerce and Website lack hosted cross-device/activation proof; managed setup and commands stay digest-bound.
 - No isolated hosted Supabase target has repeated database and private Storage proof.
-- The candidate is not on GitHub or Vercel; live remains `6885c320` and PR #258 remains `338b6fd`. The next external action is an approved fast-forward-only push.
-- Preview remains blocked until the exact `megaos` project and credentials are linked; no fallback domain is allowed.
+- The candidate is not on GitHub or Vercel; live remains `6885c320` and PR #258 remains `338b6fd`. The next external action is an approved fast-forward-only push of the clean release branch.
+- Preview remains blocked until the exact `supermega-public` project is linked to the clean candidate commit; no fallback project or domain is allowed.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
-- Hosted scheduler cadence and protected-secret scope remain unverified because the connector exposed no live cron or environment metadata. An owner-approved credentialed read is required; no provider state changed.
+- The hosted scheduler endpoint reports a configured, review-gated Vercel runtime with no PC dependency. Available runtime logs showed no recent six-hour cron execution evidence, and protected environment scope remains unverified; no provider state changed.
 - The products target SAP-grade accountability, not feature parity. Shop still needs managed proof, receiving/count reconciliation, pricing/tax, and accounting adapters; Plant needs managed persistence, multi-material import UI, warehouse/cost/accounting adapters, calibration, and OEE; Website needs versioned content/release operations; Ecommerce needs catalog, checkout, tax, shipping, payment, and returns depth.
 
 ## Decisions in force
@@ -85,8 +85,8 @@ Each slice must keep the interface task-first: one primary action, progressive d
 
 ## Next evidence
 
-1. Execute ENG-078: deterministic quote, adapter gates, Shop review, returns, and duplicate-safe recovery; no charge or second order authority.
-2. Repeat the 12-profile rehearsal with one founder-approved named pilot company and measure import correction, setup, and human review time.
-3. After an approved push and exact Vercel link, review that clean commit without deploying or mutating aliases.
-4. On an approved isolated Supabase target, prove private Storage, RLS, replay/isolation, and recovery.
-5. With owner-approved credentialed read access, compare live `megaos` cron and environment metadata against checkpoint `6c19084`; keep every provider mutation behind a separate owner decision.
+1. After an approved fast-forward-only push, review PR #258 from clean commit `52917c5` and rerun the coordinated remote checks.
+2. Link that exact commit to a protected `supermega-public` preview and repeat desktop/mobile Shop, Plant, Website, Ecommerce, reload, and duplicate-handoff journeys without mutating aliases.
+3. On an approved isolated Supabase target, prove private Storage, RLS, replay/isolation, recovery, and one real managed tenant before enabling writes.
+4. Repeat the 12-profile rehearsal with one founder-approved named pilot company and measure import correction, setup, human review, and first-value time.
+5. Only after preview, managed-security, rollback, and observability evidence passes, approve production promotion; begin public marketing after the live release re-verifies the same commit and one pilot can complete onboarding.
