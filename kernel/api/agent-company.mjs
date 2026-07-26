@@ -24,6 +24,7 @@ import {
   buildCompanyOperationsReport,
   COMPANY_OPERATIONS_TARGETS,
   COMPANY_OPERATIONS_WINDOWS,
+  evaluateCeoOutcomeDelivery,
   evaluateCompanyWorkOrder,
 } from '../agent-company-operations.mjs'
 import {
@@ -45,7 +46,7 @@ import {
 
 function statusFor(result) {
   if (result.ok) return 200
-  if (['company_work_order_not_found', 'company_mission_not_found'].includes(result.reason)) return 404
+  if (['company_work_order_not_found', 'company_mission_not_found', 'ceo_outcome_not_found'].includes(result.reason)) return 404
   if ([
     'company_cycle_already_claimed',
     'company_work_order_already_claimed',
@@ -62,6 +63,11 @@ function statusFor(result) {
     'company_evaluation_already_claimed',
     'company_evaluation_conflict',
     'company_evaluation_terminal_result_required',
+    'ceo_outcome_already_claimed',
+    'ceo_outcome_record_conflict',
+    'ceo_outcome_record_mismatch',
+    'ceo_outcome_evaluation_already_claimed',
+    'ceo_outcome_evaluation_conflict',
     'company_mission_already_claimed',
     'company_mission_conflict',
     'company_mission_handoff_mismatch',
@@ -89,6 +95,10 @@ function statusFor(result) {
     'company_evaluation_durable_claim_required',
     'company_evaluation_store_unavailable',
     'company_operations_store_unavailable',
+    'ceo_outcome_store_unavailable',
+    'ceo_outcome_durable_claim_required',
+    'ceo_outcome_evaluation_store_unavailable',
+    'ceo_outcome_evaluation_durable_claim_required',
     'company_mission_durable_claim_required',
     'company_mission_store_unavailable',
     'company_mission_work_order_unavailable',
@@ -250,6 +260,11 @@ export async function handleAgentCompany(request = {}, options = {}) {
           rawEvidenceReturned: false,
           modelOutputReturned: false,
           customerSlaClaimed: false,
+          ceoOutcomeMetrics: true,
+          explicitOwnerOutcomeAcceptance: true,
+          acceptedOutcomeEfficiency: true,
+          ceoBriefTextReturned: false,
+          providerRowsReturned: false,
         },
       },
     }
@@ -278,6 +293,7 @@ export async function handleAgentCompany(request = {}, options = {}) {
     'work-order-proof',
     'work-order-review',
     'work-order-evaluate',
+    'ceo-outcome-evaluate',
     'operations-report',
   ].includes(action)) {
     return { status: 400, json: { ok: false, reason: 'company_invalid_action' } }
@@ -330,6 +346,7 @@ export async function handleAgentCompany(request = {}, options = {}) {
   const getProof = options.getCompanyWorkOrderProof || getCompanyWorkOrderProof
   const reviewOrder = options.reviewCompanyWorkOrder || reviewCompanyWorkOrder
   const evaluateOrder = options.evaluateCompanyWorkOrder || evaluateCompanyWorkOrder
+  const evaluateOutcome = options.evaluateCeoOutcomeDelivery || evaluateCeoOutcomeDelivery
   const operationsReport = options.buildCompanyOperationsReport || buildCompanyOperationsReport
   let customerScopedOrder = null
   if (auth.role === 'customer') {
@@ -377,7 +394,8 @@ export async function handleAgentCompany(request = {}, options = {}) {
                                   }
                                 : {})
                                 : action === 'work-order-evaluate' ? await evaluateOrder(body)
-                                  : await operationsReport(body)
+                                  : action === 'ceo-outcome-evaluate' ? await evaluateOutcome(body)
+                                    : await operationsReport(body)
   if (auth.role === 'customer' && action === 'work-order-review' && result.ok) {
     return {
       status: 200,

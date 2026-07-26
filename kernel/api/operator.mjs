@@ -3,10 +3,13 @@
 // SYNTHESIZES a grounded answer from the real tool results. Ops-gated (x-ops-key); bounded to 4 steps.
 // This is the connector framework working as an agent action-toolbelt, with the draft→approve gate intact.
 import crypto from 'node:crypto'
-import gateway, { stripInjectionFrames } from '../gateway.mjs'
+import gateway, { stripInjectionFrames, TIER_COST_WEIGHTS } from '../gateway.mjs'
 import { availableTools, runTool } from '../tools.mjs'
 
 const OPS_KEY = (process.env.SUPERMEGA_OPS_KEY || '').trim()
+const OPERATOR_USAGE_CONTRACT = 'supermega.operator-usage.v1'
+const MAX_USAGE_TOKENS_PER_CALL = 10_000_000
+
 function constantTimeEqual(a, b) {
   const ha = crypto.createHash('sha256').update(String(a)).digest()
   const hb = crypto.createHash('sha256').update(String(b)).digest()
@@ -47,6 +50,43 @@ function safeJson(value) {
   }
 }
 
+function emptyOperatorUsage() {
+  return {
+    contract: OPERATOR_USAGE_CONTRACT,
+    units: 'bulk_equivalent_tokens',
+    modelCalls: 0,
+    cacheHits: 0,
+    measuredCalls: 0,
+    unmeasuredCalls: 0,
+    weightedTotalUnits: 0,
+  }
+}
+
+function boundedUsageNumber(value) {
+  const number = Number(value)
+  return Number.isSafeInteger(number) && number >= 0 && number <= MAX_USAGE_TOKENS_PER_CALL
+    ? number
+    : null
+}
+
+function mergeCompletionUsage(summary, completion) {
+  if (completion?.cached === true) {
+    summary.cacheHits += 1
+    return summary
+  }
+  summary.modelCalls += 1
+  const tier = Object.hasOwn(TIER_COST_WEIGHTS, completion?.tier) ? completion.tier : ''
+  const promptTokens = boundedUsageNumber(completion?.usage?.input_tokens)
+  const completionTokens = boundedUsageNumber(completion?.usage?.output_tokens)
+  if (!tier || promptTokens === null || completionTokens === null) {
+    summary.unmeasuredCalls += 1
+    return summary
+  }
+  summary.measuredCalls += 1
+  summary.weightedTotalUnits += (promptTokens + completionTokens) * TIER_COST_WEIGHTS[tier]
+  return summary
+}
+
 function approvedToolPlan(value, tools) {
   if (!Array.isArray(value) || value.length < 1 || value.length > 4) return null
   const available = new Set(tools.map((tool) => tool.name))
@@ -75,6 +115,7 @@ export async function runOperator({ goal, approvedPlan }, options = {}) {
   const g = String(goal || '').trim()
   if (!g) return { ok: false, reason: 'missing_goal' }
   const tools = listTools()
+  const usage = emptyOperatorUsage()
 
   // 1) PLAN — use checked HQ evidence steps when present; otherwise plan from the read-only catalog.
   let plan
@@ -93,6 +134,7 @@ export async function runOperator({ goal, approvedPlan }, options = {}) {
         tier: 'bulk',
         schema: PLAN_SCHEMA,
       })
+      mergeCompletionUsage(usage, r)
       plan = r.data
     } catch (e) {
       return { ok: false, reason: 'plan_failed', detail: String((e && e.message) || 'gateway_error').slice(0, 160) }
@@ -130,12 +172,13 @@ export async function runOperator({ goal, approvedPlan }, options = {}) {
       }],
       tier: 'reason',
     })
+    mergeCompletionUsage(usage, r)
     answer = r.text
   } catch (e) {
     answer = `(synthesis unavailable: ${String((e && e.message) || 'gateway_error').slice(0, 120)})`
   }
 
-  return { ok: true, goal: g, planningMode, plan, results, answer }
+  return { ok: true, goal: g, planningMode, plan, results, answer, usage }
 }
 
 export default async function handler(req, res) {

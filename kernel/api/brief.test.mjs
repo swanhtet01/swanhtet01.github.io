@@ -202,8 +202,9 @@ test('SuperMega CEO cycle selects one HQ outcome and uses its fixed evidence pla
   const deliveries = durableClaimStore('delivery')
   const operatorInputs = []
   const sent = []
+  const recorded = []
   const result = await runScheduledBrief({
-    env: {},
+    env: { SUPERMEGA_CLIENT_ID: 'client-acme' },
     now: NOW,
     runOperator: async (input) => {
       operatorInputs.push(input)
@@ -212,12 +213,32 @@ test('SuperMega CEO cycle selects one HQ outcome and uses its fixed evidence pla
         planningMode: 'hq_authority_fixed',
         answer: 'One decision',
         results: input.approvedPlan.map((step) => ({ tool: step.tool, ok: true })),
+        usage: {
+          contract: 'supermega.operator-usage.v1',
+          units: 'bulk_equivalent_tokens',
+          modelCalls: 1,
+          cacheHits: 0,
+          measuredCalls: 1,
+          unmeasuredCalls: 0,
+          weightedTotalUnits: 45,
+        },
       }
     },
     claimWorkcellExecution: executions.claim,
     claimWorkcellDelivery: deliveries.claim,
     releaseWorkcellDelivery: async (claim) => (await executions.release(claim)) || deliveries.release(claim),
     notify: async (message) => { sent.push(message); return true },
+    recordCeoOutcomeCompletion: async (input) => {
+      recorded.push(input)
+      return {
+        ok: true,
+        outcome: {
+          operationId: `ceo-outcome:${'a'.repeat(40)}`,
+          status: 'completed',
+          recordHash: 'b'.repeat(64),
+        },
+      }
+    },
   })
 
   assert.equal(result.ok, true)
@@ -234,6 +255,60 @@ test('SuperMega CEO cycle selects one HQ outcome and uses its fixed evidence pla
   assert.match(operatorInputs[0].goal, /Blocked context only - never execute/)
   assert.equal(sent.length, 1)
   assert.match(sent[0], /Prepare one evidence-backed owner decision/)
+  assert.equal(result.outcomeMetrics.recorded, true)
+  assert.equal(recorded.length, 1)
+  assert.deepEqual(recorded[0], {
+    clientId: 'client-acme',
+    outcomeId: 'daily-company-control',
+    authorityDigest: result.outcome.authorityDigest,
+    completedAt: NOW.toISOString(),
+    usage: {
+      contract: 'supermega.operator-usage.v1',
+      units: 'bulk_equivalent_tokens',
+      modelCalls: 1,
+      cacheHits: 0,
+      measuredCalls: 1,
+      unmeasuredCalls: 0,
+      weightedTotalUnits: 45,
+    },
+  })
+  assert.equal(JSON.stringify(recorded[0]).includes('One decision'), false)
+  assert.equal(JSON.stringify(recorded[0]).includes('provider'), false)
+})
+
+test('CEO cycle does not notify the owner when completion metadata is not durable', async () => {
+  let deliveryClaims = 0
+  let sends = 0
+  let releases = 0
+  const result = await runScheduledBrief({
+    env: { SUPERMEGA_CLIENT_ID: 'client-acme' },
+    now: NOW,
+    runOperator: async () => ({
+      ok: true,
+      answer: 'private answer',
+      results: [],
+      usage: {
+        contract: 'supermega.operator-usage.v1',
+        units: 'bulk_equivalent_tokens',
+        modelCalls: 1,
+        cacheHits: 0,
+        measuredCalls: 1,
+        unmeasuredCalls: 0,
+        weightedTotalUnits: 45,
+      },
+    }),
+    claimWorkcellExecution: async () => ({ fresh: true, durable: true, claimId: 'execution' }),
+    claimWorkcellDelivery: async () => { deliveryClaims += 1; return { fresh: true, durable: true } },
+    releaseWorkcellDelivery: async () => { releases += 1; return true },
+    recordCeoOutcomeCompletion: async () => ({ ok: false, reason: 'ceo_outcome_store_unavailable' }),
+    notify: async () => { sends += 1; return true },
+  })
+  assert.equal(result.ok, false)
+  assert.equal(result.reason, 'ceo_outcome_store_unavailable')
+  assert.equal(result.retryable, true)
+  assert.equal(deliveryClaims, 0)
+  assert.equal(sends, 0)
+  assert.equal(releases, 1)
 })
 
 test('blocked or completed HQ outcomes decline before claims, models, or sends', async () => {

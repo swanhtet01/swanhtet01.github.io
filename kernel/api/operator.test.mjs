@@ -86,7 +86,16 @@ test('HQ authority plan skips the planner model call and runs only exact read to
       ],
     },
     {
-      complete: async (request) => { calls.push(request); return { text: 'One grounded decision' } },
+      complete: async (request) => {
+        calls.push(request)
+        return {
+          text: 'One grounded decision',
+          tier: 'reason',
+          provider: 'private-provider',
+          model: 'private-model',
+          usage: { input_tokens: 10, output_tokens: 5 },
+        }
+      },
       runTool: async (tool, args) => { executed.push({ tool, args }); return { ok: true, data: { count: 1 } } },
       availableTools: () => [
         { name: 'leads_overview', description: 'Leads', input_schema: { type: 'object', properties: {} } },
@@ -104,6 +113,44 @@ test('HQ authority plan skips the planner model call and runs only exact read to
     'hq_authority_fixed_evidence',
     'hq_authority_fixed_evidence',
   ])
+  assert.deepEqual(result.usage, {
+    contract: 'supermega.operator-usage.v1',
+    units: 'bulk_equivalent_tokens',
+    modelCalls: 1,
+    cacheHits: 0,
+    measuredCalls: 1,
+    unmeasuredCalls: 0,
+    weightedTotalUnits: 45,
+  })
+  assert.equal(JSON.stringify(result.usage).includes('private-'), false)
+})
+
+test('cached operator synthesis reports no new model work or provider identity', async () => {
+  const result = await runOperator({
+    goal: 'Check status',
+    approvedPlan: [{ tool: 'platform_status', args: {} }],
+  }, {
+    complete: async () => ({
+      text: 'Cached status',
+      cached: true,
+      tier: 'reason',
+      provider: 'private-provider',
+      model: 'private-model',
+      usage: { input_tokens: 1000, output_tokens: 500 },
+    }),
+    runTool: async () => ({ ok: true, data: { status: 'ready' } }),
+    availableTools: () => [{ name: 'platform_status', description: 'Status', input_schema: { type: 'object', properties: {} } }],
+  })
+  assert.deepEqual(result.usage, {
+    contract: 'supermega.operator-usage.v1',
+    units: 'bulk_equivalent_tokens',
+    modelCalls: 0,
+    cacheHits: 1,
+    measuredCalls: 0,
+    unmeasuredCalls: 0,
+    weightedTotalUnits: 0,
+  })
+  assert.equal(JSON.stringify(result.usage).includes('private-'), false)
 })
 
 test('invalid or unavailable HQ evidence plans fail before model or tool work', async () => {

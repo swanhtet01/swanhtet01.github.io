@@ -8,6 +8,7 @@ import { notify } from '../alert.mjs'
 import { claimWorkcellDelivery, claimWorkcellExecution, formatWorkcellNotification, releaseWorkcellDelivery, runWorkcell } from '../workcell-run.mjs'
 import { resolveWorkcellConfig, scheduledWorkcellSlugs } from '../workcells.mjs'
 import { buildCeoOutcomeGoal, selectCeoOutcome } from '../supermega-hq-authority.mjs'
+import { recordCeoOutcomeCompletion } from '../agent-company-operations.mjs'
 
 function safeEq(a, b) {
   const left = crypto.createHash('sha256').update(String(a)).digest()
@@ -158,6 +159,42 @@ export async function runScheduledBrief(options = {}) {
     const retryable = await releaseClaimSafely(releaseDelivery, executionClaim)
     return { ok: false, mode: 'legacy', companyMode: 'supermega_hq', reason: result.reason || 'brief_failed', retryable, outcome }
   }
+  const clientId = String(options.clientId ?? env.SUPERMEGA_CLIENT_ID ?? '').trim()
+  if (!clientId) {
+    const retryable = await releaseClaimSafely(releaseDelivery, executionClaim)
+    return { ok: false, mode: 'legacy', companyMode: 'supermega_hq', reason: 'company_client_id_missing', retryable, outcome }
+  }
+  const recordOutcome = options.recordCeoOutcomeCompletion || recordCeoOutcomeCompletion
+  let recorded
+  try {
+    recorded = await recordOutcome({
+      clientId,
+      outcomeId: selection.selected.id,
+      authorityDigest: selection.authorityDigest,
+      completedAt: now.toISOString(),
+      usage: result.usage,
+    })
+  } catch {
+    recorded = { ok: false, reason: 'ceo_outcome_store_unavailable' }
+  }
+  if (!recorded?.ok) {
+    const retryable = await releaseClaimSafely(releaseDelivery, executionClaim)
+    return {
+      ok: false,
+      mode: 'legacy',
+      companyMode: 'supermega_hq',
+      reason: recorded?.reason || 'ceo_outcome_store_unavailable',
+      retryable,
+      outcome,
+    }
+  }
+  const outcomeMetrics = {
+    recorded: true,
+    operationId: recorded.outcome?.operationId,
+    status: recorded.outcome?.status,
+    recordHash: recorded.outcome?.recordHash,
+    replayed: recorded.replayed === true,
+  }
   const deliveryClaim = await claimSafely(claimDelivery, claimSlug, { env, now }, 'durable_delivery_claim_unavailable')
   if (!deliveryClaim?.fresh && deliveryClaim?.durable) {
     return { ok: true, mode: 'legacy', companyMode: 'supermega_hq', declined: true, duplicate: true, sent: false, reason: 'ceo_outcome_duplicate', outcome }
@@ -184,6 +221,7 @@ export async function runScheduledBrief(options = {}) {
     outcome,
     planningMode: result.planningMode || null,
     toolsUsed: (result.results || []).map((item) => item.tool),
+    outcomeMetrics,
     answer: result.answer,
   }
 }
