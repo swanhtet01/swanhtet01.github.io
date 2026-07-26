@@ -30,7 +30,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 - Ally audit after a non-terminating trim: RAM 77.8%, Codex 1.16 GB, zero models, one worker, and no duplicate listener. OS data cannot prove subagents; unchanged evidence-bound missions reuse for 24 hours (`72853ac`).
 - All seven company jobs use SuperMega Agent Operations or core GitHub. Catalogs are exact-tenant scoped, so YTF identities cannot render in core operations (`b46c386`).
 - Hosted scheduling is dormant with zero registered crons. A signed seven-day bundle now binds five proof digests, tenant, owner decision, canonical project, production, and exact commit; flag-only, preview, stale, incomplete, or tampered attempts stop before worker invocation (`07dd959`).
-- A provider-neutral Storage verifier now proves explicit anonymous-list denial, a tenant positive control, cross-tenant list/object denial, and 60-second signed access in six bounded requests. It rejects service keys, redirects, proxies, oversized/duplicate JSON, and unconfirmed targets; its 11-case self-test makes zero network requests (`f642962`). Hosted proof remains blocked.
+- Storage privacy now has a six-request owner-confirmed verifier, zero-network configuration preflight, and secret-free owner handoff. It rejects privileged keys, redirects, proxies, oversized/duplicate JSON, and unconfirmed targets; 13 focused tests and an 11-case self-test pass (`be78a02`). Hosted proof remains blocked.
 - Each CEO cycle selects at most one HQ-authorized outcome. Hosted Storage proof, protected preview, and named pilot work remain blocked; completed, in-flight, duplicate, or invalid work stops before claims, models, or sends. The owner brief uses four fixed reads and one synthesis call (`cdd925a`).
 - CEO completion metadata persists before notification; acceptance is a separate immutable owner/operator verdict. Reports store no brief/provider rows and publish efficiency only with durable, complete, valid usage and evaluation coverage (`78f2297`).
 - Shop covers guarded orders, stock, purchasing, fulfilment, payments, returns, and close at `/shop/`.
@@ -46,8 +46,8 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 
 ## Verified baseline
 
-- Current local checkpoints: product `52917c5`, agent operations `f642962`, operations `63a245f`, and security `98b8044`.
-- App and local contracts pass: 291 Python tests, frontend lint/build, 11 Storage self-test cases, 60 security checks, 20 Vercel environment checks, and the guarded release suite. Kernel retains 277 tests, 69 connectors/993 calls, and 15 crews/214 checks.
+- Current local checkpoints: product `52917c5`, agent operations `be78a02`, operations `63a245f`, and security `98b8044`.
+- App and local contracts pass: 292 Python tests, frontend lint/build, 13 focused Storage tests, 11 Storage self-test cases, 60 security checks, and the guarded release suite. Kernel retains 277 tests, 69 connectors/993 calls, and 15 crews/214 checks.
 - Rendered setup and four phone-width products have no overflow or error overlay. Plant also passes desktop lifecycle, reload, and phone first-run/released-state checks.
 - Core first-action QA leads Shop Stock, incomplete orders to Promise or Payment, Plant alerts to Problems or output, and invalid Website briefs to their first error. Mobile controls are at least 44 px with focus-safe fixed navigation (`36fa7dd`); guide and review actions create no record.
 - Product checkpoint `52917c5` is on a clean fast-forward descendant of open draft PR #258 head `338b6fd`. Vercel `supermega-public` serves both domains at live `6885c320`; it is healthy but intentionally reports `isolated_demo`, zero managed coverage, and database/schema/audit/writes disabled. No grouped seven-day runtime errors were reported; remote checks exclude the local delta.
