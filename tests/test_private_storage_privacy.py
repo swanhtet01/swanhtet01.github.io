@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 import unittest
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime, timezone
 from io import StringIO
 from unittest.mock import patch
@@ -63,6 +63,29 @@ class PrivateStoragePrivacyTests(unittest.TestCase):
             "fixture-signed-token",
         ):
             self.assertNotIn(secret, serialized)
+
+    def test_configuration_preflight_is_network_free_redacted_and_cli_reachable(self) -> None:
+        report = verifier.configuration_preflight(self.config, captured_at=self.now)
+        self.assertTrue(report["ok"])
+        self.assertEqual(report["mode"], "offline_configuration_preflight")
+        self.assertEqual(report["network_requests_performed"], 0)
+        self.assertEqual(report["persistent_mutations_performed"], 0)
+        self.assertFalse(report["provider_credentials_verified"])
+        serialized = json.dumps(report, sort_keys=True)
+        for value in (
+            self.config.publishable_key,
+            self.config.tenant_a_jwt,
+            self.config.tenant_b_jwt,
+            self.config.bucket,
+            self.config.tenant_a_object,
+            self.config.tenant_b_object,
+        ):
+            self.assertNotIn(value, serialized)
+
+        output = StringIO()
+        with patch.dict(os.environ, self.environment, clear=True), redirect_stdout(output):
+            self.assertEqual(verifier.main(["--preflight"]), 0)
+        self.assertEqual(json.loads(output.getvalue())["network_requests_performed"], 0)
 
     def test_anonymous_listing_must_be_explicitly_denied(self) -> None:
         responses = verifier._fixture_responses(self.config)

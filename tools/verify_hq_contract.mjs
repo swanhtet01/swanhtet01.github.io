@@ -17,7 +17,7 @@ import {
 } from '../kernel/agent-company-operations.mjs'
 
 const root = resolve(import.meta.dirname, '..')
-const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, packageText] = await Promise.all([
+const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, packageText, storageAuditHandoff] = await Promise.all([
   readFile(resolve(root, 'hq', 'README.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'NOW.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'CODEX-PRODUCT-QA-BRIEF.md'), 'utf8'),
@@ -33,6 +33,7 @@ const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, wo
   readFile(resolve(root, 'hq', 'research', 'release-reconciliation-2026-07-26.md'), 'utf8'),
   readFile(resolve(root, 'tools', 'audit_ally_runtime.ps1'), 'utf8'),
   readFile(resolve(root, 'package.json'), 'utf8'),
+  readFile(resolve(root, 'hq', 'pilots', 'private-storage-privacy-audit.md'), 'utf8'),
 ])
 
 const manifest = JSON.parse(manifestText)
@@ -237,6 +238,16 @@ requireContract('agent security brief is reconciled to current controls',
   && agentSecurity.includes('removing the planner model call')
   && !agentSecurity.includes('queue viewing can authorize processing or preview deployment')
   && !agentSecurity.includes('root development compose publishes services'))
+requireContract('private Storage audit handoff is offline-first and secret-free',
+  storageAuditHandoff.includes('Verifier: `supermega.private-storage-privacy.v1`')
+  && storageAuditHandoff.includes('This handoff is not approval to run against `supermegabase`')
+  && storageAuditHandoff.includes('npm.cmd run storage:privacy:preflight')
+  && storageAuditHandoff.includes('--confirm-read-only-audit $env:SUPERMEGA_STORAGE_PRIVACY_OWNER_APPROVAL_ID')
+  && storageAuditHandoff.includes('provider_credentials_verified` equal to `false`')
+  && storageAuditHandoff.includes('Cleanup is destructive provider activity')
+  && packageText.includes('"storage:privacy:preflight": "python tools/verify_private_storage_privacy.py --preflight"')
+  && storageAuditHandoff.length < 7000
+  && !/sb_secret_|eyJ[A-Za-z0-9_-]{12,}|fixture-signed-token/.test(storageAuditHandoff))
 requireContract('product QA brief matches current portfolio',
   qaBrief.includes('Work item: `QA-003`')
   && qaBrief.includes('Mode: read-only')

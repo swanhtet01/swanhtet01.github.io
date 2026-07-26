@@ -702,6 +702,32 @@ def _fixture_responses(config: AuditConfig) -> list[AuditResponse | PrivacyAudit
     ]
 
 
+def configuration_preflight(
+    config: AuditConfig, *, captured_at: datetime | None = None
+) -> dict[str, Any]:
+    now = (captured_at or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    evidence = {
+        "contract": CONTRACT,
+        "mode": "offline_configuration_preflight",
+        "adapter": ADAPTER,
+        "target_host_digest": _digest(config.host),
+        "bucket_digest": _digest(config.bucket),
+        "owner_approval_digest": _digest(config.owner_approval_id),
+        "captured_at": now.replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "tenant_identity_count": 2,
+        "credential_shapes_validated_locally": True,
+        "provider_credentials_verified": False,
+        "maximum_live_requests": MAX_REQUESTS,
+        "signed_url_ttl_seconds": SIGNED_URL_TTL_SECONDS,
+        "network_requests_performed": 0,
+        "persistent_mutations_performed": 0,
+        "secrets_exposed": False,
+        "bucket_or_object_names_exposed": False,
+    }
+    encoded = json.dumps(evidence, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
+    return {"ok": True, **evidence, "evidence_digest": _digest(encoded)}
+
+
 def run_self_test() -> dict[str, Any]:
     cases = 0
     environment = _fixture_environment()
@@ -798,7 +824,10 @@ def run_self_test() -> dict[str, Any]:
         raise PrivacyAuditError("self_test_service_key_rejection_failed")
 
     cases += 1
-    serialized = json.dumps(report, sort_keys=True)
+    preflight = configuration_preflight(
+        config, captured_at=datetime(2030, 1, 1, tzinfo=timezone.utc)
+    )
+    serialized = json.dumps([report, preflight], sort_keys=True)
     forbidden_values = [
         config.publishable_key,
         config.tenant_a_jwt,
@@ -839,14 +868,20 @@ def main(argv: list[str] | None = None) -> int:
         description="Prove private managed-storage isolation without writing objects."
     )
     parser.add_argument("--self-test", action="store_true")
+    parser.add_argument("--preflight", action="store_true")
     parser.add_argument("--confirm-read-only-audit", metavar="OWNER_APPROVAL_ID")
     args = parser.parse_args(argv)
     session: PrivacyAuditSession | None = None
     try:
-        if args.self_test and args.confirm_read_only_audit:
+        selected_modes = sum(
+            (bool(args.self_test), bool(args.preflight), bool(args.confirm_read_only_audit))
+        )
+        if selected_modes > 1:
             raise PrivacyAuditError("audit_mode_conflict")
         if args.self_test:
             result = run_self_test()
+        elif args.preflight:
+            result = configuration_preflight(load_config())
         else:
             if not args.confirm_read_only_audit:
                 raise PrivacyAuditError("owner_approval_confirmation_required")
