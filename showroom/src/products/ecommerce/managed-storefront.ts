@@ -8,6 +8,7 @@ import {
   type CommerceState,
   type CommerceStorefrontConfiguration,
   type CommerceStorefrontConfigurationInput,
+  type CommerceStorefrontMerchandising,
 } from '../../core/commerce-workspace.ts'
 
 export type ManagedStorefrontSaved = {
@@ -16,6 +17,7 @@ export type ManagedStorefrontSaved = {
   storeName: string
   summary: string
   selectedSkus: string[]
+  merchandising?: CommerceStorefrontMerchandising[]
   shopCatalogDigest?: string
   actionId?: string
 }
@@ -54,6 +56,9 @@ export function readManagedStorefront(state: CommerceState): ManagedStorefrontSa
     storeName: configuration.storeName,
     summary: configuration.summary,
     selectedSkus: [...configuration.selectedSkus],
+    ...(configuration.merchandising
+      ? { merchandising: configuration.merchandising.map((entry) => ({ ...entry })) }
+      : {}),
     shopCatalogDigest: configuration.shopCatalogDigest,
     actionId: configuration.saved.actionId,
   }
@@ -110,6 +115,7 @@ export function acceptManagedStorefrontSave(
     || configuration.storeName !== expected.storeName
     || configuration.summary !== expected.summary
     || !sameStrings(configuration.selectedSkus, expected.selectedSkus)
+    || !sameJson(configuration.merchandising ?? null, expected.merchandising ?? null)
     || configuration.saved.actionId !== expected.saved.actionId
     || configuration.saved.actor !== expectedActor
     || configuration.saved.reason !== expected.saved.reason

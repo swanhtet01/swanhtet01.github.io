@@ -4,6 +4,7 @@ import {
   createSeedCommerce,
   validateCommerceState,
   type CommerceItem,
+  type CommerceStorefrontMerchandising,
 } from '../../core/commerce-workspace.ts'
 
 export const STOREFRONT_PREVIEW_SCHEMA = 'supermega.ecommerce.storefront_preview.v1' as const
@@ -22,6 +23,7 @@ export type StorefrontPreviewItem = {
   variant: string | null
   unitPriceMmk: number
   availability: 'available' | 'sold_out'
+  merchandising?: Omit<CommerceStorefrontMerchandising, 'sku'>
 }
 
 export type StorefrontPreview = {
@@ -38,19 +40,21 @@ type ReadableStorage = {
   getItem: (key: string) => string | null
 }
 
-type StorefrontInput = {
+export type StorefrontInput = {
   storeName: string
   summary: string
   selectedSkus: string[]
+  merchandising?: CommerceStorefrontMerchandising[]
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
 
-function hasExactKeys(value: Record<string, unknown>, keys: string[]) {
+function hasExactKeys(value: Record<string, unknown>, keys: string[], optional: string[] = []) {
   const actual = Object.keys(value)
-  return actual.length === keys.length && keys.every((key) => actual.includes(key))
+  return keys.every((key) => actual.includes(key))
+    && actual.every((key) => keys.includes(key) || optional.includes(key))
 }
 
 function browserStorage(): ReadableStorage | undefined {
@@ -66,6 +70,51 @@ function canonicalText(value: unknown, field: string, maximum: number) {
     throw new Error(`${field} must be visible canonical text of at most ${maximum} characters.`)
   }
   return value
+}
+
+function canonicalBlankableText(value: unknown, field: string, maximum: number) {
+  if (typeof value !== 'string' || value !== value.trim() || value.length > maximum) {
+    throw new Error(`${field} must be canonical text of at most ${maximum} characters or empty.`)
+  }
+  return value
+}
+
+function compareCanonicalText(left: string, right: string) {
+  const leftCodePoints = Array.from(left, (character) => character.codePointAt(0) as number)
+  const rightCodePoints = Array.from(right, (character) => character.codePointAt(0) as number)
+  const sharedLength = Math.min(leftCodePoints.length, rightCodePoints.length)
+  for (let index = 0; index < sharedLength; index += 1) {
+    if (leftCodePoints[index] !== rightCodePoints[index]) return leftCodePoints[index] - rightCodePoints[index]
+  }
+  return leftCodePoints.length - rightCodePoints.length
+}
+
+function normalizedMerchandising(
+  value: CommerceStorefrontMerchandising[] | undefined,
+  selectedSkus: string[],
+) {
+  if (value === undefined) return undefined
+  if (!Array.isArray(value) || value.length !== selectedSkus.length) {
+    throw new Error('Merchandising must cover every selected Shop SKU exactly once.')
+  }
+  const rows = value.map((candidate, index) => {
+    if (!isRecord(candidate)
+      || !hasExactKeys(candidate, ['sku', 'featured', 'collection', 'displayName', 'note'])) {
+      throw new Error(`Merchandising row ${index + 1} is invalid.`)
+    }
+    if (typeof candidate.featured !== 'boolean') throw new Error(`Merchandising row ${index + 1} featured must be boolean.`)
+    return {
+      sku: canonicalText(candidate.sku, `Merchandising row ${index + 1} SKU`, 80),
+      featured: candidate.featured,
+      collection: canonicalText(candidate.collection, `Merchandising row ${index + 1} collection`, 120),
+      displayName: canonicalBlankableText(candidate.displayName, `Merchandising row ${index + 1} display name`, 180),
+      note: canonicalBlankableText(candidate.note, `Merchandising row ${index + 1} note`, 300),
+    }
+  }).sort((left, right) => compareCanonicalText(left.sku, right.sku))
+  if (rows.some((row, index) => row.sku !== selectedSkus[index])) {
+    throw new Error('Merchandising must follow the canonical selected SKU order.')
+  }
+  return rows
 }
 
 function validateCatalog(items: CommerceItem[]) {
@@ -143,7 +192,10 @@ export function buildStorefrontPreview(
     const item = itemBySku.get(sku)
     if (!item) throw new Error(`Selected SKU ${sku} is not in the Shop catalog.`)
     return item
-  })
+  }).sort((left, right) => compareCanonicalText(left.sku, right.sku))
+  const canonicalSelectedSkus = selected.map((item) => item.sku)
+  const merchandising = normalizedMerchandising(input.merchandising, canonicalSelectedSkus)
+  const merchandisingBySku = new Map(merchandising?.map((entry) => [entry.sku, entry]) ?? [])
 
   return validateStorefrontPreview({
     schema: STOREFRONT_PREVIEW_SCHEMA,
@@ -152,15 +204,24 @@ export function buildStorefrontPreview(
     storeName,
     summary,
     currency: 'MMK',
-    items: selected
-      .sort((left, right) => left.sku.localeCompare(right.sku))
-      .map((item) => ({
+    items: selected.map((item) => {
+      const presentation = merchandisingBySku.get(item.sku)
+      return {
         sku: item.sku,
         name: item.name,
         variant: item.variant ?? null,
         unitPriceMmk: item.price,
         availability: item.onHand > 0 ? 'available' : 'sold_out',
-      })),
+        ...(presentation ? {
+          merchandising: {
+            featured: presentation.featured,
+            collection: presentation.collection,
+            displayName: presentation.displayName,
+            note: presentation.note,
+          },
+        } : {}),
+      }
+    }),
   })
 }
 
@@ -178,7 +239,7 @@ export function validateStorefrontPreview(value: unknown): StorefrontPreview {
   const storeName = canonicalText(value.storeName, 'Store name', 60)
   const summary = canonicalText(value.summary, 'Store summary', 180)
   const items = value.items.map((candidate, index) => {
-    if (!isRecord(candidate) || !hasExactKeys(candidate, ['sku', 'name', 'variant', 'unitPriceMmk', 'availability'])) {
+    if (!isRecord(candidate) || !hasExactKeys(candidate, ['sku', 'name', 'variant', 'unitPriceMmk', 'availability'], ['merchandising'])) {
       throw new Error(`Storefront item ${index + 1} is invalid.`)
     }
     const sku = canonicalText(candidate.sku, `Storefront item ${index + 1} SKU`, 80)
@@ -190,6 +251,20 @@ export function validateStorefrontPreview(value: unknown): StorefrontPreview {
     if (candidate.availability !== 'available' && candidate.availability !== 'sold_out') {
       throw new Error(`${sku} has invalid storefront availability.`)
     }
+    let merchandising: StorefrontPreviewItem['merchandising']
+    if (candidate.merchandising !== undefined) {
+      if (!isRecord(candidate.merchandising)
+        || !hasExactKeys(candidate.merchandising, ['featured', 'collection', 'displayName', 'note'])
+        || typeof candidate.merchandising.featured !== 'boolean') {
+        throw new Error(`${sku} has invalid storefront merchandising.`)
+      }
+      merchandising = {
+        featured: candidate.merchandising.featured,
+        collection: canonicalText(candidate.merchandising.collection, `${sku} collection`, 120),
+        displayName: canonicalBlankableText(candidate.merchandising.displayName, `${sku} display name`, 180),
+        note: canonicalBlankableText(candidate.merchandising.note, `${sku} note`, 300),
+      }
+    }
     const availability: StorefrontPreviewItem['availability'] = candidate.availability
     return {
       sku,
@@ -197,11 +272,16 @@ export function validateStorefrontPreview(value: unknown): StorefrontPreview {
       variant,
       unitPriceMmk: Number(candidate.unitPriceMmk),
       availability,
+      ...(merchandising ? { merchandising } : {}),
     }
   })
   const skus = items.map((item) => item.sku)
-  if (new Set(skus).size !== skus.length || skus.join(',') !== [...skus].sort((left, right) => left.localeCompare(right)).join(',')) {
+  if (new Set(skus).size !== skus.length || skus.join(',') !== [...skus].sort(compareCanonicalText).join(',')) {
     throw new Error('Storefront item SKUs must be unique and canonical.')
+  }
+  const merchandisingCount = items.filter((item) => item.merchandising).length
+  if (merchandisingCount !== 0 && merchandisingCount !== items.length) {
+    throw new Error('Storefront merchandising must cover every preview item or none of them.')
   }
   return {
     schema: STOREFRONT_PREVIEW_SCHEMA,

@@ -309,7 +309,7 @@ export type CommerceStorefrontConfigurationInput = {
   summary: string
   selectedSkus: string[]
   shopCatalogDigest: string
-  merchandising?: CommerceStorefrontMerchandising[]
+  merchandising?: CommerceStorefrontMerchandising[] | null
 }
 
 type CommerceLockManager = {
@@ -1979,7 +1979,7 @@ export async function saveCommerceStorefrontConfiguration(
     selectedSkus = input.selectedSkus
       .map((sku, index) => canonicalText(sku, `Selected SKU ${index + 1}`, 80))
       .sort(compareCanonicalText)
-    if (input.merchandising !== undefined) {
+    if (input.merchandising !== undefined && input.merchandising !== null) {
       if (!Array.isArray(input.merchandising) || input.merchandising.length !== selectedSkus.length) return null
       requestedMerchandising = input.merchandising
         .map((candidate, index) => ({
@@ -1997,7 +1997,9 @@ export async function saveCommerceStorefrontConfiguration(
   if (new Set(selectedSkus).size !== selectedSkus.length
     || selectedSkus.some((sku) => !current.items.some((item) => item.sku === sku))) return null
   const existing = commerceStorefrontConfiguration(current)
-  const merchandising = requestedMerchandising ?? existing?.merchandising
+  const merchandising = input.merchandising === undefined
+    ? existing?.merchandising
+    : requestedMerchandising
   if (merchandising && !sameStringArray(merchandising.map((entry) => entry.sku), selectedSkus)) return null
   if (input.merchandising === undefined && existing?.merchandising
     && !sameStringArray(existing.selectedSkus, selectedSkus)) return null

@@ -33,10 +33,17 @@ export async function confirmEcommerceShopDraft(input: {
     || await storefrontPreviewDigest(preview) !== input.sourcePreviewDigest) {
     throw new Error('The storefront preview changed. Create a new request receipt before Shop review.')
   }
+  const merchandising = preview.items[0]?.merchandising
+    ? preview.items.map((item) => {
+      if (!item.merchandising) throw new Error('The storefront merchandising overlay is incomplete.')
+      return { sku: item.sku, ...item.merchandising }
+    })
+    : undefined
   const currentPreview = buildStorefrontPreview(input.currentCatalog, {
     storeName: preview.storeName,
     summary: preview.summary,
     selectedSkus: preview.items.map((item) => item.sku),
+    ...(merchandising ? { merchandising } : {}),
   })
   if (await storefrontPreviewDigest(currentPreview) !== input.sourcePreviewDigest) {
     throw new Error('The Shop catalog changed. Refresh Ecommerce before handing off this request.')

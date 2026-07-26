@@ -4839,6 +4839,28 @@ async function verifyStorefrontRuntime() {
     const firstDigest = await storefront.storefrontPreviewDigest(preview)
     const retryDigest = await storefront.storefrontPreviewDigest(reordered)
     assert(firstDigest === retryDigest && /^sha256:[a-f0-9]{64}$/.test(firstDigest), 'storefront_digest_not_deterministic_sha256')
+    const merchandising = [
+      { sku: 'SM-CARE-01', featured: false, collection: 'Care', displayName: '', note: '' },
+      { sku: 'SM-1003', featured: false, collection: 'Pantry', displayName: 'Household refill', note: 'Confirm availability.' },
+      { sku: 'SM-1001', featured: true, collection: 'Best sellers', displayName: 'Daily essentials', note: 'Lead with the customer favourite.' },
+    ]
+    const merchandisedPreview = storefront.buildStorefrontPreview(catalog, { ...input, merchandising })
+    assert(merchandisedPreview.items.every((item) => item.merchandising)
+      && merchandisedPreview.items[0].merchandising.displayName === 'Daily essentials',
+    'storefront_merchandising_not_rendered_in_canonical_sku_order')
+    const merchandisedDigest = await storefront.storefrontPreviewDigest(merchandisedPreview)
+    assert(merchandisedDigest !== firstDigest, 'storefront_merchandising_not_digest_bound')
+    let partialMerchandisingRejected = false
+    try {
+      storefront.validateStorefrontPreview({
+        ...merchandisedPreview,
+        items: merchandisedPreview.items.map((item, index) => index ? item : (() => {
+          const { merchandising: _removed, ...withoutMerchandising } = item
+          return withoutMerchandising
+        })()),
+      })
+    } catch { partialMerchandisingRejected = true }
+    assert(partialMerchandisingRejected, 'storefront_partial_merchandising_accepted')
     const managedPreviewBase = { ...commerce.createEmptyCommerce(), items: catalog }
     const managedPreviewCatalogDigest = await commerce.commerceCatalogDigest(managedPreviewBase)
     const managedPreviewProof = {
@@ -4856,6 +4878,20 @@ async function verifyStorefrontRuntime() {
     assert(managedPreviewState
       && await commerce.commerceStorefrontPreviewDigest(managedPreviewState) === firstDigest,
     'storefront_customer_and_managed_preview_digests_diverged')
+    const managedMerchandisedState = await commerce.saveCommerceStorefrontConfiguration(
+      managedPreviewState,
+      { ...input, shopCatalogDigest: managedPreviewCatalogDigest, merchandising },
+      {
+        actionId: commerce.commerceStorefrontConfigurationActionId(2, managedPreviewCatalogDigest),
+        capturedAt: '2026-07-24T08:59:30.000Z',
+        actor: 'OP-OWNER',
+        reason: 'Bind the customer merchandising parity vector.',
+        evidenceReference: `ECOMMERCE-STOREFRONT:${managedPreviewCatalogDigest}:R2`,
+      },
+    )
+    assert(managedMerchandisedState
+      && await commerce.commerceStorefrontPreviewDigest(managedMerchandisedState) === merchandisedDigest,
+    'storefront_merchandising_customer_and_managed_digests_diverged')
     const changed = storefront.buildStorefrontPreview(catalog, { ...input, summary: 'Changed storefront copy.' })
     assert(await storefront.storefrontPreviewDigest(changed) !== firstDigest, 'storefront_digest_ignored_copy_change')
     const repriced = storefront.buildStorefrontPreview(
@@ -4913,6 +4949,26 @@ async function verifyStorefrontRuntime() {
     requestAssert(request.id === 'ECR-12345678-1234-4ABC-8ABC-1234567890AB' && request.state === 'pending_shop_review', 'storefront_request_identity_or_state_invalid')
     requestAssert(request.totalMmk === 37_000 && request.line.unitPriceMmk === 18_500 && request.line.quantity === 2, 'storefront_request_price_snapshot_invalid')
     requestAssert(!JSON.stringify(request).includes('onHand') && !JSON.stringify(request).includes('reorderAt'), 'storefront_request_leaked_shop_stock_fields')
+    const merchandisedRequest = await requestModel.buildStorefrontOrderRequest(
+      merchandisedPreview,
+      merchandisedDigest,
+      { ...requestInput, idempotencyKey: 'ECI-12345678-1234-4ABC-8ABC-1234567890AD' },
+    )
+    const merchandisedLedger = requestModel.recordStorefrontOrderRequest(
+      requestModel.createEmptyStorefrontRequestLedger(),
+      merchandisedRequest,
+    )
+    const merchandisedDraft = await confirmModel.confirmEcommerceShopDraft({
+      request: merchandisedRequest,
+      requestLedger: merchandisedLedger,
+      preview: merchandisedPreview,
+      sourcePreviewDigest: merchandisedDigest,
+      currentCatalog: catalog,
+      confirmedAt: '2026-07-24T09:00:30.000Z',
+    })
+    requestAssert(merchandisedDraft.sourcePreviewDigest === merchandisedDigest,
+      'storefront_merchandising_handoff_lost_preview_binding')
+    handoffModel.dismissEcommerceShopDraft(merchandisedDraft.id)
     const emptyLedger = requestModel.createEmptyStorefrontRequestLedger()
     const legacyLocalReceipt = { ...request }
     delete legacyLocalReceipt.sourceStorefrontRevision
@@ -5139,6 +5195,10 @@ async function verifyManagedStorefrontRuntime() {
       storeName: 'Mingalar Shop',
       summary: 'A small managed catalog for customer requests.',
       selectedSkus: ['SM-CARE-01', 'SM-1001'],
+      merchandising: [
+        { sku: 'SM-1001', featured: true, collection: 'Best sellers', displayName: 'Daily essentials', note: 'Lead with the customer favourite.' },
+        { sku: 'SM-CARE-01', featured: false, collection: 'Care', displayName: '', note: '' },
+      ],
     }
     const plan = await model.prepareManagedStorefrontSave(
       state,
@@ -5181,7 +5241,9 @@ async function verifyManagedStorefrontRuntime() {
       })
     } catch { swappedReceiptRejected = true }
     assert(swappedReceiptRejected, 'managed_storefront_swapped_command_receipt_accepted')
-    assert(model.readManagedStorefront(accepted)?.storeName === input.storeName, 'managed_storefront_accepted_configuration_unreadable')
+    assert(model.readManagedStorefront(accepted)?.storeName === input.storeName
+      && JSON.stringify(model.readManagedStorefront(accepted)?.merchandising) === JSON.stringify(input.merchandising),
+    'managed_storefront_accepted_configuration_unreadable')
     const unchanged = await model.prepareManagedStorefrontSave(
       accepted,
       input,
@@ -5235,6 +5297,21 @@ async function verifyManagedStorefrontRuntime() {
     let actorTamperRejected = false
     try { model.acceptManagedStorefrontSave(plan, actorTampered, 'OP-MANAGED') } catch { actorTamperRejected = true }
     assert(actorTamperRejected, 'managed_storefront_actor_tamper_accepted')
+    const merchandisingTampered = structuredClone(plan.next)
+    merchandisingTampered.storefrontConfiguration.merchandising[0].collection = 'Changed collection'
+    let merchandisingTamperRejected = false
+    try { model.acceptManagedStorefrontSave(plan, merchandisingTampered, 'OP-MANAGED') } catch { merchandisingTamperRejected = true }
+    assert(merchandisingTamperRejected, 'managed_storefront_merchandising_tamper_accepted')
+    const cleared = await model.prepareManagedStorefrontSave(
+      accepted,
+      { ...input, merchandising: null },
+      'OP-MANAGED',
+      '2026-07-25T00:02:30.000Z',
+    )
+    assert(cleared.status === 'ready'
+      && cleared.configuration.revision === 2
+      && cleared.configuration.merchandising === undefined,
+    'managed_storefront_explicit_merchandising_clear_failed')
     const unknownSkuRejected = await model.prepareManagedStorefrontSave(
       state,
       { ...input, selectedSkus: ['UNKNOWN-SKU'] },
