@@ -26,26 +26,27 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 ## Implemented reality
 
 - HQ uses four teams. One contract caps 12 roles, four active/batch jobs, two Kernel agents per cycle, and zero idle compute; overrides fail closed, and the default workspace no longer duplicates a 256-role ceiling.
-- Kernel uses four owner-bound capacity claims with 120-second stale recovery. A fifth cycle stops before model use; failed work returns for retry; every path releases its slot. Scheduler failures retain raw streams without interpolating secret-bearing arguments (`ca5070e`).
+- Kernel has four owner-bound slots with 120-second stale recovery; a fifth cycle stops before model use and failed work returns for retry (`ca5070e`).
 - One manifest makes Vercel production the sole recurring `megaos` scheduler: a 15-minute queue plus a 00:45 UTC daily run, capped at 97/day. Cloud Tasks stays on-demand; Google Scheduler mutation is retired. Protected credentials, exact cadence, and conflicting state are release-gated (`6c19084`).
 - Shop covers guarded orders, stock, purchasing, fulfilment, payment/refund, returns, and close at `/shop/`.
-- Plant covers jobs, output/material evidence, problems, holds, handoff, equipment, downtime, and maintenance at `/plant/`; it controls no equipment.
+- Plant stays task-first at `/plant/` and controls no equipment.
 - Website turns one brief into Preview, guarded Save, and Review at `/website/`; it never deploys.
 - Ecommerce reads versioned Shop data. Setup, Save, receipt, and handoff focus the next step. Review exposes source and consequence; Cancel restores the exact prepared draft. Only accountable Shop confirmation can create an order.
 - AI assistance remains gated shared infrastructure; Order Intake passed 20 local cases, but the provider runner remains at the credential gate.
 - Client setup now uses one manifest-backed two-step flow, stable template IDs, detail-preserving switches/deep links, and one smart-import path. Exact matches collapse detail; exceptions open for review; the duplicate Shop importer is gone (`ab9a89e`).
 - Shop `social-commerce` now has a deterministic, versioned recipe bound to the trusted importer and human-approved Commerce lifecycle. Fresh, upgrade, and rollback plans perform no writes (`9ba8569`).
 - Shop Stock now has a lazy-loaded two-location layer in its existing tab: masters, lot/serial evidence, paired transfers, reservations, ATP, exact replay, digest validation, locked writes, and rollback (`5fa93a9`, `2790f9d`).
+- Plant Jobs now has a lazy order-execution layer: immutable plan, shortfall gate, lot genealogy, quality hold/reinspection, human release, exact replay, and locked write/rollback (`0831ad7`, `920c13d`).
 - Home keeps Shop and Plant exceptions above collapsed HQ work. Purchases suppress duplicate stock tasks; a Plant issue badge links to Problems and otherwise the card opens Jobs. `/work/` stays labelled HQ; bottom navigation reads Home, HQ, and Products.
 - `npm run dev` starts canonical FastAPI plus Vite on loopback while clearing database, hosted-auth, model, worker, and write authority; the full local command proxies canonical FastAPI while keeping managed data disconnected and writes locked. Records stay browser-local by default; hosted production activation is not proven.
 
 ## Verified baseline
 
-- Current local checkpoints: product `2790f9d`, agent operations `6c19084`, operations `63a245f`, and security `98b8044`.
-- App build and all local contracts pass; the Kernel passes 262 tests, 69 connectors/993 calls, and 15 crews/214 checks. Provisioning passes 12 focused adversarial tests; Shop inventory passes 11 focused tests and 24 browser-model runtime checks; all Python coverage passes 238 tests.
-- React Router is isolated in a 43,870-byte cacheable chunk. Shop inventory is isolated in a 27,160-byte on-demand chunk; the current product checkpoint's largest JavaScript chunk is 476,008 bytes and remains below the build gate.
+- Current local checkpoints: product `920c13d`, agent operations `6c19084`, operations `63a245f`, and security `98b8044`.
+- App and local contracts pass; Kernel passes 262 tests, 69 connectors/993 calls, and 15 crews/214 checks. Shop and Plant foundations each pass 11 focused tests plus 24 and 25 browser-model checks; all Python coverage passes 249 tests.
+- React Router is isolated in a 43,870-byte cacheable chunk; Shop inventory and Plant execution are 27,160- and 41,075-byte on-demand chunks. The largest JavaScript chunk is 476,450 bytes and remains below the build gate.
 - Focused coverage includes 205 Shop, 256 Plant, 94 Website, 109 client-onboarding, 54 managed-import, and 17 trusted-server import tests.
-- Rendered 390x844/1440x900 setup and all four phone-width product routes have no horizontal overflow or error overlay; switches preserve client details and exact imports collapse review detail.
+- Rendered setup and four phone-width product routes have no horizontal overflow or error overlay. Plant additionally passes a seven-step 1280x720 lifecycle, reload persistence, and a 390x844 first-run/released-state audit with its primary action visible.
 - Core first-action QA leads Shop Stock, incomplete orders to Promise or Payment, Plant alerts to Problems or output, and invalid Website briefs to their first error. Mobile controls are at least 44 px with focus-safe fixed navigation (`36fa7dd`); guide and review actions create no record.
 - Last remote release snapshot: `b67db94` is 0 behind / 230 ahead of open draft PR #258 head `338b6fd`; `megaos` production is READY at `6885c320` with no 24-hour runtime errors; remote checks exclude the local delta. See `hq/research/release-reconciliation-2026-07-26.md`.
 
@@ -63,7 +64,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - Preview remains blocked until the exact `megaos` project and credentials are linked; no fallback domain is allowed.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
 - Hosted scheduler cadence and protected-secret scope remain unverified because the connector exposed no live cron or environment metadata. An owner-approved credentialed read is required; no provider state changed.
-- The products target SAP-grade accountability, not feature parity. Shop still needs managed proof, receiving/count reconciliation, pricing/tax, and accounting adapters; Plant needs BOM/routing, planning, genealogy, quality, and maintenance; Website needs versioned content/release operations; Ecommerce needs catalog, checkout, tax, shipping, payment, and returns depth.
+- The products target SAP-grade accountability, not feature parity. Shop still needs managed proof, receiving/count reconciliation, pricing/tax, and accounting adapters; Plant needs managed persistence, multi-material import UI, warehouse/cost/accounting adapters, calibration, and OEE; Website needs versioned content/release operations; Ecommerce needs catalog, checkout, tax, shipping, payment, and returns depth.
 
 ## Decisions in force
 
@@ -76,7 +77,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 1. **Provisioning** — version roles, objects, states, mappings, permissions, checks, upgrades, and rollback.
 2. **Shop** — masters, locations, lots/serials, available-to-promise, purchasing, pricing/tax, and accounting boundaries.
-3. **Plant** — BOM/routing, MRP/capacity, genealogy, quality, maintenance, calibration, and OEE.
+3. **Plant** — managed orders, multi-level BOM/MRP, inventory/cost adapters, maintenance, calibration, and OEE.
 4. **Website** — versioned blocks/tokens, CMS/media/localisation, roles, forms/leads/analytics, deploy and rollback evidence.
 5. **Ecommerce** — PIM, cart/checkout, tax/payment/shipping boundaries, order/return lifecycle, and Shop handoff.
 
@@ -84,7 +85,7 @@ Each slice must keep the interface task-first: one primary action, progressive d
 
 ## Next evidence
 
-1. Prove ENG-076's production-order planning and traceability lifecycle through the existing Plant tasks without a new setup page or equipment-control authority.
+1. Prove ENG-077's versioned Website template, content upgrade, role review, responsive release artifact, deploy plan, and rollback evidence without publishing or domain authority.
 2. Repeat the 12-profile rehearsal with one founder-approved named pilot company and measure import correction, setup, and human review time.
 3. After an approved push and exact Vercel link, review that clean commit without deploying or mutating aliases.
 4. On an approved isolated Supabase target, prove private Storage, RLS, replay/isolation, and recovery.
