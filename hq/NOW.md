@@ -30,6 +30,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 - The Ally runs one 4,096-token, 30-second scale-to-zero worker; unchanged evidence-bound direct missions reuse for 24 hours. Live check: idle, no queue, schedule, or loaded model.
 - All seven company jobs use SuperMega Agent Operations or core GitHub. Catalogs are exact-tenant scoped, so YTF identities cannot render in core operations (`b46c386`).
 - Hosted scheduling is dormant with zero registered crons and a second runtime activation gate. After five managed-security proofs, the reviewed plan is hourly plus daily, at most 25 invocations/day instead of 97 (`2472c2f`).
+- Each SuperMega CEO cycle selects at most one HQ-authorized outcome. Storage proof, protected preview, and named pilot work remain explicitly blocked; completed, in-flight, duplicate, or invalid work stops before claims, models, or sends. The one ready owner brief uses four fixed read-only tools and one synthesis call (`cdd925a`).
 - Shop covers guarded orders, stock, purchasing, fulfilment, payment/refund, returns, and close at `/shop/`.
 - Plant stays task-first at `/plant/` and controls no equipment.
 - Website turns a brief into Preview, guarded Save/Review, a release package, and an owner-gated plan at `/website/`; it never deploys.
@@ -43,8 +44,8 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 
 ## Verified baseline
 
-- Current local checkpoints: product `52917c5`, agent operations `2472c2f`, operations `63a245f`, and security `98b8044`.
-- App and local contracts pass: 275 Python tests, frontend lint/build, 14 Ecommerce buying checks, 16 Shop-handoff checks, and the guarded release suite. Kernel retains 262 tests, 69 connectors/993 calls, and 15 crews/214 checks.
+- Current local checkpoints: product `52917c5`, agent operations `cdd925a`, operations `63a245f`, and security `98b8044`.
+- App and local contracts pass: 275 Python tests, frontend lint/build, 14 Ecommerce buying checks, 16 Shop-handoff checks, and the guarded release suite. Kernel retains 272 tests, 69 connectors/993 calls, and 15 crews/214 checks.
 - Rendered setup and four phone-width product routes have no horizontal overflow or error overlay. Plant additionally passes a seven-step 1280x720 lifecycle, reload persistence, and a 390x844 first-run/released-state audit with its primary action visible.
 - Core first-action QA leads Shop Stock, incomplete orders to Promise or Payment, Plant alerts to Problems or output, and invalid Website briefs to their first error. Mobile controls are at least 44 px with focus-safe fixed navigation (`36fa7dd`); guide and review actions create no record.
 - Product checkpoint `52917c5` is on a clean fast-forward descendant of open draft PR #258 head `338b6fd`. Vercel `supermega-public` serves both domains at live `6885c320`; it is healthy but intentionally reports `isolated_demo`, zero managed coverage, and database/schema/audit/writes disabled. No grouped seven-day runtime errors were reported; remote checks exclude the local delta.

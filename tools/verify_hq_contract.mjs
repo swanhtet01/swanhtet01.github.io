@@ -9,6 +9,7 @@ import {
   MAX_REGISTERED_COMPANY_AGENTS,
   MAX_RUNNING_COMPANY_CYCLES,
 } from '../kernel/agent-company.mjs'
+import { SUPERMEGA_HQ_AUTHORITY, selectCeoOutcome } from '../kernel/supermega-hq-authority.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation] = await Promise.all([
@@ -34,6 +35,7 @@ const agentWorkspace = JSON.parse(agentWorkspaceText)
 const databaseRehearsal = JSON.parse(databaseRehearsalText)
 const kernelRoster = listCompanyAgents()
 const kernelCrewCapabilities = kernelRoster.flatMap((agent) => [agent.crew, ...agent.capabilityCrews])
+const ceoOutcomeSelection = selectCeoOutcome()
 const failures = []
 const requireContract = (name, condition) => { if (!condition) failures.push(name) }
 const product = (id) => portfolio.products?.find((entry) => entry.id === id)
@@ -65,6 +67,10 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.agentOperatingModel?.batchJobLimit === 4
   && portfolio.agentOperatingModel?.maxAgentsPerCycle === 2
   && portfolio.agentOperatingModel?.validatedCrewCapabilities === 15
+  && portfolio.agentOperatingModel?.ceoOutcomeAuthority === 'supermega.ceo-outcome-authority.v1'
+  && portfolio.agentOperatingModel?.maxOutcomesPerCeoCycle === 1
+  && portfolio.agentOperatingModel?.fixedReadOnlyEvidencePlan === true
+  && portfolio.agentOperatingModel?.blockedOrDuplicateOutcomesConsumeModelCalls === false
   && portfolio.agentOperatingModel?.scaleToZero === true
   && portfolio.agentOperatingModel?.idleCapabilitiesConsumeCompute === false
   && portfolio.agentOperatingModel?.dynamicDelegation === false
@@ -85,6 +91,16 @@ requireContract('agent capacity agrees across HQ, coordinator, and Kernel',
   && MAX_CYCLE_AGENTS === portfolio.agentOperatingModel?.maxAgentsPerCycle
   && kernelCrewCapabilities.length === portfolio.agentOperatingModel?.validatedCrewCapabilities
   && new Set(kernelCrewCapabilities).size === kernelCrewCapabilities.length)
+requireContract('CEO outcome authority is bounded and reconciled to HQ',
+  SUPERMEGA_HQ_AUTHORITY.contract === portfolio.agentOperatingModel?.ceoOutcomeAuthority
+  && SUPERMEGA_HQ_AUTHORITY.maxSelectedOutcomes === portfolio.agentOperatingModel?.maxOutcomesPerCeoCycle
+  && SUPERMEGA_HQ_AUTHORITY.northStar === portfolio.northStar
+  && ceoOutcomeSelection.ok === true
+  && ceoOutcomeSelection.selected?.id === 'daily-company-control'
+  && ceoOutcomeSelection.selected?.evidencePlan?.map((step) => step.tool).join(',') === 'leads_overview,pipeline_overview,fx_rate,platform_status'
+  && ceoOutcomeSelection.skipped?.filter((item) => item.reason === 'authority_blocked').length === 3
+  && SUPERMEGA_HQ_AUTHORITY.outcomes?.find((item) => item.id === 'managed-storage-privacy-proof')?.sourceRefs
+    ?.includes('https://www.instagram.com/p/Da-NXcnkz8p/?img_index=8'))
 requireContract('workspace consumes one capacity authority without repeating ceilings',
   agentWorkspace.resource_id === 'supermega-core-agent-workspace-v3'
   && agentWorkspace.capacity_authority === 'repository://agent_os/workforce/supermega_build_workforce.json'
@@ -147,15 +163,19 @@ requireContract('agent roster consolidation is recorded',
   && workboard.includes('| OPS-026 | CEO + Agent Operations / Security Codex | done-local |')
   && workboard.includes('scheduler authority v2 dormant with zero crons, zero scheduled invocations')
   && workboard.includes('at most 25 invocations/day instead of 97')
-  && workboard.includes('Current accepted agent-operations checkpoint: `2472c2f`')
-  && now.includes('agent operations `2472c2f`')
+  && workboard.includes('| OPS-027 | CEO + Agent Operations / Security Codex | done-local |')
+  && workboard.includes('adds `supermega.ceo-outcome-authority.v1`')
+  && workboard.includes('removing the planner model call')
+  && workboard.includes('Current accepted agent-operations checkpoint: `cdd925a`')
+  && now.includes('agent operations `cdd925a`')
   && now.includes('operations `63a245f`')
   && now.includes('unchanged evidence-bound direct missions reuse for 24 hours')
   && now.includes('YTF identities cannot render in core operations')
   && now.includes('Hosted scheduling is dormant with zero registered crons')
+  && now.includes('Each SuperMega CEO cycle selects at most one HQ-authorized outcome')
   && now.includes('default workspace no longer duplicates a 256-role ceiling'))
 requireContract('agent security brief is reconciled to current controls',
-  agentSecurity.includes('Agent-operations checkpoint: `2472c2f`')
+  agentSecurity.includes('Agent-operations checkpoint: `cdd925a`')
   && agentSecurity.includes('Agent visibility, execution, and preview deployment use separate capabilities')
   && agentSecurity.includes('The root development Compose entry point is retired as `services: {}`')
   && agentSecurity.includes('An environment value cannot add a third credential destination')
@@ -174,7 +194,9 @@ requireContract('agent security brief is reconciled to current controls',
   && agentSecurity.includes('old Google Cloud Scheduler entry point is now a read-only compatibility shim')
   && agentSecurity.includes('no production or preview project activity over 90 days')
   && agentSecurity.includes('prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG')
-  && agentSecurity.includes('Bind the CEO operating brief to current HQ authority')
+  && agentSecurity.includes('SuperMega CEO brief now follows `supermega.ceo-outcome-authority.v1`')
+  && agentSecurity.includes('removing the planner model call')
+  && agentSecurity.includes('Attach the selected outcome ID and authority digest')
   && !agentSecurity.includes('queue viewing can authorize processing or preview deployment')
   && !agentSecurity.includes('root development compose publishes services'))
 requireContract('product QA brief matches current portfolio',
@@ -394,6 +416,9 @@ console.log(JSON.stringify({
     registeredRoles: portfolio.agentOperatingModel.registeredRoleLimit,
     activeAssignments: portfolio.agentOperatingModel.activeAssignmentLimit,
     crewCapabilities: portfolio.agentOperatingModel.validatedCrewCapabilities,
+    ceoOutcomeAuthority: portfolio.agentOperatingModel.ceoOutcomeAuthority,
+    maxOutcomesPerCeoCycle: portfolio.agentOperatingModel.maxOutcomesPerCeoCycle,
+    selectedCeoOutcome: ceoOutcomeSelection.selected.id,
     scaleToZero: portfolio.agentOperatingModel.scaleToZero,
   },
   workflowProfiles: workflowProfileCount,
