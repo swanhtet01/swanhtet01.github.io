@@ -27,6 +27,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 
 - HQ uses four teams. One contract caps 12 roles, four active/batch jobs, two Kernel agents per cycle, and zero idle compute; overrides fail closed, and the default workspace no longer duplicates a 256-role ceiling.
 - Kernel has four owner-bound slots with 120-second stale recovery; a fifth cycle stops before model use and failed work returns for retry (`ca5070e`).
+- The Ally local company runs one scale-to-zero worker at a 4,096-token context and 30-second keep-alive. An unchanged direct mission reuses its evidence-bound report for 24 hours; changed evidence and explicit retries still run. Live verification found an idle worker, no queued or scheduled work, and no loaded Ollama model.
 - Shop covers guarded orders, stock, purchasing, fulfilment, payment/refund, returns, and close at `/shop/`.
 - Plant stays task-first at `/plant/` and controls no equipment.
 - Website turns a brief into Preview, guarded Save/Review, a release package, and an owner-gated plan at `/website/`; it never deploys.
