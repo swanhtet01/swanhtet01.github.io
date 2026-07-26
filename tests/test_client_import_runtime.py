@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import datetime, timezone
 from hashlib import sha256
 import json
 from pathlib import Path
@@ -186,7 +187,7 @@ class ClientImportValidatorTests(unittest.TestCase):
                     self.assertTrue(response["activation"]["human_approval_required"])
                     self.assertEqual(
                         response["activation"]["atomic_adapter_ready"],
-                        product == "commerce",
+                        product in {"commerce", "website"},
                     )
                     self.assertFalse(response["activation"]["external_writes_performed"])
 
@@ -386,6 +387,47 @@ class ClientImportValidatorTests(unittest.TestCase):
         too_many["controls"]["rowCount"] = len(rows)
         self.assert_invalid(too_many)
 
+    def test_website_adapter_limits_match_the_managed_workspace(self) -> None:
+        too_many_pages = _package("website")
+        template = deepcopy(too_many_pages["rows"][0])
+        pages = []
+        for index in range(5):
+            row = deepcopy(template)
+            row["sourceRow"] = index + 2
+            row["key"] = f"page-{index + 1}"
+            row["values"]["slug"] = row["key"]
+            pages.append(row)
+        too_many_pages["rows"] = pages
+        too_many_pages["controls"]["rowCount"] = len(pages)
+
+        long_workspace = _package("website")
+        long_workspace["workspace"] = "w" * 61
+
+        long_title = _package("website")
+        long_title["rows"][0]["values"]["title"] = "t" * 41
+
+        long_headline = _package("website")
+        long_headline["rows"][0]["values"]["headline"] = "h" * 141
+
+        long_body = _package("website")
+        long_body["rows"][0]["values"]["body"] = "b" * 361
+
+        long_contact = _package("website")
+        long_contact["rows"][0]["values"]["contactUrl"] = (
+            "https://example.com/" + "c" * 141
+        )
+
+        for name, candidate in (
+            ("page count", too_many_pages),
+            ("workspace", long_workspace),
+            ("title", long_title),
+            ("headline", long_headline),
+            ("body", long_body),
+            ("contact URL", long_contact),
+        ):
+            with self.subTest(case=name):
+                self.assert_invalid(candidate)
+
 
 class CounterReducer:
     def __init__(self) -> None:
@@ -424,7 +466,7 @@ class ClientImportRouteTests(unittest.TestCase):
             workspace_id="workspace-b",
             actor_id="setup-writer",
             actor_kind="human",
-            capabilities=("setup.write", "commerce.write"),
+            capabilities=("setup.write", "commerce.write", "website.write"),
         )
         self.store.provision_membership(
             workspace_id="workspace-c",
@@ -681,6 +723,109 @@ class ClientImportRouteTests(unittest.TestCase):
         self.assertEqual(self.reducer.calls, 1)
         self.assertEqual(len(self.store._events), 1)
 
+    def test_reviewed_website_import_applies_once_as_server_stamped_drafts(self) -> None:
+        package = _package("website", "business-presence")
+        second_row = deepcopy(package["rows"][0])
+        second_row["sourceRow"] = 3
+        second_row["key"] = "about"
+        second_row["values"] = {
+            "slug": "about",
+            "title": "About",
+            "headline": "Why customers trust us",
+            "body": "Add the approved company story and team.",
+            "contactUrl": "https://example.com/contact",
+        }
+        package["rows"].append(second_row)
+        package["controls"]["rowCount"] = 2
+        package = _resign(package)
+        validation = validate_client_import_staging_package(package)
+        body = {
+            "command_id": "00000000-0000-4000-8000-000000000103",
+            "expected_version": 0,
+            "confirmation": f"APPLY {validation.package_digest}",
+            "package": package,
+        }
+
+        applied = self.client.post(
+            "/api/trial/v1/imports/apply",
+            headers=self._headers("writer"),
+            json=body,
+        )
+        self.assertEqual(applied.status_code, 200, applied.text)
+        response = applied.json()
+        self.assertEqual(
+            response["activation"],
+            {
+                "contract": "supermega.client_import_activation.v1",
+                "status": "applied",
+                "product": "website",
+                "object": "website_pages",
+                "workflow_template_id": "business-presence",
+                "package_digest": validation.package_digest,
+                "row_count": 2,
+                "workspace_id": "workspace-b",
+                "external_writes_performed": True,
+            },
+        )
+        self.assertEqual(response["result"]["surface"], "website")
+        self.assertEqual(
+            response["result"]["event_type"],
+            "website.workspace.initialized",
+        )
+        self.assertEqual(response["result"]["version"], 1)
+        self.assertFalse(response["result"]["idempotent_replay"])
+        state = response["result"]["state"]
+        self.assertEqual(state["schema"], "supermega.website.workspace.v2")
+        self.assertEqual(state["siteName"], "Example Myanmar Company")
+        self.assertEqual(state["selectedPageId"], "page-import-1")
+        self.assertEqual(
+            [page["slug"] for page in state["pages"]],
+            ["/", "/about"],
+        )
+        self.assertEqual(
+            [page["hero"]["headline"] for page in state["pages"]],
+            ["Clear help for your customers", "Why customers trust us"],
+        )
+        self.assertEqual(
+            [page["sections"][0]["body"] for page in state["pages"]],
+            [
+                "Explain the main service and strongest proof.",
+                "Add the approved company story and team.",
+            ],
+        )
+        self.assertTrue(all(page["stage"] == "draft" for page in state["pages"]))
+        self.assertTrue(
+            all(page["navigation"]["visible"] is False for page in state["pages"])
+        )
+        self.assertEqual(state["evidence"], [])
+        self.assertEqual(state["approvals"], [])
+        self.assertEqual(state["localPublishes"], [])
+        self.assertEqual(state["events"], [])
+        stored = self.store._states[("workspace-b", "website")]
+        self.assertTrue(stored.updated_at)
+        canonical_updated_at = (
+            datetime.fromisoformat(stored.updated_at.replace("Z", "+00:00"))
+            .astimezone(timezone.utc)
+            .isoformat(timespec="milliseconds")
+            .replace("+00:00", "Z")
+        )
+        self.assertTrue(
+            all(page["updatedAt"] == canonical_updated_at for page in state["pages"])
+        )
+        self.assertNotEqual(state["pages"][0]["updatedAt"], "server-assigned")
+        self.assertEqual(self.reducer.calls, 1)
+        self.assertEqual(len(self.store._events), 1)
+
+        replay = self.client.post(
+            "/api/trial/v1/imports/apply",
+            headers=self._headers("writer"),
+            json=body,
+        )
+        self.assertEqual(replay.status_code, 200)
+        self.assertTrue(replay.json()["result"]["idempotent_replay"])
+        self.assertEqual(self.reducer.calls, 1)
+        self.assertEqual(len(self.store._events), 1)
+
     def test_import_activation_fails_closed_before_every_product_write(self) -> None:
         package = _package("commerce")
         validation = validate_client_import_staging_package(package)
@@ -722,15 +867,15 @@ class ClientImportRouteTests(unittest.TestCase):
         self.assertEqual(nonhuman.status_code, 403)
         self.assertEqual(nonhuman.json()["detail"]["code"], "trial_human_approval_required")
 
-        website_package = _package("website")
-        website_validation = validate_client_import_staging_package(website_package)
+        production_package = _package("production")
+        production_validation = validate_client_import_staging_package(production_package)
         unsupported = self.client.post(
             "/api/trial/v1/imports/apply",
             headers=self._headers("writer"),
             json={
                 **body,
-                "confirmation": f"APPLY {website_validation.package_digest}",
-                "package": website_package,
+                "confirmation": f"APPLY {production_validation.package_digest}",
+                "package": production_package,
             },
         )
         self.assertEqual(unsupported.status_code, 409)

@@ -380,6 +380,78 @@ def _shop_catalog_import_payload(
     }
 
 
+def _website_pages_import_payload(
+    package: Mapping[str, Any],
+    *,
+    actor_id: str,
+    command_id: UUID,
+    package_digest: str,
+) -> dict[str, Any]:
+    rows = package.get("rows")
+    workspace = package.get("workspace")
+    if not isinstance(rows, list) or not rows or not isinstance(workspace, str):
+        raise _error(422, "client_import_activation_invalid")
+    pages: list[dict[str, Any]] = []
+    try:
+        for index, row in enumerate(rows, start=1):
+            if not isinstance(row, Mapping) or not isinstance(row.get("values"), Mapping):
+                raise ValueError("invalid row")
+            values = row["values"]
+            slug = str(values["slug"])
+            title = str(values["title"])
+            contact_url = str(values["contactUrl"])
+            pages.append(
+                {
+                    "id": f"page-import-{index}",
+                    "internalName": title,
+                    "slug": "/" if slug == "home" else f"/{slug}",
+                    "stage": "draft",
+                    "navigation": {"label": title, "visible": False},
+                    "hero": {
+                        "eyebrow": "",
+                        "headline": str(values["headline"]),
+                        "summary": "",
+                        "ctaLabel": "Contact" if contact_url else "",
+                        "ctaHref": contact_url,
+                    },
+                    "sections": [
+                        {
+                            "id": f"section-import-{index}",
+                            "eyebrow": "",
+                            "title": title,
+                            "body": str(values["body"]),
+                        }
+                    ],
+                    "seo": {"title": title, "description": ""},
+                    "updatedAt": "server-assigned",
+                }
+            )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise _error(422, "client_import_activation_invalid") from exc
+    return {
+        "state": {
+            "schema": "supermega.website.workspace.v2",
+            "version": 2,
+            "revision": 0,
+            "contentRevision": 0,
+            "siteName": workspace,
+            "pages": pages,
+            "selectedPageId": pages[0]["id"],
+            "evidence": [],
+            "approvals": [],
+            "localPublishes": [],
+            "events": [],
+        },
+        "evidence": {
+            "actionId": f"ACT-IMPORT-{command_id}",
+            "capturedAt": "server-assigned",
+            "actor": actor_id,
+            "reason": "Initialize Website drafts from the reviewed page import.",
+            "evidenceReference": package_digest,
+        },
+    }
+
+
 def _website_source_identity(value: object) -> tuple[str, str, str, str] | None:
     if not isinstance(value, Mapping):
         return None
@@ -500,7 +572,7 @@ def create_trial_router(*, store: TrialStore, resolve_principal: PrincipalResolv
                 "client_import_validation_error",
                 message=str(exc),
             ) from exc
-        if validation.product != "commerce":
+        if validation.product not in {"commerce", "website"}:
             raise _error(
                 409,
                 "client_import_activation_not_ready",
@@ -509,18 +581,30 @@ def create_trial_router(*, store: TrialStore, resolve_principal: PrincipalResolv
         _require_write_ready(readiness, validation.required_capability)
         if body.confirmation != f"APPLY {validation.package_digest}":
             raise _error(409, "client_import_confirmation_mismatch")
-        payload = _shop_catalog_import_payload(
-            body.package,
-            actor_id=principal.actor_id,
-            command_id=body.command_id,
-            package_digest=validation.package_digest,
-        )
+        if validation.product == "commerce":
+            surface = "commerce"
+            event_type = "commerce.workspace.initialized"
+            payload = _shop_catalog_import_payload(
+                body.package,
+                actor_id=principal.actor_id,
+                command_id=body.command_id,
+                package_digest=validation.package_digest,
+            )
+        else:
+            surface = "website"
+            event_type = "website.workspace.initialized"
+            payload = _website_pages_import_payload(
+                body.package,
+                actor_id=principal.actor_id,
+                command_id=body.command_id,
+                package_digest=validation.package_digest,
+            )
         result = _invoke(
             lambda: store.apply_command(
                 principal,
                 command_id=body.command_id,
-                surface="commerce",
-                event_type="commerce.workspace.initialized",
+                surface=surface,
+                event_type=event_type,
                 expected_version=body.expected_version,
                 payload=payload,
             )

@@ -52,6 +52,7 @@ class ClientImportObjectSpec:
     fields: tuple[ClientImportFieldSpec, ...]
     target_surface: str
     required_capability: str
+    maximum_rows: int = CLIENT_IMPORT_MAX_ROWS
 
 
 CLIENT_IMPORT_OBJECTS: dict[str, ClientImportObjectSpec] = {
@@ -86,12 +87,13 @@ CLIENT_IMPORT_OBJECTS: dict[str, ClientImportObjectSpec] = {
         key_field="slug",
         target_surface="website",
         required_capability="website.write",
+        maximum_rows=4,
         fields=(
             ClientImportFieldSpec("slug", "slug", maximum=80),
-            ClientImportFieldSpec("title", "text", maximum=120),
-            ClientImportFieldSpec("headline", "text", maximum=180),
-            ClientImportFieldSpec("body", "text", maximum=1200),
-            ClientImportFieldSpec("contactUrl", "url", required=False),
+            ClientImportFieldSpec("title", "text", maximum=40),
+            ClientImportFieldSpec("headline", "text", maximum=140),
+            ClientImportFieldSpec("body", "text", maximum=360),
+            ClientImportFieldSpec("contactUrl", "url", required=False, maximum=160),
         ),
     ),
     "ecommerce": ClientImportObjectSpec(
@@ -151,7 +153,7 @@ class ClientImportValidationResult:
                 "target_surface": self.target_surface,
                 "required_capability": self.required_capability,
                 "human_approval_required": True,
-                "atomic_adapter_ready": self.product == "commerce",
+                "atomic_adapter_ready": self.product in {"commerce", "website"},
                 "external_writes_performed": False,
             },
         }
@@ -360,7 +362,7 @@ def validate_client_import_staging_package(value: object) -> ClientImportValidat
     workspace = _text(
         package["workspace"],
         "package.workspace",
-        maximum=120,
+        maximum=60 if product == "website" else 120,
         formula_safe=False,
     )
     owner = _text(
@@ -401,8 +403,8 @@ def validate_client_import_staging_package(value: object) -> ClientImportValidat
         raise _fail("A source column cannot supply more than one target field.")
 
     rows = package["rows"]
-    if not isinstance(rows, list) or not rows or len(rows) > CLIENT_IMPORT_MAX_ROWS:
-        raise _fail(f"package.rows must contain between 1 and {CLIENT_IMPORT_MAX_ROWS} rows.")
+    if not isinstance(rows, list) or not rows or len(rows) > spec.maximum_rows:
+        raise _fail(f"package.rows must contain between 1 and {spec.maximum_rows} rows.")
     seen_keys: set[str] = set()
     seen_source_rows: set[int] = set()
     normalized_rows: list[dict[str, Any]] = []

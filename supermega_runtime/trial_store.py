@@ -443,6 +443,32 @@ def _authoritative_command_payload(
     captured_at: str,
 ) -> JsonObject:
     authoritative = deepcopy(dict(payload))
+    if surface == "website" and event_type == "website.workspace.initialized":
+        website_captured_at = (
+            datetime.fromisoformat(captured_at.replace("Z", "+00:00"))
+            .astimezone(timezone.utc)
+            .isoformat(timespec="milliseconds")
+            .replace("+00:00", "Z")
+        )
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        pages = state.get("pages") if isinstance(state, Mapping) else None
+        if not isinstance(evidence, Mapping) or not isinstance(pages, list):
+            return authoritative
+        authoritative_state = dict(state)
+        authoritative_pages: list[object] = []
+        for page in pages:
+            if not isinstance(page, Mapping):
+                return authoritative
+            authoritative_pages.append({**dict(page), "updatedAt": website_captured_at})
+        authoritative_state["pages"] = authoritative_pages
+        authoritative["state"] = authoritative_state
+        authoritative["evidence"] = {
+            **dict(evidence),
+            "actor": principal.actor_id,
+            "capturedAt": website_captured_at,
+        }
+        return authoritative
     if surface != "commerce":
         return authoritative
     if event_type == "commerce.workspace.initialized":
