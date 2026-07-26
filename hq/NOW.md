@@ -37,7 +37,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 - Website runs at `/website/`: one brief becomes an unsaved Preview, guarded Save, and deterministic Review artifact, never a deployment; recovery and stale-write denial remain.
 - Ecommerce reads versioned Shop data. Setup, Save, receipt, and handoff focus the next step. Review exposes source and consequence; Cancel restores the exact prepared draft. Only accountable Shop confirmation can create an order.
 - Products says `Choose a product`; Website promises review, not publishing. AI assistance is shared gated infrastructure with no product card or customer control: Order Intake passed 20 local cases, but the provider runner remains at the credential gate.
-- Settings gives all four products one-tap sample preview, plain-language checks, workspace/owner gating, and digest-bound zero-write imports.
+- Settings gives all four products one saved-pilot handoff into a one-tap sample preview, plain-language checks, workspace/owner gating, and digest-bound zero-write imports (`7344bb5`).
 - Home keeps Shop and Plant exceptions above collapsed HQ work. Purchases suppress duplicate stock tasks; a Plant issue badge links to Problems and otherwise the card opens Jobs. `/work/` stays labelled HQ; bottom navigation reads Home, HQ, and Products.
 - `npm run dev` starts canonical FastAPI plus Vite on loopback while clearing database, hosted-auth, model, worker, and write authority; the full local command proxies canonical FastAPI while keeping managed data disconnected and writes locked. Records stay browser-local by default; hosted production activation is not proven.
 
