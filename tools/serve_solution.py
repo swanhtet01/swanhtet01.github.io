@@ -8708,35 +8708,82 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
 
     def _preferred_deploy_url(urls: list[str]) -> str:
         for candidate in urls:
-            if ".vercel.app" in candidate:
+            parsed = urlparse(str(candidate or "").strip())
+            hostname = str(parsed.hostname or "").strip().lower()
+            if (
+                parsed.scheme == "https"
+                and hostname.endswith(".vercel.app")
+                and parsed.username is None
+                and parsed.password is None
+                and parsed.path in {"", "/"}
+                and not parsed.query
+                and not parsed.fragment
+            ):
                 return candidate
-        return urls[0] if urls else ""
+        return ""
 
-    def _run_vercel_cli_preview() -> dict[str, Any]:
+    def _run_vercel_cli_preview(revision: str) -> dict[str, Any]:
+        normalized_revision = str(revision or "").strip().lower()
+        if not re.fullmatch(r"[0-9a-f]{40}", normalized_revision):
+            raise HTTPException(status_code=409, detail="canonical_preview_revision_invalid")
         npx_path = shutil.which("npx")
         if not npx_path:
             raise HTTPException(status_code=503, detail="npx is not available on this host.")
-        command = [npx_path, "--yes", "vercel@56.1.0", "deploy", "-y", "--no-wait"]
-        try:
-            completed = subprocess.run(
-                command,
-                cwd=str(REPO_ROOT),
-                capture_output=True,
-                text=True,
-                timeout=900,
-                check=False,
-            )
-        except subprocess.TimeoutExpired as exc:
-            raise HTTPException(
-                status_code=504,
-                detail=f"Preview deploy timed out after {int(exc.timeout or 900)} seconds.",
-            ) from exc
-        combined_output = "\n".join(part for part in ((completed.stdout or "").strip(), (completed.stderr or "").strip()) if part).strip()
-        if completed.returncode != 0:
-            detail = combined_output or "Preview deploy failed."
-            raise HTTPException(status_code=502, detail=detail[:1200])
-        urls = _extract_urls_from_output(combined_output)
+        cli_prefix = [npx_path, "--yes", "vercel@56.1.0"]
+        deploy_environment = dict(os.environ)
+        deploy_environment["SUPERMEGA_RELEASE_COMMIT"] = normalized_revision
+
+        def run_phase(arguments: list[str], *, phase: str, timeout_seconds: int = 900) -> str:
+            try:
+                completed = subprocess.run(
+                    [*cli_prefix, *arguments],
+                    cwd=str(REPO_ROOT),
+                    env=deploy_environment,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout_seconds,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired as exc:
+                raise HTTPException(
+                    status_code=504,
+                    detail=f"canonical_preview_{phase}_timed_out",
+                ) from exc
+            if completed.returncode != 0:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"canonical_preview_{phase}_failed:{completed.returncode}",
+                )
+            return "\n".join(
+                part
+                for part in ((completed.stdout or "").strip(), (completed.stderr or "").strip())
+                if part
+            ).strip()
+
+        run_phase(
+            ["pull", "--yes", "--environment=preview"],
+            phase="pull",
+        )
+        _require_canonical_preview_deploy_target()
+        run_phase(["build", "--yes"], phase="build")
+        prebuilt_config = REPO_ROOT / ".vercel" / "output" / "config.json"
+        if not prebuilt_config.is_file():
+            raise HTTPException(status_code=502, detail="canonical_preview_prebuilt_output_missing")
+        deploy_output = run_phase(
+            [
+                "deploy",
+                "--prebuilt",
+                "--yes",
+                "--no-wait",
+                "--meta",
+                f"githubCommitSha={normalized_revision}",
+            ],
+            phase="deploy",
+        )
+        urls = _extract_urls_from_output(deploy_output)
         deployment_url = _preferred_deploy_url(urls)
+        if not deployment_url:
+            raise HTTPException(status_code=502, detail="canonical_preview_deployment_url_missing")
         inspect_url = next((item for item in urls if "vercel.com/" in item), "")
         payload: dict[str, Any] = {
             "provider": "vercel-cli",
@@ -8745,8 +8792,12 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "deploymentUrl": deployment_url,
             "url": deployment_url,
             "inspectUrl": inspect_url,
-            "urls": urls,
             "previewUrl": deployment_url,
+            "artifact": {
+                "prebuilt": True,
+                "revision": normalized_revision,
+                "cli": "vercel@56.1.0",
+            },
             "target": {
                 "team_id": CANONICAL_VERCEL_TEAM_ID,
                 "project_id": CANONICAL_APP_VERCEL_PROJECT_ID,
@@ -8808,11 +8859,11 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             raise HTTPException(status_code=409, detail="Preview deploy requires a clean approved worktree.")
         return current_revision
 
-    def _run_preview_deploy(mode: str = PREVIEW_DEPLOY_MODE) -> dict[str, Any]:
+    def _run_preview_deploy(mode: str, *, revision: str) -> dict[str, Any]:
         normalized_mode = str(mode or PREVIEW_DEPLOY_MODE).strip().lower()
         if normalized_mode != PREVIEW_DEPLOY_MODE:
             raise HTTPException(status_code=400, detail="preview_deploy_mode_not_allowed")
-        return _run_vercel_cli_preview()
+        return _run_vercel_cli_preview(revision)
 
     def _record_workspace_preview(session: dict[str, Any], deploy_result: dict[str, Any]) -> None:
         actor = str(session.get("display_name", session.get("username", "system"))).strip() or "system"
@@ -11158,7 +11209,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         try:
-            deploy_result = _run_preview_deploy(payload.mode)
+            deploy_result = _run_preview_deploy(payload.mode, revision=approved_revision)
         except Exception as exc:
             failure_outcome = (
                 f"http_{exc.status_code}"

@@ -15,6 +15,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import FunctionType, ModuleType
 from typing import Any
+from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -97,6 +98,16 @@ def _nested_function_source(path: Path, name: str) -> str:
     tree = ast.parse(source)
     node = next(item for item in ast.walk(tree) if isinstance(item, ast.FunctionDef) and item.name == name)
     return ast.get_source_segment(source, node) or ""
+
+
+def _isolated_nested_function(path: Path, name: str) -> FunctionType:
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    function = next(node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and node.name == name)
+    module = ast.Module(body=[function], type_ignores=[])
+    ast.fix_missing_locations(module)
+    namespace: dict[str, object] = {"Any": Any, "urlparse": urlparse}
+    exec(compile(module, str(path), "exec", dont_inherit=True), namespace)
+    return namespace[name]  # type: ignore[return-value]
 
 
 def _isolated_model(path: Path, name: str) -> type[BaseModel]:
@@ -228,6 +239,7 @@ class LegacyPilotSecurityTests(unittest.TestCase):
             deploy_source.index("reserve_approval_action"),
             deploy_source.index("_run_preview_deploy"),
         )
+        self.assertIn("revision=approved_revision", deploy_source)
         self.assertIn('status="failed"', deploy_source)
         revision_source = _nested_function_source(SERVER_PATH, "_require_clean_preview_deploy_revision")
         self.assertIn('"rev-parse", "--verify", "HEAD"', revision_source)
@@ -518,6 +530,43 @@ class LegacyPilotSecurityTests(unittest.TestCase):
             self.assertIn("exit 78", launcher)
             self.assertNotIn("codex-deploy-skills.vercel.sh", launcher)
             self.assertNotIn("curl ", launcher)
+
+    def test_preview_launch_uses_one_pinned_prebuilt_artifact_without_production_aliases(self) -> None:
+        runner_source = _nested_function_source(SERVER_PATH, "_run_vercel_cli_preview")
+        wrapper_source = _nested_function_source(SERVER_PATH, "_run_preview_deploy")
+        self.assertIn('"vercel@56.1.0"', runner_source)
+        self.assertIn('["pull", "--yes", "--environment=preview"]', runner_source)
+        self.assertIn('["build", "--yes"]', runner_source)
+        self.assertIn('"--prebuilt"', runner_source)
+        self.assertIn('"--no-wait"', runner_source)
+        self.assertIn('f"githubCommitSha={normalized_revision}"', runner_source)
+        self.assertIn('deploy_environment["SUPERMEGA_RELEASE_COMMIT"] = normalized_revision', runner_source)
+        self.assertIn("_require_canonical_preview_deploy_target()", runner_source)
+        self.assertIn("prebuilt_config.is_file()", runner_source)
+        self.assertIn('"prebuilt": True', runner_source)
+        self.assertNotIn('"--prod"', runner_source)
+        self.assertNotIn('"--token"', runner_source)
+        self.assertNotIn('"urls": urls', runner_source)
+        self.assertNotIn("detail = combined_output", runner_source)
+        self.assertLess(runner_source.index('"pull"'), runner_source.index('"build"'))
+        self.assertLess(runner_source.index('"build"'), runner_source.index('"deploy"'))
+        self.assertIn("revision: str", wrapper_source)
+        self.assertIn("_run_vercel_cli_preview(revision)", wrapper_source)
+
+        preferred_url = _isolated_nested_function(SERVER_PATH, "_preferred_deploy_url")
+        valid_url = "https://megaos-review-abc.vercel.app"
+        self.assertEqual(preferred_url([valid_url]), valid_url)
+        invalid_urls = [
+            "http://megaos-review-abc.vercel.app",
+            "https://megaos-review-abc.vercel.app.evil.example",
+            "https://user:password@megaos-review-abc.vercel.app",
+            "https://megaos-review-abc.vercel.app/not-root",
+            "https://megaos-review-abc.vercel.app?secret=value",
+            "https://vercel.com/swanhtet01s-projects/megaos/deployment",
+        ]
+        for candidate in invalid_urls:
+            with self.subTest(candidate=candidate):
+                self.assertEqual(preferred_url([candidate]), "")
 
     def test_agent_runner_rejects_untrusted_destinations_and_unbounded_responses(self) -> None:
         runner = _load_module(AGENT_RUNNER_PATH, "supermega_agent_runner_security_test")
