@@ -51,7 +51,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 - Existing 390/1280 px product QA remains valid. Fresh 390x844 and 1280x900 import QA has no overflow, overlay, or browser warning/error; one tap checks the two-row Shop sample and keeps download gated by workspace and owner.
 - Core first-action QA leads Shop Stock with the exact shortage, guides incomplete orders to Promise or Payment, sends Plant alerts to Problems and jobs to output, puts open Problems before Equipment, and moves invalid Website briefs to their first error. Mobile actions are at least 44 px with no overflow; guide actions create no record.
 - PostgreSQL 17.10 passed 32 TLS checks, including exact approval/event restore and the trusted-server identity boundary.
-- At the prior release audit, local `5d7b217` was a fast-forward 164 commits beyond remote PR #258 head `338b6fd`; existing green checks cover only the remote head. GitHub, Vercel, domain, and deployment observations are historical until refreshed; see `hq/research/release-reconciliation-2026-07-25.md`.
+- The 2026-07-26 release audit anchors implementation at `784379e`: 0 behind / 192 ahead of draft PR #258 head `338b6fd` and 0 / 238 versus live `main` `6885c320`. Both canonical domains still serve `main`; passing remote checks do not cover the local delta. See `hq/research/release-reconciliation-2026-07-26.md`.
 
 ## Coordination
 
@@ -70,7 +70,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - No isolated hosted Supabase branch or separate non-production project has repeated the local database proof.
 - Storage privacy is local-contract evidence only; hosted bucket inventory and object-listing denial remain required.
 - Browser-local Website records cannot authenticate out-of-band storage edits; managed commands use the locked prior state and separate ledger. Hosted activation remains unproven.
-- Live GitHub and Vercel state were not refreshed. The live app cannot be claimed to contain `69dfb09` until read-only reconciliation and separately approved integration/release.
+- The validated local candidate is not on GitHub or Vercel: live domains remain at `6885c320` and draft PR #258 at `338b6fd`. Its single next external action is an explicitly approved fast-forward-only push for fresh checks.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
 
 ## Decisions in force
@@ -90,4 +90,4 @@ No external send, payment, refund, publish, domain change, connector write, merg
 2. Rehearse lease expiry, retry, recovery, and human release review in isolation.
 3. Repeat the 12-profile synthetic rehearsal with one founder-approved named pilot company and measure human correction and review time before any write adapter.
 4. On one approved isolated Supabase target, prove private Storage, RLS, Ecommerce replay/isolation, and database recovery.
-5. Refresh GitHub/Vercel/DNS read-only, then run the gated 20-case Order Intake provider review only after owner-approved credentials and four-product onboarding evidence.
+5. After an approved fast-forward PR update and fresh checks, review the exact candidate before any separate merge or release decision; keep provider review behind approved credentials.

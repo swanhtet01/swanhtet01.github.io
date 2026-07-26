@@ -19,7 +19,7 @@ const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, wo
   readFile(resolve(root, 'agent_os', 'workforce', 'supermega_build_workforce.json'), 'utf8'),
   readFile(resolve(root, 'hq', 'research', 'product-rd-2026-07.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'research', 'postgres17-rehearsal.json'), 'utf8'),
-  readFile(resolve(root, 'hq', 'research', 'release-reconciliation-2026-07-25.md'), 'utf8'),
+  readFile(resolve(root, 'hq', 'research', 'release-reconciliation-2026-07-26.md'), 'utf8'),
 ])
 
 const manifest = JSON.parse(manifestText)
@@ -135,7 +135,7 @@ requireContract('accepted core checkpoints lead directly to real work',
   && workboard.includes('one-tap sample preview through the exact Shop, Plant, Website, or Ecommerce template')
   && workboard.includes('keeps the checked-import download disabled until workspace and owner are present')
   && workboard.includes('Keep product checkpoint `7447d07`')
-  && workboard.includes('current 210-commit local product delta')
+  && workboard.includes('current 192-commit fast-forward delta')
   && now.includes('Checkpoint `7447d07` is the accepted local product')
   && now.includes('Core first-action QA leads Shop Stock')
   && now.includes('The active delivery focus is:')
@@ -145,31 +145,31 @@ requireContract('accepted core checkpoints lead directly to real work',
   && now.includes('largest JavaScript chunk is 478,469 bytes')
   && now.includes('one-tap sample preview')
   && now.includes('103 client-onboarding')
-  && now.includes('fast-forward 164 commits beyond remote PR #258 head `338b6fd`')
+  && now.includes('0 behind / 192 ahead of draft PR #258 head `338b6fd`')
   && now.includes('`npm run dev` starts canonical FastAPI plus Vite on loopback')
   && now.includes('the full local command proxies canonical FastAPI while keeping managed data disconnected and writes locked')
   && !now.includes('probe remains 500'))
 requireContract('release reconciliation is current and discoverable',
   workboard.includes('| OPS-006 | Release / Codex integrator | done-local |')
-  && workboard.includes('fast-forward 134 commits beyond remote PR #258')
-  && now.includes('release-reconciliation-2026-07-25.md')
-  && now.includes('existing green checks cover only the remote head'))
+  && workboard.includes('fast-forward 192 commits beyond draft PR #258 head `338b6fd`')
+  && now.includes('release-reconciliation-2026-07-26.md')
+  && now.includes('passing remote checks do not cover the local delta'))
 requireContract('release reconciliation binds exact Git and Vercel evidence',
-  releaseReconciliation.includes('Audited implementation checkpoint: `49b4e0e79461adb744b151314396ed1b8a2a06c3`')
+  releaseReconciliation.includes('Audited implementation checkpoint: `784379e3a13e1ad9366cca70816675b692063702`')
   && releaseReconciliation.includes('Live `main`: `6885c3201d523d42d176c3dcd91de28dc1e17f6f`')
-  && releaseReconciliation.includes('Live pull-request head: `338b6fd11bc27da9b7aa42bee2c293a5c0e3a9ef`')
-  && releaseReconciliation.includes('0 commits behind and 134 commits ahead')
-  && releaseReconciliation.includes('75 files changed, 30,188 insertions, 2,768 deletions')
-  && releaseReconciliation.includes('`supermega.dev` from the Vercel project `supermega-public`')
-  && releaseReconciliation.includes('`app.supermega.dev` from the Vercel project `megaos`')
+  && releaseReconciliation.includes('Remote pull-request head: `338b6fd11bc27da9b7aa42bee2c293a5c0e3a9ef`')
+  && releaseReconciliation.includes('0 commits behind and 192 commits ahead')
+  && releaseReconciliation.includes('120 files changed, 39,567 insertions, and 4,132 deletions')
+  && releaseReconciliation.includes('`supermega.dev` from Vercel project `supermega-public`')
+  && releaseReconciliation.includes('`app.supermega.dev` from Vercel project `megaos`')
   && releaseReconciliation.includes('dpl_Dc5U4M2fXkob3KejYAYDv4jAjEw1')
   && releaseReconciliation.includes('dpl_FL5eESWF2vGJffydGAVNA4vPQzdp'))
 requireContract('release action remains owner-gated and push-only',
-  releaseReconciliation.includes('existing green SuperMega App CI and GitGuardian results cover remote checkpoint `338b6fd`')
-  && releaseReconciliation.includes('perform one fast-forward-only push')
+  releaseReconciliation.includes('Those checks cover remote checkpoint `338b6fd`')
+  && releaseReconciliation.includes('perform one normal fast-forward-only push')
   && releaseReconciliation.includes('Do not force push.')
   && releaseReconciliation.includes('Do not merge, deploy, promote, change aliases or domains')
-  && releaseReconciliation.includes('No GitHub, Vercel, DNS, Supabase, domain, deployment, alias, environment, credential, or production state was changed'))
+  && releaseReconciliation.includes('No GitHub, Vercel, DNS, Supabase, domain, deployment, alias, environment, credential, payment, or production state was changed'))
 
 requireContract('Shop uses the stable commerce runtime',
   product('shop')?.name === 'Shop'
