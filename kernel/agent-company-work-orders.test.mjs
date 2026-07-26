@@ -615,6 +615,32 @@ test('dispatch never spends when the running state cannot be persisted', async (
   assert.equal(runs, 0)
 })
 
+test('capacity pressure returns a work order to planned for a safe retry', async () => {
+  const state = harness()
+  const created = await createCompanyWorkOrder(work({ cycleId: 'capacity-retry' }), state.options)
+  const result = await runCompanyWorkOrder({
+    clientId: created.workOrder.clientId,
+    workOrderId: created.workOrder.workOrderId,
+    planHash: created.workOrder.planHash,
+    confirmation: `RUN ${created.workOrder.workOrderId}`,
+  }, {
+    ...state.options,
+    runCompanyCycle: async () => ({
+      ok: false,
+      reason: 'company_capacity_exhausted',
+      status: 'busy',
+      maxRunning: 4,
+    }),
+  })
+  assert.equal(result.reason, 'company_capacity_exhausted')
+  assert.equal(result.status, 'blocked')
+  assert.equal(result.workOrder.status, 'planned')
+  assert.equal(
+    state.records.get(`company-work-order-record:${created.workOrder.workOrderId}`).lastDispatch.reason,
+    'company_capacity_exhausted',
+  )
+})
+
 test('work-order actions reject unknown fields and unbounded listing', async () => {
   assert.equal((await createCompanyWorkOrder({ ...work(), execute: true })).reason, 'company_work_order_unknown_field')
   assert.equal((await listCompanyWorkOrders({ clientId: 'client-acme', limit: 41 })).reason, 'company_work_order_invalid_limit')

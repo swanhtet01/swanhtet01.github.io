@@ -2,9 +2,12 @@ import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
 import {
+  COMPANY_CAPACITY_CLAIM_CONTRACT,
+  COMPANY_CAPACITY_CLAIM_TTL_SECONDS,
   listCompanyAgents,
   MAX_CYCLE_AGENTS,
   MAX_REGISTERED_COMPANY_AGENTS,
+  MAX_RUNNING_COMPANY_CYCLES,
 } from '../kernel/agent-company.mjs'
 
 const root = resolve(import.meta.dirname, '..')
@@ -76,6 +79,9 @@ requireContract('agent capacity agrees across HQ, coordinator, and Kernel',
   && workforce.build_teams?.map((entry) => entry.id).join(',') === portfolio.agentOperatingModel?.buildTeams?.join(',')
   && MAX_REGISTERED_COMPANY_AGENTS === portfolio.agentOperatingModel?.registeredRoleLimit
   && kernelRoster.length === MAX_REGISTERED_COMPANY_AGENTS
+  && MAX_RUNNING_COMPANY_CYCLES === portfolio.agentOperatingModel?.activeAssignmentLimit
+  && workforce.runtime_policy?.capacity_claim_contract === COMPANY_CAPACITY_CLAIM_CONTRACT
+  && workforce.runtime_policy?.capacity_claim_ttl_seconds === COMPANY_CAPACITY_CLAIM_TTL_SECONDS
   && MAX_CYCLE_AGENTS === portfolio.agentOperatingModel?.maxAgentsPerCycle
   && kernelCrewCapabilities.length === portfolio.agentOperatingModel?.validatedCrewCapabilities
   && new Set(kernelCrewCapabilities).size === kernelCrewCapabilities.length)

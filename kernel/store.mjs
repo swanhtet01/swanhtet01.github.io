@@ -272,29 +272,99 @@ export async function claimActivity(a) {
   }
 }
 // Release only an internal deterministic claim so an owner delivery that failed can be retried.
-export async function releaseActivityClaim(id) {
+export async function releaseActivityClaim(id, expectedRef = undefined) {
   const key = String(id || '').trim().slice(0, 120)
   if (!key) return false
+  const ownerBound = expectedRef !== undefined
+  const normalizedRef = ownerBound ? String(expectedRef || '').trim().slice(0, 160) : ''
+  if (ownerBound && !normalizedRef) return false
   try {
     if (mode === 'supabase') {
-      const response = await fetch(`${SUPABASE_URL}/rest/v1/supermega_console_activity?id=eq.${encodeURIComponent(key)}`, {
+      const ownerFilter = ownerBound ? `&ref=eq.${encodeURIComponent(normalizedRef)}` : ''
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/supermega_console_activity?id=eq.${encodeURIComponent(key)}${ownerFilter}`, {
         method: 'DELETE',
         headers: {
           apikey: SUPABASE_KEY,
           authorization: `Bearer ${SUPABASE_KEY}`,
-          prefer: 'return=minimal',
+          prefer: ownerBound ? 'return=representation' : 'return=minimal',
         },
       })
-      return response.ok
+      if (!response.ok) return false
+      if (!ownerBound) return true
+      const rows = await response.json().catch(() => [])
+      return Array.isArray(rows) && rows.length === 1
     }
     if (mode === 'postgres') {
       await ensurePgTables()
-      await q('delete from supermega_console_activity where id=$1', [key])
-      return true
+      if (!ownerBound) {
+        await q('delete from supermega_console_activity where id=$1', [key])
+        return true
+      }
+      const rows = await q('delete from supermega_console_activity where id=$1 and ref=$2 returning id', [key, normalizedRef])
+      return rows.length === 1
     }
+    if (ownerBound && mem.activity.get(key)?.ref !== normalizedRef) return false
     return mem.activity.delete(key)
   } catch {
     return false
+  }
+}
+
+export async function getActivityClaim(id) {
+  const key = String(id || '').trim().slice(0, 120)
+  if (!key) return { claim: null, durable: mode !== 'memory', reason: 'missing_claim_id' }
+  try {
+    if (mode === 'supabase') {
+      const rows = await rest('GET', `supermega_console_activity?id=eq.${encodeURIComponent(key)}&select=id,at,kind,summary,ref&limit=1`)
+      return { claim: rows[0] || null, durable: true }
+    }
+    if (mode === 'postgres') {
+      await ensurePgTables()
+      const rows = await q('select id, at, kind, summary, ref from supermega_console_activity where id=$1 limit 1', [key])
+      return { claim: rows[0] || null, durable: true }
+    }
+    return { claim: mem.activity.get(key) || null, durable: false }
+  } catch {
+    return { claim: null, durable: false, reason: 'claim_store_unavailable' }
+  }
+}
+
+export async function transitionActivityClaim(id, expectedRef, nextRef) {
+  const key = String(id || '').trim().slice(0, 120)
+  const expected = String(expectedRef || '').trim().slice(0, 160)
+  const next = String(nextRef || '').trim().slice(0, 160)
+  if (!key || !expected || !next || expected === next) {
+    return { updated: false, durable: mode !== 'memory', reason: 'invalid_claim_transition' }
+  }
+  try {
+    if (mode === 'supabase') {
+      const rows = await rest(
+        'PATCH',
+        `supermega_console_activity?id=eq.${encodeURIComponent(key)}&ref=eq.${encodeURIComponent(expected)}&select=id`,
+        { ref: next, at: new Date().toISOString() },
+      )
+      return Array.isArray(rows) && rows.length === 1
+        ? { updated: true, durable: true }
+        : { updated: false, durable: true, reason: 'claim_transition_conflict' }
+    }
+    if (mode === 'postgres') {
+      await ensurePgTables()
+      const rows = await q(
+        'update supermega_console_activity set ref=$3, at=now() where id=$1 and ref=$2 returning id',
+        [key, expected, next],
+      )
+      return rows.length === 1
+        ? { updated: true, durable: true }
+        : { updated: false, durable: true, reason: 'claim_transition_conflict' }
+    }
+    const current = mem.activity.get(key)
+    if (!current || current.ref !== expected) {
+      return { updated: false, durable: false, reason: 'claim_transition_conflict' }
+    }
+    mem.activity.set(key, { ...current, ref: next, at: new Date().toISOString() })
+    return { updated: true, durable: false }
+  } catch {
+    return { updated: false, durable: false, reason: 'claim_store_unavailable' }
   }
 }
 export async function listActivity(limit = 30, filter = {}) {
@@ -786,4 +856,4 @@ export async function ping() {
   return { ok: false, mode, detail: 'unknown_mode' }
 }
 
-export default { mode, listLeads, getLead, insertLead, updateLead, listClients, listProjects, createClient, getClient, createProject, updateProject, getProject, markDepositPaid, convertedLeadIds, saveDeal, listDeals, updateDeal, logActivity, claimActivity, releaseActivityClaim, listActivity, getTokenUsage, addTokenUsage, getCachedResponse, putCachedResponse, listCachedResponseRecords, transitionCachedResponse, createApprovalRecord, getApprovalRecord, listApprovalRecords, transitionApprovalRecord, recordPaymentEvent, ping, bumpGraduation, recordBuildModules, listGraduation }
+export default { mode, listLeads, getLead, insertLead, updateLead, listClients, listProjects, createClient, getClient, createProject, updateProject, getProject, markDepositPaid, convertedLeadIds, saveDeal, listDeals, updateDeal, logActivity, claimActivity, releaseActivityClaim, getActivityClaim, transitionActivityClaim, listActivity, getTokenUsage, addTokenUsage, getCachedResponse, putCachedResponse, listCachedResponseRecords, transitionCachedResponse, createApprovalRecord, getApprovalRecord, listApprovalRecords, transitionApprovalRecord, recordPaymentEvent, ping, bumpGraduation, recordBuildModules, listGraduation }

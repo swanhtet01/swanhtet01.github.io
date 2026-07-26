@@ -2,8 +2,11 @@
 
 import {
   listCompanyAgents,
+  COMPANY_CAPACITY_CLAIM_CONTRACT,
+  COMPANY_CAPACITY_CLAIM_TTL_SECONDS,
   MAX_CYCLE_AGENTS,
   MAX_CYCLE_ROLE_BUDGET,
+  MAX_RUNNING_COMPANY_CYCLES,
   planCompanyCycle,
   runCompanyCycle,
 } from '../agent-company.mjs'
@@ -72,7 +75,11 @@ function statusFor(result) {
     'company_mission_accepted_evaluation_required',
   ].includes(result.reason)) return 409
   if ([
+    'company_capacity_exhausted',
+  ].includes(result.reason)) return 429
+  if ([
     'company_claim_unavailable',
+    'company_capacity_unavailable',
     'company_durable_claim_required',
     'company_work_order_durable_claim_required',
     'company_work_order_state_unavailable',
@@ -192,7 +199,13 @@ export async function handleAgentCompany(request = {}, options = {}) {
         actionMode: 'draft_only',
         auth,
         agents: listCompanyAgents(),
-        limits: { maxAgents: MAX_CYCLE_AGENTS, maxRoleBudget: MAX_CYCLE_ROLE_BUDGET },
+        limits: {
+          maxAgents: MAX_CYCLE_AGENTS,
+          maxRoleBudget: MAX_CYCLE_ROLE_BUDGET,
+          maxConcurrentCycles: MAX_RUNNING_COMPANY_CYCLES,
+          capacityClaimContract: COMPANY_CAPACITY_CLAIM_CONTRACT,
+          capacityClaimTtlSeconds: COMPANY_CAPACITY_CLAIM_TTL_SECONDS,
+        },
         playbooks: {
           enabled: true,
           catalog: listCompanyPlaybooks(),

@@ -7,15 +7,20 @@ import { loadCrew } from './crew-runner.mjs'
 import { runCrew } from './crew-run.mjs'
 import {
   claimActivity,
+  getActivityClaim,
   getCachedResponse,
   putCachedResponse,
   releaseActivityClaim,
+  transitionActivityClaim,
 } from './store.mjs'
 
 export const MAX_CYCLE_AGENTS = 2
 export const MAX_CYCLE_ROLE_BUDGET = 8
 export const MAX_AGENT_EVIDENCE_BYTES = 12_000
 export const MAX_REGISTERED_COMPANY_AGENTS = 12
+export const MAX_RUNNING_COMPANY_CYCLES = 4
+export const COMPANY_CAPACITY_CLAIM_CONTRACT = 'supermega.agent-company-capacity-claims.v1'
+export const COMPANY_CAPACITY_CLAIM_TTL_SECONDS = 120
 
 const specialist = (definition) => Object.freeze({
   ...definition,
@@ -174,6 +179,105 @@ function runIdFor(clientId, cycleId) {
 
 const finalResultKey = (runId) => `company-cycle:${runId}:final`
 const agentResultKey = (runId, index) => `company-cycle:${runId}:agent:${index + 1}`
+const capacityClaimKey = (slot) => `agent-company-capacity:${slot}`
+const capacityLeaseRef = (runId, expiresAtMs) => `${runId}|${expiresAtMs}`
+const capacityLeaseExpiry = (value) => {
+  const match = /^agent-company:[a-f0-9]{40}\|([0-9]{13})$/.exec(String(value || ''))
+  return match ? Number(match[1]) : null
+}
+
+async function acquireCompanyCapacityClaim(plan, {
+  reserve,
+  release,
+  readClaim,
+  transferClaim,
+  requireDurableClaim,
+  nowMs,
+}) {
+  let observedAtMs
+  try { observedAtMs = Number(nowMs()) }
+  catch { observedAtMs = Number.NaN }
+  if (!Number.isFinite(observedAtMs) || observedAtMs < 0) {
+    return failure('company_capacity_unavailable', { status: 'blocked', runId: plan.runId })
+  }
+  const leaseRef = capacityLeaseRef(
+    plan.runId,
+    Math.floor(observedAtMs) + (COMPANY_CAPACITY_CLAIM_TTL_SECONDS * 1_000),
+  )
+  for (let slot = 1; slot <= MAX_RUNNING_COMPANY_CYCLES; slot++) {
+    const claimId = capacityClaimKey(slot)
+    let claim
+    try {
+      claim = await reserve({
+        id: claimId,
+        kind: 'agent_company_capacity',
+        summary: `Bounded company execution slot ${slot}`,
+        ref: leaseRef,
+      })
+    } catch {
+      return failure('company_capacity_unavailable', { status: 'blocked', runId: plan.runId })
+    }
+    if (claim?.fresh) {
+      if (requireDurableClaim && !claim.durable) {
+        try { await release(claimId, leaseRef) } catch { /* no model call has started */ }
+        return failure('company_capacity_unavailable', { status: 'blocked', runId: plan.runId })
+      }
+      return { ok: true, claimId, leaseRef, slot, durable: Boolean(claim.durable) }
+    }
+    if (requireDurableClaim && !claim?.durable) {
+      return failure('company_capacity_unavailable', { status: 'blocked', runId: plan.runId })
+    }
+
+    let existing
+    try { existing = await readClaim(claimId) }
+    catch { existing = { claim: null, durable: false, reason: 'claim_store_unavailable' } }
+    if (requireDurableClaim && !existing?.durable) {
+      return failure('company_capacity_unavailable', { status: 'blocked', runId: plan.runId })
+    }
+    if (!existing?.claim) {
+      let retry
+      try {
+        retry = await reserve({
+          id: claimId,
+          kind: 'agent_company_capacity',
+          summary: `Bounded company execution slot ${slot}`,
+          ref: leaseRef,
+        })
+      } catch {
+        retry = { fresh: false, durable: false }
+      }
+      if (retry?.fresh && (!requireDurableClaim || retry.durable)) {
+        return { ok: true, claimId, leaseRef, slot, durable: Boolean(retry.durable) }
+      }
+      if (requireDurableClaim && !retry?.durable) {
+        return failure('company_capacity_unavailable', { status: 'blocked', runId: plan.runId })
+      }
+      continue
+    }
+
+    const existingExpiry = capacityLeaseExpiry(existing.claim.ref)
+    if (existingExpiry === null) {
+      return failure('company_capacity_unavailable', { status: 'blocked', runId: plan.runId })
+    }
+    if (existingExpiry > observedAtMs) continue
+
+    let transferred
+    try { transferred = await transferClaim(claimId, existing.claim.ref, leaseRef) }
+    catch { transferred = { updated: false, durable: false, reason: 'claim_store_unavailable' } }
+    if (transferred?.updated && (!requireDurableClaim || transferred.durable)) {
+      return { ok: true, claimId, leaseRef, slot, durable: Boolean(transferred.durable), recovered: true }
+    }
+    if (requireDurableClaim && !transferred?.durable) {
+      return failure('company_capacity_unavailable', { status: 'blocked', runId: plan.runId })
+    }
+  }
+  return failure('company_capacity_exhausted', {
+    status: 'busy',
+    runId: plan.runId,
+    maxRunning: MAX_RUNNING_COMPANY_CYCLES,
+    retry: { sameCycleIdAllowed: true },
+  })
+}
 
 export function listCompanyAgents() {
   return AGENT_ROSTER.map((agent) => ({
@@ -261,6 +365,9 @@ async function prepareCompanyCycle(input, options = {}) {
     },
     controls: {
       execution: 'sequential',
+      capacityClaimContract: COMPANY_CAPACITY_CLAIM_CONTRACT,
+      capacityClaimTtlSeconds: COMPANY_CAPACITY_CLAIM_TTL_SECONDS,
+      maxConcurrentCycles: MAX_RUNNING_COMPANY_CYCLES,
       dynamicDelegation: false,
       crossAgentContext: false,
       externalWrites: false,
@@ -344,7 +451,10 @@ export async function runCompanyCycle(input, options = {}) {
   const release = options.releaseActivityClaim || releaseActivityClaim
   const readResult = options.getRunResult || getCachedResponse
   const saveResult = options.putRunResult || putCachedResponse
+  const readClaim = options.getActivityClaim || getActivityClaim
+  const transferClaim = options.transitionActivityClaim || transitionActivityClaim
   const requireDurableClaim = options.requireDurableClaim !== false
+  const capacityNowMs = options.capacityNowMs || Date.now
   let claim
   try {
     claim = await reserve({
@@ -383,75 +493,101 @@ export async function runCompanyCycle(input, options = {}) {
     })
   }
   if (requireDurableClaim && !claim.durable) {
-    try { await release(plan.runId) } catch { /* no model call has started */ }
+    try { await release(plan.runId, plan.clientId) } catch { /* no model call has started */ }
     return failure('company_durable_claim_required', { status: 'blocked', runId: plan.runId })
   }
 
-  const executeCrew = options.runCrew || runCrew
-  const results = []
-  let persistedAgentResults = 0
-  for (let index = 0; index < plan.assignments.length; index++) {
-    const assignment = plan.assignments[index]
-    let result
-    try {
-      result = await executeCrew(assignment.crew, normalizedEvidence.get(assignment.agentId), {
-        clientId: plan.clientId,
-      })
-    } catch {
-      result = { ok: false, reason: 'company_agent_failed' }
+  const capacity = await acquireCompanyCapacityClaim(plan, {
+    reserve,
+    release,
+    readClaim,
+    transferClaim,
+    requireDurableClaim,
+    nowMs: capacityNowMs,
+  })
+  if (!capacity.ok) {
+    try { await release(plan.runId, plan.clientId) } catch { /* capacity rejected before model use */ }
+    return capacity
+  }
+
+  try {
+    const executeCrew = options.runCrew || runCrew
+    const results = []
+    let persistedAgentResults = 0
+    for (let index = 0; index < plan.assignments.length; index++) {
+      const assignment = plan.assignments[index]
+      let result
+      try {
+        result = await executeCrew(assignment.crew, normalizedEvidence.get(assignment.agentId), {
+          clientId: plan.clientId,
+        })
+      } catch {
+        result = { ok: false, reason: 'company_agent_failed' }
+      }
+      const normalized = normalizeCrewResult(assignment, result)
+      results.push(normalized)
+      try {
+        const stored = await saveResult(agentResultKey(plan.runId, index), {
+          version: 1,
+          runId: plan.runId,
+          clientId: plan.clientId,
+          cycleId: plan.cycleId,
+          result: normalized,
+        })
+        if (stored) persistedAgentResults += 1
+      } catch { /* the caller still receives the completed specialist result */ }
     }
-    const normalized = normalizeCrewResult(assignment, result)
-    results.push(normalized)
-    try {
-      const stored = await saveResult(agentResultKey(plan.runId, index), {
-        version: 1,
-        runId: plan.runId,
-        clientId: plan.clientId,
-        cycleId: plan.cycleId,
-        result: normalized,
-      })
-      if (stored) persistedAgentResults += 1
-    } catch { /* the caller still receives the completed specialist result */ }
-  }
 
-  const completed = results.filter((result) => result.status === 'completed').length
-  const gated = results.filter((result) => result.status === 'gated').length
-  const failed = results.length - completed - gated
-  const status = completed === results.length ? 'completed'
-    : completed > 0 ? 'partial'
-      : gated > 0 && failed === 0 ? 'blocked'
-        : 'failed'
-  const usedRoleCalls = results.reduce((total, result) => total + result.usedRoleCalls, 0)
+    const completed = results.filter((result) => result.status === 'completed').length
+    const gated = results.filter((result) => result.status === 'gated').length
+    const failed = results.length - completed - gated
+    const status = completed === results.length ? 'completed'
+      : completed > 0 ? 'partial'
+        : gated > 0 && failed === 0 ? 'blocked'
+          : 'failed'
+    const usedRoleCalls = results.reduce((total, result) => total + result.usedRoleCalls, 0)
 
-  const envelope = {
-    ok: completed > 0,
-    mode: 'run',
-    status,
-    runId: plan.runId,
-    clientId: plan.clientId,
-    cycleId: plan.cycleId,
-    actionMode: 'draft_only',
-    approvalRequired: true,
-    results,
-    budget: { ...plan.budget, usedRoleCalls },
-    trace: results.map((result, index) => ({
-      order: index + 1,
-      agentId: result.agentId,
-      crew: result.crew,
-      status: result.status,
-      usedRoleCalls: result.usedRoleCalls,
-      guardrails: result.guardrails,
-    })),
-    retry: status === 'completed' ? null : { requiresNewCycleId: true },
+    const envelope = {
+      ok: completed > 0,
+      mode: 'run',
+      status,
+      runId: plan.runId,
+      clientId: plan.clientId,
+      cycleId: plan.cycleId,
+      actionMode: 'draft_only',
+      approvalRequired: true,
+      results,
+      budget: { ...plan.budget, usedRoleCalls },
+      capacity: {
+        contract: COMPANY_CAPACITY_CLAIM_CONTRACT,
+        maxConcurrentCycles: MAX_RUNNING_COMPANY_CYCLES,
+        claimTtlSeconds: COMPANY_CAPACITY_CLAIM_TTL_SECONDS,
+        release: 'finally',
+      },
+      trace: results.map((result, index) => ({
+        order: index + 1,
+        agentId: result.agentId,
+        crew: result.crew,
+        status: result.status,
+        usedRoleCalls: result.usedRoleCalls,
+        guardrails: result.guardrails,
+      })),
+      retry: status === 'completed' ? null : { requiresNewCycleId: true },
+    }
+    let durableResultStored = false
+    try { durableResultStored = Boolean(await saveResult(finalResultKey(plan.runId), envelope)) }
+    catch { durableResultStored = false }
+    return { ...envelope, persistedAgentResults, durableResultStored }
+  } finally {
+    try { await release(capacity.claimId, capacity.leaseRef) } catch { /* the bounded slot remains fail-closed */ }
   }
-  let durableResultStored = false
-  try { durableResultStored = Boolean(await saveResult(finalResultKey(plan.runId), envelope)) }
-  catch { durableResultStored = false }
-  return { ...envelope, persistedAgentResults, durableResultStored }
 }
 
 export default {
   AGENT_ROSTER,
+  COMPANY_CAPACITY_CLAIM_CONTRACT,
+  COMPANY_CAPACITY_CLAIM_TTL_SECONDS,
+  MAX_RUNNING_COMPANY_CYCLES,
   MAX_REGISTERED_COMPANY_AGENTS,
   listCompanyAgents,
   planCompanyCycle,

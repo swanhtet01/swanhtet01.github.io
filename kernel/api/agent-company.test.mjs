@@ -41,6 +41,9 @@ test('GET returns the protected fixed roster and hard limits', async () => {
   assert.equal(result.json.agents.every((agent) => agent.evidenceHint), true)
   assert.equal(result.json.limits.maxAgents, 2)
   assert.equal(result.json.limits.maxRoleBudget, 8)
+  assert.equal(result.json.limits.maxConcurrentCycles, 4)
+  assert.equal(result.json.limits.capacityClaimContract, 'supermega.agent-company-capacity-claims.v1')
+  assert.equal(result.json.limits.capacityClaimTtlSeconds, 120)
   assert.equal(result.json.playbooks.enabled, true)
   assert.equal(result.json.playbooks.catalog.length, 8)
   assert.equal(result.json.playbooks.staged, true)
@@ -396,6 +399,16 @@ test('POST run maps duplicate and unavailable durable claims cleanly', async () 
     runCompanyCycle: async () => ({ ok: false, reason: 'company_durable_claim_required', status: 'blocked' }),
   })
   assert.equal(blocked.status, 503)
+  const unavailableCapacity = await handleAgentCompany(request({ body: { ...validBody, action: 'run' } }), {
+    opsKey: KEY,
+    runCompanyCycle: async () => ({ ok: false, reason: 'company_capacity_unavailable', status: 'blocked' }),
+  })
+  assert.equal(unavailableCapacity.status, 503)
+  const exhausted = await handleAgentCompany(request({ body: { ...validBody, action: 'run' } }), {
+    opsKey: KEY,
+    runCompanyCycle: async () => ({ ok: false, reason: 'company_capacity_exhausted', status: 'busy' }),
+  })
+  assert.equal(exhausted.status, 429)
 })
 
 test('protected work-order actions delegate to the durable queue contract', async () => {

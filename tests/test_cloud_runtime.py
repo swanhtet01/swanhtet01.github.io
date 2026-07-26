@@ -3,7 +3,9 @@ from __future__ import annotations
 import ast
 import json
 import os
+import shutil
 import sqlite3
+import subprocess
 import tempfile
 import unittest
 import urllib.error
@@ -145,6 +147,61 @@ class CloudRuntimeTests(unittest.TestCase):
             self.assertEqual(response.json()["detail"], "cron_auth_required")
         self.assertEqual(bearer.status_code, 200)
         self.assertEqual(explicit_header.status_code, 200)
+
+    def test_scheduler_gcloud_failures_redact_secret_arguments(self) -> None:
+        powershell = shutil.which("pwsh") or shutil.which("powershell")
+        if not powershell:
+            self.skipTest("PowerShell is unavailable")
+
+        scheduler_path = Path(__file__).resolve().parents[1] / "tools" / "ensure_supermega_scheduler.ps1"
+        scheduler_source = scheduler_path.read_text(encoding="utf-8")
+        helper_source, marker, _ = scheduler_source.partition('function Ensure-SecretVersion {')
+        self.assertTrue(marker)
+        self.assertNotIn("$CommandArgs -join", helper_source)
+
+        sentinel = "SENTINEL_CRON_TOKEN_4dd59237"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            if os.name == "nt":
+                fake_gcloud = temp_path / "gcloud.cmd"
+                fake_gcloud.write_text("@echo %*\r\n@exit /b 23\r\n", encoding="utf-8")
+            else:
+                fake_gcloud = temp_path / "gcloud"
+                fake_gcloud.write_text("#!/bin/sh\nprintf '%s\\n' \"$*\"\nexit 23\n", encoding="utf-8")
+                fake_gcloud.chmod(0o755)
+
+            harness = temp_path / "scheduler-redaction-probe.ps1"
+            escaped_path = str(temp_path).replace("'", "''")
+            harness.write_text(
+                helper_source
+                + f"\n$env:PATH = '{escaped_path}' + [IO.Path]::PathSeparator + $env:PATH\n"
+                + f"$sentinel = '{sentinel}'\n"
+                + "$messages = @()\n"
+                + "foreach ($wrapper in @('Invoke-Gcloud', 'Invoke-GcloudCapture')) {\n"
+                + "  try {\n"
+                + "    & $wrapper -CommandArgs @('scheduler', 'jobs', 'update', \"--headers=x-supermega-cron-token=$sentinel\") | Out-Null\n"
+                + "    $messages += \"$wrapper unexpected success\"\n"
+                + "  } catch {\n"
+                + "    $messages += \"$wrapper $($_.Exception.Message)\"\n"
+                + "  }\n"
+                + "}\n"
+                + "$messages | ForEach-Object { Write-Output $_ }\n",
+                encoding="utf-8",
+            )
+            completed = subprocess.run(
+                [powershell, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", str(harness)],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+
+        diagnostics = f"{completed.stdout}\n{completed.stderr}"
+        self.assertEqual(completed.returncode, 0, diagnostics)
+        self.assertNotIn(sentinel, diagnostics)
+        self.assertNotIn("x-supermega-cron-token=", diagnostics)
+        self.assertEqual(diagnostics.count("scheduler jobs update"), 2)
+        self.assertEqual(diagnostics.count("exit code 23"), 2)
 
     def test_degraded_mode_is_truthful_and_does_not_invoke_a_worker(self) -> None:
         with patch("supermega_runtime.cloud_runtime._open_worker_request") as open_worker:

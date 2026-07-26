@@ -20,21 +20,48 @@ function Require-Command {
     }
 }
 
+function Get-GcloudOperation {
+    param([string[]]$CommandArgs)
+
+    $segments = @()
+    foreach ($argument in $CommandArgs) {
+        $candidate = [string]$argument
+        if ($candidate -notmatch '^[a-z][a-z0-9-]{0,31}$') {
+            break
+        }
+        $segments += $candidate
+        if ($segments.Count -ge 3) {
+            break
+        }
+    }
+    if ($segments.Count -eq 0) {
+        return "unknown"
+    }
+    return ($segments -join " ")
+}
+
+function Invoke-GcloudSafe {
+    param([string[]]$CommandArgs)
+
+    # Capture both native streams so a failed command cannot echo a secret-bearing
+    # header, data-file path, or token argument into CI or terminal diagnostics.
+    $commandOutput = @(& gcloud @CommandArgs 2>&1)
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -ne 0) {
+        $operation = Get-GcloudOperation -CommandArgs $CommandArgs
+        throw "gcloud operation '$operation' failed with exit code $exitCode."
+    }
+    return $commandOutput
+}
+
 function Invoke-Gcloud {
     param([string[]]$CommandArgs)
-    & gcloud @CommandArgs
-    if ($LASTEXITCODE -ne 0) {
-        throw "gcloud failed: gcloud $($CommandArgs -join ' ')"
-    }
+    Invoke-GcloudSafe -CommandArgs $CommandArgs
 }
 
 function Invoke-GcloudCapture {
     param([string[]]$CommandArgs)
-    $output = & gcloud @CommandArgs
-    if ($LASTEXITCODE -ne 0) {
-        throw "gcloud failed: gcloud $($CommandArgs -join ' ')"
-    }
-    return @($output)
+    return @(Invoke-GcloudSafe -CommandArgs $CommandArgs)
 }
 
 function Ensure-SecretVersion {

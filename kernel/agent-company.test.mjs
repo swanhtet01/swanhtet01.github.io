@@ -2,10 +2,13 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 import {
+  COMPANY_CAPACITY_CLAIM_CONTRACT,
+  COMPANY_CAPACITY_CLAIM_TTL_SECONDS,
   listCompanyAgents,
   MAX_CYCLE_AGENTS,
   MAX_CYCLE_ROLE_BUDGET,
   MAX_REGISTERED_COMPANY_AGENTS,
+  MAX_RUNNING_COMPANY_CYCLES,
   planCompanyCycle,
   runCompanyCycle,
 } from './agent-company.mjs'
@@ -23,10 +26,40 @@ const cycle = (patch = {}) => ({
   ...patch,
 })
 
+function durableClaimHarness() {
+  const claims = new Map()
+  return {
+    claims,
+    claimActivity: async (row) => {
+      if (claims.has(row.id)) return { fresh: false, durable: true }
+      claims.set(row.id, { ...row })
+      return { fresh: true, durable: true }
+    },
+    releaseActivityClaim: async (id, expectedRef = undefined) => {
+      const current = claims.get(id)
+      if (!current || (expectedRef !== undefined && current.ref !== expectedRef)) return false
+      claims.delete(id)
+      return true
+    },
+    getActivityClaim: async (id) => ({ claim: claims.get(id) || null, durable: true }),
+    transitionActivityClaim: async (id, expectedRef, nextRef) => {
+      const current = claims.get(id)
+      if (!current || current.ref !== expectedRef) {
+        return { updated: false, durable: true, reason: 'claim_transition_conflict' }
+      }
+      claims.set(id, { ...current, ref: nextRef })
+      return { updated: true, durable: true }
+    },
+  }
+}
+
 test('agent roster is fixed, bounded, and backed by validated crews', async () => {
   const roster = listCompanyAgents()
   assert.equal(roster.length, 12)
   assert.equal(MAX_REGISTERED_COMPANY_AGENTS, 12)
+  assert.equal(MAX_RUNNING_COMPANY_CYCLES, 4)
+  assert.equal(COMPANY_CAPACITY_CLAIM_CONTRACT, 'supermega.agent-company-capacity-claims.v1')
+  assert.equal(COMPANY_CAPACITY_CLAIM_TTL_SECONDS, 120)
   assert.equal(MAX_CYCLE_AGENTS, 2)
   assert.equal(MAX_CYCLE_ROLE_BUDGET, 8)
   assert.equal(new Set(roster.map((agent) => agent.id)).size, roster.length)
@@ -61,6 +94,9 @@ test('agent roster is fixed, bounded, and backed by validated crews', async () =
   assert.equal(plan.approvalRequired, true)
   assert.equal(plan.budget.plannedRoles, 6)
   assert.equal(plan.controls.execution, 'sequential')
+  assert.equal(plan.controls.maxConcurrentCycles, 4)
+  assert.equal(plan.controls.capacityClaimContract, COMPANY_CAPACITY_CLAIM_CONTRACT)
+  assert.equal(plan.controls.capacityClaimTtlSeconds, COMPANY_CAPACITY_CLAIM_TTL_SECONDS)
   assert.equal(plan.controls.dynamicDelegation, false)
   assert.equal(plan.controls.crossAgentContext, false)
   assert.equal(plan.controls.externalWrites, false)
@@ -181,6 +217,110 @@ test('runner uses a durable claim, executes serially, and isolates each agent ev
     maxOutputFields: 24,
   })
   assert.deepEqual(result.trace[0].guardrails, result.results[0].guardrails)
+})
+
+test('runner admits four durable cycles, blocks the fifth, and releases capacity on every result', async () => {
+  const state = durableClaimHarness()
+  let started = 0
+  let releaseCrews
+  let resolveStarted
+  const crewsStarted = new Promise((resolve) => { resolveStarted = resolve })
+  const crewGate = new Promise((resolve) => { releaseCrews = resolve })
+  const inputFor = (index) => cycle({
+    cycleId: `capacity-${index}`,
+    agents: ['operations-analyst'],
+    evidence: { 'operations-analyst': `Approved operations evidence ${index}.` },
+    roleBudget: 3,
+  })
+  const heldCrew = (throws = false) => async () => {
+    started += 1
+    if (started === MAX_RUNNING_COMPANY_CYCLES) resolveStarted()
+    await crewGate
+    if (throws) throw new Error('synthetic crew failure')
+    return { ok: true, output: { ready: true }, usageByRole: [], trace: [] }
+  }
+  const admitted = Array.from({ length: MAX_RUNNING_COMPANY_CYCLES }, (_, index) => runCompanyCycle(inputFor(index + 1), {
+    ...state,
+    putRunResult: async () => true,
+    runCrew: heldCrew(index === MAX_RUNNING_COMPANY_CYCLES - 1),
+  }))
+  await Promise.race([
+    crewsStarted,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('capacity probe did not admit four cycles')), 1_000)),
+  ])
+
+  const fifthInput = inputFor(5)
+  const fifth = await runCompanyCycle(fifthInput, {
+    ...state,
+    putRunResult: async () => true,
+    runCrew: async () => { throw new Error('fifth cycle must not execute') },
+  })
+  assert.equal(fifth.reason, 'company_capacity_exhausted')
+  assert.equal(fifth.status, 'busy')
+  assert.equal(fifth.maxRunning, MAX_RUNNING_COMPANY_CYCLES)
+  assert.equal(started, MAX_RUNNING_COMPANY_CYCLES)
+  assert.equal([...state.claims.keys()].filter((id) => id.startsWith('agent-company-capacity:')).length, 4)
+
+  releaseCrews()
+  const completed = await Promise.all(admitted)
+  assert.deepEqual(completed.map((result) => result.status), ['completed', 'completed', 'completed', 'failed'])
+  assert.equal([...state.claims.keys()].filter((id) => id.startsWith('agent-company-capacity:')).length, 0)
+
+  const retried = await runCompanyCycle(fifthInput, {
+    ...state,
+    putRunResult: async () => true,
+    runCrew: async () => ({ ok: true, output: { ready: true }, usageByRole: [], trace: [] }),
+  })
+  assert.equal(retried.status, 'completed')
+  assert.equal(retried.capacity.contract, COMPANY_CAPACITY_CLAIM_CONTRACT)
+  assert.equal(retried.capacity.claimTtlSeconds, COMPANY_CAPACITY_CLAIM_TTL_SECONDS)
+  assert.equal([...state.claims.keys()].filter((id) => id.startsWith('agent-company-capacity:')).length, 0)
+})
+
+test('expired capacity is atomically reassigned and an old owner cannot release the new lease', async () => {
+  const state = durableClaimHarness()
+  const staleOwner = `agent-company:${'a'.repeat(40)}|1000000000000`
+  state.claims.set('agent-company-capacity:1', {
+    id: 'agent-company-capacity:1',
+    kind: 'agent_company_capacity',
+    summary: 'stale slot',
+    ref: staleOwner,
+  })
+  for (let slot = 2; slot <= MAX_RUNNING_COMPANY_CYCLES; slot++) {
+    state.claims.set(`agent-company-capacity:${slot}`, {
+      id: `agent-company-capacity:${slot}`,
+      kind: 'agent_company_capacity',
+      summary: 'active slot',
+      ref: `agent-company:${String(slot).repeat(40)}|2000000000000`,
+    })
+  }
+  let releaseRecovered
+  let started
+  const crewStarted = new Promise((resolve) => { started = resolve })
+  const crewGate = new Promise((resolve) => { releaseRecovered = resolve })
+  const run = runCompanyCycle(cycle({
+    cycleId: 'recover-expired-capacity',
+    agents: ['operations-analyst'],
+    evidence: { 'operations-analyst': 'Approved recovery evidence.' },
+    roleBudget: 3,
+  }), {
+    ...state,
+    capacityNowMs: () => 1_500_000_000_000,
+    putRunResult: async () => true,
+    runCrew: async () => {
+      started()
+      await crewGate
+      return { ok: true, output: { recovered: true }, usageByRole: [], trace: [] }
+    },
+  })
+  await crewStarted
+  const recoveredRef = state.claims.get('agent-company-capacity:1').ref
+  assert.notEqual(recoveredRef, staleOwner)
+  assert.equal(await state.releaseActivityClaim('agent-company-capacity:1', staleOwner), false)
+  assert.equal(state.claims.get('agent-company-capacity:1').ref, recoveredRef)
+  releaseRecovered()
+  assert.equal((await run).status, 'completed')
+  assert.equal(state.claims.has('agent-company-capacity:1'), false)
 })
 
 test('runner preserves partial results and never feeds one specialist output to another', async () => {
