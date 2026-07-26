@@ -225,9 +225,9 @@ async function buildRehearsal() {
     item.status === 'valid'
     && item.activation.status === 'not_applied'
     && item.activation.human_approval_required === true
-    && item.activation.atomic_adapter_ready === false
+    && item.activation.atomic_adapter_ready === (item.product === 'commerce')
     && item.activation.external_writes_performed === false
-  )), 'A trusted validation result crossed the activation boundary.')
+  )), 'A trusted validation result exposed the wrong adapter or crossed the activation boundary.')
 
   const selectedPackages = Object.fromEntries(PRODUCT_ORDER.map((product) => [
     product,

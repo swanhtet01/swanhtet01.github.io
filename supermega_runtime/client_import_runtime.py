@@ -151,7 +151,7 @@ class ClientImportValidationResult:
                 "target_surface": self.target_surface,
                 "required_capability": self.required_capability,
                 "human_approval_required": True,
-                "atomic_adapter_ready": False,
+                "atomic_adapter_ready": self.product == "commerce",
                 "external_writes_performed": False,
             },
         }

@@ -184,7 +184,10 @@ class ClientImportValidatorTests(unittest.TestCase):
                     self.assertEqual(response["status"], "valid")
                     self.assertEqual(response["activation"]["status"], "not_applied")
                     self.assertTrue(response["activation"]["human_approval_required"])
-                    self.assertFalse(response["activation"]["atomic_adapter_ready"])
+                    self.assertEqual(
+                        response["activation"]["atomic_adapter_ready"],
+                        product == "commerce",
+                    )
                     self.assertFalse(response["activation"]["external_writes_performed"])
 
     def test_optional_website_values_and_mapping_can_be_blank(self) -> None:
