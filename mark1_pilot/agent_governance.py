@@ -16,6 +16,8 @@ AGENT_CAPACITY_PLAN_CONTRACT = "supermega.agent-capacity-plan.v1"
 AGENT_BUDGET_GRANT_CONTRACT = "supermega.agent-budget-grant.v1"
 AGENT_BUDGET_ACCOUNTING_CONTRACT = "supermega.agent-budget-accounting.v1"
 AGENT_BUDGET_AUDIENCE = "supermega-agent-runtime"
+AGENT_ACTIVE_ASSIGNMENT_LIMIT = 4
+AGENT_ROSTER_LIMIT = 12
 
 AGENT_JOB_UNITS: dict[str, int] = {
     "revenue_scout": 3,
@@ -59,12 +61,12 @@ class AgentGovernanceError(RuntimeError):
 
 @dataclass(frozen=True)
 class AgentWorkforcePolicy:
-    max_running: int = 4
+    max_running: int = AGENT_ACTIVE_ASSIGNMENT_LIMIT
     max_queued: int = 24
     max_daily_runs: int = 64
     max_daily_units: int = 96
-    max_batch_jobs: int = 5
-    max_registered_specialists: int = 12
+    max_batch_jobs: int = AGENT_ACTIVE_ASSIGNMENT_LIMIT
+    max_registered_specialists: int = AGENT_ROSTER_LIMIT
     lease_seconds: int = 300
 
     @property
@@ -107,32 +109,57 @@ def _bounded_environment_int(name: str, default: int, minimum: int, maximum: int
     return value
 
 
+def _validate_agent_workforce_policy(policy: AgentWorkforcePolicy) -> AgentWorkforcePolicy:
+    bounded_fields = {
+        "max_running": (policy.max_running, 1, AGENT_ACTIVE_ASSIGNMENT_LIMIT),
+        "max_queued": (policy.max_queued, 1, 100),
+        "max_daily_runs": (policy.max_daily_runs, 1, 128),
+        "max_daily_units": (policy.max_daily_units, 1, 256),
+        "max_batch_jobs": (policy.max_batch_jobs, 1, AGENT_ACTIVE_ASSIGNMENT_LIMIT),
+        "max_registered_specialists": (policy.max_registered_specialists, 4, AGENT_ROSTER_LIMIT),
+        "lease_seconds": (policy.lease_seconds, 30, 900),
+    }
+    for field, (value, minimum, maximum) in bounded_fields.items():
+        if type(value) is not int or value < minimum or value > maximum:
+            raise AgentGovernanceError(
+                "agent_policy_invalid",
+                f"{field} must be a whole number between {minimum} and {maximum}.",
+            )
+    if policy.max_daily_runs < policy.max_running:
+        raise AgentGovernanceError("agent_policy_invalid", "max_daily_runs cannot be lower than max_running.")
+    if policy.max_daily_units < policy.max_running:
+        raise AgentGovernanceError("agent_policy_invalid", "max_daily_units cannot be lower than max_running.")
+    if policy.max_registered_specialists < policy.max_running:
+        raise AgentGovernanceError("agent_policy_invalid", "max_registered_specialists cannot be lower than max_running.")
+    return policy
+
+
 def load_agent_workforce_policy() -> AgentWorkforcePolicy:
     policy = AgentWorkforcePolicy(
-        max_running=_bounded_environment_int("SUPERMEGA_AGENT_MAX_RUNNING", 4, 1, 8),
+        max_running=_bounded_environment_int(
+            "SUPERMEGA_AGENT_MAX_RUNNING",
+            AGENT_ACTIVE_ASSIGNMENT_LIMIT,
+            1,
+            AGENT_ACTIVE_ASSIGNMENT_LIMIT,
+        ),
         max_queued=_bounded_environment_int("SUPERMEGA_AGENT_MAX_QUEUED", 24, 1, 100),
         max_daily_runs=_bounded_environment_int("SUPERMEGA_AGENT_MAX_DAILY_RUNS", 64, 1, 128),
         max_daily_units=_bounded_environment_int("SUPERMEGA_AGENT_MAX_DAILY_UNITS", 96, 1, 256),
-        max_batch_jobs=_bounded_environment_int("SUPERMEGA_AGENT_MAX_BATCH_JOBS", 5, 1, 7),
-        max_registered_specialists=_bounded_environment_int("SUPERMEGA_AGENT_MAX_REGISTERED_SPECIALISTS", 12, 4, 12),
+        max_batch_jobs=_bounded_environment_int(
+            "SUPERMEGA_AGENT_MAX_BATCH_JOBS",
+            AGENT_ACTIVE_ASSIGNMENT_LIMIT,
+            1,
+            AGENT_ACTIVE_ASSIGNMENT_LIMIT,
+        ),
+        max_registered_specialists=_bounded_environment_int(
+            "SUPERMEGA_AGENT_MAX_REGISTERED_SPECIALISTS",
+            AGENT_ROSTER_LIMIT,
+            4,
+            AGENT_ROSTER_LIMIT,
+        ),
         lease_seconds=_bounded_environment_int("SUPERMEGA_AGENT_LEASE_SECONDS", 300, 30, 900),
     )
-    if policy.max_daily_runs < policy.max_running:
-        raise AgentGovernanceError(
-            "agent_policy_invalid",
-            "SUPERMEGA_AGENT_MAX_DAILY_RUNS cannot be lower than SUPERMEGA_AGENT_MAX_RUNNING.",
-        )
-    if policy.max_daily_units < policy.max_running:
-        raise AgentGovernanceError(
-            "agent_policy_invalid",
-            "SUPERMEGA_AGENT_MAX_DAILY_UNITS cannot be lower than SUPERMEGA_AGENT_MAX_RUNNING.",
-        )
-    if policy.max_registered_specialists < policy.max_running:
-        raise AgentGovernanceError(
-            "agent_policy_invalid",
-            "SUPERMEGA_AGENT_MAX_REGISTERED_SPECIALISTS cannot be lower than SUPERMEGA_AGENT_MAX_RUNNING.",
-        )
-    return policy
+    return _validate_agent_workforce_policy(policy)
 
 
 def normalize_agent_job_types(job_types: Sequence[object] | None) -> list[str]:
@@ -202,7 +229,7 @@ def plan_agent_capacity(
 ) -> dict[str, object]:
     """Plan useful execution demand without treating a specialist roster as workers."""
 
-    active_policy = policy or load_agent_workforce_policy()
+    active_policy = _validate_agent_workforce_policy(policy) if policy is not None else load_agent_workforce_policy()
     if (
         type(registered_specialists) is not int
         or registered_specialists < 0

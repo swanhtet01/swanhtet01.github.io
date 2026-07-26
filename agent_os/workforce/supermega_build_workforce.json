@@ -14,7 +14,7 @@
     "max_registered_specialists": 12,
     "max_running": 4,
     "max_queued": 24,
-    "max_batch_jobs": 5,
+    "max_batch_jobs": 4,
     "max_daily_runs": 64,
     "max_daily_work_units": 96,
     "in_flight_per_job": 1,

@@ -18,10 +18,13 @@ from fastapi.testclient import TestClient
 
 from supermega_runtime.cloud_runtime import DAILY_CRON_PATH, QUEUE_CRON_PATH, router
 from mark1_pilot.agent_governance import (
+    AGENT_ACTIVE_ASSIGNMENT_LIMIT,
     AGENT_CAPACITY_PLAN_CONTRACT,
     AGENT_BUDGET_ACCOUNTING_CONTRACT,
     AGENT_BUDGET_GRANT_CONTRACT,
+    AGENT_ROSTER_LIMIT,
     AgentGovernanceError,
+    AgentWorkforcePolicy,
     issue_agent_budget_grant,
     load_agent_workforce_policy,
     plan_agent_capacity,
@@ -399,10 +402,15 @@ class AgentGovernanceTests(unittest.TestCase):
             )
         self.assertEqual(weak_secret_error.exception.code, "budget_grant_secret_invalid")
 
-        with patch.dict(os.environ, {"SUPERMEGA_AGENT_MAX_RUNNING": "99"}):
+        with patch.dict(os.environ, {"SUPERMEGA_AGENT_MAX_RUNNING": "5"}):
             with self.assertRaises(AgentGovernanceError) as policy_error:
                 load_agent_workforce_policy()
         self.assertEqual(policy_error.exception.code, "agent_policy_invalid")
+
+        with patch.dict(os.environ, {"SUPERMEGA_AGENT_MAX_BATCH_JOBS": "5"}):
+            with self.assertRaises(AgentGovernanceError) as batch_policy_error:
+                load_agent_workforce_policy()
+        self.assertEqual(batch_policy_error.exception.code, "agent_policy_invalid")
 
         with patch.dict(os.environ, {"SUPERMEGA_AGENT_MAX_REGISTERED_SPECIALISTS": "13"}):
             with self.assertRaises(AgentGovernanceError) as roster_policy_error:
@@ -412,25 +420,43 @@ class AgentGovernanceTests(unittest.TestCase):
     def test_roster_cap_rejects_agent_sprawl_and_valid_roster_scales_to_zero(self) -> None:
         workforce_path = Path(__file__).resolve().parents[1] / "agent_os" / "workforce" / "supermega_build_workforce.json"
         workforce = json.loads(workforce_path.read_text(encoding="utf-8"))
-        self.assertEqual(
-            workforce["runtime_policy"]["max_registered_specialists"],
-            load_agent_workforce_policy().max_registered_specialists,
-        )
+        policy = load_agent_workforce_policy()
+        runtime_policy = workforce["runtime_policy"]
+        self.assertEqual(runtime_policy["max_running"], policy.max_running)
+        self.assertEqual(runtime_policy["max_batch_jobs"], policy.max_batch_jobs)
+        self.assertEqual(runtime_policy["max_registered_specialists"], policy.max_registered_specialists)
+        self.assertEqual(runtime_policy["specialist_job_types"], list(policy.allowed_job_types))
+
+        for unsafe_policy in (
+            AgentWorkforcePolicy(max_running=AGENT_ACTIVE_ASSIGNMENT_LIMIT + 1),
+            AgentWorkforcePolicy(max_batch_jobs=AGENT_ACTIVE_ASSIGNMENT_LIMIT + 1),
+            AgentWorkforcePolicy(max_registered_specialists=AGENT_ROSTER_LIMIT + 1),
+        ):
+            with self.subTest(unsafe_policy=unsafe_policy):
+                with self.assertRaises(AgentGovernanceError) as custom_policy_error:
+                    plan_agent_capacity(
+                        queued_job_types=self.job_types,
+                        running_job_types=[],
+                        daily_job_types=[],
+                        registered_specialists=0,
+                        policy=unsafe_policy,
+                    )
+                self.assertEqual(custom_policy_error.exception.code, "agent_policy_invalid")
 
         idle = plan_agent_capacity(
             queued_job_types=[],
             running_job_types=[],
             daily_job_types=[],
-            registered_specialists=12,
+            registered_specialists=AGENT_ROSTER_LIMIT,
         )
         self.assertEqual(idle["contract"], AGENT_CAPACITY_PLAN_CONTRACT)
         self.assertEqual(idle["decision"], "scale_to_zero")
         self.assertEqual(idle["target_active_executions"], 0)
-        self.assertEqual(idle["idle_registered_specialists"], 12)
+        self.assertEqual(idle["idle_registered_specialists"], AGENT_ROSTER_LIMIT)
         self.assertFalse(idle["registered_specialists_consume_compute"])
         self.assertTrue(idle["registry_attention"])
         self.assertEqual(idle["registry_slots_remaining"], 0)
-        self.assertEqual(idle["limits"]["max_registered_specialists"], 12)
+        self.assertEqual(idle["limits"]["max_registered_specialists"], AGENT_ROSTER_LIMIT)
 
         for roster_size in (13, 175):
             with self.subTest(roster_size=roster_size):
@@ -447,12 +473,12 @@ class AgentGovernanceTests(unittest.TestCase):
             queued_job_types=self.job_types,
             running_job_types=[],
             daily_job_types=[],
-            registered_specialists=12,
+            registered_specialists=AGENT_ROSTER_LIMIT,
         )
         self.assertEqual(busy["decision"], "scale_up")
         self.assertEqual(busy["target_active_executions"], load_agent_workforce_policy().max_running)
         self.assertEqual(len(busy["recommended_claim_job_types"]), load_agent_workforce_policy().max_running)
-        self.assertEqual(busy["idle_registered_specialists"], 8)
+        self.assertEqual(busy["idle_registered_specialists"], AGENT_ROSTER_LIMIT - AGENT_ACTIVE_ASSIGNMENT_LIMIT)
 
     def test_capacity_plan_skips_expensive_work_that_cannot_fit_remaining_budget(self) -> None:
         with patch.dict(os.environ, {"SUPERMEGA_AGENT_MAX_DAILY_UNITS": "4"}):
