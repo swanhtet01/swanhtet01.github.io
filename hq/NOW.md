@@ -43,8 +43,8 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 
 ## Verified baseline
 
-- `7447d07` remains the product baseline; operating checkpoint `e9751c4` enforces 12 roles, four active slots, priority/cadence gates, split authority, and fixed worker destinations; `98b8044` remains the legacy-security checkpoint.
-- App lint/build, every local contract, 21 cloud/governance tests, 12 legacy-security tests, and all 206 Python tests pass. Four-product rehearsal remains 12 profiles, 24 staged rows, four recovery paths, and 58 security checks.
+- `7447d07` remains the product baseline; operating checkpoint `ff2007d` locks 12 roles, four slots, priority/cadence, split authority, fixed destinations, and job-safe recovery; legacy-security checkpoint `98b8044` remains.
+- App lint/build and all local contracts pass with 23 cloud/governance, 12 legacy-security, and 208 total Python tests. Four-product rehearsal remains 12 profiles, 24 rows, four recovery paths, and 58 security checks.
 - Dependency audit previously reported zero known vulnerabilities; this slice did not refresh external package or hosted-state inventories.
 - React Router is isolated in a 43,870-byte cacheable chunk. The accepted product baseline's largest JavaScript chunk is 478,469 bytes and remains below the build gate.
 - Focused coverage: 202 Shop, 34 order-recovery, 250 Plant, 94 Website, 11 managed-Website, 103 client-onboarding, 27 storefront-draft, 14 storefront, 15 request, 17 managed-storefront, and 16 handoff checks.
@@ -87,7 +87,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 ## Next evidence
 
 1. Prove the one daily Kernel brief produces a useful owner outcome before retaining its schedule.
-2. Rehearse lease expiry, retry, recovery, and human release review in isolation.
+2. Rehearse human release review in isolation; keep the locally proven lease-recovery boundary unchanged.
 3. Repeat the 12-profile synthetic rehearsal with one founder-approved named pilot company and measure human correction and review time before any write adapter.
 4. On one approved isolated Supabase target, prove private Storage, RLS, Ecommerce replay/isolation, and database recovery.
 5. After an approved fast-forward PR update and fresh checks, review the exact candidate before any separate merge or release decision; keep provider review behind approved credentials.

@@ -1,7 +1,7 @@
 # Agent operations and security brief
 
 Updated: 2026-07-26
-Agent-operations checkpoint: `e9751c4`
+Agent-operations checkpoint: `ff2007d`
 Legacy-security checkpoint: `98b8044`
 Mode: local evidence only; no hosted or production claim
 
@@ -9,12 +9,12 @@ Mode: local evidence only; no hosted or production claim
 
 SuperMega uses four standing AI teams: Product, Engineering, Growth, and Finance / Risk. A registered role is a dormant record, not a running process. The local roster caps at 12, active company assignments cap at four, and an empty queue scales to zero. One work item has one owner. Stale, duplicate, over-capacity, or unevidenced review states fail closed.
 
-Runtime work is limited by job family, queue depth, concurrent runs, daily runs, daily units, batch size, and lease duration. Budget grants are signed, expiring, single-use, reservation-bound, and require at least 32 UTF-8 bytes of secret material. Consequential sends, payments, publishes, deployments, access changes, and production writes remain human-gated.
+Runtime work is limited by job family, queue depth, concurrent runs, daily runs, daily units, batch size, lease duration, and server-owned retry allowance. Budget grants are signed, expiring, single-use, reservation-bound, and require at least 32 UTF-8 bytes of secret material. Consequential sends, payments, publishes, deployments, access changes, and production writes remain human-gated.
 
 ## Verified locally
 
 - Full app lint/build and release/security/database/Vercel/HQ contracts pass.
-- All 206 Python tests pass; the focused cloud/runtime slice has 21 and the legacy-security slice has 12 passing tests.
+- All 208 Python tests pass; the focused cloud/runtime slice has 23 and the legacy-security slice has 12 passing tests.
 - The retired AgentOS gateway reports not-ready and writes-disabled; old log/status routes return HTTP 410 and OpenAPI is disabled.
 - The retired finance launcher reports payments-disabled and exits nonzero.
 - HQ Agent Teams at 390 and 1280 px has no horizontal overflow or browser warnings/errors; visible mobile controls are at least 44 px.
@@ -35,6 +35,7 @@ Runtime work is limited by job family, queue depth, concurrent runs, daily runs,
 3. The root development Compose entry point is retired as `services: {}`; it exposes no ports, floating service images, default credentials, or Docker socket.
 4. The durable runner fixes its endpoint paths, rejects redirects and non-HTTPS remote URLs, bounds JSON responses, and keeps credentials out of CLI arguments.
 5. Runtime host configuration may only narrow the compiled `app.supermega.dev` and canonical Cloud Run destinations. An environment value cannot add a third credential destination.
+6. Expired leases may reclaim the same run once only for the four read-only jobs. Task-writing and release-watch jobs remain single-attempt; callers cannot expand the server policy, stale claim tokens are rejected, and every reservation remains charged to daily capacity.
 
 These are local code and test results. They do not prove a hosted deployment, live credentials, or production data migration.
 
@@ -47,4 +48,4 @@ A previously shared social post remains a threat-model prompt only. Its exact co
 
 ## Next bounded slice
 
-Rehearse queue lease expiry, retry, recovery, due-only admission, and human release review in isolation. Do not start a public listener, use production credentials, or deploy while validating.
+Rehearse human release review in isolation while preserving due-only admission, bounded lease recovery, split capabilities, and fixed credential destinations. Do not start a public listener, use production credentials, or deploy while validating.
