@@ -174,6 +174,14 @@ export type CommerceStorefrontRequest = {
   totalMmk: number
 }
 
+export type CommerceStorefrontMerchandising = {
+  sku: string
+  featured: boolean
+  collection: string
+  displayName: string
+  note: string
+}
+
 export type CommerceStorefrontConfiguration = {
   schema: typeof COMMERCE_STOREFRONT_SCHEMA
   revision: number
@@ -182,6 +190,7 @@ export type CommerceStorefrontConfiguration = {
   storeName: string
   summary: string
   selectedSkus: string[]
+  merchandising?: CommerceStorefrontMerchandising[]
   saved: CommerceActionProof
 }
 
@@ -300,6 +309,7 @@ export type CommerceStorefrontConfigurationInput = {
   summary: string
   selectedSkus: string[]
   shopCatalogDigest: string
+  merchandising?: CommerceStorefrontMerchandising[]
 }
 
 type CommerceLockManager = {
@@ -356,6 +366,18 @@ function canonicalText(value: unknown, field: string, maximum = 180) {
   const text = requiredText(value, field)
   if (value !== text || text.length > maximum) throw new Error(`${field} must be canonical text of at most ${maximum} characters.`)
   return text
+}
+
+function canonicalBlankableText(value: unknown, field: string, maximum: number) {
+  if (typeof value !== 'string' || value !== value.trim() || value.length > maximum) {
+    throw new Error(`${field} must be canonical text of at most ${maximum} characters or empty.`)
+  }
+  return value
+}
+
+function canonicalBoolean(value: unknown, field: string) {
+  if (typeof value !== 'boolean') throw new Error(`${field} must be boolean.`)
+  return value
 }
 
 function compareCanonicalText(left: string, right: string) {
@@ -875,6 +897,7 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (!hasExactKeys(
       storefrontConfiguration,
       ['schema', 'revision', 'shopCatalogSnapshotRevision', 'shopCatalogDigest', 'storeName', 'summary', 'selectedSkus', 'saved'],
+      ['merchandising'],
     ) || storefrontConfiguration.schema !== COMMERCE_STOREFRONT_SCHEMA) {
       throw new Error('storefrontConfiguration is invalid.')
     }
@@ -897,6 +920,29 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (selectedSkus.some((sku) => !itemSkus.includes(sku))
       || !sameStringArray(selectedSkus, [...selectedSkus].sort(compareCanonicalText))) {
       throw new Error('storefrontConfiguration.selectedSkus must be sorted current Shop SKUs.')
+    }
+    if (storefrontConfiguration.merchandising !== undefined) {
+      if (!Array.isArray(storefrontConfiguration.merchandising)
+        || storefrontConfiguration.merchandising.length !== selectedSkus.length) {
+        throw new Error('storefrontConfiguration.merchandising must cover every selected Shop SKU exactly once.')
+      }
+      const merchandisingSkus = storefrontConfiguration.merchandising.map((candidate, index) => {
+        if (!isRecord(candidate)
+          || !hasExactKeys(candidate, ['sku', 'featured', 'collection', 'displayName', 'note'])) {
+          throw new Error(`storefrontConfiguration.merchandising[${index}] is invalid.`)
+        }
+        const sku = canonicalText(candidate.sku, `storefrontConfiguration.merchandising[${index}].sku`, 80)
+        if (typeof candidate.featured !== 'boolean') {
+          throw new Error(`storefrontConfiguration.merchandising[${index}].featured must be boolean.`)
+        }
+        canonicalText(candidate.collection, `storefrontConfiguration.merchandising[${index}].collection`, 120)
+        canonicalBlankableText(candidate.displayName, `storefrontConfiguration.merchandising[${index}].displayName`, 180)
+        canonicalBlankableText(candidate.note, `storefrontConfiguration.merchandising[${index}].note`, 300)
+        return sku
+      })
+      if (!sameStringArray(merchandisingSkus, selectedSkus)) {
+        throw new Error('storefrontConfiguration.merchandising must follow the canonical selected SKU order.')
+      }
     }
     if (!isRecord(storefrontConfiguration.saved)
       || !hasExactKeys(storefrontConfiguration.saved, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
@@ -1869,6 +1915,7 @@ export async function commerceStorefrontPreviewDigest(state: CommerceState) {
     throw new Error('The saved storefront configuration does not match the current Shop catalog.')
   }
   const itemBySku = new Map(current.items.map((item) => [item.sku, item]))
+  const merchandisingBySku = new Map(configuration.merchandising?.map((entry) => [entry.sku, entry]) ?? [])
   const source = JSON.stringify({
     schema: COMMERCE_STOREFRONT_PREVIEW_SCHEMA,
     mode: 'browser-local-preview',
@@ -1879,12 +1926,21 @@ export async function commerceStorefrontPreviewDigest(state: CommerceState) {
     items: configuration.selectedSkus.map((sku) => {
       const item = itemBySku.get(sku)
       if (!item) throw new Error(`Saved storefront SKU ${sku} is unavailable.`)
+      const merchandising = merchandisingBySku.get(sku)
       return {
         sku: item.sku,
         name: item.name,
         variant: item.variant ?? null,
         unitPriceMmk: item.price,
         availability: item.onHand > 0 ? 'available' : 'sold_out',
+        ...(merchandising ? {
+          merchandising: {
+            featured: merchandising.featured,
+            collection: merchandising.collection,
+            displayName: merchandising.displayName,
+            note: merchandising.note,
+          },
+        } : {}),
       }
     }),
   })
@@ -1916,24 +1972,43 @@ export async function saveCommerceStorefrontConfiguration(
   let storeName: string
   let summary: string
   let selectedSkus: string[]
+  let requestedMerchandising: CommerceStorefrontMerchandising[] | undefined
   try {
     storeName = canonicalText(input.storeName, 'Store name', 60)
     summary = canonicalText(input.summary, 'Store summary', 180)
     selectedSkus = input.selectedSkus
       .map((sku, index) => canonicalText(sku, `Selected SKU ${index + 1}`, 80))
       .sort(compareCanonicalText)
+    if (input.merchandising !== undefined) {
+      if (!Array.isArray(input.merchandising) || input.merchandising.length !== selectedSkus.length) return null
+      requestedMerchandising = input.merchandising
+        .map((candidate, index) => ({
+          sku: canonicalText(candidate?.sku, `Merchandising row ${index + 1} SKU`, 80),
+          featured: canonicalBoolean(candidate?.featured, `Merchandising row ${index + 1} featured`),
+          collection: canonicalText(candidate?.collection, `Merchandising row ${index + 1} collection`, 120),
+          displayName: canonicalBlankableText(candidate?.displayName, `Merchandising row ${index + 1} display name`, 180),
+          note: canonicalBlankableText(candidate?.note, `Merchandising row ${index + 1} note`, 300),
+        }))
+        .sort((left, right) => compareCanonicalText(left.sku, right.sku))
+    }
   } catch {
     return null
   }
   if (new Set(selectedSkus).size !== selectedSkus.length
     || selectedSkus.some((sku) => !current.items.some((item) => item.sku === sku))) return null
   const existing = commerceStorefrontConfiguration(current)
+  const merchandising = requestedMerchandising ?? existing?.merchandising
+  if (merchandising && !sameStringArray(merchandising.map((entry) => entry.sku), selectedSkus)) return null
+  if (input.merchandising === undefined && existing?.merchandising
+    && !sameStringArray(existing.selectedSkus, selectedSkus)) return null
+  const sameMerchandising = JSON.stringify(existing?.merchandising ?? null) === JSON.stringify(merchandising ?? null)
   if (existing
     && existing.storeName === storeName
     && existing.summary === summary
     && existing.shopCatalogDigest === input.shopCatalogDigest
     && existing.selectedSkus.length === selectedSkus.length
-    && existing.selectedSkus.every((sku, index) => sku === selectedSkus[index])) return current
+    && existing.selectedSkus.every((sku, index) => sku === selectedSkus[index])
+    && sameMerchandising) return current
   if (actionIdIsUsed(current, proof.actionId)
     || (existing?.revision ?? 0) >= Number.MAX_SAFE_INTEGER
     || (existing?.shopCatalogSnapshotRevision ?? 0) >= Number.MAX_SAFE_INTEGER) return null
@@ -1955,6 +2030,7 @@ export async function saveCommerceStorefrontConfiguration(
       storeName,
       summary,
       selectedSkus,
+      ...(merchandising ? { merchandising: merchandising.map((entry) => ({ ...entry })) } : {}),
       saved: { ...proof },
     },
   })

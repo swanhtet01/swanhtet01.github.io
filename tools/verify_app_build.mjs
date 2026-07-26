@@ -3228,6 +3228,41 @@ async function verifyCommerceRuntime() {
     assert(configuredBase?.storefrontConfiguration?.revision === 1, 'storefront_request_configuration_fixture_failed')
     const configuredPreviewDigest = await model.commerceStorefrontPreviewDigest(configuredBase)
     assert(configuredPreviewDigest === 'sha256:5708a10fcffa1df487bd93f88809e1cfb678f92888cdf6f22a7deabbaf24c34d', 'storefront_preview_cross_runtime_digest_drifted')
+    const merchandising = [{
+      sku: 'SKU-1',
+      featured: true,
+      collection: 'Best sellers',
+      displayName: 'Myanmar coffee 250g',
+      note: 'Lead with the locally sourced proof.',
+    }]
+    const merchandisingProof = {
+      actionId: model.commerceStorefrontConfigurationActionId(2, baseCatalogDigest),
+      capturedAt: '2026-07-23T08:59:30.000Z',
+      actor: 'OP-OWNER',
+      reason: 'Bind reviewed Ecommerce merchandising to the Shop catalog.',
+      evidenceReference: `ECOMMERCE-STOREFRONT:${baseCatalogDigest}:R2`,
+    }
+    const merchandisedBase = await model.saveCommerceStorefrontConfiguration(configuredBase, {
+      storeName: 'Mingalar Shop',
+      summary: 'Clear prices and a small customer-ready catalog.',
+      selectedSkus: ['SKU-1'],
+      shopCatalogDigest: baseCatalogDigest,
+      merchandising,
+    }, merchandisingProof)
+    assert(merchandisedBase?.storefrontConfiguration?.revision === 2
+      && JSON.stringify(merchandisedBase.storefrontConfiguration.merchandising) === JSON.stringify(merchandising),
+    'storefront_merchandising_not_revisioned_exactly')
+    const merchandisedPreviewDigest = await model.commerceStorefrontPreviewDigest(merchandisedBase)
+    assert(merchandisedPreviewDigest === 'sha256:7fecf82c74d794cae9380e3a3ce946f6d0f2bd1a0a838869ac77f867b309af61'
+      && merchandisedPreviewDigest !== configuredPreviewDigest,
+    'storefront_merchandising_not_preview_bound')
+    assert(await model.saveCommerceStorefrontConfiguration(merchandisedBase, {
+      storeName: 'Mingalar Shop',
+      summary: 'Clear prices and a small customer-ready catalog.',
+      selectedSkus: ['SKU-1'],
+      shopCatalogDigest: baseCatalogDigest,
+      merchandising: [{ ...merchandising[0], sku: 'UNKNOWN' }],
+    }, merchandisingProof) === null, 'storefront_merchandising_unknown_sku_accepted')
     const unicodePreviewBase = {
       ...model.createEmptyCommerce(),
       items: [

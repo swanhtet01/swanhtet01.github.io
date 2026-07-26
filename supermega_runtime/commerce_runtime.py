@@ -263,6 +263,10 @@ _STOREFRONT_CONFIGURATION_FIELDS = frozenset(
         "saved",
     }
 )
+_STOREFRONT_CONFIGURATION_OPTIONAL_FIELDS = frozenset({"merchandising"})
+_STOREFRONT_MERCHANDISING_FIELDS = frozenset(
+    {"sku", "featured", "collection", "displayName", "note"}
+)
 
 
 def _object(value: object, field: str) -> dict[str, Any]:
@@ -292,6 +296,14 @@ def _exact_fields(
 def _text(value: object, field: str, *, maximum: int = 180) -> str:
     if not isinstance(value, str) or not value.strip() or value != value.strip() or len(value) > maximum:
         raise TrialValidationError(f"{field} must be canonical non-empty text of at most {maximum} characters.")
+    return value
+
+
+def _blankable_text(value: object, field: str, *, maximum: int) -> str:
+    if not isinstance(value, str) or value != value.strip() or len(value) > maximum:
+        raise TrialValidationError(
+            f"{field} must be canonical text of at most {maximum} characters or empty."
+        )
     return value
 
 
@@ -702,6 +714,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             configuration,
             "commerce state.storefrontConfiguration",
             required=_STOREFRONT_CONFIGURATION_FIELDS,
+            optional=_STOREFRONT_CONFIGURATION_OPTIONAL_FIELDS,
         )
         if configuration["schema"] != "supermega.ecommerce.storefront.v1":
             raise TrialValidationError("commerce state.storefrontConfiguration.schema is invalid.")
@@ -758,6 +771,56 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             raise TrialValidationError(
                 "commerce state.storefrontConfiguration.selectedSkus must be sorted current Shop SKUs."
             )
+        if "merchandising" in configuration:
+            merchandising = _list(
+                configuration["merchandising"],
+                "commerce state.storefrontConfiguration.merchandising",
+            )
+            if len(merchandising) != len(normalized_selected_skus):
+                raise TrialValidationError(
+                    "commerce state.storefrontConfiguration.merchandising must cover every selected Shop SKU exactly once."
+                )
+            merchandising_skus: list[str] = []
+            for index, candidate in enumerate(merchandising):
+                row = _object(
+                    candidate,
+                    f"commerce state.storefrontConfiguration.merchandising[{index}]",
+                )
+                _exact_fields(
+                    row,
+                    f"commerce state.storefrontConfiguration.merchandising[{index}]",
+                    required=_STOREFRONT_MERCHANDISING_FIELDS,
+                )
+                merchandising_skus.append(
+                    _text(
+                        row["sku"],
+                        f"commerce state.storefrontConfiguration.merchandising[{index}].sku",
+                        maximum=80,
+                    )
+                )
+                if not isinstance(row["featured"], bool):
+                    raise TrialValidationError(
+                        f"commerce state.storefrontConfiguration.merchandising[{index}].featured must be boolean."
+                    )
+                _text(
+                    row["collection"],
+                    f"commerce state.storefrontConfiguration.merchandising[{index}].collection",
+                    maximum=120,
+                )
+                _blankable_text(
+                    row["displayName"],
+                    f"commerce state.storefrontConfiguration.merchandising[{index}].displayName",
+                    maximum=180,
+                )
+                _blankable_text(
+                    row["note"],
+                    f"commerce state.storefrontConfiguration.merchandising[{index}].note",
+                    maximum=300,
+                )
+            if merchandising_skus != normalized_selected_skus:
+                raise TrialValidationError(
+                    "commerce state.storefrontConfiguration.merchandising must follow the canonical selected SKU order."
+                )
         saved = _action_proof(
             configuration["saved"],
             "commerce state.storefrontConfiguration.saved",
@@ -2162,6 +2225,29 @@ def _configured_storefront_preview_digest(
     configuration: Mapping[str, Any],
 ) -> str:
     item_by_sku = {item["sku"]: item for item in state["items"]}
+    merchandising_by_sku = {
+        row["sku"]: row for row in configuration.get("merchandising", [])
+    }
+
+    def preview_item(sku: str) -> dict[str, Any]:
+        item = item_by_sku[sku]
+        merchandising = merchandising_by_sku.get(sku)
+        projected = {
+            "sku": item["sku"],
+            "name": item["name"],
+            "variant": item.get("variant"),
+            "unitPriceMmk": item["price"],
+            "availability": "available" if item["onHand"] > 0 else "sold_out",
+        }
+        if merchandising is not None:
+            projected["merchandising"] = {
+                "featured": merchandising["featured"],
+                "collection": merchandising["collection"],
+                "displayName": merchandising["displayName"],
+                "note": merchandising["note"],
+            }
+        return projected
+
     preview = {
         "schema": _STOREFRONT_PREVIEW_SCHEMA,
         "mode": "browser-local-preview",
@@ -2169,18 +2255,7 @@ def _configured_storefront_preview_digest(
         "storeName": configuration["storeName"],
         "summary": configuration["summary"],
         "currency": "MMK",
-        "items": [
-            {
-                "sku": item_by_sku[sku]["sku"],
-                "name": item_by_sku[sku]["name"],
-                "variant": item_by_sku[sku].get("variant"),
-                "unitPriceMmk": item_by_sku[sku]["price"],
-                "availability": (
-                    "available" if item_by_sku[sku]["onHand"] > 0 else "sold_out"
-                ),
-            }
-            for sku in configuration["selectedSkus"]
-        ],
+        "items": [preview_item(sku) for sku in configuration["selectedSkus"]],
     }
     encoded = json.dumps(
         preview,
@@ -3115,7 +3190,9 @@ def _validate_storefront_configuration_saved(
             )
         return
     content_fields = ("storeName", "summary", "selectedSkus", "shopCatalogDigest")
-    if all(before[field] == after[field] for field in content_fields):
+    if all(before[field] == after[field] for field in content_fields) and before.get(
+        "merchandising"
+    ) == after.get("merchandising"):
         raise TrialValidationError("an unchanged storefront configuration cannot advance.")
     if after["revision"] != before["revision"] + 1:
         raise TrialValidationError("storefront configuration revision must advance exactly once.")

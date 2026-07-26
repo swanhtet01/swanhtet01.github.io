@@ -380,6 +380,7 @@ def storefront_configuration(
     store_name: str = "Mingalar Shop",
     summary: str = "Clear prices and a small customer-ready catalog.",
     selected_skus: list[str] | None = None,
+    merchandising: list[dict[str, object]] | None = None,
     digest: str | None = None,
     actor: str = "Accountable operator",
     captured_at: str = NOW,
@@ -391,7 +392,7 @@ def storefront_configuration(
         captured_at=captured_at,
         evidence_reference=f"ECOMMERCE-STOREFRONT:{catalog_digest}:R{revision}",
     )
-    return {
+    configuration: dict[str, object] = {
         "schema": "supermega.ecommerce.storefront.v1",
         "revision": revision,
         "shopCatalogSnapshotRevision": catalog_revision,
@@ -401,6 +402,9 @@ def storefront_configuration(
         "selectedSkus": selected_skus or ["SKU-1"],
         "saved": evidence,
     }
+    if merchandising is not None:
+        configuration["merchandising"] = deepcopy(merchandising)
+    return configuration
 
 
 def pending_intake_state() -> dict[str, object]:
@@ -1377,6 +1381,78 @@ class CommerceRuntimeTests(unittest.TestCase):
             commerce_storefront_preview_digest(unicode_vector),
             "sha256:a755c68b02a8de75279f0bcda5bb8ed21078ee538a68f583eeb223ee8a43973c",
         )
+
+    def test_storefront_merchandising_is_canonical_revisioned_and_preview_bound(self) -> None:
+        current = catalog_state()
+        merchandising = [
+            {
+                "sku": "SKU-1",
+                "featured": True,
+                "collection": "Best sellers",
+                "displayName": "Myanmar coffee 250g",
+                "note": "Lead with the locally sourced proof.",
+            }
+        ]
+        first_state = deepcopy(current)
+        first_state["storefrontConfiguration"] = storefront_configuration(current)
+        first = apply_event(
+            current,
+            "commerce.storefront.configuration.saved",
+            first_state,
+        )
+        second_state = deepcopy(first)
+        second_state["storefrontConfiguration"] = storefront_configuration(
+            first,
+            revision=2,
+            merchandising=merchandising,
+        )
+        second = apply_event(
+            first,
+            "commerce.storefront.configuration.saved",
+            second_state,
+        )
+        self.assertEqual(
+            second["storefrontConfiguration"]["merchandising"],  # type: ignore[index]
+            merchandising,
+        )
+        self.assertEqual(
+            commerce_storefront_preview_digest(second),
+            "sha256:7fecf82c74d794cae9380e3a3ce946f6d0f2bd1a0a838869ac77f867b309af61",
+        )
+        self.assertNotEqual(
+            commerce_storefront_preview_digest(first),
+            commerce_storefront_preview_digest(second),
+        )
+
+        unchanged = deepcopy(second)
+        unchanged["storefrontConfiguration"] = storefront_configuration(
+            second,
+            revision=3,
+            merchandising=merchandising,
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                second,
+                "commerce.storefront.configuration.saved",
+                unchanged,
+            )
+
+        invalid_vectors = []
+        wrong_sku = deepcopy(second)
+        wrong_sku["storefrontConfiguration"]["merchandising"][0]["sku"] = "UNKNOWN"  # type: ignore[index]
+        invalid_vectors.append(wrong_sku)
+        wrong_boolean = deepcopy(second)
+        wrong_boolean["storefrontConfiguration"]["merchandising"][0]["featured"] = "true"  # type: ignore[index]
+        invalid_vectors.append(wrong_boolean)
+        noncanonical_optional = deepcopy(second)
+        noncanonical_optional["storefrontConfiguration"]["merchandising"][0]["displayName"] = " padded "  # type: ignore[index]
+        invalid_vectors.append(noncanonical_optional)
+        extra_field = deepcopy(second)
+        extra_field["storefrontConfiguration"]["merchandising"][0]["price"] = 1  # type: ignore[index]
+        invalid_vectors.append(extra_field)
+        for candidate in invalid_vectors:
+            with self.assertRaises(TrialValidationError):
+                validate_commerce_state(candidate)
 
     def test_legacy_storefront_request_without_provenance_remains_readable(self) -> None:
         legacy_request = storefront_request()
