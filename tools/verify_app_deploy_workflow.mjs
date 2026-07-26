@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs'
-import { readFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { copyFile, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 
 const root = resolve(import.meta.dirname, '..')
@@ -37,6 +38,48 @@ function runRollbackResolver(args, payload) {
   )
 }
 
+async function verifyCanonicalPythonBundle() {
+  const bundleRoot = await mkdtemp(join(tmpdir(), 'supermega-vercel-python-'))
+  try {
+    await mkdir(resolve(bundleRoot, 'supermega_runtime'), { recursive: true })
+    for (const relativePath of [
+      'supermega_runtime/__init__.py',
+      'supermega_runtime/agent_governance.py',
+      'supermega_runtime/cloud_runtime.py',
+    ]) {
+      await copyFile(resolve(root, relativePath), resolve(bundleRoot, relativePath))
+    }
+    const localPython = process.platform === 'win32'
+      ? resolve(root, '.venv/Scripts/python.exe')
+      : resolve(root, '.venv/bin/python')
+    const python = existsSync(localPython)
+      ? localPython
+      : (process.env.PYTHON || (process.platform === 'win32' ? 'python' : 'python3'))
+    return spawnSync(
+      python,
+      ['-c', [
+        'import builtins',
+        '_import = builtins.__import__',
+        'def guarded(name, *args, **kwargs):',
+        '    if name == "mark1_pilot" or name.startswith("mark1_pilot."):',
+        '        raise RuntimeError("excluded_mark1_pilot_imported")',
+        '    return _import(name, *args, **kwargs)',
+        'builtins.__import__ = guarded',
+        'from supermega_runtime.cloud_runtime import _SCHEDULER_ROUTES',
+        'assert sum(len(route["job_types"]) for route in _SCHEDULER_ROUTES.values()) == 4',
+        'print("canonical-python-bundle-import-ok")',
+      ].join('\n')],
+      {
+        cwd: bundleRoot,
+        encoding: 'utf8',
+        env: { ...process.env, PYTHONDONTWRITEBYTECODE: '1', PYTHONPATH: bundleRoot },
+      },
+    )
+  } finally {
+    await rm(bundleRoot, { recursive: true, force: true })
+  }
+}
+
 const fixtureUrl = 'https://megaos-release-fixture.vercel.app'
 const aliasFixture = {
   alias: 'app.supermega.dev',
@@ -66,6 +109,7 @@ const releaseBarrierSelfTest = spawnSync(
   [resolve(root, 'tools/verify_coordinated_release_live.mjs'), '--self-test'],
   { encoding: 'utf8' },
 )
+const canonicalPythonBundle = await verifyCanonicalPythonBundle()
 
 requireContract('canonical app project id', workflow.includes('APP_VERCEL_PROJECT_ID: prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG'))
 requireContract('canonical public project id', workflow.includes('VERCEL_PROJECT_ID: prj_Yaf0cZYbiFXcLkMcKaAm4alPWMhR'))
@@ -76,6 +120,7 @@ requireContract('remote dependency install contract', config.installCommand === 
 requireContract('remote security inputs are included', generator.includes("'!.env.app.example'"))
 requireContract('canonical output directory', config.outputDirectory === 'showroom/dist')
 requireContract('canonical API function', config.routes?.[0]?.dest === '/api/app.py' && JSON.stringify(Object.keys(config.functions || {}).sort()) === JSON.stringify(['api/app.py']) && config.functions?.['api/app.py']?.includeFiles === 'supermega_runtime/**' && generator.includes("includeFiles: 'supermega_runtime/**'"))
+requireContract('canonical Python function cold imports from included runtime only', canonicalPythonBundle.status === 0 && canonicalPythonBundle.stdout.includes('canonical-python-bundle-import-ok'))
 requireContract('native Git deployment disabled in config', config.git?.deploymentEnabled === false && /deploymentEnabled:\s*false/.test(generator))
 requireContract('deployment control files trigger coordinated release', workflow.includes('- vercel.json') && workflow.includes('- .vercelignore'))
 requireContract('retired alias control triggers coordinated release', workflow.includes('tools/verify_retired_vercel_alias_state.mjs'))

@@ -9,7 +9,7 @@ const [runtime, supabaseAuth, cloudRuntime, agentGovernance, vercelEntry, portab
   read('supermega_runtime/runtime.py'),
   read('supermega_runtime/supabase_auth.py'),
   read('supermega_runtime/cloud_runtime.py'),
-  read('mark1_pilot/agent_governance.py'),
+  read('supermega_runtime/agent_governance.py'),
   read('api/app.py'),
   read('api_app.py'),
   read('supermega_runtime/trial_runtime.py'),

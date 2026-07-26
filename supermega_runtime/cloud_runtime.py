@@ -18,7 +18,7 @@ from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Header, HTTPException, Request
 
-from mark1_pilot.agent_governance import (
+from .agent_governance import (
     AGENT_AUTOMATION_LANES,
     AGENT_CAPACITY_PLAN_CONTRACT,
     AGENT_BUDGET_ACCOUNTING_CONTRACT,
