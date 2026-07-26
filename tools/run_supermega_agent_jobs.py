@@ -39,14 +39,22 @@ class RejectRedirectHandler(HTTPRedirectHandler):
 
 def _allowed_remote_hosts() -> frozenset[str]:
     configured = str(os.getenv("SUPERMEGA_AGENT_ALLOWED_HOSTS", "")).strip()
-    hosts = set(DEFAULT_ALLOWED_REMOTE_HOSTS)
+    if not configured:
+        return DEFAULT_ALLOWED_REMOTE_HOSTS
+
+    # Runtime configuration may reduce credential destinations, never add one.
+    hosts: set[str] = set()
     for value in configured.split(","):
         host = value.strip().lower().rstrip(".")
         if not host:
             continue
         if not re.fullmatch(r"[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?", host):
             raise RuntimeError("invalid_runtime_allowed_host")
+        if host not in DEFAULT_ALLOWED_REMOTE_HOSTS:
+            raise RuntimeError("runtime_allowed_host_not_canonical")
         hosts.add(host)
+    if not hosts:
+        raise RuntimeError("runtime_allowed_hosts_empty")
     return frozenset(hosts)
 
 

@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import ast
 import importlib.util
+import os
 import sqlite3
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import FunctionType, ModuleType
@@ -297,6 +299,30 @@ class LegacyPilotSecurityTests(unittest.TestCase):
                 runner._read_json_response(response)
         with self.assertRaises(RuntimeError):
             runner.RejectRedirectHandler().redirect_request(None, None, 302, "Found", {}, "https://evil.example")
+
+    def test_agent_runner_host_configuration_can_only_narrow_canonical_destinations(self) -> None:
+        runner = _load_module(AGENT_RUNNER_PATH, "supermega_agent_runner_host_policy_test")
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(runner._allowed_remote_hosts(), runner.DEFAULT_ALLOWED_REMOTE_HOSTS)
+
+        with patch.dict(os.environ, {"SUPERMEGA_AGENT_ALLOWED_HOSTS": "app.supermega.dev"}):
+            self.assertEqual(runner._allowed_remote_hosts(), frozenset({"app.supermega.dev"}))
+        with patch.dict(
+            os.environ,
+            {
+                "SUPERMEGA_AGENT_ALLOWED_HOSTS": (
+                    "app.supermega.dev,supermega-app-453184845544.asia-southeast1.run.app"
+                )
+            },
+        ):
+            self.assertEqual(runner._allowed_remote_hosts(), runner.DEFAULT_ALLOWED_REMOTE_HOSTS)
+
+        for configured in ("evil.example", "app.supermega.dev,evil.example", "https://app.supermega.dev", ",,"):
+            with self.subTest(configured=configured), patch.dict(
+                os.environ,
+                {"SUPERMEGA_AGENT_ALLOWED_HOSTS": configured},
+            ), self.assertRaises(RuntimeError):
+                runner._allowed_remote_hosts()
 
     def test_agent_credentials_are_not_defaulted_or_forwarded_on_cli(self) -> None:
         runner = AGENT_RUNNER_PATH.read_text(encoding="utf-8")
