@@ -29,6 +29,7 @@ ACTOR = "actor-operator"
 NOW = "2026-07-24T09:00:00.000Z"
 LATER = "2026-07-24T09:15:00.000Z"
 LATEST = "2026-07-24T09:30:00.000Z"
+OPENING_DIGEST = f"sha256:{'a' * 64}"
 
 
 def action_evidence(
@@ -71,6 +72,60 @@ def starting_workspace(*, target: int = 100) -> dict[str, object]:
             }
         ],
         "events": [],
+    }
+
+
+def opening_plan_workspace(
+    *,
+    digest: str = OPENING_DIGEST,
+    confirmed_at: str = NOW,
+) -> dict[str, object]:
+    return {
+        "schema": "supermega.production.workspace.v2",
+        "revision": 0,
+        "jobs": [
+            {
+                "id": "JOB-OPENING-001",
+                "line": "Assembly line",
+                "product": "Customer batch 001",
+                "target": 100,
+                "output": 0,
+                "owner": "Production lead",
+                "priority": "normal",
+                "dueAt": "2026-07-25T09:00:00.000Z",
+            },
+            {
+                "id": "JOB-OPENING-002",
+                "line": "Packing line",
+                "product": "Customer batch 002",
+                "target": 50,
+                "output": 0,
+                "owner": "Production lead",
+                "priority": "normal",
+                "dueAt": "2026-07-26T09:00:00.000Z",
+            },
+        ],
+        "issues": [],
+        "machines": [
+            {
+                "id": "MACHINE-OPENING-001",
+                "name": "Assembly line",
+                "state": "running",
+            },
+            {
+                "id": "MACHINE-OPENING-002",
+                "name": "Packing line",
+                "state": "running",
+            },
+        ],
+        "events": [],
+        "openingPlan": {
+            "contract": "supermega.production.opening-plan.v1",
+            "packageDigest": digest,
+            "confirmedAt": confirmed_at,
+            "jobIds": ["JOB-OPENING-001", "JOB-OPENING-002"],
+            "machineIds": ["MACHINE-OPENING-001", "MACHINE-OPENING-002"],
+        },
     }
 
 
@@ -562,6 +617,150 @@ class ProductionRuntimeTests(unittest.TestCase):
             len(validate_production_state(retained_history)["events"]),
             501,
         )
+
+    def test_opening_plan_is_atomic_multi_record_and_immutable(self) -> None:
+        initial = opening_plan_workspace()
+        evidence = action_evidence("ACT-INIT-OPENING-PLAN")
+        evidence["evidenceReference"] = OPENING_DIGEST
+
+        self.assertEqual(validate_production_state(initial), initial)
+        accepted = apply_event(
+            {},
+            "production.workspace.initialized",
+            initial,
+            evidence,
+        )
+        self.assertEqual(len(accepted["jobs"]), 2)
+        self.assertEqual(len(accepted["machines"]), 2)
+        self.assertEqual(accepted["revision"], 0)
+        self.assertEqual(accepted["events"], [])
+
+        schedule_evidence = action_evidence(
+            "ACT-OPENING-PLAN-SCHEDULE",
+            captured_at=LATER,
+        )
+        scheduled = apply_event(
+            accepted,
+            "production.job.schedule_updated",
+            schedule_state(
+                accepted,
+                "urgent",
+                "2026-07-27T09:00:00.000Z",
+                schedule_evidence,
+                job_id="JOB-OPENING-002",
+                owner="Packing supervisor",
+            ),
+            schedule_evidence,
+        )
+        self.assertEqual(scheduled["openingPlan"], accepted["openingPlan"])
+        self.assertEqual(scheduled["jobs"][1]["priority"], "urgent")
+        self.assertEqual(scheduled["revision"], 1)
+
+        altered = schedule_state(
+            accepted,
+            "urgent",
+            "2026-07-27T09:00:00.000Z",
+            schedule_evidence,
+            job_id="JOB-OPENING-002",
+            owner="Packing supervisor",
+        )
+        altered["openingPlan"]["packageDigest"] = f"sha256:{'b' * 64}"
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                accepted,
+                "production.job.schedule_updated",
+                altered,
+                schedule_evidence,
+            )
+
+    def test_opening_plan_rejects_tamper_and_copied_history(self) -> None:
+        invalid_states: list[tuple[str, dict[str, object]]] = []
+
+        reordered_jobs = opening_plan_workspace()
+        reordered_jobs["openingPlan"]["jobIds"].reverse()
+        invalid_states.append(("reordered jobs", reordered_jobs))
+
+        missing_job = opening_plan_workspace()
+        missing_job["openingPlan"]["jobIds"].pop(0)
+        invalid_states.append(("missing job", missing_job))
+
+        duplicate_job = opening_plan_workspace()
+        duplicate_job["openingPlan"]["jobIds"][1] = "JOB-OPENING-001"
+        invalid_states.append(("duplicate job", duplicate_job))
+
+        mismatched_machine = opening_plan_workspace()
+        mismatched_machine["openingPlan"]["machineIds"].reverse()
+        invalid_states.append(("mismatched machine", mismatched_machine))
+
+        bad_contract = opening_plan_workspace()
+        bad_contract["openingPlan"]["contract"] = "supermega.production.opening-plan.v0"
+        invalid_states.append(("bad contract", bad_contract))
+
+        bad_digest = opening_plan_workspace(digest="sha256:not-a-digest")
+        invalid_states.append(("bad digest", bad_digest))
+
+        noncanonical_time = opening_plan_workspace(
+            confirmed_at="2026-07-24T09:00:00Z"
+        )
+        invalid_states.append(("noncanonical time", noncanonical_time))
+
+        copied_output = opening_plan_workspace()
+        copied_output["jobs"][0]["output"] = 1
+        invalid_states.append(("copied output", copied_output))
+
+        stopped_machine = opening_plan_workspace()
+        stopped_machine["machines"][0]["state"] = "stopped"
+        invalid_states.append(("stopped machine", stopped_machine))
+
+        for label, candidate in invalid_states:
+            with self.subTest(label=label), self.assertRaises(TrialValidationError):
+                validate_production_state(candidate)
+
+        evidence = action_evidence("ACT-INIT-OPENING-TAMPER")
+        evidence["evidenceReference"] = OPENING_DIGEST
+
+        wrong_digest_evidence = deepcopy(evidence)
+        wrong_digest_evidence["evidenceReference"] = f"sha256:{'b' * 64}"
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                {},
+                "production.workspace.initialized",
+                opening_plan_workspace(),
+                wrong_digest_evidence,
+            )
+
+        mismatched_confirmation = opening_plan_workspace(confirmed_at=LATER)
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                {},
+                "production.workspace.initialized",
+                mismatched_confirmation,
+                evidence,
+            )
+
+        overdue = opening_plan_workspace()
+        overdue["jobs"][1]["dueAt"] = NOW
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                {},
+                "production.workspace.initialized",
+                overdue,
+                evidence,
+            )
+
+        copied_scrap_field = opening_plan_workspace()
+        copied_scrap_field["jobs"][0]["scrap"] = 0
+        self.assertEqual(
+            validate_production_state(copied_scrap_field),
+            copied_scrap_field,
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                {},
+                "production.workspace.initialized",
+                copied_scrap_field,
+                evidence,
+            )
 
     def test_job_schedule_update_is_chained_exact_and_active_only(self) -> None:
         current = starting_workspace()

@@ -64,6 +64,12 @@ _MAX_ISSUES = 500
 _MAX_MACHINES = 100
 
 _STATE_FIELDS = frozenset({"schema", "revision", "jobs", "issues", "machines", "events"})
+_STATE_OPTIONAL_FIELDS = frozenset({"openingPlan"})
+_OPENING_PLAN_FIELDS = frozenset(
+    {"contract", "packageDigest", "confirmedAt", "jobIds", "machineIds"}
+)
+_OPENING_PLAN_CONTRACT = "supermega.production.opening-plan.v1"
+_DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
 _JOB_REQUIRED_FIELDS = frozenset({"id", "line", "product", "target", "output"})
 _JOB_SCHEDULE_FIELDS = frozenset({"priority", "dueAt"})
 _JOB_OPTIONAL_FIELDS = _JOB_SCHEDULE_FIELDS | {
@@ -429,6 +435,76 @@ def _validate_machine(candidate: object, index: int) -> dict[str, Any]:
     ):
         raise TrialValidationError(f"{field}.state is unsupported.")
     return machine
+
+
+def _validate_opening_plan(
+    candidate: object,
+    *,
+    jobs: Sequence[dict[str, Any]],
+    machines: Sequence[dict[str, Any]],
+) -> dict[str, Any]:
+    plan = _object(candidate, "production state.openingPlan")
+    _exact_fields(
+        plan,
+        "production state.openingPlan",
+        required=_OPENING_PLAN_FIELDS,
+    )
+    if plan["contract"] != _OPENING_PLAN_CONTRACT:
+        raise TrialValidationError(
+            f"production state.openingPlan.contract must be {_OPENING_PLAN_CONTRACT}."
+        )
+    package_digest = _text(
+        plan["packageDigest"],
+        "production state.openingPlan.packageDigest",
+        maximum=71,
+    )
+    if _DIGEST_PATTERN.fullmatch(package_digest) is None:
+        raise TrialValidationError(
+            "production state.openingPlan.packageDigest must use SHA-256."
+        )
+    _lifecycle_timestamp(
+        plan["confirmedAt"],
+        "production state.openingPlan.confirmedAt",
+        "opening plan",
+    )
+    job_ids_raw = _list(
+        plan["jobIds"],
+        "production state.openingPlan.jobIds",
+        maximum=_MAX_JOBS,
+    )
+    machine_ids_raw = _list(
+        plan["machineIds"],
+        "production state.openingPlan.machineIds",
+        maximum=_MAX_MACHINES,
+    )
+    if not job_ids_raw or not machine_ids_raw:
+        raise TrialValidationError(
+            "production state.openingPlan must retain its jobs and machines."
+        )
+    job_ids = [
+        _text(value, f"production state.openingPlan.jobIds[{index}]", maximum=80)
+        for index, value in enumerate(job_ids_raw)
+    ]
+    machine_ids = [
+        _text(
+            value,
+            f"production state.openingPlan.machineIds[{index}]",
+            maximum=80,
+        )
+        for index, value in enumerate(machine_ids_raw)
+    ]
+    _unique(job_ids, "Production opening job ID")
+    _unique(machine_ids, "Production opening machine ID")
+    current_job_ids = [job["id"] for job in jobs]
+    if current_job_ids[-len(job_ids) :] != job_ids:
+        raise TrialValidationError(
+            "production state.openingPlan jobs must remain the immutable job suffix."
+        )
+    if [machine["id"] for machine in machines] != machine_ids:
+        raise TrialValidationError(
+            "production state.openingPlan machines must match the retained machines."
+        )
+    return plan
 
 
 def _validate_event(
@@ -848,16 +924,18 @@ def _validate_material_history(
 def _validate_job_history(
     jobs: Sequence[dict[str, Any]],
     events: Sequence[dict[str, Any]],
+    opening_job_ids: Sequence[str] | None = None,
 ) -> None:
     if not jobs:
         raise TrialValidationError("Production must retain its initial job.")
-    initial_job_id = jobs[-1]["id"]
+    retained_opening_job_ids = tuple(opening_job_ids or (jobs[-1]["id"],))
+    retained_opening_job_id_set = frozenset(retained_opening_job_ids)
     created_events = [
         event for event in events if event["kind"] == "job_created"
     ]
-    if len(created_events) != len(jobs) - 1:
+    if len(created_events) != len(jobs) - len(retained_opening_job_ids):
         raise TrialValidationError(
-            "Every job after the initial job requires one immutable creation event."
+            "Every job after the opening plan requires one immutable creation event."
         )
     for index, job in enumerate(jobs):
         matches = [
@@ -865,10 +943,10 @@ def _validate_job_history(
             for event in created_events
             if event["subjectId"] == job["id"]
         ]
-        if job["id"] == initial_job_id:
+        if job["id"] in retained_opening_job_id_set:
             if matches:
                 raise TrialValidationError(
-                    "The initial Production job cannot have a later creation event."
+                    "An opening Production job cannot have a later creation event."
                 )
             creation_event = None
         elif len(matches) != 1:
@@ -1421,7 +1499,12 @@ def validate_production_state(value: object) -> dict[str, Any]:
     """Validate a complete managed Production workspace without repairing it."""
 
     state = _object(value, "production state")
-    _exact_fields(state, "production state", required=_STATE_FIELDS)
+    _exact_fields(
+        state,
+        "production state",
+        required=_STATE_FIELDS,
+        optional=_STATE_OPTIONAL_FIELDS,
+    )
     if state.get("schema") != PRODUCTION_SCHEMA:
         raise TrialValidationError(
             f"production state schema must be {PRODUCTION_SCHEMA}."
@@ -1458,6 +1541,15 @@ def validate_production_state(value: object) -> dict[str, Any]:
     _unique(job_ids, "Production job ID")
     _unique(issue_ids, "Production issue ID")
     _unique(machine_ids, "Production machine ID")
+    opening_plan = (
+        _validate_opening_plan(
+            state["openingPlan"],
+            jobs=jobs,
+            machines=machines,
+        )
+        if "openingPlan" in state
+        else None
+    )
 
     events = [
         _validate_event(
@@ -1476,7 +1568,11 @@ def validate_production_state(value: object) -> dict[str, Any]:
             "Production revision must equal the append-only event count."
         )
 
-    _validate_job_history(jobs, events)
+    _validate_job_history(
+        jobs,
+        events,
+        opening_plan["jobIds"] if opening_plan is not None else None,
+    )
     _validate_job_closure_history(jobs, events)
     _validate_output_history(jobs, events)
     _validate_material_history(jobs, events)
@@ -2144,36 +2240,66 @@ def reduce_production_state(
     if event_type == "production.workspace.initialized":
         if dict(current):
             raise TrialValidationError("managed Production is already initialized.")
+        opening_plan = next_state.get("openingPlan")
+        legacy_shape_is_valid = (
+            opening_plan is None
+            and len(next_state["jobs"]) == 1
+            and len(next_state["machines"]) == 1
+        )
+        managed_plan_shape_is_valid = (
+            opening_plan is not None
+            and bool(next_state["jobs"])
+            and bool(next_state["machines"])
+        )
+        jobs_are_pristine = all(
+            job["output"] == 0
+            and _JOB_SCHEDULE_FIELDS.intersection(job) == _JOB_SCHEDULE_FIELDS
+            and "owner" in job
+            and "scrap" not in job
+            and "qualityHold" not in job
+            and "closure" not in job
+            for job in next_state["jobs"]
+        )
         if (
             next_state["revision"] != 0
-            or len(next_state["jobs"]) != 1
-            or len(next_state["machines"]) != 1
+            or not (legacy_shape_is_valid or managed_plan_shape_is_valid)
             or next_state["issues"]
             or next_state["events"]
-            or next_state["jobs"][0]["output"] != 0
-            or _JOB_SCHEDULE_FIELDS.intersection(next_state["jobs"][0])
-            != _JOB_SCHEDULE_FIELDS
-            or "owner" not in next_state["jobs"][0]
-            or "scrap" in next_state["jobs"][0]
-            or "qualityHold" in next_state["jobs"][0]
-            or "closure" in next_state["jobs"][0]
-            or next_state["machines"][0]["state"] != "running"
+            or not jobs_are_pristine
+            or any(
+                machine["state"] != "running"
+                for machine in next_state["machines"]
+            )
         ):
             raise TrialValidationError(
-                "Production initialization requires one owned, scheduled "
-                "zero-output job, one running machine, and no copied operating "
-                "history."
+                "Production initialization requires owned, scheduled zero-output "
+                "jobs, running machines, and no copied operating history. Multiple "
+                "opening records require one immutable opening plan."
             )
-        if _timestamp(
-            next_state["jobs"][0]["dueAt"],
-            "jobs[0].dueAt",
-        ) <= _timestamp(evidence["capturedAt"], "evidence.capturedAt"):
+        if opening_plan is not None and (
+            opening_plan["confirmedAt"] != evidence["capturedAt"]
+            or opening_plan["packageDigest"] != evidence["evidenceReference"]
+        ):
             raise TrialValidationError(
-                "The opening Production job due time must follow confirmation."
+                "The Production opening plan must match the exact confirmation "
+                "time and reviewed package digest."
             )
+        confirmed_at = _parsed_timestamp(
+            evidence["capturedAt"],
+            "evidence.capturedAt",
+        )[1]
+        for index, job in enumerate(next_state["jobs"]):
+            if _parsed_timestamp(job["dueAt"], f"jobs[{index}].dueAt")[1] <= confirmed_at:
+                raise TrialValidationError(
+                    "Every opening Production job due time must follow confirmation."
+                )
         return next_state
 
     current_state = validate_production_state(current)
+    if current_state.get("openingPlan") != next_state.get("openingPlan"):
+        raise TrialValidationError(
+            "Production opening plan evidence is immutable after initialization."
+        )
     event = _appended_event(
         current_state,
         next_state,
