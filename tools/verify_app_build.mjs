@@ -17,6 +17,7 @@ let managedStorefrontRuntimeChecks = 0
 let ecommerceHandoffRuntimeChecks = 0
 let catalogImportRuntimeChecks = 0
 let clientOnboardingRuntimeChecks = 0
+let managedClientImportRuntimeChecks = 0
 let commerceRuntimeChecks = 0
 let productionRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
@@ -1181,6 +1182,23 @@ if (!coreSource.includes("lazy(() => import('./ClientDataOnboarding')")
   || !clientOnboardingUiSource.includes('[product, workflowTemplateId]')
   || !clientOnboardingUiSource.includes('clientImportTemplate(product, workflowTemplateId)')
   || ['fetch(', 'localStorage', 'sessionStorage', 'supabase'].some((marker) => clientOnboardingUiSource.includes(marker))) fail('four_product_client_onboarding_ui_missing_or_unsafe')
+const managedClientImportUiContract = sourceBlock(clientOnboardingUiSource, '  async function validateOrDownloadStagingPackage()', '\n\n  return (')
+if (!managedTrialSource.includes('export async function validateManagedClientImport')
+  || !managedTrialSource.includes("'/api/trial/v1/imports/validate'")
+  || !managedTrialSource.includes('expectedPackageDigest = await sha256Text(body)')
+  || !managedTrialSource.includes('assertManagedClientImportValidation(')
+  || !managedTrialSource.includes("activation.status !== 'not_applied'")
+  || !managedTrialSource.includes("code: 'managed_client_import_package_changed'")
+  || !managedTrialSource.includes('expectedIdentity,')
+  || !coreSource.includes('<ClientDataOnboarding managedIdentity={managedIdentity}')
+  || !clientOnboardingUiSource.includes('Only the checked staging package is sent to')
+  || !clientOnboardingUiSource.includes('Validate staged package')
+  || !clientOnboardingUiSource.includes('Download validated package')
+  || !clientOnboardingUiSource.includes('activation remains not applied and zero product records were written.')
+  || !managedClientImportUiContract.includes('validateManagedClientImport(stagingPackage, expectedIdentity)')
+  || !managedClientImportUiContract.includes('validationRequestRef.current !== validationRequestId')
+  || !managedClientImportUiContract.includes('sameManagedIdentity(managedIdentityRef.current, expectedIdentity)')
+  || ['fetch(', 'localStorage', 'sessionStorage', 'saveManagedCommerceCommand', 'saveManagedProductionCommand', 'saveManagedWebsiteCommand', 'createManagedApproval'].some((marker) => managedClientImportUiContract.includes(marker))) fail('managed_client_import_ui_or_authority_contract_missing')
 const cronTokenRotationContract = sourceBlock(schedulerSource, '$cronTokenChanged = ', '\n\nInvoke-Gcloud -CommandArgs @(')
 if (!schedulerSource.includes('[ValidateSet("unchanged", "demand-driven-canary", "polling")]')
   || !schedulerSource.includes('supermega.agent_worker_canary.v1')
@@ -1931,6 +1949,90 @@ async function verifyClientOnboardingRuntime() {
     await rejects(() => model.createClientImportPreview(tooManyRows, 'commerce'), 'client_import_row_limit_not_enforced')
   } catch (error) {
     fail(`client_onboarding_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
+async function verifyManagedClientImportRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    managedClientImportRuntimeChecks += 1
+  }
+  const rejects = (action, reason) => {
+    try { action() } catch { managedClientImportRuntimeChecks += 1; return }
+    throw new Error(reason)
+  }
+  try {
+    const nonce = Date.now()
+    const onboarding = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'client-onboarding.ts')).href}?managed-client-import-onboarding=${nonce}`)
+    const managedTrial = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'managed-trial.ts')).href}?managed-client-import-trial=${nonce}`)
+    const identity = { userId: 'OP-IMPORT', email: 'operator@example.test', workspaceId: 'workspace-import' }
+    const preview = await onboarding.createClientImportPreview(
+      onboarding.clientImportTemplate('commerce', 'social-commerce'),
+      'commerce',
+      undefined,
+      'shop.csv',
+      'social-commerce',
+    )
+    const staged = onboarding.buildClientImportStagingPackage(preview, {
+      workflowTemplateId: 'social-commerce',
+      workspace: 'Example Shop',
+      owner: 'Shop owner',
+    })
+    const packageDigest = await managedTrial.managedClientImportPackageDigest(staged)
+    const receipt = {
+      contract: 'supermega.client_import_validation.v1',
+      status: 'valid',
+      product: staged.product,
+      object: staged.object,
+      workflow_template_id: staged.workflowTemplateId,
+      preview_digest: staged.source.previewDigest,
+      package_digest: packageDigest,
+      row_count: staged.rows.length,
+      checks: ['contract', 'workflow_profile', 'mapping', 'row_schema', 'field_values', 'unique_keys', 'source_rows', 'preview_digest', 'package_digest'],
+      workspace_id: identity.workspaceId,
+      activation: {
+        status: 'not_applied',
+        target_surface: 'commerce',
+        required_capability: 'commerce.write',
+        human_approval_required: true,
+        atomic_adapter_ready: false,
+        external_writes_performed: false,
+      },
+    }
+    const accepted = managedTrial.assertManagedClientImportValidation(
+      { validation: receipt },
+      staged,
+      identity,
+      packageDigest,
+    )
+    assert(accepted === receipt && /^sha256:[0-9a-f]{64}$/.test(packageDigest), 'managed_client_import_valid_receipt_rejected')
+    assert(await managedTrial.managedClientImportPackageDigest(staged) === packageDigest, 'managed_client_import_package_digest_not_deterministic')
+    assert(await managedTrial.managedClientImportPackageDigest({ ...staged, owner: 'Different owner' }) !== packageDigest, 'managed_client_import_context_not_digest_bound')
+
+    for (const [label, validation] of [
+      ['package', { ...receipt, package_digest: `sha256:${'0'.repeat(64)}` }],
+      ['workspace', { ...receipt, workspace_id: 'workspace-other' }],
+      ['product', { ...receipt, product: 'website' }],
+      ['row_count', { ...receipt, row_count: staged.rows.length + 1 }],
+      ['checks', { ...receipt, checks: receipt.checks.slice(0, -1) }],
+      ['activation', { ...receipt, activation: { ...receipt.activation, atomic_adapter_ready: true } }],
+    ]) {
+      rejects(
+        () => managedTrial.assertManagedClientImportValidation(
+          { validation },
+          staged,
+          identity,
+          packageDigest,
+        ),
+        `managed_client_import_${label}_tamper_accepted`,
+      )
+    }
+    rejects(
+      () => managedTrial.assertManagedClientImportValidation({}, staged, identity, packageDigest),
+      'managed_client_import_malformed_receipt_accepted',
+    )
+  } catch (error) {
+    fail(`managed_client_import_runtime:${error instanceof Error ? error.message : 'unknown'}`)
   }
 }
 
@@ -5825,6 +5927,7 @@ async function verifyProductionRuntime() {
 await verifyChannelOrderRuntime()
 await verifyCatalogImportRuntime()
 await verifyClientOnboardingRuntime()
+await verifyManagedClientImportRuntime()
 await verifyWebsiteRuntime()
 await verifyWebsiteOrderCompletionRuntime()
 await verifyCommerceOrderDraftRuntime()
@@ -5849,4 +5952,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, channelOrderRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceHandoffRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, channelOrderRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceHandoffRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))

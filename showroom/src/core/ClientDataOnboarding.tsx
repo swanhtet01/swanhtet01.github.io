@@ -10,12 +10,26 @@ import {
   type ClientImportPreview,
   type ClientSolutionId,
 } from './client-onboarding'
+import {
+  sameManagedIdentity,
+  validateManagedClientImport,
+  type ManagedClientImportPackage,
+  type ManagedClientImportValidation,
+  type ManagedIdentity,
+} from './managed-trial'
 
 type ClientDataOnboardingProps = {
   product: ClientSolutionId
   workflowTemplateId: string
   workspace: string
   owner: string
+  managedIdentity: ManagedIdentity | null
+}
+
+type ValidatedImport = {
+  contextKey: string
+  receipt: ManagedClientImportValidation
+  stagingPackage: ManagedClientImportPackage
 }
 
 type ImportState = {
@@ -23,6 +37,8 @@ type ImportState = {
   sourceText: string
   preview: ClientImportPreview | null
   busy: boolean
+  validating: boolean
+  validation: ValidatedImport | null
   error: string
 }
 
@@ -34,7 +50,34 @@ const productSlugs: Record<ClientSolutionId, string> = {
 }
 
 function emptyImportState(): ImportState {
-  return { sourceName: '', sourceText: '', preview: null, busy: false, error: '' }
+  return {
+    sourceName: '',
+    sourceText: '',
+    preview: null,
+    busy: false,
+    validating: false,
+    validation: null,
+    error: '',
+  }
+}
+
+function validationContextKey(
+  product: ClientSolutionId,
+  workflowTemplateId: string,
+  previewDigest: string,
+  workspace: string,
+  owner: string,
+  managedIdentity: ManagedIdentity | null,
+) {
+  return JSON.stringify([
+    product,
+    workflowTemplateId,
+    previewDigest,
+    workspace,
+    owner,
+    managedIdentity?.userId ?? '',
+    managedIdentity?.workspaceId ?? '',
+  ])
 }
 
 function downloadFile(filename: string, content: string, type: string) {
@@ -49,14 +92,34 @@ function downloadFile(filename: string, content: string, type: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 0)
 }
 
-export function ClientDataOnboarding({ product, workflowTemplateId, workspace, owner }: ClientDataOnboardingProps) {
+export function ClientDataOnboarding({ product, workflowTemplateId, workspace, owner, managedIdentity }: ClientDataOnboardingProps) {
   const object = clientImportObject(product)
   const requestRef = useRef(0)
+  const validationRequestRef = useRef(0)
   const productRef = useRef(product)
   const workflowTemplateRef = useRef(workflowTemplateId)
+  const workspaceRef = useRef(workspace)
+  const ownerRef = useRef(owner)
+  const managedIdentityRef = useRef(managedIdentity)
   productRef.current = product
   workflowTemplateRef.current = workflowTemplateId
+  workspaceRef.current = workspace
+  ownerRef.current = owner
+  managedIdentityRef.current = managedIdentity
   const [state, setState] = useState<ImportState>(emptyImportState)
+  const currentValidationContext = validationContextKey(
+    product,
+    workflowTemplateId,
+    state.preview?.previewDigest ?? '',
+    workspace,
+    owner,
+    managedIdentity,
+  )
+  const validationIsCurrent = Boolean(
+    managedIdentity
+    && state.validation
+    && state.validation.contextKey === currentValidationContext,
+  )
   const visibleRows = state.preview
     ? [
         ...state.preview.rows.filter((row) => row.status !== 'ready'),
@@ -66,8 +129,14 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
 
   useEffect(() => {
     requestRef.current += 1
+    validationRequestRef.current += 1
     setState(emptyImportState())
   }, [product, workflowTemplateId])
+
+  useEffect(() => {
+    validationRequestRef.current += 1
+    setState((current) => ({ ...current, validating: false, validation: null, error: '' }))
+  }, [managedIdentity?.userId, managedIdentity?.workspaceId, owner, workspace])
 
   async function runPreview(
     sourceName: string,
@@ -79,11 +148,12 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
     if (productRef.current !== expectedProduct || workflowTemplateRef.current !== expectedWorkflowTemplateId) return
     const requestId = requestRef.current + 1
     requestRef.current = requestId
-    setState((current) => ({ ...current, sourceName, sourceText, busy: true, error: '' }))
+    validationRequestRef.current += 1
+    setState((current) => ({ ...current, sourceName, sourceText, busy: true, validating: false, validation: null, error: '' }))
     try {
       const preview = await createClientImportPreview(sourceText, expectedProduct, mapping, sourceName, expectedWorkflowTemplateId)
       if (requestRef.current !== requestId || productRef.current !== expectedProduct || workflowTemplateRef.current !== expectedWorkflowTemplateId) return
-      setState({ sourceName, sourceText, preview, busy: false, error: '' })
+      setState({ sourceName, sourceText, preview, busy: false, validating: false, validation: null, error: '' })
     } catch (error) {
       if (requestRef.current !== requestId || productRef.current !== expectedProduct || workflowTemplateRef.current !== expectedWorkflowTemplateId) return
       setState((current) => ({ ...current, busy: false, error: error instanceof Error ? error.message : 'The CSV could not be previewed.' }))
@@ -104,7 +174,8 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
       setState({ ...emptyImportState(), sourceName: file.name, error: `Choose a CSV smaller than ${CLIENT_IMPORT_MAX_BYTES / 1024} KB.` })
       return
     }
-    setState({ sourceName: file.name, sourceText: '', preview: null, busy: true, error: '' })
+    validationRequestRef.current += 1
+    setState({ sourceName: file.name, sourceText: '', preview: null, busy: true, validating: false, validation: null, error: '' })
     try {
       const sourceText = await file.text()
       if (requestRef.current !== requestId || productRef.current !== expectedProduct || workflowTemplateRef.current !== expectedWorkflowTemplateId) return
@@ -122,6 +193,7 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
 
   function clearPreview() {
     requestRef.current += 1
+    validationRequestRef.current += 1
     setState(emptyImportState())
   }
 
@@ -133,22 +205,77 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
     )
   }
 
-  function downloadStagingPackage() {
+  function currentStagingPackage() {
+    if (!state.preview) throw new Error('Preview the CSV before creating a staging package.')
+    return buildClientImportStagingPackage(state.preview, {
+      workflowTemplateId,
+      workspace,
+      owner,
+    })
+  }
+
+  function downloadStagingPackage(stagingPackage: ManagedClientImportPackage) {
+    downloadFile(
+      `supermega-${productSlugs[product]}-${workflowTemplateId}-client-import-staging-v1.json`,
+      `${JSON.stringify(stagingPackage, null, 2)}\n`,
+      'application/json;charset=utf-8',
+    )
+  }
+
+  async function validateOrDownloadStagingPackage() {
     if (!state.preview) return
+    const expectedIdentity = managedIdentity
+    const expectedProduct = product
+    const expectedWorkflowTemplateId = workflowTemplateId
+    const expectedWorkspace = workspace
+    const expectedOwner = owner
+    const expectedPreviewDigest = state.preview.previewDigest
+    const expectedContextKey = currentValidationContext
+    const validationContextChanged = () => (
+      productRef.current !== expectedProduct
+      || workflowTemplateRef.current !== expectedWorkflowTemplateId
+      || workspaceRef.current !== expectedWorkspace
+      || ownerRef.current !== expectedOwner
+      || !expectedIdentity
+      || !managedIdentityRef.current
+      || !sameManagedIdentity(managedIdentityRef.current, expectedIdentity)
+    )
+    let validationRequestId: number | null = null
     try {
-      const stagingPackage = buildClientImportStagingPackage(state.preview, {
-        workflowTemplateId,
-        workspace,
-        owner,
-      })
-      downloadFile(
-        `supermega-${productSlugs[product]}-${workflowTemplateId}-client-import-staging-v1.json`,
-        `${JSON.stringify(stagingPackage, null, 2)}\n`,
-        'application/json;charset=utf-8',
-      )
-      setState((current) => ({ ...current, error: '' }))
+      if (validationIsCurrent && state.validation) {
+        downloadStagingPackage(state.validation.stagingPackage)
+        setState((current) => ({ ...current, error: '' }))
+        return
+      }
+      const stagingPackage = currentStagingPackage()
+      if (!expectedIdentity) {
+        downloadStagingPackage(stagingPackage)
+        setState((current) => ({ ...current, error: '' }))
+        return
+      }
+
+      validationRequestId = validationRequestRef.current + 1
+      validationRequestRef.current = validationRequestId
+      setState((current) => ({ ...current, validating: true, validation: null, error: '' }))
+      const receipt = await validateManagedClientImport(stagingPackage, expectedIdentity)
+      if (validationRequestRef.current !== validationRequestId || validationContextChanged()) return
+      setState((current) => current.preview?.previewDigest === expectedPreviewDigest
+        ? {
+            ...current,
+            validating: false,
+            validation: { contextKey: expectedContextKey, receipt, stagingPackage },
+            error: '',
+          }
+        : current)
     } catch (error) {
-      setState((current) => ({ ...current, error: error instanceof Error ? error.message : 'The staging package could not be created.' }))
+      if (validationRequestId !== null
+        && (validationRequestRef.current !== validationRequestId || validationContextChanged())) return
+      setState((current) => ({
+        ...current,
+        validating: false,
+        validation: null,
+        error: error instanceof Error ? error.message : 'The staging package could not be validated.',
+      }))
     }
   }
 
@@ -167,13 +294,16 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
             <label htmlFor={`client-import-${product}`}>Choose CSV<input accept=".csv,text/csv" disabled={state.busy} id={`client-import-${product}`} onChange={(event) => { const file = event.currentTarget.files?.[0] ?? null; event.currentTarget.value = ''; void chooseFile(file) }} type="file" /></label>
           </div>
         </div>
-        <p className="catalog-import-boundary">The file stays in this browser tab. It is not uploaded, sent to AI, or applied to a product. {object.activationBoundary}</p>
+        <p className="catalog-import-boundary">{managedIdentity
+          ? `The source CSV stays in this tab. Only the checked staging package is sent to ${managedIdentity.workspaceId} for validation; it is not sent to AI or applied to a product. `
+          : 'The file stays in this browser tab. It is not uploaded, sent to AI, or applied to a product. '}{object.activationBoundary}</p>
         {state.busy ? <p className="form-notice" role="status">Checking mappings, required values, duplicates, dates, URLs, and Unicode…</p> : null}
+        {state.validating ? <p className="form-notice" role="status">Validating the exact package with the authenticated workspace…</p> : null}
         {state.error ? <p className="form-error" role="alert">{state.error}</p> : null}
         {state.preview ? <div className="catalog-import-preview">
           <div className="catalog-import-source">
             <div><strong>{state.preview.sourceName}</strong><small>Preview {state.preview.previewDigest.slice(7, 19).toUpperCase()} · source fingerprint retained</small></div>
-            <span className={`status-pill ${state.preview.readyForStaging ? 'approved' : 'pending'}`}>{state.preview.readyForStaging ? 'Ready to stage' : 'Review needed'}</span>
+            <span className={`status-pill ${validationIsCurrent || state.preview.readyForStaging ? 'approved' : 'pending'}`}>{validationIsCurrent ? 'Server validated' : state.preview.readyForStaging ? 'Ready to stage' : 'Review needed'}</span>
           </div>
           <fieldset className="catalog-import-mapping" disabled={state.busy}>
             <legend>Explainable column mapping</legend>
@@ -197,8 +327,12 @@ export function ClientDataOnboarding({ product, workflowTemplateId, workspace, o
           </div>
           {state.preview.rows.length > visibleRows.length ? <p className="panel-copy">Showing the first {visibleRows.length} rows; the staging package retains all {state.preview.rows.length} checked rows.</p> : null}
           <div className="catalog-import-footer">
-            <div><strong>{state.preview.readyForStaging ? 'Consistency check passed.' : 'Nothing can be staged yet.'}</strong><small>A staging package records the template, mapping, source digest, owner, and rows. It performs zero product writes.</small></div>
-            <div className="form-actions"><button className="core-button" onClick={clearPreview} type="button">Clear</button><button className="core-button primary" disabled={!state.preview.readyForStaging || state.busy} onClick={downloadStagingPackage} type="button">Download staged package</button></div>
+            <div><strong>{validationIsCurrent ? `Validated by ${managedIdentity?.workspaceId}.` : state.preview.readyForStaging ? 'Consistency check passed.' : 'Nothing can be staged yet.'}</strong><small>{validationIsCurrent && state.validation
+              ? `Receipt ${state.validation.receipt.package_digest.slice(7, 19).toUpperCase()} · activation remains not applied and zero product records were written.`
+              : managedIdentity
+                ? 'The exact template, mapping, checked rows, owner, and workspace label must pass the tenant API before download.'
+                : 'A staging package records the template, mapping, source digest, owner, and rows. It performs zero product writes.'}</small></div>
+            <div className="form-actions"><button className="core-button" onClick={clearPreview} type="button">Clear</button><button className="core-button primary" disabled={!state.preview.readyForStaging || state.busy || state.validating} onClick={() => void validateOrDownloadStagingPackage()} type="button">{state.validating ? 'Validating…' : validationIsCurrent ? 'Download validated package' : managedIdentity ? 'Validate staged package' : 'Download staged package'}</button></div>
           </div>
         </div> : null}
       </div>

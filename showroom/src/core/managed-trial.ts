@@ -1,4 +1,5 @@
 import type { Session, SupabaseClient } from '@supabase/supabase-js'
+import type { buildClientImportStagingPackage } from './client-onboarding'
 
 
 const WORKSPACE_STORAGE_KEY = 'supermega.managed.workspace.v1'
@@ -134,6 +135,29 @@ export type ManagedBootstrap = {
   approvals: ManagedApprovalRecord[]
 }
 
+export type ManagedClientImportPackage = ReturnType<typeof buildClientImportStagingPackage>
+
+export type ManagedClientImportValidation = {
+  contract: 'supermega.client_import_validation.v1'
+  status: 'valid'
+  product: ManagedClientImportPackage['product']
+  object: string
+  workflow_template_id: string
+  preview_digest: string
+  package_digest: string
+  row_count: number
+  checks: string[]
+  workspace_id: string
+  activation: {
+    status: 'not_applied'
+    target_surface: 'commerce' | 'production' | 'website'
+    required_capability: 'commerce.write' | 'production.write' | 'website.write'
+    human_approval_required: true
+    atomic_adapter_ready: false
+    external_writes_performed: false
+  }
+}
+
 type ManagedApprovalRequest = {
   command_id: string
   title: string
@@ -171,6 +195,102 @@ export function sameManagedIdentity(left: ManagedIdentity, right: ManagedIdentit
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+const CLIENT_IMPORT_VALIDATION_CHECKS = [
+  'contract',
+  'workflow_profile',
+  'mapping',
+  'row_schema',
+  'field_values',
+  'unique_keys',
+  'source_rows',
+  'preview_digest',
+  'package_digest',
+] as const
+
+const CLIENT_IMPORT_ACTIVATION = {
+  commerce: { target: 'commerce', capability: 'commerce.write' },
+  production: { target: 'production', capability: 'production.write' },
+  website: { target: 'website', capability: 'website.write' },
+  ecommerce: { target: 'commerce', capability: 'commerce.write' },
+} as const
+
+async function sha256Text(value: string) {
+  if (!globalThis.crypto?.subtle) {
+    throw new ManagedTrialError('Secure package verification is unavailable in this browser.', {
+      code: 'managed_client_import_digest_unavailable',
+    })
+  }
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
+  return `sha256:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')}`
+}
+
+function serializeManagedClientImportPackage(stagingPackage: ManagedClientImportPackage) {
+  try {
+    const body = JSON.stringify(stagingPackage)
+    if (typeof body === 'string') return body
+  } catch {
+    // The caller receives the same bounded contract error for every serialization failure.
+  }
+  throw new ManagedTrialError('The staged import package could not be serialized safely.', {
+    code: 'managed_client_import_package_invalid',
+  })
+}
+
+export async function managedClientImportPackageDigest(stagingPackage: ManagedClientImportPackage) {
+  return sha256Text(serializeManagedClientImportPackage(stagingPackage))
+}
+
+export function assertManagedClientImportValidation(
+  response: unknown,
+  stagingPackage: ManagedClientImportPackage,
+  expectedIdentity: ManagedIdentity,
+  expectedPackageDigest: string,
+): ManagedClientImportValidation {
+  if (!isRecord(response) || !isRecord(response.validation) || !isRecord(response.validation.activation)) {
+    throw new ManagedTrialError('The managed workspace returned an invalid import validation.', {
+      code: 'managed_client_import_validation_invalid',
+    })
+  }
+  const validation = response.validation
+  const activation = validation.activation as Record<string, unknown>
+  const expectedActivation = CLIENT_IMPORT_ACTIVATION[stagingPackage.product]
+  const checks = validation.checks
+  const checksMatch = Array.isArray(checks)
+    && checks.length === CLIENT_IMPORT_VALIDATION_CHECKS.length
+    && CLIENT_IMPORT_VALIDATION_CHECKS.every((check, index) => checks[index] === check)
+  if (validation.contract !== 'supermega.client_import_validation.v1'
+    || validation.status !== 'valid'
+    || validation.product !== stagingPackage.product
+    || validation.object !== stagingPackage.object
+    || validation.workflow_template_id !== stagingPackage.workflowTemplateId
+    || validation.preview_digest !== stagingPackage.source.previewDigest
+    || typeof validation.row_count !== 'number'
+    || !Number.isSafeInteger(validation.row_count)
+    || validation.row_count !== stagingPackage.rows.length
+    || !checksMatch
+    || activation.status !== 'not_applied'
+    || activation.target_surface !== expectedActivation.target
+    || activation.required_capability !== expectedActivation.capability
+    || activation.human_approval_required !== true
+    || activation.atomic_adapter_ready !== false
+    || activation.external_writes_performed !== false) {
+    throw new ManagedTrialError('The managed workspace returned a mismatched import validation.', {
+      code: 'managed_client_import_validation_invalid',
+    })
+  }
+  if (validation.workspace_id !== expectedIdentity.workspaceId) {
+    throw new ManagedTrialError('The managed workspace returned a different identity.', {
+      code: 'managed_identity_changed',
+    })
+  }
+  if (validation.package_digest !== expectedPackageDigest) {
+    throw new ManagedTrialError('The managed import receipt does not match the package that was sent.', {
+      code: 'managed_client_import_package_changed',
+    })
+  }
+  return validation as unknown as ManagedClientImportValidation
 }
 
 export function assertManagedBootstrapIdentity(
@@ -403,6 +523,27 @@ async function authorizedRequest<T>(
   if (expectedIdentity) await sessionForRequest(expectedIdentity)
   if (!response.ok) throw await parseError(response)
   return response.json() as Promise<T>
+}
+
+export async function validateManagedClientImport(
+  stagingPackage: ManagedClientImportPackage,
+  expectedIdentity: ManagedIdentity,
+) {
+  const body = serializeManagedClientImportPackage(stagingPackage)
+  const submittedPackage = JSON.parse(body) as ManagedClientImportPackage
+  const expectedPackageDigest = await sha256Text(body)
+  const response = await authorizedRequest<unknown>(
+    '/api/trial/v1/imports/validate',
+    { method: 'POST', body },
+    true,
+    expectedIdentity,
+  )
+  return assertManagedClientImportValidation(
+    response,
+    submittedPackage,
+    expectedIdentity,
+    expectedPackageDigest,
+  )
 }
 
 export async function loadManagedBootstrap(expectedIdentity?: ManagedIdentity) {
