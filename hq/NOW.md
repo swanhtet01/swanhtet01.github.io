@@ -34,13 +34,14 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 - Ecommerce reads versioned Shop data. Setup, Save, receipt, and handoff focus the next step. Review exposes source and consequence; Cancel restores the exact prepared draft. Only accountable Shop confirmation can create an order.
 - AI assistance remains gated shared infrastructure; Order Intake passed 20 local cases, but the provider runner remains at the credential gate.
 - Client setup now uses one manifest-backed two-step flow, stable template IDs, detail-preserving switches/deep links, and one smart-import path. Exact matches collapse detail; exceptions open for review; the duplicate Shop importer is gone (`ab9a89e`).
+- Shop `social-commerce` now has a deterministic, versioned recipe bound to the trusted importer and human-approved Commerce lifecycle. Fresh, upgrade, and rollback plans perform no writes (`9ba8569`).
 - Home keeps Shop and Plant exceptions above collapsed HQ work. Purchases suppress duplicate stock tasks; a Plant issue badge links to Problems and otherwise the card opens Jobs. `/work/` stays labelled HQ; bottom navigation reads Home, HQ, and Products.
 - `npm run dev` starts canonical FastAPI plus Vite on loopback while clearing database, hosted-auth, model, worker, and write authority; the full local command proxies canonical FastAPI while keeping managed data disconnected and writes locked. Records stay browser-local by default; hosted production activation is not proven.
 
 ## Verified baseline
 
-- `ab9a89e` is the current local product checkpoint; agent-operations checkpoint `6c19084` combines the existing distributed-capacity ceiling with one bounded scheduler authority; operating checkpoint `63a245f` and security checkpoint `98b8044` remain.
-- App build and all local contracts pass; the Kernel passes 262 tests, 69 connectors/993 calls, and 15 crews/214 checks. The focused cloud slice passes 25 tests and all Python coverage passes 215 tests.
+- Current local checkpoints: product `9ba8569`, agent operations `6c19084`, operations `63a245f`, and security `98b8044`.
+- App build and all local contracts pass; the Kernel passes 262 tests, 69 connectors/993 calls, and 15 crews/214 checks. The provisioning contract passes 12 focused adversarial tests and all Python coverage passes 227 tests.
 - React Router is isolated in a 43,870-byte cacheable chunk. The current product checkpoint's largest JavaScript chunk is 471,580 bytes and remains below the build gate.
 - Focused coverage includes 205 Shop, 256 Plant, 94 Website, 109 client-onboarding, 54 managed-import, and 17 trusted-server import tests.
 - Rendered 390x844/1440x900 setup and all four phone-width product routes have no horizontal overflow or error overlay; switches preserve client details and exact imports collapse review detail.
@@ -82,7 +83,7 @@ Each slice must keep the interface task-first: one primary action, progressive d
 
 ## Next evidence
 
-1. Implement and test the executable provisioning recipe for one Shop template, then reuse the same contract for the remaining eleven profiles without product-specific setup pages.
+1. Prove ENG-075's two-location stock lifecycle, then extend the accepted recipe to the other eleven profiles without new setup pages.
 2. Repeat the 12-profile rehearsal with one founder-approved named pilot company and measure import correction, setup, and human review time.
 3. After an approved push and exact Vercel link, review that clean commit without deploying or mutating aliases.
 4. On an approved isolated Supabase target, prove private Storage, RLS, replay/isolation, and recovery.
