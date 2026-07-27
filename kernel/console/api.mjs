@@ -24,7 +24,7 @@ const DEAL_STATUSES = ['draft', 'approved', 'sent']
 // displayed deposit equals the Stripe charge for the same offer.
 const OFFER_USD = { 'tool-week': 600, dashboard: 1800, 'ai-agent': 2500, 'design-ship': 6000, build: 1800, 'care-plan': 79 }
 const priceOf = (offer) => OFFER_USD[offer] || OFFER_USD.build
-const aiConfigured = () => Boolean(process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY)
+const aiConfigured = () => Boolean(process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY || process.env.OPENROUTER_API_KEY)
 
 function operatorAiBudgetStatus(usage, window, capUnits) {
   const contract = 'supermega.company-ai-budget-status.v1'

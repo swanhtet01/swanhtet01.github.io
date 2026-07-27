@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 
 const ENV_KEYS = [
   'SUPERMEGA_OPS_KEY', 'SUPERMEGA_COMPANY_DAILY_AI_BUDGET_UNITS',
+  'ANTHROPIC_API_KEY', 'CLAUDE_API_KEY', 'OPENROUTER_API_KEY',
   'SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SERVICE_KEY',
   'POSTGRES_URL_NON_POOLING', 'POSTGRES_URL', 'DATABASE_URL_UNPOOLED', 'POSTGRES_PRISMA_URL',
   'SUPERMEGA_DATABASE_URL', 'DATABASE_URL',
@@ -30,6 +31,7 @@ test('protected state exposes only truthful aggregate daily AI-budget metadata',
     for (const name of ENV_KEYS) delete process.env[name]
     process.env.SUPERMEGA_OPS_KEY = 'owner-budget-key'
     process.env.SUPERMEGA_COMPANY_DAILY_AI_BUDGET_UNITS = '1000'
+    process.env.OPENROUTER_API_KEY = 'openrouter-offline-test-key'
 
     const { handle } = await import(`./console/api.mjs?ai-budget-state=${Date.now()}`)
     const { currentDailyBudgetWindow } = await import('./gateway.mjs')
@@ -60,6 +62,7 @@ test('protected state exposes only truthful aggregate daily AI-budget metadata',
 
     const response = await handle({ method: 'GET', path: '/api/state', headers: { 'x-ops-key': 'owner-budget-key' } })
     assert.equal(response.status, 200)
+    assert.equal(response.json.aiConfigured, true, 'OpenRouter-only gateway configuration is reported truthfully')
     assert.deepEqual(response.json.aiBudget, {
       contract: 'supermega.company-ai-budget-status.v1',
       window,
