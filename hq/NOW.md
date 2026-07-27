@@ -27,12 +27,13 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 
 - HQ caps 12 dormant roles, four active/batch jobs, two Kernel agents per cycle, and zero idle compute; overrides fail closed and duplicate ceilings are removed.
 - Kernel has four owner-bound slots with 120-second stale recovery; a fifth cycle stops before model use and failed work returns for retry (`ca5070e`).
-- Ally audit after a non-terminating trim: RAM 77.1%, Codex 1.21 GB, zero models, one worker, no dev server/duplicate listener, and no stopped process. Multi-agent remains disabled; dormant plugins are off for next restart (`72853ac`).
+- Ally audit: immediate post-trim RAM 77.4% / Codex 747.4 MB; warmed recheck 80.4% / 1,379.1 MB. Zero models, one worker, no dev listener. Multi-agent remains disabled; dormant plugins are off for next restart.
 - All seven company jobs use SuperMega Agent Operations or core GitHub. Catalogs are exact-tenant scoped, so YTF identities cannot render in core operations (`b46c386`).
 - Hosted scheduling is dormant with zero registered crons. A signed seven-day bundle now binds five proof digests, tenant, owner decision, canonical project, production, and exact commit; flag-only, preview, stale, incomplete, or tampered attempts stop before worker invocation (`07dd959`).
-- Storage privacy now has a six-request owner-confirmed verifier, zero-network configuration preflight, and secret-free owner handoff. It rejects privileged keys, redirects, proxies, oversized/duplicate JSON, and unconfirmed targets; 13 focused tests and an 11-case self-test pass (`be78a02`). Hosted proof remains blocked.
-- Each CEO cycle selects at most one HQ-authorized outcome. Hosted Storage proof, protected preview, and named pilot work remain blocked; completed, in-flight, duplicate, or invalid work stops before claims, models, or sends. The owner brief uses four fixed reads and one synthesis call (`cdd925a`).
-- CEO completion metadata persists before notification; acceptance is a separate immutable owner/operator verdict. Reports store no brief/provider rows and publish efficiency only with durable, complete, valid usage and evaluation coverage (`78f2297`).
+- Storage privacy now has a six-request owner-confirmed verifier and zero-network configuration preflight (`be78a02`). Privileged keys, redirects, proxies, malformed data, and unconfirmed targets fail closed; hosted proof remains blocked.
+- Each CEO cycle selects at most one HQ-authorized outcome; blocked, duplicate, or invalid work stops before claims, models, or sends. The owner brief uses four fixed reads and one synthesis call (`cdd925a`).
+- CEO completion persists before notification; owner acceptance is separate. Efficiency requires durable, valid, fully measured evidence (`78f2297`).
+- Model calls reserve before provider I/O. All tenants and retries share one atomic UTC-day ceiling; failures stay charged, cache hits reserve nothing, hosted memory state fails closed, and the hard maximum is 2,000,000 units (`a2e1b89`).
 - Shop covers orders, stock, purchasing, fulfilment, payments, returns, production issues, and close at `/shop/`; message intake stays lazy and initial JavaScript is 472,542 bytes (`62a2fdf`).
 - Plant is task-first at `/plant/` and controls no equipment.
 - Website builds a guarded preview, approved site file, and tenant-bound release plan at `/website/`; it never deploys (`a400a86`).
@@ -46,8 +47,8 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 
 ## Verified baseline
 
-- Current local checkpoints: product `62a2fdf`, agent operations `be78a02`, operations `63a245f`, and security `98b8044`.
-- App/local contracts pass: 309 Python tests, 25 Shop inventory/221 Commerce/42 Plant/258 Production/94 Website checks, lint/build, 66 security checks, and a 472,542-byte largest chunk. Kernel remains separately gated at 277 tests.
+- Current local checkpoints: product `62a2fdf`, agent operations `a2e1b89`, operations `63a245f`, and security `98b8044`.
+- App/local gates pass: 309 Python tests, lint/build, 66 security checks, and a 472,542-byte largest chunk. Kernel passes 278 tests, 69 connectors/993 adversarial calls, and 15 crews/214 checks.
 - Earlier rendered product checks passed. The managed location slice passes automated contracts; fresh rendered QA is pending.
 - Core first-action QA leads Shop Stock, incomplete orders to Promise or Payment, Plant alerts to Problems or output, and invalid Website briefs to their first error. Mobile controls are at least 44 px with focus-safe fixed navigation (`36fa7dd`); guide and review actions create no record.
 - Product checkpoint `62a2fdf` is on a clean fast-forward descendant of open draft PR #258 head `338b6fd`. Vercel `supermega-public` serves both domains from live `6885c320` in `isolated_demo` with zero managed coverage and database/schema/audit/writes disabled; remote checks exclude the local delta.
@@ -61,12 +62,13 @@ No external send, payment, refund, publish, domain change, connector write, merg
 ## Blockers
 
 - Website, Plant, and Ecommerce have tenant-bound persistence contracts but still lack hosted cross-device/activation proof.
-- Supabase `supermegabase` is active on Postgres 17.6, but it is not an accepted trial target: it contains existing enterprise records, has only one recorded migration, and the security advisor reports 27 public tables with RLS enabled but no policies. No isolated branch was verified, so managed writes remain off.
+- The atomic AI-budget table and invoker-rights RPC pass local concurrency and provisioning contracts but have not been applied or queried on an approved hosted database; hosted model calls must remain fail closed until that proof exists.
+- `supermegabase` is not a trial target: it has existing records, one recorded migration, and 27 public RLS tables without policies. No isolated branch is verified, so managed writes remain off.
 - The candidate is not on GitHub or Vercel; live remains `6885c320` and PR #258 remains `338b6fd`. The next external action is an approved fast-forward-only push of the clean release branch.
 - Preview remains blocked until the exact `supermega-public` project is linked to the clean candidate commit; no fallback project or domain is allowed.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
 - Local scheduler authority emits no crons and no signed activation bundle exists. Live `megaos` cron/environment cleanup remains unverified because grouped log reads timed out then returned 403; no provider state changed.
-- SAP-grade gaps remain: Shop location allocation for receipts/orders/counts/production issues plus tax/accounting; Plant cost valuation, calibration, and OEE; Website hosted CMS/media and release execution; Ecommerce payment, shipping, tax, and returns.
+- SAP-grade gaps remain in Shop tax/location accounting, Plant costing/OEE/calibration, Website hosted CMS/release, and Ecommerce payment/shipping/tax/returns.
 
 ## Decisions in force
 

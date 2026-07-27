@@ -1,7 +1,7 @@
 # Agent operations and security brief
 
 Updated: 2026-07-27
-Agent-operations checkpoint: `be78a02`
+Agent-operations checkpoint: `a2e1b89`
 Legacy-security checkpoint: `98b8044`
 Mode: local evidence only; no hosted or production claim
 
@@ -14,7 +14,7 @@ Runtime work is limited by job family, queue depth, concurrent runs, daily runs,
 ## Verified locally
 
 - Full app lint/build and release/security/database/Vercel/HQ contracts pass.
-- All 292 Python tests pass; the focused Storage slice has 13, its offline self-test has 11 adversarial cases, the Kernel has 277, and the coordinated-release verifier has 67 passing checks. All 69 connectors survive 993 adversarial calls and all 15 crews pass 214 checks.
+- All 309 Python tests pass; the focused Storage slice has 13, its offline self-test has 11 adversarial cases, the Kernel has 278, and the coordinated-release verifier has 67 passing checks. All 69 connectors survive 993 adversarial calls and all 15 crews pass 214 checks.
 - The retired AgentOS gateway reports not-ready and writes-disabled; old log/status routes return HTTP 410 and OpenAPI is disabled.
 - The retired finance launcher reports payments-disabled and exits nonzero.
 - HQ Agent Teams at 390 and 1280 px has no horizontal overflow or browser warnings/errors; visible mobile controls are at least 44 px.
@@ -48,6 +48,7 @@ Runtime work is limited by job family, queue depth, concurrent runs, daily runs,
 16. Hosted scheduler activation now follows `supermega.scheduler-activation-evidence.v1`. `SUPERMEGA_HOSTED_SCHEDULER_ENABLED=1` is insufficient by itself: an HMAC-signed exact-shape bundle must bind the scheduler-authority digest, canonical `megaos` project, production environment, exact deployed commit, managed tenant, owner decision, all five required proof digests, and a maximum seven-day lifetime. Duplicate keys, tampering, missing or failed proof, stale or expired evidence, preview scope, wrong project or commit, plaintext activation variables, and dormant environment remnants fail before worker invocation. Runtime status exposes only contract, digest, release, expiry, and count metadata.
 17. Managed Storage privacy now has `supermega.private-storage-privacy.v1` and a current Supabase Storage REST v2 adapter. Live mode requires one exact owner-approval ID, HTTPS host allowlist, publishable or anon key, and two distinct unexpired user JWTs; service-role/secret credentials are forbidden. The fixed six-request sequence proves explicit anonymous-list denial, one positive-control sentinel, cross-tenant list/object denial, and 60-second signed access. Redirects and proxies are disabled, responses and JSON complexity are bounded, and evidence exposes only digests, status classes, proof IDs, counts, and zero-mutation/redaction flags. The 11-case self-test makes zero network requests. This is verifier evidence, not hosted Storage proof.
 18. `storage:privacy:preflight` now loads the same exact target and credential contract but performs zero network requests. It returns only host, bucket, approval, and evidence digests plus local-shape, request-ceiling, TTL, redaction, and zero-mutation metadata; it explicitly reports that provider credentials are unverified. The owner handoff forbids `supermegabase`, production/customer data, privileged credentials, persisted secrets, and unapproved setup or cleanup. Sentinel creation and cleanup remain owner-controlled provider writes outside the verifier.
+19. Company model calls now follow `supermega.company-ai-budget.v1`. Every provider attempt atomically reserves a conservative cost-weighted maximum before network I/O across all tenants and retries. Failed or ambiguous attempts remain charged, cache hits reserve nothing, caller output limits are tier-bounded, and hosted runtimes reject per-process state. The Supabase table has RLS, no anon/authenticated privileges, and an invoker-rights RPC executable only by the server service role. The default is 500,000 and the compiled/database hard maximum is 2,000,000 bulk-equivalent units per UTC day. This is local code and concurrency evidence; no hosted migration or provider call occurred.
 
 These are local code and test results. They do not prove a hosted deployment, live credentials, or production data migration.
 
@@ -58,9 +59,10 @@ These are local code and test results. They do not prove a hosted deployment, li
 3. Read-only Vercel inventory confirms canonical app project `megaos` and public project `supermega-public`; similarly named projects are not release authority. This checkout has no canonical `.vercel/project.json` link and lacks exact org/project environment values and `VERCEL_TOKEN`, so preview deployment is deliberately blocked.
 4. Read-only Vercel Agent Runs observability reports no production or preview project activity over 90 days. The canonical `megaos` project has a ready production deployment, but grouped runtime-log reads timed out and then returned 403; live cron and environment state remain unproven.
 5. Local authority emits no crons and no activation bundle was issued. Hosted cleanup still requires a protected deployment and may require removal of dormant scheduler environment variables. No provider state was changed here.
+6. The atomic AI-budget schema and RPC are not installed or query-proven on an approved hosted database. Hosted model execution must stay fail closed until the migration, grants, Security Advisor, and two-reservation cap proof pass.
 
 The selected Instagram security slide warns that storage buckets may remain enumerable even when individual object links appear private. SuperMega therefore requires bucket inventory, anonymous-list denial, cross-tenant-list denial, and short-lived authorized object access before managed activation. This is a release gate, not hosted proof.
 
 ## Next bounded slice
 
-Expose the accepted order calculation in the existing review and order detail using one short subtotal and tax-status line. Preserve the one primary order action, mobile fit, legacy readability, immutable calculation, and explicit `not_configured` tax boundary; add no settings panel, tax rate, route, product, provider call, or live write.
+Expose metadata-only daily AI-budget telemetry in the existing protected operator status. Show UTC window, reserved units, hard cap, attempts, and durable-store readiness without tenant IDs, prompts, outputs, provider errors, a new route/page, a model call, or a hosted write.

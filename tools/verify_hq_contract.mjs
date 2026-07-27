@@ -15,6 +15,10 @@ import {
   CEO_OUTCOME_OPERATION_CONTRACT,
   COMPANY_USAGE_UNITS,
 } from '../kernel/agent-company-operations.mjs'
+import {
+  COMPANY_DAILY_BUDGET_DEFAULT_UNITS,
+  COMPANY_DAILY_BUDGET_HARD_MAX_UNITS,
+} from '../kernel/gateway.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, packageText, storageAuditHandoff] = await Promise.all([
@@ -87,6 +91,15 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.agentOperatingModel?.incompleteOutcomeCoverageProducesEfficiency === false
   && portfolio.agentOperatingModel?.ceoBriefTextStoredInOperations === false
   && portfolio.agentOperatingModel?.providerRowsStoredInOperations === false
+  && portfolio.agentOperatingModel?.companyAiBudgetContract === 'supermega.company-ai-budget.v1'
+  && portfolio.agentOperatingModel?.companyAiBudgetUnits === COMPANY_USAGE_UNITS
+  && portfolio.agentOperatingModel?.companyAiBudgetWindow === 'utc_day'
+  && portfolio.agentOperatingModel?.companyAiBudgetDefaultUnits === COMPANY_DAILY_BUDGET_DEFAULT_UNITS
+  && portfolio.agentOperatingModel?.companyAiBudgetHardMaxUnits === COMPANY_DAILY_BUDGET_HARD_MAX_UNITS
+  && portfolio.agentOperatingModel?.providerAttemptReservedBeforeNetwork === true
+  && portfolio.agentOperatingModel?.providerFailuresRemainCharged === true
+  && portfolio.agentOperatingModel?.cacheHitsReserveProviderBudget === false
+  && portfolio.agentOperatingModel?.hostedAiBudgetRequiresDurableStore === true
   && portfolio.agentOperatingModel?.scaleToZero === true
   && portfolio.agentOperatingModel?.idleCapabilitiesConsumeCompute === false
   && portfolio.agentOperatingModel?.dynamicDelegation === false
@@ -201,11 +214,13 @@ requireContract('agent roster consolidation is recorded',
   && workboard.includes('all 292 Python tests')
   && workboard.includes('| OPS-033 | CEO + Ally Operations Codex | done-local |')
   && workboard.includes('Eight dormant artifact or duplicate-browser plugins and ambient suggestions are disabled')
-  && workboard.includes('2,661.0 MB working set released, and zero processes stopped')
-  && workboard.includes('Current accepted agent-operations checkpoint: `be78a02`')
-  && now.includes('agent operations `be78a02`')
+  && workboard.includes('issued zero termination calls, and released 2,027.8 MB')
+  && workboard.includes('| OPS-034 | CEO + Agent Operations / Cost Security Codex | done-local |')
+  && workboard.includes('adds `supermega.company-ai-budget.v1`')
+  && workboard.includes('Current accepted agent-operations checkpoint: `a2e1b89`')
+  && now.includes('agent operations `a2e1b89`')
   && now.includes('operations `63a245f`')
-  && now.includes('RAM 77.1%, Codex 1.21 GB')
+  && now.includes('warmed recheck 80.4% / 1,379.1 MB')
   && now.includes('Multi-agent remains disabled; dormant plugins are off for next restart')
   && now.includes('YTF identities cannot render in core operations')
   && now.includes('Hosted scheduling is dormant with zero registered crons')
@@ -215,7 +230,7 @@ requireContract('agent roster consolidation is recorded',
   && now.includes('zero-network configuration preflight')
   && now.includes('overrides fail closed and duplicate ceilings are removed'))
 requireContract('agent security brief is reconciled to current controls',
-  agentSecurity.includes('Agent-operations checkpoint: `be78a02`')
+  agentSecurity.includes('Agent-operations checkpoint: `a2e1b89`')
   && agentSecurity.includes('Agent visibility, execution, and preview deployment use separate capabilities')
   && agentSecurity.includes('The root development Compose entry point is retired as `services: {}`')
   && agentSecurity.includes('An environment value cannot add a third credential destination')
@@ -231,7 +246,8 @@ requireContract('agent security brief is reconciled to current controls',
   && agentSecurity.includes('Managed Storage privacy now has `supermega.private-storage-privacy.v1`')
   && agentSecurity.includes('The 11-case self-test makes zero network requests')
   && agentSecurity.includes('`storage:privacy:preflight` now loads the same exact target')
-  && agentSecurity.includes('Expose the accepted order calculation in the existing review and order detail')
+  && agentSecurity.includes('Company model calls now follow `supermega.company-ai-budget.v1`')
+  && agentSecurity.includes('Expose metadata-only daily AI-budget telemetry in the existing protected operator status')
   && agentSecurity.includes('Efficiency remains unavailable unless the tenant-bound records are durable')
   && agentSecurity.includes('Hosted cleanup still requires a protected deployment')
   && agentSecurity.includes('The unlinked claimable-preview service is retired')
@@ -525,6 +541,11 @@ console.log(JSON.stringify({
     ceoOutcomeAuthority: portfolio.agentOperatingModel.ceoOutcomeAuthority,
     maxOutcomesPerCeoCycle: portfolio.agentOperatingModel.maxOutcomesPerCeoCycle,
     selectedCeoOutcome: ceoOutcomeSelection.selected.id,
+    companyDailyAiBudget: {
+      units: portfolio.agentOperatingModel.companyAiBudgetUnits,
+      default: portfolio.agentOperatingModel.companyAiBudgetDefaultUnits,
+      hardMax: portfolio.agentOperatingModel.companyAiBudgetHardMaxUnits,
+    },
     scaleToZero: portfolio.agentOperatingModel.scaleToZero,
   },
   workflowProfiles: workflowProfileCount,
