@@ -1,8 +1,14 @@
 import { existsSync } from 'node:fs'
-import { copyFile, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
+import { copyFile, mkdir, mkdtemp, readFile as readRawFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
+
+const normalizeSourceText = (value) => value.replace(/\r\n?/g, '\n')
+const readFile = async (...args) => {
+  const value = await readRawFile(...args)
+  return typeof value === 'string' ? normalizeSourceText(value) : value
+}
 
 const root = resolve(import.meta.dirname, '..')
 const appWorkflow = await readFile(resolve(root, '.github/workflows/supermega-app-deploy.yml'), 'utf8')
@@ -34,6 +40,9 @@ function requireContract(name, condition) {
   checks.push(name)
   if (!condition) failures.push(name)
 }
+
+requireContract('source line endings normalize across platforms',
+  normalizeSourceText('line one\r\nline two\rline three') === 'line one\nline two\nline three')
 
 function runRollbackResolver(args, payload) {
   return spawnSync(

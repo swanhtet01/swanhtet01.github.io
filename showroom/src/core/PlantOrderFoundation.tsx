@@ -53,6 +53,7 @@ type ReviewedTransition = {
   commandId: string
   title: string
   summary: string
+  details?: Array<{ label: string; value: string }>
   boundary: string
   proof: PlantOrderProof
   apply: PlantOrderTransition
@@ -376,7 +377,12 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, jobs, man
       const actionProof = proof(actor, 'the reviewed BOM and routing')
       stage({
         title: 'Execution plan',
-        summary: `${selectedSetupJob.id} · ${targetQuantity.toLocaleString()} remaining · ${materials.length} ${materials.length === 1 ? 'material' : 'materials'} · ${routing.length} ${routing.length === 1 ? 'operation' : 'operations'}`,
+        summary: `${selectedSetupJob.id} · ${targetQuantity.toLocaleString()} units remaining`,
+        details: [
+          { label: 'Output batch', value: `${selectedSetupJob.product} · ${targetQuantity.toLocaleString()} units → ${plan.job.outputBatchId}` },
+          { label: 'Materials', value: materials.map((material) => `${material.name} (${material.materialId}) · ${formatMilli(material.quantityPerUnitMilli)} ${material.unit}/unit`).join(' · ') },
+          { label: 'Routing', value: routing.map((operation) => `${operation.name} (${operation.operationId}) · ${formatMilli(operation.minutesPerUnitMilli)} min/unit · ${operation.workCentreId}`).join(' → ') },
+        ],
         boundary: 'Creates an immutable execution package. It does not schedule staff, move stock, post accounting, or control equipment.',
         proof: actionProof,
         apply: (current) => applyPlantOrderPlan(current, plan, actionProof, expectedHeadDigest),
@@ -555,6 +561,7 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, jobs, man
       {review ? <>
         <div className="panel-head"><div><span className="core-eyebrow">Accountable review</span><h2 id="plant-execution-review-title">{review.title}</h2></div><button aria-label={`Edit ${review.title.toLowerCase()}`} className="text-link" disabled={busy} onClick={editReview} style={{ minHeight: 44, minWidth: 44 }} type="button">Edit</button></div>
         <div className="stock-receipt-preview plant-execution-review" role="status"><small>{review.title} ready</small><strong>{review.summary}</strong></div>
+        {review.details?.length ? <dl aria-label={`${review.title} details`} className="action-change-flow">{review.details.map((detail) => <div key={detail.label}><dt>{detail.label}</dt><dd>{detail.value}</dd></div>)}</dl> : null}
         <p className="panel-copy">{review.boundary}</p>
         <p className="panel-copy">Nothing changes until this one action is confirmed.</p>
         <div className="form-actions"><button className="core-button" disabled={busy} onClick={editReview} type="button">Back</button><button className="core-button primary" data-plant-review-primary disabled={busy} onClick={() => void confirmReview()} type="button">{busy ? 'Recording…' : `Confirm ${review.title.toLowerCase()}`}</button></div>
