@@ -3,6 +3,7 @@ export const PLANT_ORDER_PLAN_CONTRACT = 'supermega.plant.reviewed_plan.v1' as c
 export const PLANT_ORDER_PROJECTION_CONTRACT = 'supermega.plant.order_projection.v1' as const
 export const EMPTY_PLANT_ORDER_DIGEST = `sha256:${'0'.repeat(64)}`
 export const PLANT_ORDER_STORAGE_PREFIX = 'supermega.plant.order-foundation.v1:'
+export const PLANT_ORDER_ADDITIONAL_MATERIAL_MAX = 11
 
 export type PlantOrderProof = {
   actionId: string
@@ -163,6 +164,38 @@ function identifier(value: unknown, field: string, prefix?: string) {
 function integer(value: unknown, field: string, minimum = 0) {
   if (!Number.isSafeInteger(value) || Number(value) < minimum) throw new Error(`${field} must be a supported integer quantity.`)
   return Number(value)
+}
+
+export function parsePlantOrderQuantityMilli(value: string, allowZero = false) {
+  if (!/^(?:0|[1-9]\d*)(?:\.\d{1,3})?$/.test(value)) return null
+  const [whole, fraction = ''] = value.split('.')
+  const result = Number(whole) * 1_000 + Number(fraction.padEnd(3, '0'))
+  return Number.isSafeInteger(result) && (allowZero ? result >= 0 : result > 0) ? result : null
+}
+
+export function parsePlantOrderMaterialPaste(value: string) {
+  if (value.length > 16_000) throw new Error('Additional BOM material rows are too large.')
+  const lines = value.replace(/^\uFEFF/, '').split(/\r?\n/)
+    .map((line, index) => ({ line: index + 1, value: line.trim() }))
+    .filter((line) => line.value)
+  if (lines[0]?.value.toLowerCase().replaceAll(' ', '') === 'material_id|material_name|unit|quantity_per_unit') lines.shift()
+  if (lines.length > PLANT_ORDER_ADDITIONAL_MATERIAL_MAX) throw new Error(`Add at most ${PLANT_ORDER_ADDITIONAL_MATERIAL_MAX} additional BOM materials.`)
+  const materials = lines.map(({ line, value: row }) => {
+    const columns = row.split('|').map((column) => column.trim())
+    if (columns.length !== 4) throw new Error(`Additional BOM material line ${line} must contain material ID | name | unit | quantity per output unit.`)
+    const unit = columns[2].toLowerCase()
+    if (!materialUnits.has(unit)) throw new Error(`Additional BOM material line ${line} has an unsupported unit.`)
+    const quantityPerUnitMilli = parsePlantOrderQuantityMilli(columns[3])
+    if (!quantityPerUnitMilli) throw new Error(`Additional BOM material line ${line} needs a positive quantity with up to three decimals.`)
+    return {
+      materialId: identifier(columns[0].toUpperCase(), `Additional BOM material line ${line} ID`, 'MAT'),
+      name: text(columns[1], `Additional BOM material line ${line} name`),
+      unit: unit as PlantOrderMaterial['unit'],
+      quantityPerUnitMilli,
+    }
+  })
+  unique(materials.map((material) => material.materialId), 'Additional BOM material IDs')
+  return materials.sort((left, right) => compareCanonicalText(left.materialId, right.materialId))
 }
 
 function safeProduct(left: number, right: number, field: string) {

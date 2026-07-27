@@ -190,6 +190,12 @@ textarea { min-height: 72px; resize: vertical; }
 .core-form { display: grid; gap: 10px; }
 .compact-form { max-width: 680px; }
 .form-row { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+.plant-availability-fields { max-height: 360px; display: grid; gap: 12px; overflow: auto; border: 1px solid var(--core-line); border-radius: 10px; padding: 10px; background: rgba(255,255,255,.7); }
+.plant-availability-group { display: grid; gap: 10px; }
+.plant-availability-group + .plant-availability-group { border-top: 1px solid var(--core-line); padding-top: 10px; }
+.plant-availability-item { display: grid; gap: 7px; }
+.plant-availability-item > div:first-child { display: flex; min-width: 0; align-items: baseline; justify-content: space-between; gap: 10px; }
+.plant-availability-item > div:first-child small { overflow: hidden; color: var(--core-quiet); font-family: var(--core-mono); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
 .template-contract { display: grid; grid-template-columns: auto minmax(0,1fr); gap: 3px 8px; border: 1px solid var(--core-line); border-radius: 8px; padding: 7px 8px; background: rgba(11,116,94,.05); }
 .template-contract span { color: var(--core-green); font-family: var(--core-mono); font-size: 7px; font-weight: 760; letter-spacing: .06em; text-transform: uppercase; }
 .template-contract strong { overflow: hidden; font-size: 8px; font-weight: 680; text-overflow: ellipsis; white-space: nowrap; }

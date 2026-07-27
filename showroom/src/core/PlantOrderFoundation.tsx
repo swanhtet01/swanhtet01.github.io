@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 
 import {
+  PLANT_ORDER_ADDITIONAL_MATERIAL_MAX,
   applyPlantOrderPlan,
   buildPlantOrderPlan,
   checkPlantOrderAvailability,
@@ -9,6 +10,8 @@ import {
   issuePlantOrderMaterial,
   loadPlantOrderWorkspace,
   mutatePlantOrderWorkspace,
+  parsePlantOrderMaterialPaste,
+  parsePlantOrderQuantityMilli,
   plantOrderEvidenceDigest,
   projectPlantOrder,
   recordPlantOrderOutput,
@@ -16,6 +19,7 @@ import {
   releasePlantOrderBatch,
   type PlantOrderProof,
   type PlantOrderMaterial,
+  type PlantOrderPlan,
   type PlantOrderState,
 } from './plant-order-foundation'
 import type { ProductionJob } from './production-workspace'
@@ -42,9 +46,15 @@ type SetupDraft = {
   materialName: string
   materialUnit: PlantOrderMaterial['unit']
   quantityPerUnit: string
+  additionalMaterials: string
   workCentreId: string
   workCentreName: string
   minutesPerUnit: string
+}
+
+type AvailabilityDraft = {
+  materials: Record<string, { inputLotId: string; availableQuantity: string }>
+  workCentres: Record<string, string>
 }
 
 const setupMaterialUnits: PlantOrderMaterial['unit'][] = ['pcs', 'kg', 'g', 'l', 'ml', 'pack', 'bag', 'roll', 'sheet', 'm', 'cm']
@@ -90,15 +100,15 @@ function remaining(job: ProductionJob) {
   return job.target - job.output - (job.scrap ?? 0)
 }
 
-function parseMilli(value: string) {
-  if (!/^(?:0|[1-9]\d*)(?:\.\d{1,3})?$/.test(value)) return null
-  const [whole, fraction = ''] = value.split('.')
-  const result = Number(whole) * 1_000 + Number(fraction.padEnd(3, '0'))
-  return Number.isSafeInteger(result) && result > 0 ? result : null
-}
-
 function formatMilli(value: number) {
   return (value / 1_000).toLocaleString(undefined, { maximumFractionDigits: 3 })
+}
+
+function milliInputValue(value: number) {
+  if (!Number.isSafeInteger(value) || value < 0) throw new Error('The required quantity exceeds the supported range.')
+  const whole = Math.floor(value / 1_000)
+  const fraction = String(value % 1_000).padStart(3, '0').replace(/0+$/, '')
+  return fraction ? `${whole}.${fraction}` : String(whole)
 }
 
 function defaultSetup(job?: ProductionJob): SetupDraft {
@@ -110,23 +120,35 @@ function defaultSetup(job?: ProductionJob): SetupDraft {
     materialName: 'Primary material',
     materialUnit: 'pcs',
     quantityPerUnit: '1',
+    additionalMaterials: '',
     workCentreId: 'WC-ASSEMBLY-01',
     workCentreName: 'Assembly',
     minutesPerUnit: '1',
   }
 }
 
-function availabilityDefaults(state: PlantOrderState) {
-  const projection = projectPlantOrder(state)
-  const material = projection.materials[0]
-  const plan = projection.plan
-  if (!material || !plan) return { inputLotId: 'LOT-OPEN-001', materialAvailable: '', availableMinutes: '' }
-  const requiredMinutesMilli = plan.routing.reduce((total, operation) => total + operation.minutesPerUnitMilli * plan.job.targetQuantity, 0)
+function availabilityDefaultsForPlan(plan: PlantOrderPlan): AvailabilityDraft {
+  const requiredMinutes = new Map(plan.workCentres.map((centre) => [centre.workCentreId, 0]))
+  plan.routing.forEach((operation) => {
+    const next = (requiredMinutes.get(operation.workCentreId) ?? 0) + operation.minutesPerUnitMilli * plan.job.targetQuantity
+    if (!Number.isSafeInteger(next)) throw new Error(`The required capacity for ${operation.workCentreId} exceeds the supported range.`)
+    requiredMinutes.set(operation.workCentreId, next)
+  })
   return {
-    inputLotId: `LOT-${material.materialId.replace(/^MAT-/, '')}`,
-    materialAvailable: formatMilli(material.requiredQuantityMilli),
-    availableMinutes: String(Math.ceil(requiredMinutesMilli / 1_000)),
+    materials: Object.fromEntries(plan.materials.map((material) => [material.materialId, {
+      inputLotId: `LOT-${material.materialId.replace(/^MAT-/, '')}`,
+      availableQuantity: milliInputValue(material.quantityPerUnitMilli * plan.job.targetQuantity),
+    }])),
+    workCentres: Object.fromEntries(plan.workCentres.map((centre) => [
+      centre.workCentreId,
+      String(Math.ceil((requiredMinutes.get(centre.workCentreId) ?? 0) / 1_000)),
+    ])),
   }
+}
+
+function availabilityDefaults(state: PlantOrderState) {
+  const plan = projectPlantOrder(state).plan
+  return plan ? availabilityDefaultsForPlan(plan) : { materials: {}, workCentres: {} }
 }
 
 function loadState(scope: string) {
@@ -228,22 +250,31 @@ export function PlantOrderFoundation({ actor, disabled, jobs, scope }: PlantOrde
     event.preventDefault()
     if (!selectedSetupJob) return setError('Add or choose one active Plant job first.')
     try {
-      const quantityPerUnitMilli = parseMilli(setupDraft.quantityPerUnit); const minutesPerUnitMilli = parseMilli(setupDraft.minutesPerUnit)
+      const quantityPerUnitMilli = parsePlantOrderQuantityMilli(setupDraft.quantityPerUnit); const minutesPerUnitMilli = parsePlantOrderQuantityMilli(setupDraft.minutesPerUnit)
       if (!quantityPerUnitMilli || !minutesPerUnitMilli) throw new Error('Material and work-centre rates must be positive numbers with up to three decimals.')
+      const primaryMaterial: PlantOrderMaterial = {
+        materialId: setupDraft.materialId.trim().toUpperCase(),
+        name: setupDraft.materialName.trim(),
+        unit: setupDraft.materialUnit,
+        quantityPerUnitMilli,
+      }
+      const materials = [primaryMaterial, ...parsePlantOrderMaterialPaste(setupDraft.additionalMaterials)]
+        .sort((left, right) => left.materialId < right.materialId ? -1 : left.materialId > right.materialId ? 1 : 0)
+      if (new Set(materials.map((material) => material.materialId)).size !== materials.length) throw new Error('Each BOM material ID must be unique, including the primary material.')
       const targetQuantity = remaining(selectedSetupJob); const expectedHeadDigest = state.headDigest
       const sourceDigest = plantOrderEvidenceDigest(jobSnapshot(scope, selectedSetupJob))
       const plan = buildPlantOrderPlan({
         planId: commandId('PLN'), sourceDigest,
         job: { jobId: selectedSetupJob.id, product: selectedSetupJob.product, targetQuantity, outputBatchId: setupDraft.outputBatchId.trim().toUpperCase() },
-        materials: [{ materialId: setupDraft.materialId.trim().toUpperCase(), name: setupDraft.materialName.trim(), unit: setupDraft.materialUnit, quantityPerUnitMilli }],
+        materials,
         workCentres: [{ workCentreId: setupDraft.workCentreId.trim().toUpperCase(), name: setupDraft.workCentreName.trim() }],
         routing: [{ operationId: `OP-${setupDraft.workCentreId.trim().toUpperCase().replace(/^WC-/, '')}-10`, sequence: 1, name: setupDraft.workCentreName.trim(), workCentreId: setupDraft.workCentreId.trim().toUpperCase(), minutesPerUnitMilli }],
       })
-      setAvailabilityDraft({ inputLotId: `LOT-${setupDraft.materialId.trim().toUpperCase().replace(/^MAT-/, '')}`, materialAvailable: formatMilli(targetQuantity * quantityPerUnitMilli), availableMinutes: String(Math.ceil(targetQuantity * minutesPerUnitMilli / 1_000)) })
+      setAvailabilityDraft(availabilityDefaultsForPlan(plan))
       const actionProof = proof(actor, 'the reviewed BOM and routing')
       stage({
         title: 'Execution plan',
-        summary: `${selectedSetupJob.id} · ${targetQuantity.toLocaleString()} remaining · 1 material · 1 operation`,
+        summary: `${selectedSetupJob.id} · ${targetQuantity.toLocaleString()} remaining · ${materials.length} ${materials.length === 1 ? 'material' : 'materials'} · 1 operation`,
         boundary: 'Creates an immutable local execution package. It does not schedule staff, move stock, post accounting, or control equipment.',
         apply: (current) => applyPlantOrderPlan(current, plan, actionProof, expectedHeadDigest),
       })
@@ -254,19 +285,45 @@ export function PlantOrderFoundation({ actor, disabled, jobs, scope }: PlantOrde
 
   function reviewAvailability(event: FormEvent) {
     event.preventDefault()
-    if (!projection.plan || !projection.materials[0] || !projection.plan.workCentres[0]) return
-    const availableQuantityMilli = parseMilli(availabilityDraft.materialAvailable); const availableMinutes = Number(availabilityDraft.availableMinutes)
-    if (!availableQuantityMilli || !Number.isSafeInteger(availableMinutes) || availableMinutes < 0) return setError('Enter the observed lot quantity and whole available minutes.')
-    const checkId = commandId('CHK'); const expectedHeadDigest = state.headDigest
-    const materials = [{ materialId: projection.materials[0].materialId, inputLotId: availabilityDraft.inputLotId.trim().toUpperCase(), availableQuantityMilli }]
-    const workCentres = [{ workCentreId: projection.plan.workCentres[0].workCentreId, availableMinutes }]
-    const sourceDigest = plantOrderEvidenceDigest({ materials, workCentres }); const actionProof = proof(actor, 'material and work-centre availability')
-    stage({
-      title: 'Availability check',
-      summary: `${formatMilli(availableQuantityMilli)} ${projection.materials[0].unit} · ${availableMinutes.toLocaleString()} work-centre minutes`,
-      boundary: 'Records a reviewed snapshot only. A shortfall blocks order release; no purchase, reservation, or dispatch occurs.',
-      apply: (current) => checkPlantOrderAvailability(current, { checkId, sourceDigest, materials, workCentres, proof: actionProof, expectedHeadDigest }),
+    if (!projection.plan) return
+    try {
+      const materials = projection.materials.map((material) => {
+        const draft = availabilityDraft.materials[material.materialId]
+        const inputLotId = draft?.inputLotId.trim().toUpperCase() ?? ''
+        const availableQuantityMilli = draft ? parsePlantOrderQuantityMilli(draft.availableQuantity, true) : null
+        if (!/^LOT-[A-Z0-9]+(?:-[A-Z0-9]+)*$/.test(inputLotId) || availableQuantityMilli === null) {
+          throw new Error(`Enter a canonical lot ID and observed quantity for ${material.materialId}. Quantity may be zero.`)
+        }
+        return { materialId: material.materialId, inputLotId, availableQuantityMilli }
+      })
+      const workCentres = projection.plan.workCentres.map((centre) => {
+        const rawAvailableMinutes = availabilityDraft.workCentres[centre.workCentreId] ?? ''
+        const availableMinutes = /^\d+$/.test(rawAvailableMinutes) ? Number(rawAvailableMinutes) : Number.NaN
+        if (!Number.isSafeInteger(availableMinutes) || availableMinutes < 0) throw new Error(`Enter whole available minutes for ${centre.workCentreId}.`)
+        return { workCentreId: centre.workCentreId, availableMinutes }
+      })
+      const checkId = commandId('CHK'); const expectedHeadDigest = state.headDigest
+      const sourceDigest = plantOrderEvidenceDigest({ materials, workCentres }); const actionProof = proof(actor, 'material and work-centre availability')
+      stage({
+        title: 'Availability check',
+        summary: `${materials.length} material ${materials.length === 1 ? 'lot' : 'lots'} · ${workCentres.length} work ${workCentres.length === 1 ? 'centre' : 'centres'}`,
+        boundary: 'Records a reviewed snapshot only. A shortfall blocks order release; no purchase, reservation, or dispatch occurs.',
+        apply: (current) => checkPlantOrderAvailability(current, { checkId, sourceDigest, materials, workCentres, proof: actionProof, expectedHeadDigest }),
+      })
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Availability could not be prepared for review.')
+    }
+  }
+
+  function updateMaterialAvailability(materialId: string, patch: Partial<AvailabilityDraft['materials'][string]>) {
+    setAvailabilityDraft((current) => {
+      const existing = current.materials[materialId] ?? { inputLotId: '', availableQuantity: '' }
+      return { ...current, materials: { ...current.materials, [materialId]: { ...existing, ...patch } } }
     })
+  }
+
+  function updateWorkCentreAvailability(workCentreId: string, availableMinutes: string) {
+    setAvailabilityDraft((current) => ({ ...current, workCentres: { ...current.workCentres, [workCentreId]: availableMinutes } }))
   }
 
   function reviewOrderRelease() {
@@ -312,8 +369,23 @@ export function PlantOrderFoundation({ actor, disabled, jobs, scope }: PlantOrde
       {projection.plan ? <span className={`status-pill ${projection.status === 'quality_hold' || projection.status === 'shortfall' ? 'pending' : 'bounded'}`}>{statusCopy[projection.status]}</span> : null}
 
       {projection.plan && (projection.status === 'planned' || projection.status === 'shortfall') ? <form className="core-form compact-form" onSubmit={reviewAvailability}>
-        <div className="form-row"><label>Input lot<input disabled={controlsDisabled} maxLength={80} onChange={(event) => setAvailabilityDraft((current) => ({ ...current, inputLotId: event.target.value }))} required value={availabilityDraft.inputLotId} /></label><label>Available {projection.materials[0]?.unit}<input disabled={controlsDisabled} inputMode="decimal" min="0.001" onChange={(event) => setAvailabilityDraft((current) => ({ ...current, materialAvailable: event.target.value }))} required step="0.001" type="number" value={availabilityDraft.materialAvailable} /></label></div>
-        <label>Available work-centre minutes<input disabled={controlsDisabled} min="0" onChange={(event) => setAvailabilityDraft((current) => ({ ...current, availableMinutes: event.target.value }))} required step="1" type="number" value={availabilityDraft.availableMinutes} /></label>
+        <div aria-label="Material and capacity availability" className="plant-availability-fields">
+          <section aria-label="Material lots" className="plant-availability-group">
+            {projection.materials.map((material) => {
+              const draft = availabilityDraft.materials[material.materialId] ?? { inputLotId: '', availableQuantity: '' }
+              return <div className="plant-availability-item" key={material.materialId}>
+                <div><strong>{material.name}</strong><small>{material.materialId} · need {formatMilli(material.requiredQuantityMilli)} {material.unit}</small></div>
+                <div className="form-row"><label>Input lot<input disabled={controlsDisabled} maxLength={80} onChange={(event) => updateMaterialAvailability(material.materialId, { inputLotId: event.target.value })} required value={draft.inputLotId} /></label><label>Available {material.unit}<input disabled={controlsDisabled} inputMode="decimal" min="0" onChange={(event) => updateMaterialAvailability(material.materialId, { availableQuantity: event.target.value })} required step="0.001" type="number" value={draft.availableQuantity} /></label></div>
+              </div>
+            })}
+          </section>
+          <section aria-label="Work-centre capacity" className="plant-availability-group">
+            {projection.plan.workCentres.map((centre) => <div className="plant-availability-item" key={centre.workCentreId}>
+              <div><strong>{centre.name}</strong><small>{centre.workCentreId}</small></div>
+              <label>Available whole minutes<input disabled={controlsDisabled} min="0" onChange={(event) => updateWorkCentreAvailability(centre.workCentreId, event.target.value)} required step="1" type="number" value={availabilityDraft.workCentres[centre.workCentreId] ?? ''} /></label>
+            </div>)}
+          </section>
+        </div>
         {projection.status === 'shortfall' ? <p className="form-notice warning-text" role="alert">{projection.latestAvailability?.shortfalls.map((row) => `${row.subjectId}: need ${formatMilli(row.required)}, have ${formatMilli(row.available)}`).join(' · ')}</p> : null}
         <button className="core-button primary" disabled={controlsDisabled} type="submit">Review availability</button>
       </form> : null}
@@ -339,15 +411,16 @@ export function PlantOrderFoundation({ actor, disabled, jobs, scope }: PlantOrde
         <label>Active job<select disabled={disabled || Boolean(review)} onChange={(event) => { const job = activeJobs.find((candidate) => candidate.id === event.target.value); setSetupDraft(defaultSetup(job)) }} value={selectedSetupJob?.id ?? ''}>{activeJobs.length ? activeJobs.map((job) => <option key={job.id} value={job.id}>{job.id} · {job.product} · {remaining(job).toLocaleString()} left</option>) : <option value="">No active jobs</option>}</select></label>
         <label>Output batch ID<input disabled={disabled || Boolean(review)} maxLength={80} onChange={(event) => setSetupDraft((current) => ({ ...current, outputBatchId: event.target.value }))} required value={setupDraft.outputBatchId} /></label>
         <details className="compact-disclosure production-history">
-          <summary>Customize material and routing <span>1 material · 1 operation</span></summary>
+          <summary>Customize material and routing <span>Up to {PLANT_ORDER_ADDITIONAL_MATERIAL_MAX + 1} materials · 1 operation</span></summary>
           <div className="core-form compact-form">
             <div className="form-row"><label>Material ID<input disabled={disabled || Boolean(review)} maxLength={80} onChange={(event) => setSetupDraft((current) => ({ ...current, materialId: event.target.value }))} required value={setupDraft.materialId} /></label><label>Material name<input disabled={disabled || Boolean(review)} maxLength={180} onChange={(event) => setSetupDraft((current) => ({ ...current, materialName: event.target.value }))} required value={setupDraft.materialName} /></label></div>
             <div className="form-row"><label>Material unit<select disabled={disabled || Boolean(review)} onChange={(event) => setSetupDraft((current) => ({ ...current, materialUnit: event.target.value as PlantOrderMaterial['unit'] }))} value={setupDraft.materialUnit}>{setupMaterialUnits.map((unit) => <option key={unit} value={unit}>{unit}</option>)}</select></label><label>Per output unit<input disabled={disabled || Boolean(review)} inputMode="decimal" min="0.001" onChange={(event) => setSetupDraft((current) => ({ ...current, quantityPerUnit: event.target.value }))} required step="0.001" type="number" value={setupDraft.quantityPerUnit} /></label></div>
+            <label>Additional BOM materials (optional)<textarea disabled={disabled || Boolean(review)} maxLength={16_000} onChange={(event) => setSetupDraft((current) => ({ ...current, additionalMaterials: event.target.value }))} placeholder="MAT-RUBBER-01 | Natural rubber | kg | 1.5" rows={4} value={setupDraft.additionalMaterials} /><small>One row per line: material ID | name | unit | quantity per output unit. Add up to {PLANT_ORDER_ADDITIONAL_MATERIAL_MAX}.</small></label>
             <div className="form-row"><label>Work centre ID<input disabled={disabled || Boolean(review)} maxLength={80} onChange={(event) => setSetupDraft((current) => ({ ...current, workCentreId: event.target.value }))} required value={setupDraft.workCentreId} /></label><label>Work centre name<input disabled={disabled || Boolean(review)} maxLength={180} onChange={(event) => setSetupDraft((current) => ({ ...current, workCentreName: event.target.value }))} required value={setupDraft.workCentreName} /></label></div>
             <label>Minutes per output unit<input disabled={disabled || Boolean(review)} inputMode="decimal" min="0.001" onChange={(event) => setSetupDraft((current) => ({ ...current, minutesPerUnit: event.target.value }))} required step="0.001" type="number" value={setupDraft.minutesPerUnit} /></label>
           </div>
         </details>
-        <p className="panel-copy">A ready one-material, one-operation template is prefilled. Customize it only when this batch differs. No stock, staff, machine, costing, or accounting action occurs.</p>
+        <p className="panel-copy">One material and one operation are prefilled. Paste up to {PLANT_ORDER_ADDITIONAL_MATERIAL_MAX} more BOM rows only when this batch needs them. No stock, staff, machine, costing, or accounting action occurs.</p>
         <div className="form-actions"><button className="core-button" onClick={closeSetup} type="button">Cancel</button><button className="core-button primary" disabled={disabled || Boolean(review) || !selectedSetupJob} type="submit">Review execution plan</button></div>
       </form> : null}
     </dialog>

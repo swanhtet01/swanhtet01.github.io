@@ -1245,6 +1245,8 @@ if (!coreSource.includes('<ShopInventoryFoundation')
   || shopInventoryUiSource.includes('fetch(')) fail('shop_inventory_foundation_ui_boundary_missing')
 if (!plantOrderSource.includes("PLANT_ORDER_STATE_SCHEMA = 'supermega.plant.order_foundation.v1'")
   || !plantOrderSource.includes("PLANT_ORDER_PLAN_CONTRACT = 'supermega.plant.reviewed_plan.v1'")
+  || !plantOrderSource.includes('PLANT_ORDER_ADDITIONAL_MATERIAL_MAX = 11')
+  || !plantOrderSource.includes('export function parsePlantOrderMaterialPaste')
   || !plantOrderSource.includes('export function checkPlantOrderAvailability')
   || !plantOrderSource.includes('export function releasePlantOrder')
   || !plantOrderSource.includes('export function issuePlantOrderMaterial')
@@ -1257,6 +1259,13 @@ if (['fetch(', 'supabase', 'openai', 'anthropic'].some((marker) => plantOrderSou
 if (!coreSource.includes('<PlantOrderFoundation')
   || !coreSource.includes("lazy(() => import('./PlantOrderFoundation')")
   || !plantOrderUiSource.includes('Run one controlled batch')
+  || !plantOrderUiSource.includes('Additional BOM materials (optional)')
+  || !plantOrderUiSource.includes('additionalMaterials: event.target.value')
+  || !plantOrderUiSource.includes('projection.materials.map((material)')
+  || !plantOrderUiSource.includes('projection.plan.workCentres.map((centre)')
+  || !plantOrderUiSource.includes('parsePlantOrderQuantityMilli(draft.availableQuantity, true)')
+  || !plantOrderUiSource.includes('availableQuantity: milliInputValue(')
+  || (plantOrderUiSource.match(/>Review availability<\/button>/g) || []).length !== 1
   || !plantOrderUiSource.includes('No machine command')
   || !plantOrderUiSource.includes('Shop receipt, delivery, costing, and accounting are not posted automatically.')
   || !plantOrderUiSource.includes('navigator.locks')
@@ -2193,6 +2202,22 @@ async function verifyPlantOrderRuntime() {
       reason: label,
       evidenceReference: `WO-2026-0726-${String(sequence).padStart(3, '0')}`,
     })
+    const pastedMaterials = model.parsePlantOrderMaterialPaste('\uFEFFmaterial_id | material_name | unit | quantity_per_unit\nmat-shell-001 | Outer shell | PCS | 2\nMAT-FILTER-001 | Filter media | kg | 1.5')
+    assert(pastedMaterials.length === 2
+      && pastedMaterials[0].materialId === 'MAT-FILTER-001'
+      && pastedMaterials[0].quantityPerUnitMilli === 1_500
+      && pastedMaterials[1].materialId === 'MAT-SHELL-001'
+      && pastedMaterials[1].unit === 'pcs',
+    'plant_order_bom_paste_not_normalized_or_sorted')
+    assert(model.parsePlantOrderQuantityMilli('0', true) === 0
+      && model.parsePlantOrderQuantityMilli('0') === null
+      && model.parsePlantOrderQuantityMilli('1.234') === 1_234,
+    'plant_order_quantity_parser_zero_or_precision_contract_drifted')
+    assertThrows(() => model.parsePlantOrderMaterialPaste('MAT-FILTER-001 | Filter media | kg | 1\nmat-filter-001 | Duplicate filter | kg | 1'), 'plant_order_bom_paste_duplicate_succeeded')
+    assertThrows(() => model.parsePlantOrderMaterialPaste('MAT-GLUE-001 | Adhesive | gallon | 1'), 'plant_order_bom_paste_unsupported_unit_succeeded')
+    assertThrows(() => model.parsePlantOrderMaterialPaste('MAT-GLUE-001 | Adhesive | kg'), 'plant_order_bom_paste_malformed_row_succeeded')
+    const tooManyMaterials = Array.from({ length: model.PLANT_ORDER_ADDITIONAL_MATERIAL_MAX + 1 }, (_, index) => `MAT-EXTRA-${String(index + 1).padStart(2, '0')} | Extra ${index + 1} | pcs | 1`).join('\n')
+    assertThrows(() => model.parsePlantOrderMaterialPaste(tooManyMaterials), 'plant_order_bom_paste_row_limit_not_enforced')
     const plan = model.buildPlantOrderPlan({
       planId: 'PLN-20260726-001',
       sourceDigest: model.plantOrderEvidenceDigest({ jobId: 'JOB-401', revision: 12, target: 10 }),
