@@ -63,4 +63,4 @@ The selected Instagram security slide warns that storage buckets may remain enum
 
 ## Next bounded slice
 
-Audit managed Shop order pricing and tax boundaries, then implement only the smallest missing server-authoritative calculation foundation. Preserve immutable catalog price snapshots, idempotent replay, tenant isolation, human-only authority, zero-tax legacy compatibility, and the existing Orders page; add no route, product, provider call, legal tax-rate claim, or live write.
+Expose the accepted order calculation in the existing review and order detail using one short subtotal and tax-status line. Preserve the one primary order action, mobile fit, legacy readability, immutable calculation, and explicit `not_configured` tax boundary; add no settings panel, tax rate, route, product, provider call, or live write.
