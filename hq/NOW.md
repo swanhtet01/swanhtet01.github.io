@@ -4,8 +4,8 @@ Updated: 2026-07-27
 Owner: founder / CEO
 Mode: Codex-only guarded production release; managed operation remains isolated
 Live state contract: `supermega.hq-live-state.v1`
-Live release commit: `2b25e747c1818703031a3bfcb958f7669655a157`
-Live state observed: `2026-07-27T21:13:48Z`
+Live release commit: `2930ecfc2d29cc73310e27a2a73f5ac87aa29da8`
+Live state observed: `2026-07-27T21:44:38Z`
 Live operating mode: `isolated_demo`
 Live scheduler status: `degraded`
 Live scheduler configured: `false`
@@ -53,11 +53,12 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 
 ## Verified baseline
 
-- Current checkpoints: product `17b458f`, release `2b25e747`, agent operations `a2e1b89`, operations `63a245f`, and security `98b8044`.
-- App/local gates pass: 314 Python tests, lint/build, 54 Shop inventory/221 Commerce/258 Production checks, 69 security checks, and the complete release/database/Vercel/HQ suite.
+- Current checkpoints: product `17b458f`, release `2930ecf`, agent operations `a2e1b89`, operations `63a245f`, and security `98b8044`.
+- App/local gates pass: 329 Python tests, lint/build, 54 Shop inventory/221 Commerce/258 Production checks, 69 security checks, and the complete release/database/Vercel/HQ suite.
+- PostgreSQL 17.10 rehearsal passes twice: migrations, isolation, four-product journeys, human approvals, TLS, backup/restore, and cleanup. Hosted Storage privacy remains unproven (`2930ecf`).
 - A 390 px Shop journey passed exact-lot reserve, fulfil, and sellable return with no overflow; managed count and Plant allocation remain model/runtime verified.
 - First-action QA routes Shop, Plant, and Website blockers to the next task; mobile controls are 44 px and guide/review actions create no record (`36fa7dd`).
-- Both `supermega.dev` and `app.supermega.dev` serve exact commit `2b25e747c1818703031a3bfcb958f7669655a157`. The public site exposes four direct product links with no template catalogue; the app opens Shop, Plant, Website, and Ecommerce into usable samples. The coordinated release, app guard, paired live verification, rollback rehearsal, and independent rendered-browser check pass at catalog `2026-07-28.1`.
+- Both `supermega.dev` and `app.supermega.dev` serve exact commit `2930ecfc2d29cc73310e27a2a73f5ac87aa29da8`. The public site exposes four direct product links with no template catalogue; the app opens all four samples directly. Protected promotion and exact release identity pass at catalog `2026-07-28.1`.
 - Production remains an `isolated_demo`: managed database, schema, audit, security, and writes are not ready. The hosted scheduler is degraded and unconfigured by design, uses no Ally compute, and retains a zero-idle execution target.
 
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
