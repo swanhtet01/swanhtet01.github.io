@@ -525,9 +525,9 @@ export function createSeedProduction(now = deterministicSeedNow): ProductionStat
     schema: PRODUCTION_WORKSPACE_SCHEMA,
     revision: 0,
     jobs: [
-      { id: 'JOB-201', line: 'Line 01', product: 'Batch Alpha', target: 1200, output: 860, priority: 'urgent', dueAt: new Date(now + 7 * 24 * 60 * 60 * 1000).toISOString() },
-      { id: 'JOB-202', line: 'Line 02', product: 'Batch Beta', target: 900, output: 745, priority: 'normal', dueAt: new Date(now + 8 * 24 * 60 * 60 * 1000).toISOString() },
-      { id: 'JOB-203', line: 'Line 03', product: 'Batch Gamma', target: 650, output: 650, priority: 'low', dueAt: new Date(now + 6 * 24 * 60 * 60 * 1000).toISOString() },
+      { id: 'JOB-201', line: 'Line 01', product: 'Batch Alpha', target: 1200, output: 860, owner: 'Line 01 lead', priority: 'urgent', dueAt: new Date(now + 7 * 24 * 60 * 60 * 1000).toISOString() },
+      { id: 'JOB-202', line: 'Line 02', product: 'Batch Beta', target: 900, output: 745, owner: 'Line 02 lead', priority: 'normal', dueAt: new Date(now + 8 * 24 * 60 * 60 * 1000).toISOString() },
+      { id: 'JOB-203', line: 'Line 03', product: 'Batch Gamma', target: 650, output: 650, owner: 'Line 03 lead', priority: 'low', dueAt: new Date(now + 6 * 24 * 60 * 60 * 1000).toISOString() },
     ],
     issues: [
       { id: 'ISS-301', createdAt: new Date(now - 82 * 60 * 1000).toISOString(), area: 'Line 02', kind: 'quality', summary: 'Temperature drift requires supervisor review', status: 'open' },

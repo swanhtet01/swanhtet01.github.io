@@ -255,6 +255,9 @@ textarea { min-height: 72px; resize: vertical; }
 .action-history-list article p { margin: 0; color: var(--core-green); font-family: var(--core-mono); font-size: 8px; }
 .action-history-list article > small { grid-column: 1/-1; }
 .form-panel, .guidance-panel, .output-panel, .decision-form-panel, .setup-form { overflow: auto; }
+.plant-output-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.plant-output-head h2 { margin-bottom: 18px; }
+.plant-output-backdrop, .plant-output-close { display: none; }
 .guidance-panel ol { display: grid; gap: 10px; margin: 18px 0 0; padding-left: 22px; color: var(--core-muted); font-size: 12px; }
 
 .review-workspace, .control-workspace, .module-today { height: 100%; min-height: 0; display: flex; flex-direction: column; gap: 11px; }
@@ -1059,6 +1062,11 @@ textarea { min-height: 72px; resize: vertical; }
   .workspace-view { overflow: visible !important; }
   .operation-module { height: auto; }
   .operation-module > .split-workspace, .operation-module > .module-today, .operation-module > .control-workspace, .operation-module > .inventory-panel { flex: none; }
+  .production-view .output-panel { position: fixed; right: 6px; bottom: calc(67px + env(safe-area-inset-bottom)); z-index: 72; width: min(480px,calc(100% - 12px)); max-height: calc(100svh - 78px - env(safe-area-inset-bottom)); overflow-y: auto; border-radius: 18px 18px 8px 8px; padding: 16px; opacity: 0; visibility: hidden; pointer-events: none; transform: translateY(24px) scale(.985); transition: opacity .18s ease, transform .18s ease, visibility .18s; }
+  .production-view .output-panel.is-open { opacity: 1; visibility: visible; pointer-events: auto; transform: none; }
+  .plant-output-backdrop { position: fixed; inset: 0 0 calc(64px + env(safe-area-inset-bottom)); z-index: 71; display: block; border: 0; background: rgba(0,3,7,.68); opacity: 0; visibility: hidden; pointer-events: none; backdrop-filter: blur(4px); transition: opacity .18s ease, visibility .18s; }
+  .plant-output-backdrop.is-open { opacity: 1; visibility: visible; pointer-events: auto; }
+  .plant-output-close { min-width: 58px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--core-line); border-radius: 9px; background: transparent; color: var(--core-muted); font-size: 11px; font-weight: 750; cursor: pointer; }
   .accountable-action-gate, .action-history { min-height: 0; }
   .review-workspace, .control-workspace, .module-today { height: auto; }
   .review-grid, .ops-today-grid { height: auto; }
