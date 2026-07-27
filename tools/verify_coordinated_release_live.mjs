@@ -163,6 +163,7 @@ async function readRelease(baseUrl, projectId) {
 
 const sleep = (milliseconds) => new Promise((resolveSleep) => setTimeout(resolveSleep, milliseconds))
 let lastError
+let verified = false
 for (let attempt = 1; attempt <= attempts; attempt += 1) {
   try {
     const [appRelease, publicRelease] = await Promise.all([
@@ -179,19 +180,22 @@ for (let attempt = 1; attempt <= attempts; attempt += 1) {
       pairOnly,
       identity,
     }, null, 2))
-    process.exit(0)
+    verified = true
+    break
   } catch (error) {
     lastError = error
     if (attempt < attempts) await sleep(attempt * retryDelayMs)
   }
 }
 
-console.error(JSON.stringify({
-  ok: false,
-  contract: 'supermega_coordinated_release',
-  appBaseUrl,
-  publicBaseUrl,
-  pairOnly,
-  reason: lastError?.message || 'unknown_failure',
-}, null, 2))
-process.exit(1)
+if (!verified) {
+  console.error(JSON.stringify({
+    ok: false,
+    contract: 'supermega_coordinated_release',
+    appBaseUrl,
+    publicBaseUrl,
+    pairOnly,
+    reason: lastError?.message || 'unknown_failure',
+  }, null, 2))
+  process.exitCode = 1
+}

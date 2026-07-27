@@ -114,11 +114,13 @@ async function verifyOnce() {
 }
 
 let lastError
+let verified = false
 for (let attempt = 1; attempt <= attempts; attempt += 1) {
   try {
     const result = await verifyOnce()
     console.log(JSON.stringify({ ok: true, contract: 'supermega_public_live_release', baseUrl, attempt, expectedCommit: expectedCommit || null, ...result }, null, 2))
-    process.exit(0)
+    verified = true
+    break
   } catch (error) {
     lastError = error
     if (attempt < attempts) {
@@ -128,5 +130,7 @@ for (let attempt = 1; attempt <= attempts; attempt += 1) {
   }
 }
 
-console.error(JSON.stringify({ ok: false, contract: 'supermega_public_live_release', baseUrl, expectedCommit: expectedCommit || null, reason: lastError?.message || 'unknown_failure' }, null, 2))
-process.exit(1)
+if (!verified) {
+  console.error(JSON.stringify({ ok: false, contract: 'supermega_public_live_release', baseUrl, expectedCommit: expectedCommit || null, reason: lastError?.message || 'unknown_failure' }, null, 2))
+  process.exitCode = 1
+}
