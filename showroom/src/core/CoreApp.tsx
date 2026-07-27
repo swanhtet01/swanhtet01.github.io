@@ -1470,17 +1470,13 @@ function RuntimeBadge({ status }: { status: RuntimeStatus }) {
 function ProductTrialContext({ product, setup }: { product: SetupProductId; setup: SetupState }) {
   const productContract = productContracts[product]
   const matchesProduct = setup.product === product
-  const selectedTemplate = templateFor(product, matchesProduct ? setup.templateId : '')
   const started = matchesProduct && Boolean(setup.startedAt)
-  const context = started
-    ? `${setup.workspace || 'Sample workspace'} · ${setup.owner || 'Owner not named'} · Measure ${selectedTemplate.metric.toLowerCase()}`
-    : `Choose one of ${productContract.templates.length} business templates before trying ${productContract.name}.`
+  if (started) return null
 
   return <aside className="product-trial-context" aria-label={`${productContract.name} trial`}>
-    <div><span>{started ? 'Guided trial' : 'Sample workspace'}</span><strong>{started ? selectedTemplate.name : `Make ${productContract.name} fit your workflow`}</strong><small>{context}</small></div>
+    <div><span>Sample workspace</span><strong>Choose a {productContract.name} template</strong><small>Start with one of {productContract.templates.length} proven workflows.</small></div>
     <div className="product-trial-actions">
-      <Link className="text-link" to={clientSetupPath(product)}>{started ? 'Edit trial' : 'Choose template'}</Link>
-      {started ? <a className="core-button compact" href={managedTrialRequestUrl(product, selectedTemplate.id)}>Request workspace</a> : null}
+      <Link className="text-link" to={clientSetupPath(product)}>Choose template</Link>
     </div>
   </aside>
 }
@@ -1940,7 +1936,7 @@ export function OperationsPage({ product }: { product?: ProductId }) {
 
   return (
     <div className="workspace-screen operations-screen">
-      <PageHeading title={productDisplayName(view)} copy={productCopy} actions={<Link className="text-link all-apps-link" to="/">All products</Link>} />
+      <PageHeading title={productDisplayName(view)} copy={productCopy} />
       <nav className="workspace-toolbar view-tabs product-task-tabs" aria-label={`${productDisplayName(view)} tasks`}>{tabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{tab.label}</button>)}</nav>
       <div className="workspace-view">{view === 'commerce' ? <CommercePage ecommerceNavigationDraft={ecommerceNavigationDraft} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedSource={requestedSource} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
     </div>
@@ -3968,12 +3964,15 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     && orderDraftIssue.startsWith('Order confirmed, but its local recovery copy remains:')
   const orderDraftRecoveryBlocked = orderDraftRead.status === 'invalid'
     || orderDraftRead.status === 'unavailable'
+  const orderDraftRecoveryVisible = !orderDraftActive
+    && !pendingAction
+    && (orderDraftRead.status === 'ready' || orderDraftRecoveryBlocked)
 
   if (tab === 'orders') return <div className={`operation-module orders-module${returnDraft && selectedReturnLine ? ' has-return-draft' : ''}`}>
     {commerceBoundary}
     <section className="core-panel order-queue-panel order-workspace">
-      <div className="panel-head"><div><span className="core-eyebrow">Orders</span><h2>{actionOrders.length} {actionOrders.length === 1 ? 'order needs' : 'orders need'} action</h2></div><div className="order-queue-actions"><span className="panel-note">{openOrders.length} in fulfilment</span><button className="core-button primary compact" disabled={!commerceCanWrite || Boolean(pendingAction) || !orderDraftInitialized || orderDraftRecoveryBlocked} onClick={orderDraftRead.status === 'ready' && !orderDraftActive ? resumeSavedOrderDraft : openOrderComposer} ref={orderComposerTriggerRef} type="button">{!orderDraftInitialized ? 'Loading orders' : orderDraftRead.status === 'unavailable' ? 'Recovery unavailable' : orderDraftRead.status === 'ready' && !orderDraftActive ? 'Resume order' : 'New order'}</button></div></div>
-      {!orderDraftActive && !pendingAction && (orderDraftRead.status === 'ready' || orderDraftRecoveryBlocked) ? <div className={`order-draft-recovery ${orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'is-blocked' : ''}`} role={orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'alert' : 'status'}>
+      <div className="panel-head"><div><span className="core-eyebrow">Orders</span><h2>{actionOrders.length} {actionOrders.length === 1 ? 'order needs' : 'orders need'} action</h2></div><div className="order-queue-actions"><span className="panel-note">{openOrders.length} in fulfilment</span>{!orderDraftRecoveryVisible ? <button className="core-button primary compact" disabled={!commerceCanWrite || Boolean(pendingAction) || !orderDraftInitialized || orderDraftRecoveryBlocked} onClick={openOrderComposer} ref={orderComposerTriggerRef} type="button">{!orderDraftInitialized ? 'Loading orders' : orderDraftRead.status === 'unavailable' ? 'Recovery unavailable' : 'New order'}</button> : null}</div></div>
+      {orderDraftRecoveryVisible ? <div className={`order-draft-recovery ${orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'is-blocked' : ''}`} role={orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'alert' : 'status'}>
         <div>
           <strong>{orderDraftRecoveryWarning
             ? 'Confirmed order left a saved recovery copy'
@@ -3990,7 +3989,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
           {orderDraftRecoveryWarning && orderDraftRead.draft ? <small>{orderDraftRead.draft.lines.length} {orderDraftRead.draft.lines.length === 1 ? 'item' : 'items'} · revision {orderDraftRead.draft.revision} · review before creating another order</small> : null}
         </div>
         <div className="order-draft-recovery-actions">
-          {orderDraftRead.status === 'ready' ? <button className="core-button compact" onClick={resumeSavedOrderDraft} type="button">Resume</button> : <Link className="text-link" to="/settings/#controls">{orderDraftRead.status === 'invalid' ? 'Export evidence' : 'Open Settings'}</Link>}
+          {orderDraftRead.status === 'ready' ? <button className="core-button compact" onClick={resumeSavedOrderDraft} type="button">Resume order</button> : <Link className="text-link" to="/settings/#controls">{orderDraftRead.status === 'invalid' ? 'Export evidence' : 'Open Settings'}</Link>}
           {orderDraftRead.status !== 'unavailable' ? <button className="text-link danger-text" disabled={orderDraftSaving} onClick={() => void discardSavedOrderDraft()} type="button">{orderDraftRead.status === 'ready' ? 'Discard' : 'Discard unreadable draft'}</button> : null}
         </div>
       </div> : null}

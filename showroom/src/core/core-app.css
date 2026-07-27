@@ -148,7 +148,6 @@ a { color: inherit; }
 .segmented-control.wide { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }
 .product-task-tabs { justify-content: flex-start; overflow-x: auto; }
 .product-task-tabs button { min-width: 88px; justify-content: center; font-size: 13px; }
-.all-apps-link { min-width: 44px; min-height: 40px; justify-content: center; }
 
 .summary-strip { min-height: 62px; display: grid; grid-template-columns: repeat(auto-fit,minmax(120px,1fr)); overflow: hidden; border: 1px solid var(--core-line); border-radius: var(--core-radius); background: var(--core-panel); }
 .summary-strip.compact-summary { grid-template-columns: repeat(3,minmax(0,1fr)); }
@@ -904,7 +903,6 @@ textarea { min-height: 72px; resize: vertical; }
   .page-heading { align-items: flex-start; }
   .page-heading p { white-space: normal; }
   .operations-screen .page-heading { flex-direction: column; gap: 8px; }
-  .operations-screen .heading-actions { width: 100%; }
   .workspace-toolbar { align-items: flex-start; overflow-x: auto; }
   .operations-toolbar { overflow: visible; }
   .segmented-control, .view-tabs { flex: 0 0 auto; }
@@ -1024,8 +1022,6 @@ textarea { min-height: 72px; resize: vertical; }
   .heading-actions, .heading-actions .core-button { width: 100%; }
   .heading-actions .core-button { min-height: 48px; padding-inline: 12px; }
   .operations-screen .page-heading { grid-template-columns: minmax(0,1fr) auto; align-items: end; gap: 8px 12px; }
-  .operations-screen .heading-actions { width: auto; }
-  .operations-screen .heading-actions .text-link { display: none; }
   .product-launcher { grid-template-columns: 1fr; gap: 8px; }
   .setup-product-grid, .setup-template-summary { grid-template-columns: 1fr; }
   .setup-template-summary > small { grid-column: auto; }
