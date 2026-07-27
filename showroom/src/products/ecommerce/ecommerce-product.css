@@ -57,6 +57,82 @@
   white-space: nowrap;
 }
 
+.ecommerce-ai-desk {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, .85fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 12px;
+  border: 1px solid rgba(31, 68, 51, .14);
+  border-radius: 10px;
+  padding: 12px;
+  background: #fff;
+}
+
+.ecommerce-ai-desk > div:first-child {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.ecommerce-ai-desk h2 {
+  margin: 0;
+  color: #17231d;
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+.ecommerce-ai-desk p {
+  max-width: 680px;
+  margin: 0;
+  color: #66746b;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.ecommerce-ai-desk-queue {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid rgba(31, 68, 51, .12);
+  border-radius: 8px;
+}
+
+.ecommerce-ai-desk-queue span {
+  min-width: 0;
+  min-height: 46px;
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  border-right: 1px solid rgba(31, 68, 51, .1);
+  padding: 6px 8px;
+  background: rgba(11, 116, 94, .04);
+}
+
+.ecommerce-ai-desk-queue span:last-child {
+  border-right: 0;
+}
+
+.ecommerce-ai-desk-queue small {
+  overflow: hidden;
+  color: #66746b;
+  font-size: 8px;
+  font-weight: 780;
+  letter-spacing: .04em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.ecommerce-ai-desk-queue strong {
+  overflow: hidden;
+  color: #17231d;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @media (min-width: 841px) {
   .ecommerce-workspace {
     grid-template-columns: minmax(480px, 1.2fr) minmax(320px, .8fr);
@@ -587,6 +663,26 @@
 
   .ecommerce-command-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ecommerce-ai-desk {
+    grid-template-columns: 1fr;
+  }
+
+  .ecommerce-ai-desk .core-button {
+    width: 100%;
+  }
+
+  .ecommerce-ai-desk-queue {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ecommerce-ai-desk-queue span:nth-child(2n) {
+    border-right: 0;
+  }
+
+  .ecommerce-ai-desk-queue span:nth-child(-n+2) {
+    border-bottom: 1px solid rgba(31, 68, 51, .1);
   }
 
   .ecommerce-save-actions {

@@ -750,12 +750,29 @@ export function EcommerceProduct() {
     })
     : []
   const buyingReady = Boolean(previewResult.preview && digest && (savedDraftIsCurrent || !managedIdentity))
+  const pendingManagedRequests = managedInbox
+    ? commerceStorefrontRequests(managedInbox.state).filter((request) => request.state === 'pending_shop_review')
+    : []
+  const importNeeded = catalog.source === 'sample' || catalog.source === 'unavailable' || catalog.items.length === 0
   const setupRows = [
     ['Catalog', sourceLabel],
     ['Products', `${selectedSkus.length}/${Math.min(catalog.items.length, 8)} selected`],
     ['Store', savedDraftIsCurrent ? 'Saved' : hasUnsavedStorefront ? 'Save needed' : 'Draft'],
     ['Orders', buyingReady ? 'Ready' : catalogHydrating ? 'Checking' : 'Save store'],
   ] as const
+  const aiDeskRows = [
+    ['Import', importNeeded ? 'Needed' : `${catalog.items.length} items`],
+    ['Merchandise', selectedSkus.length ? `${selectedSkus.length} live` : 'Pick products'],
+    ['Checkout', buyingReady ? 'Quote ready' : 'Save first'],
+    ['Shop review', pendingManagedRequests.length ? `${pendingManagedRequests.length} waiting` : 'No queue'],
+  ] as const
+  const aiDeskAction = pendingManagedRequests.length
+    ? { label: 'Review requests', to: '/shop/?tab=orders&source=ecommerce' }
+    : importNeeded
+      ? { label: 'Import catalog', to: '/settings/?product=ecommerce' }
+      : !savedDraftIsCurrent
+        ? null
+        : { label: 'Open storefront', to: '#ecommerce-preview-panel' }
 
   return (
     <div className="workspace-screen ecommerce-product">
@@ -779,6 +796,26 @@ export function EcommerceProduct() {
       <div aria-label="Ecommerce setup status" className="ecommerce-command-strip">
         {setupRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
       </div>
+
+      <section aria-label="AI order desk" className="ecommerce-ai-desk">
+        <div>
+          <span className="core-eyebrow">AI order desk</span>
+          <h2>{pendingManagedRequests.length ? 'Shop review is waiting' : importNeeded ? 'Import first, then sell' : !savedDraftIsCurrent ? 'Finish setup before orders' : 'Ready to take reviewed orders'}</h2>
+          <p>{pendingManagedRequests.length
+            ? 'Requests are retained for Shop confirmation before stock, delivery, payment, or customer contact changes.'
+            : importNeeded
+              ? 'Upload or connect the Shop catalog once. The storefront, quote, and Shop handoff use that source.'
+              : !savedDraftIsCurrent
+                ? 'Save the customer view so the quote, cart, and Shop handoff all share one verified fingerprint.'
+                : 'Customers can build a cart; Shop still confirms the accountable order before anything consequential happens.'}</p>
+        </div>
+        <div className="ecommerce-ai-desk-queue">
+          {aiDeskRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+        </div>
+        {aiDeskAction
+          ? <Link className="core-button primary compact" to={aiDeskAction.to}>{aiDeskAction.label}</Link>
+          : <button className="core-button primary compact" onClick={finishStorefrontSetup} type="button">Finish setup</button>}
+      </section>
 
       <div aria-label="Ecommerce workspace" className="ecommerce-mobile-switch" role="group">
         <button aria-controls="ecommerce-preview-panel" aria-pressed={mobileWorkspace === 'preview'} onClick={() => showMobileWorkspace('preview')} type="button">Store</button>
