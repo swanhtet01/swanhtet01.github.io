@@ -860,8 +860,8 @@ export function EcommerceProduct() {
                 ? <Link className="text-link" to="/settings/#controls">Open recovery settings</Link>
                 : null}
             </div>
-            <div className="ecommerce-save-actions">
-              <button className="core-button secondary" disabled={!hasUnsavedFieldChanges || catalogHydrating || draftBusy} onClick={discardStorefrontChanges} type="button">Discard</button>
+            {!savedDraftIsCurrent ? <div className="ecommerce-save-actions">
+              {hasUnsavedFieldChanges ? <button className="core-button secondary" disabled={catalogHydrating || draftBusy} onClick={discardStorefrontChanges} type="button">Discard</button> : null}
               <button
                 className="core-button primary"
                 disabled={!hasUnsavedStorefront
@@ -881,7 +881,7 @@ export function EcommerceProduct() {
               >
                 {draftBusy ? 'Saving…' : localFingerprintUpgradeRequired ? 'Upgrade storefront' : catalogRebindRequired ? 'Rebind storefront' : 'Save storefront'}
               </button>
-            </div>
+            </div> : null}
           </div>
           <p className="ecommerce-save-notice" aria-live="polite">{draftNotice}</p>
         </section>
