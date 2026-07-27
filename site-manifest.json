@@ -1,11 +1,11 @@
 {
   "schemaVersion": "supermega.site-context.v2",
-  "contextVersion": "2026-07-26.2",
-  "catalogVersion": "2026-07-26.2",
+  "contextVersion": "2026-07-27.1",
+  "catalogVersion": "2026-07-27.1",
   "brand": {
     "name": "SuperMega",
     "domain": "supermega.dev",
-    "version": "jade-v1-2026-07",
+    "version": "jade-v2-2026-07",
     "mark": "terminal",
     "colors": {
       "background": "#f6f4ee",
@@ -15,9 +15,9 @@
   },
   "company": {
     "positioning": "Operating software for Myanmar companies.",
-    "statement": "SuperMega connects shop work, plant work, websites, ecommerce ordering, evidence, and owner decisions in one accountable system.",
-    "headline": "One operating layer behind the work your company already does.",
-    "supporting": "Run Shop and Plant, build Website and Ecommerce experiences, and add bounded AI assistance without forcing people through disconnected tools.",
+    "statement": "Four focused SuperMega products for retail, production, websites, and ecommerce ordering.",
+    "headline": "Choose the product for the work you need to run.",
+    "supporting": "Shop runs orders and stock. Plant runs production and quality. Website builds company sites. Ecommerce creates Shop-connected ordering.",
     "publicPricing": false
   },
   "customerProducts": [
@@ -337,24 +337,24 @@
     }
   ],
   "pages": [
-    { "route": "/", "file": "index.html", "title": "SuperMega | Operating software for real company work" },
+    { "route": "/", "file": "index.html", "title": "SuperMega | Four focused business products" },
     { "route": "/contact/", "file": "contact/index.html", "title": "Contact | SuperMega" },
     { "route": "/privacy/", "file": "privacy/index.html", "title": "Privacy | SuperMega" }
   ],
   "redirects": [
-    { "source": "^/solutions/?$", "destination": "/#product" },
+    { "source": "^/solutions/?$", "destination": "/#products" },
     { "source": "^/trust/?$", "destination": "/#trust" },
     { "source": "^/shop(?:/.*)?$", "destination": "/#shop" },
     { "source": "^/plant(?:/.*)?$", "destination": "/#plant" },
-    { "source": "^/templates(?:/.*)?$", "destination": "/#operations" },
-    { "source": "^/work(?:/.*)?$", "destination": "/#product" },
-    { "source": "^/(?:products?|offers|pricing|plans|packages)/?$", "destination": "/#product" },
+    { "source": "^/templates(?:/.*)?$", "destination": "/#products" },
+    { "source": "^/work(?:/.*)?$", "destination": "/#products" },
+    { "source": "^/(?:products?|offers|pricing|plans|packages)/?$", "destination": "/#products" },
     { "source": "^/products/(?:commerce|retail|restaurant|store|shop)/?.*$", "destination": "/#shop" },
     { "source": "^/products/(?:production|factory|operations|erp|plant)/?.*$", "destination": "/#plant" },
     { "source": "^/products/website/?.*$", "destination": "/#website" },
     { "source": "^/products/ecommerce/?.*$", "destination": "/#ecommerce" },
-    { "source": "^/(?:ai-agent-solutions|ai-agents|agents|agent-templates|workcell|machine|agentops)/?.*$", "destination": "/#agents" },
-    { "source": "^/(?:find-clients|company-list|receiving-control|receiving-log|founder-brief|reconcile)/?.*$", "destination": "/#operations" },
+    { "source": "^/(?:ai-agent-solutions|ai-agents|agents|agent-templates|workcell|machine|agentops)/?.*$", "destination": "/#products" },
+    { "source": "^/(?:find-clients|company-list|receiving-control|receiving-log|founder-brief|reconcile)/?.*$", "destination": "/#products" },
     { "source": "^/(?:start|book|setup|get-started|intake)/?.*$", "destination": "/contact/" },
     { "source": "^/(?:app|login|clients)/?.*$", "destination": "https://app.supermega.dev/" },
     { "source": "^/demo/?$", "destination": "https://app.supermega.dev/" }

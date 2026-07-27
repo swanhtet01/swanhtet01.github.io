@@ -42,7 +42,7 @@ async function readPage(route) {
     `meta name="supermega-context-version" content="${manifest.contextVersion}"`,
     'aria-label="SuperMega home"',
     '<span class="brand-mark" aria-hidden="true">&gt;_</span>',
-    'href="/contact/">Contact</a>',
+    'href="/contact/"',
     'href="/privacy/">Privacy</a>',
   ]) assert(html.includes(token), 'page_shared_contract_missing', { route, token })
   for (const token of manifest.retiredPublicNames) assert(!html.toLowerCase().includes(token.toLowerCase()), 'retired_context_live', { route, token })
@@ -68,11 +68,13 @@ async function verifyOnce() {
   const pageResults = await Promise.all(manifest.pages.map(async (page) => [page.route, await readPage(page.route)]))
   const pages = new Map(pageResults)
   assert(pages.get('/')?.includes(manifest.company.headline), 'homepage_headline_wrong')
-  assert(pages.get('/')?.includes('href="https://app.supermega.dev/">Explore the product workspace</a>'), 'homepage_workspace_cta_missing')
-  assert(pages.get('/')?.includes('Product is a working lifecycle, not another showcase page.'), 'product_team_workspace_missing')
-  assert(pages.get('/')?.includes(manifest.customerProducts.find((product) => product.id === 'shop')?.appRoute), 'shop_workspace_wrong')
-  assert(pages.get('/')?.includes(manifest.customerProducts.find((product) => product.id === 'plant')?.appRoute), 'plant_workspace_wrong')
-  for (const product of manifest.customerProducts.filter((product) => product.kind === 'operating-product')) for (const template of product.templates) assert(pages.get('/')?.includes(template.name), 'template_catalog_missing', { template: template.id })
+  assert(pages.get('/')?.includes('href="#products">Choose a product</a>'), 'homepage_product_cta_missing')
+  assert(pages.get('/')?.includes('id="products"'), 'product_portfolio_missing')
+  for (const product of manifest.customerProducts) {
+    assert(pages.get('/')?.includes(product.appRoute), 'product_workspace_wrong', { product: product.id })
+    for (const template of product.templates) assert(pages.get('/')?.includes(template.name), 'template_catalog_missing', { template: template.id })
+  }
+  for (const internalLabel of ['SuperMega HQ', 'One next action for the company', 'Gated R&amp;D']) assert(!pages.get('/')?.includes(internalLabel), 'internal_system_exposed', { internalLabel })
   assert(pages.get('/')?.includes('id="trust"'), 'control_boundary_missing')
 
   const [{ body: release, headers: releaseHeaders }, { body: health }, { body: contact }] = await Promise.all([
@@ -96,9 +98,9 @@ async function verifyOnce() {
     verifyRedirect('/products/shop/', '/#shop'),
     verifyRedirect('/products/factory/', '/#plant'),
     verifyRedirect('/products/ecommerce/', '/#ecommerce'),
-    verifyRedirect('/ai-agent-solutions/', '/#agents'),
-    verifyRedirect('/offers/', '/#product'),
-    verifyRedirect('/solutions/', '/#product'),
+    verifyRedirect('/ai-agent-solutions/', '/#products'),
+    verifyRedirect('/offers/', '/#products'),
+    verifyRedirect('/solutions/', '/#products'),
     verifyRedirect('/trust/', '/#trust'),
     verifyRedirect('/demo/', 'https://app.supermega.dev/'),
   ])

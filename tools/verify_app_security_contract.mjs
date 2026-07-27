@@ -39,6 +39,11 @@ const [runtime, supabaseAuth, cloudRuntime, schedulerActivation, agentGovernance
 const migration = `${rolePreflight}\n${foundationMigration}\n${decisionMigration}\n${websiteMigration}\n${hardeningMigration}\n${readCapabilityMigration}`
 const productionMaterialHandoff = await read('supermega_runtime/production_material_handoff.py')
 const shopInventoryRuntime = await read('supermega_runtime/shop_inventory_runtime.py')
+const orderIntakeProvider = await read('supermega_runtime/order_intake_provider.py')
+const orderIntakeRoute = trialRuntime.slice(
+  trialRuntime.indexOf('@router.post("/commerce/order-intake/drafts")'),
+  trialRuntime.indexOf('@router.post("/imports/validate")'),
+)
 const managedPurchaseReceiptAuthority = trialStore.slice(
   trialStore.indexOf('if event_type == "commerce.purchase_order.received":'),
   trialStore.indexOf('if event_type == "commerce.purchase_order.cancelled":'),
@@ -312,7 +317,24 @@ requireContract('identity signing secret has a fail-closed entropy floor', /_MIN
 requireContract('Supabase identity accepts only a confirmed named-user token', /\/auth\/v1\/user/.test(supabaseAuth) && /_is_publishable_key/.test(supabaseAuth) && /is_anonymous"\) is not False/.test(supabaseAuth) && /actor_kind="human"/.test(runtime))
 requireContract('Supabase token verification disables proxy and redirect forwarding', /ProxyHandler\(\{\}\)/.test(supabaseAuth) && /_NoRedirectHandler/.test(supabaseAuth) && /opener\.open/.test(supabaseAuth))
 requireContract('identity is rejected from request bodies', /_CLIENT_IDENTITY_FIELDS/.test(trialRuntime) && /client_identity_forbidden/.test(trialRuntime))
-requireContract('trial router is mounted', /create_trial_router\(store=store, resolve_principal=resolve_trial_principal\)/.test(runtime))
+requireContract('trial router is mounted with bounded order intake', /create_trial_router\([\s\S]*store=store,[\s\S]*resolve_principal=resolve_trial_principal,[\s\S]*order_intake_provider=order_intake_provider,[\s\S]*\)/.test(runtime))
+requireContract('AI order intake is authenticated, human-only, read-scoped, and non-mutating',
+  /_resolve_principal\(request, resolve_principal\)/.test(orderIntakeRoute)
+  && /has_surface_read_capability\(readiness\.capabilities, "commerce"\)/.test(orderIntakeRoute)
+  && /principal\.actor_kind != "human"/.test(orderIntakeRoute)
+  && /_bounded_json_body\(/.test(orderIntakeRoute)
+  && /store\.get_state\(principal, "commerce"\)/.test(orderIntakeRoute)
+  && !/store\.(?:apply_command|create_approval|decide_approval)/.test(orderIntakeRoute))
+requireContract('AI order intake provider cannot use tools, store responses, redirect credentials, or bypass hosted budget',
+  /"store": False/.test(orderIntakeProvider)
+  && /"strict": True/.test(orderIntakeProvider)
+  && /"type": "json_schema"/.test(orderIntakeProvider)
+  && /"safety_identifier"/.test(orderIntakeProvider)
+  && !/"tools"\s*:/.test(orderIntakeProvider)
+  && /build_opener\(ProxyHandler\(\{\}\), _NoRedirectHandler\(\)\)/.test(orderIntakeProvider)
+  && /PostgresOrderIntakeBudget\(database_url, cap\)/.test(orderIntakeProvider)
+  && /else UnavailableOrderIntakeBudget\(\)/.test(orderIntakeProvider)
+  && /order_intake_provider_quota_exhausted/.test(orderIntakeProvider))
 requireContract('runtime exposes bounded health truth', /"operating_mode": "managed_trial" if not requirements else "isolated_demo"/.test(runtime) && /"browser_service_role_exposed": False/.test(runtime))
 requireContract('managed browser auth is readiness gated and cannot accept a secret key', /runtime\.status === 'enterprise' && managedTrialAuthConfigured\(\)/.test(coreApp) && /validPublishableKey/.test(managedTrialClient) && !/VITE_SUPABASE_(?:SERVICE_ROLE|SECRET)/.test(managedTrialClient))
 requireContract('managed approval evidence is never persisted in demo storage', /localApprovalsOnly/.test(coreApp) && /persist \? persist\(normalizedState\)/.test(coreApp) && /current\.filter\(\(approval\) => !approval\.managed\)/.test(coreApp))

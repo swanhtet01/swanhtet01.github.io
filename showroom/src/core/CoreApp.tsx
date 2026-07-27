@@ -506,8 +506,10 @@ const checkingRuntime: RuntimeHealth = {
 
 const navigation = [
   { to: '/', label: 'Home', end: true },
-  { to: '/work/', label: 'HQ', end: false },
-  { to: '/operations/', label: 'Products', end: false },
+  { to: '/shop/', label: 'Shop', end: false },
+  { to: '/plant/', label: 'Plant', end: false },
+  { to: '/website/', label: 'Website', end: false },
+  { to: '/ecommerce/', label: 'Ecommerce', end: false },
 ] as const
 
 const commerceTabs: Array<{ id: CommerceTab; label: string }> = [
@@ -1413,7 +1415,7 @@ function useRuntimeHealth() {
 }
 
 function RuntimeBadge({ status }: { status: RuntimeStatus }) {
-  return <span className={`runtime-badge ${status}`}><i />{status === 'checking' ? 'Checking' : status === 'enterprise' ? 'Managed' : 'Local trial'}</span>
+  return <span className={`runtime-badge ${status}`}><i />{status === 'checking' ? 'Checking' : status === 'enterprise' ? 'Managed' : 'Sample workspace'}</span>
 }
 
 export function CoreLayout() {
@@ -1424,21 +1426,14 @@ export function CoreLayout() {
     ? 'Website'
     : location.pathname.startsWith('/ecommerce/')
       ? 'Ecommerce'
-    : location.pathname.startsWith('/settings/')
+      : location.pathname.startsWith('/settings/')
       ? 'Client setup'
-      : location.pathname.startsWith('/shop/') || location.pathname.startsWith('/operations/commerce/')
+      : location.pathname.startsWith('/shop/')
         ? 'Shop'
-        : location.pathname.startsWith('/plant/') || location.pathname.startsWith('/operations/production/')
+        : location.pathname.startsWith('/plant/')
           ? 'Plant'
           : navigation.find((item) => item.to !== '/' && location.pathname.startsWith(item.to))?.label ?? 'Home'
-  const navigationClass = (to: string, isActive: boolean) => (
-    isActive || (to === '/operations/' && (
-      location.pathname.startsWith('/website/')
-      || location.pathname.startsWith('/ecommerce/')
-      || location.pathname.startsWith('/shop/')
-      || location.pathname.startsWith('/plant/')
-    )) ? 'active' : ''
-  )
+  const navigationClass = (_to: string, isActive: boolean) => isActive ? 'active' : ''
 
   useEffect(() => {
     document.title = `${routeName} | SuperMega`
@@ -1456,7 +1451,7 @@ export function CoreLayout() {
         <div className="sidebar-foot"><RuntimeBadge status={runtime.status} /><NavLink to="/settings/">Client setup</NavLink></div>
       </aside>
       <div className="core-stage">
-        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>{location.pathname.startsWith('/work/') ? 'SuperMega HQ' : 'SuperMega'}</span></div><div className="topbar-meta"><NavLink to="/settings/">Setup</NavLink><RuntimeBadge status={runtime.status} /></div></header>
+        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta"><NavLink to="/settings/">Setup</NavLink><RuntimeBadge status={runtime.status} /></div></header>
         <nav className="mobile-nav" aria-label="Mobile application">{navigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={item.end} key={item.to} to={item.to}>{item.label}</NavLink>)}</nav>
         <main id="workspace-main" className="core-main" ref={workspaceMainRef} tabIndex={-1}><Outlet context={runtime} /></main>
       </div>
@@ -1470,6 +1465,56 @@ export function PageHeading({ eyebrow, title, copy, actions }: { eyebrow?: strin
 
 export function Empty({ children }: { children: ReactNode }) {
   return <div className="empty-state"><span>&gt;_</span><p>{children}</p></div>
+}
+
+const customerProducts = [
+  {
+    to: '/shop/?tab=orders',
+    number: '01',
+    name: 'Shop',
+    copy: 'Run orders, payments, stock, purchasing, returns, and daily close.',
+    tasks: ['Orders', 'Stock', 'Purchasing'],
+  },
+  {
+    to: '/plant/?tab=production',
+    number: '02',
+    name: 'Plant',
+    copy: 'Run production jobs, output, quality, maintenance, and shift handoff.',
+    tasks: ['Jobs', 'Quality', 'Maintenance'],
+  },
+  {
+    to: '/website/',
+    number: '03',
+    name: 'Website',
+    copy: 'Build, review, and export a mobile-ready company website.',
+    tasks: ['Content', 'Preview', 'Publish'],
+  },
+  {
+    to: '/ecommerce/',
+    number: '04',
+    name: 'Ecommerce',
+    copy: 'Build a Shop-connected storefront and review incoming order requests.',
+    tasks: ['Catalog', 'Storefront', 'Requests'],
+  },
+] as const
+
+export function ProductHomePage() {
+  return (
+    <div className="workspace-screen product-home-screen">
+      <PageHeading copy="Choose one product. Each opens a focused workspace for that job." eyebrow="SuperMega products" title="What do you want to run?" />
+      <nav aria-label="SuperMega products" className="product-home-grid">
+        {customerProducts.map((product) => (
+          <Link className="product-home-card" key={product.name} to={product.to}>
+            <span className="product-home-number">{product.number}</span>
+            <div><h2>{product.name}</h2><p>{product.copy}</p></div>
+            <span className="product-home-tasks">{product.tasks.map((task) => <small key={task}>{task}</small>)}</span>
+            <strong>Open {product.name}<span aria-hidden="true"> →</span></strong>
+          </Link>
+        ))}
+      </nav>
+      <aside className="product-home-setup"><div><strong>Use your company data</strong><span>Set up a client workspace when you are ready to move beyond sample records.</span></div><Link className="core-button" to="/settings/">Client setup</Link></aside>
+    </div>
+  )
 }
 
 function ApprovalReviewDialog({ approval, onClose, onDecision }: { approval: Approval; onClose: () => void; onDecision: (status: 'approved' | 'declined', reviewer: string, note: string) => Promise<void> | void }) {
@@ -1827,7 +1872,7 @@ export function OperationsPage({ product }: { product?: ProductId }) {
 
   return (
     <div className="workspace-screen operations-screen">
-      <PageHeading title={productDisplayName(view)} copy={productCopy} actions={<Link className="text-link all-apps-link" to="/operations/">Products</Link>} />
+      <PageHeading title={productDisplayName(view)} copy={productCopy} actions={<Link className="text-link all-apps-link" to="/">All products</Link>} />
       <nav className="workspace-toolbar view-tabs product-task-tabs" aria-label={`${productDisplayName(view)} tasks`}>{tabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{tab.label}</button>)}</nav>
       <div className="workspace-view">{view === 'commerce' ? <CommercePage ecommerceNavigationDraft={ecommerceNavigationDraft} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedSource={requestedSource} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
     </div>
@@ -3908,7 +3953,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         <button aria-pressed={orderEntryMode === 'online'} disabled={Boolean(pendingAction)} onClick={() => setOrderEntryMode('online')} type="button">Online request</button>
       </div>
       {orderNotice ? <p className="form-notice order-entry-notice" aria-live="polite">{orderNotice}</p> : null}
-      {orderEntryMode === 'message' ? <div className="order-entry-panel" data-mode="message"><Suspense fallback={<p className="form-notice" role="status">Loading message intake…</p>}><ChannelOrderIntake disabled={commerceControlsDisabled} items={commerce.items} onAcceptedFocus={() => requestAnimationFrame(() => preparedChannelRef.current?.focus())} onUse={useChannelDraft} /></Suspense></div> : null}
+      {orderEntryMode === 'message' ? <div className="order-entry-panel" data-mode="message"><Suspense fallback={<p className="form-notice" role="status">Loading message intake…</p>}><ChannelOrderIntake disabled={commerceControlsDisabled} identity={managedIdentity ?? undefined} items={commerce.items} onAcceptedFocus={() => requestAnimationFrame(() => preparedChannelRef.current?.focus())} onUse={useChannelDraft} /></Suspense></div> : null}
       {orderEntryMode === 'online' ? <div className="order-entry-panel" data-mode="online">
         <section className="website-intake">
           <div className="website-intake-head"><div><span className="core-eyebrow">Ecommerce inbox</span><strong>{pendingStorefrontRequests.length} requests waiting</strong></div><span className={`status-pill ${managedIdentity ? 'bounded' : 'pending'}`}>{managedIdentity ? 'Managed' : 'Not connected'}</span></div>

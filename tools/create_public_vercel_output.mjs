@@ -23,9 +23,6 @@ assert(manifest.sharedCapabilities?.map((capability) => capability.id).join(',')
 assert(manifest.company?.publicPricing === false, 'public_pricing_must_remain_hidden')
 
 const brand = manifest.brand
-const operatingProducts = manifest.customerProducts.filter((product) => product.kind === 'operating-product')
-const makerProducts = manifest.customerProducts.filter((product) => product.kind === 'maker-product')
-const aiAssistance = manifest.sharedCapabilities[0]
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -118,8 +115,8 @@ const sharedStyle = `
   h3 { margin-bottom: 9px; font-size: 20px; line-height: 1.2; letter-spacing: -.02em; }
   .lede { max-width: 720px; color: var(--muted); font-size: clamp(18px, 2vw, 23px); line-height: 1.55; }
   .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 30px; }
-  .hero { display: grid; grid-template-columns: minmax(0, .96fr) minmax(400px, 1.04fr); gap: 52px; align-items: center; padding: 52px 0 58px; }
-  .hero-copy { position: relative; z-index: 2; }
+  .hero { padding: 76px 0 68px; }
+  .hero-copy { max-width: 900px; }
   .hero h1 { max-width: 820px; margin-top: 20px; }
   .hero-note { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 34px; color: var(--quiet); font-size: 12px; font-weight: 720; }
   .hero-note span { display: inline-flex; align-items: center; gap: 7px; }
@@ -244,9 +241,10 @@ const sharedStyle = `
   .control-line { grid-column: 1/-1; display: flex; align-items: center; justify-content: space-between; gap: 22px; border: 1px solid rgba(11,116,94,.2); border-radius: var(--radius); padding: 18px 22px; background: var(--green-soft); }
   .control-line p { max-width: 760px; margin: 0; color: var(--muted); font-size: 12px; }
   .compact-solutions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
-  .compact-solution { min-width: 0; border: 1px solid var(--line); border-radius: var(--radius); padding: 28px; background: var(--panel-solid); }
+  .compact-solution { min-width: 0; min-height: 270px; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius); padding: 28px; background: var(--panel-solid); box-shadow: 0 12px 34px rgba(25,54,42,.045); }
   .compact-solution h3 { margin: 20px 0 9px; font-size: 30px; }
-  .compact-solution > p { min-height: 62px; color: var(--muted); font-size: 13px; }
+  .compact-solution > p { min-height: 44px; color: var(--muted); font-size: 13px; }
+  .compact-solution > .card-link { margin-top: auto; }
   .product-roadmap { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; margin-top: 14px; }
   .roadmap-solution { min-height: 228px; display: flex; flex-direction: column; }
   .roadmap-solution > p { min-height: 0; }
@@ -323,70 +321,26 @@ function documentHtml({ route, title, description, content, robots = 'index,foll
 </html>`
 }
 
-function workspacePreview() {
-  const rows = [
-    ['01', 'Home', 'One next action for the company'],
-    ['02', 'Work', 'Owners, evidence, review, and release'],
-    ['03', 'Products', 'Shop, Plant, Website, and Ecommerce'],
-  ]
-  return `<div class="workspace system-preview" aria-label="SuperMega operating system preview">
-    <div class="workspace-bar"><span>&gt;_ supermega / company-system</span><span class="live-pill">Local trial</span></div>
-    <div class="system-preview-body">
-      <div class="system-kicker">ONE OPERATING LAYER</div>
-      <div class="system-flow">${rows.map(([index, title, copy]) => `<div class="system-row"><span>${index}</span><strong>${title}</strong><small>${copy}</small><i></i></div>`).join('')}</div>
-      <div class="system-boundary"><span>HUMAN CONTROL</span><strong>External sends · payments · publishing · production changes</strong></div>
-    </div>
-  </div>`
-}
-
 function productCardHtml(product, index) {
-  const [summary, boundary = ''] = product.description.split(/(?=No (?:live channel|machine telemetry))/)
+  const capabilities = (product.modules?.length ? product.modules : product.workflow).slice(0, 3)
   return `<article class="compact-solution" id="${escapeHtml(product.id)}">
     <span class="card-index">0${index + 1} / ${escapeHtml(product.eyebrow)}</span>
     <h3>${escapeHtml(product.name)}</h3>
-    <p>${escapeHtml(summary.trim())}</p>
-    <details class="detail-disclosure product-disclosure">
-      <summary>What it covers</summary>
-      <div class="disclosure-body">
-        <p class="boundary-note">${escapeHtml(boundary.trim())}</p>
-        <div class="module-tags">${product.modules.map((module) => `<span>${escapeHtml(module)}</span>`).join('')}</div>
-        <div class="template-line">${product.templates.map((template) => `<span>${escapeHtml(template.name)}</span>`).join('')}</div>
-      </div>
-    </details>
-    <a class="card-link" href="${escapeHtml(product.appRoute)}">${escapeHtml(product.primaryCta.label)}</a>
-  </article>`
-}
-
-function roadmapCardHtml(product, index) {
-  const available = product.status === 'release-candidate-local'
-  const status = available ? 'Available locally' : product.status === 'rebuild-planned' ? 'Focused rebuild planned' : 'Evaluation required'
-  return `<article class="compact-solution roadmap-solution" id="${escapeHtml(product.id)}">
-    <span class="card-index">0${index + 3} / ${escapeHtml(product.eyebrow ?? 'AI assistance')}</span>
-    <h3>${escapeHtml(product.name)}</h3>
     <p>${escapeHtml(product.headline)}</p>
-    <span class="product-label">${escapeHtml(status)}</span>
-    ${available
-      ? `<a class="card-link" href="${escapeHtml(product.appRoute)}">Open ${escapeHtml(product.name)}</a>`
-      : `<span class="status-note">No demo button until this workflow passes.</span>`}
+    <div class="module-tags" aria-label="Core capabilities">${capabilities.map((capability) => `<span>${escapeHtml(capability)}</span>`).join('')}</div>
+    <div class="template-line" aria-label="Templates">${product.templates.map((template) => `<span>${escapeHtml(template.name)}</span>`).join('')}</div>
+    <a class="card-link" href="${escapeHtml(product.appRoute)}">Open ${escapeHtml(product.name)}</a>
   </article>`
-}
-
-function sharedCapabilityHtml(capability) {
-  return `<aside class="shared-capability" id="${escapeHtml(capability.anchor)}">
-    <div><span class="eyebrow">Shared capability</span><h3>${escapeHtml(capability.name)}</h3></div>
-    <p>${escapeHtml(capability.headline)} It is embedded only after evaluation; it is not a fifth product.</p>
-    <span class="product-label">Gated R&amp;D</span>
-  </aside>`
 }
 
 const homeHtml = documentHtml({
   route: '/',
-  title: 'SuperMega | Operating software for real company work',
+  title: 'SuperMega | Four focused business products',
   description: manifest.company.statement,
   content: `<main>
-    <section class="frame hero"><div class="hero-copy"><span class="eyebrow">${escapeHtml(manifest.company.positioning)}</span><h1>${escapeHtml(manifest.company.headline)}</h1><p class="lede">${escapeHtml(manifest.company.supporting)}</p><div class="actions"><a class="button primary" href="https://app.supermega.dev/">Explore the product workspace</a></div><div class="hero-note"><span>Channels people already use</span><span>Evidence with the work</span><span>Human authority where it matters</span></div></div>${workspacePreview()}</section>
-    <section class="frame trust-strip" id="trust" aria-label="Control boundary"><div class="control-line"><span class="eyebrow">Control boundary</span><p>Assistance may organize, inspect, summarize, and draft from approved records. Sends, payments, publishing, access changes, and production writes wait for the responsible owner.</p></div></section>
-    <section class="frame section" id="operations"><div class="section-head"><span class="eyebrow">Four focused products</span><h2>Shop and Plant run the work. Website and Ecommerce reach customers.</h2><p>All four share one accountable foundation. Templates change the starting workflow, not the brand or core controls.</p></div><div class="compact-solutions">${operatingProducts.map(productCardHtml).join('')}</div><div class="product-roadmap" aria-label="Website and Ecommerce">${makerProducts.map(roadmapCardHtml).join('')}</div>${sharedCapabilityHtml(aiAssistance)}<div class="closing-strip"><div><h2>Start with one real workflow.</h2><p>Send the channel, record, owner, and outcome. SuperMega will define the smallest useful implementation and acceptance test.</p></div><a class="button primary" href="/contact/">Contact SuperMega</a></div></section>
+    <section class="frame hero"><div class="hero-copy"><span class="eyebrow">${escapeHtml(manifest.company.positioning)}</span><h1>${escapeHtml(manifest.company.headline)}</h1><p class="lede">${escapeHtml(manifest.company.supporting)}</p><div class="actions"><a class="button primary" href="#products">Choose a product</a></div><div class="hero-note"><span>Four separate products</span><span>One secure foundation</span><span>Mobile-ready workflows</span></div></div></section>
+    <section class="frame section" id="products"><div class="section-head"><span class="eyebrow">SuperMega products</span><h2>Open the product that matches the job.</h2><p>Each product opens directly to the work, with simple navigation and shared security controls.</p></div><div class="compact-solutions">${manifest.customerProducts.map(productCardHtml).join('')}</div><div class="closing-strip"><div><h2>Need a workspace for your company?</h2><p>Tell us the product, existing data, and first workflow. We will define the implementation and acceptance test.</p></div><a class="button primary" href="/contact/">Contact SuperMega</a></div></section>
+    <section class="frame trust-strip" id="trust" aria-label="Security boundary"><div class="control-line"><span class="eyebrow">Secure by default</span><p>AI may prepare drafts from approved records. Sends, payments, publishing, access changes, and production writes require explicit authority and verified server-side controls.</p></div></section>
   </main>`,
 })
 

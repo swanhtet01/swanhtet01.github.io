@@ -4,16 +4,15 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-route
 import {
   CoreLayout,
   OperationsPage,
-  OverviewPage,
+  ProductHomePage,
   SettingsPage,
 } from './core/CoreApp'
 
-const TeamsPage = lazy(() => import('./core/TeamWorkspace').then((module) => ({ default: module.TeamsPage })))
 const WebsiteProduct = lazy(() => import('./products/website/WebsiteProduct').then((module) => ({ default: module.WebsiteProduct })))
 const EcommerceProduct = lazy(() => import('./products/ecommerce/EcommerceProduct').then((module) => ({ default: module.EcommerceProduct })))
 
 function ProductLoading({ name }: { name: string }) {
-  return <div aria-live="polite" className="product-route-loading" role="status"><span>&gt;_</span><p>Loading {name} workspace…</p></div>
+  return <div aria-live="polite" className="product-route-loading" role="status"><span>&gt;_</span><p>Loading {name}…</p></div>
 }
 
 function LegacyEntryRedirect() {
@@ -31,19 +30,21 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route element={<CoreLayout />}>
-          <Route element={<OverviewPage />} index />
-          <Route element={<Suspense fallback={<ProductLoading name="HQ" />}><TeamsPage /></Suspense>} path="work/*" />
-          <Route element={<OperationsPage />} path="operations/*" />
+          <Route element={<ProductHomePage />} index />
           <Route element={<OperationsPage product="commerce" />} path="shop/*" />
           <Route element={<OperationsPage product="production" />} path="plant/*" />
           <Route element={<Suspense fallback={<ProductLoading name="Website" />}><WebsiteProduct /></Suspense>} path="website/*" />
           <Route element={<Suspense fallback={<ProductLoading name="Ecommerce" />}><EcommerceProduct /></Suspense>} path="ecommerce/*" />
+          <Route element={<Navigate replace to="/shop/" />} path="operations/commerce/*" />
+          <Route element={<Navigate replace to="/plant/" />} path="operations/production/*" />
+          <Route element={<Navigate replace to="/" />} path="operations/*" />
+          <Route element={<Navigate replace to="/" />} path="work/*" />
           <Route element={<Navigate replace to="/website/" />} path="products/website/*" />
           <Route element={<Navigate replace to="/ecommerce/" />} path="products/ecommerce/*" />
           <Route element={<SettingsPage />} path="settings/*" />
           <Route element={<LegacyEntryRedirect />} path="legacy-entry" />
-          <Route element={<Navigate replace to="/work/?view=agents" />} path="agents/*" />
-          <Route element={<Navigate replace to="/work/?view=agents" />} path="assist/*" />
+          <Route element={<Navigate replace to="/" />} path="agents/*" />
+          <Route element={<Navigate replace to="/" />} path="assist/*" />
           <Route element={<Navigate replace to="/settings/" />} path="setup/*" />
           <Route element={<Navigate replace to="/settings/#controls" />} path="trust/*" />
           <Route element={<Navigate replace to="/" />} path="app/*" />

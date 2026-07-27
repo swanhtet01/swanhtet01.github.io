@@ -133,47 +133,42 @@ if (/\.brand-name\s*\{[^}]*display\s*:\s*none/i.test(home)) fail('mobile_brand_n
 for (const token of [
   manifest.company.headline,
   manifest.company.supporting,
-  'One next action for the company',
-  'Owners, evidence, review, and release',
-  'Shop, Plant, Website, and Ecommerce',
-  '<summary>What it covers</summary>',
+  'Four separate products',
+  'One secure foundation',
+  'Mobile-ready workflows',
+  'aria-label="Core capabilities"',
+  'aria-label="Templates"',
   'min-height: 44px',
-  'id="operations"',
-  'Four focused products',
-  'Shop and Plant run the work. Website and Ecommerce reach customers.',
-  'All four share one accountable foundation.',
-  'Explore the product workspace',
-  'Start with one real workflow.',
-  'Run browser-local orders, stock, fulfilment, payment status, exceptions, and daily close across common channels.',
-  'No live channel, checkout, payment, delivery, customer send, or external write is connected.',
-  'Run recurring jobs, output, machine state, quality, maintenance, exceptions, and shift handoffs in a clearly labelled local demo.',
-  'No machine telemetry, machine control, access change, or external write is connected.',
+  'id="products"',
+  'SuperMega products',
+  'Open the product that matches the job.',
+  'Each product opens directly to the work, with simple navigation and shared security controls.',
+  'Choose a product',
+  'Need a workspace for your company?',
   'id="trust"',
-  'aria-label="Control boundary"',
-  'Assistance may organize, inspect, summarize, and draft from approved records.',
+  'aria-label="Security boundary"',
+  'AI may prepare drafts from approved records.',
   'https://app.supermega.dev/shop/?tab=orders',
   'https://app.supermega.dev/plant/?tab=production',
   'id="website"',
-  'Available locally',
+  'https://app.supermega.dev/website/',
   'id="ecommerce"',
   'Create a Shop-backed storefront and hand customer intent to human review.',
   'https://app.supermega.dev/ecommerce/',
-  'id="agents"',
-  'Shared capability',
-  'AI assistance',
-  'It is embedded only after evaluation; it is not a fifth product.',
-  'Gated R&amp;D',
 ]) {
   if (!home.includes(token)) fail('homepage_contract_missing', { token })
 }
-for (const product of operatingProducts) {
-  if (!home.includes(product.primaryCta.label)) fail('primary_cta_label_missing', { product: product.id, label: product.primaryCta.label })
-  for (const module of product.modules) {
-    if (!home.includes(module)) fail('module_catalog_missing', { product: product.id, module })
+for (const product of manifest.customerProducts || []) {
+  if (!home.includes(`Open ${product.name}`)) fail('primary_cta_label_missing', { product: product.id })
+  for (const capability of (product.modules?.length ? product.modules : product.workflow).slice(0, 3)) {
+    if (!home.includes(capability)) fail('module_catalog_missing', { product: product.id, capability })
   }
   for (const template of product.templates) {
     if (!home.includes(template.name)) fail('template_catalog_missing', { product: product.id, template: template.id })
   }
+}
+for (const internalLabel of ['SuperMega HQ', 'One next action for the company', 'Owners, evidence, review, and release', 'Gated R&amp;D']) {
+  if (home.includes(internalLabel)) fail('internal_system_exposed_on_public_home', { internalLabel })
 }
 for (const retiredLabel of ['>Open Commerce<', '>Open Production<']) {
   if (home.includes(retiredLabel)) fail('ambiguous_demo_cta_present', { retiredLabel })

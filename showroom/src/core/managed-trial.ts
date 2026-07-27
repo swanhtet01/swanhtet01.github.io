@@ -1153,6 +1153,25 @@ export async function loadManagedBootstrap(expectedIdentity?: ManagedIdentity) {
   return expectedIdentity ? assertManagedBootstrapIdentity(bootstrap, expectedIdentity) : bootstrap
 }
 
+export async function prepareManagedOrderIntakeDraft(request: {
+  identity: ManagedIdentity
+  message: string
+  sourceLabel: string
+}) {
+  return authorizedRequest<unknown>(
+    '/api/trial/v1/commerce/order-intake/drafts',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        source_label: request.sourceLabel,
+        message: request.message,
+      }),
+    },
+    true,
+    request.identity,
+  )
+}
+
 export async function saveManagedCommerceCommand(request: {
   commandId: string
   evidence: ManagedCommandEvidence

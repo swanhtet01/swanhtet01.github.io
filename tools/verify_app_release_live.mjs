@@ -65,7 +65,7 @@ for (const route of routes) {
   }
 }
 for (const [route, html] of pages) {
-  if (!html.includes('SuperMega operating workspace') && !html.includes('<title>Today | SuperMega</title>')) throw new Error(`wrong_shell:${route}`)
+  if (!html.includes('<title>SuperMega</title>')) throw new Error(`wrong_shell:${route}`)
 }
 
 const release = JSON.parse((await get('/__release.json')).body)
@@ -97,10 +97,10 @@ const rootHtml = pages.get('/')
 const scriptPaths = [...rootHtml.matchAll(/<script[^>]+src="([^"]+)"/g)].map((match) => match[1])
 const cssPaths = [...rootHtml.matchAll(/<link[^>]+href="([^"]+\.css)"/g)].map((match) => match[1])
 const assetCorpus = (await Promise.all([...scriptPaths, ...cssPaths].map(async (path) => (await get(path)).body))).join('\n')
-for (const required of ['Teams', 'Product', 'Shop', 'Plant', 'Acceptance outcome', 'Prepare brief', 'Operations', 'Local trial', '#7cf5b4', '#f2f5f1']) {
+for (const required of ['SUPERMEGA', 'What do you want to run?', 'Shop', 'Plant', 'Website', 'Ecommerce', 'Sample workspace', manifest.brand.colors.accent, manifest.brand.colors.ink]) {
   if (!assetCorpus.includes(required)) throw new Error(`missing_live_context:${required}`)
 }
-for (const forbidden of ['pos.supermega.dev', 'ytf.supermega.dev', 'Yangon Tyre', 'ytf-plant-a']) {
+for (const forbidden of ['SuperMega HQ', 'One next action for the company', 'Agents prepare work', 'pos.supermega.dev', 'ytf.supermega.dev', 'Yangon Tyre', 'ytf-plant-a']) {
   if (assetCorpus.toLowerCase().includes(forbidden.toLowerCase())) throw new Error(`retired_live_context:${forbidden}`)
 }
 

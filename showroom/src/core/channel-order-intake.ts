@@ -1,6 +1,6 @@
 export const CHANNEL_ORDER_DRAFT_SCHEMA = 'supermega.channel_order_draft.v1' as const
-export const CHANNEL_ORDER_MESSAGE_MAX = 2_000
-export const CHANNEL_ORDER_QUOTE_MAX = 120
+export const CHANNEL_ORDER_MESSAGE_MAX = 4_000
+export const CHANNEL_ORDER_QUOTE_MAX = 280
 
 export const channelOrderChannels = ['Messenger', 'Viber', 'Phone'] as const
 export const channelOrderPayments = ['KBZPay', 'WavePay', 'Cash on delivery', 'Cash', 'Card'] as const
@@ -84,6 +84,152 @@ function expectedEvidenceReference(draft: Pick<ChannelOrderDraft, 'sourceRecordI
     provenance: draft.provenance,
   }))
   return `channel-message://${draft.sourceRecordId}#msg-${draft.messageFingerprint.slice(4).toLowerCase()}-map-${mappingFingerprint}`
+}
+
+function record(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function stringList(value: unknown) {
+  return Array.isArray(value) && value.every((entry) => typeof entry === 'string')
+    ? value as string[]
+    : null
+}
+
+async function sha256Reference(value: string) {
+  if (!globalThis.crypto?.subtle) throw new Error('Secure draft verification is unavailable in this browser.')
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
+  return `sha256:${[...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')}`
+}
+
+const managedChannels: Record<string, ChannelOrderChannel> = {
+  messenger: 'Messenger',
+  viber: 'Viber',
+  phone: 'Phone',
+}
+
+const managedPayments: Record<string, ChannelOrderPayment> = {
+  kbzpay: 'KBZPay',
+  wavepay: 'WavePay',
+  cash_on_delivery: 'Cash on delivery',
+  cash: 'Cash',
+  card: 'Card',
+}
+
+type ManagedOrderField = 'customer_reference' | 'channel' | 'sku' | 'quantity' | 'payment' | 'fulfilment'
+
+export async function buildManagedChannelOrderDraft(input: {
+  catalogSkus: string[]
+  fallbackChannel: string
+  message: string
+  response: unknown
+  sourceLabel: string
+}): Promise<ChannelOrderDraft> {
+  if (!record(input.response) || !record(input.response.draft)) {
+    throw new Error('The managed AI draft response is invalid.')
+  }
+  const sourceLabelDigest = await sha256Reference(input.sourceLabel)
+  const messageDigest = await sha256Reference(input.message)
+  if (input.response.source_label_digest !== sourceLabelDigest) {
+    throw new Error('The managed AI draft does not match this message reference.')
+  }
+  const managed = input.response.draft
+  if (managed.schema_version !== 'supermega.order_intake.draft.v1'
+    || managed.message_digest !== messageDigest
+    || !['ready_for_review', 'needs_clarification'].includes(String(managed.status))
+    || !['single_item_order', 'multiple_item_order', 'not_an_order', 'ambiguous'].includes(String(managed.scope))) {
+    throw new Error('The managed AI draft contract is invalid.')
+  }
+  const missingFields = stringList(managed.missing_fields)
+  const uncertainFields = stringList(managed.uncertain_fields)
+  const managedBlockers = stringList(managed.blockers)
+  if (!missingFields || !uncertainFields || !managedBlockers || !Array.isArray(managed.provenance)) {
+    throw new Error('The managed AI draft review fields are invalid.')
+  }
+
+  const provenance = new Map<ManagedOrderField, { quote: string; start: number; end: number }>()
+  const managedFieldNames = new Set<ManagedOrderField>(['customer_reference', 'channel', 'sku', 'quantity', 'payment', 'fulfilment'])
+  for (const entry of managed.provenance) {
+    if (!record(entry) || !managedFieldNames.has(entry.field as ManagedOrderField) || provenance.has(entry.field as ManagedOrderField) || !Array.isArray(entry.source_spans) || entry.source_spans.length < 1) {
+      throw new Error('The managed AI source evidence is invalid.')
+    }
+    const spans = entry.source_spans.map((span) => {
+      if (!record(span)
+        || typeof span.quote !== 'string'
+        || !span.quote.trim()
+        || span.quote.length > CHANNEL_ORDER_QUOTE_MAX
+        || !Number.isSafeInteger(span.start)
+        || !Number.isSafeInteger(span.end)
+        || Number(span.start) < 0
+        || Number(span.end) !== Number(span.start) + span.quote.length
+        || input.message.slice(Number(span.start), Number(span.end)) !== span.quote) {
+        throw new Error('The managed AI source evidence does not match the message.')
+      }
+      return { quote: span.quote, start: Number(span.start), end: Number(span.end) }
+    })
+    provenance.set(entry.field as ManagedOrderField, spans[0])
+  }
+
+  const customer = managed.customer_reference === null ? '' : boundedText(managed.customer_reference, 80)
+  const sku = managed.sku === null ? '' : boundedText(managed.sku, 80).toUpperCase()
+  const quantity = managed.quantity === null ? 0 : Number(managed.quantity)
+  const managedChannel = managed.channel === null ? null : managedChannels[String(managed.channel)] ?? null
+  const fallbackChannel = channelOrderChannels.includes(input.fallbackChannel as ChannelOrderChannel)
+    ? input.fallbackChannel as ChannelOrderChannel
+    : null
+  const channel = managed.channel === null ? fallbackChannel : managedChannel
+  const payment = managed.payment === null ? null : managedPayments[String(managed.payment)] ?? null
+  const values: Record<ManagedOrderField, unknown> = {
+    customer_reference: managed.customer_reference,
+    channel: managed.channel,
+    sku: managed.sku,
+    quantity: managed.quantity,
+    payment: managed.payment,
+    fulfilment: managed.fulfilment,
+  }
+  for (const field of managedFieldNames) {
+    if (values[field] !== null && !provenance.has(field)) {
+      throw new Error(`The managed AI ${field.replaceAll('_', ' ')} is missing exact source evidence.`)
+    }
+  }
+
+  const attribution = (field: ManagedOrderField): ChannelOrderAttributionInput => {
+    const source = provenance.get(field)
+    return source ? { kind: 'quote', quote: source.quote } : { kind: 'operator_supplied' }
+  }
+  const draft = buildChannelOrderDraft({
+    sourceLabel: input.sourceLabel,
+    message: input.message,
+    channel: channel ?? '',
+    customer,
+    sku,
+    quantity,
+    payment: payment ?? '',
+    catalogSkus: input.catalogSkus,
+    attributions: {
+      customer: attribution('customer_reference'),
+      sku: attribution('sku'),
+      quantity: attribution('quantity'),
+      payment: attribution('payment'),
+    },
+  })
+
+  const fallbackResolvedChannel = managed.channel === null && Boolean(fallbackChannel)
+  const unresolvedMissing = missingFields.filter((field) => field !== 'channel' || !fallbackResolvedChannel)
+  const unresolvedUncertain = uncertainFields.filter((field) => field !== 'channel' || !fallbackResolvedChannel)
+  const unresolvedManaged = managedBlockers.filter((blocker) => {
+    if (blocker === 'incomplete_required_fields' && unresolvedMissing.length === 0) return false
+    if (blocker === 'uncertain_fields' && unresolvedUncertain.length === 0) return false
+    return true
+  })
+  if (managed.scope !== 'single_item_order') unresolvedManaged.push(`scope_${String(managed.scope)}`)
+  const blockers = [...new Set([
+    ...draft.blockers,
+    ...unresolvedManaged.map((blocker) => `ai_${blocker}`),
+  ])]
+  return blockers.length
+    ? { ...draft, status: 'needs_review', blockers }
+    : draft
 }
 
 export function buildChannelOrderDraft(input: ChannelOrderDraftInput): ChannelOrderDraft {

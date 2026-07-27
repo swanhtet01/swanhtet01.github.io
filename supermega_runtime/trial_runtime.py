@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from datetime import date
+from hashlib import sha256
 import json
 from typing import Any, Literal, TypeVar
 from uuid import UUID
@@ -16,6 +17,15 @@ from supermega_runtime.client_import_runtime import (
     validate_client_import_staging_package,
 )
 from supermega_runtime.production_runtime import PRODUCTION_HUMAN_EVENTS
+from supermega_runtime.order_intake import (
+    MAX_ORDER_MESSAGE_LENGTH,
+    OrderIntakeCatalogItem,
+)
+from supermega_runtime.order_intake_provider import (
+    MAX_ORDER_INTAKE_CATALOG_ITEMS,
+    OrderIntakeDraftProvider,
+    OrderIntakeProviderError,
+)
 from supermega_runtime.production_material_handoff import (
     require_shop_issue_before_plant_progress,
     require_shop_issue_matches_plant,
@@ -99,6 +109,25 @@ class TrialClientImportApplyRequest(_StrictRequest):
         pattern=r"^APPLY sha256:[0-9a-f]{64}$",
     )
     package: dict[str, Any]
+
+
+class TrialOrderIntakeDraftRequest(_StrictRequest):
+    source_label: str = Field(min_length=1, max_length=120)
+    message: str = Field(min_length=1, max_length=MAX_ORDER_MESSAGE_LENGTH)
+
+    @field_validator("source_label")
+    @classmethod
+    def require_canonical_source_label(cls, value: str) -> str:
+        if not value.strip() or value != value.strip():
+            raise ValueError("source label must be canonical visible text")
+        return value
+
+    @field_validator("message")
+    @classmethod
+    def require_visible_order_message(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("order message must contain visible characters")
+        return value
 
 
 class TrialDecisionSubject(_StrictRequest):
@@ -586,7 +615,41 @@ def _commerce_retains_website_source(commerce_state: object, source: object) -> 
     )
 
 
-def create_trial_router(*, store: TrialStore, resolve_principal: PrincipalResolver) -> APIRouter:
+def _order_intake_catalog(commerce_state: object) -> list[OrderIntakeCatalogItem]:
+    if not isinstance(commerce_state, Mapping):
+        raise _error(409, "order_intake_catalog_unavailable")
+    items = commerce_state.get("items")
+    if not isinstance(items, list) or not items:
+        raise _error(409, "order_intake_catalog_unavailable")
+    if len(items) > MAX_ORDER_INTAKE_CATALOG_ITEMS:
+        raise _error(
+            409,
+            "order_intake_catalog_too_large",
+            maximum_items=MAX_ORDER_INTAKE_CATALOG_ITEMS,
+        )
+    if any(not isinstance(item, Mapping) for item in items):
+        raise _error(409, "order_intake_catalog_invalid")
+    try:
+        return [
+            OrderIntakeCatalogItem(
+                sku=item["sku"],
+                name=item["name"],
+                variant=item.get("variant"),
+                on_hand=item["onHand"],
+                unit_price_mmk=item["price"],
+            )
+            for item in items
+        ]
+    except (KeyError, ValidationError) as exc:
+        raise _error(409, "order_intake_catalog_invalid") from exc
+
+
+def create_trial_router(
+    *,
+    store: TrialStore,
+    resolve_principal: PrincipalResolver,
+    order_intake_provider: OrderIntakeDraftProvider | None = None,
+) -> APIRouter:
     """Create an unwired private-trial router with injected storage and auth.
 
     ``resolve_principal`` must validate a server-side session or token and return
@@ -625,6 +688,58 @@ def create_trial_router(*, store: TrialStore, resolve_principal: PrincipalResolv
             "readiness": readiness.to_dict(),
             "states": states,
             "approvals": [approval.to_dict() for approval in approvals],
+        }
+
+    @router.post("/commerce/order-intake/drafts")
+    async def trial_order_intake_draft(request: Request) -> dict[str, Any]:
+        principal = _resolve_principal(request, resolve_principal)
+        readiness = _readiness(store, principal)
+        _require_read_ready(readiness)
+        if not has_surface_read_capability(readiness.capabilities, "commerce"):
+            raise _error(
+                403,
+                "trial_capability_required",
+                required_capability="commerce.read",
+            )
+        if principal.actor_kind != "human":
+            raise _error(403, "trial_human_approval_required")
+        if order_intake_provider is None:
+            raise _error(503, "order_intake_provider_not_configured")
+        raw_body = await _bounded_json_body(
+            request,
+            maximum_bytes=MAX_ORDER_MESSAGE_LENGTH + 512,
+        )
+        try:
+            body = TrialOrderIntakeDraftRequest.model_validate(raw_body)
+        except ValidationError as exc:
+            raise _error(422, "order_intake_request_invalid") from exc
+        commerce = _invoke(lambda: store.get_state(principal, "commerce"))
+        catalog = _order_intake_catalog(commerce.state)
+        try:
+            draft = await order_intake_provider.generate(
+                message=body.message,
+                catalog=catalog,
+                workspace_id=principal.workspace_id,
+                actor_id=principal.actor_id,
+            )
+        except OrderIntakeProviderError as exc:
+            status_code = 503
+            if exc.code == "order_intake_company_budget_reached":
+                status_code = 429
+            elif exc.code in {
+                "order_intake_catalog_empty",
+                "order_intake_catalog_invalid",
+                "order_intake_catalog_too_large",
+            }:
+                status_code = 409
+            elif exc.code == "order_intake_provider_refused":
+                status_code = 422
+            raise _error(status_code, exc.code) from exc
+        return {
+            "draft": draft.model_dump(mode="json"),
+            "source_label_digest": (
+                f"sha256:{sha256(body.source_label.encode('utf-8')).hexdigest()}"
+            ),
         }
 
     @router.post("/imports/validate")

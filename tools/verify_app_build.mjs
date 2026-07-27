@@ -187,14 +187,14 @@ else {
     || webmanifest.icons?.[0]?.src !== '/favicon.svg') fail('wrong_app_webmanifest')
 }
 if (!indexSource.includes('<title>SuperMega</title>')
-  || !indexSource.includes('Run Shop and Plant, build Website and Ecommerce experiences, and keep owner decisions accountable.')
+  || !indexSource.includes(manifest.company.supporting)
   || indexSource.includes('SuperMega Company OS')
   || indexSource.includes('Run Product, Commerce, and Production')) fail('stale_app_metadata')
 
 const files = await walk(dist)
 const textFiles = files.filter((path) => /\.(?:html|js|css|json|svg)$/.test(path))
 const corpus = (await Promise.all(textFiles.map((path) => readFile(path, 'utf8')))).join('\n')
-for (const required of ['SUPERMEGA', 'Teams', 'Product', 'Acceptance outcome', 'Prepare brief', 'Evidence register', 'Record evidence', 'Verified evidence', 'verifiedAt', 'Operations', 'Confirm change', 'Action history', 'actorKind', 'evidenceReference', 'accountableActions', 'decision_packet.v1', 'Claims and provenance', 'claimType', 'claim_type', 'source_reference', 'artifact_reference', 'managedApprovalRequests', 'packetFingerprint', 'uncertainty', 'visibility', 'artifactReference', 'Human reviewer', 'Decision note', 'Approve and record', 'Local trial', 'Agents prepare work', 'Pilot definition', 'Workflow', 'workflowProfile', 'Current record', 'Baseline', 'Target outcome', 'Human authority boundary', 'Acceptance evidence', 'Operating mode', 'Write path', manifest.brand.colors.accent, manifest.brand.colors.ink]) {
+for (const required of ['SUPERMEGA', 'Shop', 'Plant', 'Website', 'Ecommerce', 'Orders', 'Stock', 'Purchasing', 'Jobs', 'Quality', 'Maintenance', 'Content', 'Preview', 'Publish', 'Catalog', 'Storefront', 'Requests', 'Sample workspace', 'Confirm change', 'Action history', 'actorKind', 'evidenceReference', 'accountableActions', 'Operating mode', 'Write path', manifest.brand.colors.accent, manifest.brand.colors.ink]) {
   if (!corpus.includes(required)) fail(`missing_context:${required}`)
 }
 if (!coreSource.includes("import siteManifest from '../../../site-manifest.json'")) fail('workflow_contract_not_shared')
@@ -216,35 +216,26 @@ if (!viteConfigSource.includes("process.env.SUPERMEGA_LOCAL_API?.trim()")
   || (viteConfigSource.match(/if \(!localApi\) server\.middlewares\.use\(isolatedHealthMiddleware\)/g) ?? []).length !== 2) fail('local_health_not_truthful_or_fail_closed')
 if (coreSource.includes('const setupTemplates =') || coreSource.includes('const setupEntryPoints =')) fail('workflow_contract_duplicated')
 if (!coreSource.includes("{ to: '/', label: 'Home', end: true }")
-  || !coreSource.includes("{ to: '/work/', label: 'HQ', end: false }")
-  || !coreSource.includes("{ to: '/operations/', label: 'Products', end: false }")) fail('first_run_navigation_not_simple')
-const overviewPageContract = coreSource.slice(coreSource.indexOf('export function OverviewPage'), coreSource.indexOf('export function OperationsPage'))
-if (!overviewPageContract.includes('useCommerceWorkspace(managedIdentity)')
-  || !overviewPageContract.includes('useProductionWorkspace(managedIdentity)')) fail('home_managed_product_sources_not_consistent')
-if (!coreSource.includes('className="product-launcher home-products"')
-  || !coreSource.includes('to="/shop/?tab=orders"')
-  || !overviewPageContract.includes("to={openProductionIssues.length ? '/plant/?tab=control' : '/plant/?tab=production'}")
-  || !overviewPageContract.includes("openProductionIssues.length === 1 ? 'issue' : 'issues'")
-  || !coreSource.includes('to="/website/"')
-  || !coreSource.includes('to="/ecommerce/"')
-  || !overviewPageContract.includes("label: 'Shop stock'")
-  || !overviewPageContract.includes("label: 'Plant problem'")
-  || !overviewPageContract.includes("label: 'Shop order'")
-  || !overviewPageContract.includes('className="next-task-source"')
-  || !overviewPageContract.includes("managedIdentity ? 'Managed records' : 'Sample data'")
-  || !overviewPageContract.includes('<summary><span>SuperMega HQ</span><small>Internal company work</small></summary>')
-  || !coreSource.includes('const homeWork = visibleWork.slice(0, 3)')) fail('first_run_product_launcher_missing')
+  || !coreSource.includes("{ to: '/shop/', label: 'Shop', end: false }")
+  || !coreSource.includes("{ to: '/plant/', label: 'Plant', end: false }")
+  || !coreSource.includes("{ to: '/website/', label: 'Website', end: false }")
+  || !coreSource.includes("{ to: '/ecommerce/', label: 'Ecommerce', end: false }")
+  || coreSource.includes("{ to: '/work/', label: 'HQ', end: false }")
+  || coreSource.includes("{ to: '/operations/', label: 'Products', end: false }")) fail('first_run_navigation_not_simple')
+const productHomePageContract = coreSource.slice(coreSource.indexOf('const customerProducts'), coreSource.indexOf('function ApprovalReviewDialog'))
+if (!productHomePageContract.includes('title="What do you want to run?"')
+  || !productHomePageContract.includes('className="product-home-grid"')
+  || !productHomePageContract.includes('to: \'/shop/?tab=orders\'')
+  || !productHomePageContract.includes('to: \'/plant/?tab=production\'')
+  || !productHomePageContract.includes('to: \'/website/\'')
+  || !productHomePageContract.includes('to: \'/ecommerce/\'')
+  || productHomePageContract.includes('HQ')
+  || productHomePageContract.includes('Agent')
+  || productHomePageContract.includes('Operations')) fail('first_run_product_launcher_missing')
 if (!coreSource.includes('title="Choose a product" copy="Open the product for the job you need to do."')
   || !coreSource.includes('<strong>Website</strong><small>Build, preview, and review a site</small>')
   || coreSource.includes('Choose a workspace')
   || coreSource.includes('prepare to publish')) fail('product_launcher_language_not_truthful')
-if (!overviewPageContract.includes('const uncoveredLowStock = lowStock.filter((item) => !activePurchaseOrderBySku.has(item.sku))')
-  || !overviewPageContract.includes("urgency === 'late' || urgency === 'due_soon' || urgency === 'unrecorded'")
-  || !overviewPageContract.includes("label: 'Shop purchase'")
-  || !overviewPageContract.includes('nextPurchaseArrivalProblem')
-  || !overviewPageContract.includes('nextPurchaseArrivalDueSoon')
-  || !overviewPageContract.includes('purchaseArrivalAttention.map(')
-  || overviewPageContract.includes('{lowStock.map((item)')) fail('home_purchase_commitment_priority_missing')
 if (!/\.core-skip \{[^}]*min-height:\s*44px;/.test(coreCssSource)
   || !/\.evidence-disclosure > summary,[^{]*\.company-brief-disclosure > summary \{[^}]*min-height:\s*44px;/.test(coreCssSource)
   || !/\.release-review-link \{[^}]*min-height:\s*44px;/.test(coreCssSource)
@@ -297,9 +288,10 @@ if (!teamSource.includes("activeView === 'agents'")
   || !teamSource.includes("actions={activeView === 'work' && !intakeOpen")
   || teamSource.includes('actions={<button className="core-button primary" onClick={openNewWork}')) fail('team_view_context_missing')
 if (!appSource.includes("lazy(() => import('./products/website/WebsiteProduct')") || !appSource.includes('Suspense') || appSource.includes("import('./products/ecommerce/EcommerceOrdersProduct')")) fail('website_prototype_route_not_isolated')
-if (!appSource.includes("lazy(() => import('./core/TeamWorkspace')")
+if (appSource.includes("import('./core/TeamWorkspace')")
   || appSource.includes("import { TeamsPage } from './core/TeamWorkspace'")
-  || !appSource.includes('<ProductLoading name="HQ" />')) fail('hq_route_not_isolated')
+  || appSource.includes('<ProductLoading name="HQ" />')
+  || !appSource.includes('<Route element={<Navigate replace to="/" />} path="work/*" />')) fail('internal_hq_exposed_in_customer_router')
 const coreLayoutRouteStart = appSource.indexOf('<Route element={<CoreLayout />}>')
 const coreLayoutRouteEnd = appSource.indexOf('</Route>', coreLayoutRouteStart)
 const websiteRoute = appSource.indexOf('path="website/*"')
@@ -309,7 +301,6 @@ if (coreLayoutRouteStart < 0
   || websiteRoute < coreLayoutRouteStart
   || websiteRoute > coreLayoutRouteEnd
   || !coreSource.includes("location.pathname.startsWith('/website/')")
-  || !coreSource.includes("to === '/operations/' && (")
   || !coreSource.includes("location.pathname.startsWith('/shop/')")
   || !coreSource.includes("location.pathname.startsWith('/plant/')")
   || websiteSource.includes('className="website-topbar"')
@@ -329,9 +320,9 @@ if (!appSource.includes('<Navigate replace to="/website/" />')
   || !appSource.includes('<Navigate replace to="/ecommerce/" />')
   || !appSource.includes('path="products/website/*"')
   || !appSource.includes('path="products/ecommerce/*"')) fail('maker_product_compatibility_routes_missing')
-if ((appSource.match(/<Navigate replace to="\/work\/\?view=agents" \/>/g) || []).length !== 2
-  || !appSource.includes('path="agents/*"')
-  || !appSource.includes('path="assist/*"')) fail('agents_not_internal_hq_capability')
+if (!appSource.includes('<Route element={<Navigate replace to="/" />} path="agents/*" />')
+  || !appSource.includes('<Route element={<Navigate replace to="/" />} path="assist/*" />')
+  || appSource.includes('/work/?view=agents')) fail('internal_agents_exposed_in_customer_router')
 if (!storefrontSource.includes("supermega.ecommerce.storefront_preview.v1")
   || !storefrontSource.includes('readStorefrontCatalog')
   || !storefrontSource.includes('buildStorefrontPreview')
@@ -969,10 +960,13 @@ const websitePreviewControlsHiddenUnconditionally = /(?:^|\n)\s*\.website-previe
 if (!websiteMobileCss.includes('.website-preview-controls') || !websiteMobileCss.includes('display: flex') || websitePreviewControlsHiddenUnconditionally) fail('website_mobile_review_controls_hidden')
 if (!websiteCssSource.includes('.website-inline-actions > button,\n  .website-navigation-actions > button {\n    min-width: 44px;')) fail('website_mobile_reorder_touch_target_undersized')
 if (!commerceIntakeSource.includes('Browser-local evidence only.') || !commerceIntakeSource.includes('No customer message, payment, delivery request, or external write occurs.')) fail('commerce_intake_boundary_missing')
-if (!channelOrderUiSource.includes('Start from a channel message')
-  || !channelOrderUiSource.includes('Human-mapped intake')
-  || !channelOrderUiSource.includes('AI is not connected')
-  || !channelOrderUiSource.includes('The full message is not part of the order record.')
+if (!channelOrderUiSource.includes('Turn one message into an order draft')
+  || !channelOrderUiSource.includes('AI-assisted intake')
+  || !channelOrderUiSource.includes('Prepare with AI')
+  || !channelOrderUiSource.includes('Connect a managed workspace to use AI')
+  || !channelOrderUiSource.includes('is not written into the order record')
+  || !managedTrialSource.includes("'/api/trial/v1/commerce/order-intake/drafts'")
+  || !managedTrialSource.includes('prepareManagedOrderIntakeDraft')
   || !coreSource.includes('const sourceRecordId = sourceDraft?.sourceRecordId ?? ecommerceDraft?.sourceRequestId')
   || !coreSource.includes('const sourceEvidence = sourceDraft?.evidenceReference ?? ecommerceDraft?.evidenceReference')
   || !coreSource.includes('evidenceReferenceSuggestion: sourceEvidence')
@@ -981,6 +975,8 @@ if (!channelOrderUiSource.includes('Start from a channel message')
   || !coreSource.includes("setOrderEntryMode('manual')")
   || !coreSource.includes("lazy(() => import('./ChannelOrderIntake')")
   || !channelOrderUiSource.includes("useState<ChannelOrderField>('customer')")
+  || !channelOrderUiSource.includes('buildManagedChannelOrderDraft')
+  || !coreSource.includes('identity={managedIdentity ?? undefined}')
   || !channelOrderUiSource.includes('aria-label="Message field mapping"')
   || !channelOrderUiSource.includes('className="channel-intake-disclosure"')
   || !channelOrderUiSource.includes('channelOrderDraftIsReady')) fail('channel_order_intake_ui_missing')
@@ -1930,7 +1926,7 @@ if (!coreCssSource.includes('.production-mode-banner[data-write="blocked"]')
 if (!coreCssSource.includes('.action-history summary { min-height: 44px; }')) fail('production_mobile_history_touch_target_missing')
 if (!coreSource.includes("const requestedTabIsCanonical = requestedTab === activeTab") || !coreSource.includes("!requestedTabIsCanonical") || !coreSource.includes(" : 'orders'") || !coreSource.includes(" : 'production'")) fail('legacy_product_tab_not_canonicalized')
 if (coreSource.includes('>All apps</Link>')
-  || !coreSource.includes('className="text-link all-apps-link" to="/operations/">Products</Link>')
+  || !coreSource.includes('className="text-link all-apps-link" to="/">All products</Link>')
   || !coreCssSource.includes('.operations-screen .heading-actions .text-link { display: none; }')
   || !coreCssSource.includes('.order-row-actions .text-link { min-width: 44px; justify-content: center; }')
   || !coreCssSource.includes('.boundary-list a { min-height: 44px;')) fail('product_mobile_simplification_missing')
@@ -1950,8 +1946,8 @@ for (const product of solutionProducts) {
 for (const route of ['/shop/', '/plant/', '/website/', '/ecommerce/']) {
   if (!corpus.includes(route)) fail(`missing_canonical_module_route:${route}`)
 }
-for (const route of ['/operations/commerce/', '/operations/production/']) {
-  if (!`${appSource}\n${coreSource}`.includes(route)) fail(`missing_runtime_compatibility_route:${route}`)
+for (const route of ['operations/commerce/*', 'operations/production/*']) {
+  if (!appSource.includes(`path="${route}"`)) fail(`missing_runtime_compatibility_route:${route}`)
 }
 for (const forbidden of ['pos.supermega.dev', 'ytf.supermega.dev', 'Yangon Tyre', 'ytf-plant-a', 'Company Systems That Replace Tool Sprawl', 'Workspace draft', 'Service bookings', 'Material receiving']) {
   if (corpus.toLowerCase().includes(forbidden.toLowerCase())) fail(`retired_context:${forbidden}`)
@@ -2019,6 +2015,57 @@ async function verifyChannelOrderRuntime() {
     assert(drafts.every((draft) => /^CHN-[A-F0-9]{16}$/.test(draft.sourceRecordId)
       && /^MSG-[A-F0-9]{16}$/.test(draft.messageFingerprint)
       && draft.evidenceReference.startsWith(`channel-message://${draft.sourceRecordId}#msg-${draft.messageFingerprint.slice(4).toLowerCase()}-map-`)), 'channel_order_source_identity_invalid')
+    const sha256Reference = async (value) => {
+      const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
+      return `sha256:${[...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')}`
+    }
+    const managedFixture = fixtures[0]
+    const sourceSpan = (quote) => ({ start: managedFixture.message.indexOf(quote), end: managedFixture.message.indexOf(quote) + quote.length, quote })
+    const managedResponse = {
+      source_label_digest: await sha256Reference(managedFixture.sourceLabel),
+      draft: {
+        schema_version: 'supermega.order_intake.draft.v1',
+        message_digest: await sha256Reference(managedFixture.message),
+        status: 'ready_for_review',
+        scope: 'single_item_order',
+        customer_reference: managedFixture.customer,
+        channel: 'messenger',
+        sku: managedFixture.sku,
+        quantity: managedFixture.quantity,
+        payment: 'kbzpay',
+        fulfilment: null,
+        missing_fields: [],
+        uncertain_fields: [],
+        blockers: [],
+        provenance: [
+          { field: 'customer_reference', source_spans: [sourceSpan(managedFixture.quotes.customer)] },
+          { field: 'channel', source_spans: [sourceSpan('Messenger')] },
+          { field: 'sku', source_spans: [sourceSpan(managedFixture.quotes.sku)] },
+          { field: 'quantity', source_spans: [sourceSpan(managedFixture.quotes.quantity)] },
+          { field: 'payment', source_spans: [sourceSpan(managedFixture.quotes.payment)] },
+        ],
+      },
+    }
+    const managedDraft = await intake.buildManagedChannelOrderDraft({
+      catalogSkus: ['SM-1001', 'SM-1002', 'SM-1003'],
+      fallbackChannel: managedFixture.channel,
+      message: managedFixture.message,
+      response: managedResponse,
+      sourceLabel: managedFixture.sourceLabel,
+    })
+    assert(intake.channelOrderDraftIsReady(managedDraft), 'managed_channel_order_draft_not_ready')
+    assert(!JSON.stringify(managedDraft).includes(managedFixture.message), 'managed_channel_order_retained_full_message')
+    let managedDigestRejected = false
+    try {
+      await intake.buildManagedChannelOrderDraft({
+        catalogSkus: ['SM-1001', 'SM-1002', 'SM-1003'],
+        fallbackChannel: managedFixture.channel,
+        message: `${managedFixture.message} changed`,
+        response: managedResponse,
+        sourceLabel: managedFixture.sourceLabel,
+      })
+    } catch { managedDigestRejected = true }
+    assert(managedDigestRejected, 'managed_channel_order_accepted_message_digest_mismatch')
     assert(!intake.channelOrderDraftIsReady({ ...drafts[0], provenance: drafts[0].provenance.slice(1) }), 'channel_order_ready_guard_accepted_missing_provenance')
     assert(!intake.channelOrderDraftIsReady({ ...drafts[0], sourceRecordId: 'CHN-TAMPERED' }), 'channel_order_ready_guard_accepted_tampered_source')
     assert(!intake.channelOrderDraftIsReady({ ...drafts[0], schema: 'supermega.channel_order_draft.v0' }), 'channel_order_ready_guard_accepted_stale_schema')
