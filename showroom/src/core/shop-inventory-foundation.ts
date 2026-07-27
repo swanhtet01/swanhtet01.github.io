@@ -49,6 +49,7 @@ export type ShopInventoryCommandPayload =
   | { kind: 'import'; id: string; package: ShopInventoryImportPackage; proof: ShopInventoryProof }
   | { kind: 'transfer'; id: string; stockUnitId: string; fromLocationId: string; toLocationId: string; quantity: number; proof: ShopInventoryProof }
   | { kind: 'receipt'; id: string; purchaseOrderId: string; stockUnitId: string; sku: string; trackingCode: string; locationId: string; quantity: number; proof: ShopInventoryProof }
+  | { kind: 'count'; id: string; stockUnitId: string; locationId: string; expectedQuantity: number; countedQuantity: number; proof: ShopInventoryProof }
   | { kind: 'reserve'; id: string; clientId: string; stockUnitId: string; locationId: string; quantity: number; proof: ShopInventoryProof }
   | { kind: 'release' | 'fulfil'; id: string; reservationId: string; proof: ShopInventoryProof }
   | { kind: 'order_reserve'; id: string; orderId: string; customerReference: string; allocations: ShopInventoryOrderAllocation[]; proof: ShopInventoryProof }
@@ -108,7 +109,7 @@ export type ShopInventoryProjection = {
 const digestPattern = /^sha256:[0-9a-f]{64}$/
 const businessIdPattern = /^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+$/
 const timestampPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/
-const commandKinds = new Set(['import', 'transfer', 'receipt', 'reserve', 'release', 'fulfil', 'order_reserve', 'order_release', 'order_fulfil'])
+const commandKinds = new Set(['import', 'transfer', 'receipt', 'count', 'reserve', 'release', 'fulfil', 'order_reserve', 'order_release', 'order_fulfil'])
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -421,6 +422,18 @@ function commandPayload(value: unknown, field: string, catalog: string[]): ShopI
       proof: proof(source.proof, `${field}.proof`),
     }
   }
+  if (value.kind === 'count') {
+    const source = exact(value, field, ['kind', 'id', 'stockUnitId', 'locationId', 'expectedQuantity', 'countedQuantity', 'proof'])
+    return {
+      kind: 'count',
+      id: identifier(source.id, `${field}.id`, 'CNT'),
+      stockUnitId: text(source.stockUnitId, `${field}.stockUnitId`, 80),
+      locationId: identifier(source.locationId, `${field}.locationId`, 'LOC'),
+      expectedQuantity: quantity(source.expectedQuantity, `${field}.expectedQuantity`),
+      countedQuantity: quantity(source.countedQuantity, `${field}.countedQuantity`),
+      proof: proof(source.proof, `${field}.proof`),
+    }
+  }
   if (value.kind === 'reserve') {
     const source = exact(value, field, ['kind', 'id', 'clientId', 'stockUnitId', 'locationId', 'quantity', 'proof'])
     return {
@@ -495,6 +508,8 @@ function ledgerEvent(input: {
   clientId?: string
   orderId?: string
   customerReference?: string
+  expectedQuantity?: number
+  countedQuantity?: number
 }) {
   const record: Record<string, unknown> = {
     id: input.id,
@@ -516,6 +531,8 @@ function ledgerEvent(input: {
   if (input.clientId !== undefined) record.clientId = input.clientId
   if (input.orderId !== undefined) record.orderId = input.orderId
   if (input.customerReference !== undefined) record.customerReference = input.customerReference
+  if (input.expectedQuantity !== undefined) record.expectedQuantity = input.expectedQuantity
+  if (input.countedQuantity !== undefined) record.countedQuantity = input.countedQuantity
   return record
 }
 
@@ -589,7 +606,7 @@ function replayCommands(commands: ShopInventoryCommandPayload[]) {
       return
     }
     const stockUnitId = 'stockUnitId' in command ? command.stockUnitId : ''
-    if ((command.kind === 'transfer' || command.kind === 'reserve') && !stockUnits.has(stockUnitId)) throw new Error(`${field}.stockUnitId is unknown.`)
+    if ((command.kind === 'transfer' || command.kind === 'count' || command.kind === 'reserve') && !stockUnits.has(stockUnitId)) throw new Error(`${field}.stockUnitId is unknown.`)
     if (command.kind === 'transfer') {
       if (!locations.has(command.fromLocationId) || !locations.has(command.toLocationId)) throw new Error(`${field} references an unknown location.`)
       const source = currentBalance(command.stockUnitId, command.fromLocationId)
@@ -600,6 +617,23 @@ function replayCommands(commands: ShopInventoryCommandPayload[]) {
         ledgerEvent({ id: `LED-${command.id}-OUT`, kind: 'transfer-out', command, stockUnitId: command.stockUnitId, locationId: command.fromLocationId, counterpartyLocationId: command.toLocationId, onHandDelta: -command.quantity, reservedDelta: 0, referenceId: command.id }),
         ledgerEvent({ id: `LED-${command.id}-IN`, kind: 'transfer-in', command, stockUnitId: command.stockUnitId, locationId: command.toLocationId, counterpartyLocationId: command.fromLocationId, onHandDelta: command.quantity, reservedDelta: 0, referenceId: command.id }),
       )
+      return
+    }
+    if (command.kind === 'count') {
+      if (!locations.has(command.locationId)) throw new Error(`${field}.locationId is unknown.`)
+      const key = balanceKey(command.stockUnitId, command.locationId)
+      if (!balances.has(key)) throw new Error(`${field} must reference an existing stock-unit balance.`)
+      const current = currentBalance(command.stockUnitId, command.locationId)
+      if (current.onHand === 0 && current.reserved === 0) throw new Error(`${field} must reference an active stock-unit balance.`)
+      if (current.onHand !== command.expectedQuantity) throw new Error(`${field}.expectedQuantity is stale.`)
+      if (command.countedQuantity < current.reserved) throw new Error(`${field}.countedQuantity cannot be below reserved stock.`)
+      const delta = command.countedQuantity - current.onHand
+      applyDelta(command.stockUnitId, command.locationId, delta, 0, field)
+      ledger.push(ledgerEvent({
+        id: `LED-${command.id}-COUNT`, kind: 'count', command, stockUnitId: command.stockUnitId,
+        locationId: command.locationId, onHandDelta: delta, reservedDelta: 0, referenceId: command.id,
+        expectedQuantity: command.expectedQuantity, countedQuantity: command.countedQuantity,
+      }))
       return
     }
     if (command.kind === 'order_reserve') {
@@ -837,6 +871,23 @@ export function receiveShopInventory(state: unknown, input: {
     kind: 'receipt', id: input.receiptId, purchaseOrderId: input.purchaseOrderId,
     stockUnitId: input.stockUnitId, sku: input.sku, trackingCode: input.trackingCode,
     locationId: input.locationId, quantity: input.quantity, proof: proof(input.proof, 'proof'),
+  }, input.catalogSkus, input.expectedHeadDigest)
+}
+
+export function countShopInventory(state: unknown, input: {
+  countId: unknown
+  stockUnitId: unknown
+  locationId: unknown
+  expectedQuantity: unknown
+  countedQuantity: unknown
+  proof: unknown
+  catalogSkus: unknown
+  expectedHeadDigest: unknown
+}) {
+  return appendCommand(state, {
+    kind: 'count', id: input.countId, stockUnitId: input.stockUnitId, locationId: input.locationId,
+    expectedQuantity: input.expectedQuantity, countedQuantity: input.countedQuantity,
+    proof: proof(input.proof, 'proof'),
   }, input.catalogSkus, input.expectedHeadDigest)
 }
 

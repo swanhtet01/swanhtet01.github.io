@@ -15,6 +15,7 @@ from supermega_runtime.shop_inventory_runtime import (
     SHOP_INVENTORY_SCHEMA,
     ShopInventoryValidationError,
     restamp_latest_shop_inventory_command,
+    shop_inventory_balances,
     shop_inventory_catalog_digest,
     shop_inventory_sku_available_to_promise,
     shop_inventory_sku_totals,
@@ -198,6 +199,30 @@ def append_inventory_command(
     return current
 
 
+def counted_inventory(
+    state: dict[str, object],
+    proof: dict[str, str],
+    *,
+    expected_quantity: int,
+    counted_quantity: int,
+    stock_unit_id: str = "LOT-SKU1-OPENING-001",
+    location_id: str = "LOC-MAIN",
+    count_id: str = "CNT-LOCATION-001",
+) -> dict[str, object]:
+    return append_inventory_command(
+        state,
+        {
+            "kind": "count",
+            "id": count_id,
+            "stockUnitId": stock_unit_id,
+            "locationId": location_id,
+            "expectedQuantity": expected_quantity,
+            "countedQuantity": counted_quantity,
+            "proof": proof,
+        },
+    )
+
+
 def order_inventory_command_id(prefix: str, order_id: str) -> str:
     identity = canonical_digest(
         {
@@ -373,6 +398,24 @@ def purchase_receipt_movement(
     }
 
 
+def count_movement(
+    proof: dict[str, str], *, expected_quantity: int, counted_quantity: int
+) -> dict[str, object]:
+    return {
+        "id": f"MOV2:{proof['actionId']}",
+        "actionId": proof["actionId"],
+        "createdAt": proof["capturedAt"],
+        "actor": proof["actor"],
+        "reason": proof["reason"],
+        "evidenceReference": proof["evidenceReference"],
+        "kind": "count",
+        "sku": "SKU-1",
+        "quantityDelta": counted_quantity - expected_quantity,
+        "expectedQuantity": expected_quantity,
+        "countedQuantity": counted_quantity,
+    }
+
+
 class ShopInventoryRuntimeTests(unittest.TestCase):
     def test_opening_transfer_and_digest_chain_match_the_existing_contract(self) -> None:
         opening = opening_inventory()
@@ -495,6 +538,122 @@ class ShopInventoryRuntimeTests(unittest.TestCase):
                 "commerce.purchase_order.received",
                 ordered,
                 {"state": aggregate_only, "evidence": proof},
+            )
+
+    def test_location_count_sets_one_physical_balance_and_preserves_reservations(self) -> None:
+        current = commerce_state()
+        opening = opening_inventory()
+        initialized = reduce_commerce_state(
+            "commerce.inventory.initialized",
+            current,
+            {
+                "state": {**current, "inventoryFoundation": opening},
+                "evidence": opening["commands"][-1]["payload"]["proof"],  # type: ignore[index]
+            },
+        )
+        reserve_proof = action_proof(
+            "ACT-ORDER-RESERVE-COUNT", "2026-07-27T06:00:00.000Z"
+        )
+        order = sales_order(reserve_proof, order_id="ORD-LOCATION-COUNT")
+        reserved_state = deepcopy(initialized)
+        reserved_state["items"][0]["onHand"] = 7  # type: ignore[index]
+        reserved_state["orders"] = [order]
+        reserved_state["movements"] = [
+            order_movement(
+                "reserve", reserve_proof, -3, order_id="ORD-LOCATION-COUNT"
+            )
+        ]
+        reserved_state["inventoryFoundation"] = reserved_order_inventory(
+            initialized["inventoryFoundation"],
+            reserve_proof,
+            order_id="ORD-LOCATION-COUNT",
+        )
+        reserved = reduce_commerce_state(
+            "commerce.order.created",
+            initialized,
+            {"state": reserved_state, "evidence": reserve_proof},
+        )
+
+        count_proof = action_proof(
+            "ACT-LOCATION-COUNT-001", "2026-07-27T07:00:00.000Z"
+        )
+        counted_state = deepcopy(reserved)
+        counted_state["items"][0]["onHand"] = 5  # type: ignore[index]
+        counted_state["movements"] = [
+            count_movement(
+                count_proof, expected_quantity=7, counted_quantity=5
+            ),
+            *reserved["movements"],  # type: ignore[misc]
+        ]
+        counted_state["inventoryFoundation"] = counted_inventory(
+            reserved["inventoryFoundation"],
+            count_proof,
+            expected_quantity=10,
+            counted_quantity=8,
+        )
+        counted = reduce_commerce_state(
+            "commerce.stock.counted",
+            reserved,
+            {"state": counted_state, "evidence": count_proof},
+        )
+        main_balance = next(
+            balance
+            for balance in shop_inventory_balances(
+                counted["inventoryFoundation"], ["SKU-1"]
+            )
+            if balance["stockUnitId"] == "LOT-SKU1-OPENING-001"
+            and balance["locationId"] == "LOC-MAIN"
+        )
+        self.assertEqual(
+            (main_balance["onHand"], main_balance["reserved"], main_balance["availableToPromise"]),
+            (8, 3, 5),
+        )
+        self.assertEqual(
+            shop_inventory_sku_totals(counted["inventoryFoundation"], ["SKU-1"]),
+            {"SKU-1": 8},
+        )
+        self.assertEqual(
+            shop_inventory_sku_available_to_promise(
+                counted["inventoryFoundation"], ["SKU-1"]
+            ),
+            {"SKU-1": 5},
+        )
+
+        stale = deepcopy(counted_state)
+        stale["inventoryFoundation"] = counted_inventory(
+            reserved["inventoryFoundation"],
+            count_proof,
+            expected_quantity=9,
+            counted_quantity=8,
+        )
+        with self.assertRaisesRegex(TrialValidationError, "expected quantity is stale"):
+            reduce_commerce_state(
+                "commerce.stock.counted",
+                reserved,
+                {"state": stale, "evidence": count_proof},
+            )
+
+        below_reserved = deepcopy(counted_state)
+        below_reserved["inventoryFoundation"] = counted_inventory(
+            reserved["inventoryFoundation"],
+            count_proof,
+            expected_quantity=10,
+            counted_quantity=2,
+        )
+        with self.assertRaisesRegex(TrialValidationError, "below reserved stock"):
+            reduce_commerce_state(
+                "commerce.stock.counted",
+                reserved,
+                {"state": below_reserved, "evidence": count_proof},
+            )
+
+        aggregate_only = deepcopy(counted_state)
+        aggregate_only["inventoryFoundation"] = reserved["inventoryFoundation"]
+        with self.assertRaisesRegex(TrialValidationError, "location inventory|location count"):
+            reduce_commerce_state(
+                "commerce.stock.counted",
+                reserved,
+                {"state": aggregate_only, "evidence": count_proof},
             )
 
     def test_order_allocation_reserve_release_and_fulfil_are_atomic(self) -> None:
@@ -930,6 +1089,66 @@ class ShopInventoryRuntimeTests(unittest.TestCase):
             ),
             {"SKU-1": 14},
         )
+
+        spoofed_count_proof = action_proof(
+            "ACT-LOCATION-COUNT-STORE",
+            "2099-01-01T00:00:00.000Z",
+            "fabricated-counter",
+        )
+        count_state = deepcopy(received.state)
+        count_state["items"][0]["onHand"] = 13  # type: ignore[index]
+        count_state["movements"] = [
+            count_movement(
+                spoofed_count_proof,
+                expected_quantity=14,
+                counted_quantity=13,
+            ),
+            *received.state["movements"],  # type: ignore[misc]
+        ]
+        count_state["inventoryFoundation"] = counted_inventory(
+            received.state["inventoryFoundation"],
+            spoofed_count_proof,
+            expected_quantity=7,
+            counted_quantity=6,
+            count_id="CNT-LOCATION-STORE",
+        )
+        count_payload = {"state": count_state, "evidence": spoofed_count_proof}
+        count_command_id = str(uuid4())
+        with patch(
+            "supermega_runtime.trial_store._utc_now",
+            return_value="2026-07-27T06:00:00+00:00",
+        ):
+            counted = store.apply_command(
+                operator,
+                command_id=count_command_id,
+                surface="commerce",
+                event_type="commerce.stock.counted",
+                expected_version=received.version,
+                payload=count_payload,
+            )
+            count_replay = store.apply_command(
+                operator,
+                command_id=count_command_id,
+                surface="commerce",
+                event_type="commerce.stock.counted",
+                expected_version=received.version,
+                payload=count_payload,
+            )
+        retained_count_movement = counted.state["movements"][0]
+        retained_count_proof = counted.state["inventoryFoundation"]["commands"][-1][
+            "payload"
+        ]["proof"]
+        self.assertEqual(retained_count_movement["actor"], operator.actor_id)
+        self.assertEqual(
+            retained_count_movement["createdAt"], "2026-07-27T06:00:00+00:00"
+        )
+        self.assertEqual(retained_count_proof["actor"], operator.actor_id)
+        self.assertEqual(
+            retained_count_proof["capturedAt"], "2026-07-27T06:00:00+00:00"
+        )
+        self.assertTrue(count_replay.idempotent_replay)
+        self.assertEqual(count_replay.state, counted.state)
+        self.assertEqual(counted.state["items"][0]["onHand"], 13)
 
 
 if __name__ == "__main__":

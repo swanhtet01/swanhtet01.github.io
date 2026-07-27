@@ -1,4 +1,5 @@
 import {
+  countShopInventory,
   fulfilShopInventoryOrder,
   planShopInventoryOrderAllocation,
   projectShopInventory,
@@ -429,6 +430,15 @@ export type CommercePurchaseOrderLocationReceipt = {
   stockUnitId: string
   trackingCode: string
   locationId: string
+  expectedHeadDigest: string
+}
+
+export type CommerceStockLocationCount = {
+  countId: string
+  stockUnitId: string
+  locationId: string
+  expectedQuantity: number
+  countedQuantity: number
   expectedHeadDigest: string
 }
 
@@ -3199,24 +3209,59 @@ export function issueCommerceStockToProduction(
   })
 }
 
-export function countCommerceStock(state: CommerceState, sku: string, countedQuantity: number, proof: CommerceActionProof) {
+export function countCommerceStock(
+  state: CommerceState,
+  sku: string,
+  countedQuantity: number,
+  proof: CommerceActionProof,
+  locationCount?: CommerceStockLocationCount,
+) {
   if (!validProof(proof) || !Number.isSafeInteger(countedQuantity) || countedQuantity < 0) return null
   const current = validateCommerceState(state)
   const replayMovement = current.movements.find((movement) => movement.actionId === proof.actionId)
   if (replayMovement) {
-    return replayMovement.kind === 'count'
+    const movementMatches = replayMovement.kind === 'count'
       && replayMovement.sku === sku
       && replayMovement.countedQuantity === countedQuantity
       && replayMovement.quantityDelta === countedQuantity - Number(replayMovement.expectedQuantity)
-      && sameProof(replayMovement, proof) ? current : null
+      && sameProof(replayMovement, proof)
+    if (!movementMatches) return null
+    if (!current.inventoryFoundation) return locationCount ? null : current
+    if (!locationCount) return null
+    try {
+      const locationReplay = countShopInventory(current.inventoryFoundation, {
+        ...locationCount,
+        proof,
+        catalogSkus: current.items.map((item) => item.sku).sort(),
+      })
+      return locationReplay.replayed && shopInventoryMatchesItems(locationReplay.state, current.items) ? current : null
+    } catch {
+      return null
+    }
   }
-  if (current.inventoryFoundation) return null
   if (actionIdIsUsed(current, proof.actionId)) return null
   const matchingItems = current.items.filter((candidate) => candidate.sku === sku)
   const item = matchingItems.length === 1 ? matchingItems[0] : undefined
   if (!item) return null
   const quantityDelta = countedQuantity - item.onHand
   if (!Number.isSafeInteger(quantityDelta)) return null
+  let inventoryFoundation = current.inventoryFoundation
+  if (inventoryFoundation) {
+    if (!locationCount || !shopInventoryMatchesItems(inventoryFoundation, current.items)) return null
+    try {
+      const locationResult = countShopInventory(inventoryFoundation, {
+        ...locationCount,
+        proof,
+        catalogSkus: current.items.map((candidate) => candidate.sku).sort(),
+      })
+      if (locationResult.replayed) return null
+      const nextItems = current.items.map((candidate) => candidate.sku === sku ? { ...candidate, onHand: countedQuantity } : candidate)
+      if (!shopInventoryMatchesItems(locationResult.state, nextItems)) return null
+      inventoryFoundation = locationResult.state
+    } catch {
+      return null
+    }
+  } else if (locationCount) return null
   const movement = movementFor(proof, {
     kind: 'count',
     sku,
@@ -3224,11 +3269,13 @@ export function countCommerceStock(state: CommerceState, sku: string, countedQua
     expectedQuantity: item.onHand,
     countedQuantity,
   })
-  return validateCommerceState({
+  const nextState: CommerceState = {
     ...current,
     items: current.items.map((candidate) => candidate.sku === sku ? { ...candidate, onHand: countedQuantity } : candidate),
     movements: [movement, ...current.movements],
-  })
+  }
+  if (inventoryFoundation) nextState.inventoryFoundation = inventoryFoundation
+  return validateCommerceState(nextState)
 }
 
 export function commerceOrderHasReleasableReservation(state: CommerceState, orderId: string) {

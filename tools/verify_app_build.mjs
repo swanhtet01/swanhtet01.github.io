@@ -1286,6 +1286,7 @@ if (!shopInventorySource.includes("SHOP_INVENTORY_STATE_SCHEMA = 'supermega.shop
   || !shopInventorySource.includes('export function applyShopInventoryImport')
   || !shopInventorySource.includes('export function transferShopInventory')
   || !shopInventorySource.includes('export function receiveShopInventory')
+  || !shopInventorySource.includes('export function countShopInventory')
   || !shopInventorySource.includes('export function reserveShopInventory')
   || !shopInventorySource.includes('export function releaseShopInventoryReservation')
   || !shopInventorySource.includes('export function fulfilShopInventoryReservation')
@@ -1319,6 +1320,15 @@ if (!commerceSource.includes('CommercePurchaseOrderLocationReceipt')
   || !commerceSource.includes('locationResult.replayed')
   || !managedCommerceRuntime.includes('managed purchase receipt must append exactly one location receipt')
   || !managedTrialStoreRuntime.includes('location_receipt_matches')) fail('managed_purchase_receipt_location_contract_missing')
+if (!commerceSource.includes('CommerceStockLocationCount')
+  || !commerceSource.includes('countShopInventory(current.inventoryFoundation')
+  || !coreSource.includes("'Count one location'")
+  || !coreSource.includes("'Counted physical units'")
+  || !coreSource.includes('locationCount.expectedHeadDigest')
+  || !managedCommerceRuntime.includes('location-managed stock count must append exactly one location count')
+  || !managedCommerceRuntime.includes('shop_inventory_balances')
+  || !managedTrialStoreRuntime.includes('location_count_matches')
+  || !shopInventoryPythonSource.includes('counted quantity cannot be below reserved stock')) fail('managed_location_stock_count_contract_missing')
 if (!plantOrderSource.includes("PLANT_ORDER_STATE_SCHEMA = 'supermega.plant.order_foundation.v1'")
   || !plantOrderSource.includes("PLANT_ORDER_PLAN_CONTRACT = 'supermega.plant.reviewed_plan.v1'")
   || !plantOrderSource.includes("PLANT_ORDER_EXECUTION_PLAN_CONTRACT = 'supermega.plant.reviewed_plan.v2'")
@@ -1617,14 +1627,17 @@ if ((commerceInventoryContract.match(/'Count stock'/g) || []).length !== 1
   || !commerceInventoryContract.includes('aria-labelledby="stock-count-title"')
   || !commerceInventoryContract.includes('aria-describedby="stock-count-help stock-count-preview"')
   || !commerceInventoryContract.includes('Counted available units')
-  || !commerceInventoryContract.includes('min="0"')
-  || !commerceInventoryContract.includes('max={Number.MAX_SAFE_INTEGER}')
+  || !commerceInventoryContract.includes('Counted physical units')
+  || !commerceInventoryContract.includes('min={stockCountBalance?.reserved ?? 0}')
+  || !commerceInventoryContract.includes("max={stockCountBalance?.tracking === 'serial' ? 1 : Number.MAX_SAFE_INTEGER}")
+  || !commerceInventoryContract.includes('Choose location and lot')
   || !commerceInventoryContract.includes('Review count')
   || !commercePageContract.includes("kind: 'inventory_count'")
   || !commercePageContract.includes("'commerce.stock.counted'")
-  || !commercePageContract.includes('currentItems[0].onHand !== expectedOnHand')
+  || !commercePageContract.includes('currentItems[0].onHand !== expectedAvailable')
+  || !commercePageContract.includes('current.inventoryFoundation?.headDigest !== locationCount.expectedHeadDigest')
   || !commercePageContract.includes('Stock changed while you were reviewing. Nothing was applied.')
-  || !commercePageContract.includes("setStockCountDraft({ sku: item.sku, quantity: '' })")
+  || !commercePageContract.includes("stockUnitId: locationCount?.stockUnitId ?? ''")
   || (commerceStockTableHeadContract.match(/role="columnheader"/g) || []).length !== 5
   || !coreCssSource.includes('content: "Available";')
   || !coreCssSource.includes('.stock-receipt-editor { grid-template-columns: 1fr; }')) fail('commerce_stock_count_ui_missing_or_unsafe')
@@ -2327,6 +2340,44 @@ async function verifyShopInventoryRuntime() {
       && commerce.countCommerceStock(locationReserved, 'SKU-1', 7, proof(3, 'aggregate-count')) === null
       && commerce.registerCommerceItem(locationReserved, { sku: 'SKU-2', name: 'Unsafe opening', onHand: 1, reorderAt: 0, price: 1 }, proof(3, 'aggregate-opening')) === null,
     'location_managed_shop_allowed_aggregate_only_stock_change')
+    const locationCountProof = proof(3, 'location-count')
+    const locationCountInput = {
+      countId: 'CNT-LOCATION-001',
+      stockUnitId: 'LOT-SKU1-OPENING-001',
+      locationId: 'LOC-MAIN',
+      expectedQuantity: 10,
+      countedQuantity: 8,
+      expectedHeadDigest: locationReserved.inventoryFoundation.headDigest,
+    }
+    const locationCounted = commerce.countCommerceStock(locationReserved, 'SKU-1', 5, locationCountProof, locationCountInput)
+    const locationCountedProjection = locationCounted && model.projectShopInventory(locationCounted.inventoryFoundation, ['SKU-1'])
+    const locationCountedBalance = locationCountedProjection?.balances.find((row) => row.stockUnitId === 'LOT-SKU1-OPENING-001' && row.locationId === 'LOC-MAIN')
+    assert(locationCounted?.items[0].onHand === 5
+      && locationCounted.inventoryFoundation?.commands.at(-1)?.payload.kind === 'count'
+      && locationCountedBalance?.onHand === 8
+      && locationCountedBalance.reserved === 3
+      && locationCountedBalance.availableToPromise === 5
+      && locationCountedProjection?.metrics.totalOnHand === 8
+      && locationCountedProjection.metrics.totalReserved === 3
+      && locationCountedProjection.metrics.totalAvailableToPromise === 5,
+    'managed_location_count_did_not_preserve_physical_and_reserved_stock')
+    assert(commerce.countCommerceStock(locationCounted, 'SKU-1', 5, locationCountProof, locationCountInput) === locationCounted,
+      'managed_location_count_retry_not_idempotent')
+    assert(commerce.countCommerceStock(locationCounted, 'SKU-1', 6, locationCountProof, { ...locationCountInput, countedQuantity: 9 }) === null,
+      'managed_location_count_changed_retry_succeeded')
+    assert(commerce.countCommerceStock(locationReserved, 'SKU-1', 6, proof(4, 'location-count-stale'), {
+      ...locationCountInput,
+      countId: 'CNT-LOCATION-STALE',
+      countedQuantity: 9,
+      expectedHeadDigest: managedOpening.state.headDigest,
+    }) === null, 'managed_location_count_stale_head_succeeded')
+    assertThrows(() => model.countShopInventory(locationReserved.inventoryFoundation, {
+      ...locationCountInput,
+      countId: 'CNT-LOCATION-BELOW-RESERVED',
+      countedQuantity: 2,
+      proof: proof(4, 'location-count-below-reserved'),
+      catalogSkus: ['SKU-1'],
+    }), 'managed_location_count_reduced_physical_below_reserved')
     const locationReleaseProof = proof(3, 'order-release')
     const locationCancelled = commerce.cancelCommerceOrder(locationReserved, locationOrder.id, locationReleaseProof)
     const locationCancelledProjection = locationCancelled && model.projectShopInventory(locationCancelled.inventoryFoundation, ['SKU-1'])

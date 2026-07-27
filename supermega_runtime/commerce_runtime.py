@@ -22,6 +22,7 @@ from supermega_runtime.ecommerce_buying_lifecycle import (
 from supermega_runtime.shop_inventory_runtime import (
     ShopInventoryValidationError,
     shop_inventory_available_balances,
+    shop_inventory_balances,
     shop_inventory_sku_available_to_promise,
     shop_inventory_sku_totals,
     validate_shop_inventory_state,
@@ -2304,18 +2305,35 @@ def _validate_event_evidence(
     elif event_type in {
         "commerce.inventory.initialized",
         "commerce.inventory.transferred",
-    }:
+        "commerce.stock.counted",
+    } and (
+        event_type != "commerce.stock.counted"
+        or _inventory_foundation(current) is not None
+    ):
         foundation = _inventory_foundation(next_state)
         commands = foundation.get("commands") if foundation is not None else None
-        proof = (
-            commands[-1].get("payload", {}).get("proof", {})
+        expected_location_kind = {
+            "commerce.inventory.initialized": "import",
+            "commerce.inventory.transferred": "transfer",
+            "commerce.stock.counted": "count",
+        }[event_type]
+        latest_payload = (
+            commands[-1].get("payload", {})
             if isinstance(commands, list)
             and commands
             and isinstance(commands[-1], Mapping)
             else {}
         )
-        if not isinstance(proof, Mapping) or not _proof_matches_evidence(
-            proof, evidence
+        proof = (
+            latest_payload.get("proof", {})
+            if isinstance(latest_payload, Mapping)
+            else {}
+        )
+        if (
+            not isinstance(latest_payload, Mapping)
+            or latest_payload.get("kind") != expected_location_kind
+            or not isinstance(proof, Mapping)
+            or not _proof_matches_evidence(proof, evidence)
         ):
             raise TrialValidationError(
                 "command evidence must match the location inventory proof."
@@ -3720,10 +3738,6 @@ def _validate_counted(
     current: Mapping[str, Any],
     next_state: Mapping[str, Any],
 ) -> None:
-    if _inventory_foundation(current) is not None:
-        raise TrialValidationError(
-            "location-managed stock counts require a location count workflow."
-        )
     _require_unchanged(current, next_state, "orders", "closes")
     _require_website_intakes_unchanged(current, next_state)
     _require_storefront_requests_unchanged(current, next_state)
@@ -3757,14 +3771,68 @@ def _validate_counted(
         raise TrialValidationError("stock count must reference one existing item.")
     item_index = matching_indexes[0]
     before_item = current["items"][item_index]
+    before_foundation = _inventory_foundation(current)
+    after_foundation = _inventory_foundation(next_state)
+    counted_quantity = movement["countedQuantity"]
+    if before_foundation is not None:
+        if after_foundation is None:
+            raise TrialValidationError(
+                "location-managed stock count cannot remove its inventory record."
+            )
+        before_commands = before_foundation["commands"]
+        after_commands = after_foundation["commands"]
+        if (
+            len(after_commands) != len(before_commands) + 1
+            or after_commands[:-1] != before_commands
+        ):
+            raise TrialValidationError(
+                "location-managed stock count must append exactly one location count."
+            )
+        location_count = after_commands[-1]["payload"]
+        if location_count.get("kind") != "count":
+            raise TrialValidationError(
+                "location-managed stock count requires one count command."
+            )
+        catalog_skus = sorted(item["sku"] for item in current["items"])
+        matching_balances = [
+            balance
+            for balance in shop_inventory_balances(
+                before_foundation, catalog_skus
+            )
+            if balance["stockUnitId"] == location_count["stockUnitId"]
+            and balance["locationId"] == location_count["locationId"]
+        ]
+        if len(matching_balances) != 1:
+            raise TrialValidationError(
+                "location count must reference one existing stock-unit balance."
+            )
+        balance = matching_balances[0]
+        if (
+            balance["sku"] != movement["sku"]
+            or location_count["expectedQuantity"] != balance["onHand"]
+            or location_count["countedQuantity"] < balance["reserved"]
+        ):
+            raise TrialValidationError(
+                "location count must match its SKU, physical balance, and reservations."
+            )
+        counted_quantity = (
+            before_item["onHand"]
+            + location_count["countedQuantity"]
+            - balance["onHand"]
+        )
+    elif after_foundation is not None:
+        raise TrialValidationError(
+            "commerce.stock.counted cannot initialize location inventory."
+        )
     expected_after = {
         **before_item,
-        "onHand": movement["countedQuantity"],
+        "onHand": counted_quantity,
     }
     if (
         movement["expectedQuantity"] != before_item["onHand"]
         or movement["quantityDelta"]
-        != movement["countedQuantity"] - before_item["onHand"]
+        != counted_quantity - before_item["onHand"]
+        or movement["countedQuantity"] != counted_quantity
         or next_state["items"][item_index] != expected_after
         or any(
             before != after
@@ -4340,6 +4408,7 @@ def reduce_commerce_state(
     if event_type not in {
         "commerce.inventory.initialized",
         "commerce.inventory.transferred",
+        "commerce.stock.counted",
         "commerce.purchase_order.received",
         "commerce.order.created",
         "commerce.order.cancelled",

@@ -451,6 +451,37 @@ def _payload(value: object, field: str, catalog_skus: list[str]) -> dict[str, An
             "quantity": _integer(row["quantity"], f"{field}.quantity", 1),
             "proof": _proof(row["proof"], f"{field}.proof"),
         }
+    if kind == "count":
+        row = _exact(
+            row,
+            field,
+            {
+                "kind",
+                "id",
+                "stockUnitId",
+                "locationId",
+                "expectedQuantity",
+                "countedQuantity",
+                "proof",
+            },
+        )
+        return {
+            "kind": "count",
+            "id": _identifier(row["id"], f"{field}.id", "CNT"),
+            "stockUnitId": _text(
+                row["stockUnitId"], f"{field}.stockUnitId", 80
+            ),
+            "locationId": _identifier(
+                row["locationId"], f"{field}.locationId", "LOC"
+            ),
+            "expectedQuantity": _integer(
+                row["expectedQuantity"], f"{field}.expectedQuantity"
+            ),
+            "countedQuantity": _integer(
+                row["countedQuantity"], f"{field}.countedQuantity"
+            ),
+            "proof": _proof(row["proof"], f"{field}.proof"),
+        }
     if kind == "order_reserve":
         row = _exact(
             row,
@@ -637,6 +668,40 @@ def _project(commands: list[dict[str, Any]]) -> dict[str, Any]:
                 command["stockUnitId"],
                 command["toLocationId"],
                 on_hand_delta=command["quantity"],
+                reserved_delta=0,
+                field=field,
+            )
+            continue
+        if command["kind"] == "count":
+            if command["stockUnitId"] not in units:
+                raise ShopInventoryValidationError(
+                    "count references an unknown stock unit."
+                )
+            if command["locationId"] not in locations:
+                raise ShopInventoryValidationError(
+                    "count references an unknown location."
+                )
+            balance_key = (command["stockUnitId"], command["locationId"])
+            if balance_key not in balances:
+                raise ShopInventoryValidationError(
+                    "count must reference an existing stock-unit balance."
+                )
+            balance = current_balance(*balance_key)
+            if balance["onHand"] == 0 and balance["reserved"] == 0:
+                raise ShopInventoryValidationError(
+                    "count must reference an active stock-unit balance."
+                )
+            if balance["onHand"] != command["expectedQuantity"]:
+                raise ShopInventoryValidationError(
+                    "count expected quantity is stale."
+                )
+            if command["countedQuantity"] < balance["reserved"]:
+                raise ShopInventoryValidationError(
+                    "counted quantity cannot be below reserved stock."
+                )
+            apply_delta(
+                *balance_key,
+                on_hand_delta=command["countedQuantity"] - balance["onHand"],
                 reserved_delta=0,
                 field=field,
             )
@@ -848,6 +913,32 @@ def shop_inventory_available_balances(
     )
 
 
+def shop_inventory_balances(
+    value: object, catalog_skus: Sequence[str]
+) -> list[dict[str, Any]]:
+    state = validate_shop_inventory_state(value, catalog_skus)
+    projection = _project([command["payload"] for command in state["commands"]])
+    rows: list[dict[str, Any]] = []
+    for (stock_unit_id, location_id), balance in projection["balances"].items():
+        if balance["onHand"] == 0 and balance["reserved"] == 0:
+            continue
+        unit = projection["units"][stock_unit_id]
+        rows.append(
+            {
+                "stockUnitId": stock_unit_id,
+                "sku": unit["sku"],
+                "locationId": location_id,
+                "onHand": balance["onHand"],
+                "reserved": balance["reserved"],
+                "availableToPromise": balance["onHand"] - balance["reserved"],
+            }
+        )
+    return sorted(
+        rows,
+        key=lambda row: (row["sku"], row["locationId"], row["stockUnitId"]),
+    )
+
+
 def restamp_latest_shop_inventory_command(
     value: object,
     *,
@@ -884,6 +975,7 @@ __all__ = [
     "ShopInventoryValidationError",
     "restamp_latest_shop_inventory_command",
     "shop_inventory_available_balances",
+    "shop_inventory_balances",
     "shop_inventory_catalog_digest",
     "shop_inventory_sku_available_to_promise",
     "shop_inventory_sku_totals",
