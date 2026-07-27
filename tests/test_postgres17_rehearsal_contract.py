@@ -61,6 +61,9 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
             "approval_record_immutable",
             "approval_decision_event_immutable",
             "trusted_backend_transaction_context",
+            "local_private_fixture",
+            "hosted_storage_privacy_proof_required",
+            "supermega_storage_audit_database_url",
         ):
             self.assertIn(expected, lowered)
 

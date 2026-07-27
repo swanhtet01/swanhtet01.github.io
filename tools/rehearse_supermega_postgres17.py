@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 from copy import deepcopy
+from datetime import datetime, timedelta, timezone
 import json
 import os
 import re
@@ -176,6 +177,7 @@ def _clean_environment(postgres_bin: Path) -> dict[str, str]:
             "PGSERVICE",
             "PGSERVICEFILE",
             "SUPERMEGA_DATABASE_URL",
+            "SUPERMEGA_STORAGE_AUDIT_DATABASE_URL",
             "SUPERMEGA_DATABASE_URL_TO_ACTIVATE",
             "SUPERMEGA_REHEARSAL_DATABASE_URL",
         }
@@ -511,6 +513,42 @@ def _provision_runtime(admin_database_url: str, runtime_password: str) -> None:
             )
 
 
+def _bootstrap_local_storage_catalog_fixture(admin_database_url: str) -> None:
+    """Create only the Storage metadata needed for a local validator rehearsal.
+
+    This is not hosted Supabase Storage proof. It lets the real PostgreSQL 17
+    rehearsal verify that the production validator rejects public buckets,
+    missing RLS, and unexpected policies while keeping the fixture private.
+    """
+
+    with _connect(admin_database_url, autocommit=True) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute("create schema storage authorization postgres")
+            cursor.execute(
+                """
+                create table storage.buckets (
+                  id text primary key,
+                  public boolean not null default false
+                )
+                """
+            )
+            cursor.execute(
+                """
+                create table storage.objects (
+                  id uuid primary key
+                )
+                """
+            )
+            cursor.execute("alter table storage.buckets enable row level security")
+            cursor.execute("alter table storage.objects enable row level security")
+            cursor.execute(
+                """
+                insert into storage.buckets (id, public)
+                values ('supermega-private-trial', false)
+                """
+            )
+
+
 def _create_backend_group_for_restore(admin_database_url: str) -> None:
     with _connect(admin_database_url, autocommit=True) as connection:
         connection.execute(
@@ -760,16 +798,22 @@ def _exercise_managed_product_journeys(
         nonlocal command_number
         command_number += 1
         command_id = f"10000000-0000-4000-8000-{command_number:012d}"
-        result = store.apply_command(
-            principal,
-            command_id=command_id,
-            surface=surface,
-            event_type=event_type,
-            expected_version=expected_version,
-            payload={"state": state, "evidence": evidence},
-            related_surfaces=related_surfaces,
-            state_precondition=state_precondition,
-        )
+        try:
+            result = store.apply_command(
+                principal,
+                command_id=command_id,
+                surface=surface,
+                event_type=event_type,
+                expected_version=expected_version,
+                payload={"state": state, "evidence": evidence},
+                related_surfaces=related_surfaces,
+                state_precondition=state_precondition,
+            )
+        except Exception as exc:
+            safe_event = event_type.replace(".", "_")
+            raise RehearsalFailure(
+                f"managed_journey_{surface}_{safe_event}_failed"
+            ) from exc
         if (
             result.idempotent_replay
             or result.surface != surface
@@ -999,6 +1043,9 @@ def _exercise_managed_product_journeys(
         reason="Human confirmed retained Website intake",
         reference="evidence://commerce/website-confirmation",
     )
+    conversion_promised_at = (
+        datetime.now(timezone.utc) + timedelta(hours=1)
+    ).isoformat(timespec="milliseconds").replace("+00:00", "Z")
     conversion_state = deepcopy(dict(commerce_result.state))
     conversion_state["websiteIntakes"][0]["status"] = "converted"
     conversion_state["websiteIntakes"][0]["conversion"] = {
@@ -1020,6 +1067,7 @@ def _exercise_managed_product_journeys(
             "refundStatus": "none",
             "fulfilment": "pickup",
             "fulfilmentReference": "Website pickup confirmed by the named owner.",
+            "promisedAt": conversion_promised_at,
             "sourceRecordId": intake_id,
             "evidenceReference": conversion_evidence["evidenceReference"],
             "total": 50_000,
@@ -1067,6 +1115,9 @@ def _exercise_managed_product_journeys(
                 "product": "Customer batch 001",
                 "target": 100,
                 "output": 0,
+                "owner": "Production lead",
+                "priority": "normal",
+                "dueAt": "2026-07-25T09:00:00.000Z",
             }
         ],
         "issues": [],
@@ -1108,6 +1159,9 @@ def _exercise_managed_product_journeys(
         "product": "Customer batch 002",
         "target": 50,
         "output": 0,
+        "owner": "Production lead",
+        "priority": "normal",
+        "dueAt": "2026-07-26T09:00:00.000Z",
     }
     job_state["revision"] = int(job_state["revision"]) + 1
     job_state["jobs"] = [new_job, *job_state["jobs"]]
@@ -1117,6 +1171,9 @@ def _exercise_managed_product_journeys(
             kind="job_created",
             subject_id=new_job["id"],
             summary="Created Customer batch 002 job for Assembly team",
+            jobPriority=new_job["priority"],
+            jobDueAt=new_job["dueAt"],
+            jobOwner=new_job["owner"],
         ),
         *job_state["events"],
     ]
@@ -2103,9 +2160,16 @@ def _exercise_runtime(
     return checks
 
 
-def _run_validator(runtime_database_url: str, environment: dict[str, str]) -> dict[str, Any]:
+def _run_validator(
+    runtime_database_url: str,
+    storage_audit_database_url: str,
+    environment: dict[str, str],
+) -> dict[str, Any]:
     validator_environment = dict(environment)
     validator_environment["SUPERMEGA_REHEARSAL_DATABASE_URL"] = runtime_database_url
+    validator_environment["SUPERMEGA_STORAGE_AUDIT_DATABASE_URL"] = (
+        storage_audit_database_url
+    )
     result = _run(
         [
             sys.executable,
@@ -2325,10 +2389,16 @@ def _run_rehearsal(
             )
             phase = "runtime_provisioning"
             _provision_runtime(admin_database_url, runtime_password)
+            phase = "local_storage_catalog_fixture"
+            _bootstrap_local_storage_catalog_fixture(admin_database_url)
             phase = "runtime_seed"
             _seed_rehearsal_data(admin_database_url)
             phase = "database_validation"
-            primary_validation = _run_validator(runtime_database_url, environment)
+            primary_validation = _run_validator(
+                runtime_database_url,
+                admin_database_url,
+                environment,
+            )
             phase = "upgrade_and_role_boundaries"
             boundaries = _verify_upgrade_and_role_boundaries(
                 runtime_database_url,
@@ -2421,7 +2491,11 @@ def _run_rehearsal(
                 environment=environment,
             )
             phase = "restored_database_validation"
-            restored_validation = _run_validator(restored_runtime_url, environment)
+            restored_validation = _run_validator(
+                restored_runtime_url,
+                restore_admin_database_url,
+                environment,
+            )
             _verify_restored_data(
                 restore_admin_database_url,
                 expected_approval_authority_snapshot=approval_authority_snapshot,
@@ -2444,6 +2518,12 @@ def _run_rehearsal(
                     "count": len(MIGRATIONS),
                     "schema_version": 5,
                     "production_validator_ready": primary_validation.get("ready") is True,
+                },
+                "storage": {
+                    "catalog_mode": "local_private_fixture",
+                    "public_bucket_count": 0,
+                    "policy_count": 0,
+                    "hosted_storage_privacy_proof_required": True,
                 },
                 "checks": {
                     "migration_chain_applied": True,
@@ -2475,8 +2555,16 @@ def _run_rehearsal(
             }
         except RehearsalFailure as exc:
             report = _safe_report(str(exc), cleanup_complete=False)
-        except Exception:
-            report = _safe_report(f"{phase}_failed", cleanup_complete=False)
+        except Exception as exc:
+            safe_error_type = re.sub(
+                r"[^a-z0-9]+",
+                "_",
+                type(exc).__name__.casefold(),
+            ).strip("_") or "unexpected"
+            report = _safe_report(
+                f"{phase}_{safe_error_type}_failed",
+                cleanup_complete=False,
+            )
         finally:
             if started:
                 cleanup_complete = _stop_cluster(
