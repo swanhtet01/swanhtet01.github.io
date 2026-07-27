@@ -2207,6 +2207,21 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     && returnQuantity <= selectedReturnLine.remaining
     ? returnQuantity
     : null
+  const returnReviewExpectation = useMemo(() => {
+    if (!returnDraft || returnQuantityResult === null) return null
+    return commerceOrderReturnExpectation(
+      commerce,
+      returnDraft.orderId,
+      returnDraft.sku,
+      returnDraft.disposition,
+      returnQuantityResult,
+    )
+  }, [commerce, returnDraft, returnQuantityResult])
+  const returnLocationPreview = returnReviewExpectation?.locationAllocations?.map((allocation) => {
+    const location = managedInventoryProjection?.locations.find((candidate) => candidate.id === allocation.locationId)
+    const stockUnit = managedInventoryProjection?.stockUnits.find((candidate) => candidate.id === allocation.stockUnitId)
+    return `${location?.name ?? allocation.locationId} · ${stockUnit?.trackingCode ?? allocation.stockUnitId} × ${allocation.quantity}`
+  }).join(', ') ?? ''
 
   useEffect(() => {
     if (tab !== 'inventory' || commerceLocation.hash !== '#purchase-orders') return
@@ -3435,12 +3450,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       setNotice('Choose an order item and a whole return quantity within the remaining sold quantity.')
       return
     }
-    const expected = commerceOrderReturnExpectation(
-      commerce,
-      returnDraft.orderId,
-      returnDraft.sku,
-      returnDraft.disposition,
-    )
+    const expected = returnReviewExpectation
     if (!expected || returnQuantityResult > expected.soldQuantity - expected.returnedQuantity) {
       setNotice('The order or its remaining return quantity changed. Review the latest order record.')
       return
@@ -3452,7 +3462,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     }
     const nextReturned = expected.returnedQuantity + returnQuantityResult
     const dispositionAfter = returnDraft.disposition === 'restock'
-      ? `${item.onHand} → ${item.onHand + returnQuantityResult} sellable units`
+      ? `${item.onHand} → ${item.onHand + returnQuantityResult} sellable units${returnLocationPreview ? ` · ${returnLocationPreview}` : ''}`
       : `${item.onHand} sellable units unchanged · item not restocked`
     const input = {
       orderId: returnDraft.orderId,
@@ -3979,6 +3989,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     }}
     orders={closedOrders}
     returnDraft={returnDraft}
+    returnLocationPreview={returnLocationPreview}
   />
   <details className="core-panel today-more order-daily-controls">
     <summary><span>Close and exceptions</span><small>{paymentReview.length + lowStock.length} {paymentReview.length + lowStock.length === 1 ? 'item needs' : 'items need'} attention</small></summary>
@@ -4199,6 +4210,7 @@ function ClosedOrderHistory({
   onReturnTrigger,
   orders,
   returnDraft,
+  returnLocationPreview,
 }: {
   canReturn: (orderId: string) => boolean
   disabled: boolean
@@ -4210,6 +4222,7 @@ function ClosedOrderHistory({
   onReturnTrigger: (orderId: string, node: HTMLButtonElement | null) => void
   orders: CommerceOrder[]
   returnDraft: CommerceReturnDraft | null
+  returnLocationPreview: string
 }) {
   const [page, setPage] = useState(0)
   if (!orders.length) return null
@@ -4271,6 +4284,7 @@ function ClosedOrderHistory({
         <label>Item<select disabled={disabled || availableLines.length === 1} onChange={(event) => onChangeReturn({ sku: event.target.value, quantity: '1' })} value={selectedLine.sku}>{availableLines.map((line) => <option key={line.sku} value={line.sku}>{line.name} · {line.remaining} left</option>)}</select></label>
         <label>Quantity<input disabled={disabled} id="order-return-quantity" max={selectedLine.remaining} min="1" onChange={(event) => onChangeReturn({ quantity: event.target.value })} required step="1" type="number" value={activeReturnDraft.quantity} /></label>
         <label>Stock result<select disabled={disabled} onChange={(event) => onChangeReturn({ disposition: event.target.value as CommerceReturnDisposition })} value={activeReturnDraft.disposition}><option value="restock">Sellable · add to stock</option><option value="not_restocked">Not sellable · stock unchanged</option></select></label>
+        {activeReturnDraft.disposition === 'restock' && returnLocationPreview ? <small role="note">Restock to {returnLocationPreview}</small> : null}
         <div className="form-actions"><button className="core-button primary compact" disabled={disabled} type="submit">Review return</button><button className="core-button compact" disabled={disabled} onClick={onCancelReturn} type="button">Cancel</button></div>
       </form> : null}
     </article>})}</div>

@@ -350,6 +350,53 @@ def _order_inventory_command_id(prefix: str, order_id: str) -> str:
     return f"{prefix}-{identity[7:39].upper()}"
 
 
+def _order_return_command_id(order_id: str, sku: str, action_id: str) -> str:
+    identity = _canonical_digest(
+        {
+            "contract": "supermega.shop.order-return-inventory-command.v1",
+            "orderId": order_id,
+            "sku": sku,
+            "actionId": action_id,
+        }
+    )
+    return f"ORT-{identity[7:39].upper()}"
+
+
+def _order_return_allocations(value: object, field: str) -> list[dict[str, Any]]:
+    allocations: list[dict[str, Any]] = []
+    for index, candidate in enumerate(_list(value, field, 1, 200)):
+        row_field = f"{field}[{index}]"
+        row = _exact(
+            candidate,
+            row_field,
+            {"reservationId", "stockUnitId", "locationId", "quantity"},
+        )
+        allocations.append(
+            {
+                "reservationId": _identifier(
+                    row["reservationId"], f"{row_field}.reservationId", "RES"
+                ),
+                "stockUnitId": _text(
+                    row["stockUnitId"], f"{row_field}.stockUnitId", 80
+                ),
+                "locationId": _identifier(
+                    row["locationId"], f"{row_field}.locationId", "LOC"
+                ),
+                "quantity": _integer(row["quantity"], f"{row_field}.quantity", 1),
+            }
+        )
+    reservation_ids = [row["reservationId"] for row in allocations]
+    keys = [
+        f"{row['locationId']}|{row['stockUnitId']}|{row['reservationId']}"
+        for row in allocations
+    ]
+    if len(reservation_ids) != len(set(reservation_ids)) or keys != sorted(keys):
+        raise ShopInventoryValidationError(
+            f"{field} must use unique canonical allocation order."
+        )
+    return allocations
+
+
 def _production_allocations(value: object, field: str) -> list[dict[str, Any]]:
     allocations: list[dict[str, Any]] = []
     for index, candidate in enumerate(_list(value, field, 1, 200)):
@@ -666,6 +713,43 @@ def _payload(value: object, field: str, catalog_skus: list[str]) -> dict[str, An
             "reservationIds": reservation_ids,
             "proof": _proof(row["proof"], f"{field}.proof"),
         }
+    if kind == "order_return":
+        row = _exact(
+            row,
+            field,
+            {"kind", "id", "orderId", "sku", "quantity", "allocations", "proof"},
+        )
+        order_id = _text(row["orderId"], f"{field}.orderId", 160)
+        sku = _text(row["sku"], f"{field}.sku", 80)
+        if sku not in catalog_skus:
+            raise ShopInventoryValidationError(
+                f"{field}.sku is not in the Shop catalog."
+            )
+        returned_quantity = _integer(row["quantity"], f"{field}.quantity", 1)
+        allocations = _order_return_allocations(
+            row["allocations"], f"{field}.allocations"
+        )
+        if sum(allocation["quantity"] for allocation in allocations) != returned_quantity:
+            raise ShopInventoryValidationError(
+                f"{field}.allocations must equal the returned Shop quantity."
+            )
+        action_proof = _proof(row["proof"], f"{field}.proof")
+        command_id = _identifier(row["id"], f"{field}.id", "ORT")
+        if command_id != _order_return_command_id(
+            order_id, sku, action_proof["actionId"]
+        ):
+            raise ShopInventoryValidationError(
+                f"{field}.id is not deterministic for its order return."
+            )
+        return {
+            "kind": kind,
+            "id": command_id,
+            "orderId": order_id,
+            "sku": sku,
+            "quantity": returned_quantity,
+            "allocations": allocations,
+            "proof": action_proof,
+        }
     raise ShopInventoryValidationError(f"{field}.kind is unsupported for managed v1.")
 
 
@@ -716,11 +800,54 @@ def _plan_production_allocations(
     )
 
 
+def _plan_order_return_allocations(
+    candidates: Sequence[Mapping[str, Any]],
+    returned_quantity: int,
+) -> list[dict[str, Any]]:
+    ranked = sorted(
+        (
+            candidate
+            for candidate in candidates
+            if int(candidate["returnableQuantity"]) > 0
+        ),
+        key=lambda candidate: (
+            -int(candidate["returnableQuantity"]),
+            f"{candidate['locationId']}|{candidate['stockUnitId']}|{candidate['reservationId']}",
+        ),
+    )
+    remaining = returned_quantity
+    allocations: list[dict[str, Any]] = []
+    for candidate in ranked:
+        if remaining == 0:
+            break
+        allocated = min(remaining, int(candidate["returnableQuantity"]))
+        allocations.append(
+            {
+                "reservationId": candidate["reservationId"],
+                "stockUnitId": candidate["stockUnitId"],
+                "locationId": candidate["locationId"],
+                "quantity": allocated,
+            }
+        )
+        remaining -= allocated
+    if remaining:
+        raise ShopInventoryValidationError(
+            f"the fulfilled order has only {returned_quantity - remaining} location units available to return."
+        )
+    return sorted(
+        allocations,
+        key=lambda allocation: (
+            f"{allocation['locationId']}|{allocation['stockUnitId']}|{allocation['reservationId']}"
+        ),
+    )
+
+
 def _project(commands: list[dict[str, Any]]) -> dict[str, Any]:
     locations: set[str] = set()
     units: dict[str, dict[str, str]] = {}
     balances: dict[tuple[str, str], dict[str, int]] = {}
     reservations: dict[str, dict[str, Any]] = {}
+    returned_by_reservation: dict[str, int] = {}
     import_count = 0
 
     def current_balance(stock_unit_id: str, location_id: str) -> dict[str, int]:
@@ -980,6 +1107,66 @@ def _project(commands: list[dict[str, Any]]) -> dict[str, Any]:
                     field=field,
                 )
                 reservation["status"] = "fulfilled" if fulfil else "released"
+            continue
+        if command["kind"] == "order_return":
+            candidates: list[dict[str, Any]] = []
+            for reservation_id, reservation in reservations.items():
+                unit = units.get(reservation["stockUnitId"])
+                if (
+                    reservation["orderId"] != command["orderId"]
+                    or reservation["status"] != "fulfilled"
+                    or unit is None
+                    or unit["sku"] != command["sku"]
+                ):
+                    continue
+                candidates.append(
+                    {
+                        "reservationId": reservation_id,
+                        "stockUnitId": reservation["stockUnitId"],
+                        "locationId": reservation["locationId"],
+                        "returnableQuantity": reservation["quantity"]
+                        - returned_by_reservation.get(reservation_id, 0),
+                    }
+                )
+            expected_allocations = _plan_order_return_allocations(
+                candidates, command["quantity"]
+            )
+            if command["allocations"] != expected_allocations:
+                raise ShopInventoryValidationError(
+                    "order return allocations do not match deterministic fulfilled locations."
+                )
+            for allocation in command["allocations"]:
+                reservation = reservations.get(allocation["reservationId"])
+                unit = units.get(allocation["stockUnitId"])
+                if (
+                    reservation is None
+                    or reservation["orderId"] != command["orderId"]
+                    or reservation["status"] != "fulfilled"
+                    or reservation["stockUnitId"] != allocation["stockUnitId"]
+                    or reservation["locationId"] != allocation["locationId"]
+                    or unit is None
+                    or unit["sku"] != command["sku"]
+                ):
+                    raise ShopInventoryValidationError(
+                        "order return allocation does not match a fulfilled reservation."
+                    )
+                prior_returned = returned_by_reservation.get(
+                    allocation["reservationId"], 0
+                )
+                if prior_returned + allocation["quantity"] > reservation["quantity"]:
+                    raise ShopInventoryValidationError(
+                        "order return exceeds its fulfilled reservation quantity."
+                    )
+                apply_delta(
+                    allocation["stockUnitId"],
+                    allocation["locationId"],
+                    on_hand_delta=allocation["quantity"],
+                    reserved_delta=0,
+                    field=field,
+                )
+                returned_by_reservation[allocation["reservationId"]] = (
+                    prior_returned + allocation["quantity"]
+                )
             continue
         raise ShopInventoryValidationError("inventory command kind cannot be projected.")
     if commands and import_count != 1:

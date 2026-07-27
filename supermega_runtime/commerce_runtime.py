@@ -2941,6 +2941,20 @@ def _production_inventory_command_id(request_id: str) -> str:
     return f"PIS-{identity[7:39].upper()}"
 
 
+def _order_return_inventory_command_id(
+    order_id: str, sku: str, action_id: str
+) -> str:
+    identity = _order_inventory_digest(
+        {
+            "contract": "supermega.shop.order-return-inventory-command.v1",
+            "orderId": order_id,
+            "sku": sku,
+            "actionId": action_id,
+        }
+    )
+    return f"ORT-{identity[7:39].upper()}"
+
+
 def _order_inventory_transition(
     current: Mapping[str, Any],
     next_state: Mapping[str, Any],
@@ -3132,6 +3146,83 @@ def _order_inventory_transition(
             raise TrialValidationError(
                 "order fulfilment must consume every allocated line exactly once."
             )
+
+
+def _order_return_inventory_transition(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+    order: Mapping[str, Any],
+    record: Mapping[str, Any],
+) -> None:
+    current_foundation = _inventory_foundation(current)
+    next_foundation = _inventory_foundation(next_state)
+    if current_foundation is None:
+        if next_foundation is not None:
+            raise TrialValidationError(
+                "an order return cannot create location inventory implicitly."
+            )
+        return
+    if next_foundation is None:
+        raise TrialValidationError(
+            "a sellable return cannot remove the location inventory record."
+        )
+    catalog_skus = [str(item["sku"]) for item in current["items"]]
+    try:
+        before = validate_shop_inventory_state(current_foundation, catalog_skus)
+        after = validate_shop_inventory_state(next_foundation, catalog_skus)
+        before_physical = shop_inventory_sku_totals(before, catalog_skus)
+        after_physical = shop_inventory_sku_totals(after, catalog_skus)
+        before_available = shop_inventory_sku_available_to_promise(
+            before, catalog_skus
+        )
+        after_available = shop_inventory_sku_available_to_promise(
+            after, catalog_skus
+        )
+    except ShopInventoryValidationError as exc:
+        raise TrialValidationError(str(exc)) from exc
+    if (
+        len(after["commands"]) != len(before["commands"]) + 1
+        or after["commands"][:-1] != before["commands"]
+        or after["commands"][-1]["payload"].get("kind") != "order_return"
+    ):
+        raise TrialValidationError(
+            "a sellable return must append exactly one order return location command."
+        )
+    command = after["commands"][-1]["payload"]
+    if (
+        command.get("id")
+        != _order_return_inventory_command_id(
+            str(order["id"]), str(record["sku"]), str(record["actionId"])
+        )
+        or command.get("orderId") != order["id"]
+        or command.get("sku") != record["sku"]
+        or command.get("quantity") != record["quantity"]
+        or any(
+            command["proof"].get(proof_field) != record[record_field]
+            for proof_field, record_field in (
+                ("actionId", "actionId"),
+                ("capturedAt", "createdAt"),
+                ("actor", "actor"),
+                ("reason", "reason"),
+                ("evidenceReference", "evidenceReference"),
+            )
+        )
+    ):
+        raise TrialValidationError(
+            "the order return location command must match the exact inspected return evidence."
+        )
+    expected_physical = dict(before_physical)
+    expected_physical[str(record["sku"])] = (
+        expected_physical.get(str(record["sku"]), 0) + int(record["quantity"])
+    )
+    if (
+        before_available != _inventory_item_totals(current)
+        or after_available != _inventory_item_totals(next_state)
+        or after_physical != expected_physical
+    ):
+        raise TrialValidationError(
+            "the sellable return must conserve aggregate Shop ATP and exact location stock."
+        )
 
 
 def _validate_inventory_initialized(
@@ -3643,10 +3734,6 @@ def _validate_return_recorded(
         )
     record = after_returns[0]
     if record["disposition"] == "restock":
-        if _inventory_foundation(current) is not None:
-            raise TrialValidationError(
-                "sellable returns require a location allocation before restocking."
-            )
         before_item, after_item = _one_changed(
             current["items"],
             next_state["items"],
@@ -3688,8 +3775,15 @@ def _validate_return_recorded(
             raise TrialValidationError(
                 "a sellable return requires one exact attributable stock movement."
             )
+        _order_return_inventory_transition(
+            current,
+            next_state,
+            before_order,
+            record,
+        )
     elif record["disposition"] == "not_restocked":
         _require_unchanged(current, next_state, "items", "movements")
+        _require_inventory_foundation_unchanged(current, next_state)
     else:
         raise TrialValidationError("return disposition is invalid.")
 
@@ -4556,6 +4650,7 @@ def reduce_commerce_state(
         "commerce.order.created",
         "commerce.order.cancelled",
         "commerce.order.advanced",
+        "commerce.order.return_recorded",
         "commerce.website_intake.converted",
     }:
         _require_inventory_foundation_unchanged(current_state, next_state)

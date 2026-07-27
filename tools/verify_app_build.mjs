@@ -1233,8 +1233,16 @@ if (!coreSource.includes("'commerce.order.return_recorded'")
   || !coreSource.includes("kind: 'order_return'")
   || !coreSource.includes('Record return')
   || !coreSource.includes('Sellable · add to stock')
+  || !coreSource.includes('Restock to {returnLocationPreview}')
   || !coreSource.includes('payment and order total unchanged')
   || !coreSource.includes('Return unavailable: this older order has no attributable completion proof.')
+  || !commerceSource.includes('returnShopInventoryOrder(current.inventoryFoundation')
+  || !commerceSource.includes('locationAllocations: ShopInventoryOrderReturnAllocation[] | null')
+  || !shopInventorySource.includes("kind: 'order_return'")
+  || !shopInventorySource.includes('deterministic fulfilled order locations')
+  || !shopInventoryPythonSource.includes('order return allocations do not match deterministic fulfilled locations')
+  || !managedCommerceRuntime.includes('append exactly one order return location command')
+  || !managedTrialStoreRuntime.includes('kind="order_return"')
   || !coreSource.includes('Math.ceil(orders.length / pageSize)')
   || !coreSource.includes('aria-label="Closed order pages"')) fail('commerce_order_return_ui_or_gate_missing')
 if (!coreSource.includes("mode: 'managed-unprovisioned'") || !coreSource.includes('No browser demo orders, customers, or stock records are copied') || !coreSource.includes('Create managed catalog') || !coreSource.includes('Opening balance reason') || !coreSource.includes('result.version !== current.version + 1') || !coreSource.includes('validateCommerceState(result.state)') || !coreSource.includes("error.code === 'trial_version_conflict'") || !coreSource.includes('class ShopReviewRequiredError') || !coreSource.includes('error instanceof ShopReviewRequiredError') || !coreSource.includes('const latest = loadCommerceWorkspace()') || !coreSource.includes('latest record is loaded for fresh review') || !coreSource.includes('managedIdentity ? null : <ActionHistory')) fail('managed_commerce_ui_not_fail_closed')
@@ -2529,6 +2537,41 @@ async function verifyShopInventoryRuntime() {
       && fulfilProjection.metrics.totalReserved === 0
       && fulfilProjection.metrics.totalAvailableToPromise === 7,
     'managed_order_completion_did_not_fulfil_location_stock')
+    const managedReturnProof = proof(9, 'order-return')
+    const managedReturnInput = { orderId: fulfilOrder.id, sku: 'SKU-1', quantity: 1, disposition: 'restock' }
+    const managedReturnExpectation = commerce.commerceOrderReturnExpectation(
+      fulfilCompleted, fulfilOrder.id, 'SKU-1', 'restock', 1,
+    )
+    const managedReturned = commerce.recordCommerceOrderReturn(
+      fulfilCompleted, managedReturnInput, managedReturnProof, managedReturnExpectation,
+    )
+    const managedReturnProjection = managedReturned && model.projectShopInventory(managedReturned.inventoryFoundation, ['SKU-1'])
+    const managedReturnCommand = managedReturned?.inventoryFoundation?.commands.at(-1)?.payload
+    assert(managedReturnExpectation?.locationAllocations?.length === 1
+      && managedReturnExpectation.locationAllocations[0].locationId === 'LOC-MAIN'
+      && managedReturnExpectation.locationAllocations[0].stockUnitId === 'LOT-SKU1-OPENING-001'
+      && managedReturned?.items[0].onHand === 8
+      && managedReturned.orders[0].returns?.[0]?.disposition === 'restock'
+      && managedReturnCommand?.kind === 'order_return'
+      && managedReturnCommand.orderId === fulfilOrder.id
+      && managedReturnCommand.sku === 'SKU-1'
+      && managedReturnCommand.quantity === 1
+      && managedReturnCommand.allocations[0].reservationId === managedReturnExpectation.locationAllocations[0].reservationId
+      && managedReturnProjection?.metrics.totalOnHand === 8
+      && managedReturnProjection.metrics.totalReserved === 0
+      && managedReturnProjection.metrics.totalAvailableToPromise === 8
+      && managedReturnProjection.ledger.at(-1)?.kind === 'order-return',
+    'managed_sellable_return_did_not_restore_exact_fulfilled_location_stock')
+    assert(commerce.recordCommerceOrderReturn(
+      managedReturned, managedReturnInput, managedReturnProof, managedReturnExpectation,
+    ) === managedReturned, 'managed_sellable_return_retry_not_idempotent')
+    assert(commerce.recordCommerceOrderReturn(
+      managedReturned, { ...managedReturnInput, disposition: 'not_restocked' }, managedReturnProof, managedReturnExpectation,
+    ) === null, 'managed_sellable_return_changed_retry_succeeded')
+    const forgedManagedReturn = structuredClone(managedReturned.inventoryFoundation)
+    forgedManagedReturn.commands.at(-1).payload.allocations[0].locationId = 'LOC-BRANCH'
+    assertThrows(() => model.validateShopInventoryState(forgedManagedReturn, ['SKU-1']),
+      'managed_sellable_return_accepted_forged_location_allocation')
     const managedPurchaseOrderId = 'PO-00000000-0000-4000-8000-000000000072'
     const managedOrdered = commerce.createCommercePurchaseOrder(managedBase, {
       id: managedPurchaseOrderId, expectedAt: '2026-07-28T05:00:00.000Z', supplier: 'Yangon Supply', sku: 'SKU-1', quantityOrdered: 6,

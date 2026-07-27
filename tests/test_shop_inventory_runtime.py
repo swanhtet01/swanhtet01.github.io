@@ -26,6 +26,7 @@ from supermega_runtime.trial_store import (
     TrialHumanApprovalRequired,
     TrialPrincipal,
     TrialValidationError,
+    _authoritative_command_payload,
 )
 
 
@@ -377,6 +378,62 @@ def closed_order_inventory(
             "reservationIds": sorted(
                 allocation["reservationId"] for allocation in reserve["allocations"]
             ),
+            "proof": proof,
+        },
+    )
+
+
+def order_return_inventory_command_id(
+    order_id: str, sku: str, action_id: str
+) -> str:
+    identity = canonical_digest(
+        {
+            "contract": "supermega.shop.order-return-inventory-command.v1",
+            "orderId": order_id,
+            "sku": sku,
+            "actionId": action_id,
+        }
+    )
+    return f"ORT-{identity[7:39].upper()}"
+
+
+def returned_order_inventory(
+    state: dict[str, object],
+    proof: dict[str, str],
+    *,
+    order_id: str = "ORD-LOCATION-001",
+    sku: str = "SKU-1",
+    quantity: int = 1,
+) -> dict[str, object]:
+    reserve = next(
+        command["payload"]
+        for command in state["commands"]  # type: ignore[union-attr]
+        if command["payload"]["kind"] == "order_reserve"
+        and command["payload"]["orderId"] == order_id
+    )
+    allocation = next(
+        candidate
+        for candidate in reserve["allocations"]
+        if candidate["sku"] == sku
+    )
+    return append_inventory_command(
+        state,
+        {
+            "kind": "order_return",
+            "id": order_return_inventory_command_id(
+                order_id, sku, proof["actionId"]
+            ),
+            "orderId": order_id,
+            "sku": sku,
+            "quantity": quantity,
+            "allocations": [
+                {
+                    "reservationId": allocation["reservationId"],
+                    "stockUnitId": allocation["stockUnitId"],
+                    "locationId": allocation["locationId"],
+                    "quantity": quantity,
+                }
+            ],
             "proof": proof,
         },
     )
@@ -989,6 +1046,124 @@ class ShopInventoryRuntimeTests(unittest.TestCase):
             ),
             {"SKU-1": 7},
         )
+
+        return_proof = action_proof(
+            "ACT-ORDER-RETURN-001", "2026-07-27T09:00:00.000Z"
+        )
+        returned_state = deepcopy(completed)
+        returned_state["items"][0]["onHand"] = 8  # type: ignore[index]
+        returned_state["orders"][0]["returns"] = [  # type: ignore[index]
+            {
+                "actionId": return_proof["actionId"],
+                "createdAt": return_proof["capturedAt"],
+                "actor": return_proof["actor"],
+                "reason": return_proof["reason"],
+                "evidenceReference": return_proof["evidenceReference"],
+                "sku": "SKU-1",
+                "quantity": 1,
+                "disposition": "restock",
+            }
+        ]
+        returned_state["movements"] = [
+            order_movement("return", return_proof, 1),
+            *completed["movements"],  # type: ignore[misc]
+        ]
+        returned_state["inventoryFoundation"] = returned_order_inventory(
+            completed["inventoryFoundation"], return_proof
+        )
+        returned = reduce_commerce_state(
+            "commerce.order.return_recorded",
+            completed,
+            {"state": returned_state, "evidence": return_proof},
+        )
+        latest_return = returned["inventoryFoundation"]["commands"][-1]["payload"]  # type: ignore[index]
+        self.assertEqual(latest_return["kind"], "order_return")
+        self.assertEqual(latest_return["orderId"], "ORD-LOCATION-001")
+        self.assertEqual(latest_return["allocations"][0]["locationId"], "LOC-MAIN")
+        self.assertEqual(
+            shop_inventory_sku_totals(returned["inventoryFoundation"], ["SKU-1"]),
+            {"SKU-1": 8},
+        )
+        self.assertEqual(
+            shop_inventory_sku_available_to_promise(
+                returned["inventoryFoundation"], ["SKU-1"]
+            ),
+            {"SKU-1": 8},
+        )
+
+        authoritative = _authoritative_command_payload(
+            {"state": returned_state, "evidence": return_proof},
+            principal=TrialPrincipal(
+                "workspace-return", "authenticated-return-operator", "human"
+            ),
+            surface="commerce",
+            event_type="commerce.order.return_recorded",
+            captured_at="2026-07-27T09:30:00+00:00",
+        )
+        authoritative_returned = reduce_commerce_state(
+            "commerce.order.return_recorded",
+            completed,
+            authoritative,
+        )
+        authoritative_record = authoritative_returned["orders"][0]["returns"][0]  # type: ignore[index]
+        authoritative_movement = authoritative_returned["movements"][0]  # type: ignore[index]
+        authoritative_location_proof = authoritative_returned["inventoryFoundation"]["commands"][-1]["payload"]["proof"]  # type: ignore[index]
+        for evidence_record in (
+            authoritative["evidence"],
+            authoritative_record,
+            authoritative_movement,
+            authoritative_location_proof,
+        ):
+            self.assertEqual(
+                evidence_record["actor"], "authenticated-return-operator"
+            )
+        self.assertEqual(
+            authoritative_location_proof["capturedAt"],
+            "2026-07-27T09:30:00+00:00",
+        )
+
+        missing_location_return = deepcopy(returned_state)
+        missing_location_return["inventoryFoundation"] = completed[
+            "inventoryFoundation"
+        ]
+        with self.assertRaisesRegex(TrialValidationError, "location command"):
+            reduce_commerce_state(
+                "commerce.order.return_recorded",
+                completed,
+                {"state": missing_location_return, "evidence": return_proof},
+            )
+
+        forged_allocation = deepcopy(returned["inventoryFoundation"])
+        forged_allocation["commands"][-1]["payload"]["allocations"][0][  # type: ignore[index]
+            "locationId"
+        ] = "LOC-BRANCH"
+        forged_body = {
+            "sequence": forged_allocation["commands"][-1]["sequence"],  # type: ignore[index]
+            "previousDigest": forged_allocation["commands"][-1]["previousDigest"],  # type: ignore[index]
+            "payload": forged_allocation["commands"][-1]["payload"],  # type: ignore[index]
+        }
+        forged_allocation["commands"][-1]["digest"] = canonical_digest(  # type: ignore[index]
+            forged_body
+        )
+        forged_allocation["headDigest"] = forged_allocation["commands"][-1][  # type: ignore[index]
+            "digest"
+        ]
+        with self.assertRaisesRegex(
+            ShopInventoryValidationError, "deterministic|fulfilled reservation"
+        ):
+            validate_shop_inventory_state(forged_allocation, ["SKU-1"])
+
+        over_return = returned_order_inventory(
+            returned["inventoryFoundation"],
+            action_proof(
+                "ACT-ORDER-RETURN-OVER", "2026-07-27T10:00:00.000Z"
+            ),
+            quantity=3,
+        )
+        with self.assertRaisesRegex(
+            ShopInventoryValidationError, "only 2 location units"
+        ):
+            validate_shop_inventory_state(over_return, ["SKU-1"])
 
     def test_store_stamps_order_location_reserve_and_release(self) -> None:
         store = InMemoryTrialStore(reducer=reduce_trial_state)

@@ -1393,6 +1393,25 @@ def _authoritative_command_payload(
         authoritative_state = dict(state)
         authoritative_state["orders"] = authoritative_orders
         authoritative_state["movements"] = authoritative_movements
+        return_record = (
+            returned_order["returns"][0]
+            if isinstance(returned_order, Mapping)
+            and isinstance(returned_order.get("returns"), list)
+            and returned_order["returns"]
+            and isinstance(returned_order["returns"][0], Mapping)
+            else None
+        )
+        if (
+            isinstance(return_record, Mapping)
+            and return_record.get("disposition") == "restock"
+        ):
+            authoritative_state = _restamp_order_inventory(
+                authoritative_state,
+                kind="order_return",
+                action_id=str(evidence.get("actionId", "")),
+                actor=principal.actor_id,
+                captured_at=effective_captured_at,
+            )
         authoritative["evidence"] = authoritative_evidence
         authoritative["state"] = authoritative_state
         return authoritative

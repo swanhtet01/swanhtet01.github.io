@@ -3,10 +3,13 @@ import {
   fulfilShopInventoryOrder,
   issueShopInventoryToProduction,
   planShopInventoryOrderAllocation,
+  planShopInventoryOrderReturn,
   projectShopInventory,
   receiveShopInventory,
   releaseShopInventoryOrder,
   reserveShopInventoryOrder,
+  returnShopInventoryOrder,
+  type ShopInventoryOrderReturnAllocation,
   type ShopInventoryState,
 } from './shop-inventory-foundation.ts'
 
@@ -401,6 +404,8 @@ export type CommerceOrderReturnExpectation = {
   soldQuantity: number
   returnedQuantity: number
   stockOnHand: number | null
+  inventoryHeadDigest: string | null
+  locationAllocations: ShopInventoryOrderReturnAllocation[] | null
   orderSnapshot: string
 }
 
@@ -3505,6 +3510,8 @@ function sameOrderReturnExpectation(
     && left.soldQuantity === right.soldQuantity
     && left.returnedQuantity === right.returnedQuantity
     && left.stockOnHand === right.stockOnHand
+    && left.inventoryHeadDigest === right.inventoryHeadDigest
+    && JSON.stringify(left.locationAllocations) === JSON.stringify(right.locationAllocations)
     && left.orderSnapshot === right.orderSnapshot
 }
 
@@ -3513,6 +3520,7 @@ export function commerceOrderReturnExpectation(
   orderId: string,
   sku: string,
   disposition: CommerceReturnDisposition,
+  quantityToReturn?: number,
 ): CommerceOrderReturnExpectation | null {
   if (!returnDispositions.includes(disposition)) return null
   const current = validateCommerceState(state)
@@ -3535,12 +3543,30 @@ export function commerceOrderReturnExpectation(
   if (!Number.isSafeInteger(returnedQuantity) || returnedQuantity >= matchingLines[0].quantity) return null
   const item = current.items.find((candidate) => candidate.sku === sku)
   if (!item) return null
+  let inventoryHeadDigest: string | null = null
+  let locationAllocations: ShopInventoryOrderReturnAllocation[] | null = null
+  if (current.inventoryFoundation && disposition === 'restock') {
+    if (!Number.isSafeInteger(quantityToReturn) || Number(quantityToReturn) < 1) return null
+    try {
+      inventoryHeadDigest = current.inventoryFoundation.headDigest
+      locationAllocations = planShopInventoryOrderReturn(current.inventoryFoundation, {
+        orderId,
+        sku,
+        quantity: quantityToReturn,
+        catalogSkus: current.items.map((candidate) => candidate.sku).sort(),
+      })
+    } catch {
+      return null
+    }
+  }
   return {
     orderId,
     sku,
     soldQuantity: matchingLines[0].quantity,
     returnedQuantity,
     stockOnHand: disposition === 'restock' ? item.onHand : null,
+    inventoryHeadDigest,
+    locationAllocations,
     orderSnapshot: JSON.stringify(order),
   }
 }
@@ -3574,18 +3600,37 @@ export function recordCommerceOrderReturn(
     if (replayRecords.length !== 1) return null
     const { order, record } = replayRecords[0]
     const replayMovements = current.movements.filter((movement) => movement.actionId === proof.actionId)
-    return order.id === input.orderId
+    const aggregateMatches = order.id === input.orderId
       && record.sku === input.sku
       && record.quantity === input.quantity
       && record.disposition === input.disposition
       && sameReturnProof(record, proof)
       && (record.disposition === 'restock'
         ? replayMovements.length === 1 && movementMatchesReturn(replayMovements[0], record, order.id)
-        : replayMovements.length === 0) ? current : null
+        : replayMovements.length === 0)
+    if (!aggregateMatches) return null
+    if (!current.inventoryFoundation) return current
+    if (record.disposition !== 'restock') {
+      return current.inventoryFoundation.commands.some((command) => command.payload.proof.actionId === proof.actionId)
+        ? null
+        : current
+    }
+    try {
+      const locationReplay = returnShopInventoryOrder(current.inventoryFoundation, {
+        orderId: input.orderId,
+        sku: input.sku,
+        quantity: input.quantity,
+        proof,
+        catalogSkus: current.items.map((item) => item.sku).sort(),
+        expectedHeadDigest: current.inventoryFoundation.headDigest,
+      })
+      return locationReplay.replayed && shopInventoryMatchesItems(locationReplay.state, current.items) ? current : null
+    } catch {
+      return null
+    }
   }
-  if (current.inventoryFoundation && input.disposition === 'restock') return null
   if (actionIdIsUsed(current, proof.actionId)) return null
-  const actual = commerceOrderReturnExpectation(current, input.orderId, input.sku, input.disposition)
+  const actual = commerceOrderReturnExpectation(current, input.orderId, input.sku, input.disposition, input.quantity)
   if (!actual || !expected || !sameOrderReturnExpectation(actual, expected)) return null
   const remaining = actual.soldQuantity - actual.returnedQuantity
   if (input.quantity > remaining) return null
@@ -3615,6 +3660,31 @@ export function recordCommerceOrderReturn(
     ? safeBalance(item.onHand, input.quantity)
     : item.onHand
   if (nextBalance === null) return null
+  const nextItems = input.disposition === 'restock'
+    ? current.items.map((candidate) => candidate.sku === input.sku ? { ...candidate, onHand: nextBalance } : candidate)
+    : current.items
+  let inventoryFoundation = current.inventoryFoundation
+  if (inventoryFoundation && input.disposition === 'restock') {
+    if (expected.inventoryHeadDigest !== inventoryFoundation.headDigest || !expected.locationAllocations) return null
+    try {
+      const locationResult = returnShopInventoryOrder(inventoryFoundation, {
+        orderId: input.orderId,
+        sku: input.sku,
+        quantity: input.quantity,
+        proof,
+        catalogSkus: current.items.map((candidate) => candidate.sku).sort(),
+        expectedHeadDigest: expected.inventoryHeadDigest,
+      })
+      const locationCommand = locationResult.state.commands.at(-1)?.payload
+      if (locationResult.replayed
+        || locationCommand?.kind !== 'order_return'
+        || JSON.stringify(locationCommand.allocations) !== JSON.stringify(expected.locationAllocations)
+        || !shopInventoryMatchesItems(locationResult.state, nextItems)) return null
+      inventoryFoundation = locationResult.state
+    } catch {
+      return null
+    }
+  } else if (expected.inventoryHeadDigest !== null || expected.locationAllocations !== null) return null
   const movement = input.disposition === 'restock'
     ? movementFor(proof, {
         kind: 'return',
@@ -3625,13 +3695,12 @@ export function recordCommerceOrderReturn(
     : null
   return validateCommerceState({
     ...current,
-    items: input.disposition === 'restock'
-      ? current.items.map((candidate) => candidate.sku === input.sku ? { ...candidate, onHand: nextBalance } : candidate)
-      : current.items,
+    items: nextItems,
     orders: current.orders.map((candidate) => candidate.id === input.orderId
       ? { ...candidate, returns: [record, ...(candidate.returns ?? [])] }
       : candidate),
     movements: movement ? [movement, ...current.movements] : current.movements,
+    ...(inventoryFoundation ? { inventoryFoundation } : {}),
   })
 }
 

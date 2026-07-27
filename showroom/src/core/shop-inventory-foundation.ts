@@ -32,6 +32,12 @@ export type ShopInventoryOrderAllocation = {
   locationId: string
   quantity: number
 }
+export type ShopInventoryOrderReturnAllocation = {
+  reservationId: string
+  stockUnitId: string
+  locationId: string
+  quantity: number
+}
 export type ShopInventoryProductionUnit = 'kg' | 'g' | 'l' | 'ml' | 'pcs' | 'pack' | 'bag' | 'roll' | 'sheet' | 'm' | 'cm'
 export type ShopInventoryProductionRequest = {
   requestId: string
@@ -70,6 +76,7 @@ export type ShopInventoryCommandPayload =
   | { kind: 'release' | 'fulfil'; id: string; reservationId: string; proof: ShopInventoryProof }
   | { kind: 'order_reserve'; id: string; orderId: string; customerReference: string; allocations: ShopInventoryOrderAllocation[]; proof: ShopInventoryProof }
   | { kind: 'order_release' | 'order_fulfil'; id: string; orderId: string; reservationIds: string[]; proof: ShopInventoryProof }
+  | { kind: 'order_return'; id: string; orderId: string; sku: string; quantity: number; allocations: ShopInventoryOrderReturnAllocation[]; proof: ShopInventoryProof }
 
 export type ShopInventoryCommand = {
   sequence: number
@@ -125,7 +132,7 @@ export type ShopInventoryProjection = {
 const digestPattern = /^sha256:[0-9a-f]{64}$/
 const businessIdPattern = /^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+$/
 const timestampPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/
-const commandKinds = new Set(['import', 'transfer', 'receipt', 'count', 'production_issue', 'reserve', 'release', 'fulfil', 'order_reserve', 'order_release', 'order_fulfil'])
+const commandKinds = new Set(['import', 'transfer', 'receipt', 'count', 'production_issue', 'reserve', 'release', 'fulfil', 'order_reserve', 'order_release', 'order_fulfil', 'order_return'])
 const productionUnits = new Set<ShopInventoryProductionUnit>(['kg', 'g', 'l', 'ml', 'pcs', 'pack', 'bag', 'roll', 'sheet', 'm', 'cm'])
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -399,6 +406,24 @@ function orderAllocations(value: unknown, field: string, catalog: string[]) {
   return rows
 }
 
+function orderReturnAllocations(value: unknown, field: string) {
+  const rows = array(value, field, 1, 200).map((candidate, index): ShopInventoryOrderReturnAllocation => {
+    const rowField = `${field}[${index}]`
+    const row = exact(candidate, rowField, ['reservationId', 'stockUnitId', 'locationId', 'quantity'])
+    return {
+      reservationId: identifier(row.reservationId, `${rowField}.reservationId`, 'RES'),
+      stockUnitId: text(row.stockUnitId, `${rowField}.stockUnitId`, 80),
+      locationId: identifier(row.locationId, `${rowField}.locationId`, 'LOC'),
+      quantity: quantity(row.quantity, `${rowField}.quantity`, 1),
+    }
+  })
+  unique(rows.map((row) => row.reservationId), `${field} reservation IDs`)
+  const keys = rows.map((row) => `${row.locationId}|${row.stockUnitId}|${row.reservationId}`)
+  unique(keys, field)
+  sorted(keys, field)
+  return rows
+}
+
 function productionAllocations(value: unknown, field: string) {
   const rows = array(value, field, 1, 200).map((candidate, index): ShopInventoryProductionAllocation => {
     const rowField = `${field}[${index}]`
@@ -551,6 +576,24 @@ function commandPayload(value: unknown, field: string, catalog: string[]): ShopI
       proof: proof(source.proof, `${field}.proof`),
     }
   }
+  if (value.kind === 'order_return') {
+    const source = exact(value, field, ['kind', 'id', 'orderId', 'sku', 'quantity', 'allocations', 'proof'])
+    const orderId = text(source.orderId, `${field}.orderId`, 160)
+    const sku = text(source.sku, `${field}.sku`, 80)
+    if (!catalog.includes(sku)) throw new Error(`${field}.sku is not present in the trusted Shop catalog.`)
+    const returnedQuantity = quantity(source.quantity, `${field}.quantity`, 1)
+    const allocations = orderReturnAllocations(source.allocations, `${field}.allocations`)
+    const allocated = allocations.reduce((total, allocation) => total + allocation.quantity, 0)
+    if (!Number.isSafeInteger(allocated) || allocated !== returnedQuantity) {
+      throw new Error(`${field}.allocations must equal the returned Shop quantity.`)
+    }
+    const actionProof = proof(source.proof, `${field}.proof`)
+    const id = identifier(source.id, `${field}.id`, 'ORT')
+    if (id !== inventoryOrderReturnCommandId(orderId, sku, actionProof.actionId)) {
+      throw new Error(`${field}.id is not deterministic for its order return.`)
+    }
+    return { kind: 'order_return', id, orderId, sku, quantity: returnedQuantity, allocations, proof: actionProof }
+  }
   const kind = value.kind as 'release' | 'fulfil'
   const source = exact(value, field, ['kind', 'id', 'reservationId', 'proof'])
   return {
@@ -573,6 +616,7 @@ function ledgerEvent(input: {
   counterpartyLocationId?: string
   vendorId?: string
   clientId?: string
+  reservationId?: string
   orderId?: string
   customerReference?: string
   expectedQuantity?: number
@@ -600,6 +644,7 @@ function ledgerEvent(input: {
   if (input.counterpartyLocationId !== undefined) record.counterpartyLocationId = input.counterpartyLocationId
   if (input.vendorId !== undefined) record.vendorId = input.vendorId
   if (input.clientId !== undefined) record.clientId = input.clientId
+  if (input.reservationId !== undefined) record.reservationId = input.reservationId
   if (input.orderId !== undefined) record.orderId = input.orderId
   if (input.customerReference !== undefined) record.customerReference = input.customerReference
   if (input.expectedQuantity !== undefined) record.expectedQuantity = input.expectedQuantity
@@ -634,6 +679,37 @@ function planProductionAllocationRows(
   ))
 }
 
+function planOrderReturnAllocationRows(
+  candidates: Array<ShopInventoryOrderReturnAllocation & { returnableQuantity: number }>,
+  returnedQuantity: number,
+) {
+  let remaining = returnedQuantity
+  const allocations: ShopInventoryOrderReturnAllocation[] = []
+  const ranked = [...candidates]
+    .filter((candidate) => candidate.returnableQuantity > 0)
+    .sort((left, right) => right.returnableQuantity - left.returnableQuantity
+      || compareCanonicalText(
+        `${left.locationId}|${left.stockUnitId}|${left.reservationId}`,
+        `${right.locationId}|${right.stockUnitId}|${right.reservationId}`,
+      ))
+  for (const candidate of ranked) {
+    if (remaining === 0) break
+    const allocated = Math.min(remaining, candidate.returnableQuantity)
+    allocations.push({
+      reservationId: candidate.reservationId,
+      stockUnitId: candidate.stockUnitId,
+      locationId: candidate.locationId,
+      quantity: allocated,
+    })
+    remaining -= allocated
+  }
+  if (remaining !== 0) throw new Error(`The fulfilled order has only ${returnedQuantity - remaining} location units available to return.`)
+  return allocations.sort((left, right) => compareCanonicalText(
+    `${left.locationId}|${left.stockUnitId}|${left.reservationId}`,
+    `${right.locationId}|${right.stockUnitId}|${right.reservationId}`,
+  ))
+}
+
 function replayCommands(commands: ShopInventoryCommandPayload[]) {
   const clients = new Map<string, ShopInventoryMaster>()
   const vendors = new Map<string, ShopInventoryMaster>()
@@ -641,6 +717,7 @@ function replayCommands(commands: ShopInventoryCommandPayload[]) {
   const stockUnits = new Map<string, ShopInventoryStockUnit>()
   const balances = new Map<string, { onHand: number; reserved: number }>()
   const reservations = new Map<string, ShopInventoryProjection['reservations'][number]>()
+  const returnedByReservation = new Map<string, number>()
   const ledger: Array<Record<string, unknown>> = []
   let importCount = 0
   const balanceKey = (stockUnitId: string, locationId: string) => `${stockUnitId}\u0000${locationId}`
@@ -856,6 +933,55 @@ function replayCommands(commands: ShopInventoryCommandPayload[]) {
           referenceId: command.orderId,
           orderId: command.orderId,
           customerReference: reservation.customerReference,
+        }))
+      })
+      return
+    }
+    if (command.kind === 'order_return') {
+      const candidates = [...reservations.values()].flatMap((reservation) => {
+        const unit = stockUnits.get(reservation.stockUnitId)
+        if (reservation.orderId !== command.orderId || reservation.status !== 'fulfilled' || unit?.sku !== command.sku) return []
+        return [{
+          reservationId: reservation.id,
+          stockUnitId: reservation.stockUnitId,
+          locationId: reservation.locationId,
+          quantity: reservation.quantity,
+          returnableQuantity: reservation.quantity - (returnedByReservation.get(reservation.id) ?? 0),
+        }]
+      })
+      const expectedAllocations = planOrderReturnAllocationRows(candidates, command.quantity)
+      if (canonicalJson(expectedAllocations) !== canonicalJson(command.allocations)) {
+        throw new Error(`${field}.allocations do not match the deterministic fulfilled order locations.`)
+      }
+      command.allocations.forEach((allocation, allocationIndex) => {
+        const allocationField = `${field}.allocations[${allocationIndex}]`
+        const reservation = reservations.get(allocation.reservationId)
+        const unit = stockUnits.get(allocation.stockUnitId)
+        if (!reservation
+          || reservation.orderId !== command.orderId
+          || reservation.status !== 'fulfilled'
+          || reservation.stockUnitId !== allocation.stockUnitId
+          || reservation.locationId !== allocation.locationId
+          || unit?.sku !== command.sku) {
+          throw new Error(`${allocationField} does not match a fulfilled location reservation for this order and SKU.`)
+        }
+        const priorReturned = returnedByReservation.get(allocation.reservationId) ?? 0
+        if (priorReturned + allocation.quantity > reservation.quantity) {
+          throw new Error(`${allocationField} exceeds the fulfilled reservation quantity.`)
+        }
+        applyDelta(allocation.stockUnitId, allocation.locationId, allocation.quantity, 0, allocationField)
+        returnedByReservation.set(allocation.reservationId, priorReturned + allocation.quantity)
+        ledger.push(ledgerEvent({
+          id: `LED-${command.id}-RETURN-${allocationIndex + 1}`,
+          kind: 'order-return',
+          command,
+          stockUnitId: allocation.stockUnitId,
+          locationId: allocation.locationId,
+          onHandDelta: allocation.quantity,
+          reservedDelta: 0,
+          referenceId: command.orderId,
+          reservationId: allocation.reservationId,
+          orderId: command.orderId,
         }))
       })
       return
@@ -1109,6 +1235,16 @@ function inventoryOrderCommandId(prefix: 'ORS' | 'ORL' | 'ORF', orderId: string)
   return `${prefix}-${identity.slice(7, 39).toUpperCase()}`
 }
 
+function inventoryOrderReturnCommandId(orderId: string, sku: string, actionId: string) {
+  const identity = canonicalDigest({
+    contract: 'supermega.shop.order-return-inventory-command.v1',
+    orderId,
+    sku,
+    actionId,
+  })
+  return `ORT-${identity.slice(7, 39).toUpperCase()}`
+}
+
 function inventoryOrderReservationId(orderId: string, allocation: Omit<ShopInventoryOrderAllocation, 'reservationId'>) {
   const identity = canonicalDigest({
     contract: 'supermega.shop.order-allocation.v1',
@@ -1237,6 +1373,75 @@ export function releaseShopInventoryOrder(state: unknown, input: Omit<Parameters
 
 export function fulfilShopInventoryOrder(state: unknown, input: Omit<Parameters<typeof closeShopInventoryOrder>[1], 'kind'>) {
   return closeShopInventoryOrder(state, { ...input, kind: 'order_fulfil' })
+}
+
+export function planShopInventoryOrderReturn(state: unknown, input: {
+  orderId: unknown
+  sku: unknown
+  quantity: unknown
+  catalogSkus: unknown
+}) {
+  const catalog = catalogSkus(input.catalogSkus)
+  const current = validateShopInventoryState(state, catalog)
+  const orderId = text(input.orderId, 'order return.orderId', 160)
+  const sku = text(input.sku, 'order return.sku', 80)
+  if (!catalog.includes(sku)) throw new Error('The returned SKU is not present in the trusted Shop catalog.')
+  const returnedQuantity = quantity(input.quantity, 'order return.quantity', 1)
+  const projection = projectShopInventory(current, catalog)
+  const unitById = new Map(projection.stockUnits.map((unit) => [unit.id, unit]))
+  const returnedByReservation = new Map<string, number>()
+  current.commands.forEach((command) => {
+    if (command.payload.kind !== 'order_return') return
+    command.payload.allocations.forEach((allocation) => {
+      returnedByReservation.set(
+        allocation.reservationId,
+        (returnedByReservation.get(allocation.reservationId) ?? 0) + allocation.quantity,
+      )
+    })
+  })
+  const candidates = projection.reservations.flatMap((reservation) => {
+    const unit = unitById.get(reservation.stockUnitId)
+    if (reservation.orderId !== orderId || reservation.status !== 'fulfilled' || unit?.sku !== sku) return []
+    return [{
+      reservationId: reservation.id,
+      stockUnitId: reservation.stockUnitId,
+      locationId: reservation.locationId,
+      quantity: reservation.quantity,
+      returnableQuantity: reservation.quantity - (returnedByReservation.get(reservation.id) ?? 0),
+    }]
+  })
+  return canonicalCopy(planOrderReturnAllocationRows(candidates, returnedQuantity))
+}
+
+export function returnShopInventoryOrder(state: unknown, input: {
+  orderId: unknown
+  sku: unknown
+  quantity: unknown
+  proof: unknown
+  catalogSkus: unknown
+  expectedHeadDigest: unknown
+}) {
+  const catalog = catalogSkus(input.catalogSkus)
+  const current = validateShopInventoryState(state, catalog)
+  const orderId = text(input.orderId, 'order return.orderId', 160)
+  const sku = text(input.sku, 'order return.sku', 80)
+  if (!catalog.includes(sku)) throw new Error('The returned SKU is not present in the trusted Shop catalog.')
+  const returnedQuantity = quantity(input.quantity, 'order return.quantity', 1)
+  const actionProof = proof(input.proof, 'proof')
+  const commandId = inventoryOrderReturnCommandId(orderId, sku, actionProof.actionId)
+  const retained = current.commands.find((command) => command.payload.id === commandId)?.payload
+  const allocations = retained?.kind === 'order_return'
+    ? retained.allocations
+    : planShopInventoryOrderReturn(current, { orderId, sku, quantity: returnedQuantity, catalogSkus: catalog })
+  return appendCommand(current, {
+    kind: 'order_return',
+    id: commandId,
+    orderId,
+    sku,
+    quantity: returnedQuantity,
+    allocations,
+    proof: actionProof,
+  }, catalog, input.expectedHeadDigest)
 }
 
 export function reserveShopInventory(state: unknown, input: {
