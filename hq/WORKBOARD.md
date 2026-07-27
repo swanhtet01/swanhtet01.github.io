@@ -3,7 +3,8 @@
 Updated: 2026-07-27
 Authority: founder / CEO
 Canonical repository: `C:\Users\thesw\Projects\supermega-platform`
-Integration branch: `agent/supermega-release-candidate`
+Integration branch: `main`
+Current accepted release checkpoint: `f00b1e3ee163714e7c6f1db4a7f17c3cac73de46`
 Current accepted product checkpoint: `3cd4825`
 Current accepted operating checkpoint: `63a245f`
 Current accepted agent-operations checkpoint: `a2e1b89`
@@ -226,11 +227,11 @@ Every worker handoff contains:
 
 ## Execution order
 
-1. Retain the completed Shop, Plant, Website, and Ecommerce checkpoints through location-aware Shop return checkpoint `3cd4825`; do not add a fifth public product or a second order authority.
-2. After the owner authorizes the external write, fast-forward only the existing draft PR #258 branch to the exact clean candidate, run fresh GitHub checks, and create a protected Vercel preview without changing production aliases.
-3. Provision a genuinely isolated Supabase branch or project, apply and verify migrations plus RLS policies there, and prove tenant isolation, recovery, and server-only credentials before enabling managed trial writes.
-4. Run one named Shop design-partner pilot and measure import correction, setup time, daily task completion, review effort, and failure recovery before broad activation.
-5. Start founder-led preview recruitment only with truthful preview language; production launch and broad marketing require protected-preview, persistence, security, and pilot gates to pass.
-6. Run OPS-001 only on a newly approved isolated Supabase target, including Storage listing/object denial; do not reuse the legacy public-schema project.
-7. Start ENG-005 only after four-product onboarding gates pass and the owner securely provides the missing OpenAI key.
-8. Run PILOT-001 only after one named Shop operator, safe tenant, baseline, and five-day evidence plan are recorded.
+1. Retain the completed Shop, Plant, Website, and Ecommerce checkpoints through location-aware Shop return checkpoint `3cd4825`, now carried by paired live release `f00b1e3e`; do not add a fifth public product or a second order authority.
+2. Run OPS-001 only on a newly approved isolated Supabase target. Apply and verify migrations, private Storage denial, RLS, tenant isolation, recovery, and server-only credentials before enabling managed trial writes; do not reuse the legacy public-schema project.
+3. Repeat the 12-profile rehearsal against the live isolated release, including mobile, reload, import correction, duplicate handoff, export, and reset recovery.
+4. Run PILOT-001 only after one named Shop operator, safe tenant, baseline, five-day evidence plan, and explicit acceptance criteria are recorded; measure setup time, daily task completion, review effort, and failure recovery.
+5. Require every future release from current `main` to pass an exact-commit protected preview, coordinated remote checks, observability, promotion and rollback evidence, paired-domain verification, and a fresh live-HQ snapshot; never deploy directly from this checkout.
+6. Start founder-led recruitment only with truthful isolated-preview language. Broad activation and marketing require managed persistence, security, recovery, and named-pilot evidence.
+7. Keep hosted scheduling and AI provider execution dormant until their managed-security, durable-budget, recovery, credential, and owner-approval gates pass; only then may ENG-005 begin.
+8. Add payment, shipping, tax, publishing, and other consequential adapters only after the corresponding measured product gate and explicit accountable approval pass.
