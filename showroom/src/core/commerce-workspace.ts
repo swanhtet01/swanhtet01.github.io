@@ -2468,6 +2468,23 @@ export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder,
     || order.refundStatus !== 'none') return null
   if (Boolean(order.sourceRecordId) !== Boolean(order.evidenceReference)
     || (order.evidenceReference && order.evidenceReference !== proof.evidenceReference)) return null
+  const proofMovements = state.movements.filter((movement) => movement.actionId === proof.actionId)
+  if (proofMovements.length) {
+    const storedOrder = state.orders.find((candidate) => candidate.id === order.id)
+    if (!storedOrder) return null
+    const storedLines = reservationLinesForOrder(storedOrder)
+    const storedBusinessOrder = { ...storedOrder }
+    delete storedBusinessOrder.calculation
+    const requestedBusinessOrder = { ...order }
+    delete requestedBusinessOrder.calculation
+    return proofMovements.length === storedLines.length
+      && storedLines.every((line) => proofMovements.some((movement) => movement.kind === 'reserve'
+        && movement.orderId === storedOrder.id
+        && movement.sku === line.sku
+        && movement.quantityDelta === -line.quantity
+        && sameProof(movement, proof)))
+      && JSON.stringify(storedBusinessOrder) === JSON.stringify(requestedBusinessOrder) ? state : null
+  }
   const capturedLines = order.lines === undefined ? undefined : validatedOrderLineSnapshots(order)
   if (order.lines !== undefined && !capturedLines) return null
   const legacyItem = order.lines === undefined && order.itemSku
@@ -2482,21 +2499,6 @@ export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder,
   }] : [])
   if (!lines.length
     || (order.lines === undefined && (order.item !== legacyItem?.name || legacyItem.price * order.quantity !== order.total))) return null
-  const proofMovements = state.movements.filter((movement) => movement.actionId === proof.actionId)
-  if (proofMovements.length) {
-    const storedOrder = state.orders.find((candidate) => candidate.id === order.id)
-    const storedBusinessOrder = storedOrder ? { ...storedOrder } : null
-    if (storedBusinessOrder) delete storedBusinessOrder.calculation
-    const requestedBusinessOrder = { ...order }
-    delete requestedBusinessOrder.calculation
-    return proofMovements.length === lines.length
-      && lines.every((line) => proofMovements.some((movement) => movement.kind === 'reserve'
-        && movement.orderId === order.id
-        && movement.sku === line.sku
-        && movement.quantityDelta === -line.quantity
-        && sameProof(movement, proof)))
-      && JSON.stringify(storedBusinessOrder) === JSON.stringify(requestedBusinessOrder) ? state : null
-  }
   if (actionIdIsUsed(state, proof.actionId)) return null
   const duplicate = state.orders.some((candidate) => candidate.id === order.id || Boolean(order.sourceRecordId && candidate.sourceRecordId === order.sourceRecordId))
   if (duplicate) return null

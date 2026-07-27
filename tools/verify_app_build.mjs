@@ -4512,6 +4512,41 @@ async function verifyCommerceRuntime() {
     }
     const reserved = model.reserveCommerceOrder(base, order, reserveProof)
     assert(reserved?.items[0].onHand === 8 && reserved.orders.length === 1 && reserved.movements.length === 1, 'reservation_did_not_apply_once')
+    assert(reserved.orders[0].calculation?.schema === 'supermega.commerce.order-calculation.v1'
+      && reserved.orders[0].calculation.currency === 'MMK'
+      && reserved.orders[0].calculation.catalogRevision === 0
+      && reserved.orders[0].calculation.subtotalMmk === 200
+      && reserved.orders[0].calculation.taxMode === 'not_configured'
+      && reserved.orders[0].calculation.taxMmk === 0
+      && reserved.orders[0].calculation.totalMmk === 200,
+    'new_order_calculation_not_bound_to_catalog_subtotal')
+    const legacyOrderWithoutCalculation = { ...reserved.orders[0] }
+    delete legacyOrderWithoutCalculation.calculation
+    assert(model.validateCommerceState({ ...reserved, orders: [legacyOrderWithoutCalculation] }).orders[0].calculation === undefined, 'legacy_order_without_calculation_not_readable')
+    assertThrows(() => model.validateCommerceState({
+      ...reserved,
+      orders: [{
+        ...reserved.orders[0],
+        calculation: { ...reserved.orders[0].calculation, taxMmk: 1 },
+      }],
+    }), 'order_calculation_invented_tax_was_loaded')
+    assertThrows(() => model.validateCommerceState({
+      ...reserved,
+      orders: [{
+        ...reserved.orders[0],
+        calculation: { ...reserved.orders[0].calculation, catalogRevision: 1 },
+      }],
+    }), 'order_calculation_future_catalog_revision_was_loaded')
+    const postOrderCatalogUpdate = model.updateCommerceItem(reserved, {
+      sku: 'SKU-1',
+      expectedPrice: 100,
+      nextPrice: 125,
+      expectedReorderAt: 2,
+      nextReorderAt: 3,
+    }, proof('ACT-POST-ORDER-CATALOG', 2_500))
+    assert(postOrderCatalogUpdate?.items[0].price === 125
+      && model.reserveCommerceOrder(postOrderCatalogUpdate, order, reserveProof) === postOrderCatalogUpdate,
+    'exact_order_retry_failed_after_later_catalog_update')
     assert(model.commerceOrderPromiseUrgency(order, Date.parse('2026-07-23T09:59:59.999Z')) === 'scheduled', 'order_promise_more_than_one_hour_away_not_scheduled')
     assert(model.commerceOrderPromiseUrgency(order, Date.parse('2026-07-23T10:00:00.000Z')) === 'due_soon', 'order_promise_one_hour_boundary_not_due_soon')
     assert(model.commerceOrderPromiseUrgency(order, Date.parse(order.promisedAt)) === 'late', 'order_promise_at_deadline_not_late')
