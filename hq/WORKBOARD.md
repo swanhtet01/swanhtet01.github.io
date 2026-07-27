@@ -4,7 +4,7 @@ Updated: 2026-07-27
 Authority: founder / CEO
 Canonical repository: `C:\Users\thesw\Projects\supermega-platform`
 Integration branch: `main`
-Current accepted release checkpoint: `bb6411dc533e0ecd491d5000b5aa238adfbfe821`
+Current accepted release checkpoint: `8525839388a64fe5768c02249cebdff760ce9813`
 Current accepted product checkpoint: `3cd4825`
 Current accepted operating checkpoint: `63a245f`
 Current accepted agent-operations checkpoint: `a2e1b89`
@@ -227,7 +227,7 @@ Every worker handoff contains:
 
 ## Execution order
 
-1. Retain the completed Shop, Plant, Website, and Ecommerce checkpoints through location-aware Shop return checkpoint `3cd4825`, now carried by paired live release `bb6411dc`; do not add a fifth public product or a second order authority.
+1. Retain the completed Shop, Plant, Website, and Ecommerce checkpoints through location-aware Shop return checkpoint `3cd4825`, now carried by paired live release `85258393`; do not add a fifth public product or a second order authority.
 2. Run OPS-001 only on a newly approved isolated Supabase target. Apply and verify migrations, private Storage denial, RLS, tenant isolation, recovery, and server-only credentials before enabling managed trial writes; do not reuse the legacy public-schema project.
 3. Repeat the 12-profile rehearsal against the live isolated release, including mobile, reload, import correction, duplicate handoff, export, and reset recovery.
 4. Run PILOT-001 only after one named Shop operator, safe tenant, baseline, five-day evidence plan, and explicit acceptance criteria are recorded; measure setup time, daily task completion, review effort, and failure recovery.

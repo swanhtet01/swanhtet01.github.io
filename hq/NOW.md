@@ -4,8 +4,8 @@ Updated: 2026-07-27
 Owner: founder / CEO
 Mode: Codex-only guarded production release; managed operation remains isolated
 Live state contract: `supermega.hq-live-state.v1`
-Live release commit: `bb6411dc533e0ecd491d5000b5aa238adfbfe821`
-Live state observed: `2026-07-27T16:48:08Z`
+Live release commit: `8525839388a64fe5768c02249cebdff760ce9813`
+Live state observed: `2026-07-27T17:11:32Z`
 Live operating mode: `isolated_demo`
 Live scheduler status: `degraded`
 Live scheduler configured: `false`
@@ -57,7 +57,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 - App/local gates pass: 314 Python tests, lint/build, 54 Shop inventory/221 Commerce checks, 66 security checks, and a 477,717-byte largest chunk. Kernel passes 282 tests, 69 connectors/993 adversarial calls, and 15 crews/214 checks.
 - Desktop/mobile Shop passes. A rendered 390 px flow set up two locations, reserved and fulfilled one order, previewed `Main store / OPENING-001`, and returned the unit to that exact lot with no overflow or crash overlay. Managed count and Plant allocation remain model/runtime verified.
 - Core first-action QA leads Shop Stock, incomplete orders to Promise or Payment, Plant alerts to Problems or output, and invalid Website briefs to their first error. Mobile controls are at least 44 px with focus-safe fixed navigation (`36fa7dd`); guide and review actions create no record.
-- PR #262 merged the Shop confirmation simplification after PR #261's read-only live-HQ verifier. Both `supermega.dev` and `app.supermega.dev` serve exact commit `bb6411dc`; paired live verifiers pass with brand `jade-v2-2026-07` and context/catalog `2026-07-27.1`.
+- PR #263 merged exact Plant plan review and cross-platform verifier normalization. Both `supermega.dev` and `app.supermega.dev` serve exact commit `85258393`; paired live verifiers pass with brand `jade-v2-2026-07` and context/catalog `2026-07-27.1`.
 - Production remains an `isolated_demo`: managed database, schema, audit, security, and writes are not ready. The hosted scheduler is degraded and unconfigured by design, uses no Ally compute, and retains a zero-idle execution target.
 
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
