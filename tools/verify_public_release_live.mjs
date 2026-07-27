@@ -71,7 +71,8 @@ async function verifyOnce() {
   assert(pages.get('/')?.includes('href="#products">Choose a product</a>'), 'homepage_product_cta_missing')
   assert(pages.get('/')?.includes('id="products"'), 'product_portfolio_missing')
   for (const product of manifest.customerProducts) {
-    assert(pages.get('/')?.includes(product.appRoute), 'product_workspace_wrong', { product: product.id })
+    const trialRoute = `https://app.supermega.dev/settings/?product=${encodeURIComponent(product.id)}`
+    assert(pages.get('/')?.includes(trialRoute), 'guided_trial_route_wrong', { product: product.id })
     for (const template of product.templates) assert(pages.get('/')?.includes(template.name), 'template_catalog_missing', { template: template.id })
   }
   for (const internalLabel of ['SuperMega HQ', 'One next action for the company', 'Gated R&amp;D']) assert(!pages.get('/')?.includes(internalLabel), 'internal_system_exposed', { internalLabel })

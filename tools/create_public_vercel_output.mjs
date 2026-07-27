@@ -323,13 +323,14 @@ function documentHtml({ route, title, description, content, robots = 'index,foll
 
 function productCardHtml(product, index) {
   const capabilities = (product.modules?.length ? product.modules : product.workflow).slice(0, 3)
+  const trialRoute = `https://app.supermega.dev/settings/?product=${encodeURIComponent(product.id)}`
   return `<article class="compact-solution" id="${escapeHtml(product.id)}">
     <span class="card-index">0${index + 1} / ${escapeHtml(product.eyebrow)}</span>
     <h3>${escapeHtml(product.name)}</h3>
     <p>${escapeHtml(product.headline)}</p>
     <div class="module-tags" aria-label="Core capabilities">${capabilities.map((capability) => `<span>${escapeHtml(capability)}</span>`).join('')}</div>
     <div class="template-line" aria-label="Templates">${product.templates.map((template) => `<span>${escapeHtml(template.name)}</span>`).join('')}</div>
-    <a class="card-link" href="${escapeHtml(product.appRoute)}">Open ${escapeHtml(product.name)}</a>
+    <a class="card-link" href="${escapeHtml(trialRoute)}">Start guided trial</a>
   </article>`
 }
 
@@ -339,7 +340,7 @@ const homeHtml = documentHtml({
   description: manifest.company.statement,
   content: `<main>
     <section class="frame hero"><div class="hero-copy"><span class="eyebrow">${escapeHtml(manifest.company.positioning)}</span><h1>${escapeHtml(manifest.company.headline)}</h1><p class="lede">${escapeHtml(manifest.company.supporting)}</p><div class="actions"><a class="button primary" href="#products">Choose a product</a></div><div class="hero-note"><span>Four separate products</span><span>One secure foundation</span><span>Mobile-ready workflows</span></div></div></section>
-    <section class="frame section" id="products"><div class="section-head"><span class="eyebrow">SuperMega products</span><h2>Open the product that matches the job.</h2><p>Each product opens directly to the work, with simple navigation and shared security controls.</p></div><div class="compact-solutions">${manifest.customerProducts.map(productCardHtml).join('')}</div><div class="closing-strip"><div><h2>Need a workspace for your company?</h2><p>Tell us the product, existing data, and first workflow. We will define the implementation and acceptance test.</p></div><a class="button primary" href="/contact/">Contact SuperMega</a></div></section>
+    <section class="frame section" id="products"><div class="section-head"><span class="eyebrow">SuperMega products</span><h2>Choose a product and workflow template.</h2><p>Each guided trial starts with one proven template, then opens a focused sample workspace with optional CSV import.</p></div><div class="compact-solutions">${manifest.customerProducts.map(productCardHtml).join('')}</div><div class="closing-strip"><div><h2>Need a workspace for your company?</h2><p>Tell us the product, existing data, and first workflow. We will define the implementation and acceptance test.</p></div><a class="button primary" href="/contact/">Contact SuperMega</a></div></section>
     <section class="frame trust-strip" id="trust" aria-label="Security boundary"><div class="control-line"><span class="eyebrow">Secure by default</span><p>AI may prepare drafts from approved records. Sends, payments, publishing, access changes, and production writes require explicit authority and verified server-side controls.</p></div></section>
   </main>`,
 })
@@ -442,7 +443,7 @@ function normalizePayload(payload) {
     name: text(payload.name, 120),
     email: text(payload.email, 180).toLowerCase(),
     company: text(payload.company, 180),
-    product: ['commerce', 'production', 'product-team', 'company-system', 'guide'].includes(product) ? product : 'guide',
+    product: ['commerce', 'production', 'website', 'ecommerce', 'guide'].includes(product) ? product : 'guide',
     template: text(payload.template, 120),
     goal: text(payload.goal, 4000),
     source_url: text(payload.source_url, 700),
@@ -494,10 +495,30 @@ function localRateLimit(req, now) {
   return { allowed: true, retryAfter: 0 }
 }
 
+function sourceAttribution(sourceUrl) {
+  const fallback = { page_path: '/contact/', utm_source: '', utm_medium: '', utm_campaign: '', utm_content: '', utm_term: '' }
+  try {
+    const source = new URL(sourceUrl)
+    if (source.protocol !== 'https:' && source.protocol !== 'http:') return fallback
+    const campaign = (name) => text(source.searchParams.get(name), 160)
+    return {
+      page_path: text(source.pathname + source.search, 700) || '/contact/',
+      utm_source: campaign('utm_source'),
+      utm_medium: campaign('utm_medium'),
+      utm_campaign: campaign('utm_campaign'),
+      utm_content: campaign('utm_content'),
+      utm_term: campaign('utm_term'),
+    }
+  } catch {
+    return fallback
+  }
+}
+
 function recordFrom(safe, req, idempotencyKey, fingerprint) {
   const submittedAt = new Date().toISOString()
   const leadId = 'LEAD-' + keyedDigest('lead:' + idempotencyKey).slice(0, 16).toUpperCase()
   const taskId = 'TASK-' + keyedDigest('task:' + idempotencyKey).slice(0, 16).toUpperCase()
+  const attribution = sourceAttribution(safe.source_url)
   return {
     lead_id: leadId,
     task_id: taskId,
@@ -511,13 +532,13 @@ function recordFrom(safe, req, idempotencyKey, fingerprint) {
     data: '',
     team: '',
     source_url: safe.source_url,
-    page_path: (() => { try { const source = new URL(safe.source_url); return source.pathname + source.search } catch { return '/contact/' } })(),
+    page_path: attribution.page_path,
     referrer: safe.referrer,
-    utm_source: '',
-    utm_medium: '',
-    utm_campaign: '',
-    utm_content: '',
-    utm_term: '',
+    utm_source: attribution.utm_source,
+    utm_medium: attribution.utm_medium,
+    utm_campaign: attribution.utm_campaign,
+    utm_content: attribution.utm_content,
+    utm_term: attribution.utm_term,
     lead_score: 50,
     lead_stage: 'new',
     status: 'new',

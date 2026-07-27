@@ -141,25 +141,26 @@ for (const token of [
   'min-height: 44px',
   'id="products"',
   'SuperMega products',
-  'Open the product that matches the job.',
-  'Each product opens directly to the work, with simple navigation and shared security controls.',
+  'Choose a product and workflow template.',
+  'Each guided trial starts with one proven template, then opens a focused sample workspace with optional CSV import.',
   'Choose a product',
   'Need a workspace for your company?',
   'id="trust"',
   'aria-label="Security boundary"',
   'AI may prepare drafts from approved records.',
-  'https://app.supermega.dev/shop/?tab=orders',
-  'https://app.supermega.dev/plant/?tab=production',
+  'https://app.supermega.dev/settings/?product=shop',
+  'https://app.supermega.dev/settings/?product=plant',
   'id="website"',
-  'https://app.supermega.dev/website/',
+  'https://app.supermega.dev/settings/?product=website',
   'id="ecommerce"',
   'Create a Shop-backed storefront and hand customer intent to human review.',
-  'https://app.supermega.dev/ecommerce/',
+  'https://app.supermega.dev/settings/?product=ecommerce',
 ]) {
   if (!home.includes(token)) fail('homepage_contract_missing', { token })
 }
 for (const product of manifest.customerProducts || []) {
-  if (!home.includes(`Open ${product.name}`)) fail('primary_cta_label_missing', { product: product.id })
+  const trialRoute = `https://app.supermega.dev/settings/?product=${encodeURIComponent(product.id)}`
+  if (!home.includes(trialRoute)) fail('guided_trial_route_missing', { product: product.id })
   for (const capability of (product.modules?.length ? product.modules : product.workflow).slice(0, 3)) {
     if (!home.includes(capability)) fail('module_catalog_missing', { product: product.id, capability })
   }
@@ -167,6 +168,7 @@ for (const product of manifest.customerProducts || []) {
     if (!home.includes(template.name)) fail('template_catalog_missing', { product: product.id, template: template.id })
   }
 }
+if ((home.match(/>Start guided trial<\/a>/g) || []).length !== 4) fail('guided_trial_cta_count_wrong')
 for (const internalLabel of ['SuperMega HQ', 'One next action for the company', 'Owners, evidence, review, and release', 'Gated R&amp;D']) {
   if (home.includes(internalLabel)) fail('internal_system_exposed_on_public_home', { internalLabel })
 }
