@@ -1551,40 +1551,16 @@ export function Empty({ children }: { children: ReactNode }) {
 }
 
 const customerTracks = [
-  {
-    name: 'Retail',
-    fit: 'Shop, showroom, social selling.',
-    outcome: 'Sell, reserve stock, review requests.',
-    path: '/shop/?tab=counter',
-    setupPath: clientSetupPath('commerce'),
-  },
-  {
-    name: 'Factory MES',
-    fit: 'Plant, workshop, service floor.',
-    outcome: 'Plan jobs, record output, hand off shifts.',
-    path: '/plant/?tab=production',
-    setupPath: clientSetupPath('production'),
-  },
-  {
-    name: 'Website catalog',
-    fit: 'Business site and proof catalog.',
-    outcome: 'Create pages, package offers, review leads.',
-    path: '/website/',
-    setupPath: clientSetupPath('website'),
-  },
-  {
-    name: 'Online orders',
-    fit: 'Catalog sellers and delivery teams.',
-    outcome: 'Build storefronts, quote requests, Shop handoff.',
-    path: '/ecommerce/',
-    setupPath: clientSetupPath('ecommerce'),
-  },
+  ['Retail', 'Shop, showroom, social selling.', 'Sell, reserve, review requests.', '/shop/?tab=counter', 'commerce'],
+  ['Factory MES', 'Plant, workshop, service floor.', 'Plan, record, hand off shifts.', '/plant/?tab=production', 'production'],
+  ['Website catalog', 'Site and proof catalog.', 'Create pages, offers, leads.', '/website/', 'website'],
+  ['Online orders', 'Catalog sellers and delivery.', 'Build storefronts and Shop handoff.', '/ecommerce/', 'ecommerce'],
 ] as const
 
 export function ProductHomePage() {
   return (
     <div className="workspace-screen product-home-screen">
-      <PageHeading copy="Start from the business type. SuperMega prepares the work; owners approve sends, payments, changes, and publishing." eyebrow="SuperMega products" title="Pick a track. Run work." />
+      <PageHeading copy="Pick a business type. SuperMega prepares work; owners approve sends, payments, changes, publishing." eyebrow="SuperMega products" title="Pick a track. Run work." />
       <section className="product-home-operating-model" aria-label="SuperMega operating model">
         <div>
           <span className="core-eyebrow">Handled by SuperMega</span>
@@ -1592,21 +1568,21 @@ export function ProductHomePage() {
         </div>
         <div>
           <span className="core-eyebrow">Approved by owner</span>
-          <strong>Orders, production, payments, messages, and publishing.</strong>
+          <strong>Orders, production, payments, messages, publishing.</strong>
         </div>
         <Link className="core-button primary" to="/settings/">Set up pilot</Link>
       </section>
       <nav aria-label="Business tracks" className="product-track-grid">
-        {customerTracks.map((track) => (
-          <article className="product-track-card" key={track.name}>
+        {customerTracks.map(([name, fit, outcome, path, product]) => (
+          <article className="product-track-card" key={name}>
             <div>
-              <span className="core-eyebrow">{track.fit}</span>
-              <h2>{track.name}</h2>
-              <p>{track.outcome}</p>
+              <span className="core-eyebrow">{fit}</span>
+              <h2>{name}</h2>
+              <p>{outcome}</p>
             </div>
             <div className="product-track-actions">
-              <Link to={track.path}>Open track</Link>
-              <Link to={track.setupPath}>Set up data</Link>
+              <Link to={path}>Open track</Link>
+              <Link to={clientSetupPath(product)}>Set up data</Link>
             </div>
           </article>
         ))}
@@ -5872,7 +5848,14 @@ export function SettingsPage() {
   const evidenceFilename = `supermega-trial-evidence-${evidenceDate}.json`
   const managedApprovalRequests = approvals.map(toManagedApprovalRequest).filter((request): request is NonNullable<typeof request> => Boolean(request))
   const localProductRecords = collectLocalProductRecords(window.localStorage)
-  const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 10, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady, setup, workflowProfile: selectedTemplate, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords }, null, 2))}`
+  const localRecordCount = Object.keys(localProductRecords).length
+  const learningRows = [
+    ['Data', localRecordCount ? `${localRecordCount} records` : 'Import'],
+    ['Trust', `${runtime.coverageScore}%`],
+    ['Review', `${managedApprovalRequests.length || approvals.length} packets`],
+    ['AI', runtime.enterpriseDbReady && runtime.writesReady ? 'Ready' : 'Locked'],
+  ] as const
+  const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 11, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady, setup, workflowProfile: selectedTemplate, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords, learningRows }, null, 2))}`
 
   useEffect(() => {
     if (!requestedProduct || requestedProduct === setup.product) return
@@ -6045,8 +6028,9 @@ export function SettingsPage() {
             {runtime.status === 'enterprise' && managedTrialAuthConfigured() ? managedIdentity ? <div className="template-contract"><span>Managed account</span><strong>{managedIdentity.email}</strong><small>{managedIdentity.workspaceId} · membership and capabilities are checked by the API</small><button className="text-link" disabled={managedBusy} onClick={() => void disconnectManagedWorkspace()} type="button">Disconnect</button></div> : <form className="core-form compact-form" onSubmit={(event) => void connectManagedWorkspace(event)}><span className="core-eyebrow">Managed workspace</span><div className="form-row"><label>Email<input autoComplete="username" maxLength={160} onChange={(event) => setManagedEmail(event.target.value)} required type="email" value={managedEmail} /></label><label>Password<input autoComplete="current-password" minLength={8} onChange={(event) => setManagedPassword(event.target.value)} required type="password" value={managedPassword} /></label></div><label>Workspace ID<input maxLength={128} onChange={(event) => setManagedWorkspace(event.target.value)} placeholder="Your provisioned workspace" required value={managedWorkspace} /></label><button className="core-button primary" disabled={managedBusy} type="submit">{managedBusy ? 'Checking…' : 'Connect workspace'}</button></form> : null}
             {managedNotice ? <p className="form-notice" role="status">{managedNotice}</p> : null}
             <div className="readiness-list"><span><small>Trial plan</small><strong>{isPilotReady ? 'Ready' : `${completion}% complete`}</strong></span><span><small>Runtime</small><strong>{runtime.serviceStatus}</strong></span><span><small>Operating mode</small><strong>{runtime.operatingMode.replace('_', ' ')}</strong></span><span><small>Managed data</small><strong>{runtime.enterpriseDbReady ? 'Ready' : 'Not connected'}</strong></span><span><small>Security</small><strong>{runtime.securityReady ? 'Ready' : 'Not ready'}</strong></span><span><small>Write path</small><strong>{runtime.writesReady ? 'Enabled' : 'Locked'}</strong></span><span><small>Source coverage</small><strong>{runtime.coverageScore}%</strong></span><span><small>External action</small><strong>Owner controlled</strong></span></div>
+            <div className="readiness-list" aria-label="AI learning readiness">{learningRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
             {runtime.status !== 'enterprise' ? <ul className="requirement-list">{(runtime.requirements.length ? runtime.requirements : ['Configure managed tenant persistence.', 'Verify production identity and source coverage.']).map((requirement) => <li key={requirement}>{requirement}</li>)}</ul> : null}
-            <p className="authority-note">External sends, payments, publishing, access changes, and production writes remain owner-approved and auditable.</p>
+            <p className="authority-note">AI learns from imported records and reviews. Owners approve sends, payments, publishing, access, and production.</p>
           </section>
           <section className="core-panel trial-control-panel"><div><span className="core-eyebrow">Local evidence</span><h2>Export or reset deliberately.</h2><p>Export the client setup and browser workspace for review. Reset clears Company, Shop, unfinished order drafts, Plant, Website, Ecommerce setup, and handoff records only after confirmation.</p></div><div className="trial-actions"><a className="core-button" download={evidenceFilename} href={evidenceHref}>Export evidence</a>{resetArmed ? <><button className="text-link" disabled={resetBusy} onClick={() => setResetArmed(false)} type="button">Cancel</button><button className="core-button danger" disabled={resetBusy} onClick={() => void resetDemoWorkspace()} type="button">{resetBusy ? 'Resetting…' : 'Confirm reset'}</button></> : <button className="text-link danger-text" onClick={() => setResetArmed(true)} type="button">Reset local trial</button>}</div></section>
         </div>
