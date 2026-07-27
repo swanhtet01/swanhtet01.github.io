@@ -4,14 +4,11 @@ import {
   applyShopInventoryImport,
   buildShopInventoryImportPackage,
   createEmptyShopInventoryState,
-  loadShopInventoryWorkspace,
-  mutateShopInventoryWorkspace,
   projectShopInventory,
   shopInventoryEvidenceDigest,
   transferShopInventory,
   type ShopInventoryImportPackage,
   type ShopInventoryProof,
-  type ShopInventoryState,
 } from './shop-inventory-foundation'
 import { ShopProductionHandoff } from './ShopProductionHandoff'
 import type { CommerceActionProof, CommerceState } from './commerce-workspace'
@@ -54,10 +51,6 @@ type TransferReview = {
   expectedHeadDigest: string
 }
 
-const browserLocks = () => typeof navigator !== 'undefined'
-  ? navigator.locks as unknown as Parameters<typeof mutateShopInventoryWorkspace>[4]
-  : null
-
 function commandId(prefix: string) {
   const random = typeof crypto !== 'undefined' && crypto.randomUUID
     ? crypto.randomUUID().toUpperCase()
@@ -76,24 +69,14 @@ function actionProof(actor: string, label: string): ShopInventoryProof {
   }
 }
 
-function loadState(scope: string, catalogSkus: string[]) {
-  if (typeof localStorage === 'undefined') return { state: createEmptyShopInventoryState(), error: '' }
-  const snapshot = loadShopInventoryWorkspace(localStorage, scope, catalogSkus)
-  return { state: snapshot.state, error: snapshot.error }
-}
-
 export function ShopInventoryFoundation({ actor, commerce, disabled, identity, onInventory, onIssue, scope }: ShopInventoryFoundationProps) {
   const catalog = commerce.items
   const catalogSkus = useMemo(
     () => [...new Set(catalog.map((item) => item.sku))].sort(),
     [catalog],
   )
-  const [initial] = useState(() => identity
-    ? { state: createEmptyShopInventoryState(), error: '' }
-    : loadState(scope, catalogSkus))
-  const [localState, setLocalState] = useState<ShopInventoryState>(initial.state)
-  const state = identity ? commerce.inventoryFoundation ?? createEmptyShopInventoryState() : localState
-  const [error, setError] = useState(initial.error)
+  const state = commerce.inventoryFoundation ?? createEmptyShopInventoryState()
+  const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
   const [setupOpen, setSetupOpen] = useState(false)
@@ -174,53 +157,36 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
   }
 
   async function confirmSetup() {
-    if (!setupReview || (!identity && typeof localStorage === 'undefined')) return
+    if (!setupReview) return
     setBusy(true)
     setError('')
-    if (identity) {
-      try {
-        await onInventory(
-          'commerce.inventory.initialized',
-          setupReview.proof.actionId.slice(4),
-          setupReview.proof,
-          (current) => {
-            if (current.inventoryFoundation) return null
-            const result = applyShopInventoryImport(
-              createEmptyShopInventoryState(),
-              setupReview.package,
-              setupReview.proof,
-              current.items.map((item) => item.sku).sort(),
-              setupReview.expectedHeadDigest,
-            )
-            return { ...current, inventoryFoundation: result.state }
-          },
-        )
-        setSetupReview(null)
-        setSetupOpen(false)
-        setNotice('Two-location stock is now confirmed by the managed Shop workspace.')
-      } catch (nextError) {
-        setError(nextError instanceof Error ? nextError.message : 'Managed location setup was not confirmed.')
-      } finally {
-        setBusy(false)
-      }
-      return
+    try {
+      await onInventory(
+        'commerce.inventory.initialized',
+        setupReview.proof.actionId.slice(4),
+        setupReview.proof,
+        (current) => {
+          if (current.inventoryFoundation) return null
+          const result = applyShopInventoryImport(
+            createEmptyShopInventoryState(),
+            setupReview.package,
+            setupReview.proof,
+            current.items.map((item) => item.sku).sort(),
+            setupReview.expectedHeadDigest,
+          )
+          return { ...current, inventoryFoundation: result.state }
+        },
+      )
+      setSetupReview(null)
+      setSetupOpen(false)
+      setNotice(identity
+        ? 'Two-location stock is now confirmed by the managed Shop workspace.'
+        : 'Two-location stock is now part of this Shop record. No supplier or accounting action was sent.')
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Location setup was not confirmed.')
+    } finally {
+      setBusy(false)
     }
-    const result = await mutateShopInventoryWorkspace(
-      scope,
-      catalogSkus,
-      (current) => applyShopInventoryImport(current, setupReview.package, setupReview.proof, catalogSkus, setupReview.expectedHeadDigest),
-      localStorage,
-      browserLocks(),
-    )
-    setBusy(false)
-    if (!result.ok) {
-      setError(result.error)
-      return
-    }
-    setLocalState(result.state)
-    setSetupReview(null)
-    setSetupOpen(false)
-    setNotice(result.replayed ? 'The exact opening import was already recorded.' : 'Two-location stock is ready. No supplier or accounting action was sent.')
   }
 
   function reviewTransfer(event: FormEvent) {
@@ -240,50 +206,33 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
   }
 
   async function confirmTransfer() {
-    if (!transferReview || (!identity && typeof localStorage === 'undefined')) return
+    if (!transferReview) return
     setBusy(true)
     setError('')
-    if (identity) {
-      try {
-        await onInventory(
-          'commerce.inventory.transferred',
-          transferReview.proof.actionId.slice(4),
-          transferReview.proof,
-          (current) => {
-            if (!current.inventoryFoundation) return null
-            const result = transferShopInventory(current.inventoryFoundation, {
-              ...transferReview,
-              catalogSkus: current.items.map((item) => item.sku).sort(),
-            })
-            return { ...current, inventoryFoundation: result.state }
-          },
-        )
-        setTransferReview(null)
-        setTransferOpen(false)
-        setNotice('The managed Shop workspace confirmed the paired location transfer.')
-      } catch (nextError) {
-        setError(nextError instanceof Error ? nextError.message : 'Managed location transfer was not confirmed.')
-      } finally {
-        setBusy(false)
-      }
-      return
+    try {
+      await onInventory(
+        'commerce.inventory.transferred',
+        transferReview.proof.actionId.slice(4),
+        transferReview.proof,
+        (current) => {
+          if (!current.inventoryFoundation) return null
+          const result = transferShopInventory(current.inventoryFoundation, {
+            ...transferReview,
+            catalogSkus: current.items.map((item) => item.sku).sort(),
+          })
+          return { ...current, inventoryFoundation: result.state }
+        },
+      )
+      setTransferReview(null)
+      setTransferOpen(false)
+      setNotice(identity
+        ? 'The managed Shop workspace confirmed the paired location transfer.'
+        : 'Stock moved inside this Shop record with paired evidence.')
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Location transfer was not confirmed.')
+    } finally {
+      setBusy(false)
     }
-    const result = await mutateShopInventoryWorkspace(
-      scope,
-      catalogSkus,
-      (current) => transferShopInventory(current, { ...transferReview, catalogSkus }),
-      localStorage,
-      browserLocks(),
-    )
-    setBusy(false)
-    if (!result.ok) {
-      setError(result.error)
-      return
-    }
-    setLocalState(result.state)
-    setTransferReview(null)
-    setTransferOpen(false)
-    setNotice(result.replayed ? 'The exact transfer was already recorded.' : 'Stock moved between locations with paired evidence.')
   }
 
   return <><ShopProductionHandoff commerce={commerce} disabled={disabled} identity={identity} onIssue={onIssue} /><section aria-labelledby="location-stock-title" className="catalog-onboarding-bridge">
@@ -292,7 +241,7 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
       <h3 id="location-stock-title">{state.revision ? `${projection.metrics.totalAvailableToPromise.toLocaleString()} available to promise` : 'Set up two locations'}</h3>
       <p>{state.revision
         ? `${projection.metrics.totalOnHand.toLocaleString()} on hand · ${projection.metrics.totalReserved.toLocaleString()} reserved · ${projection.stockUnits.length} traceable ${projection.stockUnits.length === 1 ? 'unit' : 'units'}`
-        : 'Add accountable client, vendor, location, and opening-lot evidence without another ERP menu.'}</p>
+        : 'Add accountable client, vendor, location, and opening-lot evidence inside the Shop record.'}</p>
     </div>
     {!state.revision ? <button aria-controls="location-stock-setup" aria-expanded={setupOpen} className="core-button primary" disabled={disabled} onClick={() => { setSetupOpen((current) => !current); setSetupReview(null) }} type="button">{setupOpen ? 'Close setup' : 'Set up locations'}</button>
       : <button aria-controls="location-stock-transfer" aria-expanded={transferOpen} className="core-button primary" disabled={disabled || inventoryDrift || !balanceOptions.length} onClick={() => { setTransferOpen((current) => !current); setTransferReview(null); setTransferDraft({ balanceKey: balanceOptions[0] ? `${balanceOptions[0].stockUnitId}|${balanceOptions[0].locationId}` : '', quantity: '1' }) }} type="button">{transferOpen ? 'Close move' : 'Move stock'}</button>}
@@ -310,6 +259,6 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
       <div className="form-actions">{transferReview ? <button className="core-button" disabled={busy} onClick={() => setTransferReview(null)} type="button">Edit</button> : null}<button className="core-button primary" disabled={disabled || busy || !transferQuantityValid} onClick={transferReview ? () => void confirmTransfer() : undefined} type={transferReview ? 'button' : 'submit'}>{transferReview ? busy ? 'Moving…' : 'Confirm move' : 'Review move'}</button></div>
     </form> : null}
     {inventoryDrift ? <p className="form-notice warning-text" role="alert">Aggregate Shop stock changed after location setup. Reconcile the opening layer before another move.</p> : null}
-    <p className="form-notice" aria-live="polite">{error || notice || (state.revision ? 'Transfers retain paired source and destination evidence. No supplier contact, payment, or accounting action occurs.' : 'Setup previews the exact opening package before one local write.')}</p>
+    <p className="form-notice" aria-live="polite">{error || notice || (state.revision ? 'Transfers retain paired source and destination evidence. No supplier contact, payment, or accounting action occurs.' : 'Setup previews the exact opening package before one Shop write.')}</p>
   </section></>
 }

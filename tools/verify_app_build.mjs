@@ -1289,16 +1289,19 @@ if (!shopInventorySource.includes("SHOP_INVENTORY_STATE_SCHEMA = 'supermega.shop
   || !shopInventorySource.includes('export function reserveShopInventory')
   || !shopInventorySource.includes('export function releaseShopInventoryReservation')
   || !shopInventorySource.includes('export function fulfilShopInventoryReservation')
-  || !shopInventorySource.includes('export async function mutateShopInventoryWorkspace')
-  || !shopInventorySource.includes("mode: 'exclusive'")
-  || !shopInventorySource.includes('Location stock write verification failed.')) fail('shop_inventory_foundation_contract_missing')
+  || shopInventorySource.includes('SHOP_INVENTORY_STORAGE_PREFIX')
+  || shopInventorySource.includes('mutateShopInventoryWorkspace')) fail('shop_inventory_foundation_contract_missing')
 if (['fetch(', 'supabase', 'openai', 'anthropic'].some((marker) => shopInventorySource.toLowerCase().includes(marker))) fail('shop_inventory_foundation_external_side_effect_added')
 if (!coreSource.includes('<ShopInventoryFoundation')
   || !shopInventoryUiSource.includes('Set up two locations')
   || !shopInventoryUiSource.includes('available to promise')
   || !shopInventoryUiSource.includes('No supplier or accounting action')
   || !shopInventoryUiSource.includes('Review the exact source, destination, and quantity. Nothing has moved yet.')
-  || !shopInventoryUiSource.includes('navigator.locks')
+  || !shopInventoryUiSource.includes('commerce.inventoryFoundation ?? createEmptyShopInventoryState()')
+  || !shopInventoryUiSource.includes("await onInventory(\n        'commerce.inventory.initialized'")
+  || !shopInventoryUiSource.includes("await onInventory(\n        'commerce.inventory.transferred'")
+  || shopInventoryUiSource.includes('loadShopInventoryWorkspace')
+  || shopInventoryUiSource.includes('mutateShopInventoryWorkspace')
   || shopInventoryUiSource.includes('fetch(')) fail('shop_inventory_foundation_ui_boundary_missing')
 if (!commerceSource.includes('inventoryFoundation?: ShopInventoryState')
   || !commerceSource.includes('Commerce location inventory envelope is invalid.')
@@ -2257,6 +2260,28 @@ async function verifyShopInventoryRuntime() {
       items: [{ sku: 'SKU-1', name: 'Managed item', onHand: 10, reorderAt: 2, price: 100 }],
       inventoryFoundation: managedOpening.state,
     })
+    const unifiedLocalBase = commerce.validateCommerceState({
+      ...commerce.createEmptyCommerce(),
+      items: [{ sku: 'SKU-1', name: 'Local item', onHand: 10, reorderAt: 2, price: 100 }],
+    })
+    const unifiedLocalValues = new Map([[commerce.COMMERCE_KEY, JSON.stringify(unifiedLocalBase)]])
+    const unifiedLocalStorage = {
+      getItem: (key) => unifiedLocalValues.get(key) ?? null,
+      setItem: (key, value) => unifiedLocalValues.set(key, String(value)),
+      removeItem: (key) => unifiedLocalValues.delete(key),
+    }
+    const unifiedLocalLocks = { request: async (_name, _options, callback) => callback() }
+    const unifiedLocalSetup = await commerce.mutateCommerceWorkspace(
+      (current) => current.inventoryFoundation ? null : { ...current, inventoryFoundation: managedOpening.state },
+      unifiedLocalStorage,
+      unifiedLocalLocks,
+    )
+    const unifiedLocalReload = commerce.loadCommerceWorkspace(unifiedLocalStorage)
+    assert(unifiedLocalSetup.ok
+      && unifiedLocalSetup.state.inventoryFoundation?.headDigest === managedOpening.state.headDigest
+      && unifiedLocalReload.state.inventoryFoundation?.headDigest === managedOpening.state.headDigest
+      && [...unifiedLocalValues.keys()].join(',') === commerce.COMMERCE_KEY,
+    'local_shop_location_setup_used_a_second_storage_authority')
     const managedPurchaseOrderId = 'PO-00000000-0000-4000-8000-000000000072'
     const managedOrdered = commerce.createCommercePurchaseOrder(managedBase, {
       id: managedPurchaseOrderId, expectedAt: '2026-07-28T05:00:00.000Z', supplier: 'Yangon Supply', sku: 'SKU-1', quantityOrdered: 6,
@@ -2326,66 +2351,6 @@ async function verifyShopInventoryRuntime() {
     assertThrows(() => model.applyShopInventoryImport(model.createEmptyShopInventoryState(), importPackage, proof(1, 'opening'), [...catalogSkus, 'SM-1003'], model.EMPTY_SHOP_INVENTORY_DIGEST), 'shop_inventory_stale_catalog_import_succeeded')
     assert(model.validateShopInventoryState(opening.state, [...catalogSkus, 'SM-1003']).headDigest === opening.state.headDigest, 'shop_inventory_safe_catalog_addition_invalidated_history')
 
-    const values = new Map()
-    const storage = {
-      getItem: (key) => values.get(key) ?? null,
-      setItem: (key, value) => values.set(key, String(value)),
-      removeItem: (key) => values.delete(key),
-    }
-    const scope = 'shop-runtime-verifier'
-    const storageKey = model.shopInventoryStorageKey(scope)
-    values.set(storageKey, '{malformed')
-    const recovery = model.loadShopInventoryWorkspace(storage, scope, catalogSkus)
-    assert(recovery.source === 'recovery' && values.get(storageKey) === '{malformed', 'shop_inventory_malformed_storage_was_overwritten')
-    values.clear()
-    let lockRequests = 0
-    const locks = {
-      request: async (name, options, callback) => {
-        lockRequests += 1
-        assert(name === storageKey && options?.mode === 'exclusive', 'shop_inventory_wrong_lock_contract')
-        return callback()
-      },
-    }
-    const saved = await model.mutateShopInventoryWorkspace(
-      scope,
-      catalogSkus,
-      (current) => model.applyShopInventoryImport(current, importPackage, proof(1, 'opening'), catalogSkus, current.headDigest),
-      storage,
-      locks,
-    )
-    assert(saved.ok && lockRequests === 1 && JSON.parse(values.get(storageKey)).headDigest === opening.state.headDigest, 'shop_inventory_locked_write_not_confirmed')
-    const beforeUnlocked = values.get(storageKey)
-    const unlocked = await model.mutateShopInventoryWorkspace(
-      scope,
-      catalogSkus,
-      (current) => model.transferShopInventory(current, {
-        transferId: 'TRF-NO-LOCK-001', stockUnitId: 'LOT-SM1001-BATCH-A', fromLocationId: 'LOC-MAIN', toLocationId: 'LOC-BRANCH', quantity: 1,
-        proof: proof(2, 'transfer'), catalogSkus, expectedHeadDigest: current.headDigest,
-      }),
-      storage,
-      null,
-    )
-    assert(!unlocked.ok && values.get(storageKey) === beforeUnlocked, 'shop_inventory_unlocked_write_succeeded')
-    let corruptNextWrite = true
-    const unconfirmedStorage = {
-      getItem: storage.getItem,
-      setItem: (key, value) => {
-        values.set(key, corruptNextWrite ? `${value}x` : String(value))
-        corruptNextWrite = false
-      },
-      removeItem: storage.removeItem,
-    }
-    const unconfirmed = await model.mutateShopInventoryWorkspace(
-      scope,
-      catalogSkus,
-      (current) => model.transferShopInventory(current, {
-        transferId: 'TRF-UNCONFIRMED-001', stockUnitId: 'LOT-SM1001-BATCH-A', fromLocationId: 'LOC-MAIN', toLocationId: 'LOC-BRANCH', quantity: 1,
-        proof: proof(2, 'transfer'), catalogSkus, expectedHeadDigest: current.headDigest,
-      }),
-      unconfirmedStorage,
-      locks,
-    )
-    assert(!unconfirmed.ok && values.get(storageKey) === beforeUnlocked, 'shop_inventory_unconfirmed_write_not_rolled_back')
   } catch (error) {
     fail(`shop_inventory_runtime:${error instanceof Error ? error.message : 'unknown'}`)
   }

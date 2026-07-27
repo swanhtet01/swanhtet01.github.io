@@ -2,7 +2,6 @@ export const SHOP_INVENTORY_STATE_SCHEMA = 'supermega.shop.inventory_foundation.
 export const SHOP_INVENTORY_IMPORT_CONTRACT = 'supermega.shop.inventory_import.v1' as const
 export const SHOP_INVENTORY_PROJECTION_CONTRACT = 'supermega.shop.inventory_projection.v1' as const
 export const EMPTY_SHOP_INVENTORY_DIGEST = `sha256:${'0'.repeat(64)}`
-export const SHOP_INVENTORY_STORAGE_PREFIX = 'supermega.shop.inventory-foundation.v1:'
 
 export type ShopInventoryProof = {
   actionId: string
@@ -92,15 +91,6 @@ export type ShopInventoryProjection = {
   }>
   ledger: Array<Record<string, unknown>>
   metrics: { totalOnHand: number; totalReserved: number; totalAvailableToPromise: number }
-}
-
-type StorageLike = {
-  getItem: (key: string) => string | null
-  setItem: (key: string, value: string) => void
-  removeItem: (key: string) => void
-}
-type LockLike = {
-  request: <T>(name: string, options: { mode: 'exclusive' }, callback: () => T | Promise<T>) => Promise<T>
 }
 
 const digestPattern = /^sha256:[0-9a-f]{64}$/
@@ -746,53 +736,4 @@ export function fulfilShopInventoryReservation(state: unknown, input: {
   expectedHeadDigest: unknown
 }) {
   return closeReservation(state, { ...input, kind: 'fulfil', commandId: input.fulfilmentId })
-}
-
-export function shopInventoryStorageKey(scope: string) {
-  return `${SHOP_INVENTORY_STORAGE_PREFIX}${encodeURIComponent(text(scope, 'scope', 160))}`
-}
-
-export function loadShopInventoryWorkspace(storage: StorageLike, scope: string, catalog: unknown) {
-  const key = shopInventoryStorageKey(scope)
-  const retained = storage.getItem(key)
-  if (retained === null) return { state: createEmptyShopInventoryState(), source: 'empty' as const, error: '' }
-  try {
-    return { state: validateShopInventoryState(JSON.parse(retained), catalog), source: 'current' as const, error: '' }
-  } catch (error) {
-    return { state: createEmptyShopInventoryState(), source: 'recovery' as const, error: error instanceof Error ? error.message : 'Location stock could not be recovered.' }
-  }
-}
-
-export async function mutateShopInventoryWorkspace(
-  scope: string,
-  catalog: unknown,
-  transition: (state: ShopInventoryState) => { state: ShopInventoryState; replayed: boolean },
-  storage: StorageLike,
-  locks: LockLike | null | undefined,
-) {
-  if (!locks?.request) return { ok: false as const, error: 'Location stock requires an exclusive browser lock.' }
-  try {
-    return await locks.request(shopInventoryStorageKey(scope), { mode: 'exclusive' }, () => {
-      const key = shopInventoryStorageKey(scope)
-      const previousRaw = storage.getItem(key)
-      const snapshot = loadShopInventoryWorkspace(storage, scope, catalog)
-      if (snapshot.source === 'recovery') throw new Error(`Location stock recovery required: ${snapshot.error}`)
-      const result = transition(snapshot.state)
-      const checked = validateShopInventoryState(result.state, catalog)
-      try {
-        storage.setItem(key, canonicalJson(checked))
-        const retained = loadShopInventoryWorkspace(storage, scope, catalog)
-        if (retained.source !== 'current' || retained.state.headDigest !== checked.headDigest) throw new Error('Location stock write verification failed.')
-        return { ok: true as const, state: retained.state, replayed: result.replayed }
-      } catch (error) {
-        try {
-          if (previousRaw === null) storage.removeItem(key)
-          else storage.setItem(key, previousRaw)
-        } catch { /* The failed mutation is still reported and never returned as committed. */ }
-        throw error
-      }
-    })
-  } catch (error) {
-    return { ok: false as const, error: error instanceof Error ? error.message : 'Location stock transition failed.' }
-  }
 }
