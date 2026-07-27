@@ -1,24 +1,129 @@
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import os
+import re
 import sys
 from http.cookiejar import CookieJar
 from urllib.error import HTTPError, URLError
-from urllib.request import HTTPCookieProcessor, Request, build_opener
+from urllib.parse import urlsplit
+from urllib.request import HTTPRedirectHandler, HTTPCookieProcessor, Request, build_opener
 
 
 DEFAULT_JOB_TYPES = [
+    "ops_watch",
+    "github_release_watch",
+    "task_triage",
+    "founder_brief",
+    "template_clerk",
     "revenue_scout",
     "list_clerk",
-    "template_clerk",
-    "task_triage",
-    "ops_watch",
-    "founder_brief",
-    "github_release_watch",
 ]
-DEFAULT_BASE_URL = os.getenv("SUPERMEGA_RUNTIME_BASE_URL", "https://supermega-app-453184845544.asia-southeast1.run.app").strip() or "https://supermega-app-453184845544.asia-southeast1.run.app"
+DEFAULT_DEPLOYED_BASE_URL = "https://supermega-app-453184845544.asia-southeast1.run.app"
+DEFAULT_BASE_URL = os.getenv("SUPERMEGA_RUNTIME_BASE_URL", DEFAULT_DEPLOYED_BASE_URL).strip() or DEFAULT_DEPLOYED_BASE_URL
+DEFAULT_ALLOWED_REMOTE_HOSTS = frozenset(
+    {
+        "app.supermega.dev",
+        "supermega-app-453184845544.asia-southeast1.run.app",
+    }
+)
+MAX_RESPONSE_BYTES = 262_144
+
+
+class RejectRedirectHandler(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001, ANN201
+        raise RuntimeError("runtime_redirect_rejected")
+
+
+def _allowed_remote_hosts() -> frozenset[str]:
+    configured = str(os.getenv("SUPERMEGA_AGENT_ALLOWED_HOSTS", "")).strip()
+    if not configured:
+        return DEFAULT_ALLOWED_REMOTE_HOSTS
+
+    # Runtime configuration may reduce credential destinations, never add one.
+    hosts: set[str] = set()
+    for value in configured.split(","):
+        host = value.strip().lower().rstrip(".")
+        if not host:
+            continue
+        if not re.fullmatch(r"[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?", host):
+            raise RuntimeError("invalid_runtime_allowed_host")
+        if host not in DEFAULT_ALLOWED_REMOTE_HOSTS:
+            raise RuntimeError("runtime_allowed_host_not_canonical")
+        hosts.add(host)
+    if not hosts:
+        raise RuntimeError("runtime_allowed_hosts_empty")
+    return frozenset(hosts)
+
+
+def validate_base_url(base_url: str, *, allowed_hosts: frozenset[str] | None = None) -> str:
+    raw_url = str(base_url or "").strip()
+    try:
+        parsed = urlsplit(raw_url)
+        port = parsed.port
+    except ValueError as exc:
+        raise RuntimeError("invalid_runtime_base_url") from exc
+    scheme = parsed.scheme.lower()
+    host = str(parsed.hostname or "").strip().lower().rstrip(".")
+    if scheme not in {"http", "https"} or not host:
+        raise RuntimeError("invalid_runtime_base_url")
+    if parsed.username is not None or parsed.password is not None:
+        raise RuntimeError("runtime_base_url_userinfo_rejected")
+    if parsed.query or parsed.fragment:
+        raise RuntimeError("runtime_base_url_query_or_fragment_rejected")
+    if parsed.path not in {"", "/"}:
+        raise RuntimeError("runtime_base_url_path_rejected")
+    if port == 0:
+        raise RuntimeError("runtime_base_url_port_rejected")
+
+    is_loopback = host == "localhost"
+    try:
+        parsed_ip = ipaddress.ip_address(host)
+    except ValueError:
+        parsed_ip = None
+    else:
+        is_loopback = parsed_ip.is_loopback
+
+    if not is_loopback:
+        if parsed_ip is not None:
+            raise RuntimeError("runtime_base_url_ip_literal_rejected")
+        if scheme != "https":
+            raise RuntimeError("runtime_base_url_https_required")
+        if port not in {None, 443}:
+            raise RuntimeError("runtime_base_url_port_rejected")
+        if host not in (allowed_hosts if allowed_hosts is not None else _allowed_remote_hosts()):
+            raise RuntimeError("runtime_base_url_host_not_allowed")
+
+    host_port = f"[{host}]" if ":" in host else host
+    if port is not None and not (scheme == "https" and port == 443) and not (scheme == "http" and port == 80):
+        host_port = f"{host_port}:{port}"
+    return f"{scheme}://{host_port}"
+
+
+def _read_json_response(response) -> dict:  # noqa: ANN001
+    content_type = str(response.headers.get("Content-Type", "")).lower()
+    if "application/json" not in content_type and "+json" not in content_type:
+        raise RuntimeError("runtime_response_content_type_rejected")
+    content_length = str(response.headers.get("Content-Length", "")).strip()
+    if content_length:
+        try:
+            parsed_content_length = int(content_length)
+            if parsed_content_length < 0 or parsed_content_length > MAX_RESPONSE_BYTES:
+                raise RuntimeError("runtime_response_too_large")
+        except ValueError as exc:
+            raise RuntimeError("runtime_response_content_length_invalid") from exc
+    body = response.read(MAX_RESPONSE_BYTES + 1)
+    if len(body) > MAX_RESPONSE_BYTES:
+        raise RuntimeError("runtime_response_too_large")
+    try:
+        payload = json.loads(body.decode("utf-8") or "{}")
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise RuntimeError("runtime_response_json_invalid") from exc
+    if not isinstance(payload, dict):
+        raise RuntimeError("runtime_response_shape_invalid")
+    return payload
 
 
 def request_json(
@@ -38,24 +143,21 @@ def request_json(
         headers["Content-Type"] = "application/json"
     request = Request(url, data=body, headers=headers, method=method.upper())
     with opener.open(request, timeout=timeout) as response:
-        return json.loads(response.read().decode("utf-8") or "{}")
+        return _read_json_response(response)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run the current durable SuperMega agent jobs.")
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
-    parser.add_argument("--username", default="owner")
-    parser.add_argument("--password", default="supermega-demo")
-    parser.add_argument("--workspace", default="supermega-lab")
+    parser.add_argument("--workspace", default=os.getenv("SUPERMEGA_AGENT_WORKSPACE", "supermega-lab"))
     parser.add_argument("--job-type", action="append", dest="job_types")
-    parser.add_argument("--cron-token", default="")
     parser.add_argument("--as-json", action="store_true")
     args = parser.parse_args()
 
     job_types = [str(item).strip().lower() for item in (args.job_types or DEFAULT_JOB_TYPES) if str(item).strip()]
-    opener = build_opener(HTTPCookieProcessor(CookieJar()))
-    base_url = args.base_url.rstrip("/")
-    cron_token = str(args.cron_token or os.getenv("SUPERMEGA_INTERNAL_CRON_TOKEN", "")).strip()
+    opener = build_opener(RejectRedirectHandler(), HTTPCookieProcessor(CookieJar()))
+    base_url = validate_base_url(args.base_url)
+    cron_token = str(os.getenv("SUPERMEGA_INTERNAL_CRON_TOKEN", "")).strip()
 
     if cron_token:
         enqueue_payload = request_json(
@@ -112,13 +214,20 @@ def main() -> int:
             print()
         return 0 if all(str(row.get("status", "")) == "ready" for row in results) else 1
 
+    username = str(os.getenv("SUPERMEGA_AGENT_USERNAME", "")).strip()
+    password = str(os.getenv("SUPERMEGA_AGENT_PASSWORD", "")).strip()
+    if not username or not password:
+        raise RuntimeError(
+            "Set SUPERMEGA_INTERNAL_CRON_TOKEN or both SUPERMEGA_AGENT_USERNAME and SUPERMEGA_AGENT_PASSWORD."
+        )
+
     login = request_json(
         opener,
         "POST",
         f"{base_url}/api/auth/login",
         {
-            "username": args.username,
-            "password": args.password,
+            "username": username,
+            "password": password,
             "workspace_slug": args.workspace,
         },
     )
@@ -147,7 +256,7 @@ def main() -> int:
                     "run_id": str(row.get("run_id", "")),
                 }
             )
-        except (HTTPError, URLError, TimeoutError, OSError) as exc:
+        except (RuntimeError, HTTPError, URLError, TimeoutError, OSError) as exc:
             results.append(
                 {
                     "job_type": job_type,
@@ -181,6 +290,6 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
-    except RuntimeError as exc:
+    except (RuntimeError, HTTPError, URLError, TimeoutError, OSError) as exc:
         print(str(exc), file=sys.stderr)
         raise SystemExit(1)

@@ -1,0 +1,81 @@
+{
+  "contract": "supermega.scheduler-authority.v2",
+  "authority": "vercel",
+  "environment": "production",
+  "timezone": "UTC",
+  "team_id": "team_wI4l7ZgSxcEztQPSlCCYVeJ5",
+  "project_id": "prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG",
+  "project_name": "megaos",
+  "authentication": {
+    "scheme": "Bearer",
+    "secret_environment_key": "CRON_SECRET"
+  },
+  "activation": {
+    "state": "dormant",
+    "runtime_environment_key": "SUPERMEGA_HOSTED_SCHEDULER_ENABLED",
+    "enabled_value": "1",
+    "evidence_contract": "supermega.scheduler-activation-evidence.v1",
+    "evidence_environment_key": "SUPERMEGA_SCHEDULER_ACTIVATION_EVIDENCE",
+    "signing_secret_environment_key": "SUPERMEGA_SCHEDULER_ACTIVATION_SIGNING_SECRET",
+    "maximum_bundle_ttl_seconds": 604800,
+    "maximum_evidence_age_seconds": 604800,
+    "required_evidence": [
+      "managed-database-tenant-isolation",
+      "private-storage-privacy",
+      "protected-worker-egress",
+      "queue-recovery-side-effect-accounting",
+      "protected-release-rollback-owner-decision"
+    ]
+  },
+  "crons": [],
+  "maximum_scheduler_invocations_per_day": 0,
+  "activation_plan": {
+    "crons": [
+      {
+        "id": "agent-queue",
+        "path": "/api/cron/supermega/agent-queue",
+        "schedule": "5 * * * *",
+        "job_types": ["task_triage", "ops_watch"],
+        "max_claims_per_invocation": 2,
+        "maximum_invocations_per_day": 24
+      },
+      {
+        "id": "daily",
+        "path": "/api/cron/supermega/daily",
+        "schedule": "45 0 * * *",
+        "job_types": ["founder_brief", "github_release_watch"],
+        "max_claims_per_invocation": 2,
+        "maximum_invocations_per_day": 1
+      }
+    ],
+    "maximum_scheduler_invocations_per_day": 25
+  },
+  "migration": {
+    "preflight_retiring_crons": [
+      {
+        "path": "/api/cron/supermega/agent-queue",
+        "schedule": "*/15 * * * *"
+      },
+      {
+        "path": "/api/cron/supermega/daily",
+        "schedule": "45 0 * * *"
+      }
+    ],
+    "post_deploy_retiring_crons_allowed": false
+  },
+  "worker_dispatch": {
+    "provider": "google-cloud-tasks",
+    "mode": "enqueue-on-demand",
+    "polling_allowed": false
+  },
+  "retired_authority": {
+    "provider": "google-cloud-scheduler",
+    "mutation_allowed": false,
+    "job_names": [
+      "supermega-default-agent-jobs",
+      "supermega-ops-watch",
+      "supermega-founder-brief-daily",
+      "supermega-agent-worker"
+    ]
+  }
+}

@@ -3,7 +3,7 @@ name: SuperMega Public Live Health
 on:
   workflow_run:
     workflows:
-      - SuperMega Public - Verified Prebuilt Release
+      - SuperMega - Coordinated Verified Release
     types:
       - completed
   workflow_dispatch:

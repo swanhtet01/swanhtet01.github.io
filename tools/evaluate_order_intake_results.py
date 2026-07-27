@@ -15,7 +15,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Score pre-generated AI order-intake drafts without network, storage, "
-            "command, payment, or customer-message side effects."
+            "command, payment, or customer-message side effects. Every result must "
+            "include bounded latency, token, cost, and schema-attempt metrics."
         )
     )
     parser.add_argument(
@@ -47,7 +48,7 @@ def main() -> int:
         load_json(args.results),
     )
     print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
-    return 0 if report["passed_all"] else 1
+    return 0 if report["quality_gate_passed"] else 1
 
 
 if __name__ == "__main__":

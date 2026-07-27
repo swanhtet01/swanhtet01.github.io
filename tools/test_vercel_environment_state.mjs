@@ -1,14 +1,29 @@
+import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { resolve } from 'node:path'
+import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 
 const verifier = resolve(import.meta.dirname, 'verify_vercel_environment_state.mjs')
-const env = (key) => ({ key, target: ['production'], type: 'sensitive' })
+const env = (key, options = {}) => {
+  const entry = {
+    key,
+    target: options.target ?? ['production'],
+  }
+  if (!options.omitType) entry.type = options.type ?? 'sensitive'
+  if (Object.hasOwn(options, 'value')) entry.value = options.value
+  return entry
+}
 
-function run(kind, keys, options = {}) {
-  return spawnSync(process.execPath, [verifier, kind], {
-    input: JSON.stringify({ envs: keys.map(env) }),
+function run(kind, entries, options = {}) {
+  const childEnv = { ...process.env }
+  delete childEnv.VERIFY_ENV_CLEANUP_STRICT
+  if (options.strictCleanup === false) childEnv.VERIFY_ENV_CLEANUP_STRICT = '0'
+  if (options.strictCleanup === true) childEnv.VERIFY_ENV_CLEANUP_STRICT = '1'
+  return spawnSync(process.execPath, [options.verifier ?? verifier, kind], {
+    input: JSON.stringify({ envs: entries }),
     encoding: 'utf8',
-    env: { ...process.env, VERIFY_ENV_CLEANUP_STRICT: options.strict ? '1' : '0' },
+    env: childEnv,
   })
 }
 
@@ -16,37 +31,152 @@ function parse(result) {
   return JSON.parse(result.status === 0 ? result.stdout : result.stderr)
 }
 
-const appCore = [
-  'CRON_SECRET',
-  'SUPERMEGA_INTERNAL_CRON_TOKEN',
-  'SUPERMEGA_CLOUD_TASKS_WORKER_URL',
-  'SUPERMEGA_CLOUD_TASKS_ALLOWED_HOSTS',
+const dormantSchedulerEnvironment = [
+  env('SUPERMEGA_HOSTED_SCHEDULER_ENABLED', { type: 'plain' }),
+  env('SUPERMEGA_SCHEDULER_ACTIVATION_EVIDENCE'),
+  env('SUPERMEGA_SCHEDULER_ACTIVATION_SIGNING_SECRET'),
+  env('CRON_SECRET'),
+  env('SUPERMEGA_INTERNAL_CRON_TOKEN', { type: 'encrypted' }),
+  env('SUPERMEGA_CLOUD_TASKS_WORKER_URL', { type: 'plain' }),
+  env('SUPERMEGA_CLOUD_TASKS_ALLOWED_HOSTS', { type: 'plain' }),
 ]
 const managedTrial = [
-  'SUPERMEGA_DATABASE_URL',
-  'SUPERMEGA_TRIAL_IDENTITY_SECRET',
-  'SUPERMEGA_TRIAL_WRITES_ENABLED',
+  env('SUPERMEGA_DATABASE_URL', { type: 'secret' }),
+  env('SUPERMEGA_TRIAL_IDENTITY_SECRET'),
+  env('SUPERMEGA_TRIAL_WRITES_ENABLED', { type: 'plain' }),
 ]
 
-const isolated = run('app', appCore)
-if (isolated.status !== 0 || parse(isolated).operatingMode !== 'isolated_demo') throw new Error('isolated_app_contract_failed')
+const isolated = run('app', [])
+assert.equal(isolated.status, 0, 'isolated_app_contract_failed')
+assert.equal(parse(isolated).operatingMode, 'isolated_demo', 'isolated_app_mode_failed')
+assert.equal(parse(isolated).schedulerActivation, 'dormant', 'dormant_scheduler_state_missing')
 
-const managed = run('app', [...appCore, ...managedTrial, 'VITE_SUPABASE_URL'])
-if (managed.status !== 0 || parse(managed).operatingMode !== 'managed_trial' || parse(managed).cleanupCandidateCount !== 1) throw new Error('managed_app_contract_failed')
+const managed = run('app', managedTrial)
+assert.equal(managed.status, 0, 'managed_app_contract_failed')
+assert.equal(parse(managed).operatingMode, 'managed_trial', 'managed_app_mode_failed')
 
-const partialManaged = run('app', [...appCore, managedTrial[0]])
-if (partialManaged.status === 0 || !parse(partialManaged).failures.includes('managed_trial_environment_incomplete')) throw new Error('partial_managed_app_allowed')
+const partialManaged = run('app', [managedTrial[0]])
+assert.notEqual(partialManaged.status, 0, 'partial_managed_app_allowed')
+assert.ok(parse(partialManaged).failures.includes('managed_trial_environment_incomplete'))
 
-const publicReady = run('public', ['SUPERMEGA_CONTACT_IDEMPOTENCY_SECRET', 'SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'])
-if (publicReady.status !== 0 || !parse(publicReady).deliveryModes.includes('supabase')) throw new Error('public_delivery_contract_failed')
+const dormantScheduler = run('app', dormantSchedulerEnvironment)
+assert.notEqual(dormantScheduler.status, 0, 'dormant_scheduler_environment_allowed')
+assert.ok(parse(dormantScheduler).failures.includes('dormant_scheduler_environment_present'))
 
-const publicNoDelivery = run('public', ['SUPERMEGA_CONTACT_IDEMPOTENCY_SECRET'])
-if (publicNoDelivery.status === 0 || !parse(publicNoDelivery).failures.includes('contact_delivery_environment_missing')) throw new Error('public_without_delivery_allowed')
+const activeFixtureDirectory = mkdtempSync(join(tmpdir(), 'supermega-vercel-env-active-'))
+const activeVerifier = join(activeFixtureDirectory, 'verify_vercel_environment_state.mjs')
+const activeAuthorityPath = join(activeFixtureDirectory, 'supermega_scheduler_authority.json')
+copyFileSync(verifier, activeVerifier)
+const activeAuthority = JSON.parse(readFileSync(resolve(import.meta.dirname, 'supermega_scheduler_authority.json'), 'utf8'))
+activeAuthority.activation.state = 'active'
+writeFileSync(activeAuthorityPath, JSON.stringify(activeAuthority))
+try {
+  const activeScheduler = run('app', [...managedTrial, ...dormantSchedulerEnvironment], { verifier: activeVerifier })
+  assert.equal(activeScheduler.status, 0, 'active_scheduler_environment_rejected')
+  assert.equal(parse(activeScheduler).schedulerActivation, 'active')
 
-const browserSecret = run('app', [...appCore, 'VITE_SUPABASE_SERVICE_ROLE_KEY'])
-if (browserSecret.status === 0 || !parse(browserSecret).failures.includes('browser_exposed_secret_name_present')) throw new Error('browser_secret_allowed')
+  const missingActivationEvidence = run(
+    'app',
+    [...managedTrial, ...dormantSchedulerEnvironment.filter((entry) => entry.key !== 'SUPERMEGA_SCHEDULER_ACTIVATION_EVIDENCE')],
+    { verifier: activeVerifier },
+  )
+  assert.notEqual(missingActivationEvidence.status, 0, 'missing_activation_evidence_allowed')
+  assert.ok(parse(missingActivationEvidence).missing.includes('SUPERMEGA_SCHEDULER_ACTIVATION_EVIDENCE'))
 
-const strictCleanup = run('app', [...appCore, 'VITE_SUPABASE_URL'], { strict: true })
-if (strictCleanup.status === 0 || !parse(strictCleanup).failures.includes('legacy_environment_variables_present')) throw new Error('strict_cleanup_contract_failed')
+  const plainActivationEvidence = run(
+    'app',
+    [
+      ...managedTrial,
+      ...dormantSchedulerEnvironment.filter((entry) => entry.key !== 'SUPERMEGA_SCHEDULER_ACTIVATION_EVIDENCE'),
+      env('SUPERMEGA_SCHEDULER_ACTIVATION_EVIDENCE', { type: 'plain' }),
+    ],
+    { verifier: activeVerifier },
+  )
+  assert.notEqual(plainActivationEvidence.status, 0, 'plain_activation_evidence_allowed')
+  assert.ok(parse(plainActivationEvidence).failures.includes('scheduler_activation_environment_not_protected'))
 
-console.log(JSON.stringify({ ok: true, contract: 'supermega_vercel_environment_state_tests', checks: 7 }, null, 2))
+  const previewActivationSecret = run(
+    'app',
+    [
+      ...managedTrial,
+      ...dormantSchedulerEnvironment.filter((entry) => entry.key !== 'SUPERMEGA_SCHEDULER_ACTIVATION_SIGNING_SECRET'),
+      env('SUPERMEGA_SCHEDULER_ACTIVATION_SIGNING_SECRET', { target: ['production', 'preview'] }),
+    ],
+    { verifier: activeVerifier },
+  )
+  assert.notEqual(previewActivationSecret.status, 0, 'preview_activation_secret_allowed')
+  assert.ok(parse(previewActivationSecret).invalidScopeVariables.includes('SUPERMEGA_SCHEDULER_ACTIVATION_SIGNING_SECRET'))
+} finally {
+  rmSync(activeFixtureDirectory, { recursive: true, force: true })
+}
+
+const publicReady = run('public', [
+  env('SUPERMEGA_CONTACT_IDEMPOTENCY_SECRET'),
+  env('SUPABASE_URL', { type: 'plain' }),
+  env('SUPABASE_SERVICE_ROLE_KEY'),
+])
+assert.equal(publicReady.status, 0, 'public_delivery_contract_failed')
+assert.ok(parse(publicReady).deliveryModes.includes('supabase'))
+
+const publicNoDelivery = run('public', [env('SUPERMEGA_CONTACT_IDEMPOTENCY_SECRET')])
+assert.notEqual(publicNoDelivery.status, 0, 'public_without_delivery_allowed')
+assert.ok(parse(publicNoDelivery).failures.includes('contact_delivery_environment_missing'))
+
+const browserSecret = run('app', [env('VITE_SUPABASE_SERVICE_ROLE_KEY')], { strictCleanup: false })
+assert.notEqual(browserSecret.status, 0, 'browser_secret_allowed')
+assert.ok(parse(browserSecret).failures.includes('browser_exposed_secret_name_present'))
+
+const previewLeakage = run('app', [
+  ...managedTrial.filter((entry) => entry.key !== 'SUPERMEGA_TRIAL_IDENTITY_SECRET'),
+  env('SUPERMEGA_TRIAL_IDENTITY_SECRET', { target: ['production', 'preview'] }),
+])
+assert.notEqual(previewLeakage.status, 0, 'preview_scope_leakage_allowed')
+assert.ok(parse(previewLeakage).failures.includes('allowed_environment_scope_not_production_only'))
+assert.deepEqual(parse(previewLeakage).invalidScopeVariables, ['SUPERMEGA_TRIAL_IDENTITY_SECRET'])
+
+const plainCredential = run('app', [
+  ...managedTrial.filter((entry) => entry.key !== 'SUPERMEGA_TRIAL_IDENTITY_SECRET'),
+  env('SUPERMEGA_TRIAL_IDENTITY_SECRET', { type: 'plain' }),
+])
+assert.notEqual(plainCredential.status, 0, 'plain_credential_allowed')
+assert.ok(parse(plainCredential).failures.includes('credential_environment_type_not_protected'))
+
+const missingCredentialType = run('app', [
+  ...managedTrial.filter((entry) => entry.key !== 'SUPERMEGA_TRIAL_IDENTITY_SECRET'),
+  env('SUPERMEGA_TRIAL_IDENTITY_SECRET', { omitType: true }),
+])
+assert.notEqual(missingCredentialType.status, 0, 'missing_credential_type_allowed')
+assert.ok(parse(missingCredentialType).unprotectedCredentialVariables.includes('SUPERMEGA_TRIAL_IDENTITY_SECRET'))
+
+const duplicate = run('app', [...managedTrial, env('SUPERMEGA_TRIAL_IDENTITY_SECRET')])
+assert.notEqual(duplicate.status, 0, 'duplicate_environment_definition_allowed')
+assert.ok(parse(duplicate).failures.includes('duplicate_environment_variables_present'))
+assert.deepEqual(parse(duplicate).duplicateEnvironmentKeys, ['SUPERMEGA_TRIAL_IDENTITY_SECRET'])
+
+const conflicting = run('app', [...managedTrial, env('SUPERMEGA_TRIAL_IDENTITY_SECRET', { target: ['preview'], type: 'plain' })])
+assert.notEqual(conflicting.status, 0, 'conflicting_environment_definition_allowed')
+assert.ok(parse(conflicting).failures.includes('conflicting_environment_definitions_present'))
+assert.deepEqual(parse(conflicting).conflictingEnvironmentKeys, ['SUPERMEGA_TRIAL_IDENTITY_SECRET'])
+
+const validPlainConfig = run('app', [env('SUPERMEGA_CORS_ORIGINS', { type: 'plain' })])
+assert.equal(validPlainConfig.status, 0, 'plain_non_secret_config_rejected')
+
+const strictCleanup = run('app', [env('LEGACY_FLAG', { type: 'plain' })])
+assert.notEqual(strictCleanup.status, 0, 'strict_cleanup_not_enabled_by_default')
+assert.equal(parse(strictCleanup).strictCleanup, true)
+assert.ok(parse(strictCleanup).failures.includes('legacy_environment_variables_present'))
+
+const diagnosticCleanup = run('app', [env('LEGACY_FLAG', { type: 'plain' })], { strictCleanup: false })
+assert.equal(diagnosticCleanup.status, 0, 'diagnostic_cleanup_disable_failed')
+assert.equal(parse(diagnosticCleanup).strictCleanup, false)
+assert.deepEqual(parse(diagnosticCleanup).cleanupCandidates, ['LEGACY_FLAG'])
+
+const sentinel = 'must-never-appear-in-verifier-output'
+const redaction = run('app', [
+  ...managedTrial.filter((entry) => entry.key !== 'SUPERMEGA_TRIAL_IDENTITY_SECRET'),
+  env('SUPERMEGA_TRIAL_IDENTITY_SECRET', { value: sentinel }),
+])
+assert.equal(redaction.status, 0, 'redaction_fixture_failed')
+assert.equal(`${redaction.stdout}${redaction.stderr}`.includes(sentinel), false, 'environment_value_disclosed')
+
+console.log(JSON.stringify({ ok: true, contract: 'supermega_vercel_environment_state_tests', checks: 20 }, null, 2))

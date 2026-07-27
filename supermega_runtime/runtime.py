@@ -21,6 +21,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from supermega_runtime.cloud_runtime import router as cloud_runtime_router
 from supermega_runtime.commerce_runtime import reduce_commerce_state
+from supermega_runtime.order_intake_provider import (
+    OpenAIOrderIntakeProvider,
+    OrderIntakeProviderError,
+)
+from supermega_runtime.production_runtime import reduce_production_state
 from supermega_runtime.supabase_auth import SupabaseAuthConfig, verify_supabase_user_token
 from supermega_runtime.trial_runtime import create_trial_router
 from supermega_runtime.trial_store import (
@@ -35,7 +40,6 @@ SERVICE_NAME = "supermega-service"
 SERVICE_VERSION = "1.1.0"
 TRIAL_EVENT_BY_SURFACE = {
     "company": "company.snapshot.saved",
-    "production": "production.snapshot.saved",
     "setup": "setup.snapshot.saved",
 }
 _IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
@@ -87,7 +91,6 @@ def _validate_state_shape(surface: str, state: Mapping[str, Any]) -> None:
     required_lists = {
         "company": ("tasks",),
         "commerce": ("items", "orders", "closes"),
-        "production": ("jobs", "issues", "machines"),
     }
     if surface in required_lists:
         missing = [key for key in required_lists[surface] if not isinstance(state.get(key), list)]
@@ -111,6 +114,8 @@ def reduce_trial_state(
 
     if surface == "commerce":
         state = reduce_commerce_state(event_type, current, payload)
+    elif surface == "production":
+        state = reduce_production_state(event_type, current, payload)
     elif surface == "website":
         state = reduce_website_state(event_type, current, payload)
     else:
@@ -241,6 +246,10 @@ def create_app() -> FastAPI:
         reducer=reduce_trial_state,
         write_enabled=_flag("SUPERMEGA_TRIAL_WRITES_ENABLED"),
     )
+    try:
+        order_intake_provider = OpenAIOrderIntakeProvider.from_environment()
+    except OrderIntakeProviderError:
+        order_intake_provider = None
     app = FastAPI(
         title="SuperMega Service",
         version=SERVICE_VERSION,
@@ -312,6 +321,11 @@ def create_app() -> FastAPI:
                 "write_enabled": readiness.write_enabled,
                 "browser_service_role_exposed": False,
             },
+            "ai": {
+                "order_intake_configured": order_intake_provider is not None,
+                "browser_api_key_exposed": False,
+                "operational_actions_allowed": False,
+            },
             "enterprise_activation": {
                 "status": "ready" if not requirements else "attention",
                 "requirements": requirements,
@@ -319,7 +333,13 @@ def create_app() -> FastAPI:
             },
         }
 
-    app.include_router(create_trial_router(store=store, resolve_principal=resolve_trial_principal))
+    app.include_router(
+        create_trial_router(
+            store=store,
+            resolve_principal=resolve_trial_principal,
+            order_intake_provider=order_intake_provider,
+        )
+    )
     app.include_router(cloud_runtime_router)
     return app
 

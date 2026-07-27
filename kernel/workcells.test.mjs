@@ -1,7 +1,12 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { claimActivity, releaseActivityClaim } from './store.mjs'
+import {
+  claimActivity,
+  getActivityClaim,
+  releaseActivityClaim,
+  transitionActivityClaim,
+} from './store.mjs'
 import { claimWorkcellDelivery, deliveryClaimId, formatWorkcellNotification, runWorkcell } from './workcell-run.mjs'
 import { listWorkcells, resolveWorkcellConfig, scheduledWorkcellSlugs } from './workcells.mjs'
 
@@ -118,9 +123,16 @@ test('notifications are bounded and delivery claims are stable and atomic', asyn
   assert.ok(message.length <= 3500)
 
   const id = `workcell:test-${Date.now()}-${Math.random()}`
-  assert.equal((await claimActivity({ id, kind: 'test', summary: 'first' })).fresh, true)
+  assert.equal((await claimActivity({ id, kind: 'test', summary: 'first', ref: 'owner-a' })).fresh, true)
   assert.equal((await claimActivity({ id, kind: 'test', summary: 'duplicate' })).fresh, false)
-  assert.equal(await releaseActivityClaim(id), true)
+  assert.equal(await releaseActivityClaim(id, 'owner-b'), false)
+  assert.equal((await claimActivity({ id, kind: 'test', summary: 'still-claimed' })).fresh, false)
+  assert.equal((await getActivityClaim(id)).claim.ref, 'owner-a')
+  assert.equal((await transitionActivityClaim(id, 'owner-b', 'owner-c')).updated, false)
+  assert.equal((await transitionActivityClaim(id, 'owner-a', 'owner-c')).updated, true)
+  assert.equal((await getActivityClaim(id)).claim.ref, 'owner-c')
+  assert.equal(await releaseActivityClaim(id, 'owner-a'), false)
+  assert.equal(await releaseActivityClaim(id, 'owner-c'), true)
   assert.equal((await claimActivity({ id, kind: 'test', summary: 'retry' })).fresh, true)
 
   const claims = []

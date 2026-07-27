@@ -489,7 +489,12 @@ export async function runCompanyWorkOrder(input, options = {}) {
   try { result = await execute(record.input) }
   catch { result = failure('company_work_order_dispatch_failed', { status: 'failed' }) }
 
-  if (result.reason === 'company_claim_unavailable' || result.reason === 'company_durable_claim_required') {
+  if ([
+    'company_claim_unavailable',
+    'company_durable_claim_required',
+    'company_capacity_unavailable',
+    'company_capacity_exhausted',
+  ].includes(result.reason)) {
     const retryable = { ...running, status: 'planned', updatedAt: now(), lastDispatch: { reason: result.reason } }
     try { await save(recordKey(workOrderId), retryable) } catch { /* next read reports running */ }
     return failure(result.reason, { status: 'blocked', workOrderId, workOrder: publicWorkOrder(retryable) })

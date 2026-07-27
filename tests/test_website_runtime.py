@@ -5,10 +5,24 @@ import unittest
 
 from supermega_runtime.trial_store import TrialValidationError
 from supermega_runtime.website_runtime import (
+    WEBSITE_EVENTS,
+    WEBSITE_HUMAN_EVENTS,
+    _canonical_digest,
+    _website_artifact,
     _website_fingerprint,
     reduce_website_state,
     validate_website_snapshot_source,
     validate_website_state,
+)
+from supermega_runtime.website_release_foundation import (
+    approve_website_release_package,
+    build_website_release_package,
+    create_empty_website_release_state,
+    prepare_website_deploy_plan,
+    prepare_website_release_package,
+    project_website_release,
+    website_release_evidence_digest,
+    website_release_template,
 )
 
 
@@ -27,7 +41,7 @@ def _page(page_id: str = "page-home", slug: str = "/") -> dict[str, object]:
             "headline": "Run the website with evidence.",
             "summary": "A bounded Website workspace for accountable content and release records.",
             "ctaLabel": "Start",
-            "ctaHref": "/start",
+            "ctaHref": "/",
         },
         "sections": [
             {
@@ -118,11 +132,272 @@ def _record_evidence(current: dict[str, object], kind: str) -> dict[str, object]
     return dict(reduce_website_state("website.evidence.recorded", current, payload))
 
 
+def _published_state() -> dict[str, object]:
+    current = _state()
+    current["revision"] = 1
+    current["contentRevision"] = 1
+    for kind in ("content", "responsive", "links"):
+        current = _record_evidence(current, kind)
+    source = _source(current)
+    evidence_ids = [entry["id"] for entry in current["evidence"]]
+    approval = {
+        "id": "approval-managed-release",
+        "reviewer": "actor-human",
+        "note": "Approved current Website revision",
+        "approvedAt": STAMP,
+        "fingerprint": source["digest"],
+        "evidenceIds": evidence_ids,
+        "source": source,
+        "migratedFromV1": False,
+    }
+    approved = deepcopy(current)
+    approved["revision"] = int(current["revision"]) + 1
+    approved["approvals"] = [approval]
+    approved["events"] = [
+        {
+            "id": "event-approval-managed-release",
+            "createdAt": STAMP,
+            "actorKind": "human",
+            "actor": "actor-human",
+            "action": "website_revision_approved",
+            "subjectId": approval["id"],
+            "reason": approval["note"],
+            "evidenceReference": ",".join(evidence_ids),
+            "source": source,
+        },
+        *current["events"],
+    ]
+    current = dict(reduce_website_state(
+        "website.revision.approved",
+        current,
+        _command(
+            approved,
+            action_id=str(approval["id"]),
+            reason=str(approval["note"]),
+            reference=",".join(evidence_ids),
+        ),
+    ))
+    publish = {
+        "id": "snapshot-managed-release",
+        "recordedAt": STAMP,
+        "recordedBy": "actor-human",
+        "fingerprint": source["digest"],
+        "readyPageIds": ["page-home"],
+        "approvalId": approval["id"],
+        "evidenceIds": evidence_ids,
+        "source": source,
+        "migratedFromV1": False,
+        "artifact": _website_artifact(current),
+    }
+    snapshotted = deepcopy(current)
+    snapshotted["revision"] = int(current["revision"]) + 1
+    snapshotted["localPublishes"] = [publish]
+    snapshotted["events"] = [
+        {
+            "id": "event-snapshot-managed-release",
+            "createdAt": STAMP,
+            "actorKind": "human",
+            "actor": "actor-human",
+            "action": "local_snapshot_recorded",
+            "subjectId": publish["id"],
+            "reason": "Approved browser-local snapshot recorded",
+            "evidenceReference": approval["id"],
+            "source": source,
+        },
+        *current["events"],
+    ]
+    return dict(reduce_website_state(
+        "website.snapshot.recorded",
+        current,
+        _command(
+            snapshotted,
+            action_id=str(publish["id"]),
+            reason="Approved browser-local snapshot recorded",
+            reference=str(approval["id"]),
+        ),
+    ))
+
+
+def _release_proof(sequence: int, actor: str = "actor-human") -> dict[str, str]:
+    return {
+        "actionId": f"ACT-WEBSITE-RELEASE-{sequence:03d}",
+        "capturedAt": STAMP,
+        "actor": actor,
+        "reason": "Prepared Website release evidence" if sequence == 1 else "Reviewed Website release evidence",
+        "evidenceReference": f"WEBSITE-RELEASE-{sequence:03d}",
+    }
+
+
+def _release_package(current: dict[str, object], scope: str, actor: str = "actor-human") -> dict[str, object]:
+    publish = current["localPublishes"][0]
+    approval = current["approvals"][0]
+    evidence_by_id = {entry["id"]: entry for entry in current["evidence"]}
+    source_evidence = sorted(
+        (
+            {
+                "id": evidence_by_id[identifier]["id"],
+                "kind": evidence_by_id[identifier]["kind"],
+                "reference": evidence_by_id[identifier]["reference"],
+                "verifiedBy": evidence_by_id[identifier]["verifiedBy"],
+                "verifiedAt": evidence_by_id[identifier]["verifiedAt"],
+            }
+            for identifier in publish["evidenceIds"]
+        ),
+        key=lambda row: row["kind"],
+    )
+    artifact_digest = website_release_evidence_digest(publish["artifact"])
+    return build_website_release_package(
+        package_id=f"package-{artifact_digest[7:23]}-v2",
+        source={
+            "scope": scope,
+            "snapshotId": publish["id"],
+            "websiteFingerprint": publish["fingerprint"],
+            "artifactDigest": artifact_digest,
+            "contentRevision": publish["source"]["contentRevision"],
+            "contentApprovalId": approval["id"],
+            "contentApprovalActor": approval["reviewer"],
+            "contentApprovalAt": approval["approvedAt"],
+            "evidence": source_evidence,
+        },
+        template=website_release_template(2),
+        brand={
+            "schema": "supermega.website.brand_tokens.v1",
+            "palette": {"accent": "#087f5b", "ink": "#17211b", "surface": "#f7f8f4"},
+            "typography": {"body": "noto-sans-myanmar", "heading": "system-sans"},
+            "radiusPx": 12,
+        },
+        locales=[{
+            "locale": "en",
+            "isDefault": True,
+            "status": "approved",
+            "contentDigest": website_release_evidence_digest({"artifact": artifact_digest, "locale": "en"}),
+        }],
+        media=[],
+        roles=[
+            {"role": "content_owner", "actor": approval["reviewer"]},
+            {"role": "release_manager", "actor": actor},
+            {"role": "release_reviewer", "actor": actor},
+        ],
+    )
+
+
 class WebsiteRuntimeTests(unittest.TestCase):
+    def test_managed_release_records_bind_the_current_site_file(self) -> None:
+        self.assertIn("website.release.recorded", WEBSITE_EVENTS)
+        self.assertIn("website.release.recorded", WEBSITE_HUMAN_EVENTS)
+        current = _published_state()
+        artifact_digest = website_release_evidence_digest(current["localPublishes"][0]["artifact"])
+        scope = f"website:{artifact_digest}"
+        empty = create_empty_website_release_state(scope)
+        prepared = prepare_website_release_package(
+            empty,
+            _release_package(current, scope),
+            _release_proof(1),
+            expected_head_digest=empty["headDigest"],
+        )["state"]
+        approval_proof = _release_proof(2)
+        package = project_website_release(prepared)["package"]
+        approved = approve_website_release_package(
+            prepared,
+            approval_id=f"review-{artifact_digest[7:23]}",
+            package_digest=package["packageDigest"],
+            note="Template, brand, source evidence, and release boundary reviewed.",
+            proof=approval_proof,
+            expected_head_digest=prepared["headDigest"],
+        )["state"]
+        next_state = deepcopy(current)
+        next_state["revision"] = int(current["revision"]) + 1
+        next_state["releaseRecords"] = [approved]
+        accepted = dict(reduce_website_state(
+            "website.release.recorded",
+            current,
+            {"state": next_state, "evidence": approval_proof},
+        ))
+        self.assertEqual(accepted["releaseRecords"][0]["revision"], 2)
+        self.assertEqual(accepted["localPublishes"], current["localPublishes"])
+        self.assertEqual(accepted["events"], current["events"])
+
+        plan_proof = _release_proof(3)
+        planned_record = prepare_website_deploy_plan(
+            approved,
+            plan_id=f"plan-{artifact_digest[7:23]}",
+            package_digest=package["packageDigest"],
+            approval_id=f"review-{artifact_digest[7:23]}",
+            target={
+                "provider": "vercel",
+                "projectRef": "owner-bound-at-execution",
+                "environment": "production",
+                "protection": "required",
+            },
+            previous_deployment=None,
+            proof=plan_proof,
+            expected_head_digest=approved["headDigest"],
+        )["state"]
+        planned = deepcopy(accepted)
+        planned["revision"] = int(accepted["revision"]) + 1
+        planned["releaseRecords"] = [planned_record]
+        accepted_plan = reduce_website_state(
+            "website.release.recorded",
+            accepted,
+            {"state": planned, "evidence": plan_proof},
+        )
+        self.assertEqual(project_website_release(accepted_plan["releaseRecords"][0])["status"], "plan_ready")
+
+        wrong_source_empty = create_empty_website_release_state("website:wrong-source")
+        wrong_source_prepared = prepare_website_release_package(
+            wrong_source_empty,
+            _release_package(current, "website:wrong-source"),
+            _release_proof(4),
+            expected_head_digest=wrong_source_empty["headDigest"],
+        )["state"]
+        wrong_source = deepcopy(current)
+        wrong_source["revision"] = int(current["revision"]) + 1
+        wrong_source["releaseRecords"] = [wrong_source_prepared]
+        with self.assertRaises(TrialValidationError):
+            reduce_website_state(
+                "website.release.recorded",
+                current,
+                {"state": wrong_source, "evidence": _release_proof(4)},
+            )
+
+        spoofed_empty = create_empty_website_release_state(scope)
+        spoofed_prepared = prepare_website_release_package(
+            spoofed_empty,
+            _release_package(current, scope, actor="actor-spoofed"),
+            _release_proof(5, actor="actor-spoofed"),
+            expected_head_digest=spoofed_empty["headDigest"],
+        )["state"]
+        spoofed = deepcopy(current)
+        spoofed["revision"] = int(current["revision"]) + 1
+        spoofed["releaseRecords"] = [spoofed_prepared]
+        with self.assertRaises(TrialValidationError):
+            reduce_website_state(
+                "website.release.recorded",
+                current,
+                {"state": spoofed, "evidence": _release_proof(5)},
+            )
+
+        removed = deepcopy(accepted)
+        removed["revision"] = int(accepted["revision"]) + 1
+        removed["contentRevision"] = int(accepted["contentRevision"]) + 1
+        removed["siteName"] = "Changed without retained release evidence"
+        removed.pop("releaseRecords")
+        with self.assertRaises(TrialValidationError):
+            reduce_website_state(
+                "website.content.saved",
+                accepted,
+                _command(
+                    removed,
+                    action_id="content-after-release",
+                    reason="Website draft content saved",
+                    reference="website:content:2",
+                ),
+            )
+
     def test_fingerprint_matches_browser_utf16_hashing(self) -> None:
         state = _state()
         state["siteName"] = "စူပါမီဂါ 🚀"
-        self.assertEqual(_website_fingerprint(state), "web-82a070b9")
+        self.assertEqual(_website_fingerprint(state), "web-d3f36a73")
         reordered = _reverse_object_keys(state)
         assert isinstance(reordered, dict)
         self.assertEqual(_website_fingerprint(state), _website_fingerprint(reordered))
@@ -171,6 +446,26 @@ class WebsiteRuntimeTests(unittest.TestCase):
         current["pages"].append(draft_page)
         for kind in ("content", "responsive", "links"):
             current = _record_evidence(current, kind)
+
+        relabeled_migration = deepcopy(current)
+        relabeled_migration["evidence"][0]["migratedFromV1"] = True
+        relabeled_subject = relabeled_migration["evidence"][0]["id"]
+        relabeled_migration["events"] = [
+            event for event in relabeled_migration["events"] if event["subjectId"] != relabeled_subject
+        ]
+        relabeled_migration["contentRevision"] = relabeled_migration["revision"]
+        forged_records = {
+            "evidence": [entry for entry in relabeled_migration["evidence"] if entry["migratedFromV1"]],
+            "approvals": [],
+            "localPublishes": [],
+        }
+        relabeled_migration["legacyImport"] = {
+            "schema": "supermega.website.legacy-import.v1",
+            "recordIds": [entry["id"] for entry in forged_records["evidence"]],
+            "digest": f"legacy-{_canonical_digest(forged_records)}",
+        }
+        with self.assertRaises(TrialValidationError):
+            validate_website_state(relabeled_migration)
 
         source = _source(current)
         evidence_ids = [entry["id"] for entry in current["evidence"]]
@@ -238,6 +533,7 @@ class WebsiteRuntimeTests(unittest.TestCase):
             "evidenceIds": evidence_ids,
             "source": source,
             "migratedFromV1": False,
+            "artifact": _website_artifact(current),
         }
         publish_event = {
             "id": "event-snapshot-1",
@@ -273,6 +569,19 @@ class WebsiteRuntimeTests(unittest.TestCase):
                 current,
                 _command(
                     draft_included,
+                    action_id="snapshot-1",
+                    reason="Approved browser-local snapshot recorded",
+                    reference="approval-1",
+                ),
+            )
+        tampered_artifact = deepcopy(snapshotted)
+        tampered_artifact["localPublishes"][0]["artifact"]["pages"][0]["hero"]["headline"] = "Changed after approval"
+        with self.assertRaises(TrialValidationError):
+            reduce_website_state(
+                "website.snapshot.recorded",
+                current,
+                _command(
+                    tampered_artifact,
                     action_id="snapshot-1",
                     reason="Approved browser-local snapshot recorded",
                     reference="approval-1",
@@ -333,6 +642,27 @@ class WebsiteRuntimeTests(unittest.TestCase):
                 "website.revision.approved",
                 current,
                 _command(tampered, action_id="approval-1", reason=str(approval["note"]), reference=",".join(evidence_ids)),
+            )
+
+    def test_managed_command_cannot_reclassify_a_deleted_release_record(self) -> None:
+        current = _record_evidence(_state(), "content")
+        forged = deepcopy(current)
+        forged["revision"] = int(current["revision"]) + 1
+        forged["contentRevision"] = forged["revision"]
+        forged["evidence"] = []
+        forged["events"] = []
+
+        self.assertEqual(validate_website_state(forged), forged)
+        with self.assertRaises(TrialValidationError):
+            reduce_website_state(
+                "website.content.saved",
+                current,
+                _command(
+                    forged,
+                    action_id="content-forged",
+                    reason="Website draft content saved",
+                    reference="website:content:2",
+                ),
             )
 
     def test_initialization_rejects_client_asserted_history_and_invalid_timestamp(self) -> None:

@@ -6,7 +6,13 @@ import { createHash } from 'node:crypto'
 import { listCompanyAgents, MAX_CYCLE_ROLE_BUDGET } from './agent-company.mjs'
 import { loadCrew } from './crew-runner.mjs'
 
-const stage = (id, name, agentId, objective) => Object.freeze({ id, name, agentId, objective })
+const stage = (id, name, agentId, objective, crew = null) => Object.freeze({
+  id,
+  name,
+  agentId,
+  objective,
+  ...(crew ? { crew } : {}),
+})
 const playbook = (definition) => Object.freeze({
   ...definition,
   stages: Object.freeze(definition.stages),
@@ -21,7 +27,7 @@ export const COMPANY_PLAYBOOKS = Object.freeze([
     intake: 'Approved messages, files, exports, definitions, business question, and known gaps.',
     stages: [
       stage('organize', 'Organize evidence', 'evidence-organizer', 'Normalize sources, facts, gaps, and accountable follow-ups.'),
-      stage('analyze', 'Build decision analysis', 'data-insights-analyst', 'Calculate only source-supported metrics and frame the decision.'),
+      stage('analyze', 'Build decision analysis', 'operations-analyst', 'Calculate only source-supported metrics and frame the decision.', 'data-insights-desk'),
       stage('assure', 'Review the decision packet', 'quality-reviewer', 'Audit the exact packet against sources and acceptance rules.'),
     ],
   }),
@@ -81,7 +87,7 @@ export const COMPANY_PLAYBOOKS = Object.freeze([
     deliverable: 'A validated document register, canonical knowledge update, and quality verdict.',
     intake: 'Approved business documents, field requirements, source labels, effective dates, and known exceptions.',
     stages: [
-      stage('extract', 'Process documents', 'document-processor', 'Extract required fields with source references and exception flags.'),
+      stage('extract', 'Process documents', 'knowledge-manager', 'Extract required fields with source references and exception flags.', 'document-processing-desk'),
       stage('codify', 'Build operating knowledge', 'knowledge-manager', 'Convert accepted records into canonical answers and procedures.'),
       stage('assure', 'Review the records', 'quality-reviewer', 'Audit structured records and procedures against source documents.'),
     ],
@@ -93,7 +99,7 @@ export const COMPANY_PLAYBOOKS = Object.freeze([
     deliverable: 'A decision and action register, controlled delivery update, and quality verdict.',
     intake: 'Approved transcript or notes, attendee roles, project context, dates, and decision rules.',
     stages: [
-      stage('capture', 'Capture decisions and actions', 'meeting-actions-coordinator', 'Separate decisions, actions, owners, dates, risks, and open questions.'),
+      stage('capture', 'Capture decisions and actions', 'project-controller', 'Separate decisions, actions, owners, dates, risks, and open questions.', 'meeting-actions-desk'),
       stage('control', 'Update delivery control', 'project-controller', 'Map accepted actions to critical path and accountable status.'),
       stage('assure', 'Review the action packet', 'quality-reviewer', 'Check actions and status against the approved meeting source.'),
     ],
@@ -106,7 +112,7 @@ export const COMPANY_PLAYBOOKS = Object.freeze([
     intake: 'Approved quotes, specifications, delivery terms, currencies, evaluation rules, and constraints.',
     stages: [
       stage('compare', 'Compare quotes', 'procurement-analyst', 'Normalize commercial terms, flag exceptions, and build the comparison.'),
-      stage('analyze', 'Frame the decision', 'data-insights-analyst', 'Calculate traceable trade-offs and decision options.'),
+      stage('analyze', 'Frame the decision', 'operations-analyst', 'Calculate traceable trade-offs and decision options.', 'data-insights-desk'),
       stage('assure', 'Review the recommendation', 'quality-reviewer', 'Audit the comparison and recommendation against source quotes.'),
     ],
   }),
@@ -161,9 +167,14 @@ export async function planCompanyPlaybook(input, options = {}) {
     const definitionStage = definition.stages[index]
     const agent = roster.get(definitionStage.agentId)
     if (!agent) return failure('company_playbook_roster_invalid', { agentId: definitionStage.agentId })
+    const crewSlug = definitionStage.crew || agent.crew
+    const allowedCrews = new Set([agent.crew, ...(agent.capabilityCrews || [])])
+    if (!allowedCrews.has(crewSlug)) {
+      return failure('company_playbook_roster_invalid', { agentId: agent.id, crew: crewSlug })
+    }
     let crew
-    try { crew = await readCrew(agent.crew) }
-    catch { return failure('company_playbook_roster_invalid', { agentId: agent.id }) }
+    try { crew = await readCrew(crewSlug) }
+    catch { return failure('company_playbook_roster_invalid', { agentId: agent.id, crew: crewSlug }) }
     if (crew.roles.length > MAX_CYCLE_ROLE_BUDGET) {
       return failure('company_playbook_role_budget_exceeded', {
         agentId: agent.id,

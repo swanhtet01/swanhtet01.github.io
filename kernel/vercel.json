@@ -1,5 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "git": {
+    "deploymentEnabled": false
+  },
   "functions": {
     "api/index.mjs": { "maxDuration": 30 },
     "api/stripe-webhook.mjs": { "maxDuration": 15 },
@@ -16,9 +19,6 @@
     "api/owner-evidence.mjs": { "maxDuration": 15 },
     "api/approvals.mjs": { "maxDuration": 30 }
   },
-  "crons": [
-    { "path": "/api/brief", "schedule": "30 1 * * *" }
-  ],
   "routes": [
     {
       "src": "/(.*)",

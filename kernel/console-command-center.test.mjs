@@ -63,6 +63,36 @@ test('owner access hides the command center until the protected state accepts th
   assert.doesNotMatch(overview, /pipelineUsd|mrrUsd|deposits\.usd|usd\(/)
 })
 
+test('existing AI badge reports the protected daily budget without another control', async () => {
+  const html = await readConsole()
+  const header = html.match(/<header>[\s\S]*?<\/header>/)?.[0] || ''
+  const formatterSource = html.match(/function formatAiBudgetBadge\(r=\{\}\)\{[\s\S]*?\n\}/)?.[0] || ''
+  assert.ok(formatterSource)
+  const format = Function(`${formatterSource};return formatAiBudgetBadge`)()
+  const budget = {
+    contract: 'supermega.company-ai-budget-status.v1', available: true, readiness: 'durable', durableStoreReady: true,
+    capUnits: 1000, reservedUnits: 600, attempts: 3, states: { inFlight: 1, consumed: 1, failed: 1 },
+  }
+
+  assert.equal((header.match(/id="aiBadge"/g) || []).length, 1)
+  assert.doesNotMatch(header, /aiBudgetBadge|button[^>]+budget/i)
+  assert.match(header, /id="aiBadge" role="status" aria-live="polite"/)
+  assert.deepEqual(format({ aiConfigured: false, aiBudget: budget }), { text: 'ai: off', tone: 'off', label: 'AI provider is not configured.' })
+  assert.deepEqual(format({ aiConfigured: true, aiBudget: budget }), {
+    text: 'ai: 60% · 400 left', tone: 'on',
+    label: 'AI is configured. 600 of 1,000 daily bulk-equivalent units reserved; 400 remaining across 3 attempts. 1 in flight, 1 consumed, 1 failed. Durable budget store ready.',
+  })
+  assert.equal(format({ aiConfigured: true, aiBudget: { ...budget, reservedUnits: 850 } }).tone, 'warn')
+  assert.equal(format({ aiConfigured: true, aiBudget: { ...budget, reservedUnits: 1000 } }).text, 'ai: cap reached')
+  assert.match(format({ aiConfigured: true, aiBudget: { ...budget, readiness: 'ephemeral', durableStoreReady: false } }).label, /Memory-only budget; hosted model calls remain blocked\./)
+  assert.deepEqual(format({ aiConfigured: true, aiBudget: { available: false } }), {
+    text: 'ai: blocked', tone: 'off', label: 'AI is configured, but daily budget telemetry is unavailable. Hosted model calls remain blocked.',
+  })
+  assert.match(html, /badge\.setAttribute\('aria-label',ai\.label\)/)
+  assert.match(html, /header\{display:grid;grid-template-columns:minmax\(0,max-content\) minmax\(0,1fr\) max-content/)
+  assert.match(html, /#modeBadge,#aiBadge\{min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap\}/)
+})
+
 test('project board uses recorded MMK values and no stale inferred USD checkout', async () => {
   const html = await readConsole()
 

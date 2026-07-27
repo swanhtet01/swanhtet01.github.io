@@ -7,25 +7,37 @@ import { loadCrew } from './crew-runner.mjs'
 import { runCrew } from './crew-run.mjs'
 import {
   claimActivity,
+  getActivityClaim,
   getCachedResponse,
   putCachedResponse,
   releaseActivityClaim,
+  transitionActivityClaim,
 } from './store.mjs'
 
 export const MAX_CYCLE_AGENTS = 2
 export const MAX_CYCLE_ROLE_BUDGET = 8
 export const MAX_AGENT_EVIDENCE_BYTES = 12_000
+export const MAX_REGISTERED_COMPANY_AGENTS = 12
+export const MAX_RUNNING_COMPANY_CYCLES = 4
+export const COMPANY_CAPACITY_CLAIM_CONTRACT = 'supermega.agent-company-capacity-claims.v1'
+export const COMPANY_CAPACITY_CLAIM_TTL_SECONDS = 120
+
+const specialist = (definition) => Object.freeze({
+  ...definition,
+  capabilityCrews: Object.freeze([...(definition.capabilityCrews || [])]),
+})
 
 export const AGENT_ROSTER = Object.freeze([
-  Object.freeze({
+  specialist({
     id: 'operations-analyst',
     name: 'Operations Analyst',
     department: 'operations',
     crew: 'daily-operator-brief',
+    capabilityCrews: ['data-insights-desk'],
     outcome: 'Ranks the day by money at stake and identifies the next operational risk.',
-    evidenceHint: 'Provide current sales, cash, delivery, staffing, and exception facts for one operating period.',
+    evidenceHint: 'Provide current sales, cash, delivery, staffing, exceptions, or approved analytical exports and definitions for one operating decision.',
   }),
-  Object.freeze({
+  specialist({
     id: 'cash-reconciler',
     name: 'Cash Reconciler',
     department: 'finance',
@@ -33,7 +45,7 @@ export const AGENT_ROSTER = Object.freeze([
     outcome: 'Reconciles payment channels against POS evidence and drafts the close packet.',
     evidenceHint: 'Provide POS totals and matching MMQR, KBZPay, WavePay, cash, shift, or staff records.',
   }),
-  Object.freeze({
+  specialist({
     id: 'receivables-agent',
     name: 'Receivables Agent',
     department: 'revenue',
@@ -41,7 +53,7 @@ export const AGENT_ROSTER = Object.freeze([
     outcome: 'Finds open balances and prepares customer-language reminder drafts.',
     evidenceHint: 'Provide approved invoice, balance, payment, and customer-thread evidence with dates and currency.',
   }),
-  Object.freeze({
+  specialist({
     id: 'evidence-organizer',
     name: 'Evidence Organizer',
     department: 'operations',
@@ -49,7 +61,7 @@ export const AGENT_ROSTER = Object.freeze([
     outcome: 'Turns owner-provided business messages into traceable ledgers and follow-ups.',
     evidenceHint: 'Provide an owner-approved business inbox or chat export with personal threads removed.',
   }),
-  Object.freeze({
+  specialist({
     id: 'proof-builder',
     name: 'Proof Builder',
     department: 'delivery',
@@ -57,7 +69,7 @@ export const AGENT_ROSTER = Object.freeze([
     outcome: 'Builds one source-traced proof and a human approval packet.',
     evidenceHint: 'Provide the approved order packet, source files or links, acceptance test, and known constraints.',
   }),
-  Object.freeze({
+  specialist({
     id: 'sales-qualifier',
     name: 'Sales Qualifier',
     department: 'growth',
@@ -65,7 +77,7 @@ export const AGENT_ROSTER = Object.freeze([
     outcome: 'Qualifies one opportunity from evidence and drafts the smallest useful next step.',
     evidenceHint: 'Provide approved lead notes, buyer, problem, timing, budget evidence, and discovery gaps.',
   }),
-  Object.freeze({
+  specialist({
     id: 'delivery-planner',
     name: 'Delivery Planner',
     department: 'delivery',
@@ -73,7 +85,7 @@ export const AGENT_ROSTER = Object.freeze([
     outcome: 'Turns an accepted outcome into milestones, dependencies, and objective acceptance checks.',
     evidenceHint: 'Provide the accepted outcome, deadline, owners, dependencies, constraints, and acceptance rules.',
   }),
-  Object.freeze({
+  specialist({
     id: 'quality-reviewer',
     name: 'Quality Reviewer',
     department: 'assurance',
@@ -81,15 +93,7 @@ export const AGENT_ROSTER = Object.freeze([
     outcome: 'Audits a deliverable against sources and acceptance rules before owner release.',
     evidenceHint: 'Provide the exact draft, source trace, tests, acceptance rules, and declared limitations.',
   }),
-  Object.freeze({
-    id: 'data-insights-analyst',
-    name: 'Data & Insights Analyst',
-    department: 'insights',
-    crew: 'data-insights-desk',
-    outcome: 'Cleans the analytical frame, calculates traceable metrics, and turns findings into an owner-ready story.',
-    evidenceHint: 'Provide approved exports, field definitions, date range, business questions, and known data gaps.',
-  }),
-  Object.freeze({
+  specialist({
     id: 'customer-support-operator',
     name: 'Customer Support Operator',
     department: 'service',
@@ -97,39 +101,25 @@ export const AGENT_ROSTER = Object.freeze([
     outcome: 'Triages support evidence, drafts resolution paths, and identifies escalations and knowledge gaps.',
     evidenceHint: 'Provide approved ticket or message text, account and order facts, policy excerpts, and prior actions.',
   }),
-  Object.freeze({
+  specialist({
     id: 'knowledge-manager',
     name: 'Knowledge Manager',
     department: 'knowledge',
     crew: 'knowledge-base-desk',
-    outcome: 'Turns approved source documents into canonical answers, procedures, and a controlled update queue.',
-    evidenceHint: 'Provide approved policies, manuals, FAQs, source owners, effective dates, and publication scope.',
+    capabilityCrews: ['document-processing-desk'],
+    outcome: 'Extracts approved business documents and turns accepted source material into canonical answers, procedures, and a controlled update queue.',
+    evidenceHint: 'Provide approved documents or OCR, required fields, policies, manuals, source owners, validation rules, effective dates, and publication scope.',
   }),
-  Object.freeze({
+  specialist({
     id: 'project-controller',
     name: 'Project Controller',
     department: 'delivery',
     crew: 'project-control-desk',
-    outcome: 'Finds critical-path risk and produces a factual owner update with the next accountable actions.',
-    evidenceHint: 'Provide the baseline plan, current milestones, owners, dates, dependencies, changes, and blockers.',
+    capabilityCrews: ['meeting-actions-desk'],
+    outcome: 'Captures approved meeting actions, finds critical-path risk, and produces a factual owner update with the next accountable actions.',
+    evidenceHint: 'Provide the approved notes or transcript, baseline plan, current milestones, owners, dates, dependencies, decision rules, changes, and blockers.',
   }),
-  Object.freeze({
-    id: 'document-processor',
-    name: 'Document Processor',
-    department: 'knowledge',
-    crew: 'document-processing-desk',
-    outcome: 'Extracts required business fields into a source-traced register with explicit validation exceptions.',
-    evidenceHint: 'Provide approved document text or OCR, required fields, source labels, validation rules, and known readability limits.',
-  }),
-  Object.freeze({
-    id: 'meeting-actions-coordinator',
-    name: 'Meeting Actions Coordinator',
-    department: 'operations',
-    crew: 'meeting-actions-desk',
-    outcome: 'Turns approved meeting evidence into decisions, accountable actions, risks, and open questions.',
-    evidenceHint: 'Provide approved notes or transcript, attendee roles, business context, dates, and decision rules.',
-  }),
-  Object.freeze({
+  specialist({
     id: 'procurement-analyst',
     name: 'Procurement Analyst',
     department: 'procurement',
@@ -138,6 +128,16 @@ export const AGENT_ROSTER = Object.freeze([
     evidenceHint: 'Provide approved quotes, specifications, commercial terms, currencies, evaluation rules, and known gaps.',
   }),
 ])
+
+const rosterIds = AGENT_ROSTER.map((agent) => agent.id)
+const rosterCrews = AGENT_ROSTER.flatMap((agent) => [agent.crew, ...agent.capabilityCrews])
+if (
+  AGENT_ROSTER.length !== MAX_REGISTERED_COMPANY_AGENTS
+  || new Set(rosterIds).size !== rosterIds.length
+  || new Set(rosterCrews).size !== rosterCrews.length
+) {
+  throw new Error('company_roster_contract_invalid')
+}
 
 const ROSTER_BY_ID = new Map(AGENT_ROSTER.map((agent) => [agent.id, agent]))
 const ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/
@@ -179,9 +179,111 @@ function runIdFor(clientId, cycleId) {
 
 const finalResultKey = (runId) => `company-cycle:${runId}:final`
 const agentResultKey = (runId, index) => `company-cycle:${runId}:agent:${index + 1}`
+const capacityClaimKey = (slot) => `agent-company-capacity:${slot}`
+const capacityLeaseRef = (runId, expiresAtMs) => `${runId}|${expiresAtMs}`
+const capacityLeaseExpiry = (value) => {
+  const match = /^agent-company:[a-f0-9]{40}\|([0-9]{13})$/.exec(String(value || ''))
+  return match ? Number(match[1]) : null
+}
+
+async function acquireCompanyCapacityClaim(plan, {
+  reserve,
+  release,
+  readClaim,
+  transferClaim,
+  requireDurableClaim,
+  nowMs,
+}) {
+  let observedAtMs
+  try { observedAtMs = Number(nowMs()) }
+  catch { observedAtMs = Number.NaN }
+  if (!Number.isFinite(observedAtMs) || observedAtMs < 0) {
+    return failure('company_capacity_unavailable', { status: 'blocked', runId: plan.runId })
+  }
+  const leaseRef = capacityLeaseRef(
+    plan.runId,
+    Math.floor(observedAtMs) + (COMPANY_CAPACITY_CLAIM_TTL_SECONDS * 1_000),
+  )
+  for (let slot = 1; slot <= MAX_RUNNING_COMPANY_CYCLES; slot++) {
+    const claimId = capacityClaimKey(slot)
+    let claim
+    try {
+      claim = await reserve({
+        id: claimId,
+        kind: 'agent_company_capacity',
+        summary: `Bounded company execution slot ${slot}`,
+        ref: leaseRef,
+      })
+    } catch {
+      return failure('company_capacity_unavailable', { status: 'blocked', runId: plan.runId })
+    }
+    if (claim?.fresh) {
+      if (requireDurableClaim && !claim.durable) {
+        try { await release(claimId, leaseRef) } catch { /* no model call has started */ }
+        return failure('company_capacity_unavailable', { status: 'blocked', runId: plan.runId })
+      }
+      return { ok: true, claimId, leaseRef, slot, durable: Boolean(claim.durable) }
+    }
+    if (requireDurableClaim && !claim?.durable) {
+      return failure('company_capacity_unavailable', { status: 'blocked', runId: plan.runId })
+    }
+
+    let existing
+    try { existing = await readClaim(claimId) }
+    catch { existing = { claim: null, durable: false, reason: 'claim_store_unavailable' } }
+    if (requireDurableClaim && !existing?.durable) {
+      return failure('company_capacity_unavailable', { status: 'blocked', runId: plan.runId })
+    }
+    if (!existing?.claim) {
+      let retry
+      try {
+        retry = await reserve({
+          id: claimId,
+          kind: 'agent_company_capacity',
+          summary: `Bounded company execution slot ${slot}`,
+          ref: leaseRef,
+        })
+      } catch {
+        retry = { fresh: false, durable: false }
+      }
+      if (retry?.fresh && (!requireDurableClaim || retry.durable)) {
+        return { ok: true, claimId, leaseRef, slot, durable: Boolean(retry.durable) }
+      }
+      if (requireDurableClaim && !retry?.durable) {
+        return failure('company_capacity_unavailable', { status: 'blocked', runId: plan.runId })
+      }
+      continue
+    }
+
+    const existingExpiry = capacityLeaseExpiry(existing.claim.ref)
+    if (existingExpiry === null) {
+      return failure('company_capacity_unavailable', { status: 'blocked', runId: plan.runId })
+    }
+    if (existingExpiry > observedAtMs) continue
+
+    let transferred
+    try { transferred = await transferClaim(claimId, existing.claim.ref, leaseRef) }
+    catch { transferred = { updated: false, durable: false, reason: 'claim_store_unavailable' } }
+    if (transferred?.updated && (!requireDurableClaim || transferred.durable)) {
+      return { ok: true, claimId, leaseRef, slot, durable: Boolean(transferred.durable), recovered: true }
+    }
+    if (requireDurableClaim && !transferred?.durable) {
+      return failure('company_capacity_unavailable', { status: 'blocked', runId: plan.runId })
+    }
+  }
+  return failure('company_capacity_exhausted', {
+    status: 'busy',
+    runId: plan.runId,
+    maxRunning: MAX_RUNNING_COMPANY_CYCLES,
+    retry: { sameCycleIdAllowed: true },
+  })
+}
 
 export function listCompanyAgents() {
-  return AGENT_ROSTER.map((agent) => ({ ...agent }))
+  return AGENT_ROSTER.map((agent) => ({
+    ...agent,
+    capabilityCrews: [...agent.capabilityCrews],
+  }))
 }
 
 async function prepareCompanyCycle(input, options = {}) {
@@ -263,6 +365,9 @@ async function prepareCompanyCycle(input, options = {}) {
     },
     controls: {
       execution: 'sequential',
+      capacityClaimContract: COMPANY_CAPACITY_CLAIM_CONTRACT,
+      capacityClaimTtlSeconds: COMPANY_CAPACITY_CLAIM_TTL_SECONDS,
+      maxConcurrentCycles: MAX_RUNNING_COMPANY_CYCLES,
       dynamicDelegation: false,
       crossAgentContext: false,
       externalWrites: false,
@@ -322,9 +427,10 @@ function normalizeCrewResult(assignment, result) {
       guardrails,
     }
   }
+  const budgetBlocked = ['crew_company_budget_exhausted', 'crew_company_budget_unavailable'].includes(result?.reason)
   return {
     ok: false,
-    status: 'failed',
+    status: budgetBlocked ? 'blocked' : 'failed',
     agentId: assignment.agentId,
     department: assignment.department,
     crew: assignment.crew,
@@ -346,7 +452,10 @@ export async function runCompanyCycle(input, options = {}) {
   const release = options.releaseActivityClaim || releaseActivityClaim
   const readResult = options.getRunResult || getCachedResponse
   const saveResult = options.putRunResult || putCachedResponse
+  const readClaim = options.getActivityClaim || getActivityClaim
+  const transferClaim = options.transitionActivityClaim || transitionActivityClaim
   const requireDurableClaim = options.requireDurableClaim !== false
+  const capacityNowMs = options.capacityNowMs || Date.now
   let claim
   try {
     claim = await reserve({
@@ -385,71 +494,104 @@ export async function runCompanyCycle(input, options = {}) {
     })
   }
   if (requireDurableClaim && !claim.durable) {
-    try { await release(plan.runId) } catch { /* no model call has started */ }
+    try { await release(plan.runId, plan.clientId) } catch { /* no model call has started */ }
     return failure('company_durable_claim_required', { status: 'blocked', runId: plan.runId })
   }
 
-  const executeCrew = options.runCrew || runCrew
-  const results = []
-  let persistedAgentResults = 0
-  for (let index = 0; index < plan.assignments.length; index++) {
-    const assignment = plan.assignments[index]
-    let result
-    try {
-      result = await executeCrew(assignment.crew, normalizedEvidence.get(assignment.agentId), {
-        clientId: plan.clientId,
-      })
-    } catch {
-      result = { ok: false, reason: 'company_agent_failed' }
+  const capacity = await acquireCompanyCapacityClaim(plan, {
+    reserve,
+    release,
+    readClaim,
+    transferClaim,
+    requireDurableClaim,
+    nowMs: capacityNowMs,
+  })
+  if (!capacity.ok) {
+    try { await release(plan.runId, plan.clientId) } catch { /* capacity rejected before model use */ }
+    return capacity
+  }
+
+  try {
+    const executeCrew = options.runCrew || runCrew
+    const results = []
+    let persistedAgentResults = 0
+    for (let index = 0; index < plan.assignments.length; index++) {
+      const assignment = plan.assignments[index]
+      let result
+      try {
+        result = await executeCrew(assignment.crew, normalizedEvidence.get(assignment.agentId), {
+          clientId: plan.clientId,
+        })
+      } catch {
+        result = { ok: false, reason: 'company_agent_failed' }
+      }
+      const normalized = normalizeCrewResult(assignment, result)
+      results.push(normalized)
+      try {
+        const stored = await saveResult(agentResultKey(plan.runId, index), {
+          version: 1,
+          runId: plan.runId,
+          clientId: plan.clientId,
+          cycleId: plan.cycleId,
+          result: normalized,
+        })
+        if (stored) persistedAgentResults += 1
+      } catch { /* the caller still receives the completed specialist result */ }
     }
-    const normalized = normalizeCrewResult(assignment, result)
-    results.push(normalized)
-    try {
-      const stored = await saveResult(agentResultKey(plan.runId, index), {
-        version: 1,
-        runId: plan.runId,
-        clientId: plan.clientId,
-        cycleId: plan.cycleId,
-        result: normalized,
-      })
-      if (stored) persistedAgentResults += 1
-    } catch { /* the caller still receives the completed specialist result */ }
-  }
 
-  const completed = results.filter((result) => result.status === 'completed').length
-  const gated = results.filter((result) => result.status === 'gated').length
-  const failed = results.length - completed - gated
-  const status = completed === results.length ? 'completed'
-    : completed > 0 ? 'partial'
-      : gated > 0 && failed === 0 ? 'blocked'
-        : 'failed'
-  const usedRoleCalls = results.reduce((total, result) => total + result.usedRoleCalls, 0)
+    const completed = results.filter((result) => result.status === 'completed').length
+    const gated = results.filter((result) => result.status === 'gated').length
+    const blocked = results.filter((result) => result.status === 'blocked').length
+    const failed = results.length - completed - gated - blocked
+    const status = completed === results.length ? 'completed'
+      : completed > 0 ? 'partial'
+        : (gated > 0 || blocked > 0) && failed === 0 ? 'blocked'
+          : 'failed'
+    const usedRoleCalls = results.reduce((total, result) => total + result.usedRoleCalls, 0)
 
-  const envelope = {
-    ok: completed > 0,
-    mode: 'run',
-    status,
-    runId: plan.runId,
-    clientId: plan.clientId,
-    cycleId: plan.cycleId,
-    actionMode: 'draft_only',
-    approvalRequired: true,
-    results,
-    budget: { ...plan.budget, usedRoleCalls },
-    trace: results.map((result, index) => ({
-      order: index + 1,
-      agentId: result.agentId,
-      crew: result.crew,
-      status: result.status,
-      usedRoleCalls: result.usedRoleCalls,
-      guardrails: result.guardrails,
-    })),
-    retry: status === 'completed' ? null : { requiresNewCycleId: true },
+    const envelope = {
+      ok: completed > 0,
+      mode: 'run',
+      status,
+      runId: plan.runId,
+      clientId: plan.clientId,
+      cycleId: plan.cycleId,
+      actionMode: 'draft_only',
+      approvalRequired: true,
+      results,
+      budget: { ...plan.budget, usedRoleCalls },
+      capacity: {
+        contract: COMPANY_CAPACITY_CLAIM_CONTRACT,
+        maxConcurrentCycles: MAX_RUNNING_COMPANY_CYCLES,
+        claimTtlSeconds: COMPANY_CAPACITY_CLAIM_TTL_SECONDS,
+        release: 'finally',
+      },
+      trace: results.map((result, index) => ({
+        order: index + 1,
+        agentId: result.agentId,
+        crew: result.crew,
+        status: result.status,
+        usedRoleCalls: result.usedRoleCalls,
+        guardrails: result.guardrails,
+      })),
+      retry: status === 'completed' ? null : { requiresNewCycleId: true },
+    }
+    let durableResultStored = false
+    try { durableResultStored = Boolean(await saveResult(finalResultKey(plan.runId), envelope)) }
+    catch { durableResultStored = false }
+    return { ...envelope, persistedAgentResults, durableResultStored }
+  } finally {
+    try { await release(capacity.claimId, capacity.leaseRef) } catch { /* the bounded slot remains fail-closed */ }
   }
-  let durableResultStored = false
-  try { durableResultStored = Boolean(await saveResult(finalResultKey(plan.runId), envelope)) }
-  catch { durableResultStored = false }
-  return { ...envelope, persistedAgentResults, durableResultStored }
 }
 
-export default { AGENT_ROSTER, listCompanyAgents, planCompanyCycle, runCompanyCycle }
+export default {
+  AGENT_ROSTER,
+  COMPANY_CAPACITY_CLAIM_CONTRACT,
+  COMPANY_CAPACITY_CLAIM_TTL_SECONDS,
+  MAX_RUNNING_COMPANY_CYCLES,
+  MAX_REGISTERED_COMPANY_AGENTS,
+  listCompanyAgents,
+  planCompanyCycle,
+  runCompanyCycle,
+}

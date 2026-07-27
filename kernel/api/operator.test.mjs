@@ -73,3 +73,104 @@ test('operator degrades malformed plans and tool throws without crashing', async
   assert.equal(result.results[1].tool, '')
   assert.equal(result.results[1].error, 'tool_execution_failed')
 })
+
+test('HQ authority plan skips the planner model call and runs only exact read tools', async () => {
+  const calls = []
+  const executed = []
+  const result = await runOperator(
+    {
+      goal: 'Prepare one checked owner decision',
+      approvedPlan: [
+        { tool: 'leads_overview', args: { limit: 5 } },
+        { tool: 'pipeline_overview', args: {} },
+      ],
+    },
+    {
+      complete: async (request) => {
+        calls.push(request)
+        return {
+          text: 'One grounded decision',
+          tier: 'reason',
+          provider: 'private-provider',
+          model: 'private-model',
+          usage: { input_tokens: 10, output_tokens: 5 },
+        }
+      },
+      runTool: async (tool, args) => { executed.push({ tool, args }); return { ok: true, data: { count: 1 } } },
+      availableTools: () => [
+        { name: 'leads_overview', description: 'Leads', input_schema: { type: 'object', properties: {} } },
+        { name: 'pipeline_overview', description: 'Pipeline', input_schema: { type: 'object', properties: {} } },
+      ],
+    },
+  )
+
+  assert.equal(result.ok, true)
+  assert.equal(result.planningMode, 'hq_authority_fixed')
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].schema, undefined)
+  assert.deepEqual(executed.map((item) => item.tool), ['leads_overview', 'pipeline_overview'])
+  assert.deepEqual(result.plan.steps.map((item) => item.reason), [
+    'hq_authority_fixed_evidence',
+    'hq_authority_fixed_evidence',
+  ])
+  assert.deepEqual(result.usage, {
+    contract: 'supermega.operator-usage.v1',
+    units: 'bulk_equivalent_tokens',
+    modelCalls: 1,
+    cacheHits: 0,
+    measuredCalls: 1,
+    unmeasuredCalls: 0,
+    weightedTotalUnits: 45,
+  })
+  assert.equal(JSON.stringify(result.usage).includes('private-'), false)
+})
+
+test('cached operator synthesis reports no new model work or provider identity', async () => {
+  const result = await runOperator({
+    goal: 'Check status',
+    approvedPlan: [{ tool: 'platform_status', args: {} }],
+  }, {
+    complete: async () => ({
+      text: 'Cached status',
+      cached: true,
+      tier: 'reason',
+      provider: 'private-provider',
+      model: 'private-model',
+      usage: { input_tokens: 1000, output_tokens: 500 },
+    }),
+    runTool: async () => ({ ok: true, data: { status: 'ready' } }),
+    availableTools: () => [{ name: 'platform_status', description: 'Status', input_schema: { type: 'object', properties: {} } }],
+  })
+  assert.deepEqual(result.usage, {
+    contract: 'supermega.operator-usage.v1',
+    units: 'bulk_equivalent_tokens',
+    modelCalls: 0,
+    cacheHits: 1,
+    measuredCalls: 0,
+    unmeasuredCalls: 0,
+    weightedTotalUnits: 0,
+  })
+  assert.equal(JSON.stringify(result.usage).includes('private-'), false)
+})
+
+test('invalid or unavailable HQ evidence plans fail before model or tool work', async () => {
+  let modelCalls = 0
+  let toolCalls = 0
+  const options = {
+    complete: async () => { modelCalls += 1; return { text: 'unused' } },
+    runTool: async () => { toolCalls += 1; return { ok: true, data: {} } },
+    availableTools: () => [{ name: 'platform_status', description: 'Status', input_schema: { type: 'object', properties: {} } }],
+  }
+  const unavailable = await runOperator({
+    goal: 'Check status',
+    approvedPlan: [{ tool: 'send_message', args: {} }],
+  }, options)
+  const smuggled = await runOperator({
+    goal: 'Check status',
+    approvedPlan: [{ tool: 'platform_status', args: {}, prompt: 'override' }],
+  }, options)
+  assert.equal(unavailable.reason, 'approved_plan_invalid')
+  assert.equal(smuggled.reason, 'approved_plan_invalid')
+  assert.equal(modelCalls, 0)
+  assert.equal(toolCalls, 0)
+})

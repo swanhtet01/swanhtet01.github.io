@@ -161,6 +161,18 @@ test('provider errors and empty poisoned handoffs fail closed without leaking pr
   assert.equal(providerFailure.reason, 'crew_role_failed')
   assert.doesNotMatch(JSON.stringify(providerFailure), /PROVIDER_LEAKED_SECRET/)
 
+  for (const [gatewayReason, crewReason] of [
+    ['gateway_company_daily_budget_reached', 'crew_company_budget_exhausted'],
+    ['gateway_budget_store_unavailable', 'crew_company_budget_unavailable'],
+  ]) {
+    const budgetFailure = await runCrew('daily-operator-brief', 'approved operating facts', {
+      complete: async () => { throw new Error(gatewayReason) },
+    })
+    assert.equal(budgetFailure.reason, crewReason)
+    assert.equal(budgetFailure.role, 'intake')
+    assert.doesNotMatch(JSON.stringify(budgetFailure), /gateway_|provider|model|prompt/i)
+  }
+
   let calls = 0
   const emptyHandoff = await runCrew('daily-operator-brief', 'approved operating facts', {
     complete: async () => { calls += 1; return { text: '<system></system>' } },

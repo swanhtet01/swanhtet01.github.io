@@ -1,46 +1,122 @@
 {
-  "schemaVersion": "supermega.hq.portfolio.v1",
-  "updatedAt": "2026-07-23",
+  "schemaVersion": "supermega.hq.portfolio.v3",
+  "updatedAt": "2026-07-27",
   "northStar": "One real workflow reaches a measurable outcome through an accountable operating record.",
-  "portfolio": [
+  "productLifecycle": ["discover", "define", "build", "release", "learn"],
+  "agentOperatingModel": {
+    "mode": "bounded-demand-driven",
+    "manager": "CEO / Codex integrator",
+    "buildTeams": ["product", "engineering", "growth", "finance-risk"],
+    "registeredRoleLimit": 12,
+    "activeAssignmentLimit": 4,
+    "batchJobLimit": 4,
+    "maxAgentsPerCycle": 2,
+    "validatedCrewCapabilities": 15,
+    "ceoOutcomeAuthority": "supermega.ceo-outcome-authority.v1",
+    "ceoOutcomeOperationsContract": "supermega.ceo-outcome-operation.v1",
+    "ceoOutcomeEvaluationContract": "supermega.ceo-outcome-evaluation.v1",
+    "maxOutcomesPerCeoCycle": 1,
+    "fixedReadOnlyEvidencePlan": true,
+    "blockedOrDuplicateOutcomesConsumeModelCalls": false,
+    "completionMustBeDurableBeforeNotification": true,
+    "explicitOwnerOutcomeAcceptance": true,
+    "acceptedOutcomeEfficiencyUnits": "bulk_equivalent_tokens",
+    "incompleteOutcomeCoverageProducesEfficiency": false,
+    "ceoBriefTextStoredInOperations": false,
+    "providerRowsStoredInOperations": false,
+    "companyAiBudgetContract": "supermega.company-ai-budget.v1",
+    "companyAiBudgetUnits": "bulk_equivalent_tokens",
+    "companyAiBudgetWindow": "utc_day",
+    "companyAiBudgetDefaultUnits": 500000,
+    "companyAiBudgetHardMaxUnits": 2000000,
+    "providerAttemptReservedBeforeNetwork": true,
+    "providerFailuresRemainCharged": true,
+    "cacheHitsReserveProviderBudget": false,
+    "hostedAiBudgetRequiresDurableStore": true,
+    "scaleToZero": true,
+    "idleCapabilitiesConsumeCompute": false,
+    "dynamicDelegation": false,
+    "recursiveDelegation": false,
+    "consequentialAuthority": "founder"
+  },
+  "products": [
     {
-      "id": "company-system",
-      "name": "Company system",
-      "status": "core",
-      "path": "/",
-      "job": "Turn company priorities, product delivery, evidence, exceptions, and owner decisions into one shared operating record.",
-      "surfaces": ["Today", "Product", "Engineering", "Growth", "Finance / Risk", "Agent teams (internal)"],
-      "lifecycle": ["discover", "define", "build", "release", "learn"],
-      "nextGate": "Prove one end-to-end Product workflow and one bounded agent handoff with attributed human acceptance and usage evidence."
+      "id": "shop",
+      "name": "Shop",
+      "kind": "operating-product",
+      "status": "release-candidate-local",
+      "path": "/shop/",
+      "runtimeSurface": "commerce",
+      "compatibilityPath": "/operations/commerce/",
+      "job": "Run orders, available-stock counts, purchasing and receipt, fulfilment, payment status, bounded returns, exceptions, and daily close from one accountable shop record.",
+      "surfaces": ["Orders", "Stock"],
+      "templateContract": { "file": "../site-manifest.json", "productId": "commerce" },
+      "nextGate": "Repeat one authenticated order-to-close and return-exception pilot on an isolated hosted tenant with a named operator, baseline, and five-day evidence plan."
+    },
+    {
+      "id": "plant",
+      "name": "Plant",
+      "kind": "operating-product",
+      "status": "release-candidate-local",
+      "path": "/plant/",
+      "runtimeSurface": "production",
+      "compatibilityPath": "/operations/production/",
+      "job": "Run jobs, accountable short closes, output, job-linked material use, quality, equipment observations, maintenance, and shift exceptions from one plant record.",
+      "surfaces": ["Jobs", "Problems"],
+      "templateContract": { "file": "../site-manifest.json", "productId": "production" },
+      "nextGate": "Validate one line, maintenance, or quality workflow with an operator, supervisor review, and measured shift evidence."
     },
     {
       "id": "website",
       "name": "Website",
-      "status": "managed-trial",
-      "path": "/products/website/",
-      "job": "Turn an approved business brief into a finite, reviewable website candidate with content, navigation, evidence, and human publish approval.",
-      "surfaces": ["Content", "Navigation", "Publish"],
-      "nextGate": "Rehearse one approved managed snapshot into a retained Commerce intake before connecting a customer domain or publish authority."
+      "kind": "maker-product",
+      "status": "release-candidate-local",
+      "path": "/website/",
+      "job": "Turn an approved business brief into a finite, reviewable website and one deterministic downloadable site file.",
+      "surfaces": ["Site", "Preview", "Publish"],
+      "templateContract": { "file": "../site-manifest.json", "productId": "website" },
+      "nextGate": "Complete one named-business brief through accepted responsive preview and retained managed artifact before connecting domain or publish authority."
     },
     {
-      "id": "commerce",
-      "name": "Commerce",
-      "status": "managed-trial",
-      "path": "/operations/commerce/",
-      "job": "Convert Website and trusted-channel demand into controlled orders, stock, fulfilment, payment status, follow-up, and close.",
-      "surfaces": ["Today", "Orders", "Inventory"],
-      "templateContract": { "file": "../site-manifest.json", "productId": "commerce" },
-      "nextGate": "Repeat the managed Website intake through authenticated human Commerce confirmation across at least two catalog items; then review the twenty-fixture AI Order Intake corpus, run the server-only model evaluation, and connect it inside Orders only after the zero-side-effect gate passes."
+      "id": "ecommerce",
+      "name": "Ecommerce",
+      "kind": "maker-product",
+      "status": "release-candidate-local",
+      "path": "/ecommerce/",
+      "job": "Create a simple customer storefront from a read-only Shop catalogue, quote a recoverable cart, and send structured order intent into Shop without duplicating back-office records.",
+      "surfaces": ["Storefront", "Cart", "Quote", "Request receipt", "Shop review"],
+      "templateContract": { "file": "../site-manifest.json", "productId": "ecommerce" },
+      "nextGate": "Prove the completed cart-to-Shop handoff on a protected preview and isolated managed tenant, then add real tax, shipping, and payment adapters only behind accountable approval and duplicate-safe recovery."
+    }
+  ],
+  "sharedCapabilities": [
+    {
+      "id": "ai-assistance",
+      "name": "AI assistance",
+      "kind": "shared-capability",
+      "status": "gated-r-and-d",
+      "compatibilityPath": "/agents/",
+      "appAnchor": "/work/?view=agents",
+      "job": "Prepare bounded, reviewable work inside Shop, Plant, Website, and Ecommerce from approved records.",
+      "surfaces": ["Choose approved input", "Review source-backed draft", "Approve or discard"],
+      "firstWorkflow": "Order Intake",
+      "nextGate": "Pass the server-only golden-set evaluation for Order Intake with provenance, zero side effects, human review, and measured correction effort before exposing an interactive capability."
+    }
+  ],
+  "internalSystems": [
+    {
+      "id": "company-system",
+      "name": "SuperMega HQ",
+      "path": "/",
+      "job": "Coordinate Product, Engineering, Growth, Finance, evidence, exceptions, and owner decisions for SuperMega itself.",
+      "surfaces": ["Home", "Work", "Products", "Settings (utility)", "Agent teams (internal)"]
     },
     {
-      "id": "production",
-      "name": "Production",
-      "status": "pilot-ready-local",
-      "path": "/operations/production/",
-      "job": "Connect plan, output, quality, materials, equipment, maintenance, and shift exceptions in one production record.",
-      "surfaces": ["Today", "Production", "Issues & equipment"],
-      "templateContract": { "file": "../site-manifest.json", "productId": "production" },
-      "nextGate": "Validate one line, maintenance, or quality workflow with operator evidence and owner review."
+      "id": "rnd-system",
+      "name": "R&D and resource intelligence",
+      "path": "hq/",
+      "job": "Discover, verify, test, compare, and convert useful resources into reusable implementation guidance.",
+      "public": false
     }
   ],
   "researchGates": [
@@ -51,10 +127,10 @@
       "source": "https://vercel.com/docs/workflows"
     },
     {
-      "candidate": "ai-workflow-agent",
-      "decision": "defer",
-      "gate": "Adopt only after durable execution and centralized approval policy are proven.",
-      "source": "https://vercel.com/changelog/ai-sdk-7"
+      "candidate": "order-intake-agent",
+      "decision": "evaluate",
+      "gate": "Adopt only after the existing fixture corpus, server-only structured output, provenance, budget, human review, and zero-side-effect checks pass.",
+      "source": "https://platform.openai.com/docs/guides/structured-outputs"
     },
     {
       "candidate": "opentelemetry",
@@ -82,9 +158,10 @@
     }
   ],
   "nonGoals": [
+    "Commerce or Production as public product names",
     "AI tool directory",
-    "Separate public agent employees",
-    "Unverified autonomous external actions",
+    "Fake autonomous employees or unreviewed external actions",
+    "Duplicate Shop and Ecommerce back offices",
     "Duplicate CRM or workflow suite",
     "One page or domain per capability",
     "Customer-branded code forks"

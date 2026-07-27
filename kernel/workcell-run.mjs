@@ -197,6 +197,29 @@ export function deliveryClaimId(slug, config) {
   return `workcell:${createHash('sha256').update(identity).digest('hex').slice(0, 40)}`
 }
 
+export function executionClaimId(slug, config, now = new Date()) {
+  const value = now instanceof Date && Number.isFinite(now.getTime()) ? now : new Date()
+  const hour = value.toISOString().slice(0, 13)
+  const identity = `${safeString(config?.clientId || config?.clientName || 'client', 120)}|${safeString(slug, 60)}|${safeString(config?.localDate, 20)}|${hour}`
+  return `workcell-run:${createHash('sha256').update(identity).digest('hex').slice(0, 40)}`
+}
+
+export async function claimWorkcellExecution(slug, options = {}) {
+  const env = options.env || process.env
+  const now = options.now || new Date()
+  const value = now instanceof Date && Number.isFinite(now.getTime()) ? now : new Date()
+  const config = options.config || resolveWorkcellConfig(env, value)
+  const claim = options.claimActivity || claimActivity
+  const claimId = executionClaimId(slug, config, value)
+  const result = await claim({
+    id: claimId,
+    kind: 'workcell_execution',
+    summary: `Scheduled owner workcell: ${safeString(slug, 60)} during ${value.toISOString().slice(0, 13)}:00Z`,
+    ref: `${safeString(slug, 60)}:${config.localDate}`,
+  })
+  return { ...result, claimId }
+}
+
 export async function claimWorkcellDelivery(slug, options = {}) {
   const env = options.env || process.env
   const config = options.config || resolveWorkcellConfig(env, options.now || new Date())
@@ -217,4 +240,4 @@ export async function releaseWorkcellDelivery(claim, options = {}) {
   return claimId ? release(claimId) : false
 }
 
-export default { runWorkcell, formatWorkcellNotification, claimWorkcellDelivery, releaseWorkcellDelivery, deliveryClaimId }
+export default { runWorkcell, formatWorkcellNotification, claimWorkcellExecution, claimWorkcellDelivery, releaseWorkcellDelivery, executionClaimId, deliveryClaimId }

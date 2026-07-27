@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs'
-import { readFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { copyFile, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 
 const root = resolve(import.meta.dirname, '..')
@@ -13,8 +14,19 @@ const generator = await readFile(resolve(root, 'tools/write_app_vercel_config.mj
 const appVerifier = await readFile(resolve(root, 'tools/verify_app_release_live.mjs'), 'utf8')
 const releaseBarrier = await readFile(resolve(root, 'tools/verify_coordinated_release_live.mjs'), 'utf8')
 const databaseValidator = await readFile(resolve(root, 'tools/validate_supermega_database_url.py'), 'utf8')
+const migrationVerifier = await readFile(resolve(root, 'tools/verify_private_trial_migrations.mjs'), 'utf8')
 const rollbackResolver = await readFile(resolve(root, 'tools/resolve_vercel_rollback_target.mjs'), 'utf8')
+const retiredAliasVerifier = await readFile(resolve(root, 'tools/verify_retired_vercel_alias_state.mjs'), 'utf8')
+const previewServer = await readFile(resolve(root, 'tools/serve_solution.py'), 'utf8')
+const previewLauncher = await readFile(resolve(root, 'tools/deploy_preview.sh'), 'utf8')
+const retiredClaimableLauncher = await readFile(resolve(root, 'tools/deploy_claimable_preview.sh'), 'utf8')
 const config = JSON.parse(await readFile(resolve(root, 'vercel.json'), 'utf8'))
+const schedulerAuthority = JSON.parse(await readFile(resolve(root, 'tools/supermega_scheduler_authority.json'), 'utf8'))
+const kernelConfig = JSON.parse(await readFile(resolve(root, 'kernel/vercel.json'), 'utf8'))
+const agentConnectorMap = previewServer.slice(
+  previewServer.indexOf('AGENT_JOB_CONNECTOR_MAP:'),
+  previewServer.indexOf('AGENT_TEAM_RUNTIME_JOB_MAP:'),
+)
 const failures = []
 const checks = []
 
@@ -29,6 +41,49 @@ function runRollbackResolver(args, payload) {
     [resolve(root, 'tools/resolve_vercel_rollback_target.mjs'), ...args],
     { input: JSON.stringify(payload), encoding: 'utf8' },
   )
+}
+
+async function verifyCanonicalPythonBundle() {
+  const bundleRoot = await mkdtemp(join(tmpdir(), 'supermega-vercel-python-'))
+  try {
+    await mkdir(resolve(bundleRoot, 'supermega_runtime'), { recursive: true })
+    for (const relativePath of [
+      'supermega_runtime/__init__.py',
+      'supermega_runtime/agent_governance.py',
+      'supermega_runtime/cloud_runtime.py',
+      'supermega_runtime/scheduler_activation.py',
+    ]) {
+      await copyFile(resolve(root, relativePath), resolve(bundleRoot, relativePath))
+    }
+    const localPython = process.platform === 'win32'
+      ? resolve(root, '.venv/Scripts/python.exe')
+      : resolve(root, '.venv/bin/python')
+    const python = existsSync(localPython)
+      ? localPython
+      : (process.env.PYTHON || (process.platform === 'win32' ? 'python' : 'python3'))
+    return spawnSync(
+      python,
+      ['-c', [
+        'import builtins',
+        '_import = builtins.__import__',
+        'def guarded(name, *args, **kwargs):',
+        '    if name == "mark1_pilot" or name.startswith("mark1_pilot."):',
+        '        raise RuntimeError("excluded_mark1_pilot_imported")',
+        '    return _import(name, *args, **kwargs)',
+        'builtins.__import__ = guarded',
+        'from supermega_runtime.cloud_runtime import _SCHEDULER_ROUTES',
+        'assert sum(len(route["job_types"]) for route in _SCHEDULER_ROUTES.values()) == 4',
+        'print("canonical-python-bundle-import-ok")',
+      ].join('\n')],
+      {
+        cwd: bundleRoot,
+        encoding: 'utf8',
+        env: { ...process.env, PYTHONDONTWRITEBYTECODE: '1', PYTHONPATH: bundleRoot },
+      },
+    )
+  } finally {
+    await rm(bundleRoot, { recursive: true, force: true })
+  }
 }
 
 const fixtureUrl = 'https://megaos-release-fixture.vercel.app'
@@ -60,6 +115,7 @@ const releaseBarrierSelfTest = spawnSync(
   [resolve(root, 'tools/verify_coordinated_release_live.mjs'), '--self-test'],
   { encoding: 'utf8' },
 )
+const canonicalPythonBundle = await verifyCanonicalPythonBundle()
 
 requireContract('canonical app project id', workflow.includes('APP_VERCEL_PROJECT_ID: prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG'))
 requireContract('canonical public project id', workflow.includes('VERCEL_PROJECT_ID: prj_Yaf0cZYbiFXcLkMcKaAm4alPWMhR'))
@@ -70,12 +126,30 @@ requireContract('remote dependency install contract', config.installCommand === 
 requireContract('remote security inputs are included', generator.includes("'!.env.app.example'"))
 requireContract('canonical output directory', config.outputDirectory === 'showroom/dist')
 requireContract('canonical API function', config.routes?.[0]?.dest === '/api/app.py' && JSON.stringify(Object.keys(config.functions || {}).sort()) === JSON.stringify(['api/app.py']) && config.functions?.['api/app.py']?.includeFiles === 'supermega_runtime/**' && generator.includes("includeFiles: 'supermega_runtime/**'"))
+requireContract('canonical Python function cold imports from included runtime only', canonicalPythonBundle.status === 0 && canonicalPythonBundle.stdout.includes('canonical-python-bundle-import-ok'))
 requireContract('native Git deployment disabled in config', config.git?.deploymentEnabled === false && /deploymentEnabled:\s*false/.test(generator))
 requireContract('deployment control files trigger coordinated release', workflow.includes('- vercel.json') && workflow.includes('- .vercelignore'))
+requireContract('retired alias control triggers coordinated release', workflow.includes('tools/verify_retired_vercel_alias_state.mjs'))
 requireContract('app and public changes trigger one release authority', workflow.includes("- 'showroom/**'") && workflow.includes('tools/create_public_vercel_output.mjs') && workflow.includes('tools/verify_coordinated_release_live.mjs'))
 requireContract('all API tests trigger and execute', workflow.includes("- 'tests/**'") && workflow.includes("python -m unittest discover -s tests -p 'test_*.py' -v"))
 requireContract('runtime package changes trigger release', workflow.includes("- 'supermega_runtime/**'"))
 requireContract('database activation controls trigger release', workflow.includes('tools/validate_supermega_database_url.py') && workflow.includes('tools/activate_supermega_database.ps1'))
+requireContract('PostgreSQL 17 rehearsal changes trigger every database-aware workflow',
+  [workflow, ciWorkflow, appWorkflow].every((source) =>
+    source.includes('tools/rehearse_supermega_postgres17.py')
+    && source.includes('tools/run_postgres17_rehearsal.mjs')))
+requireContract('migration proof changes trigger every database-aware workflow',
+  [workflow, ciWorkflow, appWorkflow].every((source) => source.includes('tools/verify_private_trial_migrations.mjs') && source.includes('package-lock.json')))
+requireContract('real migration proof precedes every production candidate',
+  workflow.includes('npm ci --ignore-scripts')
+  && workflow.includes('node tools/verify_private_trial_migrations.mjs')
+  && workflow.indexOf('node tools/verify_private_trial_migrations.mjs') < workflow.indexOf('Deploy isolated app production candidate')
+  && workflow.indexOf('node tools/verify_private_trial_migrations.mjs') < workflow.indexOf('Deploy isolated production candidate')
+  && ciWorkflow.includes('node tools/verify_private_trial_migrations.mjs')
+  && appWorkflow.includes('node tools/verify_private_trial_migrations.mjs')
+  && migrationVerifier.includes("from '@electric-sql/pglite'")
+  && migrationVerifier.includes('unsafe role rejected before foundation grants')
+  && migrationVerifier.includes('hosted_postgres_17_proof_required: true'))
 requireContract('app guard remains non-mutating but runs API tests', appWorkflow.includes("- 'supermega_runtime/**'") && appWorkflow.includes("python -m unittest discover -s tests -p 'test_*.py' -v") && !/vercel@56\.1\.0\s+(?:deploy|promote|rollback)\b/.test(appWorkflow) && !appWorkflow.includes('VERCEL_TOKEN') && !/environment:\s*production/.test(appWorkflow))
 requireContract('protected app candidate verification', workflow.includes("VERCEL_PROTECTED_PREVIEW: '1'") && appVerifier.includes("'curl', path, '--deployment'") && appVerifier.includes('deploymentFunctions') && appVerifier.includes("JSON.stringify(['api/app'])") && appVerifier.includes('hosted_agent_runtime_contract_wrong'))
 requireContract('app live identity validates brand context and catalog', appVerifier.includes('release.brandVersion !== manifest.brand.version') && appVerifier.includes('release.contextVersion !== manifest.contextVersion') && appVerifier.includes('release.catalogVersion !== manifest.catalogVersion'))
@@ -87,10 +161,35 @@ requireContract('cross-domain barrier validates complete release identity', rele
 requireContract('release barrier fixtures pass', releaseBarrierSelfTest.status === 0 && releaseBarrierSelfTest.stdout.includes('"ok": true') && releaseBarrierSelfTest.stdout.includes('reject_catalog_drift'))
 requireContract('cross-platform protected deployment requests', !appVerifier.includes("'--silent'") && !appVerifier.includes("'--show-error'") && !appVerifier.includes("'--location'") && !appVerifier.includes("'--token'") && appVerifier.includes('describeCliFailure'))
 requireContract('both project controls are verified', workflow.includes('verify_vercel_project_state.mjs app') && workflow.includes('verify_vercel_project_state.mjs public') && workflow.includes('verify_vercel_domain_state.mjs app') && workflow.includes('verify_vercel_domain_state.mjs public') && workflow.includes('verify_vercel_environment_state.mjs app') && workflow.includes('verify_vercel_environment_state.mjs public'))
+requireContract('retired POS alias blocks release before and after promotion', (workflow.match(/api "\/v4\/aliases\?domain=pos\.supermega\.dev&teamId=\$VERCEL_ORG_ID"/g) || []).length === 2
+  && (workflow.match(/verify_retired_vercel_alias_state\.mjs pos\.supermega\.dev/g) || []).length === 2
+  && retiredAliasVerifier.includes("failures = liveRetiredAliases.length ? ['retired_alias_still_live'] : []")
+  && retiredAliasVerifier.includes("contract: 'supermega_retired_vercel_alias_state'"))
 requireContract('all control URLs use explicit project identities', workflow.includes('api "/v9/projects/$APP_VERCEL_PROJECT_ID"') && workflow.includes('/v9/projects/$APP_VERCEL_PROJECT_ID/domains?teamId=$VERCEL_ORG_ID') && workflow.includes('/v10/projects/$APP_VERCEL_PROJECT_ID/env?teamId=$VERCEL_ORG_ID') && workflow.includes('api "/v9/projects/$PUBLIC_VERCEL_PROJECT_ID"') && workflow.includes('/v9/projects/$PUBLIC_VERCEL_PROJECT_ID/domains?teamId=$VERCEL_ORG_ID') && workflow.includes('/v10/projects/$PUBLIC_VERCEL_PROJECT_ID/env?teamId=$VERCEL_ORG_ID') && workflow.includes('projectId=$PUBLIC_VERCEL_PROJECT_ID&teamId=$VERCEL_ORG_ID') && !workflow.includes('/v9/projects/megaos') && !workflow.includes('/v9/projects/supermega-public'))
 requireContract('managed mode is derived from production environment state', workflow.includes('id: app-environment') && workflow.includes("operating_mode=%s") && workflow.includes("['isolated_demo','managed_trial']"))
-requireContract('managed database audit executes fail closed before promotion', workflow.includes('Enforce managed database and RLS promotion gate') && workflow.includes('SELECTED_OPERATING_MODE') && workflow.includes('SUPERMEGA_DATABASE_URL: ${{ secrets.SUPERMEGA_DATABASE_URL }}') && workflow.includes('python tools/validate_supermega_database_url.py --env-key SUPERMEGA_DATABASE_URL --ensure-schema --require-ready') && workflow.includes('Operating mode selection is missing or invalid'))
-requireContract('RLS policy validator rejects boolean bypasses', !databaseValidator.includes('def _contains_tokens') && databaseValidator.includes('def _policy_expression_matches') && databaseValidator.includes('TRUE OR (') && databaseValidator.includes('reject_ungrouped_human_or') && databaseValidator.includes('"--self-test"'))
+requireContract('managed database audit uses the exact app runtime environment before candidate creation',
+  workflow.includes('Enforce exact app runtime database and RLS gate')
+  && workflow.includes('VERCEL_PROJECT_ID: ${{ env.APP_VERCEL_PROJECT_ID }}')
+  && workflow.includes('vercel@56.1.0 env run --environment=production')
+  && workflow.includes('python tools/validate_supermega_database_url.py --env-key SUPERMEGA_DATABASE_URL --ensure-schema --require-ready')
+  && workflow.includes('Operating mode selection is missing or invalid')
+  && !workflow.includes('SUPERMEGA_DATABASE_URL: ${{ secrets.SUPERMEGA_DATABASE_URL }}')
+  && workflow.indexOf('Enforce exact app runtime database and RLS gate') < workflow.indexOf('Deploy isolated app production candidate')
+  && workflow.indexOf('Enforce exact app runtime database and RLS gate') < workflow.indexOf('Deploy isolated production candidate'))
+requireContract('RLS and trigger validator rejects semantic bypasses',
+  !databaseValidator.includes('def _contains_tokens')
+  && databaseValidator.includes('def _policy_expression_matches')
+  && databaseValidator.includes('EXPECTED_POLICY_FINGERPRINTS')
+  && databaseValidator.includes('reject_dead_case_wrapper')
+  && databaseValidator.includes('reject_weakened_status')
+  && databaseValidator.includes('reject_inverted_identity_predicates')
+  && databaseValidator.includes('reject_swapped_identity_settings')
+  && databaseValidator.includes('security_constraints_exact')
+  && databaseValidator.includes('backend_acl_scope_exact')
+  && databaseValidator.includes('no_when_clause')
+  && databaseValidator.includes('trigger_type')
+  && databaseValidator.includes('function_source')
+  && databaseValidator.includes('"--self-test"'))
 requireContract('app rollback target captured from exact live alias', workflow.includes('api "/now/aliases/app.supermega.dev" --raw') && workflow.includes('resolve_vercel_rollback_target.mjs alias app.supermega.dev prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG') && workflow.includes('id: app-rollback-target'))
 requireContract('public rollback target captured from exact live alias', workflow.includes('api "/now/aliases/supermega.dev" --raw') && workflow.includes('resolve_vercel_rollback_target.mjs alias supermega.dev prj_Yaf0cZYbiFXcLkMcKaAm4alPWMhR') && workflow.includes('id: rollback-target'))
 requireContract('rollback resolver validates exact deployment identity', workflow.includes('read -r PREVIOUS_URL PREVIOUS_ID') && workflow.includes('resolve_vercel_rollback_target.mjs deployment "$PREVIOUS_URL" "$PREVIOUS_ID"') && rollbackResolver.includes("mode === 'alias'") && rollbackResolver.includes("mode === 'deployment'") && rollbackResolver.includes("state.projectId !== expectedProjectId") && rollbackResolver.includes("nestedDeploymentId !== deploymentId") && rollbackResolver.includes("state.id !== expectedDeploymentId") && rollbackResolver.includes("state.target !== 'production'") && rollbackResolver.includes("state.readyState !== 'READY'"))
@@ -98,32 +197,144 @@ requireContract('rollback alias resolver fixtures', validAliasResolution.status 
 requireContract('rollback deployment resolver fixtures', validDeploymentResolution.status === 0 && validDeploymentResolution.stdout === fixtureUrl && invalidDeploymentResolution.status !== 0 && invalidDeploymentResolution.stderr.includes('deployment_identity'))
 requireContract('only coordinated workflow can promote app or public', (workflow.match(/vercel@56\.1\.0 promote/g) || []).length === 2 && !/vercel@56\.1\.0\s+promote\b/.test(appWorkflow))
 requireContract('failed paired verification rolls back every attempted promotion', workflow.includes("failure() && (steps.promote-app.outputs.attempted == 'true' || steps.promote.outputs.attempted == 'true')") && (workflow.match(/attempted=true/g) || []).length === 2 && workflow.includes('APP_PROMOTION_ATTEMPTED') && workflow.includes('PUBLIC_PROMOTION_ATTEMPTED') && workflow.includes('steps.app-rollback-target.outputs.url') && workflow.includes('steps.rollback-target.outputs.url') && workflow.includes('VERIFY_RELEASE_PAIR_ONLY=1 node tools/verify_coordinated_release_live.mjs'))
+requireContract('kernel native Git deployment is disabled', kernelConfig.git?.deploymentEnabled === false)
+requireContract('kernel release is manual current-main and environment gated',
+  kernelWorkflow.includes("github.event_name == 'workflow_dispatch'")
+  && kernelWorkflow.includes("github.ref == 'refs/heads/main'")
+  && kernelWorkflow.includes("github.repository == 'swanhtet01/swanhtet01.github.io'")
+  && kernelWorkflow.includes('environment: kernel-production')
+  && kernelWorkflow.includes('RELEASE KERNEL $ACTUAL_SHA')
+  && kernelWorkflow.includes('git rev-parse origin/main'))
+requireContract('kernel release promotes one exact isolated artifact',
+  (kernelWorkflow.match(/vercel@56\.1\.0 deploy --prebuilt --prod --skip-domain --yes/g) || []).length === 1
+  && (kernelWorkflow.match(/vercel@56\.1\.0 promote "\$CANDIDATE_URL"/g) || []).length === 1
+  && kernelWorkflow.includes('vercel@56.1.0 curl /api/status --deployment "$CANDIDATE_URL"')
+  && kernelWorkflow.indexOf('Reconfirm current main before promotion') < kernelWorkflow.indexOf('Promote the exact verified candidate')
+  && !kernelWorkflow.includes('npx vercel deploy --prod -y'))
+requireContract('kernel failed production verification restores the exact prior alias',
+  kernelWorkflow.includes("failure() && steps.promote.outputs.attempted == 'true'")
+  && kernelWorkflow.includes('resolve_vercel_rollback_target.mjs deployment "$PREVIOUS_URL" "$PREVIOUS_ID"')
+  && kernelWorkflow.includes('vercel@56.1.0 rollback "$PREVIOUS_URL" --yes')
+  && kernelWorkflow.includes('[ "$RESTORED_URL" != "$PREVIOUS_URL" ]'))
 requireContract('production environment gate', /environment:\s*production/.test(workflow))
 requireContract('production is main-only in the canonical repository', workflow.includes("if: ${{ github.ref == 'refs/heads/main' && github.repository == 'swanhtet01/swanhtet01.github.io' }}"))
 requireContract('deployment metadata uses the guarded runtime ref', (workflow.match(/githubCommitRef=\$\{\{ github\.ref_name \}\}/g) || []).length === 2 && !workflow.includes('githubCommitRef=main'))
 const coreWorkflowActions = `${workflow}\n${appWorkflow}\n${ciWorkflow}\n${publicHealthWorkflow}\n${kernelWorkflow}`
 requireContract('core actions are commit-pinned', !/uses:\s+[^\s#]+@v\d+/m.test(coreWorkflowActions) && /uses:\s+actions\/checkout@[0-9a-f]{40}/.test(workflow))
 requireContract('core workflows use Node 24 action revisions',
-  (coreWorkflowActions.match(/actions\/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1/g) || []).length === 5
-  && (coreWorkflowActions.match(/actions\/setup-node@820762786026740c76f36085b0efc47a31fe5020/g) || []).length === 5
+  (coreWorkflowActions.match(/actions\/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1/g) || []).length === 6
+  && (coreWorkflowActions.match(/actions\/setup-node@820762786026740c76f36085b0efc47a31fe5020/g) || []).length === 6
   && (coreWorkflowActions.match(/actions\/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97/g) || []).length === 3
   && !/(?:11d5960a326750d5838078e36cf38b85af677262|49933ea5288caeca8642d1e84afbd3f7d6820020|a26af69be951a213d495a4c3e4e4022e16d87065)/.test(coreWorkflowActions))
 requireContract('uv build tool is immutable', workflow.includes('astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9') && workflow.includes("version: '0.11.30'"))
 requireContract('stale Cloud Run release authority is retired', !existsSync(resolve(root, '.github/workflows/supermega-app-cloud-run.yml')))
+requireContract('orphan enterprise and free-mode gates are retired',
+  !existsSync(resolve(root, '.github/workflows/supermega-enterprise-gate.yml'))
+  && !existsSync(resolve(root, 'tools/smoke_free_mode_health.mjs'))
+  && ![workflow, appWorkflow, ciWorkflow].some((source) => source.includes('SuperMega App Build and Deploy')))
+requireContract('unlinked preview deployment is retired',
+  previewServer.includes('PREVIEW_DEPLOY_MODE = "canonical_preview"')
+  && previewServer.includes('CANONICAL_VERCEL_TEAM_ID = "team_wI4l7ZgSxcEztQPSlCCYVeJ5"')
+  && previewServer.includes('CANONICAL_APP_VERCEL_PROJECT_ID = "prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG"')
+  && previewServer.includes('_require_canonical_preview_deploy_target()')
+  && previewServer.includes('vercel@56.1.0')
+  && !previewServer.includes('deploy_claimable_preview.sh')
+  && !previewServer.includes('claimable_preview')
+  && [previewLauncher, retiredClaimableLauncher].every((source) =>
+    source.includes('Retired:')
+    && source.includes('exit 78')
+    && !source.includes('codex-deploy-skills.vercel.sh')
+    && !source.includes('curl ')))
+requireContract('preview release review is exact and server-owned',
+  previewServer.includes('PREVIEW_RELEASE_REVIEW_CONTRACT = "supermega.preview-release-review.v1"')
+  && previewServer.includes('PREVIEW_RELEASE_REVIEW_SOURCE = "system:preview_release_review"')
+  && previewServer.includes('@app.post("/api/cloud/deployments/preview/reviews")')
+  && previewServer.includes('def _build_preview_release_review_packet(')
+  && previewServer.includes('def _validate_preview_release_review_packet(')
+  && previewServer.includes('def _find_reusable_preview_release_review(')
+  && previewServer.includes('"status": "human_review_required"')
+  && previewServer.includes('"strategy": "discard_preview"')
+  && previewServer.includes('"production_alias_mutation": False')
+  && previewServer.includes('with preview_release_review_lock:')
+  && previewServer.indexOf('_validate_preview_deploy_approval(') < previewServer.indexOf('_run_preview_deploy(payload.mode, revision=approved_revision)'))
+requireContract('canonical preview deploys one pinned prebuilt artifact',
+  previewServer.includes('deploy_environment["SUPERMEGA_RELEASE_COMMIT"] = normalized_revision')
+  && previewServer.includes('["pull", "--yes", "--environment=preview"]')
+  && previewServer.includes('["build", "--yes"]')
+  && previewServer.includes('"--prebuilt"')
+  && previewServer.includes('f"githubCommitSha={normalized_revision}"')
+  && previewServer.includes('_require_canonical_preview_deploy_target()')
+  && previewServer.includes('prebuilt_config.is_file()')
+  && previewServer.includes('"prebuilt": True')
+  && previewServer.includes('_run_preview_deploy(payload.mode, revision=approved_revision)')
+  && !previewServer.includes('"--prod"')
+  && !previewServer.includes('"--token"')
+  && !previewServer.includes('"urls": urls')
+  && previewServer.indexOf('["pull", "--yes", "--environment=preview"]') < previewServer.indexOf('["build", "--yes"]')
+  && previewServer.indexOf('["build", "--yes"]') < previewServer.indexOf('"deploy",\n                "--prebuilt"'))
 
-const expectedCrons = ['/api/cron/supermega/agent-queue', '/api/cron/supermega/daily'].sort()
-const actualCrons = (config.crons || []).map((cron) => cron.path).sort()
-requireContract('canonical cron contract', JSON.stringify(actualCrons) === JSON.stringify(expectedCrons))
+const normalizeCrons = (crons) => (crons || [])
+  .map(({ path, schedule }) => ({ path, schedule }))
+  .sort((left, right) => left.path.localeCompare(right.path))
+const expectedCrons = normalizeCrons(schedulerAuthority.crons)
+const actualCrons = normalizeCrons(config.crons)
+requireContract('single production scheduler authority',
+  schedulerAuthority.contract === 'supermega.scheduler-authority.v2'
+  && schedulerAuthority.authority === 'vercel'
+  && schedulerAuthority.environment === 'production'
+  && schedulerAuthority.project_id === 'prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG'
+  && schedulerAuthority.activation?.state === 'dormant'
+  && schedulerAuthority.activation?.runtime_environment_key === 'SUPERMEGA_HOSTED_SCHEDULER_ENABLED'
+  && schedulerAuthority.activation?.enabled_value === '1'
+  && schedulerAuthority.activation?.required_evidence?.length === 5
+  && schedulerAuthority.crons?.length === 0
+  && schedulerAuthority.maximum_scheduler_invocations_per_day === 0
+  && schedulerAuthority.activation_plan?.maximum_scheduler_invocations_per_day === 25
+  && JSON.stringify(normalizeCrons(schedulerAuthority.activation_plan?.crons)) === JSON.stringify(normalizeCrons([
+    { path: '/api/cron/supermega/agent-queue', schedule: '5 * * * *' },
+    { path: '/api/cron/supermega/daily', schedule: '45 0 * * *' },
+  ]))
+  && JSON.stringify(normalizeCrons(schedulerAuthority.migration?.preflight_retiring_crons)) === JSON.stringify(normalizeCrons([
+    { path: '/api/cron/supermega/agent-queue', schedule: '*/15 * * * *' },
+    { path: '/api/cron/supermega/daily', schedule: '45 0 * * *' },
+  ]))
+  && schedulerAuthority.migration?.post_deploy_retiring_crons_allowed === false
+  && schedulerAuthority.worker_dispatch?.mode === 'enqueue-on-demand'
+  && schedulerAuthority.worker_dispatch?.polling_allowed === false
+  && schedulerAuthority.retired_authority?.provider === 'google-cloud-scheduler'
+  && schedulerAuthority.retired_authority?.mutation_allowed === false)
+requireContract('canonical cron path and cadence contract', JSON.stringify(actualCrons) === JSON.stringify(expectedCrons))
+requireContract('company automation events stay tenant-scoped and off YTF connectors',
+  agentConnectorMap.startsWith('AGENT_JOB_CONNECTOR_MAP:')
+  && agentConnectorMap.includes('"core-agent-operations"')
+  && agentConnectorMap.includes('"core-github-build"')
+  && !agentConnectorMap.includes('"ytf-')
+  && previewServer.includes('def _scope_connector_catalog(')
+  && previewServer.includes('connectors = _scope_connector_catalog(connectors, expected_tenant_key)')
+  && previewServer.indexOf('connectors = _scope_connector_catalog(connectors, expected_tenant_key)') < previewServer.indexOf('connector_lookup = {'))
+requireContract('Vercel config is generated from scheduler authority',
+  generator.includes("readFileSync('tools/supermega_scheduler_authority.json'")
+  && generator.includes('const canonicalCrons = schedulerAuthority.crons.map')
+  && generator.includes("schedulerAuthority.activation?.state !== 'dormant'")
+  && generator.includes('schedulerAuthority.activation_plan?.maximum_scheduler_invocations_per_day !== 25'))
+requireContract('public live health follows the canonical release workflow',
+  publicHealthWorkflow.includes('SuperMega - Coordinated Verified Release')
+  && !publicHealthWorkflow.includes('SuperMega Public - Verified Prebuilt Release'))
+requireContract('scheduler authority changes trigger every release gate',
+  [workflow, appWorkflow, ciWorkflow].every((source) =>
+    source.includes('tools/supermega_scheduler_authority.json')
+    && source.includes('tools/verify_vercel_project_state.mjs')
+    && source.includes('tools/test_vercel_project_state.mjs')))
 
 const combined = `${workflow}\n${appWorkflow}\n${generator}\n${JSON.stringify(config)}`
 requireContract('no POS route', !/\/pos\/login/i.test(combined))
 requireContract('no YTF schedule', !/\/api\/cron\/ytf/i.test(combined))
 
 const orderedSteps = [
+  'Enforce exact app runtime database and RLS gate',
   'Inspect and verify app candidate',
   'Verify protected candidate content',
   'Verify candidate release identity barrier',
-  'Enforce managed database and RLS promotion gate',
   'Promote the verified app artifact',
   'Promote the verified artifact',
   'Verify production aliases and exact release',

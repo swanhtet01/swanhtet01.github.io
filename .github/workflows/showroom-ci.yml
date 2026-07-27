@@ -12,10 +12,13 @@ on:
       - 'tests/**'
       - 'supabase/migrations/**'
       - 'tools/write_app_vercel_config.mjs'
+      - 'tools/supermega_scheduler_authority.json'
+      - 'tools/ensure_supermega_scheduler.ps1'
       - 'tools/write_app_release_metadata.mjs'
       - 'tools/verify_app_build.mjs'
       - 'tools/verify_app_deploy_workflow.mjs'
       - 'tools/verify_app_security_contract.mjs'
+      - 'tools/verify_private_trial_migrations.mjs'
       - 'tools/verify_app_release_live.mjs'
       - 'tools/verify_coordinated_release_live.mjs'
       - 'tools/verify_public_deploy_guard.mjs'
@@ -28,12 +31,17 @@ on:
       - 'tools/verify_hq_contract.mjs'
       - 'tools/verify_vercel_environment_state.mjs'
       - 'tools/test_vercel_environment_state.mjs'
+      - 'tools/verify_vercel_project_state.mjs'
+      - 'tools/test_vercel_project_state.mjs'
       - 'tools/verify_vercel_domain_state.mjs'
       - 'tools/test_vercel_domain_state.mjs'
       - 'tools/validate_supermega_database_url.py'
       - 'tools/activate_supermega_database.ps1'
+      - 'tools/rehearse_supermega_postgres17.py'
+      - 'tools/run_postgres17_rehearsal.mjs'
       - 'site-manifest.json'
       - 'package.json'
+      - 'package-lock.json'
       - 'pyproject.toml'
       - 'uv.lock'
       - 'requirements.txt'
@@ -59,7 +67,9 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: showroom/package-lock.json
+          cache-dependency-path: |
+            package-lock.json
+            showroom/package-lock.json
 
       - name: Setup Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -71,9 +81,13 @@ jobs:
           python -m pip install --disable-pip-version-check -r requirements-test.txt
           python -m unittest discover -s tests -p 'test_*.py' -v
 
+      - name: Install migration verifier
+        run: npm ci --ignore-scripts
+
       - name: Verify coordinated release and RLS guards
         run: |
           python tools/validate_supermega_database_url.py --self-test
+          node tools/verify_private_trial_migrations.mjs
           node tools/verify_coordinated_release_live.mjs --self-test
           node tools/verify_app_deploy_workflow.mjs
           node tools/verify_public_deploy_guard.mjs

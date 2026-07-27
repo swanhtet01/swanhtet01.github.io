@@ -33,10 +33,17 @@ test('GET returns the protected fixed roster and hard limits', async () => {
   assert.equal(result.json.auth.mode, 'owner')
   assert.equal(result.json.auth.role, 'owner')
   assert.deepEqual(result.json.auth.allowedActions, ['*'])
-  assert.equal(result.json.agents.length, 15)
+  assert.equal(result.json.agents.length, 12)
+  assert.equal(
+    new Set(result.json.agents.flatMap((agent) => [agent.crew, ...agent.capabilityCrews])).size,
+    15,
+  )
   assert.equal(result.json.agents.every((agent) => agent.evidenceHint), true)
   assert.equal(result.json.limits.maxAgents, 2)
   assert.equal(result.json.limits.maxRoleBudget, 8)
+  assert.equal(result.json.limits.maxConcurrentCycles, 4)
+  assert.equal(result.json.limits.capacityClaimContract, 'supermega.agent-company-capacity-claims.v1')
+  assert.equal(result.json.limits.capacityClaimTtlSeconds, 120)
   assert.equal(result.json.playbooks.enabled, true)
   assert.equal(result.json.playbooks.catalog.length, 8)
   assert.equal(result.json.playbooks.staged, true)
@@ -392,6 +399,16 @@ test('POST run maps duplicate and unavailable durable claims cleanly', async () 
     runCompanyCycle: async () => ({ ok: false, reason: 'company_durable_claim_required', status: 'blocked' }),
   })
   assert.equal(blocked.status, 503)
+  const unavailableCapacity = await handleAgentCompany(request({ body: { ...validBody, action: 'run' } }), {
+    opsKey: KEY,
+    runCompanyCycle: async () => ({ ok: false, reason: 'company_capacity_unavailable', status: 'blocked' }),
+  })
+  assert.equal(unavailableCapacity.status, 503)
+  const exhausted = await handleAgentCompany(request({ body: { ...validBody, action: 'run' } }), {
+    opsKey: KEY,
+    runCompanyCycle: async () => ({ ok: false, reason: 'company_capacity_exhausted', status: 'busy' }),
+  })
+  assert.equal(exhausted.status, 429)
 })
 
 test('protected work-order actions delegate to the durable queue contract', async () => {
@@ -406,6 +423,7 @@ test('protected work-order actions delegate to the durable queue contract', asyn
     getCompanyWorkOrderProof: async (body) => { calls.push(['proof', body]); return { ok: true, mode: 'work_order_proof' } },
     reviewCompanyWorkOrder: async (body) => { calls.push(['review', body]); return { ok: true, mode: 'work_order_review' } },
     evaluateCompanyWorkOrder: async (body) => { calls.push(['evaluate', body]); return { ok: true, mode: 'work_order_evaluate' } },
+    evaluateCeoOutcomeDelivery: async (body) => { calls.push(['evaluate-outcome', body]); return { ok: true, mode: 'ceo_outcome_evaluate' } },
     buildCompanyOperationsReport: async (body) => { calls.push(['report', body]); return { ok: true, mode: 'operations_report' } },
   }
   const actions = [
@@ -417,13 +435,14 @@ test('protected work-order actions delegate to the durable queue contract', asyn
     ['work-order-proof', { clientId: 'client-acme', workOrderId: 'company-order:abc' }],
     ['work-order-review', { clientId: 'client-acme', workOrderId: 'company-order:abc', resultHash: 'a'.repeat(64), decision: 'accepted', reviewerName: 'Aye Aye', source: 'chat', statement: 'Accepted.', recordedBy: 'Swan', confirmation: 'ACCEPT company-order:abc hash' }],
     ['work-order-evaluate', { clientId: 'client-acme', workOrderId: 'company-order:abc', planHash: 'a'.repeat(64), verdict: 'accepted', checks: { accurate: true, complete: true, usable: true, boundarySafe: true }, confirmation: 'EVALUATE company-order:abc' }],
+    ['ceo-outcome-evaluate', { clientId: 'client-acme', operationId: `ceo-outcome:${'a'.repeat(40)}`, recordHash: 'b'.repeat(64), verdict: 'accepted', confirmation: `EVALUATE ceo-outcome:${'a'.repeat(40)}` }],
     ['operations-report', { clientId: 'client-acme', windowDays: 30 }],
   ]
   for (const [action, body] of actions) {
     const result = await handleAgentCompany(request({ body: { ...body, action } }), options)
     assert.equal(result.status, 200)
   }
-  assert.deepEqual(calls.map(([name]) => name), ['create', 'list', 'get', 'run', 'cancel', 'proof', 'review', 'evaluate', 'report'])
+  assert.deepEqual(calls.map(([name]) => name), ['create', 'list', 'get', 'run', 'cancel', 'proof', 'review', 'evaluate', 'evaluate-outcome', 'report'])
   assert.equal(calls.every(([, body]) => !('action' in body)), true)
 })
 

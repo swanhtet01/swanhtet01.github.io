@@ -9,6 +9,7 @@ on:
       - 'hq/**'
       - site-manifest.json
       - package.json
+      - package-lock.json
       - 'api/**'
       - api_app.py
       - 'supermega_runtime/**'
@@ -28,22 +29,29 @@ on:
       - tools/verify_public_release_live.mjs
       - tools/verify_public_preview_live.mjs
       - tools/write_app_vercel_config.mjs
+      - tools/supermega_scheduler_authority.json
+      - tools/ensure_supermega_scheduler.ps1
       - tools/write_app_release_metadata.mjs
       - tools/verify_app_build.mjs
       - tools/verify_app_deploy_workflow.mjs
       - tools/verify_app_release_live.mjs
       - tools/verify_app_security_contract.mjs
+      - tools/verify_private_trial_migrations.mjs
       - tools/verify_coordinated_release_live.mjs
       - tools/verify_hq_contract.mjs
       - tools/verify_vercel_project_state.mjs
+      - tools/test_vercel_project_state.mjs
       - tools/verify_vercel_environment_state.mjs
       - tools/test_vercel_environment_state.mjs
       - tools/verify_vercel_domain_state.mjs
+      - tools/verify_retired_vercel_alias_state.mjs
       - tools/test_vercel_domain_state.mjs
       - tools/verify_public_firewall_state.mjs
       - tools/resolve_vercel_rollback_target.mjs
       - tools/validate_supermega_database_url.py
       - tools/activate_supermega_database.ps1
+      - tools/rehearse_supermega_postgres17.py
+      - tools/run_postgres17_rehearsal.mjs
       - tools/deny_stale_public_deploy.mjs
       - tools/deploy_website_actions.ps1
       - vercel.json
@@ -89,6 +97,10 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            showroom/package-lock.json
 
       - name: Setup Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -101,11 +113,15 @@ jobs:
           version: '0.11.30'
           enable-cache: false
 
+      - name: Install migration verifier
+        run: npm ci --ignore-scripts
+
       - name: Verify canonical API and release contracts
         run: |
           python -m pip install --disable-pip-version-check -r requirements-test.txt
           python -m unittest discover -s tests -p 'test_*.py' -v
           python tools/validate_supermega_database_url.py --self-test
+          node tools/verify_private_trial_migrations.mjs
           node tools/verify_coordinated_release_live.mjs --self-test
           node tools/verify_app_deploy_workflow.mjs
 
@@ -140,10 +156,31 @@ jobs:
           npx --yes vercel@56.1.0 project inspect megaos --token="$VERCEL_TOKEN"
           npx --yes vercel@56.1.0 api "/v9/projects/$APP_VERCEL_PROJECT_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_project_state.mjs app
           npx --yes vercel@56.1.0 api "/v9/projects/$APP_VERCEL_PROJECT_ID/domains?teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_domain_state.mjs app
+          npx --yes vercel@56.1.0 api "/v4/aliases?domain=pos.supermega.dev&teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_retired_vercel_alias_state.mjs pos.supermega.dev
           APP_ENV_AUDIT="$(npx --yes vercel@56.1.0 api "/v10/projects/$APP_VERCEL_PROJECT_ID/env?teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_environment_state.mjs app)"
           printf '%s\n' "$APP_ENV_AUDIT"
           OPERATING_MODE="$(printf '%s' "$APP_ENV_AUDIT" | node -e "let input='';process.stdin.on('data',chunk=>input+=chunk);process.stdin.on('end',()=>{const value=JSON.parse(input);if(!['isolated_demo','managed_trial'].includes(value.operatingMode))process.exit(1);process.stdout.write(value.operatingMode)})")"
           printf 'operating_mode=%s\n' "$OPERATING_MODE" >> "$GITHUB_OUTPUT"
+
+      - name: Enforce exact app runtime database and RLS gate
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ env.APP_VERCEL_PROJECT_ID }}
+          SELECTED_OPERATING_MODE: ${{ steps.app-environment.outputs.operating_mode }}
+        run: |
+          case "$SELECTED_OPERATING_MODE" in
+            managed_trial)
+              npx --yes vercel@56.1.0 env run --environment=production --token="$VERCEL_TOKEN" -- \
+                python tools/validate_supermega_database_url.py --env-key SUPERMEGA_DATABASE_URL --ensure-schema --require-ready
+              ;;
+            isolated_demo)
+              echo "Managed activation is not selected; production remains isolated_demo."
+              ;;
+            *)
+              echo "::error::Operating mode selection is missing or invalid."
+              exit 1
+              ;;
+          esac
 
       - name: Build the immutable app artifact
         env:
@@ -262,28 +299,6 @@ jobs:
           EXPECTED_RELEASE_COMMIT: ${{ github.sha }}
         run: node tools/verify_coordinated_release_live.mjs
 
-      - name: Enforce managed database and RLS promotion gate
-        env:
-          SELECTED_OPERATING_MODE: ${{ steps.app-environment.outputs.operating_mode }}
-          SUPERMEGA_DATABASE_URL: ${{ secrets.SUPERMEGA_DATABASE_URL }}
-        run: |
-          case "$SELECTED_OPERATING_MODE" in
-            managed_trial)
-              if [ -z "$SUPERMEGA_DATABASE_URL" ]; then
-                echo "::error::Managed activation is selected but the owner-gated SUPERMEGA_DATABASE_URL secret is unavailable."
-                exit 1
-              fi
-              python tools/validate_supermega_database_url.py --env-key SUPERMEGA_DATABASE_URL --ensure-schema --require-ready
-              ;;
-            isolated_demo)
-              echo "Managed activation is not selected; production remains isolated_demo."
-              ;;
-            *)
-              echo "::error::Operating mode selection is missing or invalid."
-              exit 1
-              ;;
-          esac
-
       - name: Promote the verified app artifact
         id: promote-app
         env:
@@ -319,6 +334,7 @@ jobs:
         run: |
           VERCEL_PROJECT_ID="$APP_VERCEL_PROJECT_ID" npx --yes vercel@56.1.0 api "/v9/projects/$APP_VERCEL_PROJECT_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_project_state.mjs app
           VERCEL_PROJECT_ID="$APP_VERCEL_PROJECT_ID" npx --yes vercel@56.1.0 api "/v9/projects/$APP_VERCEL_PROJECT_ID/domains?teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_domain_state.mjs app
+          VERCEL_PROJECT_ID="$APP_VERCEL_PROJECT_ID" npx --yes vercel@56.1.0 api "/v4/aliases?domain=pos.supermega.dev&teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_retired_vercel_alias_state.mjs pos.supermega.dev
           VERCEL_PROJECT_ID="$APP_VERCEL_PROJECT_ID" npx --yes vercel@56.1.0 api "/v10/projects/$APP_VERCEL_PROJECT_ID/env?teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_environment_state.mjs app
           VERCEL_PROJECT_ID="$PUBLIC_VERCEL_PROJECT_ID" npx --yes vercel@56.1.0 api "/v9/projects/$PUBLIC_VERCEL_PROJECT_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_project_state.mjs public
           VERCEL_PROJECT_ID="$PUBLIC_VERCEL_PROJECT_ID" npx --yes vercel@56.1.0 api "/v9/projects/$PUBLIC_VERCEL_PROJECT_ID/domains?teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_domain_state.mjs public

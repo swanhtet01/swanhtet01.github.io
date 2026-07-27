@@ -85,6 +85,7 @@ test('required secrets derive from selected workcells and plan output never cont
   assert.equal(plan.missingSecretInputs.length, 0)
   assert.ok(plan.secretNames.includes('CRON_SECRET'))
   assert.ok(plan.variableNames.includes('WORKCELL_OWNER_EVIDENCE_ENABLED'))
+  assert.ok(plan.variableNames.includes('SUPERMEGA_COMPANY_DAILY_AI_BUDGET_UNITS'))
   assert.ok(plan.requiredSecretInputs.includes('SUPERMEGA_NEW_CLIENT_SUPABASE_SERVICE_ROLE_KEY'))
   assert.ok(plan.requiredSecretInputs.some((name) => name.startsWith('SUPERMEGA_NEW_CLIENT_SUPABASE_DB_URL ')))
   assert.equal(plan.schemaBootstrap.supplied, false)
@@ -226,9 +227,24 @@ test('data-spine preflight proves table access and atomic claims without leaving
   const calls = []
   let activityWrites = 0
   let approvalTransitions = 0
+  let budgetReservations = 0
   const result = await verifyClientDataSpine(resolved, {
     fetch: async (url, options) => {
       calls.push({ url, options })
+      if (url.includes('rpc/supermega_get_ai_budget_usage')) {
+        return { ok: true, async json() { return [{ reserved_units: 1, attempts: 1, in_flight: 1, consumed: 0, failed: 0 }] } }
+      }
+      if (url.includes('rpc/supermega_reserve_ai_budget')) {
+        budgetReservations += 1
+        return {
+          ok: true,
+          async json() {
+            return budgetReservations === 1
+              ? [{ granted: true, used_units: 1, cap_units: 1, reason: null }]
+              : [{ granted: false, used_units: 1, cap_units: 1, reason: 'company_daily_budget_reached' }]
+          },
+        }
+      }
       if (url.includes('supermega_action_queue')) {
         if (options?.method === 'POST') return { ok: true, async json() { return [{ status: 'draft', version: 0 }] } }
         if (options?.method === 'PATCH') {
@@ -245,15 +261,18 @@ test('data-spine preflight proves table access and atomic claims without leaving
     },
     randomBytes: () => Buffer.from('fixed-probe'),
   })
-  assert.deepEqual(result.tables, ['supermega_console_activity', 'supermega_token_ledger', 'supermega_ai_cache', 'supermega_action_queue', 'supermega_owner_evidence'])
+  assert.deepEqual(result.tables, ['supermega_console_activity', 'supermega_token_ledger', 'supermega_ai_budget_reservations', 'supermega_ai_cache', 'supermega_action_queue', 'supermega_owner_evidence'])
+  assert.equal(result.atomicAiBudget, true)
+  assert.equal(result.aiBudgetTelemetry, true)
   assert.equal(result.idempotentClaim, true)
   assert.equal(result.approvalCas, true)
   assert.equal(result.probeCleaned, true)
   assert.deepEqual(calls.map((call) => call.options?.method || 'GET'), [
-    'GET', 'GET', 'GET', 'GET', 'GET', 'POST', 'POST', 'DELETE', 'POST', 'PATCH', 'PATCH', 'DELETE',
+    'GET', 'GET', 'GET', 'GET', 'GET', 'GET', 'POST', 'POST', 'POST', 'DELETE', 'POST', 'POST', 'DELETE', 'POST', 'PATCH', 'PATCH', 'DELETE',
   ])
   assert.equal(calls.every((call) => call.options.headers.apikey === 'supabase-secret'), true)
-  assert.equal(JSON.parse(calls[5].options.body).id, JSON.parse(calls[6].options.body).id)
+  assert.deepEqual(JSON.parse(calls[7].options.body), { p_window: '1970-01-01' })
+  assert.equal(JSON.parse(calls[10].options.body).id, JSON.parse(calls[11].options.body).id)
   assert.doesNotMatch(JSON.stringify(result), /supabase-secret/)
   await assert.rejects(
     verifyClientDataSpine(resolved, { fetch: async () => ({ ok: false, status: 404 }) }),
@@ -261,10 +280,18 @@ test('data-spine preflight proves table access and atomic claims without leaving
   )
 
   const failedCalls = []
+  let failedBudgetReservations = 0
   await assert.rejects(
     verifyClientDataSpine(resolved, {
       fetch: async (url, options) => {
         failedCalls.push(options?.method || 'GET')
+        if (url.includes('rpc/supermega_get_ai_budget_usage')) {
+          return { ok: true, async json() { return [{ reserved_units: 1, attempts: 1, in_flight: 1, consumed: 0, failed: 0 }] } }
+        }
+        if (url.includes('rpc/supermega_reserve_ai_budget')) {
+          failedBudgetReservations += 1
+          return { ok: true, async json() { return failedBudgetReservations === 1 ? [{ granted: true, used_units: 1 }] : [{ granted: false, reason: 'company_daily_budget_reached' }] } }
+        }
         if (options?.method === 'POST') return { ok: true, async json() { return [] } }
         return { ok: true, async json() { return [] } }
       },
@@ -274,10 +301,18 @@ test('data-spine preflight proves table access and atomic claims without leaving
   assert.equal(failedCalls.at(-1), 'DELETE')
 
   let activityPost = 0
+  let approvalBudgetReservations = 0
   await assert.rejects(
     verifyClientDataSpine(resolved, {
       fetch: async (url, options) => {
         if (!options?.method) return { ok: true, async json() { return [] } }
+        if (url.includes('rpc/supermega_get_ai_budget_usage')) {
+          return { ok: true, async json() { return [{ reserved_units: 1, attempts: 1, in_flight: 1, consumed: 0, failed: 0 }] } }
+        }
+        if (url.includes('rpc/supermega_reserve_ai_budget')) {
+          approvalBudgetReservations += 1
+          return { ok: true, async json() { return approvalBudgetReservations === 1 ? [{ granted: true, used_units: 1 }] : [{ granted: false, reason: 'company_daily_budget_reached' }] } }
+        }
         if (url.includes('supermega_console_activity') && options.method === 'POST') {
           activityPost += 1
           return { ok: true, async json() { return activityPost === 1 ? [{ id: 'probe' }] : [] } }
@@ -299,7 +334,7 @@ async function fixtureSource() {
   const source = await mkdtemp(join(tmpdir(), 'workcell-source-'))
   await mkdir(join(source, 'public'))
   await writeFile(join(source, 'public', 'index.html'), '<!doctype html><title>Workcell</title>')
-  await writeFile(join(source, 'vercel.json'), JSON.stringify({ crons: [{ path: '/api/brief', schedule: '30 1 * * *' }], routes: [] }))
+  await writeFile(join(source, 'vercel.json'), JSON.stringify({ routes: [] }))
   return source
 }
 
@@ -482,13 +517,20 @@ test('project inspection auth or network failures never become create operations
 
 test('client SQL bootstrap contains the exact durable workcell contract', async () => {
   const sql = await readFile(new URL('./supabase/workcell-client.sql', import.meta.url), 'utf8')
-  for (const table of ['supermega_console_activity', 'supermega_token_ledger', 'supermega_ai_cache', 'supermega_action_queue', 'supermega_owner_evidence']) {
+  for (const table of ['supermega_console_activity', 'supermega_token_ledger', 'supermega_ai_budget_reservations', 'supermega_ai_cache', 'supermega_action_queue', 'supermega_owner_evidence']) {
     assert.match(sql, new RegExp(`create table if not exists public\\.${table}`))
     assert.match(sql, new RegExp(`alter table public\\.${table} enable row level security`))
     assert.match(sql, new RegExp(`revoke all on public\\.${table} from anon, authenticated`))
   }
   assert.match(sql, /create index if not exists supermega_action_queue_status_created_idx/)
   assert.match(sql, /create index if not exists supermega_owner_evidence_occurred_idx/)
+  assert.match(sql, /create or replace function public\.supermega_reserve_ai_budget/)
+  assert.match(sql, /create or replace function public\.supermega_get_ai_budget_usage/)
+  assert.match(sql, /pg_advisory_xact_lock/)
+  assert.match(sql, /security invoker/)
+  assert.doesNotMatch(sql, /security definer/)
+  assert.match(sql, /grant execute on function public\.supermega_reserve_ai_budget\(text,text,bigint,bigint,text,text,text\) to service_role/)
+  assert.match(sql, /grant execute on function public\.supermega_get_ai_budget_usage\(text\) to service_role/)
   assert.match(sql, /grant select, insert on public\.supermega_owner_evidence to service_role/)
   assert.doesNotMatch(sql, /grant select, insert, update, delete on public\.supermega_owner_evidence/)
   assert.match(sql, /notify pgrst, 'reload schema'/)

@@ -5,30 +5,69 @@ from __future__ import annotations
 from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 import json
 from threading import RLock
 from typing import Any, Callable, Iterator, Mapping, Protocol, Sequence
 from uuid import UUID, uuid4
 
+from supermega_runtime.shop_inventory_runtime import (
+    ShopInventoryValidationError,
+    restamp_latest_shop_inventory_command,
+)
+
 
 TRIAL_SCHEMA_COMPONENT = "private_trial_backend"
-TRIAL_SCHEMA_VERSION = 3
+TRIAL_SCHEMA_VERSION = 5
 TRIAL_SURFACES = frozenset({"company", "commerce", "production", "website", "setup"})
 TRUSTED_ACTOR_KINDS = frozenset({"human", "service", "agent"})
 HUMAN_ACTOR_KIND = "human"
+_MAX_SAFE_INTEGER = 9_007_199_254_740_991
+_ORDER_CALCULATION_SCHEMA = "supermega.commerce.order-calculation.v1"
 HUMAN_COMMAND_EVENTS = frozenset(
     {
         "commerce.workspace.initialized",
         "commerce.item.created",
+        "commerce.item.updated",
         "commerce.order.created",
         "commerce.order.advanced",
         "commerce.order.cancelled",
+        "commerce.order.return_recorded",
         "commerce.payment.reconciled",
+        "commerce.refund.settled",
         "commerce.stock.received",
+        "commerce.stock.counted",
+        "commerce.production_material.issued",
+        "commerce.inventory.initialized",
+        "commerce.inventory.transferred",
+        "commerce.purchase_order.created",
+        "commerce.purchase_order.received",
+        "commerce.purchase_order.cancelled",
         "commerce.close.saved",
         "commerce.website_intake.converted",
+        "commerce.storefront.configuration.saved",
+        "commerce.storefront.merchandising.imported",
+        "production.workspace.initialized",
+        "production.job.created",
+        "production.job.schedule_updated",
+        "production.job.closed",
+        "production.output.recorded",
+        "production.material.consumed",
+        "production.issue.opened",
+        "production.issue.resolved",
+        "production.quality_hold.placed",
+        "production.quality_hold.released",
+        "production.machine_state.changed",
+        "production.order_execution.recorded",
+        "production.downtime.started",
+        "production.downtime.ended",
+        "production.maintenance.started",
+        "production.maintenance.completed",
+        "website.evidence.recorded",
+        "website.revision.approved",
+        "website.snapshot.recorded",
+        "website.release.recorded",
     }
 )
 SURFACE_WRITE_CAPABILITIES = {
@@ -38,6 +77,10 @@ SURFACE_WRITE_CAPABILITIES = {
     "website": "website.write",
     "setup": "setup.write",
 }
+SURFACE_READ_CAPABILITIES = {
+    surface: f"{surface}.read" for surface in SURFACE_WRITE_CAPABILITIES
+}
+APPROVAL_READ_CAPABILITY = "approvals.read"
 APPROVAL_REQUEST_CAPABILITY = "approvals.request"
 APPROVAL_DECIDE_CAPABILITY = "approvals.decide"
 DECISION_PACKET_CONTRACT = "decision_packet.v1"
@@ -46,6 +89,98 @@ MAX_JSON_BYTES = 64 * 1024
 JsonObject = dict[str, Any]
 StateReducer = Callable[[str, str, Mapping[str, Any], Mapping[str, Any]], Mapping[str, Any]]
 StatePrecondition = Callable[[Mapping[str, Any], Mapping[str, Mapping[str, Any]]], None]
+
+_PRIVATE_HARDENING_TRIGGER_CONTRACT: dict[tuple[str, str], dict[str, Any]] = {
+    ("workspace_state", "workspace_state_version_guard"): {
+        "event_mask": 23,
+        "function_name": "guard_workspace_state_update",
+        "function_source": """
+            begin
+              if tg_op = 'INSERT' then
+                if new.version <> 1 then
+                  raise exception using errcode = '55000', message = 'initial workspace state version must be one';
+                end if;
+              else
+                if new.workspace_id is distinct from old.workspace_id
+                   or new.surface is distinct from old.surface then
+                  raise exception using errcode = '55000', message = 'workspace state identity is immutable';
+                end if;
+                if new.version <> old.version + 1 then
+                  raise exception using errcode = '40001', message = 'workspace state version must increment by one';
+                end if;
+              end if;
+              new.updated_at := transaction_timestamp();
+              return new;
+            end
+        """,
+    },
+    ("workspace_events", "workspace_events_immutable"): {
+        "event_mask": 27,
+        "function_name": "reject_workspace_event_mutation",
+        "function_source": """
+            begin
+              raise exception using
+                errcode = '55000',
+                message = 'workspace events are immutable';
+            end
+        """,
+    },
+    ("workspace_events", "workspace_events_server_timestamp"): {
+        "event_mask": 7,
+        "function_name": "stamp_workspace_event_insert",
+        "function_source": """
+            begin
+              new.created_at := transaction_timestamp();
+              return new;
+            end
+        """,
+    },
+    ("approval_requests", "approval_requests_controlled_mutation"): {
+        "event_mask": 31,
+        "function_name": "guard_approval_mutation",
+        "function_source": """
+            begin
+              if tg_op = 'INSERT' then
+                new.requested_at := transaction_timestamp();
+                return new;
+              end if;
+              if tg_op = 'DELETE' then
+                raise exception using errcode = '55000', message = 'approval records cannot be deleted';
+              end if;
+              if new.approval_id is distinct from old.approval_id
+                 or new.workspace_id is distinct from old.workspace_id
+                 or new.command_id is distinct from old.command_id
+                 or new.command_fingerprint is distinct from old.command_fingerprint
+                 or new.title is distinct from old.title
+                 or new.proposal_json is distinct from old.proposal_json
+                 or new.evidence_refs_json is distinct from old.evidence_refs_json
+                 or new.requested_by is distinct from old.requested_by
+                 or new.requested_actor_kind is distinct from old.requested_actor_kind
+                 or new.requested_at is distinct from old.requested_at
+                 or new.decision_contract_version is distinct from old.decision_contract_version then
+                raise exception using errcode = '55000', message = 'approval proposal and evidence are immutable';
+              end if;
+              if old.decision_contract_version <> 2 then
+                raise exception using errcode = '55000', message = 'legacy approval must be reissued under decision contract v2';
+              end if;
+              if old.status <> 'pending' or new.status not in ('approved', 'declined') then
+                raise exception using errcode = '55000', message = 'approval transition must be pending to approved or declined';
+              end if;
+              if new.version <> old.version + 1
+                 or new.decided_by is null
+                 or new.decided_by <> btrim(new.decided_by)
+                 or new.decided_by = ''
+                 or new.decided_actor_kind <> 'human'
+                 or new.decision_note <> btrim(new.decision_note)
+                 or char_length(new.decision_note) not between 1 and 500 then
+                raise exception using errcode = '55000', message = 'approval decision requires a named human and nonblank note';
+              end if;
+              new.decided_at := transaction_timestamp();
+              return new;
+            end
+        """,
+    },
+}
 
 
 class TrialStoreError(RuntimeError):
@@ -294,6 +429,1164 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _canonical_millisecond_utc(timestamp: str) -> str:
+    return (
+        datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+        .astimezone(timezone.utc)
+        .isoformat(timespec="milliseconds")
+        .replace("+00:00", "Z")
+    )
+
+
+def _not_before(captured_at: str, *timestamps: object) -> str:
+    latest = datetime.fromisoformat(captured_at.replace("Z", "+00:00"))
+    for timestamp in timestamps:
+        if not isinstance(timestamp, str):
+            continue
+        try:
+            candidate = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if candidate > latest:
+            latest = candidate
+    return latest.isoformat()
+
+
+def _myanmar_business_date(timestamp: str) -> str:
+    parsed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    return (
+        parsed.astimezone(timezone.utc) + timedelta(hours=6, minutes=30)
+    ).date().isoformat()
+
+
+def _authoritative_order_calculation(
+    state: Mapping[str, Any],
+    order: Mapping[str, Any],
+) -> JsonObject | None:
+    catalog_changes = state.get("catalogChanges", [])
+    if not isinstance(catalog_changes, list):
+        return None
+    lines = order.get("lines")
+    subtotal_mmk = 0
+    if lines is not None:
+        if not isinstance(lines, list) or not 1 <= len(lines) <= 20:
+            return None
+        for line in lines:
+            if not isinstance(line, Mapping):
+                return None
+            quantity = line.get("quantity")
+            unit_price = line.get("unitPriceMmk")
+            if (
+                not isinstance(quantity, int)
+                or isinstance(quantity, bool)
+                or not isinstance(unit_price, int)
+                or isinstance(unit_price, bool)
+                or quantity < 1
+                or unit_price < 1
+            ):
+                return None
+            subtotal_mmk += quantity * unit_price
+            if subtotal_mmk > _MAX_SAFE_INTEGER:
+                return None
+    else:
+        item_sku = order.get("itemSku")
+        quantity = order.get("quantity")
+        items = state.get("items")
+        if (
+            not isinstance(item_sku, str)
+            or not isinstance(quantity, int)
+            or isinstance(quantity, bool)
+            or quantity < 1
+            or not isinstance(items, list)
+        ):
+            return None
+        matching_items = [
+            item
+            for item in items
+            if isinstance(item, Mapping) and item.get("sku") == item_sku
+        ]
+        if len(matching_items) != 1:
+            return None
+        unit_price = matching_items[0].get("price")
+        if (
+            not isinstance(unit_price, int)
+            or isinstance(unit_price, bool)
+            or unit_price < 1
+        ):
+            return None
+        subtotal_mmk = quantity * unit_price
+        if subtotal_mmk > _MAX_SAFE_INTEGER:
+            return None
+    return {
+        "schema": _ORDER_CALCULATION_SCHEMA,
+        "currency": "MMK",
+        "catalogRevision": len(catalog_changes),
+        "subtotalMmk": subtotal_mmk,
+        "taxMode": "not_configured",
+        "taxMmk": 0,
+        "totalMmk": subtotal_mmk,
+    }
+
+
+def _restamp_order_inventory(
+    state: Mapping[str, Any],
+    *,
+    kind: str,
+    action_id: str,
+    actor: str,
+    captured_at: str,
+) -> JsonObject:
+    authoritative_state = dict(state)
+    foundation = state.get("inventoryFoundation")
+    if not isinstance(foundation, Mapping):
+        return authoritative_state
+    commands = foundation.get("commands")
+    latest_payload = (
+        commands[-1].get("payload")
+        if isinstance(commands, list)
+        and commands
+        and isinstance(commands[-1], Mapping)
+        else None
+    )
+    if not isinstance(latest_payload, Mapping) or latest_payload.get("kind") != kind:
+        return authoritative_state
+    try:
+        authoritative_state["inventoryFoundation"] = (
+            restamp_latest_shop_inventory_command(
+                foundation,
+                action_id=action_id,
+                actor=actor,
+                captured_at=captured_at,
+            )
+        )
+    except ShopInventoryValidationError as exc:
+        raise TrialValidationError(str(exc)) from exc
+    return authoritative_state
+
+
+def _authoritative_command_payload(
+    payload: Mapping[str, Any],
+    *,
+    principal: TrialPrincipal,
+    surface: str,
+    event_type: str,
+    captured_at: str,
+) -> JsonObject:
+    authoritative = deepcopy(dict(payload))
+    if surface == "website" and event_type == "website.workspace.initialized":
+        website_captured_at = _canonical_millisecond_utc(captured_at)
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        pages = state.get("pages") if isinstance(state, Mapping) else None
+        if not isinstance(evidence, Mapping) or not isinstance(pages, list):
+            return authoritative
+        authoritative_state = dict(state)
+        authoritative_pages: list[object] = []
+        for page in pages:
+            if not isinstance(page, Mapping):
+                return authoritative
+            authoritative_pages.append({**dict(page), "updatedAt": website_captured_at})
+        authoritative_state["pages"] = authoritative_pages
+        authoritative["state"] = authoritative_state
+        authoritative["evidence"] = {
+            **dict(evidence),
+            "actor": principal.actor_id,
+            "capturedAt": website_captured_at,
+        }
+        return authoritative
+    if surface == "production" and event_type == "production.workspace.initialized":
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        opening_plan = state.get("openingPlan") if isinstance(state, Mapping) else None
+        if not isinstance(evidence, Mapping) or not isinstance(opening_plan, Mapping):
+            return authoritative
+        production_captured_at = _canonical_millisecond_utc(captured_at)
+        authoritative_state = dict(state)
+        authoritative_state["openingPlan"] = {
+            **dict(opening_plan),
+            "confirmedAt": production_captured_at,
+        }
+        authoritative["state"] = authoritative_state
+        authoritative["evidence"] = {
+            **dict(evidence),
+            "actor": principal.actor_id,
+            "capturedAt": production_captured_at,
+        }
+        return authoritative
+    if surface != "commerce":
+        return authoritative
+    if event_type == "commerce.workspace.initialized":
+        evidence = authoritative.get("evidence")
+        if not isinstance(evidence, Mapping):
+            return authoritative
+        authoritative["evidence"] = {
+            **dict(evidence),
+            "actor": principal.actor_id,
+            "capturedAt": captured_at,
+        }
+        return authoritative
+    if event_type in {
+        "commerce.inventory.initialized",
+        "commerce.inventory.transferred",
+    }:
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        foundation = (
+            state.get("inventoryFoundation") if isinstance(state, Mapping) else None
+        )
+        if (
+            not isinstance(evidence, Mapping)
+            or not isinstance(state, Mapping)
+            or not isinstance(foundation, Mapping)
+        ):
+            return authoritative
+        commands = foundation.get("commands")
+        previous_captured_at = None
+        if (
+            isinstance(commands, list)
+            and len(commands) > 1
+            and isinstance(commands[-2], Mapping)
+        ):
+            previous_payload = commands[-2].get("payload")
+            previous_proof = (
+                previous_payload.get("proof")
+                if isinstance(previous_payload, Mapping)
+                else None
+            )
+            previous_captured_at = (
+                previous_proof.get("capturedAt")
+                if isinstance(previous_proof, Mapping)
+                else None
+            )
+        effective_captured_at = _not_before(captured_at, previous_captured_at)
+        authoritative_evidence = {
+            **dict(evidence),
+            "actor": principal.actor_id,
+            "capturedAt": effective_captured_at,
+        }
+        try:
+            authoritative_foundation = restamp_latest_shop_inventory_command(
+                foundation,
+                action_id=str(authoritative_evidence.get("actionId", "")),
+                actor=principal.actor_id,
+                captured_at=effective_captured_at,
+            )
+        except ShopInventoryValidationError as exc:
+            raise TrialValidationError(str(exc)) from exc
+        authoritative_state = dict(state)
+        authoritative_state["inventoryFoundation"] = authoritative_foundation
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
+    if event_type == "commerce.item.updated":
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        changes = state.get("catalogChanges") if isinstance(state, Mapping) else None
+        if (
+            not isinstance(evidence, Mapping)
+            or not isinstance(state, Mapping)
+            or not isinstance(changes, list)
+            or not changes
+            or not isinstance(changes[0], Mapping)
+            or not isinstance(changes[0].get("proof"), Mapping)
+            or changes[0]["proof"].get("actionId") != evidence.get("actionId")
+        ):
+            return authoritative
+        target_sku = changes[0].get("sku")
+        prior_change = next(
+            (
+                change
+                for change in changes[1:]
+                if isinstance(change, Mapping)
+                and change.get("sku") == target_sku
+                and isinstance(change.get("proof"), Mapping)
+            ),
+            None,
+        )
+        effective_captured_at = _not_before(
+            captured_at,
+            prior_change["proof"].get("capturedAt")
+            if isinstance(prior_change, Mapping)
+            else None,
+        )
+        authoritative_evidence = dict(evidence)
+        authoritative_evidence["actor"] = principal.actor_id
+        authoritative_evidence["capturedAt"] = effective_captured_at
+        authoritative_change = dict(changes[0])
+        authoritative_change["proof"] = deepcopy(authoritative_evidence)
+        authoritative_state = dict(state)
+        authoritative_state["catalogChanges"] = [
+            authoritative_change,
+            *deepcopy(changes[1:]),
+        ]
+        baselines = state.get("catalogBaselines")
+        if isinstance(baselines, list):
+            authoritative_baselines = deepcopy(baselines)
+            for index, baseline in enumerate(authoritative_baselines):
+                proof = baseline.get("proof") if isinstance(baseline, Mapping) else None
+                if (
+                    isinstance(proof, Mapping)
+                    and baseline.get("sku") == target_sku
+                    and proof.get("actionId") == evidence.get("actionId")
+                ):
+                    authoritative_baseline = dict(baseline)
+                    authoritative_baseline["proof"] = deepcopy(authoritative_evidence)
+                    projection = [
+                        "supermega.commerce.catalog-baseline.v1",
+                        authoritative_baseline.get("sku"),
+                        authoritative_baseline.get("price"),
+                        authoritative_baseline.get("reorderAt"),
+                        [
+                            authoritative_evidence.get("actionId"),
+                            authoritative_evidence.get("capturedAt"),
+                            authoritative_evidence.get("actor"),
+                            authoritative_evidence.get("reason"),
+                            authoritative_evidence.get("evidenceReference"),
+                        ],
+                    ]
+                    encoded = json.dumps(
+                        projection,
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    ).encode("utf-8")
+                    authoritative_baseline["anchorDigest"] = (
+                        f"sha256:{sha256(encoded).hexdigest()}"
+                    )
+                    authoritative_baselines[index] = authoritative_baseline
+            authoritative_state["catalogBaselines"] = authoritative_baselines
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
+    if event_type == "commerce.website_intake.created":
+        state = authoritative.get("state")
+        intakes = state.get("websiteIntakes") if isinstance(state, Mapping) else None
+        if (
+            not isinstance(state, Mapping)
+            or not isinstance(intakes, list)
+            or not intakes
+            or not isinstance(intakes[0], Mapping)
+            or not isinstance(intakes[0].get("source"), Mapping)
+            or not isinstance(intakes[0].get("creation"), Mapping)
+        ):
+            return authoritative
+        intake = dict(intakes[0])
+        source = intake["source"]
+        creation = intake["creation"]
+        projection = [
+            "supermega.commerce.website-intake.snapshot.v1",
+            intake.get("id"),
+            intake.get("createdAt"),
+            [
+                source.get("fingerprint"),
+                source.get("approvalId"),
+                source.get("snapshotId"),
+                source.get("pageId"),
+                source.get("siteName"),
+                source.get("pagePath"),
+            ],
+            intake.get("sku"),
+            intake.get("quantity"),
+            intake.get("itemName"),
+            intake.get("itemVariant"),
+            intake.get("unitPrice"),
+            intake.get("total"),
+            [
+                creation.get("actionId"),
+                creation.get("capturedAt"),
+                creation.get("actor"),
+                creation.get("reason"),
+                creation.get("evidenceReference"),
+            ],
+        ]
+        encoded = json.dumps(
+            projection,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        intake["snapshotDigest"] = f"sha256:{sha256(encoded).hexdigest()}"
+        authoritative_state = dict(state)
+        authoritative_state["websiteIntakes"] = [
+            intake,
+            *deepcopy(intakes[1:]),
+        ]
+        authoritative["state"] = authoritative_state
+        return authoritative
+    if event_type == "commerce.website_intake.converted":
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        orders = state.get("orders") if isinstance(state, Mapping) else None
+        movements = state.get("movements") if isinstance(state, Mapping) else None
+        intakes = state.get("websiteIntakes") if isinstance(state, Mapping) else None
+        if (
+            not isinstance(evidence, Mapping)
+            or not isinstance(state, Mapping)
+            or not isinstance(orders, list)
+            or not isinstance(movements, list)
+            or not isinstance(intakes, list)
+        ):
+            return authoritative
+        action_id = evidence.get("actionId")
+        target = next(
+            (
+                (index, intake["conversion"])
+                for index, intake in enumerate(intakes)
+                if isinstance(intake, Mapping)
+                and isinstance(intake.get("conversion"), Mapping)
+                and intake["conversion"].get("actionId") == action_id
+                and isinstance(intake["conversion"].get("orderId"), str)
+            ),
+            None,
+        )
+        if target is None:
+            return authoritative
+        intake_index, conversion = target
+        order_id = conversion["orderId"]
+        authoritative_evidence = dict(evidence)
+        authoritative_evidence["actor"] = principal.actor_id
+        authoritative_evidence["capturedAt"] = captured_at
+        authoritative_intakes = deepcopy(intakes)
+        authoritative_intake = dict(authoritative_intakes[intake_index])
+        authoritative_intake["conversion"] = {
+            **authoritative_evidence,
+            "orderId": order_id,
+        }
+        authoritative_intakes[intake_index] = authoritative_intake
+        authoritative_orders = deepcopy(orders)
+        for order_index, order in enumerate(authoritative_orders):
+            if isinstance(order, Mapping) and order.get("id") == order_id:
+                authoritative_order = dict(order)
+                authoritative_order["createdAt"] = captured_at
+                authoritative_order["owner"] = principal.actor_id
+                calculation = _authoritative_order_calculation(state, order)
+                if calculation is not None:
+                    authoritative_order["calculation"] = calculation
+                    authoritative_order["total"] = calculation["totalMmk"]
+                authoritative_orders[order_index] = authoritative_order
+        authoritative_movements = deepcopy(movements)
+        for movement_index, movement in enumerate(authoritative_movements):
+            if (
+                isinstance(movement, Mapping)
+                and movement.get("kind") == "reserve"
+                and movement.get("actionId") == action_id
+                and movement.get("orderId") == order_id
+            ):
+                authoritative_movement = dict(movement)
+                authoritative_movement["actor"] = principal.actor_id
+                authoritative_movement["createdAt"] = captured_at
+                authoritative_movements[movement_index] = authoritative_movement
+        authoritative_state = _restamp_order_inventory(
+            {
+                **dict(state),
+                "websiteIntakes": authoritative_intakes,
+                "orders": authoritative_orders,
+                "movements": authoritative_movements,
+            },
+            kind="order_reserve",
+            action_id=str(action_id),
+            actor=principal.actor_id,
+            captured_at=captured_at,
+        )
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
+    if event_type == "commerce.order.created":
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        orders = state.get("orders") if isinstance(state, Mapping) else None
+        movements = state.get("movements") if isinstance(state, Mapping) else None
+        if (
+            not isinstance(evidence, Mapping)
+            or not isinstance(state, Mapping)
+            or not isinstance(orders, list)
+            or not isinstance(movements, list)
+        ):
+            return authoritative
+        authoritative_evidence = dict(evidence)
+        authoritative_evidence["actor"] = principal.actor_id
+        authoritative_evidence["capturedAt"] = captured_at
+        target_order_ids = {
+            movement.get("orderId")
+            for movement in movements
+            if isinstance(movement, Mapping)
+            and movement.get("kind") == "reserve"
+            and movement.get("actionId") == evidence.get("actionId")
+            and isinstance(movement.get("orderId"), str)
+        }
+        authoritative_orders = deepcopy(orders)
+        for order_index, order in enumerate(authoritative_orders):
+            if (
+                isinstance(order, Mapping)
+                and order.get("id") in target_order_ids
+            ):
+                authoritative_order = dict(order)
+                authoritative_order["createdAt"] = captured_at
+                authoritative_order["owner"] = principal.actor_id
+                calculation = _authoritative_order_calculation(state, order)
+                if calculation is not None:
+                    authoritative_order["calculation"] = calculation
+                    authoritative_order["total"] = calculation["totalMmk"]
+                authoritative_orders[order_index] = authoritative_order
+        authoritative_movements = deepcopy(movements)
+        for movement_index, movement in enumerate(authoritative_movements):
+            if (
+                isinstance(movement, Mapping)
+                and movement.get("kind") == "reserve"
+                and movement.get("actionId") == evidence.get("actionId")
+            ):
+                authoritative_movement = dict(movement)
+                authoritative_movement["actor"] = principal.actor_id
+                authoritative_movement["createdAt"] = captured_at
+                authoritative_movements[movement_index] = authoritative_movement
+        authoritative_state = _restamp_order_inventory(
+            {
+                **dict(state),
+                "orders": authoritative_orders,
+                "movements": authoritative_movements,
+            },
+            kind="order_reserve",
+            action_id=str(evidence.get("actionId", "")),
+            actor=principal.actor_id,
+            captured_at=captured_at,
+        )
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
+    if event_type == "commerce.order.cancelled":
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        orders = state.get("orders") if isinstance(state, Mapping) else None
+        movements = state.get("movements") if isinstance(state, Mapping) else None
+        if (
+            not isinstance(evidence, Mapping)
+            or not isinstance(state, Mapping)
+            or not isinstance(orders, list)
+            or not isinstance(movements, list)
+        ):
+            return authoritative
+        target_order_ids = {
+            movement.get("orderId")
+            for movement in movements
+            if isinstance(movement, Mapping)
+            and movement.get("kind") == "release"
+            and movement.get("actionId") == evidence.get("actionId")
+            and isinstance(movement.get("orderId"), str)
+        }
+        target_order_id = next(iter(target_order_ids)) if len(target_order_ids) == 1 else None
+        target_order = next(
+            (
+                order
+                for order in orders
+                if isinstance(order, Mapping) and order.get("id") == target_order_id
+            ),
+            None,
+        )
+        effective_captured_at = _not_before(
+            captured_at,
+            target_order.get("createdAt") if isinstance(target_order, Mapping) else None,
+            target_order.get("paymentReconciledAt") if isinstance(target_order, Mapping) else None,
+            *(
+                movement.get("createdAt")
+                for movement in movements
+                if isinstance(movement, Mapping)
+                and movement.get("orderId") == target_order_id
+                and movement.get("actionId") != evidence.get("actionId")
+            ),
+        )
+        authoritative_evidence = {
+            **dict(evidence),
+            "actor": principal.actor_id,
+            "capturedAt": effective_captured_at,
+        }
+        authoritative_movements = deepcopy(movements)
+        for movement_index, movement in enumerate(authoritative_movements):
+            if (
+                isinstance(movement, Mapping)
+                and movement.get("kind") == "release"
+                and movement.get("actionId") == evidence.get("actionId")
+            ):
+                authoritative_movements[movement_index] = {
+                    **dict(movement),
+                    "actor": principal.actor_id,
+                    "createdAt": effective_captured_at,
+                }
+        authoritative_state = _restamp_order_inventory(
+            {**dict(state), "movements": authoritative_movements},
+            kind="order_release",
+            action_id=str(evidence.get("actionId", "")),
+            actor=principal.actor_id,
+            captured_at=effective_captured_at,
+        )
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
+    if event_type == "commerce.purchase_order.created":
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        purchase_orders = (
+            state.get("purchaseOrders") if isinstance(state, Mapping) else None
+        )
+        if (
+            not isinstance(evidence, Mapping)
+            or not isinstance(state, Mapping)
+            or not isinstance(purchase_orders, list)
+            or not purchase_orders
+            or not isinstance(purchase_orders[0], Mapping)
+            or not isinstance(purchase_orders[0].get("creation"), Mapping)
+            or purchase_orders[0]["creation"].get("actionId")
+            != evidence.get("actionId")
+        ):
+            return authoritative
+        authoritative_evidence = dict(evidence)
+        authoritative_evidence["actor"] = principal.actor_id
+        authoritative_evidence["capturedAt"] = captured_at
+        authoritative_purchase_order = dict(purchase_orders[0])
+        authoritative_purchase_order["createdAt"] = captured_at
+        authoritative_purchase_order["creation"] = deepcopy(
+            authoritative_evidence
+        )
+        authoritative_state = dict(state)
+        authoritative_state["purchaseOrders"] = [
+            authoritative_purchase_order,
+            *deepcopy(purchase_orders[1:]),
+        ]
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
+    if event_type == "commerce.purchase_order.received":
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        movements = state.get("movements") if isinstance(state, Mapping) else None
+        foundation = (
+            state.get("inventoryFoundation") if isinstance(state, Mapping) else None
+        )
+        purchase_orders = (
+            state.get("purchaseOrders") if isinstance(state, Mapping) else None
+        )
+        if (
+            not isinstance(evidence, Mapping)
+            or not isinstance(state, Mapping)
+            or not isinstance(movements, list)
+            or not movements
+            or not isinstance(movements[0], Mapping)
+            or not isinstance(purchase_orders, list)
+        ):
+            return authoritative
+        receipt = movements[0]
+        purchase_order_id = receipt.get("purchaseOrderId")
+        purchase_order = next(
+            (
+                candidate
+                for candidate in purchase_orders
+                if isinstance(candidate, Mapping)
+                and candidate.get("id") == purchase_order_id
+            ),
+            None,
+        )
+        if (
+            receipt.get("kind") != "receipt"
+            or receipt.get("actionId") != evidence.get("actionId")
+            or not isinstance(purchase_order_id, str)
+            or not isinstance(purchase_order, Mapping)
+        ):
+            return authoritative
+        location_receipt_matches = False
+        previous_inventory_captured_at = None
+        commands = foundation.get("commands") if isinstance(foundation, Mapping) else None
+        if (
+            isinstance(commands, list)
+            and commands
+            and isinstance(commands[-1], Mapping)
+        ):
+            latest_payload = commands[-1].get("payload")
+            latest_proof = (
+                latest_payload.get("proof")
+                if isinstance(latest_payload, Mapping)
+                else None
+            )
+            location_receipt_matches = bool(
+                isinstance(latest_payload, Mapping)
+                and latest_payload.get("kind") == "receipt"
+                and isinstance(latest_proof, Mapping)
+                and latest_proof.get("actionId") == evidence.get("actionId")
+            )
+            if (
+                location_receipt_matches
+                and len(commands) > 1
+                and isinstance(commands[-2], Mapping)
+            ):
+                previous_payload = commands[-2].get("payload")
+                previous_proof = (
+                    previous_payload.get("proof")
+                    if isinstance(previous_payload, Mapping)
+                    else None
+                )
+                previous_inventory_captured_at = (
+                    previous_proof.get("capturedAt")
+                    if isinstance(previous_proof, Mapping)
+                    else None
+                )
+        effective_captured_at = _not_before(
+            captured_at,
+            purchase_order.get("createdAt"),
+            previous_inventory_captured_at,
+            *(
+                prior.get("createdAt")
+                for prior in movements[1:]
+                if isinstance(prior, Mapping)
+                and prior.get("kind") == "receipt"
+                and prior.get("purchaseOrderId") == purchase_order_id
+            ),
+        )
+        authoritative_evidence = dict(evidence)
+        authoritative_evidence["actor"] = principal.actor_id
+        authoritative_evidence["capturedAt"] = effective_captured_at
+        authoritative_movement = dict(receipt)
+        authoritative_movement["actor"] = principal.actor_id
+        authoritative_movement["createdAt"] = effective_captured_at
+        authoritative_state = dict(state)
+        authoritative_state["movements"] = [
+            authoritative_movement,
+            *deepcopy(movements[1:]),
+        ]
+        if location_receipt_matches and isinstance(foundation, Mapping):
+            try:
+                authoritative_state["inventoryFoundation"] = (
+                    restamp_latest_shop_inventory_command(
+                        foundation,
+                        action_id=str(authoritative_evidence.get("actionId", "")),
+                        actor=principal.actor_id,
+                        captured_at=effective_captured_at,
+                    )
+                )
+            except ShopInventoryValidationError as exc:
+                raise TrialValidationError(str(exc)) from exc
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
+    if event_type == "commerce.purchase_order.cancelled":
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        movements = state.get("movements") if isinstance(state, Mapping) else None
+        purchase_orders = (
+            state.get("purchaseOrders") if isinstance(state, Mapping) else None
+        )
+        if (
+            not isinstance(evidence, Mapping)
+            or not isinstance(state, Mapping)
+            or not isinstance(movements, list)
+            or not isinstance(purchase_orders, list)
+        ):
+            return authoritative
+        cancellation_matches = [
+            (purchase_order_index, purchase_order)
+            for purchase_order_index, purchase_order in enumerate(purchase_orders)
+            if isinstance(purchase_order, Mapping)
+            and isinstance(purchase_order.get("cancellation"), Mapping)
+            and purchase_order["cancellation"].get("actionId")
+            == evidence.get("actionId")
+        ]
+        if len(cancellation_matches) != 1:
+            return authoritative
+        purchase_order_index, purchase_order = cancellation_matches[0]
+        purchase_order_id = purchase_order.get("id")
+        if not isinstance(purchase_order_id, str):
+            return authoritative
+        effective_captured_at = _not_before(
+            captured_at,
+            purchase_order.get("createdAt"),
+            *(
+                movement.get("createdAt")
+                for movement in movements
+                if isinstance(movement, Mapping)
+                and movement.get("kind") == "receipt"
+                and movement.get("purchaseOrderId") == purchase_order_id
+            ),
+        )
+        authoritative_evidence = dict(evidence)
+        authoritative_evidence["actor"] = principal.actor_id
+        authoritative_evidence["capturedAt"] = effective_captured_at
+        authoritative_purchase_order = dict(purchase_order)
+        authoritative_purchase_order["cancellation"] = deepcopy(
+            authoritative_evidence
+        )
+        authoritative_purchase_orders = deepcopy(purchase_orders)
+        authoritative_purchase_orders[purchase_order_index] = (
+            authoritative_purchase_order
+        )
+        authoritative_state = dict(state)
+        authoritative_state["purchaseOrders"] = authoritative_purchase_orders
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
+    if event_type == "commerce.payment.reconciled":
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        orders = state.get("orders") if isinstance(state, Mapping) else None
+        if (
+            not isinstance(evidence, Mapping)
+            or not isinstance(state, Mapping)
+            or not isinstance(orders, list)
+        ):
+            return authoritative
+        authoritative_evidence = dict(evidence)
+        authoritative_evidence["actor"] = principal.actor_id
+        authoritative_evidence["capturedAt"] = captured_at
+        authoritative_orders = deepcopy(orders)
+        for order_index, order in enumerate(authoritative_orders):
+            if (
+                isinstance(order, Mapping)
+                and order.get("paymentReconciliationActionId")
+                == evidence.get("actionId")
+            ):
+                authoritative_order = dict(order)
+                authoritative_order["paymentReconciledAt"] = captured_at
+                authoritative_order["paymentReconciledBy"] = principal.actor_id
+                authoritative_orders[order_index] = authoritative_order
+        authoritative_state = dict(state)
+        authoritative_state["orders"] = authoritative_orders
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
+    if event_type == "commerce.order.advanced":
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        orders = state.get("orders") if isinstance(state, Mapping) else None
+        movements = state.get("movements") if isinstance(state, Mapping) else None
+        if (
+            not isinstance(evidence, Mapping)
+            or not isinstance(state, Mapping)
+            or not isinstance(orders, list)
+            or not isinstance(movements, list)
+        ):
+            return authoritative
+        completion_order = next(
+            (
+                order
+                for order in orders
+                if isinstance(order, Mapping)
+                and isinstance(order.get("completion"), Mapping)
+                and order["completion"].get("actionId")
+                == evidence.get("actionId")
+            ),
+            None,
+        )
+        effective_captured_at = captured_at
+        if completion_order is not None:
+            effective_captured_at = _not_before(
+                captured_at,
+                completion_order.get("createdAt"),
+                completion_order.get("paymentReconciledAt"),
+                *(
+                    movement.get("createdAt")
+                    for movement in movements
+                    if isinstance(movement, Mapping)
+                    and movement.get("orderId") == completion_order.get("id")
+                ),
+            )
+        authoritative_evidence = dict(evidence)
+        authoritative_evidence["actor"] = principal.actor_id
+        authoritative_evidence["capturedAt"] = effective_captured_at
+        authoritative_orders = deepcopy(orders)
+        for index, order in enumerate(authoritative_orders):
+            completion = order.get("completion") if isinstance(order, Mapping) else None
+            if (
+                isinstance(completion, Mapping)
+                and completion.get("actionId") == evidence.get("actionId")
+            ):
+                authoritative_order = dict(order)
+                authoritative_order["completion"] = deepcopy(
+                    authoritative_evidence
+                )
+                authoritative_orders[index] = authoritative_order
+        authoritative_state = _restamp_order_inventory(
+            {**dict(state), "orders": authoritative_orders},
+            kind="order_fulfil",
+            action_id=str(evidence.get("actionId", "")),
+            actor=principal.actor_id,
+            captured_at=effective_captured_at,
+        )
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
+    if event_type == "commerce.order.return_recorded":
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        orders = state.get("orders") if isinstance(state, Mapping) else None
+        movements = state.get("movements") if isinstance(state, Mapping) else None
+        if (
+            not isinstance(evidence, Mapping)
+            or not isinstance(state, Mapping)
+            or not isinstance(orders, list)
+            or not isinstance(movements, list)
+        ):
+            return authoritative
+        returned_order = next(
+            (
+                order
+                for order in orders
+                if isinstance(order, Mapping)
+                and isinstance(order.get("returns"), list)
+                and order["returns"]
+                and isinstance(order["returns"][0], Mapping)
+                and order["returns"][0].get("actionId")
+                == evidence.get("actionId")
+            ),
+            None,
+        )
+        effective_captured_at = captured_at
+        if returned_order is not None:
+            prior_returns = returned_order.get("returns", [])[1:]
+            completion = returned_order.get("completion")
+            effective_captured_at = _not_before(
+                captured_at,
+                returned_order.get("createdAt"),
+                returned_order.get("paymentReconciledAt"),
+                completion.get("capturedAt")
+                if isinstance(completion, Mapping)
+                else None,
+                *(
+                    record.get("createdAt")
+                    for record in prior_returns
+                    if isinstance(record, Mapping)
+                ),
+                *(
+                    movement.get("createdAt")
+                    for movement in movements
+                    if isinstance(movement, Mapping)
+                    and movement.get("orderId") == returned_order.get("id")
+                    and movement.get("actionId") != evidence.get("actionId")
+                ),
+            )
+        authoritative_evidence = dict(evidence)
+        authoritative_evidence["actor"] = principal.actor_id
+        authoritative_evidence["capturedAt"] = effective_captured_at
+        authoritative_orders = deepcopy(orders)
+        for order_index, order in enumerate(authoritative_orders):
+            returns = order.get("returns") if isinstance(order, Mapping) else None
+            if (
+                not isinstance(returns, list)
+                or not returns
+                or not isinstance(returns[0], Mapping)
+                or returns[0].get("actionId") != evidence.get("actionId")
+            ):
+                continue
+            authoritative_return = dict(returns[0])
+            authoritative_return["actor"] = principal.actor_id
+            authoritative_return["createdAt"] = effective_captured_at
+            authoritative_order = dict(order)
+            authoritative_order["returns"] = [
+                authoritative_return,
+                *deepcopy(returns[1:]),
+            ]
+            authoritative_orders[order_index] = authoritative_order
+        authoritative_movements = deepcopy(movements)
+        for movement_index, movement in enumerate(authoritative_movements):
+            if (
+                isinstance(movement, Mapping)
+                and movement.get("kind") == "return"
+                and movement.get("actionId") == evidence.get("actionId")
+            ):
+                authoritative_movement = dict(movement)
+                authoritative_movement["actor"] = principal.actor_id
+                authoritative_movement["createdAt"] = effective_captured_at
+                authoritative_movements[movement_index] = authoritative_movement
+        authoritative_state = dict(state)
+        authoritative_state["orders"] = authoritative_orders
+        authoritative_state["movements"] = authoritative_movements
+        return_record = (
+            returned_order["returns"][0]
+            if isinstance(returned_order, Mapping)
+            and isinstance(returned_order.get("returns"), list)
+            and returned_order["returns"]
+            and isinstance(returned_order["returns"][0], Mapping)
+            else None
+        )
+        if (
+            isinstance(return_record, Mapping)
+            and return_record.get("disposition") == "restock"
+        ):
+            authoritative_state = _restamp_order_inventory(
+                authoritative_state,
+                kind="order_return",
+                action_id=str(evidence.get("actionId", "")),
+                actor=principal.actor_id,
+                captured_at=effective_captured_at,
+            )
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
+    if event_type in {
+        "commerce.stock.counted",
+        "commerce.production_material.issued",
+    }:
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        movements = state.get("movements") if isinstance(state, Mapping) else None
+        if (
+            not isinstance(evidence, Mapping)
+            or not isinstance(state, Mapping)
+            or not isinstance(movements, list)
+            or not movements
+            or not isinstance(movements[0], Mapping)
+        ):
+            return authoritative
+        foundation = state.get("inventoryFoundation")
+        location_command_kind = {
+            "commerce.stock.counted": "count",
+            "commerce.production_material.issued": "production_issue",
+        }[event_type]
+        location_command_matches = False
+        previous_inventory_captured_at = None
+        if isinstance(foundation, Mapping):
+            commands = foundation.get("commands")
+            if (
+                isinstance(commands, list)
+                and commands
+                and isinstance(commands[-1], Mapping)
+            ):
+                latest_payload = commands[-1].get("payload")
+                latest_proof = (
+                    latest_payload.get("proof")
+                    if isinstance(latest_payload, Mapping)
+                    else None
+                )
+                location_command_matches = bool(
+                    isinstance(latest_payload, Mapping)
+                    and latest_payload.get("kind") == location_command_kind
+                    and isinstance(latest_proof, Mapping)
+                    and latest_proof.get("actionId") == evidence.get("actionId")
+                )
+                if (
+                    location_command_matches
+                    and len(commands) > 1
+                    and isinstance(commands[-2], Mapping)
+                ):
+                    previous_payload = commands[-2].get("payload")
+                    previous_proof = (
+                        previous_payload.get("proof")
+                        if isinstance(previous_payload, Mapping)
+                        else None
+                    )
+                    previous_inventory_captured_at = (
+                        previous_proof.get("capturedAt")
+                        if isinstance(previous_proof, Mapping)
+                        else None
+                    )
+        effective_captured_at = (
+            _not_before(captured_at, previous_inventory_captured_at)
+            if location_command_matches
+            else captured_at
+        )
+        authoritative_evidence = dict(evidence)
+        authoritative_evidence["actor"] = principal.actor_id
+        authoritative_evidence["capturedAt"] = effective_captured_at
+        authoritative_movement = dict(movements[0])
+        authoritative_movement["actor"] = principal.actor_id
+        authoritative_movement["createdAt"] = effective_captured_at
+        authoritative_state = dict(state)
+        authoritative_state["movements"] = [
+            authoritative_movement,
+            *deepcopy(movements[1:]),
+        ]
+        if location_command_matches and isinstance(foundation, Mapping):
+            try:
+                authoritative_state["inventoryFoundation"] = (
+                    restamp_latest_shop_inventory_command(
+                        foundation,
+                        action_id=str(authoritative_evidence.get("actionId", "")),
+                        actor=principal.actor_id,
+                        captured_at=effective_captured_at,
+                    )
+                )
+            except ShopInventoryValidationError as exc:
+                raise TrialValidationError(str(exc)) from exc
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
+    if event_type == "commerce.close.saved":
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        closes = state.get("closes") if isinstance(state, Mapping) else None
+        if not isinstance(evidence, Mapping) or not isinstance(state, Mapping) or not isinstance(closes, list) or not closes or not isinstance(closes[0], Mapping):
+            return authoritative
+        authoritative_evidence = dict(evidence)
+        authoritative_evidence["actor"] = principal.actor_id
+        authoritative_evidence["capturedAt"] = captured_at
+        authoritative_close = dict(closes[0])
+        authoritative_close["operator"] = principal.actor_id
+        authoritative_close["createdAt"] = captured_at
+        authoritative_close["businessDate"] = _myanmar_business_date(captured_at)
+        authoritative_closes = [authoritative_close, *deepcopy(closes[1:])]
+        authoritative_state = dict(state)
+        authoritative_state["closes"] = authoritative_closes
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
+    if event_type == "commerce.storefront.merchandising.imported":
+        evidence = authoritative.get("evidence")
+        if not isinstance(evidence, Mapping):
+            return authoritative
+        authoritative["evidence"] = {
+            **dict(evidence),
+            "actor": principal.actor_id,
+            "capturedAt": _canonical_millisecond_utc(captured_at),
+        }
+        return authoritative
+    if event_type != "commerce.storefront.configuration.saved":
+        return authoritative
+    evidence = authoritative.get("evidence")
+    state = authoritative.get("state")
+    configuration = state.get("storefrontConfiguration") if isinstance(state, Mapping) else None
+    if not isinstance(evidence, Mapping) or not isinstance(state, Mapping) or not isinstance(configuration, Mapping):
+        return authoritative
+    authoritative_evidence = dict(evidence)
+    authoritative_evidence["actor"] = principal.actor_id
+    authoritative_evidence["capturedAt"] = captured_at
+    authoritative_configuration = dict(configuration)
+    authoritative_configuration["saved"] = deepcopy(authoritative_evidence)
+    authoritative_state = dict(state)
+    authoritative_state["storefrontConfiguration"] = authoritative_configuration
+    authoritative["evidence"] = authoritative_evidence
+    authoritative["state"] = authoritative_state
+    return authoritative
+
+
+def _require_command_evidence_actor(
+    payload: Mapping[str, Any],
+    *,
+    principal: TrialPrincipal,
+    surface: str,
+    event_type: str,
+) -> None:
+    if surface != "production" and not (surface == "website" and event_type in HUMAN_COMMAND_EVENTS):
+        return
+    evidence = payload.get("evidence")
+    if not isinstance(evidence, Mapping) or evidence.get("actor") != principal.actor_id:
+        raise TrialValidationError(
+            f"{surface.title()} evidence actor must match the authenticated principal."
+        )
+
+
+def _commerce_command_action_id(
+    surface: str,
+    payload: Mapping[str, Any],
+) -> str | None:
+    if surface != "commerce":
+        return None
+    evidence = payload.get("evidence")
+    if not isinstance(evidence, Mapping):
+        return None
+    action_id = evidence.get("actionId")
+    if (
+        not isinstance(action_id, str)
+        or not action_id
+        or action_id != action_id.strip()
+        or len(action_id) > 160
+    ):
+        return None
+    return action_id
+
+
 def _normalize_uuid(value: str | UUID, *, field_name: str) -> str:
     try:
         return str(UUID(str(value)))
@@ -480,6 +1773,39 @@ def _required_surface_capability(surface: str) -> str:
     return SURFACE_WRITE_CAPABILITIES[_normalize_surface(surface)]
 
 
+def has_surface_read_capability(capabilities: Sequence[str], surface: str) -> bool:
+    surface_value = _normalize_surface(surface)
+    granted = frozenset(capabilities)
+    return (
+        SURFACE_READ_CAPABILITIES[surface_value] in granted
+        or SURFACE_WRITE_CAPABILITIES[surface_value] in granted
+    )
+
+
+def has_approval_read_capability(capabilities: Sequence[str]) -> bool:
+    granted = frozenset(capabilities)
+    return bool(
+        granted.intersection(
+            {
+                APPROVAL_READ_CAPABILITY,
+                APPROVAL_REQUEST_CAPABILITY,
+                APPROVAL_DECIDE_CAPABILITY,
+            }
+        )
+    )
+
+
+def _require_surface_read_capability(capabilities: Sequence[str], surface: str) -> None:
+    surface_value = _normalize_surface(surface)
+    if not has_surface_read_capability(capabilities, surface_value):
+        raise TrialPermissionDenied(SURFACE_READ_CAPABILITIES[surface_value])
+
+
+def _require_approval_read_capability(capabilities: Sequence[str]) -> None:
+    if not has_approval_read_capability(capabilities):
+        raise TrialPermissionDenied(APPROVAL_READ_CAPABILITY)
+
+
 def _principal_auth_ready(principal: TrialPrincipal | None) -> bool:
     if principal is None:
         return False
@@ -490,6 +1816,19 @@ def _principal_auth_ready(principal: TrialPrincipal | None) -> bool:
         and normalized.actor_id
         and normalized.actor_kind in TRUSTED_ACTOR_KINDS
     )
+
+
+def _iso_timestamp(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, datetime):
+        normalized = value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+        return normalized.astimezone(timezone.utc).isoformat()
+    return str(value)
+
+
+def _normalize_sql_source(value: Any) -> str:
+    return " ".join(str(value or "").strip().lower().split())
 
 
 def _require_human_decider(principal: TrialPrincipal) -> None:
@@ -513,10 +1852,10 @@ def _approval_from_mapping(row: Mapping[str, Any], *, replay: bool = False) -> A
         status=str(row.get("status", "pending")),
         requested_by=str(row.get("requested_by", "")),
         requested_actor_kind=str(row.get("requested_actor_kind", "")),
-        requested_at=str(row.get("requested_at", "")),
+        requested_at=_iso_timestamp(row.get("requested_at")),
         decided_by=str(row.get("decided_by", "") or ""),
         decided_actor_kind=str(row.get("decided_actor_kind", "") or ""),
-        decided_at=str(row.get("decided_at", "") or ""),
+        decided_at=_iso_timestamp(row.get("decided_at")),
         decision_note=str(row.get("decision_note", "") or ""),
         version=int(row.get("version", 0) or 0),
         idempotent_replay=replay,
@@ -546,14 +1885,17 @@ class PostgresTrialStore:
             from psycopg.rows import dict_row
         except ImportError as exc:
             raise TrialNotReadyError(("postgres_driver_ready",)) from exc
-        # The Vercel runtime uses short-lived pooled connections. Disable
-        # automatic prepared statements for Supavisor transaction mode and
-        # enforce encrypted transport even if a manually supplied URL omitted
-        # sslmode. A stronger URL setting (verify-ca / verify-full) remains in
-        # the DSN and should be used where the provider certificate is pinned.
+        # The Vercel runtime uses short-lived pooled connections. Keep
+        # autocommit explicitly disabled so every request can bind its identity
+        # to one transaction, disable automatic prepared statements for
+        # Supavisor transaction mode, and enforce encrypted transport even if a
+        # manually supplied URL omitted sslmode. A stronger URL setting
+        # (verify-ca / verify-full) remains in the DSN and should be used where
+        # the provider certificate is pinned.
         connection_kwargs: dict[str, Any] = {
             "row_factory": dict_row,
             "connect_timeout": 5,
+            "autocommit": False,
             "prepare_threshold": None,
             "application_name": "supermega-trial-runtime",
         }
@@ -588,17 +1930,42 @@ class PostgresTrialStore:
                   )
               ) as actor_decision_columns_ready,
               (
-                select count(*) = 2
+                select count(*) = 3
+                  and bool_and(
+                    constraint_record.contype = 'c'
+                    and constraint_record.convalidated
+                    and table_record.relname = case constraint_record.conname
+                      when 'workspace_events_approval_surface_v4_check'
+                        then 'workspace_events'
+                      else 'approval_requests'
+                    end
+                    and md5(
+                      regexp_replace(
+                        lower(pg_get_constraintdef(constraint_record.oid, true)),
+                        '[[:space:]]+',
+                        ' ',
+                        'g'
+                      )
+                    ) = case constraint_record.conname
+                      when 'approval_requests_decision_packet_v2_check'
+                        then '1dd6a9dcdbb54e0c4f2c2a8982e8c5b8'
+                      when 'approval_requests_terminal_decision_v2_check'
+                        then '60d677e7b45dc392363aac8ed611b2e9'
+                      when 'workspace_events_approval_surface_v4_check'
+                        then '984de8f9066e2caaa3b5d4507da2d11f'
+                    end
+                  )
                 from pg_constraint constraint_record
                 join pg_class table_record on table_record.oid = constraint_record.conrelid
                 join pg_namespace schema_record on schema_record.oid = table_record.relnamespace
                 where schema_record.nspname = 'app_private'
-                  and table_record.relname = 'approval_requests'
                   and constraint_record.conname in (
                     'approval_requests_decision_packet_v2_check',
-                    'approval_requests_terminal_decision_v2_check'
+                    'approval_requests_terminal_decision_v2_check',
+                    'workspace_events_approval_surface_v4_check'
                   )
-              ) as decision_constraints_ready
+              ) as security_constraints_ready,
+              true as schema_contract_row_ready
             from app_private.trial_schema_meta schema_meta
             where schema_meta.component = %s
             """,
@@ -609,8 +1976,87 @@ class PostgresTrialStore:
             not row
             or int(row["schema_version"]) != TRIAL_SCHEMA_VERSION
             or not bool(row.get("actor_decision_columns_ready"))
-            or not bool(row.get("decision_constraints_ready"))
+            or not bool(row.get("security_constraints_ready"))
         ):
+            raise TrialNotReadyError(("schema_ready",))
+        cursor.execute(
+            """
+            select
+              table_record.relname as table_name,
+              trigger_record.tgname as trigger_name,
+              trigger_record.tgtype::integer as event_mask,
+              trigger_record.tgenabled as enabled,
+              trigger_record.tgqual is null as no_when_clause,
+              trigger_record.tgnargs = 0 as no_arguments,
+              cardinality(trigger_record.tgattr::int2[]) = 0 as no_column_filter,
+              trigger_record.tgconstraint = 0 as no_constraint_link,
+              not trigger_record.tgdeferrable as not_deferrable,
+              not trigger_record.tginitdeferred as not_initially_deferred,
+              trigger_record.tgoldtable is null
+                and trigger_record.tgnewtable is null as no_transition_tables,
+              function_schema.nspname as function_schema,
+              function_record.proname as function_name,
+              function_record.prosrc as function_source,
+              language_record.lanname as function_language,
+              function_record.prosecdef as security_definer,
+              function_record.proconfig as function_config
+            from pg_trigger trigger_record
+            join pg_class table_record on table_record.oid = trigger_record.tgrelid
+            join pg_namespace table_schema on table_schema.oid = table_record.relnamespace
+            join pg_proc function_record on function_record.oid = trigger_record.tgfoid
+            join pg_namespace function_schema on function_schema.oid = function_record.pronamespace
+            join pg_language language_record on language_record.oid = function_record.prolang
+            where table_schema.nspname = 'app_private'
+              and not trigger_record.tgisinternal
+            order by table_record.relname, trigger_record.tgname
+            """
+        )
+        trigger_rows = cursor.fetchall()
+        if len(trigger_rows) != len(_PRIVATE_HARDENING_TRIGGER_CONTRACT):
+            raise TrialNotReadyError(("schema_ready",))
+        actual_triggers: dict[tuple[str, str], dict[str, Any]] = {}
+        for trigger_row in trigger_rows:
+            key = (str(trigger_row.get("table_name", "")), str(trigger_row.get("trigger_name", "")))
+            actual_triggers[key] = {
+                "event_mask": int(trigger_row.get("event_mask", 0)),
+                "enabled": str(trigger_row.get("enabled", "")),
+                "no_when_clause": bool(trigger_row.get("no_when_clause")),
+                "no_arguments": bool(trigger_row.get("no_arguments")),
+                "no_column_filter": bool(trigger_row.get("no_column_filter")),
+                "no_constraint_link": bool(trigger_row.get("no_constraint_link")),
+                "not_deferrable": bool(trigger_row.get("not_deferrable")),
+                "not_initially_deferred": bool(
+                    trigger_row.get("not_initially_deferred")
+                ),
+                "no_transition_tables": bool(trigger_row.get("no_transition_tables")),
+                "function_schema": str(trigger_row.get("function_schema", "")),
+                "function_name": str(trigger_row.get("function_name", "")),
+                "function_source": _normalize_sql_source(trigger_row.get("function_source")),
+                "function_language": str(trigger_row.get("function_language", "")),
+                "security_definer": bool(trigger_row.get("security_definer")),
+                "function_config": tuple(str(item) for item in (trigger_row.get("function_config") or ())),
+            }
+        expected_triggers = {
+            key: {
+                "event_mask": int(contract["event_mask"]),
+                "enabled": "O",
+                "no_when_clause": True,
+                "no_arguments": True,
+                "no_column_filter": True,
+                "no_constraint_link": True,
+                "not_deferrable": True,
+                "not_initially_deferred": True,
+                "no_transition_tables": True,
+                "function_schema": "app_private",
+                "function_name": str(contract["function_name"]),
+                "function_source": _normalize_sql_source(contract["function_source"]),
+                "function_language": "plpgsql",
+                "security_definer": False,
+                "function_config": ("search_path=pg_catalog, app_private",),
+            }
+            for key, contract in _PRIVATE_HARDENING_TRIGGER_CONTRACT.items()
+        }
+        if actual_triggers != expected_triggers:
             raise TrialNotReadyError(("schema_ready",))
 
     @staticmethod
@@ -646,6 +2092,37 @@ class PostgresTrialStore:
                 select pg_has_role(runtime_role.oid, backend_role.oid, 'USAGE')
                 from runtime_role cross join backend_role
               ), false) as inherits_backend,
+              coalesce((
+                select
+                  count(*) = 1
+                  and bool_and(
+                    parent_role.rolname = 'supermega_trial_backend'
+                    and membership.inherit_option
+                    and not membership.set_option
+                    and not membership.admin_option
+                  )
+                from runtime_role
+                join pg_auth_members membership on membership.member = runtime_role.oid
+                join pg_roles parent_role on parent_role.oid = membership.roleid
+              ), false) as direct_parent_membership_exact,
+              coalesce((
+                select
+                  count(*) = 1
+                  and bool_and(
+                    member_role.rolname = current_user
+                    and membership.inherit_option
+                    and not membership.set_option
+                    and not membership.admin_option
+                  )
+                from backend_role
+                join pg_auth_members membership on membership.roleid = backend_role.oid
+                join pg_roles member_role on member_role.oid = membership.member
+              ), false) as backend_member_exact,
+              not exists (
+                select 1
+                from runtime_role
+                join pg_auth_members membership on membership.roleid = runtime_role.oid
+              ) as no_runtime_role_members,
               not exists (
                 select 1
                 from runtime_role cross join elevated_role
@@ -666,6 +2143,9 @@ class PostgresTrialStore:
             "no_create_db",
             "no_replication",
             "inherits_backend",
+            "direct_parent_membership_exact",
+            "backend_member_exact",
+            "no_runtime_role_members",
             "no_elevated_membership",
             "tls_active",
         )
@@ -723,21 +2203,22 @@ class PostgresTrialStore:
             raise TrialNotReadyError(("database_ready",)) from exc
 
         with connection:
-            with connection.cursor() as cursor:
-                try:
-                    self._assert_runtime_role(cursor)
-                    self._assert_schema(cursor)
-                    self._set_context(cursor, normalized)
-                    capabilities = self._load_membership(cursor, normalized)
-                    if write:
-                        self._assert_audit(cursor)
-                except TrialStoreError:
-                    raise
-                except Exception as exc:
-                    raise TrialNotReadyError(("database_or_schema_ready",)) from exc
-                if capability and capability not in capabilities:
-                    raise TrialPermissionDenied(capability)
-                yield cursor, capabilities
+            with connection.transaction():
+                with connection.cursor() as cursor:
+                    try:
+                        self._assert_runtime_role(cursor)
+                        self._assert_schema(cursor)
+                        self._set_context(cursor, normalized)
+                        capabilities = self._load_membership(cursor, normalized)
+                        if write:
+                            self._assert_audit(cursor)
+                    except TrialStoreError:
+                        raise
+                    except Exception as exc:
+                        raise TrialNotReadyError(("database_or_schema_ready",)) from exc
+                    if capability and capability not in capabilities:
+                        raise TrialPermissionDenied(capability)
+                    yield cursor, capabilities
 
     def readiness(self, principal: TrialPrincipal | None) -> TrialReadiness:
         auth_ready = _principal_auth_ready(principal)
@@ -760,20 +2241,21 @@ class PostgresTrialStore:
             )
         try:
             with self._connect() as connection:
-                with connection.cursor() as cursor:
-                    cursor.execute("select 1 as ready")
-                    database_ready = bool((cursor.fetchone() or {}).get("ready"))
-                    self._assert_runtime_role(cursor)
-                    role_ready = True
-                    self._assert_schema(cursor)
-                    schema_ready = True
-                    self._assert_audit(cursor)
-                    audit_ready = True
-                    if auth_ready and principal is not None:
-                        normalized = principal.normalized()
-                        self._set_context(cursor, normalized)
-                        capabilities = self._load_membership(cursor, normalized)
-                        membership_ready = True
+                with connection.transaction():
+                    with connection.cursor() as cursor:
+                        cursor.execute("select 1 as ready")
+                        database_ready = bool((cursor.fetchone() or {}).get("ready"))
+                        self._assert_runtime_role(cursor)
+                        role_ready = True
+                        self._assert_schema(cursor)
+                        schema_ready = True
+                        self._assert_audit(cursor)
+                        audit_ready = True
+                        if auth_ready and principal is not None:
+                            normalized = principal.normalized()
+                            self._set_context(cursor, normalized)
+                            capabilities = self._load_membership(cursor, normalized)
+                            membership_ready = True
         except TrialNotReadyError as exc:
             if "postgres_driver_ready" in exc.reasons:
                 database_ready = False
@@ -805,7 +2287,8 @@ class PostgresTrialStore:
 
     def get_state(self, principal: TrialPrincipal, surface: str) -> TrialState:
         normalized_surface = _normalize_surface(surface)
-        with self._guarded_cursor(principal, write=False) as (cursor, _):
+        with self._guarded_cursor(principal, write=False) as (cursor, capabilities):
+            _require_surface_read_capability(capabilities, normalized_surface)
             cursor.execute(
                 """
                 select workspace_id, surface, version, state_json, updated_by, updated_at
@@ -831,7 +2314,8 @@ class PostgresTrialStore:
 
     def list_approvals(self, principal: TrialPrincipal, *, limit: int = 50) -> list[ApprovalRecord]:
         bounded_limit = max(1, min(int(limit), 100))
-        with self._guarded_cursor(principal, write=False) as (cursor, _):
+        with self._guarded_cursor(principal, write=False) as (cursor, capabilities):
+            _require_approval_read_capability(capabilities)
             cursor.execute(
                 """
                 select approval_id, command_id, title, proposal_json, evidence_refs_json,
@@ -905,6 +2389,10 @@ class PostgresTrialStore:
         }
         if related_surface_values:
             command_contract["related_surfaces"] = list(related_surface_values)
+        commerce_action_id = _commerce_command_action_id(
+            surface_value,
+            payload_value,
+        )
         fingerprint = _canonical_fingerprint(
             "state_command",
             command_contract,
@@ -912,8 +2400,19 @@ class PostgresTrialStore:
         normalized = principal.normalized()
         if event_type_value in HUMAN_COMMAND_EVENTS and normalized.actor_kind != HUMAN_ACTOR_KIND:
             raise TrialHumanApprovalRequired()
+        _require_command_evidence_actor(
+            payload_value,
+            principal=normalized,
+            surface=surface_value,
+            event_type=event_type_value,
+        )
         capability = _required_surface_capability(surface_value)
-        with self._guarded_cursor(normalized, write=True, capability=capability) as (cursor, _):
+        with self._guarded_cursor(normalized, write=True, capability=capability) as (
+            cursor,
+            capabilities,
+        ):
+            for related_surface in related_surface_values:
+                _require_surface_read_capability(capabilities, related_surface)
             self._lock(cursor, f"{normalized.workspace_id}:command:{command_id_value}")
             replay = self._load_event_replay(
                 cursor,
@@ -930,7 +2429,6 @@ class PostgresTrialStore:
                     state=_json_object(replay.get("state", {}), field_name="state"),
                     idempotent_replay=True,
                 )
-
             locked_surfaces = tuple(sorted({surface_value, *related_surface_values}))
             for locked_surface in locked_surfaces:
                 self._lock(cursor, f"{normalized.workspace_id}:state:{locked_surface}")
@@ -963,6 +2461,26 @@ class PostgresTrialStore:
                     expected_version=int(expected_version),
                     current_version=current_version,
                 )
+            if commerce_action_id is not None:
+                self._lock(
+                    cursor,
+                    f"{normalized.workspace_id}:commerce-action:{commerce_action_id}",
+                )
+                cursor.execute(
+                    """
+                    select command_id
+                    from app_private.workspace_events
+                    where workspace_id = %s
+                      and surface = 'commerce'
+                      and payload_json #>> '{evidence,actionId}' = %s
+                    limit 1
+                    """,
+                    (normalized.workspace_id, commerce_action_id),
+                )
+                if cursor.fetchone():
+                    raise TrialValidationError(
+                        "Commerce actionId was already used by an earlier command."
+                    )
             if state_precondition is not None:
                 state_precondition(
                     deepcopy(current_state),
@@ -971,12 +2489,27 @@ class PostgresTrialStore:
                         for related_surface in related_surface_values
                     },
                 )
+            now = _utc_now()
+            authoritative_payload = _json_object(
+                _authoritative_command_payload(
+                    payload_value,
+                    principal=normalized,
+                    surface=surface_value,
+                    event_type=event_type_value,
+                    captured_at=now,
+                ),
+                field_name="authoritative payload",
+            )
             next_state = _json_object(
-                self.reducer(surface_value, event_type_value, deepcopy(current_state), deepcopy(payload_value)),
+                self.reducer(
+                    surface_value,
+                    event_type_value,
+                    deepcopy(current_state),
+                    deepcopy(authoritative_payload),
+                ),
                 field_name="reduced state",
             )
             next_version = current_version + 1
-            now = _utc_now()
             if row:
                 cursor.execute(
                     """
@@ -1035,7 +2568,7 @@ class PostgresTrialStore:
                     normalized.actor_kind,
                     int(expected_version),
                     next_version,
-                    json.dumps(payload_value, ensure_ascii=False),
+                    json.dumps(authoritative_payload, ensure_ascii=False),
                     json.dumps(result, ensure_ascii=False),
                     now,
                 ),
@@ -1083,14 +2616,14 @@ class PostgresTrialStore:
             if replay is not None:
                 return _approval_from_mapping(replay["approval"], replay=True)
             approval_id = str(uuid4())
-            now = _utc_now()
             cursor.execute(
                 """
                 insert into app_private.approval_requests
                   (approval_id, workspace_id, command_id, command_fingerprint, title,
-                   proposal_json, evidence_refs_json, status, requested_by,
-                   requested_actor_kind, requested_at, decision_contract_version, version)
-                values (%s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, 'pending', %s, %s, %s::timestamptz, 2, 0)
+                    proposal_json, evidence_refs_json, status, requested_by,
+                    requested_actor_kind, decision_contract_version, version)
+                values (%s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, 'pending', %s, %s, 2, 0)
+                returning requested_at
                 """,
                 (
                     approval_id,
@@ -1102,9 +2635,11 @@ class PostgresTrialStore:
                     json.dumps(list(evidence_value), ensure_ascii=False),
                     normalized.actor_id,
                     normalized.actor_kind,
-                    now,
                 ),
             )
+            requested_at = _iso_timestamp((cursor.fetchone() or {}).get("requested_at"))
+            if not requested_at:
+                raise TrialNotReadyError(("schema_ready",))
             approval = ApprovalRecord(
                 approval_id=approval_id,
                 command_id=command_id_value,
@@ -1114,17 +2649,17 @@ class PostgresTrialStore:
                 status="pending",
                 requested_by=normalized.actor_id,
                 requested_actor_kind=normalized.actor_kind,
-                requested_at=now,
+                requested_at=requested_at,
             )
             result = {"approval": approval.to_dict()}
             cursor.execute(
                 """
                 insert into app_private.workspace_events
                   (event_id, workspace_id, command_id, command_fingerprint, surface,
-                   event_type, actor_id, actor_kind, expected_version, resulting_version,
-                   payload_json, result_json, created_at)
+                    event_type, actor_id, actor_kind, expected_version, resulting_version,
+                    payload_json, result_json)
                 values (%s, %s, %s, %s, 'approvals', 'approval.requested', %s, %s,
-                        null, 0, %s::jsonb, %s::jsonb, %s::timestamptz)
+                        null, 0, %s::jsonb, %s::jsonb)
                 """,
                 (
                     str(uuid4()),
@@ -1138,7 +2673,6 @@ class PostgresTrialStore:
                         ensure_ascii=False,
                     ),
                     json.dumps(result, ensure_ascii=False),
-                    now,
                 ),
             )
         return approval
@@ -1198,20 +2732,18 @@ class PostgresTrialStore:
                 raise TrialNotFound("Approval not found.")
             if str(row["status"]) != "pending":
                 raise TrialInvalidTransition("Approval has already reached a terminal decision.")
-            now = _utc_now()
             cursor.execute(
                 """
                 update app_private.approval_requests
                 set status = %s, decided_by = %s, decided_actor_kind = %s,
-                    decided_at = %s::timestamptz,
                     decision_note = %s, version = version + 1
                 where workspace_id = %s and approval_id = %s and status = 'pending'
+                returning decided_at
                 """,
                 (
                     decision_value,
                     normalized.actor_id,
                     normalized.actor_kind,
-                    now,
                     note_value,
                     normalized.workspace_id,
                     approval_id_value,
@@ -1219,13 +2751,16 @@ class PostgresTrialStore:
             )
             if cursor.rowcount != 1:
                 raise TrialInvalidTransition("Approval decision lost a concurrent update race.")
+            decided_at = _iso_timestamp((cursor.fetchone() or {}).get("decided_at"))
+            if not decided_at:
+                raise TrialNotReadyError(("schema_ready",))
             decided = _approval_from_mapping(
                 {
                     **dict(row),
                     "status": decision_value,
                     "decided_by": normalized.actor_id,
                     "decided_actor_kind": normalized.actor_kind,
-                    "decided_at": now,
+                    "decided_at": decided_at,
                     "decision_note": note_value,
                     "version": int(row["version"]) + 1,
                 }
@@ -1235,10 +2770,10 @@ class PostgresTrialStore:
                 """
                 insert into app_private.workspace_events
                   (event_id, workspace_id, command_id, command_fingerprint, surface,
-                   event_type, actor_id, actor_kind, expected_version, resulting_version,
-                   payload_json, result_json, created_at)
+                    event_type, actor_id, actor_kind, expected_version, resulting_version,
+                    payload_json, result_json)
                 values (%s, %s, %s, %s, 'approvals', 'approval.decided', %s, %s,
-                        0, 1, %s::jsonb, %s::jsonb, %s::timestamptz)
+                        0, 1, %s::jsonb, %s::jsonb)
                 """,
                 (
                     str(uuid4()),
@@ -1252,7 +2787,6 @@ class PostgresTrialStore:
                         ensure_ascii=False,
                     ),
                     json.dumps(result, ensure_ascii=False),
-                    now,
                 ),
             )
         return decided
@@ -1279,7 +2813,8 @@ class InMemoryTrialStore:
         self.write_enabled = bool(write_enabled)
         self._memberships: dict[tuple[str, str], tuple[str, str, frozenset[str]]] = {}
         self._states: dict[tuple[str, str], TrialState] = {}
-        self._events: dict[tuple[str, str], tuple[str, JsonObject]] = {}
+        self._events: dict[tuple[str, str], tuple[str, str, str, JsonObject]] = {}
+        self._commerce_action_ids: dict[tuple[str, str], str] = {}
         self._approvals: dict[tuple[str, str], ApprovalRecord] = {}
         self._approval_commands: dict[tuple[str, str], str] = {}
         self._lock = RLock()
@@ -1352,8 +2887,9 @@ class InMemoryTrialStore:
         return normalized, readiness
 
     def get_state(self, principal: TrialPrincipal, surface: str) -> TrialState:
-        normalized, _ = self._guard(principal, write=False)
+        normalized, readiness = self._guard(principal, write=False)
         surface_value = _normalize_surface(surface)
+        _require_surface_read_capability(readiness.capabilities, surface_value)
         state = self._states.get((normalized.workspace_id, surface_value))
         if state is None:
             return TrialState(normalized.workspace_id, surface_value, 0, {})
@@ -1367,21 +2903,39 @@ class InMemoryTrialStore:
         )
 
     def list_approvals(self, principal: TrialPrincipal, *, limit: int = 50) -> list[ApprovalRecord]:
-        normalized, _ = self._guard(principal, write=False)
+        normalized, readiness = self._guard(principal, write=False)
+        _require_approval_read_capability(readiness.capabilities)
+        can_review_all = bool(
+            readiness.capabilities.intersection(
+                {APPROVAL_READ_CAPABILITY, APPROVAL_DECIDE_CAPABILITY}
+            )
+        )
         rows = [
             approval
             for (workspace_id, _), approval in self._approvals.items()
             if workspace_id == normalized.workspace_id
+            and (can_review_all or approval.requested_by == normalized.actor_id)
         ]
         rows.sort(key=lambda row: (row.status != "pending", row.requested_at), reverse=False)
         return [deepcopy(row) for row in rows[: max(1, min(int(limit), 100))]]
 
-    def _replay(self, workspace_id: str, command_id: str, fingerprint: str) -> JsonObject | None:
+    def _replay(
+        self,
+        workspace_id: str,
+        actor_id: str,
+        actor_kind: str,
+        command_id: str,
+        fingerprint: str,
+    ) -> JsonObject | None:
         row = self._events.get((workspace_id, command_id))
         if row is None:
             return None
-        stored_fingerprint, result = row
-        if stored_fingerprint != fingerprint:
+        stored_fingerprint, stored_actor_id, stored_actor_kind, result = row
+        if (
+            stored_fingerprint != fingerprint
+            or stored_actor_id != actor_id
+            or stored_actor_kind != actor_kind
+        ):
             raise TrialIdempotencyConflict(command_id)
         return deepcopy(result)
 
@@ -1414,19 +2968,37 @@ class InMemoryTrialStore:
         }
         if related_surface_values:
             command_contract["related_surfaces"] = list(related_surface_values)
+        commerce_action_id = _commerce_command_action_id(
+            surface_value,
+            payload_value,
+        )
         fingerprint = _canonical_fingerprint(
             "state_command",
             command_contract,
         )
         with self._lock:
-            normalized, _ = self._guard(
+            normalized, readiness = self._guard(
                 principal,
                 write=True,
                 capability=_required_surface_capability(surface_value),
             )
+            for related_surface in related_surface_values:
+                _require_surface_read_capability(readiness.capabilities, related_surface)
             if event_type_value in HUMAN_COMMAND_EVENTS and normalized.actor_kind != HUMAN_ACTOR_KIND:
                 raise TrialHumanApprovalRequired()
-            replay = self._replay(normalized.workspace_id, command_id_value, fingerprint)
+            _require_command_evidence_actor(
+                payload_value,
+                principal=normalized,
+                surface=surface_value,
+                event_type=event_type_value,
+            )
+            replay = self._replay(
+                normalized.workspace_id,
+                normalized.actor_id,
+                normalized.actor_kind,
+                command_id_value,
+                fingerprint,
+            )
             if replay is not None:
                 return CommandResult(
                     command_id=command_id_value,
@@ -1445,6 +3017,17 @@ class InMemoryTrialStore:
                     expected_version=int(expected_version),
                     current_version=current.version,
                 )
+            if (
+                commerce_action_id is not None
+                and (
+                    normalized.workspace_id,
+                    commerce_action_id,
+                )
+                in self._commerce_action_ids
+            ):
+                raise TrialValidationError(
+                    "Commerce actionId was already used by an earlier command."
+                )
             if state_precondition is not None:
                 state_precondition(
                     deepcopy(current.state),
@@ -1458,8 +3041,24 @@ class InMemoryTrialStore:
                         for related_surface in related_surface_values
                     },
                 )
+            now = _utc_now()
+            authoritative_payload = _json_object(
+                _authoritative_command_payload(
+                    payload_value,
+                    principal=normalized,
+                    surface=surface_value,
+                    event_type=event_type_value,
+                    captured_at=now,
+                ),
+                field_name="authoritative payload",
+            )
             next_state = _json_object(
-                self.reducer(surface_value, event_type_value, deepcopy(current.state), deepcopy(payload_value)),
+                self.reducer(
+                    surface_value,
+                    event_type_value,
+                    deepcopy(current.state),
+                    deepcopy(authoritative_payload),
+                ),
                 field_name="reduced state",
             )
             next_version = current.version + 1
@@ -1469,7 +3068,7 @@ class InMemoryTrialStore:
                 version=next_version,
                 state=deepcopy(next_state),
                 updated_by=normalized.actor_id,
-                updated_at=_utc_now(),
+                updated_at=now,
             )
             result = CommandResult(
                 command_id=command_id_value,
@@ -1479,7 +3078,16 @@ class InMemoryTrialStore:
                 state=deepcopy(next_state),
             )
             self._states[(normalized.workspace_id, surface_value)] = next_row
-            self._events[(normalized.workspace_id, command_id_value)] = (fingerprint, result.to_dict())
+            self._events[(normalized.workspace_id, command_id_value)] = (
+                fingerprint,
+                normalized.actor_id,
+                normalized.actor_kind,
+                result.to_dict(),
+            )
+            if commerce_action_id is not None:
+                self._commerce_action_ids[
+                    (normalized.workspace_id, commerce_action_id)
+                ] = command_id_value
             return result
 
     def create_approval(
@@ -1507,7 +3115,13 @@ class InMemoryTrialStore:
                 write=True,
                 capability=APPROVAL_REQUEST_CAPABILITY,
             )
-            replay = self._replay(normalized.workspace_id, command_id_value, fingerprint)
+            replay = self._replay(
+                normalized.workspace_id,
+                normalized.actor_id,
+                normalized.actor_kind,
+                command_id_value,
+                fingerprint,
+            )
             if replay is not None:
                 return _approval_from_mapping(replay["approval"], replay=True)
             approval = ApprovalRecord(
@@ -1525,6 +3139,8 @@ class InMemoryTrialStore:
             self._approval_commands[(normalized.workspace_id, command_id_value)] = approval.approval_id
             self._events[(normalized.workspace_id, command_id_value)] = (
                 fingerprint,
+                normalized.actor_id,
+                normalized.actor_kind,
                 {"approval": approval.to_dict()},
             )
             return deepcopy(approval)
@@ -1557,7 +3173,13 @@ class InMemoryTrialStore:
                 write=True,
                 capability=APPROVAL_DECIDE_CAPABILITY,
             )
-            replay = self._replay(normalized.workspace_id, command_id_value, fingerprint)
+            replay = self._replay(
+                normalized.workspace_id,
+                normalized.actor_id,
+                normalized.actor_kind,
+                command_id_value,
+                fingerprint,
+            )
             if replay is not None:
                 return _approval_from_mapping(replay["approval"], replay=True)
             key = (normalized.workspace_id, approval_id_value)
@@ -1585,6 +3207,8 @@ class InMemoryTrialStore:
             self._approvals[key] = deepcopy(decided)
             self._events[(normalized.workspace_id, command_id_value)] = (
                 fingerprint,
+                normalized.actor_id,
+                normalized.actor_kind,
                 {"approval": decided.to_dict()},
             )
             return deepcopy(decided)

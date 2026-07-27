@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 import {
   createBlankSection,
   formatTimestamp,
@@ -5,6 +7,8 @@ import {
   pageIssues,
   type WebsitePage,
 } from './website-model'
+
+type EditorSection = 'page' | 'hero' | 'sections' | 'seo'
 
 type ContentWorkspaceProps = {
   page: WebsitePage
@@ -24,6 +28,7 @@ export function ContentWorkspace({
   onUpdatePage,
 }: ContentWorkspaceProps) {
   const issues = pageIssues(page)
+  const [editorSection, setEditorSection] = useState<EditorSection>('hero')
 
   function editPage(update: (current: WebsitePage) => WebsitePage) {
     onUpdatePage((current) => ({ ...update(current), stage: 'draft' }))
@@ -54,8 +59,18 @@ export function ContentWorkspace({
         </span>
       </header>
 
-      <div className="website-editor-scroll">
-        <fieldset className="website-fieldset">
+      <div className="website-editor-scroll" data-editor-section={editorSection}>
+        <label className="website-editor-section-picker">
+          <span>Edit</span>
+          <select aria-label="Page section to edit" onChange={(event) => setEditorSection(event.target.value as EditorSection)} value={editorSection}>
+            <option value="hero">Hero</option>
+            <option value="sections">Content sections</option>
+            <option value="page">Page details</option>
+            <option value="seo">Search metadata</option>
+          </select>
+        </label>
+
+        <fieldset className="website-fieldset" data-content-section="page">
           <legend>Page record</legend>
           <div className="website-form-grid two-columns">
             <label>
@@ -79,7 +94,7 @@ export function ContentWorkspace({
           </div>
         </fieldset>
 
-        <fieldset className="website-fieldset">
+        <fieldset className="website-fieldset" data-content-section="hero">
           <legend>Hero</legend>
           <div className="website-form-grid">
             <label>
@@ -146,7 +161,7 @@ export function ContentWorkspace({
           </div>
         </fieldset>
 
-        <fieldset className="website-fieldset has-heading-action">
+        <fieldset className="website-fieldset has-heading-action" data-content-section="sections">
           <legend>Content sections</legend>
           <button
             className="website-text-button website-fieldset-action"
@@ -247,7 +262,7 @@ export function ContentWorkspace({
           </div>
         </fieldset>
 
-        <details className="website-disclosure">
+        <details className="website-disclosure" data-content-section="seo" open>
           <summary>
             <span>Search metadata</span>
             <small>{page.seo.title && page.seo.description ? 'Complete' : 'Needs copy'}</small>
@@ -294,7 +309,7 @@ export function ContentWorkspace({
 
       <footer className="website-panel-actions">
         <div>
-          <button className="website-button is-secondary" disabled={!canDuplicate} onClick={onDuplicate} title={canDuplicate ? 'Duplicate this page' : 'The four-page prototype limit is reached'} type="button">
+          <button className="website-button is-secondary" disabled={!canDuplicate} onClick={onDuplicate} title={canDuplicate ? 'Duplicate this page' : 'The four-page workspace limit is reached'} type="button">
             Duplicate
           </button>
           {page.slug !== '/' && page.stage === 'draft' ? (

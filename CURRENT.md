@@ -1,108 +1,119 @@
 # SuperMega current direction
 
-Last confirmed: 2026-07-23
+Last confirmed: 2026-07-27
 Authority: this file, `site-manifest.json`, and `hq/portfolio.json`
 
-SuperMega is operating software for real company work. It connects accountable company delivery, website delivery, ecommerce and channel-to-fulfilment operations, production control, evidence, and owner decisions without turning every capability into a separate public page or deployment.
+SuperMega builds simple operating products for Myanmar businesses. The customer portfolio is exactly **Shop**, **Plant**, **Website**, and **Ecommerce**. Bounded **AI assistance** is a shared capability inside those products, not a fifth product. SuperMega HQ, R&D, agent coordination, Ops, Console, and machine coordination are internal company systems.
 
-## Product thesis
+## Product map
 
-SuperMega competes on implementation readiness, local operating context, evidence, and controlled execution—not on the size of a tool catalogue.
+1. **Shop** — orders, stock, fulfilment, payment status, exceptions, and daily close.
+2. **Plant** — jobs, output, materials, quality, equipment, maintenance, and shift exceptions.
+3. **Website** — an approved brief to a finite responsive website, review, and retained site artifact.
+4. **Ecommerce** — a simple storefront and ordering surface that sends structured order intent into Shop.
 
-The portfolio has three operating products and one local product prototype inside one application:
+AI assistance may prepare work inside these four products only when it exposes inputs, output, evidence, and the responsible human approval boundary.
 
-1. **Company system** — Today plus Product, Engineering, Growth, and Finance team workspaces, including an internal bounded-agent roster and handoff view.
-2. **Website** — finite page/content workflow, responsive preview, attributed evidence, evidence-bound human approval, and an approved snapshot; managed persistence is available only to authenticated v3 workspaces, with a clearly labelled local fallback.
-3. **Commerce** — Website and customer-channel intake, order confirmation, stock, fulfilment, payment status, follow-up, and close.
-4. **Production** — plan, output, materials, quality, equipment, maintenance, exceptions, and shift handoff.
+`commerce` and `production` remain stable internal runtime and database surface identifiers during migration. They are not customer-facing product names. Ecommerce is not a second Shop back office: it owns the customer storefront, product display, and order-intent experience; Shop owns the accountable order, stock, fulfilment, payment-status, and close records.
 
-AI is an embedded execution capability. It may inspect approved records, organize, summarize, draft, and escalate. It is not a separate public product, fake employee page, or substitute system of record.
+## Product status
 
-## Public company surface
+- **Shop** — implemented local release candidate at `/shop/` under the stable internal `commerce` runtime. `/operations/commerce/` is compatibility-only and resolves to the same records.
+- **Plant** — implemented local release candidate at `/plant/` under the stable internal `production` runtime. `/operations/production/` is compatibility-only and resolves to the same records.
+- **Website** — implemented local release candidate at `/website/`; it can produce a deterministic downloadable site artifact but cannot publish or change a domain.
+- **Ecommerce** — implemented local release candidate at `/ecommerce/`. It reads versioned Shop catalogue data, builds a multi-item cart, produces a deterministic 15-minute quote, recovers across reload, and sends one duplicate-safe multi-line handoff into Shop. Tax, shipping, and payment remain explicit adapter boundaries; no charge occurs. Only Shop's accountable confirmation can create an order or reserve stock. Hosted managed persistence is not yet proven.
+- **AI assistance** — shared, gated R&D capability. `/agents/` is compatibility-only and resolves to HQ's delegated roles. The first workflow is Order Intake: approved message or form input to a structured draft, with provenance, evaluation, human review, and zero side effects.
 
-- `supermega.dev` is one compact product page.
-- The only support pages are `/contact/` and `/privacy/`.
-- The page explains the company system, Product lifecycle, Commerce, Production, configurable templates, and authority boundary without a long catalogue or public pricing theatre.
-- The brand is SuperMega with the jade `>_` terminal mark on a warm, light operating interface with ink text and restrained status color.
-- Historical product, demo, trust, agent, catalogue, and case-specific routes redirect to the relevant section or canonical application.
+No local demo, passing test, healthy provider, or generated artifact is proof of a live customer system, revenue, production persistence, or autonomous operation.
 
 ## Canonical application
 
 Canonical host: `app.supermega.dev`
 
-- `/` — **Today**: company work, customer orders, production exceptions, release readiness, briefs, and owner decisions.
-- `/work/?team=product&view=work` — **Teams**: accountable work for Product, Engineering, Growth, and Finance.
-- `/work/?team=engineering&view=agents` — **Agent Teams**: internal role, capability, assignment, evidence, human-owner, and approval-boundary records inside Teams; not another product or public route.
-- `/products/website/` — **Website**: lazy-loaded Content, Navigation, and Publish workflow with responsive preview, revisioned evidence, approval, and snapshot records; authenticated v3 workspaces sync through the managed API and all other sessions remain local or fail closed.
-- `/operations/commerce/?tab=today` — **Commerce**: Website and channel orders, fulfilment, stock, attributable payment reconciliation, safe cancellation, stock movements, and daily close. The retired `/products/ecommerce/` path redirects to Commerce Orders.
-- `/operations/production/?tab=today` — **Production**: plan versus actual, output, quality, maintenance, equipment, issues, and one attributed local event record across three tabs.
-- `/settings/` — pilot definition, evidence export, reset, and managed-readiness status.
+- `/` — compact home: one accountable next action and direct entry to the four products according to truthful availability.
+- `/shop/` — Shop Orders first; Stock second.
+- `/plant/` — Plant Jobs first; Problems second.
+- `/website/` — Website Site, Preview, and Publish workflow.
+- `/ecommerce/` — Ecommerce storefront setup, responsive preview, local request receipt, optional authenticated Shop-inbox retention, and explicit handoff to a source-locked Shop draft; clearly non-publishing and without automatic operational consequences.
+- `/agents/` — compatibility-only path to HQ's delegated roles; it is not a product route or separate workspace.
+- `/work/` — internal SuperMega HQ work and agent-team coordination.
+- `/settings/` — setup, evidence export, reset, and managed-readiness utility.
 
-Settings is a utility, not a primary product area. Today, Teams, and Operations remain the only primary navigation; Website is the only addressable `/products/` prototype and is linked from the Commerce order intake. Deeper capability stays in internal tabs and bounded panels. Desktop workspaces fit the available viewport and use panel scrolling. Mobile layouts use a short linear flow.
+The old `/operations/commerce/` and `/operations/production/` routes are temporary compatibility paths for the stable runtime surfaces. They must resolve to the same records as Shop and Plant, never create duplicate apps or state.
 
-Before activation, the pilot definition captures the entry point, current record, baseline, target outcome, responsible owner, human authority boundary, and acceptance evidence. An incomplete pilot remains visible as an owner exception on Today.
+Home, Products, and internal Work should reveal one clear task at a time. Desktop may use bounded panels; mobile uses list-to-detail or short linear flows. Do not add a route, tab, button, module, domain, or product card unless it owns a real user job and implemented state transition.
 
-## Product team lifecycle
+## Public company surface
 
-Product is the first complete company-team workspace:
+- `supermega.dev` is one compact company page.
+- The only support pages are `/contact/` and `/privacy/`.
+- The page explains Shop, Plant, Website, Ecommerce, and bounded AI assistance without a catalogue, pricing theatre, or fake launch claims.
+- The brand is SuperMega with the jade `>_` terminal mark on a warm light interface, dark ink, and restrained status colors.
+- Historical products, demos, client deployments, YTF material, and case-specific routes are not current SuperMega public context.
 
-1. **Discover** — capture customer signal and problem evidence.
-2. **Define** — name the outcome, owner, priority, and acceptance boundary.
-3. **Build** — deliver with tests and implementation evidence.
-4. **Release** — pass explicit checks and preserve release identity.
-5. **Learn** — record usage evidence and the next decision.
+## Product lifecycle
 
-Every team uses the same work contract: observable outcome, named owner, explicit state, structured evidence with provenance and verification status, reviewable brief, and human approval for consequential action. A work record cannot become done and a release check cannot become complete without evidence verified by an attributed human reviewer. Product proposals cannot become accepted decisions without a named human reviewer, decision note, and evidence reference. Delegated roles can be assigned existing team work and prepare evidence; they cannot send, pay, publish, merge, deploy, change access, or write to production from the browser-local roster.
+Every product uses one evidence-backed lifecycle:
 
-## Template model
+1. **Discover** — name the user, problem, current workaround, and evidence.
+2. **Define** — set the outcome, owner, scope, authority boundary, and acceptance test.
+3. **Build** — implement the smallest complete workflow with tests and recovery.
+4. **Release** — preserve release identity and pass security, data, mobile, and rollback checks.
+5. **Learn** — measure usage, corrections, time, exceptions, and the next decision.
 
-Templates configure the starting records and workflow while preserving the shared identity, evidence, approval, audit, and recovery foundation.
+A prototype remains labelled as such. A product becomes available only after the workflow, persistence boundary, failure modes, evidence, and named-user acceptance are proven.
 
-- `site-manifest.json` is the shared, machine-readable template contract. Each profile declares its valid entry points, real workflow stages, and default measurement.
-- Commerce starts from Social commerce, Retail and wholesale, or Restaurant ordering.
-- Production starts from Production control, Maintenance and downtime, or Quality and traceability.
-- Service booking and material-receiving templates remain unadvertised until their records and actions exist in the product.
-- Selecting a profile changes the Operations context and the exported pilot evidence; it does not create another page or code fork.
-- A template is not a new brand, public page, code fork, or isolated demo domain.
+## Templates and customization
 
-## Data and authority boundary
+Templates configure records, roles, vocabulary, starting data, and workflow steps on one shared product foundation. They are not separate brands, code forks, domains, or demo pages.
 
-- The default application remains an isolated browser-local trial, not a customer system of record.
-- Team, bounded-agent, Website, Commerce, Production, approval, and setup records can be exercised locally. Website can also sync for an authenticated member with `website.write` after schema v3 is activated; core evidence export v9 includes the team roster and operating records while preserving the isolated-demo boundary when managed gates are unavailable.
-- Website workspace v2 deterministically migrates valid v1 browser records without inventing events or reopening historical approvals. Local mode uses a Web Lock for reread, transition, validation, write, and readback confirmation. Managed mode uses six explicit lifecycle events, optimistic server versions, authenticated actor evidence, exact UTF-16-compatible content fingerprints, append-only release history, and human-only evidence, approval, and snapshot commands. Concurrent initialization or edits refresh from the authoritative workspace; malformed state, stale versions, missing capability, unavailable storage, and unconfirmed writes fail closed without replacing the last valid screen.
-- The Website-to-Commerce handoff carries only an approved local revision reference, SKU, and quantity. Commerce revalidates the source, requires a bounded human operator ID, and atomically records one accepted local intake plus its audit event. It then creates one deterministic browser-local `ecommerce_order_draft.v1` with an immutable MMK catalogue snapshot and visible missing customer, fulfilment, and payment fields. A locked, attributable completion migrates that valid draft to one `ecommerce_order_record.v1` in `ready_for_confirmation`, using a system-generated opaque customer reference, bounded fulfilment/payment methods, exact-retry idempotency, conflict rejection, and a second audit event. A separate accountable Commerce confirmation rechecks the item, immutable price, quantity, and stock before inserting the order and reserving local stock once. Commerce workspace v2 serializes browser writes, preserves its append-only stock-movement ledger, requires an unmatched attributed reservation before cancellation releases stock, keeps payment reconciliation immutable, and records a separate refund-due exception for a reconciled cancellation. Malformed v2 data fails closed instead of restoring stale v1 data, and storage failure cannot advance the interface. No customer confirmation, payment initiation, refund, delivery request, message, or external write occurs.
-- Production workspace v2 deterministically migrates valid local v1 records without inventing historical events. Locked writes reread the latest record, advance one revision, and atomically append one attributed output, issue-open, issue-resolution, or machine-state event. Exact retries are stable; conflicting or stale transitions, malformed v2, target overflow, missing browser locks, and unconfirmed storage writes fail closed. Issue resolution retains its operator and evidence. Machine state is an operating record only: no telemetry, machine command, or external production write is connected.
-- Managed readiness must not be implied until tenant persistence, identity, workspace isolation, source coverage, backup, recovery, audit, and runtime-role checks pass.
-- External sends, payments, publishing, access changes, and production writes remain owner-approved and auditable.
-- The managed trial contract is `/api/trial/v1`; it fails closed until additive private schema v3, a high-entropy v2 signed actor identity, matching typed membership, audit, capability, and write gates pass. Schema v3 adds Website without granting `website.write` to existing members. Approval proposals must use `decision_packet.v1` with a versioned subject, fact-or-analysis claims, source and capture provenance, verification state, uncertainty, visibility, baseline, target, current result, acceptance rule, and artifact reference. Verified claims require a digest; terminal decisions require a named human and a trimmed nonblank note; agent, service, unknown, and legacy identities cannot make them.
+- Shop begins with Social commerce, Retail and wholesale, and Restaurant ordering.
+- Plant begins with Production control, Maintenance and downtime, and Quality and traceability.
+- Website begins with Business presence, Lead generation, and Catalog showcase.
+- Ecommerce begins with Social storefront, Pickup and preorder, and Wholesale request.
+- Shared AI assistance starts with Order Intake. Website Brief and Plant Shift Handoff follow only if the first workflow improves the accepted product workflow.
+
+All four products share one versioned browser-local CSV intake: downloadable template, explainable header mapping, row-level validation, Unicode handling, duplicate detection, deterministic digests, and a zero-write staging package. Product writes require a separate accountable confirmation.
+
+`site-manifest.json` remains the machine-readable public and template contract. Internal runtime IDs may remain `commerce` and `production` while names, routes, and customer language use Shop and Plant.
+
+## AI and agent boundary
+
+AI may inspect approved records, classify, extract, organize, summarize, draft, compare, and escalate. Every generated result must retain provenance, model and prompt version, evaluation state, and a responsible human review step.
+
+AI and delegated agents may not independently send customer messages, charge or refund money, publish a site, change a domain, merge, deploy, change access, operate machinery, or write to production. Agent Teams in HQ are coordination records, not proof of autonomous employees or a production agent runtime.
+
+## Data and managed-mode boundary
+
+- The default app remains an isolated browser-local trial.
+- Shop and Plant currently use the stable `commerce` and `production` state contracts; renaming the interface must not migrate, fork, or silently reset those records.
+- Website retains revisioned content, evidence, approval, deterministic artifact generation, recovery, and a controlled handoff.
+- Ecommerce may retain a catalogue-bound storefront configuration and structured order intent until a responsible Shop operator confirms the intent. Managed setup and inbox writes use the existing tenant-scoped identity, revision, idempotency, event, and bootstrap contracts; neither owns stock, fulfilment, reconciliation, refund, or daily-close authority.
+- Managed mode remains locked behind authenticated tenant identity, least-privilege capabilities, private schema migrations, isolation, immutable events, backup, recovery, runtime-role checks, and confirmed writes.
+- External sends, payments, publishing, access changes, deployment, and production writes remain owner-approved and auditable.
 - The only approved database handoff is the read-only, fail-closed process in `docs/supermega-enterprise-activation.md`.
 
-## Infrastructure adoption gates
+## Internal company system and R&D
 
-Research does not automatically become a dependency.
-
-- Evaluate durable workflow execution against the existing Cloud Tasks runtime before introducing Vercel Workflows.
-- Add OpenTelemetry when managed workflow execution is activated; telemetry is diagnostic, not the authoritative audit ledger.
-- Keep native tables until measured row volume or interaction complexity justifies TanStack Table or virtualization.
-- Defer realtime fan-out until simultaneous operators create a measured need.
-- Do not add a second CRM, queueing system, general workflow suite, or agent runtime without a proven gap.
-- Keep resource intelligence and recommendation research inside HQ until it becomes verified implementation guidance; it is not another public catalogue or current product route.
-
-## Internal HQ
-
-- `hq/` in this repository is the active, machine-readable company authority.
-- `hq/NOW.md` is the current operating brief and must be short enough to review daily.
-- `hq/portfolio.json` defines the product portfolio, lifecycle, adoption gates, and explicit non-goals.
-- The OneDrive `codex_hq` folder is a historical archive and intake source while it remains offline/unpinned on the Ally. It does not override the repository authority.
-- Foundry, Ops, Console, agent runtimes, lead operations, and machine coordination remain internal capabilities rather than public products.
+- `hq/` is the active machine-readable company authority.
+- `hq/NOW.md` is the short daily operating brief; `hq/WORKBOARD.md` is assignment authority.
+- SuperMega HQ coordinates Product, Engineering, Growth, Finance, evidence, exceptions, and bounded agents. It is internal machinery, not another customer product.
+- The supplied Codex operating-system and free-resource packs govern R&D discipline: discover, verify, test, compare, package, review, and monitor.
+- Resource intelligence stays inside HQ until it produces verified implementation guidance for a real product. It must not become a public AI-tools directory.
+- Social posts can provide discovery signals but cannot verify product, pricing, security, or market claims.
 
 ## Release authority
 
 - Source branch: `main`
-- App guard workflow: `.github/workflows/supermega-app-deploy.yml` (validation only; it cannot deploy)
-- App Vercel project: `megaos`
-- Coordinated production workflow: `.github/workflows/supermega-public-release.yml`
-- Public Vercel project: `supermega-public`
-- Both live domains must expose matching `__release.json` metadata for the released commit and context versions.
-- The app guard validates contracts without mutation. The coordinated workflow verifies both Vercel projects, production environment-name contracts, candidates, promotion, post-promotion controls, and paired rollback without exposing secret values.
-- Direct local production deployment is blocked. The coordinated GitHub workflow is the only production release path for both canonical domains.
+- Customer-facing Vercel project: `supermega-public` for both production domains
+- Internal hosted runtime project: `megaos`; it is not public domain authority
+- Coordinated workflow: `.github/workflows/supermega-public-release.yml`
+- Both production domains must expose matching `__release.json` metadata for the reviewed commit and context versions.
+- Direct local production deployment is blocked. The coordinated GitHub workflow is the only production release path.
+
+## Current execution order
+
+1. Fast-forward the exact clean candidate to draft PR #258 only after owner authorization, run fresh checks, and review a protected `supermega-public` preview without changing production aliases.
+2. Prove the four products on a genuinely isolated managed tenant with RLS, recovery, server-only credentials, and no cross-tenant access.
+3. Run one named Shop design-partner pilot, then validate Website and Ecommerce with the same accountable onboarding and evidence rules.
+4. Add provider-backed AI, payment, shipping, tax, publishing, and broader marketing only after their product gate has measured pilot evidence.

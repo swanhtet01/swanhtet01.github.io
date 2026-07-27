@@ -1,5 +1,5 @@
-import { type FormEvent, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { type FormEvent, useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router'
 
 import { AgentTeamsPanel } from './AgentTeamsPanel'
 import { Empty, PageHeading } from './CoreApp'
@@ -93,6 +93,10 @@ export function TeamsPage() {
 
   const intakeOpen = showIntake || requestedView === 'intake'
   const selectedItem = requestedItemId ? teamItems.find((item) => item.id === requestedItemId) : teamItems[0]
+  const mobileDetailOpen = Boolean(requestedItemId && selectedItem)
+  const mobileAgentDetailOpen = activeView === 'agents'
+    && Boolean(requestedAgentId && workspace.agents.some((agent) => agent.team === activeTeam && agent.id === requestedAgentId))
+  const mobileFocusOpen = intakeOpen || (activeView === 'work' && mobileDetailOpen) || mobileAgentDetailOpen
   const openItems = teamItems.filter((item) => item.status !== 'done')
   const activeItems = teamItems.filter((item) => ['in_progress', 'review'].includes(item.status))
   const blockedItems = teamItems.filter((item) => item.status === 'blocked')
@@ -101,6 +105,16 @@ export function TeamsPage() {
   const releaseComplete = workspace.release.checks.filter((check) => check.complete).length
   const releasePercent = Math.round((releaseComplete / workspace.release.checks.length) * 100)
   const reviewDecision = workspace.decisions.find((decision) => decision.id === reviewDecisionId && decision.status === 'proposed')
+  const workspaceCopy = activeView === 'agents'
+    ? 'Assign bounded roles to work; named humans keep authority.'
+    : activeView === 'review'
+      ? 'Check release evidence and decisions before approval.'
+      : 'Own one outcome, its evidence, and its next status.'
+
+  useEffect(() => {
+    if (!mobileFocusOpen || !window.matchMedia('(max-width: 840px)').matches) return
+    window.scrollTo({ top: 0, behavior: 'auto' })
+  }, [mobileFocusOpen, requestedAgentId, requestedItemId])
 
   function navigate(team: TeamId, view: WorkspaceView, selectedId?: string) {
     const next = { team, view } as Record<string, string>
@@ -275,12 +289,12 @@ export function TeamsPage() {
   }
 
   return (
-    <div className="workspace-screen team-screen">
+    <div className={`workspace-screen team-screen ${mobileFocusOpen ? 'mobile-focus-open' : ''}`}>
       <PageHeading
         eyebrow="Teams"
         title={activeDefinition.label}
-        copy="Accountable work, delegated roles, evidence, and human review in one workspace."
-        actions={<button className="core-button primary" onClick={openNewWork} type="button">New work</button>}
+        copy={workspaceCopy}
+        actions={activeView === 'work' && !intakeOpen ? <button className="core-button primary" onClick={openNewWork} type="button">New work</button> : undefined}
       />
       <div className="workspace-toolbar simple-toolbar">
         <label className="team-picker"><span>Team</span><select aria-label="Team" value={activeTeam} onChange={(event) => selectTeam(event.target.value as TeamId)}>{teamDefinitions.map((team) => <option key={team.id} value={team.id}>{team.label}</option>)}</select></label>
@@ -309,19 +323,22 @@ export function TeamsPage() {
           <aside className="core-panel guidance-panel"><span className="core-eyebrow">Definition of ready</span><h2>Outcome, owner, evidence, boundary.</h2><ol><li>Name the observable result.</li><li>Assign one accountable human.</li><li>State what evidence proves it.</li><li>Keep consequential authority human.</li></ol></aside>
         </div> : null}
 
-        {activeView === 'work' && !intakeOpen ? <div className="split-workspace team-board-view">
+        {activeView === 'work' && !intakeOpen ? <div className={`split-workspace team-board-view ${mobileDetailOpen ? 'mobile-detail-open' : 'mobile-list-open'}`}>
           <section className="core-panel queue-panel">
             <div className="panel-head"><div><span className="core-eyebrow">Owned work</span><h2>{openItems.length} open</h2></div></div>
-            {teamItems.length ? <div className="record-list" role="list">{teamItems.map((item) => (
-              <button aria-current={selectedItem?.id === item.id ? 'true' : undefined} className="record-row" key={item.id} onClick={() => navigate(activeTeam, 'work', item.id)} type="button">
-                <span className={`record-status ${item.status}`} />
-                <span><strong>{item.title}</strong><small>{item.id} / {item.owner}</small></span>
-                <span><b>{item.priority}</b><small>{statusLabel(item.status)}</small></span>
-              </button>
-            ))}</div> : <Empty>No work is recorded for this team.</Empty>}
+            {teamItems.length ? <ul className="record-list">{teamItems.map((item) => (
+              <li key={item.id}>
+                <button aria-current={selectedItem?.id === item.id ? 'true' : undefined} className="record-row" onClick={() => navigate(activeTeam, 'work', item.id)} type="button">
+                  <span className={`record-status ${item.status}`} />
+                  <span><strong>{item.title}</strong><small>{item.id} / {item.owner}</small></span>
+                  <span><b>{item.priority}</b><small>{statusLabel(item.status)}</small></span>
+                </button>
+              </li>
+            ))}</ul> : <Empty>No work is recorded for this team.</Empty>}
           </section>
           <section className="core-panel record-detail-panel">
             {selectedItem ? <>
+              <button className="team-mobile-back text-link" onClick={() => navigate(activeTeam, 'work')} type="button">Back to work</button>
               <div className="record-detail-head"><div><span className="core-eyebrow">{selectedItem.id}</span><h2>{selectedItem.title}</h2><p>{selectedItem.outcome}</p></div><span className={`status-pill ${selectedItem.status === 'done' ? 'approved' : selectedItem.status === 'blocked' ? 'pending' : 'bounded'}`}>{statusLabel(selectedItem.status)}</span></div>
               <div className="record-controls">
                 <label>Owner<input aria-label={`Owner for ${selectedItem.title}`} maxLength={80} value={selectedItem.owner} onChange={(event) => updateWork(selectedItem.id, { owner: event.target.value })} /></label>

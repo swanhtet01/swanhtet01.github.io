@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "supermega.hq.database-rehearsal.v1",
+  "recordedAt": "2026-07-25",
+  "runner": "tools/rehearse_supermega_postgres17.py",
+  "implementationCommit": "304fea5a23e05e6021375753e5e1ebe2034ac1ee",
+  "githubCi": {
+    "workflow": "SuperMega App CI",
+    "run": 180,
+    "commit": "338b6fd11bc27da9b7aa42bee2c293a5c0e3a9ef",
+    "conclusion": "success",
+    "coversImplementationCommit": false
+  },
+  "engine": {
+    "distribution": "EDB PostgreSQL Windows x86-64 binaries",
+    "version": "17.10",
+    "major": 17,
+    "sourcePage": "https://www.postgresql.org/download/windows/",
+    "archive": "https://get.enterprisedb.com/postgresql/postgresql-17.10-2-windows-x64-binaries.zip",
+    "archiveBytes": 333927270,
+    "observedArchiveSha256": "ef9b1e5e23d2e8a83914ba13d9dc536a72210fba53fd1808ff1f7e06bb22b106",
+    "tlsActive": true,
+    "loopbackOnly": true
+  },
+  "migration": {
+    "count": 6,
+    "schemaVersion": 5,
+    "productionValidatorReady": true
+  },
+  "runtime": {
+    "adapter": "PostgresTrialStore",
+    "autocommit": false,
+    "explicitTransaction": true,
+    "transactionLocalIdentity": true
+  },
+  "checks": {
+    "approvalAgentRowSpoofDenied": true,
+    "approvalDecisionEventImmutable": true,
+    "approvalExactRetry": true,
+    "approvalHumanDecisionOnce": true,
+    "approvalMutatedRetryRejected": true,
+    "approvalRecordImmutable": true,
+    "approvalRequesterReadScoped": true,
+    "approvalReviewerReadsAll": true,
+    "approvalServiceRowSpoofDenied": true,
+    "approvalTerminalReplayRejected": true,
+    "backupCreated": true,
+    "browserRoleIsolation": true,
+    "capabilityDenial": true,
+    "capabilityScopedEventReads": true,
+    "capabilityScopedReads": true,
+    "dedicatedRuntimeRoleValidated": true,
+    "eventImmutability": true,
+    "identityTransactionLocal": true,
+    "invalidInitialVersionDenied": true,
+    "legacyActorDenied": true,
+    "managedExactRetry": true,
+    "managedHumanAttribution": true,
+    "managedProductionJobToOutput": true,
+    "managedWebsiteToCommerceJourney": true,
+    "migrationChainApplied": true,
+    "mismatchedIdentityDenied": true,
+    "optimisticConcurrency": true,
+    "restoreCompletedOnFreshCluster": true,
+    "restoredDataPreserved": true,
+    "restoredDatabaseValidated": true,
+    "revocation": true,
+    "runtimeRoleSettingsEmpty": true,
+    "runtimeSetRoleDenied": true,
+    "serverTimestamps": true,
+    "tenantIsolation": true,
+    "v1UpgradePreserved": true,
+    "writeCapabilityImpliesRead": true
+  },
+  "safety": {
+    "cleanupComplete": true,
+    "secretValuesExposed": false,
+    "productionMutated": false,
+    "supabaseMutated": false,
+    "vercelMutated": false
+  },
+  "remainingHostedGates": [
+    "Repeat the complete migration and product-journey rehearsal on an isolated Supabase non-production target.",
+    "Run Supabase Security Advisor and resolve applicable findings.",
+    "Exercise the provider transaction-mode pooler and hosted backup/restore process.",
+    "Keep production writes disabled until founder approval."
+  ]
+}

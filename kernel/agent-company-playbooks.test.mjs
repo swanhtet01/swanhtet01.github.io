@@ -55,16 +55,31 @@ test('playbook planner produces deterministic staged handoffs without execution 
 
 test('new general-use workers are packaged into bounded delegation playbooks', async () => {
   const cases = [
-    ['documents-to-system', 'document-processor'],
-    ['meeting-to-delivery', 'meeting-actions-coordinator'],
-    ['quote-to-decision', 'procurement-analyst'],
+    ['documents-to-system', 'knowledge-manager', 'document-processing-desk'],
+    ['meeting-to-delivery', 'project-controller', 'meeting-actions-desk'],
+    ['quote-to-decision', 'procurement-analyst', 'procurement-review-desk'],
   ]
-  for (const [playbookId, firstAgent] of cases) {
+  for (const [playbookId, firstAgent, firstCrew] of cases) {
     const plan = await planCompanyPlaybook({ clientId: 'client-acme', missionId: playbookId, playbookId })
     assert.equal(plan.ok, true)
     assert.equal(plan.stages[0].agentId, firstAgent)
+    assert.equal(plan.stages[0].crew, firstCrew)
     assert.equal(plan.stages.every((item) => item.roleBudget === 3), true)
   }
+  const sourceDecision = await planCompanyPlaybook({
+    clientId: 'client-acme',
+    missionId: 'source-decision',
+    playbookId: 'source-to-decision',
+  })
+  assert.equal(sourceDecision.stages[1].agentId, 'operations-analyst')
+  assert.equal(sourceDecision.stages[1].crew, 'data-insights-desk')
+  const quoteDecision = await planCompanyPlaybook({
+    clientId: 'client-acme',
+    missionId: 'quote-decision',
+    playbookId: 'quote-to-decision',
+  })
+  assert.equal(quoteDecision.stages[1].agentId, 'operations-analyst')
+  assert.equal(quoteDecision.stages[1].crew, 'data-insights-desk')
 })
 
 test('playbook planner rejects invented work, unsafe fields, and invalid identities before crew loading', async () => {

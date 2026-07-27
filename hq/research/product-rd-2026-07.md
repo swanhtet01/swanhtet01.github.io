@@ -1,6 +1,8 @@
 # SuperMega product R&D brief — July 2026
 
-Status: founder direction accepted; Website remains the local prototype, while the guarded non-PII handoff and accountable order confirmation now live in canonical Commerce
+Status: superseded in part by the founder's 2026-07-24 portfolio correction
+
+Current interpretation: this brief remains useful research and implementation evidence, but its decision to make Commerce and Production public product names and retire Ecommerce is no longer authority. The current customer map is Shop, Plant, Website, and Ecommerce. Bounded AI assistance is shared infrastructure, not a fifth product. Commerce and Production remain internal runtime identifiers; Ecommerce owns the customer storefront and order-intent experience while Shop owns the operating record.
 
 Evidence basis: released `7bb2c72973473d5cc10d9a89849065b22b9f18fa`, repository authority, and the shared “Curating Dev Resources” conversation
 
@@ -10,25 +12,25 @@ Decision owner: founder / product lead
 
 ## Executive recommendation
 
-Build depth in this order:
+Build depth in this corrected order:
 
-1. **Website product** — prove a repeatable, evidence-backed website-delivery workflow before advertising the local prototype as a launched or customer-proven product.
-2. **Ecommerce and orders capability** — let an approved website or existing customer channel create a structured order draft inside canonical Commerce.
-3. **Shop and Plant improvements** — deepen Commerce and Production under their current routes; treat Shop and Plant only as familiar legacy labels.
-4. **Easy-demo AI assistance** — ship three bounded draft-and-review experiences inside the products, not an agent catalogue, marketplace, or autonomous workforce.
+1. **Shop and Plant identity and depth** — restore the founder-selected customer names and canonical slash routes while preserving the stable Commerce and Production runtime contracts.
+2. **Website product** — prove a repeatable, evidence-backed website-delivery workflow before claiming customer or production success.
+3. **Ecommerce product** — rebuild only the customer storefront, product, cart, and structured order-intent layer; hand accountable operations to Shop.
+4. **Shared AI assistance** — make Order Intake the first bounded draft-and-review capability inside the products, then add Website Brief and Plant Shift Handoff only after the same evaluation gate passes.
 
 This order preserves the current compact topology:
 
 | Concern | Keep | Do not add now |
 | --- | --- | --- |
 | Public surface | `supermega.dev`: `/`, `/contact/`, `/privacy/` | A page per feature, public agent pages, public pricing theatre |
-| Product app | Today, Teams, Operations, Settings; lazy `/products/website/` prototype; legacy Ecommerce path redirects to Commerce Orders | A new primary-navigation area, separate domain, separate deployment authority, separate Shop/Plant apps |
-| Product authority | Company system, Commerce, and Production as operating entries; Website as the local prototype | Claims that a prototype is launched, managed, integrated, or customer-proven |
+| Product app | One shell with `/shop/`, `/plant/`, `/website/`, and `/ecommerce/`; `/agents/` is compatibility-only for HQ delegated roles | Separate domains, duplicate back offices, or a new deployment authority |
+| Product authority | Shop, Plant, Website, and Ecommerce; bounded AI assistance is shared infrastructure and internal HQ is not another customer product | Claims that a prototype is launched, managed, integrated, autonomous, or customer-proven |
 | Data | Browser-local truthful demos; gated `/api/trial/v1`; private Postgres/Supabase state, events, approvals | A second CRM, database, queue, or direct browser-to-privileged database path |
 | Release | The paired public/app candidate, promotion, verification, and rollback workflow | Local production deploys, a third Vercel project, agent-owned promotion |
 | AI | Approved inputs, structured drafts, provenance, named human decisions | External sends, payments, publishing, access changes, machine control, production writes |
 
-The first implementation target is therefore not “launch four products.” It is **one Website workflow that can be demonstrated truthfully, one Website-to-order handoff, and one measurable operating outcome**.
+The implementation target is therefore **four complete products plus one evaluated Order Intake capability inside them**, not a fifth product or separate back office.
 
 ## Source availability and interpretation
 
@@ -74,7 +76,7 @@ These are product opportunities only when the demo and claims continue to state 
 
 | Priority | R&D product slice | Existing owner surface | First truthful demo | Graduation evidence |
 | --- | --- | --- | --- | --- |
-| 1 | Website delivery | `/products/website/` plus the existing Product lifecycle | Approved sample brief → finite local preview → QA/release packet | One named user accepts the workflow and a real preview against explicit criteria |
+| 1 | Website delivery | `/website/` plus the existing Product lifecycle | Approved sample brief → finite local preview → QA/release packet | One named user accepts the workflow and a real preview against explicit criteria |
 | 2 | Ecommerce and orders capability | `/operations/commerce/?tab=orders` | Approved website/chat order intent → operator-confirmed order → reserved stock → fulfilment close | Idempotent, transactional managed pilot with measured handling time and completion |
 | 3a | Shop depth (Commerce) | Existing Commerce tabs | Cancellation/release, reconciliation, exception, and daily-close evidence | One operator runs a full day with zero unexplained stock variance |
 | 3b | Plant depth (Production) | Existing Production tabs | Shift output, issue ownership, machine observation, and evidence-backed handoff | One shift closes with traceable output and all exceptions owned |
@@ -267,18 +269,18 @@ The demo must keep “mock,” “local,” and “not sent/not charged” label
 - No general connector framework before one approved Website or merchant connector passes the order contract.
 - No realtime layer until simultaneous operators create a measured stale-state problem.
 
-## Priority 3 — improve Shop and Plant without reviving them as products
+## Priority 3 — improve Shop and Plant as the operating products
 
-“Shop” maps to **Commerce** and “Plant” maps to **Production** in current routes, migrations, local-state normalization, and public redirects. Keep those familiar words in discovery conversations if useful, but use canonical names in code, contracts, HQ, release checks, and public claims.
+**Shop** maps to the stable internal `commerce` surface and **Plant** maps to the stable internal `production` surface in migrations and local-state normalization. Use Shop and Plant in routes, UI, HQ, release checks, and public claims. Keep the internal identifiers until a separately tested data migration provides enough value to justify changing them.
 
 ### Problems and target users
 
-- **Commerce problem:** order-desk and stock operators need one trustworthy order, reservation, payment, fulfilment, and close record; the current local demo proves the flow but cannot yet prevent managed concurrency or reconciliation errors.
-- **Commerce target user:** a named order operator, stock keeper, or commerce owner in a one-branch pilot.
-- **Production problem:** supervisors need shift output, issues, quality decisions, machine observations, and handoff evidence without claiming that SuperMega controls equipment or replaces MRP/SCADA.
-- **Production target user:** a shift supervisor, production lead, quality lead, or maintenance coordinator on one line or bounded workflow.
+- **Shop problem:** order-desk and stock operators need one trustworthy order, reservation, payment-status, fulfilment, and close record; the current local demo proves the flow but hosted concurrency and reconciliation still require validation.
+- **Shop target user:** a named order operator, stock keeper, or shop owner in a one-branch pilot.
+- **Plant problem:** supervisors need shift output, issues, quality decisions, machine observations, and handoff evidence without claiming that SuperMega controls equipment or replaces MRP/SCADA.
+- **Plant target user:** a shift supervisor, production lead, quality lead, or maintenance coordinator on one line or bounded workflow.
 
-The must-have modules remain the current canonical modules. Commerce deepens Today, Orders, and Inventory; Production deepens Today, Production, and Issues & equipment. New records should compose inside those modules before any new tab is proposed.
+The must-have modules remain the current canonical modules. Shop deepens Orders and Stock; Plant deepens Jobs and Problems. New records should compose inside those modules before any new tab is proposed.
 
 ### Shop / Commerce next slice
 
@@ -456,7 +458,7 @@ No product may claim revenue, conversion, time saved, reliability, or autonomy u
 
 1. Preserve four app route families and three public pages through the local R&D stages.
 2. Do not add a public Website portfolio item until a named user accepts one real preview and HQ records the decision.
-3. Do not make Shop or Plant canonical names again.
+3. Keep Shop and Plant as the canonical customer names; do not rename internal storage contracts without a tested migration.
 4. Do not create a second database, CRM, queue, scheduler, agent runtime, CMS, UI system, or deployment project without a proven gap.
 5. Do not add realtime, virtualization, or durable workflow infrastructure from projected scale; require a measured failure first.
 6. Do not build ecommerce breadth before order integrity, reservation, reconciliation, and close are correct.
@@ -493,11 +495,12 @@ Current primary/official technical sources, accessed 2026-07-22:
 
 ## Decision recorded
 
-The founder approved this sequence on 2026-07-22 with the following implementation boundary:
+The founder corrected the portfolio on 2026-07-24:
 
-1. Treat Website as a slash-addressable local product prototype, not a public launch claim yet.
-2. Define Ecommerce & Orders as Website/channel intake into Commerce, not a separate commerce engine.
-3. Implement the Shop/Plant depth slices under Commerce/Production and keep current canonical names.
-4. Build Order Intake as the first AI demo; add Website Brief and Shift Handoff only after it passes the same truth and safety contract.
+1. Shop and Plant are the canonical customer-facing operating products.
+2. Commerce and Production remain internal runtime identifiers during a compatibility-preserving migration.
+3. Website and Ecommerce are distinct maker products. Ecommerce owns the storefront and order-intent layer and feeds Shop; it does not duplicate Shop's stock, fulfilment, payment-status, refund, or close records.
+4. AI assistance is a bounded shared capability, not a customer product. Order Intake remains the first workflow and must pass provenance, structured-output, zero-side-effect, and human-review gates.
+5. SuperMega HQ, R&D, Agent Teams, Ops, Console, and machine coordination are internal systems rather than public products.
 
-This decision authorizes local product implementation and validation. Schema changes, external data, API keys, managed activation, customer publishing, payment integration, and production release each retain their existing separate gates.
+This decision authorizes local product implementation and validation. Schema changes, external data, API keys, managed activation, customer publishing, payment integration, connector writes, and production release each retain their existing separate gates.

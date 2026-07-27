@@ -1,116 +1,262 @@
-import { type KeyboardEvent, useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router'
 
 import { ContentWorkspace } from './ContentWorkspace'
 import { NavigationWorkspace } from './NavigationWorkspace'
 import { PublishWorkspace } from './PublishWorkspace'
 import { SitePreview } from './SitePreview'
+import { WebsiteStarterSetup } from './WebsiteStarterSetup'
 import { useWebsiteWorkspace } from './useWebsiteWorkspace'
+import { createWebsiteHtmlDownload } from './website-export'
+import type { WebsiteReleaseState } from './website-release-foundation'
 import {
-  commerceWebsiteIntakes,
-  createCommerceWebsiteIntake,
-  validateCommerceState,
-  type CommerceWebsiteSource,
-} from '../../core/commerce-workspace'
-import {
-  loadManagedBootstrap,
-  ManagedTrialError,
-  saveManagedCommerceCommand,
-} from '../../core/managed-trial'
-import {
-  createWebsiteEcommerceHandoff,
-  readWebsiteEcommerceHandoff,
-  writeWebsiteEcommerceHandoff,
-} from '../product-handoff'
+  applyWebsiteStarterBrief,
+  isUntouchedWebsiteStarter,
+  type WebsiteStarterBrief,
+} from './website-starter'
 import {
   approveWebsiteRevision,
+  commitWebsiteEditSession,
   createBlankPage,
+  createWebsiteEditSession,
   createId,
+  deleteWebsiteRecoveryArchive,
   duplicatePage,
   getCurrentApproval,
   getCurrentPublish,
+  LEGACY_WEBSITE_STORAGE_KEY,
+  listWebsiteRecoveryArchives,
   MAX_WEBSITE_PAGES,
   previewDevices,
   readinessChecks,
+  readWebsiteRecoveryArchive,
   recordWebsiteEvidence,
   recordWebsiteSnapshot,
+  restoreWebsiteEditSession,
+  updateWebsiteEditSession,
+  WEBSITE_EDIT_SESSION_KEY,
+  websiteEditSessionMatches,
   workspaceFingerprint,
   type EvidenceKind,
   type PreviewDevice,
+  type WebsiteEditSession,
   type WebsitePage,
+  type WebsiteRecoveryArchiveSummary,
   type WebsiteWorkspaceUpdate,
-  type WorkspaceView,
 } from './website-model'
 import './website-product.css'
 
-const workspaceViews: Array<{ id: WorkspaceView; index: string; label: string }> = [
-  { id: 'content', index: '01', label: 'Content' },
-  { id: 'navigation', index: '02', label: 'Navigation' },
-  { id: 'publish', index: '03', label: 'Publish' },
-]
+type WebsiteView = 'content' | 'publish'
 
-const viewCopy: Record<WorkspaceView, { eyebrow: string; title: string; copy: string }> = {
+type WebsiteEditSessionState = {
+  scope: string
+  session: WebsiteEditSession
+}
+
+const DEFAULT_NOTICE = 'Website workspace loaded. No website has been deployed.'
+
+const viewCopy: Record<WebsiteView, { title: string; copy: string }> = {
   content: {
-    eyebrow: 'Page workspace',
-    title: 'Edit one page at a time.',
-    copy: 'Change the content, then review the result before publishing.',
-  },
-  navigation: {
-    eyebrow: 'Site structure',
-    title: 'Make every destination intentional.',
-    copy: 'Order pages, control visibility, and keep drafts out of public navigation.',
+    title: 'Edit page',
+    copy: 'Edit one section, preview it, then save or discard.',
   },
   publish: {
-    eyebrow: 'Release control',
-    title: 'Prove the revision before approval.',
-    copy: 'Readiness, evidence, and human approval are bound to the current content fingerprint.',
+    title: 'Review and save',
+    copy: 'Check the saved revision, approve it, then download the site file.',
   },
 }
 
-function handoffSourceKey(context: ReturnType<typeof readWebsiteEcommerceHandoff>) {
-  if (!context?.display) return ''
-  const source = context.handoff.source
-  return ['local', source.fingerprint, source.approvalId, source.localPublishId, source.pageId].join('|')
+function formatRecoveryDate(value: string) {
+  const timestamp = Date.parse(value)
+  return Number.isNaN(timestamp) ? 'Saved recovery' : new Date(timestamp).toLocaleString()
 }
 
-function managedHandoffSourceKey(source: CommerceWebsiteSource) {
-  return ['managed', source.fingerprint, source.approvalId, source.snapshotId, source.pageId].join('|')
-}
-
-function secureUuid() {
-  if (typeof globalThis.crypto?.randomUUID !== 'function') throw new Error('Secure command IDs are unavailable in this browser.')
-  return globalThis.crypto.randomUUID()
+function editSessionStorageKey(scope: string) {
+  return `${WEBSITE_EDIT_SESSION_KEY}.${encodeURIComponent(scope)}`
 }
 
 export function WebsiteProduct() {
-  const { workspace, mutateWorkspace, storageMode, storageIssue, managedActorId } = useWebsiteWorkspace()
-  const [view, setView] = useState<WorkspaceView>('content')
-  const [device, setDevice] = useState<PreviewDevice>('desktop')
-  const [notice, setNotice] = useState('Website workspace loaded. No website has been deployed.')
+  const {
+    workspace,
+    mutateWorkspace,
+    repairLocalWorkspace,
+    canRepairLocalStorage,
+    repairCandidateRevision,
+    storageMode,
+    storageIssue,
+    managedActorId,
+  } = useWebsiteWorkspace()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const requestedView = searchParams.get('view')
+  const [surface, setSurface] = useState<'work' | 'preview'>('work')
+  const [selectedPageId, setSelectedPageId] = useState(workspace.selectedPageId)
+  const [siteSettingsOpen, setSiteSettingsOpen] = useState(false)
+  const [starterDismissed, setStarterDismissed] = useState(false)
+  const [editSessionState, setEditSessionState] = useState<WebsiteEditSessionState | null>(null)
+  const [savingDraft, setSavingDraft] = useState(false)
+  const [repairConfirmationRevision, setRepairConfirmationRevision] = useState<number | null>(null)
+  const [repairing, setRepairing] = useState(false)
+  const [repairArchiveKey, setRepairArchiveKey] = useState('')
+  const [recoveryArchives, setRecoveryArchives] = useState<WebsiteRecoveryArchiveSummary[]>(() => (
+    typeof window === 'undefined' ? [] : listWebsiteRecoveryArchives(window.localStorage)
+  ))
+  const [recoveryDeleteCandidate, setRecoveryDeleteCandidate] = useState('')
+  const [headingFocusRequest, setHeadingFocusRequest] = useState(0)
+  const [recoveryFocusRequest, setRecoveryFocusRequest] = useState(0)
+  const headingRef = useRef<HTMLHeadingElement>(null)
+  const recoveryPrimaryActionRef = useRef<HTMLButtonElement>(null)
+  const editSessionRef = useRef<WebsiteEditSessionState | null>(null)
+  const [device, setDevice] = useState<PreviewDevice>(() => (
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 900px)').matches ? 'mobile' : 'desktop'
+  ))
+  const [notice, setNotice] = useState(DEFAULT_NOTICE)
   const [deleteCandidateId, setDeleteCandidateId] = useState('')
-  const [preparedHandoffSource, setPreparedHandoffSource] = useState(() => handoffSourceKey(readWebsiteEcommerceHandoff()))
-  const selectedPage = workspace.pages.find((page) => page.id === workspace.selectedPageId) ?? workspace.pages[0]
+  const editSessionScope = storageMode === 'managed'
+    ? managedActorId ? `managed:${managedActorId}` : ''
+    : storageMode
+  const activeEditSession = editSessionState?.scope === editSessionScope ? editSessionState.session : null
+  const editorWorkspace = activeEditSession?.workspace ?? workspace
+  const selectedPage = editorWorkspace.pages.find((page) => page.id === selectedPageId)
+    ?? editorWorkspace.pages.find((page) => page.id === editorWorkspace.selectedPageId)
+    ?? editorWorkspace.pages[0]
+  const hasUnsavedChanges = Boolean(activeEditSession)
+  const editConflict = Boolean(activeEditSession && !websiteEditSessionMatches(activeEditSession, workspace))
   const fingerprint = workspaceFingerprint(workspace)
   const checks = readinessChecks(workspace, fingerprint)
+  const contentChecksPass = checks
+    .filter((check) => !check.id.startsWith('evidence-'))
+    .every((check) => check.passed)
   const approval = getCurrentApproval(workspace)
   const publish = getCurrentPublish(workspace)
   const approvalIsCurrent = Boolean(approval)
   const publishIsCurrent = Boolean(publish)
-  const handoffSourcePage = workspace.pages.find((page) => page.stage === 'ready' && page.slug === '/products')
-    ?? workspace.pages.find((page) => page.stage === 'ready')
-  const currentHandoffSource = approval && publish && handoffSourcePage
-    ? [storageMode === 'managed' ? 'managed' : 'local', fingerprint, approval.id, publish.id, handoffSourcePage.id].join('|')
-    : ''
-  const handoffIsCurrent = Boolean(preparedHandoffSource
-    && preparedHandoffSource === currentHandoffSource
-    && approvalIsCurrent
-    && publishIsCurrent
-    && checks.every((check) => check.passed))
-  const activeViewCopy = viewCopy[view]
+  const starterAvailable = !hasUnsavedChanges && isUntouchedWebsiteStarter(editorWorkspace)
+  const canReview = !hasUnsavedChanges && !starterAvailable && contentChecksPass
+  const view: WebsiteView = requestedView === 'publish' && canReview ? 'publish' : 'content'
+  const starterSetupActive = view === 'content' && starterAvailable && !starterDismissed
+  const activeViewCopy = starterSetupActive
+    ? {
+        title: 'Start your website',
+        copy: 'Answer five short questions, then preview before anything is saved.',
+      }
+    : view === 'content' && surface === 'preview'
+    ? {
+        title: hasUnsavedChanges ? 'Preview unsaved changes' : 'Preview page',
+        copy: hasUnsavedChanges
+          ? 'This preview is not saved yet. Return to edit, then save or discard it.'
+          : selectedPage.stage === 'draft'
+            ? 'This page is saved as a draft. Return to edit and mark it ready.'
+            : 'Check the selected page at desktop, tablet, or mobile size.',
+      }
+    : viewCopy[view]
+  const savedStateNotice = storageMode === 'managed'
+    ? 'Changes are saved to this managed workspace. Nothing has been deployed.'
+    : storageMode === 'browser-local'
+      ? 'Changes are saved on this device. Nothing has been deployed.'
+      : 'Changes last for this session only. Nothing has been deployed.'
+  const saveStateLabel = starterAvailable
+    ? 'Sample only'
+    : editConflict
+    ? 'Saved version changed'
+    : hasUnsavedChanges
+      ? 'Unsaved preview'
+      : storageMode === 'managed'
+        ? 'Saved to workspace'
+        : storageMode === 'browser-local'
+          ? 'Saved on this device'
+          : 'Session only'
+  const visiblePageCount = editorWorkspace.pages.filter((page) => page.navigation.visible).length
+  const statusNotice = editConflict
+    ? 'The saved Website changed after this edit session started. Your preview is preserved, but it cannot overwrite the newer version. Discard it and review the saved workspace.'
+    : storageIssue || (notice === DEFAULT_NOTICE ? savedStateNotice : notice)
+  const noticePriority = editConflict || storageIssue ? 'error' : notice === DEFAULT_NOTICE ? 'routine' : 'update'
+  const repairArmed = canRepairLocalStorage
+    && repairCandidateRevision > 0
+    && repairConfirmationRevision === repairCandidateRevision
 
   useEffect(() => {
     document.title = 'Website | SuperMega'
     window.scrollTo({ top: 0, behavior: 'instant' })
   }, [])
+
+  useEffect(() => {
+    if (requestedView === null || requestedView === 'publish') return
+    const next = new URLSearchParams(searchParams)
+    next.delete('view')
+    setSearchParams(next, { replace: true })
+  }, [requestedView, searchParams, setSearchParams])
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !editSessionScope) return
+    if (editSessionRef.current?.scope === editSessionScope) return
+    const restoreTimer = window.setTimeout(() => {
+      if (editSessionRef.current?.scope === editSessionScope) return
+      const storageKey = editSessionStorageKey(editSessionScope)
+      try {
+        const raw = window.sessionStorage.getItem(storageKey)
+        const restored = raw ? restoreWebsiteEditSession(raw) : null
+        const next = restored ? { scope: editSessionScope, session: restored } : null
+        if (raw && !restored) window.sessionStorage.removeItem(storageKey)
+        editSessionRef.current = next
+        setEditSessionState(next)
+      } catch {
+        editSessionRef.current = null
+        setEditSessionState(null)
+      }
+    }, 0)
+    return () => window.clearTimeout(restoreTimer)
+  }, [editSessionScope])
+
+  useEffect(() => {
+    if (requestedView !== 'publish' || canReview) return
+    const next = new URLSearchParams(searchParams)
+    next.delete('view')
+    setSearchParams(next, { replace: true })
+  }, [canReview, requestedView, searchParams, setSearchParams])
+
+  useEffect(() => {
+    if (headingFocusRequest > 0) headingRef.current?.focus()
+  }, [headingFocusRequest])
+
+  useEffect(() => {
+    if (recoveryFocusRequest > 0) recoveryPrimaryActionRef.current?.focus()
+  }, [recoveryFocusRequest])
+
+  function requestHeadingFocus() {
+    setHeadingFocusRequest((current) => current + 1)
+  }
+
+  function requestRecoveryFocus() {
+    setRecoveryFocusRequest((current) => current + 1)
+  }
+
+  function refreshRecoveryArchives() {
+    setRecoveryArchives(listWebsiteRecoveryArchives(window.localStorage))
+  }
+
+  function openWorkspaceView(nextView: WebsiteView) {
+    if (nextView === 'publish' && hasUnsavedChanges) {
+      setNotice('Save or discard the unsaved Website preview before reviewing release evidence.')
+      return
+    }
+    if (nextView === 'publish' && !canReview) {
+      setNotice('Finish and save every page before reviewing release evidence.')
+      return
+    }
+    const next = new URLSearchParams(searchParams)
+    if (nextView === 'publish') next.set('view', 'publish')
+    else next.delete('view')
+    setSearchParams(next)
+    setSurface('work')
+    setSiteSettingsOpen(false)
+    requestHeadingFocus()
+  }
+
+  function openContentSurface(nextSurface: 'work' | 'preview') {
+    setSurface(nextSurface)
+    setSiteSettingsOpen(false)
+    requestHeadingFocus()
+  }
 
   async function commitWorkspace(update: WebsiteWorkspaceUpdate, success = '', durable = false) {
     const result = await mutateWorkspace(update, { durable })
@@ -122,30 +268,210 @@ export function WebsiteProduct() {
     return result
   }
 
-  function moveWorkspaceTabFocus(event: KeyboardEvent<HTMLButtonElement>, currentIndex: number) {
-    const tabs = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')
-    if (!tabs?.length) return
-    let nextIndex = currentIndex
-    if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % tabs.length
-    else if (event.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + tabs.length) % tabs.length
-    else if (event.key === 'Home') nextIndex = 0
-    else if (event.key === 'End') nextIndex = tabs.length - 1
-    else return
-    event.preventDefault()
-    tabs[nextIndex]?.focus()
-    setView(workspaceViews[nextIndex].id)
+  async function saveManagedRelease(nextRelease: WebsiteReleaseState) {
+    if (storageMode !== 'managed') return { ok: false as const, error: 'Managed Website release storage is unavailable.' }
+    const result = await commitWorkspace((current) => {
+      const retained = current.releaseRecords ?? []
+      const index = retained.findIndex((record) => record.scope === nextRelease.scope)
+      if (index >= 0 && retained[index].headDigest === nextRelease.headDigest) return current
+      const previous = index >= 0 ? retained[index] : null
+      const added = nextRelease.revision - (previous?.revision ?? 0)
+      if (added < 1 || added > 2
+        || (previous && JSON.stringify(nextRelease.commands.slice(0, previous.commands.length)) !== JSON.stringify(previous.commands))) {
+        throw new Error('Managed Website release history must append one reviewed step without rewriting prior evidence.')
+      }
+      const releaseRecords = index < 0
+        ? [...retained, nextRelease]
+        : retained.map((record, recordIndex) => recordIndex === index ? nextRelease : record)
+      return { ...current, releaseRecords }
+    }, 'Release record saved to this managed workspace.', true)
+    return result.ok ? { ok: true as const } : result
   }
 
-  async function selectPage(pageId: string) {
-    await commitWorkspace((current) => current.pages.some((page) => page.id === pageId)
-      ? { ...current, selectedPageId: pageId }
-      : current)
+  function replaceEditSession(next: WebsiteEditSessionState | null) {
+    editSessionRef.current = next
+    setEditSessionState(next)
+  }
+
+  function persistEditSession(next: WebsiteEditSessionState) {
+    try {
+      window.sessionStorage.setItem(editSessionStorageKey(next.scope), JSON.stringify(next.session))
+    } catch {
+      setNotice('The unsaved preview is held in this tab only. Browser draft recovery is unavailable, but Save and Discard still work.')
+    }
+  }
+
+  function clearEditSession(target = editSessionRef.current) {
+    if (target) {
+      try {
+        window.sessionStorage.removeItem(editSessionStorageKey(target.scope))
+      } catch {
+        // The in-memory edit session can still be cleared safely.
+      }
+    }
+    replaceEditSession(null)
+  }
+
+  function stageWorkspace(update: WebsiteWorkspaceUpdate) {
+    if (savingDraft) {
+      setNotice('Website Save is still being confirmed. Wait for it to finish before making another change.')
+      return null
+    }
+    if (!editSessionScope) {
+      setNotice('Website workspace is still loading. Try the edit again.')
+      return null
+    }
+    const retained = editSessionRef.current
+    if (retained && retained.scope !== editSessionScope) {
+      setNotice('Website workspace identity changed. Review the loaded workspace before editing.')
+      return null
+    }
+    const base = retained?.session ?? createWebsiteEditSession(workspace)
+    if (!websiteEditSessionMatches(base, workspace)) {
+      setNotice('The saved Website changed after this edit session started. Discard the preview before making more changes.')
+      return null
+    }
+    const result = updateWebsiteEditSession(base, update)
+    if (!result.ok) {
+      setNotice(result.error)
+      return null
+    }
+    if (!result.changed) return retained?.session ?? null
+    const next = { scope: editSessionScope, session: result.session }
+    replaceEditSession(next)
+    persistEditSession(next)
+    return result.session
+  }
+
+  async function saveDraft() {
+    const retained = editSessionRef.current
+    if (!retained || retained.scope !== editSessionScope) return
+    if (!websiteEditSessionMatches(retained.session, workspace)) {
+      setNotice('This preview started from an older saved version. Nothing was overwritten; discard it and review the newer Website.')
+      return
+    }
+    setSavingDraft(true)
+    const result = await commitWorkspace(
+      (current) => commitWebsiteEditSession(current, retained.session),
+      '',
+    )
+    setSavingDraft(false)
+    if (!result.ok) return
+    if (editSessionRef.current === retained) clearEditSession(retained)
+    setNotice(result.changed
+      ? `Website saved once as content revision ${result.workspace.contentRevision}. Nothing was deployed.`
+      : 'The preview already matched the saved Website. No revision was added.')
+  }
+
+  function discardDraft() {
+    if (!activeEditSession || savingDraft) return
+    clearEditSession()
     setDeleteCandidateId('')
-    setNotice('Previewing the selected page.')
+    if (isUntouchedWebsiteStarter(workspace)) {
+      setStarterDismissed(false)
+      setSurface('work')
+      setSiteSettingsOpen(false)
+      requestHeadingFocus()
+    }
+    setNotice('Unsaved Website changes discarded. The saved workspace was not changed.')
   }
 
-  async function updatePage(pageId: string, update: (page: WebsitePage) => WebsitePage) {
-    await commitWorkspace((current) => ({
+  function requireSavedWorkspace(action: string) {
+    if (!hasUnsavedChanges) return true
+    setNotice(`Save or discard the unsaved Website preview before ${action}.`)
+    return false
+  }
+
+  function selectPage(pageId: string) {
+    if (!editorWorkspace.pages.some((page) => page.id === pageId)) {
+      setNotice('That page is no longer available. The current page was preserved.')
+      return false
+    }
+    setSelectedPageId(pageId)
+    setDeleteCandidateId('')
+    setNotice(DEFAULT_NOTICE)
+    return true
+  }
+
+  function previewPage(pageId = selectedPage.id) {
+    if (pageId !== selectedPage.id && !selectPage(pageId)) return
+    openContentSurface('preview')
+  }
+
+  async function repairLocalData() {
+    if (!requireSavedWorkspace('repairing local Website data')) return
+    setRepairing(true)
+    const result = await repairLocalWorkspace()
+    setRepairing(false)
+    setRepairConfirmationRevision(null)
+    if (result.ok) {
+      setRepairArchiveKey(result.archiveKey)
+      const cleanupNotice = result.legacyCleanup === 'retained'
+        ? ' The old Website storage key could not be removed; it remains on this device and should be reviewed in Recovery archives.'
+        : ''
+      setNotice(`Website data repaired and confirmed. The previous unreadable value is archived in this browser as ${result.archiveKey}.${cleanupNotice} No deployment occurred.`)
+    } else if (result.archiveConfirmed && result.archiveKey) {
+      setRepairArchiveKey(result.archiveKey)
+    }
+    refreshRecoveryArchives()
+    requestRecoveryFocus()
+  }
+
+  function armLocalRepair() {
+    setRepairConfirmationRevision(repairCandidateRevision)
+    requestRecoveryFocus()
+  }
+
+  function cancelLocalRepair() {
+    setRepairConfirmationRevision(null)
+    requestRecoveryFocus()
+  }
+
+  function downloadRepairArchive(archiveKey = repairArchiveKey) {
+    try {
+      const content = readWebsiteRecoveryArchive(archiveKey, window.localStorage)
+      if (!content) {
+        setNotice('The Website recovery archive could not be read or validated.')
+        return
+      }
+      const url = URL.createObjectURL(new Blob([content], { type: 'application/json' }))
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `supermega-website-recovery-${archiveKey.split('.').at(-1) ?? 'archive'}.json`
+      link.hidden = true
+      document.body.append(link)
+      link.click()
+      link.remove()
+      window.setTimeout(() => URL.revokeObjectURL(url), 0)
+      setNotice('Website recovery archive downloaded. No local data or deployment state changed.')
+    } catch (error) {
+      setNotice(`Website recovery archive download failed: ${error instanceof Error ? error.message : 'unknown error'}`)
+    }
+  }
+
+  async function removeRecoveryArchive(archiveKey: string) {
+    if (recoveryDeleteCandidate !== archiveKey) {
+      setRecoveryDeleteCandidate(archiveKey)
+      setNotice('Confirm removal only after downloading the recovery archive if you may need it later.')
+      return
+    }
+    const result = await deleteWebsiteRecoveryArchive(
+      archiveKey,
+      window.localStorage,
+      window.navigator.locks,
+    )
+    setRecoveryDeleteCandidate('')
+    if (!result.ok) {
+      setNotice(result.error)
+      return
+    }
+    setRecoveryArchives(result.archives)
+    if (repairArchiveKey === archiveKey) setRepairArchiveKey('')
+    setNotice('Website recovery archive removed from this browser. Website content and deployment state were unchanged.')
+  }
+
+  function updatePage(pageId: string, update: (page: WebsitePage) => WebsitePage) {
+    stageWorkspace((current) => ({
       ...current,
       pages: current.pages.map((page) => page.id === pageId
         ? { ...update(page), updatedAt: new Date().toISOString() }
@@ -154,40 +480,70 @@ export function WebsiteProduct() {
     setDeleteCandidateId('')
   }
 
-  async function addPage() {
-    if (workspace.pages.length >= MAX_WEBSITE_PAGES) {
-      setNotice('This prototype is capped at four pages. Remove a draft before adding another.')
+  function addPage() {
+    if (editorWorkspace.pages.length >= MAX_WEBSITE_PAGES) {
+      setNotice('This workspace supports up to four pages. Remove a draft before adding another.')
       return
     }
-    const result = await commitWorkspace((current) => {
+    const staged = stageWorkspace((current) => {
       if (current.pages.length >= MAX_WEBSITE_PAGES) return current
       const page = createBlankPage(current.pages.length + 1)
       return { ...current, pages: [...current.pages, page], selectedPageId: page.id }
-    }, 'Draft page added. Complete its content before marking it ready.')
-    if (result.ok && result.changed) {
-      setView('content')
+    })
+    if (staged) {
+      setSelectedPageId(staged.workspace.selectedPageId)
+      openWorkspaceView('content')
       setDeleteCandidateId('')
+      setNotice('New page added to the unsaved preview.')
     }
   }
 
-  async function copySelectedPage() {
-    if (workspace.pages.length >= MAX_WEBSITE_PAGES) {
-      setNotice('This prototype is capped at four pages. Remove a draft before duplicating.')
+  function startWithBusiness(brief: WebsiteStarterBrief) {
+    if (!starterAvailable) {
+      setNotice('The Website sample has already changed. Nothing was replaced.')
       return
     }
-    const result = await commitWorkspace((current) => {
+    const staged = stageWorkspace((current) => (
+      applyWebsiteStarterBrief(current, brief, new Date().toISOString())
+    ))
+    if (!staged) {
+      setNotice('The business brief was not applied. Review every required field and try again.')
+      return
+    }
+    setSelectedPageId(staged.workspace.selectedPageId)
+    setStarterDismissed(true)
+    openContentSurface('preview')
+    setNotice('Your one-page site is ready as an unsaved preview. Review it, then Save or Discard.')
+  }
+
+  function openStarterSetup() {
+    setStarterDismissed(false)
+    setSurface('work')
+    setSiteSettingsOpen(false)
+    requestHeadingFocus()
+  }
+
+  function copySelectedPage() {
+    if (editorWorkspace.pages.length >= MAX_WEBSITE_PAGES) {
+      setNotice('This workspace supports up to four pages. Remove a draft before duplicating.')
+      return
+    }
+    const sourcePageId = selectedPage.id
+    const staged = stageWorkspace((current) => {
       if (current.pages.length >= MAX_WEBSITE_PAGES) return current
-      const sourcePage = current.pages.find((page) => page.id === current.selectedPageId) ?? current.pages[0]
+      const sourcePage = current.pages.find((page) => page.id === sourcePageId) ?? current.pages[0]
       const page = duplicatePage(sourcePage, current.pages.length + 1)
       return { ...current, pages: [...current.pages, page], selectedPageId: page.id }
-    }, 'Draft copy added with navigation hidden.')
-    if (result.ok && result.changed) {
-      setView('content')
+    })
+    if (staged) {
+      setSelectedPageId(staged.workspace.selectedPageId)
+      openWorkspaceView('content')
       setDeleteCandidateId('')
+      setNotice('Page copy added to the unsaved preview with navigation hidden.')
     }
   }
 
-  async function requestDeletePage() {
+  function requestDeletePage() {
     if (selectedPage.slug === '/' || selectedPage.stage !== 'draft') return
     if (deleteCandidateId !== selectedPage.id) {
       setDeleteCandidateId(selectedPage.id)
@@ -195,7 +551,7 @@ export function WebsiteProduct() {
       return
     }
 
-    const result = await commitWorkspace((current) => {
+    const staged = stageWorkspace((current) => {
       const target = current.pages.find((page) => page.id === selectedPage.id)
       if (!target || target.slug === '/' || target.stage !== 'draft') return current
       const pages = current.pages.filter((page) => page.id !== target.id)
@@ -204,12 +560,16 @@ export function WebsiteProduct() {
         pages,
         selectedPageId: pages[0]?.id ?? '',
       }
-    }, 'Draft page removed.')
-    if (result.ok && result.changed) setDeleteCandidateId('')
+    })
+    if (staged) {
+      setSelectedPageId(staged.workspace.selectedPageId)
+      setDeleteCandidateId('')
+      setNotice('Draft page removed from the unsaved preview.')
+    }
   }
 
-  async function movePage(pageId: string, direction: -1 | 1) {
-    await commitWorkspace((current) => {
+  function movePage(pageId: string, direction: -1 | 1) {
+    const staged = stageWorkspace((current) => {
       const currentIndex = current.pages.findIndex((page) => page.id === pageId)
       const nextIndex = currentIndex + direction
       if (currentIndex < 0 || nextIndex < 0 || nextIndex >= current.pages.length) return current
@@ -217,7 +577,8 @@ export function WebsiteProduct() {
       const [page] = pages.splice(currentIndex, 1)
       pages.splice(nextIndex, 0, page)
       return { ...current, pages }
-    }, 'Navigation order updated.')
+    })
+    if (staged) setNotice('Navigation order changed in the unsaved preview.')
   }
 
   async function addEvidence(input: {
@@ -226,6 +587,7 @@ export function WebsiteProduct() {
     reference: string
     verifiedBy: string
   }) {
+    if (!requireSavedWorkspace('recording release evidence')) return false
     const actionId = createId('evidence')
     const capturedAt = new Date().toISOString()
     const result = await commitWorkspace(
@@ -237,6 +599,7 @@ export function WebsiteProduct() {
   }
 
   async function approveCurrentRevision(input: { reviewer: string; note: string }) {
+    if (!requireSavedWorkspace('approving a revision')) return false
     const actionId = createId('approval')
     const capturedAt = new Date().toISOString()
     const result = await commitWorkspace(
@@ -248,328 +611,307 @@ export function WebsiteProduct() {
   }
 
   async function recordLocalPublish() {
+    if (!requireSavedWorkspace('recording a site file')) return
     if (!approvalIsCurrent || publishIsCurrent) return
     await commitWorkspace(
       (current) => recordWebsiteSnapshot(current, {
         actionId: createId('local-snapshot'),
         capturedAt: new Date().toISOString(),
       }),
-      'Approved snapshot saved and confirmed. No deployment occurred.',
+      'Approved site file saved and confirmed. No deployment occurred.',
       true,
     )
   }
 
-  async function prepareCommerceHandoff(input: { sku: string; quantity: number }) {
-    const sku = input.sku.trim().toUpperCase()
-    const sourcePage = handoffSourcePage
-    if (!/^[A-Z0-9][A-Z0-9_-]{2,79}$/.test(sku)
-      || !Number.isSafeInteger(input.quantity)
-      || input.quantity < 1
-      || input.quantity > 99) {
-      setNotice('Enter an exact Commerce SKU and a whole-number quantity from 1 to 99.')
+  function downloadPublishedSite(recordId: string) {
+    const record = workspace.localPublishes.find((entry) => entry.id === recordId)
+    if (!record?.artifact) {
+      setNotice('This older site record has no retained file. Approve the current revision and create a new site file.')
       return
     }
-
-    if (!approvalIsCurrent || !publishIsCurrent || !approval || !publish || !sourcePage || storageMode === 'session-only') {
-      setNotice('A current approval, recorded snapshot, ready source page, and durable workspace are required for intake.')
-      return
+    try {
+      const download = createWebsiteHtmlDownload(record.artifact)
+      const url = URL.createObjectURL(new Blob([download.content], { type: download.mimeType }))
+      const link = document.createElement('a')
+      link.href = url
+      link.download = download.filename
+      link.hidden = true
+      document.body.append(link)
+      link.click()
+      link.remove()
+      window.setTimeout(() => URL.revokeObjectURL(url), 0)
+      setNotice(`${download.filename} downloaded. No deployment or domain change occurred.`)
+    } catch (error) {
+      setNotice('The retained site file failed closed: ' + (error instanceof Error ? error.message : 'unknown export error'))
     }
-
-    const readyPageIds = workspace.pages.filter((page) => page.stage === 'ready').map((page) => page.id)
-    const sourceIsCurrent = checks.every((check) => check.passed)
-      && approval.reviewer.trim().length > 0
-      && approval.note.trim().length > 0
-      && publish.recordedBy === approval.reviewer
-      && Date.parse(publish.recordedAt) >= Date.parse(approval.approvedAt)
-      && readyPageIds.length === publish.readyPageIds.length
-      && readyPageIds.every((pageId) => publish.readyPageIds.includes(pageId))
-      && publish.readyPageIds.includes(sourcePage.id)
-    if (!sourceIsCurrent) {
-      setNotice('The current Website evidence, approval, snapshot, and ready-page set do not match. Intake failed closed.')
-      return
-    }
-
-    if (storageMode === 'managed') {
-      const source: CommerceWebsiteSource = {
-        fingerprint,
-        approvalId: approval.id,
-        snapshotId: publish.id,
-        pageId: sourcePage.id,
-        siteName: workspace.siteName,
-        pagePath: sourcePage.slug,
-      }
-      const sourceKey = managedHandoffSourceKey(source)
-      try {
-        const bootstrap = await loadManagedBootstrap()
-        if (!managedActorId || bootstrap.identity.actor_id !== managedActorId) {
-          throw new Error('Managed Website identity changed before the Commerce intake could be prepared.')
-        }
-        const record = bootstrap.states.commerce
-        if (record.surface !== 'commerce' || record.version < 1) {
-          throw new Error('Create the managed Commerce catalog before sending a Website intake.')
-        }
-        const current = validateCommerceState(record.state)
-        const existing = commerceWebsiteIntakes(current).find((intake) => managedHandoffSourceKey(intake.source) === sourceKey)
-        if (existing) {
-          if (existing.sku !== sku || existing.quantity !== input.quantity) {
-            throw new Error('This Website snapshot already has a different retained Commerce intake.')
-          }
-          setPreparedHandoffSource(sourceKey)
-          setNotice(`${existing.id} is already retained in managed Commerce.`)
-          return
-        }
-
-        const commandId = secureUuid()
-        const proof = {
-          actionId: `ACT-WEB-${secureUuid().toUpperCase()}`,
-          capturedAt: new Date().toISOString(),
-          actor: managedActorId,
-          reason: 'Approved Website snapshot sent to Commerce intake',
-          evidenceReference: publish.id,
-        }
-        const candidate = createCommerceWebsiteIntake(current, {
-          id: `WINT-${secureUuid().toUpperCase()}`,
-          source,
-          sku,
-          quantity: input.quantity,
-        }, proof)
-        if (!candidate || candidate === current) throw new Error('The SKU does not match exactly one managed Commerce catalog item.')
-        const saved = await saveManagedCommerceCommand({
-          commandId,
-          eventType: 'commerce.website_intake.created',
-          expectedVersion: record.version,
-          evidence: proof,
-          state: candidate as unknown as Record<string, unknown>,
-        })
-        if (saved.surface !== 'commerce'
-          || saved.event_type !== 'commerce.website_intake.created'
-          || saved.version !== record.version + 1) {
-          throw new Error('Managed Commerce returned an invalid intake confirmation.')
-        }
-        const accepted = validateCommerceState(saved.state)
-        const retained = commerceWebsiteIntakes(accepted).find((intake) => managedHandoffSourceKey(intake.source) === sourceKey)
-        if (!retained || retained.status !== 'pending_confirmation' || retained.sku !== sku || retained.quantity !== input.quantity) {
-          throw new Error('Managed Commerce did not confirm the expected intake record.')
-        }
-        setPreparedHandoffSource(sourceKey)
-        setNotice(`${retained.id} is waiting in Commerce. No stock or order changed.`)
-      } catch (error) {
-        if (error instanceof ManagedTrialError && error.code === 'trial_version_conflict') {
-          try {
-            const refreshed = await loadManagedBootstrap()
-            const current = validateCommerceState(refreshed.states.commerce.state)
-            const retained = commerceWebsiteIntakes(current).find((intake) => managedHandoffSourceKey(intake.source) === sourceKey)
-            if (retained && retained.sku === sku && retained.quantity === input.quantity) {
-              setPreparedHandoffSource(sourceKey)
-              setNotice(`${retained.id} was already retained by another session.`)
-              return
-            }
-          } catch {
-            // Preserve the original version-conflict message below.
-          }
-        }
-        setNotice(`Managed Commerce intake was not created: ${error instanceof Error ? error.message : 'unknown managed error'}`)
-      }
-      return
-    }
-
-    const existingHandoff = readWebsiteEcommerceHandoff()
-    if (existingHandoff?.handoff.state === 'accepted') {
-      const source = existingHandoff.handoff.source
-      const acceptedSourceIsCurrent = Boolean(existingHandoff.display
-        && source.fingerprint === fingerprint
-        && source.approvalId === approval.id
-        && source.localPublishId === publish.id
-        && source.pageId === sourcePage.id)
-      setPreparedHandoffSource(acceptedSourceIsCurrent ? handoffSourceKey(existingHandoff) : '')
-      setNotice(acceptedSourceIsCurrent
-        ? 'This exact local Website intake is already accepted and retained.'
-        : 'The prior accepted local intake is retained and will not be overwritten.')
-      return
-    }
-
-    const handoff = createWebsiteEcommerceHandoff({
-      fingerprint,
-      approvalId: approval.id,
-      localPublishId: publish.id,
-      pageId: sourcePage.id,
-      sku,
-      quantity: input.quantity,
-    })
-
-    const restored = writeWebsiteEcommerceHandoff(handoff, workspace)
-    if (!restored) {
-      setNotice('Browser storage is unavailable, so no cross-product handoff was created.')
-      return
-    }
-
-    setPreparedHandoffSource(handoffSourceKey(restored))
-    setNotice('Website intake prepared in this browser. Review it in Commerce Orders.')
   }
 
   return (
     <div className="website-product">
-      <a className="website-skip" href="#website-workspace">Skip to website workspace</a>
-
-      <header className="website-topbar">
-        <a aria-label="Back to SuperMega operations" className="website-brand" href="/operations/">
-          <span aria-hidden="true">&gt;_</span>
-          <strong>SUPERMEGA</strong>
-          <i>/</i>
-          <b>WEBSITE</b>
-        </a>
-        <div className="website-runtime">
-          <span className="website-local-badge"><i />{storageMode === 'managed' ? 'Managed workspace' : storageMode === 'browser-local' ? 'Local workspace' : 'Session only'}</span>
-          <small>{storageMode === 'managed'
-            ? 'synced · content r' + String(workspace.contentRevision)
-            : storageMode === 'browser-local'
-              ? 'saved · content r' + String(workspace.contentRevision)
-              : 'writes paused'}</small>
-          <button className="website-button is-primary is-compact" onClick={() => setView('publish')} type="button">
-            Review publish
-          </button>
-        </div>
-      </header>
-
       <div className="website-shell">
-        <aside className="website-sidebar">
-          <div className="website-site-record">
-            <span>Website workspace</span>
-            <strong>{workspace.siteName || 'Untitled site'}</strong>
-            <small>{workspace.pages.length} / {MAX_WEBSITE_PAGES} pages · {storageMode === 'managed' ? 'managed draft' : 'local draft'}</small>
-          </div>
+        <div id="website-workspace" className="website-main">
+          {noticePriority !== 'routine' ? (
+            <div className="website-notice" aria-busy={repairing} aria-live="polite" data-priority={noticePriority} role="status">
+              <p>{repairArmed
+                ? 'SuperMega will keep a recovery copy on this device, then restore saving with the valid Website shown here. Nothing will be published; Shop, Plant, managed data, and domains stay unchanged.'
+                : repairing ? 'Keeping a recovery copy and restoring Website saving…' : statusNotice}</p>
+              {repairArchiveKey && !repairArmed ? (
+                <div className="website-notice-actions">
+                  <button ref={recoveryPrimaryActionRef} className="website-notice-action is-quiet" onClick={() => downloadRepairArchive()} type="button">Download archive</button>
+                  {canRepairLocalStorage ? <button className="website-notice-action" onClick={armLocalRepair} type="button">Retry repair</button> : null}
+                </div>
+              ) : canRepairLocalStorage ? repairArmed ? (
+                <div className="website-notice-actions">
+                  <button className="website-notice-action is-quiet" disabled={repairing} onClick={cancelLocalRepair} type="button">Cancel</button>
+                  <button ref={recoveryPrimaryActionRef} className="website-notice-action" disabled={repairing} onClick={() => void repairLocalData()} type="button">Keep copy and repair</button>
+                </div>
+              ) : (
+                <div className="website-notice-actions">
+                  <a className="website-notice-action is-quiet" href="/settings/#controls">Export backup</a>
+                  <button ref={recoveryPrimaryActionRef} className="website-notice-action" onClick={armLocalRepair} type="button">Review repair</button>
+                </div>
+              ) : storageIssue && storageMode === 'session-only' ? (
+                <a className="website-notice-action" href="/settings/#controls">Recovery settings</a>
+              ) : null}
+            </div>
+          ) : null}
 
-          <nav className="website-workspace-nav" aria-label="Website workspace" role="tablist">
-            {workspaceViews.map((item, index) => (
-              <button
-                aria-controls="website-active-panel"
-                aria-selected={view === item.id}
-                key={item.id}
-                onKeyDown={(event) => moveWorkspaceTabFocus(event, index)}
-                onClick={() => setView(item.id)}
-                role="tab"
-                tabIndex={view === item.id ? 0 : -1}
-                type="button"
+          {view === 'content' ? (
+            <section
+              aria-label="Website actions"
+              className="website-action-bar"
+              data-editing={hasUnsavedChanges ? 'true' : 'false'}
+              data-starter={starterSetupActive ? 'true' : 'false'}
+            >
+              {starterSetupActive ? (
+                <div className="website-page-control website-starter-control">
+                  <span>Start</span>
+                  <strong>Business website</strong>
+                </div>
+              ) : (
+                <div className="website-page-control">
+                  <label htmlFor="website-page-select">Page</label>
+                  <select
+                    id="website-page-select"
+                    onChange={(event) => selectPage(event.currentTarget.value)}
+                    value={selectedPage.id}
+                  >
+                    {editorWorkspace.pages.map((page) => (
+                      <option key={page.id} value={page.id}>
+                        {page.internalName || 'Untitled page'} — {page.slug || 'No path'} ({page.stage})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <span
+                aria-live="polite"
+                className="website-save-state"
+                data-mode={storageMode}
+                data-state={editConflict ? 'conflict' : hasUnsavedChanges ? 'unsaved' : 'saved'}
               >
-                <span>{item.index}</span>{item.label}
-              </button>
-            ))}
-          </nav>
-
-          <section className="website-page-index" aria-labelledby="website-pages-title">
-            <header>
-              <span id="website-pages-title">Pages</span>
-              <button aria-label="Add page" disabled={workspace.pages.length >= MAX_WEBSITE_PAGES} onClick={addPage} title={workspace.pages.length >= MAX_WEBSITE_PAGES ? 'The four-page prototype limit is reached' : 'Add page'} type="button">+</button>
-            </header>
-            <div>
-              {workspace.pages.map((page) => (
+                {saveStateLabel}
+              </span>
+              {!starterSetupActive ? (
+                <div className="website-primary-actions">
+                {starterAvailable ? (
+                  <button className="website-button is-primary" onClick={openStarterSetup} type="button">
+                    Start site
+                  </button>
+                ) : null}
+                {surface === 'work' ? (
+                  <details
+                    className="website-site-settings"
+                    onKeyDown={(event) => {
+                      if (event.key !== 'Escape') return
+                      setSiteSettingsOpen(false)
+                      event.currentTarget.querySelector('summary')?.focus()
+                    }}
+                    onToggle={(event) => setSiteSettingsOpen(event.currentTarget.open)}
+                    open={siteSettingsOpen}
+                  >
+                    <summary>Site</summary>
+                    <div className="website-site-settings-content">
+                      <div className="website-site-settings-actions">
+                        <span>{editorWorkspace.pages.length} pages · {visiblePageCount} in navigation</span>
+                        <button
+                          className="website-button is-secondary"
+                          disabled={editorWorkspace.pages.length >= MAX_WEBSITE_PAGES}
+                          onClick={addPage}
+                          title={editorWorkspace.pages.length >= MAX_WEBSITE_PAGES ? 'The four-page workspace limit is reached' : 'Add page'}
+                          type="button"
+                        >
+                          New page
+                        </button>
+                      </div>
+                      <NavigationWorkspace
+                        onMovePage={movePage}
+                        onSelectPage={previewPage}
+                        onSiteNameChange={(siteName) => {
+                          stageWorkspace((current) => ({ ...current, siteName }))
+                        }}
+                        onUpdatePage={updatePage}
+                        workspace={editorWorkspace}
+                      />
+                      {recoveryArchives.length ? (
+                        <details className="website-recovery-manager">
+                          <summary>Recovery archives <span>{recoveryArchives.length}</span></summary>
+                          <div className="website-recovery-list">
+                            <p>Unreadable Website values kept on this device. Download before removing anything you may need.</p>
+                            {recoveryArchives.map((archive) => {
+                              const deleteArmed = recoveryDeleteCandidate === archive.archiveKey
+                              return (
+                                <div className="website-recovery-row" key={archive.archiveKey}>
+                                  <div>
+                                    <strong>{formatRecoveryDate(archive.archivedAt)}</strong>
+                                    <span>{archive.sourceKey === LEGACY_WEBSITE_STORAGE_KEY ? 'Old Website data' : 'Website data'}</span>
+                                  </div>
+                                  <div className="website-recovery-actions">
+                                    <button onClick={() => downloadRepairArchive(archive.archiveKey)} type="button">Download</button>
+                                    {deleteArmed ? (
+                                      <>
+                                        <button className="is-quiet" onClick={() => setRecoveryDeleteCandidate('')} type="button">Cancel</button>
+                                        <button className="is-danger" onClick={() => void removeRecoveryArchive(archive.archiveKey)} type="button">Confirm remove</button>
+                                      </>
+                                    ) : (
+                                      <button className="is-quiet" onClick={() => void removeRecoveryArchive(archive.archiveKey)} type="button">Remove</button>
+                                    )}
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </details>
+                      ) : null}
+                    </div>
+                  </details>
+                ) : null}
                 <button
-                  aria-current={selectedPage.id === page.id ? 'true' : undefined}
-                  key={page.id}
-                  onClick={() => selectPage(page.id)}
+                  aria-pressed={surface === 'preview'}
+                  className="website-button is-secondary"
+                  onClick={() => {
+                    if (surface === 'preview') openContentSurface('work')
+                    else previewPage()
+                  }}
                   type="button"
                 >
-                  <i className={page.stage === 'ready' ? 'is-ready' : ''} />
-                  <span>
-                    <strong>{page.internalName || 'Untitled page'}</strong>
-                    <small>{page.slug || 'No path'}</small>
-                  </span>
-                  <b>{page.stage === 'ready' ? 'R' : 'D'}</b>
+                  {surface === 'preview' ? 'Back' : 'Preview'}
                 </button>
-              ))}
-            </div>
-          </section>
+                {hasUnsavedChanges ? (
+                  <>
+                    <button
+                      className="website-button is-quiet"
+                      disabled={savingDraft}
+                      onClick={discardDraft}
+                      type="button"
+                    >
+                      Discard
+                    </button>
+                    <button
+                      className="website-button is-primary"
+                      disabled={editConflict || savingDraft}
+                      onClick={() => void saveDraft()}
+                      title={editConflict ? 'Discard this preview and review the newer saved version' : 'Save all preview changes as one revision'}
+                      type="button"
+                    >
+                      {savingDraft ? 'Saving…' : 'Save'}
+                    </button>
+                  </>
+                ) : canReview ? (
+                  <button className="website-button is-primary" onClick={() => openWorkspaceView('publish')} type="button">
+                    Review site
+                  </button>
+                ) : null}
+                </div>
+              ) : null}
+            </section>
+          ) : null}
 
-          <footer className="website-sidebar-foot">
-            <span aria-hidden="true">&gt;_</span>
-            <p>{storageMode === 'managed'
-              ? 'Authenticated records are synced. Domain and deployment remain separate approval-gated actions.'
-              : 'Local records only. No CMS, domain, analytics, or deployment target is connected.'}</p>
-          </footer>
-        </aside>
-
-        <main id="website-workspace" className="website-main">
-          <header className="website-heading">
+          <header className="website-heading" data-view={view}>
             <div>
-              <span className="website-eyebrow">{activeViewCopy.eyebrow}</span>
-              <h1>{activeViewCopy.title}</h1>
+              <h1 ref={headingRef} tabIndex={-1}>{activeViewCopy.title}</h1>
               <p>{activeViewCopy.copy}</p>
             </div>
-            <div className="website-preview-controls" role="group" aria-label="Responsive preview size">
-              <span>Preview</span>
-              {previewDevices.map((option) => (
-                <button
-                  aria-pressed={device === option.id}
-                  key={option.id}
-                  onClick={() => setDevice(option.id)}
-                  title={option.label + ' preview'}
-                  type="button"
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
+            {view === 'publish' ? (
+              <button className="website-button is-secondary" onClick={() => openWorkspaceView('content')} type="button">Back to edit</button>
+            ) : null}
           </header>
 
           <div
-            aria-label={workspaceViews.find((item) => item.id === view)?.label}
+            aria-label={view === 'content' ? 'Edit' : 'Publish'}
             className={'website-workspace-grid view-' + view}
+            data-surface={surface}
             id="website-active-panel"
-            role="tabpanel"
+            role="region"
           >
-            {view === 'content' ? (
-              <ContentWorkspace
-                canDuplicate={workspace.pages.length < MAX_WEBSITE_PAGES}
-                deleteArmed={deleteCandidateId === selectedPage.id}
-                onDuplicate={copySelectedPage}
-                onRequestDelete={requestDeletePage}
-                onUpdatePage={(update) => updatePage(selectedPage.id, update)}
-                page={selectedPage}
-              />
-            ) : null}
+            <div className="website-work-surface">
+              {view === 'content' ? (
+                starterSetupActive ? (
+                  <WebsiteStarterSetup
+                    onCreate={startWithBusiness}
+                    onViewSample={() => setStarterDismissed(true)}
+                  />
+                ) : (
+                  <ContentWorkspace
+                    canDuplicate={editorWorkspace.pages.length < MAX_WEBSITE_PAGES}
+                    deleteArmed={deleteCandidateId === selectedPage.id}
+                    onDuplicate={copySelectedPage}
+                    onRequestDelete={requestDeletePage}
+                    onUpdatePage={(update) => updatePage(selectedPage.id, update)}
+                    page={selectedPage}
+                  />
+                )
+              ) : null}
 
-            {view === 'navigation' ? (
-              <NavigationWorkspace
-                onMovePage={movePage}
+              {view === 'publish' ? (
+                <PublishWorkspace
+                  approvalIsCurrent={approvalIsCurrent}
+                  checks={checks}
+                  currentPublishId={publish?.id ?? ''}
+                  fingerprint={fingerprint}
+                  managedActorId={managedActorId}
+                  managedReleaseRecords={storageMode === 'managed' ? workspace.releaseRecords ?? [] : undefined}
+                  onAddEvidence={addEvidence}
+                  onApprove={approveCurrentRevision}
+                  onDownloadPublish={downloadPublishedSite}
+                  onRecordPublish={recordLocalPublish}
+                  onSaveManagedRelease={storageMode === 'managed' ? saveManagedRelease : undefined}
+                  publishIsCurrent={publishIsCurrent}
+                  workspace={workspace}
+                />
+              ) : null}
+            </div>
+
+            <div className="website-preview-surface">
+              <header className="website-preview-surface-head">
+                <div>
+                  <strong>{hasUnsavedChanges ? 'Unsaved preview' : 'Preview'}</strong>
+                  <small>{selectedPage.internalName || 'Untitled page'}</small>
+                </div>
+                <div className="website-preview-controls" role="group" aria-label="Responsive preview size">
+                  {previewDevices.map((option) => (
+                    <button
+                      aria-pressed={device === option.id}
+                      key={option.id}
+                      onClick={() => setDevice(option.id)}
+                      title={option.label + ' preview'}
+                      type="button"
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </header>
+              <SitePreview
+                device={device}
                 onSelectPage={selectPage}
-                onSiteNameChange={(siteName) => {
-                  void commitWorkspace((current) => ({ ...current, siteName }), 'Site identity updated.')
-                }}
-                onUpdatePage={updatePage}
-                workspace={workspace}
+                page={selectedPage}
+                pages={editorWorkspace.pages}
+                siteName={editorWorkspace.siteName}
               />
-            ) : null}
-
-            {view === 'publish' ? (
-              <PublishWorkspace
-                approvalIsCurrent={approvalIsCurrent}
-                checks={checks}
-                fingerprint={fingerprint}
-                handoffAvailable={storageMode !== 'session-only'}
-                handoffIsCurrent={handoffIsCurrent}
-                managedActorId={managedActorId}
-                onAddEvidence={addEvidence}
-                onApprove={approveCurrentRevision}
-                onPrepareCommerceHandoff={prepareCommerceHandoff}
-                onRecordPublish={recordLocalPublish}
-                publishIsCurrent={publishIsCurrent}
-                workspace={workspace}
-              />
-            ) : null}
-
-            <SitePreview
-              device={device}
-              onSelectPage={selectPage}
-              page={selectedPage}
-              pages={workspace.pages}
-              siteName={workspace.siteName}
-            />
+            </div>
           </div>
-        </main>
-      </div>
-
-      <div className="website-notice" aria-live="polite" role="status">
-        <span aria-hidden="true">&gt;_</span>{storageIssue || notice}
+        </div>
       </div>
     </div>
   )

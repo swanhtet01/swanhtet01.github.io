@@ -31,7 +31,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from google.cloud import tasks_v2
 from google.protobuf import timestamp_pb2
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 import sentry_sdk
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 
@@ -65,6 +65,7 @@ from mark1_pilot.state_store import (  # noqa: E402
     add_maintenance_record,
     add_product_feedback,
     add_receiving_record,
+    complete_approval_action,
     grant_workspace_access,
     list_actions,
     list_agent_teams,
@@ -98,6 +99,7 @@ from mark1_pilot.state_store import (  # noqa: E402
     load_supplier_risk_summary,
     load_workspace_member_summary,
     resolve_state_db,
+    reserve_approval_action,
     sync_state_from_output_dir,
     upsert_snapshot,
     update_contact_submission_handoff,
@@ -111,6 +113,7 @@ from mark1_pilot.enterprise_store import (  # noqa: E402
     add_leads_with_tasks as enterprise_add_leads_with_tasks,
     claim_agent_runs as enterprise_claim_agent_runs,
     complete_agent_run as enterprise_complete_agent_run,
+    create_and_reserve_agent_run as enterprise_create_and_reserve_agent_run,
     create_agent_run as enterprise_create_agent_run,
     add_workspace_tasks as enterprise_add_workspace_tasks,
     authenticate_user as enterprise_authenticate_user,
@@ -122,6 +125,7 @@ from mark1_pilot.enterprise_store import (  # noqa: E402
     ensure_user as enterprise_ensure_user,
     get_lead as enterprise_get_lead,
     get_lead_hunt_profile as enterprise_get_lead_hunt_profile,
+    get_agent_capacity_plan as enterprise_get_agent_capacity_plan,
     get_session as enterprise_get_session,
     get_workspace_profile as enterprise_get_workspace_profile,
     get_workspace_domain_by_hostname as enterprise_get_workspace_domain_by_hostname,
@@ -144,12 +148,17 @@ from mark1_pilot.enterprise_store import (  # noqa: E402
     revoke_session as enterprise_revoke_session,
     save_lead_hunt_profile as enterprise_save_lead_hunt_profile,
     record_lead_hunt_run as enterprise_record_lead_hunt_run,
-    start_agent_run as enterprise_start_agent_run,
     update_lead as enterprise_update_lead,
     update_workspace_domain as enterprise_update_workspace_domain,
     update_workspace_module as enterprise_update_workspace_module,
     update_workspace_profile as enterprise_update_workspace_profile,
     update_workspace_task as enterprise_update_workspace_task,
+)
+from mark1_pilot.agent_governance import (  # noqa: E402
+    AGENT_AUTOMATED_JOB_TYPES,
+    AGENT_BUDGET_ACCOUNTING_CONTRACT,
+    AgentGovernanceError,
+    load_agent_workforce_policy,
 )
 from mark1_pilot.lead_finder import run_lead_finder  # noqa: E402
 from mark1_pilot.lead_to_pilot import build_lead_to_pilot_pack  # noqa: E402
@@ -181,8 +190,10 @@ class LeadToPilotRequest(BaseModel):
 
 
 class NewsBriefRequest(BaseModel):
-    raw_text: str = Field(default="")
-    urls: list[str] = Field(default_factory=list)
+    model_config = ConfigDict(extra="forbid")
+
+    raw_text: str = Field(default="", max_length=50_000)
+    urls: list[str] = Field(default_factory=list, max_length=4)
 
 
 class ActionBoardRequest(BaseModel):
@@ -348,23 +359,25 @@ class DecisionJournalRequest(BaseModel):
 
 
 class ApprovalQueueRequest(BaseModel):
-    title: str
-    summary: str = ""
-    approval_gate: str = "general"
-    requested_by: str = "System"
-    owner: str = "Management"
-    status: str = "pending"
-    due: str = ""
-    related_route: str = "/app"
-    related_entity: str = ""
-    evidence_link: str = ""
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=1, max_length=200)
+    summary: str = Field(default="", max_length=2_000)
+    approval_gate: str = Field(default="general", max_length=80)
+    owner: str = Field(default="Management", max_length=120)
+    due: str = Field(default="", max_length=80)
+    related_route: str = Field(default="/app", max_length=240)
+    related_entity: str = Field(default="", max_length=200)
+    evidence_link: str = Field(default="", max_length=500)
     payload: dict[str, Any] = Field(default_factory=dict)
 
 
 class ApprovalQueueUpdateRequest(BaseModel):
-    status: str | None = None
-    owner: str | None = None
-    note: str | None = None
+    model_config = ConfigDict(extra="forbid")
+
+    status: str = Field(pattern=r"^(review|approved|rejected)$")
+    owner: str | None = Field(default=None, max_length=120)
+    note: str = Field(default="", max_length=1_000)
 
 
 class LeadPipelineImportRequest(BaseModel):
@@ -447,9 +460,13 @@ class AgentBatchRunRequest(BaseModel):
 
 
 class AgentQueueProcessRequest(BaseModel):
+    contract_version: str = ""
+    cycle: str = ""
     job_types: list[str] = Field(default_factory=list)
     source: str = "worker"
     limit: int = Field(default=8, ge=1, le=50)
+    execution_policy: str = ""
+    budget_grant: dict[str, Any] = Field(default_factory=dict)
 
 
 class AgentRunDefaultsRequest(BaseModel):
@@ -570,7 +587,333 @@ class WorkspaceProfileUpdateRequest(BaseModel):
 
 
 class CloudPreviewDeployRequest(BaseModel):
-    mode: str = "claimable_preview"
+    model_config = ConfigDict(extra="forbid")
+
+    approval_id: str = Field(min_length=1, max_length=120)
+    mode: str = Field(
+        default="canonical_preview",
+        pattern=r"^canonical_preview$",
+    )
+    revision: str = Field(pattern=r"^[0-9a-fA-F]{40}$")
+
+
+PREVIEW_DEPLOY_APPROVAL_GATE = "deployment.preview"
+PREVIEW_DEPLOY_APPROVAL_ROUTE = "/api/cloud/deployments/preview"
+PREVIEW_DEPLOY_MODE = "canonical_preview"
+CANONICAL_VERCEL_TEAM_ID = "team_wI4l7ZgSxcEztQPSlCCYVeJ5"
+CANONICAL_APP_VERCEL_PROJECT_ID = "prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG"
+CANONICAL_APP_VERCEL_PROJECT_NAME = "megaos"
+PREVIEW_RELEASE_REVIEW_SOURCE = "system:preview_release_review"
+PREVIEW_RELEASE_REVIEW_CONTRACT = "supermega.preview-release-review.v1"
+PREVIEW_RELEASE_REQUIRED_CONTRACTS = (
+    "supermega_python_tests",
+    "supermega_app_build",
+    "supermega_local_full_stack",
+    "supermega_coordinated_release_workflow",
+    "supermega_app_security",
+    "supermega_private_trial_migrations",
+    "supermega_vercel_environment_state_tests",
+    "supermega_vercel_domain_state_tests",
+    "supermega_hq",
+)
+
+
+def _canonical_preview_target_state(
+    project_link: dict[str, Any],
+    environment: dict[str, Any],
+) -> dict[str, Any]:
+    observed_org_id = str(project_link.get("orgId", "")).strip()
+    observed_project_id = str(project_link.get("projectId", "")).strip()
+    environment_org_id = str(environment.get("VERCEL_ORG_ID", "")).strip()
+    environment_project_id = str(environment.get("VERCEL_PROJECT_ID", "")).strip()
+    blockers: list[str] = []
+    if observed_org_id != CANONICAL_VERCEL_TEAM_ID:
+        blockers.append("canonical_vercel_team_link_missing")
+    if observed_project_id != CANONICAL_APP_VERCEL_PROJECT_ID:
+        blockers.append("canonical_vercel_project_link_missing")
+    if environment_org_id != CANONICAL_VERCEL_TEAM_ID:
+        blockers.append("canonical_vercel_team_environment_missing")
+    if environment_project_id != CANONICAL_APP_VERCEL_PROJECT_ID:
+        blockers.append("canonical_vercel_project_environment_missing")
+    if not str(environment.get("VERCEL_TOKEN", "")).strip():
+        blockers.append("vercel_token_missing")
+    return {
+        "contract": "supermega.canonical-preview-target.v1",
+        "ready": not blockers,
+        "status": "ready" if not blockers else "blocked",
+        "team_id": CANONICAL_VERCEL_TEAM_ID,
+        "project_id": CANONICAL_APP_VERCEL_PROJECT_ID,
+        "project_name": CANONICAL_APP_VERCEL_PROJECT_NAME,
+        "environment": "preview",
+        "production_alias_mutation": False,
+        "blockers": blockers,
+    }
+
+
+def _build_preview_release_review_packet(
+    *,
+    revision: str,
+    generated_at: str,
+    release_identity: dict[str, Any],
+) -> dict[str, Any]:
+    normalized_revision = str(revision or "").strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{40}", normalized_revision):
+        raise ValueError("preview_release_revision_invalid")
+    normalized_generated_at = str(generated_at or "").strip()
+    if not normalized_generated_at:
+        raise ValueError("preview_release_generated_at_missing")
+    identity = {
+        "service": str(release_identity.get("service", "supermega-app")).strip() or "supermega-app",
+        "brand_version": str(release_identity.get("brand_version", "")).strip(),
+        "context_version": str(release_identity.get("context_version", "")).strip(),
+        "catalog_version": str(release_identity.get("catalog_version", "")).strip(),
+    }
+    if not all(identity.values()):
+        raise ValueError("preview_release_identity_incomplete")
+    packet: dict[str, Any] = {
+        "contract": PREVIEW_RELEASE_REVIEW_CONTRACT,
+        "generated_at": normalized_generated_at,
+        "candidate": {
+            "repository": "supermega-platform",
+            "revision": normalized_revision,
+            "worktree_clean": True,
+            "release_identity": identity,
+        },
+        "target": {
+            "provider": "vercel",
+            "mode": PREVIEW_DEPLOY_MODE,
+            "team_id": CANONICAL_VERCEL_TEAM_ID,
+            "project_id": CANONICAL_APP_VERCEL_PROJECT_ID,
+            "project_name": CANONICAL_APP_VERCEL_PROJECT_NAME,
+            "environment": "preview",
+            "canonical_domain": "https://app.supermega.dev",
+            "production_alias_mutation": False,
+        },
+        "verification": {
+            "status": "human_review_required",
+            "required_contracts": list(PREVIEW_RELEASE_REQUIRED_CONTRACTS),
+            "evidence_rule": "Review fresh local or CI output for this exact revision before approval.",
+        },
+        "rollback": {
+            "strategy": "discard_preview",
+            "production_aliases_unchanged": True,
+            "production_rollback_target_required": False,
+        },
+    }
+    canonical = json.dumps(packet, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    packet["packet_digest"] = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return packet
+
+
+def _validate_preview_release_review_packet(
+    release_review: dict[str, Any],
+    *,
+    mode: str,
+    revision: str,
+) -> dict[str, Any]:
+    normalized_mode = str(mode or PREVIEW_DEPLOY_MODE).strip().lower()
+    normalized_revision = str(revision or "").strip().lower()
+    if normalized_mode != PREVIEW_DEPLOY_MODE:
+        raise ValueError("preview_release_mode_mismatch")
+    if not re.fullmatch(r"[0-9a-f]{40}", normalized_revision):
+        raise ValueError("preview_release_revision_invalid")
+    if not isinstance(release_review, dict):
+        raise ValueError("preview_release_review_missing")
+
+    packet_digest = str(release_review.get("packet_digest", "")).strip().lower()
+    unsigned_packet = dict(release_review)
+    unsigned_packet.pop("packet_digest", None)
+    expected_digest = hashlib.sha256(
+        json.dumps(
+            unsigned_packet,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    if not re.fullmatch(r"[0-9a-f]{64}", packet_digest) or not secrets.compare_digest(
+        packet_digest,
+        expected_digest,
+    ):
+        raise ValueError("preview_release_review_digest_mismatch")
+    if str(release_review.get("contract", "")).strip() != PREVIEW_RELEASE_REVIEW_CONTRACT:
+        raise ValueError("preview_release_review_contract_mismatch")
+    if not str(release_review.get("generated_at", "")).strip():
+        raise ValueError("preview_release_generated_at_missing")
+
+    candidate = release_review.get("candidate", {})
+    if not isinstance(candidate, dict):
+        raise ValueError("preview_release_candidate_missing")
+    if str(candidate.get("repository", "")).strip() != "supermega-platform":
+        raise ValueError("preview_release_repository_mismatch")
+    if str(candidate.get("revision", "")).strip().lower() != normalized_revision:
+        raise ValueError("preview_release_revision_mismatch")
+    if candidate.get("worktree_clean") is not True:
+        raise ValueError("preview_release_worktree_evidence_missing")
+    identity = candidate.get("release_identity", {})
+    if not isinstance(identity, dict) or any(
+        not str(identity.get(field, "")).strip()
+        for field in ("service", "brand_version", "context_version", "catalog_version")
+    ):
+        raise ValueError("preview_release_identity_incomplete")
+
+    target = release_review.get("target", {})
+    expected_target = {
+        "provider": "vercel",
+        "mode": PREVIEW_DEPLOY_MODE,
+        "team_id": CANONICAL_VERCEL_TEAM_ID,
+        "project_id": CANONICAL_APP_VERCEL_PROJECT_ID,
+        "project_name": CANONICAL_APP_VERCEL_PROJECT_NAME,
+        "environment": "preview",
+        "canonical_domain": "https://app.supermega.dev",
+        "production_alias_mutation": False,
+    }
+    if not isinstance(target, dict) or target != expected_target:
+        raise ValueError("preview_release_target_mismatch")
+
+    verification = release_review.get("verification", {})
+    if not isinstance(verification, dict):
+        raise ValueError("preview_release_verification_missing")
+    if str(verification.get("status", "")).strip() != "human_review_required":
+        raise ValueError("preview_release_review_status_mismatch")
+    if verification.get("required_contracts") != list(PREVIEW_RELEASE_REQUIRED_CONTRACTS):
+        raise ValueError("preview_release_required_contracts_mismatch")
+    if str(verification.get("evidence_rule", "")).strip() != (
+        "Review fresh local or CI output for this exact revision before approval."
+    ):
+        raise ValueError("preview_release_evidence_rule_mismatch")
+
+    rollback = release_review.get("rollback", {})
+    expected_rollback = {
+        "strategy": "discard_preview",
+        "production_aliases_unchanged": True,
+        "production_rollback_target_required": False,
+    }
+    if not isinstance(rollback, dict) or rollback != expected_rollback:
+        raise ValueError("preview_release_rollback_mismatch")
+    return release_review
+
+
+def _find_reusable_preview_release_review(
+    approval_rows: list[dict[str, Any]],
+    *,
+    workspace_id: str,
+    mode: str,
+    revision: str,
+) -> dict[str, Any] | None:
+    normalized_workspace_id = str(workspace_id or "").strip()
+    normalized_mode = str(mode or PREVIEW_DEPLOY_MODE).strip().lower()
+    normalized_revision = str(revision or "").strip().lower()
+    expected_entity = f"cloud-preview:{normalized_mode}:{normalized_revision}"
+    for row in approval_rows:
+        if str(row.get("workspace_id", "")).strip() != normalized_workspace_id:
+            continue
+        if str(row.get("source", "")).strip() != PREVIEW_RELEASE_REVIEW_SOURCE:
+            continue
+        if str(row.get("status", "")).strip().lower() not in {"pending", "review", "approved"}:
+            continue
+        if str(row.get("approval_gate", "")).strip().lower() != PREVIEW_DEPLOY_APPROVAL_GATE:
+            continue
+        if str(row.get("related_route", "")).strip() != PREVIEW_DEPLOY_APPROVAL_ROUTE:
+            continue
+        if str(row.get("related_entity", "")).strip().lower() != expected_entity:
+            continue
+        payload = row.get("payload", {}) if isinstance(row.get("payload"), dict) else {}
+        if "_approval_action" in payload:
+            continue
+        if str(payload.get("deployment_mode", "")).strip().lower() != normalized_mode:
+            continue
+        if str(payload.get("deployment_revision", "")).strip().lower() != normalized_revision:
+            continue
+        release_review = payload.get("release_review", {})
+        try:
+            _validate_preview_release_review_packet(
+                release_review if isinstance(release_review, dict) else {},
+                mode=normalized_mode,
+                revision=normalized_revision,
+            )
+        except ValueError:
+            continue
+        return row
+    return None
+
+
+def _validate_preview_deploy_approval(
+    approval_rows: list[dict[str, Any]],
+    *,
+    workspace_id: str,
+    approval_id: str,
+    mode: str,
+    revision: str,
+) -> dict[str, Any]:
+    normalized_workspace_id = str(workspace_id or "").strip()
+    normalized_approval_id = str(approval_id or "").strip()
+    normalized_mode = str(mode or PREVIEW_DEPLOY_MODE).strip().lower()
+    normalized_revision = str(revision or "").strip().lower()
+    expected_entity = f"cloud-preview:{normalized_mode}:{normalized_revision}"
+    row = next(
+        (
+            item
+            for item in approval_rows
+            if str(item.get("approval_id", "")).strip() == normalized_approval_id
+        ),
+        None,
+    )
+    if not row:
+        raise ValueError("preview_deploy_approval_not_found")
+    if str(row.get("workspace_id", "")).strip() != normalized_workspace_id:
+        raise ValueError("preview_deploy_approval_workspace_mismatch")
+    if str(row.get("status", "")).strip().lower() != "approved":
+        raise ValueError("preview_deploy_approval_not_approved")
+    if str(row.get("source", "")).strip() != PREVIEW_RELEASE_REVIEW_SOURCE:
+        raise ValueError("preview_deploy_approval_source_mismatch")
+    if str(row.get("approval_gate", "")).strip().lower() != PREVIEW_DEPLOY_APPROVAL_GATE:
+        raise ValueError("preview_deploy_approval_gate_mismatch")
+    if str(row.get("related_route", "")).strip() != PREVIEW_DEPLOY_APPROVAL_ROUTE:
+        raise ValueError("preview_deploy_approval_route_mismatch")
+    if str(row.get("related_entity", "")).strip().lower() != expected_entity:
+        raise ValueError("preview_deploy_approval_target_mismatch")
+    payload = row.get("payload", {}) if isinstance(row.get("payload"), dict) else {}
+    if str(payload.get("deployment_mode", "")).strip().lower() != normalized_mode:
+        raise ValueError("preview_deploy_approval_mode_mismatch")
+    if str(payload.get("deployment_revision", "")).strip().lower() != normalized_revision:
+        raise ValueError("preview_deploy_approval_revision_mismatch")
+    release_review = payload.get("release_review", {})
+    _validate_preview_release_review_packet(
+        release_review if isinstance(release_review, dict) else {},
+        mode=normalized_mode,
+        revision=normalized_revision,
+    )
+    if "_approval_action" in payload:
+        raise ValueError("preview_deploy_approval_already_used")
+    authority = (
+        payload.get("_approval_authority", {})
+        if isinstance(payload.get("_approval_authority"), dict)
+        else {}
+    )
+    if str(authority.get("workspace_id", "")).strip() != normalized_workspace_id:
+        raise ValueError("preview_deploy_approval_authority_mismatch")
+    history = (
+        payload.get("decision_history", [])
+        if isinstance(payload.get("decision_history"), list)
+        else []
+    )
+    approved_decision = next(
+        (
+            decision
+            for decision in reversed(history)
+            if isinstance(decision, dict)
+            and str(decision.get("to_status", "")).strip().lower() == "approved"
+        ),
+        None,
+    )
+    if (
+        not approved_decision
+        or not str(approved_decision.get("actor", "")).strip()
+        or not str(approved_decision.get("note", "")).strip()
+    ):
+        raise ValueError("preview_deploy_approval_evidence_missing")
+    return row
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -677,32 +1020,9 @@ def _strip_html(value: str) -> str:
 
 
 def _fetch_url_brief_context(urls: list[str]) -> list[str]:
-    snippets: list[str] = []
-    for raw_url in urls[:4]:
-        normalized = str(raw_url or "").strip()
-        if not normalized:
-            continue
-        if not normalized.startswith(("http://", "https://")):
-            normalized = f"https://{normalized}"
-        try:
-            request = UrlRequest(
-                normalized,
-                headers={
-                    "User-Agent": "Mozilla/5.0",
-                    "Accept-Language": "en-US,en;q=0.9",
-                },
-            )
-            with urlopen(request, timeout=15) as response:
-                html = response.read(120_000).decode("utf-8", errors="ignore")
-        except Exception:
-            continue
-
-        title_match = re.search(r"<title[^>]*>(.*?)</title>", html, flags=re.I | re.S)
-        title = _strip_html(title_match.group(1)) if title_match else urlparse(normalized).netloc
-        body = _strip_html(html[:6000])
-        if body:
-            snippets.append(f"{title}. {body[:800]}")
-    return snippets
+    if any(str(raw_url or "").strip() for raw_url in urls):
+        raise ValueError("remote_url_fetch_disabled_use_reviewed_text_or_connector")
+    return []
 
 
 def _infer_owner(text: str) -> str:
@@ -842,7 +1162,7 @@ def _build_operating_insights(
     quality_summary = load_quality_summary(state_db)
     receiving_summary = load_receiving_summary(state_db)
     inventory_summary = load_inventory_summary(state_db)
-    approval_summary = load_approval_summary(state_db)
+    approval_summary = load_approval_summary(state_db, workspace_id=workspace_id)
     decision_summary = load_decision_summary(state_db)
     lead_summary = enterprise_load_lead_summary(enterprise_db_url, workspace_id=workspace_id)
     exception_rows = _load_exception_rows(state_db, limit=8)
@@ -1177,28 +1497,43 @@ CONNECTOR_EVENT_DIRECTORY: dict[str, dict[str, str]] = {
         "tenant": "core",
         "route": "/app/teams",
     },
+    "core-agent-operations": {
+        "connector_name": "SuperMega Agent Operations",
+        "tenant": "core",
+        "route": "/work/?team=engineering&view=agents",
+    },
 }
 
 AGENT_JOB_CONNECTOR_MAP: dict[str, dict[str, str]] = {
     "revenue_scout": {
-        "connector_id": "ytf-sales-gmail",
-        "source": "Agent runtime",
-        "route": "/app/revenue",
+        "connector_id": "core-agent-operations",
+        "source": "SuperMega Growth agent",
+        "route": "/work/?team=growth&view=work",
+    },
+    "list_clerk": {
+        "connector_id": "core-agent-operations",
+        "source": "SuperMega Growth agent",
+        "route": "/work/?team=growth&view=work",
+    },
+    "template_clerk": {
+        "connector_id": "core-agent-operations",
+        "source": "SuperMega Growth agent",
+        "route": "/work/?team=growth&view=work",
     },
     "founder_brief": {
-        "connector_id": "ytf-markdown-vault",
-        "source": "Agent runtime",
-        "route": "/app/director",
+        "connector_id": "core-agent-operations",
+        "source": "SuperMega CEO agent",
+        "route": "/work/",
     },
     "ops_watch": {
-        "connector_id": "ytf-shopfloor-entry",
-        "source": "Agent runtime",
-        "route": "/app/adoption-command",
+        "connector_id": "core-agent-operations",
+        "source": "SuperMega Agent Operations",
+        "route": "/work/?team=engineering&view=agents",
     },
     "task_triage": {
-        "connector_id": "ytf-shopfloor-entry",
-        "source": "Agent runtime",
-        "route": "/app/adoption-command",
+        "connector_id": "core-agent-operations",
+        "source": "SuperMega Agent Operations",
+        "route": "/work/?team=engineering&view=work",
     },
     "github_release_watch": {
         "connector_id": "core-github-build",
@@ -1206,6 +1541,18 @@ AGENT_JOB_CONNECTOR_MAP: dict[str, dict[str, str]] = {
         "route": "/app/teams",
     },
 }
+
+
+def _scope_connector_catalog(connectors: list[dict[str, Any]], tenant_key: str) -> list[dict[str, Any]]:
+    normalized_tenant = str(tenant_key or "").strip().lower()
+    if not normalized_tenant:
+        return []
+    catalog_tenant = "core" if normalized_tenant == "default" else normalized_tenant
+    return [
+        item for item in connectors
+        if isinstance(item, dict)
+        and str(item.get("tenant", "")).strip().lower() == catalog_tenant
+    ]
 
 AGENT_TEAM_RUNTIME_JOB_MAP: dict[str, tuple[str, ...]] = {
     "command_office": ("founder_brief",),
@@ -1445,12 +1792,29 @@ def _viewer_has_any_capability(viewer_capabilities: list[str], required_capabili
     return any(capability in allowed for capability in required)
 
 
+def _registered_specialist_count(teams: list[dict[str, Any]]) -> int:
+    registered: set[str] = set()
+    for team in teams:
+        team_id = str(team.get("team_id", "")).strip()
+        agents = team.get("agents", [])
+        if not isinstance(agents, list):
+            continue
+        for agent in agents:
+            if not isinstance(agent, dict):
+                continue
+            agent_id = str(agent.get("agent_id") or agent.get("unit_id") or agent.get("name") or "").strip()
+            if agent_id:
+                registered.add(f"{team_id}::{agent_id}")
+    return len(registered)
+
+
 def _build_agent_runtime_contract(
     *,
     manifest: dict[str, Any] | None,
     teams: list[dict[str, Any]],
     latest_runs_by_type: dict[str, dict[str, Any]],
     viewer_contract: dict[str, Any] | None = None,
+    capacity_plan: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     manifest_dict = manifest if isinstance(manifest, dict) else {}
     tool_lookup = {
@@ -1470,6 +1834,13 @@ def _build_agent_runtime_contract(
     scheduler_backed_team_count = 0
     guarded_team_count = 0
     viewer_dict = viewer_contract if isinstance(viewer_contract, dict) else {}
+    capacity_dict = capacity_plan if isinstance(capacity_plan, dict) else {}
+    registered_specialists = int(
+        capacity_dict.get("registered_specialists", _registered_specialist_count(teams)) or 0
+    )
+    capacity_limits = capacity_dict.get("limits", {}) if isinstance(capacity_dict.get("limits", {}), dict) else {}
+    max_active_executions = int(capacity_limits.get("max_running", load_agent_workforce_policy().max_running) or 0)
+    target_active_executions = int(capacity_dict.get("target_active_executions", 0) or 0)
     viewer_capabilities = [str(item).strip() for item in viewer_dict.get("capabilities", []) if str(item).strip()]
     crews: list[dict[str, Any]] = []
 
@@ -1571,8 +1942,46 @@ def _build_agent_runtime_contract(
             "connector_enabled_team_count": connector_enabled_team_count,
             "approval_gate_count": len(approval_gates_seen),
             "guarded_team_count": guarded_team_count,
+            "registered_specialists": registered_specialists,
+            "max_active_executions": max_active_executions,
+            "target_active_executions": target_active_executions,
+            "registered_specialists_consume_compute": False,
         },
+        "capacity": capacity_dict,
         "crews": crews,
+    }
+
+
+def _agent_governance_row(job_type: str, error: AgentGovernanceError) -> dict[str, Any]:
+    return {
+        "run_id": "",
+        "job_type": str(job_type or "").strip().lower(),
+        "status": "deferred" if error.code == "agent_cadence_not_elapsed" else "throttled",
+        "summary": error.detail,
+        "error_text": "",
+        "execution_authorized": False,
+        "writes_performed": False,
+        "external_messages_sent": False,
+        "governance": error.as_dict(),
+    }
+
+
+def _agent_completion_rejected_row(
+    *,
+    run_id: str,
+    job_type: str,
+    error: AgentGovernanceError,
+) -> dict[str, Any]:
+    return {
+        "run_id": run_id,
+        "job_type": job_type,
+        "status": "completion_rejected",
+        "summary": "Execution finished but its lease no longer owns completion.",
+        "error_text": "",
+        "execution_authorized": False,
+        "writes_performed": None,
+        "external_messages_sent": None,
+        "governance": error.as_dict(),
     }
 
 
@@ -1588,30 +1997,35 @@ def _run_and_persist_agent_job(
     idempotency_key: str | None = None,
     related_entity_type: str = "",
     related_entity_id: str = "",
+    respect_cadence: bool = False,
 ) -> dict[str, Any]:
     job_defaults = AGENT_JOB_CONNECTOR_MAP.get(str(job_type or "").strip(), {})
     job_label = next(
         (str(item.get("name", "")).strip() for item in AGENT_JOB_TEMPLATES if str(item.get("job_type", "")).strip() == str(job_type or "").strip()),
         str(job_type or "").replace("_", " ").title() or "Agent job",
     )
-    row = enterprise_create_agent_run(
-        enterprise_db_url,
-        workspace_id=workspace_id,
-        job_type=job_type,
-        source=source,
-        payload=payload,
-        idempotency_key=idempotency_key,
-        max_attempts=1,
-        triggered_by=triggered_by,
-        related_entity_type=related_entity_type,
-        related_entity_id=related_entity_id,
-    )
+    try:
+        row = enterprise_create_and_reserve_agent_run(
+            enterprise_db_url,
+            workspace_id=workspace_id,
+            job_type=job_type,
+            source=source,
+            payload=payload,
+            idempotency_key=idempotency_key,
+            max_attempts=1,
+            triggered_by=triggered_by,
+            related_entity_type=related_entity_type,
+            related_entity_id=related_entity_id,
+            claimed_by=str(source or "").strip() or "direct",
+            respect_cadence=respect_cadence,
+        )
+    except AgentGovernanceError as exc:
+        return _agent_governance_row(job_type, exc)
+    if not bool(row.get("execution_authorized")):
+        return row
     run_id = str(row.get("run_id", "")).strip()
-    enterprise_start_agent_run(
-        enterprise_db_url,
-        workspace_id=workspace_id,
-        run_id=run_id,
-    )
+    claim_token = str(row.get("claim_token", "")).strip()
+    safe_row = {key: value for key, value in row.items() if key != "claim_token"}
     try:
         result = _execute_agent_job(
             state_db=state_db,
@@ -1620,47 +2034,24 @@ def _run_and_persist_agent_job(
             job_type=job_type,
             payload=payload,
         )
-        completed = enterprise_complete_agent_run(
-            enterprise_db_url,
-            workspace_id=workspace_id,
-            run_id=run_id,
-            status="ready",
-            summary=str(result.get("summary", "")).strip(),
-            result=result,
-        ) or row
-        if job_defaults:
-            _emit_connector_event(
-                enterprise_db_url=enterprise_db_url,
-                workspace_id=workspace_id,
-                actor=triggered_by,
-                connector_id=str(job_defaults.get("connector_id", "")).strip(),
-                title=str(completed.get("summary", "")).strip() or f"{job_label} completed.",
-                detail=f"Run {run_id or 'unknown'} completed via {str(source or '').strip() or 'manual'}.",
-                source=str(job_defaults.get("source", "")).strip() or "Agent runtime",
-                kind=str(job_type or "").strip() or "agent_run",
-                route=str(job_defaults.get("route", "")).strip(),
-                severity="info",
-                entity_type="agent_run",
-                entity_id=run_id,
-                payload={
-                    "job_type": job_type,
-                    "status": str(completed.get("status", "")).strip() or "ready",
-                    "source": str(source or "").strip() or "manual",
-                    "result": completed.get("result", {}),
-                },
-                created_at=_runtime_run_timestamp(completed),
-            )
-        return completed
     except Exception as exc:
-        failed = enterprise_complete_agent_run(
-            enterprise_db_url,
-            workspace_id=workspace_id,
-            run_id=run_id,
-            status="error",
-            summary=f"{job_type} failed",
-            result={"job_type": job_type},
-            error_text=str(exc),
-        ) or row
+        try:
+            failed = enterprise_complete_agent_run(
+                enterprise_db_url,
+                workspace_id=workspace_id,
+                run_id=run_id,
+                claim_token=claim_token,
+                status="error",
+                summary=f"{job_type} failed",
+                result={"job_type": job_type},
+                error_text=str(exc),
+            ) or safe_row
+        except AgentGovernanceError as completion_error:
+            return _agent_completion_rejected_row(
+                run_id=run_id,
+                job_type=job_type,
+                error=completion_error,
+            )
         if job_defaults:
             _emit_connector_event(
                 enterprise_db_url=enterprise_db_url,
@@ -1685,6 +2076,46 @@ def _run_and_persist_agent_job(
             )
         return failed
 
+    try:
+        completed = enterprise_complete_agent_run(
+            enterprise_db_url,
+            workspace_id=workspace_id,
+            run_id=run_id,
+            claim_token=claim_token,
+            status="ready",
+            summary=str(result.get("summary", "")).strip(),
+            result=result,
+        ) or safe_row
+    except AgentGovernanceError as completion_error:
+        return _agent_completion_rejected_row(
+            run_id=run_id,
+            job_type=job_type,
+            error=completion_error,
+        )
+    if job_defaults:
+        _emit_connector_event(
+            enterprise_db_url=enterprise_db_url,
+            workspace_id=workspace_id,
+            actor=triggered_by,
+            connector_id=str(job_defaults.get("connector_id", "")).strip(),
+            title=str(completed.get("summary", "")).strip() or f"{job_label} completed.",
+            detail=f"Run {run_id or 'unknown'} completed via {str(source or '').strip() or 'manual'}.",
+            source=str(job_defaults.get("source", "")).strip() or "Agent runtime",
+            kind=str(job_type or "").strip() or "agent_run",
+            route=str(job_defaults.get("route", "")).strip(),
+            severity="info",
+            entity_type="agent_run",
+            entity_id=run_id,
+            payload={
+                "job_type": job_type,
+                "status": str(completed.get("status", "")).strip() or "ready",
+                "source": str(source or "").strip() or "manual",
+                "result": completed.get("result", {}),
+            },
+            created_at=_runtime_run_timestamp(completed),
+        )
+    return completed
+
 
 def _complete_existing_agent_run(
     *,
@@ -1693,6 +2124,7 @@ def _complete_existing_agent_run(
     workspace_id: str,
     run_id: str,
     job_type: str,
+    claim_token: str,
     payload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     job_defaults = AGENT_JOB_CONNECTOR_MAP.get(str(job_type or "").strip(), {})
@@ -1705,46 +2137,24 @@ def _complete_existing_agent_run(
             job_type=job_type,
             payload=payload,
         )
-        completed = enterprise_complete_agent_run(
-            enterprise_db_url,
-            workspace_id=workspace_id,
-            run_id=run_id,
-            status="ready",
-            summary=str(result.get("summary", "")).strip(),
-            result=result,
-        ) or {"run_id": run_id, "job_type": job_type, "status": "ready"}
-        if job_defaults:
-            _emit_connector_event(
-                enterprise_db_url=enterprise_db_url,
-                workspace_id=workspace_id,
-                actor=triggered_by,
-                connector_id=str(job_defaults.get("connector_id", "")).strip(),
-                title=str(completed.get("summary", "")).strip() or f"{str(job_type or '').replace('_', ' ').title() or 'Agent job'} completed.",
-                detail=f"Queued run {run_id or 'unknown'} completed by worker.",
-                source=str(job_defaults.get("source", "")).strip() or "Agent runtime",
-                kind=str(job_type or "").strip() or "agent_run",
-                route=str(job_defaults.get("route", "")).strip(),
-                severity="info",
-                entity_type="agent_run",
-                entity_id=run_id,
-                payload={
-                    "job_type": job_type,
-                    "status": str(completed.get("status", "")).strip() or "ready",
-                    "mode": "queued",
-                },
-                created_at=_runtime_run_timestamp(completed),
-            )
-        return completed
     except Exception as exc:
-        failed = enterprise_complete_agent_run(
-            enterprise_db_url,
-            workspace_id=workspace_id,
-            run_id=run_id,
-            status="error",
-            summary=f"{job_type} failed",
-            result={"job_type": job_type},
-            error_text=str(exc),
-        ) or {"run_id": run_id, "job_type": job_type, "status": "error", "error_text": str(exc)}
+        try:
+            failed = enterprise_complete_agent_run(
+                enterprise_db_url,
+                workspace_id=workspace_id,
+                run_id=run_id,
+                claim_token=claim_token,
+                status="error",
+                summary=f"{job_type} failed",
+                result={"job_type": job_type},
+                error_text=str(exc),
+            ) or {"run_id": run_id, "job_type": job_type, "status": "error", "error_text": str(exc)}
+        except AgentGovernanceError as completion_error:
+            return _agent_completion_rejected_row(
+                run_id=run_id,
+                job_type=job_type,
+                error=completion_error,
+            )
         if job_defaults:
             _emit_connector_event(
                 enterprise_db_url=enterprise_db_url,
@@ -1769,6 +2179,45 @@ def _complete_existing_agent_run(
             )
         return failed
 
+    try:
+        completed = enterprise_complete_agent_run(
+            enterprise_db_url,
+            workspace_id=workspace_id,
+            run_id=run_id,
+            claim_token=claim_token,
+            status="ready",
+            summary=str(result.get("summary", "")).strip(),
+            result=result,
+        ) or {"run_id": run_id, "job_type": job_type, "status": "ready"}
+    except AgentGovernanceError as completion_error:
+        return _agent_completion_rejected_row(
+            run_id=run_id,
+            job_type=job_type,
+            error=completion_error,
+        )
+    if job_defaults:
+        _emit_connector_event(
+            enterprise_db_url=enterprise_db_url,
+            workspace_id=workspace_id,
+            actor=triggered_by,
+            connector_id=str(job_defaults.get("connector_id", "")).strip(),
+            title=str(completed.get("summary", "")).strip() or f"{str(job_type or '').replace('_', ' ').title() or 'Agent job'} completed.",
+            detail=f"Queued run {run_id or 'unknown'} completed by worker.",
+            source=str(job_defaults.get("source", "")).strip() or "Agent runtime",
+            kind=str(job_type or "").strip() or "agent_run",
+            route=str(job_defaults.get("route", "")).strip(),
+            severity="info",
+            entity_type="agent_run",
+            entity_id=run_id,
+            payload={
+                "job_type": job_type,
+                "status": str(completed.get("status", "")).strip() or "ready",
+                "mode": "queued",
+            },
+            created_at=_runtime_run_timestamp(completed),
+        )
+    return completed
+
 
 def _agent_jobs_payload(
     *,
@@ -1778,16 +2227,24 @@ def _agent_jobs_payload(
     status: str = "ready",
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    policy = load_agent_workforce_policy()
     latest_runs = enterprise_list_agent_runs(
         enterprise_db_url,
         workspace_id=workspace_id,
         limit=50,
     )
     latest_by_type = _group_agent_runs_by_job_type(latest_runs)
+    row_statuses = {str(row.get("status", "")).strip().lower() for row in rows if isinstance(row, dict)}
+    effective_status = status
+    if status == "ready" and row_statuses and row_statuses <= {"throttled", "completion_rejected"}:
+        effective_status = "throttled"
+    elif status == "ready" and row_statuses & {"throttled", "completion_rejected"}:
+        effective_status = "partial"
     payload: dict[str, Any] = {
-        "status": status,
+        "status": effective_status,
         "count": len(rows),
         "rows": rows,
+        "workforce_policy": policy.as_dict(),
         "jobs": [
             {
                 **template,
@@ -1980,8 +2437,11 @@ def _build_ops_watch_result(*, state_db: str, enterprise_db_url: str, workspace_
     stale_jobs: list[str] = []
     errored_jobs: list[str] = []
 
+    automated_job_types = set(AGENT_AUTOMATED_JOB_TYPES)
     for template in AGENT_JOB_TEMPLATES:
         job_type = str(template.get("job_type", "")).strip()
+        if job_type not in automated_job_types:
+            continue
         row = latest_by_type.get(job_type, {})
         status = str(row.get("status", "")).strip().lower()
         if status == "error":
@@ -1991,10 +2451,18 @@ def _build_ops_watch_result(*, state_db: str, enterprise_db_url: str, workspace_
         if not completed_at or (now - completed_at).total_seconds() > threshold_hours * 3600:
             stale_jobs.append(job_type)
 
-    approvals = load_approval_summary(state_db)
+    approvals = load_approval_summary(state_db, workspace_id=workspace_id)
     pending_approvals = int(approvals.get("pending_count", 0) or 0)
     open_tasks = enterprise_list_workspace_tasks(enterprise_db_url, workspace_id=workspace_id, limit=500)
     open_count = sum(1 for row in open_tasks if str(row.get("status", "")).strip().lower() != "done")
+    existing_watch_task = next(
+        (
+            row for row in open_tasks
+            if str(row.get("template", "")).strip() == "ops_watch"
+            and str(row.get("status", "")).strip().lower() != "done"
+        ),
+        None,
+    )
 
     notes: list[str] = []
     if stale_jobs:
@@ -2007,7 +2475,7 @@ def _build_ops_watch_result(*, state_db: str, enterprise_db_url: str, workspace_
         notes.append(f"Open task pressure: {open_count}")
 
     saved = {"saved_count": 0}
-    if notes:
+    if notes and existing_watch_task is None:
         saved = enterprise_add_workspace_tasks(
             enterprise_db_url,
             workspace_id=workspace_id,
@@ -2023,6 +2491,7 @@ def _build_ops_watch_result(*, state_db: str, enterprise_db_url: str, workspace_
                 }
             ],
         )
+    suppressed_duplicate_task = bool(notes and existing_watch_task is not None)
 
     if not notes:
         summary = "Agent runtime is healthy. Core loops are running on cadence."
@@ -2038,7 +2507,10 @@ def _build_ops_watch_result(*, state_db: str, enterprise_db_url: str, workspace_
             "pending_approval_count": pending_approvals,
             "open_task_count": open_count,
             "saved_watch_task_count": int(saved.get("saved_count", 0) or 0),
+            "suppressed_duplicate_task_count": 1 if suppressed_duplicate_task else 0,
+            "monitored_job_count": len(AGENT_AUTOMATED_JOB_TYPES),
         },
+        "monitored_jobs": list(AGENT_AUTOMATED_JOB_TYPES),
         "stale_jobs": stale_jobs,
         "errored_jobs": errored_jobs,
         "next_actions": [
@@ -2053,7 +2525,7 @@ def _build_founder_brief_result(*, state_db: str, enterprise_db_url: str, worksp
     lead_summary = enterprise_load_lead_summary(enterprise_db_url, workspace_id=workspace_id)
     tasks = enterprise_list_workspace_tasks(enterprise_db_url, workspace_id=workspace_id, limit=500)
     open_tasks = [row for row in tasks if str(row.get("status", "")).strip() != "done"]
-    approvals = load_approval_summary(state_db)
+    approvals = load_approval_summary(state_db, workspace_id=workspace_id)
     receiving = load_receiving_summary(state_db)
     inventory = load_inventory_summary(state_db)
     summary = (
@@ -2630,6 +3102,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
     _init_sentry_runtime()
     state_db = resolve_state_db(pilot_data)
     enterprise_db_url = resolve_enterprise_database_url(pilot_data)
+    preview_release_review_lock = threading.Lock()
     sync_state_from_output_dir(pilot_data)
     runtime_environment = str(os.getenv("SUPERMEGA_ENV", "production")).strip().lower() or "production"
     production_mode = runtime_environment in {"production", "prod"}
@@ -2648,6 +3121,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
     auth_workspace_plan = str(os.getenv("SUPERMEGA_WORKSPACE_PLAN", "pilot")).strip() or "pilot"
     session_ttl_hours = int(os.getenv("SUPERMEGA_SESSION_HOURS", str(24 * 14)) or (24 * 14))
     internal_cron_token = str(os.getenv("SUPERMEGA_INTERNAL_CRON_TOKEN", "")).strip()
+    cron_secret = str(os.getenv("CRON_SECRET", "")).strip()
     app_base_url = str(os.getenv("VITE_WORKSPACE_APP_BASE", "")).strip()
     gcp_project_id = str(os.getenv("SUPERMEGA_GCP_PROJECT_ID", os.getenv("GOOGLE_CLOUD_PROJECT", "supermega-468612"))).strip() or "supermega-468612"
     cloud_tasks_location = str(os.getenv("SUPERMEGA_CLOUD_TASKS_LOCATION", "")).strip() or "asia-southeast1"
@@ -2732,7 +3206,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         if not internal_cron_token:
             raise HTTPException(status_code=503, detail="Internal cron token is not configured.")
         provided = str(request.headers.get("x-supermega-cron-token", "")).strip()
-        if not provided or provided != internal_cron_token:
+        if not provided or not secrets.compare_digest(provided, internal_cron_token):
             raise HTTPException(status_code=401, detail="Invalid internal cron token.")
 
     def _agent_queue_name(job_types: list[str]) -> str:
@@ -2805,6 +3279,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                     job_type=job_type,
                     source=source,
                     payload={},
+                    respect_cadence=True,
                 )
             )
         return _agent_jobs_payload(enterprise_db_url=enterprise_db_url, workspace_id=workspace_id, rows=results)
@@ -2817,30 +3292,50 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         job_types: list[str] | None = None,
     ) -> dict[str, Any]:
         normalized_job_types = _normalized_agent_job_types(job_types)
-        rows = [
-            enterprise_create_agent_run(
-                enterprise_db_url,
+        rows: list[dict[str, Any]] = []
+        accepted_job_types: list[str] = []
+        deferred_count = 0
+        for job_type in normalized_job_types:
+            try:
+                row = enterprise_create_agent_run(
+                    enterprise_db_url,
+                    workspace_id=workspace_id,
+                    job_type=job_type,
+                    source=source,
+                    payload={},
+                    triggered_by=triggered_by,
+                    respect_cadence=True,
+                )
+            except AgentGovernanceError as exc:
+                governance_row = _agent_governance_row(job_type, exc)
+                rows.append(governance_row)
+                if governance_row["status"] == "deferred":
+                    deferred_count += 1
+                continue
+            rows.append(row)
+            if str(row.get("status", "")).strip() == "queued" and str(row.get("run_id", "")).strip():
+                accepted_job_types.append(job_type)
+        queue_result = (
+            _enqueue_agent_worker_task(
                 workspace_id=workspace_id,
-                job_type=job_type,
-                source=source,
-                payload={},
-                max_attempts=1,
-                triggered_by=triggered_by,
+                source="cloud_tasks_worker",
+                job_types=accepted_job_types,
+                limit=len(accepted_job_types),
             )
-            for job_type in normalized_job_types
-        ]
-        queue_result = _enqueue_agent_worker_task(
-            workspace_id=workspace_id,
-            source="cloud_tasks_worker",
-            job_types=normalized_job_types,
-            limit=len(rows) or 1,
+            if accepted_job_types
+            else {
+                "status": "not_needed",
+                "reason": "cadence_not_elapsed" if deferred_count else "no_new_work",
+            }
         )
         return _agent_jobs_payload(
             enterprise_db_url=enterprise_db_url,
             workspace_id=workspace_id,
             rows=rows,
             extra={
-                "queued_count": len(rows),
+                "queued_count": len(accepted_job_types),
+                "deferred_count": deferred_count,
+                "rejected_count": len(rows) - len(accepted_job_types) - deferred_count,
                 "mode": "queued",
                 "dispatch": queue_result,
             },
@@ -2852,13 +3347,45 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         source: str,
         job_types: list[str] | None = None,
         limit: int = 8,
+        budget_grant: dict[str, Any] | None = None,
+        grant_secret: str = "",
+        require_budget_grant: bool = False,
     ) -> dict[str, Any]:
-        claimed_rows = enterprise_claim_agent_runs(
-            enterprise_db_url,
-            workspace_id=workspace_id,
-            job_types=_normalized_agent_job_types(job_types),
-            limit=limit,
-        )
+        try:
+            claimed_rows = enterprise_claim_agent_runs(
+                enterprise_db_url,
+                workspace_id=workspace_id,
+                job_types=_normalized_agent_job_types(job_types),
+                limit=limit,
+                claimed_by=str(source or "").strip() or "worker",
+                budget_grant=budget_grant,
+                grant_secret=grant_secret,
+                require_budget_grant=require_budget_grant,
+            )
+        except AgentGovernanceError as exc:
+            accounting = {
+                "contract": AGENT_BUDGET_ACCOUNTING_CONTRACT,
+                "grant_id": str((budget_grant or {}).get("grant_id", "")).strip().lower(),
+                "reserved_runs": 0,
+                "reserved_work_units": 0,
+                "consumed_runs": 0,
+                "consumed_work_units": 0,
+                "status": "rejected",
+                "error": exc.as_dict(),
+            }
+            return _agent_jobs_payload(
+                enterprise_db_url=enterprise_db_url,
+                workspace_id=workspace_id,
+                rows=[],
+                status="throttled",
+                extra={
+                    "claimed_count": 0,
+                    "processed_count": 0,
+                    "mode": source,
+                    "budget_accounting": accounting,
+                    "side_effects": {"writes_performed": False, "external_messages_sent": False},
+                },
+            )
         completed_rows = [
             _complete_existing_agent_run(
                 state_db=state_db,
@@ -2866,11 +3393,42 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                 workspace_id=workspace_id,
                 run_id=str(row.get("run_id", "")).strip(),
                 job_type=str(row.get("job_type", "")).strip(),
+                claim_token=str(row.get("claim_token", "")).strip(),
                 payload=row.get("payload", {}) if isinstance(row.get("payload", {}), dict) else {},
             )
             for row in claimed_rows
             if str(row.get("run_id", "")).strip() and str(row.get("job_type", "")).strip()
         ]
+        reserved_units = sum(
+            int((row.get("budget_reservation", {}) or {}).get("units", 0) or 0)
+            for row in claimed_rows
+            if isinstance(row.get("budget_reservation", {}), dict)
+        )
+        consumed_rows = [
+            row for row in completed_rows
+            if isinstance(row.get("budget_accounting", {}), dict)
+            and str((row.get("budget_accounting", {}) or {}).get("status", "")) == "consumed"
+        ]
+        consumed_units = sum(
+            int((row.get("budget_accounting", {}) or {}).get("consumed_work_units", 0) or 0)
+            for row in consumed_rows
+        )
+        reservation_grant_ids = {
+            str((row.get("budget_reservation", {}) or {}).get("grant_id", "")).strip().lower()
+            for row in claimed_rows
+            if isinstance(row.get("budget_reservation", {}), dict)
+        }
+        reservation_grant_ids.discard("")
+        expected_grant_id = str((budget_grant or {}).get("grant_id", "")).strip().lower()
+        accounting = {
+            "contract": AGENT_BUDGET_ACCOUNTING_CONTRACT,
+            "grant_id": expected_grant_id or (next(iter(reservation_grant_ids)) if len(reservation_grant_ids) == 1 else ""),
+            "reserved_runs": len(claimed_rows),
+            "reserved_work_units": reserved_units,
+            "consumed_runs": len(consumed_rows),
+            "consumed_work_units": consumed_units,
+            "status": "consumed" if len(consumed_rows) == len(claimed_rows) and consumed_units == reserved_units else "incomplete",
+        }
         return _agent_jobs_payload(
             enterprise_db_url=enterprise_db_url,
             workspace_id=workspace_id,
@@ -2879,6 +3437,11 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                 "claimed_count": len(claimed_rows),
                 "processed_count": len(completed_rows),
                 "mode": source,
+                "budget_accounting": accounting,
+                "side_effects": {
+                    "writes_performed": bool(completed_rows),
+                    "external_messages_sent": False,
+                },
             },
         )
 
@@ -2889,7 +3452,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             return "cron"
         session = _session_from_request(request)
         if session:
-            validated_session = _require_agent_ops_control_access(request)
+            validated_session = _require_agent_ops_execute_access(request)
             return str(validated_session.get("display_name", validated_session.get("username", "system"))).strip() or "system"
         raise HTTPException(status_code=401, detail="Internal automation auth required.")
 
@@ -3042,12 +3605,14 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "sales.view",
             "receiving.view",
             "approvals.view",
+            "approvals.request",
             "documents.view",
         }
     )
     MANAGER_CAPABILITIES = frozenset(
         {
             *OPERATOR_CAPABILITIES,
+            "approvals.manage",
             "agent_ops.view",
             "director.view",
             "architect.view",
@@ -3056,6 +3621,8 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
     OWNER_CAPABILITIES = frozenset(
         {
             *MANAGER_CAPABILITIES,
+            "agent_ops.execute",
+            "agent_ops.deploy",
             "operations.view",
             "dqms.view",
             "maintenance.view",
@@ -3114,26 +3681,27 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                 "actions.view",
                 "approvals.view",
                 "agent_ops.view",
+                "agent_ops.execute",
                 "architect.view",
                 "tenant_admin.view",
                 "knowledge_admin.view",
             }
         ),
-        "tenant_operator": frozenset({"actions.view", "approvals.view", "agent_ops.view", "documents.view"}),
-        "director": frozenset({"director.view", "sales.view", "approvals.view", "actions.view"}),
+        "tenant_operator": frozenset({"actions.view", "approvals.view", "approvals.request", "agent_ops.view", "documents.view"}),
+        "director": frozenset({"director.view", "sales.view", "approvals.view", "approvals.manage", "actions.view"}),
         "plant_manager": frozenset(
-            {"actions.view", "receiving.view", "operations.view", "dqms.view", "maintenance.view", "approvals.view", "documents.view"}
+            {"actions.view", "receiving.view", "operations.view", "dqms.view", "maintenance.view", "approvals.view", "approvals.manage", "documents.view"}
         ),
-        "procurement_lead": frozenset({"receiving.view", "approvals.view", "documents.view", "actions.view"}),
-        "receiving_clerk": frozenset({"receiving.view", "operations.view", "actions.view", "documents.view"}),
-        "quality": frozenset({"dqms.view", "actions.view", "approvals.view", "documents.view", "knowledge_admin.view"}),
-        "quality_manager": frozenset({"dqms.view", "actions.view", "approvals.view", "documents.view", "knowledge_admin.view"}),
-        "finance_controller": frozenset({"approvals.view", "director.view", "sales.view", "documents.view"}),
+        "procurement_lead": frozenset({"receiving.view", "approvals.view", "approvals.manage", "documents.view", "actions.view"}),
+        "receiving_clerk": frozenset({"receiving.view", "operations.view", "actions.view", "approvals.request", "documents.view"}),
+        "quality": frozenset({"dqms.view", "actions.view", "approvals.view", "approvals.manage", "documents.view", "knowledge_admin.view"}),
+        "quality_manager": frozenset({"dqms.view", "actions.view", "approvals.view", "approvals.manage", "documents.view", "knowledge_admin.view"}),
+        "finance_controller": frozenset({"approvals.view", "approvals.manage", "director.view", "sales.view", "documents.view"}),
         "sales_lead": frozenset({"sales.view", "actions.view", "director.view"}),
-        "sales": frozenset({"sales.view", "actions.view", "approvals.view", "documents.view"}),
-        "maintenance": frozenset({"maintenance.view", "operations.view", "actions.view", "receiving.view", "approvals.view", "documents.view"}),
+        "sales": frozenset({"sales.view", "actions.view", "approvals.view", "approvals.request", "documents.view"}),
+        "maintenance": frozenset({"maintenance.view", "operations.view", "actions.view", "receiving.view", "approvals.view", "approvals.request", "documents.view"}),
         "operations": frozenset(
-            {"operations.view", "dqms.view", "actions.view", "receiving.view", "approvals.view", "documents.view", "agent_ops.view"}
+            {"operations.view", "dqms.view", "actions.view", "receiving.view", "approvals.view", "approvals.request", "documents.view", "agent_ops.view"}
         ),
         "ceo": frozenset({*PLATFORM_ADMIN_CAPABILITIES, "operations.view", "dqms.view", "maintenance.view"}),
         "admin": frozenset({*PLATFORM_ADMIN_CAPABILITIES, "operations.view", "dqms.view", "maintenance.view"}),
@@ -3174,6 +3742,33 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             detail="Workspace admin access required.",
         )
 
+    def _require_session_workspace_id(session: dict[str, Any]) -> str:
+        workspace_id = str(session.get("workspace_id", "")).strip()
+        if not workspace_id:
+            raise HTTPException(status_code=503, detail="Workspace identity is unavailable.")
+        return workspace_id
+
+    def _require_approval_view_access(request: Request) -> dict[str, Any]:
+        return _require_capability_access(
+            request,
+            capabilities={"approvals.view", "approvals.request", "approvals.manage", "tenant_admin.view", "platform_admin.view"},
+            detail="Approval queue access required.",
+        )
+
+    def _require_approval_request_access(request: Request) -> dict[str, Any]:
+        return _require_capability_access(
+            request,
+            capabilities={"approvals.request", "approvals.manage", "tenant_admin.view", "platform_admin.view"},
+            detail="Approval request access required.",
+        )
+
+    def _require_approval_manage_access(request: Request) -> dict[str, Any]:
+        return _require_capability_access(
+            request,
+            capabilities={"approvals.manage", "tenant_admin.view", "platform_admin.view"},
+            detail="Approval decision access required.",
+        )
+
     def _require_solution_architect_access(request: Request) -> dict[str, Any]:
         return _require_capability_access(
             request,
@@ -3181,11 +3776,25 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             detail="Solution Architect access required.",
         )
 
-    def _require_agent_ops_control_access(request: Request) -> dict[str, Any]:
+    def _require_agent_ops_view_access(request: Request) -> dict[str, Any]:
         return _require_capability_access(
             request,
-            capabilities={"agent_ops.view", "architect.view", "tenant_admin.view", "platform_admin.view"},
-            detail="Agent Ops control access required.",
+            capabilities={"agent_ops.view", "agent_ops.execute", "agent_ops.deploy"},
+            detail="Agent Ops view access required.",
+        )
+
+    def _require_agent_ops_execute_access(request: Request) -> dict[str, Any]:
+        return _require_capability_access(
+            request,
+            capabilities={"agent_ops.execute"},
+            detail="Agent Ops execution access required.",
+        )
+
+    def _require_agent_ops_deploy_access(request: Request) -> dict[str, Any]:
+        return _require_capability_access(
+            request,
+            capabilities={"agent_ops.deploy"},
+            detail="Agent Ops deployment access required.",
         )
 
     def _require_runtime_control_access(request: Request) -> dict[str, Any]:
@@ -3216,13 +3825,6 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             request,
             capabilities={"agent_ops.view", "director.view", "architect.view", "security_admin.view", "tenant_admin.view", "platform_admin.view"},
             detail="Model operations access required.",
-        )
-
-    def _require_cloud_control_manage_access(request: Request) -> dict[str, Any]:
-        return _require_capability_access(
-            request,
-            capabilities={"agent_ops.view", "tenant_admin.view", "platform_admin.view"},
-            detail="Cloud operations management access required.",
         )
 
     def _require_agent_manifest_access(request: Request) -> dict[str, Any]:
@@ -3709,7 +4311,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         connector_event_rows = enterprise_list_connector_events(enterprise_db_url, workspace_id=workspace_id, limit=160) if workspace_id else []
         audit_rows = enterprise_list_audit_events(enterprise_db_url, workspace_id=workspace_id, limit=120) if workspace_id else []
         latest_agent_runs_by_type = _group_agent_runs_by_job_type(latest_agent_runs)
-        approval_rows = list_approval_entries(state_db, limit=100)
+        approval_rows = list_approval_entries(state_db, workspace_id=workspace_id, limit=100)
         decision_rows = list_decision_entries(state_db, limit=100)
         quality_rows = list_quality_incidents(state_db, limit=200)
         supplier_rows = list_supplier_risks(state_db, limit=200)
@@ -3718,7 +4320,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         metric_rows = list_metric_entries(state_db, limit=200)
         inventory_rows = list_inventory_records(state_db, limit=200)
         action_summary = load_action_summary(state_db)
-        approval_summary = load_approval_summary(state_db)
+        approval_summary = load_approval_summary(state_db, workspace_id=workspace_id)
         metric_summary = load_metric_summary(state_db)
         feedback_summary = load_product_feedback_summary(state_db)
         quality_summary = load_quality_summary(state_db)
@@ -3818,6 +4420,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         erp_signal_at = _latest_signal([receiving_latest, inventory_latest, metric_latest])
         markdown_signal_at = _latest_signal([agent_snapshot_generated_at, latest_decision_at, founder_run_at])
         github_signal_at = _latest_signal([github_latest_run_updated_at, github_release_watch_run_at, founder_run_at, ops_watch_run_at, portfolio_generated_at])
+        core_agent_signal_at = _latest_signal([sales_run_at, founder_run_at, task_run_at, ops_watch_run_at, github_release_watch_run_at])
 
         sales_gmail_status = (
             _runtime_status_from_timestamp(sales_signal_at, "hourly", missing="Warning" if lead_count else "Needs wiring")
@@ -3844,6 +4447,13 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             core_github_status = "Warning" if core_github_status == "Healthy" else core_github_status
         elif github_probe_status == "local_only" and not github_repo_slug and not portfolio_manifest:
             core_github_status = "Needs wiring"
+        core_agent_status = _runtime_status_from_timestamp(
+            core_agent_signal_at,
+            "daily",
+            missing="Needs wiring",
+        )
+        if any(str(row.get("status", "")).strip().lower() in {"error", "completion_rejected"} for row in latest_agent_runs):
+            core_agent_status = "Degraded"
         core_human_entry_status = "Healthy" if workspace_id else "Warning"
 
         connectors = [
@@ -4016,6 +4626,33 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                 ],
             },
             {
+                "id": "core-agent-operations",
+                "name": "SuperMega Agent Operations",
+                "tenant": "core",
+                "system": "Internal runtime",
+                "status": core_agent_status,
+                "installState": "Live" if core_agent_signal_at else "Needs wiring",
+                "credentialMode": "Workspace-scoped queue with signed execution budgets",
+                "cursorMode": "durable agent-run ledger",
+                "lastSuccessAt": core_agent_signal_at or "No bounded company run recorded yet",
+                "replayMode": "Idempotent run review; consequential actions require a new approval",
+                "blastRadius": "Current SuperMega workspace only",
+                "freshness": _runtime_freshness_label(
+                    core_agent_signal_at,
+                    fallback="No company automation run recorded yet",
+                ),
+                "owner": "Agent Operations",
+                "workspace": "core/company-operations",
+                "inputs": ["workspace tasks", "approvals", "lead pipeline", "release evidence"],
+                "outputs": ["bounded run evidence", "CEO brief", "operations exceptions"],
+                "backlog": f"{len(open_workspace_tasks)} open tasks, {pending_approval_count} pending approvals, {len(latest_agent_runs)} recent agent runs.",
+                "writeBack": "Internal records only; external sends, release, access, payment, and production actions remain approval-gated",
+                "nextAutomation": "Activate one unique job only when its reviewed cadence and workspace budget permit it.",
+                "risks": [
+                    "Hosted runtime and tenant-security evidence must pass before managed automation is enabled.",
+                ],
+            },
+            {
                 "id": "core-github-build",
                 "name": "SuperMega Build GitHub Feed",
                 "tenant": "core",
@@ -4099,6 +4736,8 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                 ],
             },
         ]
+
+        connectors = _scope_connector_catalog(connectors, expected_tenant_key)
 
         connector_lookup = {
             str(item.get("id", "")).strip(): item
@@ -4963,7 +5602,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         connector_event_rows = enterprise_list_connector_events(enterprise_db_url, workspace_id=workspace_id, limit=160) if workspace_id else []
         latest_agent_runs_by_type = _group_agent_runs_by_job_type(latest_agent_runs)
         decision_rows = list_decision_entries(state_db, limit=200)
-        approval_rows = list_approval_entries(state_db, limit=200)
+        approval_rows = list_approval_entries(state_db, workspace_id=workspace_id, limit=200)
         capa_rows = list_capa_actions(state_db, limit=200)
         quality_rows = list_quality_incidents(state_db, limit=200)
         supplier_rows = list_supplier_risks(state_db, limit=200)
@@ -6357,7 +6996,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         latest_agent_runs = enterprise_list_agent_runs(enterprise_db_url, workspace_id=workspace_id, limit=50) if workspace_id else []
         latest_agent_runs_by_type = _group_agent_runs_by_job_type(latest_agent_runs)
         decision_rows = list_decision_entries(state_db, limit=200)
-        approval_rows = list_approval_entries(state_db, limit=200)
+        approval_rows = list_approval_entries(state_db, workspace_id=workspace_id, limit=200)
         quality_rows = list_quality_incidents(state_db, limit=200)
         capa_rows = list_capa_actions(state_db, limit=200)
         supplier_rows = list_supplier_risks(state_db, limit=200)
@@ -6885,7 +7524,10 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         receiving_summary = load_receiving_summary(state_db)
         inventory_summary = load_inventory_summary(state_db)
         maintenance_summary = load_maintenance_summary(state_db)
-        approval_summary = load_approval_summary(state_db)
+        approval_summary = load_approval_summary(
+            state_db,
+            workspace_id=str(session.get("workspace_id", "")).strip(),
+        )
         metric_summary = load_metric_summary(state_db)
         feedback_summary = load_product_feedback_summary(state_db)
         lead_pipeline_summary = enterprise_load_lead_summary(
@@ -7230,6 +7872,83 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             ),
         ]
 
+    def _scheduler_authority_state(authority_path: Path) -> dict[str, Any]:
+        authority = _load_json(authority_path)
+        crons = authority.get("crons", []) if isinstance(authority, dict) else []
+        cron_contract = sorted(
+            (
+                str(cron.get("path", "")).strip(),
+                str(cron.get("schedule", "")).strip(),
+            )
+            for cron in crons
+            if isinstance(cron, dict)
+        )
+        expected_crons = sorted(
+            [
+                ("/api/cron/supermega/agent-queue", "5 * * * *"),
+                ("/api/cron/supermega/daily", "45 0 * * *"),
+            ]
+        )
+        activation = authority.get("activation", {}) if isinstance(authority, dict) else {}
+        activation_plan = authority.get("activation_plan", {}) if isinstance(authority, dict) else {}
+        migration = authority.get("migration", {}) if isinstance(authority, dict) else {}
+        activation_crons = activation_plan.get("crons", []) if isinstance(activation_plan, dict) else []
+        retiring_crons = migration.get("preflight_retiring_crons", []) if isinstance(migration, dict) else []
+        activation_cron_contract = sorted(
+            (
+                str(cron.get("path", "")).strip(),
+                str(cron.get("schedule", "")).strip(),
+            )
+            for cron in activation_crons
+            if isinstance(cron, dict)
+        )
+        retiring_cron_contract = sorted(
+            (
+                str(cron.get("path", "")).strip(),
+                str(cron.get("schedule", "")).strip(),
+            )
+            for cron in retiring_crons
+            if isinstance(cron, dict)
+        )
+        ready = bool(
+            authority.get("contract") == "supermega.scheduler-authority.v2"
+            and authority.get("authority") == "vercel"
+            and authority.get("environment") == "production"
+            and authority.get("project_id") == "prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG"
+            and activation.get("state") == "dormant"
+            and activation.get("runtime_environment_key") == "SUPERMEGA_HOSTED_SCHEDULER_ENABLED"
+            and len(activation.get("required_evidence", [])) == 5
+            and cron_contract == []
+            and int(authority.get("maximum_scheduler_invocations_per_day", 0) or 0) == 0
+            and activation_cron_contract == expected_crons
+            and int(activation_plan.get("maximum_scheduler_invocations_per_day", 0) or 0) == 25
+            and retiring_cron_contract == sorted(
+                [
+                    ("/api/cron/supermega/agent-queue", "*/15 * * * *"),
+                    ("/api/cron/supermega/daily", "45 0 * * *"),
+                ]
+            )
+            and migration.get("post_deploy_retiring_crons_allowed") is False
+            and authority.get("worker_dispatch", {}).get("mode") == "enqueue-on-demand"
+            and authority.get("worker_dispatch", {}).get("polling_allowed") is False
+            and authority.get("retired_authority", {}).get("provider") == "google-cloud-scheduler"
+            and authority.get("retired_authority", {}).get("mutation_allowed") is False
+        )
+        return {
+            "ready": ready,
+            "authority": str(authority.get("authority", "")).strip(),
+            "environment": str(authority.get("environment", "")).strip(),
+            "activation_state": str(activation.get("state", "")).strip(),
+            "cron_count": len(cron_contract),
+            "maximum_scheduler_invocations_per_day": int(
+                authority.get("maximum_scheduler_invocations_per_day", 0) or 0
+            ),
+            "activation_plan_cron_count": len(activation_cron_contract),
+            "activation_plan_maximum_invocations_per_day": int(
+                activation_plan.get("maximum_scheduler_invocations_per_day", 0) or 0
+            ),
+        }
+
     def _cloud_workspace_resource_cards(
         *,
         config: dict[str, Any],
@@ -7237,9 +7956,8 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         api_entrypoint: Path,
         jobs_script: Path,
         local_smoke_script: Path,
-        deploy_preview_script: Path,
-        claimable_preview_script: Path,
-        scheduler_script: Path,
+        canonical_preview_target: dict[str, Any],
+        scheduler_authority_path: Path,
         showroom_dir: Path,
     ) -> list[dict[str, Any]]:
         sources = config.get("sources", {}) if isinstance(config, dict) else {}
@@ -7348,22 +8066,30 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             str(WORKFORCE_RESOURCE_DIR.name),
         ]
 
+        scheduler_authority = _scheduler_authority_state(scheduler_authority_path)
+        scheduler_contract_ready = bool(scheduler_authority.get("ready"))
+        scheduler_active = str(scheduler_authority.get("activation_state", "")).strip() == "active"
         automation_pack_status = (
             "ready"
-            if scheduler_script.exists() and deploy_preview_script.exists() and claimable_preview_script.exists()
+            if scheduler_contract_ready and scheduler_active and bool(canonical_preview_target.get("ready"))
             else "attention"
-            if scheduler_script.exists() or deploy_preview_script.exists() or claimable_preview_script.exists()
+            if scheduler_contract_ready or bool(canonical_preview_target.get("ready"))
             else "blocked"
         )
         automation_pack_detail = (
-            "Scheduler, deploy, and preview scripts are present for the autonomous runtime lane outside the interactive session."
+            "The single Vercel production scheduler contract and canonical preview target are ready for the guarded runtime lane."
             if automation_pack_status == "ready"
-            else "Autonomous scheduler or deploy script coverage is incomplete on this host."
+            else "The Vercel scheduler is safely dormant until managed security, worker, preview, rollback, and owner evidence pass."
+            if scheduler_contract_ready and not scheduler_active
+            else "The Vercel scheduler authority contract or canonical preview target is incomplete on this host."
         )
         automation_pack_chips = [
-            "scheduler ready" if scheduler_script.exists() else "scheduler missing",
-            "preview deploy ready" if deploy_preview_script.exists() else "preview deploy missing",
-            "claimable preview ready" if claimable_preview_script.exists() else "claimable preview missing",
+            "scheduler safely dormant" if scheduler_contract_ready and not scheduler_active else "Vercel production scheduler" if scheduler_contract_ready else "scheduler authority invalid",
+            f"{scheduler_authority.get('cron_count', 0)} bounded crons",
+            f"max {scheduler_authority.get('maximum_scheduler_invocations_per_day', 0)} invocations/day",
+            f"active plan max {scheduler_authority.get('activation_plan_maximum_invocations_per_day', 0)} per day",
+            "canonical preview ready" if bool(canonical_preview_target.get("ready")) else "canonical preview blocked",
+            str(canonical_preview_target.get("project_name", "megaos")),
         ]
 
         return [
@@ -7480,28 +8206,23 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             else "The control plane is missing one or more foundations: app base URL, state store, or enterprise database."
         )
 
-        deploy_preview_script = REPO_ROOT / "tools" / "deploy_preview.sh"
-        claimable_preview_script = REPO_ROOT / "tools" / "deploy_claimable_preview.sh"
-        package_preview_script = REPO_ROOT / "tools" / "package_preview_bundle.py"
         jobs_script = REPO_ROOT / "tools" / "run_supermega_agent_jobs.py"
         local_smoke_script = REPO_ROOT / "tools" / "run_local_smoke.sh"
-        scheduler_script = REPO_ROOT / "tools" / "ensure_supermega_scheduler.ps1"
+        scheduler_authority_path = REPO_ROOT / "tools" / "supermega_scheduler_authority.json"
         api_entrypoint = REPO_ROOT / "api_app.py"
         vercel_config = REPO_ROOT / "vercel.json"
         showroom_dir = REPO_ROOT / "showroom"
-        vercel_cli_available = bool(shutil.which("vercel"))
-        deploy_ready = all(
-            item.exists()
-            for item in (deploy_preview_script, claimable_preview_script, package_preview_script, vercel_config)
+        vercel_cli_available = bool(shutil.which("npx"))
+        canonical_preview_target = _canonical_preview_target_state(
+            _load_json(REPO_ROOT / ".vercel" / "project.json"),
+            dict(os.environ),
         )
-        deploy_status = "ready" if deploy_ready else "attention" if any(
-            item.exists()
-            for item in (deploy_preview_script, claimable_preview_script, package_preview_script, vercel_config)
-        ) else "blocked"
+        deploy_ready = bool(canonical_preview_target.get("ready")) and vercel_config.exists()
+        deploy_status = "ready" if deploy_ready else "blocked"
         deploy_detail = (
-            "Preview deploy scripts and Vercel config are present, so the repo can ship a cloud preview from its current bundle path."
+            "The exact megaos project and Vercel team are linked for approval-gated preview deployment."
             if deploy_ready
-            else "The preview deploy path is only partially wired. The repo needs the deploy scripts and Vercel config present together."
+            else "Preview deployment is blocked until this checkout is linked to the exact megaos project and team with owner-provided credentials."
         )
 
         tooling_ready = all(item.exists() for item in (jobs_script, local_smoke_script, api_entrypoint))
@@ -7616,8 +8337,8 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                 detail=deploy_detail,
                 chips=[
                     "vercel cli ready" if vercel_cli_available else "vercel cli missing",
-                    "preview script ready" if deploy_preview_script.exists() else "preview script missing",
-                    "claimable deploy ready" if claimable_preview_script.exists() else "claimable deploy missing",
+                    "canonical project linked" if bool(canonical_preview_target.get("ready")) else "canonical project link blocked",
+                    str(canonical_preview_target.get("project_name", "megaos")),
                     "vercel.json ready" if vercel_config.exists() else "vercel.json missing",
                 ],
                 route="/app/factory",
@@ -7644,7 +8365,15 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             if queue_ready and (cloud_tasks_queue_brief or cloud_tasks_queue_browser)
             else "blocked"
         )
-        scheduler_status = "ready" if internal_cron_token and runtime_base_url else "attention" if internal_cron_token or runtime_base_url else "blocked"
+        scheduler_authority = _scheduler_authority_state(scheduler_authority_path)
+        scheduler_contract_ready = bool(scheduler_authority.get("ready"))
+        scheduler_status = (
+            "ready"
+            if scheduler_contract_ready and cron_secret
+            else "attention"
+            if scheduler_contract_ready or cron_secret
+            else "blocked"
+        )
         infrastructure = [
             _cloud_control_card(
                 item_id="deployment-target",
@@ -7699,19 +8428,19 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             ),
             _cloud_control_card(
                 item_id="scheduler-cadence",
-                name="Scheduler cadence and worker drain",
+                name="Vercel production scheduler",
                 status=scheduler_status,
                 detail=(
-                    "Cloud Scheduler should enqueue the default families, ops watch, founder brief, and worker drain cadence against the live runtime host."
-                    if internal_cron_token and runtime_base_url
-                    else "The scheduler contract is still partial because the cron token or runtime base URL is missing."
+                    "Vercel production owns two bounded cron routes; Cloud Tasks dispatches work only when those routes enqueue it."
+                    if scheduler_status == "ready"
+                    else "The scheduler stays blocked until the checked Vercel authority contract and production-only CRON_SECRET are both present."
                 ),
                 chips=[
-                    "cron token ready" if internal_cron_token else "cron token missing",
-                    "2h default batch",
-                    "15m ops watch",
-                    "daily founder brief",
-                    "5m worker drain",
+                    "CRON_SECRET ready" if cron_secret else "CRON_SECRET missing",
+                    "15m queue",
+                    "00:45 UTC daily",
+                    "Cloud Tasks on demand",
+                    "GCP Scheduler retired",
                 ],
                 route="/app/runtime",
             ),
@@ -7725,9 +8454,8 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             api_entrypoint=api_entrypoint,
             jobs_script=jobs_script,
             local_smoke_script=local_smoke_script,
-            deploy_preview_script=deploy_preview_script,
-            claimable_preview_script=claimable_preview_script,
-            scheduler_script=scheduler_script,
+            canonical_preview_target=canonical_preview_target,
+            scheduler_authority_path=scheduler_authority_path,
             showroom_dir=showroom_dir,
         )
         topology = _cloud_topology_payload(session)
@@ -7793,30 +8521,13 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                     "detail": "Boot the local service and verify the authenticated portal, runtime, and queue paths.",
                 }
             )
-        if deploy_preview_script.exists():
-            commands.append(
-                {
-                    "id": "deploy-preview",
-                    "label": "Deploy preview",
-                    "command": "bash tools/deploy_preview.sh",
-                    "detail": "Package the current repo and push a preview deployment through the configured Vercel fallback.",
-                }
-            )
         if vercel_config.exists():
             commands.append(
                 {
                     "id": "vercel-build",
                     "label": "Build for Vercel",
-                    "command": "npx vercel build --yes",
-                    "detail": "Build the repo in Vercel-compatible mode before deploying a prebuilt artifact.",
-                }
-            )
-            commands.append(
-                {
-                    "id": "vercel-prebuilt-preview",
-                    "label": "Deploy prebuilt preview",
-                    "command": "npx vercel deploy --prebuilt -y",
-                    "detail": "Ship a linked-project preview deployment using the repo-root Vercel configuration.",
+                    "command": "npx --yes vercel@56.1.0 build",
+                    "detail": "Build against the exact linked Vercel project; deployment remains approval-gated.",
                 }
             )
         if str(gmail_client.get("recommended_command", "")).strip() and gmail_status != "ready":
@@ -7841,7 +8552,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         if coverage_score < 70:
             next_moves.append("Improve the data coverage score before expanding autonomy so the agents work from canonical records instead of partial evidence.")
         if deploy_status != "ready":
-            next_moves.append("Close the preview deploy path gaps so product and runtime changes can ship to cloud without manual packaging detours.")
+            next_moves.append("Link this checkout to the exact megaos Vercel project and team before requesting any preview deployment.")
         if domain_blocker_count:
             next_moves.append("Verify and repair blocked domain rows so the public host, shared app host, and tenant portals stop relying on implicit DNS assumptions.")
         elif domain_attention_count:
@@ -8171,35 +8882,82 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
 
     def _preferred_deploy_url(urls: list[str]) -> str:
         for candidate in urls:
-            if ".vercel.app" in candidate:
+            parsed = urlparse(str(candidate or "").strip())
+            hostname = str(parsed.hostname or "").strip().lower()
+            if (
+                parsed.scheme == "https"
+                and hostname.endswith(".vercel.app")
+                and parsed.username is None
+                and parsed.password is None
+                and parsed.path in {"", "/"}
+                and not parsed.query
+                and not parsed.fragment
+            ):
                 return candidate
-        return urls[0] if urls else ""
+        return ""
 
-    def _run_vercel_cli_preview() -> dict[str, Any]:
+    def _run_vercel_cli_preview(revision: str) -> dict[str, Any]:
+        normalized_revision = str(revision or "").strip().lower()
+        if not re.fullmatch(r"[0-9a-f]{40}", normalized_revision):
+            raise HTTPException(status_code=409, detail="canonical_preview_revision_invalid")
         npx_path = shutil.which("npx")
         if not npx_path:
             raise HTTPException(status_code=503, detail="npx is not available on this host.")
-        command = [npx_path, "vercel", "deploy", "-y", "--no-wait"]
-        try:
-            completed = subprocess.run(
-                command,
-                cwd=str(REPO_ROOT),
-                capture_output=True,
-                text=True,
-                timeout=900,
-                check=False,
-            )
-        except subprocess.TimeoutExpired as exc:
-            raise HTTPException(
-                status_code=504,
-                detail=f"Preview deploy timed out after {int(exc.timeout or 900)} seconds.",
-            ) from exc
-        combined_output = "\n".join(part for part in ((completed.stdout or "").strip(), (completed.stderr or "").strip()) if part).strip()
-        if completed.returncode != 0:
-            detail = combined_output or "Preview deploy failed."
-            raise HTTPException(status_code=502, detail=detail[:1200])
-        urls = _extract_urls_from_output(combined_output)
+        cli_prefix = [npx_path, "--yes", "vercel@56.1.0"]
+        deploy_environment = dict(os.environ)
+        deploy_environment["SUPERMEGA_RELEASE_COMMIT"] = normalized_revision
+
+        def run_phase(arguments: list[str], *, phase: str, timeout_seconds: int = 900) -> str:
+            try:
+                completed = subprocess.run(
+                    [*cli_prefix, *arguments],
+                    cwd=str(REPO_ROOT),
+                    env=deploy_environment,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout_seconds,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired as exc:
+                raise HTTPException(
+                    status_code=504,
+                    detail=f"canonical_preview_{phase}_timed_out",
+                ) from exc
+            if completed.returncode != 0:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"canonical_preview_{phase}_failed:{completed.returncode}",
+                )
+            return "\n".join(
+                part
+                for part in ((completed.stdout or "").strip(), (completed.stderr or "").strip())
+                if part
+            ).strip()
+
+        run_phase(
+            ["pull", "--yes", "--environment=preview"],
+            phase="pull",
+        )
+        _require_canonical_preview_deploy_target()
+        run_phase(["build", "--yes"], phase="build")
+        prebuilt_config = REPO_ROOT / ".vercel" / "output" / "config.json"
+        if not prebuilt_config.is_file():
+            raise HTTPException(status_code=502, detail="canonical_preview_prebuilt_output_missing")
+        deploy_output = run_phase(
+            [
+                "deploy",
+                "--prebuilt",
+                "--yes",
+                "--no-wait",
+                "--meta",
+                f"githubCommitSha={normalized_revision}",
+            ],
+            phase="deploy",
+        )
+        urls = _extract_urls_from_output(deploy_output)
         deployment_url = _preferred_deploy_url(urls)
+        if not deployment_url:
+            raise HTTPException(status_code=502, detail="canonical_preview_deployment_url_missing")
         inspect_url = next((item for item in urls if "vercel.com/" in item), "")
         payload: dict[str, Any] = {
             "provider": "vercel-cli",
@@ -8208,65 +8966,78 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "deploymentUrl": deployment_url,
             "url": deployment_url,
             "inspectUrl": inspect_url,
-            "urls": urls,
-            "output": combined_output[-4000:],
             "previewUrl": deployment_url,
+            "artifact": {
+                "prebuilt": True,
+                "revision": normalized_revision,
+                "cli": "vercel@56.1.0",
+            },
+            "target": {
+                "team_id": CANONICAL_VERCEL_TEAM_ID,
+                "project_id": CANONICAL_APP_VERCEL_PROJECT_ID,
+                "project_name": CANONICAL_APP_VERCEL_PROJECT_NAME,
+                "environment": "preview",
+            },
         }
         return payload
 
-    def _run_preview_deploy(mode: str = "claimable_preview") -> dict[str, Any]:
-        normalized_mode = str(mode or "claimable_preview").strip().lower()
-        deploy_script = REPO_ROOT / "tools" / "deploy_claimable_preview.sh"
-        fallback_errors: list[str] = []
-        if normalized_mode not in {"preview", "direct", "vercel", "vercel_cli"}:
-            if not deploy_script.exists():
-                fallback_errors.append("Claimable preview deploy script is not available on this host.")
-            else:
-                bash_path = shutil.which("bash")
-                if not bash_path:
-                    fallback_errors.append("Bash is not available on this host.")
-                else:
-                    try:
-                        completed = subprocess.run(
-                            [bash_path, str(deploy_script)],
-                            cwd=str(REPO_ROOT),
-                            capture_output=True,
-                            text=True,
-                            timeout=600,
-                            check=False,
-                        )
-                    except subprocess.TimeoutExpired as exc:
-                        fallback_errors.append(f"Claimable preview deploy timed out after {int(exc.timeout or 600)} seconds.")
-                    else:
-                        if completed.returncode == 0:
-                            output_text = (completed.stdout or "").strip()
-                            try:
-                                payload = json.loads(output_text)
-                            except Exception as exc:
-                                raise HTTPException(status_code=502, detail="Preview deploy completed but returned invalid JSON.") from exc
-                            if not isinstance(payload, dict):
-                                raise HTTPException(status_code=502, detail="Preview deploy completed but returned an invalid payload.")
-                            payload.setdefault("provider", "claimable-preview")
-                            payload.setdefault("mode", "preview")
-                            payload.setdefault("status", "ready")
-                            return payload
-                        detail = (completed.stderr or completed.stdout or "Preview deploy failed.").strip()
-                        fallback_errors.append(detail[:1200])
+    def _require_canonical_preview_deploy_target() -> dict[str, Any]:
+        target = _canonical_preview_target_state(
+            _load_json(REPO_ROOT / ".vercel" / "project.json"),
+            dict(os.environ),
+        )
+        if not bool(target.get("ready")):
+            blockers = target.get("blockers", []) if isinstance(target.get("blockers"), list) else []
+            detail = ",".join(str(item) for item in blockers if str(item).strip())
+            raise HTTPException(
+                status_code=503,
+                detail=f"canonical_preview_target_not_ready:{detail or 'unknown'}",
+            )
+        return target
+
+    def _require_clean_preview_deploy_revision(requested_revision: str) -> str:
+        normalized_requested_revision = str(requested_revision or "").strip().lower()
+        git_path = shutil.which("git")
+        if not git_path:
+            raise HTTPException(status_code=503, detail="Preview deploy requires Git revision verification.")
         try:
-            payload = _run_vercel_cli_preview()
-        except HTTPException as exc:
-            if fallback_errors:
-                detail = "; ".join(item for item in fallback_errors if item)
-                detail = f"{detail}; {exc.detail}" if detail else str(exc.detail)
-                raise HTTPException(status_code=exc.status_code, detail=detail[:1200]) from exc
-            raise
-        if fallback_errors:
-            payload["fallback"] = {
-                "status": "used",
-                "reason": fallback_errors[0],
-                "details": fallback_errors[:3],
-            }
-        return payload
+            revision_result = subprocess.run(
+                [git_path, "rev-parse", "--verify", "HEAD"],
+                cwd=str(REPO_ROOT),
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise HTTPException(status_code=503, detail="Preview deploy revision could not be verified.") from exc
+        current_revision = str(revision_result.stdout or "").strip().lower()
+        if revision_result.returncode != 0 or not re.fullmatch(r"[0-9a-f]{40}", current_revision):
+            raise HTTPException(status_code=503, detail="Preview deploy revision could not be verified.")
+        if normalized_requested_revision and current_revision != normalized_requested_revision:
+            raise HTTPException(status_code=409, detail="Preview deploy revision does not match the approved artifact.")
+        try:
+            status_result = subprocess.run(
+                [git_path, "status", "--porcelain=v1", "--untracked-files=all"],
+                cwd=str(REPO_ROOT),
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise HTTPException(status_code=503, detail="Preview deploy worktree state could not be verified.") from exc
+        if status_result.returncode != 0:
+            raise HTTPException(status_code=503, detail="Preview deploy worktree state could not be verified.")
+        if str(status_result.stdout or "").strip():
+            raise HTTPException(status_code=409, detail="Preview deploy requires a clean approved worktree.")
+        return current_revision
+
+    def _run_preview_deploy(mode: str, *, revision: str) -> dict[str, Any]:
+        normalized_mode = str(mode or PREVIEW_DEPLOY_MODE).strip().lower()
+        if normalized_mode != PREVIEW_DEPLOY_MODE:
+            raise HTTPException(status_code=400, detail="preview_deploy_mode_not_allowed")
+        return _run_vercel_cli_preview(revision)
 
     def _record_workspace_preview(session: dict[str, Any], deploy_result: dict[str, Any]) -> None:
         actor = str(session.get("display_name", session.get("username", "system"))).strip() or "system"
@@ -8525,27 +9296,20 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         root_report = _safe_domain_report(root_domain, public_routes, cached_rows=workspace_domain_rows)
         shared_app_domain = _find_domain_row(topology_rows, shared_app_host) or _find_domain_row(workspace_domain_rows, shared_app_host)
         site_root = _default_site_root_path()
-        deployment_scripts = [
+        deployment_controls = [
             _path_resource_payload(
-                item_id="deploy-preview-script",
-                label="Preview deploy launcher",
+                item_id="coordinated-release-workflow",
+                label="Coordinated release workflow",
                 category="deployment",
-                path=REPO_ROOT / "tools" / "deploy_preview.sh",
-                detail="Checks the deploy endpoint and launches the preview bundle upload.",
+                path=REPO_ROOT / ".github" / "workflows" / "supermega-public-release.yml",
+                detail="Builds isolated candidates, verifies both products, and controls promotion and rollback.",
             ),
             _path_resource_payload(
-                item_id="claimable-preview-script",
-                label="Claimable preview deploy",
+                item_id="release-verifier",
+                label="Release workflow verifier",
                 category="deployment",
-                path=REPO_ROOT / "tools" / "deploy_claimable_preview.sh",
-                detail="Packages and uploads a claimable preview bundle for the current repo state.",
-            ),
-            _path_resource_payload(
-                item_id="preview-bundle-script",
-                label="Preview bundle packager",
-                category="deployment",
-                path=REPO_ROOT / "tools" / "package_preview_bundle.py",
-                detail="Curates the deployment bundle used for preview deploys.",
+                path=REPO_ROOT / "tools" / "verify_app_deploy_workflow.mjs",
+                detail="Fails release verification when project identity, promotion, or rollback controls drift.",
             ),
             _path_resource_payload(
                 item_id="vercel-config",
@@ -8586,7 +9350,14 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             ),
         ]
         resource_groups = _supermega_dev_resource_groups()
-        deployment_ready = all(bool(item.get("exists")) for item in deployment_scripts)
+        canonical_preview_target = _canonical_preview_target_state(
+            _load_json(REPO_ROOT / ".vercel" / "project.json"),
+            dict(os.environ),
+        )
+        deployment_ready = (
+            all(bool(item.get("exists")) for item in deployment_controls)
+            and bool(canonical_preview_target.get("ready"))
+        )
         smoke_ready = all(bool(item.get("exists")) for item in smoke_scripts)
         topology_summary = topology.get("summary", {}) if isinstance(topology.get("summary"), dict) else {}
         cloud_summary = cloud_control.get("summary", {}) if isinstance(cloud_control.get("summary"), dict) else {}
@@ -8608,20 +9379,6 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                 "kind": "build",
                 "command": "npm --prefix .\\showroom run build",
                 "detail": "Build the public and app bundles from the repo root and refresh api-static routes.",
-            },
-            {
-                "id": "preview-deploy",
-                "label": "Deploy preview",
-                "kind": "deploy",
-                "command": "bash tools/deploy_preview.sh",
-                "detail": "Ship the current repo into a preview deployment path.",
-            },
-            {
-                "id": "package-preview",
-                "label": "Package preview bundle",
-                "kind": "deploy",
-                "command": "python .\\tools\\package_preview_bundle.py",
-                "detail": "Create the curated bundle before a claimable preview upload.",
             },
             {
                 "id": "local-smoke",
@@ -8756,7 +9513,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "deployment": {
                 "preview_ready": deployment_ready,
                 "vercel_cli_available": bool(shutil.which("vercel")),
-                "scripts": deployment_scripts,
+                "scripts": deployment_controls,
                 "commands": [item for item in commands if str(item.get("kind", "")).strip() in {"ops", "build", "deploy"}],
             },
             "smoke": {
@@ -10143,6 +10900,8 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
     @app.post("/api/workforce/automation/apply")
     def apply_workforce_automation(request_http: Request, request: WorkforceAutomationRequest) -> dict[str, Any]:
         session = _require_workforce_manage_access(request_http)
+        if request.queue_default_jobs or request.process_queue:
+            session = _require_agent_ops_execute_access(request_http)
         workspace_id = str(session.get("workspace_id", "")).strip()
         actor = str(session.get("display_name", session.get("username", "system"))).strip() or "system"
         source = str(request.source or "").strip() or "workforce_command"
@@ -10512,10 +11271,165 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "cloud_control": _cloud_control_payload(session),
         }
 
+    @app.post("/api/cloud/deployments/preview/reviews")
+    def create_preview_deploy_review(request: Request) -> dict[str, Any]:
+        session = _require_approval_request_access(request)
+        workspace_id = _require_session_workspace_id(session)
+        actor = str(session.get("display_name", session.get("username", "system"))).strip() or "system"
+        revision = _require_clean_preview_deploy_revision("")
+        manifest = _load_json(REPO_ROOT / "site-manifest.json")
+        brand = manifest.get("brand", {}) if isinstance(manifest.get("brand"), dict) else {}
+        try:
+            release_review = _build_preview_release_review_packet(
+                revision=revision,
+                generated_at=datetime.now().astimezone().isoformat(),
+                release_identity={
+                    "service": "supermega-app",
+                    "brand_version": brand.get("version", ""),
+                    "context_version": manifest.get("contextVersion", ""),
+                    "catalog_version": manifest.get("catalogVersion", ""),
+                },
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        target = f"cloud-preview:{PREVIEW_DEPLOY_MODE}:{revision}"
+
+        with preview_release_review_lock:
+            existing = _find_reusable_preview_release_review(
+                list_approval_entries(state_db, workspace_id=workspace_id, limit=500),
+                workspace_id=workspace_id,
+                mode=PREVIEW_DEPLOY_MODE,
+                revision=revision,
+            )
+            if existing:
+                existing_payload = (
+                    existing.get("payload", {})
+                    if isinstance(existing.get("payload"), dict)
+                    else {}
+                )
+                existing_review = existing_payload.get("release_review", {})
+                return {
+                    "status": (
+                        "approval_ready"
+                        if str(existing.get("status", "")).strip().lower() == "approved"
+                        else "review_required"
+                    ),
+                    "row": existing,
+                    "release_review": existing_review,
+                    "idempotent_replay": True,
+                }
+            row = add_approval_entry(
+                state_db,
+                workspace_id=workspace_id,
+                title=f"Review canonical preview {revision[:12]}",
+                summary=(
+                    "Review the exact clean candidate, canonical megaos preview target, required checks, "
+                    "and no-production-alias rollback boundary."
+                ),
+                approval_gate=PREVIEW_DEPLOY_APPROVAL_GATE,
+                requested_by=actor,
+                owner="Owner",
+                status="pending",
+                due="",
+                related_route=PREVIEW_DEPLOY_APPROVAL_ROUTE,
+                related_entity=target,
+                evidence_link=f"git:{revision}",
+                payload={
+                    "deployment_mode": PREVIEW_DEPLOY_MODE,
+                    "deployment_revision": revision,
+                    "release_review": release_review,
+                },
+                source=PREVIEW_RELEASE_REVIEW_SOURCE,
+            )
+        return {
+            "status": "review_required",
+            "row": row,
+            "release_review": release_review,
+            "idempotent_replay": False,
+        }
+
     @app.post("/api/cloud/deployments/preview")
     def cloud_preview_deploy(request: Request, payload: CloudPreviewDeployRequest) -> dict[str, Any]:
-        session = _require_cloud_control_manage_access(request)
-        deploy_result = _run_preview_deploy(payload.mode)
+        session = _require_agent_ops_deploy_access(request)
+        workspace_id = _require_session_workspace_id(session)
+        actor = str(session.get("display_name", session.get("username", "system"))).strip() or "system"
+        try:
+            approval = _validate_preview_deploy_approval(
+                list_approval_entries(
+                    state_db,
+                    workspace_id=workspace_id,
+                    status="approved",
+                    limit=500,
+                ),
+                workspace_id=workspace_id,
+                approval_id=payload.approval_id,
+                mode=payload.mode,
+                revision=payload.revision,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        approved_revision = _require_clean_preview_deploy_revision(payload.revision)
+        _require_canonical_preview_deploy_target()
+        approval_target = str(approval.get("related_entity", "")).strip().lower()
+        try:
+            action_claim = reserve_approval_action(
+                state_db,
+                approval_id=payload.approval_id,
+                workspace_id=workspace_id,
+                actor=actor,
+                action=PREVIEW_DEPLOY_APPROVAL_GATE,
+                target=approval_target,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        try:
+            deploy_result = _run_preview_deploy(payload.mode, revision=approved_revision)
+        except Exception as exc:
+            failure_outcome = (
+                f"http_{exc.status_code}"
+                if isinstance(exc, HTTPException)
+                else f"internal_{type(exc).__name__}"
+            )
+            complete_approval_action(
+                state_db,
+                approval_id=payload.approval_id,
+                workspace_id=workspace_id,
+                claim_token=str(action_claim.get("claim_token", "")),
+                status="failed",
+                outcome=failure_outcome,
+            )
+            raise
+        action_receipt = complete_approval_action(
+            state_db,
+            approval_id=payload.approval_id,
+            workspace_id=workspace_id,
+            claim_token=str(action_claim.get("claim_token", "")),
+            status="succeeded",
+            outcome="preview_launch_accepted",
+        )
+        approval_payload = approval.get("payload", {}) if isinstance(approval.get("payload"), dict) else {}
+        decision_history = (
+            approval_payload.get("decision_history", [])
+            if isinstance(approval_payload.get("decision_history"), list)
+            else []
+        )
+        approved_decision = next(
+            (
+                decision
+                for decision in reversed(decision_history)
+                if isinstance(decision, dict)
+                and str(decision.get("to_status", "")).strip().lower() == "approved"
+            ),
+            {},
+        )
+        deploy_result["approval"] = {
+            "approval_id": str(approval.get("approval_id", "")).strip(),
+            "approved_by": str(approved_decision.get("actor", "")).strip(),
+            "gate": str(approval.get("approval_gate", "")).strip(),
+            "target": str(approval.get("related_entity", "")).strip(),
+            "revision": approved_revision,
+            "action_reservation": action_receipt,
+        }
         _record_workspace_preview(session, deploy_result)
         return {
             "status": "ready",
@@ -10557,7 +11471,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             workspace_id=workspace_id,
             limit=12,
         )
-        approval_rows = list_approval_entries(state_db, limit=approval_limit)
+        approval_rows = list_approval_entries(state_db, workspace_id=workspace_id, limit=approval_limit)
 
         if limited_meta_view:
             runtime_payload: dict[str, Any] = {}
@@ -10635,7 +11549,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "role": str(session.get("role", "")).strip(),
             "display_name": str(session.get("display_name", "")).strip(),
             "capabilities": sorted(_role_capabilities(str(session.get("role", "")))),
-            "can_run_jobs": _session_has_any_capability(session, {"agent_ops.view", "tenant_admin.view", "platform_admin.view"}),
+            "can_run_jobs": _session_has_any_capability(session, {"agent_ops.execute"}),
             "can_manage_runtime": _session_has_any_capability(session, {"tenant_admin.view", "platform_admin.view"}),
             "can_approve_guardrails": _session_has_any_capability(
                 session,
@@ -10647,6 +11561,11 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             teams=agent_team_rows,
             latest_runs_by_type=latest_by_type,
             viewer_contract=agent_runtime_viewer,
+            capacity_plan=enterprise_get_agent_capacity_plan(
+                enterprise_db_url,
+                workspace_id=workspace_id,
+                registered_specialists=_registered_specialist_count(agent_team_rows),
+            ),
         )
 
         return {
@@ -10691,7 +11610,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "latest_rollout": latest_rollout if isinstance(latest_rollout, dict) else None,
             "approval_queue": {
                 "count": len(approval_rows),
-                "summary": load_approval_summary(state_db),
+                "summary": load_approval_summary(state_db, workspace_id=workspace_id),
                 "rows": approval_rows,
             },
             "exceptions": exception_payload,
@@ -10705,7 +11624,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
 
     @app.get("/api/agent-runs")
     def agent_runs(request: Request, job_type: str | None = None, status: str | None = None, limit: int = 50) -> dict[str, Any]:
-        session = _require_session(request)
+        session = _require_agent_ops_view_access(request)
         workspace_id = str(session.get("workspace_id", "")).strip()
         rows = enterprise_list_agent_runs(
             enterprise_db_url,
@@ -10730,7 +11649,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
 
     @app.post("/api/agent-runs")
     def create_agent_run(request_http: Request, request: AgentRunRequest) -> dict[str, Any]:
-        session = _require_agent_ops_control_access(request_http)
+        session = _require_agent_ops_execute_access(request_http)
         workspace_id = str(session.get("workspace_id", "")).strip()
         job_type = str(request.job_type or "").strip().lower()
         if job_type not in {item["job_type"] for item in AGENT_JOB_TEMPLATES}:
@@ -10738,18 +11657,21 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
 
         triggered_by = str(session.get("display_name", session.get("username", "system")))
         if request.enqueue_only:
-            row = enterprise_create_agent_run(
-                enterprise_db_url,
-                workspace_id=workspace_id,
-                job_type=job_type,
-                source=str(request.source or "").strip() or "manual",
-                payload=request.payload,
-                idempotency_key=str(request.idempotency_key or "").strip() or None,
-                max_attempts=int(request.max_attempts or 1),
-                triggered_by=triggered_by,
-                related_entity_type=str(request.related_entity_type or "").strip(),
-                related_entity_id=str(request.related_entity_id or "").strip(),
-            )
+            try:
+                row = enterprise_create_agent_run(
+                    enterprise_db_url,
+                    workspace_id=workspace_id,
+                    job_type=job_type,
+                    source=str(request.source or "").strip() or "manual",
+                    payload=request.payload,
+                    idempotency_key=str(request.idempotency_key or "").strip() or None,
+                    max_attempts=int(request.max_attempts or 1),
+                    triggered_by=triggered_by,
+                    related_entity_type=str(request.related_entity_type or "").strip(),
+                    related_entity_id=str(request.related_entity_id or "").strip(),
+                )
+            except AgentGovernanceError as exc:
+                raise HTTPException(status_code=429, detail=exc.as_dict()) from exc
             payload = _agent_jobs_payload(
                 enterprise_db_url=enterprise_db_url,
                 workspace_id=workspace_id,
@@ -10781,7 +11703,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
 
     @app.post("/api/agent-runs/process-queue")
     def process_agent_run_queue(request_http: Request, request: AgentQueueProcessRequest) -> dict[str, Any]:
-        session = _require_agent_ops_control_access(request_http)
+        session = _require_agent_ops_execute_access(request_http)
         return _process_agent_run_queue(
             workspace_id=str(session.get("workspace_id", "")).strip(),
             source=str(request.source or "").strip() or "manual_worker",
@@ -10830,7 +11752,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
 
     @app.post("/api/agent-runs/run-defaults")
     def run_default_agent_runs(request_http: Request, request: AgentBatchRunRequest) -> dict[str, Any]:
-        session = _require_agent_ops_control_access(request_http)
+        session = _require_agent_ops_execute_access(request_http)
         workspace_id = str(session.get("workspace_id", "")).strip()
         triggered_by = str(session.get("display_name", session.get("username", "system")))
         normalized_source = str(request.source or "").strip() or "manual_batch"
@@ -10883,11 +11805,17 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
     @app.post("/api/internal/agent-runs/process-queue")
     def process_internal_agent_run_queue(request_http: Request, request: AgentQueueProcessRequest) -> dict[str, Any]:
         _require_internal_cron_token(request_http)
+        normalized_source = str(request.source or "").strip() or "worker"
+        hosted_scheduler_contract = request.contract_version == "supermega.hosted-agent-scheduler.v1"
+        require_budget_grant = normalized_source == "vercel_cron" or hosted_scheduler_contract
         return _process_agent_run_queue(
             workspace_id=default_workspace_id,
-            source=str(request.source or "").strip() or "worker",
+            source=normalized_source,
             job_types=request.job_types,
             limit=int(request.limit or 8),
+            budget_grant=request.budget_grant,
+            grant_secret=internal_cron_token,
+            require_budget_grant=require_budget_grant,
         )
 
     @app.post("/api/tools/lead-finder")
@@ -10909,13 +11837,22 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         }
 
     @app.post("/api/tools/news-brief")
-    def tool_news_brief(request: NewsBriefRequest) -> dict[str, Any]:
+    def tool_news_brief(request_http: Request, request: NewsBriefRequest) -> dict[str, Any]:
+        _require_capability_access(
+            request_http,
+            capabilities={"actions.view"},
+            detail="News brief access required.",
+        )
         hydrated_parts = [request.raw_text.strip()]
-        hydrated_parts.extend(_fetch_url_brief_context(request.urls))
+        try:
+            hydrated_parts.extend(_fetch_url_brief_context(request.urls))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         payload = "\n".join(part for part in hydrated_parts if part)
         return {
             "status": "ready",
-            "source_count": len([url for url in request.urls if str(url).strip()]),
+            "source_count": 0,
+            "remote_url_fetch": "disabled",
             **_build_news_brief(payload),
         }
 
@@ -11853,31 +12790,48 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
 
     @app.get("/api/approvals")
     def approval_entries(request: Request, status: str | None = None, owner: str | None = None, limit: int = 100) -> dict[str, Any]:
-        _require_session(request)
-        rows = list_approval_entries(state_db, status=status, owner=owner, limit=limit)
-        return {"status": "ready", "summary": load_approval_summary(state_db), "count": len(rows), "rows": rows}
+        session = _require_approval_view_access(request)
+        workspace_id = _require_session_workspace_id(session)
+        rows = list_approval_entries(state_db, workspace_id=workspace_id, status=status, owner=owner, limit=limit)
+        return {
+            "status": "ready",
+            "summary": load_approval_summary(state_db, workspace_id=workspace_id),
+            "count": len(rows),
+            "rows": rows,
+        }
 
     @app.post("/api/approvals")
     def create_approval_entry(request_http: Request, request: ApprovalQueueRequest) -> dict[str, Any]:
-        session = _require_session(request_http)
+        session = _require_approval_request_access(request_http)
+        workspace_id = _require_session_workspace_id(session)
+        actor = str(session.get("display_name", session.get("username", ""))).strip() or "authenticated_user"
+        title = request.title.strip()
+        related_route = request.related_route.strip() or "/app"
+        if not title:
+            raise HTTPException(status_code=422, detail="Approval title is required.")
+        if not related_route.startswith("/") or related_route.startswith("//"):
+            raise HTTPException(status_code=422, detail="Approval route must be an internal path.")
+        if len(json.dumps(request.payload, ensure_ascii=False).encode("utf-8")) > 16_384:
+            raise HTTPException(status_code=413, detail="Approval payload is too large.")
         row = add_approval_entry(
             state_db,
-            title=request.title.strip(),
+            workspace_id=workspace_id,
+            title=title,
             summary=request.summary.strip(),
             approval_gate=request.approval_gate.strip(),
-            requested_by=request.requested_by.strip(),
+            requested_by=actor,
             owner=request.owner.strip(),
-            status=request.status.strip(),
+            status="pending",
             due=request.due.strip(),
-            related_route=request.related_route.strip(),
+            related_route=related_route,
             related_entity=request.related_entity.strip(),
             evidence_link=request.evidence_link.strip(),
             payload=request.payload,
         )
         _record_audit_and_connector_event(
             enterprise_db_url=enterprise_db_url,
-            workspace_id=str(session.get("workspace_id", "")).strip(),
-            actor=str(session.get("display_name", session.get("username", "system"))).strip() or "system",
+            workspace_id=workspace_id,
+            actor=actor,
             event_type="approval.entry_created",
             entity_type="approval",
             entity_id=str(row.get("approval_id", "")).strip(),
@@ -11898,26 +12852,33 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "status": "ready",
             "message": "Approval saved.",
             "row": row,
-            "rows": list_approval_entries(state_db, limit=50),
-            "summary": load_approval_summary(state_db),
+            "rows": list_approval_entries(state_db, workspace_id=workspace_id, limit=50),
+            "summary": load_approval_summary(state_db, workspace_id=workspace_id),
         }
 
     @app.post("/api/approvals/{approval_id}/status")
     def update_approval_status(request_http: Request, approval_id: str, request: ApprovalQueueUpdateRequest) -> dict[str, Any]:
-        session = _require_session(request_http)
-        row = update_approval_entry(
-            state_db,
-            approval_id=approval_id,
-            status=(request.status or "").strip() or None,
-            owner=(request.owner or "").strip() or None,
-            note=(request.note or "").strip() or None,
-        )
+        session = _require_approval_manage_access(request_http)
+        workspace_id = _require_session_workspace_id(session)
+        actor = str(session.get("display_name", session.get("username", ""))).strip() or "authenticated_user"
+        try:
+            row = update_approval_entry(
+                state_db,
+                approval_id=approval_id,
+                workspace_id=workspace_id,
+                actor=actor,
+                status=request.status.strip(),
+                owner=(request.owner or "").strip() or None,
+                note=request.note.strip() or None,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         if not row:
             raise HTTPException(status_code=404, detail="Approval not found.")
         _record_audit_and_connector_event(
             enterprise_db_url=enterprise_db_url,
-            workspace_id=str(session.get("workspace_id", "")).strip(),
-            actor=str(session.get("display_name", session.get("username", "system"))).strip() or "system",
+            workspace_id=workspace_id,
+            actor=actor,
             event_type="approval.status_updated",
             entity_type="approval",
             entity_id=str(approval_id).strip(),
@@ -11937,8 +12898,8 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "status": "ready",
             "message": "Approval updated.",
             "row": row,
-            "rows": list_approval_entries(state_db, limit=50),
-            "summary": load_approval_summary(state_db),
+            "rows": list_approval_entries(state_db, workspace_id=workspace_id, limit=50),
+            "summary": load_approval_summary(state_db, workspace_id=workspace_id),
         }
 
     @app.get("/api/supermega/operating-model")
@@ -12267,13 +13228,14 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "role": str(session.get("role", "")).strip(),
             "display_name": str(session.get("display_name", "")).strip(),
             "capabilities": sorted(_role_capabilities(str(session.get("role", "")))),
-            "can_run_jobs": _session_has_any_capability(session, {"agent_ops.view", "tenant_admin.view", "platform_admin.view"}),
+            "can_run_jobs": _session_has_any_capability(session, {"agent_ops.execute"}),
             "can_manage_runtime": _session_has_any_capability(session, {"tenant_admin.view", "platform_admin.view"}),
             "can_approve_guardrails": _session_has_any_capability(
                 session,
                 {"architect.view", "director.view", "tenant_admin.view", "platform_admin.view"},
             ),
         }
+        registered_specialists = _registered_specialist_count(team_rows)
         return {
             "status": "blocked" if bool(tenant_state.get("blocked")) else "ready",
             "tenant_state": tenant_state,
@@ -12292,6 +13254,11 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                 teams=team_rows,
                 latest_runs_by_type=latest_runs_by_type,
                 viewer_contract=viewer_contract,
+                capacity_plan=enterprise_get_agent_capacity_plan(
+                    enterprise_db_url,
+                    workspace_id=workspace_id,
+                    registered_specialists=registered_specialists,
+                ),
             ),
         }
 

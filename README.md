@@ -2,24 +2,26 @@
 
 SuperMega builds operating software for Myanmar businesses. The product portfolio is deliberately focused:
 
-- **Commerce** — channel orders, catalogue, stock, fulfilment, payment, close, and operating exceptions.
-- **Production** — jobs, output, machines, materials, quality, maintenance, and shift handoffs.
+- **Shop** — channel orders, catalogue, stock, fulfilment, payment status, close, and operating exceptions.
+- **Plant** — jobs, output, equipment observations, materials, quality, maintenance, and shift handoffs.
+- **Website** — a finite, reviewable business website and retained site artifact.
+- **Ecommerce** — a Shop-backed storefront and accountable customer-request handoff.
 
-`>_` is the operating signature: direct, evidence-led, and ready for action. AI agents prepare work, surface exceptions, and draft decisions; a named person remains accountable for consequential actions.
+`>_` is the operating signature: direct, evidence-led, and ready for action. AI assistance is shared infrastructure inside the four products, not a fifth product; a named person remains accountable for consequential actions.
 
 ## Canonical surfaces
 
 | Surface | Domain | Routes | Purpose |
 | --- | --- | --- | --- |
 | Public site | `supermega.dev` | `/`, `/contact/`, `/privacy/` | One product story, trust boundary, qualified contact intake, and privacy |
-| Product app | `app.supermega.dev` | `/`, `/work/`, `/operations/commerce/`, `/operations/production/`, `/settings/` | Today, accountable teams, Commerce, Production, pilot setup, evidence, and controls |
+| Product app | `app.supermega.dev` | `/`, `/shop/`, `/plant/`, `/website/`, `/ecommerce/`, `/work/`, `/settings/` | Four customer products plus internal HQ, setup, evidence, and controls |
 
 Client-specific deployments, legacy demos, and old product names are not part of the current public or application authority.
 
 ## Source authority
 
 - `CURRENT.md` — company, product, domain, context, and release authority.
-- `site-manifest.json` — compact public information architecture, Commerce and Production workflow profiles, versioning, and legacy redirects.
+- `site-manifest.json` — canonical four-product registry, workflow templates, shared-capability boundary, versioning, and legacy redirects.
 - `showroom/src/core/CoreApp.tsx` — canonical application experience.
 - `api/app.py` — the only Vercel function entrypoint.
 - `supermega_runtime/runtime.py` — canonical FastAPI application runtime.
@@ -47,6 +49,8 @@ Run the product app locally:
 ```powershell
 npm.cmd run dev
 ```
+
+This starts the canonical FastAPI runtime and Vite together on loopback (`127.0.0.1:8788` and `127.0.0.1:5173`). The default command clears database, hosted-auth, model, and external-worker configuration, so managed writes remain disabled. Use the separately gated rehearsal workflow for any managed database testing.
 
 ## Release policy
 

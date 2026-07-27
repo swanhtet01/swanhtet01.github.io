@@ -8,7 +8,8 @@ const expectedCommit = String(process.env.EXPECTED_RELEASE_COMMIT || '').trim().
 const protectedPreview = process.env.VERCEL_PROTECTED_PREVIEW === '1'
 const vercelToken = String(process.env.VERCEL_TOKEN || '').trim()
 const cliEnv = vercelToken ? { ...process.env, VERCEL_TOKEN: vercelToken } : process.env
-const routes = ['/', '/work/', '/operations/', '/operations/commerce/', '/operations/production/', '/products/website/', '/products/ecommerce/', '/settings/']
+const canonicalProductRoutes = ['/shop/', '/plant/', '/website/', '/ecommerce/']
+const routes = ['/', '/work/', '/operations/', ...canonicalProductRoutes, '/operations/commerce/', '/operations/production/', '/products/website/', '/products/ecommerce/', '/agents/', '/settings/']
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -55,9 +56,16 @@ async function get(path, attempts = 7) {
 }
 
 const pages = new Map()
-for (const route of routes) pages.set(route, (await get(route)).body)
+for (const route of routes) {
+  const result = await get(route)
+  pages.set(route, result.body)
+  if (!protectedPreview && result.response && canonicalProductRoutes.includes(route)) {
+    const finalPath = new URL(result.response.url).pathname
+    if (finalPath !== route) throw new Error(`canonical_product_route_redirected:${route}:${finalPath}`)
+  }
+}
 for (const [route, html] of pages) {
-  if (!html.includes('SuperMega operating workspace') && !html.includes('<title>Today | SuperMega</title>')) throw new Error(`wrong_shell:${route}`)
+  if (!html.includes('<title>SuperMega</title>')) throw new Error(`wrong_shell:${route}`)
 }
 
 const release = JSON.parse((await get('/__release.json')).body)
@@ -81,16 +89,18 @@ if (!['ready', 'degraded'].includes(cloud.status) || cloud.runtime_target !== 'h
 if (JSON.stringify(cloud.scheduler?.queue_job_types) !== JSON.stringify(['task_triage', 'ops_watch'])) throw new Error('hosted_agent_queue_jobs_wrong')
 if (JSON.stringify(cloud.scheduler?.daily_job_types) !== JSON.stringify(['founder_brief', 'github_release_watch'])) throw new Error('hosted_agent_daily_jobs_wrong')
 if (cloud.scheduler?.redirects_allowed !== false) throw new Error('hosted_agent_redirect_policy_wrong')
+if (cloud.scheduler?.activation_required !== true || cloud.scheduler?.activation_environment_key !== 'SUPERMEGA_HOSTED_SCHEDULER_ENABLED') throw new Error('hosted_agent_activation_contract_wrong')
 if (cloud.status === 'ready' && cloud.scheduler?.configured !== true) throw new Error('hosted_agent_readiness_mismatch')
+if (cloud.status === 'ready' && cloud.scheduler?.activation_enabled !== true) throw new Error('hosted_agent_activation_mismatch')
 
 const rootHtml = pages.get('/')
 const scriptPaths = [...rootHtml.matchAll(/<script[^>]+src="([^"]+)"/g)].map((match) => match[1])
 const cssPaths = [...rootHtml.matchAll(/<link[^>]+href="([^"]+\.css)"/g)].map((match) => match[1])
 const assetCorpus = (await Promise.all([...scriptPaths, ...cssPaths].map(async (path) => (await get(path)).body))).join('\n')
-for (const required of ['Teams', 'Product', 'Acceptance outcome', 'Prepare brief', 'Operations', 'Local trial', '#7cf5b4', '#f2f5f1']) {
+for (const required of ['SUPERMEGA', 'What do you want to run?', 'Shop', 'Plant', 'Website', 'Ecommerce', 'Sample workspace', manifest.brand.colors.accent, manifest.brand.colors.ink]) {
   if (!assetCorpus.includes(required)) throw new Error(`missing_live_context:${required}`)
 }
-for (const forbidden of ['pos.supermega.dev', 'ytf.supermega.dev', 'Yangon Tyre', 'ytf-plant-a']) {
+for (const forbidden of ['SuperMega HQ', 'One next action for the company', 'Agents prepare work', 'pos.supermega.dev', 'ytf.supermega.dev', 'Yangon Tyre', 'ytf-plant-a']) {
   if (assetCorpus.toLowerCase().includes(forbidden.toLowerCase())) throw new Error(`retired_live_context:${forbidden}`)
 }
 

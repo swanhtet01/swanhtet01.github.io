@@ -8,8 +8,16 @@ from datetime import datetime, timezone
 import json
 import re
 from typing import Any
+from urllib.parse import urlsplit
 
 from supermega_runtime.trial_store import TrialValidationError
+from supermega_runtime.website_release_foundation import (
+    WebsiteReleaseValidationError,
+    create_empty_website_release_state,
+    project_website_release,
+    validate_website_release_state,
+    website_release_evidence_digest,
+)
 
 
 WEBSITE_SCHEMA = "supermega.website.workspace.v2"
@@ -21,6 +29,7 @@ WEBSITE_EVENTS = frozenset(
         "website.evidence.recorded",
         "website.revision.approved",
         "website.snapshot.recorded",
+        "website.release.recorded",
     }
 )
 WEBSITE_HUMAN_EVENTS = frozenset(
@@ -28,6 +37,7 @@ WEBSITE_HUMAN_EVENTS = frozenset(
         "website.evidence.recorded",
         "website.revision.approved",
         "website.snapshot.recorded",
+        "website.release.recorded",
     }
 )
 
@@ -61,6 +71,9 @@ _STATE_FIELDS = frozenset(
         "events",
     }
 )
+_STATE_OPTIONAL_FIELDS = frozenset({"releaseRecords"})
+_MAX_RELEASE_RECORDS = 50
+_MAX_RELEASE_COMMANDS = 500
 _PAGE_FIELDS = frozenset(
     {"id", "internalName", "slug", "stage", "navigation", "hero", "sections", "seo", "updatedAt"}
 )
@@ -69,6 +82,8 @@ _HERO_FIELDS = frozenset({"eyebrow", "headline", "summary", "ctaLabel", "ctaHref
 _SECTION_FIELDS = frozenset({"id", "eyebrow", "title", "body"})
 _SEO_FIELDS = frozenset({"title", "description"})
 _SOURCE_FIELDS = frozenset({"contentRevision", "digest"})
+_ARTIFACT_FIELDS = frozenset({"schema", "siteName", "fingerprint", "contentDigest", "source", "pages"})
+_ARTIFACT_PAGE_FIELDS = frozenset({"id", "slug", "navigation", "hero", "sections", "seo"})
 _EVIDENCE_FIELDS = frozenset(
     {"id", "kind", "finding", "reference", "verifiedBy", "verifiedAt", "fingerprint", "source", "migratedFromV1"}
 )
@@ -86,8 +101,10 @@ _PUBLISH_FIELDS = frozenset(
         "evidenceIds",
         "source",
         "migratedFromV1",
+        "artifact",
     }
 )
+_METADATA_ONLY_PUBLISH_FIELDS = _PUBLISH_FIELDS - {"artifact"}
 _COMMERCE_INTAKE_SOURCE_FIELDS = frozenset(
     {"fingerprint", "approvalId", "snapshotId", "pageId", "siteName", "pagePath"}
 )
@@ -180,6 +197,16 @@ def _same_string_set(left: Sequence[str], right: Sequence[str]) -> bool:
     return len(left) == len(right) and set(left) == set(right)
 
 
+def _canonical_digest(value: object) -> str:
+    encoded = json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+    data = encoded.encode("utf-16-le", errors="surrogatepass")
+    digest = 2_166_136_261
+    for index in range(0, len(data), 2):
+        digest ^= data[index] | (data[index + 1] << 8)
+        digest = (digest * 16_777_619) & 0xFFFFFFFF
+    return f"{digest:08x}"
+
+
 def _website_fingerprint(state: Mapping[str, Any]) -> str:
     publishable = {
         "siteName": _js_trim(str(state["siteName"])),
@@ -197,13 +224,50 @@ def _website_fingerprint(state: Mapping[str, Any]) -> str:
             for page in state["pages"]
         ],
     }
-    encoded = json.dumps(publishable, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
-    data = encoded.encode("utf-16-le", errors="surrogatepass")
-    digest = 2_166_136_261
-    for index in range(0, len(data), 2):
-        digest ^= data[index] | (data[index + 1] << 8)
-        digest = (digest * 16_777_619) & 0xFFFFFFFF
-    return f"web-{digest:08x}"
+    return f"web-{_canonical_digest(publishable)}"
+
+
+def _website_artifact(state: Mapping[str, Any]) -> dict[str, Any]:
+    source = {
+        "contentRevision": state["contentRevision"],
+        "digest": _website_fingerprint(state),
+    }
+    content = {
+        "schema": "supermega.website.artifact.v1",
+        "siteName": state["siteName"],
+        "fingerprint": source["digest"],
+        "source": source,
+        "pages": [
+            {
+                "id": page["id"],
+                "slug": _js_trim(str(page["slug"])).rstrip("/") or "/",
+                "navigation": deepcopy(page["navigation"]),
+                "hero": deepcopy(page["hero"]),
+                "sections": deepcopy(page["sections"]),
+                "seo": deepcopy(page["seo"]),
+            }
+            for page in state["pages"]
+            if page["stage"] == "ready"
+        ],
+    }
+    return {**content, "contentDigest": f"site-{_canonical_digest(content)}"}
+
+
+def _page_anchor(path: str) -> str:
+    return "home" if path == "/" else path.removeprefix("/").replace("/", "-")
+
+
+def _safe_https_destination(value: str) -> bool:
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return False
+    return (
+        parsed.scheme == "https"
+        and bool(parsed.hostname)
+        and parsed.username is None
+        and parsed.password is None
+    )
 
 
 def _validate_page(value: object, field: str) -> dict[str, Any]:
@@ -286,8 +350,101 @@ def _validate_approval(value: object, field: str) -> dict[str, Any]:
     return approval
 
 
+def _validate_artifact_page(value: object, field: str) -> dict[str, Any]:
+    page = _object(value, field)
+    _exact(page, field, _ARTIFACT_PAGE_FIELDS)
+    _text(page["id"], f"{field}.id", maximum=80)
+    slug = _text(page["slug"], f"{field}.slug", maximum=100)
+    if not _SLUG.fullmatch(slug) or (slug.rstrip("/") or "/") != slug:
+        raise TrialValidationError(f"{field}.slug must be a canonical site path.")
+
+    navigation = _object(page["navigation"], f"{field}.navigation")
+    _exact(navigation, f"{field}.navigation", _NAVIGATION_FIELDS)
+    _text(navigation["label"], f"{field}.navigation.label", maximum=40, allow_blank=True)
+    if not isinstance(navigation["visible"], bool):
+        raise TrialValidationError(f"{field}.navigation.visible must be boolean.")
+
+    hero = _object(page["hero"], f"{field}.hero")
+    _exact(hero, f"{field}.hero", _HERO_FIELDS)
+    _text(hero["eyebrow"], f"{field}.hero.eyebrow", maximum=80, allow_blank=True)
+    _text(hero["headline"], f"{field}.hero.headline", maximum=140)
+    _text(hero["summary"], f"{field}.hero.summary", maximum=280)
+    _text(hero["ctaLabel"], f"{field}.hero.ctaLabel", maximum=40, allow_blank=True)
+    _text(hero["ctaHref"], f"{field}.hero.ctaHref", maximum=160, allow_blank=True)
+    if bool(_js_trim(hero["ctaLabel"])) != bool(_js_trim(hero["ctaHref"])):
+        raise TrialValidationError(f"{field}.hero CTA label and destination must be completed together.")
+
+    sections = _array(page["sections"], f"{field}.sections")
+    if not 1 <= len(sections) <= _MAX_SECTIONS:
+        raise TrialValidationError(f"{field}.sections requires between 1 and {_MAX_SECTIONS} sections.")
+    section_ids: list[str] = []
+    for index, candidate in enumerate(sections):
+        section = _object(candidate, f"{field}.sections[{index}]")
+        _exact(section, f"{field}.sections[{index}]", _SECTION_FIELDS)
+        section_ids.append(_text(section["id"], f"{field}.sections[{index}].id", maximum=80))
+        _text(section["eyebrow"], f"{field}.sections[{index}].eyebrow", maximum=60, allow_blank=True)
+        _text(section["title"], f"{field}.sections[{index}].title", maximum=120)
+        _text(section["body"], f"{field}.sections[{index}].body", maximum=360)
+    _unique(section_ids, f"{field} section ID")
+
+    seo = _object(page["seo"], f"{field}.seo")
+    _exact(seo, f"{field}.seo", _SEO_FIELDS)
+    _text(seo["title"], f"{field}.seo.title", maximum=70)
+    _text(seo["description"], f"{field}.seo.description", maximum=160)
+    return page
+
+
+def _validate_artifact(value: object, field: str) -> dict[str, Any]:
+    artifact = _object(value, field)
+    _exact(artifact, field, _ARTIFACT_FIELDS)
+    if artifact["schema"] != "supermega.website.artifact.v1":
+        raise TrialValidationError(f"{field}.schema is unsupported.")
+    _text(artifact["siteName"], f"{field}.siteName", maximum=60)
+    fingerprint = _text(artifact["fingerprint"], f"{field}.fingerprint", maximum=12)
+    if not _FINGERPRINT.fullmatch(fingerprint):
+        raise TrialValidationError(f"{field}.fingerprint must be a Website fingerprint.")
+    content_digest = _text(artifact["contentDigest"], f"{field}.contentDigest", maximum=13)
+    if not re.fullmatch(r"site-[a-f0-9]{8}", content_digest):
+        raise TrialValidationError(f"{field}.contentDigest must be a site artifact digest.")
+    source = _source(artifact["source"], f"{field}.source")
+    if fingerprint != source["digest"]:
+        raise TrialValidationError(f"{field}.fingerprint must match its source digest.")
+    pages = [
+        _validate_artifact_page(item, f"{field}.pages[{index}]")
+        for index, item in enumerate(_array(artifact["pages"], f"{field}.pages"))
+    ]
+    if not 1 <= len(pages) <= _MAX_PAGES:
+        raise TrialValidationError(f"{field}.pages requires between 1 and {_MAX_PAGES} ready pages.")
+    _unique([page["id"] for page in pages], f"{field} page ID")
+    _unique([page["slug"] for page in pages], f"{field} page path")
+    _unique(
+        [section["id"] for page in pages for section in page["sections"]],
+        f"{field} section ID",
+    )
+    if sum(page["slug"] == "/" for page in pages) != 1:
+        raise TrialValidationError(f"{field} must contain exactly one home page.")
+    if not any(page["navigation"]["visible"] for page in pages):
+        raise TrialValidationError(f"{field} must contain visible navigation.")
+    ready_paths = {page["slug"] for page in pages}
+    ready_anchors = {_page_anchor(path) for path in ready_paths}
+    for page in pages:
+        destination = _js_trim(page["hero"]["ctaHref"])
+        if destination and not (
+            (destination.startswith("#") and destination[1:] in ready_anchors)
+            or _safe_https_destination(destination)
+            or (destination.startswith("/") and (destination.rstrip("/") or "/") in ready_paths)
+        ):
+            raise TrialValidationError(f"{field} contains an unsafe or unavailable CTA destination.")
+    content = {key: value for key, value in artifact.items() if key != "contentDigest"}
+    if content_digest != f"site-{_canonical_digest(content)}":
+        raise TrialValidationError(f"{field}.contentDigest does not match the retained artifact.")
+    return artifact
+
+
 def _validate_publish(value: object, field: str) -> dict[str, Any]:
     publish = _object(value, field)
+    if set(publish) == _METADATA_ONLY_PUBLISH_FIELDS:
+        publish["artifact"] = None
     _exact(publish, field, _PUBLISH_FIELDS)
     _text(publish["id"], f"{field}.id", maximum=100)
     _timestamp(publish["recordedAt"], f"{field}.recordedAt")
@@ -305,6 +462,17 @@ def _validate_publish(value: object, field: str) -> dict[str, Any]:
         raise TrialValidationError(f"{field}.fingerprint must match its source digest.")
     if not isinstance(publish["migratedFromV1"], bool):
         raise TrialValidationError(f"{field}.migratedFromV1 must be boolean.")
+    if publish["artifact"] is not None:
+        artifact = _validate_artifact(publish["artifact"], f"{field}.artifact")
+        if (
+            artifact["fingerprint"] != fingerprint
+            or not _same_source(artifact["source"], source)
+            or not _same_string_set(
+                [page["id"] for page in artifact["pages"]],
+                publish["readyPageIds"],
+            )
+        ):
+            raise TrialValidationError(f"{field}.artifact must match the retained snapshot.")
     return publish
 
 
@@ -325,11 +493,30 @@ def _validate_workflow_event(value: object, field: str) -> dict[str, Any]:
     return event
 
 
+def _validate_release_records(value: object) -> list[dict[str, Any]]:
+    candidates = _array(value, "website state.releaseRecords")
+    if len(candidates) > _MAX_RELEASE_RECORDS:
+        raise TrialValidationError("website state.releaseRecords exceeds its bounded history.")
+    records: list[dict[str, Any]] = []
+    for index, candidate in enumerate(candidates):
+        try:
+            records.append(validate_website_release_state(candidate))
+        except WebsiteReleaseValidationError as exc:
+            raise TrialValidationError(
+                f"website state.releaseRecords[{index}] is invalid: {exc}"
+            ) from exc
+    _unique([record["scope"] for record in records], "Website release scope")
+    if sum(record["revision"] for record in records) > _MAX_RELEASE_COMMANDS:
+        raise TrialValidationError("website release command history exceeds its bound.")
+    return records
+
+
 def validate_website_state(value: object) -> dict[str, Any]:
-    """Validate a complete Website v2 workspace without repairing it."""
+    """Validate one Website snapshot structurally; command history establishes managed provenance."""
 
     state = _object(value, "website state")
-    _exact(state, "website state", _STATE_FIELDS)
+    optional = _STATE_OPTIONAL_FIELDS if "releaseRecords" in state else frozenset()
+    _exact(state, "website state", _STATE_FIELDS | optional)
     if state["schema"] != WEBSITE_SCHEMA or state["version"] != 2:
         raise TrialValidationError(f"website state must use {WEBSITE_SCHEMA} version 2.")
     revision = _integer(state["revision"], "website state.revision")
@@ -356,6 +543,14 @@ def validate_website_state(value: object) -> dict[str, Any]:
     evidence = [_validate_evidence(item, f"evidence[{index}]") for index, item in enumerate(_array(state["evidence"], "website state.evidence"))]
     approvals = [_validate_approval(item, f"approvals[{index}]") for index, item in enumerate(_array(state["approvals"], "website state.approvals"))]
     publishes = [_validate_publish(item, f"localPublishes[{index}]") for index, item in enumerate(_array(state["localPublishes"], "website state.localPublishes"))]
+    release_records = [*evidence, *approvals, *publishes]
+    if any(item["migratedFromV1"] for item in release_records):
+        raise TrialValidationError(
+            "Website legacy release claims are not trusted; retain the source backup and record current review evidence."
+        )
+    confirmed_release_count = revision - content_revision
+    if len(release_records) > confirmed_release_count:
+        raise TrialValidationError("Website revision history does not match its release records.")
     events = [_validate_workflow_event(item, f"events[{index}]") for index, item in enumerate(_array(state["events"], "website state.events"))]
     for values, field in ((evidence, "Evidence ID"), (approvals, "Approval ID"), (publishes, "Publish ID"), (events, "Event ID")):
         _unique([item["id"] for item in values], field)
@@ -408,7 +603,7 @@ def validate_website_state(value: object) -> dict[str, Any]:
     for item in publishes:
         if any(identifier not in evidence_by_id for identifier in item["evidenceIds"]):
             raise TrialValidationError("Website snapshot references unknown evidence.")
-        if any(identifier not in page_id_set for identifier in item["readyPageIds"]):
+        if item["artifact"] is None and any(identifier not in page_id_set for identifier in item["readyPageIds"]):
             raise TrialValidationError("Website snapshot references an unknown page.")
         if item["migratedFromV1"]:
             continue
@@ -428,7 +623,11 @@ def validate_website_state(value: object) -> dict[str, Any]:
             and _same_source(event["source"], item["source"])
         ):
             raise TrialValidationError("Website snapshot must bind its approval, evidence, and workflow event.")
-    return deepcopy(state)
+    validated = deepcopy(state)
+    validated["localPublishes"] = deepcopy(publishes)
+    if "releaseRecords" in state:
+        validated["releaseRecords"] = _validate_release_records(state["releaseRecords"])
+    return validated
 
 
 def validate_website_snapshot_source(
@@ -461,6 +660,7 @@ def validate_website_snapshot_source(
     current_source = {"contentRevision": state["contentRevision"], "digest": fingerprint}
     if (
         snapshot["migratedFromV1"]
+        or snapshot["artifact"] is None
         or approval["migratedFromV1"]
         or _website_fingerprint(state) != fingerprint
         or not _same_source(snapshot["source"], current_source)
@@ -508,7 +708,11 @@ def _prepend_one(current: Sequence[Any], next_values: Sequence[Any], field: str)
 def _page_is_complete(page: Mapping[str, Any]) -> bool:
     cta_label = bool(_js_trim(str(page["hero"]["ctaLabel"])))
     cta_href = _js_trim(str(page["hero"]["ctaHref"]))
-    destination_ok = not cta_href or cta_href.startswith(("/", "#", "https://"))
+    destination_ok = (
+        not cta_href
+        or cta_href.startswith(("/", "#"))
+        or _safe_https_destination(cta_href)
+    )
     return bool(
         _js_trim(str(page["internalName"]))
         and _SLUG.fullmatch(_js_trim(str(page["slug"])))
@@ -526,6 +730,8 @@ def _page_is_complete(page: Mapping[str, Any]) -> bool:
 def _require_publish_ready(state: Mapping[str, Any]) -> None:
     ready_pages = [page for page in state["pages"] if page["stage"] == "ready"]
     normalized_slugs = [_js_trim(str(page["slug"])).rstrip("/") or "/" for page in ready_pages]
+    ready_paths = set(normalized_slugs)
+    ready_anchors = {_page_anchor(path) for path in ready_paths}
     visible = [page for page in state["pages"] if page["navigation"]["visible"]]
     source = {"contentRevision": state["contentRevision"], "digest": _website_fingerprint(state)}
     current_kinds = {
@@ -541,6 +747,13 @@ def _require_publish_ready(state: Mapping[str, Any]) -> None:
         and len(set(normalized_slugs)) == len(normalized_slugs)
         and visible
         and all(page["stage"] == "ready" and _js_trim(str(page["navigation"]["label"])) for page in visible)
+        and all(
+            not (destination := _js_trim(str(page["hero"]["ctaHref"])))
+            or (destination.startswith("#") and destination[1:] in ready_anchors)
+            or _safe_https_destination(destination)
+            or (destination.startswith("/") and (destination.rstrip("/") or "/") in ready_paths)
+            for page in ready_pages
+        )
         and current_kinds == _EVIDENCE_KINDS
     ):
         raise TrialValidationError("Website revision is not ready for approval or snapshot recording.")
@@ -559,6 +772,139 @@ def _validate_command_evidence(record: Mapping[str, Any], event: Mapping[str, An
         raise TrialValidationError("Website command evidence must match the new accountable record.")
 
 
+def _current_release_source(state: Mapping[str, Any]) -> dict[str, Any]:
+    source = {"contentRevision": state["contentRevision"], "digest": _website_fingerprint(state)}
+    artifact = _website_artifact(state)
+    publish = next(
+        (
+            record
+            for record in state["localPublishes"]
+            if _same_source(record["source"], source) and record["artifact"] == artifact
+        ),
+        None,
+    )
+    if publish is None:
+        raise TrialValidationError("Website release requires the exact current site file.")
+    approval = next(
+        (
+            record
+            for record in state["approvals"]
+            if record["id"] == publish["approvalId"] and _same_source(record["source"], source)
+        ),
+        None,
+    )
+    if approval is None:
+        raise TrialValidationError("Website release requires the current site-file approval.")
+    evidence_by_id = {record["id"]: record for record in state["evidence"]}
+    evidence = [evidence_by_id.get(identifier) for identifier in publish["evidenceIds"]]
+    if any(record is None for record in evidence):
+        raise TrialValidationError("Website release source evidence is incomplete.")
+    source_evidence = sorted(
+        (
+            {
+                "id": record["id"],
+                "kind": record["kind"],
+                "reference": record["reference"],
+                "verifiedBy": record["verifiedBy"],
+                "verifiedAt": record["verifiedAt"],
+            }
+            for record in evidence
+            if record is not None
+        ),
+        key=lambda record: record["kind"],
+    )
+    artifact_digest = website_release_evidence_digest(artifact)
+    return {
+        "scope": f"website:{artifact_digest}",
+        "snapshotId": publish["id"],
+        "websiteFingerprint": publish["fingerprint"],
+        "artifactDigest": artifact_digest,
+        "contentRevision": publish["source"]["contentRevision"],
+        "contentApprovalId": approval["id"],
+        "contentApprovalActor": approval["reviewer"],
+        "contentApprovalAt": approval["approvedAt"],
+        "evidence": source_evidence,
+    }
+
+
+def _validate_release_recorded(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+    evidence: Mapping[str, str],
+) -> None:
+    _unchanged(
+        current,
+        next_state,
+        "siteName",
+        "pages",
+        "selectedPageId",
+        "evidence",
+        "approvals",
+        "localPublishes",
+        "events",
+    )
+    before_records = list(current.get("releaseRecords", []))
+    after_records = list(next_state.get("releaseRecords", []))
+    if len(after_records) not in {len(before_records), len(before_records) + 1}:
+        raise TrialValidationError("Website release history must retain records and change one scope.")
+    changed_indexes: list[int] = []
+    for index, retained in enumerate(before_records):
+        if after_records[index]["scope"] != retained["scope"]:
+            raise TrialValidationError("Website release history cannot reorder or replace prior scopes.")
+        if after_records[index] != retained:
+            changed_indexes.append(index)
+    if len(after_records) == len(before_records) + 1:
+        changed_indexes.append(len(before_records))
+    if len(changed_indexes) != 1:
+        raise TrialValidationError("Website release event must change exactly one release scope.")
+    changed_index = changed_indexes[0]
+    after = after_records[changed_index]
+    before = (
+        before_records[changed_index]
+        if changed_index < len(before_records)
+        else create_empty_website_release_state(after["scope"])
+    )
+    added = after["revision"] - before["revision"]
+    if (
+        added not in {1, 2}
+        or after["commands"][: before["revision"]] != before["commands"]
+        or after["commands"][before["revision"]]["previousDigest"] != before["headDigest"]
+    ):
+        raise TrialValidationError("Website release event must append one reviewed transition without rewriting evidence.")
+    appended = after["commands"][before["revision"] :]
+    if any(command["payload"]["proof"]["actor"] != evidence["actor"] for command in appended):
+        raise TrialValidationError("Website release actors must match the authenticated operator.")
+    if appended[-1]["payload"]["proof"] != dict(evidence):
+        raise TrialValidationError("Website release proof must match the authenticated command evidence.")
+    prior_command_ids = {
+        command["payload"]["id"]
+        for record in before_records
+        for command in record["commands"]
+    }
+    prior_action_ids = {
+        command["payload"]["proof"]["actionId"]
+        for record in before_records
+        for command in record["commands"]
+    }
+    if any(command["payload"]["id"] in prior_command_ids for command in appended):
+        raise TrialValidationError("Website release command ID was already used in another release scope.")
+    if any(command["payload"]["proof"]["actionId"] in prior_action_ids for command in appended):
+        raise TrialValidationError("Website release action ID was already used in another release scope.")
+    before_status = project_website_release(before)["status"]
+    after_projection = project_website_release(after)
+    allowed = {
+        ("unprepared", "needs_release_review", 1),
+        ("unprepared", "ready_for_plan", 2),
+        ("needs_release_review", "ready_for_plan", 1),
+        ("ready_for_plan", "plan_ready", 1),
+    }
+    if (before_status, after_projection["status"], added) not in allowed:
+        raise TrialValidationError("Website release lifecycle did not advance by one supported review step.")
+    package = after_projection["package"]
+    if not isinstance(package, Mapping) or package["source"] != _current_release_source(current):
+        raise TrialValidationError("Website release package does not match the exact current approved site file.")
+
+
 def reduce_website_state(
     event_type: str,
     current: Mapping[str, Any],
@@ -574,7 +920,7 @@ def reduce_website_state(
             raise TrialValidationError("An empty Website workspace must be initialized first.")
         if next_state["revision"] != 0 or next_state["contentRevision"] != 0:
             raise TrialValidationError("A managed Website workspace must initialize at revision zero.")
-        if any(next_state[field] for field in ("evidence", "approvals", "localPublishes", "events")):
+        if any(next_state[field] for field in ("evidence", "approvals", "localPublishes", "events")) or next_state.get("releaseRecords"):
             raise TrialValidationError("A managed Website workspace cannot initialize with client-asserted release history.")
         return next_state
 
@@ -583,6 +929,8 @@ def reduce_website_state(
         raise TrialValidationError("Website revision must advance exactly once per event.")
     if next_state["schema"] != current_state["schema"] or next_state["version"] != current_state["version"]:
         raise TrialValidationError("Website schema identity is immutable.")
+    if event_type != "website.release.recorded" and current_state.get("releaseRecords", []) != next_state.get("releaseRecords", []):
+        raise TrialValidationError("Website release records can change only through their dedicated event.")
 
     if event_type == "website.content.saved":
         if next_state["contentRevision"] != current_state["contentRevision"] + 1:
@@ -596,6 +944,10 @@ def reduce_website_state(
         raise TrialValidationError("This Website event cannot change contentRevision.")
     if _website_fingerprint(next_state) != _website_fingerprint(current_state):
         raise TrialValidationError("This Website event cannot change publishable content.")
+
+    if event_type == "website.release.recorded":
+        _validate_release_recorded(current_state, next_state, command_evidence)
+        return next_state
 
     if event_type == "website.selection.changed":
         _unchanged(current_state, next_state, "siteName", "pages", "evidence", "approvals", "localPublishes", "events")
@@ -622,6 +974,8 @@ def reduce_website_state(
         ready_page_ids = [page["id"] for page in next_state["pages"] if page["stage"] == "ready"]
         if not _same_string_set(record["readyPageIds"], ready_page_ids):
             raise TrialValidationError("Website snapshot must include the exact current ready-page set.")
+        if record["artifact"] != _website_artifact(next_state):
+            raise TrialValidationError("Website snapshot must retain the exact approved site artifact.")
     if event["action"] != expected_action or event["subjectId"] != record["id"]:
         raise TrialValidationError("Website lifecycle event does not match its new accountable record.")
     current_source = {"contentRevision": next_state["contentRevision"], "digest": _website_fingerprint(next_state)}

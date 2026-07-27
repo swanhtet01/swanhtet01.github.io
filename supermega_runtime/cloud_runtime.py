@@ -4,9 +4,11 @@ import hashlib
 import hmac
 import ipaddress
 import json
+import logging
 import math
 import os
 import re
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Mapping
@@ -16,13 +18,33 @@ from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Header, HTTPException, Request
 
+from .agent_governance import (
+    AGENT_AUTOMATION_LANES,
+    AGENT_CAPACITY_PLAN_CONTRACT,
+    AGENT_BUDGET_ACCOUNTING_CONTRACT,
+    AGENT_BUDGET_GRANT_CONTRACT,
+    AgentGovernanceError,
+    issue_agent_budget_grant,
+    load_agent_workforce_policy,
+)
+from .scheduler_activation import (
+    CANONICAL_SCHEDULER_PROJECT_ID,
+    SCHEDULER_ACTIVATION_EVIDENCE_CONTRACT,
+    SCHEDULER_ACTIVATION_EVIDENCE_ENV,
+    SCHEDULER_ACTIVATION_SIGNING_SECRET_ENV,
+    SchedulerActivationEvidenceResult,
+    verify_scheduler_activation_evidence,
+)
+
 
 router = APIRouter()
+LOGGER = logging.getLogger("supermega.cloud_runtime")
 
 QUEUE_CRON_PATH = "/api/cron/supermega/agent-queue"
 DAILY_CRON_PATH = "/api/cron/supermega/daily"
 WORKER_ALLOWLIST_ENV = "SUPERMEGA_CLOUD_TASKS_ALLOWED_HOSTS"
 WORKER_URL_ENV = "SUPERMEGA_CLOUD_TASKS_WORKER_URL"
+SCHEDULER_ENABLED_ENV = "SUPERMEGA_HOSTED_SCHEDULER_ENABLED"
 
 _WORKER_TIMEOUT_SECONDS = 12
 _MAX_WORKER_URL_CHARS = 2_048
@@ -54,13 +76,13 @@ _SENSITIVE_KEY_PARTS = frozenset(
 _SCHEDULER_ROUTES: dict[str, dict[str, object]] = {
     QUEUE_CRON_PATH: {
         "cycle": "queue",
-        "job_types": ("task_triage", "ops_watch"),
-        "limit": 8,
+        "job_types": AGENT_AUTOMATION_LANES["queue"],
+        "limit": len(AGENT_AUTOMATION_LANES["queue"]),
     },
     DAILY_CRON_PATH: {
         "cycle": "daily",
-        "job_types": ("founder_brief", "github_release_watch"),
-        "limit": 4,
+        "job_types": AGENT_AUTOMATION_LANES["daily"],
+        "limit": len(AGENT_AUTOMATION_LANES["daily"]),
     },
 }
 
@@ -99,6 +121,23 @@ def _configured_tokens() -> tuple[str, ...]:
 
 def _worker_token() -> str:
     return _text(os.getenv("SUPERMEGA_INTERNAL_CRON_TOKEN")) or _text(os.getenv("CRON_SECRET"))
+
+
+def _scheduler_activation_state(
+) -> tuple[bool, bool, str | None, SchedulerActivationEvidenceResult | None]:
+    raw = _text(os.getenv(SCHEDULER_ENABLED_ENV))
+    if not raw or raw == "0":
+        return False, False, "scheduler_activation_disabled", None
+    if raw != "1":
+        return False, False, "scheduler_activation_invalid", None
+    evidence = verify_scheduler_activation_evidence(
+        os.getenv(SCHEDULER_ACTIVATION_EVIDENCE_ENV),
+        secret=os.getenv(SCHEDULER_ACTIVATION_SIGNING_SECRET_ENV),
+        expected_release_commit=_text(os.getenv("VERCEL_GIT_COMMIT_SHA")),
+        expected_project_id=_text(os.getenv("VERCEL_PROJECT_ID")),
+        expected_environment=_text(os.getenv("VERCEL_ENV")),
+    )
+    return True, evidence.valid, evidence.error, evidence
 
 
 def _authorized(authorization: str | None, x_cron_secret: str | None) -> bool:
@@ -210,12 +249,17 @@ def _validated_worker_url() -> tuple[str | None, str | None, int]:
 
 
 def _runtime_status() -> dict[str, object]:
+    activation_requested, activation_enabled, activation_error, activation_evidence = (
+        _scheduler_activation_state()
+    )
     token_configured = bool(_configured_tokens())
     cron_secret_configured = bool(_text(os.getenv("CRON_SECRET")))
     worker_url_configured = bool(_text(os.getenv(WORKER_URL_ENV)))
     worker_url, worker_configuration_error, allowed_host_count = _validated_worker_url()
 
     configuration_errors: list[str] = []
+    if activation_error:
+        configuration_errors.append(activation_error)
     if not token_configured:
         configuration_errors.append("cron_token_missing")
     if not cron_secret_configured:
@@ -223,13 +267,41 @@ def _runtime_status() -> dict[str, object]:
     if worker_configuration_error:
         configuration_errors.append(worker_configuration_error)
 
-    scheduler_ready = not configuration_errors and bool(worker_url) and bool(_worker_token())
+    try:
+        workforce_policy = load_agent_workforce_policy()
+    except AgentGovernanceError as exc:
+        workforce_policy = None
+        configuration_errors.append(exc.code)
+
+    scheduler_ready = activation_enabled and not configuration_errors and bool(worker_url) and bool(_worker_token())
     return {
         "status": "ready" if scheduler_ready else "degraded",
         "runtime_target": "hosted_vercel_api",
         "pc_dependency": False,
         "scheduler": {
             "configured": scheduler_ready,
+            "activation_required": True,
+            "activation_environment_key": SCHEDULER_ENABLED_ENV,
+            "activation_requested": activation_requested,
+            "activation_enabled": activation_enabled,
+            "activation_evidence_required": True,
+            "activation_evidence_contract": SCHEDULER_ACTIVATION_EVIDENCE_CONTRACT,
+            "activation_evidence_environment_key": SCHEDULER_ACTIVATION_EVIDENCE_ENV,
+            "activation_evidence_signing_secret_environment_key": SCHEDULER_ACTIVATION_SIGNING_SECRET_ENV,
+            "activation_evidence_valid": bool(activation_evidence and activation_evidence.valid),
+            "activation_evidence_digest": (
+                activation_evidence.evidence_digest if activation_evidence else None
+            ),
+            "activation_evidence_release_commit": (
+                activation_evidence.release_commit if activation_evidence else None
+            ),
+            "activation_evidence_expires_at": (
+                activation_evidence.expires_at if activation_evidence else None
+            ),
+            "activation_evidence_count": (
+                activation_evidence.evidence_count if activation_evidence else 0
+            ),
+            "canonical_project_id": CANONICAL_SCHEDULER_PROJECT_ID,
             "token_configured": token_configured,
             "cron_secret_configured": cron_secret_configured,
             "worker_url_configured": worker_url_configured,
@@ -241,9 +313,19 @@ def _runtime_status() -> dict[str, object]:
             "daily_path": DAILY_CRON_PATH,
             "queue_job_types": list(_SCHEDULER_ROUTES[QUEUE_CRON_PATH]["job_types"]),
             "daily_job_types": list(_SCHEDULER_ROUTES[DAILY_CRON_PATH]["job_types"]),
-            "max_jobs_per_run": 8,
+            "max_jobs_per_run": max(int(route["limit"]) for route in _SCHEDULER_ROUTES.values()),
             "max_worker_response_bytes": _MAX_WORKER_RESPONSE_BYTES,
             "redirects_allowed": False,
+            "budget_grant_contract": AGENT_BUDGET_GRANT_CONTRACT,
+            "budget_grants_required": True,
+        },
+        "capacity": {
+            "contract": AGENT_CAPACITY_PLAN_CONTRACT,
+            "execution_model": "ephemeral_demand_driven",
+            "registered_specialists_consume_compute": False,
+            "idle_active_execution_target": 0,
+            "scale_to_zero_when_idle": True,
+            "max_active_executions": workforce_policy.max_running if workforce_policy else None,
         },
         "execution_policy": "review_gated_no_external_send_or_money_actions",
     }
@@ -341,6 +423,44 @@ def _reported_side_effects(payload: Mapping[str, object]) -> tuple[bool | None, 
     return reported_boolean("writes_performed"), reported_boolean("external_messages_sent")
 
 
+def _reported_budget_accounting(
+    payload: Mapping[str, object],
+    grant: Mapping[str, object],
+) -> tuple[dict[str, object] | None, str | None]:
+    accounting = payload.get("budget_accounting")
+    if not isinstance(accounting, Mapping):
+        return None, "worker_budget_accounting_required"
+    if str(accounting.get("contract", "")) != AGENT_BUDGET_ACCOUNTING_CONTRACT:
+        return None, "worker_budget_accounting_contract_invalid"
+    if not hmac.compare_digest(str(accounting.get("grant_id", "")), str(grant.get("grant_id", ""))):
+        return None, "worker_budget_grant_mismatch"
+    integer_fields = ("reserved_runs", "reserved_work_units", "consumed_runs", "consumed_work_units")
+    if any(type(accounting.get(field)) is not int for field in integer_fields):
+        return None, "worker_budget_accounting_invalid"
+    reserved_runs = int(accounting["reserved_runs"])
+    reserved_units = int(accounting["reserved_work_units"])
+    consumed_runs = int(accounting["consumed_runs"])
+    consumed_units = int(accounting["consumed_work_units"])
+    if (
+        min(reserved_runs, reserved_units, consumed_runs, consumed_units) < 0
+        or reserved_runs > int(grant["max_runs"])
+        or reserved_units > int(grant["max_work_units"])
+        or consumed_runs != reserved_runs
+        or consumed_units != reserved_units
+        or str(accounting.get("status", "")) != "consumed"
+    ):
+        return None, "worker_budget_accounting_invalid"
+    return {
+        "contract": AGENT_BUDGET_ACCOUNTING_CONTRACT,
+        "grant_id": str(grant["grant_id"]),
+        "reserved_runs": reserved_runs,
+        "reserved_work_units": reserved_units,
+        "consumed_runs": consumed_runs,
+        "consumed_work_units": consumed_units,
+        "status": "consumed",
+    }, None
+
+
 def _read_worker_payload(response: Any) -> Mapping[str, object]:
     body = response.read(_MAX_WORKER_RESPONSE_BYTES + 1)
     if len(body) > _MAX_WORKER_RESPONSE_BYTES:
@@ -404,6 +524,17 @@ def _cron_result(path: str) -> dict[str, object]:
         result["configuration_errors"] = [worker_configuration_error or "worker_token_missing"]
         return result
 
+    try:
+        budget_grant = issue_agent_budget_grant(
+            secret=token,
+            cycle=str(route["cycle"]),
+            job_types=list(route["job_types"]),
+            max_runs=min(int(route["limit"]), len(tuple(route["job_types"]))),
+        )
+    except AgentGovernanceError as exc:
+        result["configuration_errors"] = [exc.code]
+        return result
+
     payload = json.dumps(
         {
             "contract_version": "supermega.hosted-agent-scheduler.v1",
@@ -412,6 +543,9 @@ def _cron_result(path: str) -> dict[str, object]:
             "source": "vercel_cron",
             "limit": int(route["limit"]),
             "execution_policy": "review_gated_no_external_send_or_money_actions",
+            "budget_grant": budget_grant,
+            "capacity_contract": AGENT_CAPACITY_PLAN_CONTRACT,
+            "execution_model": "ephemeral_demand_driven",
         },
         separators=(",", ":"),
     ).encode("utf-8")
@@ -447,6 +581,7 @@ def _cron_result(path: str) -> dict[str, object]:
             worker_payload = _read_worker_payload(response)
 
         writes_performed, external_messages_sent = _reported_side_effects(worker_payload)
+        budget_accounting, budget_error = _reported_budget_accounting(worker_payload, budget_grant)
         result["worker_status"] = worker_status
         result["worker_result"] = _sanitize_worker_value(worker_payload)
         result["writes_performed"] = writes_performed
@@ -459,12 +594,24 @@ def _cron_result(path: str) -> dict[str, object]:
                 "reporting": "incomplete",
             }
             return result
+        if budget_error or budget_accounting is None:
+            result["execution"] = "worker_response_invalid"
+            result["worker_error"] = budget_error or "worker_budget_accounting_required"
+            result["side_effects"] = {
+                "worker_invoked": True,
+                "reporting": "incomplete",
+            }
+            return result
 
         result["status"] = "accepted"
         result["execution"] = "hosted_runtime_forwarded"
+        result["budget_accounting"] = budget_accounting
         result["side_effects"] = {
             "worker_invoked": True,
+            # Side effects remain worker assertions even when the separate
+            # signed budget ledger is cryptographically bound.
             "reporting": "worker_reported_unverified",
+            "budget_reporting": "worker_reported_budget_bound",
             "writes_performed": writes_performed,
             "external_messages_sent": external_messages_sent,
         }
@@ -484,6 +631,30 @@ def _cron_result(path: str) -> dict[str, object]:
     return result
 
 
+def _log_scheduler_result(result: Mapping[str, object], *, started_at: float) -> None:
+    side_effects = result.get("side_effects", {})
+    LOGGER.info(
+        json.dumps(
+            {
+                "event": "supermega_agent_scheduler_cycle",
+                "cycle": result.get("cycle"),
+                "path": result.get("path"),
+                "status": result.get("status"),
+                "execution": result.get("execution"),
+                "worker_invoked": (
+                    bool(side_effects.get("worker_invoked", False))
+                    if isinstance(side_effects, Mapping)
+                    else False
+                ),
+                "retryable": bool(result.get("retryable", False)),
+                "duration_ms": max(0, round((time.monotonic() - started_at) * 1_000)),
+            },
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+    )
+
+
 @router.get(QUEUE_CRON_PATH)
 def agent_queue_cron(
     request: Request,
@@ -491,7 +662,10 @@ def agent_queue_cron(
     x_cron_secret: str | None = Header(default=None),
 ) -> dict[str, object]:
     _require_cron_auth(authorization, x_cron_secret)
-    return _cron_result(str(request.url.path))
+    started_at = time.monotonic()
+    result = _cron_result(str(request.url.path))
+    _log_scheduler_result(result, started_at=started_at)
+    return result
 
 
 @router.get(DAILY_CRON_PATH)
@@ -501,4 +675,7 @@ def daily_cron(
     x_cron_secret: str | None = Header(default=None),
 ) -> dict[str, object]:
     _require_cron_auth(authorization, x_cron_secret)
-    return _cron_result(str(request.url.path))
+    started_at = time.monotonic()
+    result = _cron_result(str(request.url.path))
+    _log_scheduler_result(result, started_at=started_at)
+    return result

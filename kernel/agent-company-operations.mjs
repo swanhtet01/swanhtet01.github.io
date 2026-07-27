@@ -22,12 +22,16 @@ import {
 import {
   claimActivity,
   getCachedResponse,
+  listCachedResponseRecords,
   putCachedResponse,
   releaseActivityClaim,
 } from './store.mjs'
 
 export const COMPANY_OPERATIONS_WINDOWS = Object.freeze([7, 30, 90])
 export const COMPANY_USAGE_UNITS = 'bulk_equivalent_tokens'
+export const CEO_OUTCOME_OPERATION_CONTRACT = 'supermega.ceo-outcome-operation.v1'
+export const CEO_OUTCOME_EVALUATION_CONTRACT = 'supermega.ceo-outcome-evaluation.v1'
+export const MAX_CEO_OUTCOME_RECORDS = 90
 export const COMPANY_OPERATIONS_TARGETS = Object.freeze({
   minimumSamples: 5,
   queueP90Minutes: 1440,
@@ -42,11 +46,50 @@ export const COMPANY_OPERATIONS_TARGETS = Object.freeze({
 
 const ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/
 const HASH_RE = /^[a-f0-9]{64}$/
+const CEO_OUTCOME_ID_RE = /^[a-z0-9][a-z0-9-]{0,79}$/
+const CEO_OPERATION_ID_RE = /^ceo-outcome:[a-f0-9]{40}$/
 const TERMINAL_STATUSES = new Set(['completed', 'partial', 'blocked', 'failed'])
 const VERDICTS = new Set(['accepted', 'revision_required'])
 const EVALUATION_FIELDS = new Set(['clientId', 'workOrderId', 'planHash', 'verdict', 'checks', 'confirmation'])
 const GET_EVALUATION_FIELDS = new Set(['clientId', 'workOrderId'])
 const REPORT_FIELDS = new Set(['clientId', 'windowDays'])
+const CEO_OUTCOME_RECORD_INPUT_FIELDS = new Set(['clientId', 'outcomeId', 'authorityDigest', 'completedAt', 'usage'])
+const CEO_OUTCOME_EVALUATION_INPUT_FIELDS = new Set(['clientId', 'operationId', 'recordHash', 'verdict', 'confirmation'])
+const CEO_OUTCOME_RECORD_FIELDS = new Set([
+  'contract',
+  'operationId',
+  'clientId',
+  'outcomeId',
+  'authorityDigest',
+  'status',
+  'usage',
+  'completedAt',
+  'recordHash',
+])
+const CEO_OUTCOME_EVALUATION_FIELDS = new Set([
+  'contract',
+  'evaluationId',
+  'operationId',
+  'clientId',
+  'outcomeId',
+  'authorityDigest',
+  'operationHash',
+  'verdict',
+  'evaluatedAt',
+  'evaluationHash',
+])
+const CEO_USAGE_FIELDS = new Set([
+  'contract',
+  'units',
+  'modelCalls',
+  'cacheHits',
+  'measuredCalls',
+  'unmeasuredCalls',
+  'weightedTotalUnits',
+])
+const CEO_OUTCOME_RECORD_PREFIX = 'ceo-outcome-operation:'
+const CEO_OUTCOME_EVALUATION_PREFIX = 'ceo-outcome-evaluation:'
+const OPERATOR_USAGE_CONTRACT = 'supermega.operator-usage.v1'
 const CHECK_FIELDS = Object.freeze(['accurate', 'complete', 'usable', 'boundarySafe'])
 const USAGE_TIERS = Object.freeze(Object.keys(TIER_COST_WEIGHTS))
 const MAX_USAGE_TOKENS_PER_CALL = 10_000_000
@@ -55,6 +98,8 @@ const failure = (reason, extra = {}) => ({ ok: false, reason, ...extra })
 const isRecord = (value) => value && typeof value === 'object' && !Array.isArray(value)
 const evaluationIdFor = (workOrderId) => `company-evaluation:${String(workOrderId).split(':').pop()}`
 const evaluationKey = (workOrderId) => `company-work-order-evaluation:${workOrderId}`
+const ceoRecordKey = (operationId) => `${CEO_OUTCOME_RECORD_PREFIX}${String(operationId).split(':').pop()}`
+const ceoEvaluationKey = (operationId) => `${CEO_OUTCOME_EVALUATION_PREFIX}${String(operationId).split(':').pop()}`
 
 function onlyFields(input, allowed) {
   if (!isRecord(input)) return failure('company_operations_invalid_request')
@@ -80,6 +125,122 @@ function sha256(value) {
 function sameHash(left, right) {
   if (!HASH_RE.test(String(left)) || !HASH_RE.test(String(right))) return false
   return timingSafeEqual(Buffer.from(String(left), 'hex'), Buffer.from(String(right), 'hex'))
+}
+
+function exactIso(value) {
+  const text = String(value || '')
+  const time = Date.parse(text)
+  return Number.isFinite(time) && new Date(time).toISOString() === text ? text : ''
+}
+
+function normalizeCeoUsage(value) {
+  if (!isRecord(value)) return failure('ceo_outcome_invalid_usage')
+  const unknown = Object.keys(value).filter((field) => !CEO_USAGE_FIELDS.has(field)).sort()
+  if (unknown.length) return failure('ceo_outcome_invalid_usage', { fields: unknown })
+  if (value.contract !== OPERATOR_USAGE_CONTRACT || value.units !== COMPANY_USAGE_UNITS) {
+    return failure('ceo_outcome_invalid_usage')
+  }
+  const modelCalls = boundedUsageNumber(value.modelCalls, 2)
+  const cacheHits = boundedUsageNumber(value.cacheHits, 2)
+  const measuredCalls = boundedUsageNumber(value.measuredCalls, 2)
+  const unmeasuredCalls = boundedUsageNumber(value.unmeasuredCalls, 2)
+  const weightedTotalUnits = boundedUsageNumber(value.weightedTotalUnits, MAX_USAGE_TOKENS_PER_CALL * 30)
+  if ([modelCalls, cacheHits, measuredCalls, unmeasuredCalls, weightedTotalUnits].some((item) => item === null)
+    || modelCalls + cacheHits !== 1
+    || measuredCalls + unmeasuredCalls !== modelCalls
+    || (measuredCalls === 0 && weightedTotalUnits !== 0)) {
+    return failure('ceo_outcome_invalid_usage')
+  }
+  return {
+    contract: OPERATOR_USAGE_CONTRACT,
+    units: COMPANY_USAGE_UNITS,
+    modelCalls,
+    cacheHits,
+    measuredCalls,
+    unmeasuredCalls,
+    weightedTotalUnits,
+  }
+}
+
+function publicCeoOutcomeRecord(record) {
+  return {
+    contract: record.contract,
+    operationId: record.operationId,
+    clientId: record.clientId,
+    outcomeId: record.outcomeId,
+    authorityDigest: record.authorityDigest,
+    status: record.status,
+    usage: { ...record.usage },
+    completedAt: record.completedAt,
+    recordHash: record.recordHash,
+  }
+}
+
+function publicCeoOutcomeEvaluation(record) {
+  return {
+    contract: record.contract,
+    evaluationId: record.evaluationId,
+    operationId: record.operationId,
+    clientId: record.clientId,
+    outcomeId: record.outcomeId,
+    authorityDigest: record.authorityDigest,
+    operationHash: record.operationHash,
+    verdict: record.verdict,
+    evaluatedAt: record.evaluatedAt,
+    evaluationHash: record.evaluationHash,
+  }
+}
+
+function validateCeoOutcomeRecord(value, expectedKey = '') {
+  if (!isRecord(value) || Object.keys(value).some((field) => !CEO_OUTCOME_RECORD_FIELDS.has(field))) return null
+  if (value.contract !== CEO_OUTCOME_OPERATION_CONTRACT
+    || !CEO_OPERATION_ID_RE.test(String(value.operationId || ''))
+    || !ID_RE.test(String(value.clientId || ''))
+    || !CEO_OUTCOME_ID_RE.test(String(value.outcomeId || ''))
+    || !HASH_RE.test(String(value.authorityDigest || ''))
+    || value.status !== 'completed'
+    || !exactIso(value.completedAt)
+    || !HASH_RE.test(String(value.recordHash || ''))
+    || (expectedKey && expectedKey !== ceoRecordKey(value.operationId))) return null
+  const usage = normalizeCeoUsage(value.usage)
+  if (usage.ok === false) return null
+  const payload = {
+    contract: CEO_OUTCOME_OPERATION_CONTRACT,
+    operationId: value.operationId,
+    clientId: value.clientId,
+    outcomeId: value.outcomeId,
+    authorityDigest: value.authorityDigest,
+    status: 'completed',
+    usage,
+    completedAt: value.completedAt,
+  }
+  return sameHash(value.recordHash, sha256(stableStringify(payload))) ? { ...payload, recordHash: value.recordHash } : null
+}
+
+function validateCeoOutcomeEvaluation(value, operation) {
+  if (!isRecord(value) || Object.keys(value).some((field) => !CEO_OUTCOME_EVALUATION_FIELDS.has(field))) return null
+  if (value.contract !== CEO_OUTCOME_EVALUATION_CONTRACT
+    || !/^ceo-outcome-evaluation:[a-f0-9]{40}$/.test(String(value.evaluationId || ''))
+    || value.operationId !== operation.operationId
+    || value.clientId !== operation.clientId
+    || value.outcomeId !== operation.outcomeId
+    || value.authorityDigest !== operation.authorityDigest
+    || !sameHash(value.operationHash, operation.recordHash)
+    || !VERDICTS.has(value.verdict)
+    || !exactIso(value.evaluatedAt)
+    || !HASH_RE.test(String(value.evaluationHash || ''))) return null
+  const payload = {
+    contract: CEO_OUTCOME_EVALUATION_CONTRACT,
+    evaluationId: value.evaluationId,
+    operationId: value.operationId,
+    clientId: value.clientId,
+    outcomeId: value.outcomeId,
+    authorityDigest: value.authorityDigest,
+    operationHash: value.operationHash,
+    verdict: value.verdict,
+    evaluatedAt: value.evaluatedAt,
+  }
+  return sameHash(value.evaluationHash, sha256(stableStringify(payload))) ? { ...payload, evaluationHash: value.evaluationHash } : null
 }
 
 function normalizeChecks(value) {
@@ -209,6 +370,167 @@ export async function evaluateCompanyWorkOrder(input, options = {}) {
     return failure('company_evaluation_store_unavailable', { status: 'blocked', workOrderId })
   }
   return { ok: true, mode: 'work_order_evaluate', replayed: false, evaluation: publicEvaluation(record) }
+}
+
+export async function recordCeoOutcomeCompletion(input, options = {}) {
+  const fields = onlyFields(input, CEO_OUTCOME_RECORD_INPUT_FIELDS)
+  if (!fields.ok) return fields
+  const clientId = normalizeId(input.clientId, 'company_invalid_client_id')
+  if (isRecord(clientId)) return clientId
+  const outcomeId = String(input.outcomeId || '').trim()
+  const authorityDigest = String(input.authorityDigest || '').trim()
+  const completedAt = exactIso(input.completedAt)
+  const usage = normalizeCeoUsage(input.usage)
+  if (!CEO_OUTCOME_ID_RE.test(outcomeId)) return failure('ceo_outcome_invalid_id')
+  if (!HASH_RE.test(authorityDigest)) return failure('ceo_outcome_invalid_authority_digest')
+  if (!completedAt) return failure('ceo_outcome_invalid_completed_at')
+  if (usage.ok === false) return usage
+
+  const operationSuffix = sha256(stableStringify({
+    clientId,
+    outcomeId,
+    authorityDigest,
+    completedAt,
+  })).slice(0, 40)
+  const operationId = `ceo-outcome:${operationSuffix}`
+  const payload = {
+    contract: CEO_OUTCOME_OPERATION_CONTRACT,
+    operationId,
+    clientId,
+    outcomeId,
+    authorityDigest,
+    status: 'completed',
+    usage,
+    completedAt,
+  }
+  const record = { ...payload, recordHash: sha256(stableStringify(payload)) }
+  const reserve = options.claimActivity || claimActivity
+  const release = options.releaseActivityClaim || releaseActivityClaim
+  const save = options.putCeoOutcomeRecord || putCachedResponse
+  const read = options.getCeoOutcomeRecord || getCachedResponse
+  const claimId = `ceo-outcome-record:${operationSuffix}`
+  const requireDurableClaim = options.requireDurableClaim !== false
+  let claim
+  try {
+    claim = await reserve({
+      id: claimId,
+      kind: 'ceo_outcome_completion_record',
+      summary: 'CEO outcome completion metadata recorded',
+      ref: clientId,
+    })
+  } catch {
+    claim = { fresh: false, durable: false }
+  }
+  if (!claim?.fresh) {
+    if (!claim?.durable) return failure('ceo_outcome_store_unavailable', { status: 'blocked' })
+    let existing = null
+    try { existing = validateCeoOutcomeRecord(await read(ceoRecordKey(operationId)), ceoRecordKey(operationId)) }
+    catch { existing = null }
+    if (!existing) return failure('ceo_outcome_already_claimed', { status: 'duplicate', operationId })
+    if (!sameHash(existing.recordHash, record.recordHash)) {
+      return failure('ceo_outcome_record_conflict', { status: 'conflict', operationId })
+    }
+    return { ok: true, mode: 'ceo_outcome_record', replayed: true, outcome: publicCeoOutcomeRecord(existing) }
+  }
+  if (requireDurableClaim && !claim.durable) {
+    try { await release(claimId, clientId) } catch { /* no outcome record was persisted */ }
+    return failure('ceo_outcome_durable_claim_required', { status: 'blocked', operationId })
+  }
+  let stored = false
+  try { stored = Boolean(await save(ceoRecordKey(operationId), record)) }
+  catch { stored = false }
+  if (!stored) {
+    try { await release(claimId, clientId) } catch { /* allow an explicit retry */ }
+    return failure('ceo_outcome_store_unavailable', { status: 'blocked', operationId })
+  }
+  return { ok: true, mode: 'ceo_outcome_record', replayed: false, outcome: publicCeoOutcomeRecord(record) }
+}
+
+export async function evaluateCeoOutcomeDelivery(input, options = {}) {
+  const fields = onlyFields(input, CEO_OUTCOME_EVALUATION_INPUT_FIELDS)
+  if (!fields.ok) return fields
+  const clientId = normalizeId(input.clientId, 'company_invalid_client_id')
+  if (isRecord(clientId)) return clientId
+  const operationId = String(input.operationId || '').trim()
+  const recordHash = String(input.recordHash || '').trim()
+  const verdict = String(input.verdict || '').trim()
+  if (!CEO_OPERATION_ID_RE.test(operationId)) return failure('ceo_outcome_invalid_operation_id')
+  if (!HASH_RE.test(recordHash)) return failure('ceo_outcome_invalid_record_hash')
+  if (!VERDICTS.has(verdict)) return failure('ceo_outcome_invalid_verdict')
+  if (String(input.confirmation || '') !== `EVALUATE ${operationId}`) {
+    return failure('ceo_outcome_evaluation_confirmation_required', {
+      operationId,
+      confirmation: `EVALUATE ${operationId}`,
+    })
+  }
+
+  const readRecord = options.getCeoOutcomeRecord || getCachedResponse
+  let operation = null
+  try { operation = validateCeoOutcomeRecord(await readRecord(ceoRecordKey(operationId)), ceoRecordKey(operationId)) }
+  catch { operation = null }
+  if (!operation || operation.clientId !== clientId) return failure('ceo_outcome_not_found')
+  if (!sameHash(operation.recordHash, recordHash)) {
+    return failure('ceo_outcome_record_mismatch', { status: 'conflict', operationId })
+  }
+
+  const evaluationId = `ceo-outcome-evaluation:${operationId.split(':').pop()}`
+  const evaluatedAt = exactIso(options.now?.() || new Date().toISOString())
+  if (!evaluatedAt) return failure('ceo_outcome_evaluation_clock_invalid')
+  const evaluationPayload = {
+    contract: CEO_OUTCOME_EVALUATION_CONTRACT,
+    evaluationId,
+    operationId,
+    clientId,
+    outcomeId: operation.outcomeId,
+    authorityDigest: operation.authorityDigest,
+    operationHash: operation.recordHash,
+    verdict,
+    evaluatedAt,
+  }
+  const evaluation = {
+    ...evaluationPayload,
+    evaluationHash: sha256(stableStringify(evaluationPayload)),
+  }
+  const reserve = options.claimActivity || claimActivity
+  const release = options.releaseActivityClaim || releaseActivityClaim
+  const save = options.putCeoOutcomeEvaluation || putCachedResponse
+  const readEvaluation = options.getCeoOutcomeEvaluation || getCachedResponse
+  const claimId = `ceo-outcome-evaluation-record:${operationId.split(':').pop()}`
+  const requireDurableClaim = options.requireDurableClaim !== false
+  let claim
+  try {
+    claim = await reserve({
+      id: claimId,
+      kind: 'ceo_outcome_evaluation',
+      summary: 'CEO outcome evaluation metadata recorded',
+      ref: clientId,
+    })
+  } catch {
+    claim = { fresh: false, durable: false }
+  }
+  if (!claim?.fresh) {
+    if (!claim?.durable) return failure('ceo_outcome_evaluation_store_unavailable', { status: 'blocked' })
+    let existing = null
+    try { existing = validateCeoOutcomeEvaluation(await readEvaluation(ceoEvaluationKey(operationId)), operation) }
+    catch { existing = null }
+    if (!existing) return failure('ceo_outcome_evaluation_already_claimed', { status: 'duplicate', operationId })
+    if (!sameHash(existing.evaluationHash, evaluation.evaluationHash)) {
+      return failure('ceo_outcome_evaluation_conflict', { status: 'conflict', operationId })
+    }
+    return { ok: true, mode: 'ceo_outcome_evaluate', replayed: true, evaluation: publicCeoOutcomeEvaluation(existing) }
+  }
+  if (requireDurableClaim && !claim.durable) {
+    try { await release(claimId, clientId) } catch { /* no evaluation was persisted */ }
+    return failure('ceo_outcome_evaluation_durable_claim_required', { status: 'blocked', operationId })
+  }
+  let stored = false
+  try { stored = Boolean(await save(ceoEvaluationKey(operationId), evaluation)) }
+  catch { stored = false }
+  if (!stored) {
+    try { await release(claimId, clientId) } catch { /* allow an explicit retry */ }
+    return failure('ceo_outcome_evaluation_store_unavailable', { status: 'blocked', operationId })
+  }
+  return { ok: true, mode: 'ceo_outcome_evaluate', replayed: false, evaluation: publicCeoOutcomeEvaluation(evaluation) }
 }
 
 function parseTime(value) {
@@ -567,6 +889,165 @@ function buildTargets(orders) {
   return { measures: { queueP90Minutes: queueP90, executionP90Minutes: executionP90, ...measures }, targets }
 }
 
+function unavailableCeoOutcomeOperations(reason) {
+  return {
+    contract: CEO_OUTCOME_OPERATION_CONTRACT,
+    available: false,
+    durable: false,
+    state: reason,
+    counts: {
+      completed: 0,
+      evaluated: 0,
+      accepted: 0,
+      revisionRequired: 0,
+      missingEvaluation: 0,
+      uniqueOutcomes: 0,
+    },
+    usage: {
+      units: COMPANY_USAGE_UNITS,
+      modelCalls: 0,
+      cacheHits: 0,
+      measuredCalls: 0,
+      unmeasuredCalls: 0,
+      weightedTotalUnits: 0,
+    },
+    efficiency: {
+      available: false,
+      acceptedOutcomesPer1000WorkUnits: null,
+      workUnitsPerAcceptedOutcome: null,
+    },
+    coverage: {
+      listedRecords: 0,
+      includedRecords: 0,
+      invalidRecords: 0,
+      duplicateRecords: 0,
+      outOfWindowRecords: 0,
+      invalidEvaluations: 0,
+      unavailableEvaluations: 0,
+      evaluationCoverageRate: null,
+      usageCoverageRate: null,
+      capped: false,
+    },
+    records: [],
+  }
+}
+
+async function buildCeoOutcomeOperations(clientId, cutoff, nowMs, options = {}) {
+  const listRecords = options.listCeoOutcomeRecords || listCachedResponseRecords
+  const getEvaluation = options.getCeoOutcomeEvaluation || getCachedResponse
+  let listed
+  try {
+    listed = await listRecords({
+      prefix: CEO_OUTCOME_RECORD_PREFIX,
+      clientId,
+      limit: MAX_CEO_OUTCOME_RECORDS,
+    })
+  } catch {
+    return unavailableCeoOutcomeOperations('store_unavailable')
+  }
+  if (!listed || !Array.isArray(listed.records)) return unavailableCeoOutcomeOperations('store_unavailable')
+
+  const records = []
+  const seen = new Set()
+  let invalidRecords = 0
+  let duplicateRecords = 0
+  let outOfWindowRecords = 0
+  let invalidEvaluations = 0
+  let unavailableEvaluations = 0
+  for (const entry of listed.records) {
+    const record = validateCeoOutcomeRecord(entry?.payload, String(entry?.key || ''))
+    if (!record || record.clientId !== clientId) {
+      invalidRecords += 1
+      continue
+    }
+    if (seen.has(record.operationId)) {
+      duplicateRecords += 1
+      continue
+    }
+    seen.add(record.operationId)
+    const completedTime = parseTime(record.completedAt)
+    if (completedTime === null || completedTime < cutoff || completedTime > nowMs + 300000) {
+      outOfWindowRecords += 1
+      continue
+    }
+    let rawEvaluation = null
+    let evaluationReadFailed = false
+    try { rawEvaluation = await getEvaluation(ceoEvaluationKey(record.operationId)) }
+    catch { evaluationReadFailed = true }
+    if (evaluationReadFailed) unavailableEvaluations += 1
+    const evaluation = rawEvaluation ? validateCeoOutcomeEvaluation(rawEvaluation, record) : null
+    if (rawEvaluation && !evaluation) invalidEvaluations += 1
+    records.push({
+      ...publicCeoOutcomeRecord(record),
+      evaluation: evaluation ? publicCeoOutcomeEvaluation(evaluation) : null,
+    })
+  }
+  records.sort((left, right) => right.completedAt.localeCompare(left.completedAt) || left.operationId.localeCompare(right.operationId))
+
+  const evaluated = records.filter((record) => record.evaluation)
+  const accepted = evaluated.filter((record) => record.evaluation.verdict === 'accepted').length
+  const revisionRequired = evaluated.filter((record) => record.evaluation.verdict === 'revision_required').length
+  const usage = {
+    units: COMPANY_USAGE_UNITS,
+    modelCalls: records.reduce((total, record) => total + record.usage.modelCalls, 0),
+    cacheHits: records.reduce((total, record) => total + record.usage.cacheHits, 0),
+    measuredCalls: records.reduce((total, record) => total + record.usage.measuredCalls, 0),
+    unmeasuredCalls: records.reduce((total, record) => total + record.usage.unmeasuredCalls, 0),
+    weightedTotalUnits: records.reduce((total, record) => total + record.usage.weightedTotalUnits, 0),
+  }
+  const invalidCoverage = invalidRecords + duplicateRecords + invalidEvaluations + unavailableEvaluations > 0
+  const evaluationCoverageRate = rate(evaluated.length, records.length)
+  const usageCovered = records.filter((record) => record.usage.unmeasuredCalls === 0).length
+  const usageCoverageRate = rate(usageCovered, records.length)
+  let state = 'measured'
+  if (!records.length) state = 'no_outcomes'
+  else if (invalidCoverage) state = 'invalid_coverage'
+  else if (listed.durable !== true) state = 'non_durable'
+  else if (evaluated.length !== records.length) state = 'incomplete_evaluations'
+  else if (usageCovered !== records.length) state = 'incomplete_usage'
+  else if (usage.weightedTotalUnits === 0) state = 'zero_work_units'
+  const efficiencyAvailable = state === 'measured'
+  const acceptedOutcomesPer1000WorkUnits = efficiencyAvailable
+    ? Math.round(((accepted / usage.weightedTotalUnits) * 1000) * 1_000_000) / 1_000_000
+    : null
+  const workUnitsPerAcceptedOutcome = efficiencyAvailable && accepted > 0
+    ? Math.round((usage.weightedTotalUnits / accepted) * 1000) / 1000
+    : null
+  return {
+    contract: CEO_OUTCOME_OPERATION_CONTRACT,
+    available: true,
+    durable: listed.durable === true,
+    state,
+    counts: {
+      completed: records.length,
+      evaluated: evaluated.length,
+      accepted,
+      revisionRequired,
+      missingEvaluation: records.length - evaluated.length,
+      uniqueOutcomes: new Set(records.map((record) => record.outcomeId)).size,
+    },
+    usage,
+    efficiency: {
+      available: efficiencyAvailable,
+      acceptedOutcomesPer1000WorkUnits,
+      workUnitsPerAcceptedOutcome,
+    },
+    coverage: {
+      listedRecords: listed.records.length,
+      includedRecords: records.length,
+      invalidRecords,
+      duplicateRecords,
+      outOfWindowRecords,
+      invalidEvaluations,
+      unavailableEvaluations,
+      evaluationCoverageRate,
+      usageCoverageRate,
+      capped: listed.records.length === MAX_CEO_OUTCOME_RECORDS,
+    },
+    records,
+  }
+}
+
 export async function buildCompanyOperationsReport(input, options = {}) {
   const fields = onlyFields(input, REPORT_FIELDS)
   if (!fields.ok) return fields
@@ -608,6 +1089,7 @@ export async function buildCompanyOperationsReport(input, options = {}) {
   const { measures, targets } = buildTargets(orders)
   const workforce = buildWorkforce(orders)
   const usage = await buildUsageEconomics(clientId, orders, options)
+  const outcomes = await buildCeoOutcomeOperations(clientId, cutoff, nowMs, options)
   const overduePlanned = orders.filter((order) => order.status === 'planned' && order.ageMinutes > COMPANY_OPERATIONS_TARGETS.queueP90Minutes).length
   const overdueRunning = orders.filter((order) => order.status === 'running' && (
     !order.startedAt
@@ -648,6 +1130,7 @@ export async function buildCompanyOperationsReport(input, options = {}) {
     targets,
     workforce,
     usage,
+    outcomes,
     attention: {
       overduePlanned,
       overdueRunning,
@@ -671,9 +1154,16 @@ export async function buildCompanyOperationsReport(input, options = {}) {
       specialistOutputReturned: false,
       customerSlaClaimed: false,
       currencyCostClaimed: false,
+      ceoBriefTextReturned: false,
+      providerRowsReturned: false,
     },
     orders,
   }
 }
 
-export default { evaluateCompanyWorkOrder, buildCompanyOperationsReport }
+export default {
+  evaluateCompanyWorkOrder,
+  recordCeoOutcomeCompletion,
+  evaluateCeoOutcomeDelivery,
+  buildCompanyOperationsReport,
+}

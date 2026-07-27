@@ -4,6 +4,8 @@ import hashlib
 import json
 import secrets
 import sqlite3
+from contextlib import contextmanager
+from collections.abc import Iterator
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -59,12 +61,17 @@ def _load_json(path: Path) -> Any:
         return {}
 
 
-def _connect(db_path: Path) -> sqlite3.Connection:
+@contextmanager
+def _connect(db_path: Path) -> Iterator[sqlite3.Connection]:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(str(db_path))
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA journal_mode=WAL")
-    return connection
+    try:
+        with connection:
+            yield connection
+    finally:
+        connection.close()
 
 
 def _agent_team_snapshot_key(tenant_key: str) -> str:
@@ -378,6 +385,7 @@ def ensure_schema(db_path: Path) -> None:
                 approval_id TEXT PRIMARY KEY,
                 created_at TEXT NOT NULL,
                 source TEXT NOT NULL,
+                workspace_id TEXT NOT NULL DEFAULT '',
                 title TEXT NOT NULL,
                 summary TEXT NOT NULL,
                 approval_gate TEXT NOT NULL,
@@ -694,6 +702,16 @@ def ensure_schema(db_path: Path) -> None:
             connection.execute("ALTER TABLE contact_submissions ADD COLUMN lead_id TEXT NOT NULL DEFAULT ''")
         if "task_id" not in contact_columns:
             connection.execute("ALTER TABLE contact_submissions ADD COLUMN task_id TEXT NOT NULL DEFAULT ''")
+        approval_columns = {
+            str(row["name"]).strip()
+            for row in connection.execute("PRAGMA table_info(approval_queue)").fetchall()
+        }
+        if "workspace_id" not in approval_columns:
+            connection.execute("ALTER TABLE approval_queue ADD COLUMN workspace_id TEXT NOT NULL DEFAULT ''")
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_approval_queue_workspace_status "
+            "ON approval_queue (workspace_id, status, created_at DESC)"
+        )
         _migrate_agent_team_runtime_tables(connection)
         connection.executescript(
             """
@@ -2189,9 +2207,31 @@ def load_decision_summary(db_path: Path) -> dict[str, Any]:
     }
 
 
+_APPROVAL_TRANSITIONS: dict[str, frozenset[str]] = {
+    "pending": frozenset({"pending", "review", "approved", "rejected"}),
+    "review": frozenset({"review", "approved", "rejected"}),
+    "approved": frozenset({"approved"}),
+    "rejected": frozenset({"rejected"}),
+}
+
+APPROVAL_ACTION_RESERVATION_CONTRACT = "supermega.approval-action-reservation.v1"
+_APPROVAL_ACTION_FIELD = "_approval_action"
+
+
+def _approval_payload_for_output(payload: dict[str, Any]) -> dict[str, Any]:
+    output = dict(payload)
+    action = output.get(_APPROVAL_ACTION_FIELD)
+    if isinstance(action, dict):
+        public_action = dict(action)
+        public_action.pop("claim_token_digest", None)
+        output[_APPROVAL_ACTION_FIELD] = public_action
+    return output
+
+
 def add_approval_entry(
     db_path: Path,
     *,
+    workspace_id: str = "",
     title: str,
     summary: str,
     approval_gate: str,
@@ -2208,16 +2248,27 @@ def add_approval_entry(
     ensure_schema(db_path)
     created_at = datetime.now().astimezone().isoformat()
     normalized_title = str(title or "").strip() or "Untitled approval"
+    normalized_workspace_id = str(workspace_id or "").strip()
     normalized_summary = str(summary or "").strip()
     normalized_gate = str(approval_gate or "").strip().lower() or "general"
     normalized_requested_by = str(requested_by or "").strip() or "System"
     normalized_owner = str(owner or "").strip() or "Management"
     normalized_status = str(status or "").strip().lower() or "pending"
+    if normalized_status != "pending":
+        raise ValueError("approval_must_start_pending")
     normalized_due = str(due or "").strip()
     normalized_route = str(related_route or "").strip() or "/app"
     normalized_entity = str(related_entity or "").strip()
     normalized_evidence = str(evidence_link or "").strip()
-    payload_json = json.dumps(payload or {}, ensure_ascii=False)
+    normalized_payload = dict(payload or {})
+    normalized_payload.pop("_approval_authority", None)
+    normalized_payload.pop("decision_history", None)
+    normalized_payload.pop(_APPROVAL_ACTION_FIELD, None)
+    normalized_payload["_approval_authority"] = {
+        "workspace_id": normalized_workspace_id,
+        "requested_by": normalized_requested_by,
+    }
+    payload_json = json.dumps(normalized_payload, ensure_ascii=False)
     approval_id = _stable_key(
         "APR",
         f"{normalized_title}:{normalized_gate}:{normalized_requested_by}:{normalized_due}:{created_at}",
@@ -2229,6 +2280,7 @@ def add_approval_entry(
                 approval_id,
                 created_at,
                 source,
+                workspace_id,
                 title,
                 summary,
                 approval_gate,
@@ -2240,12 +2292,13 @@ def add_approval_entry(
                 related_entity,
                 evidence_link,
                 payload_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 approval_id,
                 created_at,
                 source,
+                normalized_workspace_id,
                 normalized_title,
                 normalized_summary,
                 normalized_gate,
@@ -2264,6 +2317,7 @@ def add_approval_entry(
         "approval_id": approval_id,
         "created_at": created_at,
         "source": source,
+        "workspace_id": normalized_workspace_id,
         "title": normalized_title,
         "summary": normalized_summary,
         "approval_gate": normalized_gate,
@@ -2274,7 +2328,7 @@ def add_approval_entry(
         "related_route": normalized_route,
         "related_entity": normalized_entity,
         "evidence_link": normalized_evidence,
-        "payload": payload or {},
+        "payload": _approval_payload_for_output(normalized_payload),
     }
 
 
@@ -2434,6 +2488,8 @@ def update_approval_entry(
     db_path: Path,
     *,
     approval_id: str,
+    workspace_id: str | None = None,
+    actor: str = "",
     status: str | None = None,
     owner: str | None = None,
     note: str | None = None,
@@ -2442,13 +2498,23 @@ def update_approval_entry(
     normalized_id = str(approval_id or "").strip()
     if not normalized_id:
         return None
+    normalized_workspace_id = str(workspace_id or "").strip()
+    normalized_actor = str(actor or "").strip()
+    if workspace_id is not None and not normalized_actor:
+        raise ValueError("approval_actor_required")
     with _connect(db_path) as connection:
+        where_clause = "approval_id = ?"
+        where_params: list[Any] = [normalized_id]
+        if workspace_id is not None:
+            where_clause += " AND workspace_id = ?"
+            where_params.append(normalized_workspace_id)
         row = connection.execute(
-            """
+            f"""
             SELECT
                 approval_id,
                 created_at,
                 source,
+                workspace_id,
                 title,
                 summary,
                 approval_gate,
@@ -2461,30 +2527,58 @@ def update_approval_entry(
                 evidence_link,
                 payload_json
             FROM approval_queue
-            WHERE approval_id = ?
+            WHERE {where_clause}
             """,
-            (normalized_id,),
+            where_params,
         ).fetchone()
         if not row:
             return None
         payload = json.loads(row["payload_json"]) if row["payload_json"] else {}
-        if note:
-            payload["note"] = str(note).strip()
+        if not isinstance(payload, dict):
+            payload = {}
+        normalized_note = str(note or "").strip()
         next_status = str(status or row["status"]).strip().lower() or str(row["status"]).strip().lower()
         next_owner = str(owner or row["owner"]).strip() or str(row["owner"]).strip()
+        current_status = str(row["status"] or "").strip().lower()
+        if next_status not in _APPROVAL_TRANSITIONS.get(current_status, frozenset()):
+            raise ValueError("invalid_approval_status_transition")
+        if next_status in {"approved", "rejected"} and current_status != next_status and not normalized_note:
+            raise ValueError("approval_decision_note_required")
+        if current_status in {"approved", "rejected"} and (
+            next_owner != str(row["owner"]).strip() or normalized_note
+        ):
+            raise ValueError("terminal_approval_is_immutable")
+        if normalized_note:
+            payload["note"] = normalized_note
+        if next_status != current_status or next_owner != str(row["owner"]).strip() or normalized_note:
+            history = payload.get("decision_history", [])
+            if not isinstance(history, list):
+                history = []
+            history.append(
+                {
+                    "actor": normalized_actor or "legacy_internal",
+                    "changed_at": datetime.now().astimezone().isoformat(),
+                    "from_status": current_status,
+                    "to_status": next_status,
+                    "owner": next_owner,
+                    "note": normalized_note,
+                }
+            )
+            payload["decision_history"] = history[-50:]
         connection.execute(
-            """
+            f"""
             UPDATE approval_queue
             SET status = ?, owner = ?, payload_json = ?
-            WHERE approval_id = ?
+            WHERE {where_clause}
             """,
-            (next_status, next_owner, json.dumps(payload, ensure_ascii=False), normalized_id),
+            (next_status, next_owner, json.dumps(payload, ensure_ascii=False), *where_params),
         )
         connection.commit()
         return {
             "approval_id": row["approval_id"],
             "created_at": row["created_at"],
             "source": row["source"],
+            "workspace_id": row["workspace_id"],
             "title": row["title"],
             "summary": row["summary"],
             "approval_gate": row["approval_gate"],
@@ -2495,13 +2589,171 @@ def update_approval_entry(
             "related_route": row["related_route"],
             "related_entity": row["related_entity"],
             "evidence_link": row["evidence_link"],
-            "payload": payload,
+            "payload": _approval_payload_for_output(payload),
         }
+
+
+def reserve_approval_action(
+    db_path: Path,
+    *,
+    approval_id: str,
+    workspace_id: str,
+    actor: str,
+    action: str,
+    target: str,
+) -> dict[str, Any]:
+    """Atomically reserve one approved consequential action exactly once."""
+
+    ensure_schema(db_path)
+    normalized_id = str(approval_id or "").strip()
+    normalized_workspace_id = str(workspace_id or "").strip()
+    normalized_actor = str(actor or "").strip()
+    normalized_action = str(action or "").strip().lower()
+    normalized_target = str(target or "").strip().lower()
+    if not normalized_id or not normalized_workspace_id:
+        raise ValueError("approval_action_identity_required")
+    if not normalized_actor:
+        raise ValueError("approval_action_actor_required")
+    if not normalized_action or len(normalized_action) > 100:
+        raise ValueError("approval_action_type_invalid")
+    if not normalized_target or len(normalized_target) > 240:
+        raise ValueError("approval_action_target_invalid")
+
+    reserved_at = datetime.now().astimezone().isoformat()
+    claim_token = secrets.token_urlsafe(24)
+    reservation = {
+        "contract": APPROVAL_ACTION_RESERVATION_CONTRACT,
+        "reservation_id": secrets.token_urlsafe(18),
+        "action": normalized_action,
+        "target": normalized_target,
+        "status": "reserved",
+        "reserved_by": normalized_actor,
+        "reserved_at": reserved_at,
+        "claim_token_digest": hashlib.sha256(claim_token.encode("utf-8")).hexdigest(),
+    }
+    with _connect(db_path) as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        row = connection.execute(
+            """
+            SELECT status, approval_gate, related_entity, payload_json
+            FROM approval_queue
+            WHERE approval_id = ? AND workspace_id = ?
+            """,
+            (normalized_id, normalized_workspace_id),
+        ).fetchone()
+        if not row:
+            raise ValueError("approval_action_not_found")
+        if str(row["status"] or "").strip().lower() != "approved":
+            raise ValueError("approval_action_not_approved")
+        if (
+            str(row["approval_gate"] or "").strip().lower() != normalized_action
+            or str(row["related_entity"] or "").strip().lower() != normalized_target
+        ):
+            raise ValueError("approval_action_scope_mismatch")
+        payload = json.loads(row["payload_json"]) if row["payload_json"] else {}
+        if not isinstance(payload, dict):
+            raise ValueError("approval_action_payload_invalid")
+        if _APPROVAL_ACTION_FIELD in payload:
+            raise ValueError("approval_action_already_reserved")
+        payload[_APPROVAL_ACTION_FIELD] = reservation
+        updated = connection.execute(
+            """
+            UPDATE approval_queue
+            SET payload_json = ?
+            WHERE approval_id = ? AND workspace_id = ? AND status = 'approved' AND payload_json = ?
+            """,
+            (
+                json.dumps(payload, ensure_ascii=False),
+                normalized_id,
+                normalized_workspace_id,
+                row["payload_json"],
+            ),
+        )
+        if updated.rowcount != 1:
+            raise ValueError("approval_action_reservation_conflict")
+        connection.commit()
+    return {
+        **_approval_payload_for_output({_APPROVAL_ACTION_FIELD: reservation})[_APPROVAL_ACTION_FIELD],
+        "approval_id": normalized_id,
+        "claim_token": claim_token,
+    }
+
+
+def complete_approval_action(
+    db_path: Path,
+    *,
+    approval_id: str,
+    workspace_id: str,
+    claim_token: str,
+    status: str,
+    outcome: str = "",
+) -> dict[str, Any]:
+    """Finalize a reserved approval action without making the approval reusable."""
+
+    ensure_schema(db_path)
+    normalized_id = str(approval_id or "").strip()
+    normalized_workspace_id = str(workspace_id or "").strip()
+    normalized_claim_token = str(claim_token or "").strip()
+    normalized_status = str(status or "").strip().lower()
+    if not normalized_id or not normalized_workspace_id or not normalized_claim_token:
+        raise ValueError("approval_action_claim_required")
+    if normalized_status not in {"succeeded", "failed"}:
+        raise ValueError("approval_action_status_invalid")
+
+    with _connect(db_path) as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        row = connection.execute(
+            """
+            SELECT payload_json
+            FROM approval_queue
+            WHERE approval_id = ? AND workspace_id = ?
+            """,
+            (normalized_id, normalized_workspace_id),
+        ).fetchone()
+        if not row:
+            raise ValueError("approval_action_not_found")
+        payload = json.loads(row["payload_json"]) if row["payload_json"] else {}
+        if not isinstance(payload, dict):
+            raise ValueError("approval_action_payload_invalid")
+        reservation = payload.get(_APPROVAL_ACTION_FIELD)
+        if not isinstance(reservation, dict) or str(reservation.get("status", "")).strip() != "reserved":
+            raise ValueError("approval_action_claim_invalid")
+        expected_digest = str(reservation.get("claim_token_digest", "")).strip().lower()
+        observed_digest = hashlib.sha256(normalized_claim_token.encode("utf-8")).hexdigest()
+        if not expected_digest or not secrets.compare_digest(expected_digest, observed_digest):
+            raise ValueError("approval_action_claim_invalid")
+        completed = dict(reservation)
+        completed["status"] = normalized_status
+        completed["completed_at"] = datetime.now().astimezone().isoformat()
+        completed["outcome"] = str(outcome or "").strip()[:160]
+        completed.pop("claim_token_digest", None)
+        payload[_APPROVAL_ACTION_FIELD] = completed
+        updated = connection.execute(
+            """
+            UPDATE approval_queue
+            SET payload_json = ?
+            WHERE approval_id = ? AND workspace_id = ? AND payload_json = ?
+            """,
+            (
+                json.dumps(payload, ensure_ascii=False),
+                normalized_id,
+                normalized_workspace_id,
+                row["payload_json"],
+            ),
+        )
+        if updated.rowcount != 1:
+            raise ValueError("approval_action_completion_conflict")
+        connection.commit()
+    return {
+        **_approval_payload_for_output({_APPROVAL_ACTION_FIELD: completed})[_APPROVAL_ACTION_FIELD],
+        "approval_id": normalized_id,
+    }
 
 
 def list_approval_entries(
     db_path: Path,
     *,
+    workspace_id: str | None = None,
     status: str | None = None,
     owner: str | None = None,
     limit: int = 50,
@@ -2512,6 +2764,7 @@ def list_approval_entries(
             approval_id,
             created_at,
             source,
+            workspace_id,
             title,
             summary,
             approval_gate,
@@ -2527,6 +2780,10 @@ def list_approval_entries(
     """
     conditions: list[str] = []
     params: list[Any] = []
+    normalized_workspace_id = str(workspace_id or "").strip()
+    if workspace_id is not None:
+        conditions.append("workspace_id = ?")
+        params.append(normalized_workspace_id)
     if status:
         conditions.append("status = ?")
         params.append(status)
@@ -2536,7 +2793,7 @@ def list_approval_entries(
     if conditions:
         query += " WHERE " + " AND ".join(conditions)
     query += " ORDER BY CASE status WHEN 'pending' THEN 0 WHEN 'review' THEN 1 WHEN 'approved' THEN 2 WHEN 'rejected' THEN 3 ELSE 4 END, due, created_at DESC LIMIT ?"
-    params.append(max(1, int(limit)))
+    params.append(min(500, max(1, int(limit))))
     with _connect(db_path) as connection:
         rows = connection.execute(query, params).fetchall()
     return [
@@ -2544,6 +2801,7 @@ def list_approval_entries(
             "approval_id": row["approval_id"],
             "created_at": row["created_at"],
             "source": row["source"],
+            "workspace_id": row["workspace_id"],
             "title": row["title"],
             "summary": row["summary"],
             "approval_gate": row["approval_gate"],
@@ -2554,21 +2812,29 @@ def list_approval_entries(
             "related_route": row["related_route"],
             "related_entity": row["related_entity"],
             "evidence_link": row["evidence_link"],
-            "payload": json.loads(row["payload_json"]) if row["payload_json"] else {},
+            "payload": _approval_payload_for_output(
+                json.loads(row["payload_json"]) if row["payload_json"] else {}
+            ),
         }
         for row in rows
     ]
 
 
-def load_approval_summary(db_path: Path) -> dict[str, Any]:
+def load_approval_summary(db_path: Path, *, workspace_id: str | None = None) -> dict[str, Any]:
     ensure_schema(db_path)
+    normalized_workspace_id = str(workspace_id or "").strip()
+    where_clause = " WHERE workspace_id = ?" if workspace_id is not None else ""
+    params: tuple[Any, ...] = (normalized_workspace_id,) if workspace_id is not None else ()
     with _connect(db_path) as connection:
-        total = int(connection.execute("SELECT COUNT(*) FROM approval_queue").fetchone()[0])
+        total = int(connection.execute(f"SELECT COUNT(*) FROM approval_queue{where_clause}", params).fetchone()[0])
         status_rows = connection.execute(
-            "SELECT status, COUNT(*) AS item_count FROM approval_queue GROUP BY status"
+            f"SELECT status, COUNT(*) AS item_count FROM approval_queue{where_clause} GROUP BY status",
+            params,
         ).fetchall()
         gate_rows = connection.execute(
-            "SELECT approval_gate, COUNT(*) AS item_count FROM approval_queue GROUP BY approval_gate ORDER BY item_count DESC, approval_gate LIMIT 5"
+            f"SELECT approval_gate, COUNT(*) AS item_count FROM approval_queue{where_clause} "
+            "GROUP BY approval_gate ORDER BY item_count DESC, approval_gate LIMIT 5",
+            params,
         ).fetchall()
     return {
         "approval_count": total,

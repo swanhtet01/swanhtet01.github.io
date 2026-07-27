@@ -191,8 +191,14 @@ export async function runCrew(slug, intake, o = {}) {
         clientId,
         ...(isLast ? { schema: contractSchema(def) } : {}),
       })
-    } catch {
-      return guardedResult({ ok: false, slug: def.slug, reason: 'crew_role_failed', role: role.id, usageByRole })
+    } catch (error) {
+      const message = String(error?.message || '')
+      const budgetReason = message === 'gateway_company_daily_budget_reached'
+        ? 'crew_company_budget_exhausted'
+        : message === 'gateway_budget_store_unavailable'
+          ? 'crew_company_budget_unavailable'
+          : ''
+      return guardedResult({ ok: false, slug: def.slug, reason: budgetReason || 'crew_role_failed', role: role.id, usageByRole })
     }
     const measuredUsage = usageRecord(role, r)
     usageByRole.push(measuredUsage)

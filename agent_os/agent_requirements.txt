@@ -1,11 +1,4 @@
-langgraph
-langchain
-openai
-pydantic
-requests
-redis
-google-api-python-client
-google-auth-httplib2
-google-auth-oauthlib
-stripe
-frappe-client
+# Compatibility-only dependencies for the retired fail-closed gateway.
+# The canonical runtime owns dependencies in the repository root.
+fastapi==0.139.2
+uvicorn==0.51.0

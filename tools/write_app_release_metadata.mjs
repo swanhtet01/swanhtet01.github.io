@@ -22,9 +22,9 @@ const favicon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" rol
 </svg>
 `
 const webmanifest = {
-  name: 'SuperMega Company OS',
-  short_name: 'SuperMega',
-  description: 'Company operations and governed agents in one accountable system.',
+  name: manifest.brand.name,
+  short_name: manifest.brand.name,
+  description: manifest.company.supporting,
   start_url: '/',
   display: 'standalone',
   background_color: manifest.brand.colors.background,

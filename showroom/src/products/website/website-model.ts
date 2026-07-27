@@ -1,12 +1,21 @@
+import type { WebsiteReleaseState } from './website-release-foundation'
+
 export const WEBSITE_SCHEMA = 'supermega.website.workspace.v2'
 export const WEBSITE_STORAGE_KEY = 'supermega.website.workspace.v2'
 export const LEGACY_WEBSITE_STORAGE_KEY = 'supermega.website.workspace.v1'
+export const WEBSITE_RECOVERY_INDEX_KEY = 'supermega.website.workspace.recovery.v1.index'
+export const WEBSITE_EDIT_SESSION_KEY = 'supermega.website.edit-session.v1'
 export const MAX_WEBSITE_PAGES = 4
 export const MAX_WEBSITE_SECTIONS = 4
 
 const WEBSITE_MUTATION_LOCK = 'supermega.website.workspace.mutation.v2'
+const WEBSITE_RECOVERY_SCHEMA = 'supermega.website.workspace.recovery.v1'
+const WEBSITE_EDIT_SESSION_SCHEMA = 'supermega.website.edit-session.v1'
+const WEBSITE_RECOVERY_KEY_PREFIX = `${WEBSITE_RECOVERY_SCHEMA}.`
 const INITIAL_CREATED_AT = '2026-07-23T00:00:00.000Z'
 const fingerprintPattern = /^web-[a-f0-9]{8}$/
+const WEBSITE_RELEASE_STATE_SCHEMA = 'supermega.website.release_foundation.v1'
+const MAX_WEBSITE_RELEASE_RECORDS = 50
 
 export const previewDevices = [
   { id: 'desktop', label: 'Desktop', width: '100%' },
@@ -73,6 +82,24 @@ export type WebsiteSourceRef = {
   digest: string
 }
 
+export type WebsiteArtifactPage = {
+  id: string
+  slug: string
+  navigation: WebsitePage['navigation']
+  hero: WebsitePage['hero']
+  sections: PageSection[]
+  seo: WebsitePage['seo']
+}
+
+export type WebsiteArtifact = {
+  schema: 'supermega.website.artifact.v1'
+  siteName: string
+  fingerprint: string
+  contentDigest: string
+  source: WebsiteSourceRef
+  pages: WebsiteArtifactPage[]
+}
+
 export type PublishEvidence = {
   id: string
   kind: EvidenceKind
@@ -106,6 +133,7 @@ export type LocalPublishRecord = {
   evidenceIds: string[]
   source: WebsiteSourceRef
   migratedFromV1: boolean
+  artifact: WebsiteArtifact | null
 }
 
 export type WebsiteWorkflowEvent = {
@@ -132,7 +160,20 @@ export type WebsiteWorkspace = {
   approvals: PublishApproval[]
   localPublishes: LocalPublishRecord[]
   events: WebsiteWorkflowEvent[]
+  releaseRecords?: WebsiteReleaseState[]
 }
+
+export type WebsiteEditSession = {
+  schema: typeof WEBSITE_EDIT_SESSION_SCHEMA
+  baseRevision: number
+  baseContentRevision: number
+  baseFingerprint: string
+  workspace: WebsiteWorkspace
+}
+
+export type WebsiteEditSessionUpdateResult =
+  | { ok: true; changed: boolean; session: WebsiteEditSession }
+  | { ok: false; error: string }
 
 export type ReadinessCheck = {
   id: string
@@ -143,7 +184,7 @@ export type ReadinessCheck = {
 
 type LegacyPublishEvidence = Omit<PublishEvidence, 'source' | 'migratedFromV1'>
 type LegacyPublishApproval = Omit<PublishApproval, 'evidenceIds' | 'source' | 'migratedFromV1'>
-type LegacyLocalPublishRecord = Omit<LocalPublishRecord, 'approvalId' | 'evidenceIds' | 'source' | 'migratedFromV1'>
+type LegacyLocalPublishRecord = Omit<LocalPublishRecord, 'approvalId' | 'evidenceIds' | 'source' | 'migratedFromV1' | 'artifact'>
 
 type LegacyWebsiteWorkspace = {
   version: 1
@@ -156,6 +197,7 @@ type LegacyWebsiteWorkspace = {
 }
 
 export type WebsiteStorage = Pick<Storage, 'getItem' | 'setItem'>
+export type WebsiteRepairStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
 
 export type WebsiteLockManager = {
   request<T>(
@@ -173,6 +215,51 @@ export type WebsiteMutationResult =
 
 export type WebsiteLoadResult =
   | { ok: true; source: 'v2' | 'v1' | 'seed'; workspace: WebsiteWorkspace }
+  | { ok: false; error: string }
+
+export type WebsiteInvalidLocalCandidate = Readonly<{
+  source: 'v2' | 'v1'
+  sourceKey: typeof WEBSITE_STORAGE_KEY | typeof LEGACY_WEBSITE_STORAGE_KEY
+  expectedRaw: string
+  observedAt: string
+}>
+
+export type WebsiteRepairFailureCode =
+  | 'not_invalid'
+  | 'stale_candidate'
+  | 'storage_unavailable'
+  | 'lock_unavailable'
+  | 'archive_write_failed'
+  | 'archive_confirmation_failed'
+  | 'archive_index_failed'
+  | 'replacement_write_failed'
+  | 'replacement_confirmation_failed'
+
+export type WebsiteLocalRepairResult =
+  | {
+      ok: true
+      workspace: WebsiteWorkspace
+      archiveKey: string
+      archivedAt: string
+      legacyCleanup: 'not-needed' | 'removed' | 'retained'
+    }
+  | {
+      ok: false
+      code: WebsiteRepairFailureCode
+      error: string
+      archiveKey?: string
+      archiveConfirmed: boolean
+      replacementConfirmed: boolean
+    }
+
+export type WebsiteRecoveryArchiveSummary = Readonly<{
+  archiveKey: string
+  archivedAt: string
+  sourceKey: typeof WEBSITE_STORAGE_KEY | typeof LEGACY_WEBSITE_STORAGE_KEY
+}>
+
+export type WebsiteRecoveryDeleteResult =
+  | { ok: true; archives: WebsiteRecoveryArchiveSummary[] }
   | { ok: false; error: string }
 
 function now() {
@@ -353,13 +440,108 @@ export function workspaceFingerprint(workspace: WebsiteWorkspace) {
       seo: page.seo,
     })),
   }
-  const source = canonicalJson(publishableState)
+  return 'web-' + canonicalDigest(publishableState)
+}
+
+export function createWebsiteEditSession(workspace: WebsiteWorkspace): WebsiteEditSession {
+  return {
+    schema: WEBSITE_EDIT_SESSION_SCHEMA,
+    baseRevision: workspace.revision,
+    baseContentRevision: workspace.contentRevision,
+    baseFingerprint: workspaceFingerprint(workspace),
+    workspace,
+  }
+}
+
+export function updateWebsiteEditSession(
+  session: WebsiteEditSession,
+  update: WebsiteWorkspaceUpdate,
+): WebsiteEditSessionUpdateResult {
+  try {
+    const candidate = update(session.workspace)
+    if (!isWebsiteWorkspace(candidate)) {
+      return { ok: false, error: 'Website edit produced an invalid draft.' }
+    }
+    if (candidate.revision !== session.baseRevision || candidate.contentRevision !== session.baseContentRevision) {
+      return { ok: false, error: 'Website drafts cannot change saved revision metadata.' }
+    }
+    if (!sameReleaseHistory(candidate, session.workspace)) {
+      return { ok: false, error: 'Evidence, approval, and snapshot actions cannot be staged as draft edits.' }
+    }
+    if (serialize(candidate) === serialize(session.workspace)) {
+      return { ok: true, changed: false, session }
+    }
+    return { ok: true, changed: true, session: { ...session, workspace: candidate } }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Website draft edit failed.' }
+  }
+}
+
+export function websiteEditSessionMatches(
+  session: WebsiteEditSession,
+  workspace: WebsiteWorkspace,
+) {
+  return session.baseRevision === workspace.revision
+    && session.baseContentRevision === workspace.contentRevision
+    && session.baseFingerprint === workspaceFingerprint(workspace)
+}
+
+export function commitWebsiteEditSession(
+  current: WebsiteWorkspace,
+  session: WebsiteEditSession,
+): WebsiteWorkspace {
+  if (!websiteEditSessionMatches(session, current)) {
+    throw new Error('Website changed after this edit session started. The saved workspace was preserved; discard this preview and review the newer version.')
+  }
+  if (!sameReleaseHistory(session.workspace, current)) {
+    throw new Error('Website edit-session history no longer matches the saved workspace.')
+  }
+  return {
+    ...session.workspace,
+    revision: current.revision,
+    contentRevision: current.contentRevision,
+    evidence: current.evidence,
+    approvals: current.approvals,
+    localPublishes: current.localPublishes,
+    events: current.events,
+  }
+}
+
+export function restoreWebsiteEditSession(value: unknown): WebsiteEditSession | null {
+  try {
+    const candidate = typeof value === 'string' ? JSON.parse(value) as unknown : value
+    if (!isRecord(candidate)
+      || !hasExactKeys(candidate, ['schema', 'baseRevision', 'baseContentRevision', 'baseFingerprint', 'workspace'])
+      || candidate.schema !== WEBSITE_EDIT_SESSION_SCHEMA
+      || !isNonNegativeInteger(candidate.baseRevision)
+      || !isNonNegativeInteger(candidate.baseContentRevision)
+      || candidate.baseContentRevision > candidate.baseRevision
+      || typeof candidate.baseFingerprint !== 'string'
+      || !fingerprintPattern.test(candidate.baseFingerprint)) return null
+    const workspace = restoreWorkspace(candidate.workspace)
+    if (!workspace
+      || workspace.revision !== candidate.baseRevision
+      || workspace.contentRevision !== candidate.baseContentRevision) return null
+    return {
+      schema: WEBSITE_EDIT_SESSION_SCHEMA,
+      baseRevision: candidate.baseRevision,
+      baseContentRevision: candidate.baseContentRevision,
+      baseFingerprint: candidate.baseFingerprint,
+      workspace,
+    }
+  } catch {
+    return null
+  }
+}
+
+function canonicalDigest(value: unknown) {
+  const source = canonicalJson(value)
   let hash = 2166136261
   for (let index = 0; index < source.length; index += 1) {
     hash ^= source.charCodeAt(index)
     hash = Math.imul(hash, 16777619)
   }
-  return 'web-' + (hash >>> 0).toString(16).padStart(8, '0')
+  return (hash >>> 0).toString(16).padStart(8, '0')
 }
 
 function canonicalJson(value: unknown): string {
@@ -380,6 +562,32 @@ export function websiteSource(workspace: WebsiteWorkspace): WebsiteSourceRef {
   return { contentRevision: workspace.contentRevision, digest: workspaceFingerprint(workspace) }
 }
 
+export function createWebsiteArtifact(workspace: WebsiteWorkspace): WebsiteArtifact {
+  const source = websiteSource(workspace)
+  const content: Omit<WebsiteArtifact, 'contentDigest'> = {
+    schema: 'supermega.website.artifact.v1',
+    siteName: workspace.siteName,
+    fingerprint: source.digest,
+    source,
+    pages: workspace.pages
+      .filter((page) => page.stage === 'ready')
+      .map((page) => ({
+        id: page.id,
+        slug: normalizeSlug(page.slug),
+        navigation: { ...page.navigation },
+        hero: { ...page.hero },
+        sections: page.sections.map((section) => ({ ...section })),
+        seo: { ...page.seo },
+      })),
+  }
+  const artifact: WebsiteArtifact = {
+    ...content,
+    contentDigest: 'site-' + canonicalDigest(content),
+  }
+  if (!isWebsiteArtifact(artifact)) throw new Error('Approved Website content could not be retained safely.')
+  return artifact
+}
+
 function sameSource(left: WebsiteSourceRef, right: WebsiteSourceRef) {
   return left.contentRevision === right.contentRevision && left.digest === right.digest
 }
@@ -395,8 +603,17 @@ export function readinessChecks(workspace: WebsiteWorkspace, fingerprint = works
   const readyPages = workspace.pages.filter((page) => page.stage === 'ready')
   const normalizedSlugs = readyPages.map((page) => normalizeSlug(page.slug))
   const uniqueSlugs = new Set(normalizedSlugs)
+  const readyPaths = new Set(normalizedSlugs)
+  const readyAnchors = new Set(normalizedSlugs.map(pageAnchorForSlug))
   const visibleNavigation = workspace.pages.filter((page) => page.navigation.visible)
   const completePages = readyPages.filter((page) => pageIssues(page).length === 0)
+  const destinationsAreSafe = readyPages.every((page) => {
+    const destination = page.hero.ctaHref.trim()
+    return !destination
+      || (destination.startsWith('#') && readyAnchors.has(destination.slice(1)))
+      || isSafeHttpsDestination(destination)
+      || (destination.startsWith('/') && readyPaths.has(normalizeSlug(destination)))
+  })
   const currentSource = websiteSource(workspace)
   const currentEvidenceKinds = new Set(
     workspace.evidence
@@ -440,6 +657,14 @@ export function readinessChecks(workspace: WebsiteWorkspace, fingerprint = works
       passed: visibleNavigation.length > 0
         && visibleNavigation.every((page) => page.stage === 'ready' && Boolean(page.navigation.label.trim())),
     },
+    {
+      id: 'destinations',
+      label: 'Buttons use safe destinations',
+      detail: destinationsAreSafe
+        ? 'Every ready-page button uses a ready page, on-page anchor, or HTTPS destination.'
+        : 'Point each ready-page button to another ready page, an on-page anchor, or an HTTPS destination.',
+      passed: destinationsAreSafe,
+    },
     ...evidenceRequirements.map((requirement) => ({
       id: 'evidence-' + requirement.id,
       label: requirement.label,
@@ -462,14 +687,15 @@ export function getCurrentApproval(workspace: WebsiteWorkspace) {
 }
 
 export function isCurrentPublish(record: LocalPublishRecord | undefined, workspace: WebsiteWorkspace) {
-  if (!record || record.migratedFromV1 || !sameSource(record.source, websiteSource(workspace))) return false
+  if (!record || record.migratedFromV1 || !record.artifact || !sameSource(record.source, websiteSource(workspace))) return false
   const approval = getCurrentApproval(workspace)
   const readyPageIds = workspace.pages.filter((page) => page.stage === 'ready').map((page) => page.id)
   return Boolean(approval
     && record.approvalId === approval.id
     && record.recordedBy === approval.reviewer
     && sameStringSet(record.evidenceIds, approval.evidenceIds)
-    && sameStringSet(record.readyPageIds, readyPageIds))
+    && sameStringSet(record.readyPageIds, readyPageIds)
+    && serialize(record.artifact) === serialize(createWebsiteArtifact(workspace)))
 }
 
 export function getCurrentPublish(workspace: WebsiteWorkspace) {
@@ -576,6 +802,7 @@ export function recordWebsiteSnapshot(workspace: WebsiteWorkspace, input: {
     evidenceIds: [...approval.evidenceIds],
     source,
     migratedFromV1: false,
+    artifact: createWebsiteArtifact(workspace),
   }
   const existing = workspace.localPublishes.find((entry) => entry.id === input.actionId)
   if (existing) {
@@ -599,7 +826,7 @@ export function recordWebsiteSnapshot(workspace: WebsiteWorkspace, input: {
 export function applyWebsiteWorkspaceUpdate(current: WebsiteWorkspace, update: WebsiteWorkspaceUpdate): WebsiteMutationResult {
   try {
     const candidate = update(current)
-    if (!isWebsiteWorkspace(candidate)) return { ok: false, error: 'Website transition produced an invalid workspace.' }
+    if (!isWebsiteWorkspace(candidate, 1)) return { ok: false, error: 'Website transition produced an invalid workspace.' }
     if (candidate.revision !== current.revision || candidate.contentRevision !== current.contentRevision) {
       return { ok: false, error: 'Website transitions cannot set revision metadata directly.' }
     }
@@ -661,14 +888,14 @@ export function loadWebsiteWorkspace(storage: Pick<WebsiteStorage, 'getItem'>): 
       const current = parseStoredWorkspace(currentRaw)
       return current
         ? { ok: true, source: 'v2', workspace: current }
-        : { ok: false, error: 'Stored Website v2 data is invalid. The original record was preserved and writes are disabled.' }
+        : { ok: false, error: 'Website saving is paused because the saved data on this device cannot be read safely. The original value is untouched; export a backup or review the guided repair.' }
     }
     const legacyRaw = storage.getItem(LEGACY_WEBSITE_STORAGE_KEY)
     if (legacyRaw !== null) {
       const legacy = parseLegacyWorkspace(legacyRaw)
       return legacy
         ? { ok: true, source: 'v1', workspace: migrateLegacyWorkspace(legacy) }
-        : { ok: false, error: 'Stored Website v1 data is invalid. The original record was preserved and was not replaced with demo data.' }
+        : { ok: false, error: 'Website saving is paused because older data on this device cannot be read safely. The original value is untouched; export a backup or review the guided repair.' }
     }
     return { ok: true, source: 'seed', workspace: createInitialWorkspace() }
   } catch (error) {
@@ -676,8 +903,276 @@ export function loadWebsiteWorkspace(storage: Pick<WebsiteStorage, 'getItem'>): 
   }
 }
 
+function repairFailure(
+  code: WebsiteRepairFailureCode,
+  error: string,
+  state: { archiveKey?: string; archiveConfirmed?: boolean; replacementConfirmed?: boolean } = {},
+): WebsiteLocalRepairResult {
+  return {
+    ok: false,
+    code,
+    error,
+    archiveKey: state.archiveKey,
+    archiveConfirmed: state.archiveConfirmed ?? false,
+    replacementConfirmed: state.replacementConfirmed ?? false,
+  }
+}
+
+export async function repairInvalidWebsiteWorkspace(
+  candidate: WebsiteInvalidLocalCandidate,
+  replacement: WebsiteWorkspace,
+  storage: WebsiteRepairStorage | undefined = globalThis.localStorage,
+  locks: WebsiteLockManager | undefined = globalThis.navigator?.locks as WebsiteLockManager | undefined,
+): Promise<WebsiteLocalRepairResult> {
+  if (!storage) return repairFailure('storage_unavailable', 'Browser storage is unavailable, so the saved Website value was not changed.')
+  if (!locks?.request) return repairFailure('lock_unavailable', 'Safe browser locking is unavailable, so the saved Website value was not changed.')
+  if (!isWebsiteWorkspace(replacement)) return repairFailure('replacement_confirmation_failed', 'The current Website workspace is not valid enough to repair local storage.')
+  const sourceMatches = (candidate.source === 'v2' && candidate.sourceKey === WEBSITE_STORAGE_KEY)
+    || (candidate.source === 'v1' && candidate.sourceKey === LEGACY_WEBSITE_STORAGE_KEY)
+  if (!sourceMatches) return repairFailure('stale_candidate', 'The Website repair candidate does not match its storage source.')
+
+  const repairState: {
+    archiveKey?: string
+    archiveConfirmed: boolean
+    replacementConfirmed: boolean
+  } = {
+    archiveConfirmed: false,
+    replacementConfirmed: false,
+  }
+
+  try {
+    return await locks.request(WEBSITE_MUTATION_LOCK, { mode: 'exclusive' }, async () => {
+      const currentRaw = storage.getItem(candidate.sourceKey)
+      if (currentRaw !== candidate.expectedRaw) {
+        return repairFailure('stale_candidate', 'Saved Website data changed after repair was requested. Nothing was replaced.')
+      }
+      const isStillInvalid = candidate.source === 'v2'
+        ? parseStoredWorkspace(currentRaw) === null
+        : parseLegacyWorkspace(currentRaw) === null
+      if (!isStillInvalid) return repairFailure('not_invalid', 'Saved Website data is now valid. Nothing was replaced.')
+      if (candidate.source === 'v1' && storage.getItem(WEBSITE_STORAGE_KEY) !== null) {
+        return repairFailure('stale_candidate', 'A newer Website workspace now exists. The old value was not repaired or replaced.')
+      }
+
+      const archivedAt = new Date().toISOString()
+      const archiveId = createId('website-recovery')
+      const archiveKey = `${WEBSITE_RECOVERY_KEY_PREFIX}${archiveId}`
+      repairState.archiveKey = archiveKey
+      if (storage.getItem(archiveKey) !== null) {
+        return repairFailure('archive_write_failed', 'A Website recovery archive with this ID already exists. Nothing was replaced.', repairState)
+      }
+      const archiveRaw = serialize({
+        schema: WEBSITE_RECOVERY_SCHEMA,
+        archiveId,
+        archivedAt,
+        sourceKey: candidate.sourceKey,
+        rawValue: currentRaw,
+        replacementRevision: replacement.revision,
+        replacementContentRevision: replacement.contentRevision,
+      })
+      try {
+        storage.setItem(archiveKey, archiveRaw)
+      } catch (error) {
+        return repairFailure('archive_write_failed', `The invalid Website value could not be archived: ${error instanceof Error ? error.message : 'unknown storage error'}`, repairState)
+      }
+      if (storage.getItem(archiveKey) !== archiveRaw) {
+        return repairFailure('archive_confirmation_failed', 'The Website recovery archive could not be confirmed. The saved value was not replaced.', repairState)
+      }
+      repairState.archiveConfirmed = true
+
+      const currentIndexRaw = storage.getItem(WEBSITE_RECOVERY_INDEX_KEY)
+      const currentArchives = parseWebsiteRecoveryIndex(currentIndexRaw)
+      if (currentArchives === null) {
+        return repairFailure('archive_index_failed', 'The Website recovery index is invalid. The archive was retained, but the saved value was not replaced.', repairState)
+      }
+      const nextIndexRaw = serialize({
+        schema: WEBSITE_RECOVERY_SCHEMA,
+        archives: [...currentArchives, { archiveKey, archivedAt, sourceKey: candidate.sourceKey }],
+      })
+      try {
+        storage.setItem(WEBSITE_RECOVERY_INDEX_KEY, nextIndexRaw)
+      } catch (error) {
+        return repairFailure('archive_index_failed', `The Website recovery index could not be saved: ${error instanceof Error ? error.message : 'unknown storage error'}`, repairState)
+      }
+      if (storage.getItem(WEBSITE_RECOVERY_INDEX_KEY) !== nextIndexRaw) {
+        return repairFailure('archive_index_failed', 'The Website recovery index could not be confirmed. The archive was retained, but the saved value was not replaced.', repairState)
+      }
+
+      if (storage.getItem(candidate.sourceKey) !== currentRaw) {
+        return repairFailure('stale_candidate', 'Saved Website data changed while the recovery archive was being prepared. The archive was retained, but nothing was replaced.', repairState)
+      }
+      if (candidate.source === 'v1' && storage.getItem(WEBSITE_STORAGE_KEY) !== null) {
+        return repairFailure('stale_candidate', 'A newer Website workspace appeared while the old value was being archived. The archive was retained, but the newer workspace was not replaced.', repairState)
+      }
+      const replacementRaw = serialize(replacement)
+      try {
+        storage.setItem(WEBSITE_STORAGE_KEY, replacementRaw)
+      } catch (error) {
+        return repairFailure('replacement_write_failed', `The valid Website workspace could not be saved: ${error instanceof Error ? error.message : 'unknown storage error'}`, repairState)
+      }
+      const confirmedRaw = storage.getItem(WEBSITE_STORAGE_KEY)
+      const confirmed = confirmedRaw === replacementRaw ? parseStoredWorkspace(confirmedRaw) : null
+      if (!confirmed || serialize(confirmed) !== replacementRaw) {
+        return repairFailure('replacement_confirmation_failed', 'The repaired Website workspace could not be confirmed. The archive was retained and durable editing remains paused.', repairState)
+      }
+      repairState.replacementConfirmed = true
+
+      let legacyCleanup: 'not-needed' | 'removed' | 'retained' = 'not-needed'
+      if (candidate.source === 'v1') {
+        try {
+          storage.removeItem(LEGACY_WEBSITE_STORAGE_KEY)
+          legacyCleanup = storage.getItem(LEGACY_WEBSITE_STORAGE_KEY) === null ? 'removed' : 'retained'
+        } catch {
+          legacyCleanup = 'retained'
+        }
+      }
+      return { ok: true, workspace: confirmed, archiveKey, archivedAt, legacyCleanup }
+    })
+  } catch (error) {
+    return repairFailure('storage_unavailable', `Website repair stopped because browser storage could not be confirmed: ${error instanceof Error ? error.message : 'unknown storage error'}`, repairState)
+  }
+}
+
+function isWebsiteRecoverySourceKey(
+  value: unknown,
+): value is typeof WEBSITE_STORAGE_KEY | typeof LEGACY_WEBSITE_STORAGE_KEY {
+  return value === WEBSITE_STORAGE_KEY || value === LEGACY_WEBSITE_STORAGE_KEY
+}
+
+function parseWebsiteRecoveryIndex(raw: string | null): WebsiteRecoveryArchiveSummary[] | null {
+  if (raw === null) return []
+  try {
+    const candidate = JSON.parse(raw) as unknown
+    if (!isRecord(candidate)
+      || !hasExactKeys(candidate, ['schema', 'archives'])
+      || candidate.schema !== WEBSITE_RECOVERY_SCHEMA
+      || !Array.isArray(candidate.archives)) return null
+    const archives: WebsiteRecoveryArchiveSummary[] = []
+    const keys = new Set<string>()
+    for (const entry of candidate.archives) {
+      if (!isRecord(entry)
+        || !hasExactKeys(entry, ['archiveKey', 'archivedAt', 'sourceKey'])
+        || typeof entry.archiveKey !== 'string'
+        || !entry.archiveKey.startsWith(WEBSITE_RECOVERY_KEY_PREFIX)
+        || entry.archiveKey === WEBSITE_RECOVERY_INDEX_KEY
+        || typeof entry.archivedAt !== 'string'
+        || Number.isNaN(Date.parse(entry.archivedAt))
+        || !isWebsiteRecoverySourceKey(entry.sourceKey)
+        || keys.has(entry.archiveKey)) return null
+      keys.add(entry.archiveKey)
+      archives.push({
+        archiveKey: entry.archiveKey,
+        archivedAt: entry.archivedAt,
+        sourceKey: entry.sourceKey,
+      })
+    }
+    return archives
+  } catch {
+    return null
+  }
+}
+
+export function readWebsiteRecoveryArchive(
+  archiveKey: string,
+  storage: Pick<WebsiteRepairStorage, 'getItem'> | undefined = globalThis.localStorage,
+): string | null {
+  if (!storage || !archiveKey.startsWith(WEBSITE_RECOVERY_KEY_PREFIX) || archiveKey === WEBSITE_RECOVERY_INDEX_KEY) return null
+  const raw = storage.getItem(archiveKey)
+  if (raw === null) return null
+  try {
+    const candidate = JSON.parse(raw) as {
+      schema?: unknown
+      archiveId?: unknown
+      archivedAt?: unknown
+      sourceKey?: unknown
+      rawValue?: unknown
+      replacementRevision?: unknown
+      replacementContentRevision?: unknown
+    }
+    if (candidate.schema !== WEBSITE_RECOVERY_SCHEMA
+      || typeof candidate.archiveId !== 'string'
+      || archiveKey !== `${WEBSITE_RECOVERY_KEY_PREFIX}${candidate.archiveId}`
+      || typeof candidate.archivedAt !== 'string'
+      || !isWebsiteRecoverySourceKey(candidate.sourceKey)
+      || typeof candidate.rawValue !== 'string'
+      || !Number.isSafeInteger(candidate.replacementRevision)
+      || !Number.isSafeInteger(candidate.replacementContentRevision)) return null
+    return raw
+  } catch {
+    return null
+  }
+}
+
+export function listWebsiteRecoveryArchives(
+  storage: Pick<WebsiteRepairStorage, 'getItem'> | undefined = globalThis.localStorage,
+): WebsiteRecoveryArchiveSummary[] {
+  if (!storage) return []
+  try {
+    const index = parseWebsiteRecoveryIndex(storage.getItem(WEBSITE_RECOVERY_INDEX_KEY))
+    if (!index) return []
+    return index
+      .filter((entry) => readWebsiteRecoveryArchive(entry.archiveKey, storage) !== null)
+      .sort((left, right) => right.archivedAt.localeCompare(left.archivedAt))
+  } catch {
+    return []
+  }
+}
+
+export async function deleteWebsiteRecoveryArchive(
+  archiveKey: string,
+  storage: WebsiteRepairStorage | undefined = globalThis.localStorage,
+  locks: WebsiteLockManager | undefined = globalThis.navigator?.locks as WebsiteLockManager | undefined,
+): Promise<WebsiteRecoveryDeleteResult> {
+  if (!storage) return { ok: false, error: 'Browser storage is unavailable, so the recovery archive was not removed.' }
+  if (!locks?.request) return { ok: false, error: 'Safe browser locking is unavailable, so the recovery archive was not removed.' }
+  if (!archiveKey.startsWith(WEBSITE_RECOVERY_KEY_PREFIX) || archiveKey === WEBSITE_RECOVERY_INDEX_KEY) {
+    return { ok: false, error: 'The selected Website recovery archive is not valid.' }
+  }
+  try {
+    return await locks.request(WEBSITE_MUTATION_LOCK, { mode: 'exclusive' }, () => {
+      const currentIndexRaw = storage.getItem(WEBSITE_RECOVERY_INDEX_KEY)
+      const currentArchives = parseWebsiteRecoveryIndex(currentIndexRaw)
+      if (!currentArchives) return { ok: false, error: 'The Website recovery index is invalid, so nothing was removed.' }
+      if (!currentArchives.some((entry) => entry.archiveKey === archiveKey)
+        || readWebsiteRecoveryArchive(archiveKey, storage) === null) {
+        return { ok: false, error: 'The selected Website recovery archive no longer exists or failed validation.' }
+      }
+      const nextArchives = currentArchives.filter((entry) => entry.archiveKey !== archiveKey)
+      const nextIndexRaw = serialize({ schema: WEBSITE_RECOVERY_SCHEMA, archives: nextArchives })
+      storage.setItem(WEBSITE_RECOVERY_INDEX_KEY, nextIndexRaw)
+      if (storage.getItem(WEBSITE_RECOVERY_INDEX_KEY) !== nextIndexRaw) {
+        return { ok: false, error: 'The recovery index did not confirm the change, so the archive was retained.' }
+      }
+      try {
+        storage.removeItem(archiveKey)
+        if (storage.getItem(archiveKey) !== null) throw new Error('archive removal was not confirmed')
+      } catch (error) {
+        try {
+          storage.setItem(WEBSITE_RECOVERY_INDEX_KEY, currentIndexRaw ?? serialize({
+            schema: WEBSITE_RECOVERY_SCHEMA,
+            archives: currentArchives,
+          }))
+        } catch {
+          // The archive remains intact; a later reload will validate the index before showing it.
+        }
+        return {
+          ok: false,
+          error: `The recovery archive could not be removed: ${error instanceof Error ? error.message : 'unknown storage error'}`,
+        }
+      }
+      return { ok: true, archives: listWebsiteRecoveryArchives(storage) }
+    })
+  } catch (error) {
+    return { ok: false, error: `Website recovery archive removal failed: ${error instanceof Error ? error.message : 'unknown storage error'}` }
+  }
+}
+
+// A restored device snapshot is structurally valid, not a signed audit checkpoint.
+// In-app writes establish append-only history by comparing it with the prior workspace.
 export function restoreWorkspace(value: unknown): WebsiteWorkspace | null {
   if (isWebsiteWorkspace(value)) return value
+  const restoredV2 = restoreV2(value)
+  if (restoredV2) return restoredV2
   if (isLegacyWorkspace(value)) return migrateLegacyWorkspace(value)
   return null
 }
@@ -688,6 +1183,11 @@ export function normalizeSlug(value: string) {
   return trimmed.endsWith('/') ? trimmed.slice(0, -1) : trimmed
 }
 
+function pageAnchorForSlug(value: string) {
+  const normalized = normalizeSlug(value)
+  return normalized === '/' ? 'home' : normalized.slice(1).replaceAll('/', '-')
+}
+
 export function formatTimestamp(value: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return 'Unknown time'
@@ -695,27 +1195,6 @@ export function formatTimestamp(value: string) {
 }
 
 function migrateLegacyWorkspace(legacy: LegacyWebsiteWorkspace): WebsiteWorkspace {
-  const sourceForDigest = (digest: string): WebsiteSourceRef => ({ contentRevision: 0, digest })
-  const evidence: PublishEvidence[] = legacy.evidence.map((entry) => ({
-    ...entry,
-    source: sourceForDigest(entry.fingerprint),
-    migratedFromV1: true,
-  }))
-  const approvals: PublishApproval[] = legacy.approval ? [{
-    ...legacy.approval,
-    evidenceIds: evidence
-      .filter((entry) => entry.fingerprint === legacy.approval?.fingerprint)
-      .map((entry) => entry.id),
-    source: sourceForDigest(legacy.approval.fingerprint),
-    migratedFromV1: true,
-  }] : []
-  const localPublishes: LocalPublishRecord[] = legacy.localPublishes.map((record) => ({
-    ...record,
-    approvalId: legacy.approval?.fingerprint === record.fingerprint ? legacy.approval.id : null,
-    evidenceIds: evidence.filter((entry) => entry.fingerprint === record.fingerprint).map((entry) => entry.id),
-    source: sourceForDigest(record.fingerprint),
-    migratedFromV1: true,
-  }))
   return {
     schema: WEBSITE_SCHEMA,
     version: 2,
@@ -724,9 +1203,9 @@ function migrateLegacyWorkspace(legacy: LegacyWebsiteWorkspace): WebsiteWorkspac
     siteName: legacy.siteName,
     pages: legacy.pages,
     selectedPageId: legacy.selectedPageId,
-    evidence,
-    approvals,
-    localPublishes,
+    evidence: [],
+    approvals: [],
+    localPublishes: [],
     events: [],
   }
 }
@@ -743,14 +1222,23 @@ function parseLegacyWorkspace(raw: string) {
 }
 
 function restoreV2(value: unknown) {
-  return isWebsiteWorkspace(value) ? value : null
+  if (isWebsiteWorkspace(value)) return value
+  if (!isRecord(value) || !Array.isArray(value.localPublishes)) return null
+  const localPublishes = value.localPublishes.map((record) => (
+    isMetadataOnlyPublishRecord(record) ? { ...record, artifact: null } : record
+  ))
+  const migrated = { ...value, localPublishes }
+  return isWebsiteWorkspace(migrated) ? migrated : null
 }
 
-function isWebsiteWorkspace(value: unknown): value is WebsiteWorkspace {
-  if (!isRecord(value) || !hasExactKeys(value, [
+function isWebsiteWorkspace(value: unknown, pendingReleaseRecords = 0): value is WebsiteWorkspace {
+  if (!isRecord(value)) return false
+  const workspaceKeys = [
     'schema', 'version', 'revision', 'contentRevision', 'siteName', 'pages', 'selectedPageId',
     'evidence', 'approvals', 'localPublishes', 'events',
-  ])) return false
+  ]
+  if (Object.hasOwn(value, 'releaseRecords')) workspaceKeys.push('releaseRecords')
+  if (!hasExactKeys(value, workspaceKeys)) return false
   if (value.schema !== WEBSITE_SCHEMA || value.version !== 2) return false
   const revision = value.revision
   const contentRevision = value.contentRevision
@@ -761,6 +1249,17 @@ function isWebsiteWorkspace(value: unknown): value is WebsiteWorkspace {
   if (!Array.isArray(value.evidence) || !value.evidence.every(isPublishEvidence) || !hasUniqueIds(value.evidence)) return false
   if (!Array.isArray(value.approvals) || !value.approvals.every(isPublishApproval) || !hasUniqueIds(value.approvals)) return false
   if (!Array.isArray(value.localPublishes) || !value.localPublishes.every(isLocalPublishRecord) || !hasUniqueIds(value.localPublishes)) return false
+  if (Object.hasOwn(value, 'releaseRecords')) {
+    if (!Array.isArray(value.releaseRecords)
+      || value.releaseRecords.length > MAX_WEBSITE_RELEASE_RECORDS
+      || !value.releaseRecords.every(isWebsiteReleaseStateEnvelope)
+      || !hasUniqueStrings(value.releaseRecords.map((record) => record.scope))) return false
+  }
+  const releaseRecords = [...value.evidence, ...value.approvals, ...value.localPublishes]
+  if (releaseRecords.some((record) => record.migratedFromV1)) return false
+  const releaseRecordCount = releaseRecords.length
+  const confirmedReleaseCount = revision - contentRevision
+  if (releaseRecordCount > confirmedReleaseCount + pendingReleaseRecords) return false
   if (!Array.isArray(value.events) || !value.events.every(isWorkflowEvent) || !hasUniqueIds(value.events)
     || !hasUniqueStrings(value.events.map((event) => event.subjectId))) return false
   const sourceRevisionIsValid = [...value.evidence, ...value.approvals, ...value.localPublishes, ...value.events]
@@ -768,6 +1267,15 @@ function isWebsiteWorkspace(value: unknown): value is WebsiteWorkspace {
   if (!sourceRevisionIsValid) return false
   const evidenceById = new Map(value.evidence.map((entry) => [entry.id, entry]))
   const eventBySubject = new Map(value.events.map((entry) => [entry.subjectId, entry]))
+  const expectedEvents: Array<{ subjectId: string; action: WebsiteWorkflowEvent['action'] }> = [
+    ...value.evidence.map((entry) => ({ subjectId: entry.id, action: 'publish_evidence_recorded' as const })),
+    ...value.approvals.map((entry) => ({ subjectId: entry.id, action: 'website_revision_approved' as const })),
+    ...value.localPublishes.map((entry) => ({ subjectId: entry.id, action: 'local_snapshot_recorded' as const })),
+  ]
+  if (!hasUniqueStrings(expectedEvents.map((entry) => entry.subjectId))) return false
+  const expectedEventBySubject = new Map(expectedEvents.map((entry) => [entry.subjectId, entry.action]))
+  if (value.events.length !== expectedEvents.length
+    || !value.events.every((event) => expectedEventBySubject.get(event.subjectId) === event.action)) return false
   for (const evidence of value.evidence) {
     if (!evidence.migratedFromV1) {
       const event = eventBySubject.get(evidence.id)
@@ -929,9 +1437,74 @@ function isLegacyApproval(value: unknown): value is LegacyPublishApproval {
     && fingerprintPattern.test(value.fingerprint)
 }
 
+function isWebsiteArtifact(value: unknown): value is WebsiteArtifact {
+  if (!isRecord(value)
+    || !hasExactKeys(value, ['schema', 'siteName', 'fingerprint', 'contentDigest', 'source', 'pages'])
+    || value.schema !== 'supermega.website.artifact.v1'
+    || !isText(value.siteName, 60)
+    || typeof value.fingerprint !== 'string'
+    || !fingerprintPattern.test(value.fingerprint)
+    || typeof value.contentDigest !== 'string'
+    || !/^site-[a-f0-9]{8}$/.test(value.contentDigest)
+    || !isSource(value.source)
+    || value.fingerprint !== value.source.digest
+    || !Array.isArray(value.pages)
+    || value.pages.length < 1
+    || value.pages.length > MAX_WEBSITE_PAGES
+    || !value.pages.every(isWebsiteArtifactPage)
+    || !hasUniqueIds(value.pages)
+    || !hasUniqueSectionIds(value.pages)) return false
+  const { contentDigest, ...content } = value
+  if (contentDigest !== 'site-' + canonicalDigest(content)) return false
+  const slugs = value.pages.map((page) => page.slug)
+  if (!hasUniqueStrings(slugs) || slugs.filter((slug) => slug === '/').length !== 1) return false
+  const readyPaths = new Set(slugs)
+  const readyAnchors = new Set(slugs.map(pageAnchorForSlug))
+  return value.pages
+    .filter((page) => page.navigation.visible)
+    .length > 0
+    && value.pages.every((page) => {
+      const destination = page.hero.ctaHref.trim()
+      return !destination
+        || (destination.startsWith('#') && readyAnchors.has(destination.slice(1)))
+        || isSafeHttpsDestination(destination)
+        || (destination.startsWith('/') && readyPaths.has(normalizeSlug(destination)))
+    })
+}
+
+function isWebsiteArtifactPage(value: unknown): value is WebsiteArtifactPage {
+  if (!isRecord(value) || !hasExactKeys(value, ['id', 'slug', 'navigation', 'hero', 'sections', 'seo'])) return false
+  if (!isRecord(value.navigation) || !hasExactKeys(value.navigation, ['label', 'visible'])) return false
+  if (!isRecord(value.hero) || !hasExactKeys(value.hero, ['eyebrow', 'headline', 'summary', 'ctaLabel', 'ctaHref'])) return false
+  if (!isRecord(value.seo) || !hasExactKeys(value.seo, ['title', 'description'])) return false
+  const hasCtaLabel = typeof value.hero.ctaLabel === 'string' && Boolean(value.hero.ctaLabel.trim())
+  const hasCtaHref = typeof value.hero.ctaHref === 'string' && Boolean(value.hero.ctaHref.trim())
+  return isText(value.id, 80)
+    && isText(value.slug, 100)
+    && isValidSlug(value.slug)
+    && normalizeSlug(value.slug) === value.slug
+    && isText(value.navigation.label, 40, true)
+    && typeof value.navigation.visible === 'boolean'
+    && isText(value.hero.eyebrow, 80, true)
+    && isText(value.hero.headline, 140)
+    && isText(value.hero.summary, 280)
+    && isText(value.hero.ctaLabel, 40, true)
+    && isText(value.hero.ctaHref, 160, true)
+    && hasCtaLabel === hasCtaHref
+    && (!hasCtaHref || isValidDestination(value.hero.ctaHref))
+    && Array.isArray(value.sections)
+    && value.sections.length > 0
+    && value.sections.length <= MAX_WEBSITE_SECTIONS
+    && value.sections.every((section) => isPageSection(section)
+      && Boolean(section.title.trim())
+      && Boolean(section.body.trim()))
+    && isText(value.seo.title, 70)
+    && isText(value.seo.description, 160)
+}
+
 function isLocalPublishRecord(value: unknown): value is LocalPublishRecord {
   return isRecord(value)
-    && hasExactKeys(value, ['id', 'recordedAt', 'recordedBy', 'fingerprint', 'readyPageIds', 'approvalId', 'evidenceIds', 'source', 'migratedFromV1'])
+    && hasExactKeys(value, ['id', 'recordedAt', 'recordedBy', 'fingerprint', 'readyPageIds', 'approvalId', 'evidenceIds', 'source', 'migratedFromV1', 'artifact'])
     && isText(value.id, 100)
     && isIsoTimestamp(value.recordedAt)
     && isText(value.recordedBy, 80)
@@ -947,6 +1520,16 @@ function isLocalPublishRecord(value: unknown): value is LocalPublishRecord {
     && isSource(value.source)
     && value.fingerprint === value.source.digest
     && typeof value.migratedFromV1 === 'boolean'
+    && (value.artifact === null
+      || (isWebsiteArtifact(value.artifact)
+        && value.artifact.fingerprint === value.fingerprint
+        && sameSource(value.artifact.source, value.source)
+        && sameStringSet(value.artifact.pages.map((page) => page.id), value.readyPageIds)))
+}
+
+function isMetadataOnlyPublishRecord(value: unknown) {
+  return isRecord(value)
+    && hasExactKeys(value, ['id', 'recordedAt', 'recordedBy', 'fingerprint', 'readyPageIds', 'approvalId', 'evidenceIds', 'source', 'migratedFromV1'])
 }
 
 function isLegacyPublish(value: unknown): value is LegacyLocalPublishRecord {
@@ -1008,8 +1591,24 @@ function preservesAppendOnlyHistory(current: WebsiteWorkspace, next: WebsiteWork
     .some((event) => event.action === action && event.subjectId === subjectId))
 }
 
+function sameReleaseHistory(left: WebsiteWorkspace, right: WebsiteWorkspace) {
+  return serialize(left.evidence) === serialize(right.evidence)
+    && serialize(left.approvals) === serialize(right.approvals)
+    && serialize(left.localPublishes) === serialize(right.localPublishes)
+    && serialize(left.events) === serialize(right.events)
+    && serialize(left.releaseRecords ?? []) === serialize(right.releaseRecords ?? [])
+}
+
 function consequentialRecordCount(workspace: WebsiteWorkspace) {
   return workspace.evidence.length + workspace.approvals.length + workspace.localPublishes.length + workspace.events.length
+    + (workspace.releaseRecords ?? []).reduce((total, record) => total + record.revision, 0)
+}
+
+function isWebsiteReleaseStateEnvelope(value: unknown): value is WebsiteReleaseState {
+  if (!isRecord(value) || !hasExactKeys(value, ['schema', 'scope', 'revision', 'headDigest', 'commands'])) return false
+  if (value.schema !== WEBSITE_RELEASE_STATE_SCHEMA || !isText(value.scope, 180) || !isNonNegativeInteger(value.revision)) return false
+  return typeof value.headDigest === 'string' && Array.isArray(value.commands)
+    && value.commands.length === value.revision && value.commands.length <= 100
 }
 
 function hasSuffix<T>(next: T[], current: T[]) {
@@ -1021,7 +1620,7 @@ function hasUniqueIds(values: Array<{ id: string }>) {
   return hasUniqueStrings(values.map((value) => value.id))
 }
 
-function hasUniqueSectionIds(pages: WebsitePage[]) {
+function hasUniqueSectionIds(pages: Array<{ sections: Array<{ id: string }> }>) {
   return hasUniqueStrings(pages.flatMap((page) => page.sections.map((section) => section.id)))
 }
 
@@ -1063,7 +1662,16 @@ function isValidSlug(value: string) {
 
 function isValidDestination(value: string) {
   const destination = value.trim()
-  return destination.startsWith('/') || destination.startsWith('#') || destination.startsWith('https://')
+  return destination.startsWith('/') || destination.startsWith('#') || isSafeHttpsDestination(destination)
+}
+
+function isSafeHttpsDestination(value: string) {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' && Boolean(url.hostname) && !url.username && !url.password
+  } catch {
+    return false
+  }
 }
 
 function serialize(value: unknown) {

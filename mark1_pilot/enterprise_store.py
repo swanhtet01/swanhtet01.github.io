@@ -6,12 +6,27 @@ import hmac
 import json
 import os
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import Column, String, Text, or_
+from sqlalchemy import Column, String, Text, or_, text
+from sqlalchemy.pool import NullPool
 from sqlmodel import Field, SQLModel, Session, create_engine, select
+
+from mark1_pilot.agent_governance import (
+    AGENT_BUDGET_ACCOUNTING_CONTRACT,
+    AgentGovernanceError,
+    AgentWorkforcePolicy,
+    agent_job_cadence_state,
+    agent_job_daily_limit,
+    agent_job_max_attempts,
+    agent_job_units,
+    load_agent_workforce_policy,
+    normalize_agent_job_types,
+    plan_agent_capacity,
+    verify_agent_budget_grant,
+)
 
 
 ENTERPRISE_DB_FILE = "supermega_enterprise.db"
@@ -530,6 +545,39 @@ class EnterpriseAgentRun(SQLModel, table=True):
     updated_at: str
 
 
+class EnterpriseAgentBudgetReservation(SQLModel, table=True):
+    __tablename__ = "enterprise_agent_budget_reservations"
+
+    reservation_id: str = Field(primary_key=True)
+    workspace_id: str = Field(index=True, foreign_key="enterprise_workspaces.workspace_id")
+    run_id: str = Field(index=True, foreign_key="enterprise_agent_runs.run_id")
+    job_type: str = Field(index=True)
+    claim_token_digest: str = Field(index=True, unique=True)
+    grant_id: str = Field(default="", index=True)
+    claimed_by: str = "worker"
+    status: str = Field(default="reserved", index=True)
+    units: int = 1
+    window_date: str = Field(index=True)
+    expires_at: str = Field(index=True)
+    consumed_at: str = ""
+    created_at: str
+    updated_at: str
+
+
+class EnterpriseAgentBudgetGrantUse(SQLModel, table=True):
+    __tablename__ = "enterprise_agent_budget_grant_uses"
+
+    grant_id: str = Field(primary_key=True)
+    workspace_id: str = Field(index=True, foreign_key="enterprise_workspaces.workspace_id")
+    cycle: str = "bounded"
+    job_types_json: str = Field(default="[]", sa_column=Column(Text, nullable=False))
+    max_runs: int = 0
+    max_work_units: int = 0
+    reserved_runs: int = 0
+    reserved_work_units: int = 0
+    created_at: str
+
+
 def _json_list(value: str) -> list[str]:
     try:
         payload = json.loads(value or "[]")
@@ -823,7 +871,12 @@ def _connect_args(database_url: str) -> dict[str, Any]:
 
 
 def get_engine(database_url: str):
-    return create_engine(database_url, connect_args=_connect_args(database_url))
+    engine_options: dict[str, Any] = {"connect_args": _connect_args(database_url)}
+    if database_url.startswith("sqlite"):
+        # Store calls build short-lived engines, so do not retain SQLite file
+        # handles between calls. This also keeps local database rotation safe.
+        engine_options["poolclass"] = NullPool
+    return create_engine(database_url, **engine_options)
 
 
 def ensure_schema(database_url: str) -> None:
@@ -2269,6 +2322,278 @@ def record_lead_hunt_run(
         return _hunt_profile_to_dict(profile)
 
 
+def _agent_utc_now(value: datetime | None = None) -> datetime:
+    current = value or datetime.now(timezone.utc)
+    if current.tzinfo is None:
+        raise AgentGovernanceError("agent_time_invalid", "Agent execution timestamps must include a timezone.")
+    return current.astimezone(timezone.utc)
+
+
+def _agent_timestamp(value: datetime) -> str:
+    return value.astimezone(timezone.utc).isoformat()
+
+
+def _agent_workspace_lock(session: Session, workspace_id: str) -> None:
+    bind = session.get_bind()
+    dialect_name = str(getattr(getattr(bind, "dialect", None), "name", "")).strip().lower()
+    if dialect_name == "sqlite":
+        session.connection().exec_driver_sql("BEGIN IMMEDIATE")
+        return
+    if dialect_name == "postgresql":
+        lock_key = int.from_bytes(hashlib.sha256(str(workspace_id).encode("utf-8")).digest()[:8], "big", signed=True)
+        session.exec(text("SELECT pg_advisory_xact_lock(:lock_key)"), params={"lock_key": lock_key})
+        return
+    raise AgentGovernanceError(
+        "agent_governance_database_unsupported",
+        f"Agent governance requires SQLite or PostgreSQL, not {dialect_name or 'unknown'}.",
+    )
+
+
+def _reconcile_expired_agent_reservations(
+    session: Session,
+    *,
+    workspace_id: str,
+    now: datetime,
+) -> int:
+    now_text = _agent_timestamp(now)
+    expired = list(
+        session.exec(
+            select(EnterpriseAgentBudgetReservation).where(
+                EnterpriseAgentBudgetReservation.workspace_id == str(workspace_id),
+                EnterpriseAgentBudgetReservation.status == "reserved",
+                EnterpriseAgentBudgetReservation.expires_at <= now_text,
+            )
+        ).all()
+    )
+    for reservation in expired:
+        reservation.status = "expired"
+        reservation.updated_at = now_text
+        session.add(reservation)
+        run = session.get(EnterpriseAgentRun, reservation.run_id)
+        if not run or run.workspace_id != str(workspace_id) or run.status != "running":
+            continue
+        if int(run.attempt_count or 0) < int(run.max_attempts or 1):
+            run.status = "queued"
+            run.error_text = "Previous execution lease expired before completion."
+            run.updated_at = now_text
+        else:
+            run.status = "error"
+            run.finished_at = now_text
+            run.summary = "Agent execution lease expired."
+            run.error_text = "Execution lease expired and the attempt limit was reached."
+            run.updated_at = now_text
+        session.add(run)
+    return len(expired)
+
+
+def _agent_daily_reservations(
+    session: Session,
+    *,
+    workspace_id: str,
+    now: datetime,
+) -> list[EnterpriseAgentBudgetReservation]:
+    window_start = now.astimezone(timezone.utc).date().isoformat()
+    return list(
+        session.exec(
+            select(EnterpriseAgentBudgetReservation).where(
+                EnterpriseAgentBudgetReservation.workspace_id == str(workspace_id),
+                EnterpriseAgentBudgetReservation.window_date == window_start,
+            )
+        ).all()
+    )
+
+
+def _agent_active_reservations(
+    session: Session,
+    *,
+    workspace_id: str,
+) -> list[EnterpriseAgentBudgetReservation]:
+    return list(
+        session.exec(
+            select(EnterpriseAgentBudgetReservation).where(
+                EnterpriseAgentBudgetReservation.workspace_id == str(workspace_id),
+                EnterpriseAgentBudgetReservation.status == "reserved",
+            )
+        ).all()
+    )
+
+
+def _assert_agent_execution_budget(
+    session: Session,
+    *,
+    workspace_id: str,
+    job_type: str,
+    policy: AgentWorkforcePolicy,
+    now: datetime,
+) -> None:
+    units = agent_job_units(job_type)
+    active = _agent_active_reservations(session, workspace_id=workspace_id)
+    if len(active) >= policy.max_running:
+        raise AgentGovernanceError("agent_concurrency_exhausted", "The workspace agent concurrency limit is in use.")
+    if any(row.job_type == job_type for row in active):
+        raise AgentGovernanceError("agent_job_already_in_flight", f"{job_type} already has an active execution.")
+    daily = _agent_daily_reservations(session, workspace_id=workspace_id, now=now)
+    if len(daily) >= policy.max_daily_runs:
+        raise AgentGovernanceError("agent_daily_run_budget_exhausted", "The workspace daily agent run budget is exhausted.")
+    consumed_units = sum(max(0, int(row.units or 0)) for row in daily)
+    if consumed_units + units > policy.max_daily_units:
+        raise AgentGovernanceError("agent_daily_unit_budget_exhausted", "The workspace daily agent work-unit budget is exhausted.")
+    job_count = sum(1 for row in daily if row.job_type == job_type)
+    if job_count >= agent_job_daily_limit(job_type):
+        raise AgentGovernanceError("agent_job_daily_budget_exhausted", f"{job_type} reached its daily execution budget.")
+
+
+def _assert_agent_queue_admission(
+    session: Session,
+    *,
+    workspace_id: str,
+    job_type: str,
+    policy: AgentWorkforcePolicy,
+) -> None:
+    queued = list(
+        session.exec(
+            select(EnterpriseAgentRun).where(
+                EnterpriseAgentRun.workspace_id == str(workspace_id),
+                EnterpriseAgentRun.status == "queued",
+            )
+        ).all()
+    )
+    if len(queued) >= policy.max_queued:
+        raise AgentGovernanceError("agent_queue_full", "The workspace agent queue is full.")
+    in_flight = session.exec(
+        select(EnterpriseAgentRun).where(
+            EnterpriseAgentRun.workspace_id == str(workspace_id),
+            EnterpriseAgentRun.job_type == job_type,
+            EnterpriseAgentRun.status.in_(["queued", "running"]),
+        )
+    ).first()
+    if in_flight:
+        raise AgentGovernanceError("agent_job_already_in_flight", f"{job_type} is already queued or running.")
+
+
+def _assert_agent_cadence_admission(
+    session: Session,
+    *,
+    workspace_id: str,
+    job_type: str,
+    now: datetime,
+) -> None:
+    latest = session.exec(
+        select(EnterpriseAgentRun)
+        .where(
+            EnterpriseAgentRun.workspace_id == str(workspace_id),
+            EnterpriseAgentRun.job_type == job_type,
+            EnterpriseAgentRun.status.in_(["ready", "error", "cancelled"]),
+        )
+        .order_by(EnterpriseAgentRun.finished_at.desc(), EnterpriseAgentRun.updated_at.desc())
+        .limit(1)
+    ).first()
+    if latest is None:
+        return
+    raw_finished_at = str(latest.finished_at or latest.updated_at or latest.created_at).strip()
+    normalized_finished_at = raw_finished_at[:-1] + "+00:00" if raw_finished_at.endswith("Z") else raw_finished_at
+    try:
+        finished_at = datetime.fromisoformat(normalized_finished_at)
+    except ValueError as exc:
+        raise AgentGovernanceError(
+            "agent_cadence_state_invalid",
+            "The latest agent completion timestamp is malformed.",
+            job_type=job_type,
+        ) from exc
+    admission = agent_job_cadence_state(
+        job_type=job_type,
+        last_finished_at=finished_at,
+        now=now,
+    )
+    if not bool(admission["due"]):
+        raise AgentGovernanceError(
+            "agent_cadence_not_elapsed",
+            f"{job_type} is not due for another automated run.",
+            job_type=job_type,
+            cadence=admission,
+        )
+
+
+def _reserve_agent_run_in_session(
+    session: Session,
+    *,
+    run: EnterpriseAgentRun,
+    claimed_by: str,
+    grant_id: str,
+    policy: AgentWorkforcePolicy,
+    now: datetime,
+) -> tuple[str, EnterpriseAgentBudgetReservation]:
+    if run.status != "queued":
+        raise AgentGovernanceError("agent_run_not_queued", "Only a queued run can receive an execution reservation.")
+    if int(run.attempt_count or 0) >= int(run.max_attempts or 1):
+        raise AgentGovernanceError("agent_attempt_budget_exhausted", "The run attempt budget is exhausted.")
+    _assert_agent_execution_budget(
+        session,
+        workspace_id=run.workspace_id,
+        job_type=run.job_type,
+        policy=policy,
+        now=now,
+    )
+    claim_token = secrets.token_urlsafe(32)
+    now_text = _agent_timestamp(now)
+    reservation = EnterpriseAgentBudgetReservation(
+        reservation_id=secrets.token_urlsafe(16),
+        workspace_id=run.workspace_id,
+        run_id=run.run_id,
+        job_type=run.job_type,
+        claim_token_digest=hashlib.sha256(claim_token.encode("utf-8")).hexdigest(),
+        grant_id=str(grant_id or "").strip().lower(),
+        claimed_by=str(claimed_by or "").strip() or "worker",
+        status="reserved",
+        units=agent_job_units(run.job_type),
+        window_date=now.astimezone(timezone.utc).date().isoformat(),
+        expires_at=_agent_timestamp(now + timedelta(seconds=policy.lease_seconds)),
+        created_at=now_text,
+        updated_at=now_text,
+    )
+    run.status = "running"
+    run.started_at = now_text
+    run.finished_at = ""
+    run.error_text = ""
+    run.attempt_count = int(run.attempt_count or 0) + 1
+    run.updated_at = now_text
+    session.add(run)
+    session.add(reservation)
+    return claim_token, reservation
+
+
+def _claimed_agent_run_to_dict(
+    run: EnterpriseAgentRun,
+    *,
+    claim_token: str,
+    reservation: EnterpriseAgentBudgetReservation,
+) -> dict[str, Any]:
+    return {
+        **_agent_run_to_dict(run),
+        "claim_token": claim_token,
+        "budget_reservation": {
+            "contract": AGENT_BUDGET_ACCOUNTING_CONTRACT,
+            "reservation_id": reservation.reservation_id,
+            "grant_id": reservation.grant_id,
+            "units": reservation.units,
+            "expires_at": reservation.expires_at,
+        },
+        "execution_authorized": True,
+    }
+
+
+def _resolve_agent_max_attempts(job_type: str, requested: int | None) -> int:
+    policy_max_attempts = agent_job_max_attempts(job_type)
+    if requested is None:
+        return policy_max_attempts
+    if type(requested) is not int:
+        raise AgentGovernanceError(
+            "agent_attempt_budget_invalid",
+            "Agent max_attempts must be a whole number.",
+        )
+    return min(policy_max_attempts, max(1, requested))
+
+
 def create_agent_run(
     database_url: str,
     *,
@@ -2277,16 +2602,26 @@ def create_agent_run(
     source: str = "manual",
     payload: dict[str, Any] | None = None,
     idempotency_key: str | None = None,
-    max_attempts: int = 1,
+    max_attempts: int | None = None,
     scheduled_for: str = "",
     triggered_by: str = "system",
     related_entity_type: str = "",
     related_entity_id: str = "",
+    respect_cadence: bool = False,
+    now: datetime | None = None,
 ) -> dict[str, Any]:
     ensure_schema(database_url)
+    policy = load_agent_workforce_policy()
+    normalized_job_type = normalize_agent_job_types([job_type])[0]
+    resolved_max_attempts = _resolve_agent_max_attempts(normalized_job_type, max_attempts)
     normalized_key = str(idempotency_key or "").strip() or None
+    if type(respect_cadence) is not bool:
+        raise AgentGovernanceError("agent_cadence_mode_invalid", "respect_cadence must be a boolean.")
+    now_value = _agent_utc_now(now)
     engine = get_engine(database_url)
     with Session(engine) as session:
+        _agent_workspace_lock(session, str(workspace_id))
+        _reconcile_expired_agent_reservations(session, workspace_id=str(workspace_id), now=now_value)
         if normalized_key:
             existing = session.exec(
                 select(EnterpriseAgentRun).where(
@@ -2295,13 +2630,34 @@ def create_agent_run(
                 )
             ).first()
             if existing:
-                return _agent_run_to_dict(existing)
+                session.commit()
+                return {
+                    **_agent_run_to_dict(existing),
+                    "execution_authorized": False,
+                    "governance": {
+                        "contract": AGENT_BUDGET_ACCOUNTING_CONTRACT,
+                        "decision": "idempotent_replay",
+                    },
+                }
 
-        now = _now()
+        _assert_agent_queue_admission(
+            session,
+            workspace_id=str(workspace_id),
+            job_type=normalized_job_type,
+            policy=policy,
+        )
+        if respect_cadence:
+            _assert_agent_cadence_admission(
+                session,
+                workspace_id=str(workspace_id),
+                job_type=normalized_job_type,
+                now=now_value,
+            )
+        now = _agent_timestamp(now_value)
         row = EnterpriseAgentRun(
             run_id=secrets.token_urlsafe(16),
             workspace_id=str(workspace_id),
-            job_type=str(job_type or "").strip() or "unknown",
+            job_type=normalized_job_type,
             source=str(source or "").strip() or "manual",
             idempotency_key=normalized_key,
             status="queued",
@@ -2309,7 +2665,7 @@ def create_agent_run(
             result_json="{}",
             error_text="",
             attempt_count=0,
-            max_attempts=max(1, int(max_attempts or 1)),
+            max_attempts=resolved_max_attempts,
             scheduled_for=str(scheduled_for or "").strip(),
             started_at="",
             finished_at="",
@@ -2323,7 +2679,113 @@ def create_agent_run(
         session.add(row)
         session.commit()
         session.refresh(row)
-        return _agent_run_to_dict(row)
+        return {
+            **_agent_run_to_dict(row),
+            "execution_authorized": False,
+            "governance": {
+                "contract": AGENT_BUDGET_ACCOUNTING_CONTRACT,
+                "decision": "queued",
+                "policy": policy.as_dict(),
+            },
+        }
+
+
+def create_and_reserve_agent_run(
+    database_url: str,
+    *,
+    workspace_id: str,
+    job_type: str,
+    source: str = "manual",
+    payload: dict[str, Any] | None = None,
+    idempotency_key: str | None = None,
+    max_attempts: int | None = None,
+    triggered_by: str = "system",
+    related_entity_type: str = "",
+    related_entity_id: str = "",
+    claimed_by: str = "direct",
+    respect_cadence: bool = False,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    ensure_schema(database_url)
+    policy = load_agent_workforce_policy()
+    normalized_job_type = normalize_agent_job_types([job_type])[0]
+    resolved_max_attempts = _resolve_agent_max_attempts(normalized_job_type, max_attempts)
+    normalized_key = str(idempotency_key or "").strip() or None
+    if type(respect_cadence) is not bool:
+        raise AgentGovernanceError("agent_cadence_mode_invalid", "respect_cadence must be a boolean.")
+    now_value = _agent_utc_now(now)
+    engine = get_engine(database_url)
+    with Session(engine) as session:
+        _agent_workspace_lock(session, str(workspace_id))
+        _reconcile_expired_agent_reservations(session, workspace_id=str(workspace_id), now=now_value)
+        if normalized_key:
+            existing = session.exec(
+                select(EnterpriseAgentRun).where(
+                    EnterpriseAgentRun.workspace_id == str(workspace_id),
+                    EnterpriseAgentRun.idempotency_key == normalized_key,
+                )
+            ).first()
+            if existing:
+                session.commit()
+                return {
+                    **_agent_run_to_dict(existing),
+                    "execution_authorized": False,
+                    "governance": {
+                        "contract": AGENT_BUDGET_ACCOUNTING_CONTRACT,
+                        "decision": "idempotent_replay",
+                    },
+                }
+
+        _assert_agent_queue_admission(
+            session,
+            workspace_id=str(workspace_id),
+            job_type=normalized_job_type,
+            policy=policy,
+        )
+        if respect_cadence:
+            _assert_agent_cadence_admission(
+                session,
+                workspace_id=str(workspace_id),
+                job_type=normalized_job_type,
+                now=now_value,
+            )
+        now_text = _agent_timestamp(now_value)
+        row = EnterpriseAgentRun(
+            run_id=secrets.token_urlsafe(16),
+            workspace_id=str(workspace_id),
+            job_type=normalized_job_type,
+            source=str(source or "").strip() or "manual",
+            idempotency_key=normalized_key,
+            status="queued",
+            payload_json=json.dumps(payload or {}, ensure_ascii=False),
+            result_json="{}",
+            error_text="",
+            attempt_count=0,
+            max_attempts=resolved_max_attempts,
+            scheduled_for="",
+            started_at="",
+            finished_at="",
+            summary="",
+            related_entity_type=str(related_entity_type or "").strip(),
+            related_entity_id=str(related_entity_id or "").strip(),
+            triggered_by=str(triggered_by or "").strip() or "system",
+            created_at=now_text,
+            updated_at=now_text,
+        )
+        session.add(row)
+        session.flush()
+        claim_token, reservation = _reserve_agent_run_in_session(
+            session,
+            run=row,
+            claimed_by=claimed_by,
+            grant_id="",
+            policy=policy,
+            now=now_value,
+        )
+        session.commit()
+        session.refresh(row)
+        session.refresh(reservation)
+        return _claimed_agent_run_to_dict(row, claim_token=claim_token, reservation=reservation)
 
 
 def get_agent_run(
@@ -2362,43 +2824,74 @@ def list_agent_runs(
     return [_agent_run_to_dict(row) for row in rows]
 
 
-def claim_agent_runs(
+def get_agent_capacity_plan(
     database_url: str,
     *,
     workspace_id: str,
-    job_types: list[str] | None = None,
-    limit: int = 1,
-) -> list[dict[str, Any]]:
+    registered_specialists: int = 0,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Return the lock-consistent execution target for one workspace."""
+
     ensure_schema(database_url)
-    now = _now()
-    normalized_job_types = [str(item or "").strip() for item in (job_types or []) if str(item or "").strip()]
+    policy = load_agent_workforce_policy()
+    now_value = _agent_utc_now(now)
+    now_text = _agent_timestamp(now_value)
     engine = get_engine(database_url)
     with Session(engine) as session:
-        statement = select(EnterpriseAgentRun).where(
-            EnterpriseAgentRun.workspace_id == str(workspace_id),
-            EnterpriseAgentRun.status == "queued",
-            or_(EnterpriseAgentRun.scheduled_for == "", EnterpriseAgentRun.scheduled_for <= now),
+        _agent_workspace_lock(session, str(workspace_id))
+        reconciled_expired = _reconcile_expired_agent_reservations(
+            session,
+            workspace_id=str(workspace_id),
+            now=now_value,
         )
-        if normalized_job_types:
-            statement = statement.where(EnterpriseAgentRun.job_type.in_(normalized_job_types))
-        statement = statement.order_by(EnterpriseAgentRun.created_at.asc()).limit(max(1, int(limit or 1)))
-        if engine.dialect.name != "sqlite":
-            statement = statement.with_for_update(skip_locked=True)
-        rows = list(session.exec(statement).all())
-        if not rows:
-            return []
-        for row in rows:
-            row.status = "running"
-            row.started_at = now
-            row.finished_at = ""
-            row.error_text = ""
-            row.attempt_count = int(row.attempt_count or 0) + 1
-            row.updated_at = now
-            session.add(row)
+        queued_rows = list(
+            session.exec(
+                select(EnterpriseAgentRun)
+                .where(
+                    EnterpriseAgentRun.workspace_id == str(workspace_id),
+                    EnterpriseAgentRun.status == "queued",
+                )
+                .order_by(EnterpriseAgentRun.created_at.asc())
+                .limit(policy.max_queued)
+            ).all()
+        )
+        runnable_rows = [
+            row
+            for row in queued_rows
+            if row.job_type in policy.allowed_job_types
+            and int(row.attempt_count or 0) < int(row.max_attempts or 1)
+            and (not row.scheduled_for or row.scheduled_for <= now_text)
+        ]
+        active = _agent_active_reservations(session, workspace_id=str(workspace_id))
+        daily = _agent_daily_reservations(session, workspace_id=str(workspace_id), now=now_value)
+        plan = plan_agent_capacity(
+            queued_job_types=[row.job_type for row in runnable_rows],
+            running_job_types=[row.job_type for row in active],
+            daily_job_types=[row.job_type for row in daily],
+            registered_specialists=registered_specialists,
+            policy=policy,
+        )
+        plan.update(
+            {
+                "workspace_id": str(workspace_id),
+                "observed_at": now_text,
+                "queue_total": len(queued_rows),
+                "queue_runnable": len(runnable_rows),
+                "queue_scheduled": sum(
+                    1 for row in queued_rows if row.scheduled_for and row.scheduled_for > now_text
+                ),
+                "queue_invalid": sum(
+                    1
+                    for row in queued_rows
+                    if row.job_type not in policy.allowed_job_types
+                    or int(row.attempt_count or 0) >= int(row.max_attempts or 1)
+                ),
+                "expired_leases_reconciled": reconciled_expired,
+            }
+        )
         session.commit()
-        for row in rows:
-            session.refresh(row)
-        return [_agent_run_to_dict(row) for row in rows]
+        return plan
 
 
 def start_agent_run(
@@ -2407,23 +2900,52 @@ def start_agent_run(
     workspace_id: str,
     run_id: str,
 ) -> dict[str, Any] | None:
+    return reserve_agent_run_execution(
+        database_url,
+        workspace_id=workspace_id,
+        run_id=run_id,
+        claimed_by="legacy_start",
+    )
+
+
+def reserve_agent_run_execution(
+    database_url: str,
+    *,
+    workspace_id: str,
+    run_id: str,
+    claimed_by: str = "worker",
+    grant_id: str = "",
+) -> dict[str, Any] | None:
     ensure_schema(database_url)
-    now = _now()
+    policy = load_agent_workforce_policy()
     engine = get_engine(database_url)
     with Session(engine) as session:
+        _agent_workspace_lock(session, str(workspace_id))
+        now_value = _agent_utc_now()
+        reconciled_expired = _reconcile_expired_agent_reservations(
+            session,
+            workspace_id=str(workspace_id),
+            now=now_value,
+        )
         row = session.get(EnterpriseAgentRun, str(run_id))
         if not row or row.workspace_id != str(workspace_id):
+            if reconciled_expired:
+                session.commit()
+            else:
+                session.rollback()
             return None
-        row.status = "running"
-        row.started_at = now
-        row.finished_at = ""
-        row.error_text = ""
-        row.attempt_count = int(row.attempt_count or 0) + 1
-        row.updated_at = now
-        session.add(row)
+        claim_token, reservation = _reserve_agent_run_in_session(
+            session,
+            run=row,
+            claimed_by=claimed_by,
+            grant_id=grant_id,
+            policy=policy,
+            now=now_value,
+        )
         session.commit()
         session.refresh(row)
-        return _agent_run_to_dict(row)
+        session.refresh(reservation)
+        return _claimed_agent_run_to_dict(row, claim_token=claim_token, reservation=reservation)
 
 
 def claim_agent_runs(
@@ -2432,39 +2954,160 @@ def claim_agent_runs(
     workspace_id: str,
     limit: int = 10,
     job_types: list[str] | None = None,
+    claimed_by: str = "worker",
+    budget_grant: dict[str, Any] | None = None,
+    grant_secret: str = "",
+    require_budget_grant: bool = False,
 ) -> list[dict[str, Any]]:
     ensure_schema(database_url)
-    now = _now()
+    policy = load_agent_workforce_policy()
+    normalized_job_types = normalize_agent_job_types(job_types)
+    verified_grant: dict[str, object] | None = None
+    if require_budget_grant or budget_grant:
+        requested_for_grant = normalized_job_types or (
+            budget_grant.get("job_types", []) if isinstance(budget_grant, dict) else []
+        )
+        verified_grant = verify_agent_budget_grant(
+            budget_grant,
+            secret=grant_secret,
+            requested_job_types=requested_for_grant,
+        )
+        normalized_job_types = [str(item) for item in verified_grant["job_types"]]
+
+    requested_limit = min(policy.max_batch_jobs, max(1, int(limit or 1)))
+    if verified_grant:
+        requested_limit = min(requested_limit, int(verified_grant["max_runs"]))
+    now_value = _agent_utc_now()
+    now_text = _agent_timestamp(now_value)
     engine = get_engine(database_url)
-    normalized_job_types = [str(item or "").strip().lower() for item in (job_types or []) if str(item or "").strip()]
     with Session(engine) as session:
+        _agent_workspace_lock(session, str(workspace_id))
+        _reconcile_expired_agent_reservations(session, workspace_id=str(workspace_id), now=now_value)
+
+        grant_id = str((verified_grant or {}).get("grant_id", "")).strip().lower()
+        if grant_id and session.get(EnterpriseAgentBudgetGrantUse, grant_id):
+            raise AgentGovernanceError("budget_grant_replayed", "This budget grant has already been used.")
+
         statement = select(EnterpriseAgentRun).where(
             EnterpriseAgentRun.workspace_id == str(workspace_id),
             EnterpriseAgentRun.status == "queued",
-            or_(EnterpriseAgentRun.scheduled_for == "", EnterpriseAgentRun.scheduled_for <= now),
+            or_(EnterpriseAgentRun.scheduled_for == "", EnterpriseAgentRun.scheduled_for <= now_text),
         )
         if normalized_job_types:
             statement = statement.where(EnterpriseAgentRun.job_type.in_(normalized_job_types))
-        statement = statement.order_by(EnterpriseAgentRun.created_at.asc()).limit(max(1, int(limit or 1)))
+        statement = statement.order_by(EnterpriseAgentRun.created_at.asc()).limit(policy.max_queued)
         bind = session.get_bind()
         dialect_name = str(getattr(getattr(bind, "dialect", None), "name", "")).strip().lower()
         if dialect_name == "postgresql":
             statement = statement.with_for_update(skip_locked=True)
         rows = list(session.exec(statement).all())
-        claimed: list[EnterpriseAgentRun] = []
+
+        eligible_rows: list[EnterpriseAgentRun] = []
         for row in rows:
-            row.status = "running"
-            row.started_at = now
-            row.finished_at = ""
-            row.error_text = ""
-            row.attempt_count = int(row.attempt_count or 0) + 1
-            row.updated_at = now
-            session.add(row)
-            claimed.append(row)
+            if row.job_type not in policy.allowed_job_types:
+                row.status = "error"
+                row.finished_at = now_text
+                row.summary = "Unsupported agent job type."
+                row.error_text = "The queued job type is outside the workforce policy allowlist."
+                row.updated_at = now_text
+                session.add(row)
+                continue
+            if int(row.attempt_count or 0) >= int(row.max_attempts or 1):
+                row.status = "error"
+                row.finished_at = now_text
+                row.summary = "Agent attempt budget exhausted."
+                row.error_text = "The queued run cannot be claimed again."
+                row.updated_at = now_text
+                session.add(row)
+                continue
+            eligible_rows.append(row)
+
+        capacity_plan = plan_agent_capacity(
+            queued_job_types=[row.job_type for row in eligible_rows],
+            running_job_types=[
+                row.job_type for row in _agent_active_reservations(session, workspace_id=str(workspace_id))
+            ],
+            daily_job_types=[
+                row.job_type
+                for row in _agent_daily_reservations(session, workspace_id=str(workspace_id), now=now_value)
+            ],
+            max_claim_runs=requested_limit,
+            max_claim_work_units=(int(verified_grant["max_work_units"]) if verified_grant else None),
+            policy=policy,
+        )
+        recommended_job_types = list(capacity_plan["recommended_claim_job_types"])
+        recommended_job_type_set = set(recommended_job_types)
+        recommended_job_rank = {
+            job_type: index for index, job_type in enumerate(recommended_job_types)
+        }
+        requested_limit = int(capacity_plan["recommended_claim_limit"])
+
+        claimed: list[tuple[EnterpriseAgentRun, str, EnterpriseAgentBudgetReservation]] = []
+        selected_job_types: set[str] = set()
+        selected_units = 0
+        ordered_eligible_rows = sorted(
+            eligible_rows,
+            key=lambda row: (
+                recommended_job_rank.get(row.job_type, len(recommended_job_rank)),
+                row.created_at,
+                row.run_id,
+            ),
+        )
+        for row in ordered_eligible_rows:
+            if len(claimed) >= requested_limit:
+                break
+            if row.job_type not in recommended_job_type_set:
+                continue
+            if row.job_type in selected_job_types:
+                continue
+            units = agent_job_units(row.job_type)
+            if verified_grant and selected_units + units > int(verified_grant["max_work_units"]):
+                continue
+            try:
+                claim_token, reservation = _reserve_agent_run_in_session(
+                    session,
+                    run=row,
+                    claimed_by=claimed_by,
+                    grant_id=grant_id,
+                    policy=policy,
+                    now=now_value,
+                )
+            except AgentGovernanceError as exc:
+                if exc.code in {"agent_job_already_in_flight", "agent_job_daily_budget_exhausted"}:
+                    continue
+                if exc.code in {
+                    "agent_concurrency_exhausted",
+                    "agent_daily_run_budget_exhausted",
+                    "agent_daily_unit_budget_exhausted",
+                }:
+                    break
+                raise
+            claimed.append((row, claim_token, reservation))
+            selected_job_types.add(row.job_type)
+            selected_units += units
+
+        if verified_grant:
+            session.add(
+                EnterpriseAgentBudgetGrantUse(
+                    grant_id=grant_id,
+                    workspace_id=str(workspace_id),
+                    cycle=str(verified_grant.get("cycle", "bounded")),
+                    job_types_json=json.dumps(verified_grant["job_types"], ensure_ascii=True),
+                    max_runs=int(verified_grant["max_runs"]),
+                    max_work_units=int(verified_grant["max_work_units"]),
+                    reserved_runs=len(claimed),
+                    reserved_work_units=selected_units,
+                    created_at=now_text,
+                )
+            )
         session.commit()
-        for row in claimed:
+        for row, _, reservation in claimed:
             session.refresh(row)
-        return [_agent_run_to_dict(row) for row in claimed]
+            session.refresh(reservation)
+        return [
+            _claimed_agent_run_to_dict(row, claim_token=claim_token, reservation=reservation)
+            for row, claim_token, reservation in claimed
+        ]
 
 
 def complete_agent_run(
@@ -2472,29 +3115,76 @@ def complete_agent_run(
     *,
     workspace_id: str,
     run_id: str,
+    claim_token: str = "",
     status: str,
     summary: str = "",
     result: dict[str, Any] | None = None,
     error_text: str = "",
 ) -> dict[str, Any] | None:
     ensure_schema(database_url)
-    now = _now()
-    normalized_status = str(status or "").strip() or "ready"
+    normalized_status = str(status or "").strip().lower()
+    if normalized_status not in {"ready", "error", "cancelled"}:
+        raise AgentGovernanceError("agent_terminal_status_invalid", "Agent completion requires a terminal status.")
+    normalized_claim_token = str(claim_token or "").strip()
+    if not normalized_claim_token:
+        raise AgentGovernanceError("agent_claim_required", "Agent completion requires its private claim token.")
+    now_value = _agent_utc_now()
+    now = _agent_timestamp(now_value)
     engine = get_engine(database_url)
     with Session(engine) as session:
+        _agent_workspace_lock(session, str(workspace_id))
+        reconciled_expired = _reconcile_expired_agent_reservations(
+            session,
+            workspace_id=str(workspace_id),
+            now=now_value,
+        )
         row = session.get(EnterpriseAgentRun, str(run_id))
         if not row or row.workspace_id != str(workspace_id):
+            if reconciled_expired:
+                session.commit()
+            else:
+                session.rollback()
             return None
+        claim_digest = hashlib.sha256(normalized_claim_token.encode("utf-8")).hexdigest()
+        reservation = session.exec(
+            select(EnterpriseAgentBudgetReservation).where(
+                EnterpriseAgentBudgetReservation.workspace_id == str(workspace_id),
+                EnterpriseAgentBudgetReservation.run_id == str(run_id),
+                EnterpriseAgentBudgetReservation.claim_token_digest == claim_digest,
+                EnterpriseAgentBudgetReservation.status == "reserved",
+            )
+        ).first()
+        if not reservation or row.status != "running":
+            # Reconciliation is authoritative state, not part of the stale
+            # worker's rejected completion attempt. Persist it before raising.
+            if reconciled_expired:
+                session.commit()
+            raise AgentGovernanceError("agent_claim_invalid", "The run claim is stale, consumed, or does not own this execution.")
         row.status = normalized_status
         row.finished_at = now
         row.summary = str(summary or "").strip()
         row.result_json = json.dumps(result or {}, ensure_ascii=False)
         row.error_text = str(error_text or "").strip()
         row.updated_at = now
+        reservation.status = "consumed"
+        reservation.consumed_at = now
+        reservation.updated_at = now
         session.add(row)
+        session.add(reservation)
         session.commit()
         session.refresh(row)
-        return _agent_run_to_dict(row)
+        session.refresh(reservation)
+        return {
+            **_agent_run_to_dict(row),
+            "budget_accounting": {
+                "contract": AGENT_BUDGET_ACCOUNTING_CONTRACT,
+                "reservation_id": reservation.reservation_id,
+                "grant_id": reservation.grant_id,
+                "consumed_runs": 1,
+                "consumed_work_units": reservation.units,
+                "status": "consumed",
+            },
+        }
 
 
 def add_leads(
