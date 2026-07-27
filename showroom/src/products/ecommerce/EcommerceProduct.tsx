@@ -750,6 +750,12 @@ export function EcommerceProduct() {
     })
     : []
   const buyingReady = Boolean(previewResult.preview && digest && (savedDraftIsCurrent || !managedIdentity))
+  const setupRows = [
+    ['Catalog', sourceLabel],
+    ['Products', `${selectedSkus.length}/${Math.min(catalog.items.length, 8)} selected`],
+    ['Store', savedDraftIsCurrent ? 'Saved' : hasUnsavedStorefront ? 'Save needed' : 'Draft'],
+    ['Orders', buyingReady ? 'Ready' : catalogHydrating ? 'Checking' : 'Save store'],
+  ] as const
 
   return (
     <div className="workspace-screen ecommerce-product">
@@ -759,12 +765,19 @@ export function EcommerceProduct() {
           <h1>Ecommerce</h1>
           <p>Browse the working storefront, add products, and hand one reviewed order to Shop.</p>
         </div>
-        <Link className="text-link" to="/shop/?tab=inventory">Open Shop stock</Link>
+        <div className="ecommerce-heading-actions">
+          <Link className="text-link" to="/settings/?product=ecommerce">Import catalog</Link>
+          <Link className="text-link" to="/shop/?tab=inventory">Open Shop stock</Link>
+        </div>
       </header>
 
       <div className="ecommerce-boundary" role="status">
         <span>{sourceLabel}</span>
         <p>Prices and stock stay controlled by Shop. This preview sends no payment or customer message.</p>
+      </div>
+
+      <div aria-label="Ecommerce setup status" className="ecommerce-command-strip">
+        {setupRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
       </div>
 
       <div aria-label="Ecommerce workspace" className="ecommerce-mobile-switch" role="group">
