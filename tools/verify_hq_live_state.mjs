@@ -5,13 +5,17 @@ const CONTRACT = 'supermega.hq-live-state.v1'
 const APP_ORIGIN = 'https://app.supermega.dev'
 const PUBLIC_ORIGIN = 'https://supermega.dev'
 const MAX_RESPONSE_BYTES = 65_536
+const MAX_HQ_NOW_BYTES = 128 * 1_024
 const MAX_SNAPSHOT_AGE_MS = 72 * 60 * 60 * 1_000
 const MAX_FUTURE_SKEW_MS = 5 * 60 * 1_000
+const RELEASE_VALUE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/
+const UTC_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/
 
 function requireLine(text, label, pattern) {
-  const match = text.match(pattern)
-  if (!match) throw new Error(`hq_now_${label}_missing`)
-  return match[1]
+  const matches = [...text.matchAll(new RegExp(pattern.source, `${pattern.flags}g`))]
+  if (matches.length === 0) throw new Error(`hq_now_${label}_missing`)
+  if (matches.length !== 1) throw new Error(`hq_now_${label}_duplicate`)
+  return matches[0][1]
 }
 
 function parseBoolean(value, label) {
@@ -21,6 +25,9 @@ function parseBoolean(value, label) {
 }
 
 export function parseHqLiveState(text) {
+  if (typeof text !== 'string' || Buffer.byteLength(text, 'utf8') > MAX_HQ_NOW_BYTES) {
+    throw new Error('hq_now_document_invalid')
+  }
   const contract = requireLine(text, 'contract', /^Live state contract: `([^`]+)`$/m)
   const releaseCommit = requireLine(text, 'release_commit', /^Live release commit: `([0-9a-f]{40})`$/m)
   const observedAt = requireLine(text, 'observed_at', /^Live state observed: `([^`]+)`$/m)
@@ -40,7 +47,9 @@ export function parseHqLiveState(text) {
   )
 
   if (contract !== CONTRACT) throw new Error('hq_now_contract_invalid')
-  if (!Number.isFinite(Date.parse(observedAt))) throw new Error('hq_now_observed_at_invalid')
+  if (!UTC_TIMESTAMP_PATTERN.test(observedAt) || !Number.isFinite(Date.parse(observedAt))) {
+    throw new Error('hq_now_observed_at_invalid')
+  }
 
   return {
     contract,
@@ -52,6 +61,13 @@ export function parseHqLiveState(text) {
     managedPersistenceReady,
     securityReady,
   }
+}
+
+function validReleaseIdentity(value) {
+  return typeof value?.commit === 'string'
+    && /^[0-9a-f]{40}$/.test(value.commit)
+    && ['brandVersion', 'contextVersion', 'catalogVersion']
+      .every((field) => typeof value[field] === 'string' && RELEASE_VALUE_PATTERN.test(value[field]))
 }
 
 function sameReleaseIdentity(left, right) {
@@ -67,11 +83,16 @@ export function assessHqLiveState({ hq, appRelease, publicRelease, health, cloud
   const scheduler = cloud?.scheduler
   const capacity = cloud?.capacity
 
-  requireCheck('app_release_contract_invalid', appRelease?.service === 'supermega-app')
-  requireCheck('public_release_contract_invalid', publicRelease?.service === 'supermega-public-site')
+  requireCheck('app_release_contract_invalid', appRelease?.service === 'supermega-app' && validReleaseIdentity(appRelease))
+  requireCheck('public_release_contract_invalid', publicRelease?.service === 'supermega-public-site' && validReleaseIdentity(publicRelease))
   requireCheck('paired_release_identity_mismatch', sameReleaseIdentity(appRelease, publicRelease))
   requireCheck('hq_release_commit_stale', appRelease?.commit === hq.releaseCommit)
   requireCheck('app_canonical_domain_invalid', appRelease?.canonicalDomain === APP_ORIGIN)
+  requireCheck('hq_operating_mode_invalid', hq.operatingMode === 'isolated_demo')
+  requireCheck('hq_scheduler_status_invalid', hq.schedulerStatus === 'degraded')
+  requireCheck('hq_scheduler_configuration_invalid', hq.schedulerConfigured === false)
+  requireCheck('hq_managed_persistence_readiness_invalid', hq.managedPersistenceReady === false)
+  requireCheck('hq_security_readiness_invalid', hq.securityReady === false)
   requireCheck('health_not_ready', health?.status === 'ready')
   requireCheck('operating_mode_drift', health?.operating_mode === hq.operatingMode)
   requireCheck('managed_persistence_readiness_drift', health?.enterprise_db_ready === hq.managedPersistenceReady)
@@ -80,7 +101,7 @@ export function assessHqLiveState({ hq, appRelease, publicRelease, health, cloud
   requireCheck('scheduler_configuration_drift', scheduler?.configured === hq.schedulerConfigured)
   requireCheck('scheduler_pc_dependency_forbidden', cloud?.pc_dependency === false)
   requireCheck('scheduler_budget_grant_required', scheduler?.budget_grants_required === true)
-  requireCheck('scheduler_batch_limit_exceeded', Number.isInteger(scheduler?.max_jobs_per_run) && scheduler.max_jobs_per_run <= 2)
+  requireCheck('scheduler_batch_limit_exceeded', Number.isInteger(scheduler?.max_jobs_per_run) && scheduler.max_jobs_per_run >= 0 && scheduler.max_jobs_per_run <= 2)
   requireCheck('capacity_not_scale_to_zero', capacity?.scale_to_zero_when_idle === true)
   requireCheck('idle_execution_target_nonzero', capacity?.idle_active_execution_target === 0)
   requireCheck('registered_specialists_consume_compute', capacity?.registered_specialists_consume_compute === false)
@@ -153,16 +174,46 @@ Live security ready: \`false\``)
   const baseline = { hq, appRelease, publicRelease, health, cloud, now }
   if (!assessHqLiveState(baseline).ok) throw new Error('self_test_baseline_failed')
 
-  const expectFailure = (name, input) => {
+  const failureCases = [
+    ['app_release_contract_invalid', { ...baseline, appRelease: { ...appRelease, brandVersion: '' } }],
+    ['public_release_contract_invalid', { ...baseline, publicRelease: { ...publicRelease, service: 'wrong' } }],
+    ['paired_release_identity_mismatch', { ...baseline, publicRelease: { ...publicRelease, commit: 'b'.repeat(40) } }],
+    ['hq_release_commit_stale', { ...baseline, hq: { ...hq, releaseCommit: 'b'.repeat(40) } }],
+    ['app_canonical_domain_invalid', { ...baseline, appRelease: { ...appRelease, canonicalDomain: PUBLIC_ORIGIN } }],
+    ['hq_operating_mode_invalid', { ...baseline, hq: { ...hq, operatingMode: 'managed' } }],
+    ['hq_scheduler_status_invalid', { ...baseline, hq: { ...hq, schedulerStatus: 'ready' } }],
+    ['hq_scheduler_configuration_invalid', { ...baseline, hq: { ...hq, schedulerConfigured: true } }],
+    ['hq_managed_persistence_readiness_invalid', { ...baseline, hq: { ...hq, managedPersistenceReady: true } }],
+    ['hq_security_readiness_invalid', { ...baseline, hq: { ...hq, securityReady: true } }],
+    ['health_not_ready', { ...baseline, health: { ...health, status: 'degraded' } }],
+    ['operating_mode_drift', { ...baseline, health: { ...health, operating_mode: 'managed' } }],
+    ['managed_persistence_readiness_drift', { ...baseline, health: { ...health, enterprise_db_ready: true } }],
+    ['security_readiness_drift', { ...baseline, health: { ...health, security_ready: true } }],
+    ['scheduler_status_drift', { ...baseline, cloud: { ...cloud, status: 'ready' } }],
+    ['scheduler_configuration_drift', { ...baseline, cloud: { ...cloud, scheduler: { ...cloud.scheduler, configured: true } } }],
+    ['scheduler_pc_dependency_forbidden', { ...baseline, cloud: { ...cloud, pc_dependency: true } }],
+    ['scheduler_budget_grant_required', { ...baseline, cloud: { ...cloud, scheduler: { ...cloud.scheduler, budget_grants_required: false } } }],
+    ['scheduler_batch_limit_exceeded', { ...baseline, cloud: { ...cloud, scheduler: { ...cloud.scheduler, max_jobs_per_run: -1 } } }],
+    ['capacity_not_scale_to_zero', { ...baseline, cloud: { ...cloud, capacity: { ...cloud.capacity, scale_to_zero_when_idle: false } } }],
+    ['idle_execution_target_nonzero', { ...baseline, cloud: { ...cloud, capacity: { ...cloud.capacity, idle_active_execution_target: 1 } } }],
+    ['registered_specialists_consume_compute', { ...baseline, cloud: { ...cloud, capacity: { ...cloud.capacity, registered_specialists_consume_compute: true } } }],
+    ['external_action_policy_drift', { ...baseline, cloud: { ...cloud, execution_policy: 'automatic' } }],
+    ['snapshot_from_future', { ...baseline, now: new Date('2026-07-27T10:54:00Z') }],
+    ['snapshot_stale', { ...baseline, now: new Date('2026-08-01T12:00:00Z') }],
+  ]
+  for (const [name, input] of failureCases) {
     if (!assessHqLiveState(input).failures.includes(name)) throw new Error(`self_test_${name}_failed`)
   }
-  expectFailure('paired_release_identity_mismatch', { ...baseline, publicRelease: { ...publicRelease, commit: 'b'.repeat(40) } })
-  expectFailure('hq_release_commit_stale', { ...baseline, hq: { ...hq, releaseCommit: 'b'.repeat(40) } })
-  expectFailure('scheduler_pc_dependency_forbidden', { ...baseline, cloud: { ...cloud, pc_dependency: true } })
-  expectFailure('capacity_not_scale_to_zero', { ...baseline, cloud: { ...cloud, capacity: { ...cloud.capacity, scale_to_zero_when_idle: false } } })
-  expectFailure('snapshot_stale', { ...baseline, now: new Date('2026-08-01T12:00:00Z') })
 
-  return { ok: true, contract: CONTRACT, checks: 6, networkRequests: 0 }
+  const duplicate = `Live state contract: \`${CONTRACT}\`\n${`Live state contract: \`${CONTRACT}\``}`
+  try {
+    parseHqLiveState(duplicate)
+    throw new Error('self_test_duplicate_line_failed')
+  } catch (error) {
+    if (!(error instanceof Error) || error.message !== 'hq_now_contract_duplicate') throw error
+  }
+
+  return { ok: true, contract: CONTRACT, checks: failureCases.length + 2, networkRequests: 0 }
 }
 
 async function main() {
