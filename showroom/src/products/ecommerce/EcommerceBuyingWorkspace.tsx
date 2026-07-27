@@ -6,6 +6,7 @@ import {
   buildEcommercePimProjection,
   createEmptyEcommerceBuyingState,
   ecommerceBuyingStateStorageKey,
+  ecommercePaymentMatchesFulfilment,
   prepareEcommerceShopDraftV2,
   readEcommerceBuyingState,
   saveEcommerceOrderRequestV2,
@@ -41,6 +42,11 @@ function paymentLabel(value: EcommercePaymentAdapter) {
   if (value === 'cash_on_delivery') return 'Cash on delivery'
   if (value === 'kbzpay_manual') return 'KBZPay · Shop confirms'
   return 'Pay on pickup'
+}
+
+function receiveOrderLabel(value: EcommerceFulfilment) {
+  if (value === 'delivery') return 'Delivery · fee confirmed in Shop'
+  return 'Pickup · no delivery fee'
 }
 
 function cartMatchesRequest(cart: EcommerceCartLine[], request: EcommerceBuyingState['requests'][number]) {
@@ -187,6 +193,14 @@ export function EcommerceBuyingWorkspace({
     setNotice('Item removed. No Shop record or payment changed.')
   }
 
+  function changeFulfilment(next: EcommerceFulfilment) {
+    setFulfilment(next)
+    setPaymentAdapter((current) => ecommercePaymentMatchesFulfilment(next, current)
+      ? current
+      : next === 'delivery' ? 'cash_on_delivery' : 'pay_on_pickup')
+    setHandoffConfirmed(false)
+  }
+
   async function reviewOrder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (disabled || quoteBusy || recoveryBlocked || !cart.length) return
@@ -217,7 +231,7 @@ export function EcommerceBuyingWorkspace({
         await onRecordManagedRequest(retained)
         setHandoffConfirmed(false)
         setFreshQuoteId(retained.id)
-        setNotice(`${retained.id} is confirmed in the managed Shop inbox. No order, stock, message, or charge changed.`)
+        setNotice('This quote is confirmed in the managed Shop inbox. No order, stock, message, or charge changed.')
         requestAnimationFrame(() => {
           confirmationRef.current?.scrollIntoView({ block: 'center' })
           confirmationRef.current?.focus({ preventScroll: true })
@@ -244,8 +258,8 @@ export function EcommerceBuyingWorkspace({
       if (onRecordManagedRequest) await onRecordManagedRequest(request)
       setFreshQuoteId(request.id)
       setNotice(onRecordManagedRequest
-        ? `${request.id} saved to the managed Shop inbox and local recovery. No order, stock, message, or charge changed.`
-        : `${request.id} saved on this device for 15 minutes. No order, stock, message, or charge changed.`)
+        ? 'This quote is saved to the managed Shop inbox and local recovery. No order, stock, message, or charge changed.'
+        : 'This quote is saved on this device for 15 minutes. No order, stock, message, or charge changed.')
       requestAnimationFrame(() => {
         confirmationRef.current?.scrollIntoView({ block: 'center' })
         confirmationRef.current?.focus({ preventScroll: true })
@@ -331,7 +345,7 @@ export function EcommerceBuyingWorkspace({
             </label>
             <label>
               <span>Receive order</span>
-              <select onChange={(event) => { setFulfilment(event.target.value as EcommerceFulfilment); setHandoffConfirmed(false) }} value={fulfilment}>
+              <select onChange={(event) => changeFulfilment(event.target.value as EcommerceFulfilment)} value={fulfilment}>
                 <option value="pickup">Pickup · included</option>
                 <option value="delivery">Delivery · Shop confirms</option>
               </select>
@@ -339,8 +353,9 @@ export function EcommerceBuyingWorkspace({
             <label>
               <span>Payment</span>
               <select onChange={(event) => { setPaymentAdapter(event.target.value as EcommercePaymentAdapter); setHandoffConfirmed(false) }} value={paymentAdapter}>
-                <option value="pay_on_pickup">Pay on pickup</option>
-                <option value="cash_on_delivery">Cash on delivery</option>
+                {fulfilment === 'pickup'
+                  ? <option value="pay_on_pickup">Pay on pickup</option>
+                  : <option value="cash_on_delivery">Cash on delivery</option>}
                 <option value="kbzpay_manual">KBZPay · manual confirmation</option>
               </select>
             </label>
@@ -356,17 +371,17 @@ export function EcommerceBuyingWorkspace({
           {latestRequest ? (
             <article className="ecommerce-request-receipt ecommerce-quote-receipt" data-current={quoteCurrent ? 'true' : 'false'}>
               <span className="status-pill bounded">{quoteCurrent ? 'Ready for Shop' : 'Review again'}</span>
-              <strong>{latestRequest.id}</strong>
+              <strong>Quote for {latestRequest.customerReference}</strong>
               <b>{formatMmk(latestRequest.totalMmk)}</b>
               <div className="ecommerce-quote-boundaries">
+                <span><small>Receive order</small><b>{receiveOrderLabel(latestRequest.fulfilment)}</b></span>
                 <span><small>Tax</small><b>Included in listed price</b></span>
-                <span><small>Delivery</small><b>{latestRequest.quote.shipping.status === 'included' ? 'Included' : 'Shop confirms'}</b></span>
                 <span><small>Payment</small><b>{paymentLabel(latestRequest.quote.payment.adapter)} · not charged</b></span>
               </div>
-              <small>Valid until {new Date(latestRequest.quote.expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small>
+              <small>Reference {latestRequest.id} · valid until {new Date(latestRequest.quote.expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small>
               <label className="website-intake-confirm ecommerce-quote-confirm">
                 <input checked={handoffConfirmed} disabled={!quoteCurrent || handoffBusy} onChange={(event) => setHandoffConfirmed(event.target.checked)} ref={confirmationRef} type="checkbox" />
-                <span>I reviewed every item, the MMK total, delivery boundary, and payment method.</span>
+                <span>I reviewed every item, the MMK total, how I receive it, and the payment method.</span>
               </label>
               <button className="core-button primary" disabled={!quoteCurrent || !handoffConfirmed || handoffBusy} onClick={() => void openInShop()} type="button">
                 {handoffBusy ? 'Checking Shop…' : 'Open in Shop'}

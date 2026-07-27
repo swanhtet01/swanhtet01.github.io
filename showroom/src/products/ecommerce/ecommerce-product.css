@@ -370,7 +370,7 @@
 
 .ecommerce-quote-receipt {
   grid-column: 1 / -1;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 7px 10px;
 }
@@ -381,7 +381,21 @@
 }
 
 .ecommerce-quote-receipt > strong {
+  grid-column: 1 / -1;
+  grid-row: 2;
   min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ecommerce-quote-receipt > .status-pill {
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: start;
+}
+
+.ecommerce-quote-receipt > b {
+  grid-column: 2;
+  grid-row: 1;
 }
 
 .ecommerce-quote-boundaries {

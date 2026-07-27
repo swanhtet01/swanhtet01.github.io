@@ -171,6 +171,21 @@ def ecommerce_lifecycle_digest(value: object) -> str:
     return _canonical_digest(value)
 
 
+def ecommerce_payment_matches_fulfilment(
+    fulfilment: str,
+    payment_adapter: str,
+) -> bool:
+    """Return whether a checkout payment makes sense for its handoff method."""
+
+    return (
+        fulfilment == "pickup"
+        and payment_adapter in {"pay_on_pickup", "kbzpay_manual"}
+    ) or (
+        fulfilment == "delivery"
+        and payment_adapter in {"cash_on_delivery", "kbzpay_manual"}
+    )
+
+
 def _pim_item(value: object, field: str) -> dict[str, Any]:
     source = _object(
         value,
@@ -375,6 +390,10 @@ def _quote_core(value: object) -> dict[str, Any]:
         or payment_source["amountMmk"] != 0
     ):
         raise _fail("Checkout payment boundary is invalid.")
+    if not ecommerce_payment_matches_fulfilment(
+        fulfilment, payment_source["adapter"]
+    ):
+        raise _fail("Checkout payment does not match how the customer receives the order.")
 
     total = _integer(source["totalMmk"], "checkout quote.totalMmk", minimum=1)
     if total != subtotal:
@@ -434,6 +453,8 @@ def build_ecommerce_checkout_quote(
         raise _fail("Checkout fulfilment is unsupported.")
     if payment_adapter not in _PAYMENT_ADAPTERS:
         raise _fail("Checkout payment adapter is unsupported.")
+    if not ecommerce_payment_matches_fulfilment(fulfilment, payment_adapter):
+        raise _fail("Checkout payment does not match how the customer receives the order.")
     code = _optional_text(promotion_code, "promotionCode", maximum=40)
     item_by_sku = {item["sku"]: item for item in projection["items"]}
     cart_rows = _array(list(cart), "cart", minimum=1, maximum=_MAX_LINES)

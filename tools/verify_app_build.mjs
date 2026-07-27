@@ -631,10 +631,22 @@ if (addToCartStart < 0
   || !ecommerceBuyingUiSource.includes('onOpenManagedRequest(latestRequest.id)')
   || !ecommerceBuyingUiSource.includes("window.addEventListener('storage', refresh)")
   || !ecommerceBuyingUiSource.includes('setFreshQuoteId(request.id)')
-  || !ecommerceBuyingUiSource.includes('I reviewed every item, the MMK total, delivery boundary, and payment method.')
+  || !ecommerceBuyingUiSource.includes('function receiveOrderLabel(value: EcommerceFulfilment)')
+  || !ecommerceBuyingUiSource.includes('ecommercePaymentMatchesFulfilment(next, current)')
+  || !ecommerceBuyingUiSource.includes("next === 'delivery' ? 'cash_on_delivery' : 'pay_on_pickup'")
+  || !ecommerceBuyingUiSource.includes('Quote for {latestRequest.customerReference}')
+  || !ecommerceBuyingUiSource.includes('<small>Receive order</small>')
+  || !ecommerceBuyingUiSource.includes('Reference {latestRequest.id} · valid until')
+  || !ecommerceBuyingUiSource.includes('I reviewed every item, the MMK total, how I receive it, and the payment method.')
+  || !ecommerceBuyingUiSource.includes('This quote is saved on this device for 15 minutes.')
+  || ecommerceBuyingUiSource.includes('`${request.id} saved on this device')
+  || ecommerceBuyingUiSource.includes('<small>Delivery</small>')
   || !ecommerceBuyingUiSource.includes('Included in listed price')
   || !ecommerceBuyingUiSource.includes('Payment remains unauthorized.')
   || !ecommerceBuyingUiSource.includes('No refund starts here.')
+  || !ecommerceBuyingLifecycleSource.includes('export function ecommercePaymentMatchesFulfilment(')
+  || !ecommerceBuyingLifecycleSource.includes('Checkout payment does not match how the customer receives the order.')
+  || !commerceSource.includes("quote.payment.adapter !== 'kbzpay_manual'")
   || ['fetch(', 'XMLHttpRequest', 'navigator.sendBeacon', 'chargePayment', 'authorizePayment'].some((marker) => ecommerceBuyingUiSource.includes(marker))
   || !ecommerceCssSource.includes('.ecommerce-preview-gate')
   || !ecommerceCssSource.includes('.ecommerce-preview-gate .core-button')
@@ -645,6 +657,8 @@ if (addToCartStart < 0
   || !ecommerceCssSource.includes('min-height: 360px')
   || !ecommerceCssSource.includes('.ecommerce-cart')
   || !ecommerceCssSource.includes('.ecommerce-quote-receipt')
+  || !ecommerceCssSource.includes('.ecommerce-quote-receipt > .status-pill')
+  || !ecommerceCssSource.includes('grid-row: 2;')
   || !ecommerceCssSource.includes('.ecommerce-after-purchase')
   || !ecommerceCssSource.includes('min-height: 44px')
   || !ecommerceCssSource.includes('@media (max-width: 560px)')) fail('ecommerce_buying_action_missing_or_consequential')
@@ -676,7 +690,7 @@ if (!ecommerceConfirmSource.includes('storefrontRequestLedgerContains')
   || !ecommerceHandoffSource.includes('ecommerceShopDraftLines')
   || !ecommerceHandoffSource.includes('ecommerceShopDraftPayment')
   || !ecommerceHandoffSource.includes('ECOMMERCE:${request.id}:${request.sourcePreviewDigest}')
-  || !ecommerceBuyingUiSource.includes('I reviewed every item, the MMK total, delivery boundary, and payment method.')
+  || !ecommerceBuyingUiSource.includes('I reviewed every item, the MMK total, how I receive it, and the payment method.')
   || !ecommerceBuyingUiSource.includes('Open in Shop')
   || !ecommerceBuyingUiSource.includes('Payment remains unauthorized.')
   || !ecommerceSource.includes('state: { ecommerceShopDraft: draft }')
@@ -6675,6 +6689,28 @@ async function verifyStorefrontRuntime() {
       && buyingQuote.payment.status === 'not_authorized'
       && buyingQuote.payment.amountMmk === 0,
     'ecommerce_buying_adapter_boundary_became_consequential')
+    buyingAssert(buyingModel.ecommercePaymentMatchesFulfilment('pickup', 'pay_on_pickup')
+      && buyingModel.ecommercePaymentMatchesFulfilment('delivery', 'cash_on_delivery')
+      && buyingModel.ecommercePaymentMatchesFulfilment('pickup', 'kbzpay_manual')
+      && buyingModel.ecommercePaymentMatchesFulfilment('delivery', 'kbzpay_manual')
+      && !buyingModel.ecommercePaymentMatchesFulfilment('pickup', 'cash_on_delivery')
+      && !buyingModel.ecommercePaymentMatchesFulfilment('delivery', 'pay_on_pickup'),
+    'ecommerce_buying_payment_fulfilment_matrix_invalid')
+    let mismatchedBuyingPaymentRejected = false
+    try {
+      await buyingModel.buildEcommerceCheckoutQuote({
+        pim,
+        cart: [{ sku: 'SM-1001', quantity: 1 }],
+        customerReference: 'Delivery customer',
+        fulfilment: 'delivery',
+        paymentAdapter: 'pay_on_pickup',
+        promotionCode: null,
+        idempotencyKey: 'ECI-32345678-1234-4ABC-8ABC-1234567890AD',
+        quotedAt: '2026-07-24T09:00:00.000Z',
+        expiresAt: '2026-07-24T09:15:00.000Z',
+      })
+    } catch { mismatchedBuyingPaymentRejected = true }
+    buyingAssert(mismatchedBuyingPaymentRejected, 'ecommerce_buying_mismatched_payment_reached_quote')
     const buyingRequest = await buyingModel.buildEcommerceOrderRequestV2(buyingQuote, {
       revision: 1,
       actionId: managedPreviewProof.actionId,

@@ -711,6 +711,8 @@ function storefrontRequestV2(value: Record<string, unknown>, field: string): Com
     || (value.fulfilment === 'pickup' ? quote.shipping.adapter !== 'pickup' || quote.shipping.status !== 'included' : quote.shipping.adapter !== 'shop_delivery_review' || quote.shipping.status !== 'pending_shop_review')) throw new Error(`${field}.quote shipping boundary is invalid.`)
   if (!isRecord(quote.payment) || !hasExactKeys(quote.payment, ['adapter', 'status', 'amountMmk'])
     || !['pay_on_pickup', 'cash_on_delivery', 'kbzpay_manual'].includes(String(quote.payment.adapter))
+    || (quote.payment.adapter !== 'kbzpay_manual'
+      && (value.fulfilment === 'pickup' ? quote.payment.adapter !== 'pay_on_pickup' : quote.payment.adapter !== 'cash_on_delivery'))
     || quote.payment.status !== 'not_authorized' || quote.payment.amountMmk !== 0) throw new Error(`${field}.quote payment boundary is invalid.`)
   return value as CommerceStorefrontRequestV2
 }
