@@ -3278,6 +3278,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     }
     const sourceRecordId = sourceDraft?.sourceRecordId ?? ecommerceDraft?.sourceRequestId
     const sourceEvidence = sourceDraft?.evidenceReference ?? ecommerceDraft?.evidenceReference
+    const confirmationEvidence = sourceEvidence ?? handoffReference
     if (sourceRecordId && commerce.orders.some((candidate) => candidate.sourceRecordId === sourceRecordId)) {
       setNotice(`${sourceRecordId} is already linked to an order. No duplicate was queued.`)
       return
@@ -3328,12 +3329,14 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     queueAction({
       kind: 'order_create',
       subjectId: order.id,
-      summary: ecommerceDraft ? 'Review Ecommerce order' : `Confirm ${order.id} with ${orderLines.length} item ${orderLines.length === 1 ? 'line' : 'lines'}`,
+      summary: ecommerceDraft ? 'Review Ecommerce order' : `Confirm order for ${order.customer}`,
       before: `${sourceRecordId ? `Request ${sourceRecordId} · ` : ''}Customer ${order.customer} · ${lineReview}`,
       after: `Order ${order.id} · Subtotal ${formatMoney(orderTotal)} · Tax not configured · Payment ${payment} · Owner confirming operator · Promise ${formatIssueDue(canonicalPromisedAt)} · ${fulfilmentLabel(order.fulfilment)} · Stock ${reservationReview}${locationReview}`,
-      evidenceReferenceSuggestion: sourceEvidence,
+      evidenceReferenceSuggestion: confirmationEvidence,
       evidenceReferenceLocked: Boolean(sourceRecordId),
-      reasonSuggestion: ecommerceDraft ? 'Customer request reviewed against the current Shop catalog.' : undefined,
+      reasonSuggestion: ecommerceDraft
+        ? 'Customer request reviewed against the current Shop catalog.'
+        : 'Order and handoff reviewed.',
       apply: async (action) => {
         const ownedOrder = { ...order, owner: action.actor }
         await mutateCommerce('commerce.order.created', action.commandId, commerceActionProof(action), (current) => reserveCommerceOrder(current, ownedOrder, commerceActionProof(action)))
