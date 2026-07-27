@@ -22,6 +22,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 
 CONTRACT = "supermega_private_trial_database_v5"
 REHEARSAL_PREFLIGHT_CONTRACT = "supermega_supabase_rehearsal_preflight_v1"
+ACTIVATION_TARGET_CONTRACT = "supermega_supabase_activation_target_v1"
 SCHEMA = "app_private"
 BACKEND_ROLE = "supermega_trial_backend"
 TRUSTED_OWNER = "postgres"
@@ -577,6 +578,57 @@ def validate_database_url(database_url: str) -> None:
         ssl_modes and ssl_modes[0] not in SAFE_SSL_MODES
     ):
         raise AuditConfigurationError("database_url_tls_required")
+
+
+def validate_supabase_activation_target(
+    database_url: str,
+    *,
+    expected_project_ref: str,
+) -> str:
+    """Bind one runtime or audit URL to an explicit Supabase project."""
+
+    validate_database_url(database_url)
+    expected = expected_project_ref.strip().lower()
+    if not re.fullmatch(r"[a-z0-9]{20}", expected):
+        raise AuditConfigurationError("activation_expected_project_ref_invalid")
+
+    parsed = urlsplit(database_url)
+    query = parse_qs(parsed.query, keep_blank_values=True)
+    if set(query) - {"sslmode"}:
+        raise AuditConfigurationError("activation_connection_parameter_not_allowed")
+    host = str(parsed.hostname or "").lower()
+    username = unquote(parsed.username or "")
+    port = parsed.port or 5432
+    if parsed.path.strip("/") != "postgres":
+        raise AuditConfigurationError("activation_database_must_be_postgres")
+
+    direct = re.fullmatch(r"db\.([a-z0-9]{20})\.supabase\.co", host)
+    pooler = re.fullmatch(r"[a-z0-9-]+\.pooler\.supabase\.com", host)
+    if direct:
+        if port != 5432:
+            raise AuditConfigurationError("activation_direct_port_invalid")
+        target_ref = direct.group(1)
+        mode = "direct"
+    elif pooler:
+        pooler_user = re.fullmatch(
+            r"[a-zA-Z_][a-zA-Z0-9_-]{0,62}\.([a-z0-9]{20})",
+            username,
+        )
+        if not pooler_user:
+            raise AuditConfigurationError("activation_pooler_project_binding_missing")
+        target_ref = pooler_user.group(1)
+        if port == 6543:
+            mode = "transaction_pooler"
+        elif port == 5432:
+            mode = "session_pooler"
+        else:
+            raise AuditConfigurationError("activation_pooler_port_invalid")
+    else:
+        raise AuditConfigurationError("activation_target_not_supabase")
+
+    if target_ref != expected:
+        raise AuditConfigurationError("activation_target_ref_mismatch")
+    return mode
 
 
 def _database_url_sslmode(database_url: str) -> str:
@@ -1763,6 +1815,39 @@ def audit_database(
     return evaluate_snapshot(snapshot)
 
 
+def audit_supabase_activation_target(
+    database_url: str,
+    *,
+    storage_audit_database_url: str,
+    expected_project_ref: str,
+    connect_factory: Any = None,
+    storage_connect_factory: Any = None,
+) -> dict[str, Any]:
+    database_connection_mode = validate_supabase_activation_target(
+        database_url,
+        expected_project_ref=expected_project_ref,
+    )
+    storage_audit_connection_mode = validate_supabase_activation_target(
+        storage_audit_database_url,
+        expected_project_ref=expected_project_ref,
+    )
+    report = audit_database(
+        database_url,
+        storage_audit_database_url=storage_audit_database_url,
+        connect_factory=connect_factory,
+        storage_connect_factory=storage_connect_factory,
+    )
+    report.update(
+        {
+            "activation_contract": ACTIVATION_TARGET_CONTRACT,
+            "target_project_ref": expected_project_ref.strip().lower(),
+            "database_connection_mode": database_connection_mode,
+            "storage_audit_connection_mode": storage_audit_connection_mode,
+        }
+    )
+    return report
+
+
 def _safe_failure(code: str, *, contract: str = CONTRACT) -> dict[str, Any]:
     report = {
         "ok": False,
@@ -1773,7 +1858,7 @@ def _safe_failure(code: str, *, contract: str = CONTRACT) -> dict[str, Any]:
         "mutation_statements_executed": 0,
         "secret_values_exposed": False,
     }
-    if contract == REHEARSAL_PREFLIGHT_CONTRACT:
+    if contract in {REHEARSAL_PREFLIGHT_CONTRACT, ACTIVATION_TARGET_CONTRACT}:
         report.update(
             {
                 "production_mutated": False,
@@ -1812,6 +1897,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Verify one explicit clean non-production Supabase migration target without mutation.",
     )
     parser.add_argument(
+        "--activation-target",
+        action="store_true",
+        help="Bind both read-only readiness URLs to one explicit Supabase project.",
+    )
+    parser.add_argument(
         "--expected-project-ref-env-key",
         default="SUPERMEGA_REHEARSAL_PROJECT_REF",
     )
@@ -1830,6 +1920,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(json.dumps(report, sort_keys=True))
         return 0 if report["ok"] is True else 1
 
+    mode_contract = (
+        REHEARSAL_PREFLIGHT_CONTRACT
+        if args.rehearsal_preflight
+        else ACTIVATION_TARGET_CONTRACT
+        if args.activation_target
+        else CONTRACT
+    )
+
     environment_keys = [args.env_key]
     if args.rehearsal_preflight:
         environment_keys.extend(
@@ -1841,14 +1939,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     else:
         environment_keys.append(args.storage_audit_env_key)
+        if args.activation_target:
+            environment_keys.append(args.expected_project_ref_env_key)
     if not all(re.fullmatch(r"[A-Z][A-Z0-9_]{2,80}", key) for key in environment_keys):
-        contract = REHEARSAL_PREFLIGHT_CONTRACT if args.rehearsal_preflight else CONTRACT
-        print(json.dumps(_safe_failure("env_key_invalid", contract=contract), sort_keys=True))
+        print(json.dumps(_safe_failure("env_key_invalid", contract=mode_contract), sort_keys=True))
         return 2
     database_url = str(os.getenv(args.env_key, "")).strip()
     if not database_url:
-        contract = REHEARSAL_PREFLIGHT_CONTRACT if args.rehearsal_preflight else CONTRACT
-        print(json.dumps(_safe_failure("database_url_missing", contract=contract), sort_keys=True))
+        print(json.dumps(_safe_failure("database_url_missing", contract=mode_contract), sort_keys=True))
         return 2
     storage_audit_database_url = ""
     if not args.rehearsal_preflight:
@@ -1858,11 +1956,26 @@ def main(argv: Sequence[str] | None = None) -> int:
         if not storage_audit_database_url:
             print(
                 json.dumps(
-                    _safe_failure("storage_audit_database_url_missing"),
+                    _safe_failure(
+                        "storage_audit_database_url_missing",
+                        contract=mode_contract,
+                    ),
                     sort_keys=True,
                 )
             )
             return 2
+
+    if args.rehearsal_preflight and args.activation_target:
+        print(
+            json.dumps(
+                _safe_failure(
+                    "target_mode_conflict",
+                    contract=ACTIVATION_TARGET_CONTRACT,
+                ),
+                sort_keys=True,
+            )
+        )
+        return 2
 
     if args.rehearsal_preflight and (args.ensure_schema or args.require_ready):
         print(
@@ -1890,21 +2003,29 @@ def main(argv: Sequence[str] | None = None) -> int:
                     os.getenv(args.ssl_root_cert_env_key, "")
                 ),
             )
+        elif args.activation_target:
+            report = audit_supabase_activation_target(
+                database_url,
+                storage_audit_database_url=storage_audit_database_url,
+                expected_project_ref=str(
+                    os.getenv(args.expected_project_ref_env_key, "")
+                ),
+            )
         else:
             report = audit_database(
                 database_url,
                 storage_audit_database_url=storage_audit_database_url,
             )
     except AuditConfigurationError as exc:
-        contract = REHEARSAL_PREFLIGHT_CONTRACT if args.rehearsal_preflight else CONTRACT
-        report = _safe_failure(exc.code, contract=contract)
+        report = _safe_failure(exc.code, contract=mode_contract)
     except RuntimeError as exc:
         code = str(exc) if str(exc) in {"postgres_driver_missing", "unexpected_database_row"} else "database_audit_failed"
-        contract = REHEARSAL_PREFLIGHT_CONTRACT if args.rehearsal_preflight else CONTRACT
-        report = _safe_failure(code, contract=contract)
+        report = _safe_failure(code, contract=mode_contract)
     except Exception:
-        contract = REHEARSAL_PREFLIGHT_CONTRACT if args.rehearsal_preflight else CONTRACT
-        report = _safe_failure("database_connection_or_audit_failed", contract=contract)
+        report = _safe_failure(
+            "database_connection_or_audit_failed",
+            contract=mode_contract,
+        )
 
     print(json.dumps(report, sort_keys=True))
     if args.rehearsal_preflight:

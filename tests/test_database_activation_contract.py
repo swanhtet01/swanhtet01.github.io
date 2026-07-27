@@ -344,7 +344,7 @@ class ActivationWrapperContractTests(unittest.TestCase):
 
     def test_validation_precedes_every_vercel_mutation(self) -> None:
         source = _read(ACTIVATOR)
-        validator_position = source.index("tools/validate_supermega_database_url.py")
+        validator_position = source.index("& uv run python $ValidatorPath")
         exit_guard_position = source.index("if ($LASTEXITCODE -ne 0)", validator_position)
         validate_only_position = source.index("if ($ValidateOnly)", exit_guard_position)
         vercel_position = source.index("vercel env ", validate_only_position)
@@ -352,24 +352,60 @@ class ActivationWrapperContractTests(unittest.TestCase):
         self.assertLess(exit_guard_position, validate_only_position)
         self.assertLess(validate_only_position, vercel_position)
         self.assertIn("--env-key SUPERMEGA_DATABASE_URL", source)
+        self.assertIn("--storage-audit-env-key SUPERMEGA_STORAGE_AUDIT_DATABASE_URL", source)
+        self.assertIn("--activation-target", source)
+        self.assertIn(
+            "--expected-project-ref-env-key SUPERMEGA_ACTIVATION_PROJECT_REF",
+            source,
+        )
         self.assertIn("--ensure-schema", source)
         self.assertIn("--require-ready", source)
-        self.assertIn("Vercel was not changed", source)
+        self.assertIn("Supabase and Vercel were not changed", source)
 
     def test_wrapper_does_not_forward_or_print_the_database_url(self) -> None:
         source = _read(ACTIVATOR)
         validator_line = next(
             line
             for line in source.splitlines()
-            if "tools/validate_supermega_database_url.py" in line
+            if "& uv run python $ValidatorPath" in line
         )
         self.assertNotIn("$resolved", validator_line.lower())
+        self.assertNotIn("$resolvedstorageaudit", validator_line.lower())
         for line in source.splitlines():
             if "write-output" in line.lower():
                 self.assertNotIn("$resolved", line.lower())
         self.assertIn("$env:SUPERMEGA_DATABASE_URL = $resolved", source)
+        self.assertIn(
+            "$env:SUPERMEGA_STORAGE_AUDIT_DATABASE_URL = $resolvedStorageAudit",
+            source,
+        )
         self.assertIn("finally", source.lower())
         self.assertIn("Remove-Item Env:SUPERMEGA_DATABASE_URL", source)
+        self.assertIn(
+            "Remove-Item Env:SUPERMEGA_STORAGE_AUDIT_DATABASE_URL",
+            source,
+        )
+
+    def test_wrapper_binds_target_and_gates_every_external_mutation(self) -> None:
+        source = _read(ACTIVATOR)
+        parameter_block = source.split(")", 1)[0]
+        self.assertIn("[string]$StorageAuditDatabaseUrlFile", parameter_block)
+        self.assertIn("[string]$ExpectedProjectRef", parameter_block)
+        self.assertIn("[string]$ApprovalId", parameter_block)
+        self.assertIn("[switch]$ProductionHandoff", parameter_block)
+        self.assertIn("status --porcelain -- package.json", source)
+        self.assertIn("productionSupabaseProjectRef", source)
+        self.assertIn("if (-not $ValidateOnly)", source)
+        self.assertIn("if (-not $ProductionHandoff)", source)
+        self.assertIn("if ($ApprovalId -notmatch $ApprovalIdPattern)", source)
+        self.assertIn(
+            "if ($ExpectedProjectRef -ne $TrustedProductionProjectRef)",
+            source,
+        )
+        self.assertIn(
+            "elseif ($ExpectedProjectRef -eq $TrustedProductionProjectRef)",
+            source,
+        )
 
     def test_runtime_readiness_queries_are_non_mutating(self) -> None:
         source = _read(TRIAL_STORE)
@@ -437,6 +473,100 @@ class SupabaseRehearsalPreflightContractTests(unittest.TestCase):
             f"@aws-0-ap-southeast-1.pooler.supabase.com:{port}"
             "/postgres?sslmode=verify-full"
         )
+
+    def _runtime_pooler_url(
+        self,
+        *,
+        project_ref: str | None = None,
+        port: int = 6543,
+    ) -> str:
+        target = project_ref or self.TARGET_REF
+        return (
+            f"postgresql://supermega_trial_login.{target}:{self.SECRET}"
+            f"@aws-0-ap-southeast-1.pooler.supabase.com:{port}"
+            "/postgres?sslmode=require"
+        )
+
+    def test_activation_target_binds_direct_and_runtime_pooler_urls(self) -> None:
+        self.assertEqual(
+            self.validator.validate_supabase_activation_target(
+                self._direct_url(),
+                expected_project_ref=self.TARGET_REF,
+            ),
+            "direct",
+        )
+        self.assertEqual(
+            self.validator.validate_supabase_activation_target(
+                self._runtime_pooler_url(),
+                expected_project_ref=self.TARGET_REF,
+            ),
+            "transaction_pooler",
+        )
+        self.assertEqual(
+            self.validator.validate_supabase_activation_target(
+                self._runtime_pooler_url(port=5432),
+                expected_project_ref=self.TARGET_REF,
+            ),
+            "session_pooler",
+        )
+
+    def test_activation_target_rejects_cross_project_and_routing_overrides(self) -> None:
+        cases = (
+            (
+                "activation_target_ref_mismatch",
+                self._runtime_pooler_url(project_ref="11111111111111111111"),
+            ),
+            (
+                "activation_target_not_supabase",
+                (
+                    f"postgresql://supermega_trial_login:{self.SECRET}"
+                    "@database.example.invalid:5432/postgres?sslmode=require"
+                ),
+            ),
+            (
+                "activation_connection_parameter_not_allowed",
+                self._runtime_pooler_url()
+                + f"&host=db.{self.PRODUCTION_REF}.supabase.co",
+            ),
+            (
+                "activation_pooler_project_binding_missing",
+                self._runtime_pooler_url().replace(
+                    f"supermega_trial_login.{self.TARGET_REF}",
+                    "supermega_trial_login",
+                ),
+            ),
+        )
+        for expected_code, database_url in cases:
+            with self.subTest(expected_code=expected_code):
+                with self.assertRaises(
+                    self.validator.AuditConfigurationError
+                ) as caught:
+                    self.validator.validate_supabase_activation_target(
+                        database_url,
+                        expected_project_ref=self.TARGET_REF,
+                    )
+                self.assertEqual(caught.exception.code, expected_code)
+
+    def test_cross_project_storage_evidence_fails_before_any_connection(self) -> None:
+        connections_opened = 0
+
+        def unexpected_connection(_database_url):
+            nonlocal connections_opened
+            connections_opened += 1
+            raise AssertionError("project binding must fail before connecting")
+
+        with self.assertRaises(self.validator.AuditConfigurationError) as caught:
+            self.validator.audit_supabase_activation_target(
+                self._runtime_pooler_url(),
+                storage_audit_database_url=self._runtime_pooler_url(
+                    project_ref="11111111111111111111"
+                ),
+                expected_project_ref=self.TARGET_REF,
+                connect_factory=unexpected_connection,
+                storage_connect_factory=unexpected_connection,
+            )
+        self.assertEqual(caught.exception.code, "activation_target_ref_mismatch")
+        self.assertEqual(connections_opened, 0)
 
     def _assert_configuration_error(
         self,
