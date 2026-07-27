@@ -4,8 +4,8 @@ Updated: 2026-07-27
 Owner: founder / CEO
 Mode: Codex-only guarded production release; managed operation remains isolated
 Live state contract: `supermega.hq-live-state.v1`
-Live release commit: `1a1c7ae42f86f9ceb0a0c5377549ceec23977e69`
-Live state observed: `2026-07-27T18:45:45Z`
+Live release commit: `151e62cd82e69d21c01619975897645b91e82014`
+Live state observed: `2026-07-27T19:15:09Z`
 Live operating mode: `isolated_demo`
 Live scheduler status: `degraded`
 Live scheduler configured: `false`
@@ -40,7 +40,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 - Storage privacy now has a six-request owner-confirmed verifier and zero-network configuration preflight; hosted proof remains blocked (`be78a02`).
 - Each CEO cycle selects at most one HQ-authorized outcome; blocked, duplicate, or invalid work stops before model or send (`cdd925a`).
 - Model calls reserve before provider I/O. All tenants and retries share one atomic UTC-day ceiling; failures stay charged, cache hits reserve nothing, hosted memory state fails closed, and the hard maximum is 2,000,000 units (`a2e1b89`).
-- Shop covers its operating lifecycle at `/shop/`; message intake stays lazy and initial JavaScript is 477,717 bytes (`3cd4825`).
+- Shop covers its operating lifecycle at `/shop/`; message intake stays lazy and initial JavaScript is 465,245 bytes (`151e62cd`).
 - Plant is task-first at `/plant/` and controls no equipment.
 - Website turns a five-field brief into a responsive, ready-page preview and standalone HTML download. Browser-local users skip managed release paperwork; connected workspaces retain evidence and approval controls. Download never deploys or changes a domain (`dfbe00b3`).
 - Ecommerce uses versioned Shop data for a recoverable multi-line cart and deterministic quote. Managed workspaces retain exact requests in the Shop inbox; V1 requests stay readable, and only Shop confirmation creates an order (`aed737a`).
@@ -54,10 +54,10 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 ## Verified baseline
 
 - Current local checkpoints: product `3cd4825`, agent operations `a2e1b89`, operations `63a245f`, and security `98b8044`.
-- App/local gates pass: 314 Python tests, lint/build, 54 Shop inventory/221 Commerce/258 Production checks, 66 security checks, and the complete release/database/Vercel/HQ suite.
+- App/local gates pass: 314 Python tests, lint/build, 54 Shop inventory/221 Commerce/258 Production checks, 69 security checks, and the complete release/database/Vercel/HQ suite.
 - A 390 px Shop journey passed exact-lot reserve, fulfil, and sellable return with no overflow; managed count and Plant allocation remain model/runtime verified.
 - First-action QA routes Shop, Plant, and Website blockers to the next task; mobile controls are 44 px and guide/review actions create no record (`36fa7dd`).
-- PRs #267/#268 make Website finish in one standalone download and align app/public copy. A 390 px production brief-to-download passed; the inspected 8,198-byte local artifact had CSP and no script. Both `supermega.dev` and `app.supermega.dev` serve exact commit `e18fc6bc`; paired release, guard, and live-health checks pass at catalog `2026-07-27.2`.
+- PRs #267/#268 make Website finish in one standalone download and align app/public copy. Prior verified history: Both `supermega.dev` and `app.supermega.dev` serve exact commit `e18fc6bc`. PRs #272/#273 remove configured-trial navigation noise, collapse Shop draft recovery to one primary action, and keep the Website handoff to Preview and Download. Shop and Website pass 390 px and desktop product journeys without horizontal overflow. Current live state: both domains serve exact commit `151e62cd`; paired release, guard, and live-health checks pass at catalog `2026-07-27.2`.
 - Production remains an `isolated_demo`: managed database, schema, audit, security, and writes are not ready. The hosted scheduler is degraded and unconfigured by design, uses no Ally compute, and retains a zero-idle execution target.
 
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
@@ -72,7 +72,6 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - AI-budget SQL/RPCs pass local concurrency, indexed aggregate, redaction, and provisioning checks but lack approved hosted proof; model calls stay fail closed.
 - `supermegabase` is not a trial target: it has existing records, one recorded migration, and 27 public RLS tables without policies. No isolated branch is verified, so managed writes remain off.
 - The four products are live only as isolated sample workspaces; cross-device managed persistence and tenant security are not proven.
-- The next release still needs an exact-commit protected preview before alias promotion; no fallback project or domain is allowed.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
 - Hosted scheduler activation is blocked correctly: no signed activation bundle, cron token, cron secret, worker URL, or worker allowlist is configured. Do not activate it before managed storage, security, recovery, and owner evidence pass.
 - SAP-grade gaps remain in Shop tax/location accounting and external refund settlement, Plant costing/OEE/calibration, Website hosted CMS/release, and Ecommerce payment/shipping/tax/returns.
