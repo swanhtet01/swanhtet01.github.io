@@ -4,8 +4,8 @@ Updated: 2026-07-27
 Owner: founder / CEO
 Mode: Codex-only guarded production release; managed operation remains isolated
 Live state contract: `supermega.hq-live-state.v1`
-Live release commit: `151e62cd82e69d21c01619975897645b91e82014`
-Live state observed: `2026-07-27T19:15:09Z`
+Live release commit: `1f6d0e5005cf00c20483514e88f061c1637194af`
+Live state observed: `2026-07-27T19:30:41Z`
 Live operating mode: `isolated_demo`
 Live scheduler status: `degraded`
 Live scheduler configured: `false`
@@ -40,7 +40,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 - Storage privacy now has a six-request owner-confirmed verifier and zero-network configuration preflight; hosted proof remains blocked (`be78a02`).
 - Each CEO cycle selects at most one HQ-authorized outcome; blocked, duplicate, or invalid work stops before model or send (`cdd925a`).
 - Model calls reserve before provider I/O. All tenants and retries share one atomic UTC-day ceiling; failures stay charged, cache hits reserve nothing, hosted memory state fails closed, and the hard maximum is 2,000,000 units (`a2e1b89`).
-- Shop covers its operating lifecycle at `/shop/`; message intake stays lazy and initial JavaScript is 465,245 bytes (`151e62cd`).
+- Shop covers its operating lifecycle at `/shop/`; message intake stays lazy and initial JavaScript is 465,245 bytes (`1f6d0e50`).
 - Plant is task-first at `/plant/` and controls no equipment.
 - Website turns a five-field brief into a responsive, ready-page preview and standalone HTML download. Browser-local users skip managed release paperwork; connected workspaces retain evidence and approval controls. Download never deploys or changes a domain (`dfbe00b3`).
 - Ecommerce uses versioned Shop data for a recoverable multi-line cart and deterministic quote. Managed workspaces retain exact requests in the Shop inbox; V1 requests stay readable, and only Shop confirmation creates an order (`aed737a`).
@@ -57,7 +57,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 - App/local gates pass: 314 Python tests, lint/build, 54 Shop inventory/221 Commerce/258 Production checks, 69 security checks, and the complete release/database/Vercel/HQ suite.
 - A 390 px Shop journey passed exact-lot reserve, fulfil, and sellable return with no overflow; managed count and Plant allocation remain model/runtime verified.
 - First-action QA routes Shop, Plant, and Website blockers to the next task; mobile controls are 44 px and guide/review actions create no record (`36fa7dd`).
-- PRs #267/#268 make Website finish in one standalone download and align app/public copy. Prior verified history: Both `supermega.dev` and `app.supermega.dev` serve exact commit `e18fc6bc`. PRs #272/#273 remove configured-trial navigation noise, collapse Shop draft recovery to one primary action, and keep the Website handoff to Preview and Download. Shop and Website pass 390 px and desktop product journeys without horizontal overflow. Current live state: both domains serve exact commit `151e62cd`; paired release, guard, and live-health checks pass at catalog `2026-07-27.2`.
+- PRs #267/#268 make Website finish in one standalone download and align app/public copy. Prior: Both `supermega.dev` and `app.supermega.dev` serve exact commit `e18fc6bc`. PRs #272/#273 simplify trial navigation, Shop recovery, and Website handoff; #275 removes dead Ecommerce actions. Shop/Website pass mobile and desktop without overflow; Plant hides secondary work. Current: both domains serve exact commit `1f6d0e50`; release, guard, and live checks pass at catalog `2026-07-27.2`.
 - Production remains an `isolated_demo`: managed database, schema, audit, security, and writes are not ready. The hosted scheduler is degraded and unconfigured by design, uses no Ally compute, and retains a zero-idle execution target.
 
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
