@@ -2,7 +2,15 @@
 
 Updated: 2026-07-27
 Owner: founder / CEO
-Mode: Codex-only guarded release candidate; production remains isolated
+Mode: Codex-only guarded production release; managed operation remains isolated
+Live state contract: `supermega.hq-live-state.v1`
+Live release commit: `55208da22a1ce9cb934b8b280291b74054d22203`
+Live state observed: `2026-07-27T16:04:57Z`
+Live operating mode: `isolated_demo`
+Live scheduler status: `degraded`
+Live scheduler configured: `false`
+Live managed persistence ready: `false`
+Live security ready: `false`
 
 ## North-star outcome
 
@@ -26,15 +34,12 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 ## Implemented reality
 
 - HQ caps 12 roles, four jobs, and zero idle compute; overrides fail closed and duplicate ceilings are removed.
-- Kernel has four owner-bound slots and 120-second stale recovery; excess cycles stop before model use and failed work retries (`ca5070e`).
 - Ally stays zero-subagent; multi-agent is disabled. One coordinator listener remains, with no duplicate dev server or loaded local model. Idle Ollama hosts were stopped.
 - Seven jobs use Agent Operations or core GitHub; exact-tenant catalogs mean YTF identities cannot render in core operations (`b46c386`).
-- Hosted scheduling is dormant with zero registered crons; flag-only, preview, stale, incomplete, or tampered attempts stop before worker invocation (`07dd959`).
+- Hosted scheduling remains deliberately dormant; flag-only, preview, stale, incomplete, or tampered activation attempts stop before worker invocation (`07dd959`).
 - Storage privacy now has a six-request owner-confirmed verifier and zero-network configuration preflight; hosted proof remains blocked (`be78a02`).
 - Each CEO cycle selects at most one HQ-authorized outcome; blocked, duplicate, or invalid work stops before model or send (`cdd925a`).
-- CEO completion persists before notification; owner acceptance is separate. Efficiency requires durable, valid, fully measured evidence (`78f2297`).
 - Model calls reserve before provider I/O. All tenants and retries share one atomic UTC-day ceiling; failures stay charged, cache hits reserve nothing, hosted memory state fails closed, and the hard maximum is 2,000,000 units (`a2e1b89`).
-- AI cost control shows totals and records cap/store pressure as replay-safe blocked work without tenant/provider/content detail (`7be84f4`, `18fec57`, `8d756f2`).
 - Shop covers its operating lifecycle at `/shop/`; message intake stays lazy and initial JavaScript is 477,717 bytes (`3cd4825`).
 - Plant is task-first at `/plant/` and controls no equipment.
 - Website builds a guarded preview, approved site file, and tenant-bound release plan at `/website/`; it never deploys (`a400a86`).
@@ -52,7 +57,8 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 - App/local gates pass: 314 Python tests, lint/build, 54 Shop inventory/221 Commerce checks, 66 security checks, and a 477,717-byte largest chunk. Kernel passes 282 tests, 69 connectors/993 adversarial calls, and 15 crews/214 checks.
 - Desktop/mobile Shop passes. A rendered 390 px flow set up two locations, reserved and fulfilled one order, previewed `Main store / OPENING-001`, and returned the unit to that exact lot with no overflow or crash overlay. Managed count and Plant allocation remain model/runtime verified.
 - Core first-action QA leads Shop Stock, incomplete orders to Promise or Payment, Plant alerts to Problems or output, and invalid Website briefs to their first error. Mobile controls are at least 44 px with focus-safe fixed navigation (`36fa7dd`); guide and review actions create no record.
-- Product checkpoint `3cd4825` is on a clean fast-forward descendant of open draft PR #258 head `338b6fd`. Vercel `supermega-public` serves both domains from live `6885c320` in `isolated_demo` with zero managed coverage and database/schema/audit/writes disabled; remote checks exclude the local delta.
+- PR #260 merged with passing SuperMega App CI and GitGuardian checks. Both `supermega.dev` and `app.supermega.dev` serve exact commit `55208da2`; paired live verifiers pass with brand `jade-v2-2026-07` and context/catalog `2026-07-27.1`.
+- Production remains an `isolated_demo`: managed database, schema, audit, security, and writes are not ready. The hosted scheduler is degraded and unconfigured by design, uses no Ally compute, and retains a zero-idle execution target.
 
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
 
@@ -65,10 +71,10 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - Website, Plant, and Ecommerce have tenant-bound persistence contracts but still lack hosted cross-device/activation proof.
 - AI-budget SQL/RPCs pass local concurrency, indexed aggregate, redaction, and provisioning checks but lack approved hosted proof; model calls stay fail closed.
 - `supermegabase` is not a trial target: it has existing records, one recorded migration, and 27 public RLS tables without policies. No isolated branch is verified, so managed writes remain off.
-- The candidate is not on GitHub or Vercel; live remains `6885c320` and PR #258 remains `338b6fd`. The next external action is an approved fast-forward-only push of the clean release branch.
-- Preview remains blocked until the exact `supermega-public` project is linked to the clean candidate commit; no fallback project or domain is allowed.
+- The four products are live only as isolated sample workspaces; cross-device managed persistence and tenant security are not proven.
+- The next release still needs an exact-commit protected preview before alias promotion; no fallback project or domain is allowed.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
-- Local scheduler authority emits no crons and no signed activation bundle exists. Live `megaos` cron/environment cleanup remains unverified because grouped log reads timed out then returned 403; no provider state changed.
+- Hosted scheduler activation is blocked correctly: no signed activation bundle, cron token, cron secret, worker URL, or worker allowlist is configured. Do not activate it before managed storage, security, recovery, and owner evidence pass.
 - SAP-grade gaps remain in Shop tax/location accounting and external refund settlement, Plant costing/OEE/calibration, Website hosted CMS/release, and Ecommerce payment/shipping/tax/returns.
 
 ## Decisions in force
@@ -84,8 +90,8 @@ Every slice must keep one primary action, progressive disclosure, mobile accepta
 
 ## Next evidence
 
-1. After an approved fast-forward-only push, review PR #258 from clean commit `3cd4825` and rerun the coordinated remote checks.
-2. Link that exact commit to a protected `supermega-public` preview and repeat desktop/mobile Shop, Plant, Website, Ecommerce, reload, and duplicate-handoff journeys without mutating aliases.
-3. On an approved isolated Supabase target, prove private Storage, RLS, replay/isolation, recovery, and one real managed tenant before enabling writes.
-4. Repeat the 12-profile rehearsal with one founder-approved named pilot company and measure import correction, setup, human review, and first-value time.
-5. Only after preview, managed-security, rollback, and observability evidence passes, approve production promotion; begin public marketing after the live release re-verifies the same commit and one pilot can complete onboarding.
+1. On an approved isolated Supabase target, prove private Storage, RLS, replay/isolation, recovery, and one real managed tenant before enabling writes.
+2. Repeat the 12-profile rehearsal against the live isolated release, including mobile, reload, import correction, duplicate handoff, export, and reset recovery.
+3. Recruit one founder-approved Shop design partner with a named operator, baseline, five-day evidence plan, and explicit acceptance criteria.
+4. Keep AI and hosted scheduling dormant until the managed-security, durable-budget, recovery, and owner-approval gates pass; registered roles must continue to consume zero idle compute.
+5. For the next release, require exact-commit protected preview, paired live verification, observability, rollback evidence, and an updated `hq:verify:live` snapshot before broader marketing.

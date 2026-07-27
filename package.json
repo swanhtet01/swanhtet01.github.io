@@ -44,7 +44,9 @@
     "audit:ally": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/audit_ally_runtime.ps1 -Json",
     "audit:ally:self-test": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/audit_ally_runtime.ps1 -SelfTest -Json",
     "verify:app-deploy-workflow": "node tools/verify_app_deploy_workflow.mjs",
-    "hq:verify": "node tools/verify_hq_contract.mjs"
+    "hq:verify": "node tools/verify_hq_contract.mjs",
+    "hq:verify:live": "node tools/verify_hq_live_state.mjs",
+    "hq:verify:live:self-test": "node tools/verify_hq_live_state.mjs --self-test"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.4"
