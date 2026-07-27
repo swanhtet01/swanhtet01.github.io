@@ -27,7 +27,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 
 - HQ caps 12 dormant roles, four active/batch jobs, two Kernel agents per cycle, and zero idle compute; overrides fail closed and duplicate ceilings are removed.
 - Kernel has four owner-bound slots with 120-second stale recovery; a fifth cycle stops before model use and failed work returns for retry (`ca5070e`).
-- Ally audit: immediate post-trim RAM 77.4% / Codex 747.4 MB; warmed recheck 80.4% / 1,379.1 MB. Zero models, one worker, no dev listener. Multi-agent remains disabled; dormant plugins are off for next restart.
+- Ally stays zero-subagent; multi-agent is disabled. One coordinator listener remains, with no duplicate dev server or loaded local model. Idle Ollama hosts were stopped.
 - All seven company jobs use SuperMega Agent Operations or core GitHub. Catalogs are exact-tenant scoped, so YTF identities cannot render in core operations (`b46c386`).
 - Hosted scheduling is dormant with zero registered crons. A signed seven-day bundle now binds five proof digests, tenant, owner decision, canonical project, production, and exact commit; flag-only, preview, stale, incomplete, or tampered attempts stop before worker invocation (`07dd959`).
 - Storage privacy now has a six-request owner-confirmed verifier and zero-network configuration preflight (`be78a02`). Privileged keys, redirects, proxies, malformed data, and unconfirmed targets fail closed; hosted proof remains blocked.
@@ -35,24 +35,24 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 - CEO completion persists before notification; owner acceptance is separate. Efficiency requires durable, valid, fully measured evidence (`78f2297`).
 - Model calls reserve before provider I/O. All tenants and retries share one atomic UTC-day ceiling; failures stay charged, cache hits reserve nothing, hosted memory state fails closed, and the hard maximum is 2,000,000 units (`a2e1b89`).
 - AI cost control shows totals and records cap/store pressure as replay-safe blocked work without tenant/provider/content detail (`7be84f4`, `18fec57`, `8d756f2`).
-- Shop covers its operating lifecycle at `/shop/`; message intake stays lazy and initial JavaScript is 474,250 bytes (`ca7c95d`).
+- Shop covers its operating lifecycle at `/shop/`; message intake stays lazy and initial JavaScript is 474,250 bytes (`6465173`).
 - Plant is task-first at `/plant/` and controls no equipment.
 - Website builds a guarded preview, approved site file, and tenant-bound release plan at `/website/`; it never deploys (`a400a86`).
 - Ecommerce uses versioned Shop data for a recoverable multi-line cart and deterministic quote. Managed workspaces retain exact requests in the Shop inbox; V1 requests stay readable, and only Shop confirmation creates an order (`aed737a`).
 - AI remains gated; Order Intake passed 20 local cases, but provider execution still needs credentials.
 - Client setup is two steps with one manifest-backed smart import; exact matches collapse and exceptions open for review (`ab9a89e`).
-- Managed Shop Stock persists two-location/lot setup, transfers, and purchase receipts allocated to one destination and new lot in the existing action. Server proof, replay, stale-head denial, and aggregate/location conservation fail closed; orders, counts, and production issues remain aggregate (`ca7c95d`).
+- Shop Stock keeps local and managed locations in Commerce, including setup, transfers, and managed receipts. Replay, stale-head, and stock-conservation checks fail closed. Legacy standalone browser records stay untouched but inactive; orders, counts, and production issues remain aggregate (`6465173`).
 - Plant Jobs persists managed BOM/routing, WIP, minutes, genealogy, quality, release, replay, and rollback; operation/output requires exact authenticated Shop issue evidence (`3c885d8`).
 - Home keeps Shop and Plant exceptions above collapsed HQ work. Purchases suppress duplicate stock tasks; a Plant issue badge links to Problems and otherwise the card opens Jobs. `/work/` stays labelled HQ; bottom navigation reads Home, HQ, and Products.
 - `npm run dev` starts canonical FastAPI plus Vite on loopback with database, hosted-auth, model, worker, and write authority cleared. Records stay browser-local; hosted activation is not proven.
 
 ## Verified baseline
 
-- Current local checkpoints: product `ca7c95d`, agent operations `a2e1b89`, operations `63a245f`, and security `98b8044`.
-- App/local gates pass: 310 Python tests, lint/build, 33 Shop inventory/221 Commerce checks, 66 security checks, and a 474,250-byte largest chunk. Kernel passes 282 tests, 69 connectors/993 adversarial calls, and 15 crews/214 checks.
-- Earlier rendered checks passed; fresh managed-receipt QA is pending.
+- Current local checkpoints: product `6465173`, agent operations `a2e1b89`, operations `63a245f`, and security `98b8044`.
+- App/local gates pass: 310 Python tests, lint/build, 28 active Shop inventory/221 Commerce checks, 66 security checks, and a 474,250-byte largest chunk. Kernel passes 282 tests, 69 connectors/993 adversarial calls, and 15 crews/214 checks.
+- Desktop/mobile Shop setup QA passes without overflow or browser errors; managed-receipt QA is pending.
 - Core first-action QA leads Shop Stock, incomplete orders to Promise or Payment, Plant alerts to Problems or output, and invalid Website briefs to their first error. Mobile controls are at least 44 px with focus-safe fixed navigation (`36fa7dd`); guide and review actions create no record.
-- Product checkpoint `ca7c95d` is on a clean fast-forward descendant of open draft PR #258 head `338b6fd`. Vercel `supermega-public` serves both domains from live `6885c320` in `isolated_demo` with zero managed coverage and database/schema/audit/writes disabled; remote checks exclude the local delta.
+- Product checkpoint `6465173` is on a clean fast-forward descendant of open draft PR #258 head `338b6fd`. Vercel `supermega-public` serves both domains from live `6885c320` in `isolated_demo` with zero managed coverage and database/schema/audit/writes disabled; remote checks exclude the local delta.
 
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
 
@@ -84,7 +84,7 @@ Every slice must keep one primary action, progressive disclosure, mobile accepta
 
 ## Next evidence
 
-1. After an approved fast-forward-only push, review PR #258 from clean commit `ca7c95d` and rerun the coordinated remote checks.
+1. After an approved fast-forward-only push, review PR #258 from clean commit `6465173` and rerun the coordinated remote checks.
 2. Link that exact commit to a protected `supermega-public` preview and repeat desktop/mobile Shop, Plant, Website, Ecommerce, reload, and duplicate-handoff journeys without mutating aliases.
 3. On an approved isolated Supabase target, prove private Storage, RLS, replay/isolation, recovery, and one real managed tenant before enabling writes.
 4. Repeat the 12-profile rehearsal with one founder-approved named pilot company and measure import correction, setup, human review, and first-value time.
