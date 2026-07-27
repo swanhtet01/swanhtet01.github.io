@@ -37,6 +37,7 @@ COMMERCE_EVENTS = frozenset(
         "commerce.refund.settled",
         "commerce.stock.received",
         "commerce.stock.counted",
+        "commerce.production_material.issued",
         "commerce.purchase_order.created",
         "commerce.purchase_order.received",
         "commerce.purchase_order.cancelled",
@@ -61,6 +62,7 @@ COMMERCE_HUMAN_EVENTS = frozenset(
         "commerce.refund.settled",
         "commerce.stock.received",
         "commerce.stock.counted",
+        "commerce.production_material.issued",
         "commerce.purchase_order.created",
         "commerce.purchase_order.received",
         "commerce.purchase_order.cancelled",
@@ -74,7 +76,18 @@ _ORDER_STATUSES = ("confirmed", "preparing", "ready", "completed", "cancelled")
 _NEXT_ORDER_STATUS = {"confirmed": "preparing", "preparing": "ready", "ready": "completed"}
 _PAYMENT_STATUSES = ("pending", "reconciled")
 _REFUND_STATUSES = ("none", "due", "settled")
-_MOVEMENT_KINDS = ("opening", "reserve", "release", "receipt", "count", "return")
+_MOVEMENT_KINDS = (
+    "opening",
+    "reserve",
+    "release",
+    "receipt",
+    "count",
+    "return",
+    "production_issue",
+)
+_PRODUCTION_MATERIAL_UNITS = frozenset(
+    {"kg", "g", "l", "ml", "pcs", "pack", "bag", "roll", "sheet", "m", "cm"}
+)
 _RETURN_DISPOSITIONS = ("restock", "not_restocked")
 _WEBSITE_INTAKE_STATUSES = ("pending_confirmation", "converted")
 _MAX_SAFE_INTEGER = 9_007_199_254_740_991
@@ -212,6 +225,26 @@ _MOVEMENT_FIELDS = frozenset(
         "purchaseOrderId",
         "expectedQuantity",
         "countedQuantity",
+        "productionRequestId",
+        "productionCommandDigest",
+        "productionJobId",
+        "productionMaterialId",
+        "productionInputLotId",
+        "productionQuantityMilli",
+        "productionUnit",
+        "conversionNote",
+    }
+)
+_PRODUCTION_ISSUE_FIELDS = frozenset(
+    {
+        "productionRequestId",
+        "productionCommandDigest",
+        "productionJobId",
+        "productionMaterialId",
+        "productionInputLotId",
+        "productionQuantityMilli",
+        "productionUnit",
+        "conversionNote",
     }
 )
 _PURCHASE_ORDER_REQUIRED_FIELDS = frozenset(
@@ -1217,18 +1250,22 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     movements_by_action: dict[str, list[dict[str, Any]]] = {}
     receipt_quantity_by_purchase_order: dict[str, int] = {}
     latest_receipt_at_by_purchase_order: dict[str, datetime] = {}
+    production_request_ids: list[str] = []
     for index, candidate in enumerate(movements):
         movement = _object(candidate, f"movements[{index}]")
         _exact_fields(
             movement,
             f"movements[{index}]",
             required=_MOVEMENT_FIELDS
-            - {
-                "orderId",
-                "purchaseOrderId",
-                "expectedQuantity",
-                "countedQuantity",
-            },
+            - (
+                {
+                    "orderId",
+                    "purchaseOrderId",
+                    "expectedQuantity",
+                    "countedQuantity",
+                }
+                | _PRODUCTION_ISSUE_FIELDS
+            ),
             optional=frozenset(
                 {
                     "orderId",
@@ -1236,7 +1273,8 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                     "expectedQuantity",
                     "countedQuantity",
                 }
-            ),
+            )
+            | _PRODUCTION_ISSUE_FIELDS,
         )
         movement_id = _text(
             movement["id"],
@@ -1253,6 +1291,58 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         kind = movement["kind"]
         if kind not in _MOVEMENT_KINDS:
             raise TrialValidationError(f"movements[{index}].kind is invalid.")
+        retained_production_fields = _PRODUCTION_ISSUE_FIELDS.intersection(movement)
+        if kind == "production_issue":
+            if (
+                retained_production_fields != _PRODUCTION_ISSUE_FIELDS
+                or "orderId" in movement
+                or "purchaseOrderId" in movement
+                or "expectedQuantity" in movement
+                or "countedQuantity" in movement
+            ):
+                raise TrialValidationError(
+                    f"movements[{index}] production issue fields are incomplete."
+                )
+            production_request_ids.append(
+                _text(
+                    movement["productionRequestId"],
+                    f"movements[{index}].productionRequestId",
+                    maximum=80,
+                )
+            )
+            production_command_digest = _text(
+                movement["productionCommandDigest"],
+                f"movements[{index}].productionCommandDigest",
+                maximum=71,
+            )
+            if _SHA256_DIGEST_PATTERN.fullmatch(production_command_digest) is None:
+                raise TrialValidationError(
+                    f"movements[{index}].productionCommandDigest is invalid."
+                )
+            for field in (
+                "productionJobId",
+                "productionMaterialId",
+                "productionInputLotId",
+            ):
+                _text(movement[field], f"movements[{index}].{field}", maximum=80)
+            _integer(
+                movement["productionQuantityMilli"],
+                f"movements[{index}].productionQuantityMilli",
+                minimum=1,
+            )
+            if movement["productionUnit"] not in _PRODUCTION_MATERIAL_UNITS:
+                raise TrialValidationError(
+                    f"movements[{index}].productionUnit is invalid."
+                )
+            _text(
+                movement["conversionNote"],
+                f"movements[{index}].conversionNote",
+                maximum=240,
+            )
+        elif retained_production_fields:
+            raise TrialValidationError(
+                f"movements[{index}] production issue fields are unsupported for {kind}."
+            )
         movements_by_action.setdefault(action_id, []).append(movement)
         if kind == "count":
             if "orderId" in movement or "purchaseOrderId" in movement:
@@ -1287,12 +1377,18 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         elif kind != "count":
             quantity_delta = _integer(abs(movement["quantityDelta"]) if isinstance(movement["quantityDelta"], int) and not isinstance(movement["quantityDelta"], bool) else movement["quantityDelta"], f"movements[{index}].quantityDelta", minimum=1)
             signed_delta = movement["quantityDelta"]
-            if kind == "reserve" and signed_delta >= 0:
-                raise TrialValidationError(f"movements[{index}] reserve must be negative.")
-            if kind != "reserve" and signed_delta <= 0:
+            if kind in {"reserve", "production_issue"} and signed_delta >= 0:
+                raise TrialValidationError(
+                    f"movements[{index}] {kind} must be negative."
+                )
+            if kind not in {"reserve", "production_issue"} and signed_delta <= 0:
                 raise TrialValidationError(
                     f"movements[{index}] release, receipt, or return must be positive."
                 )
+        if kind == "production_issue":
+            movement_ids.append(movement_id)
+            movement_action_ids.append(action_id)
+            continue
         if kind in {"opening", "receipt", "count"}:
             if "orderId" in movement:
                 raise TrialValidationError(f"movements[{index}] {kind} cannot reference an order.")
@@ -1405,6 +1501,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         movement_ids.append(movement_id)
         movement_action_ids.append(action_id)
     _unique(movement_ids, "Stock movement ID")
+    _unique(production_request_ids, "Production material request ID")
     for order_id, return_record in order_returns:
         order = order_by_id.get(order_id)
         lines = _reservation_lines(order) if order else []
@@ -2192,6 +2289,7 @@ def _validate_event_evidence(
         "commerce.order.cancelled": "release",
         "commerce.stock.received": "receipt",
         "commerce.stock.counted": "count",
+        "commerce.production_material.issued": "production_issue",
         "commerce.purchase_order.received": "receipt",
         "commerce.website_intake.converted": "reserve",
     }.get(event_type)
@@ -3249,6 +3347,47 @@ def _validate_counted(
         )
 
 
+def _validate_production_material_issued(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "orders", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    _require_storefront_configuration_unchanged(current, next_state)
+    _require_purchase_orders_unchanged(current, next_state)
+    if (
+        len(next_state["movements"]) != len(current["movements"]) + 1
+        or next_state["movements"][1:] != current["movements"]
+    ):
+        raise TrialValidationError(
+            "commerce.production_material.issued must prepend exactly one stock issue."
+        )
+    movement = next_state["movements"][0]
+    if (
+        movement.get("kind") != "production_issue"
+        or movement.get("quantityDelta", 0) >= 0
+        or movement.get("id") != _movement_id(str(movement.get("actionId")))
+    ):
+        raise TrialValidationError(
+            "production material issue requires one attributable negative stock movement."
+        )
+    before_item, after_item = _one_changed(
+        current["items"], next_state["items"], "items"
+    )
+    if (
+        before_item["sku"] != movement["sku"]
+        or after_item
+        != {
+            **before_item,
+            "onHand": before_item["onHand"] + movement["quantityDelta"],
+        }
+    ):
+        raise TrialValidationError(
+            "production material issue must decrease only its matching Shop item."
+        )
+
+
 def _validate_purchase_order_created(
     current: Mapping[str, Any],
     next_state: Mapping[str, Any],
@@ -3632,6 +3771,7 @@ _TRANSITION_VALIDATORS = {
     "commerce.refund.settled": _validate_refund_settled,
     "commerce.stock.received": _validate_received,
     "commerce.stock.counted": _validate_counted,
+    "commerce.production_material.issued": _validate_production_material_issued,
     "commerce.purchase_order.created": _validate_purchase_order_created,
     "commerce.purchase_order.received": _validate_purchase_order_received,
     "commerce.purchase_order.cancelled": _validate_purchase_order_cancelled,

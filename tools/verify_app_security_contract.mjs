@@ -37,6 +37,7 @@ const [runtime, supabaseAuth, cloudRuntime, schedulerActivation, agentGovernance
   read('tools/verify_private_storage_privacy.py'),
 ])
 const migration = `${rolePreflight}\n${foundationMigration}\n${decisionMigration}\n${websiteMigration}\n${hardeningMigration}\n${readCapabilityMigration}`
+const productionMaterialHandoff = await read('supermega_runtime/production_material_handoff.py')
 const managedPurchaseReceiptAuthority = trialStore.slice(
   trialStore.indexOf('if event_type == "commerce.purchase_order.received":'),
   trialStore.indexOf('if event_type == "commerce.purchase_order.cancelled":'),
@@ -254,6 +255,7 @@ const expectedHumanCommerceEvents = [
   'commerce.order.created',
   'commerce.order.return_recorded',
   'commerce.payment.reconciled',
+  'commerce.production_material.issued',
   'commerce.purchase_order.cancelled',
   'commerce.purchase_order.created',
   'commerce.purchase_order.received',
@@ -349,6 +351,13 @@ requireContract('consequential Website events are human-only and actor-bound in 
   && /surface == "website" and event_type in HUMAN_COMMAND_EVENTS/.test(trialStore)
   && /f"\{surface\.title\(\)\} evidence actor must match the authenticated principal\."/.test(trialStore))
 requireContract('Website Commerce intake source is transactionally verified with replay-safe retained proof', /commerce\.website_intake\.created/.test(trialRuntime) && /validate_website_snapshot_source/.test(trialRuntime) && /related_surfaces = \("website",\)/.test(trialRuntime) && /state_precondition=state_precondition/.test(trialRuntime) && /_commerce_retains_website_source/.test(trialRuntime) && /_website_fingerprint\(state\) != fingerprint/.test(websiteRuntime) && /not _same_source\(snapshot\["source"\], current_source\)/.test(websiteRuntime) && /event_type == "commerce\.website_intake\.created"/.test(trialStore) && /intake\["snapshotDigest"\] = f"sha256:/.test(trialStore) && /locked_surfaces/.test(trialStore) && /for update/i.test(trialStore))
+requireContract('Plant material and Shop stock are cross-surface digest-bound before progress',
+  /commerce\.production_material\.issued/.test(trialRuntime)
+  && /related_surfaces = \("production",\)/.test(trialRuntime)
+  && /related_surfaces = \("commerce",\)/.test(trialRuntime)
+  && /require_shop_issue_matches_plant/.test(productionMaterialHandoff)
+  && /require_shop_issue_before_plant_progress/.test(productionMaterialHandoff)
+  && /productionCommandDigest/.test(commerceRuntime))
 requireContract('consequential Commerce events are human-only in router and store', /COMMERCE_HUMAN_EVENTS/.test(trialRuntime)
   && JSON.stringify(humanEventList(trialStore, 'HUMAN_COMMAND_EVENTS', 'SURFACE_WRITE_CAPABILITIES')) === JSON.stringify(expectedHumanCommerceEvents)
   && JSON.stringify(humanEventList(commerceRuntime, 'COMMERCE_HUMAN_EVENTS', '_ORDER_STATUSES')) === JSON.stringify(expectedHumanCommerceEvents)

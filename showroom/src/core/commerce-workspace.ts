@@ -95,7 +95,19 @@ export function commerceOrderPromiseUrgency(order: CommerceOrder, now: number): 
   return promisedAt - now <= 60 * 60 * 1000 ? 'due_soon' : 'scheduled'
 }
 
-export type CommerceStockMovementKind = 'opening' | 'reserve' | 'release' | 'receipt' | 'count' | 'return'
+export type CommerceProductionMaterialUnit = 'kg' | 'g' | 'l' | 'ml' | 'pcs' | 'pack' | 'bag' | 'roll' | 'sheet' | 'm' | 'cm'
+
+export type CommerceProductionMaterialRequest = {
+  requestId: string
+  sourceCommandDigest: string
+  jobId: string
+  materialId: string
+  inputLotId: string
+  quantityMilli: number
+  unit: CommerceProductionMaterialUnit
+}
+
+export type CommerceStockMovementKind = 'opening' | 'reserve' | 'release' | 'receipt' | 'count' | 'return' | 'production_issue'
 
 export type CommerceStockMovement = {
   id: string
@@ -111,6 +123,14 @@ export type CommerceStockMovement = {
   purchaseOrderId?: string
   expectedQuantity?: number
   countedQuantity?: number
+  productionRequestId?: string
+  productionCommandDigest?: string
+  productionJobId?: string
+  productionMaterialId?: string
+  productionInputLotId?: string
+  productionQuantityMilli?: number
+  productionUnit?: CommerceProductionMaterialUnit
+  conversionNote?: string
 }
 
 export type CommerceClose = {
@@ -424,7 +444,18 @@ export type CommerceMutationResult =
 const orderStatuses: CommerceOrderStatus[] = ['confirmed', 'preparing', 'ready', 'completed', 'cancelled']
 const paymentStatuses: CommercePaymentStatus[] = ['pending', 'reconciled']
 const refundStatuses: CommerceRefundStatus[] = ['none', 'due', 'settled']
-const movementKinds: CommerceStockMovementKind[] = ['opening', 'reserve', 'release', 'receipt', 'count', 'return']
+const movementKinds: CommerceStockMovementKind[] = ['opening', 'reserve', 'release', 'receipt', 'count', 'return', 'production_issue']
+const productionMaterialUnits = new Set<CommerceProductionMaterialUnit>(['kg', 'g', 'l', 'ml', 'pcs', 'pack', 'bag', 'roll', 'sheet', 'm', 'cm'])
+const productionIssueFields = [
+  'productionRequestId',
+  'productionCommandDigest',
+  'productionJobId',
+  'productionMaterialId',
+  'productionInputLotId',
+  'productionQuantityMilli',
+  'productionUnit',
+  'conversionNote',
+] as const
 const returnDispositions: CommerceReturnDisposition[] = ['restock', 'not_restocked']
 const websiteIntakeStatuses: CommerceWebsiteIntakeStatus[] = ['pending_confirmation', 'converted']
 const closeSnapshotFields = ['businessDate', 'orderIds', 'paymentExceptionOrderIds', 'stockExceptionSkus', 'actionId', 'operator', 'reason', 'evidenceReference'] as const
@@ -1361,11 +1392,12 @@ export function validateCommerceState(value: unknown): CommerceState {
   const movementsByAction = new Map<string, CommerceStockMovement[]>()
   const receiptQuantityByPurchaseOrder = new Map<string, number>()
   const latestReceiptAtByPurchaseOrder = new Map<string, bigint>()
+  const productionRequestIds: string[] = []
   for (const [index, candidate] of movements.entries()) {
     if (!isRecord(candidate) || !hasExactKeys(
       candidate,
       ['id', 'actionId', 'createdAt', 'actor', 'reason', 'evidenceReference', 'kind', 'sku', 'quantityDelta'],
-      ['orderId', 'purchaseOrderId', 'expectedQuantity', 'countedQuantity'],
+      ['orderId', 'purchaseOrderId', 'expectedQuantity', 'countedQuantity', ...productionIssueFields],
     )) throw new Error(`movements[${index}] is invalid.`)
     movementIds.push(requiredText(candidate.id, `movements[${index}].id`))
     movementActionIds.push(requiredText(candidate.actionId, `movements[${index}].actionId`))
@@ -1373,6 +1405,25 @@ export function validateCommerceState(value: unknown): CommerceState {
     for (const field of ['actor', 'reason', 'evidenceReference', 'sku'] as const) requiredText(candidate[field], `movements[${index}].${field}`)
     if (!itemSkus.includes(candidate.sku as string)) throw new Error(`movements[${index}].sku is unknown.`)
     if (!movementKinds.includes(candidate.kind as CommerceStockMovementKind)) throw new Error(`movements[${index}].kind is invalid.`)
+    const retainedProductionFields = productionIssueFields.filter((field) => candidate[field] !== undefined)
+    if (candidate.kind === 'production_issue') {
+      if (retainedProductionFields.length !== productionIssueFields.length
+        || candidate.orderId !== undefined
+        || candidate.purchaseOrderId !== undefined
+        || candidate.expectedQuantity !== undefined
+        || candidate.countedQuantity !== undefined) throw new Error(`movements[${index}] production issue fields are incomplete.`)
+      const requestId = canonicalText(candidate.productionRequestId, `movements[${index}].productionRequestId`, 80)
+      productionRequestIds.push(requestId)
+      if (typeof candidate.productionCommandDigest !== 'string' || !sha256DigestPattern.test(candidate.productionCommandDigest)) throw new Error(`movements[${index}].productionCommandDigest is invalid.`)
+      canonicalText(candidate.productionJobId, `movements[${index}].productionJobId`, 80)
+      canonicalText(candidate.productionMaterialId, `movements[${index}].productionMaterialId`, 80)
+      canonicalText(candidate.productionInputLotId, `movements[${index}].productionInputLotId`, 80)
+      assertSafeInteger(candidate.productionQuantityMilli, `movements[${index}].productionQuantityMilli`, 1)
+      if (!productionMaterialUnits.has(candidate.productionUnit as CommerceProductionMaterialUnit)) throw new Error(`movements[${index}].productionUnit is invalid.`)
+      canonicalText(candidate.conversionNote, `movements[${index}].conversionNote`, 240)
+    } else if (retainedProductionFields.length) {
+      throw new Error(`movements[${index}] production issue fields are unsupported for ${String(candidate.kind)}.`)
+    }
     const actionMovements = movementsByAction.get(candidate.actionId as string) ?? []
     actionMovements.push(candidate as unknown as CommerceStockMovement)
     movementsByAction.set(candidate.actionId as string, actionMovements)
@@ -1392,8 +1443,9 @@ export function validateCommerceState(value: unknown): CommerceState {
       continue
     }
     if (!Number.isSafeInteger(candidate.quantityDelta) || candidate.quantityDelta === 0) throw new Error(`movements[${index}].quantityDelta is invalid.`)
-    if (candidate.kind === 'reserve' && Number(candidate.quantityDelta) >= 0) throw new Error(`movements[${index}] reserve must be negative.`)
-    if (candidate.kind !== 'reserve' && Number(candidate.quantityDelta) <= 0) throw new Error(`movements[${index}] release, receipt, or return must be positive.`)
+    if ((candidate.kind === 'reserve' || candidate.kind === 'production_issue') && Number(candidate.quantityDelta) >= 0) throw new Error(`movements[${index}] ${String(candidate.kind)} must be negative.`)
+    if (candidate.kind !== 'reserve' && candidate.kind !== 'production_issue' && Number(candidate.quantityDelta) <= 0) throw new Error(`movements[${index}] release, receipt, or return must be positive.`)
+    if (candidate.kind === 'production_issue') continue
     if (candidate.kind === 'receipt') {
       if (candidate.orderId !== undefined) throw new Error(`movements[${index}] receipt cannot reference an order.`)
       if (candidate.purchaseOrderId !== undefined) {
@@ -1445,6 +1497,7 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (candidate.kind === 'release' && order.status !== 'cancelled') throw new Error(`movements[${index}] release requires a cancelled order.`)
   }
   assertUnique(movementIds, 'Stock movement ID')
+  assertUnique(productionRequestIds, 'Production material request ID')
   const validatedMovements = movements as unknown as CommerceStockMovement[]
   for (const { orderId, record } of orderReturns) {
     const order = orderById.get(orderId) as unknown as CommerceOrder | undefined
@@ -2878,6 +2931,77 @@ export function receiveCommerceStock(state: CommerceState, sku: string, quantity
     ...state,
     items: state.items.map((candidate) => candidate.sku === sku ? { ...candidate, onHand: nextBalance } : candidate),
     movements: [movement, ...state.movements],
+  })
+}
+
+export function issueCommerceStockToProduction(
+  state: CommerceState,
+  request: CommerceProductionMaterialRequest,
+  sku: string,
+  stockQuantity: number,
+  conversionNote: string,
+  proof: CommerceActionProof,
+) {
+  if (!validProof(proof) || !Number.isSafeInteger(stockQuantity) || stockQuantity < 1) return null
+  let checkedRequest: CommerceProductionMaterialRequest
+  let checkedSku: string
+  let checkedConversionNote: string
+  try {
+    checkedRequest = {
+      requestId: canonicalText(request.requestId, 'production material request ID', 80),
+      sourceCommandDigest: request.sourceCommandDigest,
+      jobId: canonicalText(request.jobId, 'production job ID', 80),
+      materialId: canonicalText(request.materialId, 'production material ID', 80),
+      inputLotId: canonicalText(request.inputLotId, 'production input lot ID', 80),
+      quantityMilli: request.quantityMilli,
+      unit: request.unit,
+    }
+    checkedSku = canonicalText(sku, 'production issue SKU', 80)
+    checkedConversionNote = canonicalText(conversionNote, 'production issue conversion note', 240)
+    if (!sha256DigestPattern.test(checkedRequest.sourceCommandDigest)) return null
+    assertSafeInteger(checkedRequest.quantityMilli, 'production material quantity', 1)
+    if (!productionMaterialUnits.has(checkedRequest.unit)) return null
+  } catch {
+    return null
+  }
+  const current = validateCommerceState(state)
+  const matchingMovement = (movement: CommerceStockMovement) => movement.kind === 'production_issue'
+    && movement.sku === checkedSku
+    && movement.quantityDelta === -stockQuantity
+    && movement.productionRequestId === checkedRequest.requestId
+    && movement.productionCommandDigest === checkedRequest.sourceCommandDigest
+    && movement.productionJobId === checkedRequest.jobId
+    && movement.productionMaterialId === checkedRequest.materialId
+    && movement.productionInputLotId === checkedRequest.inputLotId
+    && movement.productionQuantityMilli === checkedRequest.quantityMilli
+    && movement.productionUnit === checkedRequest.unit
+    && movement.conversionNote === checkedConversionNote
+  const replayMovement = current.movements.find((movement) => movement.actionId === proof.actionId)
+  if (replayMovement) return matchingMovement(replayMovement) && sameProof(replayMovement, proof) ? current : null
+  if (actionIdIsUsed(current, proof.actionId)
+    || current.movements.some((movement) => movement.productionRequestId === checkedRequest.requestId)) return null
+  const matchingItems = current.items.filter((candidate) => candidate.sku === checkedSku)
+  const item = matchingItems.length === 1 ? matchingItems[0] : undefined
+  if (!item) return null
+  const nextBalance = safeBalance(item.onHand, -stockQuantity)
+  if (nextBalance === null) return null
+  const movement = movementFor(proof, {
+    kind: 'production_issue',
+    sku: checkedSku,
+    quantityDelta: -stockQuantity,
+    productionRequestId: checkedRequest.requestId,
+    productionCommandDigest: checkedRequest.sourceCommandDigest,
+    productionJobId: checkedRequest.jobId,
+    productionMaterialId: checkedRequest.materialId,
+    productionInputLotId: checkedRequest.inputLotId,
+    productionQuantityMilli: checkedRequest.quantityMilli,
+    productionUnit: checkedRequest.unit,
+    conversionNote: checkedConversionNote,
+  })
+  return validateCommerceState({
+    ...current,
+    items: current.items.map((candidate) => candidate.sku === checkedSku ? { ...candidate, onHand: nextBalance } : candidate),
+    movements: [movement, ...current.movements],
   })
 }
 

@@ -763,6 +763,7 @@ def evidence_for(event_type: str, next_state: dict[str, object]) -> dict[str, st
         "commerce.order.cancelled",
         "commerce.stock.received",
         "commerce.stock.counted",
+        "commerce.production_material.issued",
         "commerce.purchase_order.received",
     }:
         movement_record = next_state["movements"][0]  # type: ignore[index]
@@ -877,6 +878,48 @@ def apply_event(
 
 
 class CommerceRuntimeTests(unittest.TestCase):
+    def test_production_material_issue_decrements_one_item_with_linked_evidence(self) -> None:
+        current = catalog_state()
+        issue = movement(
+            "production_issue",
+            "ACT-PRODUCTION-ISSUE-001",
+            -3,
+            created_at="2026-07-24T10:00:00.000Z",
+        )
+        issue.update(
+            {
+                "productionRequestId": "ISSUE-MANAGED-001",
+                "productionCommandDigest": f"sha256:{'a' * 64}",
+                "productionJobId": "JOB-REAL-001",
+                "productionMaterialId": "MAT-MANAGED-001",
+                "productionInputLotId": "LOT-MANAGED-001",
+                "productionQuantityMilli": 10_000,
+                "productionUnit": "kg",
+                "conversionNote": "3 Shop units provide the reviewed 10 kg Plant issue.",
+            }
+        )
+        next_state = deepcopy(current)
+        next_state["items"][0]["onHand"] = 7  # type: ignore[index]
+        next_state["movements"] = [issue]
+
+        accepted = apply_event(
+            current,
+            "commerce.production_material.issued",
+            next_state,
+        )
+
+        self.assertEqual(accepted["items"][0]["onHand"], 7)  # type: ignore[index]
+        self.assertEqual(accepted["movements"][0]["productionRequestId"], "ISSUE-MANAGED-001")  # type: ignore[index]
+
+        missing_link = deepcopy(next_state)
+        del missing_link["movements"][0]["productionCommandDigest"]  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "commerce.production_material.issued",
+                missing_link,
+            )
+
     def test_initialization_requires_catalog_without_invented_history(self) -> None:
         initialized = apply_event({}, "commerce.workspace.initialized", catalog_state())
         self.assertEqual(initialized, catalog_state())
@@ -2162,6 +2205,7 @@ class CommerceRuntimeTests(unittest.TestCase):
                     "commerce.refund.settled",
                     "commerce.stock.received",
                     "commerce.stock.counted",
+                    "commerce.production_material.issued",
                     "commerce.purchase_order.created",
                     "commerce.purchase_order.received",
                     "commerce.purchase_order.cancelled",

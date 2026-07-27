@@ -33,6 +33,7 @@ HUMAN_COMMAND_EVENTS = frozenset(
         "commerce.refund.settled",
         "commerce.stock.received",
         "commerce.stock.counted",
+        "commerce.production_material.issued",
         "commerce.purchase_order.created",
         "commerce.purchase_order.received",
         "commerce.purchase_order.cancelled",
@@ -1158,7 +1159,10 @@ def _authoritative_command_payload(
         authoritative["evidence"] = authoritative_evidence
         authoritative["state"] = authoritative_state
         return authoritative
-    if event_type == "commerce.stock.counted":
+    if event_type in {
+        "commerce.stock.counted",
+        "commerce.production_material.issued",
+    }:
         evidence = authoritative.get("evidence")
         state = authoritative.get("state")
         movements = state.get("movements") if isinstance(state, Mapping) else None

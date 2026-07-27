@@ -29,11 +29,14 @@ import {
   type PlantOrderTransition,
   type PlantOrderTransitionResult,
 } from './plant-order-foundation'
+import type { CommerceState } from './commerce-workspace'
+import { pendingProductionMaterialHandoffs } from './production-material-handoff'
 import { validateProductionState, type ProductionJob, type ProductionState } from './production-workspace'
 
 
 type PlantOrderFoundationProps = {
   actor: string
+  commerceState: CommerceState
   disabled: boolean
   jobs: ProductionJob[]
   managedState?: PlantOrderState | null
@@ -202,7 +205,7 @@ const statusCopy = {
   released_to_stock: 'Batch released',
 } as const
 
-export function PlantOrderFoundation({ actor, disabled, jobs, managedState, onManagedCommand, scope }: PlantOrderFoundationProps) {
+export function PlantOrderFoundation({ actor, commerceState, disabled, jobs, managedState, onManagedCommand, scope }: PlantOrderFoundationProps) {
   const managed = managedState !== undefined
   const activeJobs = jobs.filter((job) => !job.closure && !job.qualityHold && remaining(job) > 0)
   const [initial] = useState(() => managed
@@ -222,6 +225,10 @@ export function PlantOrderFoundation({ actor, disabled, jobs, managedState, onMa
   const setupTriggerRef = useRef<HTMLButtonElement>(null)
   const reviewDialogRef = useRef<HTMLDialogElement>(null)
   const projection = useMemo(() => projectPlantOrder(state), [state])
+  const pendingWarehouseIssues = useMemo(
+    () => pendingProductionMaterialHandoffs(state, commerceState),
+    [commerceState, state],
+  )
   const selectedSetupJob = activeJobs.find((job) => job.id === setupDraft.jobId) ?? activeJobs[0]
   const boundJob = projection.plan ? jobs.find((job) => job.id === projection.plan?.job.jobId) : undefined
   const bindingCurrent = Boolean(!projection.plan || (boundJob && plantOrderEvidenceDigest(jobSnapshot(scope, boundJob)) === projection.plan.sourceDigest))
@@ -238,6 +245,9 @@ export function PlantOrderFoundation({ actor, disabled, jobs, managedState, onMa
     ? operationDraft
     : { operationId: nextOperation?.operationId ?? '', quantity: operationAvailableQuantity > 0 ? String(operationAvailableQuantity) : '', actualMinutes: '' }
   const outputRemaining = projection.metrics.targetQuantity - projection.totalOutput
+  const awaitingWarehouse = !nextMaterial && pendingWarehouseIssues.length > 0
+    && Boolean(nextOperation || outputRemaining > 0)
+  const visibleStatus = awaitingWarehouse ? 'Await Shop issue' : statusCopy[projection.status]
   const inspectedQuantity = projection.totalOutput
   const rejected = /^\d+$/.test(inspectionDraft.rejected) ? Number(inspectionDraft.rejected) : Number.NaN
   const inspectionValid = Number.isSafeInteger(rejected) && rejected >= 0 && rejected <= inspectedQuantity
@@ -428,12 +438,13 @@ export function PlantOrderFoundation({ actor, disabled, jobs, managedState, onMa
 
   function reviewMaterialIssue() {
     if (!nextMaterial?.inputLotId) return
-    const issueId = commandId('ISSUE'); const expectedHeadDigest = state.headDigest; const actionProof = proof(actor, `issue of ${nextMaterial.materialId}`)
-    stage({ title: 'Material issue', summary: `${formatMilli(nextMaterial.remainingToIssueMilli)} ${nextMaterial.unit} · ${nextMaterial.inputLotId}`, boundary: 'Creates job genealogy evidence only. It does not change purchasing, warehouse, costing, or accounting balances.', proof: actionProof, apply: (current) => issuePlantOrderMaterial(current, { issueId, materialId: nextMaterial.materialId, inputLotId: nextMaterial.inputLotId!, quantityMilli: nextMaterial.remainingToIssueMilli, proof: actionProof, expectedHeadDigest }) })
+    const issueId = commandId('ISSUE'); const expectedHeadDigest = state.headDigest; const actionProof = proof(actor, `request for ${nextMaterial.materialId}`)
+    stage({ title: 'Material request', summary: `${formatMilli(nextMaterial.remainingToIssueMilli)} ${nextMaterial.unit} · ${nextMaterial.inputLotId}`, boundary: 'Creates genealogy and a linked Shop request. Shop stock changes only after a separate human-reviewed issue; no purchase, costing, or accounting entry occurs.', proof: actionProof, apply: (current) => issuePlantOrderMaterial(current, { issueId, materialId: nextMaterial.materialId, inputLotId: nextMaterial.inputLotId!, quantityMilli: nextMaterial.remainingToIssueMilli, proof: actionProof, expectedHeadDigest }) })
   }
 
   function reviewOperation(event: FormEvent) {
     event.preventDefault()
+    if (pendingWarehouseIssues.length) return setError('Shop must issue every linked material request before operation progress can be recorded.')
     if (!nextOperation || operationAvailableQuantity < 1) return
     const quantity = /^\d+$/.test(activeOperationDraft.quantity) ? Number(activeOperationDraft.quantity) : Number.NaN
     const actualMinutesMilli = parsePlantOrderQuantityMilli(activeOperationDraft.actualMinutes)
@@ -445,6 +456,7 @@ export function PlantOrderFoundation({ actor, disabled, jobs, managedState, onMa
   }
 
   function reviewOutput() {
+    if (pendingWarehouseIssues.length) return setError('Shop must issue every linked material request before batch output can be recorded.')
     if (!projection.plan || outputRemaining < 1) return
     const outputId = commandId('OUT'); const expectedHeadDigest = state.headDigest; const actionProof = proof(actor, 'produced output quantity')
     stage({ title: 'Batch output', summary: `${outputRemaining.toLocaleString()} units · ${projection.plan.job.outputBatchId}`, boundary: 'Records this execution package output. The existing Plant output ledger and Shop receipt remain separate reviewed steps.', proof: actionProof, apply: (current) => recordPlantOrderOutput(current, { outputId, outputBatchId: projection.plan!.job.outputBatchId, quantity: outputRemaining, proof: actionProof, expectedHeadDigest }) })
@@ -468,11 +480,11 @@ export function PlantOrderFoundation({ actor, disabled, jobs, managedState, onMa
     <section aria-labelledby="plant-execution-title" className="catalog-onboarding-bridge plant-execution-foundation">
       <div>
         <span className="core-eyebrow">Execution control</span>
-        <h3 id="plant-execution-title">{projection.plan ? `${projection.plan.job.jobId} · ${statusCopy[projection.status]}` : 'Run one controlled batch'}</h3>
+        <h3 id="plant-execution-title">{projection.plan ? `${projection.plan.job.jobId} · ${visibleStatus}` : 'Run one controlled batch'}</h3>
         <p>{projection.plan ? `${projection.totalOutput.toLocaleString()} / ${projection.metrics.targetQuantity.toLocaleString()} output · ${projection.genealogy.length} traced input ${projection.genealogy.length === 1 ? 'lot' : 'lots'} · revision ${projection.revision}` : 'Turn an active job into one reviewed BOM, routing, material, output, inspection, and release chain.'}</p>
       </div>
       {!projection.plan ? <button aria-controls="plant-execution-setup" aria-expanded={setupOpen} className="core-button primary" disabled={disabled} onClick={() => { setSetupOpen(true); setReview(null) }} ref={setupTriggerRef} type="button">Set up batch</button> : null}
-      {projection.plan ? <span className={`status-pill ${projection.status === 'quality_hold' || projection.status === 'shortfall' ? 'pending' : 'bounded'}`}>{statusCopy[projection.status]}</span> : null}
+      {projection.plan ? <span className={`status-pill ${awaitingWarehouse || projection.status === 'quality_hold' || projection.status === 'shortfall' ? 'pending' : 'bounded'}`}>{visibleStatus}</span> : null}
 
       {projection.plan && (projection.status === 'planned' || projection.status === 'shortfall') ? <form className="core-form compact-form" onSubmit={reviewAvailability}>
         <div aria-label="Material and capacity availability" className="plant-availability-fields">
@@ -497,13 +509,14 @@ export function PlantOrderFoundation({ actor, disabled, jobs, managedState, onMa
       </form> : null}
 
       {projection.status === 'ready' ? <button className="core-button primary" disabled={controlsDisabled} onClick={reviewOrderRelease} type="button">Review order release</button> : null}
-      {(projection.status === 'released' || projection.status === 'in_process') && nextMaterial ? <button className="core-button primary" disabled={controlsDisabled} onClick={reviewMaterialIssue} type="button">Review material issue</button> : null}
-      {(projection.status === 'released' || projection.status === 'in_process') && !nextMaterial && nextOperation ? <form className="core-form compact-form" onSubmit={reviewOperation}>
+      {(projection.status === 'released' || projection.status === 'in_process') && nextMaterial ? <button className="core-button primary" disabled={controlsDisabled} onClick={reviewMaterialIssue} type="button">Review material request</button> : null}
+      {awaitingWarehouse ? <div className="stock-receipt-preview" role="status"><small>Warehouse handoff required</small><strong>{pendingWarehouseIssues.length} Plant material {pendingWarehouseIssues.length === 1 ? 'request needs' : 'requests need'} Shop stock issue</strong><a className="core-button primary compact" href="/shop/?tab=inventory">Review in Shop</a></div> : null}
+      {(projection.status === 'released' || projection.status === 'in_process') && !nextMaterial && !awaitingWarehouse && nextOperation ? <form className="core-form compact-form" onSubmit={reviewOperation}>
         <div><strong>{nextOperation.sequence}. {nextOperation.name}</strong><small>{nextOperation.workCentreId} · {nextOperation.completedQuantity.toLocaleString()} / {projection.metrics.targetQuantity.toLocaleString()} complete</small></div>
         <div className="form-row"><label>Completed units<input disabled={controlsDisabled} inputMode="numeric" max={operationAvailableQuantity} min="1" onChange={(event) => setOperationDraft({ ...activeOperationDraft, quantity: event.target.value })} required step="1" type="number" value={activeOperationDraft.quantity} /></label><label>Actual minutes<input disabled={controlsDisabled} inputMode="decimal" min="0.001" onChange={(event) => setOperationDraft({ ...activeOperationDraft, actualMinutes: event.target.value })} placeholder={formatMilli(nextOperation.minutesPerUnitMilli * operationAvailableQuantity)} required step="0.001" type="number" value={activeOperationDraft.actualMinutes} /></label></div>
         <button className="core-button primary" disabled={controlsDisabled} type="submit">Review operation progress</button>
       </form> : null}
-      {projection.status === 'in_process' && !nextMaterial && !nextOperation && outputRemaining > 0 ? <button className="core-button primary" disabled={controlsDisabled} onClick={reviewOutput} type="button">Review batch output</button> : null}
+      {projection.status === 'in_process' && !nextMaterial && !awaitingWarehouse && !nextOperation && outputRemaining > 0 ? <button className="core-button primary" disabled={controlsDisabled} onClick={reviewOutput} type="button">Review batch output</button> : null}
       {(projection.status === 'inspection_due' || projection.status === 'quality_hold') ? <form className="core-form compact-form" onSubmit={reviewInspection}>
         <div className="form-row"><label>Inspection result<select disabled={controlsDisabled} onChange={(event) => { const result = event.target.value as 'pass' | 'fail'; setInspectionDraft({ result, rejected: result === 'pass' ? '0' : '1' }) }} value={inspectionDraft.result}><option value="pass">Pass</option><option value="fail">Fail and hold</option></select></label><label>Rejected units<input disabled={controlsDisabled} max={inspectedQuantity} min="0" onChange={(event) => setInspectionDraft((current) => ({ ...current, rejected: event.target.value }))} required step="1" type="number" value={inspectionDraft.rejected} /></label></div>
         <button className="core-button primary" disabled={controlsDisabled || !inspectionValid} type="submit">Review inspection</button>

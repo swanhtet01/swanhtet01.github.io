@@ -16,6 +16,10 @@ from supermega_runtime.client_import_runtime import (
     validate_client_import_staging_package,
 )
 from supermega_runtime.production_runtime import PRODUCTION_HUMAN_EVENTS
+from supermega_runtime.production_material_handoff import (
+    require_shop_issue_before_plant_progress,
+    require_shop_issue_matches_plant,
+)
 from supermega_runtime.trial_store import (
     APPROVAL_DECIDE_CAPABILITY,
     APPROVAL_REQUEST_CAPABILITY,
@@ -787,6 +791,64 @@ def create_trial_router(*, store: TrialStore, resolve_principal: PrincipalResolv
 
             related_surfaces = ("website",)
             state_precondition = require_website_source
+        elif (
+            body.surface == "commerce"
+            and body.event_type == "commerce.production_material.issued"
+        ):
+            submitted_commerce = body.payload.get("state")
+            if not isinstance(submitted_commerce, Mapping):
+                raise _error(422, "production_material_issue_state_required")
+
+            def require_plant_request(
+                commerce_state: Mapping[str, Any],
+                related_states: Mapping[str, Mapping[str, Any]],
+            ) -> None:
+                require_shop_issue_matches_plant(
+                    commerce_state,
+                    submitted_commerce,
+                    related_states.get("production", {}),
+                )
+
+            related_surfaces = ("production",)
+            state_precondition = require_plant_request
+        elif (
+            body.surface == "production"
+            and body.event_type == "production.order_execution.recorded"
+        ):
+            submitted_production = body.payload.get("state")
+            execution = (
+                submitted_production.get("orderExecution")
+                if isinstance(submitted_production, Mapping)
+                else None
+            )
+            commands = (
+                execution.get("commands") if isinstance(execution, Mapping) else None
+            )
+            latest_payload = (
+                commands[-1].get("payload")
+                if isinstance(commands, list)
+                and commands
+                and isinstance(commands[-1], Mapping)
+                else None
+            )
+            if (
+                isinstance(submitted_production, Mapping)
+                and isinstance(latest_payload, Mapping)
+                and latest_payload.get("kind")
+                in {"record_operation", "record_output"}
+            ):
+
+                def require_shop_issue(
+                    _production_state: Mapping[str, Any],
+                    related_states: Mapping[str, Mapping[str, Any]],
+                ) -> None:
+                    require_shop_issue_before_plant_progress(
+                        submitted_production,
+                        related_states.get("commerce", {}),
+                    )
+
+                related_surfaces = ("commerce",)
+                state_precondition = require_shop_issue
         result = _invoke(
             lambda: store.apply_command(
                 principal,

@@ -13,12 +13,22 @@ import {
   type ShopInventoryProof,
   type ShopInventoryState,
 } from './shop-inventory-foundation'
+import { ShopProductionHandoff } from './ShopProductionHandoff'
+import type { CommerceActionProof, CommerceState } from './commerce-workspace'
+import type { ManagedIdentity } from './managed-trial'
 
 
 type ShopInventoryFoundationProps = {
   actor: string
-  catalog: Array<{ sku: string; name: string; onHand: number }>
+  commerce: CommerceState
   disabled: boolean
+  identity: ManagedIdentity | null
+  onIssue: (
+    eventType: 'commerce.production_material.issued',
+    commandId: string,
+    proof: CommerceActionProof,
+    transition: (state: CommerceState) => CommerceState | null,
+  ) => Promise<void>
   scope: string
 }
 
@@ -66,7 +76,8 @@ function loadState(scope: string, catalogSkus: string[]) {
   return { state: snapshot.state, error: snapshot.error }
 }
 
-export function ShopInventoryFoundation({ actor, catalog, disabled, scope }: ShopInventoryFoundationProps) {
+export function ShopInventoryFoundation({ actor, commerce, disabled, identity, onIssue, scope }: ShopInventoryFoundationProps) {
+  const catalog = commerce.items
   const catalogSkus = useMemo(
     () => [...new Set(catalog.map((item) => item.sku))].sort(),
     [catalog],
@@ -213,7 +224,7 @@ export function ShopInventoryFoundation({ actor, catalog, disabled, scope }: Sho
     setNotice(result.replayed ? 'The exact transfer was already recorded.' : 'Stock moved between locations with paired evidence.')
   }
 
-  return <section aria-labelledby="location-stock-title" className="catalog-onboarding-bridge">
+  return <><ShopProductionHandoff commerce={commerce} disabled={disabled} identity={identity} onIssue={onIssue} /><section aria-labelledby="location-stock-title" className="catalog-onboarding-bridge">
     <div>
       <span className="core-eyebrow">Location stock</span>
       <h3 id="location-stock-title">{state.revision ? `${projection.metrics.totalAvailableToPromise.toLocaleString()} available to promise` : 'Set up two locations'}</h3>
@@ -238,5 +249,5 @@ export function ShopInventoryFoundation({ actor, catalog, disabled, scope }: Sho
     </form> : null}
     {inventoryDrift ? <p className="form-notice warning-text" role="alert">Aggregate Shop stock changed after location setup. Reconcile the opening layer before another move.</p> : null}
     <p className="form-notice" aria-live="polite">{error || notice || (state.revision ? 'Transfers retain paired source and destination evidence. No supplier contact, payment, or accounting action occurs.' : 'Setup previews the exact opening package before one local write.')}</p>
-  </section>
+  </section></>
 }

@@ -78,6 +78,10 @@ const shopInventorySource = await readFile(resolve(root, 'showroom', 'src', 'cor
 const shopInventoryUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopInventoryFoundation.tsx'), 'utf8')
 const plantOrderSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'plant-order-foundation.ts'), 'utf8')
 const plantOrderUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'PlantOrderFoundation.tsx'), 'utf8')
+const productionMaterialHandoffSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'production-material-handoff.ts'), 'utf8')
+const shopProductionHandoffUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopProductionHandoff.tsx'), 'utf8')
+const productionMaterialHandoffPython = await readFile(resolve(root, 'supermega_runtime', 'production_material_handoff.py'), 'utf8')
+const managedTrialRuntimeSource = await readFile(resolve(root, 'supermega_runtime', 'trial_runtime.py'), 'utf8')
 const websiteReleaseSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-release-foundation.ts'), 'utf8')
 const websiteReleaseUiSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'WebsiteReleaseFoundation.tsx'), 'utf8')
 const managedWebsitePythonRuntime = await readFile(resolve(root, 'supermega_runtime', 'website_runtime.py'), 'utf8')
@@ -1342,6 +1346,29 @@ if (!plantOrderUiSource.includes('managedState?: PlantOrderState | null')
   || !plantOrderUiSource.includes('current.orderExecution ?? createEmptyPlantOrderState()')
   || !coreSource.includes('managedState={managedIdentity ? production.orderExecution ?? null : undefined}')
   || !coreSource.includes('onManagedCommand={managedIdentity ? mutateProduction : undefined}')) fail('managed_plant_order_execution_contract_missing')
+if (!commerceSource.includes("'production_issue'")
+  || !commerceSource.includes('export function issueCommerceStockToProduction')
+  || !commerceSource.includes('productionCommandDigest')
+  || !commerceSource.includes('Production material request ID')
+  || !managedTrialSource.includes("'commerce.production_material.issued'")
+  || !managedCommerceRuntime.includes('commerce.production_material.issued')
+  || !managedTrialStoreRuntime.includes('commerce.production_material.issued')
+  || !productionMaterialHandoffSource.includes('pendingProductionMaterialHandoffs')
+  || !productionMaterialHandoffSource.includes("movement.kind === 'production_issue'")
+  || !productionMaterialHandoffPython.includes('require_shop_issue_matches_plant')
+  || !productionMaterialHandoffPython.includes('require_shop_issue_before_plant_progress')
+  || !managedTrialRuntimeSource.includes('related_surfaces = ("production",)')
+  || !managedTrialRuntimeSource.includes('related_surfaces = ("commerce",)')) fail('plant_shop_material_handoff_contract_missing')
+if (!shopInventoryUiSource.includes("import { ShopProductionHandoff } from './ShopProductionHandoff'")
+  || !shopInventoryUiSource.includes('<ShopProductionHandoff')
+  || !coreSource.includes('onIssue={mutateCommerce}')
+  || !coreSource.includes('commerceState={relatedCommerce}')
+  || !shopProductionHandoffUiSource.includes('Shop remains the only stock authority.')
+  || !shopProductionHandoffUiSource.includes('Review the exact stock decrement. Nothing has been written yet.')
+  || !plantOrderUiSource.includes('Await Shop issue')
+  || !plantOrderUiSource.includes('Shop must issue every linked material request before operation progress')
+  || !plantOrderUiSource.includes('Review in Shop')
+  || shopProductionHandoffUiSource.includes('fetch(')) fail('plant_shop_material_handoff_ui_boundary_missing')
 if (!clientOnboardingSource.includes("CLIENT_IMPORT_SCHEMA = 'supermega.client_import_preview.v1'")
   || !clientOnboardingSource.includes("CLIENT_STAGING_SCHEMA = 'supermega.client_import_staging.v1'")
   || !clientOnboardingSource.includes('CLIENT_IMPORT_MAX_BYTES = 512 * 1024')
@@ -4187,6 +4214,57 @@ async function verifyCommerceRuntime() {
       ...model.createEmptyCommerce(),
       items: [{ sku: 'SKU-1', name: 'Test item', onHand: 10, reorderAt: 2, price: 100 }],
     }
+    const productionRequest = {
+      requestId: 'ISSUE-MANAGED-001',
+      sourceCommandDigest: `sha256:${'a'.repeat(64)}`,
+      jobId: 'JOB-REAL-001',
+      materialId: 'MAT-MANAGED-001',
+      inputLotId: 'LOT-MANAGED-001',
+      quantityMilli: 10_000,
+      unit: 'kg',
+    }
+    const productionIssueProof = proof('ACT-PRODUCTION-ISSUE-001')
+    const productionIssued = model.issueCommerceStockToProduction(
+      base,
+      productionRequest,
+      'SKU-1',
+      3,
+      '3 Shop units provide the reviewed 10 kg Plant issue.',
+      productionIssueProof,
+    )
+    assert(productionIssued?.items[0].onHand === 7
+      && productionIssued.movements[0].kind === 'production_issue'
+      && productionIssued.movements[0].productionRequestId === productionRequest.requestId
+      && productionIssued.movements[0].productionCommandDigest === productionRequest.sourceCommandDigest,
+    'production_material_issue_not_linked_to_exact_plant_request')
+    assert(model.issueCommerceStockToProduction(
+      productionIssued,
+      productionRequest,
+      'SKU-1',
+      3,
+      '3 Shop units provide the reviewed 10 kg Plant issue.',
+      productionIssueProof,
+    ) === productionIssued, 'production_material_issue_retry_not_idempotent')
+    assert(model.issueCommerceStockToProduction(
+      productionIssued,
+      { ...productionRequest, quantityMilli: 9_000 },
+      'SKU-1',
+      3,
+      '3 Shop units provide the reviewed 9 kg Plant issue.',
+      proof('ACT-PRODUCTION-ISSUE-002'),
+    ) === null, 'production_material_request_was_issued_twice')
+    assert(model.issueCommerceStockToProduction(
+      base,
+      productionRequest,
+      'SKU-1',
+      11,
+      '11 Shop units provide the reviewed Plant issue.',
+      proof('ACT-PRODUCTION-ISSUE-003'),
+    ) === null, 'production_material_issue_exceeded_shop_stock')
+    assertThrows(() => model.validateCommerceState({
+      ...productionIssued,
+      movements: [{ ...productionIssued.movements[0], productionCommandDigest: `sha256:${'b'.repeat(64)}` }, ...productionIssued.movements],
+    }), 'duplicate_production_material_request_succeeded')
     const baseCatalogDigest = await model.commerceCatalogDigest(base)
     const configurationProof = {
       actionId: model.commerceStorefrontConfigurationActionId(1, baseCatalogDigest),
