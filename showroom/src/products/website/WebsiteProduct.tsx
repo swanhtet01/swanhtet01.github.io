@@ -18,6 +18,7 @@ import {
   approveWebsiteRevision,
   commitWebsiteEditSession,
   createBlankPage,
+  createWebsiteArtifact,
   createWebsiteEditSession,
   createId,
   deleteWebsiteRecoveryArchive,
@@ -39,9 +40,11 @@ import {
   workspaceFingerprint,
   type EvidenceKind,
   type PreviewDevice,
+  type ReadinessCheck,
   type WebsiteEditSession,
   type WebsitePage,
   type WebsiteRecoveryArchiveSummary,
+  type WebsiteWorkspace,
   type WebsiteWorkspaceUpdate,
 } from './website-model'
 import './website-product.css'
@@ -61,9 +64,70 @@ const viewCopy: Record<WebsiteView, { title: string; copy: string }> = {
     copy: 'Edit one section, preview it, then save or discard.',
   },
   publish: {
-    title: 'Review and save',
-    copy: 'Check the saved revision, approve it, then download the site file.',
+    title: 'Review release',
+    copy: 'Verify the managed revision and its accountable release record.',
   },
+}
+
+function TrialReadyWorkspace({
+  checks,
+  onDownload,
+  retentionLabel,
+  workspace,
+}: {
+  checks: ReadinessCheck[]
+  onDownload: () => void
+  retentionLabel: string
+  workspace: WebsiteWorkspace
+}) {
+  const websiteChecks = checks.filter((check) => !check.id.startsWith('evidence-'))
+  const passedChecks = websiteChecks.filter((check) => check.passed).length
+  const readyPages = workspace.pages.filter((page) => page.stage === 'ready')
+
+  return (
+    <section className="website-editor-panel website-trial-ready" aria-labelledby="website-ready-title">
+      <header className="website-panel-head">
+        <div>
+          <span className="website-eyebrow">Ready to use</span>
+          <h2 id="website-ready-title">Download your website</h2>
+          <p>Open one file on any phone or computer, or hand it to a hosting provider.</p>
+        </div>
+        <span className="website-status is-ready">Ready</span>
+      </header>
+
+      <div className="website-editor-scroll website-trial-ready-body">
+        <div className="website-trial-ready-summary">
+          <span>{retentionLabel}</span>
+          <strong>{workspace.siteName}</strong>
+          <p>{readyPages.length} ready page{readyPages.length === 1 ? '' : 's'} · {passedChecks}/{websiteChecks.length} website checks passed</p>
+        </div>
+
+        <ol className="website-trial-ready-steps">
+          <li>
+            <span aria-hidden="true">1</span>
+            <div><strong>Preview</strong><p>Use Back to edit to check desktop, tablet, or mobile again.</p></div>
+          </li>
+          <li>
+            <span aria-hidden="true">2</span>
+            <div><strong>Download</strong><p>Get a standalone HTML website with your ready pages.</p></div>
+          </li>
+          <li>
+            <span aria-hidden="true">3</span>
+            <div><strong>Go live when ready</strong><p>Use Request workspace above for managed hosting and a domain.</p></div>
+          </li>
+        </ol>
+
+        <div className="website-trial-ready-boundary" role="note">
+          <strong>Not online yet</strong>
+          <span>Downloading does not deploy a site, connect a domain, or send customer data.</span>
+        </div>
+
+        <button className="website-button is-primary website-trial-download" onClick={onDownload} type="button">
+          Download website
+        </button>
+      </div>
+    </section>
+  )
 }
 
 function formatRecoveryDate(value: string) {
@@ -148,7 +212,12 @@ export function WebsiteProduct() {
             ? 'This page is saved as a draft. Return to edit and mark it ready.'
             : 'Check the selected page at desktop, tablet, or mobile size.',
       }
-    : viewCopy[view]
+    : view === 'publish' && storageMode !== 'managed'
+      ? {
+          title: 'Your website is ready',
+          copy: 'Download it now, or request a workspace when you are ready to put it online.',
+        }
+      : viewCopy[view]
   const savedStateNotice = storageMode === 'managed'
     ? 'Changes are saved to this managed workspace. Nothing has been deployed.'
     : storageMode === 'browser-local'
@@ -646,6 +715,25 @@ export function WebsiteProduct() {
     }
   }
 
+  function downloadTrialSite() {
+    if (!requireSavedWorkspace('downloading the Website')) return
+    try {
+      const download = createWebsiteHtmlDownload(createWebsiteArtifact(workspace))
+      const url = URL.createObjectURL(new Blob([download.content], { type: download.mimeType }))
+      const link = document.createElement('a')
+      link.href = url
+      link.download = download.filename
+      link.hidden = true
+      document.body.append(link)
+      link.click()
+      link.remove()
+      window.setTimeout(() => URL.revokeObjectURL(url), 0)
+      setNotice(`${download.filename} downloaded. It is a standalone preview; no site or domain was deployed.`)
+    } catch (error) {
+      setNotice('The Website download failed closed: ' + (error instanceof Error ? error.message : 'unknown export error'))
+    }
+  }
+
   return (
     <div className="website-product">
       <div className="website-shell">
@@ -819,7 +907,7 @@ export function WebsiteProduct() {
                   </>
                 ) : canReview ? (
                   <button className="website-button is-primary" onClick={() => openWorkspaceView('publish')} type="button">
-                    Review site
+                    {storageMode === 'managed' ? 'Review release' : 'Get website'}
                   </button>
                 ) : null}
                 </div>
@@ -864,21 +952,30 @@ export function WebsiteProduct() {
               ) : null}
 
               {view === 'publish' ? (
-                <PublishWorkspace
-                  approvalIsCurrent={approvalIsCurrent}
-                  checks={checks}
-                  currentPublishId={publish?.id ?? ''}
-                  fingerprint={fingerprint}
-                  managedActorId={managedActorId}
-                  managedReleaseRecords={storageMode === 'managed' ? workspace.releaseRecords ?? [] : undefined}
-                  onAddEvidence={addEvidence}
-                  onApprove={approveCurrentRevision}
-                  onDownloadPublish={downloadPublishedSite}
-                  onRecordPublish={recordLocalPublish}
-                  onSaveManagedRelease={storageMode === 'managed' ? saveManagedRelease : undefined}
-                  publishIsCurrent={publishIsCurrent}
-                  workspace={workspace}
-                />
+                storageMode === 'managed' ? (
+                  <PublishWorkspace
+                    approvalIsCurrent={approvalIsCurrent}
+                    checks={checks}
+                    currentPublishId={publish?.id ?? ''}
+                    fingerprint={fingerprint}
+                    managedActorId={managedActorId}
+                    managedReleaseRecords={workspace.releaseRecords ?? []}
+                    onAddEvidence={addEvidence}
+                    onApprove={approveCurrentRevision}
+                    onDownloadPublish={downloadPublishedSite}
+                    onRecordPublish={recordLocalPublish}
+                    onSaveManagedRelease={saveManagedRelease}
+                    publishIsCurrent={publishIsCurrent}
+                    workspace={workspace}
+                  />
+                ) : (
+                  <TrialReadyWorkspace
+                    checks={checks}
+                    onDownload={downloadTrialSite}
+                    retentionLabel={storageMode === 'browser-local' ? 'Saved on this device' : 'Available in this session'}
+                    workspace={workspace}
+                  />
+                )
               ) : null}
             </div>
 
