@@ -1,9 +1,10 @@
-import { readFile, readdir } from 'node:fs/promises'
+import { readFile as readRawFile, readdir } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const root = resolve(import.meta.dirname, '..')
-const read = (path) => readFile(resolve(root, path), 'utf8')
+const normalizeSourceText = (value) => value.replace(/\r\n?/g, '\n')
+const read = async (path) => normalizeSourceText(await readRawFile(resolve(root, path), 'utf8'))
 const commerceWorkspace = await import(pathToFileURL(resolve(root, 'showroom/src/core/commerce-workspace.ts')).href)
 const [runtime, supabaseAuth, cloudRuntime, schedulerActivation, agentGovernance, vercelEntry, portableEntry, trialRuntime, trialStore, commerceRuntime, productionRuntime, websiteRuntime, managedTrialClient, coreApp, websiteWorkspaceHook, rolePreflight, foundationMigration, decisionMigration, websiteMigration, hardeningMigration, readCapabilityMigration, databaseValidator, databaseActivator, liveVerifier, workflow, requirements, dockerfile, appEnvironment, storagePrivacyVerifier] = await Promise.all([
   read('supermega_runtime/runtime.py'),
@@ -252,6 +253,8 @@ const requireContract = (name, condition) => {
   checks.push(name)
   if (!condition) failures.push(name)
 }
+requireContract('source line endings normalize across platforms',
+  normalizeSourceText('line one\r\nline two\rline three') === 'line one\nline two\nline three')
 const expectedHumanCommerceEvents = [
   'commerce.close.saved',
   'commerce.inventory.initialized',
