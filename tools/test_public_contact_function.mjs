@@ -150,6 +150,34 @@ try {
   assert.equal(conflict.status, 409)
   assert.equal(conflict.body.reason, 'idempotency_conflict')
 
+  const websiteAccepted = await invoke({
+    body: {
+      ...validSubmission,
+      product: 'website',
+      template: 'lead-generation',
+      source_url: 'https://supermega.dev/contact/?product=website&template=lead-generation&utm_source=linkedin&utm_medium=social&utm_campaign=website-launch&utm_content=carousel&utm_term=myanmar',
+    },
+    headers: withKey(4, { 'x-forwarded-for': '203.0.113.11' }),
+  })
+  assert.equal(websiteAccepted.status, 202)
+  const websiteEvent = JSON.parse(delivered.options.body)
+  assert.equal(websiteEvent.record.workflow, 'website')
+  assert.equal(websiteEvent.record.requested_package, 'lead-generation')
+  assert.equal(websiteEvent.record.utm_source, 'linkedin')
+  assert.equal(websiteEvent.record.utm_medium, 'social')
+  assert.equal(websiteEvent.record.utm_campaign, 'website-launch')
+  assert.equal(websiteEvent.record.utm_content, 'carousel')
+  assert.equal(websiteEvent.record.utm_term, 'myanmar')
+
+  const ecommerceAccepted = await invoke({
+    body: { ...validSubmission, product: 'ecommerce', template: 'social-storefront' },
+    headers: withKey(5, { 'x-forwarded-for': '203.0.113.12' }),
+  })
+  assert.equal(ecommerceAccepted.status, 202)
+  const ecommerceEvent = JSON.parse(delivered.options.body)
+  assert.equal(ecommerceEvent.record.workflow, 'ecommerce')
+  assert.equal(ecommerceEvent.record.requested_package, 'social-storefront')
+
   const rateHeaders = { 'x-forwarded-for': '203.0.113.77' }
   for (let index = 0; index < 5; index += 1) {
     const limited = await invoke({ body: validSubmission, headers: withKey(100 + index, rateHeaders) })
@@ -264,7 +292,7 @@ try {
   assert.equal(ambiguousReplay.body.reason, 'contact_persistence_unavailable')
   assert.equal(unexpectedDeliveryCalls, 0)
 
-  console.log(JSON.stringify({ ok: true, contract: 'supermega_public_contact_behavior', checks: 73 }, null, 2))
+  console.log(JSON.stringify({ ok: true, contract: 'supermega_public_contact_behavior', checks: 87 }, null, 2))
 } finally {
   globalThis.fetch = originalFetch
   for (const name of environmentNames) {

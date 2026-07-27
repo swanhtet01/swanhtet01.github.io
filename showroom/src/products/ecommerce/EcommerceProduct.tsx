@@ -750,7 +750,7 @@ export function EcommerceProduct() {
 
       <div className="ecommerce-boundary" role="status">
         <span>{sourceLabel}</span>
-        <p>Prices and availability are read-only. Checkout can prepare an accountable Shop review, but cannot reserve stock, create an order, take payment, send a message, or publish a site.</p>
+        <p>Prices and stock stay controlled by Shop. This preview sends no payment or customer message.</p>
       </div>
 
       <div aria-label="Ecommerce workspace" className="ecommerce-mobile-switch" role="group">

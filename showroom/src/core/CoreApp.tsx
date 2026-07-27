@@ -1,4 +1,4 @@
-import { lazy, Suspense, type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, type Dispatch, type FormEvent, type ReactNode, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate, useOutletContext, useSearchParams } from 'react-router'
 
 import siteManifest from '../../../site-manifest.json'
@@ -289,6 +289,7 @@ type PendingAccountableAction = Omit<AccountableAction, 'capturedAt' | 'actorKin
   confirmation?: AccountableAction
   evidenceReferenceLocked?: boolean
   evidenceReferenceSuggestion?: string
+  reasonSuggestion?: string
 }
 
 type ActionDetails = Pick<AccountableAction, 'actor' | 'reason' | 'evidenceReference'>
@@ -343,6 +344,7 @@ type SetupState = {
   targetOutcome: string
   authorityBoundary: string
   acceptanceEvidence: string
+  startedAt?: string
   savedAt?: string
 }
 
@@ -364,6 +366,7 @@ type ProductionTab = 'production' | 'control'
 
 const APPROVAL_KEY = 'supermega.approvals.v3'
 const SETUP_KEY = 'supermega.setup.v3'
+const SETUP_SYNC_EVENT = 'supermega:setup-updated'
 const ACTION_KEY = 'supermega.accountable.actions.v1'
 const STOREFRONT_DRAFT_RESET_PREFIX = 'supermega.ecommerce.storefront_draft.v2.'
 const LEGACY_STOREFRONT_DRAFT_RESET_PREFIX = 'supermega.ecommerce.storefront_draft.v1.'
@@ -470,6 +473,7 @@ function normalizeSetup(value: SetupState) {
     targetOutcome: typeof source.targetOutcome === 'string' ? source.targetOutcome : '',
     authorityBoundary: typeof source.authorityBoundary === 'string' ? source.authorityBoundary : '',
     acceptanceEvidence: typeof source.acceptanceEvidence === 'string' ? source.acceptanceEvidence : '',
+    ...(typeof source.startedAt === 'string' && source.startedAt ? { startedAt: source.startedAt } : {}),
     ...(typeof source.savedAt === 'string' && source.savedAt ? { savedAt: source.savedAt } : {}),
   }
   return JSON.stringify(normalized) === JSON.stringify(value) ? value : normalized
@@ -482,6 +486,24 @@ function setupProductFromQuery(value: string | null): SetupProductId | null {
 
 function clientSetupPath(product: SetupProductId) {
   return `/settings/?product=${encodeURIComponent(productContracts[product].slug)}`
+}
+
+function managedTrialRequestUrl(product: SetupProductId, templateId: string) {
+  const query = new URLSearchParams({
+    product: productContracts[product].slug,
+    template: templateId,
+    utm_source: 'app',
+    utm_medium: 'guided_trial',
+  })
+  return `https://supermega.dev/contact/?${query.toString()}`
+}
+
+function productFromPathname(pathname: string): SetupProductId | null {
+  if (pathname.startsWith('/shop/')) return 'commerce'
+  if (pathname.startsWith('/plant/')) return 'production'
+  if (pathname.startsWith('/website/')) return 'website'
+  if (pathname.startsWith('/ecommerce/')) return 'ecommerce'
+  return null
 }
 
 function pilotProgress(setup: SetupState) {
@@ -1244,7 +1266,33 @@ function useApprovalWorkspace() {
 }
 
 function useSetupWorkspace() {
-  return useStoredState<SetupState>(SETUP_KEY, seedSetup, normalizeSetup, LEGACY_SETUP_KEYS)
+  const [setup, setSetup] = useStoredState<SetupState>(SETUP_KEY, seedSetup, normalizeSetup, LEGACY_SETUP_KEYS)
+  const setupRef = useRef(setup)
+
+  useEffect(() => {
+    setupRef.current = setup
+  }, [setup])
+
+  useEffect(() => {
+    function synchronizeSetup(event: Event) {
+      const next = (event as CustomEvent<SetupState>).detail
+      if (!next) return
+      const normalized = normalizeSetup(next)
+      setupRef.current = normalized
+      setSetup(normalized)
+    }
+    window.addEventListener(SETUP_SYNC_EVENT, synchronizeSetup)
+    return () => window.removeEventListener(SETUP_SYNC_EVENT, synchronizeSetup)
+  }, [setSetup])
+
+  const updateSetup = useCallback<Dispatch<SetStateAction<SetupState>>>((next) => {
+    const normalized = normalizeSetup(typeof next === 'function' ? next(setupRef.current) : next)
+    setupRef.current = normalized
+    setSetup(normalized)
+    window.dispatchEvent(new CustomEvent<SetupState>(SETUP_SYNC_EVENT, { detail: normalized }))
+  }, [setSetup])
+
+  return [setup, updateSetup] as const
 }
 
 function useManagedIdentity(enabled: boolean) {
@@ -1291,8 +1339,9 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
   onConfirm: (details: ActionDetails) => void | Promise<void>
   returnFocus?: HTMLElement | null
 }) {
-  const [actor, setActor] = useState('')
-  const [reason, setReason] = useState('')
+  const [trialSetup] = useSetupWorkspace()
+  const [actor, setActor] = useState(trialSetup.owner)
+  const [reason, setReason] = useState(action?.reasonSuggestion ?? '')
   const [evidenceReference, setEvidenceReference] = useState(action?.evidenceReferenceSuggestion ?? '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -1418,16 +1467,36 @@ function RuntimeBadge({ status }: { status: RuntimeStatus }) {
   return <span className={`runtime-badge ${status}`}><i />{status === 'checking' ? 'Checking' : status === 'enterprise' ? 'Managed' : 'Sample workspace'}</span>
 }
 
+function ProductTrialContext({ product, setup }: { product: SetupProductId; setup: SetupState }) {
+  const productContract = productContracts[product]
+  const matchesProduct = setup.product === product
+  const selectedTemplate = templateFor(product, matchesProduct ? setup.templateId : '')
+  const started = matchesProduct && Boolean(setup.startedAt)
+  const context = started
+    ? `${setup.workspace || 'Sample workspace'} · ${setup.owner || 'Owner not named'} · Measure ${selectedTemplate.metric.toLowerCase()}`
+    : `Choose one of ${productContract.templates.length} business templates before trying ${productContract.name}.`
+
+  return <aside className="product-trial-context" aria-label={`${productContract.name} trial`}>
+    <div><span>{started ? 'Guided trial' : 'Sample workspace'}</span><strong>{started ? selectedTemplate.name : `Make ${productContract.name} fit your workflow`}</strong><small>{context}</small></div>
+    <div className="product-trial-actions">
+      <Link className="text-link" to={clientSetupPath(product)}>{started ? 'Edit trial' : 'Choose template'}</Link>
+      {started ? <a className="core-button compact" href={managedTrialRequestUrl(product, selectedTemplate.id)}>Request workspace</a> : null}
+    </div>
+  </aside>
+}
+
 export function CoreLayout() {
   const location = useLocation()
   const runtime = useRuntimeHealth()
+  const [setup] = useSetupWorkspace()
   const workspaceMainRef = useRef<HTMLElement>(null)
+  const routeProduct = productFromPathname(location.pathname)
   const routeName = location.pathname.startsWith('/website/')
     ? 'Website'
     : location.pathname.startsWith('/ecommerce/')
       ? 'Ecommerce'
       : location.pathname.startsWith('/settings/')
-      ? 'Client setup'
+      ? 'Trial setup'
       : location.pathname.startsWith('/shop/')
         ? 'Shop'
         : location.pathname.startsWith('/plant/')
@@ -1448,12 +1517,15 @@ export function CoreLayout() {
         <nav className="core-nav" aria-label="Application">
           {navigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={item.end} key={item.to} to={item.to}>{item.label}</NavLink>)}
         </nav>
-        <div className="sidebar-foot"><RuntimeBadge status={runtime.status} /><NavLink to="/settings/">Client setup</NavLink></div>
+        <div className="sidebar-foot"><RuntimeBadge status={runtime.status} /><NavLink to="/settings/">Trial setup</NavLink></div>
       </aside>
       <div className="core-stage">
-        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta"><NavLink to="/settings/">Setup</NavLink><RuntimeBadge status={runtime.status} /></div></header>
+        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta"><NavLink to="/settings/">Trial</NavLink><RuntimeBadge status={runtime.status} /></div></header>
         <nav className="mobile-nav" aria-label="Mobile application">{navigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={item.end} key={item.to} to={item.to}>{item.label}</NavLink>)}</nav>
-        <main id="workspace-main" className="core-main" ref={workspaceMainRef} tabIndex={-1}><Outlet context={runtime} /></main>
+        <main id="workspace-main" className={`core-main${routeProduct ? ' has-trial-context' : ''}${routeProduct === 'ecommerce' ? ' natural-scroll' : ''}`} ref={workspaceMainRef} tabIndex={-1}>
+          {routeProduct ? <ProductTrialContext product={routeProduct} setup={setup} /> : null}
+          <div className="core-route-content"><Outlet context={runtime} /></div>
+        </main>
       </div>
     </div>
   )
@@ -1469,50 +1541,46 @@ export function Empty({ children }: { children: ReactNode }) {
 
 const customerProducts = [
   {
-    to: '/shop/?tab=orders',
+    setupProduct: 'commerce' as const,
     number: '01',
     name: 'Shop',
     copy: 'Run orders, payments, stock, purchasing, returns, and daily close.',
-    tasks: ['Orders', 'Stock', 'Purchasing'],
   },
   {
-    to: '/plant/?tab=production',
+    setupProduct: 'production' as const,
     number: '02',
     name: 'Plant',
     copy: 'Run production jobs, output, quality, maintenance, and shift handoff.',
-    tasks: ['Jobs', 'Quality', 'Maintenance'],
   },
   {
-    to: '/website/',
+    setupProduct: 'website' as const,
     number: '03',
     name: 'Website',
     copy: 'Build, review, and export a mobile-ready company website.',
-    tasks: ['Content', 'Preview', 'Publish'],
   },
   {
-    to: '/ecommerce/',
+    setupProduct: 'ecommerce' as const,
     number: '04',
     name: 'Ecommerce',
     copy: 'Build a Shop-connected storefront and review incoming order requests.',
-    tasks: ['Catalog', 'Storefront', 'Requests'],
   },
 ] as const
 
 export function ProductHomePage() {
   return (
     <div className="workspace-screen product-home-screen">
-      <PageHeading copy="Choose one product. Each opens a focused workspace for that job." eyebrow="SuperMega products" title="What do you want to run?" />
+      <PageHeading copy="Choose one product, then pick a proven business template. Sample data is ready; importing your own CSV stays optional." eyebrow="SuperMega products" title="Start with one product." />
       <nav aria-label="SuperMega products" className="product-home-grid">
         {customerProducts.map((product) => (
-          <Link className="product-home-card" key={product.name} to={product.to}>
+          <Link className="product-home-card" key={product.name} to={clientSetupPath(product.setupProduct)}>
             <span className="product-home-number">{product.number}</span>
             <div><h2>{product.name}</h2><p>{product.copy}</p></div>
-            <span className="product-home-tasks">{product.tasks.map((task) => <small key={task}>{task}</small>)}</span>
-            <strong>Open {product.name}<span aria-hidden="true"> →</span></strong>
+            <span className="product-home-template-label">Templates</span>
+            <span className="product-home-tasks">{templatesFor(product.setupProduct).map((template) => <small key={template.id}>{template.name}</small>)}</span>
+            <strong>Choose a template<span aria-hidden="true"> →</span></strong>
           </Link>
         ))}
       </nav>
-      <aside className="product-home-setup"><div><strong>Use your company data</strong><span>Set up a client workspace when you are ready to move beyond sample records.</span></div><Link className="core-button" to="/settings/">Client setup</Link></aside>
     </div>
   )
 }
@@ -2493,7 +2561,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         setOrderDraftActive(true)
         setResumedOrderDraft(null)
         setOrderDraftConflict(false)
-        setNotice(`${ecommerceNavigationDraft.id} is ready for Shop review. Confirm the quote, promise, and payment before the accountable order gate.`)
+        setNotice(`${ecommerceNavigationDraft.sourceRequestId} is ready for Shop review. Confirm the quote, promise, and payment before the accountable order gate.`)
         requestAnimationFrame(() => {
           const dialog = orderComposerRef.current
           if (dialog && !dialog.open) dialog.showModal()
@@ -3265,6 +3333,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       after: `Order ${order.id} · Subtotal ${formatMoney(orderTotal)} · Tax not configured · Payment ${payment} · Owner confirming operator · Promise ${formatIssueDue(canonicalPromisedAt)} · ${fulfilmentLabel(order.fulfilment)} · Stock ${reservationReview}${locationReview}`,
       evidenceReferenceSuggestion: sourceEvidence,
       evidenceReferenceLocked: Boolean(sourceRecordId),
+      reasonSuggestion: ecommerceDraft ? 'Customer request reviewed against the current Shop catalog.' : undefined,
       apply: async (action) => {
         const ownedOrder = { ...order, owner: action.actor }
         await mutateCommerce('commerce.order.created', action.commandId, commerceActionProof(action), (current) => reserveCommerceOrder(current, ownedOrder, commerceActionProof(action)))
@@ -3947,11 +4016,11 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         </div>
         {resumedOrderNeedsReview ? <button className="core-button compact" disabled={!resumedOrderCanRebind || orderDraftSaving || orderDraftConflict} onClick={() => void acceptCurrentOrderDraftCatalog()} type="button">Use current Shop values</button> : null}
       </div> : null}
-      <div aria-label="Order source" className="order-entry-methods" role="group">
+      {!preparedEcommerceDraft && !preparedChannelDraft ? <div aria-label="Order source" className="order-entry-methods" role="group">
         <button aria-pressed={orderEntryMode === 'manual'} disabled={Boolean(pendingAction)} onClick={() => setOrderEntryMode('manual')} type="button">Enter order</button>
         <button aria-pressed={orderEntryMode === 'message'} disabled={Boolean(pendingAction)} onClick={() => setOrderEntryMode('message')} type="button">From message</button>
         <button aria-pressed={orderEntryMode === 'online'} disabled={Boolean(pendingAction)} onClick={() => setOrderEntryMode('online')} type="button">Online request</button>
-      </div>
+      </div> : null}
       {orderNotice ? <p className="form-notice order-entry-notice" aria-live="polite">{orderNotice}</p> : null}
       {orderEntryMode === 'message' ? <div className="order-entry-panel" data-mode="message"><Suspense fallback={<p className="form-notice" role="status">Loading message intake…</p>}><ChannelOrderIntake disabled={commerceControlsDisabled} identity={managedIdentity ?? undefined} items={commerce.items} onAcceptedFocus={() => requestAnimationFrame(() => preparedChannelRef.current?.focus())} onUse={useChannelDraft} /></Suspense></div> : null}
       {orderEntryMode === 'online' ? <div className="order-entry-panel" data-mode="online">
@@ -4159,8 +4228,8 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         })}</div> : <p className="empty-state">No purchase orders yet. Use Order stock on an item when replenishment is needed.</p>}
       </details>
       <section className="catalog-onboarding-bridge">
-        <div><span className="core-eyebrow">Client setup</span><strong>Bring in a catalog through the shared import flow.</strong><p>Use one checked, accountable path for Shop, Plant, Website, and Ecommerce instead of a second Shop-only dry run.</p></div>
-        <Link className="core-button" to={clientSetupPath('commerce')}>Set up Shop data</Link>
+        <div><span className="core-eyebrow">Import data</span><strong>Bring your catalog into the Shop trial.</strong><p>Preview and map a CSV before any reviewed records are applied.</p></div>
+        <Link className="core-button" to={clientSetupPath('commerce')}>Import Shop data</Link>
       </section>
       <details className="compact-disclosure catalog-disclosure">
         <summary>Add catalog item</summary>
@@ -5548,6 +5617,9 @@ export function SettingsPage() {
   const completion = pilotProgress(setup)
   const isPilotReady = pilotReady(setup)
   const workflowReady = Boolean(setup.workspace.trim() && setup.owner.trim() && setup.entryPoint.trim())
+  const workflowCompletion = Math.round(([setup.templateId, setup.entryPoint, setup.workspace.trim(), setup.owner.trim()].filter(Boolean).length / 4) * 100)
+  const displayedCompletion = settingsStep === 'workflow' ? workflowCompletion : completion
+  const displayedReady = settingsStep === 'workflow' ? workflowReady : isPilotReady
   const requestedProduct = setupProductFromQuery(setupSearchParams.get('product'))
   const selectedProduct = productContracts[setup.product]
   const selectedTemplate = templateFor(setup.product, setup.templateId)
@@ -5566,6 +5638,7 @@ export function SettingsPage() {
         product: requestedProduct,
         templateId: template.id,
         entryPoint: template.entryPoints.includes(current.entryPoint) ? current.entryPoint : template.entryPoints[0] ?? '',
+        startedAt: undefined,
         savedAt: undefined,
       }))
       setSettingsStep('workflow')
@@ -5591,6 +5664,7 @@ export function SettingsPage() {
       product,
       templateId: template.id,
       entryPoint: template.entryPoints.includes(current.entryPoint) ? current.entryPoint : template.entryPoints[0] ?? '',
+      startedAt: undefined,
       savedAt: undefined,
     }))
     setNotice(`Selected ${productDisplayName(product)}. Your client details were kept.`)
@@ -5598,7 +5672,18 @@ export function SettingsPage() {
 
   function changeTemplate(templateId: string) {
     const template = templateFor(setup.product, templateId)
-    updateSetup({ templateId: template.id, entryPoint: template.entryPoints.includes(setup.entryPoint) ? setup.entryPoint : template.entryPoints[0] ?? '' })
+    updateSetup({ templateId: template.id, entryPoint: template.entryPoints.includes(setup.entryPoint) ? setup.entryPoint : template.entryPoints[0] ?? '', startedAt: undefined })
+  }
+
+  function startGuidedTrial() {
+    if (!workflowReady) {
+      setNotice('Name the trial workspace and responsible owner first.')
+      chooseSettingsStep('workflow')
+      return
+    }
+    const startedAt = new Date().toISOString()
+    setSetup((current) => ({ ...current, startedAt }))
+    navigate(setupProductPreviewPath(setup.product))
   }
 
   function save(event: FormEvent) {
@@ -5608,8 +5693,9 @@ export function SettingsPage() {
       chooseSettingsStep('workflow')
       return
     }
-    setSetup((current) => ({ ...current, savedAt: new Date().toISOString() }))
-    setNotice('Client setup saved in this browser. No source, account, or external action was connected.')
+    const savedAt = new Date().toISOString()
+    setSetup((current) => ({ ...current, startedAt: current.startedAt || savedAt, savedAt }))
+    setNotice('Trial plan saved in this browser. No source, account, or external action was connected.')
   }
 
   async function resetDemoWorkspace() {
@@ -5678,22 +5764,22 @@ export function SettingsPage() {
 
   return (
     <div className="workspace-screen settings-screen">
-      <PageHeading eyebrow="Client setup" title="Set up one client solution" copy="Choose a proven workflow, bring existing data safely, and define what success means." />
+      <PageHeading eyebrow="Guided trial" title="Start with one real workflow" copy="Pick a template, name the workspace, and open the sample. Your CSV stays optional and local while you review it." />
       <nav aria-label="Setup steps" className="settings-step-nav">
-        <button aria-current={settingsStep === 'workflow' ? 'step' : undefined} onClick={() => chooseSettingsStep('workflow')} type="button"><span>1</span>Solution</button>
-        <button aria-current={settingsStep === 'success' ? 'step' : undefined} onClick={() => chooseSettingsStep('success')} type="button"><span>2</span>Success</button>
+        <button aria-current={settingsStep === 'workflow' ? 'step' : undefined} onClick={() => chooseSettingsStep('workflow')} type="button"><span>1</span>Template</button>
+        <button aria-current={settingsStep === 'success' ? 'step' : undefined} onClick={() => chooseSettingsStep('success')} type="button"><span>2</span>Trial plan</button>
       </nav>
       <div className="settings-grid settings-step-content">
         <form className="core-panel setup-form" onSubmit={save}>
-          <div className="panel-head"><div><span className="core-eyebrow">Client solution</span><h2>{settingsStep === 'workflow' ? 'Choose what to set up' : 'Define success and authority'}</h2></div><span className={`status-pill ${isPilotReady ? 'approved' : 'bounded'}`}>{isPilotReady ? 'ready' : `${completion}%`}</span></div>
-          <div className="pilot-progress"><div className="progress-track"><i style={{ width: `${completion}%` }} /></div><small>{settingsStep === 'workflow' ? 'Solution · template · starting point · owner' : 'Current record · baseline · target · authority · evidence'}</small></div>
+          <div className="panel-head"><div><span className="core-eyebrow">One product · one template</span><h2>{settingsStep === 'workflow' ? 'Choose the trial you want to run' : 'Define success and authority'}</h2></div><span className={`status-pill ${displayedReady ? 'approved' : 'bounded'}`}>{displayedReady ? 'ready' : `${displayedCompletion}%`}</span></div>
+          <div className="pilot-progress"><div className="progress-track"><i style={{ width: `${displayedCompletion}%` }} /></div><small>{settingsStep === 'workflow' ? 'Template · starting point · workspace · owner' : 'Current record · baseline · target · authority · evidence'}</small></div>
           <fieldset className="settings-step-fields" disabled={settingsStep !== 'workflow'} hidden={settingsStep !== 'workflow'}>
-          <div aria-label="Choose solution" className="setup-product-grid" role="group">{Object.values(productContracts).map((product) => <button aria-pressed={setup.product === product.id} key={product.id} onClick={() => changeProduct(product.id)} type="button"><span><strong>{product.name}</strong><small>{product.headline}</small></span><b>{product.templates.length} templates</b></button>)}</div>
+          {requestedProduct ? <div className="setup-selected-product"><span><small>Selected product</small><strong>{selectedProduct.name}</strong></span><Link className="text-link" to="/">Change product</Link></div> : <div aria-label="Choose solution" className="setup-product-grid" role="group">{Object.values(productContracts).map((product) => <button aria-pressed={setup.product === product.id} key={product.id} onClick={() => changeProduct(product.id)} type="button"><span><strong>{product.name}</strong><small>{product.headline}</small></span><b>{product.templates.length} templates</b></button>)}</div>}
           <div className="form-row"><label>Starting template<select value={setup.templateId} onChange={(event) => changeTemplate(event.target.value)}>{templatesFor(setup.product).map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select></label><label>Starting point<select value={setup.entryPoint} onChange={(event) => updateSetup({ entryPoint: event.target.value })}>{selectedTemplate.entryPoints.map((entryPoint) => <option key={entryPoint}>{entryPoint}</option>)}</select></label></div>
           <div className="setup-template-summary"><div><span>Outcome</span><strong>{selectedTemplate.outcome}</strong></div><ol aria-label={`${selectedTemplate.name} workflow`}>{selectedTemplate.workflow.map((step) => <li key={step}>{step}</li>)}</ol><small>Measure success with {selectedTemplate.metric.toLowerCase()}.</small></div>
           <div className="form-row"><label>Workspace name<input maxLength={80} required value={setup.workspace} onChange={(event) => updateSetup({ workspace: event.target.value })} placeholder={setup.product === 'commerce' ? 'Example: Social sales team' : setup.product === 'production' ? 'Example: Main plant' : setup.product === 'website' ? 'Example: Company website' : 'Example: Online order desk'} /></label><label>Responsible owner<input maxLength={80} required value={setup.owner} onChange={(event) => updateSetup({ owner: event.target.value })} placeholder="Name or role" /></label></div>
           <Suspense fallback={<p className="form-notice" role="status">Loading the client data template…</p>}><ClientDataOnboarding managedIdentity={managedIdentity} owner={setup.owner} product={setup.product} productName={selectedProduct.name} productSlug={selectedProduct.slug} workflowTemplateId={selectedTemplate.id} workspace={setup.workspace} /></Suspense>
-          <div className="settings-step-actions"><span>Step 1 of 2</span><button className="core-button primary" disabled={!workflowReady} onClick={() => chooseSettingsStep('success')} type="button">Continue to success</button></div>
+          <div className="settings-step-actions"><span>Start with sample data now. Add the full trial plan when the workflow fits.</span><div className="setup-action-group"><button className="text-link" disabled={!workflowReady} onClick={() => chooseSettingsStep('success')} type="button">Add trial plan</button><button className="core-button primary" disabled={!workflowReady} onClick={startGuidedTrial} type="button">Start guided sample</button></div></div>
           </fieldset>
           <fieldset className="settings-step-fields" disabled={settingsStep !== 'success'} hidden={settingsStep !== 'success'}>
           <div className="template-contract settings-workflow-summary"><span>{productDisplayName(setup.product)}</span><strong>{setup.workspace || 'Unnamed workspace'}</strong><small>{selectedTemplate.name} · {setup.owner || 'Owner needed'}</small></div>
@@ -5701,9 +5787,9 @@ export function SettingsPage() {
           <div className="form-row pilot-text-row"><label>Baseline<textarea maxLength={240} required value={setup.baseline} onChange={(event) => updateSetup({ baseline: event.target.value })} placeholder="Current time, error rate, backlog, or output." /></label><label>Target outcome<textarea maxLength={240} required value={setup.targetOutcome} onChange={(event) => updateSetup({ targetOutcome: event.target.value })} placeholder={`Set a target for ${selectedTemplate.metric.toLowerCase()}.`} /></label></div>
           <div className="form-row pilot-text-row"><label>Human authority boundary<textarea maxLength={240} required value={setup.authorityBoundary} onChange={(event) => updateSetup({ authorityBoundary: event.target.value })} placeholder="Which sends, payments, approvals, or production changes require an owner?" /></label><label>Acceptance evidence<textarea maxLength={240} required value={setup.acceptanceEvidence} onChange={(event) => updateSetup({ acceptanceEvidence: event.target.value })} placeholder="What record or result proves the pilot works?" /></label></div>
           <div className="settings-step-actions"><button className="text-link" onClick={() => chooseSettingsStep('workflow')} type="button">Back</button><button className="core-button primary" type="submit">Save client setup</button></div>
-          {setup.savedAt ? <div className="setup-complete"><div><strong>Client setup saved.</strong><small>Reviewed records stay separate from sample data until a managed import is confirmed.</small></div><Link className="core-button" to={setupProductPreviewPath(setup.product)}>Open {productDisplayName(setup.product)}</Link></div> : null}
+          {setup.savedAt ? <div className="setup-complete"><div><strong>Trial plan saved.</strong><small>Reviewed records stay separate from sample data until a managed import is confirmed.</small></div><div className="setup-complete-actions"><Link className="core-button" to={setupProductPreviewPath(setup.product)}>Open {productDisplayName(setup.product)}</Link><a className="core-button primary" href={managedTrialRequestUrl(setup.product, selectedTemplate.id)}>Request managed trial</a></div></div> : null}
           </fieldset>
-          <p className="form-notice" aria-live="polite">{notice || (setup.savedAt ? `Last saved ${formatTime(setup.savedAt)}` : 'The draft stays in this browser until exported or managed mode is activated.')}</p>
+          <p className="form-notice" aria-live="polite">{notice || (setup.savedAt ? `Last saved ${formatTime(setup.savedAt)}` : setup.startedAt ? `Guided ${selectedTemplate.name} sample started. Add the trial plan when you are ready.` : 'The draft stays in this browser until you start the sample, export it, or activate managed mode.')}</p>
         </form>
       </div>
       <details className="settings-advanced" id="controls" open={location.hash === '#controls' || undefined}>
@@ -5713,7 +5799,7 @@ export function SettingsPage() {
             <div className="panel-head"><div><span className="core-eyebrow">System boundary</span><h2>{runtime.status === 'enterprise' ? 'Managed mode ready' : 'Managed mode locked'}</h2></div><RuntimeBadge status={runtime.status} /></div>
             {runtime.status === 'enterprise' && managedTrialAuthConfigured() ? managedIdentity ? <div className="template-contract"><span>Managed account</span><strong>{managedIdentity.email}</strong><small>{managedIdentity.workspaceId} · membership and capabilities are checked by the API</small><button className="text-link" disabled={managedBusy} onClick={() => void disconnectManagedWorkspace()} type="button">Disconnect</button></div> : <form className="core-form compact-form" onSubmit={(event) => void connectManagedWorkspace(event)}><span className="core-eyebrow">Managed workspace</span><div className="form-row"><label>Email<input autoComplete="username" maxLength={160} onChange={(event) => setManagedEmail(event.target.value)} required type="email" value={managedEmail} /></label><label>Password<input autoComplete="current-password" minLength={8} onChange={(event) => setManagedPassword(event.target.value)} required type="password" value={managedPassword} /></label></div><label>Workspace ID<input maxLength={128} onChange={(event) => setManagedWorkspace(event.target.value)} placeholder="Your provisioned workspace" required value={managedWorkspace} /></label><button className="core-button primary" disabled={managedBusy} type="submit">{managedBusy ? 'Checking…' : 'Connect workspace'}</button></form> : null}
             {managedNotice ? <p className="form-notice" role="status">{managedNotice}</p> : null}
-            <div className="readiness-list"><span><small>Client setup</small><strong>{isPilotReady ? 'Ready' : `${completion}% complete`}</strong></span><span><small>Runtime</small><strong>{runtime.serviceStatus}</strong></span><span><small>Operating mode</small><strong>{runtime.operatingMode.replace('_', ' ')}</strong></span><span><small>Managed data</small><strong>{runtime.enterpriseDbReady ? 'Ready' : 'Not connected'}</strong></span><span><small>Security</small><strong>{runtime.securityReady ? 'Ready' : 'Not ready'}</strong></span><span><small>Write path</small><strong>{runtime.writesReady ? 'Enabled' : 'Locked'}</strong></span><span><small>Source coverage</small><strong>{runtime.coverageScore}%</strong></span><span><small>External action</small><strong>Owner controlled</strong></span></div>
+            <div className="readiness-list"><span><small>Trial plan</small><strong>{isPilotReady ? 'Ready' : `${completion}% complete`}</strong></span><span><small>Runtime</small><strong>{runtime.serviceStatus}</strong></span><span><small>Operating mode</small><strong>{runtime.operatingMode.replace('_', ' ')}</strong></span><span><small>Managed data</small><strong>{runtime.enterpriseDbReady ? 'Ready' : 'Not connected'}</strong></span><span><small>Security</small><strong>{runtime.securityReady ? 'Ready' : 'Not ready'}</strong></span><span><small>Write path</small><strong>{runtime.writesReady ? 'Enabled' : 'Locked'}</strong></span><span><small>Source coverage</small><strong>{runtime.coverageScore}%</strong></span><span><small>External action</small><strong>Owner controlled</strong></span></div>
             {runtime.status !== 'enterprise' ? <ul className="requirement-list">{(runtime.requirements.length ? runtime.requirements : ['Configure managed tenant persistence.', 'Verify production identity and source coverage.']).map((requirement) => <li key={requirement}>{requirement}</li>)}</ul> : null}
             <p className="authority-note">External sends, payments, publishing, access changes, and production writes remain owner-approved and auditable.</p>
           </section>
