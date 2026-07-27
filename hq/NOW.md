@@ -4,8 +4,8 @@ Updated: 2026-07-27
 Owner: founder / CEO
 Mode: Codex-only guarded production release; managed operation remains isolated
 Live state contract: `supermega.hq-live-state.v1`
-Live release commit: `f00b1e3ee163714e7c6f1db4a7f17c3cac73de46`
-Live state observed: `2026-07-27T17:34:43Z`
+Live release commit: `e18fc6bc8f392e398dfb89a8efa152b69ac8550d`
+Live state observed: `2026-07-27T18:17:54Z`
 Live operating mode: `isolated_demo`
 Live scheduler status: `degraded`
 Live scheduler configured: `false`
@@ -42,7 +42,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 - Model calls reserve before provider I/O. All tenants and retries share one atomic UTC-day ceiling; failures stay charged, cache hits reserve nothing, hosted memory state fails closed, and the hard maximum is 2,000,000 units (`a2e1b89`).
 - Shop covers its operating lifecycle at `/shop/`; message intake stays lazy and initial JavaScript is 477,717 bytes (`3cd4825`).
 - Plant is task-first at `/plant/` and controls no equipment.
-- Website builds a guarded preview, approved site file, and tenant-bound release plan at `/website/`; it never deploys (`a400a86`).
+- Website turns a five-field brief into a responsive, ready-page preview and standalone HTML download. Browser-local users skip managed release paperwork; connected workspaces retain evidence and approval controls. Download never deploys or changes a domain (`dfbe00b3`).
 - Ecommerce uses versioned Shop data for a recoverable multi-line cart and deterministic quote. Managed workspaces retain exact requests in the Shop inbox; V1 requests stay readable, and only Shop confirmation creates an order (`aed737a`).
 - AI remains gated; Order Intake passed 20 local cases, but provider execution still needs credentials.
 - Client setup is two steps with one manifest-backed smart import; exact matches collapse and exceptions open for review (`ab9a89e`).
@@ -54,10 +54,10 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 ## Verified baseline
 
 - Current local checkpoints: product `3cd4825`, agent operations `a2e1b89`, operations `63a245f`, and security `98b8044`.
-- App/local gates pass: 314 Python tests, lint/build, 54 Shop inventory/221 Commerce checks, 66 security checks, and a 477,717-byte largest chunk. Kernel passes 282 tests, 69 connectors/993 adversarial calls, and 15 crews/214 checks.
-- Desktop/mobile Shop passes. A rendered 390 px flow set up two locations, reserved and fulfilled one order, previewed `Main store / OPENING-001`, and returned the unit to that exact lot with no overflow or crash overlay. Managed count and Plant allocation remain model/runtime verified.
-- Core first-action QA leads Shop Stock, incomplete orders to Promise or Payment, Plant alerts to Problems or output, and invalid Website briefs to their first error. Mobile controls are at least 44 px with focus-safe fixed navigation (`36fa7dd`); guide and review actions create no record.
-- PR #264 merged the trustworthy Ecommerce checkout and payment/fulfilment contract. Both `supermega.dev` and `app.supermega.dev` serve exact commit `f00b1e3e`; paired live verifiers, release guard, and independent live health pass with brand `jade-v2-2026-07` and context/catalog `2026-07-27.1`.
+- App/local gates pass: 314 Python tests, lint/build, 54 Shop inventory/221 Commerce/258 Production checks, 66 security checks, and the complete release/database/Vercel/HQ suite.
+- A 390 px Shop journey passed exact-lot reserve, fulfil, and sellable return with no overflow; managed count and Plant allocation remain model/runtime verified.
+- First-action QA routes Shop, Plant, and Website blockers to the next task; mobile controls are 44 px and guide/review actions create no record (`36fa7dd`).
+- PRs #267/#268 make Website finish in one standalone download and align app/public copy. A 390 px production brief-to-download passed; the inspected 8,198-byte local artifact had CSP and no script. Both `supermega.dev` and `app.supermega.dev` serve exact commit `e18fc6bc`; paired release, guard, and live-health checks pass at catalog `2026-07-27.2`.
 - Production remains an `isolated_demo`: managed database, schema, audit, security, and writes are not ready. The hosted scheduler is degraded and unconfigured by design, uses no Ally compute, and retains a zero-idle execution target.
 
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
