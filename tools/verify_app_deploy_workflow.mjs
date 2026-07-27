@@ -140,6 +140,11 @@ requireContract('native Git deployment disabled in config', config.git?.deployme
 requireContract('deployment control files trigger coordinated release', workflow.includes('- vercel.json') && workflow.includes('- .vercelignore'))
 requireContract('retired alias control triggers coordinated release', workflow.includes('tools/verify_retired_vercel_alias_state.mjs'))
 requireContract('app and public changes trigger one release authority', workflow.includes("- 'showroom/**'") && workflow.includes('tools/create_public_vercel_output.mjs') && workflow.includes('tools/verify_coordinated_release_live.mjs'))
+requireContract('HQ-only evidence validates without redeploying unchanged products',
+  !workflow.includes("- 'hq/**'")
+  && !workflow.includes('tools/verify_hq_contract.mjs')
+  && ciWorkflow.includes("- 'hq/**'")
+  && ciWorkflow.includes("- 'tools/verify_hq_contract.mjs'"))
 requireContract('all API tests trigger and execute', workflow.includes("- 'tests/**'") && workflow.includes("python -m unittest discover -s tests -p 'test_*.py' -v"))
 requireContract('runtime package changes trigger release', workflow.includes("- 'supermega_runtime/**'"))
 requireContract('database activation controls trigger release', workflow.includes('tools/validate_supermega_database_url.py') && workflow.includes('tools/activate_supermega_database.ps1'))
