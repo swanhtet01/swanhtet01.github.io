@@ -21,6 +21,9 @@ _TIMESTAMP_PATTERN = re.compile(
     r"(?:\.[0-9]{1,6})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])"
 )
 _MAX_SAFE_INTEGER = 9_007_199_254_740_991
+_PRODUCTION_MATERIAL_UNITS = frozenset(
+    {"kg", "g", "l", "ml", "pcs", "pack", "bag", "roll", "sheet", "m", "cm"}
+)
 
 
 class ShopInventoryValidationError(ValueError):
@@ -347,6 +350,40 @@ def _order_inventory_command_id(prefix: str, order_id: str) -> str:
     return f"{prefix}-{identity[7:39].upper()}"
 
 
+def _production_allocations(value: object, field: str) -> list[dict[str, Any]]:
+    allocations: list[dict[str, Any]] = []
+    for index, candidate in enumerate(_list(value, field, 1, 200)):
+        row_field = f"{field}[{index}]"
+        row = _exact(candidate, row_field, {"stockUnitId", "locationId", "quantity"})
+        allocations.append(
+            {
+                "stockUnitId": _text(
+                    row["stockUnitId"], f"{row_field}.stockUnitId", 80
+                ),
+                "locationId": _identifier(
+                    row["locationId"], f"{row_field}.locationId", "LOC"
+                ),
+                "quantity": _integer(row["quantity"], f"{row_field}.quantity", 1),
+            }
+        )
+    keys = [f"{row['locationId']}|{row['stockUnitId']}" for row in allocations]
+    if len(keys) != len(set(keys)) or keys != sorted(keys):
+        raise ShopInventoryValidationError(
+            f"{field} must use unique canonical allocation order."
+        )
+    return allocations
+
+
+def _production_inventory_command_id(request_id: str) -> str:
+    identity = _canonical_digest(
+        {
+            "contract": "supermega.shop.production-issue-inventory-command.v1",
+            "requestId": request_id,
+        }
+    )
+    return f"PIS-{identity[7:39].upper()}"
+
+
 def _order_inventory_reservation_id(
     order_id: str, allocation: Mapping[str, Any]
 ) -> str:
@@ -482,6 +519,89 @@ def _payload(value: object, field: str, catalog_skus: list[str]) -> dict[str, An
             ),
             "proof": _proof(row["proof"], f"{field}.proof"),
         }
+    if kind == "production_issue":
+        row = _exact(
+            row,
+            field,
+            {
+                "kind",
+                "id",
+                "productionRequestId",
+                "productionCommandDigest",
+                "productionJobId",
+                "productionMaterialId",
+                "productionInputLotId",
+                "productionQuantityMilli",
+                "productionUnit",
+                "sku",
+                "stockQuantity",
+                "conversionNote",
+                "allocations",
+                "proof",
+            },
+        )
+        request_id = _text(
+            row["productionRequestId"], f"{field}.productionRequestId", 80
+        )
+        command_id = _identifier(row["id"], f"{field}.id", "PIS")
+        if command_id != _production_inventory_command_id(request_id):
+            raise ShopInventoryValidationError(
+                f"{field}.id is not deterministic for its Plant request."
+            )
+        sku = _text(row["sku"], f"{field}.sku", 80)
+        if sku not in catalog_skus:
+            raise ShopInventoryValidationError(
+                f"{field}.sku is not in the Shop catalog."
+            )
+        production_unit = _text(
+            row["productionUnit"], f"{field}.productionUnit", 12
+        )
+        if production_unit not in _PRODUCTION_MATERIAL_UNITS:
+            raise ShopInventoryValidationError(
+                f"{field}.productionUnit is unsupported."
+            )
+        stock_quantity = _integer(
+            row["stockQuantity"], f"{field}.stockQuantity", 1
+        )
+        allocations = _production_allocations(
+            row["allocations"], f"{field}.allocations"
+        )
+        allocated = sum(allocation["quantity"] for allocation in allocations)
+        if allocated > _MAX_SAFE_INTEGER or allocated != stock_quantity:
+            raise ShopInventoryValidationError(
+                f"{field}.allocations must equal the issued Shop quantity."
+            )
+        return {
+            "kind": "production_issue",
+            "id": command_id,
+            "productionRequestId": request_id,
+            "productionCommandDigest": _digest(
+                row["productionCommandDigest"],
+                f"{field}.productionCommandDigest",
+            ),
+            "productionJobId": _text(
+                row["productionJobId"], f"{field}.productionJobId", 80
+            ),
+            "productionMaterialId": _text(
+                row["productionMaterialId"], f"{field}.productionMaterialId", 80
+            ),
+            "productionInputLotId": _text(
+                row["productionInputLotId"], f"{field}.productionInputLotId", 80
+            ),
+            "productionQuantityMilli": _integer(
+                row["productionQuantityMilli"],
+                f"{field}.productionQuantityMilli",
+                1,
+            ),
+            "productionUnit": production_unit,
+            "sku": sku,
+            "stockQuantity": stock_quantity,
+            "conversionNote": _text(
+                row["conversionNote"], f"{field}.conversionNote", 240
+            ),
+            "allocations": allocations,
+            "proof": _proof(row["proof"], f"{field}.proof"),
+        }
     if kind == "order_reserve":
         row = _exact(
             row,
@@ -547,6 +667,53 @@ def _payload(value: object, field: str, catalog_skus: list[str]) -> dict[str, An
             "proof": _proof(row["proof"], f"{field}.proof"),
         }
     raise ShopInventoryValidationError(f"{field}.kind is unsupported for managed v1.")
+
+
+def _plan_production_allocations(
+    balances: Mapping[tuple[str, str], Mapping[str, int]],
+    units: Mapping[str, Mapping[str, str]],
+    *,
+    sku: str,
+    stock_quantity: int,
+) -> list[dict[str, Any]]:
+    candidates = sorted(
+        (
+            {
+                "stockUnitId": stock_unit_id,
+                "locationId": location_id,
+                "availableToPromise": balance["onHand"] - balance["reserved"],
+            }
+            for (stock_unit_id, location_id), balance in balances.items()
+            if units.get(stock_unit_id, {}).get("sku") == sku
+            and balance["onHand"] - balance["reserved"] > 0
+        ),
+        key=lambda candidate: (
+            -candidate["availableToPromise"],
+            f"{candidate['locationId']}|{candidate['stockUnitId']}",
+        ),
+    )
+    remaining = stock_quantity
+    allocations: list[dict[str, Any]] = []
+    for candidate in candidates:
+        if remaining == 0:
+            break
+        allocated = min(remaining, candidate["availableToPromise"])
+        allocations.append(
+            {
+                "stockUnitId": candidate["stockUnitId"],
+                "locationId": candidate["locationId"],
+                "quantity": allocated,
+            }
+        )
+        remaining -= allocated
+    if remaining:
+        raise ShopInventoryValidationError(
+            f"location stock cannot allocate {stock_quantity} Shop units for the Plant request."
+        )
+    return sorted(
+        allocations,
+        key=lambda allocation: f"{allocation['locationId']}|{allocation['stockUnitId']}",
+    )
 
 
 def _project(commands: list[dict[str, Any]]) -> dict[str, Any]:
@@ -705,6 +872,45 @@ def _project(commands: list[dict[str, Any]]) -> dict[str, Any]:
                 reserved_delta=0,
                 field=field,
             )
+            continue
+        if command["kind"] == "production_issue":
+            expected_allocations = _plan_production_allocations(
+                balances,
+                units,
+                sku=command["sku"],
+                stock_quantity=command["stockQuantity"],
+            )
+            if command["allocations"] != expected_allocations:
+                raise ShopInventoryValidationError(
+                    "production issue allocations do not match deterministic available location stock."
+                )
+            for allocation in command["allocations"]:
+                unit = units.get(allocation["stockUnitId"])
+                if unit is None or unit["sku"] != command["sku"]:
+                    raise ShopInventoryValidationError(
+                        "production issue stock unit does not match its SKU."
+                    )
+                if allocation["locationId"] not in locations:
+                    raise ShopInventoryValidationError(
+                        "production issue references an unknown location."
+                    )
+                balance = current_balance(
+                    allocation["stockUnitId"], allocation["locationId"]
+                )
+                if (
+                    balance["onHand"] - balance["reserved"]
+                    < allocation["quantity"]
+                ):
+                    raise ShopInventoryValidationError(
+                        "production issue exceeds available-to-promise stock."
+                    )
+                apply_delta(
+                    allocation["stockUnitId"],
+                    allocation["locationId"],
+                    on_hand_delta=-allocation["quantity"],
+                    reserved_delta=0,
+                    field=field,
+                )
             continue
         if command["kind"] == "order_reserve":
             if any(

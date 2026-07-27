@@ -110,10 +110,10 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
     reserved: projection.balances.filter((row) => row.locationId === location.id).reduce((sum, row) => sum + row.reserved, 0),
     availableToPromise: projection.balances.filter((row) => row.locationId === location.id).reduce((sum, row) => sum + row.availableToPromise, 0),
   }))
-  const inventoryDrift = catalog.some((item) => {
+  const inventoryDrift = Boolean(state.revision && catalog.some((item) => {
     const locationTotal = projection.balances.filter((row) => row.sku === item.sku).reduce((sum, row) => sum + row.availableToPromise, 0)
     return locationTotal !== catalogBySku.get(item.sku)?.onHand
-  })
+  }))
 
   function reviewSetup(event: FormEvent) {
     event.preventDefault()

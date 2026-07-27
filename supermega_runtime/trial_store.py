@@ -1412,11 +1412,13 @@ def _authoritative_command_payload(
         ):
             return authoritative
         foundation = state.get("inventoryFoundation")
-        location_count_matches = False
+        location_command_kind = {
+            "commerce.stock.counted": "count",
+            "commerce.production_material.issued": "production_issue",
+        }[event_type]
+        location_command_matches = False
         previous_inventory_captured_at = None
-        if event_type == "commerce.stock.counted" and isinstance(
-            foundation, Mapping
-        ):
+        if isinstance(foundation, Mapping):
             commands = foundation.get("commands")
             if (
                 isinstance(commands, list)
@@ -1429,14 +1431,14 @@ def _authoritative_command_payload(
                     if isinstance(latest_payload, Mapping)
                     else None
                 )
-                location_count_matches = bool(
+                location_command_matches = bool(
                     isinstance(latest_payload, Mapping)
-                    and latest_payload.get("kind") == "count"
+                    and latest_payload.get("kind") == location_command_kind
                     and isinstance(latest_proof, Mapping)
                     and latest_proof.get("actionId") == evidence.get("actionId")
                 )
                 if (
-                    location_count_matches
+                    location_command_matches
                     and len(commands) > 1
                     and isinstance(commands[-2], Mapping)
                 ):
@@ -1453,7 +1455,7 @@ def _authoritative_command_payload(
                     )
         effective_captured_at = (
             _not_before(captured_at, previous_inventory_captured_at)
-            if location_count_matches
+            if location_command_matches
             else captured_at
         )
         authoritative_evidence = dict(evidence)
@@ -1467,7 +1469,7 @@ def _authoritative_command_payload(
             authoritative_movement,
             *deepcopy(movements[1:]),
         ]
-        if location_count_matches and isinstance(foundation, Mapping):
+        if location_command_matches and isinstance(foundation, Mapping):
             try:
                 authoritative_state["inventoryFoundation"] = (
                     restamp_latest_shop_inventory_command(

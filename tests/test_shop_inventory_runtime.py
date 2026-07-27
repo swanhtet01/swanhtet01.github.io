@@ -223,6 +223,79 @@ def counted_inventory(
     )
 
 
+def production_inventory_command_id(request_id: str) -> str:
+    identity = canonical_digest(
+        {
+            "contract": "supermega.shop.production-issue-inventory-command.v1",
+            "requestId": request_id,
+        }
+    )
+    return f"PIS-{identity[7:39].upper()}"
+
+
+def production_issued_inventory(
+    state: dict[str, object],
+    proof: dict[str, str],
+    request: dict[str, object],
+    *,
+    stock_quantity: int = 2,
+    allocations: list[dict[str, object]] | None = None,
+) -> dict[str, object]:
+    return append_inventory_command(
+        state,
+        {
+            "kind": "production_issue",
+            "id": production_inventory_command_id(str(request["requestId"])),
+            "productionRequestId": request["requestId"],
+            "productionCommandDigest": request["sourceCommandDigest"],
+            "productionJobId": request["jobId"],
+            "productionMaterialId": request["materialId"],
+            "productionInputLotId": request["inputLotId"],
+            "productionQuantityMilli": request["quantityMilli"],
+            "productionUnit": request["unit"],
+            "sku": "SKU-1",
+            "stockQuantity": stock_quantity,
+            "conversionNote": f"{stock_quantity} Shop units provide the reviewed Plant material quantity.",
+            "allocations": allocations
+            or [
+                {
+                    "stockUnitId": "LOT-SKU1-OPENING-001",
+                    "locationId": "LOC-MAIN",
+                    "quantity": stock_quantity,
+                }
+            ],
+            "proof": proof,
+        },
+    )
+
+
+def production_issue_movement(
+    proof: dict[str, str],
+    request: dict[str, object],
+    *,
+    stock_quantity: int = 2,
+) -> dict[str, object]:
+    return {
+        "id": f"MOV2:{proof['actionId']}",
+        "actionId": proof["actionId"],
+        "createdAt": proof["capturedAt"],
+        "actor": proof["actor"],
+        "reason": proof["reason"],
+        "evidenceReference": proof["evidenceReference"],
+        "kind": "production_issue",
+        "sku": "SKU-1",
+        "quantityDelta": -stock_quantity,
+        "productionRequestId": request["requestId"],
+        "productionCommandDigest": request["sourceCommandDigest"],
+        "productionJobId": request["jobId"],
+        "productionMaterialId": request["materialId"],
+        "productionInputLotId": request["inputLotId"],
+        "productionQuantityMilli": request["quantityMilli"],
+        "productionUnit": request["unit"],
+        "conversionNote": f"{stock_quantity} Shop units provide the reviewed Plant material quantity.",
+    }
+
+
 def order_inventory_command_id(prefix: str, order_id: str) -> str:
     identity = canonical_digest(
         {
@@ -655,6 +728,134 @@ class ShopInventoryRuntimeTests(unittest.TestCase):
                 reserved,
                 {"state": aggregate_only, "evidence": count_proof},
             )
+
+    def test_production_issue_consumes_one_deterministic_location_allocation(self) -> None:
+        current = commerce_state()
+        opening = opening_inventory()
+        initialized = reduce_commerce_state(
+            "commerce.inventory.initialized",
+            current,
+            {
+                "state": {**current, "inventoryFoundation": opening},
+                "evidence": opening["commands"][-1]["payload"]["proof"],  # type: ignore[index]
+            },
+        )
+        request: dict[str, object] = {
+            "requestId": "ISSUE-LOCATION-001",
+            "sourceCommandDigest": canonical_digest({"plant": "issue-001"}),
+            "jobId": "JOB-LOCATION-001",
+            "materialId": "MAT-LOCATION-001",
+            "inputLotId": "INPUT-LOT-001",
+            "quantityMilli": 10_000,
+            "unit": "kg",
+        }
+        proof = action_proof(
+            "ACT-PRODUCTION-LOCATION-001", "2026-07-27T08:00:00.000Z"
+        )
+        candidate = deepcopy(initialized)
+        candidate["items"][0]["onHand"] = 8  # type: ignore[index]
+        candidate["movements"] = [production_issue_movement(proof, request)]
+        candidate["inventoryFoundation"] = production_issued_inventory(
+            initialized["inventoryFoundation"], proof, request
+        )
+        accepted = reduce_commerce_state(
+            "commerce.production_material.issued",
+            initialized,
+            {"state": candidate, "evidence": proof},
+        )
+        latest = accepted["inventoryFoundation"]["commands"][-1]["payload"]
+        self.assertEqual(latest["kind"], "production_issue")
+        self.assertEqual(
+            latest["id"], production_inventory_command_id("ISSUE-LOCATION-001")
+        )
+        self.assertEqual(
+            latest["allocations"],
+            [
+                {
+                    "stockUnitId": "LOT-SKU1-OPENING-001",
+                    "locationId": "LOC-MAIN",
+                    "quantity": 2,
+                }
+            ],
+        )
+        self.assertEqual(
+            shop_inventory_sku_totals(
+                accepted["inventoryFoundation"], ["SKU-1"]
+            ),
+            {"SKU-1": 8},
+        )
+        self.assertEqual(
+            shop_inventory_sku_available_to_promise(
+                accepted["inventoryFoundation"], ["SKU-1"]
+            ),
+            {"SKU-1": 8},
+        )
+
+        split_request = {**request, "requestId": "ISSUE-LOCATION-SPLIT"}
+        split_proof = action_proof(
+            "ACT-PRODUCTION-LOCATION-SPLIT", "2026-07-27T08:15:00.000Z"
+        )
+        deterministic = production_issued_inventory(
+            transferred_inventory(opening),
+            split_proof,
+            split_request,
+            stock_quantity=4,
+        )
+        validate_shop_inventory_state(deterministic, ["SKU-1"])
+        non_deterministic = production_issued_inventory(
+            transferred_inventory(opening),
+            split_proof,
+            split_request,
+            stock_quantity=4,
+            allocations=[
+                {
+                    "stockUnitId": "LOT-SKU1-OPENING-001",
+                    "locationId": "LOC-BRANCH",
+                    "quantity": 3,
+                },
+                {
+                    "stockUnitId": "LOT-SKU1-OPENING-001",
+                    "locationId": "LOC-MAIN",
+                    "quantity": 1,
+                },
+            ],
+        )
+        with self.assertRaisesRegex(
+            ShopInventoryValidationError, "deterministic available location stock"
+        ):
+            validate_shop_inventory_state(non_deterministic, ["SKU-1"])
+
+        aggregate_only = deepcopy(candidate)
+        aggregate_only["inventoryFoundation"] = initialized["inventoryFoundation"]
+        with self.assertRaisesRegex(TrialValidationError, "production issue location"):
+            reduce_commerce_state(
+                "commerce.production_material.issued",
+                initialized,
+                {"state": aggregate_only, "evidence": proof},
+            )
+
+        reserve_proof = action_proof(
+            "ACT-ORDER-RESERVE-PRODUCTION", "2026-07-27T08:30:00.000Z"
+        )
+        reserved = reserved_order_inventory(
+            opening,
+            reserve_proof,
+            order_id="ORD-LOCATION-PRODUCTION",
+            quantity=3,
+        )
+        over_issue_proof = action_proof(
+            "ACT-PRODUCTION-LOCATION-OVER", "2026-07-27T09:00:00.000Z"
+        )
+        over_issued = production_issued_inventory(
+            reserved,
+            over_issue_proof,
+            {**request, "requestId": "ISSUE-LOCATION-OVER"},
+            stock_quantity=8,
+        )
+        with self.assertRaisesRegex(
+            ShopInventoryValidationError, "cannot allocate|available"
+        ):
+            validate_shop_inventory_state(over_issued, ["SKU-1"])
 
     def test_order_allocation_reserve_release_and_fulfil_are_atomic(self) -> None:
         current = commerce_state()

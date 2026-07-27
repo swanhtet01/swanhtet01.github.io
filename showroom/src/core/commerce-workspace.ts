@@ -1,6 +1,7 @@
 import {
   countShopInventory,
   fulfilShopInventoryOrder,
+  issueShopInventoryToProduction,
   planShopInventoryOrderAllocation,
   projectShopInventory,
   receiveShopInventory,
@@ -928,6 +929,38 @@ function shopInventoryOrderActionMatches(
     const matches = foundation.commands.filter((command) => command.payload.kind === kind
       && command.payload.orderId === orderId
       && sameActionProof(command.payload.proof, proof))
+    return matches.length === 1
+  } catch {
+    return false
+  }
+}
+
+function shopInventoryProductionActionMatches(
+  foundation: ShopInventoryState,
+  request: CommerceProductionMaterialRequest,
+  sku: string,
+  stockQuantity: number,
+  conversionNote: string,
+  proof: CommerceActionProof,
+  catalogSkus: string[],
+) {
+  try {
+    projectShopInventory(foundation, catalogSkus)
+    const matches = foundation.commands.filter((command) => {
+      const payload = command.payload
+      return payload.kind === 'production_issue'
+        && payload.productionRequestId === request.requestId
+        && payload.productionCommandDigest === request.sourceCommandDigest
+        && payload.productionJobId === request.jobId
+        && payload.productionMaterialId === request.materialId
+        && payload.productionInputLotId === request.inputLotId
+        && payload.productionQuantityMilli === request.quantityMilli
+        && payload.productionUnit === request.unit
+        && payload.sku === sku
+        && payload.stockQuantity === stockQuantity
+        && payload.conversionNote === conversionNote
+        && sameActionProof(payload.proof, proof)
+    })
     return matches.length === 1
   } catch {
     return false
@@ -3180,8 +3213,17 @@ export function issueCommerceStockToProduction(
     && movement.productionUnit === checkedRequest.unit
     && movement.conversionNote === checkedConversionNote
   const replayMovement = current.movements.find((movement) => movement.actionId === proof.actionId)
-  if (replayMovement) return matchingMovement(replayMovement) && sameProof(replayMovement, proof) ? current : null
-  if (current.inventoryFoundation) return null
+  if (replayMovement) return matchingMovement(replayMovement)
+    && sameProof(replayMovement, proof)
+    && (!current.inventoryFoundation || shopInventoryProductionActionMatches(
+      current.inventoryFoundation,
+      checkedRequest,
+      checkedSku,
+      stockQuantity,
+      checkedConversionNote,
+      proof,
+      current.items.map((item) => item.sku).sort(),
+    )) ? current : null
   if (actionIdIsUsed(current, proof.actionId)
     || current.movements.some((movement) => movement.productionRequestId === checkedRequest.requestId)) return null
   const matchingItems = current.items.filter((candidate) => candidate.sku === checkedSku)
@@ -3189,6 +3231,24 @@ export function issueCommerceStockToProduction(
   if (!item) return null
   const nextBalance = safeBalance(item.onHand, -stockQuantity)
   if (nextBalance === null) return null
+  let inventoryFoundation = current.inventoryFoundation
+  if (inventoryFoundation) {
+    try {
+      if (!shopInventoryMatchesItems(inventoryFoundation, current.items)) return null
+      const locationResult = issueShopInventoryToProduction(inventoryFoundation, {
+        request: checkedRequest,
+        sku: checkedSku,
+        stockQuantity,
+        conversionNote: checkedConversionNote,
+        proof,
+        catalogSkus: current.items.map((candidate) => candidate.sku).sort(),
+        expectedHeadDigest: inventoryFoundation.headDigest,
+      })
+      inventoryFoundation = locationResult.state
+    } catch {
+      return null
+    }
+  }
   const movement = movementFor(proof, {
     kind: 'production_issue',
     sku: checkedSku,
@@ -3206,6 +3266,7 @@ export function issueCommerceStockToProduction(
     ...current,
     items: current.items.map((candidate) => candidate.sku === checkedSku ? { ...candidate, onHand: nextBalance } : candidate),
     movements: [movement, ...current.movements],
+    ...(inventoryFoundation ? { inventoryFoundation } : {}),
   })
 }
 

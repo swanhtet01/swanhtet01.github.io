@@ -5,6 +5,7 @@ import {
   type CommerceActionProof,
   type CommerceState,
 } from './commerce-workspace'
+import { planShopInventoryProductionAllocation, projectShopInventory } from './shop-inventory-foundation'
 import { pendingProductionMaterialHandoffs, type ProductionMaterialHandoff } from './production-material-handoff'
 import { loadPlantOrderWorkspace, type PlantOrderState } from './plant-order-foundation'
 import { loadManagedBootstrap, requireManagedSurfaceState, type ManagedIdentity } from './managed-trial'
@@ -25,6 +26,8 @@ type ShopProductionHandoffProps = {
 type IssueReview = {
   commandId: string
   conversionNote: string
+  expectedInventoryHeadDigest: string | null
+  locationPicks: string[]
   proof: CommerceActionProof
   request: ProductionMaterialHandoff
   sku: string
@@ -99,10 +102,32 @@ export function ShopProductionHandoff({ commerce, disabled, identity, onIssue }:
 
   const selectedItem = commerce.items.find((item) => item.sku === sku)
   const parsedQuantity = /^\d+$/.test(stockQuantity) ? Number(stockQuantity) : Number.NaN
-  const quantityValid = Boolean(selectedItem
+  const aggregateQuantityValid = Boolean(selectedItem
     && Number.isSafeInteger(parsedQuantity)
     && parsedQuantity > 0
     && parsedQuantity <= selectedItem.onHand)
+  let locationAllocationReady = !commerce.inventoryFoundation
+  let locationPicks: string[] = []
+  if (commerce.inventoryFoundation && aggregateQuantityValid) {
+    try {
+      const catalogSkus = commerce.items.map((item) => item.sku).sort()
+      const projection = projectShopInventory(commerce.inventoryFoundation, catalogSkus)
+      const allocations = planShopInventoryProductionAllocation(commerce.inventoryFoundation, {
+        sku,
+        stockQuantity: parsedQuantity,
+        catalogSkus,
+      })
+      locationPicks = allocations.map((allocation) => {
+        const location = projection.locations.find((candidate) => candidate.id === allocation.locationId)
+        const unit = projection.stockUnits.find((candidate) => candidate.id === allocation.stockUnitId)
+        return `${location?.name ?? allocation.locationId} / ${unit?.tracking ?? 'lot'} ${unit?.trackingCode ?? allocation.stockUnitId} x ${allocation.quantity}`
+      })
+      locationAllocationReady = locationPicks.length > 0
+    } catch {
+      locationAllocationReady = false
+    }
+  }
+  const quantityValid = aggregateQuantityValid && locationAllocationReady
   const open = openRequestId === request.requestId
 
   function begin() {
@@ -130,6 +155,8 @@ export function ShopProductionHandoff({ commerce, disabled, identity, onIssue }:
     setReview({
       commandId,
       conversionNote: conversionNote.trim(),
+      expectedInventoryHeadDigest: commerce.inventoryFoundation?.headDigest ?? null,
+      locationPicks,
       proof,
       request,
       sku,
@@ -147,14 +174,16 @@ export function ShopProductionHandoff({ commerce, disabled, identity, onIssue }:
         'commerce.production_material.issued',
         review.commandId,
         review.proof,
-        (current) => issueCommerceStockToProduction(
-          current,
-          review.request,
-          review.sku,
-          review.stockQuantity,
-          review.conversionNote,
-          review.proof,
-        ),
+        (current) => (current.inventoryFoundation?.headDigest ?? null) === review.expectedInventoryHeadDigest
+          ? issueCommerceStockToProduction(
+            current,
+            review.request,
+            review.sku,
+            review.stockQuantity,
+            review.conversionNote,
+            review.proof,
+          )
+          : null,
       )
       setReview(null)
       setOpenRequestId('')
@@ -175,8 +204,8 @@ export function ShopProductionHandoff({ commerce, disabled, identity, onIssue }:
       <label>Shop item<select disabled={disabled || busy || Boolean(review)} onChange={(event) => { setSku(event.target.value); setStockQuantity('1') }} required value={sku}><option value="">Choose stock</option>{commerce.items.map((item) => <option disabled={item.onHand < 1} key={item.sku} value={item.sku}>{item.name} · {item.onHand} available</option>)}</select></label>
       <label>Stock units to issue<input disabled={disabled || busy || Boolean(review) || !selectedItem} inputMode="numeric" max={selectedItem?.onHand ?? 0} min="1" onChange={(event) => setStockQuantity(event.target.value)} required step="1" type="number" value={stockQuantity} /></label>
       <label>Conversion basis<input disabled={disabled || busy || Boolean(review)} maxLength={240} onChange={(event) => setConversionNote(event.target.value)} placeholder="Example: 2 bags provide the reviewed 10 kg" required value={conversionNote} /></label>
-      {selectedItem ? <div className="stock-receipt-preview" role="status"><small>{request.requestId} → {request.jobId}</small><strong>{quantityValid ? `${selectedItem.onHand} → ${selectedItem.onHand - parsedQuantity} ${selectedItem.sku}` : 'Enter available whole stock units'}</strong></div> : null}
-      {review ? <div className="stock-receipt-preview" role="status"><small>Final review</small><strong>Issue {review.stockQuantity} {review.sku}; Plant quantity remains {formatPlantQuantity(review.request)}</strong></div> : null}
+      {selectedItem ? <div className="stock-receipt-preview" role="status"><small>{request.requestId} → {request.jobId}</small><strong>{quantityValid ? `${selectedItem.onHand} → ${selectedItem.onHand - parsedQuantity} ${selectedItem.sku}${locationPicks.length ? `; pick ${locationPicks.join('; ')}` : ''}` : commerce.inventoryFoundation ? 'Choose a quantity available in managed location stock' : 'Enter available whole stock units'}</strong></div> : null}
+      {review ? <div className="stock-receipt-preview" role="status"><small>Final review</small><strong>Issue {review.stockQuantity} {review.sku}; Plant quantity remains {formatPlantQuantity(review.request)}{review.locationPicks.length ? `; pick ${review.locationPicks.join('; ')}` : ''}</strong></div> : null}
       <div className="form-actions">
         <button className="core-button" disabled={busy} onClick={() => { setReview(null); setOpenRequestId(''); setNotice('') }} type="button">Cancel</button>
         {review ? <button className="core-button primary" disabled={disabled || busy} onClick={() => void confirm()} type="button">{busy ? 'Issuing…' : 'Confirm issue'}</button>

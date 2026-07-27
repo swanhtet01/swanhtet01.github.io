@@ -1287,6 +1287,8 @@ if (!shopInventorySource.includes("SHOP_INVENTORY_STATE_SCHEMA = 'supermega.shop
   || !shopInventorySource.includes('export function transferShopInventory')
   || !shopInventorySource.includes('export function receiveShopInventory')
   || !shopInventorySource.includes('export function countShopInventory')
+  || !shopInventorySource.includes('export function planShopInventoryProductionAllocation')
+  || !shopInventorySource.includes('export function issueShopInventoryToProduction')
   || !shopInventorySource.includes('export function reserveShopInventory')
   || !shopInventorySource.includes('export function releaseShopInventoryReservation')
   || !shopInventorySource.includes('export function fulfilShopInventoryReservation')
@@ -1299,6 +1301,7 @@ if (!coreSource.includes('<ShopInventoryFoundation')
   || !shopInventoryUiSource.includes('No supplier or accounting action')
   || !shopInventoryUiSource.includes('Review the exact source, destination, and quantity. Nothing has moved yet.')
   || !shopInventoryUiSource.includes('commerce.inventoryFoundation ?? createEmptyShopInventoryState()')
+  || !shopInventoryUiSource.includes('Boolean(state.revision && catalog.some')
   || !shopInventoryUiSource.includes("await onInventory(\n        'commerce.inventory.initialized'")
   || !shopInventoryUiSource.includes("await onInventory(\n        'commerce.inventory.transferred'")
   || shopInventoryUiSource.includes('loadShopInventoryWorkspace')
@@ -1327,7 +1330,7 @@ if (!commerceSource.includes('CommerceStockLocationCount')
   || !coreSource.includes('locationCount.expectedHeadDigest')
   || !managedCommerceRuntime.includes('location-managed stock count must append exactly one location count')
   || !managedCommerceRuntime.includes('shop_inventory_balances')
-  || !managedTrialStoreRuntime.includes('location_count_matches')
+  || !managedTrialStoreRuntime.includes('location_command_matches')
   || !shopInventoryPythonSource.includes('counted quantity cannot be below reserved stock')) fail('managed_location_stock_count_contract_missing')
 if (!plantOrderSource.includes("PLANT_ORDER_STATE_SCHEMA = 'supermega.plant.order_foundation.v1'")
   || !plantOrderSource.includes("PLANT_ORDER_PLAN_CONTRACT = 'supermega.plant.reviewed_plan.v1'")
@@ -1382,11 +1385,16 @@ if (!plantOrderUiSource.includes('managedState?: PlantOrderState | null')
   || !coreSource.includes('onManagedCommand={managedIdentity ? mutateProduction : undefined}')) fail('managed_plant_order_execution_contract_missing')
 if (!commerceSource.includes("'production_issue'")
   || !commerceSource.includes('export function issueCommerceStockToProduction')
+  || !commerceSource.includes('issueShopInventoryToProduction(inventoryFoundation')
   || !commerceSource.includes('productionCommandDigest')
   || !commerceSource.includes('Production material request ID')
   || !managedTrialSource.includes("'commerce.production_material.issued'")
   || !managedCommerceRuntime.includes('commerce.production_material.issued')
+  || !managedCommerceRuntime.includes('must append exactly one production issue location command')
   || !managedTrialStoreRuntime.includes('commerce.production_material.issued')
+  || !managedTrialStoreRuntime.includes('"commerce.production_material.issued": "production_issue"')
+  || !shopInventorySource.includes("kind: 'production_issue'")
+  || !shopInventoryPythonSource.includes('production issue allocations do not match deterministic available location stock')
   || !productionMaterialHandoffSource.includes('pendingProductionMaterialHandoffs')
   || !productionMaterialHandoffSource.includes("movement.kind === 'production_issue'")
   || !productionMaterialHandoffPython.includes('require_shop_issue_matches_plant')
@@ -1399,6 +1407,8 @@ if (!shopInventoryUiSource.includes("import { ShopProductionHandoff } from './Sh
   || !coreSource.includes('commerceState={relatedCommerce}')
   || !shopProductionHandoffUiSource.includes('Shop remains the only stock authority.')
   || !shopProductionHandoffUiSource.includes('Review the exact stock decrement. Nothing has been written yet.')
+  || !shopProductionHandoffUiSource.includes('expectedInventoryHeadDigest')
+  || !shopProductionHandoffUiSource.includes('locationPicks.join')
   || !plantOrderUiSource.includes('Await Shop issue')
   || !plantOrderUiSource.includes('Shop must issue every linked material request before operation progress')
   || !plantOrderUiSource.includes('Review in Shop')
@@ -2263,6 +2273,33 @@ async function verifyShopInventoryRuntime() {
       stockUnitId: 'LOT-SM1001-BATCH-C', sku: 'SM-1001', trackingCode: 'BATCH-C', locationId: 'LOC-MAIN', quantity: 1,
       proof: proof(4, 'receipt'), catalogSkus, expectedHeadDigest: transferred.state.headDigest,
     }), 'shop_inventory_stale_purchase_receipt_succeeded')
+    const splitProductionRequest = {
+      requestId: 'ISSUE-SPLIT-001',
+      sourceCommandDigest: `sha256:${'b'.repeat(64)}`,
+      jobId: 'JOB-SPLIT-001',
+      materialId: 'MAT-SPLIT-001',
+      inputLotId: 'INPUT-SPLIT-001',
+      quantityMilli: 5_000,
+      unit: 'pcs',
+    }
+    const splitProductionIssue = model.issueShopInventoryToProduction(received.state, {
+      request: splitProductionRequest,
+      sku: 'SM-1001',
+      stockQuantity: 5,
+      conversionNote: '5 Shop units provide the reviewed Plant material quantity.',
+      proof: proof(4, 'production-allocation'),
+      catalogSkus,
+      expectedHeadDigest: received.state.headDigest,
+    })
+    const splitAllocations = splitProductionIssue.state.commands.at(-1).payload.allocations
+    assert(splitAllocations.length === 2
+      && splitAllocations[0].stockUnitId === 'LOT-SM1001-BATCH-B'
+      && splitAllocations[0].locationId === 'LOC-BRANCH'
+      && splitAllocations[0].quantity === 4
+      && splitAllocations[1].stockUnitId === 'LOT-SM1001-BATCH-A'
+      && splitAllocations[1].locationId === 'LOC-MAIN'
+      && splitAllocations[1].quantity === 1,
+    'shop_inventory_production_issue_did_not_use_fewest_deterministic_lots')
 
     const commerce = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?shop-inventory-commerce-verify=${Date.now()}`)
     const managedOpening = model.applyShopInventoryImport(
@@ -2378,6 +2415,70 @@ async function verifyShopInventoryRuntime() {
       proof: proof(4, 'location-count-below-reserved'),
       catalogSkus: ['SKU-1'],
     }), 'managed_location_count_reduced_physical_below_reserved')
+    const locationProductionRequest = {
+      requestId: 'ISSUE-LOCATION-001',
+      sourceCommandDigest: `sha256:${'a'.repeat(64)}`,
+      jobId: 'JOB-LOCATION-001',
+      materialId: 'MAT-LOCATION-001',
+      inputLotId: 'INPUT-LOT-001',
+      quantityMilli: 10_000,
+      unit: 'kg',
+    }
+    const locationProductionProof = proof(2, 'production-issue')
+    const locationProductionIssued = commerce.issueCommerceStockToProduction(
+      managedBase,
+      locationProductionRequest,
+      'SKU-1',
+      2,
+      '2 Shop units provide the reviewed 10 kg Plant issue.',
+      locationProductionProof,
+    )
+    const locationProductionProjection = locationProductionIssued
+      && model.projectShopInventory(locationProductionIssued.inventoryFoundation, ['SKU-1'])
+    const locationProductionCommand = locationProductionIssued?.inventoryFoundation?.commands.at(-1)?.payload
+    assert(locationProductionIssued?.items[0].onHand === 8
+      && locationProductionCommand?.kind === 'production_issue'
+      && locationProductionCommand.id.startsWith('PIS-')
+      && locationProductionCommand.productionRequestId === locationProductionRequest.requestId
+      && locationProductionCommand.allocations.length === 1
+      && locationProductionCommand.allocations[0].stockUnitId === 'LOT-SKU1-OPENING-001'
+      && locationProductionCommand.allocations[0].locationId === 'LOC-MAIN'
+      && locationProductionCommand.allocations[0].quantity === 2
+      && locationProductionProjection?.metrics.totalOnHand === 8
+      && locationProductionProjection.metrics.totalReserved === 0
+      && locationProductionProjection.metrics.totalAvailableToPromise === 8
+      && locationProductionProjection.ledger.at(-1)?.kind === 'production-issue'
+      && locationProductionProjection.ledger.at(-1)?.referenceId === locationProductionRequest.requestId,
+    'managed_production_issue_did_not_consume_exact_location_stock')
+    assert(commerce.issueCommerceStockToProduction(
+      locationProductionIssued,
+      locationProductionRequest,
+      'SKU-1',
+      2,
+      '2 Shop units provide the reviewed 10 kg Plant issue.',
+      locationProductionProof,
+    ) === locationProductionIssued, 'managed_production_issue_retry_not_idempotent')
+    assert(commerce.issueCommerceStockToProduction(
+      locationReserved,
+      { ...locationProductionRequest, requestId: 'ISSUE-LOCATION-RESERVED' },
+      'SKU-1',
+      8,
+      '8 Shop units provide the reviewed Plant issue.',
+      proof(4, 'production-issue-reserved'),
+    ) === null, 'managed_production_issue_consumed_reserved_stock')
+    const forgedProductionAllocation = structuredClone(locationProductionIssued.inventoryFoundation)
+    forgedProductionAllocation.commands.at(-1).payload.allocations[0].locationId = 'LOC-BRANCH'
+    assertThrows(() => model.validateShopInventoryState(forgedProductionAllocation, ['SKU-1']),
+      'managed_production_issue_accepted_non_deterministic_location_allocation')
+    assertThrows(() => model.issueShopInventoryToProduction(managedOpening.state, {
+      request: { ...locationProductionRequest, requestId: 'ISSUE-LOCATION-STALE' },
+      sku: 'SKU-1',
+      stockQuantity: 2,
+      conversionNote: '2 Shop units provide the reviewed Plant issue.',
+      proof: proof(4, 'production-issue-stale'),
+      catalogSkus: ['SKU-1'],
+      expectedHeadDigest: model.EMPTY_SHOP_INVENTORY_DIGEST,
+    }), 'managed_production_issue_stale_head_succeeded')
     const locationReleaseProof = proof(3, 'order-release')
     const locationCancelled = commerce.cancelCommerceOrder(locationReserved, locationOrder.id, locationReleaseProof)
     const locationCancelledProjection = locationCancelled && model.projectShopInventory(locationCancelled.inventoryFoundation, ['SKU-1'])

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 import unittest
+from unittest.mock import patch
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
@@ -31,6 +32,11 @@ from tests.test_production_runtime import (
     action_evidence,
     planned_order_execution,
     starting_workspace,
+)
+from tests.test_shop_inventory_runtime import (
+    opening_inventory,
+    production_issue_movement,
+    production_issued_inventory,
 )
 
 
@@ -212,6 +218,27 @@ class ProductionMaterialHandoffTests(unittest.TestCase):
             expected_version=0,
             payload={"state": catalog_state(), "evidence": commerce_evidence},
         )
+        opening = opening_inventory(
+            action_evidence(
+                "ACT-HANDOFF-INVENTORY-INIT",
+                captured_at="2026-07-24T09:55:00.000Z",
+            )
+        )
+        with patch(
+            "supermega_runtime.trial_store._utc_now",
+            return_value="2026-07-24T09:55:00+00:00",
+        ):
+            located_commerce = store.apply_command(
+                principal,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.inventory.initialized",
+                expected_version=commerce_result.version,
+                payload={
+                    "state": {**commerce_result.state, "inventoryFoundation": opening},
+                    "evidence": opening["commands"][-1]["payload"]["proof"],  # type: ignore[index]
+                },
+            )
 
         operation_evidence = action_evidence(
             "ACT-HANDOFF-API-OPERATION",
@@ -251,8 +278,19 @@ class ProductionMaterialHandoffTests(unittest.TestCase):
             )
 
             request = production_material_requests(production_result.state)[0]
-            next_commerce = issued_commerce(request)
-            next_commerce["movements"][0]["actor"] = principal.actor_id  # type: ignore[index]
+            issue_proof = action_evidence(
+                "ACT-WAREHOUSE-ISSUE-001",
+                captured_at="2099-01-01T00:00:00.000Z",
+                actor="fabricated-warehouse-operator",
+            )
+            next_commerce = deepcopy(located_commerce.state)
+            next_commerce["items"][0]["onHand"] = 8  # type: ignore[index]
+            next_commerce["movements"] = [
+                production_issue_movement(issue_proof, request)
+            ]
+            next_commerce["inventoryFoundation"] = production_issued_inventory(
+                located_commerce.state["inventoryFoundation"], issue_proof, request
+            )
             issue_evidence = {
                 "actionId": next_commerce["movements"][0]["actionId"],  # type: ignore[index]
                 "capturedAt": next_commerce["movements"][0]["createdAt"],  # type: ignore[index]
@@ -260,21 +298,48 @@ class ProductionMaterialHandoffTests(unittest.TestCase):
                 "reason": next_commerce["movements"][0]["reason"],  # type: ignore[index]
                 "evidenceReference": next_commerce["movements"][0]["evidenceReference"],  # type: ignore[index]
             }
-            issued = client.post(
-                "/api/trial/v1/commands",
-                json={
-                    "command_id": str(uuid4()),
-                    "surface": "commerce",
-                    "event_type": "commerce.production_material.issued",
-                    "expected_version": commerce_result.version,
-                    "payload": {
-                        "state": next_commerce,
-                        "evidence": issue_evidence,
-                    },
+            issue_command_id = str(uuid4())
+            issue_body = {
+                "command_id": issue_command_id,
+                "surface": "commerce",
+                "event_type": "commerce.production_material.issued",
+                "expected_version": located_commerce.version,
+                "payload": {
+                    "state": next_commerce,
+                    "evidence": issue_evidence,
                 },
-            )
+            }
+            with patch(
+                "supermega_runtime.trial_store._utc_now",
+                return_value="2026-07-24T10:00:00+00:00",
+            ):
+                issued = client.post(
+                    "/api/trial/v1/commands",
+                    json=issue_body,
+                )
             self.assertEqual(issued.status_code, 200)
-            self.assertEqual(issued.json()["result"]["version"], 2)
+            self.assertEqual(issued.json()["result"]["version"], 3)
+            retained = issued.json()["result"]["state"]
+            self.assertEqual(retained["movements"][0]["actor"], principal.actor_id)
+            self.assertEqual(
+                retained["inventoryFoundation"]["commands"][-1]["payload"]["proof"][
+                    "actor"
+                ],
+                principal.actor_id,
+            )
+            self.assertEqual(
+                retained["inventoryFoundation"]["commands"][-1]["payload"]["proof"][
+                    "capturedAt"
+                ],
+                "2026-07-24T10:00:00+00:00",
+            )
+            self.assertEqual(
+                retained["inventoryFoundation"]["commands"][-1]["payload"]["kind"],
+                "production_issue",
+            )
+            replay = client.post("/api/trial/v1/commands", json=issue_body)
+            self.assertEqual(replay.status_code, 200)
+            self.assertTrue(replay.json()["result"]["idempotent_replay"])
 
             accepted = client.post("/api/trial/v1/commands", json=operation_body)
             self.assertEqual(accepted.status_code, 200)

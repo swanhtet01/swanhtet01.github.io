@@ -2931,6 +2931,16 @@ def _order_inventory_command_id(prefix: str, order_id: str) -> str:
     return f"{prefix}-{identity[7:39].upper()}"
 
 
+def _production_inventory_command_id(request_id: str) -> str:
+    identity = _order_inventory_digest(
+        {
+            "contract": "supermega.shop.production-issue-inventory-command.v1",
+            "requestId": request_id,
+        }
+    )
+    return f"PIS-{identity[7:39].upper()}"
+
+
 def _order_inventory_transition(
     current: Mapping[str, Any],
     next_state: Mapping[str, Any],
@@ -3847,14 +3857,145 @@ def _validate_counted(
         )
 
 
+def _validate_production_inventory_transition(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+    movement: Mapping[str, Any],
+) -> None:
+    current_foundation = _inventory_foundation(current)
+    next_foundation = _inventory_foundation(next_state)
+    if current_foundation is None:
+        if next_foundation is not None:
+            raise TrialValidationError(
+                "a production issue cannot create location inventory implicitly."
+            )
+        return
+    if next_foundation is None:
+        raise TrialValidationError(
+            "a production issue cannot remove the location inventory record."
+        )
+    catalog_skus = [str(item["sku"]) for item in current["items"]]
+    try:
+        before = validate_shop_inventory_state(current_foundation, catalog_skus)
+        after = validate_shop_inventory_state(next_foundation, catalog_skus)
+        before_physical = shop_inventory_sku_totals(before, catalog_skus)
+        after_physical = shop_inventory_sku_totals(after, catalog_skus)
+        before_available = shop_inventory_sku_available_to_promise(
+            before, catalog_skus
+        )
+        after_available = shop_inventory_sku_available_to_promise(
+            after, catalog_skus
+        )
+        available_balances = shop_inventory_available_balances(before, catalog_skus)
+    except ShopInventoryValidationError as exc:
+        raise TrialValidationError(str(exc)) from exc
+    if (
+        len(after["commands"]) != len(before["commands"]) + 1
+        or after["commands"][:-1] != before["commands"]
+        or after["commands"][-1]["payload"].get("kind") != "production_issue"
+    ):
+        raise TrialValidationError(
+            "the Plant request must append exactly one production issue location command."
+        )
+    command = after["commands"][-1]["payload"]
+    request_id = str(movement["productionRequestId"])
+    if (
+        command.get("id") != _production_inventory_command_id(request_id)
+        or command.get("productionRequestId") != request_id
+        or command.get("productionCommandDigest")
+        != movement["productionCommandDigest"]
+        or command.get("productionJobId") != movement["productionJobId"]
+        or command.get("productionMaterialId") != movement["productionMaterialId"]
+        or command.get("productionInputLotId") != movement["productionInputLotId"]
+        or command.get("productionQuantityMilli")
+        != movement["productionQuantityMilli"]
+        or command.get("productionUnit") != movement["productionUnit"]
+        or command.get("sku") != movement["sku"]
+        or command.get("stockQuantity") != -movement["quantityDelta"]
+        or command.get("conversionNote") != movement["conversionNote"]
+        or any(
+            command["proof"].get(proof_field) != movement[movement_field]
+            for proof_field, movement_field in (
+                ("actionId", "actionId"),
+                ("capturedAt", "createdAt"),
+                ("actor", "actor"),
+                ("reason", "reason"),
+                ("evidenceReference", "evidenceReference"),
+            )
+        )
+    ):
+        raise TrialValidationError(
+            "the production location command must match the exact Shop and Plant evidence."
+        )
+    remaining = int(command["stockQuantity"])
+    expected_allocations: list[dict[str, Any]] = []
+    candidates = sorted(
+        (
+            balance
+            for balance in available_balances
+            if balance["sku"] == movement["sku"]
+            and balance["availableToPromise"] > 0
+        ),
+        key=lambda balance: (
+            -int(balance["availableToPromise"]),
+            f"{balance['locationId']}|{balance['stockUnitId']}",
+        ),
+    )
+    for balance in candidates:
+        if remaining == 0:
+            break
+        allocated = min(remaining, int(balance["availableToPromise"]))
+        expected_allocations.append(
+            {
+                "stockUnitId": balance["stockUnitId"],
+                "locationId": balance["locationId"],
+                "quantity": allocated,
+            }
+        )
+        remaining -= allocated
+    if remaining:
+        raise TrialValidationError(
+            "location stock cannot allocate the complete Plant material issue."
+        )
+    expected_allocations.sort(
+        key=lambda allocation: (
+            f"{allocation['locationId']}|{allocation['stockUnitId']}"
+        )
+    )
+    if command.get("allocations") != expected_allocations:
+        raise TrialValidationError(
+            "the Plant material issue must use deterministic available location stock."
+        )
+
+    def decreased(source: Mapping[str, int]) -> dict[str, int]:
+        retained = dict(source)
+        next_quantity = retained.get(str(movement["sku"]), 0) + int(
+            movement["quantityDelta"]
+        )
+        if next_quantity < 0:
+            raise TrialValidationError(
+                "the Plant material issue exceeds location stock."
+            )
+        if next_quantity:
+            retained[str(movement["sku"])] = next_quantity
+        else:
+            retained.pop(str(movement["sku"]), None)
+        return retained
+
+    if after_physical != decreased(before_physical):
+        raise TrialValidationError(
+            "the Plant material issue must consume exact physical location stock."
+        )
+    if after_available != decreased(before_available):
+        raise TrialValidationError(
+            "the Plant material issue must reduce exact location available-to-promise."
+        )
+
+
 def _validate_production_material_issued(
     current: Mapping[str, Any],
     next_state: Mapping[str, Any],
 ) -> None:
-    if _inventory_foundation(current) is not None:
-        raise TrialValidationError(
-            "location-managed production issues require an allocated stock unit."
-        )
     _require_unchanged(current, next_state, "orders", "closes")
     _require_website_intakes_unchanged(current, next_state)
     _require_storefront_requests_unchanged(current, next_state)
@@ -3876,6 +4017,7 @@ def _validate_production_material_issued(
         raise TrialValidationError(
             "production material issue requires one attributable negative stock movement."
         )
+    _validate_production_inventory_transition(current, next_state, movement)
     before_item, after_item = _one_changed(
         current["items"], next_state["items"], "items"
     )
@@ -4409,6 +4551,7 @@ def reduce_commerce_state(
         "commerce.inventory.initialized",
         "commerce.inventory.transferred",
         "commerce.stock.counted",
+        "commerce.production_material.issued",
         "commerce.purchase_order.received",
         "commerce.order.created",
         "commerce.order.cancelled",

@@ -32,6 +32,21 @@ export type ShopInventoryOrderAllocation = {
   locationId: string
   quantity: number
 }
+export type ShopInventoryProductionUnit = 'kg' | 'g' | 'l' | 'ml' | 'pcs' | 'pack' | 'bag' | 'roll' | 'sheet' | 'm' | 'cm'
+export type ShopInventoryProductionRequest = {
+  requestId: string
+  sourceCommandDigest: string
+  jobId: string
+  materialId: string
+  inputLotId: string
+  quantityMilli: number
+  unit: ShopInventoryProductionUnit
+}
+export type ShopInventoryProductionAllocation = {
+  stockUnitId: string
+  locationId: string
+  quantity: number
+}
 export type ShopInventoryImportPackage = {
   contract: typeof SHOP_INVENTORY_IMPORT_CONTRACT
   importId: string
@@ -50,6 +65,7 @@ export type ShopInventoryCommandPayload =
   | { kind: 'transfer'; id: string; stockUnitId: string; fromLocationId: string; toLocationId: string; quantity: number; proof: ShopInventoryProof }
   | { kind: 'receipt'; id: string; purchaseOrderId: string; stockUnitId: string; sku: string; trackingCode: string; locationId: string; quantity: number; proof: ShopInventoryProof }
   | { kind: 'count'; id: string; stockUnitId: string; locationId: string; expectedQuantity: number; countedQuantity: number; proof: ShopInventoryProof }
+  | { kind: 'production_issue'; id: string; productionRequestId: string; productionCommandDigest: string; productionJobId: string; productionMaterialId: string; productionInputLotId: string; productionQuantityMilli: number; productionUnit: ShopInventoryProductionUnit; sku: string; stockQuantity: number; conversionNote: string; allocations: ShopInventoryProductionAllocation[]; proof: ShopInventoryProof }
   | { kind: 'reserve'; id: string; clientId: string; stockUnitId: string; locationId: string; quantity: number; proof: ShopInventoryProof }
   | { kind: 'release' | 'fulfil'; id: string; reservationId: string; proof: ShopInventoryProof }
   | { kind: 'order_reserve'; id: string; orderId: string; customerReference: string; allocations: ShopInventoryOrderAllocation[]; proof: ShopInventoryProof }
@@ -109,7 +125,8 @@ export type ShopInventoryProjection = {
 const digestPattern = /^sha256:[0-9a-f]{64}$/
 const businessIdPattern = /^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+$/
 const timestampPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/
-const commandKinds = new Set(['import', 'transfer', 'receipt', 'count', 'reserve', 'release', 'fulfil', 'order_reserve', 'order_release', 'order_fulfil'])
+const commandKinds = new Set(['import', 'transfer', 'receipt', 'count', 'production_issue', 'reserve', 'release', 'fulfil', 'order_reserve', 'order_release', 'order_fulfil'])
+const productionUnits = new Set<ShopInventoryProductionUnit>(['kg', 'g', 'l', 'ml', 'pcs', 'pack', 'bag', 'roll', 'sheet', 'm', 'cm'])
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -382,6 +399,22 @@ function orderAllocations(value: unknown, field: string, catalog: string[]) {
   return rows
 }
 
+function productionAllocations(value: unknown, field: string) {
+  const rows = array(value, field, 1, 200).map((candidate, index): ShopInventoryProductionAllocation => {
+    const rowField = `${field}[${index}]`
+    const row = exact(candidate, rowField, ['stockUnitId', 'locationId', 'quantity'])
+    return {
+      stockUnitId: text(row.stockUnitId, `${rowField}.stockUnitId`, 80),
+      locationId: identifier(row.locationId, `${rowField}.locationId`, 'LOC'),
+      quantity: quantity(row.quantity, `${rowField}.quantity`, 1),
+    }
+  })
+  const keys = rows.map((row) => `${row.locationId}|${row.stockUnitId}`)
+  unique(keys, field)
+  sorted(keys, field)
+  return rows
+}
+
 function commandPayload(value: unknown, field: string, catalog: string[]): ShopInventoryCommandPayload {
   if (!isRecord(value) || typeof value.kind !== 'string' || !commandKinds.has(value.kind)) throw new Error(`${field}.kind is unsupported.`)
   if (value.kind === 'import') {
@@ -431,6 +464,40 @@ function commandPayload(value: unknown, field: string, catalog: string[]): ShopI
       locationId: identifier(source.locationId, `${field}.locationId`, 'LOC'),
       expectedQuantity: quantity(source.expectedQuantity, `${field}.expectedQuantity`),
       countedQuantity: quantity(source.countedQuantity, `${field}.countedQuantity`),
+      proof: proof(source.proof, `${field}.proof`),
+    }
+  }
+  if (value.kind === 'production_issue') {
+    const source = exact(value, field, [
+      'kind', 'id', 'productionRequestId', 'productionCommandDigest', 'productionJobId', 'productionMaterialId',
+      'productionInputLotId', 'productionQuantityMilli', 'productionUnit', 'sku', 'stockQuantity',
+      'conversionNote', 'allocations', 'proof',
+    ])
+    const productionRequestId = text(source.productionRequestId, `${field}.productionRequestId`, 80)
+    const id = identifier(source.id, `${field}.id`, 'PIS')
+    if (id !== inventoryProductionCommandId(productionRequestId)) throw new Error(`${field}.id is not deterministic for its Plant request.`)
+    const sku = text(source.sku, `${field}.sku`, 80)
+    if (!catalog.includes(sku)) throw new Error(`${field}.sku is not present in the trusted Shop catalog.`)
+    const productionUnit = text(source.productionUnit, `${field}.productionUnit`, 12) as ShopInventoryProductionUnit
+    if (!productionUnits.has(productionUnit)) throw new Error(`${field}.productionUnit is unsupported.`)
+    const stockQuantity = quantity(source.stockQuantity, `${field}.stockQuantity`, 1)
+    const allocations = productionAllocations(source.allocations, `${field}.allocations`)
+    const allocated = allocations.reduce((total, allocation) => total + allocation.quantity, 0)
+    if (!Number.isSafeInteger(allocated) || allocated !== stockQuantity) throw new Error(`${field}.allocations must equal the issued Shop quantity.`)
+    return {
+      kind: 'production_issue',
+      id,
+      productionRequestId,
+      productionCommandDigest: digest(source.productionCommandDigest, `${field}.productionCommandDigest`),
+      productionJobId: text(source.productionJobId, `${field}.productionJobId`, 80),
+      productionMaterialId: text(source.productionMaterialId, `${field}.productionMaterialId`, 80),
+      productionInputLotId: text(source.productionInputLotId, `${field}.productionInputLotId`, 80),
+      productionQuantityMilli: quantity(source.productionQuantityMilli, `${field}.productionQuantityMilli`, 1),
+      productionUnit,
+      sku,
+      stockQuantity,
+      conversionNote: text(source.conversionNote, `${field}.conversionNote`, 240),
+      allocations,
       proof: proof(source.proof, `${field}.proof`),
     }
   }
@@ -510,6 +577,10 @@ function ledgerEvent(input: {
   customerReference?: string
   expectedQuantity?: number
   countedQuantity?: number
+  productionRequestId?: string
+  productionJobId?: string
+  productionMaterialId?: string
+  productionInputLotId?: string
 }) {
   const record: Record<string, unknown> = {
     id: input.id,
@@ -533,7 +604,34 @@ function ledgerEvent(input: {
   if (input.customerReference !== undefined) record.customerReference = input.customerReference
   if (input.expectedQuantity !== undefined) record.expectedQuantity = input.expectedQuantity
   if (input.countedQuantity !== undefined) record.countedQuantity = input.countedQuantity
+  if (input.productionRequestId !== undefined) record.productionRequestId = input.productionRequestId
+  if (input.productionJobId !== undefined) record.productionJobId = input.productionJobId
+  if (input.productionMaterialId !== undefined) record.productionMaterialId = input.productionMaterialId
+  if (input.productionInputLotId !== undefined) record.productionInputLotId = input.productionInputLotId
   return record
+}
+
+function planProductionAllocationRows(
+  candidates: Array<{ stockUnitId: string; locationId: string; availableToPromise: number }>,
+  stockQuantity: number,
+) {
+  let remaining = stockQuantity
+  const allocations: ShopInventoryProductionAllocation[] = []
+  const ranked = [...candidates]
+    .filter((candidate) => candidate.availableToPromise > 0)
+    .sort((left, right) => right.availableToPromise - left.availableToPromise
+      || compareCanonicalText(`${left.locationId}|${left.stockUnitId}`, `${right.locationId}|${right.stockUnitId}`))
+  for (const candidate of ranked) {
+    if (remaining === 0) break
+    const allocated = Math.min(remaining, candidate.availableToPromise)
+    allocations.push({ stockUnitId: candidate.stockUnitId, locationId: candidate.locationId, quantity: allocated })
+    remaining -= allocated
+  }
+  if (remaining !== 0) throw new Error(`Location stock cannot allocate ${stockQuantity} Shop units for the Plant request.`)
+  return allocations.sort((left, right) => compareCanonicalText(
+    `${left.locationId}|${left.stockUnitId}`,
+    `${right.locationId}|${right.stockUnitId}`,
+  ))
 }
 
 function replayCommands(commands: ShopInventoryCommandPayload[]) {
@@ -634,6 +732,46 @@ function replayCommands(commands: ShopInventoryCommandPayload[]) {
         locationId: command.locationId, onHandDelta: delta, reservedDelta: 0, referenceId: command.id,
         expectedQuantity: command.expectedQuantity, countedQuantity: command.countedQuantity,
       }))
+      return
+    }
+    if (command.kind === 'production_issue') {
+      const candidates = [...balances.entries()].flatMap(([key, balance]) => {
+        const [candidateStockUnitId, candidateLocationId] = key.split('\u0000')
+        const unit = stockUnits.get(candidateStockUnitId)
+        if (!unit || unit.sku !== command.sku) return []
+        return [{
+          stockUnitId: candidateStockUnitId,
+          locationId: candidateLocationId,
+          availableToPromise: balance.onHand - balance.reserved,
+        }]
+      })
+      const expectedAllocations = planProductionAllocationRows(candidates, command.stockQuantity)
+      if (canonicalJson(expectedAllocations) !== canonicalJson(command.allocations)) {
+        throw new Error(`${field}.allocations do not match deterministic available location stock.`)
+      }
+      command.allocations.forEach((allocation, allocationIndex) => {
+        const allocationField = `${field}.allocations[${allocationIndex}]`
+        const unit = stockUnits.get(allocation.stockUnitId)
+        if (!unit || unit.sku !== command.sku) throw new Error(`${allocationField}.stockUnitId does not match the issued SKU.`)
+        if (!locations.has(allocation.locationId)) throw new Error(`${allocationField}.locationId is unknown.`)
+        const current = currentBalance(allocation.stockUnitId, allocation.locationId)
+        if (current.onHand - current.reserved < allocation.quantity) throw new Error(`${allocationField} exceeds available-to-promise stock.`)
+        applyDelta(allocation.stockUnitId, allocation.locationId, -allocation.quantity, 0, allocationField)
+        ledger.push(ledgerEvent({
+          id: `LED-${command.id}-PRODUCTION-${allocationIndex + 1}`,
+          kind: 'production-issue',
+          command,
+          stockUnitId: allocation.stockUnitId,
+          locationId: allocation.locationId,
+          onHandDelta: -allocation.quantity,
+          reservedDelta: 0,
+          referenceId: command.productionRequestId,
+          productionRequestId: command.productionRequestId,
+          productionJobId: command.productionJobId,
+          productionMaterialId: command.productionMaterialId,
+          productionInputLotId: command.productionInputLotId,
+        }))
+      })
       return
     }
     if (command.kind === 'order_reserve') {
@@ -889,6 +1027,81 @@ export function countShopInventory(state: unknown, input: {
     expectedQuantity: input.expectedQuantity, countedQuantity: input.countedQuantity,
     proof: proof(input.proof, 'proof'),
   }, input.catalogSkus, input.expectedHeadDigest)
+}
+
+function inventoryProductionCommandId(requestId: string) {
+  const identity = canonicalDigest({ contract: 'supermega.shop.production-issue-inventory-command.v1', requestId })
+  return `PIS-${identity.slice(7, 39).toUpperCase()}`
+}
+
+export function planShopInventoryProductionAllocation(state: unknown, input: {
+  sku: unknown
+  stockQuantity: unknown
+  catalogSkus: unknown
+}) {
+  const catalog = catalogSkus(input.catalogSkus)
+  const sku = text(input.sku, 'production allocation.sku', 80)
+  if (!catalog.includes(sku)) throw new Error('The production issue SKU is not present in the trusted Shop catalog.')
+  const stockQuantity = quantity(input.stockQuantity, 'production allocation.stockQuantity', 1)
+  const projection = projectShopInventory(state, catalog)
+  return canonicalCopy(planProductionAllocationRows(
+    projection.balances
+      .filter((balance) => balance.sku === sku)
+      .map((balance) => ({
+        stockUnitId: balance.stockUnitId,
+        locationId: balance.locationId,
+        availableToPromise: balance.availableToPromise,
+      })),
+    stockQuantity,
+  ))
+}
+
+export function issueShopInventoryToProduction(state: unknown, input: {
+  request: ShopInventoryProductionRequest
+  sku: unknown
+  stockQuantity: unknown
+  conversionNote: unknown
+  proof: unknown
+  catalogSkus: unknown
+  expectedHeadDigest: unknown
+}) {
+  const catalog = catalogSkus(input.catalogSkus)
+  const current = validateShopInventoryState(state, catalog)
+  const request: ShopInventoryProductionRequest = {
+    requestId: text(input.request.requestId, 'production issue.requestId', 80),
+    sourceCommandDigest: digest(input.request.sourceCommandDigest, 'production issue.sourceCommandDigest'),
+    jobId: text(input.request.jobId, 'production issue.jobId', 80),
+    materialId: text(input.request.materialId, 'production issue.materialId', 80),
+    inputLotId: text(input.request.inputLotId, 'production issue.inputLotId', 80),
+    quantityMilli: quantity(input.request.quantityMilli, 'production issue.quantityMilli', 1),
+    unit: text(input.request.unit, 'production issue.unit', 12) as ShopInventoryProductionUnit,
+  }
+  if (!productionUnits.has(request.unit)) throw new Error('The production issue unit is unsupported.')
+  const sku = text(input.sku, 'production issue.sku', 80)
+  if (!catalog.includes(sku)) throw new Error('The production issue SKU is not present in the trusted Shop catalog.')
+  const stockQuantity = quantity(input.stockQuantity, 'production issue.stockQuantity', 1)
+  const conversionNote = text(input.conversionNote, 'production issue.conversionNote', 240)
+  const commandId = inventoryProductionCommandId(request.requestId)
+  const retained = current.commands.find((command) => command.payload.id === commandId)?.payload
+  const allocations = retained?.kind === 'production_issue'
+    ? retained.allocations
+    : planShopInventoryProductionAllocation(current, { sku, stockQuantity, catalogSkus: catalog })
+  return appendCommand(current, {
+    kind: 'production_issue',
+    id: commandId,
+    productionRequestId: request.requestId,
+    productionCommandDigest: request.sourceCommandDigest,
+    productionJobId: request.jobId,
+    productionMaterialId: request.materialId,
+    productionInputLotId: request.inputLotId,
+    productionQuantityMilli: request.quantityMilli,
+    productionUnit: request.unit,
+    sku,
+    stockQuantity,
+    conversionNote,
+    allocations,
+    proof: proof(input.proof, 'proof'),
+  }, catalog, input.expectedHeadDigest)
 }
 
 function inventoryOrderCommandId(prefix: 'ORS' | 'ORL' | 'ORF', orderId: string) {
