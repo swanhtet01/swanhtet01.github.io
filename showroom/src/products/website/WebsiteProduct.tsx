@@ -111,10 +111,6 @@ function TrialReadyWorkspace({
             <span aria-hidden="true">2</span>
             <div><strong>Download</strong><p>Get a standalone HTML website with your ready pages.</p></div>
           </li>
-          <li>
-            <span aria-hidden="true">3</span>
-            <div><strong>Go live when ready</strong><p>Use Request workspace above for managed hosting and a domain.</p></div>
-          </li>
         </ol>
 
         <div className="website-trial-ready-boundary" role="note">
