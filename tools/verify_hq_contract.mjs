@@ -21,7 +21,7 @@ import {
 } from '../kernel/gateway.mjs'
 
 const root = resolve(import.meta.dirname, '..')
-const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, packageText, storageAuditHandoff] = await Promise.all([
+const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, packageText, storageAuditHandoff, hqLiveStateVerifier] = await Promise.all([
   readFile(resolve(root, 'hq', 'README.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'NOW.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'CODEX-PRODUCT-QA-BRIEF.md'), 'utf8'),
@@ -38,6 +38,7 @@ const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, wo
   readFile(resolve(root, 'tools', 'audit_ally_runtime.ps1'), 'utf8'),
   readFile(resolve(root, 'package.json'), 'utf8'),
   readFile(resolve(root, 'hq', 'pilots', 'private-storage-privacy-audit.md'), 'utf8'),
+  readFile(resolve(root, 'tools', 'verify_hq_live_state.mjs'), 'utf8'),
 ])
 
 const manifest = JSON.parse(manifestText)
@@ -224,8 +225,8 @@ requireContract('agent roster consolidation is recorded',
   && now.includes('no duplicate dev server or loaded local model')
   && now.includes('Idle Ollama hosts were stopped')
   && now.includes('YTF identities cannot render in core operations')
-  && now.includes('Hosted scheduling is dormant with zero registered crons')
-  && now.includes('flag-only, preview, stale, incomplete, or tampered attempts stop before worker invocation')
+  && now.includes('Hosted scheduling remains deliberately dormant')
+  && now.includes('flag-only, preview, stale, incomplete, or tampered activation attempts stop before worker invocation')
   && now.includes('Each CEO cycle selects at most one HQ-authorized outcome')
   && now.includes('Storage privacy now has a six-request owner-confirmed verifier')
   && now.includes('zero-network configuration preflight')
@@ -356,7 +357,7 @@ requireContract('accepted core checkpoints lead directly to real work',
   && now.includes('Plant Jobs persists managed BOM/routing, WIP, minutes')
   && now.includes('operation/output requires exact authenticated Shop issue evidence')
   && now.includes('one manifest-backed smart import')
-  && now.includes('Product checkpoint `3cd4825` is on a clean fast-forward descendant')
+  && now.includes('PR #260 merged with passing SuperMega App CI and GitGuardian checks')
   && now.includes('Shop Stock has one Commerce authority')
   && now.includes('Orders and Website conversions reserve deterministic location/lots')
   && now.includes('sellable returns restore the exact fulfilled location/lot')
@@ -368,7 +369,7 @@ requireContract('release reconciliation is current and discoverable',
   workboard.includes('| OPS-006 | Release / Codex integrator | done-local |')
   && workboard.includes('strict fast-forward descendant of open draft PR #258 head `338b6fd`')
   && workboard.includes('release-reconciliation-2026-07-26.md')
-  && now.includes('remote checks exclude the local delta'))
+  && now.includes('Both `supermega.dev` and `app.supermega.dev` serve exact commit `55208da2`'))
 requireContract('release reconciliation binds exact Git and Vercel evidence',
   releaseReconciliation.includes('Audited implementation checkpoint: `b67db9422b523df0c1707f8dc39082ffa1c7a8dd`')
   && releaseReconciliation.includes('Live `main`: `6885c3201d523d42d176c3dcd91de28dc1e17f6f`')
@@ -540,6 +541,26 @@ requireContract('Ally runtime audit is read-only and bounded',
   && packageText.includes('"audit:ally"')
   && packageText.includes('"audit:ally:self-test"')
   && !/\b(?:Stop-Process|Start-Process|taskkill|kill|Remove-Item|EmptyWorkingSet|SetProcessWorkingSetSize)\b/i.test(allyAuditText))
+
+requireContract('live HQ state is machine-verifiable and read-only',
+  now.includes('Live state contract: `supermega.hq-live-state.v1`')
+  && /^Live release commit: `[0-9a-f]{40}`$/m.test(now)
+  && now.includes('Live operating mode: `isolated_demo`')
+  && now.includes('Live scheduler status: `degraded`')
+  && now.includes('Live scheduler configured: `false`')
+  && now.includes('Live managed persistence ready: `false`')
+  && now.includes('Live security ready: `false`')
+  && hqLiveStateVerifier.includes("const CONTRACT = 'supermega.hq-live-state.v1'")
+  && hqLiveStateVerifier.includes("const APP_ORIGIN = 'https://app.supermega.dev'")
+  && hqLiveStateVerifier.includes("const PUBLIC_ORIGIN = 'https://supermega.dev'")
+  && hqLiveStateVerifier.includes("fetchJson(`${APP_ORIGIN}/api/cloud-autonomy/status`)")
+  && hqLiveStateVerifier.includes("redirect: 'error'")
+  && hqLiveStateVerifier.includes("requireCheck('snapshot_stale'")
+  && hqLiveStateVerifier.includes("requireCheck('capacity_not_scale_to_zero'")
+  && hqLiveStateVerifier.includes("requireCheck('registered_specialists_consume_compute'")
+  && !/\b(?:writeFile|appendFile|unlink|rm|POST|PUT|PATCH|DELETE)\b/.test(hqLiveStateVerifier)
+  && packageText.includes('"hq:verify:live"')
+  && packageText.includes('"hq:verify:live:self-test"'))
 
 for (const forbidden of ['Yangon Tyre', 'ytf.supermega.dev', 'pos.supermega.dev', 'twelve product']) {
   requireContract(`retired HQ context absent: ${forbidden}`,

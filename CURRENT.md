@@ -18,10 +18,10 @@ AI assistance may prepare work inside these four products only when it exposes i
 
 ## Product status
 
-- **Shop** — implemented local release candidate at `/shop/` under the stable internal `commerce` runtime. `/operations/commerce/` is compatibility-only and resolves to the same records.
-- **Plant** — implemented local release candidate at `/plant/` under the stable internal `production` runtime. `/operations/production/` is compatibility-only and resolves to the same records.
-- **Website** — implemented local release candidate at `/website/`; it can produce a deterministic downloadable site artifact but cannot publish or change a domain.
-- **Ecommerce** — implemented local release candidate at `/ecommerce/`. It reads versioned Shop catalogue data, builds a multi-item cart, produces a deterministic 15-minute quote, recovers across reload, and sends one duplicate-safe multi-line handoff into Shop. Tax, shipping, and payment remain explicit adapter boundaries; no charge occurs. Only Shop's accountable confirmation can create an order or reserve stock. Hosted managed persistence is not yet proven.
+- **Shop** — available at `/shop/` in the live isolated app under the stable internal `commerce` runtime. `/operations/commerce/` is compatibility-only and resolves to the same records.
+- **Plant** — available at `/plant/` in the live isolated app under the stable internal `production` runtime. `/operations/production/` is compatibility-only and resolves to the same records.
+- **Website** — available at `/website/` in the live isolated app; it can produce a deterministic downloadable site artifact but cannot publish or change a domain.
+- **Ecommerce** — available at `/ecommerce/` in the live isolated app. It reads versioned Shop catalogue data, builds a multi-item cart, produces a deterministic 15-minute quote, recovers across reload, and sends one duplicate-safe multi-line handoff into Shop. Tax, shipping, and payment remain explicit adapter boundaries; no charge occurs. Only Shop's accountable confirmation can create an order or reserve stock. Hosted managed persistence is not yet proven.
 - **AI assistance** — shared, gated R&D capability. `/agents/` is compatibility-only and resolves to HQ's delegated roles. The first workflow is Order Intake: approved message or form input to a structured draft, with provenance, evaluation, human review, and zero side effects.
 
 No local demo, passing test, healthy provider, or generated artifact is proof of a live customer system, revenue, production persistence, or autonomous operation.
