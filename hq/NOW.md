@@ -34,7 +34,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 - Each CEO cycle selects at most one HQ-authorized outcome; blocked, duplicate, or invalid work stops before claims, models, or sends. The owner brief uses four fixed reads and one synthesis call (`cdd925a`).
 - CEO completion persists before notification; owner acceptance is separate. Efficiency requires durable, valid, fully measured evidence (`78f2297`).
 - Model calls reserve before provider I/O. All tenants and retries share one atomic UTC-day ceiling; failures stay charged, cache hits reserve nothing, hosted memory state fails closed, and the hard maximum is 2,000,000 units (`a2e1b89`).
-- Owner-key `/api/state` reports AI-budget totals and durable readiness; its indexed service-role aggregate returns no tenant, provider, or content detail (`7be84f4`).
+- Owner-key `/api/state` and the existing AI badge show daily spend/readiness without tenant, provider, or content detail (`7be84f4`, `18fec57`).
 - Shop covers orders, stock, purchasing, fulfilment, payments, returns, production issues, and close at `/shop/`; message intake stays lazy and initial JavaScript is 472,542 bytes (`62a2fdf`).
 - Plant is task-first at `/plant/` and controls no equipment.
 - Website builds a guarded preview, approved site file, and tenant-bound release plan at `/website/`; it never deploys (`a400a86`).
@@ -49,7 +49,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 ## Verified baseline
 
 - Current local checkpoints: product `62a2fdf`, agent operations `a2e1b89`, operations `63a245f`, and security `98b8044`.
-- App/local gates pass: 309 Python tests, lint/build, 66 security checks, and a 472,542-byte largest chunk. Kernel passes 279 tests, 69 connectors/993 adversarial calls, and 15 crews/214 checks.
+- App/local gates pass: 309 Python tests, lint/build, 66 security checks, and a 472,542-byte largest chunk. Kernel passes 280 tests, 69 connectors/993 adversarial calls, and 15 crews/214 checks.
 - Earlier rendered product checks passed. The managed location slice passes automated contracts; fresh rendered QA is pending.
 - Core first-action QA leads Shop Stock, incomplete orders to Promise or Payment, Plant alerts to Problems or output, and invalid Website briefs to their first error. Mobile controls are at least 44 px with focus-safe fixed navigation (`36fa7dd`); guide and review actions create no record.
 - Product checkpoint `62a2fdf` is on a clean fast-forward descendant of open draft PR #258 head `338b6fd`. Vercel `supermega-public` serves both domains from live `6885c320` in `isolated_demo` with zero managed coverage and database/schema/audit/writes disabled; remote checks exclude the local delta.
