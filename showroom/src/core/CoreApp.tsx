@@ -356,7 +356,8 @@ type RuntimeHealth = {
   serviceStatus: string
   operatingMode: string
   enterpriseDbReady: boolean
-  securityReady: boolean
+  authReady: boolean
+  auditReady: boolean
   writesReady: boolean
   coverageScore: number
   requirements: string[]
@@ -535,7 +536,8 @@ const checkingRuntime: RuntimeHealth = {
   serviceStatus: 'checking',
   operatingMode: 'checking',
   enterpriseDbReady: false,
-  securityReady: false,
+  authReady: false,
+  auditReady: false,
   writesReady: false,
   coverageScore: 0,
   requirements: [],
@@ -1450,14 +1452,19 @@ function useRuntimeHealth() {
           enterprise_db_ready?: boolean
           security_ready?: boolean
           coverage_score?: number
-          trial_backend?: { write_enabled?: boolean }
+          authentication?: { trusted_gateway_ready?: boolean; supabase_user_tokens_ready?: boolean }
+          trial_backend?: { audit_ready?: boolean; write_enabled?: boolean }
           enterprise_activation?: { requirements?: string[] }
         }
         const requirements = Array.isArray(body.enterprise_activation?.requirements) ? body.enterprise_activation.requirements : []
+        const authReady = Boolean(body.authentication?.trusted_gateway_ready || body.authentication?.supabase_user_tokens_ready)
+        const auditReady = body.trial_backend?.audit_ready === true
         const writesReady = body.trial_backend?.write_enabled === true
         const enterpriseReady = body.status === 'ready'
           && body.operating_mode === 'managed_trial'
           && body.enterprise_db_ready === true
+          && authReady
+          && auditReady
           && body.security_ready === true
           && writesReady
           && requirements.length === 0
@@ -1466,7 +1473,8 @@ function useRuntimeHealth() {
           serviceStatus: body.status ?? 'unknown',
           operatingMode: body.operating_mode ?? 'unknown',
           enterpriseDbReady: body.enterprise_db_ready === true,
-          securityReady: body.security_ready === true,
+          authReady,
+          auditReady,
           writesReady,
           coverageScore: Number.isFinite(body.coverage_score) ? Number(body.coverage_score) : 0,
           requirements,
@@ -1560,7 +1568,7 @@ const customerTracks = [
 export function ProductHomePage() {
   return (
     <div className="workspace-screen product-home-screen">
-      <PageHeading copy="Pick a business type. SuperMega prepares work; owners approve sends, payments, changes, publishing." eyebrow="SuperMega products" title="Pick a track. Run work." />
+      <PageHeading copy="Pick a business type. SuperMega prepares work; owners approve sends, payments, changes, publish." eyebrow="Products" title="Pick a track. Run work." />
       <section className="product-home-operating-model" aria-label="SuperMega operating model">
         <div>
           <span className="core-eyebrow">Handled by SuperMega</span>
@@ -6027,7 +6035,7 @@ export function SettingsPage() {
             <div className="panel-head"><div><span className="core-eyebrow">System boundary</span><h2>{runtime.status === 'enterprise' ? 'Managed mode ready' : 'Managed mode locked'}</h2></div><RuntimeBadge status={runtime.status} /></div>
             {runtime.status === 'enterprise' && managedTrialAuthConfigured() ? managedIdentity ? <div className="template-contract"><span>Managed account</span><strong>{managedIdentity.email}</strong><small>{managedIdentity.workspaceId} · membership and capabilities are checked by the API</small><button className="text-link" disabled={managedBusy} onClick={() => void disconnectManagedWorkspace()} type="button">Disconnect</button></div> : <form className="core-form compact-form" onSubmit={(event) => void connectManagedWorkspace(event)}><span className="core-eyebrow">Managed workspace</span><div className="form-row"><label>Email<input autoComplete="username" maxLength={160} onChange={(event) => setManagedEmail(event.target.value)} required type="email" value={managedEmail} /></label><label>Password<input autoComplete="current-password" minLength={8} onChange={(event) => setManagedPassword(event.target.value)} required type="password" value={managedPassword} /></label></div><label>Workspace ID<input maxLength={128} onChange={(event) => setManagedWorkspace(event.target.value)} placeholder="Your provisioned workspace" required value={managedWorkspace} /></label><button className="core-button primary" disabled={managedBusy} type="submit">{managedBusy ? 'Checking…' : 'Connect workspace'}</button></form> : null}
             {managedNotice ? <p className="form-notice" role="status">{managedNotice}</p> : null}
-            <div className="readiness-list"><span><small>Trial plan</small><strong>{isPilotReady ? 'Ready' : `${completion}% complete`}</strong></span><span><small>Runtime</small><strong>{runtime.serviceStatus}</strong></span><span><small>Operating mode</small><strong>{runtime.operatingMode.replace('_', ' ')}</strong></span><span><small>Managed data</small><strong>{runtime.enterpriseDbReady ? 'Ready' : 'Not connected'}</strong></span><span><small>Security</small><strong>{runtime.securityReady ? 'Ready' : 'Not ready'}</strong></span><span><small>Write path</small><strong>{runtime.writesReady ? 'Enabled' : 'Locked'}</strong></span><span><small>Source coverage</small><strong>{runtime.coverageScore}%</strong></span><span><small>External action</small><strong>Owner controlled</strong></span></div>
+            <div className="readiness-list"><span><small>Trial plan</small><strong>{isPilotReady ? 'Ready' : `${completion}% complete`}</strong></span><span><small>Runtime</small><strong>{runtime.serviceStatus}</strong></span><span><small>Mode</small><strong>{runtime.operatingMode.replace('_', ' ')}</strong></span><span><small>Data</small><strong>{runtime.enterpriseDbReady ? 'Ready' : 'Needed'}</strong></span><span><small>Auth</small><strong>{runtime.authReady ? 'Ready' : 'Needed'}</strong></span><span><small>Audit</small><strong>{runtime.auditReady ? 'Ready' : 'Needed'}</strong></span><span><small>Writes</small><strong>{runtime.writesReady ? 'Enabled' : 'Locked'}</strong></span><span><small>Coverage</small><strong>{runtime.coverageScore}%</strong></span></div>
             <div className="readiness-list" aria-label="AI learning readiness">{learningRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
             {runtime.status !== 'enterprise' ? <ul className="requirement-list">{(runtime.requirements.length ? runtime.requirements : ['Configure managed tenant persistence.', 'Verify production identity and source coverage.']).map((requirement) => <li key={requirement}>{requirement}</li>)}</ul> : null}
             <p className="authority-note">AI learns from imported records and reviews. Owners approve sends, payments, publishing, access, and production.</p>

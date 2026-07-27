@@ -202,7 +202,7 @@ if (!indexSource.includes('<title>SuperMega</title>')
 const files = await walk(dist)
 const textFiles = files.filter((path) => /\.(?:html|js|css|json|svg)$/.test(path))
 const corpus = (await Promise.all(textFiles.map((path) => readFile(path, 'utf8')))).join('\n')
-for (const required of ['SUPERMEGA', 'Shop', 'Plant', 'Website', 'Ecommerce', 'Sell', 'Orders', 'Stock', 'Purchase orders', 'Jobs', 'Quality', 'Maintenance', 'Content', 'Preview', 'Publish', 'Catalog', 'Storefront', 'Requests', 'Sample workspace', 'Start guided sample', 'Request managed trial', 'Confirm change', 'Action history', 'actorKind', 'evidenceReference', 'accountableActions', 'Operating mode', 'Write path', manifest.brand.colors.accent, manifest.brand.colors.ink]) {
+for (const required of ['SUPERMEGA', 'Shop', 'Plant', 'Website', 'Ecommerce', 'Sell', 'Orders', 'Stock', 'Purchase orders', 'Jobs', 'Quality', 'Maintenance', 'Content', 'Preview', 'Publish', 'Catalog', 'Storefront', 'Requests', 'Sample workspace', 'Start guided sample', 'Request managed trial', 'Confirm change', 'Action history', 'actorKind', 'evidenceReference', 'accountableActions', 'Mode', 'Writes', manifest.brand.colors.accent, manifest.brand.colors.ink]) {
   if (!corpus.includes(required)) fail(`missing_context:${required}`)
 }
 if (!coreSource.includes("import siteManifest from '../../../site-manifest.json'")) fail('workflow_contract_not_shared')
@@ -280,6 +280,12 @@ if (coreSource.includes('className="core-panel approval-panel"')) fail('approval
 if (!coreSource.includes("decidedActorKind: 'human'") || !coreSource.includes('decisionNote: note')) fail('approval_decision_not_human_attributed')
 if (!coreSource.includes('dialog.showModal()') || coreSource.includes('decision-dialog-backdrop')) fail('approval_review_not_native_modal')
 if (!coreSource.includes("body.operating_mode === 'managed_trial'") || !coreSource.includes('writesReady') || !coreSource.includes('requirements.length === 0')) fail('managed_readiness_not_fail_closed')
+if (!coreSource.includes('const authReady = Boolean(body.authentication?.trusted_gateway_ready || body.authentication?.supabase_user_tokens_ready)')
+  || !coreSource.includes('const auditReady = body.trial_backend?.audit_ready === true')
+  || !coreSource.includes('runtime.authReady')
+  || !coreSource.includes('runtime.auditReady')
+  || !coreSource.includes('<small>Auth</small>')
+  || !coreSource.includes('<small>Audit</small>')) fail('managed_activation_gates_not_visible')
 if (!coreSource.includes('LEGACY_TEAM_WORK_KEYS') || !coreSource.includes('LEGACY_COMMERCE_KEYS') || !coreSource.includes('LEGACY_PRODUCTION_KEYS') || !coreSource.includes('LEGACY_APPROVAL_KEYS') || !coreSource.includes('LEGACY_SETUP_KEYS')) fail('legacy_local_workspace_not_migrated')
 if (!coreSource.includes('decisionPacketFingerprint') || !coreSource.includes("status: 'superseded' as const")) fail('stale_approval_packet_not_superseded')
 if (!coreSource.includes('toManagedDecisionPacket') || !coreSource.includes('managedApprovalRequests')) fail('managed_decision_packet_serializer_missing')
