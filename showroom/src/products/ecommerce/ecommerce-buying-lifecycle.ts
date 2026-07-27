@@ -209,6 +209,14 @@ const maxLines = 20
 const maxQuantity = 99
 const maxRecords = 100
 
+export function ecommercePaymentMatchesFulfilment(
+  fulfilment: EcommerceFulfilment,
+  paymentAdapter: EcommercePaymentAdapter,
+) {
+  return paymentAdapter === 'kbzpay_manual'
+    || (fulfilment === 'pickup' ? paymentAdapter === 'pay_on_pickup' : paymentAdapter === 'cash_on_delivery')
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
@@ -442,6 +450,9 @@ function quoteCore(value: unknown): Omit<EcommerceCheckoutQuote, 'quoteDigest'> 
   if (!paymentAdapters.includes(payment.adapter as EcommercePaymentAdapter)
     || payment.status !== 'not_authorized'
     || payment.amountMmk !== 0) throw new Error('Checkout payment boundary is invalid.')
+  if (!ecommercePaymentMatchesFulfilment(fulfilment, payment.adapter as EcommercePaymentAdapter)) {
+    throw new Error('Checkout payment does not match how the customer receives the order.')
+  }
   const totalMmk = safeInteger(source.totalMmk, 'checkout quote.totalMmk', 1)
   if (totalMmk !== subtotalMmk) throw new Error('Checkout total must remain the product subtotal until Shop review.')
   if (source.currency !== 'MMK') throw new Error('Checkout currency must be MMK.')
@@ -492,6 +503,9 @@ export async function buildEcommerceCheckoutQuote(input: {
   if (!checkoutKeyPattern.test(key)) throw new Error('Checkout idempotency key is invalid.')
   if (!fulfilmentMethods.includes(input.fulfilment)) throw new Error('Checkout fulfilment is unsupported.')
   if (!paymentAdapters.includes(input.paymentAdapter)) throw new Error('Checkout payment adapter is unsupported.')
+  if (!ecommercePaymentMatchesFulfilment(input.fulfilment, input.paymentAdapter)) {
+    throw new Error('Checkout payment does not match how the customer receives the order.')
+  }
   const code = optionalText(input.promotionCode, 'promotionCode', 40)
   if (!Array.isArray(input.cart) || input.cart.length < 1 || input.cart.length > maxLines) throw new Error('Cart is empty or too large.')
   const quantities = new Map<string, number>()

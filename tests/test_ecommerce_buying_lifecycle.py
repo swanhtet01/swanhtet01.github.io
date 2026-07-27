@@ -15,6 +15,7 @@ from supermega_runtime.ecommerce_buying_lifecycle import (
     build_ecommerce_pim_projection,
     build_ecommerce_return_intent,
     create_empty_ecommerce_lifecycle_state,
+    ecommerce_payment_matches_fulfilment,
     prepare_ecommerce_shop_handoff,
     record_ecommerce_order_request,
     record_ecommerce_return_intent,
@@ -175,6 +176,25 @@ class EcommerceBuyingLifecycleTests(unittest.TestCase):
             "amountMmk": 0,
         })
         self.assertEqual(candidate["payment"]["status"], "not_authorized")
+
+    def test_payment_must_match_how_the_customer_receives_the_order(self) -> None:
+        self.assertTrue(ecommerce_payment_matches_fulfilment("pickup", "pay_on_pickup"))
+        self.assertTrue(ecommerce_payment_matches_fulfilment("delivery", "cash_on_delivery"))
+        self.assertTrue(ecommerce_payment_matches_fulfilment("pickup", "kbzpay_manual"))
+        self.assertTrue(ecommerce_payment_matches_fulfilment("delivery", "kbzpay_manual"))
+        for fulfilment, payment_adapter in (
+            ("pickup", "cash_on_delivery"),
+            ("delivery", "pay_on_pickup"),
+        ):
+            with self.subTest(fulfilment=fulfilment, payment_adapter=payment_adapter):
+                with self.assertRaisesRegex(
+                    EcommerceLifecycleValidationError,
+                    "does not match",
+                ):
+                    quote(
+                        fulfilment=fulfilment,
+                        payment_adapter=payment_adapter,
+                    )
 
     def test_quote_rejects_sold_out_unknown_duplicate_and_tampered_cart(self) -> None:
         invalid_carts = [
