@@ -34,6 +34,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 - Each CEO cycle selects at most one HQ-authorized outcome. Hosted Storage proof, protected preview, and named pilot work remain blocked; completed, in-flight, duplicate, or invalid work stops before claims, models, or sends. The owner brief uses four fixed reads and one synthesis call (`cdd925a`).
 - CEO completion metadata persists before notification; acceptance is a separate immutable owner/operator verdict. Reports store no brief/provider rows and publish efficiency only with durable, complete, valid usage and evaluation coverage (`78f2297`).
 - Shop covers orders, stock, purchasing, fulfilment, payments, returns, production issues, and close at `/shop/` (`3c885d8`).
+- Shop message intake loads only when requested; initial JavaScript is 472,527 bytes (`c7c283c`).
 - Plant is task-first at `/plant/` and controls no equipment.
 - Website builds a guarded preview, approved site file, and tenant-bound release plan at `/website/`; it never deploys (`a400a86`).
 - Ecommerce uses versioned Shop data for a recoverable multi-line cart and deterministic quote. Managed workspaces retain exact requests in the Shop inbox; V1 requests stay readable, and only Shop confirmation creates an order (`aed737a`).
@@ -46,11 +47,11 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 
 ## Verified baseline
 
-- Current local checkpoints: product `3c885d8`, agent operations `be78a02`, operations `63a245f`, and security `98b8044`.
-- App/local contracts pass: 306 Python tests, 221 Commerce/42 Plant/258 Production/94 Website/18 Ecommerce buying checks, lint/build, 65 security checks, and a 479,774-byte largest chunk. Kernel remains separately gated at 277 tests.
+- Current local checkpoints: product `c7c283c`, agent operations `be78a02`, operations `63a245f`, and security `98b8044`.
+- App/local contracts pass: 306 Python tests, 221 Commerce/42 Plant/258 Production/94 Website/18 Ecommerce buying checks, lint/build, 65 security checks, and a 472,527-byte largest chunk. Kernel remains separately gated at 277 tests.
 - Earlier rendered product checks passed. The new handoff passes automated and local HTTP contracts; fresh rendered QA is pending.
 - Core first-action QA leads Shop Stock, incomplete orders to Promise or Payment, Plant alerts to Problems or output, and invalid Website briefs to their first error. Mobile controls are at least 44 px with focus-safe fixed navigation (`36fa7dd`); guide and review actions create no record.
-- Product checkpoint `3c885d8` is on a clean fast-forward descendant of open draft PR #258 head `338b6fd`. Vercel `supermega-public` serves both domains from live `6885c320` in `isolated_demo` with zero managed coverage and database/schema/audit/writes disabled; remote checks exclude the local delta.
+- Product checkpoint `c7c283c` is on a clean fast-forward descendant of open draft PR #258 head `338b6fd`. Vercel `supermega-public` serves both domains from live `6885c320` in `isolated_demo` with zero managed coverage and database/schema/audit/writes disabled; remote checks exclude the local delta.
 
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
 
@@ -81,7 +82,7 @@ Every slice must keep one primary action, progressive disclosure, mobile accepta
 
 ## Next evidence
 
-1. After an approved fast-forward-only push, review PR #258 from clean commit `3c885d8` and rerun the coordinated remote checks.
+1. After an approved fast-forward-only push, review PR #258 from clean commit `c7c283c` and rerun the coordinated remote checks.
 2. Link that exact commit to a protected `supermega-public` preview and repeat desktop/mobile Shop, Plant, Website, Ecommerce, reload, and duplicate-handoff journeys without mutating aliases.
 3. On an approved isolated Supabase target, prove private Storage, RLS, replay/isolation, recovery, and one real managed tenant before enabling writes.
 4. Repeat the 12-profile rehearsal with one founder-approved named pilot company and measure import correction, setup, human review, and first-value time.
