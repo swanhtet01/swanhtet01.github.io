@@ -40,17 +40,17 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 - AI remains gated; Order Intake passed 20 local cases, but provider execution still needs credentials.
 - Client setup is two steps with one manifest-backed smart import; exact matches collapse and exceptions open for review (`ab9a89e`).
 - Shop Stock adds two-location masters, lot/serial evidence, transfers, reservations, ATP, replay, locked writes, and rollback in its existing tab (`5fa93a9`, `2790f9d`).
-- Plant Jobs now has a lazy order-execution layer: immutable plan, up to 12 pasted BOM materials, lot/capacity shortage review, genealogy, quality gates, human releases, exact replay, and locked rollback (`0d62b3c`).
+- Plant Jobs keeps its lazy order-execution ledger in managed Production: 12 BOM materials, shortage review, genealogy, quality gates, human releases, exact replay, and rollback (`0d62b3c`, `e5915f6`).
 - Home keeps Shop and Plant exceptions above collapsed HQ work. Purchases suppress duplicate stock tasks; a Plant issue badge links to Problems and otherwise the card opens Jobs. `/work/` stays labelled HQ; bottom navigation reads Home, HQ, and Products.
 - `npm run dev` starts canonical FastAPI plus Vite on loopback with database, hosted-auth, model, worker, and write authority cleared. Records stay browser-local; hosted activation is not proven.
 
 ## Verified baseline
 
-- Current local checkpoints: product `aed737a`, agent operations `be78a02`, operations `63a245f`, and security `98b8044`.
-- App/local contracts pass: 297 Python/50 Commerce tests, 216 Commerce/31 Plant/18 Ecommerce buying checks, frontend lint/build, 63 security checks, and guarded release gates. Kernel retains 277 tests, 69 connectors/993 calls, and 15 crews/214 checks.
+- Current local checkpoints: product `e5915f6`, agent operations `be78a02`, operations `63a245f`, and security `98b8044`.
+- App/local contracts pass: 298 Python/50 Commerce tests, 216 Commerce/31 Plant/258 Production/18 Ecommerce buying checks, frontend lint/build, 63 security checks, and a 479,079-byte largest JavaScript chunk. Kernel retains 277 tests, 69 connectors/993 calls, and 15 crews/214 checks.
 - Rendered setup and four phone-width products have no overflow or error overlay. Plant also passes desktop lifecycle, reload, and phone first-run/released-state checks.
 - Core first-action QA leads Shop Stock, incomplete orders to Promise or Payment, Plant alerts to Problems or output, and invalid Website briefs to their first error. Mobile controls are at least 44 px with focus-safe fixed navigation (`36fa7dd`); guide and review actions create no record.
-- Product checkpoint `aed737a` is on a clean fast-forward descendant of open draft PR #258 head `338b6fd`. Vercel `supermega-public` serves both domains from live `6885c320` in `isolated_demo` with zero managed coverage and database/schema/audit/writes disabled; remote checks exclude the local delta.
+- Product checkpoint `e5915f6` is on a clean fast-forward descendant of open draft PR #258 head `338b6fd`. Vercel `supermega-public` serves both domains from live `6885c320` in `isolated_demo` with zero managed coverage and database/schema/audit/writes disabled; remote checks exclude the local delta.
 
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
 
@@ -60,13 +60,13 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Blockers
 
-- Website and Ecommerce still lack hosted cross-device/activation proof; Ecommerce now has a managed request inbox, and both remain digest-bound.
+- Plant and Ecommerce now have tenant-bound persistence contracts, but Website, Plant, and Ecommerce still lack hosted cross-device/activation proof.
 - Supabase `supermegabase` is active on Postgres 17.6, but it is not an accepted trial target: it contains existing enterprise records, has only one recorded migration, and the security advisor reports 27 public tables with RLS enabled but no policies. No isolated branch was verified, so managed writes remain off.
 - The candidate is not on GitHub or Vercel; live remains `6885c320` and PR #258 remains `338b6fd`. The next external action is an approved fast-forward-only push of the clean release branch.
 - Preview remains blocked until the exact `supermega-public` project is linked to the clean candidate commit; no fallback project or domain is allowed.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
 - Local scheduler authority emits no crons and no signed activation bundle exists. Live `megaos` cron/environment cleanup remains unverified because grouped log reads timed out then returned 403; no provider state changed.
-- SAP-grade gaps remain: Shop tax policy/accounting posting; Plant managed persistence, multi-operation routing, warehouse/cost, calibration, and OEE; Website managed content/releases; Ecommerce payment, shipping, tax, and returns.
+- SAP-grade gaps remain: Shop tax policy/accounting posting; Plant multi-operation routing, warehouse/cost, calibration, and OEE; Website managed content/releases; Ecommerce payment, shipping, tax, and returns.
 
 ## Decisions in force
 
@@ -81,7 +81,7 @@ Every slice must keep one primary action, progressive disclosure, mobile accepta
 
 ## Next evidence
 
-1. After an approved fast-forward-only push, review PR #258 from clean commit `aed737a` and rerun the coordinated remote checks.
+1. After an approved fast-forward-only push, review PR #258 from clean commit `e5915f6` and rerun the coordinated remote checks.
 2. Link that exact commit to a protected `supermega-public` preview and repeat desktop/mobile Shop, Plant, Website, Ecommerce, reload, and duplicate-handoff journeys without mutating aliases.
 3. On an approved isolated Supabase target, prove private Storage, RLS, replay/isolation, recovery, and one real managed tenant before enabling writes.
 4. Repeat the 12-profile rehearsal with one founder-approved named pilot company and measure import correction, setup, human review, and first-value time.
