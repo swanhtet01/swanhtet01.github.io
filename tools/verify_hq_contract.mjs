@@ -357,7 +357,7 @@ requireContract('accepted core checkpoints lead directly to real work',
   && now.includes('Plant Jobs persists managed BOM/routing, WIP, minutes')
   && now.includes('operation/output requires exact authenticated Shop issue evidence')
   && now.includes('one manifest-backed smart import')
-  && now.includes('PR #260 merged with passing SuperMega App CI and GitGuardian checks')
+  && now.includes('PR #262 merged the Shop confirmation simplification')
   && now.includes('Shop Stock has one Commerce authority')
   && now.includes('Orders and Website conversions reserve deterministic location/lots')
   && now.includes('sellable returns restore the exact fulfilled location/lot')
@@ -365,11 +365,11 @@ requireContract('accepted core checkpoints lead directly to real work',
   && now.includes('`npm run dev` starts canonical FastAPI plus Vite on loopback')
   && now.includes('Records stay browser-local; hosted activation is not proven')
   && !now.includes('probe remains 500'))
-requireContract('release reconciliation is current and discoverable',
+requireContract('release history is retained and current live state is discoverable',
   workboard.includes('| OPS-006 | Release / Codex integrator | done-local |')
   && workboard.includes('strict fast-forward descendant of open draft PR #258 head `338b6fd`')
   && workboard.includes('release-reconciliation-2026-07-26.md')
-  && now.includes('Both `supermega.dev` and `app.supermega.dev` serve exact commit `55208da2`'))
+  && now.includes('Both `supermega.dev` and `app.supermega.dev` serve exact commit `bb6411dc`'))
 requireContract('release reconciliation binds exact Git and Vercel evidence',
   releaseReconciliation.includes('Audited implementation checkpoint: `b67db9422b523df0c1707f8dc39082ffa1c7a8dd`')
   && releaseReconciliation.includes('Live `main`: `6885c3201d523d42d176c3dcd91de28dc1e17f6f`')
