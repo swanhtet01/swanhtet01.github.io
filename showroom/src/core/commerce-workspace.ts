@@ -681,8 +681,8 @@ export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
     schema: COMMERCE_WORKSPACE_SCHEMA,
     items,
     orders: [
-      { id: 'ORD-1042', createdAt: firstOrderAt, customer: 'May', owner: 'Demo operator', channel: 'Messenger', item: 'Daily essentials basket', itemSku: 'SM-1001', quantity: 2, payment: 'KBZPay', paymentStatus: 'pending', refundStatus: 'none', promisedAt: new Date(now + 60 * 60 * 1000).toISOString(), total: 37000, status: 'preparing' },
-      { id: 'ORD-1041', createdAt: secondOrderAt, customer: 'Ko Aung', owner: 'Demo operator', channel: 'Phone', item: 'Household refill', itemSku: 'SM-1003', quantity: 1, payment: 'Cash on delivery', paymentStatus: 'pending', refundStatus: 'none', promisedAt: new Date(now + 90 * 60 * 1000).toISOString(), total: 12000, status: 'ready' },
+      { id: 'ORD-1042', createdAt: firstOrderAt, customer: 'May', owner: 'Demo operator', channel: 'Messenger', item: 'Daily essentials basket', itemSku: 'SM-1001', quantity: 2, payment: 'KBZPay', paymentStatus: 'pending', refundStatus: 'none', promisedAt: new Date(now + 60 * 60 * 1000).toISOString(), calculation: { schema: COMMERCE_ORDER_CALCULATION_SCHEMA, currency: 'MMK', catalogRevision: 0, subtotalMmk: 37000, taxMode: 'not_configured', taxMmk: 0, totalMmk: 37000 }, total: 37000, status: 'preparing' },
+      { id: 'ORD-1041', createdAt: secondOrderAt, customer: 'Ko Aung', owner: 'Demo operator', channel: 'Phone', item: 'Household refill', itemSku: 'SM-1003', quantity: 1, payment: 'Cash on delivery', paymentStatus: 'pending', refundStatus: 'none', promisedAt: new Date(now + 90 * 60 * 1000).toISOString(), calculation: { schema: COMMERCE_ORDER_CALCULATION_SCHEMA, currency: 'MMK', catalogRevision: 0, subtotalMmk: 12000, taxMode: 'not_configured', taxMmk: 0, totalMmk: 12000 }, total: 12000, status: 'ready' },
     ],
     movements: [
       { id: 'MOV-ACT-DEMO-1042', actionId: 'ACT-DEMO-1042', createdAt: firstOrderAt, actor: 'Demo operator', reason: 'Seed the local Commerce walkthrough.', evidenceReference: 'DEMO-SEED-ORD-1042', kind: 'reserve', sku: 'SM-1001', quantityDelta: -2, orderId: 'ORD-1042' },
