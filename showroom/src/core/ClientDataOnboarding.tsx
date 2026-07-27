@@ -236,6 +236,23 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
     && !state.applying
     && !appliedIsCurrent,
   )
+  const importStageRows = [
+    ['Read file', state.preview ? `${state.preview.totals.rows} rows` : state.busy ? 'Reading' : 'Waiting'],
+    ['Match columns', state.preview ? mappingNeedsReview ? 'Review' : `${matchedFieldCount}/${state.preview.fields.length}` : 'Auto'],
+    ['Check workspace', appliedIsCurrent ? 'Applied' : validationIsCurrent ? 'Checked' : state.validating ? 'Checking' : managedIdentity ? 'Ready' : 'Local file'],
+    ['Confirm import', appliedIsCurrent ? 'Done' : state.applying ? 'Writing' : canApplyManagedImport ? 'Ready' : state.preview?.readyForStaging ? 'Prepare' : 'Locked'],
+  ] as const
+  const importStageMessage = appliedIsCurrent
+    ? `${productName} import is confirmed in ${managedIdentity?.workspaceId}.`
+    : state.preview
+      ? mappingNeedsReview
+        ? 'Choose the missing required columns. Rows stay read-only until the mapping is clean.'
+        : state.preview.readyForStaging
+          ? managedIdentity
+            ? 'The file is clean. Check it with the workspace, then confirm the final import.'
+            : 'The file is clean. Download the prepared import file or connect a managed workspace.'
+          : 'Fix the highlighted rows before this can become a managed import.'
+      : `Drop in a CSV or try the sample. SuperMega reads, maps, and checks ${object.label.toLowerCase()} before any write.`
 
   useEffect(() => {
     requestRef.current += 1
@@ -514,6 +531,12 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
           : managedIdentity
           ? `Your CSV stays in this tab. Only prepared rows are checked with ${managedIdentity.workspaceId}; nothing is written until you confirm the import.`
           : `Your CSV stays in this browser. Nothing is sent to AI or added to ${productName} while you review it.`}</p>
+        <div aria-label={`${productName} import autopilot`} className="catalog-import-autopilot">
+          <div><strong>Import autopilot</strong><small>{importStageMessage}</small></div>
+          <div className="catalog-import-stage-list">
+            {importStageRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}
+          </div>
+        </div>
         {state.busy ? <p className="form-notice" role="status">Matching columns and checking every row...</p> : null}
         {state.validating ? <p className="form-notice" role="status">Checking the prepared import with your workspace...</p> : null}
         {state.applying ? <p className="form-notice" role="status">{managedActivation?.progressLabel ?? 'Confirming the import...'}</p> : null}
