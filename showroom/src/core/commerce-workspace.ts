@@ -1,3 +1,5 @@
+import type { ShopInventoryState } from './shop-inventory-foundation'
+
 export const COMMERCE_WORKSPACE_SCHEMA = 'supermega.commerce.workspace.v2' as const
 export const COMMERCE_STOREFRONT_SCHEMA = 'supermega.ecommerce.storefront.v1' as const
 export const COMMERCE_ORDER_CALCULATION_SCHEMA = 'supermega.commerce.order-calculation.v1' as const
@@ -357,6 +359,7 @@ export type CommerceState = {
   storefrontRequests?: CommerceStorefrontRequest[]
   storefrontConfiguration?: CommerceStorefrontConfiguration
   purchaseOrders?: CommercePurchaseOrder[]
+  inventoryFoundation?: ShopInventoryState
 }
 
 export type CommerceActionProof = {
@@ -923,6 +926,21 @@ export function validateCommerceState(value: unknown): CommerceState {
   if (value.storefrontRequests !== undefined && !Array.isArray(value.storefrontRequests)) throw new Error('Commerce storefront requests must be an array when present.')
   if (value.storefrontConfiguration !== undefined && !isRecord(value.storefrontConfiguration)) throw new Error('Commerce storefront configuration must be an object when present.')
   if (value.purchaseOrders !== undefined && !Array.isArray(value.purchaseOrders)) throw new Error('Commerce purchase orders must be an array when present.')
+  if (value.inventoryFoundation !== undefined) {
+    const inventory = value.inventoryFoundation
+    if (!isRecord(inventory)
+      || !hasExactKeys(inventory, ['schema', 'revision', 'headDigest', 'commands'])
+      || inventory.schema !== 'supermega.shop.inventory_foundation.v1'
+      || !Number.isSafeInteger(inventory.revision)
+      || Number(inventory.revision) < 1
+      || !Array.isArray(inventory.commands)
+      || inventory.commands.length !== inventory.revision
+      || inventory.commands.length > 2_000
+      || typeof inventory.headDigest !== 'string'
+      || !sha256DigestPattern.test(inventory.headDigest)) {
+      throw new Error('Commerce location inventory envelope is invalid.')
+    }
+  }
 
   const items = value.items as unknown[]
   const orders = value.orders as unknown[]

@@ -76,6 +76,7 @@ const websiteStarterSource = await readFile(resolve(root, 'showroom', 'src', 'pr
 const websiteStarterSetupSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'WebsiteStarterSetup.tsx'), 'utf8')
 const shopInventorySource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-inventory-foundation.ts'), 'utf8')
 const shopInventoryUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopInventoryFoundation.tsx'), 'utf8')
+const shopInventoryPythonSource = await readFile(resolve(root, 'supermega_runtime', 'shop_inventory_runtime.py'), 'utf8')
 const channelOrderUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ChannelOrderIntake.tsx'), 'utf8')
 const plantOrderSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'plant-order-foundation.ts'), 'utf8')
 const plantOrderUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'PlantOrderFoundation.tsx'), 'utf8')
@@ -1190,8 +1191,8 @@ if (!managedTrialSource.includes('saveManagedCommerceCommand')
   || !managedTrialSource.includes('sessionForRequest(expectedIdentity)')
   || !managedTrialSource.includes('request.identity')
   || !managedTrialSource.includes("code: 'managed_identity_changed'")) fail('managed_commerce_command_client_missing')
-const managedCommerceClientSources = `${coreSource}\n${websiteSource}\n${ecommerceSource}`
-for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.item.updated', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.order.return_recorded', 'commerce.payment.reconciled', 'commerce.refund.settled', 'commerce.stock.counted', 'commerce.purchase_order.created', 'commerce.purchase_order.received', 'commerce.purchase_order.cancelled', 'commerce.close.saved', 'commerce.website_intake.converted', 'commerce.storefront.configuration.saved']) {
+const managedCommerceClientSources = `${coreSource}\n${shopInventoryUiSource}\n${websiteSource}\n${ecommerceSource}`
+for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.item.updated', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.order.return_recorded', 'commerce.payment.reconciled', 'commerce.refund.settled', 'commerce.stock.counted', 'commerce.inventory.initialized', 'commerce.inventory.transferred', 'commerce.purchase_order.created', 'commerce.purchase_order.received', 'commerce.purchase_order.cancelled', 'commerce.close.saved', 'commerce.website_intake.converted', 'commerce.storefront.configuration.saved']) {
   if (!managedTrialSource.includes(eventType) || !managedCommerceClientSources.includes(eventType) || !managedCommerceRuntime.includes(eventType)) fail(`managed_commerce_event_missing:${eventType}`)
 }
 if (!managedTrialSource.includes('commerce.storefront_request.received')
@@ -1298,6 +1299,17 @@ if (!coreSource.includes('<ShopInventoryFoundation')
   || !shopInventoryUiSource.includes('Review the exact source, destination, and quantity. Nothing has moved yet.')
   || !shopInventoryUiSource.includes('navigator.locks')
   || shopInventoryUiSource.includes('fetch(')) fail('shop_inventory_foundation_ui_boundary_missing')
+if (!commerceSource.includes('inventoryFoundation?: ShopInventoryState')
+  || !commerceSource.includes('Commerce location inventory envelope is invalid.')
+  || !shopInventoryUiSource.includes("'commerce.inventory.initialized'")
+  || !shopInventoryUiSource.includes("'commerce.inventory.transferred'")
+  || !shopInventoryUiSource.includes('current.inventoryFoundation')
+  || !coreSource.includes('onInventory={mutateCommerce}')
+  || !managedCommerceRuntime.includes('_validate_inventory_initialized')
+  || !managedCommerceRuntime.includes('_validate_inventory_transferred')
+  || !managedTrialStoreRuntime.includes('restamp_latest_shop_inventory_command')
+  || !shopInventoryPythonSource.includes('validate_shop_inventory_state')
+  || !shopInventoryPythonSource.includes('inventory command digest is invalid')) fail('managed_shop_inventory_foundation_missing')
 if (!plantOrderSource.includes("PLANT_ORDER_STATE_SCHEMA = 'supermega.plant.order_foundation.v1'")
   || !plantOrderSource.includes("PLANT_ORDER_PLAN_CONTRACT = 'supermega.plant.reviewed_plan.v1'")
   || !plantOrderSource.includes("PLANT_ORDER_EXECUTION_PLAN_CONTRACT = 'supermega.plant.reviewed_plan.v2'")
@@ -2140,6 +2152,17 @@ async function verifyShopInventoryRuntime() {
       && evidenceDigest === model.shopInventoryEvidenceDigest({ rows: 2, source: 'opening' }),
     'shop_inventory_evidence_digest_not_canonical')
     assert(importPackage.packageDigest === 'sha256:3bf243c00d7f6d6c8c3a1abc9fecee8986db74c1e01f0926318b9812036df483', 'shop_inventory_package_digest_drifted')
+    const managedParityPackage = model.buildShopInventoryImportPackage({
+      importId: 'IMP-OPENING-001',
+      sourceDigest: model.shopInventoryEvidenceDigest({ rows: 1, source: 'opening' }),
+      catalogSkus: ['SKU-1'],
+      clients: [{ id: 'CLI-RETAIL-001', name: 'Walk-in customer' }],
+      vendors: [{ id: 'VEN-OPENING-001', name: 'Opening source' }],
+      locations: [{ id: 'LOC-BRANCH', name: 'Branch' }, { id: 'LOC-MAIN', name: 'Main store' }],
+      stockUnits: [{ id: 'LOT-SKU1-OPENING-001', sku: 'SKU-1', tracking: 'lot', trackingCode: 'OPENING-001' }],
+      openings: [{ stockUnitId: 'LOT-SKU1-OPENING-001', locationId: 'LOC-MAIN', vendorId: 'VEN-OPENING-001', quantity: 10 }],
+    })
+    assert(managedParityPackage.packageDigest === 'sha256:e185ea0640d14241898c33365d417362274df1d43f0778c3508bb4b4e0a7c7d6', 'shop_inventory_managed_cross_runtime_digest_drifted')
 
     const opening = model.applyShopInventoryImport(
       model.createEmptyShopInventoryState(),

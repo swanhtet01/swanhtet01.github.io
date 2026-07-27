@@ -2206,6 +2206,8 @@ class CommerceRuntimeTests(unittest.TestCase):
                     "commerce.stock.received",
                     "commerce.stock.counted",
                     "commerce.production_material.issued",
+                    "commerce.inventory.initialized",
+                    "commerce.inventory.transferred",
                     "commerce.purchase_order.created",
                     "commerce.purchase_order.received",
                     "commerce.purchase_order.cancelled",

@@ -38,6 +38,7 @@ const [runtime, supabaseAuth, cloudRuntime, schedulerActivation, agentGovernance
 ])
 const migration = `${rolePreflight}\n${foundationMigration}\n${decisionMigration}\n${websiteMigration}\n${hardeningMigration}\n${readCapabilityMigration}`
 const productionMaterialHandoff = await read('supermega_runtime/production_material_handoff.py')
+const shopInventoryRuntime = await read('supermega_runtime/shop_inventory_runtime.py')
 const managedPurchaseReceiptAuthority = trialStore.slice(
   trialStore.indexOf('if event_type == "commerce.purchase_order.received":'),
   trialStore.indexOf('if event_type == "commerce.purchase_order.cancelled":'),
@@ -248,6 +249,8 @@ const requireContract = (name, condition) => {
 }
 const expectedHumanCommerceEvents = [
   'commerce.close.saved',
+  'commerce.inventory.initialized',
+  'commerce.inventory.transferred',
   'commerce.item.created',
   'commerce.item.updated',
   'commerce.order.advanced',
@@ -358,6 +361,15 @@ requireContract('Plant material and Shop stock are cross-surface digest-bound be
   && /require_shop_issue_matches_plant/.test(productionMaterialHandoff)
   && /require_shop_issue_before_plant_progress/.test(productionMaterialHandoff)
   && /productionCommandDigest/.test(commerceRuntime))
+requireContract('managed Shop location inventory is human-only, server-stamped, and digest-chained',
+  /commerce\.inventory\.initialized/.test(managedTrialClient)
+  && /commerce\.inventory\.transferred/.test(managedTrialClient)
+  && /_validate_inventory_initialized/.test(commerceRuntime)
+  && /_validate_inventory_transferred/.test(commerceRuntime)
+  && /restamp_latest_shop_inventory_command/.test(trialStore)
+  && /validate_shop_inventory_state/.test(shopInventoryRuntime)
+  && /inventory command digest is invalid/.test(shopInventoryRuntime)
+  && /location totals drifted from aggregate Shop stock/.test(commerceRuntime))
 requireContract('consequential Commerce events are human-only in router and store', /COMMERCE_HUMAN_EVENTS/.test(trialRuntime)
   && JSON.stringify(humanEventList(trialStore, 'HUMAN_COMMAND_EVENTS', 'SURFACE_WRITE_CAPABILITIES')) === JSON.stringify(expectedHumanCommerceEvents)
   && JSON.stringify(humanEventList(commerceRuntime, 'COMMERCE_HUMAN_EVENTS', '_ORDER_STATUSES')) === JSON.stringify(expectedHumanCommerceEvents)

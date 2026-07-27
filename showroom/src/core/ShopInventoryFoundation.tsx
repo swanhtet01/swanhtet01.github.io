@@ -29,6 +29,12 @@ type ShopInventoryFoundationProps = {
     proof: CommerceActionProof,
     transition: (state: CommerceState) => CommerceState | null,
   ) => Promise<void>
+  onInventory: (
+    eventType: 'commerce.inventory.initialized' | 'commerce.inventory.transferred',
+    commandId: string,
+    proof: CommerceActionProof,
+    transition: (state: CommerceState) => CommerceState | null,
+  ) => Promise<void>
   scope: string
 }
 
@@ -76,14 +82,17 @@ function loadState(scope: string, catalogSkus: string[]) {
   return { state: snapshot.state, error: snapshot.error }
 }
 
-export function ShopInventoryFoundation({ actor, commerce, disabled, identity, onIssue, scope }: ShopInventoryFoundationProps) {
+export function ShopInventoryFoundation({ actor, commerce, disabled, identity, onInventory, onIssue, scope }: ShopInventoryFoundationProps) {
   const catalog = commerce.items
   const catalogSkus = useMemo(
     () => [...new Set(catalog.map((item) => item.sku))].sort(),
     [catalog],
   )
-  const [initial] = useState(() => loadState(scope, catalogSkus))
-  const [state, setState] = useState<ShopInventoryState>(initial.state)
+  const [initial] = useState(() => identity
+    ? { state: createEmptyShopInventoryState(), error: '' }
+    : loadState(scope, catalogSkus))
+  const [localState, setLocalState] = useState<ShopInventoryState>(initial.state)
+  const state = identity ? commerce.inventoryFoundation ?? createEmptyShopInventoryState() : localState
   const [error, setError] = useState(initial.error)
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
@@ -165,9 +174,37 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
   }
 
   async function confirmSetup() {
-    if (!setupReview || typeof localStorage === 'undefined') return
+    if (!setupReview || (!identity && typeof localStorage === 'undefined')) return
     setBusy(true)
     setError('')
+    if (identity) {
+      try {
+        await onInventory(
+          'commerce.inventory.initialized',
+          setupReview.proof.actionId.slice(4),
+          setupReview.proof,
+          (current) => {
+            if (current.inventoryFoundation) return null
+            const result = applyShopInventoryImport(
+              createEmptyShopInventoryState(),
+              setupReview.package,
+              setupReview.proof,
+              current.items.map((item) => item.sku).sort(),
+              setupReview.expectedHeadDigest,
+            )
+            return { ...current, inventoryFoundation: result.state }
+          },
+        )
+        setSetupReview(null)
+        setSetupOpen(false)
+        setNotice('Two-location stock is now confirmed by the managed Shop workspace.')
+      } catch (nextError) {
+        setError(nextError instanceof Error ? nextError.message : 'Managed location setup was not confirmed.')
+      } finally {
+        setBusy(false)
+      }
+      return
+    }
     const result = await mutateShopInventoryWorkspace(
       scope,
       catalogSkus,
@@ -180,7 +217,7 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
       setError(result.error)
       return
     }
-    setState(result.state)
+    setLocalState(result.state)
     setSetupReview(null)
     setSetupOpen(false)
     setNotice(result.replayed ? 'The exact opening import was already recorded.' : 'Two-location stock is ready. No supplier or accounting action was sent.')
@@ -203,9 +240,34 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
   }
 
   async function confirmTransfer() {
-    if (!transferReview || typeof localStorage === 'undefined') return
+    if (!transferReview || (!identity && typeof localStorage === 'undefined')) return
     setBusy(true)
     setError('')
+    if (identity) {
+      try {
+        await onInventory(
+          'commerce.inventory.transferred',
+          transferReview.proof.actionId.slice(4),
+          transferReview.proof,
+          (current) => {
+            if (!current.inventoryFoundation) return null
+            const result = transferShopInventory(current.inventoryFoundation, {
+              ...transferReview,
+              catalogSkus: current.items.map((item) => item.sku).sort(),
+            })
+            return { ...current, inventoryFoundation: result.state }
+          },
+        )
+        setTransferReview(null)
+        setTransferOpen(false)
+        setNotice('The managed Shop workspace confirmed the paired location transfer.')
+      } catch (nextError) {
+        setError(nextError instanceof Error ? nextError.message : 'Managed location transfer was not confirmed.')
+      } finally {
+        setBusy(false)
+      }
+      return
+    }
     const result = await mutateShopInventoryWorkspace(
       scope,
       catalogSkus,
@@ -218,7 +280,7 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
       setError(result.error)
       return
     }
-    setState(result.state)
+    setLocalState(result.state)
     setTransferReview(null)
     setTransferOpen(false)
     setNotice(result.replayed ? 'The exact transfer was already recorded.' : 'Stock moved between locations with paired evidence.')

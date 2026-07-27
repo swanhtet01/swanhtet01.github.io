@@ -19,6 +19,11 @@ from supermega_runtime.ecommerce_buying_lifecycle import (
     EcommerceLifecycleValidationError,
     validate_ecommerce_order_request,
 )
+from supermega_runtime.shop_inventory_runtime import (
+    ShopInventoryValidationError,
+    shop_inventory_sku_totals,
+    validate_shop_inventory_state,
+)
 from supermega_runtime.trial_store import TrialValidationError
 
 
@@ -38,6 +43,8 @@ COMMERCE_EVENTS = frozenset(
         "commerce.stock.received",
         "commerce.stock.counted",
         "commerce.production_material.issued",
+        "commerce.inventory.initialized",
+        "commerce.inventory.transferred",
         "commerce.purchase_order.created",
         "commerce.purchase_order.received",
         "commerce.purchase_order.cancelled",
@@ -63,6 +70,8 @@ COMMERCE_HUMAN_EVENTS = frozenset(
         "commerce.stock.received",
         "commerce.stock.counted",
         "commerce.production_material.issued",
+        "commerce.inventory.initialized",
+        "commerce.inventory.transferred",
         "commerce.purchase_order.created",
         "commerce.purchase_order.received",
         "commerce.purchase_order.cancelled",
@@ -513,6 +522,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 "purchaseOrders",
                 "catalogBaselines",
                 "catalogChanges",
+                "inventoryFoundation",
             }
         ),
     )
@@ -577,6 +587,13 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         item_skus.append(sku)
         item_by_sku[sku] = item
     _unique(item_skus, "Item SKU")
+    if "inventoryFoundation" in state:
+        try:
+            validate_shop_inventory_state(state["inventoryFoundation"], item_skus)
+        except ShopInventoryValidationError as exc:
+            raise TrialValidationError(
+                f"commerce state.inventoryFoundation is invalid: {exc}"
+            ) from exc
 
     catalog_baseline_skus: list[str] = []
     catalog_baseline_action_ids: list[str] = []
@@ -2282,6 +2299,25 @@ def _validate_event_evidence(
             raise TrialValidationError(
                 "command evidence must match the order return proof."
             )
+    elif event_type in {
+        "commerce.inventory.initialized",
+        "commerce.inventory.transferred",
+    }:
+        foundation = _inventory_foundation(next_state)
+        commands = foundation.get("commands") if foundation is not None else None
+        proof = (
+            commands[-1].get("payload", {}).get("proof", {})
+            if isinstance(commands, list)
+            and commands
+            and isinstance(commands[-1], Mapping)
+            else {}
+        )
+        if not isinstance(proof, Mapping) or not _proof_matches_evidence(
+            proof, evidence
+        ):
+            raise TrialValidationError(
+                "command evidence must match the location inventory proof."
+            )
 
     movement_kind = {
         "commerce.item.created": "opening",
@@ -2802,6 +2838,102 @@ def _require_catalog_baselines_unchanged(
 ) -> None:
     if _catalog_baselines(current) != _catalog_baselines(next_state):
         raise TrialValidationError("event cannot change: catalogBaselines.")
+
+
+def _inventory_foundation(state: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    foundation = state.get("inventoryFoundation")
+    return foundation if isinstance(foundation, Mapping) else None
+
+
+def _require_inventory_foundation_unchanged(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    if _inventory_foundation(current) != _inventory_foundation(next_state):
+        raise TrialValidationError("event cannot change: inventoryFoundation.")
+
+
+def _inventory_item_totals(state: Mapping[str, Any]) -> dict[str, int]:
+    return {
+        str(item["sku"]): int(item["onHand"])
+        for item in state["items"]
+        if int(item["onHand"]) > 0
+    }
+
+
+def _validate_inventory_initialized(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    if _inventory_foundation(current) is not None:
+        raise TrialValidationError("Shop location inventory is already initialized.")
+    if _without(current, frozenset({"inventoryFoundation"})) != _without(
+        next_state, frozenset({"inventoryFoundation"})
+    ):
+        raise TrialValidationError(
+            "commerce.inventory.initialized may change only inventoryFoundation."
+        )
+    foundation = _inventory_foundation(next_state)
+    if foundation is None:
+        raise TrialValidationError("Shop location inventory state is required.")
+    catalog_skus = [str(item["sku"]) for item in current["items"]]
+    try:
+        validated = validate_shop_inventory_state(
+            foundation,
+            catalog_skus,
+            require_current_catalog_digest=True,
+        )
+        totals = shop_inventory_sku_totals(validated, catalog_skus)
+    except ShopInventoryValidationError as exc:
+        raise TrialValidationError(str(exc)) from exc
+    if (
+        validated["revision"] != 1
+        or validated["commands"][0]["payload"]["kind"] != "import"
+    ):
+        raise TrialValidationError(
+            "commerce.inventory.initialized must record exactly one opening import."
+        )
+    if totals != _inventory_item_totals(current):
+        raise TrialValidationError(
+            "location opening totals must equal current positive Shop stock."
+        )
+
+
+def _validate_inventory_transferred(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    if _without(current, frozenset({"inventoryFoundation"})) != _without(
+        next_state, frozenset({"inventoryFoundation"})
+    ):
+        raise TrialValidationError(
+            "commerce.inventory.transferred may change only inventoryFoundation."
+        )
+    current_foundation = _inventory_foundation(current)
+    next_foundation = _inventory_foundation(next_state)
+    if current_foundation is None or next_foundation is None:
+        raise TrialValidationError("Shop location inventory must be initialized first.")
+    catalog_skus = [str(item["sku"]) for item in current["items"]]
+    try:
+        before = validate_shop_inventory_state(current_foundation, catalog_skus)
+        after = validate_shop_inventory_state(next_foundation, catalog_skus)
+        before_totals = shop_inventory_sku_totals(before, catalog_skus)
+        after_totals = shop_inventory_sku_totals(after, catalog_skus)
+    except ShopInventoryValidationError as exc:
+        raise TrialValidationError(str(exc)) from exc
+    if (
+        after["revision"] != before["revision"] + 1
+        or after["commands"][:-1] != before["commands"]
+        or after["commands"][-1]["payload"]["kind"] != "transfer"
+    ):
+        raise TrialValidationError(
+            "commerce.inventory.transferred must append exactly one transfer command."
+        )
+    expected = _inventory_item_totals(current)
+    if before_totals != expected or after_totals != expected:
+        raise TrialValidationError(
+            "location totals drifted from aggregate Shop stock; reconcile before transfer."
+        )
 
 
 def _validate_new_order_and_reservation(
@@ -3772,6 +3904,8 @@ _TRANSITION_VALIDATORS = {
     "commerce.stock.received": _validate_received,
     "commerce.stock.counted": _validate_counted,
     "commerce.production_material.issued": _validate_production_material_issued,
+    "commerce.inventory.initialized": _validate_inventory_initialized,
+    "commerce.inventory.transferred": _validate_inventory_transferred,
     "commerce.purchase_order.created": _validate_purchase_order_created,
     "commerce.purchase_order.received": _validate_purchase_order_received,
     "commerce.purchase_order.cancelled": _validate_purchase_order_cancelled,
@@ -3826,6 +3960,11 @@ def reduce_commerce_state(
         "commerce.purchase_order.cancelled",
     }:
         _require_purchase_orders_unchanged(current_state, next_state)
+    if event_type not in {
+        "commerce.inventory.initialized",
+        "commerce.inventory.transferred",
+    }:
+        _require_inventory_foundation_unchanged(current_state, next_state)
     _TRANSITION_VALIDATORS[event_type](current_state, next_state)
     _validate_event_evidence(event_type, current_state, next_state, evidence)
     return next_state

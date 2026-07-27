@@ -12,6 +12,11 @@ from threading import RLock
 from typing import Any, Callable, Iterator, Mapping, Protocol, Sequence
 from uuid import UUID, uuid4
 
+from supermega_runtime.shop_inventory_runtime import (
+    ShopInventoryValidationError,
+    restamp_latest_shop_inventory_command,
+)
+
 
 TRIAL_SCHEMA_COMPONENT = "private_trial_backend"
 TRIAL_SCHEMA_VERSION = 5
@@ -34,6 +39,8 @@ HUMAN_COMMAND_EVENTS = frozenset(
         "commerce.stock.received",
         "commerce.stock.counted",
         "commerce.production_material.issued",
+        "commerce.inventory.initialized",
+        "commerce.inventory.transferred",
         "commerce.purchase_order.created",
         "commerce.purchase_order.received",
         "commerce.purchase_order.cancelled",
@@ -581,6 +588,59 @@ def _authoritative_command_payload(
             "actor": principal.actor_id,
             "capturedAt": captured_at,
         }
+        return authoritative
+    if event_type in {
+        "commerce.inventory.initialized",
+        "commerce.inventory.transferred",
+    }:
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        foundation = (
+            state.get("inventoryFoundation") if isinstance(state, Mapping) else None
+        )
+        if (
+            not isinstance(evidence, Mapping)
+            or not isinstance(state, Mapping)
+            or not isinstance(foundation, Mapping)
+        ):
+            return authoritative
+        commands = foundation.get("commands")
+        previous_captured_at = None
+        if (
+            isinstance(commands, list)
+            and len(commands) > 1
+            and isinstance(commands[-2], Mapping)
+        ):
+            previous_payload = commands[-2].get("payload")
+            previous_proof = (
+                previous_payload.get("proof")
+                if isinstance(previous_payload, Mapping)
+                else None
+            )
+            previous_captured_at = (
+                previous_proof.get("capturedAt")
+                if isinstance(previous_proof, Mapping)
+                else None
+            )
+        effective_captured_at = _not_before(captured_at, previous_captured_at)
+        authoritative_evidence = {
+            **dict(evidence),
+            "actor": principal.actor_id,
+            "capturedAt": effective_captured_at,
+        }
+        try:
+            authoritative_foundation = restamp_latest_shop_inventory_command(
+                foundation,
+                action_id=str(authoritative_evidence.get("actionId", "")),
+                actor=principal.actor_id,
+                captured_at=effective_captured_at,
+            )
+        except ShopInventoryValidationError as exc:
+            raise TrialValidationError(str(exc)) from exc
+        authoritative_state = dict(state)
+        authoritative_state["inventoryFoundation"] = authoritative_foundation
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
         return authoritative
     if event_type == "commerce.item.updated":
         evidence = authoritative.get("evidence")
