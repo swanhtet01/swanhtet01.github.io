@@ -1,6 +1,7 @@
 export const COMMERCE_WORKSPACE_SCHEMA = 'supermega.commerce.workspace.v2' as const
 export const COMMERCE_STOREFRONT_SCHEMA = 'supermega.ecommerce.storefront.v1' as const
 export const COMMERCE_ORDER_CALCULATION_SCHEMA = 'supermega.commerce.order-calculation.v1' as const
+export const COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = 'supermega.commerce.daily-close-export.v1' as const
 const COMMERCE_STOREFRONT_PREVIEW_SCHEMA = 'supermega.ecommerce.storefront_preview.v1' as const
 export const COMMERCE_KEY = 'supermega.commerce.workspace.v2'
 export const LEGACY_COMMERCE_KEYS = ['supermega.commerce.workspace.v1', 'supermega.shop.workspace.v2']
@@ -134,6 +135,38 @@ export type CommerceCloseExpectation = {
   paymentExceptionOrderIds: string[]
   stockExceptionSkus: string[]
   stateSnapshot: string
+}
+
+export type CommerceDailyCloseExportOrder = {
+  orderId: string
+  orderCreatedAt: string
+  paymentMethod: string
+  paymentReconciledAt: string | null
+  paymentEvidenceReference: string | null
+  currency: 'MMK'
+  catalogRevision: number | null
+  subtotalMmk: number | null
+  taxMode: 'not_configured' | 'not_recorded'
+  taxMmk: number | null
+  totalMmk: number
+  calculationStatus: 'accepted' | 'legacy_unverified'
+}
+
+export type CommerceDailyCloseExport = {
+  schema: typeof COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA
+  closeId: string
+  businessDate: string
+  closedAt: string
+  actionId: string
+  operator: string
+  reason: string
+  evidenceReference: string
+  totalMmk: number
+  orderCount: number
+  paymentExceptionOrderIds: string[]
+  stockExceptionSkus: string[]
+  orders: CommerceDailyCloseExportOrder[]
+  digest: string
 }
 
 export type CommerceWebsiteSource = {
@@ -2960,6 +2993,15 @@ function sameCloseExpectation(left: CommerceCloseExpectation, right: CommerceClo
     && sameStringArray(left.stockExceptionSkus, right.stockExceptionSkus)
 }
 
+function commerceOrderCloseBasis(order: CommerceOrder) {
+  return [
+    order.createdAt,
+    order.paymentReconciledAt,
+    order.completion?.capturedAt,
+  ].flatMap((timestamp) => timestamp ? [timestampMicros(timestamp) as bigint] : [])
+    .reduce((latest, timestamp) => timestamp > latest ? timestamp : latest, 0n)
+}
+
 export function commerceCloseExpectation(state: CommerceState, capturedAt: string): CommerceCloseExpectation | null {
   if (!validTimestamp(capturedAt)) return null
   const current = validateCommerceState(state)
@@ -2967,10 +3009,12 @@ export function commerceCloseExpectation(state: CommerceState, capturedAt: strin
   const businessDate = myanmarBusinessDate(capturedAt)
   if (current.closes.some((close) => close.businessDate === businessDate)) return null
   const previouslyClosedOrderIds = new Set(current.closes.flatMap((close) => close.orderIds ?? []))
-  const orderIds = current.orders
+  const eligibleOrders = current.orders
     .filter((order) => order.status === 'completed'
       && order.paymentStatus === 'reconciled'
       && !previouslyClosedOrderIds.has(order.id))
+  if (eligibleOrders.some((order) => commerceOrderCloseBasis(order) > (timestampMicros(capturedAt) as bigint))) return null
+  const orderIds = eligibleOrders
     .map((order) => order.id)
     .sort()
   const total = orderIds.reduce((sum, orderId) => sum + (current.orders.find((order) => order.id === orderId)?.total ?? 0), 0)
@@ -3023,6 +3067,171 @@ export function saveCommerceClose(
     evidenceReference: proof.evidenceReference,
   }
   return validateCommerceState({ ...current, closes: [close, ...current.closes] })
+}
+
+function commerceDailyCloseExportProjection(artifact: Omit<CommerceDailyCloseExport, 'digest'>) {
+  return [
+    artifact.schema,
+    artifact.closeId,
+    artifact.businessDate,
+    artifact.closedAt,
+    artifact.actionId,
+    artifact.operator,
+    artifact.reason,
+    artifact.evidenceReference,
+    artifact.totalMmk,
+    artifact.orderCount,
+    artifact.paymentExceptionOrderIds,
+    artifact.stockExceptionSkus,
+    artifact.orders.map((order) => [
+      order.orderId,
+      order.orderCreatedAt,
+      order.paymentMethod,
+      order.paymentReconciledAt,
+      order.paymentEvidenceReference,
+      order.currency,
+      order.catalogRevision,
+      order.subtotalMmk,
+      order.taxMode,
+      order.taxMmk,
+      order.totalMmk,
+      order.calculationStatus,
+    ]),
+  ]
+}
+
+export function commerceDailyCloseExport(state: CommerceState, closeId: string): CommerceDailyCloseExport | null {
+  const current = validateCommerceState(state)
+  const close = current.closes.find((candidate) => candidate.id === closeId)
+  if (!close?.businessDate
+    || !close.orderIds
+    || !close.paymentExceptionOrderIds
+    || !close.stockExceptionSkus
+    || !close.actionId
+    || !close.operator
+    || !close.reason
+    || !close.evidenceReference) return null
+  const orderById = new Map(current.orders.map((order) => [order.id, order]))
+  if (close.orderIds.some((orderId) => commerceOrderCloseBasis(orderById.get(orderId) as CommerceOrder) > (timestampMicros(close.createdAt) as bigint))) return null
+  const orders = close.orderIds.map((orderId): CommerceDailyCloseExportOrder => {
+    const order = orderById.get(orderId) as CommerceOrder
+    const calculation = order.calculation
+    return {
+      orderId: order.id,
+      orderCreatedAt: order.createdAt,
+      paymentMethod: order.payment,
+      paymentReconciledAt: order.paymentReconciledAt ?? null,
+      paymentEvidenceReference: order.paymentEvidenceReference ?? null,
+      currency: calculation?.currency ?? 'MMK',
+      catalogRevision: calculation?.catalogRevision ?? null,
+      subtotalMmk: calculation?.subtotalMmk ?? null,
+      taxMode: calculation?.taxMode ?? 'not_recorded',
+      taxMmk: calculation?.taxMmk ?? null,
+      totalMmk: order.total,
+      calculationStatus: calculation ? 'accepted' : 'legacy_unverified',
+    }
+  })
+  const artifact: Omit<CommerceDailyCloseExport, 'digest'> = {
+    schema: COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA,
+    closeId: close.id,
+    businessDate: close.businessDate,
+    closedAt: close.createdAt,
+    actionId: close.actionId,
+    operator: close.operator,
+    reason: close.reason,
+    evidenceReference: close.evidenceReference,
+    totalMmk: close.total,
+    orderCount: close.orders,
+    paymentExceptionOrderIds: [...close.paymentExceptionOrderIds],
+    stockExceptionSkus: [...close.stockExceptionSkus],
+    orders,
+  }
+  return {
+    ...artifact,
+    digest: `sha256:${sha256Hex(JSON.stringify(commerceDailyCloseExportProjection(artifact)))}`,
+  }
+}
+
+function commerceCsvCell(value: string | number | null | string[]) {
+  let raw = Array.isArray(value) ? value.join(';') : value === null ? '' : String(value)
+  if (/^[=+@-]/.test(raw)) raw = `'${raw}`
+  return `"${raw.replace(/"/g, '""')}"`
+}
+
+export function commerceDailyCloseCsv(artifact: CommerceDailyCloseExport) {
+  const header = [
+    'schema',
+    'record_type',
+    'close_id',
+    'business_date',
+    'closed_at',
+    'operator',
+    'evidence_reference',
+    'order_id',
+    'order_created_at',
+    'payment_method',
+    'payment_reconciled_at',
+    'payment_evidence_reference',
+    'currency',
+    'catalog_revision',
+    'subtotal_mmk',
+    'tax_mode',
+    'tax_mmk',
+    'total_mmk',
+    'calculation_status',
+    'payment_exception_order_ids',
+    'stock_exception_skus',
+    'artifact_digest',
+  ]
+  const rows: Array<Array<string | number | null | string[]>> = [[
+    artifact.schema,
+    'close',
+    artifact.closeId,
+    artifact.businessDate,
+    artifact.closedAt,
+    artifact.operator,
+    artifact.evidenceReference,
+    null,
+    null,
+    null,
+    null,
+    null,
+    'MMK',
+    null,
+    null,
+    null,
+    null,
+    artifact.totalMmk,
+    null,
+    artifact.paymentExceptionOrderIds,
+    artifact.stockExceptionSkus,
+    artifact.digest,
+  ]]
+  rows.push(...artifact.orders.map((order) => [
+    artifact.schema,
+    'order',
+    artifact.closeId,
+    artifact.businessDate,
+    artifact.closedAt,
+    null,
+    null,
+    order.orderId,
+    order.orderCreatedAt,
+    order.paymentMethod,
+    order.paymentReconciledAt,
+    order.paymentEvidenceReference,
+    order.currency,
+    order.catalogRevision,
+    order.subtotalMmk,
+    order.taxMode,
+    order.taxMmk,
+    order.totalMmk,
+    order.calculationStatus,
+    null,
+    null,
+    artifact.digest,
+  ]))
+  return [header, ...rows].map((row) => row.map(commerceCsvCell).join(',')).join('\r\n') + '\r\n'
 }
 
 export function advanceCommerceOrder(

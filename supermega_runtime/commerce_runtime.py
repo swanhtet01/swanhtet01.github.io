@@ -19,6 +19,7 @@ from supermega_runtime.trial_store import TrialValidationError
 
 
 COMMERCE_SCHEMA = "supermega.commerce.workspace.v2"
+COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = "supermega.commerce.daily-close-export.v1"
 COMMERCE_EVENTS = frozenset(
     {
         "commerce.workspace.initialized",
@@ -2397,6 +2398,202 @@ def commerce_catalog_digest(state: Mapping[str, Any]) -> str:
     return f"sha256:{sha256(encoded).hexdigest()}"
 
 
+def commerce_daily_close_export(
+    state: Mapping[str, Any],
+    close_id: str,
+) -> dict[str, Any] | None:
+    """Project one attributable close into a deterministic, PII-minimised ledger artifact."""
+
+    current = validate_commerce_state(state)
+    close = next(
+        (candidate for candidate in current["closes"] if candidate["id"] == close_id),
+        None,
+    )
+    if close is None or not _CLOSE_SNAPSHOT_FIELDS.issubset(close):
+        return None
+    order_by_id = {order["id"]: order for order in current["orders"]}
+    close_at = datetime.fromisoformat(close["createdAt"].replace("Z", "+00:00"))
+    if any(
+        _commerce_order_close_basis(order_by_id[order_id]) > close_at
+        for order_id in close["orderIds"]
+    ):
+        return None
+    rows: list[dict[str, Any]] = []
+    for order_id in close["orderIds"]:
+        order = order_by_id[order_id]
+        calculation = order.get("calculation")
+        accepted_calculation = isinstance(calculation, Mapping)
+        rows.append(
+            {
+                "orderId": order["id"],
+                "orderCreatedAt": order["createdAt"],
+                "paymentMethod": order["payment"],
+                "paymentReconciledAt": order.get("paymentReconciledAt"),
+                "paymentEvidenceReference": order.get("paymentEvidenceReference"),
+                "currency": calculation["currency"] if accepted_calculation else "MMK",
+                "catalogRevision": calculation["catalogRevision"] if accepted_calculation else None,
+                "subtotalMmk": calculation["subtotalMmk"] if accepted_calculation else None,
+                "taxMode": calculation["taxMode"] if accepted_calculation else "not_recorded",
+                "taxMmk": calculation["taxMmk"] if accepted_calculation else None,
+                "totalMmk": order["total"],
+                "calculationStatus": "accepted" if accepted_calculation else "legacy_unverified",
+            }
+        )
+    artifact: dict[str, Any] = {
+        "schema": COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA,
+        "closeId": close["id"],
+        "businessDate": close["businessDate"],
+        "closedAt": close["createdAt"],
+        "actionId": close["actionId"],
+        "operator": close["operator"],
+        "reason": close["reason"],
+        "evidenceReference": close["evidenceReference"],
+        "totalMmk": close["total"],
+        "orderCount": close["orders"],
+        "paymentExceptionOrderIds": list(close["paymentExceptionOrderIds"]),
+        "stockExceptionSkus": list(close["stockExceptionSkus"]),
+        "orders": rows,
+    }
+    artifact["digest"] = _projection_digest(
+        [
+            artifact["schema"],
+            artifact["closeId"],
+            artifact["businessDate"],
+            artifact["closedAt"],
+            artifact["actionId"],
+            artifact["operator"],
+            artifact["reason"],
+            artifact["evidenceReference"],
+            artifact["totalMmk"],
+            artifact["orderCount"],
+            artifact["paymentExceptionOrderIds"],
+            artifact["stockExceptionSkus"],
+            [
+                [
+                    row["orderId"],
+                    row["orderCreatedAt"],
+                    row["paymentMethod"],
+                    row["paymentReconciledAt"],
+                    row["paymentEvidenceReference"],
+                    row["currency"],
+                    row["catalogRevision"],
+                    row["subtotalMmk"],
+                    row["taxMode"],
+                    row["taxMmk"],
+                    row["totalMmk"],
+                    row["calculationStatus"],
+                ]
+                for row in rows
+            ],
+        ]
+    )
+    return artifact
+
+
+def _commerce_csv_cell(value: Any) -> str:
+    if isinstance(value, list):
+        raw = ";".join(str(entry) for entry in value)
+    elif value is None:
+        raw = ""
+    else:
+        raw = str(value)
+    if raw.startswith(("=", "+", "-", "@")):
+        raw = f"'{raw}"
+    return f'"{raw.replace(chr(34), chr(34) * 2)}"'
+
+
+def commerce_daily_close_csv(
+    state: Mapping[str, Any],
+    close_id: str,
+) -> str | None:
+    """Render the trusted close projection as a formula-safe deterministic CSV."""
+
+    artifact = commerce_daily_close_export(state, close_id)
+    if artifact is None:
+        return None
+    header = [
+        "schema",
+        "record_type",
+        "close_id",
+        "business_date",
+        "closed_at",
+        "operator",
+        "evidence_reference",
+        "order_id",
+        "order_created_at",
+        "payment_method",
+        "payment_reconciled_at",
+        "payment_evidence_reference",
+        "currency",
+        "catalog_revision",
+        "subtotal_mmk",
+        "tax_mode",
+        "tax_mmk",
+        "total_mmk",
+        "calculation_status",
+        "payment_exception_order_ids",
+        "stock_exception_skus",
+        "artifact_digest",
+    ]
+    rows: list[list[Any]] = [
+        [
+            artifact["schema"],
+            "close",
+            artifact["closeId"],
+            artifact["businessDate"],
+            artifact["closedAt"],
+            artifact["operator"],
+            artifact["evidenceReference"],
+            None,
+            None,
+            None,
+            None,
+            None,
+            "MMK",
+            None,
+            None,
+            None,
+            None,
+            artifact["totalMmk"],
+            None,
+            artifact["paymentExceptionOrderIds"],
+            artifact["stockExceptionSkus"],
+            artifact["digest"],
+        ]
+    ]
+    rows.extend(
+        [
+            artifact["schema"],
+            "order",
+            artifact["closeId"],
+            artifact["businessDate"],
+            artifact["closedAt"],
+            None,
+            None,
+            row["orderId"],
+            row["orderCreatedAt"],
+            row["paymentMethod"],
+            row["paymentReconciledAt"],
+            row["paymentEvidenceReference"],
+            row["currency"],
+            row["catalogRevision"],
+            row["subtotalMmk"],
+            row["taxMode"],
+            row["taxMmk"],
+            row["totalMmk"],
+            row["calculationStatus"],
+            None,
+            None,
+            artifact["digest"],
+        ]
+        for row in artifact["orders"]
+    )
+    return "\r\n".join(
+        ",".join(_commerce_csv_cell(cell) for cell in row)
+        for row in [header, *rows]
+    ) + "\r\n"
+
+
 def _configured_storefront_preview_digest(
     state: Mapping[str, Any],
     configuration: Mapping[str, Any],
@@ -3165,6 +3362,19 @@ def _validate_purchase_order_cancelled(
         )
 
 
+def _commerce_order_close_basis(order: Mapping[str, Any]) -> datetime:
+    timestamps = [str(order["createdAt"])]
+    if order.get("paymentReconciledAt"):
+        timestamps.append(str(order["paymentReconciledAt"]))
+    completion = order.get("completion")
+    if isinstance(completion, Mapping):
+        timestamps.append(str(completion["capturedAt"]))
+    return max(
+        datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+        for timestamp in timestamps
+    )
+
+
 def _validate_close(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
     _require_unchanged(current, next_state, "items", "orders", "movements")
     _require_website_intakes_unchanged(current, next_state)
@@ -3197,6 +3407,9 @@ def _validate_close(current: Mapping[str, Any], next_state: Mapping[str, Any]) -
         raise TrialValidationError("new daily closes require exception and operator evidence.")
     if close["orderIds"] != [order["id"] for order in eligible]:
         raise TrialValidationError("daily close order membership must match unclosed completed orders.")
+    close_at = datetime.fromisoformat(str(close["createdAt"]).replace("Z", "+00:00"))
+    if any(_commerce_order_close_basis(order) > close_at for order in eligible):
+        raise TrialValidationError("daily close cannot predate included order evidence.")
     if close["orders"] != len(eligible) or close["total"] != sum(order["total"] for order in eligible):
         raise TrialValidationError("daily close totals must match completed, reconciled orders.")
     if close["businessDate"] != _myanmar_business_date(close["createdAt"]) or any(
@@ -3461,11 +3674,14 @@ def reduce_commerce_state(
 
 
 __all__ = [
+    "COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA",
     "COMMERCE_EVENTS",
     "COMMERCE_HUMAN_EVENTS",
     "COMMERCE_SCHEMA",
     "commerce_catalog_baseline_digest",
     "commerce_catalog_digest",
+    "commerce_daily_close_csv",
+    "commerce_daily_close_export",
     "commerce_storefront_preview_digest",
     "commerce_website_intake_snapshot_digest",
     "reduce_commerce_state",

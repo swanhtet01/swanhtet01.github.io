@@ -1,4 +1,4 @@
-import { lazy, Suspense, type FormEvent, type ReactNode, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate, useOutletContext, useSearchParams } from 'react-router'
 
 import siteManifest from '../../../site-manifest.json'
@@ -40,6 +40,8 @@ import {
   cancelCommercePurchaseOrder,
   cancelCommerceOrder,
   countCommerceStock,
+  commerceDailyCloseCsv,
+  commerceDailyCloseExport,
   commerceCloseExpectation,
   commerceOrderReturnExpectation,
   commerceOrderItemSummary,
@@ -2240,6 +2242,15 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const actionOrderIds = new Set(actionOrders.map((order) => order.id))
   const closedOrders = commerce.orders.filter((order) => !actionOrderIds.has(order.id))
   const latestClose = commerce.closes.find((close) => close.operator)
+  const latestCloseDownload = useMemo(() => {
+    if (!latestClose) return null
+    const artifact = commerceDailyCloseExport(commerce, latestClose.id)
+    if (!artifact) return null
+    return {
+      filename: `supermega-shop-close-${artifact.businessDate}-${artifact.digest.slice(7, 15)}.csv`,
+      href: `data:text/csv;charset=utf-8,${encodeURIComponent(`\uFEFF${commerceDailyCloseCsv(artifact)}`)}`,
+    }
+  }, [commerce, latestClose])
   const importedWebsiteOrderIds = commerce.orders.flatMap((order) => order.sourceRecordId ? [order.sourceRecordId] : [])
   const websiteIntakes = commerceWebsiteIntakes(commerce)
   const localWebsiteIntake = managedIdentity ? null : readWebsiteEcommerceHandoff()
@@ -4025,6 +4036,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         <summary><span>Last close · {latestClose.businessDate}</span><small>{latestClose.orders} orders · {formatMoney(latestClose.total)}</small></summary>
         <p className="form-notice">{latestClose.operator} · {formatTime(latestClose.createdAt)} · evidence {latestClose.evidenceReference}</p>
         <p className="form-notice">Orders: {latestClose.orderIds?.length ? latestClose.orderIds.join(', ') : 'none'} · Payment exceptions: {latestClose.paymentExceptionOrderIds?.length ? latestClose.paymentExceptionOrderIds.join(', ') : 'none'} · Stock exceptions: {latestClose.stockExceptionSkus?.length ? latestClose.stockExceptionSkus.join(', ') : 'none'}</p>
+        {latestCloseDownload ? <a className="core-button" data-close-export="accounting-csv-v1" download={latestCloseDownload.filename} href={latestCloseDownload.href}>Download close CSV</a> : null}
       </details> : null}
       {actionHistory}
     </div>

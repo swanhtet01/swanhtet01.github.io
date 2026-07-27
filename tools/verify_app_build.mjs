@@ -1165,6 +1165,14 @@ if (!coreSource.includes('data-order-calculation-note="true"')
   || !coreSource.includes('Recorded total {formatMoney(order.total)} · Tax status not recorded')
   || !coreSource.includes('Subtotal ${formatMoney(orderTotal)} · Tax not configured')
   || (coreSource.match(/<OrderCalculationNote order=\{order\} \/>/g) || []).length !== 2) fail('commerce_order_calculation_visibility_missing_or_bloated')
+if (!coreSource.includes('data-close-export="accounting-csv-v1"')
+  || !coreSource.includes('Download close CSV')
+  || !commerceSource.includes('supermega.commerce.daily-close-export.v1')
+  || !commerceSource.includes("calculationStatus: calculation ? 'accepted' : 'legacy_unverified'")
+  || !commerceSource.includes("taxMode: calculation?.taxMode ?? 'not_recorded'")
+  || !commerceSource.includes("if (/^[=+@-]/.test(raw)) raw = `'${raw}`")
+  || !managedCommerceRuntime.includes('def commerce_daily_close_export(')
+  || !managedCommerceRuntime.includes('def commerce_daily_close_csv(')) fail('commerce_daily_close_export_missing_or_unsafe')
 if (!coreSource.includes("'commerce.order.return_recorded'")
   || !coreSource.includes("kind: 'order_return'")
   || !coreSource.includes('Record return')
@@ -4733,6 +4741,45 @@ async function verifyCommerceRuntime() {
       && completed.orders[0].completion.actionId === completionProof.actionId
       && model.cancelCommerceOrder(completed, order.id, proof('ACT-CANCEL-COMPLETED')) === null,
     'completed_order_lost_proof_or_was_cancellable')
+    assert(model.commerceCloseExpectation(completed, '2026-07-23T09:00:01.999Z') === null, 'backdated_daily_close_expectation_succeeded')
+    const accountingCloseId = 'CLOSE-00000000-0000-4000-8000-000000000001'
+    const accountingCloseAt = '2026-07-23T10:00:00.000Z'
+    const accountingCloseProof = proof('ACT-00000000-0000-4000-8000-000000000001', 0, {
+      capturedAt: accountingCloseAt,
+      evidenceReference: 'EV-ACCOUNTING-CLOSE-001',
+    })
+    const accountingCloseExpectation = model.commerceCloseExpectation(completed, accountingCloseAt)
+    const accountingClosed = model.saveCommerceClose(completed, accountingCloseId, accountingCloseProof, accountingCloseExpectation)
+    const accountingExport = model.commerceDailyCloseExport(accountingClosed, accountingCloseId)
+    assert(accountingExport?.schema === 'supermega.commerce.daily-close-export.v1'
+      && accountingExport.orderCount === 1
+      && accountingExport.orders[0].calculationStatus === 'accepted'
+      && accountingExport.orders[0].subtotalMmk === 200
+      && accountingExport.orders[0].taxMode === 'not_configured'
+      && accountingExport.digest === 'sha256:d61fc044f45e2c3aea6471b79493c159c1e2f68687a81020abe2d2b65545ea7e'
+      && !JSON.stringify(accountingExport).includes('Customer'),
+    'daily_close_export_not_deterministic_or_minimal')
+    const accountingCsv = model.commerceDailyCloseCsv(accountingExport)
+    assert(accountingCsv.includes('"record_type"')
+      && accountingCsv.includes('"accepted"')
+      && !accountingCsv.includes('Customer')
+      && accountingCsv.split('\r\n').length - 1 === 3,
+    'daily_close_csv_not_complete_or_minimal')
+    const formulaClosed = model.validateCommerceState({
+      ...accountingClosed,
+      closes: [{ ...accountingClosed.closes[0], operator: '=2+2' }],
+    })
+    const formulaExport = model.commerceDailyCloseExport(formulaClosed, accountingCloseId)
+    assert(model.commerceDailyCloseCsv(formulaExport).includes('"\'=2+2"'), 'daily_close_csv_formula_injection_not_neutralized')
+    const legacyAccountingOrder = { ...accountingClosed.orders[0] }
+    delete legacyAccountingOrder.calculation
+    const legacyAccountingState = model.validateCommerceState({ ...accountingClosed, orders: [legacyAccountingOrder] })
+    const legacyAccountingExport = model.commerceDailyCloseExport(legacyAccountingState, accountingCloseId)
+    assert(legacyAccountingExport?.orders[0].calculationStatus === 'legacy_unverified'
+      && legacyAccountingExport.orders[0].subtotalMmk === null
+      && legacyAccountingExport.orders[0].taxMode === 'not_recorded',
+    'daily_close_export_invented_legacy_calculation')
+    assert(model.commerceDailyCloseExport(migrated, 'CLOSE-1') === null, 'legacy_close_without_proof_became_exportable')
     assert(model.advanceCommerceOrder(reconciled, order.id, 'ready') === null, 'completion_without_attribution_succeeded')
     assert(model.advanceCommerceOrder(reconciled, order.id, 'ready', proof('ACT-COMPLETE-EARLY', 500)) === null, 'backdated_completion_succeeded')
     assert(model.advanceCommerceOrder(reconciled, order.id, 'ready', readyProof) === null, 'advancement_action_id_reuse_succeeded')

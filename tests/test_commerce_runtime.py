@@ -14,6 +14,8 @@ from supermega_runtime.commerce_runtime import (
     COMMERCE_HUMAN_EVENTS,
     commerce_catalog_baseline_digest,
     commerce_catalog_digest,
+    commerce_daily_close_csv,
+    commerce_daily_close_export,
     commerce_storefront_preview_digest,
     commerce_website_intake_snapshot_digest,
     validate_commerce_state,
@@ -3947,7 +3949,9 @@ class CommerceRuntimeTests(unittest.TestCase):
         current = apply_event(current, "commerce.order.advanced", completed)
 
         closed = deepcopy(current)
-        closed["closes"] = [close_record(current)]
+        closed["closes"] = [
+            close_record(current, captured_at="2026-07-23T10:00:00.000Z")
+        ]
         result = apply_event(current, "commerce.close.saved", closed)
         self.assertEqual(result["closes"][0]["total"], 200)  # type: ignore[index]
         self.assertEqual(result["closes"][0]["operator"], "Accountable operator")  # type: ignore[index]
@@ -3956,7 +3960,12 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertEqual(result["closes"][0]["paymentExceptionOrderIds"], [])  # type: ignore[index]
 
         wrong_close = deepcopy(current)
-        invalid_close = close_record(current, CLOSE_ACTION_ID_2, close_id=CLOSE_ID_2)
+        invalid_close = close_record(
+            current,
+            CLOSE_ACTION_ID_2,
+            close_id=CLOSE_ID_2,
+            captured_at="2026-07-23T10:00:00.000Z",
+        )
         invalid_close["total"] = 100
         wrong_close["closes"] = [invalid_close]
         with self.assertRaises(TrialValidationError):
@@ -3972,7 +3981,12 @@ class CommerceRuntimeTests(unittest.TestCase):
 
         same_period = deepcopy(result)
         same_period["closes"] = [
-            close_record(result, CLOSE_ACTION_ID_3, close_id=CLOSE_ID_3),
+            close_record(
+                result,
+                CLOSE_ACTION_ID_3,
+                close_id=CLOSE_ID_3,
+                captured_at="2026-07-23T11:00:00.000Z",
+            ),
             *result["closes"],  # type: ignore[union-attr]
         ]
         with self.assertRaises(TrialValidationError):
@@ -4230,6 +4244,99 @@ class CommerceRuntimeTests(unittest.TestCase):
             boundary_next,
         )
         self.assertEqual(accepted_boundary["closes"][0]["businessDate"], "2026-07-24")  # type: ignore[index]
+
+    def test_daily_close_export_is_deterministic_minimal_and_formula_safe(self) -> None:
+        current = completed_state()
+        current["orders"][0]["calculation"] = {  # type: ignore[index]
+            "schema": "supermega.commerce.order-calculation.v1",
+            "currency": "MMK",
+            "catalogRevision": 0,
+            "subtotalMmk": 200,
+            "taxMode": "not_configured",
+            "taxMmk": 0,
+            "totalMmk": 200,
+        }
+        current["orders"][0].update(  # type: ignore[index]
+            {
+                "paymentReconciledAt": "2026-07-23T09:00:01.000Z",
+                "paymentReconciliationActionId": "ACT-PAYMENT",
+                "paymentReconciledBy": "OP-OWNER",
+                "paymentEvidenceReference": "EV-ACT-PAYMENT",
+            }
+        )
+        current = validate_commerce_state(current)
+        next_state = deepcopy(current)
+        backdated_state = deepcopy(current)
+        backdated_state["closes"] = [close_record(current)]
+        with self.assertRaises(TrialValidationError):
+            apply_event(current, "commerce.close.saved", backdated_state)
+        self.assertIsNone(commerce_daily_close_export(backdated_state, CLOSE_ID))
+
+        close = close_record(current, captured_at="2026-07-23T10:00:00.000Z")
+        close.update(
+            {
+                "operator": "OP-OWNER",
+                "evidenceReference": "EV-ACCOUNTING-CLOSE-001",
+            }
+        )
+        next_state["closes"] = [close]
+        closed = apply_event(
+            current,
+            "commerce.close.saved",
+            next_state,
+            action_evidence(
+                CLOSE_ACTION_ID,
+                captured_at="2026-07-23T10:00:00.000Z",
+                actor="OP-OWNER",
+                evidence_reference="EV-ACCOUNTING-CLOSE-001",
+            ),
+        )
+
+        artifact = commerce_daily_close_export(closed, CLOSE_ID)
+        self.assertIsNotNone(artifact)
+        assert artifact is not None
+        self.assertEqual(artifact, commerce_daily_close_export(closed, CLOSE_ID))
+        self.assertEqual(artifact["schema"], "supermega.commerce.daily-close-export.v1")
+        self.assertEqual(artifact["orderCount"], 1)
+        self.assertEqual(artifact["orders"][0]["calculationStatus"], "accepted")
+        self.assertEqual(artifact["orders"][0]["subtotalMmk"], 200)
+        self.assertEqual(artifact["orders"][0]["taxMode"], "not_configured")
+        self.assertNotIn("customer", json.dumps(artifact))
+        self.assertEqual(
+            artifact["digest"],
+            "sha256:d61fc044f45e2c3aea6471b79493c159c1e2f68687a81020abe2d2b65545ea7e",
+        )
+
+        csv_text = commerce_daily_close_csv(closed, CLOSE_ID)
+        self.assertIsNotNone(csv_text)
+        assert csv_text is not None
+        self.assertIn('"record_type"', csv_text)
+        self.assertIn('"accepted"', csv_text)
+        self.assertNotIn("Customer ref", csv_text)
+        self.assertEqual(csv_text.count("\r\n"), 3)
+
+        formula_state = deepcopy(closed)
+        formula_state["closes"][0]["operator"] = "=2+2"  # type: ignore[index]
+        formula_csv = commerce_daily_close_csv(formula_state, CLOSE_ID)
+        self.assertIsNotNone(formula_csv)
+        assert formula_csv is not None
+        self.assertIn('"\'=2+2"', formula_csv)
+
+        legacy_order_state = deepcopy(closed)
+        del legacy_order_state["orders"][0]["calculation"]  # type: ignore[index]
+        legacy_artifact = commerce_daily_close_export(legacy_order_state, CLOSE_ID)
+        self.assertIsNotNone(legacy_artifact)
+        assert legacy_artifact is not None
+        self.assertEqual(legacy_artifact["orders"][0]["calculationStatus"], "legacy_unverified")
+        self.assertIsNone(legacy_artifact["orders"][0]["subtotalMmk"])
+        self.assertEqual(legacy_artifact["orders"][0]["taxMode"], "not_recorded")
+
+        legacy_close_state = catalog_state()
+        legacy_close_state["closes"] = [
+            {"id": "CLOSE-LEGACY", "createdAt": NOW, "total": 0, "orders": 0}
+        ]
+        self.assertIsNone(commerce_daily_close_export(legacy_close_state, "CLOSE-LEGACY"))
+        self.assertIsNone(commerce_daily_close_csv(legacy_close_state, "CLOSE-LEGACY"))
 
     def test_cancellation_releases_once_and_preserves_refund_exception(self) -> None:
         current = created_state("ORD-CANCEL")
