@@ -5,6 +5,7 @@ import store from '../store.mjs'
 import { generateDeal } from './deal.mjs'
 import { onDealSaved, onProjectShipped } from './graduation.mjs'
 import connectors from '../connectors/index.mjs'
+import { companyDailyBudgetCap, currentDailyBudgetWindow } from '../gateway.mjs'
 import crypto from 'node:crypto'
 
 const OPS_KEY = (process.env.SUPERMEGA_OPS_KEY || '').trim()
@@ -25,6 +26,49 @@ const OFFER_USD = { 'tool-week': 600, dashboard: 1800, 'ai-agent': 2500, 'design
 const priceOf = (offer) => OFFER_USD[offer] || OFFER_USD.build
 const aiConfigured = () => Boolean(process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY)
 
+function operatorAiBudgetStatus(usage, window, capUnits) {
+  const contract = 'supermega.company-ai-budget-status.v1'
+  const unavailable = {
+    contract,
+    window,
+    unit: 'bulk_equivalent_tokens',
+    available: false,
+    readiness: 'unavailable',
+    durableStoreReady: false,
+    capUnits,
+    reservedUnits: null,
+    remainingUnits: null,
+    utilizationPercent: null,
+    attempts: null,
+    states: { inFlight: null, consumed: null, failed: null },
+  }
+  if (usage?.available !== true) return unavailable
+  const metric = (value) => value !== null && value !== undefined && value !== ''
+    && Number.isSafeInteger(Number(value)) && Number(value) >= 0 ? Number(value) : null
+  const reservedUnits = metric(usage.reservedUnits)
+  const attempts = metric(usage.attempts)
+  const inFlight = metric(usage.inFlight)
+  const consumed = metric(usage.consumed)
+  const failed = metric(usage.failed)
+  if ([reservedUnits, attempts, inFlight, consumed, failed].includes(null)
+    || inFlight + consumed + failed !== attempts) return unavailable
+  const durableStoreReady = usage.durable === true
+  return {
+    contract,
+    window,
+    unit: 'bulk_equivalent_tokens',
+    available: true,
+    readiness: durableStoreReady ? 'durable' : 'ephemeral',
+    durableStoreReady,
+    capUnits,
+    reservedUnits,
+    remainingUnits: Math.max(0, capUnits - reservedUnits),
+    utilizationPercent: Number(((reservedUnits / capUnits) * 100).toFixed(1)),
+    attempts,
+    states: { inFlight, consumed, failed },
+  }
+}
+
 const ok = (json) => ({ status: 200, json })
 const bad = (status, reason) => ({ status, json: { ok: false, reason } })
 const log = (kind, summary, ref) => store.logActivity({ kind, summary, ref }).catch(() => {})
@@ -39,12 +83,18 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
   try {
     // ---- STATE (header badges) ----
     if (method === 'GET' && seg[0] === 'state') {
+      const budgetWindow = currentDailyBudgetWindow()
+      const budgetCapUnits = companyDailyBudgetCap()
+      const budgetUsagePromise = Promise.resolve()
+        .then(() => store.getAiBudgetUsage(budgetWindow))
+        .catch(() => ({ available: false, durable: false, window: budgetWindow }))
       try {
-        const [leads, projects] = await Promise.all([store.listLeads(), store.listProjects()])
+        const [leads, projects, budgetUsage] = await Promise.all([store.listLeads(), store.listProjects(), budgetUsagePromise])
         const byStatus = projects.reduce((m, p) => ((m[p.status] = (m[p.status] || 0) + 1), m), {})
-        return ok({ ok: true, mode: store.mode, aiConfigured: aiConfigured(), totals: { leads: leads.length, projects: projects.length }, projects: byStatus, dbStatus: 'ok' })
+        return ok({ ok: true, mode: store.mode, aiConfigured: aiConfigured(), aiBudget: operatorAiBudgetStatus(budgetUsage, budgetWindow, budgetCapUnits), totals: { leads: leads.length, projects: projects.length }, projects: byStatus, dbStatus: 'ok' })
       } catch (e) {
-        return ok({ ok: true, mode: store.mode, aiConfigured: aiConfigured(), totals: { leads: 0, projects: 0 }, projects: {}, dbStatus: 'error', dbError: String(e.message).slice(0, 140) })
+        const budgetUsage = await budgetUsagePromise
+        return ok({ ok: true, mode: store.mode, aiConfigured: aiConfigured(), aiBudget: operatorAiBudgetStatus(budgetUsage, budgetWindow, budgetCapUnits), totals: { leads: 0, projects: 0 }, projects: {}, dbStatus: 'error', dbError: String(e.message).slice(0, 140) })
       }
     }
 

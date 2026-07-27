@@ -102,6 +102,23 @@ async function ensurePgTables() {
     end;
     $supermega$;
     revoke all on function public.supermega_reserve_ai_budget(text,text,bigint,bigint,text,text,text) from public;
+    create or replace function public.supermega_get_ai_budget_usage(p_window text)
+    returns table (reserved_units bigint, attempts bigint, in_flight bigint, consumed bigint, failed bigint)
+    language sql
+    stable
+    security invoker
+    set search_path = public
+    as $supermega$
+      select
+        coalesce(sum(r.reserved_units), 0)::bigint as reserved_units,
+        count(*)::bigint as attempts,
+        count(*) filter (where r.status = 'reserved')::bigint as in_flight,
+        count(*) filter (where r.status = 'consumed')::bigint as consumed,
+        count(*) filter (where r.status = 'failed')::bigint as failed
+      from public.supermega_ai_budget_reservations r
+      where r."window" = p_window and r.status <> 'released'
+    $supermega$;
+    revoke all on function public.supermega_get_ai_budget_usage(text) from public;
     create table if not exists supermega_ai_cache (cache_key text primary key, payload jsonb not null, created_at timestamptz default now());
     create table if not exists supermega_action_queue (id text primary key, client_id text not null, action_type text not null, title text not null, payload jsonb not null, payload_hash text not null, source jsonb not null default '{}'::jsonb, status text not null default 'draft', version int not null default 0, approved_by text, approved_at timestamptz, rejected_by text, rejected_at timestamptz, executing_at timestamptz, lease_expires_at timestamptz, attempts int not null default 0, provider_ref text, result jsonb, last_error text, executed_at timestamptz, created_at timestamptz not null default now(), updated_at timestamptz not null default now(), constraint supermega_action_queue_status check (status in ('draft','approved','executing','succeeded','failed','rejected')));
     create table if not exists supermega_graduation (signature text primary key, label text, count int not null default 1, sources jsonb default '[]'::jsonb, modules jsonb default '[]'::jsonb, productized boolean not null default false, graduated_at timestamptz, updated_at timestamptz default now());
@@ -588,6 +605,62 @@ export async function reserveAiBudget(input = {}) {
   }
 }
 
+function aiBudgetUsageRow(window, row, durable) {
+  const integer = (value) => {
+    if (value === null || value === undefined || value === '') return null
+    const parsed = Number(value)
+    return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null
+  }
+  const reservedUnits = integer(row?.reserved_units)
+  const attempts = integer(row?.attempts)
+  const inFlight = integer(row?.in_flight)
+  const consumed = integer(row?.consumed)
+  const failed = integer(row?.failed)
+  if ([reservedUnits, attempts, inFlight, consumed, failed].includes(null)
+    || inFlight + consumed + failed !== attempts) {
+    return { available: false, durable: false, window, reason: 'budget_store_invalid_response' }
+  }
+  return { available: true, durable, window, reservedUnits, attempts, inFlight, consumed, failed }
+}
+
+// Metadata-only company budget aggregate for protected operator status. Tenant, tier, provider,
+// prompt, output, and provider-error fields never leave the reservation store through this read.
+export async function getAiBudgetUsage(windowInput) {
+  const window = String(windowInput || '').trim().slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(window)) {
+    return { available: false, durable: false, window, reason: 'invalid_budget_window' }
+  }
+  try {
+    if (mode === 'supabase') {
+      const result = await rest('POST', 'rpc/supermega_get_ai_budget_usage', { p_window: window })
+      const row = Array.isArray(result) ? result[0] : result
+      return aiBudgetUsageRow(window, row, true)
+    }
+    if (mode === 'postgres') {
+      await ensurePgTables()
+      const rows = await q('select * from public.supermega_get_ai_budget_usage($1)', [window])
+      return aiBudgetUsageRow(window, rows[0], true)
+    }
+
+    const aggregate = { reserved_units: 0, attempts: 0, in_flight: 0, consumed: 0, failed: 0 }
+    for (const [id, row] of mem.aiBudgetReservations) {
+      if (row.window !== window) {
+        mem.aiBudgetReservations.delete(id)
+        continue
+      }
+      if (row.status === 'released') continue
+      aggregate.reserved_units += row.reserved_units
+      aggregate.attempts += 1
+      if (row.status === 'reserved') aggregate.in_flight += 1
+      else if (row.status === 'consumed') aggregate.consumed += 1
+      else if (row.status === 'failed') aggregate.failed += 1
+    }
+    return aiBudgetUsageRow(window, aggregate, false)
+  } catch {
+    return { available: false, durable: false, window, reason: 'budget_store_unavailable' }
+  }
+}
+
 export async function settleAiBudgetReservation(reservationIdInput, statusInput, actualUnitsInput = null) {
   const reservationId = String(reservationIdInput || '').trim().slice(0, 120)
   const status = String(statusInput || '').trim().toLowerCase()
@@ -1039,4 +1112,4 @@ export async function ping() {
   return { ok: false, mode, detail: 'unknown_mode' }
 }
 
-export default { mode, listLeads, getLead, insertLead, updateLead, listClients, listProjects, createClient, getClient, createProject, updateProject, getProject, markDepositPaid, convertedLeadIds, saveDeal, listDeals, updateDeal, logActivity, claimActivity, releaseActivityClaim, getActivityClaim, transitionActivityClaim, listActivity, getTokenUsage, addTokenUsage, reserveAiBudget, settleAiBudgetReservation, getCachedResponse, putCachedResponse, listCachedResponseRecords, transitionCachedResponse, createApprovalRecord, getApprovalRecord, listApprovalRecords, transitionApprovalRecord, recordPaymentEvent, ping, bumpGraduation, recordBuildModules, listGraduation }
+export default { mode, listLeads, getLead, insertLead, updateLead, listClients, listProjects, createClient, getClient, createProject, updateProject, getProject, markDepositPaid, convertedLeadIds, saveDeal, listDeals, updateDeal, logActivity, claimActivity, releaseActivityClaim, getActivityClaim, transitionActivityClaim, listActivity, getTokenUsage, addTokenUsage, reserveAiBudget, getAiBudgetUsage, settleAiBudgetReservation, getCachedResponse, putCachedResponse, listCachedResponseRecords, transitionCachedResponse, createApprovalRecord, getApprovalRecord, listApprovalRecords, transitionApprovalRecord, recordPaymentEvent, ping, bumpGraduation, recordBuildModules, listGraduation }

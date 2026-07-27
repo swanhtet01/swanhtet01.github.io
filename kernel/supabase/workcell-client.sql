@@ -87,6 +87,23 @@ begin
 end;
 $supermega$;
 
+create or replace function public.supermega_get_ai_budget_usage(p_window text)
+returns table (reserved_units bigint, attempts bigint, in_flight bigint, consumed bigint, failed bigint)
+language sql
+stable
+security invoker
+set search_path = public
+as $supermega$
+  select
+    coalesce(sum(r.reserved_units), 0)::bigint as reserved_units,
+    count(*)::bigint as attempts,
+    count(*) filter (where r.status = 'reserved')::bigint as in_flight,
+    count(*) filter (where r.status = 'consumed')::bigint as consumed,
+    count(*) filter (where r.status = 'failed')::bigint as failed
+  from public.supermega_ai_budget_reservations r
+  where r."window" = p_window and r.status <> 'released'
+$supermega$;
+
 create table if not exists public.supermega_ai_cache (
   cache_key text primary key,
   payload jsonb not null,
@@ -158,6 +175,8 @@ grant select, insert, update, delete on public.supermega_action_queue to service
 grant select, insert on public.supermega_owner_evidence to service_role;
 revoke all on function public.supermega_reserve_ai_budget(text,text,bigint,bigint,text,text,text) from public, anon, authenticated;
 grant execute on function public.supermega_reserve_ai_budget(text,text,bigint,bigint,text,text,text) to service_role;
+revoke all on function public.supermega_get_ai_budget_usage(text) from public, anon, authenticated;
+grant execute on function public.supermega_get_ai_budget_usage(text) to service_role;
 
 notify pgrst, 'reload schema';
 

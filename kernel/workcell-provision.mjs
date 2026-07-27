@@ -453,6 +453,7 @@ export async function verifyClientDataSpine(resolvedInput, options = {}) {
   const budgetWindow = '1970-01-01'
   const budgetIds = [`${probeId}:ai-1`, `${probeId}:ai-2`]
   const budgetRpcUrl = `${baseUrl}/rest/v1/rpc/supermega_reserve_ai_budget`
+  const budgetUsageRpcUrl = `${baseUrl}/rest/v1/rpc/supermega_get_ai_budget_usage`
   let budgetFailure = null
   try {
     const reserve = async (reservationId) => {
@@ -476,6 +477,22 @@ export async function verifyClientDataSpine(resolvedInput, options = {}) {
     const first = await reserve(budgetIds[0])
     if (!first.response.ok || first.row?.granted !== true || Number(first.row?.used_units) !== 1) {
       throw new Error('client_data_spine_ai_budget_reservation_failed')
+    }
+    const usageResponse = await fetchImpl(budgetUsageRpcUrl, {
+      method: 'POST',
+      headers: writeHeaders,
+      body: JSON.stringify({ p_window: budgetWindow }),
+      signal: AbortSignal.timeout(10_000),
+    })
+    const usageRows = await usageResponse.json().catch(() => null)
+    const usage = Array.isArray(usageRows) ? usageRows[0] : usageRows
+    if (!usageResponse.ok
+      || Number(usage?.reserved_units) !== 1
+      || Number(usage?.attempts) !== 1
+      || Number(usage?.in_flight) !== 1
+      || Number(usage?.consumed) !== 0
+      || Number(usage?.failed) !== 0) {
+      throw new Error('client_data_spine_ai_budget_telemetry_failed')
     }
     const overCap = await reserve(budgetIds[1])
     if (!overCap.response.ok || overCap.row?.granted !== false || overCap.row?.reason !== 'company_daily_budget_reached') {
@@ -573,7 +590,7 @@ export async function verifyClientDataSpine(resolvedInput, options = {}) {
   }).catch(() => null)
   if (!actionCleanup?.ok && !actionFailure) actionFailure = new Error('client_data_spine_approval_cleanup_failed')
   if (actionFailure) throw actionFailure
-  return { ok: true, tables, atomicAiBudget: true, idempotentClaim: true, approvalCas: true, probeCleaned: true }
+  return { ok: true, tables, atomicAiBudget: true, aiBudgetTelemetry: true, idempotentClaim: true, approvalCas: true, probeCleaned: true }
 }
 
 async function addEnvironmentVariable(run, cwd, scope, name, value, sensitive) {
