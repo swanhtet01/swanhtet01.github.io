@@ -92,6 +92,8 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
   )
   const catalogBySku = useMemo(() => new Map(catalog.map((item) => [item.sku, item])), [catalog])
   const balanceOptions = projection.balances.filter((row) => row.availableToPromise > 0)
+  const activeAggregateOrders = commerce.orders.filter((order) => order.status !== 'completed' && order.status !== 'cancelled')
+  const setupBlockedByOrders = !state.revision && activeAggregateOrders.length > 0
   const selectedBalance = balanceOptions.find((row) => `${row.stockUnitId}|${row.locationId}` === transferDraft.balanceKey)
   const destination = selectedBalance
     ? projection.locations.find((location) => location.id !== selectedBalance.locationId)
@@ -108,13 +110,14 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
     reserved: projection.balances.filter((row) => row.locationId === location.id).reduce((sum, row) => sum + row.reserved, 0),
     availableToPromise: projection.balances.filter((row) => row.locationId === location.id).reduce((sum, row) => sum + row.availableToPromise, 0),
   }))
-  const inventoryDrift = projection.stockUnits.some((unit) => {
-    const locationTotal = projection.balances.filter((row) => row.sku === unit.sku).reduce((sum, row) => sum + row.onHand, 0)
-    return locationTotal !== catalogBySku.get(unit.sku)?.onHand
+  const inventoryDrift = catalog.some((item) => {
+    const locationTotal = projection.balances.filter((row) => row.sku === item.sku).reduce((sum, row) => sum + row.availableToPromise, 0)
+    return locationTotal !== catalogBySku.get(item.sku)?.onHand
   })
 
   function reviewSetup(event: FormEvent) {
     event.preventDefault()
+    if (setupBlockedByOrders) return
     setError('')
     try {
       const stockItems = catalog.filter((item) => Number.isSafeInteger(item.onHand) && item.onHand > 0)
@@ -166,7 +169,7 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
         setupReview.proof.actionId.slice(4),
         setupReview.proof,
         (current) => {
-          if (current.inventoryFoundation) return null
+          if (current.inventoryFoundation || current.orders.some((order) => order.status !== 'completed' && order.status !== 'cancelled')) return null
           const result = applyShopInventoryImport(
             createEmptyShopInventoryState(),
             setupReview.package,
@@ -243,7 +246,7 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
         ? `${projection.metrics.totalOnHand.toLocaleString()} on hand · ${projection.metrics.totalReserved.toLocaleString()} reserved · ${projection.stockUnits.length} traceable ${projection.stockUnits.length === 1 ? 'unit' : 'units'}`
         : 'Add accountable client, vendor, location, and opening-lot evidence inside the Shop record.'}</p>
     </div>
-    {!state.revision ? <button aria-controls="location-stock-setup" aria-expanded={setupOpen} className="core-button primary" disabled={disabled} onClick={() => { setSetupOpen((current) => !current); setSetupReview(null) }} type="button">{setupOpen ? 'Close setup' : 'Set up locations'}</button>
+    {!state.revision ? <button aria-controls="location-stock-setup" aria-expanded={setupOpen} className="core-button primary" disabled={disabled || setupBlockedByOrders} onClick={() => { setSetupOpen((current) => !current); setSetupReview(null) }} type="button">{setupBlockedByOrders ? `Finish ${activeAggregateOrders.length} ${activeAggregateOrders.length === 1 ? 'order' : 'orders'} first` : setupOpen ? 'Close setup' : 'Set up locations'}</button>
       : <button aria-controls="location-stock-transfer" aria-expanded={transferOpen} className="core-button primary" disabled={disabled || inventoryDrift || !balanceOptions.length} onClick={() => { setTransferOpen((current) => !current); setTransferReview(null); setTransferDraft({ balanceKey: balanceOptions[0] ? `${balanceOptions[0].stockUnitId}|${balanceOptions[0].locationId}` : '', quantity: '1' }) }} type="button">{transferOpen ? 'Close move' : 'Move stock'}</button>}
     {setupOpen && !state.revision ? <form className="core-form compact-form" id="location-stock-setup" onSubmit={reviewSetup}>
       <div className="form-row"><label>Main location<input disabled={disabled || Boolean(setupReview)} maxLength={120} onChange={(event) => setSetupDraft((current) => ({ ...current, main: event.target.value }))} required value={setupDraft.main} /></label><label>Second location<input disabled={disabled || Boolean(setupReview)} maxLength={120} onChange={(event) => setSetupDraft((current) => ({ ...current, branch: event.target.value }))} required value={setupDraft.branch} /></label></div>
@@ -258,7 +261,7 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
       {selectedBalance && destination ? <div className="stock-receipt-preview" role="status"><small>{projection.locations.find((location) => location.id === selectedBalance.locationId)?.name} → {destination.name}</small><strong>{transferQuantityValid ? `${transferQuantity} units · ${selectedBalance.availableToPromise - transferQuantity} source ATP after` : 'Enter available units'}</strong></div> : null}
       <div className="form-actions">{transferReview ? <button className="core-button" disabled={busy} onClick={() => setTransferReview(null)} type="button">Edit</button> : null}<button className="core-button primary" disabled={disabled || busy || !transferQuantityValid} onClick={transferReview ? () => void confirmTransfer() : undefined} type={transferReview ? 'button' : 'submit'}>{transferReview ? busy ? 'Moving…' : 'Confirm move' : 'Review move'}</button></div>
     </form> : null}
-    {inventoryDrift ? <p className="form-notice warning-text" role="alert">Aggregate Shop stock changed after location setup. Reconcile the opening layer before another move.</p> : null}
-    <p className="form-notice" aria-live="polite">{error || notice || (state.revision ? 'Transfers retain paired source and destination evidence. No supplier contact, payment, or accounting action occurs.' : 'Setup previews the exact opening package before one Shop write.')}</p>
+    {inventoryDrift ? <p className="form-notice warning-text" role="alert">Shop available stock no longer matches location ATP. Reconcile before another move.</p> : null}
+    <p className="form-notice" aria-live="polite">{error || notice || (state.revision ? 'Transfers retain paired source and destination evidence. No supplier contact, payment, or accounting action occurs.' : setupBlockedByOrders ? 'Finish or cancel active aggregate-stock orders before starting location stock; no warehouse history will be invented.' : 'Setup previews the exact opening package before one Shop write.')}</p>
   </section></>
 }

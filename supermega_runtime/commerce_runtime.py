@@ -21,6 +21,8 @@ from supermega_runtime.ecommerce_buying_lifecycle import (
 )
 from supermega_runtime.shop_inventory_runtime import (
     ShopInventoryValidationError,
+    shop_inventory_available_balances,
+    shop_inventory_sku_available_to_promise,
     shop_inventory_sku_totals,
     validate_shop_inventory_state,
 )
@@ -2319,6 +2321,38 @@ def _validate_event_evidence(
                 "command evidence must match the location inventory proof."
             )
 
+    location_order_kind = {
+        "commerce.order.created": "order_reserve",
+        "commerce.order.cancelled": "order_release",
+        "commerce.website_intake.converted": "order_reserve",
+    }.get(event_type)
+    if event_type == "commerce.order.advanced":
+        _, advanced_order = _one_changed(
+            current["orders"], next_state["orders"], "orders"
+        )
+        if advanced_order["status"] == "completed":
+            location_order_kind = "order_fulfil"
+    if location_order_kind and _inventory_foundation(current) is not None:
+        foundation = _inventory_foundation(next_state)
+        commands = foundation.get("commands") if foundation is not None else None
+        payload = (
+            commands[-1].get("payload", {})
+            if isinstance(commands, list)
+            and commands
+            and isinstance(commands[-1], Mapping)
+            else {}
+        )
+        location_proof = payload.get("proof") if isinstance(payload, Mapping) else None
+        if (
+            not isinstance(payload, Mapping)
+            or payload.get("kind") != location_order_kind
+            or not isinstance(location_proof, Mapping)
+            or not _proof_matches_evidence(location_proof, evidence)
+        ):
+            raise TrialValidationError(
+                "command evidence must match the order location proof."
+            )
+
     movement_kind = {
         "commerce.item.created": "opening",
         "commerce.order.created": "reserve",
@@ -2861,10 +2895,228 @@ def _inventory_item_totals(state: Mapping[str, Any]) -> dict[str, int]:
     }
 
 
+def _order_inventory_digest(value: object) -> str:
+    encoded = json.dumps(
+        value, ensure_ascii=False, separators=(",", ":"), sort_keys=True
+    ).encode("utf-8")
+    return f"sha256:{sha256(encoded).hexdigest()}"
+
+
+def _order_inventory_command_id(prefix: str, order_id: str) -> str:
+    identity = _order_inventory_digest(
+        {
+            "contract": "supermega.shop.order-inventory-command.v1",
+            "kind": prefix,
+            "orderId": order_id,
+        }
+    )
+    return f"{prefix}-{identity[7:39].upper()}"
+
+
+def _order_inventory_transition(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+    order: Mapping[str, Any],
+    lines: list[dict[str, Any]],
+    *,
+    kind: str,
+) -> None:
+    current_foundation = _inventory_foundation(current)
+    next_foundation = _inventory_foundation(next_state)
+    if current_foundation is None:
+        if next_foundation is not None:
+            raise TrialValidationError(
+                "an order cannot create location inventory implicitly."
+            )
+        return
+    if next_foundation is None:
+        raise TrialValidationError(
+            "an order cannot remove the location inventory record."
+        )
+    catalog_skus = [str(item["sku"]) for item in current["items"]]
+    try:
+        before = validate_shop_inventory_state(current_foundation, catalog_skus)
+        after = validate_shop_inventory_state(next_foundation, catalog_skus)
+        before_physical = shop_inventory_sku_totals(before, catalog_skus)
+        after_physical = shop_inventory_sku_totals(after, catalog_skus)
+        before_available = shop_inventory_sku_available_to_promise(
+            before, catalog_skus
+        )
+        after_available = shop_inventory_sku_available_to_promise(
+            after, catalog_skus
+        )
+    except ShopInventoryValidationError as exc:
+        raise TrialValidationError(str(exc)) from exc
+    if (
+        len(after["commands"]) != len(before["commands"]) + 1
+        or after["commands"][:-1] != before["commands"]
+        or after["commands"][-1]["payload"].get("kind") != kind
+    ):
+        raise TrialValidationError(
+            f"the order must append exactly one {kind} location command."
+        )
+    command = after["commands"][-1]["payload"]
+    prefix = {
+        "order_reserve": "ORS",
+        "order_release": "ORL",
+        "order_fulfil": "ORF",
+    }[kind]
+    if (
+        command.get("orderId") != order["id"]
+        or command.get("id") != _order_inventory_command_id(prefix, str(order["id"]))
+    ):
+        raise TrialValidationError(
+            "the location command must use the deterministic changed-order identity."
+        )
+    expected_lines = {str(line["sku"]): int(line["quantity"]) for line in lines}
+    reserve_commands = [
+        entry["payload"]
+        for entry in (after["commands"] if kind == "order_reserve" else before["commands"])
+        if entry["payload"].get("kind") == "order_reserve"
+        and entry["payload"].get("orderId") == order["id"]
+    ]
+    if len(reserve_commands) != 1:
+        raise TrialValidationError(
+            "the order requires one attributable location reservation command."
+        )
+    reserve = reserve_commands[0]
+    allocations = reserve.get("allocations")
+    if not isinstance(allocations, list):
+        raise TrialValidationError("the order location allocations are missing.")
+    allocated: dict[str, int] = {}
+    for allocation in allocations:
+        allocation_identity = _order_inventory_digest(
+            {
+                "contract": "supermega.shop.order-allocation.v1",
+                "orderId": order["id"],
+                "sku": allocation["sku"],
+                "stockUnitId": allocation["stockUnitId"],
+                "locationId": allocation["locationId"],
+                "quantity": allocation["quantity"],
+            }
+        )
+        if allocation["reservationId"] != f"RES-ORD-{allocation_identity[7:39].upper()}":
+            raise TrialValidationError(
+                "the order location reservation identity is not deterministic."
+            )
+        allocated[str(allocation["sku"])] = allocated.get(
+            str(allocation["sku"]), 0
+        ) + int(allocation["quantity"])
+    if kind == "order_reserve":
+        expected_allocations: list[dict[str, Any]] = []
+        try:
+            available_balances = shop_inventory_available_balances(
+                before, catalog_skus
+            )
+        except ShopInventoryValidationError as exc:
+            raise TrialValidationError(str(exc)) from exc
+        for sku, line_quantity in sorted(expected_lines.items()):
+            remaining = line_quantity
+            candidates = sorted(
+                (
+                    balance
+                    for balance in available_balances
+                    if balance["sku"] == sku
+                    and balance["availableToPromise"] > 0
+                ),
+                key=lambda balance: (
+                    -int(balance["availableToPromise"]),
+                    f"{balance['locationId']}|{balance['stockUnitId']}",
+                ),
+            )
+            for balance in candidates:
+                if remaining == 0:
+                    break
+                allocated_quantity = min(
+                    remaining, int(balance["availableToPromise"])
+                )
+                expected_allocations.append(
+                    {
+                        "sku": sku,
+                        "stockUnitId": balance["stockUnitId"],
+                        "locationId": balance["locationId"],
+                        "quantity": allocated_quantity,
+                    }
+                )
+                remaining -= allocated_quantity
+            if remaining:
+                raise TrialValidationError(
+                    f"location stock cannot allocate the complete {sku} order line."
+                )
+        expected_allocations.sort(
+            key=lambda allocation: (
+                f"{allocation['sku']}|{allocation['locationId']}|{allocation['stockUnitId']}"
+            )
+        )
+        for allocation in expected_allocations:
+            identity = _order_inventory_digest(
+                {
+                    "contract": "supermega.shop.order-allocation.v1",
+                    "orderId": order["id"],
+                    **allocation,
+                }
+            )
+            allocation["reservationId"] = f"RES-ORD-{identity[7:39].upper()}"
+        if allocations != expected_allocations:
+            raise TrialValidationError(
+                "the order must use the deterministic fewest-lot location allocation."
+            )
+    if (
+        reserve.get("customerReference") != order["customer"]
+        or allocated != expected_lines
+    ):
+        raise TrialValidationError(
+            "the location allocation must match every order line and customer."
+        )
+    reservation_ids = sorted(
+        str(allocation["reservationId"]) for allocation in allocations
+    )
+    if kind != "order_reserve" and command.get("reservationIds") != reservation_ids:
+        raise TrialValidationError(
+            "the order closure must identify every original location reservation."
+        )
+    if before_available != _inventory_item_totals(current):
+        raise TrialValidationError(
+            "location ATP drifted from aggregate Shop stock before the order action."
+        )
+    if after_available != _inventory_item_totals(next_state):
+        raise TrialValidationError(
+            "the order action must conserve aggregate Shop stock against location ATP."
+        )
+    if kind in {"order_reserve", "order_release"}:
+        if before_physical != after_physical:
+            raise TrialValidationError(
+                "order reserve or release cannot change physical location stock."
+            )
+    else:
+        expected_physical = dict(before_physical)
+        for sku, quantity in expected_lines.items():
+            retained = expected_physical.get(sku, 0) - quantity
+            if retained < 0:
+                raise TrialValidationError(
+                    "order fulfilment exceeds physical location stock."
+                )
+            if retained:
+                expected_physical[sku] = retained
+            else:
+                expected_physical.pop(sku, None)
+        if after_physical != expected_physical:
+            raise TrialValidationError(
+                "order fulfilment must consume every allocated line exactly once."
+            )
+
+
 def _validate_inventory_initialized(
     current: Mapping[str, Any],
     next_state: Mapping[str, Any],
 ) -> None:
+    if any(
+        order["status"] not in {"completed", "cancelled"}
+        for order in current["orders"]
+    ):
+        raise TrialValidationError(
+            "active aggregate-stock orders must finish before location inventory setup."
+        )
     if _inventory_foundation(current) is not None:
         raise TrialValidationError("Shop location inventory is already initialized.")
     if _without(current, frozenset({"inventoryFoundation"})) != _without(
@@ -2919,6 +3171,12 @@ def _validate_inventory_transferred(
         after = validate_shop_inventory_state(next_foundation, catalog_skus)
         before_totals = shop_inventory_sku_totals(before, catalog_skus)
         after_totals = shop_inventory_sku_totals(after, catalog_skus)
+        before_available = shop_inventory_sku_available_to_promise(
+            before, catalog_skus
+        )
+        after_available = shop_inventory_sku_available_to_promise(
+            after, catalog_skus
+        )
     except ShopInventoryValidationError as exc:
         raise TrialValidationError(str(exc)) from exc
     if (
@@ -2930,9 +3188,13 @@ def _validate_inventory_transferred(
             "commerce.inventory.transferred must append exactly one transfer command."
         )
     expected = _inventory_item_totals(current)
-    if before_totals != expected or after_totals != expected:
+    if (
+        before_totals != after_totals
+        or before_available != expected
+        or after_available != expected
+    ):
         raise TrialValidationError(
-            "location totals drifted from aggregate Shop stock; reconcile before transfer."
+            "location ATP drifted from aggregate Shop stock; reconcile before transfer."
         )
 
 
@@ -3043,6 +3305,13 @@ def _validate_new_order_and_reservation(
             raise TrialValidationError(
                 "a new order requires one exact attributable reservation per line."
             )
+    _order_inventory_transition(
+        current,
+        next_state,
+        order,
+        lines,
+        kind="order_reserve",
+    )
 
 
 def _validate_created(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
@@ -3058,6 +3327,10 @@ def _validate_item_created(current: Mapping[str, Any], next_state: Mapping[str, 
     if len(next_state["movements"]) != len(current["movements"]) + 1 or next_state["movements"][1:] != current["movements"]:
         raise TrialValidationError("commerce.item.created must prepend exactly one opening balance.")
     item = next_state["items"][0]
+    if _inventory_foundation(current) is not None and item["onHand"] > 0:
+        raise TrialValidationError(
+            "location-managed Shop items must start at zero and receive stock through a location."
+        )
     movement = next_state["movements"][0]
     current_baselines = _catalog_baselines(current)
     next_baselines = _catalog_baselines(next_state)
@@ -3198,7 +3471,15 @@ def _validate_advanced(current: Mapping[str, Any], next_state: Mapping[str, Any]
             raise TrialValidationError(
                 "order completion proof cannot predate its order activity."
             )
+        _order_inventory_transition(
+            current,
+            next_state,
+            before,
+            _reservation_lines(before),
+            kind="order_fulfil",
+        )
     else:
+        _require_inventory_foundation_unchanged(current, next_state)
         before_action_ids = list(before.get("advancementActionIds", []))
         after_action_ids = list(after.get("advancementActionIds", []))
         if (
@@ -3293,6 +3574,13 @@ def _validate_cancelled(current: Mapping[str, Any], next_state: Mapping[str, Any
         raise TrialValidationError(
             "cancellation requires one unmatched reservation per order line."
         )
+    _order_inventory_transition(
+        current,
+        next_state,
+        before_order,
+        lines,
+        kind="order_release",
+    )
 
 
 def _validate_return_recorded(
@@ -3327,6 +3615,10 @@ def _validate_return_recorded(
         )
     record = after_returns[0]
     if record["disposition"] == "restock":
+        if _inventory_foundation(current) is not None:
+            raise TrialValidationError(
+                "sellable returns require a location allocation before restocking."
+            )
         before_item, after_item = _one_changed(
             current["items"],
             next_state["items"],
@@ -3402,6 +3694,10 @@ def _validate_refund_settled(current: Mapping[str, Any], next_state: Mapping[str
 
 
 def _validate_received(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
+    if _inventory_foundation(current) is not None:
+        raise TrialValidationError(
+            "location-managed stock must be received through a linked purchase order."
+        )
     _require_unchanged(current, next_state, "orders", "closes")
     _require_website_intakes_unchanged(current, next_state)
     before_item, after_item = _one_changed(current["items"], next_state["items"], "items")
@@ -3424,6 +3720,10 @@ def _validate_counted(
     current: Mapping[str, Any],
     next_state: Mapping[str, Any],
 ) -> None:
+    if _inventory_foundation(current) is not None:
+        raise TrialValidationError(
+            "location-managed stock counts require a location count workflow."
+        )
     _require_unchanged(current, next_state, "orders", "closes")
     _require_website_intakes_unchanged(current, next_state)
     _require_storefront_requests_unchanged(current, next_state)
@@ -3483,6 +3783,10 @@ def _validate_production_material_issued(
     current: Mapping[str, Any],
     next_state: Mapping[str, Any],
 ) -> None:
+    if _inventory_foundation(current) is not None:
+        raise TrialValidationError(
+            "location-managed production issues require an allocated stock unit."
+        )
     _require_unchanged(current, next_state, "orders", "closes")
     _require_website_intakes_unchanged(current, next_state)
     _require_storefront_requests_unchanged(current, next_state)
@@ -3626,6 +3930,12 @@ def _validate_purchase_order_received(
             before_foundation, catalog_skus
         )
         after_totals = shop_inventory_sku_totals(after_foundation, catalog_skus)
+        before_available = shop_inventory_sku_available_to_promise(
+            before_foundation, catalog_skus
+        )
+        after_available = shop_inventory_sku_available_to_promise(
+            after_foundation, catalog_skus
+        )
     except ShopInventoryValidationError as exc:
         raise TrialValidationError(str(exc)) from exc
     if (
@@ -3656,12 +3966,17 @@ def _validate_purchase_order_received(
         raise TrialValidationError(
             "location receipt must match its aggregate purchase receipt exactly."
         )
+    expected_physical = dict(before_totals)
+    expected_physical[movement["sku"]] = (
+        expected_physical.get(movement["sku"], 0) + movement["quantityDelta"]
+    )
     if (
-        before_totals != _inventory_item_totals(current)
-        or after_totals != _inventory_item_totals(next_state)
+        before_available != _inventory_item_totals(current)
+        or after_available != _inventory_item_totals(next_state)
+        or after_totals != expected_physical
     ):
         raise TrialValidationError(
-            "location receipt totals must conserve aggregate Shop stock."
+            "location receipt must conserve aggregate Shop ATP and physical stock."
         )
 
 
@@ -4026,6 +4341,10 @@ def reduce_commerce_state(
         "commerce.inventory.initialized",
         "commerce.inventory.transferred",
         "commerce.purchase_order.received",
+        "commerce.order.created",
+        "commerce.order.cancelled",
+        "commerce.order.advanced",
+        "commerce.website_intake.converted",
     }:
         _require_inventory_foundation_unchanged(current_state, next_state)
     _TRANSITION_VALIDATORS[event_type](current_state, next_state)

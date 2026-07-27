@@ -528,6 +528,42 @@ def _authoritative_order_calculation(
     }
 
 
+def _restamp_order_inventory(
+    state: Mapping[str, Any],
+    *,
+    kind: str,
+    action_id: str,
+    actor: str,
+    captured_at: str,
+) -> JsonObject:
+    authoritative_state = dict(state)
+    foundation = state.get("inventoryFoundation")
+    if not isinstance(foundation, Mapping):
+        return authoritative_state
+    commands = foundation.get("commands")
+    latest_payload = (
+        commands[-1].get("payload")
+        if isinstance(commands, list)
+        and commands
+        and isinstance(commands[-1], Mapping)
+        else None
+    )
+    if not isinstance(latest_payload, Mapping) or latest_payload.get("kind") != kind:
+        return authoritative_state
+    try:
+        authoritative_state["inventoryFoundation"] = (
+            restamp_latest_shop_inventory_command(
+                foundation,
+                action_id=action_id,
+                actor=actor,
+                captured_at=captured_at,
+            )
+        )
+    except ShopInventoryValidationError as exc:
+        raise TrialValidationError(str(exc)) from exc
+    return authoritative_state
+
+
 def _authoritative_command_payload(
     payload: Mapping[str, Any],
     *,
@@ -838,10 +874,18 @@ def _authoritative_command_payload(
                 authoritative_movement["actor"] = principal.actor_id
                 authoritative_movement["createdAt"] = captured_at
                 authoritative_movements[movement_index] = authoritative_movement
-        authoritative_state = dict(state)
-        authoritative_state["websiteIntakes"] = authoritative_intakes
-        authoritative_state["orders"] = authoritative_orders
-        authoritative_state["movements"] = authoritative_movements
+        authoritative_state = _restamp_order_inventory(
+            {
+                **dict(state),
+                "websiteIntakes": authoritative_intakes,
+                "orders": authoritative_orders,
+                "movements": authoritative_movements,
+            },
+            kind="order_reserve",
+            action_id=str(action_id),
+            actor=principal.actor_id,
+            captured_at=captured_at,
+        )
         authoritative["evidence"] = authoritative_evidence
         authoritative["state"] = authoritative_state
         return authoritative
@@ -893,9 +937,85 @@ def _authoritative_command_payload(
                 authoritative_movement["actor"] = principal.actor_id
                 authoritative_movement["createdAt"] = captured_at
                 authoritative_movements[movement_index] = authoritative_movement
-        authoritative_state = dict(state)
-        authoritative_state["orders"] = authoritative_orders
-        authoritative_state["movements"] = authoritative_movements
+        authoritative_state = _restamp_order_inventory(
+            {
+                **dict(state),
+                "orders": authoritative_orders,
+                "movements": authoritative_movements,
+            },
+            kind="order_reserve",
+            action_id=str(evidence.get("actionId", "")),
+            actor=principal.actor_id,
+            captured_at=captured_at,
+        )
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
+    if event_type == "commerce.order.cancelled":
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        orders = state.get("orders") if isinstance(state, Mapping) else None
+        movements = state.get("movements") if isinstance(state, Mapping) else None
+        if (
+            not isinstance(evidence, Mapping)
+            or not isinstance(state, Mapping)
+            or not isinstance(orders, list)
+            or not isinstance(movements, list)
+        ):
+            return authoritative
+        target_order_ids = {
+            movement.get("orderId")
+            for movement in movements
+            if isinstance(movement, Mapping)
+            and movement.get("kind") == "release"
+            and movement.get("actionId") == evidence.get("actionId")
+            and isinstance(movement.get("orderId"), str)
+        }
+        target_order_id = next(iter(target_order_ids)) if len(target_order_ids) == 1 else None
+        target_order = next(
+            (
+                order
+                for order in orders
+                if isinstance(order, Mapping) and order.get("id") == target_order_id
+            ),
+            None,
+        )
+        effective_captured_at = _not_before(
+            captured_at,
+            target_order.get("createdAt") if isinstance(target_order, Mapping) else None,
+            target_order.get("paymentReconciledAt") if isinstance(target_order, Mapping) else None,
+            *(
+                movement.get("createdAt")
+                for movement in movements
+                if isinstance(movement, Mapping)
+                and movement.get("orderId") == target_order_id
+                and movement.get("actionId") != evidence.get("actionId")
+            ),
+        )
+        authoritative_evidence = {
+            **dict(evidence),
+            "actor": principal.actor_id,
+            "capturedAt": effective_captured_at,
+        }
+        authoritative_movements = deepcopy(movements)
+        for movement_index, movement in enumerate(authoritative_movements):
+            if (
+                isinstance(movement, Mapping)
+                and movement.get("kind") == "release"
+                and movement.get("actionId") == evidence.get("actionId")
+            ):
+                authoritative_movements[movement_index] = {
+                    **dict(movement),
+                    "actor": principal.actor_id,
+                    "createdAt": effective_captured_at,
+                }
+        authoritative_state = _restamp_order_inventory(
+            {**dict(state), "movements": authoritative_movements},
+            kind="order_release",
+            action_id=str(evidence.get("actionId", "")),
+            actor=principal.actor_id,
+            captured_at=effective_captured_at,
+        )
         authoritative["evidence"] = authoritative_evidence
         authoritative["state"] = authoritative_state
         return authoritative
@@ -1178,8 +1298,13 @@ def _authoritative_command_payload(
                     authoritative_evidence
                 )
                 authoritative_orders[index] = authoritative_order
-        authoritative_state = dict(state)
-        authoritative_state["orders"] = authoritative_orders
+        authoritative_state = _restamp_order_inventory(
+            {**dict(state), "orders": authoritative_orders},
+            kind="order_fulfil",
+            action_id=str(evidence.get("actionId", "")),
+            actor=principal.actor_id,
+            captured_at=effective_captured_at,
+        )
         authoritative["evidence"] = authoritative_evidence
         authoritative["state"] = authoritative_state
         return authoritative

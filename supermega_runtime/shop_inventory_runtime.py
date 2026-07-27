@@ -293,6 +293,76 @@ def _import_package(
     return {**canonical, "packageDigest": package_digest}
 
 
+def _order_allocations(
+    value: object, field: str, catalog_skus: list[str]
+) -> list[dict[str, Any]]:
+    allocations: list[dict[str, Any]] = []
+    for index, candidate in enumerate(_list(value, field, 1, 200)):
+        row_field = f"{field}[{index}]"
+        row = _exact(
+            candidate,
+            row_field,
+            {"reservationId", "sku", "stockUnitId", "locationId", "quantity"},
+        )
+        sku = _text(row["sku"], f"{row_field}.sku", 80)
+        if sku not in catalog_skus:
+            raise ShopInventoryValidationError(
+                f"{row_field}.sku is not in the Shop catalog."
+            )
+        allocations.append(
+            {
+                "reservationId": _identifier(
+                    row["reservationId"], f"{row_field}.reservationId", "RES"
+                ),
+                "sku": sku,
+                "stockUnitId": _text(
+                    row["stockUnitId"], f"{row_field}.stockUnitId", 80
+                ),
+                "locationId": _identifier(
+                    row["locationId"], f"{row_field}.locationId", "LOC"
+                ),
+                "quantity": _integer(row["quantity"], f"{row_field}.quantity", 1),
+            }
+        )
+    reservation_ids = [row["reservationId"] for row in allocations]
+    keys = [
+        f"{row['sku']}|{row['locationId']}|{row['stockUnitId']}|{row['reservationId']}"
+        for row in allocations
+    ]
+    if len(reservation_ids) != len(set(reservation_ids)) or keys != sorted(keys):
+        raise ShopInventoryValidationError(
+            f"{field} must use unique canonical allocation order."
+        )
+    return allocations
+
+
+def _order_inventory_command_id(prefix: str, order_id: str) -> str:
+    identity = _canonical_digest(
+        {
+            "contract": "supermega.shop.order-inventory-command.v1",
+            "kind": prefix,
+            "orderId": order_id,
+        }
+    )
+    return f"{prefix}-{identity[7:39].upper()}"
+
+
+def _order_inventory_reservation_id(
+    order_id: str, allocation: Mapping[str, Any]
+) -> str:
+    identity = _canonical_digest(
+        {
+            "contract": "supermega.shop.order-allocation.v1",
+            "orderId": order_id,
+            "sku": allocation["sku"],
+            "stockUnitId": allocation["stockUnitId"],
+            "locationId": allocation["locationId"],
+            "quantity": allocation["quantity"],
+        }
+    )
+    return f"RES-ORD-{identity[7:39].upper()}"
+
+
 def _payload(value: object, field: str, catalog_skus: list[str]) -> dict[str, Any]:
     row = _object(value, field)
     kind = row.get("kind")
@@ -381,15 +451,112 @@ def _payload(value: object, field: str, catalog_skus: list[str]) -> dict[str, An
             "quantity": _integer(row["quantity"], f"{field}.quantity", 1),
             "proof": _proof(row["proof"], f"{field}.proof"),
         }
+    if kind == "order_reserve":
+        row = _exact(
+            row,
+            field,
+            {"kind", "id", "orderId", "customerReference", "allocations", "proof"},
+        )
+        order_id = _text(row["orderId"], f"{field}.orderId", 160)
+        command_id = _identifier(row["id"], f"{field}.id", "ORS")
+        if command_id != _order_inventory_command_id("ORS", order_id):
+            raise ShopInventoryValidationError(
+                f"{field}.id is not deterministic for its order."
+            )
+        allocations = _order_allocations(
+            row["allocations"], f"{field}.allocations", catalog_skus
+        )
+        for index, allocation in enumerate(allocations):
+            if allocation["reservationId"] != _order_inventory_reservation_id(
+                order_id, allocation
+            ):
+                raise ShopInventoryValidationError(
+                    f"{field}.allocations[{index}].reservationId is not deterministic."
+                )
+        return {
+            "kind": "order_reserve",
+            "id": command_id,
+            "orderId": order_id,
+            "customerReference": _text(
+                row["customerReference"], f"{field}.customerReference", 180
+            ),
+            "allocations": allocations,
+            "proof": _proof(row["proof"], f"{field}.proof"),
+        }
+    if kind in {"order_release", "order_fulfil"}:
+        row = _exact(
+            row,
+            field,
+            {"kind", "id", "orderId", "reservationIds", "proof"},
+        )
+        order_id = _text(row["orderId"], f"{field}.orderId", 160)
+        prefix = "ORL" if kind == "order_release" else "ORF"
+        command_id = _identifier(row["id"], f"{field}.id", prefix)
+        if command_id != _order_inventory_command_id(prefix, order_id):
+            raise ShopInventoryValidationError(
+                f"{field}.id is not deterministic for its order."
+            )
+        reservation_ids = [
+            _identifier(candidate, f"{field}.reservationIds[{index}]", "RES")
+            for index, candidate in enumerate(
+                _list(row["reservationIds"], f"{field}.reservationIds", 1, 200)
+            )
+        ]
+        if len(reservation_ids) != len(set(reservation_ids)) or reservation_ids != sorted(
+            reservation_ids
+        ):
+            raise ShopInventoryValidationError(
+                f"{field}.reservationIds must use unique canonical order."
+            )
+        return {
+            "kind": kind,
+            "id": command_id,
+            "orderId": order_id,
+            "reservationIds": reservation_ids,
+            "proof": _proof(row["proof"], f"{field}.proof"),
+        }
     raise ShopInventoryValidationError(f"{field}.kind is unsupported for managed v1.")
 
 
 def _project(commands: list[dict[str, Any]]) -> dict[str, Any]:
     locations: set[str] = set()
     units: dict[str, dict[str, str]] = {}
-    balances: dict[tuple[str, str], int] = {}
+    balances: dict[tuple[str, str], dict[str, int]] = {}
+    reservations: dict[str, dict[str, Any]] = {}
     import_count = 0
+
+    def current_balance(stock_unit_id: str, location_id: str) -> dict[str, int]:
+        return balances.setdefault(
+            (stock_unit_id, location_id), {"onHand": 0, "reserved": 0}
+        )
+
+    def apply_delta(
+        stock_unit_id: str,
+        location_id: str,
+        *,
+        on_hand_delta: int,
+        reserved_delta: int,
+        field: str,
+    ) -> None:
+        balance = current_balance(stock_unit_id, location_id)
+        on_hand = balance["onHand"] + on_hand_delta
+        reserved = balance["reserved"] + reserved_delta
+        if (
+            not 0 <= on_hand <= _MAX_SAFE_INTEGER
+            or not 0 <= reserved <= on_hand
+            or (
+                units.get(stock_unit_id, {}).get("tracking") == "serial"
+                and on_hand > 1
+            )
+        ):
+            raise ShopInventoryValidationError(
+                f"{field} would make on-hand or reserved stock invalid."
+            )
+        balance["onHand"] = on_hand
+        balance["reserved"] = reserved
+
     for index, command in enumerate(commands):
+        field = f"commands[{index}].payload"
         if index == 0 and command["kind"] != "import":
             raise ShopInventoryValidationError("the first command must be an import.")
         if command["kind"] == "import":
@@ -400,8 +567,13 @@ def _project(commands: list[dict[str, Any]]) -> dict[str, Any]:
             locations.update(location["id"] for location in package["locations"])
             units.update({unit["id"]: unit for unit in package["stockUnits"]})
             for opening in package["openings"]:
-                key = (opening["stockUnitId"], opening["locationId"])
-                balances[key] = balances.get(key, 0) + opening["quantity"]
+                apply_delta(
+                    opening["stockUnitId"],
+                    opening["locationId"],
+                    on_hand_delta=opening["quantity"],
+                    reserved_delta=0,
+                    field=field,
+                )
             continue
         if command["kind"] == "receipt":
             if command["locationId"] not in locations:
@@ -427,29 +599,139 @@ def _project(commands: list[dict[str, Any]]) -> dict[str, Any]:
                 "tracking": "lot",
                 "trackingCode": command["trackingCode"],
             }
-            key = (command["stockUnitId"], command["locationId"])
-            balances[key] = command["quantity"]
+            apply_delta(
+                command["stockUnitId"],
+                command["locationId"],
+                on_hand_delta=command["quantity"],
+                reserved_delta=0,
+                field=field,
+            )
             continue
-        if command["stockUnitId"] not in units:
-            raise ShopInventoryValidationError("transfer references an unknown stock unit.")
-        if (
-            command["fromLocationId"] not in locations
-            or command["toLocationId"] not in locations
-        ):
-            raise ShopInventoryValidationError("transfer references an unknown location.")
-        source_key = (command["stockUnitId"], command["fromLocationId"])
-        destination_key = (command["stockUnitId"], command["toLocationId"])
-        if balances.get(source_key, 0) < command["quantity"]:
-            raise ShopInventoryValidationError("transfer exceeds source available stock.")
-        balances[source_key] = balances.get(source_key, 0) - command["quantity"]
-        balances[destination_key] = balances.get(destination_key, 0) + command["quantity"]
+        if command["kind"] == "transfer":
+            if command["stockUnitId"] not in units:
+                raise ShopInventoryValidationError(
+                    "transfer references an unknown stock unit."
+                )
+            if (
+                command["fromLocationId"] not in locations
+                or command["toLocationId"] not in locations
+            ):
+                raise ShopInventoryValidationError(
+                    "transfer references an unknown location."
+                )
+            source = current_balance(
+                command["stockUnitId"], command["fromLocationId"]
+            )
+            if source["onHand"] - source["reserved"] < command["quantity"]:
+                raise ShopInventoryValidationError(
+                    "transfer exceeds source available stock."
+                )
+            apply_delta(
+                command["stockUnitId"],
+                command["fromLocationId"],
+                on_hand_delta=-command["quantity"],
+                reserved_delta=0,
+                field=field,
+            )
+            apply_delta(
+                command["stockUnitId"],
+                command["toLocationId"],
+                on_hand_delta=command["quantity"],
+                reserved_delta=0,
+                field=field,
+            )
+            continue
+        if command["kind"] == "order_reserve":
+            if any(
+                reservation["orderId"] == command["orderId"]
+                for reservation in reservations.values()
+            ):
+                raise ShopInventoryValidationError(
+                    "an order location reservation is already recorded."
+                )
+            for allocation in command["allocations"]:
+                unit = units.get(allocation["stockUnitId"])
+                if unit is None or unit["sku"] != allocation["sku"]:
+                    raise ShopInventoryValidationError(
+                        "order allocation stock unit does not match its SKU."
+                    )
+                if allocation["locationId"] not in locations:
+                    raise ShopInventoryValidationError(
+                        "order allocation references an unknown location."
+                    )
+                if allocation["reservationId"] in reservations:
+                    raise ShopInventoryValidationError(
+                        "order allocation reservation ID is already recorded."
+                    )
+                balance = current_balance(
+                    allocation["stockUnitId"], allocation["locationId"]
+                )
+                if (
+                    balance["onHand"] - balance["reserved"]
+                    < allocation["quantity"]
+                ):
+                    raise ShopInventoryValidationError(
+                        "order allocation exceeds available-to-promise stock."
+                    )
+                apply_delta(
+                    allocation["stockUnitId"],
+                    allocation["locationId"],
+                    on_hand_delta=0,
+                    reserved_delta=allocation["quantity"],
+                    field=field,
+                )
+                reservations[allocation["reservationId"]] = {
+                    **allocation,
+                    "orderId": command["orderId"],
+                    "customerReference": command["customerReference"],
+                    "status": "active",
+                }
+            continue
+        if command["kind"] in {"order_release", "order_fulfil"}:
+            active_ids = sorted(
+                reservation_id
+                for reservation_id, reservation in reservations.items()
+                if reservation["orderId"] == command["orderId"]
+                and reservation["status"] == "active"
+            )
+            if active_ids != command["reservationIds"]:
+                raise ShopInventoryValidationError(
+                    "order closure must include every active location reservation."
+                )
+            for reservation_id in command["reservationIds"]:
+                reservation = reservations[reservation_id]
+                fulfil = command["kind"] == "order_fulfil"
+                apply_delta(
+                    reservation["stockUnitId"],
+                    reservation["locationId"],
+                    on_hand_delta=-reservation["quantity"] if fulfil else 0,
+                    reserved_delta=-reservation["quantity"],
+                    field=field,
+                )
+                reservation["status"] = "fulfilled" if fulfil else "released"
+            continue
+        raise ShopInventoryValidationError("inventory command kind cannot be projected.")
     if commands and import_count != 1:
         raise ShopInventoryValidationError("inventory history lacks its opening import.")
     sku_totals: dict[str, int] = {}
-    for (unit_id, _location_id), quantity in balances.items():
+    sku_available: dict[str, int] = {}
+    for (unit_id, _location_id), balance in balances.items():
         sku = units[unit_id]["sku"]
-        sku_totals[sku] = sku_totals.get(sku, 0) + quantity
-    return {"skuTotals": sku_totals, "balances": balances}
+        sku_totals[sku] = sku_totals.get(sku, 0) + balance["onHand"]
+        sku_available[sku] = (
+            sku_available.get(sku, 0)
+            + balance["onHand"]
+            - balance["reserved"]
+        )
+    return {
+        "skuTotals": {sku: value for sku, value in sku_totals.items() if value > 0},
+        "skuAvailableToPromise": {
+            sku: value for sku, value in sku_available.items() if value > 0
+        },
+        "balances": balances,
+        "reservations": reservations,
+        "units": units,
+    }
 
 
 def validate_shop_inventory_state(
@@ -531,6 +813,41 @@ def shop_inventory_sku_totals(
     return dict(_project([command["payload"] for command in state["commands"]])["skuTotals"])
 
 
+def shop_inventory_sku_available_to_promise(
+    value: object, catalog_skus: Sequence[str]
+) -> dict[str, int]:
+    state = validate_shop_inventory_state(value, catalog_skus)
+    return dict(
+        _project([command["payload"] for command in state["commands"]])[
+            "skuAvailableToPromise"
+        ]
+    )
+
+
+def shop_inventory_available_balances(
+    value: object, catalog_skus: Sequence[str]
+) -> list[dict[str, Any]]:
+    state = validate_shop_inventory_state(value, catalog_skus)
+    projection = _project([command["payload"] for command in state["commands"]])
+    rows: list[dict[str, Any]] = []
+    for (stock_unit_id, location_id), balance in projection["balances"].items():
+        available = balance["onHand"] - balance["reserved"]
+        if available <= 0:
+            continue
+        rows.append(
+            {
+                "stockUnitId": stock_unit_id,
+                "sku": projection["units"][stock_unit_id]["sku"],
+                "locationId": location_id,
+                "availableToPromise": available,
+            }
+        )
+    return sorted(
+        rows,
+        key=lambda row: (row["sku"], row["locationId"], row["stockUnitId"]),
+    )
+
+
 def restamp_latest_shop_inventory_command(
     value: object,
     *,
@@ -566,7 +883,9 @@ __all__ = [
     "SHOP_INVENTORY_SCHEMA",
     "ShopInventoryValidationError",
     "restamp_latest_shop_inventory_command",
+    "shop_inventory_available_balances",
     "shop_inventory_catalog_digest",
+    "shop_inventory_sku_available_to_promise",
     "shop_inventory_sku_totals",
     "validate_shop_inventory_state",
 ]

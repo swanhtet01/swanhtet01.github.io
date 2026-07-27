@@ -2260,6 +2260,12 @@ async function verifyShopInventoryRuntime() {
       items: [{ sku: 'SKU-1', name: 'Managed item', onHand: 10, reorderAt: 2, price: 100 }],
       inventoryFoundation: managedOpening.state,
     })
+    const historicalOpeningProof = proof(0, 'catalog-opening')
+    const historicalOpeningItem = { sku: 'SKU-1', name: 'Managed item', onHand: 10, reorderAt: 2, price: 100 }
+    const historicalOpening = commerce.registerCommerceItem(commerce.createEmptyCommerce(), historicalOpeningItem, historicalOpeningProof)
+    const historicalOpeningWithLocations = commerce.validateCommerceState({ ...historicalOpening, inventoryFoundation: managedOpening.state })
+    assert(commerce.registerCommerceItem(historicalOpeningWithLocations, historicalOpeningItem, historicalOpeningProof) === historicalOpeningWithLocations,
+      'pre_location_catalog_opening_retry_lost_idempotency')
     const unifiedLocalBase = commerce.validateCommerceState({
       ...commerce.createEmptyCommerce(),
       items: [{ sku: 'SKU-1', name: 'Local item', onHand: 10, reorderAt: 2, price: 100 }],
@@ -2282,6 +2288,95 @@ async function verifyShopInventoryRuntime() {
       && unifiedLocalReload.state.inventoryFoundation?.headDigest === managedOpening.state.headDigest
       && [...unifiedLocalValues.keys()].join(',') === commerce.COMMERCE_KEY,
     'local_shop_location_setup_used_a_second_storage_authority')
+    const locationOrderProof = proof(2, 'order-reserve')
+    const locationOrder = {
+      id: 'ORD-LOCATION-001', createdAt: locationOrderProof.capturedAt, customer: 'Customer A', owner: locationOrderProof.actor,
+      channel: 'Phone', item: 'Managed item', itemSku: 'SKU-1', quantity: 3, payment: 'Cash', paymentStatus: 'pending', refundStatus: 'none',
+      fulfilment: 'pickup', fulfilmentReference: 'COUNTER-A', promisedAt: '2026-07-28T08:00:00.000Z', total: 300, status: 'confirmed',
+    }
+    const locationPreview = commerce.commerceOrderLocationAllocationPreview(managedBase, locationOrder)
+    const locationReserved = commerce.reserveCommerceOrder(managedBase, locationOrder, locationOrderProof)
+    const locationReservedProjection = locationReserved && model.projectShopInventory(locationReserved.inventoryFoundation, ['SKU-1'])
+    const locationReserveCommand = locationReserved?.inventoryFoundation?.commands.at(-1)?.payload
+    assert(locationPreview.length === 1
+      && locationPreview[0].locationId === 'LOC-MAIN'
+      && locationPreview[0].quantity === 3
+      && locationReserved?.items[0].onHand === 7
+      && locationReserveCommand?.kind === 'order_reserve'
+      && locationReserveCommand.id.startsWith('ORS-')
+      && locationReserveCommand.allocations[0].reservationId.startsWith('RES-ORD-')
+      && locationReservedProjection?.metrics.totalOnHand === 10
+      && locationReservedProjection.metrics.totalReserved === 3
+      && locationReservedProjection.metrics.totalAvailableToPromise === 7,
+    'managed_order_did_not_reserve_deterministic_location_stock')
+    const forgedLocationCommandId = structuredClone(locationReserved.inventoryFoundation)
+    forgedLocationCommandId.commands.at(-1).payload.id = `ORS-${'A'.repeat(32)}`
+    assertThrows(() => model.validateShopInventoryState(forgedLocationCommandId, ['SKU-1']),
+      'managed_order_accepted_non_deterministic_location_command_id')
+    const forgedLocationReservationId = structuredClone(locationReserved.inventoryFoundation)
+    forgedLocationReservationId.commands.at(-1).payload.allocations[0].reservationId = `RES-ORD-${'A'.repeat(32)}`
+    assertThrows(() => model.validateShopInventoryState(forgedLocationReservationId, ['SKU-1']),
+      'managed_order_accepted_non_deterministic_location_reservation_id')
+    assert(commerce.reserveCommerceOrder(locationReserved, locationOrder, locationOrderProof) === locationReserved,
+      'managed_location_order_reserve_retry_not_idempotent')
+    assertThrows(() => model.reserveShopInventoryOrder(managedOpening.state, {
+      orderId: locationOrder.id, customerReference: locationOrder.customer, lines: [{ sku: 'SKU-1', quantity: 3 }], proof: locationOrderProof,
+      catalogSkus: ['SKU-1'], expectedHeadDigest: model.EMPTY_SHOP_INVENTORY_DIGEST,
+    }), 'managed_location_order_stale_head_succeeded')
+    assert(commerce.receiveCommerceStock(locationReserved, 'SKU-1', 1, proof(3, 'direct-receipt')) === null
+      && commerce.countCommerceStock(locationReserved, 'SKU-1', 7, proof(3, 'aggregate-count')) === null
+      && commerce.registerCommerceItem(locationReserved, { sku: 'SKU-2', name: 'Unsafe opening', onHand: 1, reorderAt: 0, price: 1 }, proof(3, 'aggregate-opening')) === null,
+    'location_managed_shop_allowed_aggregate_only_stock_change')
+    const locationReleaseProof = proof(3, 'order-release')
+    const locationCancelled = commerce.cancelCommerceOrder(locationReserved, locationOrder.id, locationReleaseProof)
+    const locationCancelledProjection = locationCancelled && model.projectShopInventory(locationCancelled.inventoryFoundation, ['SKU-1'])
+    assert(locationCancelled?.items[0].onHand === 10
+      && locationCancelled.inventoryFoundation?.commands.at(-1)?.payload.kind === 'order_release'
+      && locationCancelledProjection?.metrics.totalOnHand === 10
+      && locationCancelledProjection.metrics.totalReserved === 0
+      && locationCancelledProjection.metrics.totalAvailableToPromise === 10,
+    'managed_order_cancellation_did_not_release_location_stock')
+
+    const locationWebsiteSource = {
+      fingerprint: 'web-1234abcd', approvalId: 'approval-location-1', snapshotId: 'snapshot-location-1',
+      pageId: 'page-products', siteName: 'Location Website', pagePath: '/products',
+    }
+    const locationWebsiteIntakeProof = proof(4, 'website-intake-location')
+    const locationWebsiteIntake = commerce.createCommerceWebsiteIntake(managedBase, {
+      id: 'WINT-LOCATION1', source: locationWebsiteSource, sku: 'SKU-1', quantity: 2,
+    }, locationWebsiteIntakeProof)
+    const locationWebsiteConversionProof = proof(5, 'website-order-location')
+    const locationWebsiteOrder = commerce.convertCommerceWebsiteIntake(locationWebsiteIntake, 'WINT-LOCATION1', {
+      customer: 'Website customer', fulfilmentMethod: 'local_delivery', paymentMethod: 'cash_on_delivery',
+      promisedAt: '2026-07-28T09:00:00.000Z',
+    }, locationWebsiteConversionProof)
+    const locationWebsiteProjection = locationWebsiteOrder && model.projectShopInventory(locationWebsiteOrder.inventoryFoundation, ['SKU-1'])
+    assert(locationWebsiteOrder?.items[0].onHand === 8
+      && locationWebsiteOrder.inventoryFoundation?.commands.at(-1)?.payload.kind === 'order_reserve'
+      && locationWebsiteProjection?.metrics.totalOnHand === 10
+      && locationWebsiteProjection.metrics.totalAvailableToPromise === 8,
+    'website_order_did_not_reserve_location_stock')
+    assert(commerce.convertCommerceWebsiteIntake(locationWebsiteOrder, 'WINT-LOCATION1', {
+      customer: 'Website customer', fulfilmentMethod: 'local_delivery', paymentMethod: 'cash_on_delivery',
+      promisedAt: '2026-07-28T09:00:00.000Z',
+    }, locationWebsiteConversionProof) === locationWebsiteOrder,
+    'website_location_order_retry_not_idempotent')
+
+    const fulfilOrderProof = proof(4, 'order-reserve-fulfil')
+    const fulfilOrder = { ...locationOrder, id: 'ORD-LOCATION-002', createdAt: fulfilOrderProof.capturedAt, owner: fulfilOrderProof.actor }
+    const fulfilReserved = commerce.reserveCommerceOrder(managedBase, fulfilOrder, fulfilOrderProof)
+    const fulfilPreparing = commerce.advanceCommerceOrder(fulfilReserved, fulfilOrder.id, 'confirmed', proof(5, 'order-preparing'))
+    const fulfilPaid = commerce.reconcileCommercePayment(fulfilPreparing, fulfilOrder.id, proof(6, 'order-payment'))
+    const fulfilReady = commerce.advanceCommerceOrder(fulfilPaid, fulfilOrder.id, 'preparing', proof(7, 'order-ready'))
+    const fulfilCompleted = commerce.advanceCommerceOrder(fulfilReady, fulfilOrder.id, 'ready', proof(8, 'order-completed'))
+    const fulfilProjection = fulfilCompleted && model.projectShopInventory(fulfilCompleted.inventoryFoundation, ['SKU-1'])
+    assert(fulfilCompleted?.orders[0].status === 'completed'
+      && fulfilCompleted.items[0].onHand === 7
+      && fulfilCompleted.inventoryFoundation?.commands.at(-1)?.payload.kind === 'order_fulfil'
+      && fulfilProjection?.metrics.totalOnHand === 7
+      && fulfilProjection.metrics.totalReserved === 0
+      && fulfilProjection.metrics.totalAvailableToPromise === 7,
+    'managed_order_completion_did_not_fulfil_location_stock')
     const managedPurchaseOrderId = 'PO-00000000-0000-4000-8000-000000000072'
     const managedOrdered = commerce.createCommercePurchaseOrder(managedBase, {
       id: managedPurchaseOrderId, expectedAt: '2026-07-28T05:00:00.000Z', supplier: 'Yangon Supply', sku: 'SKU-1', quantityOrdered: 6,

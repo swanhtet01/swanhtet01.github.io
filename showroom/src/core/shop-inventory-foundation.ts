@@ -24,6 +24,14 @@ export type ShopInventoryOpening = {
   vendorId: string
   quantity: number
 }
+export type ShopInventoryOrderLine = { sku: string; quantity: number }
+export type ShopInventoryOrderAllocation = {
+  reservationId: string
+  sku: string
+  stockUnitId: string
+  locationId: string
+  quantity: number
+}
 export type ShopInventoryImportPackage = {
   contract: typeof SHOP_INVENTORY_IMPORT_CONTRACT
   importId: string
@@ -43,6 +51,8 @@ export type ShopInventoryCommandPayload =
   | { kind: 'receipt'; id: string; purchaseOrderId: string; stockUnitId: string; sku: string; trackingCode: string; locationId: string; quantity: number; proof: ShopInventoryProof }
   | { kind: 'reserve'; id: string; clientId: string; stockUnitId: string; locationId: string; quantity: number; proof: ShopInventoryProof }
   | { kind: 'release' | 'fulfil'; id: string; reservationId: string; proof: ShopInventoryProof }
+  | { kind: 'order_reserve'; id: string; orderId: string; customerReference: string; allocations: ShopInventoryOrderAllocation[]; proof: ShopInventoryProof }
+  | { kind: 'order_release' | 'order_fulfil'; id: string; orderId: string; reservationIds: string[]; proof: ShopInventoryProof }
 
 export type ShopInventoryCommand = {
   sequence: number
@@ -80,7 +90,9 @@ export type ShopInventoryProjection = {
   balances: ShopInventoryBalance[]
   reservations: Array<{
     id: string
-    clientId: string
+    clientId?: string
+    orderId?: string
+    customerReference?: string
     stockUnitId: string
     locationId: string
     quantity: number
@@ -96,7 +108,7 @@ export type ShopInventoryProjection = {
 const digestPattern = /^sha256:[0-9a-f]{64}$/
 const businessIdPattern = /^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+$/
 const timestampPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/
-const commandKinds = new Set(['import', 'transfer', 'receipt', 'reserve', 'release', 'fulfil'])
+const commandKinds = new Set(['import', 'transfer', 'receipt', 'reserve', 'release', 'fulfil', 'order_reserve', 'order_release', 'order_fulfil'])
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -348,6 +360,27 @@ export function createEmptyShopInventoryState(): ShopInventoryState {
   return { schema: SHOP_INVENTORY_STATE_SCHEMA, revision: 0, headDigest: EMPTY_SHOP_INVENTORY_DIGEST, commands: [] }
 }
 
+function orderAllocations(value: unknown, field: string, catalog: string[]) {
+  const rows = array(value, field, 1, 200).map((candidate, index): ShopInventoryOrderAllocation => {
+    const rowField = `${field}[${index}]`
+    const row = exact(candidate, rowField, ['reservationId', 'sku', 'stockUnitId', 'locationId', 'quantity'])
+    const sku = text(row.sku, `${rowField}.sku`, 80)
+    if (!catalog.includes(sku)) throw new Error(`${rowField}.sku is not present in the trusted Shop catalog.`)
+    return {
+      reservationId: identifier(row.reservationId, `${rowField}.reservationId`, 'RES'),
+      sku,
+      stockUnitId: text(row.stockUnitId, `${rowField}.stockUnitId`, 80),
+      locationId: identifier(row.locationId, `${rowField}.locationId`, 'LOC'),
+      quantity: quantity(row.quantity, `${rowField}.quantity`, 1),
+    }
+  })
+  unique(rows.map((row) => row.reservationId), `${field} reservation IDs`)
+  const keys = rows.map((row) => `${row.sku}|${row.locationId}|${row.stockUnitId}|${row.reservationId}`)
+  unique(keys, field)
+  sorted(keys, field)
+  return rows
+}
+
 function commandPayload(value: unknown, field: string, catalog: string[]): ShopInventoryCommandPayload {
   if (!isRecord(value) || typeof value.kind !== 'string' || !commandKinds.has(value.kind)) throw new Error(`${field}.kind is unsupported.`)
   if (value.kind === 'import') {
@@ -400,6 +433,44 @@ function commandPayload(value: unknown, field: string, catalog: string[]): ShopI
       proof: proof(source.proof, `${field}.proof`),
     }
   }
+  if (value.kind === 'order_reserve') {
+    const source = exact(value, field, ['kind', 'id', 'orderId', 'customerReference', 'allocations', 'proof'])
+    const orderId = text(source.orderId, `${field}.orderId`, 160)
+    const id = identifier(source.id, `${field}.id`, 'ORS')
+    if (id !== inventoryOrderCommandId('ORS', orderId)) throw new Error(`${field}.id is not deterministic for its order.`)
+    const allocations = orderAllocations(source.allocations, `${field}.allocations`, catalog)
+    allocations.forEach((allocation, index) => {
+      if (allocation.reservationId !== inventoryOrderReservationId(orderId, allocation)) {
+        throw new Error(`${field}.allocations[${index}].reservationId is not deterministic.`)
+      }
+    })
+    return {
+      kind: 'order_reserve',
+      id,
+      orderId,
+      customerReference: text(source.customerReference, `${field}.customerReference`, 180),
+      allocations,
+      proof: proof(source.proof, `${field}.proof`),
+    }
+  }
+  if (value.kind === 'order_release' || value.kind === 'order_fulfil') {
+    const source = exact(value, field, ['kind', 'id', 'orderId', 'reservationIds', 'proof'])
+    const orderId = text(source.orderId, `${field}.orderId`, 160)
+    const prefix = value.kind === 'order_release' ? 'ORL' : 'ORF'
+    const id = identifier(source.id, `${field}.id`, prefix)
+    if (id !== inventoryOrderCommandId(prefix, orderId)) throw new Error(`${field}.id is not deterministic for its order.`)
+    const reservationIds = array(source.reservationIds, `${field}.reservationIds`, 1, 200)
+      .map((candidate, index) => identifier(candidate, `${field}.reservationIds[${index}]`, 'RES'))
+    unique(reservationIds, `${field}.reservationIds`)
+    sorted(reservationIds, `${field}.reservationIds`)
+    return {
+      kind: value.kind,
+      id,
+      orderId,
+      reservationIds,
+      proof: proof(source.proof, `${field}.proof`),
+    }
+  }
   const kind = value.kind as 'release' | 'fulfil'
   const source = exact(value, field, ['kind', 'id', 'reservationId', 'proof'])
   return {
@@ -422,6 +493,8 @@ function ledgerEvent(input: {
   counterpartyLocationId?: string
   vendorId?: string
   clientId?: string
+  orderId?: string
+  customerReference?: string
 }) {
   const record: Record<string, unknown> = {
     id: input.id,
@@ -441,6 +514,8 @@ function ledgerEvent(input: {
   if (input.counterpartyLocationId !== undefined) record.counterpartyLocationId = input.counterpartyLocationId
   if (input.vendorId !== undefined) record.vendorId = input.vendorId
   if (input.clientId !== undefined) record.clientId = input.clientId
+  if (input.orderId !== undefined) record.orderId = input.orderId
+  if (input.customerReference !== undefined) record.customerReference = input.customerReference
   return record
 }
 
@@ -527,6 +602,46 @@ function replayCommands(commands: ShopInventoryCommandPayload[]) {
       )
       return
     }
+    if (command.kind === 'order_reserve') {
+      if ([...reservations.values()].some((reservation) => reservation.orderId === command.orderId)) {
+        throw new Error(`${field}.orderId is already reserved.`)
+      }
+      command.allocations.forEach((allocation, allocationIndex) => {
+        const allocationField = `${field}.allocations[${allocationIndex}]`
+        const unit = stockUnits.get(allocation.stockUnitId)
+        if (!unit || unit.sku !== allocation.sku) throw new Error(`${allocationField}.stockUnitId does not match its SKU.`)
+        if (!locations.has(allocation.locationId)) throw new Error(`${allocationField}.locationId is unknown.`)
+        if (reservations.has(allocation.reservationId)) throw new Error(`${allocationField}.reservationId is already recorded.`)
+        const current = currentBalance(allocation.stockUnitId, allocation.locationId)
+        if (current.onHand - current.reserved < allocation.quantity) throw new Error(`${allocationField} exceeds available-to-promise stock.`)
+        applyDelta(allocation.stockUnitId, allocation.locationId, 0, allocation.quantity, allocationField)
+        reservations.set(allocation.reservationId, {
+          id: allocation.reservationId,
+          orderId: command.orderId,
+          customerReference: command.customerReference,
+          stockUnitId: allocation.stockUnitId,
+          locationId: allocation.locationId,
+          quantity: allocation.quantity,
+          status: 'active',
+          reserveProof: canonicalCopy(command.proof),
+          closureCommandId: null,
+          closureProof: null,
+        })
+        ledger.push(ledgerEvent({
+          id: `LED-${command.id}-RESERVE-${allocationIndex + 1}`,
+          kind: 'order-reserve',
+          command,
+          stockUnitId: allocation.stockUnitId,
+          locationId: allocation.locationId,
+          onHandDelta: 0,
+          reservedDelta: allocation.quantity,
+          referenceId: command.orderId,
+          orderId: command.orderId,
+          customerReference: command.customerReference,
+        }))
+      })
+      return
+    }
     if (command.kind === 'reserve') {
       if (!clients.has(command.clientId)) throw new Error(`${field}.clientId is unknown.`)
       if (!locations.has(command.locationId)) throw new Error(`${field}.locationId is unknown.`)
@@ -540,6 +655,40 @@ function replayCommands(commands: ShopInventoryCommandPayload[]) {
       ledger.push(ledgerEvent({ id: `LED-${command.id}-RESERVE`, kind: 'reserve', command, stockUnitId: command.stockUnitId, locationId: command.locationId, onHandDelta: 0, reservedDelta: command.quantity, referenceId: command.id, clientId: command.clientId }))
       return
     }
+    if (command.kind === 'order_release' || command.kind === 'order_fulfil') {
+      const activeIds = [...reservations.values()]
+        .filter((reservation) => reservation.orderId === command.orderId && reservation.status === 'active')
+        .map((reservation) => reservation.id)
+        .sort(compareCanonicalText)
+      if (canonicalJson(activeIds) !== canonicalJson(command.reservationIds)) {
+        throw new Error(`${field}.reservationIds must close every active reservation for its order.`)
+      }
+      command.reservationIds.forEach((reservationId, reservationIndex) => {
+        const reservation = reservations.get(reservationId)
+        if (!reservation || reservation.orderId !== command.orderId || reservation.status !== 'active') {
+          throw new Error(`${field}.reservationIds[${reservationIndex}] is not an active reservation for this order.`)
+        }
+        const onHandDelta = command.kind === 'order_fulfil' ? -reservation.quantity : 0
+        applyDelta(reservation.stockUnitId, reservation.locationId, onHandDelta, -reservation.quantity, field)
+        reservation.status = command.kind === 'order_fulfil' ? 'fulfilled' : 'released'
+        reservation.closureCommandId = command.id
+        reservation.closureProof = canonicalCopy(command.proof)
+        ledger.push(ledgerEvent({
+          id: `LED-${command.id}-${command.kind === 'order_fulfil' ? 'FULFIL' : 'RELEASE'}-${reservationIndex + 1}`,
+          kind: command.kind === 'order_fulfil' ? 'order-fulfil' : 'order-release',
+          command,
+          stockUnitId: reservation.stockUnitId,
+          locationId: reservation.locationId,
+          onHandDelta,
+          reservedDelta: -reservation.quantity,
+          referenceId: command.orderId,
+          orderId: command.orderId,
+          customerReference: reservation.customerReference,
+        }))
+      })
+      return
+    }
+    if (!('reservationId' in command)) throw new Error(`${field}.kind is unsupported.`)
     const reservation = reservations.get(command.reservationId)
     if (!reservation) throw new Error(`${field}.reservationId is unknown.`)
     if (reservation.status !== 'active') throw new Error(`${field}.reservationId is already closed.`)
@@ -689,6 +838,141 @@ export function receiveShopInventory(state: unknown, input: {
     stockUnitId: input.stockUnitId, sku: input.sku, trackingCode: input.trackingCode,
     locationId: input.locationId, quantity: input.quantity, proof: proof(input.proof, 'proof'),
   }, input.catalogSkus, input.expectedHeadDigest)
+}
+
+function inventoryOrderCommandId(prefix: 'ORS' | 'ORL' | 'ORF', orderId: string) {
+  const identity = canonicalDigest({ contract: 'supermega.shop.order-inventory-command.v1', kind: prefix, orderId })
+  return `${prefix}-${identity.slice(7, 39).toUpperCase()}`
+}
+
+function inventoryOrderReservationId(orderId: string, allocation: Omit<ShopInventoryOrderAllocation, 'reservationId'>) {
+  const identity = canonicalDigest({
+    contract: 'supermega.shop.order-allocation.v1',
+    orderId,
+    sku: allocation.sku,
+    stockUnitId: allocation.stockUnitId,
+    locationId: allocation.locationId,
+    quantity: allocation.quantity,
+  })
+  return `RES-ORD-${identity.slice(7, 39).toUpperCase()}`
+}
+
+function inventoryOrderLines(value: unknown, field: string, catalog: string[]) {
+  const rows = array(value, field, 1, 20).map((candidate, index): ShopInventoryOrderLine => {
+    const rowField = `${field}[${index}]`
+    const row = exact(candidate, rowField, ['sku', 'quantity'])
+    const sku = text(row.sku, `${rowField}.sku`, 80)
+    if (!catalog.includes(sku)) throw new Error(`${rowField}.sku is not present in the trusted Shop catalog.`)
+    return { sku, quantity: quantity(row.quantity, `${rowField}.quantity`, 1) }
+  })
+  unique(rows.map((row) => row.sku), `${field} SKUs`)
+  return [...rows].sort((left, right) => compareCanonicalText(left.sku, right.sku))
+}
+
+function allocationLineTotals(allocations: ShopInventoryOrderAllocation[]) {
+  const totals = new Map<string, number>()
+  allocations.forEach((allocation) => totals.set(allocation.sku, (totals.get(allocation.sku) ?? 0) + allocation.quantity))
+  return [...totals.entries()].sort(([left], [right]) => compareCanonicalText(left, right)).map(([sku, lineQuantity]) => ({ sku, quantity: lineQuantity }))
+}
+
+export function planShopInventoryOrderAllocation(state: unknown, input: {
+  orderId: unknown
+  customerReference: unknown
+  lines: unknown
+  catalogSkus: unknown
+}) {
+  const catalog = catalogSkus(input.catalogSkus)
+  const orderId = text(input.orderId, 'order allocation.orderId', 160)
+  text(input.customerReference, 'order allocation.customerReference', 180)
+  const lines = inventoryOrderLines(input.lines, 'order allocation.lines', catalog)
+  const projection = projectShopInventory(state, catalog)
+  const provisional: Omit<ShopInventoryOrderAllocation, 'reservationId'>[] = []
+  for (const line of lines) {
+    let remaining = line.quantity
+    const candidates = projection.balances
+      .filter((balance) => balance.sku === line.sku && balance.availableToPromise > 0)
+      .sort((left, right) => right.availableToPromise - left.availableToPromise
+        || compareCanonicalText(`${left.locationId}|${left.stockUnitId}`, `${right.locationId}|${right.stockUnitId}`))
+    for (const candidate of candidates) {
+      if (remaining === 0) break
+      const allocated = Math.min(remaining, candidate.availableToPromise)
+      provisional.push({ sku: line.sku, stockUnitId: candidate.stockUnitId, locationId: candidate.locationId, quantity: allocated })
+      remaining -= allocated
+    }
+    if (remaining !== 0) throw new Error(`Location stock cannot allocate ${line.quantity} units of ${line.sku}.`)
+  }
+  provisional.sort((left, right) => compareCanonicalText(
+    `${left.sku}|${left.locationId}|${left.stockUnitId}`,
+    `${right.sku}|${right.locationId}|${right.stockUnitId}`,
+  ))
+  const allocations = provisional.map((allocation): ShopInventoryOrderAllocation => {
+    return { reservationId: inventoryOrderReservationId(orderId, allocation), ...allocation }
+  })
+  unique(allocations.map((allocation) => allocation.reservationId), 'order allocation reservation IDs')
+  return canonicalCopy(allocations)
+}
+
+export function reserveShopInventoryOrder(state: unknown, input: {
+  orderId: unknown
+  customerReference: unknown
+  lines: unknown
+  proof: unknown
+  catalogSkus: unknown
+  expectedHeadDigest: unknown
+}) {
+  const catalog = catalogSkus(input.catalogSkus)
+  const current = validateShopInventoryState(state, catalog)
+  const orderId = text(input.orderId, 'order reservation.orderId', 160)
+  const customerReference = text(input.customerReference, 'order reservation.customerReference', 180)
+  const lines = inventoryOrderLines(input.lines, 'order reservation.lines', catalog)
+  const commandId = inventoryOrderCommandId('ORS', orderId)
+  const retained = current.commands.find((command) => command.payload.id === commandId)?.payload
+  if (retained) {
+    if (retained.kind !== 'order_reserve'
+      || retained.orderId !== orderId
+      || retained.customerReference !== customerReference
+      || canonicalJson(allocationLineTotals(retained.allocations)) !== canonicalJson(lines)) {
+      throw new Error('The order inventory command was already used with different allocation evidence.')
+    }
+    return appendCommand(current, { ...retained, proof: proof(input.proof, 'proof') }, catalog, input.expectedHeadDigest)
+  }
+  const allocations = planShopInventoryOrderAllocation(current, { orderId, customerReference, lines, catalogSkus: catalog })
+  return appendCommand(current, {
+    kind: 'order_reserve', id: commandId, orderId, customerReference, allocations, proof: proof(input.proof, 'proof'),
+  }, catalog, input.expectedHeadDigest)
+}
+
+function closeShopInventoryOrder(state: unknown, input: {
+  kind: 'order_release' | 'order_fulfil'
+  orderId: unknown
+  proof: unknown
+  catalogSkus: unknown
+  expectedHeadDigest: unknown
+}) {
+  const catalog = catalogSkus(input.catalogSkus)
+  const current = validateShopInventoryState(state, catalog)
+  const orderId = text(input.orderId, 'order inventory closure.orderId', 160)
+  const prefix = input.kind === 'order_release' ? 'ORL' : 'ORF'
+  const commandId = inventoryOrderCommandId(prefix, orderId)
+  const retained = current.commands.find((command) => command.payload.id === commandId)?.payload
+  const reservationIds = retained && (retained.kind === 'order_release' || retained.kind === 'order_fulfil')
+    ? retained.reservationIds
+    : projectShopInventory(current, catalog).reservations
+      .filter((reservation) => reservation.orderId === orderId && reservation.status === 'active')
+      .map((reservation) => reservation.id)
+      .sort(compareCanonicalText)
+  if (!reservationIds.length) throw new Error('The order has no active location reservation to close.')
+  return appendCommand(current, {
+    kind: input.kind, id: commandId, orderId, reservationIds, proof: proof(input.proof, 'proof'),
+  }, catalog, input.expectedHeadDigest)
+}
+
+export function releaseShopInventoryOrder(state: unknown, input: Omit<Parameters<typeof closeShopInventoryOrder>[1], 'kind'>) {
+  return closeShopInventoryOrder(state, { ...input, kind: 'order_release' })
+}
+
+export function fulfilShopInventoryOrder(state: unknown, input: Omit<Parameters<typeof closeShopInventoryOrder>[1], 'kind'>) {
+  return closeShopInventoryOrder(state, { ...input, kind: 'order_fulfil' })
 }
 
 export function reserveShopInventory(state: unknown, input: {

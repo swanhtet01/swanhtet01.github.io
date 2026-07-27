@@ -1,6 +1,10 @@
 import {
+  fulfilShopInventoryOrder,
+  planShopInventoryOrderAllocation,
   projectShopInventory,
   receiveShopInventory,
+  releaseShopInventoryOrder,
+  reserveShopInventoryOrder,
   type ShopInventoryState,
 } from './shop-inventory-foundation.ts'
 
@@ -886,6 +890,51 @@ export function commerceOrderItemSummary(lines: CommerceOrderLine[]) {
 function reservationLinesForOrder(order: CommerceOrder) {
   if (order.lines !== undefined) return order.lines.map((line) => ({ sku: line.sku, quantity: line.quantity }))
   return order.itemSku ? [{ sku: order.itemSku, quantity: order.quantity }] : []
+}
+
+function shopInventoryAvailableBySku(foundation: ShopInventoryState, catalogSkus: string[]) {
+  const totals = new Map(catalogSkus.map((sku) => [sku, 0]))
+  projectShopInventory(foundation, catalogSkus).balances.forEach((balance) => {
+    totals.set(balance.sku, (totals.get(balance.sku) ?? 0) + balance.availableToPromise)
+  })
+  return totals
+}
+
+function shopInventoryMatchesItems(foundation: ShopInventoryState, items: CommerceItem[]) {
+  const catalogSkus = items.map((item) => item.sku).sort()
+  const available = shopInventoryAvailableBySku(foundation, catalogSkus)
+  return items.every((item) => available.get(item.sku) === item.onHand)
+}
+
+function shopInventoryOrderActionMatches(
+  foundation: ShopInventoryState,
+  kind: 'order_reserve' | 'order_release' | 'order_fulfil',
+  orderId: string,
+  proof: CommerceActionProof,
+  catalogSkus: string[],
+) {
+  try {
+    projectShopInventory(foundation, catalogSkus)
+    const matches = foundation.commands.filter((command) => command.payload.kind === kind
+      && command.payload.orderId === orderId
+      && sameActionProof(command.payload.proof, proof))
+    return matches.length === 1
+  } catch {
+    return false
+  }
+}
+
+export function commerceOrderLocationAllocationPreview(state: CommerceState, order: CommerceOrder) {
+  if (!state.inventoryFoundation) return []
+  if (!shopInventoryMatchesItems(state.inventoryFoundation, state.items)) {
+    throw new Error('Location stock has drifted from aggregate Shop stock.')
+  }
+  return planShopInventoryOrderAllocation(state.inventoryFoundation, {
+    orderId: order.id,
+    customerReference: order.customer,
+    lines: reservationLinesForOrder(order),
+    catalogSkus: state.items.map((item) => item.sku).sort(),
+  })
 }
 
 export function createEmptyCommerce(): CommerceState {
@@ -1884,6 +1933,19 @@ export function validateCommerceState(value: unknown): CommerceState {
     ...storefrontActionIds,
     ...(storefrontConfigurationActionId ? [storefrontConfigurationActionId] : []),
   ], 'Commerce action ID')
+  if (value.inventoryFoundation) {
+    try {
+      if (!shopInventoryMatchesItems(
+        value.inventoryFoundation as ShopInventoryState,
+        value.items as CommerceItem[],
+      )) throw new Error('available-to-promise stock does not match the Shop catalog')
+    } catch (error) {
+      throw new Error(
+        `Commerce location inventory is invalid: ${error instanceof Error ? error.message : 'integrity check failed'}.`,
+        { cause: error },
+      )
+    }
+  }
   return value as CommerceState
 }
 
@@ -2082,6 +2144,7 @@ function actionIdIsUsed(state: CommerceState, actionId: string) {
     || commerceWebsiteIntakes(state).some((intake) => intake.creation.actionId === actionId || intake.conversion?.actionId === actionId)
     || commercePurchaseOrders(state).some((purchaseOrder) => purchaseOrder.creation.actionId === actionId || purchaseOrder.cancellation?.actionId === actionId)
     || state.storefrontConfiguration?.saved.actionId === actionId
+    || state.inventoryFoundation?.commands.some((command) => command.payload.proof.actionId === actionId)
 }
 
 function sameWebsiteSource(left: CommerceWebsiteSource, right: CommerceWebsiteSource) {
@@ -2562,7 +2625,14 @@ export function convertCommerceWebsiteIntake(
       && order.fulfilmentReference === intake.id
       && order.promisedAt === input.promisedAt
       && order.payment === (input.paymentMethod === 'cash_on_delivery' ? 'Cash on delivery' : input.paymentMethod === 'manual_qr' ? 'Manual QR review' : 'Manual bank transfer')
-      && sameActionProof(intake.conversion, proof) ? current : null
+      && sameActionProof(intake.conversion, proof)
+      && (!current.inventoryFoundation || shopInventoryOrderActionMatches(
+        current.inventoryFoundation,
+        'order_reserve',
+        order.id,
+        proof,
+        current.items.map((item) => item.sku).sort(),
+      )) ? current : null
   }
   if (!intake.snapshotDigest) return null
   if (actionIdIsUsed(current, proof.actionId)) return null
@@ -2612,9 +2682,29 @@ export function convertCommerceWebsiteIntake(
     orderId,
   })
   const conversion = { ...proof, orderId }
+  const nextItems = current.items.map((candidate) => candidate.sku === intake.sku ? { ...candidate, onHand: nextBalance } : candidate)
+  let inventoryFoundation = current.inventoryFoundation
+  if (inventoryFoundation) {
+    try {
+      const catalogSkus = current.items.map((candidate) => candidate.sku).sort()
+      if (!shopInventoryMatchesItems(inventoryFoundation, current.items)) return null
+      const locationResult = reserveShopInventoryOrder(inventoryFoundation, {
+        orderId,
+        customerReference: order.customer,
+        lines: reservationLinesForOrder(order),
+        proof,
+        catalogSkus,
+        expectedHeadDigest: inventoryFoundation.headDigest,
+      })
+      if (locationResult.replayed || !shopInventoryMatchesItems(locationResult.state, nextItems)) return null
+      inventoryFoundation = locationResult.state
+    } catch {
+      return null
+    }
+  }
   return validateCommerceState({
     ...current,
-    items: current.items.map((candidate) => candidate.sku === intake.sku ? { ...candidate, onHand: nextBalance } : candidate),
+    items: nextItems,
     orders: [order, ...current.orders],
     movements: [movement, ...current.movements],
     websiteIntakes: intakes.map((candidate) => candidate.id === intake.id ? {
@@ -2622,6 +2712,7 @@ export function convertCommerceWebsiteIntake(
       status: 'converted' as const,
       conversion,
     } : candidate),
+    ...(inventoryFoundation ? { inventoryFoundation } : {}),
   })
 }
 
@@ -2648,6 +2739,7 @@ export function registerCommerceItem(state: CommerceState, item: CommerceItem, p
       && JSON.stringify(storedItem) === JSON.stringify(item)
       && (!storedBaseline || sameCatalogBaseline(storedBaseline, expectedBaseline)) ? state : null
   }
+  if (state.inventoryFoundation && item.onHand > 0) return null
   if (actionIdIsUsed(state, proof.actionId) || state.items.some((candidate) => candidate.sku === item.sku)) return null
   const opening = movementFor(proof, { kind: 'opening', sku: item.sku, quantityDelta: item.onHand })
   const baseline = createCommerceCatalogBaseline(item, proof)
@@ -2778,6 +2870,13 @@ export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder,
         && movement.sku === line.sku
         && movement.quantityDelta === -line.quantity
         && sameProof(movement, proof)))
+      && (!state.inventoryFoundation || shopInventoryOrderActionMatches(
+        state.inventoryFoundation,
+        'order_reserve',
+        storedOrder.id,
+        proof,
+        state.items.map((item) => item.sku).sort(),
+      ))
       && JSON.stringify(storedBusinessOrder) === JSON.stringify(requestedBusinessOrder) ? state : null
   }
   const capturedLines = order.lines === undefined ? undefined : validatedOrderLineSnapshots(order)
@@ -2822,11 +2921,32 @@ export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder,
     { kind: 'reserve', sku: line.sku, quantityDelta: -line.quantity, orderId: order.id },
     lines.length > 1 ? `L${index + 1}` : undefined,
   ))
+  const nextItems = state.items.map((candidate) => nextBalances.has(candidate.sku) ? { ...candidate, onHand: nextBalances.get(candidate.sku) as number } : candidate)
+  let inventoryFoundation = state.inventoryFoundation
+  if (inventoryFoundation) {
+    try {
+      const catalogSkus = state.items.map((candidate) => candidate.sku).sort()
+      if (!shopInventoryMatchesItems(inventoryFoundation, state.items)) return null
+      const locationResult = reserveShopInventoryOrder(inventoryFoundation, {
+        orderId: order.id,
+        customerReference: order.customer,
+        lines: lines.map(({ sku, quantity }) => ({ sku, quantity })),
+        proof,
+        catalogSkus,
+        expectedHeadDigest: inventoryFoundation.headDigest,
+      })
+      if (locationResult.replayed || !shopInventoryMatchesItems(locationResult.state, nextItems)) return null
+      inventoryFoundation = locationResult.state
+    } catch {
+      return null
+    }
+  }
   return validateCommerceState({
     ...state,
-    items: state.items.map((candidate) => nextBalances.has(candidate.sku) ? { ...candidate, onHand: nextBalances.get(candidate.sku) as number } : candidate),
+    items: nextItems,
     orders: [authoritativeOrder, ...state.orders],
     movements: [...movements, ...state.movements],
+    ...(inventoryFoundation ? { inventoryFoundation } : {}),
   })
 }
 
@@ -2909,10 +3029,7 @@ export function receiveCommercePurchaseOrder(
         catalogSkus,
       })
       if (!locationReplay.replayed) return null
-      const projection = projectShopInventory(locationReplay.state, catalogSkus)
-      const totals = new Map(catalogSkus.map((sku) => [sku, 0]))
-      projection.balances.forEach((balance) => totals.set(balance.sku, (totals.get(balance.sku) ?? 0) + balance.onHand))
-      return current.items.every((item) => totals.get(item.sku) === item.onHand) ? current : null
+      return shopInventoryMatchesItems(locationReplay.state, current.items) ? current : null
     } catch {
       return null
     }
@@ -2940,10 +3057,7 @@ export function receiveCommercePurchaseOrder(
     if (!locationReceipt) return null
     try {
       const catalogSkus = current.items.map((candidate) => candidate.sku).sort()
-      const beforeProjection = projectShopInventory(inventoryFoundation, catalogSkus)
-      const beforeTotals = new Map(catalogSkus.map((sku) => [sku, 0]))
-      beforeProjection.balances.forEach((balance) => beforeTotals.set(balance.sku, (beforeTotals.get(balance.sku) ?? 0) + balance.onHand))
-      if (!current.items.every((candidate) => beforeTotals.get(candidate.sku) === candidate.onHand)) return null
+      if (!shopInventoryMatchesItems(inventoryFoundation, current.items)) return null
       const locationResult = receiveShopInventory(inventoryFoundation, {
         ...locationReceipt,
         purchaseOrderId,
@@ -2953,10 +3067,7 @@ export function receiveCommercePurchaseOrder(
         catalogSkus,
       })
       if (locationResult.replayed) return null
-      const afterProjection = projectShopInventory(locationResult.state, catalogSkus)
-      const afterTotals = new Map(catalogSkus.map((sku) => [sku, 0]))
-      afterProjection.balances.forEach((balance) => afterTotals.set(balance.sku, (afterTotals.get(balance.sku) ?? 0) + balance.onHand))
-      if (!nextItems.every((candidate) => afterTotals.get(candidate.sku) === candidate.onHand)) return null
+      if (!shopInventoryMatchesItems(locationResult.state, nextItems)) return null
       inventoryFoundation = locationResult.state
     } catch {
       return null
@@ -3001,6 +3112,7 @@ export function receiveCommerceStock(state: CommerceState, sku: string, quantity
   if (!validProof(proof) || !Number.isSafeInteger(quantity) || quantity < 1) return null
   const proofMovement = state.movements.find((movement) => movement.actionId === proof.actionId)
   if (proofMovement) return proofMovement.kind === 'receipt' && proofMovement.sku === sku && proofMovement.quantityDelta === quantity && sameProof(proofMovement, proof) ? state : null
+  if (state.inventoryFoundation) return null
   if (actionIdIsUsed(state, proof.actionId)) return null
   const matchingItems = state.items.filter((candidate) => candidate.sku === sku)
   const item = matchingItems.length === 1 ? matchingItems[0] : undefined
@@ -3059,6 +3171,7 @@ export function issueCommerceStockToProduction(
     && movement.conversionNote === checkedConversionNote
   const replayMovement = current.movements.find((movement) => movement.actionId === proof.actionId)
   if (replayMovement) return matchingMovement(replayMovement) && sameProof(replayMovement, proof) ? current : null
+  if (current.inventoryFoundation) return null
   if (actionIdIsUsed(current, proof.actionId)
     || current.movements.some((movement) => movement.productionRequestId === checkedRequest.requestId)) return null
   const matchingItems = current.items.filter((candidate) => candidate.sku === checkedSku)
@@ -3097,6 +3210,7 @@ export function countCommerceStock(state: CommerceState, sku: string, countedQua
       && replayMovement.quantityDelta === countedQuantity - Number(replayMovement.expectedQuantity)
       && sameProof(replayMovement, proof) ? current : null
   }
+  if (current.inventoryFoundation) return null
   if (actionIdIsUsed(current, proof.actionId)) return null
   const matchingItems = current.items.filter((candidate) => candidate.sku === sku)
   const item = matchingItems.length === 1 ? matchingItems[0] : undefined
@@ -3124,9 +3238,27 @@ export function commerceOrderHasReleasableReservation(state: CommerceState, orde
   if (!lines.length) return false
   const reserves = state.movements.filter((movement) => movement.kind === 'reserve' && movement.orderId === orderId)
   const releases = state.movements.filter((movement) => movement.kind === 'release' && movement.orderId === orderId)
-  return reserves.length === lines.length
+  const aggregateReady = reserves.length === lines.length
     && releases.length === 0
     && lines.every((line) => reserves.filter((movement) => movement.sku === line.sku && movement.quantityDelta === -line.quantity).length === 1)
+  if (!aggregateReady || !state.inventoryFoundation) return aggregateReady
+  try {
+    const projection = projectShopInventory(
+      state.inventoryFoundation,
+      state.items.map((item) => item.sku).sort(),
+    )
+    const locationReservations = projection.reservations.filter((reservation) => reservation.orderId === orderId && reservation.status === 'active')
+    const unitById = new Map(projection.stockUnits.map((unit) => [unit.id, unit]))
+    const locationTotals = new Map<string, number>()
+    locationReservations.forEach((reservation) => {
+      const unit = unitById.get(reservation.stockUnitId)
+      if (unit) locationTotals.set(unit.sku, (locationTotals.get(unit.sku) ?? 0) + reservation.quantity)
+    })
+    return lines.every((line) => locationTotals.get(line.sku) === line.quantity)
+      && locationReservations.length > 0
+  } catch {
+    return false
+  }
 }
 
 export function cancelCommerceOrder(state: CommerceState, orderId: string, proof: CommerceActionProof) {
@@ -3141,7 +3273,14 @@ export function cancelCommerceOrder(state: CommerceState, orderId: string, proof
         && movement.orderId === orderId
         && movement.sku === line.sku
         && movement.quantityDelta === line.quantity
-        && sameProof(movement, proof))) ? state : null
+        && sameProof(movement, proof)))
+      && (!state.inventoryFoundation || shopInventoryOrderActionMatches(
+        state.inventoryFoundation,
+        'order_release',
+        orderId,
+        proof,
+        state.items.map((item) => item.sku).sort(),
+      )) ? state : null
   }
   if (actionIdIsUsed(state, proof.actionId) || !commerceOrderHasReleasableReservation(state, orderId)) return null
   const order = state.orders.find((candidate) => candidate.id === orderId)
@@ -3161,15 +3300,34 @@ export function cancelCommerceOrder(state: CommerceState, orderId: string, proof
     { kind: 'release', sku: line.sku, quantityDelta: line.quantity, orderId },
     lines.length > 1 ? `L${index + 1}` : undefined,
   ))
+  const nextItems = state.items.map((candidate) => nextBalances.has(candidate.sku) ? { ...candidate, onHand: nextBalances.get(candidate.sku) as number } : candidate)
+  let inventoryFoundation = state.inventoryFoundation
+  if (inventoryFoundation) {
+    try {
+      const catalogSkus = state.items.map((candidate) => candidate.sku).sort()
+      if (!shopInventoryMatchesItems(inventoryFoundation, state.items)) return null
+      const locationResult = releaseShopInventoryOrder(inventoryFoundation, {
+        orderId,
+        proof,
+        catalogSkus,
+        expectedHeadDigest: inventoryFoundation.headDigest,
+      })
+      if (locationResult.replayed || !shopInventoryMatchesItems(locationResult.state, nextItems)) return null
+      inventoryFoundation = locationResult.state
+    } catch {
+      return null
+    }
+  }
   return validateCommerceState({
     ...state,
-    items: state.items.map((candidate) => nextBalances.has(candidate.sku) ? { ...candidate, onHand: nextBalances.get(candidate.sku) as number } : candidate),
+    items: nextItems,
     orders: state.orders.map((candidate) => candidate.id === orderId ? {
       ...candidate,
       status: 'cancelled' as const,
       refundStatus: candidate.paymentStatus === 'reconciled' ? 'due' as const : 'none' as const,
     } : candidate),
     movements: [...movements, ...state.movements],
+    ...(inventoryFoundation ? { inventoryFoundation } : {}),
   })
 }
 
@@ -3317,6 +3475,7 @@ export function recordCommerceOrderReturn(
         ? replayMovements.length === 1 && movementMatchesReturn(replayMovements[0], record, order.id)
         : replayMovements.length === 0) ? current : null
   }
+  if (current.inventoryFoundation && input.disposition === 'restock') return null
   if (actionIdIsUsed(current, proof.actionId)) return null
   const actual = commerceOrderReturnExpectation(current, input.orderId, input.sku, input.disposition)
   if (!actual || !expected || !sameOrderReturnExpectation(actual, expected)) return null
@@ -3651,6 +3810,23 @@ export function advanceCommerceOrder(
     }
   }
   const next: Record<'confirmed' | 'preparing' | 'ready', CommerceOrderStatus> = { confirmed: 'preparing', preparing: 'ready', ready: 'completed' }
+  let inventoryFoundation = current.inventoryFoundation
+  if (currentStatus === 'ready' && inventoryFoundation) {
+    try {
+      const catalogSkus = current.items.map((item) => item.sku).sort()
+      if (!shopInventoryMatchesItems(inventoryFoundation, current.items)) return null
+      const locationResult = fulfilShopInventoryOrder(inventoryFoundation, {
+        orderId,
+        proof: retainedProof,
+        catalogSkus,
+        expectedHeadDigest: inventoryFoundation.headDigest,
+      })
+      if (locationResult.replayed || !shopInventoryMatchesItems(locationResult.state, current.items)) return null
+      inventoryFoundation = locationResult.state
+    } catch {
+      return null
+    }
+  }
   return validateCommerceState({
     ...current,
     orders: current.orders.map((candidate) => candidate.id === orderId ? {
@@ -3661,5 +3837,6 @@ export function advanceCommerceOrder(
         : {}),
       ...(currentStatus === 'ready' ? { completion: { ...retainedProof } } : {}),
     } : candidate),
+    ...(inventoryFoundation ? { inventoryFoundation } : {}),
   })
 }

@@ -45,6 +45,7 @@ import {
   commerceCloseExpectation,
   commerceOrderReturnExpectation,
   commerceOrderItemSummary,
+  commerceOrderLocationAllocationPreview,
   commerceOrderNeedsAction,
   commerceOrderHasReleasableReservation,
   commerceOrderPromiseUrgency,
@@ -3165,12 +3166,25 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       const item = commerce.items.find((candidate) => candidate.sku === line.sku)
       return `${line.sku} ${item?.onHand ?? 0} → ${(item?.onHand ?? 0) - line.quantity}`
     }).join(', ')
+    let locationReview = ''
+    if (commerce.inventoryFoundation) {
+      try {
+        const projection = projectShopInventory(commerce.inventoryFoundation, commerce.items.map((item) => item.sku).sort())
+        const locationNames = new Map(projection.locations.map((location) => [location.id, location.name]))
+        const trackingCodes = new Map(projection.stockUnits.map((unit) => [unit.id, unit.trackingCode]))
+        const allocations = commerceOrderLocationAllocationPreview(commerce, order)
+        locationReview = ` · Pick ${allocations.map((allocation) => `${allocation.quantity} ${allocation.sku} from ${locationNames.get(allocation.locationId) ?? allocation.locationId} / ${trackingCodes.get(allocation.stockUnitId) ?? allocation.stockUnitId}`).join(', ')}`
+      } catch {
+        setNotice('Location stock cannot cover this order. Move or receive stock, then review the order again.')
+        return
+      }
+    }
     queueAction({
       kind: 'order_create',
       subjectId: order.id,
       summary: ecommerceDraft ? 'Review Ecommerce order' : `Confirm ${order.id} with ${orderLines.length} item ${orderLines.length === 1 ? 'line' : 'lines'}`,
       before: `${sourceRecordId ? `Request ${sourceRecordId} · ` : ''}Customer ${order.customer} · ${lineReview}`,
-      after: `Order ${order.id} · Subtotal ${formatMoney(orderTotal)} · Tax not configured · Payment ${payment} · Owner confirming operator · Promise ${formatIssueDue(canonicalPromisedAt)} · ${fulfilmentLabel(order.fulfilment)} · Stock ${reservationReview}`,
+      after: `Order ${order.id} · Subtotal ${formatMoney(orderTotal)} · Tax not configured · Payment ${payment} · Owner confirming operator · Promise ${formatIssueDue(canonicalPromisedAt)} · ${fulfilmentLabel(order.fulfilment)} · Stock ${reservationReview}${locationReview}`,
       evidenceReferenceSuggestion: sourceEvidence,
       evidenceReferenceLocked: Boolean(sourceRecordId),
       apply: async (action) => {

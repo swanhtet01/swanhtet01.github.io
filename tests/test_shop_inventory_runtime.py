@@ -16,6 +16,7 @@ from supermega_runtime.shop_inventory_runtime import (
     ShopInventoryValidationError,
     restamp_latest_shop_inventory_command,
     shop_inventory_catalog_digest,
+    shop_inventory_sku_available_to_promise,
     shop_inventory_sku_totals,
     validate_shop_inventory_state,
 )
@@ -181,6 +182,164 @@ def received_inventory(
     return current
 
 
+def append_inventory_command(
+    state: dict[str, object], payload: dict[str, object]
+) -> dict[str, object]:
+    current = deepcopy(state)
+    body = {
+        "sequence": int(current["revision"]) + 1,
+        "previousDigest": current["headDigest"],
+        "payload": payload,
+    }
+    command = {**body, "digest": canonical_digest(body)}
+    current["revision"] = body["sequence"]
+    current["headDigest"] = command["digest"]
+    current["commands"] = [*current["commands"], command]  # type: ignore[misc]
+    return current
+
+
+def order_inventory_command_id(prefix: str, order_id: str) -> str:
+    identity = canonical_digest(
+        {
+            "contract": "supermega.shop.order-inventory-command.v1",
+            "kind": prefix,
+            "orderId": order_id,
+        }
+    )
+    return f"{prefix}-{identity[7:39].upper()}"
+
+
+def order_allocation(
+    order_id: str,
+    *,
+    quantity: int = 3,
+    location_id: str = "LOC-MAIN",
+) -> dict[str, object]:
+    allocation: dict[str, object] = {
+        "sku": "SKU-1",
+        "stockUnitId": "LOT-SKU1-OPENING-001",
+        "locationId": location_id,
+        "quantity": quantity,
+    }
+    identity = canonical_digest(
+        {
+            "contract": "supermega.shop.order-allocation.v1",
+            "orderId": order_id,
+            **allocation,
+        }
+    )
+    return {"reservationId": f"RES-ORD-{identity[7:39].upper()}", **allocation}
+
+
+def reserved_order_inventory(
+    state: dict[str, object],
+    proof: dict[str, str],
+    *,
+    order_id: str = "ORD-LOCATION-001",
+    quantity: int = 3,
+    location_id: str = "LOC-MAIN",
+) -> dict[str, object]:
+    return append_inventory_command(
+        state,
+        {
+            "kind": "order_reserve",
+            "id": order_inventory_command_id("ORS", order_id),
+            "orderId": order_id,
+            "customerReference": "Customer A",
+            "allocations": [
+                order_allocation(
+                    order_id, quantity=quantity, location_id=location_id
+                )
+            ],
+            "proof": proof,
+        },
+    )
+
+
+def closed_order_inventory(
+    state: dict[str, object],
+    proof: dict[str, str],
+    *,
+    kind: str,
+    order_id: str = "ORD-LOCATION-001",
+) -> dict[str, object]:
+    reserve = next(
+        command["payload"]
+        for command in state["commands"]  # type: ignore[union-attr]
+        if command["payload"]["kind"] == "order_reserve"
+        and command["payload"]["orderId"] == order_id
+    )
+    prefix = "ORL" if kind == "order_release" else "ORF"
+    return append_inventory_command(
+        state,
+        {
+            "kind": kind,
+            "id": order_inventory_command_id(prefix, order_id),
+            "orderId": order_id,
+            "reservationIds": sorted(
+                allocation["reservationId"] for allocation in reserve["allocations"]
+            ),
+            "proof": proof,
+        },
+    )
+
+
+def sales_order(
+    proof: dict[str, str],
+    *,
+    order_id: str = "ORD-LOCATION-001",
+    quantity: int = 3,
+) -> dict[str, object]:
+    return {
+        "id": order_id,
+        "createdAt": proof["capturedAt"],
+        "customer": "Customer A",
+        "owner": proof["actor"],
+        "channel": "Phone",
+        "item": "Test item",
+        "itemSku": "SKU-1",
+        "quantity": quantity,
+        "payment": "Cash",
+        "paymentStatus": "pending",
+        "refundStatus": "none",
+        "fulfilment": "pickup",
+        "fulfilmentReference": "COUNTER-A",
+        "promisedAt": "2026-07-28T08:00:00.000Z",
+        "calculation": {
+            "schema": "supermega.commerce.order-calculation.v1",
+            "currency": "MMK",
+            "catalogRevision": 0,
+            "subtotalMmk": quantity * 100,
+            "taxMode": "not_configured",
+            "taxMmk": 0,
+            "totalMmk": quantity * 100,
+        },
+        "total": quantity * 100,
+        "status": "confirmed",
+    }
+
+
+def order_movement(
+    kind: str,
+    proof: dict[str, str],
+    quantity_delta: int,
+    *,
+    order_id: str = "ORD-LOCATION-001",
+) -> dict[str, object]:
+    return {
+        "id": f"MOV2:{proof['actionId']}",
+        "actionId": proof["actionId"],
+        "createdAt": proof["capturedAt"],
+        "actor": proof["actor"],
+        "reason": proof["reason"],
+        "evidenceReference": proof["evidenceReference"],
+        "kind": kind,
+        "sku": "SKU-1",
+        "quantityDelta": quantity_delta,
+        "orderId": order_id,
+    }
+
+
 def purchase_order(proof: dict[str, str] | None = None) -> dict[str, object]:
     creation = proof or action_proof(
         "ACT-PURCHASE-001", "2026-07-27T04:10:00.000Z"
@@ -337,6 +496,265 @@ class ShopInventoryRuntimeTests(unittest.TestCase):
                 ordered,
                 {"state": aggregate_only, "evidence": proof},
             )
+
+    def test_order_allocation_reserve_release_and_fulfil_are_atomic(self) -> None:
+        current = commerce_state()
+        opening = opening_inventory()
+        initialized = reduce_commerce_state(
+            "commerce.inventory.initialized",
+            current,
+            {
+                "state": {**current, "inventoryFoundation": opening},
+                "evidence": opening["commands"][-1]["payload"]["proof"],  # type: ignore[index]
+            },
+        )
+        reserve_proof = action_proof(
+            "ACT-ORDER-RESERVE-001", "2026-07-27T06:00:00.000Z"
+        )
+        order = sales_order(reserve_proof)
+        reserved_state = deepcopy(initialized)
+        reserved_state["items"][0]["onHand"] = 7  # type: ignore[index]
+        reserved_state["orders"] = [order]
+        reserved_state["movements"] = [
+            order_movement("reserve", reserve_proof, -3)
+        ]
+        reserved_state["inventoryFoundation"] = reserved_order_inventory(
+            initialized["inventoryFoundation"], reserve_proof
+        )
+        reserved = reduce_commerce_state(
+            "commerce.order.created",
+            initialized,
+            {"state": reserved_state, "evidence": reserve_proof},
+        )
+        self.assertEqual(
+            shop_inventory_sku_totals(reserved["inventoryFoundation"], ["SKU-1"]),
+            {"SKU-1": 10},
+        )
+        self.assertEqual(
+            shop_inventory_sku_available_to_promise(
+                reserved["inventoryFoundation"], ["SKU-1"]
+            ),
+            {"SKU-1": 7},
+        )
+        forged_identity = deepcopy(reserved["inventoryFoundation"])
+        forged_identity["commands"][-1]["payload"]["id"] = (  # type: ignore[index]
+            f"ORS-{'A' * 32}"
+        )
+        with self.assertRaisesRegex(
+            ShopInventoryValidationError, "not deterministic"
+        ):
+            validate_shop_inventory_state(forged_identity, ["SKU-1"])
+
+        non_deterministic_current = {
+            **initialized,
+            "inventoryFoundation": transferred_inventory(
+                initialized["inventoryFoundation"]
+            ),
+        }
+        non_deterministic = deepcopy(reserved_state)
+        non_deterministic["inventoryFoundation"] = reserved_order_inventory(
+            non_deterministic_current["inventoryFoundation"],
+            reserve_proof,
+            location_id="LOC-BRANCH",
+        )
+        with self.assertRaisesRegex(TrialValidationError, "fewest-lot"):
+            reduce_commerce_state(
+                "commerce.order.created",
+                non_deterministic_current,
+                {"state": non_deterministic, "evidence": reserve_proof},
+            )
+
+        cancel_proof = action_proof(
+            "ACT-ORDER-RELEASE-001", "2026-07-27T07:00:00.000Z"
+        )
+        cancelled_state = deepcopy(reserved)
+        cancelled_state["items"][0]["onHand"] = 10  # type: ignore[index]
+        cancelled_state["orders"][0].update(  # type: ignore[index]
+            {"status": "cancelled", "refundStatus": "none"}
+        )
+        cancelled_state["movements"] = [
+            order_movement("release", cancel_proof, 3),
+            *reserved["movements"],  # type: ignore[misc]
+        ]
+        cancelled_state["inventoryFoundation"] = closed_order_inventory(
+            reserved["inventoryFoundation"], cancel_proof, kind="order_release"
+        )
+        cancelled = reduce_commerce_state(
+            "commerce.order.cancelled",
+            reserved,
+            {"state": cancelled_state, "evidence": cancel_proof},
+        )
+        self.assertEqual(
+            shop_inventory_sku_available_to_promise(
+                cancelled["inventoryFoundation"], ["SKU-1"]
+            ),
+            {"SKU-1": 10},
+        )
+
+        ready = deepcopy(reserved)
+        ready["orders"][0].update(  # type: ignore[index]
+            {
+                "status": "ready",
+                "paymentStatus": "reconciled",
+                "paymentReconciledAt": "2026-07-27T07:00:00.000Z",
+                "paymentReconciliationActionId": "ACT-PAY-LOCATION-001",
+                "paymentReconciledBy": "operator-a",
+                "paymentReconciliationReason": "Payment reviewed.",
+                "paymentEvidenceReference": "PAYMENT:LOCATION-001",
+                "advancementActionIds": ["ACT-PREPARING-001", "ACT-READY-001"],
+            }
+        )
+        completion_proof = action_proof(
+            "ACT-ORDER-FULFIL-001", "2026-07-27T08:00:00.000Z"
+        )
+        completed_state = deepcopy(ready)
+        completed_state["orders"][0].update(  # type: ignore[index]
+            {"status": "completed", "completion": completion_proof}
+        )
+        completed_state["inventoryFoundation"] = closed_order_inventory(
+            ready["inventoryFoundation"], completion_proof, kind="order_fulfil"
+        )
+        completed = reduce_commerce_state(
+            "commerce.order.advanced",
+            ready,
+            {"state": completed_state, "evidence": completion_proof},
+        )
+        self.assertEqual(
+            shop_inventory_sku_totals(completed["inventoryFoundation"], ["SKU-1"]),
+            {"SKU-1": 7},
+        )
+        self.assertEqual(
+            shop_inventory_sku_available_to_promise(
+                completed["inventoryFoundation"], ["SKU-1"]
+            ),
+            {"SKU-1": 7},
+        )
+
+    def test_store_stamps_order_location_reserve_and_release(self) -> None:
+        store = InMemoryTrialStore(reducer=reduce_trial_state)
+        operator = TrialPrincipal("workspace-order", "operator-order", "human")
+        store.provision_membership(
+            workspace_id=operator.workspace_id,
+            actor_id=operator.actor_id,
+            actor_kind=operator.actor_kind,
+            capabilities=("commerce.read", "commerce.write"),
+        )
+        with patch(
+            "supermega_runtime.trial_store._utc_now",
+            return_value="2026-07-27T05:00:00+00:00",
+        ):
+            initialized = store.apply_command(
+                operator,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.workspace.initialized",
+                expected_version=0,
+                payload={
+                    "state": commerce_state(),
+                    "evidence": action_proof("ACT-CATALOG-ORDER-001", OPEN_AT),
+                },
+            )
+        opening = opening_inventory(
+            action_proof("ACT-OPENING-ORDER-001", OPEN_AT)
+        )
+        with patch(
+            "supermega_runtime.trial_store._utc_now",
+            return_value="2026-07-27T05:30:00+00:00",
+        ):
+            located = store.apply_command(
+                operator,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.inventory.initialized",
+                expected_version=initialized.version,
+                payload={
+                    "state": {**initialized.state, "inventoryFoundation": opening},
+                    "evidence": opening["commands"][-1]["payload"]["proof"],  # type: ignore[index]
+                },
+            )
+
+        forged_reserve = action_proof(
+            "ACT-ORDER-STORE-RESERVE-001",
+            "2099-01-01T00:00:00.000Z",
+            "forged-order-actor",
+        )
+        order = sales_order(forged_reserve)
+        reserve_state = deepcopy(located.state)
+        reserve_state["items"][0]["onHand"] = 7  # type: ignore[index]
+        reserve_state["orders"] = [order]
+        reserve_state["movements"] = [
+            order_movement("reserve", forged_reserve, -3)
+        ]
+        reserve_state["inventoryFoundation"] = reserved_order_inventory(
+            located.state["inventoryFoundation"], forged_reserve
+        )
+        reserve_command_id = str(uuid4())
+        with patch(
+            "supermega_runtime.trial_store._utc_now",
+            return_value="2026-07-27T06:00:00+00:00",
+        ):
+            reserved = store.apply_command(
+                operator,
+                command_id=reserve_command_id,
+                surface="commerce",
+                event_type="commerce.order.created",
+                expected_version=located.version,
+                payload={"state": reserve_state, "evidence": forged_reserve},
+            )
+            reserve_replay = store.apply_command(
+                operator,
+                command_id=reserve_command_id,
+                surface="commerce",
+                event_type="commerce.order.created",
+                expected_version=located.version,
+                payload={"state": reserve_state, "evidence": forged_reserve},
+            )
+        self.assertTrue(reserve_replay.idempotent_replay)
+        self.assertEqual(reserved.state["orders"][0]["owner"], operator.actor_id)  # type: ignore[index]
+        self.assertEqual(reserved.state["movements"][0]["actor"], operator.actor_id)  # type: ignore[index]
+        retained_reserve_proof = reserved.state["inventoryFoundation"]["commands"][-1]["payload"]["proof"]  # type: ignore[index]
+        self.assertEqual(retained_reserve_proof["actor"], operator.actor_id)
+        self.assertEqual(
+            retained_reserve_proof["capturedAt"], "2026-07-27T06:00:00+00:00"
+        )
+
+        forged_release = action_proof(
+            "ACT-ORDER-STORE-RELEASE-001",
+            "2099-01-02T00:00:00.000Z",
+            "forged-release-actor",
+        )
+        release_state = deepcopy(reserved.state)
+        release_state["items"][0]["onHand"] = 10  # type: ignore[index]
+        release_state["orders"][0].update(  # type: ignore[index]
+            {"status": "cancelled", "refundStatus": "none"}
+        )
+        release_state["movements"] = [
+            order_movement("release", forged_release, 3),
+            *reserved.state["movements"],  # type: ignore[misc]
+        ]
+        release_state["inventoryFoundation"] = closed_order_inventory(
+            reserved.state["inventoryFoundation"],
+            forged_release,
+            kind="order_release",
+        )
+        with patch(
+            "supermega_runtime.trial_store._utc_now",
+            return_value="2026-07-27T07:00:00+00:00",
+        ):
+            released = store.apply_command(
+                operator,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.order.cancelled",
+                expected_version=reserved.version,
+                payload={"state": release_state, "evidence": forged_release},
+            )
+        retained_release_proof = released.state["inventoryFoundation"]["commands"][-1]["payload"]["proof"]  # type: ignore[index]
+        self.assertEqual(released.state["movements"][0]["actor"], operator.actor_id)  # type: ignore[index]
+        self.assertEqual(retained_release_proof["actor"], operator.actor_id)
+        self.assertEqual(
+            retained_release_proof["capturedAt"], "2026-07-27T07:00:00+00:00"
+        )
 
     def test_store_stamps_human_location_commands_and_replays_exactly(self) -> None:
         store = InMemoryTrialStore(reducer=reduce_trial_state)
