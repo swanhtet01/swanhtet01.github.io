@@ -4,8 +4,8 @@ Updated: 2026-07-27
 Owner: founder / CEO
 Mode: Codex-only guarded production release; managed operation remains isolated
 Live state contract: `supermega.hq-live-state.v1`
-Live release commit: `2930ecfc2d29cc73310e27a2a73f5ac87aa29da8`
-Live state observed: `2026-07-27T21:44:38Z`
+Live release commit: `39642eb7a881a09899a030bbdfb68a5687f12fc6`
+Live state observed: `2026-07-27T22:06:58Z`
 Live operating mode: `isolated_demo`
 Live scheduler status: `degraded`
 Live scheduler configured: `false`
@@ -40,8 +40,8 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 - Storage privacy now has a six-request owner-confirmed verifier and zero-network configuration preflight; hosted proof remains blocked (`be78a02`).
 - Each CEO cycle selects at most one HQ-authorized outcome; blocked, duplicate, or invalid work stops before model or send (`cdd925a`).
 - Model calls reserve before provider I/O. All tenants and retries share one atomic UTC-day ceiling; failures stay charged, cache hits reserve nothing, hosted memory state fails closed, and the hard maximum is 2,000,000 units (`a2e1b89`).
-- Shop opens directly into a visual sell counter at `/shop/`; orders and stock remain one tap away. The shared app shell supports dark and light themes, with mobile-first controls across all four products (`2b25e747`).
-- Plant is task-first at `/plant/` and controls no equipment.
+- Shop opens at `/shop/` with visual selling; orders and stock are one tap away. All products share light/dark mobile-first controls (`2b25e747`).
+- Plant is task-first at `/plant/`; mobile output is a focused bottom sheet with focus return, while desktop keeps the split workspace. It controls no equipment (`39642eb`).
 - Website turns a five-field brief into a responsive, ready-page preview and standalone HTML download. Browser-local users skip managed release paperwork; connected workspaces retain evidence and approval controls. Download never deploys or changes a domain (`dfbe00b3`).
 - Ecommerce uses versioned Shop data for a recoverable multi-line cart and deterministic quote. Managed workspaces retain exact requests in the Shop inbox; V1 requests stay readable, and only Shop confirmation creates an order (`aed737a`).
 - AI remains gated; Order Intake passed 20 local cases, but provider execution still needs credentials.
@@ -53,29 +53,29 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 
 ## Verified baseline
 
-- Current checkpoints: product `17b458f`, release `2930ecf`, agent operations `a2e1b89`, operations `63a245f`, and security `98b8044`.
+- Current checkpoints: product `17b458f`, release `39642eb`, agent operations `a2e1b89`, operations `63a245f`, and security `98b8044`.
 - App/local gates pass: 329 Python tests, lint/build, 54 Shop inventory/221 Commerce/258 Production checks, 69 security checks, and the complete release/database/Vercel/HQ suite.
 - PostgreSQL 17.10 rehearsal passes twice: migrations, isolation, four-product journeys, human approvals, TLS, backup/restore, and cleanup. Hosted Storage privacy remains unproven (`2930ecf`).
-- A 390 px Shop journey passed exact-lot reserve, fulfil, and sellable return with no overflow; managed count and Plant allocation remain model/runtime verified.
+- At 390 px, Shop exact-lot flow and Plant output open/close pass without overflow; Plant passes both themes with focus return. Managed count/allocation remain model verified.
 - First-action QA routes Shop, Plant, and Website blockers to the next task; mobile controls are 44 px and guide/review actions create no record (`36fa7dd`).
-- Both `supermega.dev` and `app.supermega.dev` serve exact commit `2930ecfc2d29cc73310e27a2a73f5ac87aa29da8`. The public site exposes four direct product links with no template catalogue; the app opens all four samples directly. Protected promotion and exact release identity pass at catalog `2026-07-28.1`.
+- Both `supermega.dev` and `app.supermega.dev` serve exact commit `39642eb7a881a09899a030bbdfb68a5687f12fc6`. The public site exposes four direct product links with no template catalogue; the app opens all four samples directly. Protected promotion and exact release identity pass at catalog `2026-07-28.1`.
 - Production remains an `isolated_demo`: managed database, schema, audit, security, and writes are not ready. The hosted scheduler is degraded and unconfigured by design, uses no Ally compute, and retains a zero-idle execution target.
 
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
 
 ## Owner-gated actions
 
-No external send, payment, refund, publish, domain change, connector write, merge, deployment, access change, production database write, paid resource, or revenue claim occurs without explicit owner approval.
+No external send, payment, refund, publish, domain change, connector write, merge, deployment, access change, production database write, paid resource, or revenue claim occurs without owner approval.
 
 ## Blockers
 
-- Website, Plant, and Ecommerce have tenant-bound persistence contracts but still lack hosted cross-device/activation proof.
-- AI-budget SQL/RPCs pass local concurrency, indexed aggregate, redaction, and provisioning checks but lack approved hosted proof; model calls stay fail closed.
+- Website, Plant, and Ecommerce still lack hosted cross-device activation proof.
+- AI-budget controls pass local checks but lack hosted proof; model calls fail closed.
 - `supermegabase` is not a trial target: it has existing records, one recorded migration, and 27 public RLS tables without policies. No isolated branch is verified, so managed writes remain off.
-- The four products are live only as isolated sample workspaces; cross-device managed persistence and tenant security are not proven.
+- The four live products are isolated samples; managed persistence and tenant security are unproven.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
-- Hosted scheduler activation is blocked correctly: no signed activation bundle, cron token, cron secret, worker URL, or worker allowlist is configured. Do not activate it before managed storage, security, recovery, and owner evidence pass.
-- SAP-grade gaps remain in Shop tax/location accounting and external refund settlement, Plant costing/OEE/calibration, Website hosted CMS/release, and Ecommerce payment/shipping/tax/returns.
+- Hosted scheduling stays blocked: no signed bundle, cron credentials, worker URL, or allowlist exists. Activate only after managed storage, security, recovery, and owner evidence pass.
+- Enterprise gaps remain: Shop tax/accounting/refunds; Plant costing/OEE/calibration; Website hosted CMS/release; Ecommerce payment/shipping/tax/returns.
 
 ## Decisions in force
 
