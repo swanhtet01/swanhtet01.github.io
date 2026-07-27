@@ -5,6 +5,8 @@
 // ONE file, not every caller. Every build agent, the Deal Desk, and the per-client operator
 // call complete() — never the Anthropic SDK directly.
 
+import { randomUUID } from 'node:crypto'
+
 const API_URL = 'https://api.anthropic.com/v1/messages'
 const API_VERSION = '2023-06-01'
 
@@ -27,11 +29,46 @@ const cache = new Map() // cacheKey -> { ...out, _exp }
 const CACHE_TTL_MS = Number(process.env.SUPERMEGA_AI_CACHE_TTL_MS || 3_600_000) // 1h default; keys are tenant-scoped
 const DEFAULT_CAP_TOKENS = Number(process.env.SUPERMEGA_CLIENT_TOKEN_CAP || 150_000) // P0: free-tier cap (was 2M — 2M/mo kills margin at scale)
 
+// Company-wide admission budget. Every provider attempt reserves a conservative upper-bound before
+// network I/O, so concurrent tenants and retries cannot race past the daily ceiling. The environment
+// may tune the default but can never raise it above the compiled hard maximum.
+export const COMPANY_DAILY_BUDGET_DEFAULT_UNITS = 500_000
+export const COMPANY_DAILY_BUDGET_HARD_MAX_UNITS = 2_000_000
+const COMPANY_DAILY_BUDGET_ENV = 'SUPERMEGA_COMPANY_DAILY_AI_BUDGET_UNITS'
+const REQUEST_TOKEN_OVERHEAD = 512
+const localBudgetReservations = new Map()
+
 // Cost weights per tier, relative to bulk (Haiku 4.5 = 1). Sonnet 4.6 is ~3x Haiku per token,
 // Opus ~15x. The ledger stores COST-WEIGHTED (bulk-equivalent) tokens, so the monthly cap is a
 // COST ceiling, not a raw-token ceiling: one Sonnet token burns 3 units of the cap. Free tenants
 // only ever run bulk (weight 1), so for them cap units == raw tokens.
 export const TIER_COST_WEIGHTS = { bulk: 1, reason: 3, deep: 15 }
+
+export function companyDailyBudgetCap() {
+  const raw = Number(process.env[COMPANY_DAILY_BUDGET_ENV])
+  if (!Number.isFinite(raw) || raw <= 0) return COMPANY_DAILY_BUDGET_DEFAULT_UNITS
+  return Math.min(Math.trunc(raw), COMPANY_DAILY_BUDGET_HARD_MAX_UNITS)
+}
+
+export function currentDailyBudgetWindow(d = new Date()) {
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
+}
+
+export function boundedMaxTokens(requested, tier = 'reason') {
+  const tierDef = TIERS[tier] || TIERS.reason
+  const parsed = Math.trunc(Number(requested))
+  if (!Number.isFinite(parsed) || parsed <= 0) return tierDef.maxTokens
+  return Math.min(parsed, tierDef.maxTokens)
+}
+
+export function estimateCallBudgetUnits({ system = '', messages = [], schema = null, tier = 'reason', maxTokens } = {}) {
+  const enforcedTier = TIERS[tier] ? tier : 'reason'
+  const outputBound = boundedMaxTokens(maxTokens, enforcedTier)
+  let serialized = ''
+  try { serialized = JSON.stringify({ system, messages, schema }) || '' } catch { serialized = String(system || '') }
+  const inputBound = new TextEncoder().encode(serialized).byteLength + REQUEST_TOKEN_OVERHEAD
+  return Math.max(1, Math.ceil((inputBound + outputBound) * (TIER_COST_WEIGHTS[enforcedTier] || 1)))
+}
 
 // ---- Plan model (server-side) --------------------------------------------------------------------
 // Tenants (supermega_console_clients) carry a `plan` column ('free' | 'pro' | ...). The plan is
@@ -86,6 +123,70 @@ async function spine() {
 // Monthly window key in UTC, e.g. '2026-06'. The cap is a per-tenant monthly ceiling.
 function currentWindow(d = new Date()) {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+}
+
+function hostedRuntime() {
+  return Boolean(process.env.VERCEL || process.env.VERCEL_ENV || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.K_SERVICE || process.env.NODE_ENV === 'production')
+}
+
+function localReserveBudget({ reservationId, window, reservedUnits, capUnits }) {
+  let usedUnits = 0
+  for (const [id, row] of localBudgetReservations) {
+    if (row.window !== window) {
+      localBudgetReservations.delete(id)
+      continue
+    }
+    if (row.window === window && row.status !== 'released') usedUnits += row.reservedUnits
+  }
+  if (usedUnits + reservedUnits > capUnits) {
+    return { granted: false, durable: false, usedUnits, capUnits, reason: 'company_daily_budget_reached' }
+  }
+  localBudgetReservations.set(reservationId, { window, reservedUnits, status: 'reserved' })
+  return { granted: true, durable: false, usedUnits: usedUnits + reservedUnits, capUnits }
+}
+
+async function reserveProviderBudget({ system, messages, schema, tier, maxTokens, clientId, provider }) {
+  const reservationId = randomUUID()
+  const window = currentDailyBudgetWindow()
+  const reservedUnits = estimateCallBudgetUnits({ system, messages, schema, tier, maxTokens })
+  const capUnits = companyDailyBudgetCap()
+  const store = await spine()
+  const result = store?.reserveAiBudget
+    ? await store.reserveAiBudget({ reservationId, window, reservedUnits, capUnits, tenantId: clientId, tier, provider })
+    : localReserveBudget({ reservationId, window, reservedUnits, capUnits })
+
+  if (result?.granted && hostedRuntime() && !result.durable) {
+    if (store?.settleAiBudgetReservation) await store.settleAiBudgetReservation(reservationId, 'released', 0).catch(() => null)
+    else if (localBudgetReservations.has(reservationId)) localBudgetReservations.set(reservationId, { ...localBudgetReservations.get(reservationId), status: 'released' })
+    const err = new Error('gateway_budget_store_unavailable')
+    err.window = window
+    throw err
+  }
+  if (!result?.granted) {
+    const unavailable = !result || ['budget_store_unavailable', 'budget_store_invalid_response'].includes(result.reason)
+    const err = new Error(unavailable ? 'gateway_budget_store_unavailable' : 'gateway_company_daily_budget_reached')
+    err.used = Number(result?.usedUnits) || 0
+    err.cap = Number(result?.capUnits) || capUnits
+    err.reserved = reservedUnits
+    err.window = window
+    throw err
+  }
+  return { reservationId, window, reservedUnits, capUnits, store }
+}
+
+async function settleProviderBudget(reservation, status, actualUnits) {
+  if (!reservation) return
+  if (reservation.store?.settleAiBudgetReservation) {
+    await reservation.store.settleAiBudgetReservation(reservation.reservationId, status, actualUnits).catch(() => null)
+    return
+  }
+  const current = localBudgetReservations.get(reservation.reservationId)
+  if (current?.status === 'reserved') localBudgetReservations.set(reservation.reservationId, { ...current, status, actualUnits })
+}
+
+function weightedUsageUnits(usage, tier) {
+  const weight = TIER_COST_WEIGHTS[tier] || 1
+  return Math.max(0, Math.ceil(((Number(usage?.input_tokens) || 0) + (Number(usage?.output_tokens) || 0)) * weight))
 }
 
 function hash(str) {
@@ -284,7 +385,7 @@ export async function complete(o) {
 
   // Tenant-scoped (clientId in the key) + TTL-bounded, so tenants never share a cached response and a
   // stale entry can't live forever.
-  const key = o.cacheKey || hash(JSON.stringify({ system, messages, tier, schema: schema?.title || !!schema, clientId: clientId || '' }))
+  const key = o.cacheKey || hash(JSON.stringify({ system, messages, tier, schema: schema?.title || !!schema, clientId: clientId || '', maxTokens: boundedMaxTokens(maxTokens, tier) }))
   const nowMs = Date.now()
   const fresh = (v) => v && (!v._exp || nowMs < v._exp)
   const unwrap = (v) => { const { _exp, ...out } = v; return { ...out, cached: true } }
@@ -318,11 +419,22 @@ export async function complete(o) {
     let curTier = startTier
     for (let attempt = 0; attempt < 4; attempt++) {
       const tierDef = TIERS[curTier]
+      const attemptMaxTokens = boundedMaxTokens(maxTokens, curTier)
+      const reservation = await reserveProviderBudget({
+        system,
+        messages,
+        schema,
+        tier: curTier,
+        maxTokens: attemptMaxTokens,
+        clientId,
+        provider: provider.name,
+      })
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), timeoutMs)
       try {
-        const r = await provider.call({ tierDef, system, messages, tool, maxTokens }, controller.signal)
+        const r = await provider.call({ tierDef, system, messages, tool, maxTokens: attemptMaxTokens }, controller.signal)
         clearTimeout(timer)
+        await settleProviderBudget(reservation, 'consumed', weightedUsageUnits(r.usage, curTier))
         await recordUsage(clientId, r.usage, curTier)
         const out = tool
           ? { data: r.data, usage: r.usage, model: r.model, tier: curTier, provider: provider.name }
@@ -333,6 +445,7 @@ export async function complete(o) {
         return out
       } catch (err) {
         clearTimeout(timer)
+        await settleProviderBudget(reservation, 'failed', reservation.reservedUnits)
         lastErr = err
         if (err.noKey) break // provider unusable → next provider
         if (err.status === 401 || err.status === 403) break // this provider's auth is broken → next provider
@@ -348,4 +461,4 @@ export async function complete(o) {
   throw lastErr || new Error('gateway_failed')
 }
 
-export default { complete, stripInjectionFrames, usageFor, monthlyUsageFor, providerChain, resolvePlan, policyFor, TIERS, TIER_COST_WEIGHTS, FREE_PLAN }
+export default { complete, stripInjectionFrames, usageFor, monthlyUsageFor, providerChain, resolvePlan, policyFor, companyDailyBudgetCap, currentDailyBudgetWindow, boundedMaxTokens, estimateCallBudgetUnits, TIERS, TIER_COST_WEIGHTS, FREE_PLAN, COMPANY_DAILY_BUDGET_DEFAULT_UNITS, COMPANY_DAILY_BUDGET_HARD_MAX_UNITS }

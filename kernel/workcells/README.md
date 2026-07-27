@@ -117,9 +117,10 @@ only for bootstrap: it is never added to Vercel, printed, or returned. If the te
 that temporary input, run `supabase/workcell-client.sql` in the dedicated project's SQL editor
 before apply.
 
-The bootstrap creates only the durable delivery claim, token ledger, AI cache, action queue, and
-immutable owner-evidence tables required by the workcells. It enables RLS, removes
-`anon`/`authenticated` access, and grants access only to the Supabase service role.
+The bootstrap creates only the durable delivery claim, token ledger, atomic daily AI-budget
+reservations, AI cache, action queue, and immutable owner-evidence tables required by the workcells.
+It enables RLS, removes `anon`/`authenticated` access, and grants access only to the Supabase service
+role. The budget RPC runs with invoker rights and is not executable by public client roles.
 
 Apply only after loading the plan's exact `SUPERMEGA_NEW_CLIENT_*` inputs into the current process
 environment:
@@ -143,7 +144,8 @@ preloaded secure environments.
 
 Apply refuses dirty source and an existing project by default. `--allow-existing` is the explicit
 upgrade path. Before touching Vercel, it validates/applies the optional bootstrap transaction,
-checks the full shape of all five tables, inserts the same delivery claim twice to prove duplicate
+checks the full shape of all six tables, proves the daily AI cap with two reservations, inserts the
+same delivery claim twice to prove duplicate
 suppression, proves one action-queue draft-to-approved compare-and-swap, proves the stale duplicate
 transition loses, and deletes both probes. Every deployable environment value is then piped to
 Vercel over stdin, never placed in command arguments. The provisioner copies the clean kernel to an

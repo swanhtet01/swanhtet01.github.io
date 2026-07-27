@@ -50,6 +50,58 @@ async function ensurePgTables() {
     create table if not exists supermega_console_deals (id text primary key, lead_id text, project_id text, packet jsonb, status text default 'draft', created_at timestamptz default now());
     create table if not exists supermega_console_activity (id text primary key, at timestamptz default now(), kind text, summary text, ref text);
     create table if not exists supermega_token_ledger (tenant_id text not null, "window" text not null, in_tokens bigint default 0, out_tokens bigint default 0, calls bigint default 0, updated_at timestamptz default now(), primary key (tenant_id, "window"));
+    create table if not exists supermega_ai_budget_reservations (reservation_id text primary key, "window" text not null, reserved_units bigint not null check (reserved_units > 0), actual_units bigint, status text not null default 'reserved' check (status in ('reserved','consumed','failed','released')), tenant_id text, tier text, provider text, created_at timestamptz not null default now(), settled_at timestamptz);
+    create index if not exists supermega_ai_budget_window_status_idx on supermega_ai_budget_reservations ("window", status);
+    create or replace function public.supermega_reserve_ai_budget(
+      p_reservation_id text,
+      p_window text,
+      p_reserved_units bigint,
+      p_cap_units bigint,
+      p_tenant_id text default null,
+      p_tier text default null,
+      p_provider text default null
+    ) returns table (granted boolean, used_units bigint, cap_units bigint, reason text)
+    language plpgsql
+    security invoker
+    set search_path = public
+    as $supermega$
+    declare
+      current_used bigint;
+      effective_cap bigint;
+    begin
+      if p_reservation_id is null or char_length(p_reservation_id) not between 1 and 120
+        or p_window is null or p_window !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+        or p_reserved_units is null or p_reserved_units <= 0
+        or p_cap_units is null or p_cap_units <= 0 then
+        return query select false, 0::bigint, greatest(coalesce(p_cap_units, 0), 0)::bigint, 'invalid_budget_reservation'::text;
+        return;
+      end if;
+
+      effective_cap := least(p_cap_units, 2000000);
+
+      perform pg_advisory_xact_lock(hashtext('supermega-ai-budget:' || p_window));
+      select coalesce(sum(r.reserved_units), 0)::bigint
+        into current_used
+        from public.supermega_ai_budget_reservations r
+       where r."window" = p_window and r.status <> 'released';
+
+      if exists (select 1 from public.supermega_ai_budget_reservations r where r.reservation_id = p_reservation_id) then
+        return query select false, current_used, effective_cap, 'duplicate_budget_reservation'::text;
+        return;
+      end if;
+      if current_used + p_reserved_units > effective_cap then
+        return query select false, current_used, effective_cap, 'company_daily_budget_reached'::text;
+        return;
+      end if;
+
+      insert into public.supermega_ai_budget_reservations
+        (reservation_id, "window", reserved_units, status, tenant_id, tier, provider)
+      values
+        (p_reservation_id, p_window, p_reserved_units, 'reserved', nullif(p_tenant_id, ''), nullif(p_tier, ''), nullif(p_provider, ''));
+      return query select true, current_used + p_reserved_units, effective_cap, null::text;
+    end;
+    $supermega$;
+    revoke all on function public.supermega_reserve_ai_budget(text,text,bigint,bigint,text,text,text) from public;
     create table if not exists supermega_ai_cache (cache_key text primary key, payload jsonb not null, created_at timestamptz default now());
     create table if not exists supermega_action_queue (id text primary key, client_id text not null, action_type text not null, title text not null, payload jsonb not null, payload_hash text not null, source jsonb not null default '{}'::jsonb, status text not null default 'draft', version int not null default 0, approved_by text, approved_at timestamptz, rejected_by text, rejected_at timestamptz, executing_at timestamptz, lease_expires_at timestamptz, attempts int not null default 0, provider_ref text, result jsonb, last_error text, executed_at timestamptz, created_at timestamptz not null default now(), updated_at timestamptz not null default now(), constraint supermega_action_queue_status check (status in ('draft','approved','executing','succeeded','failed','rejected')));
     create table if not exists supermega_graduation (signature text primary key, label text, count int not null default 1, sources jsonb default '[]'::jsonb, modules jsonb default '[]'::jsonb, productized boolean not null default false, graduated_at timestamptz, updated_at timestamptz default now());
@@ -60,7 +112,7 @@ async function ensurePgTables() {
 }
 
 // ---------- in-memory fallback ----------
-const mem = { lead: new Map(), client: new Map(), project: new Map(), deal: new Map(), activity: new Map(), tokenLedger: new Map(), aiCache: new Map(), approval: new Map(), graduation: new Map(), buildModules: new Map(), paymentEvents: new Set() }
+const mem = { lead: new Map(), client: new Map(), project: new Map(), deal: new Map(), activity: new Map(), tokenLedger: new Map(), aiBudgetReservations: new Map(), aiCache: new Map(), approval: new Map(), graduation: new Map(), buildModules: new Map(), paymentEvents: new Set() }
 const memSort = (rows) => rows.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
 
 // ---------- leads (real supermega_leads) ----------
@@ -445,6 +497,137 @@ export async function addTokenUsage(tenantId, window, { inTokens = 0, outTokens 
   const next = { ...cur, in_tokens: cur.in_tokens + inTokens, out_tokens: cur.out_tokens + outTokens, calls: cur.calls + calls }
   mem.tokenLedger.set(key, next)
   return next
+}
+
+// ---------- company-wide daily AI admission budget ----------
+// Every paid provider attempt reserves its conservative maximum cost BEFORE network I/O. The
+// reservation remains charged for that UTC day even when the provider times out or fails because
+// an ambiguous response may still have incurred provider cost. Only work rejected before provider
+// I/O may transition to `released`.
+export async function reserveAiBudget(input = {}) {
+  const reservationId = String(input.reservationId || '').trim().slice(0, 120)
+  const window = String(input.window || '').trim().slice(0, 10)
+  const parsedReservedUnits = Number(input.reservedUnits)
+  const parsedCapUnits = Number(input.capUnits)
+  const reservedUnits = Number.isFinite(parsedReservedUnits) ? Math.trunc(parsedReservedUnits) : 0
+  const capUnits = Number.isFinite(parsedCapUnits) ? Math.min(Math.trunc(parsedCapUnits), 2_000_000) : 0
+  const tenantId = String(input.tenantId || '').trim().slice(0, 80)
+  const tier = String(input.tier || '').trim().slice(0, 20)
+  const provider = String(input.provider || '').trim().slice(0, 40)
+  if (!reservationId || !/^\d{4}-\d{2}-\d{2}$/.test(window) || !Number.isSafeInteger(reservedUnits) || !Number.isSafeInteger(capUnits) || reservedUnits <= 0 || capUnits <= 0) {
+    return { granted: false, durable: mode !== 'memory', usedUnits: 0, capUnits: Math.max(capUnits || 0, 0), reason: 'invalid_budget_reservation' }
+  }
+
+  try {
+    if (mode === 'supabase') {
+      const result = await rest('POST', 'rpc/supermega_reserve_ai_budget', {
+        p_reservation_id: reservationId,
+        p_window: window,
+        p_reserved_units: reservedUnits,
+        p_cap_units: capUnits,
+        p_tenant_id: tenantId || null,
+        p_tier: tier || null,
+        p_provider: provider || null,
+      })
+      const row = Array.isArray(result) ? result[0] : result
+      if (!row || typeof row.granted !== 'boolean') return { granted: false, durable: false, reason: 'budget_store_invalid_response' }
+      return {
+        granted: row.granted,
+        durable: true,
+        usedUnits: Number(row.used_units) || 0,
+        capUnits: Number(row.cap_units) || capUnits,
+        reason: row.reason || null,
+      }
+    }
+    if (mode === 'postgres') {
+      await ensurePgTables()
+      const rows = await q(
+        'select * from public.supermega_reserve_ai_budget($1,$2,$3,$4,$5,$6,$7)',
+        [reservationId, window, reservedUnits, capUnits, tenantId || null, tier || null, provider || null],
+      )
+      const row = rows[0]
+      if (!row || typeof row.granted !== 'boolean') return { granted: false, durable: false, reason: 'budget_store_invalid_response' }
+      return {
+        granted: row.granted,
+        durable: true,
+        usedUnits: Number(row.used_units) || 0,
+        capUnits: Number(row.cap_units) || capUnits,
+        reason: row.reason || null,
+      }
+    }
+
+    let usedUnits = 0
+    for (const [id, row] of mem.aiBudgetReservations) {
+      if (row.window !== window) {
+        mem.aiBudgetReservations.delete(id)
+        continue
+      }
+      if (row.window === window && row.status !== 'released') usedUnits += row.reserved_units
+    }
+    if (mem.aiBudgetReservations.has(reservationId)) {
+      return { granted: false, durable: false, usedUnits, capUnits, reason: 'duplicate_budget_reservation' }
+    }
+    if (usedUnits + reservedUnits > capUnits) {
+      return { granted: false, durable: false, usedUnits, capUnits, reason: 'company_daily_budget_reached' }
+    }
+    mem.aiBudgetReservations.set(reservationId, {
+      reservation_id: reservationId,
+      window,
+      reserved_units: reservedUnits,
+      actual_units: null,
+      status: 'reserved',
+      tenant_id: tenantId || null,
+      tier: tier || null,
+      provider: provider || null,
+      created_at: new Date().toISOString(),
+      settled_at: null,
+    })
+    return { granted: true, durable: false, usedUnits: usedUnits + reservedUnits, capUnits, reason: null }
+  } catch {
+    return { granted: false, durable: false, usedUnits: 0, capUnits, reason: 'budget_store_unavailable' }
+  }
+}
+
+export async function settleAiBudgetReservation(reservationIdInput, statusInput, actualUnitsInput = null) {
+  const reservationId = String(reservationIdInput || '').trim().slice(0, 120)
+  const status = String(statusInput || '').trim().toLowerCase()
+  const parsedActualUnits = actualUnitsInput === null ? null : Number(actualUnitsInput)
+  const actualUnits = parsedActualUnits === null ? null : Math.trunc(parsedActualUnits)
+  if (!reservationId || !['consumed', 'failed', 'released'].includes(status) || (actualUnits !== null && (!Number.isSafeInteger(actualUnits) || actualUnits < 0))) {
+    return { updated: false, durable: mode !== 'memory', reason: 'invalid_budget_transition' }
+  }
+  const patch = { status, actual_units: actualUnits, settled_at: new Date().toISOString() }
+  try {
+    if (mode === 'supabase') {
+      const rows = await rest(
+        'PATCH',
+        `supermega_ai_budget_reservations?reservation_id=eq.${encodeURIComponent(reservationId)}&status=eq.reserved&select=reservation_id,status`,
+        patch,
+      )
+      return Array.isArray(rows) && rows.length === 1
+        ? { updated: true, durable: true }
+        : { updated: false, durable: true, reason: 'budget_transition_conflict' }
+    }
+    if (mode === 'postgres') {
+      await ensurePgTables()
+      const rows = await q(
+        `update supermega_ai_budget_reservations
+            set status=$2, actual_units=$3, settled_at=now()
+          where reservation_id=$1 and status='reserved'
+          returning reservation_id`,
+        [reservationId, status, actualUnits],
+      )
+      return rows.length === 1
+        ? { updated: true, durable: true }
+        : { updated: false, durable: true, reason: 'budget_transition_conflict' }
+    }
+    const current = mem.aiBudgetReservations.get(reservationId)
+    if (!current || current.status !== 'reserved') return { updated: false, durable: false, reason: 'budget_transition_conflict' }
+    mem.aiBudgetReservations.set(reservationId, { ...current, ...patch })
+    return { updated: true, durable: false }
+  } catch {
+    return { updated: false, durable: false, reason: 'budget_store_unavailable' }
+  }
 }
 
 // AI response cache (optional). Returns the stored payload or null.
@@ -856,4 +1039,4 @@ export async function ping() {
   return { ok: false, mode, detail: 'unknown_mode' }
 }
 
-export default { mode, listLeads, getLead, insertLead, updateLead, listClients, listProjects, createClient, getClient, createProject, updateProject, getProject, markDepositPaid, convertedLeadIds, saveDeal, listDeals, updateDeal, logActivity, claimActivity, releaseActivityClaim, getActivityClaim, transitionActivityClaim, listActivity, getTokenUsage, addTokenUsage, getCachedResponse, putCachedResponse, listCachedResponseRecords, transitionCachedResponse, createApprovalRecord, getApprovalRecord, listApprovalRecords, transitionApprovalRecord, recordPaymentEvent, ping, bumpGraduation, recordBuildModules, listGraduation }
+export default { mode, listLeads, getLead, insertLead, updateLead, listClients, listProjects, createClient, getClient, createProject, updateProject, getProject, markDepositPaid, convertedLeadIds, saveDeal, listDeals, updateDeal, logActivity, claimActivity, releaseActivityClaim, getActivityClaim, transitionActivityClaim, listActivity, getTokenUsage, addTokenUsage, reserveAiBudget, settleAiBudgetReservation, getCachedResponse, putCachedResponse, listCachedResponseRecords, transitionCachedResponse, createApprovalRecord, getApprovalRecord, listApprovalRecords, transitionApprovalRecord, recordPaymentEvent, ping, bumpGraduation, recordBuildModules, listGraduation }

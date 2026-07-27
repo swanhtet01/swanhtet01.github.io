@@ -22,6 +22,7 @@ const SCHEMA_BOOTSTRAP_INPUT = 'SUPERMEGA_NEW_CLIENT_SUPABASE_DB_URL'
 const WORKCELL_DATA_TABLES = [
   ['supermega_console_activity', 'id,kind,summary,at'],
   ['supermega_token_ledger', 'tenant_id,window,in_tokens,out_tokens,calls,updated_at'],
+  ['supermega_ai_budget_reservations', 'reservation_id,window,reserved_units,actual_units,status,tenant_id,tier,provider,created_at,settled_at'],
   ['supermega_ai_cache', 'cache_key,payload,created_at'],
   ['supermega_action_queue', 'id,client_id,action_type,title,payload,payload_hash,source,status,version,approved_by,approved_at,rejected_by,rejected_at,executing_at,lease_expires_at,attempts,provider_ref,result,last_error,executed_at,created_at,updated_at'],
   ['supermega_owner_evidence', 'id,source,source_ref,occurred_at,text,reviewed_by,reviewed_at,fingerprint,created_at'],
@@ -196,6 +197,7 @@ export function resolveProvisionEnvironment(manifestInput, env = process.env, op
     ['WORKCELL_CURRENCY', manifest.currency],
     ['WORKCELL_LOOKBACK_HOURS', String(manifest.lookbackHours)],
     ['SUPERMEGA_CLIENT_TOKEN_CAP', String(manifest.tokenCap)],
+    ['SUPERMEGA_COMPANY_DAILY_AI_BUDGET_UNITS', String(Math.min(manifest.tokenCap, 500_000))],
   ])
   if (manifest.clickupListId) variables.set('WORKCELL_CLICKUP_LIST_ID', manifest.clickupListId)
   if (manifest.workcells.includes('owner-command')) variables.set('WORKCELL_OWNER_EVIDENCE_ENABLED', 'true')
@@ -447,6 +449,48 @@ export async function verifyClientDataSpine(resolvedInput, options = {}) {
     'content-type': 'application/json',
     prefer: 'resolution=ignore-duplicates,return=representation',
   }
+
+  const budgetWindow = '1970-01-01'
+  const budgetIds = [`${probeId}:ai-1`, `${probeId}:ai-2`]
+  const budgetRpcUrl = `${baseUrl}/rest/v1/rpc/supermega_reserve_ai_budget`
+  let budgetFailure = null
+  try {
+    const reserve = async (reservationId) => {
+      const response = await fetchImpl(budgetRpcUrl, {
+        method: 'POST',
+        headers: writeHeaders,
+        body: JSON.stringify({
+          p_reservation_id: reservationId,
+          p_window: budgetWindow,
+          p_reserved_units: 1,
+          p_cap_units: 1,
+          p_tenant_id: resolved.manifest.clientId,
+          p_tier: 'bulk',
+          p_provider: 'provision_probe',
+        }),
+        signal: AbortSignal.timeout(10_000),
+      })
+      const rows = await response.json().catch(() => null)
+      return { response, row: Array.isArray(rows) ? rows[0] : rows }
+    }
+    const first = await reserve(budgetIds[0])
+    if (!first.response.ok || first.row?.granted !== true || Number(first.row?.used_units) !== 1) {
+      throw new Error('client_data_spine_ai_budget_reservation_failed')
+    }
+    const overCap = await reserve(budgetIds[1])
+    if (!overCap.response.ok || overCap.row?.granted !== false || overCap.row?.reason !== 'company_daily_budget_reached') {
+      throw new Error('client_data_spine_ai_budget_not_atomic')
+    }
+  } catch (error) {
+    budgetFailure = error
+  }
+  const budgetCleanup = await fetchImpl(
+    `${baseUrl}/rest/v1/supermega_ai_budget_reservations?reservation_id=in.(${budgetIds.map(encodeURIComponent).join(',')})`,
+    { method: 'DELETE', headers: { ...writeHeaders, prefer: 'return=minimal' }, signal: AbortSignal.timeout(10_000) },
+  ).catch(() => null)
+  if (!budgetCleanup?.ok && !budgetFailure) budgetFailure = new Error('client_data_spine_ai_budget_cleanup_failed')
+  if (budgetFailure) throw budgetFailure
+
   let failure = null
   try {
     const first = await fetchImpl(`${activityUrl}?on_conflict=id`, {
@@ -529,7 +573,7 @@ export async function verifyClientDataSpine(resolvedInput, options = {}) {
   }).catch(() => null)
   if (!actionCleanup?.ok && !actionFailure) actionFailure = new Error('client_data_spine_approval_cleanup_failed')
   if (actionFailure) throw actionFailure
-  return { ok: true, tables, idempotentClaim: true, approvalCas: true, probeCleaned: true }
+  return { ok: true, tables, atomicAiBudget: true, idempotentClaim: true, approvalCas: true, probeCleaned: true }
 }
 
 async function addEnvironmentVariable(run, cwd, scope, name, value, sensitive) {

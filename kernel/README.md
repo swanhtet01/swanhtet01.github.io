@@ -42,7 +42,10 @@ const { data } = await complete({
 ```
 
 Tiers are `bulk`, `reason`, and `deep`. The client id activates server-side plan resolution,
-cost-weighted monthly usage, and the persistent response cache.
+cost-weighted monthly usage, and the persistent response cache. Every cache miss also reserves a
+company-wide UTC-day cost bound before provider I/O. Concurrent calls and retries share the same
+atomic budget; provider failures remain conservatively charged, while cache hits consume no new
+reservation. Hosted runtimes fail closed when the durable reservation store is unavailable.
 
 ## Workcells
 
@@ -208,6 +211,8 @@ allowed source.
 - `SUPABASE_URL` plus `SUPABASE_SERVICE_ROLE_KEY`, or a supported Postgres URL.
 - `SUPERMEGA_CLIENT_TOKEN_CAP` for the monthly client ceiling; default 150,000 weighted tokens.
 - `SUPERMEGA_CLIENT_CAP_SOFT_RATIO` for pre-cap tier downgrade; default `0.8`.
+- `SUPERMEGA_COMPANY_DAILY_AI_BUDGET_UNITS` for the global provider-attempt ceiling; default
+  500,000 and compiled/database hard maximum 2,000,000 bulk-equivalent units per UTC day.
 
 ## Action Approval
 
