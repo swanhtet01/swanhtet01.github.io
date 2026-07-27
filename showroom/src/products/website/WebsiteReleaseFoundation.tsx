@@ -9,6 +9,7 @@ import {
   prepareWebsiteDeployPlan,
   prepareWebsiteReleasePackage,
   projectWebsiteRelease,
+  validateWebsiteReleaseState,
   websiteReleaseEvidenceDigest,
   websiteReleaseTemplate,
   type WebsiteReleasePackage,
@@ -19,6 +20,8 @@ import { getCurrentApproval, getCurrentPublish, type WebsiteWorkspace } from './
 
 type WebsiteReleaseFoundationProps = {
   managedActorId: string
+  managedRecords?: WebsiteReleaseState[]
+  onSaveManagedState?: (state: WebsiteReleaseState) => Promise<{ ok: true } | { ok: false; error: string }>
   publishIsCurrent: boolean
   workspace: WebsiteWorkspace
 }
@@ -49,7 +52,7 @@ function roleActor(packageValue: WebsiteReleasePackage | null, role: 'release_ma
   return packageValue?.roles.find((entry) => entry.role === role)?.actor ?? ''
 }
 
-export default function WebsiteReleaseFoundation({ managedActorId, publishIsCurrent, workspace }: WebsiteReleaseFoundationProps) {
+export default function WebsiteReleaseFoundation({ managedActorId, managedRecords, onSaveManagedState, publishIsCurrent, workspace }: WebsiteReleaseFoundationProps) {
   const currentPublish = getCurrentPublish(workspace)
   const currentApproval = getCurrentApproval(workspace)
   const artifactDigest = useMemo(
@@ -57,6 +60,7 @@ export default function WebsiteReleaseFoundation({ managedActorId, publishIsCurr
     [currentPublish],
   )
   const scope = artifactDigest ? `website:${artifactDigest}` : ''
+  const managed = managedRecords !== undefined
   const [state, setState] = useState<WebsiteReleaseState | null>(null)
   const [projection, setProjection] = useState<WebsiteReleaseProjection | null>(null)
   const [releaseManager, setReleaseManager] = useState(managedActorId || currentApproval?.reviewer || '')
@@ -71,6 +75,22 @@ export default function WebsiteReleaseFoundation({ managedActorId, publishIsCurr
     if (!scope) return
     const refresh = () => {
       try {
+        if (managed) {
+          const matches = managedRecords.filter((record) => record.scope === scope)
+          if (matches.length > 1) throw new Error('Managed Website release history has a duplicate scope.')
+          const nextState = matches.length ? validateWebsiteReleaseState(matches[0]) : createEmptyWebsiteReleaseState(scope)
+          const nextProjection = projectWebsiteRelease(nextState)
+          setState(nextState)
+          setProjection(nextProjection)
+          setMessage('')
+          if (nextProjection.package) {
+            setReleaseManager(roleActor(nextProjection.package, 'release_manager'))
+            setReleaseReviewer(roleActor(nextProjection.package, 'release_reviewer'))
+            setIncludeMyanmarDraft(nextProjection.draftLocales.includes('my'))
+            setAccent(nextProjection.package.brand.palette.accent)
+          }
+          return
+        }
         const snapshot = loadWebsiteReleaseWorkspace(localStorage, scope)
         if (snapshot.source === 'recovery') {
           setState(null)
@@ -98,9 +118,10 @@ export default function WebsiteReleaseFoundation({ managedActorId, publishIsCurr
       if (event.key === null || event.key.includes(encodeURIComponent(scope))) refresh()
     }
     refresh()
+    if (managed) return
     window.addEventListener('storage', sync)
     return () => window.removeEventListener('storage', sync)
-  }, [scope])
+  }, [managed, managedRecords, scope])
 
   const candidate = useMemo(() => {
     if (!scope || !publishIsCurrent || !currentPublish?.artifact || !currentApproval) return null
@@ -153,19 +174,27 @@ export default function WebsiteReleaseFoundation({ managedActorId, publishIsCurr
         media: [],
         roles: [
           { role: 'content_owner', actor: currentApproval.reviewer },
-          { role: 'release_manager', actor: releaseManager.trim() },
-          { role: 'release_reviewer', actor: releaseReviewer.trim() },
+          { role: 'release_manager', actor: managed ? managedActorId : releaseManager.trim() },
+          { role: 'release_reviewer', actor: managed ? managedActorId : releaseReviewer.trim() },
         ],
       })
     } catch {
       return null
     }
-  }, [accent, artifactDigest, currentApproval, currentPublish, includeMyanmarDraft, publishIsCurrent, releaseManager, releaseReviewer, scope, workspace.evidence])
+  }, [accent, artifactDigest, currentApproval, currentPublish, includeMyanmarDraft, managed, managedActorId, publishIsCurrent, releaseManager, releaseReviewer, scope, workspace.evidence])
 
   const currentProjection = projection ?? (scope ? emptyProjection(scope) : null)
   const status = currentProjection?.status ?? 'unprepared'
   const packageValue = currentProjection?.package
-  const actorsReady = Boolean(releaseManager.trim() && releaseReviewer.trim())
+  const effectiveReleaseManager = managed ? managedActorId : releaseManager.trim()
+  const effectiveReleaseReviewer = managed ? managedActorId : releaseReviewer.trim()
+  const actorsReady = Boolean(effectiveReleaseManager && effectiveReleaseReviewer)
+  const assignedStepActor = status === 'needs_release_review'
+    ? roleActor(packageValue ?? null, 'release_reviewer')
+    : status === 'ready_for_plan'
+      ? roleActor(packageValue ?? null, 'release_manager')
+      : ''
+  const managedRoleBlocked = Boolean(managed && assignedStepActor && assignedStepActor !== managedActorId)
 
   async function saveTransition(
     kind: 'review' | 'plan',
@@ -174,25 +203,40 @@ export default function WebsiteReleaseFoundation({ managedActorId, publishIsCurr
     if (!scope) return
     setBusy(kind)
     setMessage('')
-    const result = await mutateWebsiteReleaseWorkspace(
-      scope,
-      transition,
-      localStorage,
-      'locks' in navigator ? navigator.locks : null,
-    )
-    setBusy('')
-    if (!result.ok) {
-      setMessage(result.error)
-      const retained = loadWebsiteReleaseWorkspace(localStorage, scope)
-      if (retained.source !== 'recovery') {
-        setState(retained.state)
-        setProjection(projectWebsiteRelease(retained.state))
+    try {
+      if (managed) {
+        if (!onSaveManagedState) throw new Error('Managed Website release storage is unavailable.')
+        const current = validateWebsiteReleaseState(state ?? createEmptyWebsiteReleaseState(scope))
+        const result = transition(current)
+        const saved = await onSaveManagedState(result.state)
+        if (!saved.ok) throw new Error(saved.error)
+        setState(result.state)
+        setProjection(projectWebsiteRelease(result.state))
+      } else {
+        const result = await mutateWebsiteReleaseWorkspace(
+          scope,
+          transition,
+          localStorage,
+          'locks' in navigator ? navigator.locks : null,
+        )
+        if (!result.ok) {
+          setMessage(result.error)
+          const retained = loadWebsiteReleaseWorkspace(localStorage, scope)
+          if (retained.source !== 'recovery') {
+            setState(retained.state)
+            setProjection(projectWebsiteRelease(retained.state))
+          }
+          return
+        }
+        setState(result.state)
+        setProjection(projectWebsiteRelease(result.state))
       }
-      return
+      setReviewConfirmed(false)
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Website release transition failed.')
+    } finally {
+      setBusy('')
     }
-    setState(result.state)
-    setProjection(projectWebsiteRelease(result.state))
-    setReviewConfirmed(false)
   }
 
   async function reviewPackage() {
@@ -212,14 +256,14 @@ export default function WebsiteReleaseFoundation({ managedActorId, publishIsCurr
       const prepared = prepareWebsiteReleasePackage(
         current,
         candidate,
-        actionProof(releaseManager.trim(), 'prepared the approved Website release package', currentPublish.id, new Date(now).toISOString()),
+        actionProof(effectiveReleaseManager, 'prepared the approved Website release package', currentPublish.id, new Date(now).toISOString()),
         current.headDigest,
       )
       return approveWebsiteReleasePackage(prepared.state, {
         approvalId: `website-review-${candidate.packageDigest.slice(7, 23)}`,
         packageDigest: candidate.packageDigest,
         note: 'Template, brand, languages, source evidence, and release boundary reviewed.',
-        proof: actionProof(releaseReviewer.trim(), 'approved the exact Website release package', currentPublish.id, new Date(now + 1).toISOString()),
+        proof: actionProof(effectiveReleaseReviewer, 'approved the exact Website release package', currentPublish.id, new Date(now + 1).toISOString()),
         expectedHeadDigest: prepared.state.headDigest,
       })
     })
@@ -267,16 +311,17 @@ export default function WebsiteReleaseFoundation({ managedActorId, publishIsCurr
       </div>
 
       {message ? <p className="website-release-message" role="status">{message}</p> : null}
+      {managedRoleBlocked ? <p className="website-release-message" role="status">This managed step is assigned to {assignedStepActor}. Sign in as that operator to continue.</p> : null}
 
       {status === 'unprepared' ? (
         <div className="website-release-config">
           <label>
             <span>Release manager</span>
-            <input autoComplete="name" onChange={(event) => setReleaseManager(event.target.value)} value={releaseManager} />
+            <input autoComplete="name" disabled={managed} onChange={(event) => setReleaseManager(event.target.value)} value={effectiveReleaseManager} />
           </label>
           <label>
             <span>Release reviewer</span>
-            <input autoComplete="name" onChange={(event) => setReleaseReviewer(event.target.value)} value={releaseReviewer} />
+            <input autoComplete="name" disabled={managed} onChange={(event) => setReleaseReviewer(event.target.value)} value={effectiveReleaseReviewer} />
           </label>
           <details>
             <summary>Template options</summary>
@@ -312,14 +357,14 @@ export default function WebsiteReleaseFoundation({ managedActorId, publishIsCurr
             <input checked={reviewConfirmed} onChange={(event) => setReviewConfirmed(event.target.checked)} type="checkbox" />
             <span>I reviewed this exact site file, template, language status, and release boundary.</span>
           </label>
-          <button className="website-button is-primary" disabled={!candidate || !actorsReady || !reviewConfirmed || Boolean(busy)} onClick={() => void reviewPackage()} type="button">
+          <button className="website-button is-primary" disabled={!candidate || !actorsReady || !reviewConfirmed || managedRoleBlocked || Boolean(busy)} onClick={() => void reviewPackage()} type="button">
             {busy === 'review' ? 'Recording...' : 'Record release review'}
           </button>
         </div>
       ) : status === 'ready_for_plan' ? (
         <div className="website-release-action">
           <p>The exact package is reviewed. The plan will stay unexecuted and rollback stays blocked until the owner binds a known-good deployment.</p>
-          <button className="website-button is-primary" disabled={Boolean(busy)} onClick={() => void preparePlan()} type="button">
+          <button className="website-button is-primary" disabled={managedRoleBlocked || Boolean(busy)} onClick={() => void preparePlan()} type="button">
             {busy === 'plan' ? 'Preparing...' : 'Prepare rollout plan'}
           </button>
         </div>

@@ -144,6 +144,22 @@ function accountableTransition(
       },
     }
   }
+  if (JSON.stringify(next.releaseRecords ?? []) !== JSON.stringify(current.releaseRecords ?? [])) {
+    const currentRecords = current.releaseRecords ?? []
+    const nextRecords = next.releaseRecords ?? []
+    const changed = nextRecords.find((record, index) => record.headDigest !== currentRecords[index]?.headDigest)
+    const proof = changed?.commands.at(-1)?.payload.proof
+    if (!proof) return null
+    return {
+      eventType: 'website.release.recorded',
+      evidence: {
+        actionId: proof.actionId,
+        capturedAt: proof.capturedAt,
+        reason: proof.reason,
+        evidenceReference: proof.evidenceReference,
+      },
+    }
+  }
   if (next.selectedPageId !== current.selectedPageId) {
     const capturedAt = new Date().toISOString()
     return {

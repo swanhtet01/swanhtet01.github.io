@@ -656,6 +656,14 @@ class TrialRuntimeTests(unittest.TestCase):
         self.assertEqual(agent_evidence.status_code, 403)
         self.assertEqual(agent_evidence.json()["detail"]["code"], "trial_human_approval_required")
 
+        agent_release = self.client.post(
+            "/api/trial/v1/commands",
+            headers=self._headers("agent-manager-session"),
+            json=website_body(actor="actor-agent-manager", event_type="website.release.recorded"),
+        )
+        self.assertEqual(agent_release.status_code, 403)
+        self.assertEqual(agent_release.json()["detail"]["code"], "trial_human_approval_required")
+
     def test_every_runtime_write_readiness_gate_fails_closed(self) -> None:
         for blocked_check in ("database_ready", "role_ready", "schema_ready", "audit_ready", "write_enabled"):
             with self.subTest(blocked_check=blocked_check):

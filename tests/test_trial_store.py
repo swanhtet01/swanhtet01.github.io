@@ -303,6 +303,7 @@ class TrialStoreTests(unittest.TestCase):
             "production.quality_hold.placed",
             "production.quality_hold.released",
             "production.machine_state.changed",
+            "production.order_execution.recorded",
             "production.downtime.started",
             "production.downtime.ended",
             "production.maintenance.started",
@@ -318,6 +319,43 @@ class TrialStoreTests(unittest.TestCase):
                     expected_version=0,
                     payload={"changes": {"status": "agent-write-blocked"}},
                 )
+        self.assertEqual(self.reducer.calls, calls_before_rejection)
+
+    def test_store_enforces_website_human_events_and_actor_binding(self) -> None:
+        self.store.provision_membership(
+            workspace_id="workspace-a",
+            actor_id="actor-agent-manager",
+            actor_kind="agent",
+            capabilities=("website.write",),
+        )
+        calls_before_rejection = self.reducer.calls
+        for event_type in (
+            "website.evidence.recorded",
+            "website.revision.approved",
+            "website.snapshot.recorded",
+            "website.release.recorded",
+        ):
+            with self.subTest(event_type=event_type), self.assertRaises(TrialHumanApprovalRequired):
+                self.store.apply_command(
+                    self.agent_manager,
+                    command_id=str(uuid4()),
+                    surface="website",
+                    event_type=event_type,
+                    expected_version=0,
+                    payload={"changes": {"status": "agent-write-blocked"}},
+                )
+        with self.assertRaisesRegex(TrialValidationError, "Website evidence actor"):
+            self.store.apply_command(
+                self.operator,
+                command_id=str(uuid4()),
+                surface="website",
+                event_type="website.release.recorded",
+                expected_version=0,
+                payload={
+                    "changes": {"status": "spoofed-write"},
+                    "evidence": {"actor": "actor-spoofed"},
+                },
+            )
         self.assertEqual(self.reducer.calls, calls_before_rejection)
 
     def test_write_requires_explicit_surface_capability(self) -> None:

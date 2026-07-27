@@ -78,6 +78,7 @@ export type ManagedWebsiteEvent =
   | 'website.evidence.recorded'
   | 'website.revision.approved'
   | 'website.snapshot.recorded'
+  | 'website.release.recorded'
 
 export type ManagedProductionEvent =
   | 'production.workspace.initialized'

@@ -56,6 +56,10 @@ HUMAN_COMMAND_EVENTS = frozenset(
         "production.downtime.ended",
         "production.maintenance.started",
         "production.maintenance.completed",
+        "website.evidence.recorded",
+        "website.revision.approved",
+        "website.snapshot.recorded",
+        "website.release.recorded",
     }
 )
 SURFACE_WRITE_CAPABILITIES = {
@@ -1233,13 +1237,14 @@ def _require_command_evidence_actor(
     *,
     principal: TrialPrincipal,
     surface: str,
+    event_type: str,
 ) -> None:
-    if surface != "production":
+    if surface != "production" and not (surface == "website" and event_type in HUMAN_COMMAND_EVENTS):
         return
     evidence = payload.get("evidence")
     if not isinstance(evidence, Mapping) or evidence.get("actor") != principal.actor_id:
         raise TrialValidationError(
-            "Production evidence actor must match the authenticated principal."
+            f"{surface.title()} evidence actor must match the authenticated principal."
         )
 
 
@@ -2080,6 +2085,7 @@ class PostgresTrialStore:
             payload_value,
             principal=normalized,
             surface=surface_value,
+            event_type=event_type_value,
         )
         capability = _required_surface_capability(surface_value)
         with self._guarded_cursor(normalized, write=True, capability=capability) as (
@@ -2665,6 +2671,7 @@ class InMemoryTrialStore:
                 payload_value,
                 principal=normalized,
                 surface=surface_value,
+                event_type=event_type_value,
             )
             replay = self._replay(
                 normalized.workspace_id,

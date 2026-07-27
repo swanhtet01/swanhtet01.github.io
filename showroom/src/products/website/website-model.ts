@@ -1,3 +1,5 @@
+import type { WebsiteReleaseState } from './website-release-foundation'
+
 export const WEBSITE_SCHEMA = 'supermega.website.workspace.v2'
 export const WEBSITE_STORAGE_KEY = 'supermega.website.workspace.v2'
 export const LEGACY_WEBSITE_STORAGE_KEY = 'supermega.website.workspace.v1'
@@ -12,6 +14,8 @@ const WEBSITE_EDIT_SESSION_SCHEMA = 'supermega.website.edit-session.v1'
 const WEBSITE_RECOVERY_KEY_PREFIX = `${WEBSITE_RECOVERY_SCHEMA}.`
 const INITIAL_CREATED_AT = '2026-07-23T00:00:00.000Z'
 const fingerprintPattern = /^web-[a-f0-9]{8}$/
+const WEBSITE_RELEASE_STATE_SCHEMA = 'supermega.website.release_foundation.v1'
+const MAX_WEBSITE_RELEASE_RECORDS = 50
 
 export const previewDevices = [
   { id: 'desktop', label: 'Desktop', width: '100%' },
@@ -156,6 +160,7 @@ export type WebsiteWorkspace = {
   approvals: PublishApproval[]
   localPublishes: LocalPublishRecord[]
   events: WebsiteWorkflowEvent[]
+  releaseRecords?: WebsiteReleaseState[]
 }
 
 export type WebsiteEditSession = {
@@ -1227,10 +1232,13 @@ function restoreV2(value: unknown) {
 }
 
 function isWebsiteWorkspace(value: unknown, pendingReleaseRecords = 0): value is WebsiteWorkspace {
-  if (!isRecord(value) || !hasExactKeys(value, [
+  if (!isRecord(value)) return false
+  const workspaceKeys = [
     'schema', 'version', 'revision', 'contentRevision', 'siteName', 'pages', 'selectedPageId',
     'evidence', 'approvals', 'localPublishes', 'events',
-  ])) return false
+  ]
+  if (Object.hasOwn(value, 'releaseRecords')) workspaceKeys.push('releaseRecords')
+  if (!hasExactKeys(value, workspaceKeys)) return false
   if (value.schema !== WEBSITE_SCHEMA || value.version !== 2) return false
   const revision = value.revision
   const contentRevision = value.contentRevision
@@ -1241,6 +1249,12 @@ function isWebsiteWorkspace(value: unknown, pendingReleaseRecords = 0): value is
   if (!Array.isArray(value.evidence) || !value.evidence.every(isPublishEvidence) || !hasUniqueIds(value.evidence)) return false
   if (!Array.isArray(value.approvals) || !value.approvals.every(isPublishApproval) || !hasUniqueIds(value.approvals)) return false
   if (!Array.isArray(value.localPublishes) || !value.localPublishes.every(isLocalPublishRecord) || !hasUniqueIds(value.localPublishes)) return false
+  if (Object.hasOwn(value, 'releaseRecords')) {
+    if (!Array.isArray(value.releaseRecords)
+      || value.releaseRecords.length > MAX_WEBSITE_RELEASE_RECORDS
+      || !value.releaseRecords.every(isWebsiteReleaseStateEnvelope)
+      || !hasUniqueStrings(value.releaseRecords.map((record) => record.scope))) return false
+  }
   const releaseRecords = [...value.evidence, ...value.approvals, ...value.localPublishes]
   if (releaseRecords.some((record) => record.migratedFromV1)) return false
   const releaseRecordCount = releaseRecords.length
@@ -1582,10 +1596,19 @@ function sameReleaseHistory(left: WebsiteWorkspace, right: WebsiteWorkspace) {
     && serialize(left.approvals) === serialize(right.approvals)
     && serialize(left.localPublishes) === serialize(right.localPublishes)
     && serialize(left.events) === serialize(right.events)
+    && serialize(left.releaseRecords ?? []) === serialize(right.releaseRecords ?? [])
 }
 
 function consequentialRecordCount(workspace: WebsiteWorkspace) {
   return workspace.evidence.length + workspace.approvals.length + workspace.localPublishes.length + workspace.events.length
+    + (workspace.releaseRecords ?? []).reduce((total, record) => total + record.revision, 0)
+}
+
+function isWebsiteReleaseStateEnvelope(value: unknown): value is WebsiteReleaseState {
+  if (!isRecord(value) || !hasExactKeys(value, ['schema', 'scope', 'revision', 'headDigest', 'commands'])) return false
+  if (value.schema !== WEBSITE_RELEASE_STATE_SCHEMA || !isText(value.scope, 180) || !isNonNegativeInteger(value.revision)) return false
+  return typeof value.headDigest === 'string' && Array.isArray(value.commands)
+    && value.commands.length === value.revision && value.commands.length <= 100
 }
 
 function hasSuffix<T>(next: T[], current: T[]) {

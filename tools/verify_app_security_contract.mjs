@@ -283,6 +283,12 @@ const expectedHumanProductionEvents = [
   'production.quality_hold.released',
   'production.workspace.initialized',
 ]
+const expectedHumanWebsiteEvents = [
+  'website.evidence.recorded',
+  'website.release.recorded',
+  'website.revision.approved',
+  'website.snapshot.recorded',
+]
 const humanEventList = (source, start, end, domain = 'commerce') => {
   const contract = source.slice(source.indexOf(start), source.indexOf(end))
   const pattern = new RegExp(`"(${domain}\\.[^"]+)"`, 'g')
@@ -337,6 +343,11 @@ requireContract('Ecommerce storefront save binds current catalog and determinist
   )))
 requireContract('company queue is a managed surface', /"company": "company\.write"/.test(trialStore) && /when 'company' then 'company\.write'/.test(migration))
 requireContract('Website is an authenticated managed surface', /"website": "website\.write"/.test(trialStore) && /reduce_website_state/.test(runtime) && /WEBSITE_HUMAN_EVENTS/.test(trialRuntime) && /when 'website' then 'website\.write'/.test(websiteMigration) && /saveManagedWebsiteCommand/.test(managedTrialClient) && /validate_website_state/.test(websiteRuntime) && /evidence\["actor"\] == event\["actor"\] == record\[actor_field\]/.test(websiteRuntime) && /exact current ready-page set/.test(websiteRuntime) && /sort_keys=True/.test(websiteRuntime))
+requireContract('consequential Website events are human-only and actor-bound in router and store', /WEBSITE_HUMAN_EVENTS/.test(trialRuntime)
+  && JSON.stringify(humanEventList(trialStore, 'HUMAN_COMMAND_EVENTS', 'SURFACE_WRITE_CAPABILITIES', 'website')) === JSON.stringify(expectedHumanWebsiteEvents)
+  && JSON.stringify(humanEventList(websiteRuntime, 'WEBSITE_HUMAN_EVENTS', '_MAX_SAFE_INTEGER', 'website')) === JSON.stringify(expectedHumanWebsiteEvents)
+  && /surface == "website" and event_type in HUMAN_COMMAND_EVENTS/.test(trialStore)
+  && /f"\{surface\.title\(\)\} evidence actor must match the authenticated principal\."/.test(trialStore))
 requireContract('Website Commerce intake source is transactionally verified with replay-safe retained proof', /commerce\.website_intake\.created/.test(trialRuntime) && /validate_website_snapshot_source/.test(trialRuntime) && /related_surfaces = \("website",\)/.test(trialRuntime) && /state_precondition=state_precondition/.test(trialRuntime) && /_commerce_retains_website_source/.test(trialRuntime) && /_website_fingerprint\(state\) != fingerprint/.test(websiteRuntime) && /not _same_source\(snapshot\["source"\], current_source\)/.test(websiteRuntime) && /event_type == "commerce\.website_intake\.created"/.test(trialStore) && /intake\["snapshotDigest"\] = f"sha256:/.test(trialStore) && /locked_surfaces/.test(trialStore) && /for update/i.test(trialStore))
 requireContract('consequential Commerce events are human-only in router and store', /COMMERCE_HUMAN_EVENTS/.test(trialRuntime)
   && JSON.stringify(humanEventList(trialStore, 'HUMAN_COMMAND_EVENTS', 'SURFACE_WRITE_CAPABILITIES')) === JSON.stringify(expectedHumanCommerceEvents)

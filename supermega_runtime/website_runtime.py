@@ -11,6 +11,13 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from supermega_runtime.trial_store import TrialValidationError
+from supermega_runtime.website_release_foundation import (
+    WebsiteReleaseValidationError,
+    create_empty_website_release_state,
+    project_website_release,
+    validate_website_release_state,
+    website_release_evidence_digest,
+)
 
 
 WEBSITE_SCHEMA = "supermega.website.workspace.v2"
@@ -22,6 +29,7 @@ WEBSITE_EVENTS = frozenset(
         "website.evidence.recorded",
         "website.revision.approved",
         "website.snapshot.recorded",
+        "website.release.recorded",
     }
 )
 WEBSITE_HUMAN_EVENTS = frozenset(
@@ -29,6 +37,7 @@ WEBSITE_HUMAN_EVENTS = frozenset(
         "website.evidence.recorded",
         "website.revision.approved",
         "website.snapshot.recorded",
+        "website.release.recorded",
     }
 )
 
@@ -62,6 +71,9 @@ _STATE_FIELDS = frozenset(
         "events",
     }
 )
+_STATE_OPTIONAL_FIELDS = frozenset({"releaseRecords"})
+_MAX_RELEASE_RECORDS = 50
+_MAX_RELEASE_COMMANDS = 500
 _PAGE_FIELDS = frozenset(
     {"id", "internalName", "slug", "stage", "navigation", "hero", "sections", "seo", "updatedAt"}
 )
@@ -481,11 +493,30 @@ def _validate_workflow_event(value: object, field: str) -> dict[str, Any]:
     return event
 
 
+def _validate_release_records(value: object) -> list[dict[str, Any]]:
+    candidates = _array(value, "website state.releaseRecords")
+    if len(candidates) > _MAX_RELEASE_RECORDS:
+        raise TrialValidationError("website state.releaseRecords exceeds its bounded history.")
+    records: list[dict[str, Any]] = []
+    for index, candidate in enumerate(candidates):
+        try:
+            records.append(validate_website_release_state(candidate))
+        except WebsiteReleaseValidationError as exc:
+            raise TrialValidationError(
+                f"website state.releaseRecords[{index}] is invalid: {exc}"
+            ) from exc
+    _unique([record["scope"] for record in records], "Website release scope")
+    if sum(record["revision"] for record in records) > _MAX_RELEASE_COMMANDS:
+        raise TrialValidationError("website release command history exceeds its bound.")
+    return records
+
+
 def validate_website_state(value: object) -> dict[str, Any]:
     """Validate one Website snapshot structurally; command history establishes managed provenance."""
 
     state = _object(value, "website state")
-    _exact(state, "website state", _STATE_FIELDS)
+    optional = _STATE_OPTIONAL_FIELDS if "releaseRecords" in state else frozenset()
+    _exact(state, "website state", _STATE_FIELDS | optional)
     if state["schema"] != WEBSITE_SCHEMA or state["version"] != 2:
         raise TrialValidationError(f"website state must use {WEBSITE_SCHEMA} version 2.")
     revision = _integer(state["revision"], "website state.revision")
@@ -594,6 +625,8 @@ def validate_website_state(value: object) -> dict[str, Any]:
             raise TrialValidationError("Website snapshot must bind its approval, evidence, and workflow event.")
     validated = deepcopy(state)
     validated["localPublishes"] = deepcopy(publishes)
+    if "releaseRecords" in state:
+        validated["releaseRecords"] = _validate_release_records(state["releaseRecords"])
     return validated
 
 
@@ -739,6 +772,139 @@ def _validate_command_evidence(record: Mapping[str, Any], event: Mapping[str, An
         raise TrialValidationError("Website command evidence must match the new accountable record.")
 
 
+def _current_release_source(state: Mapping[str, Any]) -> dict[str, Any]:
+    source = {"contentRevision": state["contentRevision"], "digest": _website_fingerprint(state)}
+    artifact = _website_artifact(state)
+    publish = next(
+        (
+            record
+            for record in state["localPublishes"]
+            if _same_source(record["source"], source) and record["artifact"] == artifact
+        ),
+        None,
+    )
+    if publish is None:
+        raise TrialValidationError("Website release requires the exact current site file.")
+    approval = next(
+        (
+            record
+            for record in state["approvals"]
+            if record["id"] == publish["approvalId"] and _same_source(record["source"], source)
+        ),
+        None,
+    )
+    if approval is None:
+        raise TrialValidationError("Website release requires the current site-file approval.")
+    evidence_by_id = {record["id"]: record for record in state["evidence"]}
+    evidence = [evidence_by_id.get(identifier) for identifier in publish["evidenceIds"]]
+    if any(record is None for record in evidence):
+        raise TrialValidationError("Website release source evidence is incomplete.")
+    source_evidence = sorted(
+        (
+            {
+                "id": record["id"],
+                "kind": record["kind"],
+                "reference": record["reference"],
+                "verifiedBy": record["verifiedBy"],
+                "verifiedAt": record["verifiedAt"],
+            }
+            for record in evidence
+            if record is not None
+        ),
+        key=lambda record: record["kind"],
+    )
+    artifact_digest = website_release_evidence_digest(artifact)
+    return {
+        "scope": f"website:{artifact_digest}",
+        "snapshotId": publish["id"],
+        "websiteFingerprint": publish["fingerprint"],
+        "artifactDigest": artifact_digest,
+        "contentRevision": publish["source"]["contentRevision"],
+        "contentApprovalId": approval["id"],
+        "contentApprovalActor": approval["reviewer"],
+        "contentApprovalAt": approval["approvedAt"],
+        "evidence": source_evidence,
+    }
+
+
+def _validate_release_recorded(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+    evidence: Mapping[str, str],
+) -> None:
+    _unchanged(
+        current,
+        next_state,
+        "siteName",
+        "pages",
+        "selectedPageId",
+        "evidence",
+        "approvals",
+        "localPublishes",
+        "events",
+    )
+    before_records = list(current.get("releaseRecords", []))
+    after_records = list(next_state.get("releaseRecords", []))
+    if len(after_records) not in {len(before_records), len(before_records) + 1}:
+        raise TrialValidationError("Website release history must retain records and change one scope.")
+    changed_indexes: list[int] = []
+    for index, retained in enumerate(before_records):
+        if after_records[index]["scope"] != retained["scope"]:
+            raise TrialValidationError("Website release history cannot reorder or replace prior scopes.")
+        if after_records[index] != retained:
+            changed_indexes.append(index)
+    if len(after_records) == len(before_records) + 1:
+        changed_indexes.append(len(before_records))
+    if len(changed_indexes) != 1:
+        raise TrialValidationError("Website release event must change exactly one release scope.")
+    changed_index = changed_indexes[0]
+    after = after_records[changed_index]
+    before = (
+        before_records[changed_index]
+        if changed_index < len(before_records)
+        else create_empty_website_release_state(after["scope"])
+    )
+    added = after["revision"] - before["revision"]
+    if (
+        added not in {1, 2}
+        or after["commands"][: before["revision"]] != before["commands"]
+        or after["commands"][before["revision"]]["previousDigest"] != before["headDigest"]
+    ):
+        raise TrialValidationError("Website release event must append one reviewed transition without rewriting evidence.")
+    appended = after["commands"][before["revision"] :]
+    if any(command["payload"]["proof"]["actor"] != evidence["actor"] for command in appended):
+        raise TrialValidationError("Website release actors must match the authenticated operator.")
+    if appended[-1]["payload"]["proof"] != dict(evidence):
+        raise TrialValidationError("Website release proof must match the authenticated command evidence.")
+    prior_command_ids = {
+        command["payload"]["id"]
+        for record in before_records
+        for command in record["commands"]
+    }
+    prior_action_ids = {
+        command["payload"]["proof"]["actionId"]
+        for record in before_records
+        for command in record["commands"]
+    }
+    if any(command["payload"]["id"] in prior_command_ids for command in appended):
+        raise TrialValidationError("Website release command ID was already used in another release scope.")
+    if any(command["payload"]["proof"]["actionId"] in prior_action_ids for command in appended):
+        raise TrialValidationError("Website release action ID was already used in another release scope.")
+    before_status = project_website_release(before)["status"]
+    after_projection = project_website_release(after)
+    allowed = {
+        ("unprepared", "needs_release_review", 1),
+        ("unprepared", "ready_for_plan", 2),
+        ("needs_release_review", "ready_for_plan", 1),
+        ("ready_for_plan", "plan_ready", 1),
+    }
+    if (before_status, after_projection["status"], added) not in allowed:
+        raise TrialValidationError("Website release lifecycle did not advance by one supported review step.")
+    package = after_projection["package"]
+    if not isinstance(package, Mapping) or package["source"] != _current_release_source(current):
+        raise TrialValidationError("Website release package does not match the exact current approved site file.")
+
+
 def reduce_website_state(
     event_type: str,
     current: Mapping[str, Any],
@@ -754,7 +920,7 @@ def reduce_website_state(
             raise TrialValidationError("An empty Website workspace must be initialized first.")
         if next_state["revision"] != 0 or next_state["contentRevision"] != 0:
             raise TrialValidationError("A managed Website workspace must initialize at revision zero.")
-        if any(next_state[field] for field in ("evidence", "approvals", "localPublishes", "events")):
+        if any(next_state[field] for field in ("evidence", "approvals", "localPublishes", "events")) or next_state.get("releaseRecords"):
             raise TrialValidationError("A managed Website workspace cannot initialize with client-asserted release history.")
         return next_state
 
@@ -763,6 +929,8 @@ def reduce_website_state(
         raise TrialValidationError("Website revision must advance exactly once per event.")
     if next_state["schema"] != current_state["schema"] or next_state["version"] != current_state["version"]:
         raise TrialValidationError("Website schema identity is immutable.")
+    if event_type != "website.release.recorded" and current_state.get("releaseRecords", []) != next_state.get("releaseRecords", []):
+        raise TrialValidationError("Website release records can change only through their dedicated event.")
 
     if event_type == "website.content.saved":
         if next_state["contentRevision"] != current_state["contentRevision"] + 1:
@@ -776,6 +944,10 @@ def reduce_website_state(
         raise TrialValidationError("This Website event cannot change contentRevision.")
     if _website_fingerprint(next_state) != _website_fingerprint(current_state):
         raise TrialValidationError("This Website event cannot change publishable content.")
+
+    if event_type == "website.release.recorded":
+        _validate_release_recorded(current_state, next_state, command_evidence)
+        return next_state
 
     if event_type == "website.selection.changed":
         _unchanged(current_state, next_state, "siteName", "pages", "evidence", "approvals", "localPublishes", "events")

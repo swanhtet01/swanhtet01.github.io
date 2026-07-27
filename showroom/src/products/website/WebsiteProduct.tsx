@@ -8,6 +8,7 @@ import { SitePreview } from './SitePreview'
 import { WebsiteStarterSetup } from './WebsiteStarterSetup'
 import { useWebsiteWorkspace } from './useWebsiteWorkspace'
 import { createWebsiteHtmlDownload } from './website-export'
+import type { WebsiteReleaseState } from './website-release-foundation'
 import {
   applyWebsiteStarterBrief,
   isUntouchedWebsiteStarter,
@@ -265,6 +266,26 @@ export function WebsiteProduct() {
     }
     if (result.changed && success) setNotice(success)
     return result
+  }
+
+  async function saveManagedRelease(nextRelease: WebsiteReleaseState) {
+    if (storageMode !== 'managed') return { ok: false as const, error: 'Managed Website release storage is unavailable.' }
+    const result = await commitWorkspace((current) => {
+      const retained = current.releaseRecords ?? []
+      const index = retained.findIndex((record) => record.scope === nextRelease.scope)
+      if (index >= 0 && retained[index].headDigest === nextRelease.headDigest) return current
+      const previous = index >= 0 ? retained[index] : null
+      const added = nextRelease.revision - (previous?.revision ?? 0)
+      if (added < 1 || added > 2
+        || (previous && JSON.stringify(nextRelease.commands.slice(0, previous.commands.length)) !== JSON.stringify(previous.commands))) {
+        throw new Error('Managed Website release history must append one reviewed step without rewriting prior evidence.')
+      }
+      const releaseRecords = index < 0
+        ? [...retained, nextRelease]
+        : retained.map((record, recordIndex) => recordIndex === index ? nextRelease : record)
+      return { ...current, releaseRecords }
+    }, 'Release record saved to this managed workspace.', true)
+    return result.ok ? { ok: true as const } : result
   }
 
   function replaceEditSession(next: WebsiteEditSessionState | null) {
@@ -849,10 +870,12 @@ export function WebsiteProduct() {
                   currentPublishId={publish?.id ?? ''}
                   fingerprint={fingerprint}
                   managedActorId={managedActorId}
+                  managedReleaseRecords={storageMode === 'managed' ? workspace.releaseRecords ?? [] : undefined}
                   onAddEvidence={addEvidence}
                   onApprove={approveCurrentRevision}
                   onDownloadPublish={downloadPublishedSite}
                   onRecordPublish={recordLocalPublish}
+                  onSaveManagedRelease={storageMode === 'managed' ? saveManagedRelease : undefined}
                   publishIsCurrent={publishIsCurrent}
                   workspace={workspace}
                 />

@@ -7,6 +7,7 @@ import {
   type ReadinessCheck,
   type WebsiteWorkspace,
 } from './website-model'
+import type { WebsiteReleaseState } from './website-release-foundation'
 import './publish-workspace.css'
 
 const WebsiteReleaseFoundation = lazy(() => import('./WebsiteReleaseFoundation'))
@@ -28,6 +29,7 @@ type PublishWorkspaceProps = {
   checks: ReadinessCheck[]
   fingerprint: string
   managedActorId: string
+  managedReleaseRecords?: WebsiteReleaseState[]
   currentPublishId: string
   publishIsCurrent: boolean
   workspace: WebsiteWorkspace
@@ -35,6 +37,7 @@ type PublishWorkspaceProps = {
   onApprove: (input: ApprovalInput) => Promise<boolean>
   onDownloadPublish: (recordId: string) => void
   onRecordPublish: () => Promise<void>
+  onSaveManagedRelease?: (state: WebsiteReleaseState) => Promise<{ ok: true } | { ok: false; error: string }>
 }
 
 type PublishStep = 'checks' | 'evidence' | 'approval' | 'snapshot'
@@ -51,6 +54,7 @@ export function PublishWorkspace({
   checks,
   fingerprint,
   managedActorId,
+  managedReleaseRecords,
   currentPublishId,
   publishIsCurrent,
   workspace,
@@ -58,6 +62,7 @@ export function PublishWorkspace({
   onApprove,
   onDownloadPublish,
   onRecordPublish,
+  onSaveManagedRelease,
 }: PublishWorkspaceProps) {
   const [evidenceKind, setEvidenceKind] = useState<EvidenceKind>('content')
   const [evidenceFinding, setEvidenceFinding] = useState('')
@@ -487,6 +492,8 @@ export function PublishWorkspace({
             <Suspense fallback={<div className="website-release-loading">Loading client release controls...</div>}>
               <WebsiteReleaseFoundation
                 managedActorId={managedActorId}
+                managedRecords={managedReleaseRecords}
+                onSaveManagedState={onSaveManagedRelease}
                 publishIsCurrent={publishIsCurrent}
                 workspace={workspace}
               />
