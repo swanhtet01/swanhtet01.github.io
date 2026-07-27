@@ -52,6 +52,7 @@ import {
   commercePurchaseOrderArrivalUrgency,
   commercePurchaseOrderProgress,
   commercePurchaseOrders,
+  commerceStorefrontRequestLines,
   commerceStorefrontRequests,
   commerceWorkspaceCanWrite,
   commerceWebsiteIntakes,
@@ -3121,6 +3122,30 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       return
     }
     try {
+      if (request.schema === 'supermega.ecommerce.order_request.v2') {
+        const { prepareManagedEcommerceShopDraftV2 } = await import('../products/ecommerce/ecommerce-buying-lifecycle')
+        const draft = await prepareManagedEcommerceShopDraftV2({
+          request,
+          currentCatalog: commerce.items,
+          confirmedAt: new Date().toISOString(),
+        })
+        const [firstLine, ...remainingLines] = draft.lines
+        if (!firstLine) throw new Error('The managed Ecommerce request has no reviewed item.')
+        setPreparedChannelDraft(null)
+        setPreparedEcommerceDraft(draft)
+        setCustomer(draft.customerReference)
+        setChannel('Ecommerce')
+        setSku(firstLine.sku)
+        setQuantity(firstLine.quantity)
+        setExtraOrderLines(remainingLines.map((line) => ({ sku: line.sku, quantity: line.quantity })))
+        setPayment('')
+        setFulfilment(draft.fulfilment)
+        setFulfilmentReference(draft.sourceRequestId)
+        setPromisedAt(defaultOrderPromiseInput())
+        setOrderEntryMode('manual')
+        setNotice(`${request.id} loaded from the authenticated inbox with ${draft.lines.length} ${draft.lines.length === 1 ? 'item' : 'items'}. Confirm the promise and payment, then use the separate Shop action gate.`)
+        return
+      }
       const { recordEcommerceShopDraft } = await import('../products/ecommerce/ecommerce-shop-handoff')
       const draft = recordEcommerceShopDraft({
         request,
@@ -3950,10 +3975,14 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       {orderEntryMode === 'online' ? <div className="order-entry-panel" data-mode="online">
         <section className="website-intake">
           <div className="website-intake-head"><div><span className="core-eyebrow">Ecommerce inbox</span><strong>{pendingStorefrontRequests.length} requests waiting</strong></div><span className={`status-pill ${managedIdentity ? 'bounded' : 'pending'}`}>{managedIdentity ? 'Managed' : 'Not connected'}</span></div>
-          {managedIdentity && pendingStorefrontRequests.length ? pendingStorefrontRequests.slice(0, 20).map((request) => <div className="website-intake-ready" key={request.id}>
-            <div><strong>{request.customerReference} · {request.line.name} × {request.line.quantity}</strong><small>{request.id} · {request.totalMmk.toLocaleString()} MMK · {request.fulfilment}</small></div>
-            <button className="core-button compact" disabled={commerceControlsDisabled} onClick={() => void reviewStorefrontRequest(request.id)} ref={request.id === requestedRequestId ? ecommerceInboxTargetRef : undefined} type="button">Review</button>
-          </div>) : <div className="website-intake-record"><strong>{managedIdentity ? 'No Ecommerce request needs Shop review.' : 'Connect a managed workspace to use the shared inbox.'}</strong><small>No request creates an order, reserves stock, starts payment, sends a message, or requests delivery.</small></div>}
+          {managedIdentity && pendingStorefrontRequests.length ? pendingStorefrontRequests.slice(0, 20).map((request) => {
+            const lines = commerceStorefrontRequestLines(request)
+            const itemSummary = lines.length === 1 ? `${lines[0].name} × ${lines[0].quantity}` : `${lines.length} items · ${lines.reduce((total, line) => total + line.quantity, 0)} units`
+            return <div className="website-intake-ready" key={request.id}>
+              <div><strong>{request.customerReference} · {itemSummary}</strong><small>{request.id} · {request.totalMmk.toLocaleString()} MMK · {request.fulfilment}</small></div>
+              <button className="core-button compact" disabled={commerceControlsDisabled} onClick={() => void reviewStorefrontRequest(request.id)} ref={request.id === requestedRequestId ? ecommerceInboxTargetRef : undefined} type="button">Review</button>
+            </div>
+          }) : <div className="website-intake-record"><strong>{managedIdentity ? 'No Ecommerce request needs Shop review.' : 'Connect a managed workspace to use the shared inbox.'}</strong><small>No request creates an order, reserves stock, starts payment, sends a message, or requests delivery.</small></div>}
           <Link className="text-link" to="/ecommerce/">Open Ecommerce</Link>
         </section>
         {legacyWebsiteWorkWaiting ? <details className="legacy-website-intake"><summary>Older Website order needs review</summary><WebsiteCommerceIntake catalog={commerce.items} disabled={commerceControlsDisabled} importedSourceIds={importedWebsiteOrderIds} key={`${managedIdentity ? 'managed' : 'local'}:${websiteIntakes.find((intake) => intake.status === 'pending_confirmation')?.id ?? 'none'}`} managedIntakes={websiteIntakes} mode={managedIdentity ? 'managed' : 'local'} onQueueManagedIntake={queueManagedWebsiteIntake} onQueueReadyOrder={queueWebsiteOrder} /></details> : null}

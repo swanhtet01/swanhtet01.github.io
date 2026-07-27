@@ -25,6 +25,11 @@ from supermega_runtime.client_import_runtime import (
     CLIENT_IMPORT_STAGING_SCHEMA,
     validate_client_import_staging_package,
 )
+from supermega_runtime.ecommerce_buying_lifecycle import (
+    build_ecommerce_checkout_quote,
+    build_ecommerce_order_request,
+    build_ecommerce_pim_projection,
+)
 from supermega_runtime.runtime import reduce_trial_state
 from supermega_runtime.trial_store import (
     InMemoryTrialStore,
@@ -365,6 +370,43 @@ def storefront_request(
         },
         "totalMmk": quantity * 100,
     }
+
+
+def storefront_request_v2(state: dict[str, object]) -> dict[str, object]:
+    configuration = state["storefrontConfiguration"]
+    selected_skus = set(configuration["selectedSkus"])  # type: ignore[index]
+    items = [
+        {
+            "sku": item["sku"],
+            "name": item["name"],
+            "variant": item.get("variant"),
+            "unitPriceMmk": item["price"],
+            "availability": "available" if item["onHand"] > 0 else "sold_out",
+        }
+        for item in state["items"]  # type: ignore[union-attr]
+        if item["sku"] in selected_skus
+    ]
+    pim = build_ecommerce_pim_projection(
+        scope="ecommerce:managed-commerce-test",
+        source_preview_digest=commerce_storefront_preview_digest(state),
+        items=items,
+    )
+    quote_value = build_ecommerce_checkout_quote(
+        pim=pim,
+        cart=[{"sku": item["sku"], "quantity": 1} for item in items],
+        customer_reference="Customer A",
+        fulfilment="delivery",
+        payment_adapter="kbzpay_manual",
+        promotion_code="WELCOME",
+        idempotency_key=f"ECI-{STOREFRONT_REQUEST_UUID}",
+        quoted_at=NOW,
+        expires_at="2026-07-23T09:15:00.000Z",
+    )
+    return build_ecommerce_order_request(
+        quote_value,
+        source_storefront_revision=configuration["revision"],  # type: ignore[index]
+        source_storefront_action_id=configuration["saved"]["actionId"],  # type: ignore[index]
+    )
 
 
 def storefront_evidence(request: dict[str, object]) -> dict[str, str]:
@@ -1422,6 +1464,60 @@ class CommerceRuntimeTests(unittest.TestCase):
         ]
         with self.assertRaises(TrialValidationError):
             validate_commerce_state(oversized)
+
+    def test_multiline_storefront_request_reaches_managed_shop_inbox(self) -> None:
+        current = catalog_state()
+        current["items"].append(  # type: ignore[union-attr]
+            {
+                "sku": "SKU-2",
+                "name": "Second item",
+                "variant": "Large",
+                "onHand": 5,
+                "reorderAt": 1,
+                "price": 250,
+            }
+        )
+        current["storefrontConfiguration"] = storefront_configuration(
+            current,
+            selected_skus=["SKU-1", "SKU-2"],
+        )
+        request = storefront_request_v2(current)
+        next_state = deepcopy(current)
+        next_state["storefrontRequests"] = [request]
+
+        accepted = apply_event(
+            current,
+            "commerce.storefront_request.received",
+            next_state,
+            storefront_evidence(request),
+        )
+
+        self.assertEqual(accepted["storefrontRequests"], [request])
+        self.assertEqual(len(request["lines"]), 2)  # type: ignore[arg-type]
+        for field in ("items", "orders", "movements", "closes"):
+            self.assertEqual(accepted[field], current[field])
+
+        tampered_quote = deepcopy(next_state)
+        tampered_quote["storefrontRequests"][0]["quote"]["payment"]["status"] = "authorized"  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "commerce.storefront_request.received",
+                tampered_quote,
+                storefront_evidence(request),
+            )
+
+        repriced_line = deepcopy(next_state)
+        repriced_line["storefrontRequests"][0]["lines"][1]["unitPriceMmk"] += 1  # type: ignore[index,operator]
+        repriced_line["storefrontRequests"][0]["lines"][1]["lineTotalMmk"] += 1  # type: ignore[index,operator]
+        repriced_line["storefrontRequests"][0]["totalMmk"] += 1  # type: ignore[index,operator]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "commerce.storefront_request.received",
+                repriced_line,
+                storefront_evidence(request),
+            )
 
     def test_storefront_catalog_digest_matches_cross_runtime_golden(self) -> None:
         vector: dict[str, object] = {

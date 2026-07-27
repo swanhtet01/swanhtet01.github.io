@@ -196,7 +196,7 @@ export type CommerceWebsiteIntake = {
   conversion?: CommerceActionProof & { orderId: string }
 }
 
-export type CommerceStorefrontRequest = {
+export type CommerceStorefrontRequestV1 = {
   schema: 'supermega.ecommerce.order_request.v1'
   mode: 'browser-local-request'
   state: 'pending_shop_review'
@@ -218,6 +218,56 @@ export type CommerceStorefrontRequest = {
   }
   totalMmk: number
 }
+
+export type CommerceStorefrontRequestLineV2 = {
+  sku: string
+  name: string
+  variant: string | null
+  quantity: number
+  unitPriceMmk: number
+  lineTotalMmk: number
+}
+
+export type CommerceStorefrontRequestV2 = {
+  schema: 'supermega.ecommerce.order_request.v2'
+  mode: 'browser-local-request'
+  state: 'pending_shop_review'
+  scope: string
+  id: string
+  idempotencyKey: string
+  createdAt: string
+  sourcePreviewDigest: string
+  sourceStorefrontRevision: number | null
+  sourceStorefrontActionId: string | null
+  customerReference: string
+  fulfilment: 'pickup' | 'delivery'
+  currency: 'MMK'
+  lines: CommerceStorefrontRequestLineV2[]
+  quote: {
+    schema: 'supermega.ecommerce.checkout_quote.v1'
+    scope: string
+    quoteId: string
+    idempotencyKey: string
+    quotedAt: string
+    expiresAt: string
+    sourcePreviewDigest: string
+    pimDigest: string
+    currency: 'MMK'
+    customerReference: string
+    fulfilment: 'pickup' | 'delivery'
+    lines: CommerceStorefrontRequestLineV2[]
+    subtotalMmk: number
+    promotion: { adapter: 'shop_promotion_review'; status: 'not_requested' | 'pending_shop_review'; code: string | null; amountMmk: 0 }
+    tax: { adapter: 'price_inclusive'; status: 'included'; amountMmk: 0 }
+    shipping: { adapter: 'pickup' | 'shop_delivery_review'; status: 'included' | 'pending_shop_review'; amountMmk: 0 }
+    payment: { adapter: 'pay_on_pickup' | 'cash_on_delivery' | 'kbzpay_manual'; status: 'not_authorized'; amountMmk: 0 }
+    totalMmk: number
+    quoteDigest: string
+  }
+  totalMmk: number
+}
+
+export type CommerceStorefrontRequest = CommerceStorefrontRequestV1 | CommerceStorefrontRequestV2
 
 export type CommerceStorefrontMerchandising = {
   sku: string
@@ -383,6 +433,7 @@ const websiteIntakeIdPattern = /^WINT-[A-Z0-9-]{8,80}$/
 const websiteFingerprintPattern = /^web-[a-f0-9]{8}$/
 const storefrontRequestIdPattern = /^ECR-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
 const storefrontIdempotencyPattern = /^ECI-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
+const storefrontQuoteIdPattern = /^ECQ-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
 const sha256DigestPattern = /^sha256:[a-f0-9]{64}$/
 const maxStorefrontRequests = 100
 const maxPurchaseOrders = 100
@@ -494,6 +545,108 @@ function hasExactKeys(value: Record<string, unknown>, required: string[], option
   const fields = Object.keys(value)
   return required.every((field) => fields.includes(field))
     && fields.every((field) => required.includes(field) || optional.includes(field))
+}
+
+function storefrontRequestLineV2(value: unknown, field: string): CommerceStorefrontRequestLineV2 {
+  if (!isRecord(value) || !hasExactKeys(value, ['sku', 'name', 'variant', 'quantity', 'unitPriceMmk', 'lineTotalMmk'])) {
+    throw new Error(`${field} is invalid.`)
+  }
+  const sku = canonicalText(value.sku, `${field}.sku`, 80)
+  const name = canonicalText(value.name, `${field}.name`)
+  if (value.variant !== null) canonicalText(value.variant, `${field}.variant`)
+  assertSafeInteger(value.quantity, `${field}.quantity`, 1)
+  if (Number(value.quantity) > 99) throw new Error(`${field}.quantity must be at most 99.`)
+  assertSafeInteger(value.unitPriceMmk, `${field}.unitPriceMmk`, 1)
+  assertSafeInteger(value.lineTotalMmk, `${field}.lineTotalMmk`, 1)
+  if (Number(value.quantity) * Number(value.unitPriceMmk) !== value.lineTotalMmk) throw new Error(`${field}.lineTotalMmk is invalid.`)
+  return { sku, name, variant: value.variant as string | null, quantity: Number(value.quantity), unitPriceMmk: Number(value.unitPriceMmk), lineTotalMmk: Number(value.lineTotalMmk) }
+}
+
+function sameStorefrontRequestLinesV2(left: CommerceStorefrontRequestLineV2[], right: CommerceStorefrontRequestLineV2[]) {
+  return left.length === right.length && left.every((line, index) => {
+    const other = right[index]
+    return line.sku === other.sku
+      && line.name === other.name
+      && line.variant === other.variant
+      && line.quantity === other.quantity
+      && line.unitPriceMmk === other.unitPriceMmk
+      && line.lineTotalMmk === other.lineTotalMmk
+  })
+}
+
+function storefrontRequestV2(value: Record<string, unknown>, field: string): CommerceStorefrontRequestV2 {
+  const requestFields = [
+    'schema', 'mode', 'state', 'scope', 'id', 'idempotencyKey', 'createdAt', 'sourcePreviewDigest',
+    'sourceStorefrontRevision', 'sourceStorefrontActionId', 'customerReference', 'fulfilment', 'currency',
+    'lines', 'quote', 'totalMmk',
+  ]
+  if (!hasExactKeys(value, requestFields)
+    || value.schema !== 'supermega.ecommerce.order_request.v2'
+    || value.mode !== 'browser-local-request'
+    || value.state !== 'pending_shop_review') throw new Error(`${field} is invalid.`)
+  const scope = canonicalText(value.scope, `${field}.scope`)
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,179}$/.test(scope)) throw new Error(`${field}.scope is invalid.`)
+  const requestId = canonicalText(value.id, `${field}.id`, 40)
+  const idempotencyKey = canonicalText(value.idempotencyKey, `${field}.idempotencyKey`, 40)
+  if (!storefrontRequestIdPattern.test(requestId)
+    || !storefrontIdempotencyPattern.test(idempotencyKey)
+    || requestId.slice(4) !== idempotencyKey.slice(4)
+    || !validTimestamp(value.createdAt)
+    || typeof value.sourcePreviewDigest !== 'string'
+    || !sha256DigestPattern.test(value.sourcePreviewDigest)) throw new Error(`${field} identity or source is invalid.`)
+  if ((value.sourceStorefrontRevision === null) !== (value.sourceStorefrontActionId === null)) throw new Error(`${field} storefront provenance is incomplete.`)
+  if (value.sourceStorefrontRevision !== null) {
+    assertSafeInteger(value.sourceStorefrontRevision, `${field}.sourceStorefrontRevision`, 1)
+    canonicalText(value.sourceStorefrontActionId, `${field}.sourceStorefrontActionId`, 160)
+  }
+  canonicalText(value.customerReference, `${field}.customerReference`, 80)
+  if (value.fulfilment !== 'pickup' && value.fulfilment !== 'delivery') throw new Error(`${field}.fulfilment is invalid.`)
+  if (value.currency !== 'MMK' || !Array.isArray(value.lines) || value.lines.length < 1 || value.lines.length > maxOrderLines) throw new Error(`${field} currency or lines are invalid.`)
+  const lines = value.lines.map((line, index) => storefrontRequestLineV2(line, `${field}.lines[${index}]`))
+  if (lines.some((line, index) => index > 0 && compareCanonicalText(lines[index - 1].sku, line.sku) >= 0)) throw new Error(`${field}.lines must use unique canonical SKU order.`)
+  const subtotalMmk = lines.reduce((total, line) => total + line.lineTotalMmk, 0)
+  assertSafeInteger(subtotalMmk, `${field}.subtotalMmk`, 1)
+  assertSafeInteger(value.totalMmk, `${field}.totalMmk`, 1)
+  if (value.totalMmk !== subtotalMmk) throw new Error(`${field}.totalMmk is invalid.`)
+
+  if (!isRecord(value.quote)) throw new Error(`${field}.quote is invalid.`)
+  const quote = value.quote
+  const quoteFields = [
+    'schema', 'scope', 'quoteId', 'idempotencyKey', 'quotedAt', 'expiresAt', 'sourcePreviewDigest',
+    'pimDigest', 'currency', 'customerReference', 'fulfilment', 'lines', 'subtotalMmk', 'promotion',
+    'tax', 'shipping', 'payment', 'totalMmk', 'quoteDigest',
+  ]
+  if (!hasExactKeys(quote, quoteFields)
+    || quote.schema !== 'supermega.ecommerce.checkout_quote.v1'
+    || quote.scope !== scope
+    || quote.idempotencyKey !== idempotencyKey
+    || quote.quotedAt !== value.createdAt
+    || quote.sourcePreviewDigest !== value.sourcePreviewDigest
+    || quote.currency !== 'MMK'
+    || quote.customerReference !== value.customerReference
+    || quote.fulfilment !== value.fulfilment
+    || !Array.isArray(quote.lines)) throw new Error(`${field}.quote does not match the request.`)
+  const quoteId = canonicalText(quote.quoteId, `${field}.quote.quoteId`, 40)
+  if (!storefrontQuoteIdPattern.test(quoteId) || quoteId.slice(4) !== idempotencyKey.slice(4)) throw new Error(`${field}.quote identity is invalid.`)
+  if (!validTimestamp(quote.expiresAt)
+    || (timestampMicros(quote.expiresAt) as bigint) <= (timestampMicros(quote.quotedAt) as bigint)
+    || (timestampMicros(quote.expiresAt) as bigint) - (timestampMicros(quote.quotedAt) as bigint) > 1_800_000_000n) throw new Error(`${field}.quote expiry is invalid.`)
+  if (typeof quote.pimDigest !== 'string' || !sha256DigestPattern.test(quote.pimDigest)
+    || typeof quote.quoteDigest !== 'string' || !sha256DigestPattern.test(quote.quoteDigest)) throw new Error(`${field}.quote digest is invalid.`)
+  const quoteLines = quote.lines.map((line, index) => storefrontRequestLineV2(line, `${field}.quote.lines[${index}]`))
+  if (!sameStorefrontRequestLinesV2(lines, quoteLines) || quote.subtotalMmk !== subtotalMmk || quote.totalMmk !== subtotalMmk) throw new Error(`${field}.quote totals or lines are invalid.`)
+  if (!isRecord(quote.promotion) || !hasExactKeys(quote.promotion, ['adapter', 'status', 'code', 'amountMmk'])
+    || quote.promotion.adapter !== 'shop_promotion_review' || quote.promotion.amountMmk !== 0
+    || (quote.promotion.code === null ? quote.promotion.status !== 'not_requested' : quote.promotion.status !== 'pending_shop_review')) throw new Error(`${field}.quote promotion boundary is invalid.`)
+  if (quote.promotion.code !== null) canonicalText(quote.promotion.code, `${field}.quote.promotion.code`, 40)
+  if (!isRecord(quote.tax) || !hasExactKeys(quote.tax, ['adapter', 'status', 'amountMmk'])
+    || quote.tax.adapter !== 'price_inclusive' || quote.tax.status !== 'included' || quote.tax.amountMmk !== 0) throw new Error(`${field}.quote tax boundary is invalid.`)
+  if (!isRecord(quote.shipping) || !hasExactKeys(quote.shipping, ['adapter', 'status', 'amountMmk']) || quote.shipping.amountMmk !== 0
+    || (value.fulfilment === 'pickup' ? quote.shipping.adapter !== 'pickup' || quote.shipping.status !== 'included' : quote.shipping.adapter !== 'shop_delivery_review' || quote.shipping.status !== 'pending_shop_review')) throw new Error(`${field}.quote shipping boundary is invalid.`)
+  if (!isRecord(quote.payment) || !hasExactKeys(quote.payment, ['adapter', 'status', 'amountMmk'])
+    || !['pay_on_pickup', 'cash_on_delivery', 'kbzpay_manual'].includes(String(quote.payment.adapter))
+    || quote.payment.status !== 'not_authorized' || quote.payment.amountMmk !== 0) throw new Error(`${field}.quote payment boundary is invalid.`)
+  return value as CommerceStorefrontRequestV2
 }
 
 function sameProof(movement: CommerceStockMovement, proof: CommerceActionProof) {
@@ -1537,6 +1690,13 @@ export function validateCommerceState(value: unknown): CommerceState {
   const storefrontActionIds: string[] = []
   for (const [index, candidate] of storefrontRequests.entries()) {
     if (!isRecord(candidate)) throw new Error(`storefrontRequests[${index}] is invalid.`)
+    if (candidate.schema === 'supermega.ecommerce.order_request.v2') {
+      const request = storefrontRequestV2(candidate, `storefrontRequests[${index}]`)
+      storefrontRequestIds.push(request.id)
+      storefrontIdempotencyKeys.push(request.idempotencyKey)
+      storefrontActionIds.push(`ACT-${request.id.slice(4)}`)
+      continue
+    }
     const legacyFields = ['schema', 'mode', 'state', 'id', 'idempotencyKey', 'createdAt', 'sourcePreviewDigest', 'customerReference', 'fulfilment', 'currency', 'line', 'totalMmk']
     const currentFields = [...legacyFields, 'sourceStorefrontRevision', 'sourceStorefrontActionId']
     if (!hasExactKeys(candidate, legacyFields) && !hasExactKeys(candidate, currentFields)) {
@@ -2131,6 +2291,16 @@ export function commerceStorefrontRequestEquals(
   left: CommerceStorefrontRequest,
   right: CommerceStorefrontRequest,
 ) {
+  if (left.schema !== right.schema) return false
+  if (left.schema === 'supermega.ecommerce.order_request.v2' && right.schema === 'supermega.ecommerce.order_request.v2') {
+    const canonical = (value: unknown): unknown => Array.isArray(value)
+      ? value.map(canonical)
+      : isRecord(value)
+        ? Object.fromEntries(Object.entries(value).sort(([first], [second]) => compareCanonicalText(first, second)).map(([key, nested]) => [key, canonical(nested)]))
+        : value
+    return JSON.stringify(canonical(left)) === JSON.stringify(canonical(right))
+  }
+  if (left.schema !== 'supermega.ecommerce.order_request.v1' || right.schema !== 'supermega.ecommerce.order_request.v1') return false
   return left.schema === right.schema
     && left.mode === right.mode
     && left.state === right.state
@@ -2149,6 +2319,12 @@ export function commerceStorefrontRequestEquals(
     && left.line.quantity === right.line.quantity
     && left.line.unitPriceMmk === right.line.unitPriceMmk
     && left.totalMmk === right.totalMmk
+}
+
+export function commerceStorefrontRequestLines(request: CommerceStorefrontRequest): CommerceStorefrontRequestLineV2[] {
+  return request.schema === 'supermega.ecommerce.order_request.v2'
+    ? request.lines.map((line) => ({ ...line }))
+    : [{ ...request.line, lineTotalMmk: request.line.quantity * request.line.unitPriceMmk }]
 }
 
 export async function recordCommerceStorefrontRequest(
@@ -2182,7 +2358,8 @@ export async function recordCommerceStorefrontRequest(
     || current.orders.some((order) => order.sourceRecordId === validatedRequest.id)) return null
   if (requests.length >= maxStorefrontRequests) return null
   const configuration = commerceStorefrontConfiguration(current)
-  if (!configuration || !configuration.selectedSkus.includes(validatedRequest.line.sku)) return null
+  const lines = commerceStorefrontRequestLines(validatedRequest)
+  if (!configuration || lines.some((line) => !configuration.selectedSkus.includes(line.sku))) return null
   if (validatedRequest.sourceStorefrontRevision !== configuration.revision
     || validatedRequest.sourceStorefrontActionId !== configuration.saved.actionId
     || (timestampMicros(validatedRequest.createdAt) as bigint) < (timestampMicros(configuration.saved.capturedAt) as bigint)) return null
@@ -2193,12 +2370,14 @@ export async function recordCommerceStorefrontRequest(
     return null
   }
   if (validatedRequest.sourcePreviewDigest !== expectedPreviewDigest) return null
-  const matches = current.items.filter((item) => item.sku === validatedRequest.line.sku)
-  if (matches.length !== 1
-    || matches[0].name !== validatedRequest.line.name
-    || (matches[0].variant ?? null) !== validatedRequest.line.variant
-    || matches[0].price !== validatedRequest.line.unitPriceMmk
-    || matches[0].onHand < 1) return null
+  if (lines.some((line) => {
+    const matches = current.items.filter((item) => item.sku === line.sku)
+    return matches.length !== 1
+      || matches[0].name !== line.name
+      || (matches[0].variant ?? null) !== line.variant
+      || matches[0].price !== line.unitPriceMmk
+      || matches[0].onHand < 1
+  })) return null
   return validateCommerceState({
     ...current,
     storefrontRequests: [validatedRequest, ...requests],

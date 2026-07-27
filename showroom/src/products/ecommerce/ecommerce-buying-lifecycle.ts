@@ -934,6 +934,17 @@ export async function prepareEcommerceShopDraftV2(input: {
   }
 }
 
+export async function prepareManagedEcommerceShopDraftV2(input: {
+  request: EcommerceOrderRequestV2
+  currentCatalog: CommerceItem[]
+  confirmedAt: string
+}) {
+  const request = await validateEcommerceOrderRequestV2(input.request)
+  const empty = createEmptyEcommerceBuyingState(request.scope)
+  const retained = await recordEcommerceOrderRequestV2(empty, request, empty.headDigest)
+  return prepareEcommerceShopDraftV2({ ...input, request, state: retained })
+}
+
 export function ecommerceShopDraftV2MatchesCatalog(value: unknown, catalogValue: CommerceItem[]): value is EcommerceShopDraftV2 {
   try {
     const draft = validateEcommerceShopDraftV2(value)

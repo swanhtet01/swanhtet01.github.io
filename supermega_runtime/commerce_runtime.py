@@ -15,6 +15,10 @@ from supermega_runtime.client_import_runtime import (
     ClientImportValidationError,
     validate_client_import_staging_package,
 )
+from supermega_runtime.ecommerce_buying_lifecycle import (
+    EcommerceLifecycleValidationError,
+    validate_ecommerce_order_request,
+)
 from supermega_runtime.trial_store import TrialValidationError
 
 
@@ -403,6 +407,11 @@ def _action_proof(value: object, field: str, *, with_order_id: bool = False) -> 
 
 def _storefront_request(value: object, field: str) -> dict[str, Any]:
     request = _object(value, field)
+    if request.get("schema") == "supermega.ecommerce.order_request.v2":
+        try:
+            return validate_ecommerce_order_request(request)
+        except EcommerceLifecycleValidationError as exc:
+            raise TrialValidationError(f"{field} is invalid: {exc}") from exc
     _exact_fields(
         request,
         field,
@@ -3518,7 +3527,11 @@ def _validate_storefront_request_received(current: Mapping[str, Any], next_state
             "commerce.storefront_request.received must prepend exactly one Ecommerce request."
         )
     request = next_requests[0]
-    line = request["line"]
+    lines = (
+        request["lines"]
+        if request["schema"] == "supermega.ecommerce.order_request.v2"
+        else [request["line"]]
+    )
     configuration = _storefront_configuration(current)
     if configuration is None:
         raise TrialValidationError(
@@ -3528,9 +3541,9 @@ def _validate_storefront_request_received(current: Mapping[str, Any], next_state
         raise TrialValidationError(
             "the Ecommerce request cannot use a storefront with a stale Shop catalog."
         )
-    if line["sku"] not in configuration["selectedSkus"]:
+    if any(line["sku"] not in configuration["selectedSkus"] for line in lines):
         raise TrialValidationError(
-            "the Ecommerce request SKU is not included in the saved storefront."
+            "every Ecommerce request SKU must be included in the saved storefront."
         )
     if (
         request.get("sourceStorefrontRevision") != configuration["revision"]
@@ -3550,13 +3563,18 @@ def _validate_storefront_request_received(current: Mapping[str, Any], next_state
         raise TrialValidationError(
             "the Ecommerce request does not match the current saved storefront preview."
         )
-    matching_items = [item for item in current["items"] if item["sku"] == line["sku"]]
+    def line_matches_catalog(line: Mapping[str, Any]) -> bool:
+        matching_items = [item for item in current["items"] if item["sku"] == line["sku"]]
+        return (
+            len(matching_items) == 1
+            and matching_items[0]["name"] == line["name"]
+            and matching_items[0].get("variant") == line["variant"]
+            and matching_items[0]["price"] == line["unitPriceMmk"]
+            and matching_items[0]["onHand"] >= 1
+        )
+
     if (
-        len(matching_items) != 1
-        or matching_items[0]["name"] != line["name"]
-        or matching_items[0].get("variant") != line["variant"]
-        or matching_items[0]["price"] != line["unitPriceMmk"]
-        or matching_items[0]["onHand"] < 1
+        any(not line_matches_catalog(line) for line in lines)
         or any(order.get("sourceRecordId") == request["id"] for order in current["orders"])
     ):
         raise TrialValidationError(

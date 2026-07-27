@@ -6,6 +6,9 @@ import {
   commerceCatalogDigest,
   commerceCatalogDigestSource,
   commerceStorefrontConfiguration,
+  commerceStorefrontRequestEquals,
+  commerceStorefrontRequests,
+  recordCommerceStorefrontRequest,
   validateCommerceState,
   type CommerceItem,
   type CommerceState,
@@ -23,6 +26,7 @@ import {
 import { EcommerceBuyingWorkspace } from './EcommerceBuyingWorkspace'
 import {
   type EcommerceCartLine,
+  type EcommerceOrderRequestV2,
   type EcommerceShopDraftV2,
 } from './ecommerce-buying-lifecycle'
 import {
@@ -640,6 +644,73 @@ export function EcommerceProduct() {
     })
   }
 
+  async function recordManagedBuyingRequest(request: EcommerceOrderRequestV2) {
+    const identity = managedIdentity
+    if (!identity || !globalThis.crypto?.randomUUID) throw new Error('Managed Ecommerce request identity is unavailable. Nothing was sent to Shop.')
+    const currentIdentity = await currentManagedIdentity()
+    if (!currentIdentity
+      || currentIdentity.workspaceId !== identity.workspaceId
+      || currentIdentity.userId !== identity.userId) throw new Error('The managed workspace identity changed. Reload before sending this request to Shop.')
+    const bootstrap = await loadManagedBootstrap(identity)
+    const view = resolveManagedStorefront(identity, requireManagedSurfaceState(bootstrap, 'commerce', 'Shop'))
+    if (!view?.saved) throw new Error('Save the managed storefront before sending a customer request to Shop.')
+    setManagedInbox(view.inbox)
+    setCatalog({ source: 'managed-shop', items: view.inbox.state.items, error: '' })
+    const exactRequestIsRetained = (state: CommerceState) => {
+      const matches = commerceStorefrontRequests(state).filter((candidate) => candidate.id === request.id || candidate.idempotencyKey === request.idempotencyKey)
+      return matches.length === 1 && commerceStorefrontRequestEquals(matches[0], request)
+    }
+    const proof = {
+      actionId: `ACT-${request.id.slice(4)}`,
+      capturedAt: request.createdAt,
+      actor: identity.userId,
+      reason: 'Record the reviewed multi-line Ecommerce request for Shop review.',
+      evidenceReference: `ECOMMERCE:${request.id}:${request.sourcePreviewDigest}`,
+    }
+    const next = await recordCommerceStorefrontRequest(view.inbox.state, request, proof)
+    if (!next) throw new Error('The Ecommerce request no longer matches the current managed Shop catalog or storefront.')
+    if (next === view.inbox.state && exactRequestIsRetained(next)) return
+    const commandId = globalThis.crypto.randomUUID()
+    try {
+      const result = await saveManagedCommerceCommand({
+        commandId,
+        evidence: proof,
+        eventType: 'commerce.storefront_request.received',
+        expectedVersion: view.inbox.version,
+        identity,
+        state: next as unknown as Record<string, unknown>,
+      })
+      if (result.command_id !== commandId
+        || result.surface !== 'commerce'
+        || result.event_type !== 'commerce.storefront_request.received'
+        || result.version !== view.inbox.version + 1
+        || typeof result.idempotent_replay !== 'boolean') throw new Error('The managed workspace returned an unrelated Ecommerce receipt.')
+      const accepted = validateCommerceState(result.state)
+      if (!exactRequestIsRetained(accepted)) throw new Error('The managed workspace returned a different Ecommerce request.')
+      const confirmedIdentity = await currentManagedIdentity()
+      if (!confirmedIdentity
+        || confirmedIdentity.workspaceId !== identity.workspaceId
+        || confirmedIdentity.userId !== identity.userId) throw new Error('The managed identity changed before the Ecommerce request could be confirmed.')
+      setManagedInbox({ identity, state: accepted, version: result.version })
+      setCatalog({ source: 'managed-shop', items: accepted.items, error: '' })
+    } catch (error) {
+      try {
+        const refreshedBootstrap = await loadManagedBootstrap(identity)
+        const refreshed = resolveManagedStorefront(identity, requireManagedSurfaceState(refreshedBootstrap, 'commerce', 'Shop'))
+        const confirmedIdentity = await currentManagedIdentity()
+        if (refreshed && confirmedIdentity
+          && confirmedIdentity.workspaceId === identity.workspaceId
+          && confirmedIdentity.userId === identity.userId
+          && exactRequestIsRetained(refreshed.inbox.state)) {
+          setManagedInbox(refreshed.inbox)
+          setCatalog({ source: 'managed-shop', items: refreshed.inbox.state.items, error: '' })
+          return
+        }
+      } catch { /* Preserve the original managed command failure. */ }
+      throw error
+    }
+  }
+
   function openShopDraft(draft: EcommerceShopDraftV2) {
     navigate('/shop/?tab=orders&source=ecommerce', { state: { ecommerceShopDraft: draft } })
   }
@@ -903,7 +974,9 @@ export function EcommerceProduct() {
               disabled={catalogHydrating}
               onCartChange={setBuyingCart}
               onDraft={openShopDraft}
+              onOpenManagedRequest={managedIdentity ? (requestId) => navigate(`/shop/?tab=orders&source=ecommerce&request=${encodeURIComponent(requestId)}`) : undefined}
               onOpenReturns={() => navigate('/shop/?tab=orders&source=ecommerce-return')}
+              onRecordManagedRequest={managedIdentity ? recordManagedBuyingRequest : undefined}
               preview={previewResult.preview}
               scope={buyingScope}
               sourcePreviewDigest={digest}

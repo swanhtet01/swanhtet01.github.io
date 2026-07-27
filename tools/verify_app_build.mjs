@@ -81,6 +81,7 @@ const plantOrderUiSource = await readFile(resolve(root, 'showroom', 'src', 'core
 const websiteReleaseSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-release-foundation.ts'), 'utf8')
 const websiteReleaseUiSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'WebsiteReleaseFoundation.tsx'), 'utf8')
 const ecommerceBuyingUiSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'EcommerceBuyingWorkspace.tsx'), 'utf8')
+const ecommerceBuyingLifecycleSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'ecommerce-buying-lifecycle.ts'), 'utf8')
 
 if (!websiteReleaseSource.includes("supermega.website.release_foundation.v1")
   || !websiteReleaseSource.includes('buildWebsiteReleasePackage')
@@ -528,7 +529,7 @@ if (!ecommerceSource.includes("useState<'setup' | 'preview'>('setup')")
   || !ecommerceCssSource.includes('.ecommerce-buying-body > form {')
   || !ecommerceCssSource.includes('grid-template-columns: 1fr;')) fail('ecommerce_mobile_workspace_not_modular')
 const addToCartStart = ecommerceSource.indexOf('function addToCart')
-const addToCartEnd = ecommerceSource.indexOf('function openShopDraft', addToCartStart)
+const addToCartEnd = ecommerceSource.indexOf('async function recordManagedBuyingRequest', addToCartStart)
 const addToCartAction = ecommerceSource.slice(addToCartStart, addToCartEnd)
 const storefrontSaveStart = ecommerceSource.indexOf('async function saveCurrentStorefront')
 const storefrontSaveEnd = ecommerceSource.indexOf('function discardStorefrontChanges', storefrontSaveStart)
@@ -572,6 +573,8 @@ if (addToCartStart < 0
   || !ecommerceSource.includes('cart={buyingCart}')
   || !ecommerceSource.includes('onCartChange={setBuyingCart}')
   || !ecommerceSource.includes('onDraft={openShopDraft}')
+  || !ecommerceSource.includes('onOpenManagedRequest={managedIdentity ?')
+  || !ecommerceSource.includes('onRecordManagedRequest={managedIdentity ? recordManagedBuyingRequest : undefined}')
   || !ecommerceSource.includes("onOpenReturns={() => navigate('/shop/?tab=orders&source=ecommerce-return')}")
   || storefrontSavePreviewAdvanceCount !== 2
   || managedStorefrontSave < 0
@@ -598,6 +601,11 @@ if (addToCartStart < 0
   || !ecommerceBuyingUiSource.includes('buildEcommerceOrderRequestV2')
   || !ecommerceBuyingUiSource.includes('saveEcommerceOrderRequestV2')
   || !ecommerceBuyingUiSource.includes('prepareEcommerceShopDraftV2')
+  || !ecommerceBuyingUiSource.includes('onRecordManagedRequest?:')
+  || !ecommerceBuyingUiSource.includes('onOpenManagedRequest?:')
+  || !ecommerceBuyingUiSource.includes('retainedMatches')
+  || !ecommerceBuyingUiSource.includes('await onRecordManagedRequest(request)')
+  || !ecommerceBuyingUiSource.includes('onOpenManagedRequest(latestRequest.id)')
   || !ecommerceBuyingUiSource.includes("window.addEventListener('storage', refresh)")
   || !ecommerceBuyingUiSource.includes('setFreshQuoteId(request.id)')
   || !ecommerceBuyingUiSource.includes('I reviewed every item, the MMK total, delivery boundary, and payment method.')
@@ -682,10 +690,16 @@ if (!ecommerceConfirmSource.includes('storefrontRequestLedgerContains')
   || !coreCssSource.includes('.order-ecommerce-payment')
   || !coreSource.includes("import('../products/ecommerce/ecommerce-shop-handoff')")
   || ['setItem(', 'removeItem(', 'localStorage', 'sessionStorage', 'fetch(', 'XMLHttpRequest', 'navigator.locks', 'convertCommerceWebsiteIntake', 'reserveCommerceOrder', 'mutateCommerceWorkspace'].some((marker) => ecommerceConfirmSource.includes(marker) || ecommerceHandoffSource.includes(marker))) fail('ecommerce_shop_handoff_contract_missing_or_mutating')
+const managedBuyingRequestStart = ecommerceSource.indexOf('async function recordManagedBuyingRequest')
+const managedBuyingRequestEnd = ecommerceSource.indexOf('function openShopDraft', managedBuyingRequestStart)
+const managedBuyingRequestAction = ecommerceSource.slice(managedBuyingRequestStart, managedBuyingRequestEnd)
 if (!commerceSource.includes('recordCommerceStorefrontRequest')
   || !commerceSource.includes('storefrontRequests?: CommerceStorefrontRequest[]')
   || !commerceSource.includes('commerceStorefrontPreviewDigest')
-  || !commerceSource.includes('configuration.selectedSkus.includes(validatedRequest.line.sku)')
+  || !commerceSource.includes("supermega.ecommerce.order_request.v2")
+  || !commerceSource.includes('function storefrontRequestV2')
+  || !commerceSource.includes('commerceStorefrontRequestLines')
+  || !commerceSource.includes('lines.some((line) => !configuration.selectedSkus.includes(line.sku))')
   || !commerceSource.includes('validatedRequest.sourceStorefrontRevision !== configuration.revision')
   || !commerceSource.includes('commerceStorefrontRequestEquals')
   || !commerceSource.includes('legacyFields')
@@ -693,14 +707,29 @@ if (!commerceSource.includes('recordCommerceStorefrontRequest')
   || !commerceSource.includes('ECOMMERCE:${validatedRequest.id}:${validatedRequest.sourcePreviewDigest}')
   || !managedTrialSource.includes('commerce.storefront_request.received')
   || !managedCommerceRuntime.includes('commerce.storefront_request.received')
-  || ecommerceSource.includes('await recordCommerceStorefrontRequest')
-  || ecommerceSource.includes("eventType: 'commerce.storefront_request.received'")
+  || !managedCommerceRuntime.includes('validate_ecommerce_order_request')
+  || !managedCommerceRuntime.includes('if request["schema"] == "supermega.ecommerce.order_request.v2"')
+  || !managedCommerceRuntime.includes('request["lines"]')
+  || managedBuyingRequestStart < 0
+  || managedBuyingRequestEnd < 0
+  || !managedBuyingRequestAction.includes('await currentManagedIdentity()')
+  || !managedBuyingRequestAction.includes('await recordCommerceStorefrontRequest')
+  || !managedBuyingRequestAction.includes("eventType: 'commerce.storefront_request.received'")
+  || !managedBuyingRequestAction.includes('result.version !== view.inbox.version + 1')
+  || !managedBuyingRequestAction.includes('exactRequestIsRetained')
+  || !managedBuyingRequestAction.includes('await loadManagedBootstrap(identity)')
+  || !ecommerceBuyingLifecycleSource.includes('prepareManagedEcommerceShopDraftV2')
+  || !ecommerceBuyingLifecycleSource.includes('validateEcommerceOrderRequestV2(input.request)')
+  || !ecommerceBuyingLifecycleSource.includes('recordEcommerceOrderRequestV2(empty, request, empty.headDigest)')
   || ecommerceBuyingUiSource.includes("eventType: 'commerce.storefront_request.received'")
   || !ecommerceSource.includes('catalogRebindRequired')
   || !ecommerceSource.includes('Rebind storefront')
   || !ecommerceSource.includes('identity.workspaceId !== managedIdentity.workspaceId')
   || !coreSource.includes('Ecommerce inbox')
   || !coreSource.includes('reviewStorefrontRequest')
+  || !coreSource.includes('commerceStorefrontRequestLines(request)')
+  || !coreSource.includes('prepareManagedEcommerceShopDraftV2')
+  || !coreSource.includes('setExtraOrderLines(remainingLines.map')
   || !coreSource.includes('separate Shop action gate')) fail('managed_ecommerce_inbox_contract_missing')
 if (!appPackage.scripts?.lint?.includes('src/products')) fail('prototype_sources_not_linted')
 if (!websiteSource.includes('No website has been deployed.')
@@ -1144,7 +1173,10 @@ for (const eventType of ['commerce.workspace.initialized', 'commerce.item.create
 }
 if (!managedTrialSource.includes('commerce.storefront_request.received')
   || !managedCommerceRuntime.includes('commerce.storefront_request.received')
-  || managedCommerceClientSources.includes('commerce.storefront_request.received')) fail('legacy_storefront_request_creation_not_read_only')
+  || !ecommerceSource.includes('commerce.storefront_request.received')
+  || coreSource.includes('commerce.storefront_request.received')
+  || websiteSource.includes('commerce.storefront_request.received')
+  || storefrontRequestSource.includes('commerce.storefront_request.received')) fail('managed_storefront_request_command_boundary_missing')
 if (!managedTrialSource.includes('commerce.stock.received')
   || !managedCommerceRuntime.includes('commerce.stock.received')
   || managedCommerceClientSources.includes('commerce.stock.received')) fail('legacy_direct_stock_receipt_not_read_only')
@@ -6059,14 +6091,41 @@ async function verifyStorefrontRuntime() {
       && buyingQuote.payment.amountMmk === 0,
     'ecommerce_buying_adapter_boundary_became_consequential')
     const buyingRequest = await buyingModel.buildEcommerceOrderRequestV2(buyingQuote, {
-      revision: 2,
-      actionId: 'ACT-STOREFRONT-R2',
+      revision: 1,
+      actionId: managedPreviewProof.actionId,
     })
     buyingAssert(buyingRequest.schema === 'supermega.ecommerce.order_request.v2'
       && buyingRequest.scope === buyingScope
       && buyingRequest.id === 'ECR-22345678-1234-4ABC-8ABC-1234567890AB'
       && JSON.stringify(buyingRequest.lines) === JSON.stringify(buyingQuote.lines),
     'ecommerce_buying_request_lost_quote_or_scope')
+    const managedRequestProof = {
+      actionId: `ACT-${buyingRequest.id.slice(4)}`,
+      capturedAt: buyingRequest.createdAt,
+      actor: 'OP-OWNER',
+      reason: 'Record the reviewed multi-line Ecommerce request for Shop review.',
+      evidenceReference: `ECOMMERCE:${buyingRequest.id}:${buyingRequest.sourcePreviewDigest}`,
+    }
+    const managedBuyingState = await commerce.recordCommerceStorefrontRequest(managedPreviewState, buyingRequest, managedRequestProof)
+    buyingAssert(managedBuyingState
+      && commerce.commerceStorefrontRequests(managedBuyingState).length === 1
+      && commerce.commerceStorefrontRequestEquals(commerce.commerceStorefrontRequests(managedBuyingState)[0], buyingRequest)
+      && commerce.commerceStorefrontRequestLines(buyingRequest).length === 2,
+    'ecommerce_buying_multiline_request_not_retained_in_managed_shop')
+    buyingAssert(await commerce.recordCommerceStorefrontRequest(managedBuyingState, structuredClone(buyingRequest), managedRequestProof) === managedBuyingState,
+      'ecommerce_buying_managed_request_retry_not_idempotent')
+    buyingAssert(await commerce.recordCommerceStorefrontRequest(managedPreviewState, {
+      ...buyingRequest,
+      lines: buyingRequest.lines.map((line, index) => index ? { ...line, unitPriceMmk: line.unitPriceMmk + 1, lineTotalMmk: line.lineTotalMmk + line.quantity } : line),
+    }, managedRequestProof) === null,
+    'ecommerce_buying_repriced_managed_request_accepted')
+    const managedBuyingDraft = await buyingModel.prepareManagedEcommerceShopDraftV2({
+      request: buyingRequest,
+      currentCatalog: catalog,
+      confirmedAt: '2026-07-24T09:10:00.000Z',
+    })
+    buyingAssert(managedBuyingDraft.lines.length === 2 && buyingModel.ecommerceShopDraftV2MatchesCatalog(managedBuyingDraft, catalog),
+      'ecommerce_buying_managed_inbox_draft_not_catalog_bound')
     const emptyBuying = buyingModel.createEmptyEcommerceBuyingState(buyingScope)
     const recordedBuying = await buyingModel.recordEcommerceOrderRequestV2(emptyBuying, buyingRequest, emptyBuying.headDigest)
     const replayedBuying = await buyingModel.recordEcommerceOrderRequestV2(recordedBuying, structuredClone(buyingRequest), recordedBuying.headDigest)

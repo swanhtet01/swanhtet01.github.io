@@ -24,7 +24,9 @@ type EcommerceBuyingWorkspaceProps = {
   disabled: boolean
   onCartChange: (cart: EcommerceCartLine[]) => void
   onDraft: (draft: EcommerceShopDraftV2) => void
+  onOpenManagedRequest?: (requestId: string) => void
   onOpenReturns: () => void
+  onRecordManagedRequest?: (request: EcommerceBuyingState['requests'][number]) => Promise<void>
   preview: StorefrontPreview
   scope: string
   sourcePreviewDigest: string
@@ -55,7 +57,9 @@ export function EcommerceBuyingWorkspace({
   disabled,
   onCartChange,
   onDraft,
+  onOpenManagedRequest,
   onOpenReturns,
+  onRecordManagedRequest,
   preview,
   scope,
   sourcePreviewDigest,
@@ -195,6 +199,31 @@ export function EcommerceBuyingWorkspace({
     try {
       const quotedAt = new Date()
       const pim = await buildEcommercePimProjection(scope, sourcePreviewDigest, preview)
+      const retained = activeBuyingState.requests[0]
+      const retainedMatches = Boolean(onRecordManagedRequest
+        && retained
+        && retained.scope === scope
+        && retained.sourcePreviewDigest === sourcePreviewDigest
+        && retained.sourceStorefrontRevision === (sourceStorefront?.revision ?? null)
+        && retained.sourceStorefrontActionId === (sourceStorefront?.actionId ?? null)
+        && retained.customerReference === customerReference.trim()
+        && retained.fulfilment === fulfilment
+        && retained.quote.payment.adapter === paymentAdapter
+        && (retained.quote.promotion.code ?? '') === promotionCode.trim()
+        && retained.quote.pimDigest === pim.pimDigest
+        && Date.parse(retained.quote.expiresAt) > quotedAt.getTime()
+        && cartMatchesRequest(cart, retained))
+      if (retainedMatches && retained && onRecordManagedRequest) {
+        await onRecordManagedRequest(retained)
+        setHandoffConfirmed(false)
+        setFreshQuoteId(retained.id)
+        setNotice(`${retained.id} is confirmed in the managed Shop inbox. No order, stock, message, or charge changed.`)
+        requestAnimationFrame(() => {
+          confirmationRef.current?.scrollIntoView({ block: 'center' })
+          confirmationRef.current?.focus({ preventScroll: true })
+        })
+        return
+      }
       const quote = await buildEcommerceCheckoutQuote({
         pim,
         cart,
@@ -211,8 +240,12 @@ export function EcommerceBuyingWorkspace({
       setBuyingState(saved)
       setRecoveryRead({ scope, status: 'ready', issue: '' })
       setHandoffConfirmed(false)
+      setFreshQuoteId('')
+      if (onRecordManagedRequest) await onRecordManagedRequest(request)
       setFreshQuoteId(request.id)
-      setNotice(`${request.id} saved on this device for 15 minutes. No order, stock, message, or charge changed.`)
+      setNotice(onRecordManagedRequest
+        ? `${request.id} saved to the managed Shop inbox and local recovery. No order, stock, message, or charge changed.`
+        : `${request.id} saved on this device for 15 minutes. No order, stock, message, or charge changed.`)
       requestAnimationFrame(() => {
         confirmationRef.current?.scrollIntoView({ block: 'center' })
         confirmationRef.current?.focus({ preventScroll: true })
@@ -239,8 +272,13 @@ export function EcommerceBuyingWorkspace({
         currentCatalog,
         confirmedAt: new Date().toISOString(),
       })
-      setNotice(`${draft.id} is ready for accountable Shop review. Payment remains unauthorized.`)
-      onDraft(draft)
+      if (onOpenManagedRequest) {
+        setNotice(`${latestRequest.id} is ready in the managed Shop inbox. Payment remains unauthorized.`)
+        onOpenManagedRequest(latestRequest.id)
+      } else {
+        setNotice(`${draft.id} is ready for accountable Shop review. Payment remains unauthorized.`)
+        onDraft(draft)
+      }
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Shop handoff failed closed.')
     } finally {
