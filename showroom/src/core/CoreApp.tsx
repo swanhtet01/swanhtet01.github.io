@@ -1550,43 +1550,51 @@ export function Empty({ children }: { children: ReactNode }) {
   return <div className="empty-state"><span>&gt;_</span><p>{children}</p></div>
 }
 
-const customerProducts = [
+const customerTracks = [
   {
-    number: '01',
-    name: 'Shop',
-    copy: 'Tap products, take payment, and keep stock and orders in sync.',
-    path: '/shop/',
+    name: 'Retail',
+    fit: 'Shops, showrooms, and social sellers.',
+    outcome: 'Sell, reserve stock, and review online requests.',
+    path: '/shop/?tab=counter',
   },
   {
-    number: '02',
-    name: 'Plant',
-    copy: 'Run production jobs, output, quality, maintenance, and shift handoff.',
-    path: '/plant/',
+    name: 'Factory MES',
+    fit: 'Plants, workshops, and service floors.',
+    outcome: 'Plan jobs, record output, and prepare shift handoffs.',
+    path: '/plant/?tab=production',
   },
   {
-    number: '03',
-    name: 'Website',
-    copy: 'Build, review, and export a mobile-ready company website.',
+    name: 'Website catalog',
+    fit: 'Businesses that need a site and catalog first.',
+    outcome: 'Create the site, package the catalog, and review requests.',
     path: '/website/',
-  },
-  {
-    number: '04',
-    name: 'Ecommerce',
-    copy: 'Build a Shop-connected storefront and review incoming order requests.',
-    path: '/ecommerce/',
   },
 ] as const
 
 export function ProductHomePage() {
   return (
     <div className="workspace-screen product-home-screen">
-      <PageHeading copy="Each product opens directly to a working sample. No setup is required to understand the main job." eyebrow="SuperMega products" title="Choose what you want to run." />
-      <nav aria-label="SuperMega products" className="product-home-grid">
-        {customerProducts.map((product) => (
-          <Link className="product-home-card" key={product.name} to={product.path}>
-            <span className="product-home-number">{product.number}</span>
-            <div><h2>{product.name}</h2><p>{product.copy}</p></div>
-            <strong>Open product<span aria-hidden="true"> →</span></strong>
+      <PageHeading copy="Start from the business type. SuperMega opens the right app and keeps owner approval before sends, payments, changes, or publishing." eyebrow="SuperMega products" title="Pick a track. Run work." />
+      <section className="product-home-operating-model" aria-label="SuperMega operating model">
+        <div>
+          <span className="core-eyebrow">Handled by SuperMega</span>
+          <strong>Import, structure, queue, reconcile, and prepare.</strong>
+        </div>
+        <div>
+          <span className="core-eyebrow">Approved by owner</span>
+          <strong>Orders, production, payment movement, messages, and publishing.</strong>
+        </div>
+        <Link className="core-button primary" to="/settings/">Set up pilot</Link>
+      </section>
+      <nav aria-label="Business tracks" className="product-track-grid">
+        {customerTracks.map((track) => (
+          <Link className="product-track-card" key={track.name} to={track.path}>
+            <div>
+              <span className="core-eyebrow">{track.fit}</span>
+              <h2>{track.name}</h2>
+              <p>{track.outcome}</p>
+            </div>
+            <strong>Open track</strong>
           </Link>
         ))}
       </nav>

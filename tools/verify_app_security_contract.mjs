@@ -499,11 +499,11 @@ requireContract('managed storage privacy proof is bounded, read-only, owner-conf
   && /service_role_key_forbidden/.test(storagePrivacyVerifier)
   && /persistent_mutations_performed": 0/.test(storagePrivacyVerifier)
   && /secrets_exposed": False/.test(storagePrivacyVerifier)
-  && workflow.includes('python tools/verify_private_storage_privacy.py --self-test')
+  && workflow.includes('npm run storage:privacy:self-test')
   && workflow.includes('node tools/verify_app_security_contract.mjs')
   && workflow.includes("- 'tools/verify_private_storage_privacy.py'")
   && workflow.includes("- 'tools/verify_app_security_contract.mjs'")
-  && rootPackage.scripts?.['storage:privacy:self-test'] === 'python tools/verify_private_storage_privacy.py --self-test')
+  && rootPackage.scripts?.['storage:privacy:self-test'] === 'node tools/run_python_tool.mjs tools/verify_private_storage_privacy.py --self-test')
 
 if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_security', failures }, null, 2))

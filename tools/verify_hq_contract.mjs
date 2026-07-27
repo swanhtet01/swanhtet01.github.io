@@ -275,7 +275,7 @@ requireContract('private Storage audit handoff is offline-first and secret-free'
   && storageAuditHandoff.includes('--confirm-read-only-audit $env:SUPERMEGA_STORAGE_PRIVACY_OWNER_APPROVAL_ID')
   && storageAuditHandoff.includes('provider_credentials_verified` equal to `false`')
   && storageAuditHandoff.includes('Cleanup is destructive provider activity')
-  && packageText.includes('"storage:privacy:preflight": "python tools/verify_private_storage_privacy.py --preflight"')
+  && packageText.includes('"storage:privacy:preflight": "node tools/run_python_tool.mjs tools/verify_private_storage_privacy.py --preflight"')
   && storageAuditHandoff.length < 7000
   && !/sb_secret_|eyJ[A-Za-z0-9_-]{12,}|fixture-signed-token/.test(storageAuditHandoff))
 requireContract('product QA brief matches current portfolio',

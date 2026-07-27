@@ -76,8 +76,8 @@ jobs:
 
       - name: Verify delegated release and RLS guards
         run: |
-          python tools/validate_supermega_database_url.py --self-test
-          python tools/verify_private_storage_privacy.py --self-test
+          npm run database:validator:self-test
+          npm run storage:privacy:self-test
           node tools/verify_app_security_contract.mjs
           node tools/verify_private_trial_migrations.mjs
           node tools/verify_coordinated_release_live.mjs --self-test

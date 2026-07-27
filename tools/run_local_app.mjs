@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -41,12 +41,30 @@ function parsePort(value, label) {
 
 function resolvePython() {
   const override = process.env.SUPERMEGA_LOCAL_PYTHON?.trim()
-  if (override) return override
+  if (override) return { command: override, argsPrefix: [] }
   const candidates = process.platform === 'win32'
-    ? [resolve(root, '.venv', 'Scripts', 'python.exe')]
-    : [resolve(root, '.venv', 'bin', 'python'), resolve(root, '.venv', 'bin', 'python3')]
-  return candidates.find((candidate) => existsSync(candidate))
-    ?? (process.platform === 'win32' ? 'python' : 'python3')
+    ? [
+        { command: resolve(root, '.venv', 'Scripts', 'python.exe'), argsPrefix: [], requiresPath: true },
+        { command: 'py', argsPrefix: ['-3'], requiresPath: false },
+        { command: 'python', argsPrefix: [], requiresPath: false },
+      ]
+    : [
+        { command: resolve(root, '.venv', 'bin', 'python'), argsPrefix: [], requiresPath: true },
+        { command: resolve(root, '.venv', 'bin', 'python3'), argsPrefix: [], requiresPath: true },
+        { command: 'python3', argsPrefix: [], requiresPath: false },
+        { command: 'python', argsPrefix: [], requiresPath: false },
+      ]
+  const candidate = candidates.find((entry) => {
+    if (entry.requiresPath && !existsSync(entry.command)) return false
+    const result = spawnSync(entry.command, [...entry.argsPrefix, '--version'], {
+      cwd: root,
+      stdio: 'ignore',
+      windowsHide: true,
+    })
+    return result.status === 0
+  })
+  if (!candidate) throw new Error('Python 3 is required for the local SuperMega API verifier.')
+  return { command: candidate.command, argsPrefix: candidate.argsPrefix }
 }
 
 function isolatedEnvironment(uiUrl) {
@@ -194,8 +212,9 @@ async function run() {
   try {
     apiState = launch(
       'Canonical API',
-      python,
+      python.command,
       [
+        ...python.argsPrefix,
         '-m',
         'uvicorn',
         'supermega_runtime.runtime:app',
