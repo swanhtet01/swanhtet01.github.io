@@ -621,6 +621,9 @@ textarea { min-height: 72px; resize: vertical; }
 .readiness-list span:nth-last-child(-n+2) { border-bottom: 0; }
 .readiness-list small { color: var(--core-quiet); font-size: 7px; text-transform: uppercase; }
 .readiness-list strong { font-size: 11px; }
+.plant-mes-strip { grid-template-columns: repeat(6,minmax(0,1fr)); }
+.plant-mes-strip span:nth-child(n) { border-right: 1px solid var(--core-line); border-bottom: 0; }
+.plant-mes-strip span:last-child { border-right: 0; }
 .requirement-list { display: grid; gap: 5px; margin: 10px 0 0; padding-left: 17px; color: var(--core-muted); font-size: 8px; }
 .trial-control-panel { min-height: 70px; display: flex; align-items: center; justify-content: space-between; gap: 18px; }
 .trial-control-panel h2 { margin: 3px 0; font-size: 14px; }
@@ -1233,6 +1236,9 @@ textarea { min-height: 72px; resize: vertical; }
   .production-mode-banner { grid-template-columns: auto minmax(0,1fr); }
   .production-mode-banner p { white-space: normal; }
   .production-mode-banner > a { grid-column: 1 / -1; justify-content: center; border-top: 1px solid var(--core-line); }
+  .plant-mes-strip { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .plant-mes-strip span:nth-child(2n) { border-right: 0; }
+  .plant-mes-strip span:nth-child(-n+4) { border-bottom: 1px solid var(--core-line); }
   .production-history > .job-list, .production-history > .issue-list { max-height: 320px; }
   .trial-control-panel { display: grid; }
   .trial-actions { justify-content: flex-start; }

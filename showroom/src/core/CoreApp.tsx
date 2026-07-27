@@ -4843,6 +4843,14 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ? maintenanceMachineId
     : availableMaintenanceMachines[0]?.id ?? ''
   const selectedMaintenanceMachine = availableMaintenanceMachines.find((machine) => machine.id === selectedMaintenanceMachineId)
+  const plantRows = [
+    ['Jobs', `${activeJobs.length} active`],
+    ['Output', `${production.jobs.reduce((total, job) => total + job.output, 0).toLocaleString()} good`],
+    ['Quality', `${heldJobs.length} held`],
+    ['WCM', `${openDowntimeIntervals.length + openMaintenanceRecords.length} open`],
+    ['Trace', `${materialEntries.length} material`],
+    ['Handoff', shiftHandoffIsCurrent ? 'Ready' : 'Build'],
+  ] as const
 
   useEffect(() => {
     const timer = window.setInterval(() => setIssueClock(Date.now()), 60_000)
@@ -5475,9 +5483,11 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     <AccountableActionGate authenticatedActor={managedIdentity ? { id: managedIdentity.userId, label: managedIdentity.email } : undefined} key={pendingAction?.id ?? 'production-idle'} action={pendingAction} onCancel={() => { setPendingAction(null); setNotice('Change cancelled. Plant data was not modified.') }} onConfirm={confirmAction} returnFocus={actionTrigger} />
     <ProductionEventHistory events={production.events} />
   </>
+  const plantStatus = <div aria-label="Plant MES status" className="readiness-list plant-mes-strip">{plantRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
 
   if (tab === 'production') return <div className="operation-module">
     {productionBoundary}
+    {plantStatus}
     <div className="split-workspace production-view">
       <section className="core-panel job-panel">
         <div className="panel-head"><div><span className="core-eyebrow">Plant plan</span><h2>Jobs to finish</h2></div><span className="panel-note">{activeJobs.length} active · {completedJobs.length} finished</span></div>
@@ -5560,6 +5570,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
 
   if (tab === 'control') return <div className="operation-module">
     {productionBoundary}
+    {plantStatus}
     <div className="control-workspace">
       <div className="split-workspace">
         <section className="core-panel production-issue-launcher">
