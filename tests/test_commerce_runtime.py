@@ -770,7 +770,66 @@ def apply_event(
     next_state: dict[str, object],
     evidence: dict[str, str] | None = None,
 ) -> dict[str, object]:
-    return dict(reduce_trial_state("commerce", event_type, current, {"state": next_state, "evidence": evidence or evidence_for(event_type, next_state)}))
+    prepared_state = next_state
+    if event_type in {
+        "commerce.order.created",
+        "commerce.website_intake.converted",
+    }:
+        current_orders = current.get("orders", [])
+        next_orders = next_state.get("orders", [])
+        if (
+            isinstance(current_orders, list)
+            and isinstance(next_orders, list)
+            and len(next_orders) == len(current_orders) + 1
+            and isinstance(next_orders[0], dict)
+            and "calculation" not in next_orders[0]
+        ):
+            order = next_orders[0]
+            lines = order.get("lines")
+            subtotal_mmk: int | None = None
+            if isinstance(lines, list) and lines:
+                try:
+                    subtotal_mmk = sum(
+                        int(line["quantity"]) * int(line["unitPriceMmk"])
+                        for line in lines
+                    )
+                except (KeyError, TypeError, ValueError):
+                    subtotal_mmk = None
+            elif isinstance(order.get("itemSku"), str) and isinstance(
+                order.get("quantity"),
+                int,
+            ):
+                matches = [
+                    item
+                    for item in current.get("items", [])  # type: ignore[union-attr]
+                    if isinstance(item, dict)
+                    and item.get("sku") == order["itemSku"]
+                ]
+                if len(matches) == 1 and isinstance(matches[0].get("price"), int):
+                    subtotal_mmk = int(order["quantity"]) * int(matches[0]["price"])
+            if subtotal_mmk is not None:
+                prepared_state = deepcopy(next_state)
+                prepared_order = prepared_state["orders"][0]  # type: ignore[index]
+                prepared_order["calculation"] = {
+                    "schema": "supermega.commerce.order-calculation.v1",
+                    "currency": "MMK",
+                    "catalogRevision": len(current.get("catalogChanges", [])),  # type: ignore[arg-type]
+                    "subtotalMmk": subtotal_mmk,
+                    "taxMode": "not_configured",
+                    "taxMmk": 0,
+                    "totalMmk": subtotal_mmk,
+                }
+    return dict(
+        reduce_trial_state(
+            "commerce",
+            event_type,
+            current,
+            {
+                "state": prepared_state,
+                "evidence": evidence or evidence_for(event_type, prepared_state),
+            },
+        )
+    )
 
 
 class CommerceRuntimeTests(unittest.TestCase):
@@ -2820,6 +2879,157 @@ class CommerceRuntimeTests(unittest.TestCase):
         other_after = store.get_state(other, "commerce")
         self.assertEqual(other_after.version, other_initialized.version)
         self.assertEqual(other_after.state, other_initialized.state)
+
+    def test_store_replaces_forged_order_calculation_and_binds_catalog_revision(self) -> None:
+        store = InMemoryTrialStore(reducer=reduce_trial_state)
+        operator = TrialPrincipal("workspace-pricing", "shop-pricing-owner", "human")
+        store.provision_membership(
+            workspace_id=operator.workspace_id,
+            actor_id=operator.actor_id,
+            actor_kind=operator.actor_kind,
+            capabilities=("commerce.write",),
+        )
+        initialized = store.apply_command(
+            operator,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.workspace.initialized",
+            expected_version=0,
+            payload={
+                "state": catalog_state(),
+                "evidence": action_evidence("ACT-PRICING-INITIALIZE"),
+            },
+        )
+        repriced_state = catalog_update_state(
+            initialized.state,
+            next_price=125,
+            action_id="ACT-PRICING-CATALOG",
+            actor="Fabricated catalog client",
+        )
+        with patch("supermega_runtime.trial_store._utc_now", return_value=NOW):
+            repriced = store.apply_command(
+                operator,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.item.updated",
+                expected_version=initialized.version,
+                payload={
+                    "state": repriced_state,
+                    "evidence": dict(repriced_state["catalogChanges"][0]["proof"]),  # type: ignore[index,arg-type]
+                },
+            )
+
+        action_id = "ACT-PRICING-ORDER"
+        candidate = deepcopy(repriced.state)
+        candidate["items"][0]["onHand"] = 8  # type: ignore[index]
+        forged_order = order_record("ORD-PRICING")
+        forged_order.update(
+            {
+                "createdAt": "2099-01-01T00:00:00.000Z",
+                "owner": "Fabricated pricing bot",
+                "total": 999,
+                "calculation": {
+                    "schema": "supermega.commerce.order-calculation.v1",
+                    "currency": "MMK",
+                    "catalogRevision": 999,
+                    "subtotalMmk": 999,
+                    "taxMode": "not_configured",
+                    "taxMmk": 99,
+                    "totalMmk": 1098,
+                },
+            }
+        )
+        candidate["orders"] = [forged_order]
+        candidate["movements"] = [
+            {
+                **movement("reserve", action_id, -2, order_id="ORD-PRICING"),
+                "actor": "Fabricated pricing bot",
+                "createdAt": "2099-01-01T00:00:00.000Z",
+            }
+        ]
+        payload = {
+            "state": candidate,
+            "evidence": action_evidence(
+                action_id,
+                captured_at="2099-01-01T00:00:00.000Z",
+                actor="Fabricated pricing bot",
+            ),
+        }
+        command_id = str(uuid4())
+        with patch("supermega_runtime.trial_store._utc_now", return_value=NOW):
+            accepted = store.apply_command(
+                operator,
+                command_id=command_id,
+                surface="commerce",
+                event_type="commerce.order.created",
+                expected_version=repriced.version,
+                payload=payload,
+            )
+            replay = store.apply_command(
+                operator,
+                command_id=command_id,
+                surface="commerce",
+                event_type="commerce.order.created",
+                expected_version=repriced.version,
+                payload=payload,
+            )
+
+        order = accepted.state["orders"][0]  # type: ignore[index]
+        self.assertEqual(order["owner"], operator.actor_id)
+        self.assertEqual(order["total"], 250)
+        self.assertEqual(
+            order["calculation"],
+            {
+                "schema": "supermega.commerce.order-calculation.v1",
+                "currency": "MMK",
+                "catalogRevision": 1,
+                "subtotalMmk": 250,
+                "taxMode": "not_configured",
+                "taxMmk": 0,
+                "totalMmk": 250,
+            },
+        )
+        self.assertTrue(replay.idempotent_replay)
+        self.assertEqual(replay.state, accepted.state)
+
+        conflicting = deepcopy(payload)
+        conflicting["state"]["orders"][0]["calculation"]["subtotalMmk"] = 998  # type: ignore[index]
+        with self.assertRaises(TrialIdempotencyConflict):
+            store.apply_command(
+                operator,
+                command_id=command_id,
+                surface="commerce",
+                event_type="commerce.order.created",
+                expected_version=repriced.version,
+                payload=conflicting,
+            )
+
+        missing = deepcopy(repriced.state)
+        missing["items"][0]["onHand"] = 8  # type: ignore[index]
+        missing_order = order_record("ORD-MISSING-CALCULATION")
+        missing_order["total"] = 250
+        missing["orders"] = [missing_order]
+        missing["movements"] = [
+            movement(
+                "reserve",
+                "ACT-MISSING-CALCULATION",
+                -2,
+                order_id="ORD-MISSING-CALCULATION",
+            )
+        ]
+        with self.assertRaisesRegex(
+            TrialValidationError,
+            "current deterministic pricing calculation",
+        ):
+            reduce_trial_state(
+                "commerce",
+                "commerce.order.created",
+                repriced.state,
+                {
+                    "state": missing,
+                    "evidence": action_evidence("ACT-MISSING-CALCULATION"),
+                },
+            )
 
     def test_purchase_order_lifecycle_supports_partial_receipt_and_cancellation(self) -> None:
         current = catalog_state()

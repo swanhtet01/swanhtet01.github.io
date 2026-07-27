@@ -18,6 +18,8 @@ TRIAL_SCHEMA_VERSION = 5
 TRIAL_SURFACES = frozenset({"company", "commerce", "production", "website", "setup"})
 TRUSTED_ACTOR_KINDS = frozenset({"human", "service", "agent"})
 HUMAN_ACTOR_KIND = "human"
+_MAX_SAFE_INTEGER = 9_007_199_254_740_991
+_ORDER_CALCULATION_SCHEMA = "supermega.commerce.order-calculation.v1"
 HUMAN_COMMAND_EVENTS = frozenset(
     {
         "commerce.workspace.initialized",
@@ -444,6 +446,75 @@ def _myanmar_business_date(timestamp: str) -> str:
     ).date().isoformat()
 
 
+def _authoritative_order_calculation(
+    state: Mapping[str, Any],
+    order: Mapping[str, Any],
+) -> JsonObject | None:
+    catalog_changes = state.get("catalogChanges", [])
+    if not isinstance(catalog_changes, list):
+        return None
+    lines = order.get("lines")
+    subtotal_mmk = 0
+    if lines is not None:
+        if not isinstance(lines, list) or not 1 <= len(lines) <= 20:
+            return None
+        for line in lines:
+            if not isinstance(line, Mapping):
+                return None
+            quantity = line.get("quantity")
+            unit_price = line.get("unitPriceMmk")
+            if (
+                not isinstance(quantity, int)
+                or isinstance(quantity, bool)
+                or not isinstance(unit_price, int)
+                or isinstance(unit_price, bool)
+                or quantity < 1
+                or unit_price < 1
+            ):
+                return None
+            subtotal_mmk += quantity * unit_price
+            if subtotal_mmk > _MAX_SAFE_INTEGER:
+                return None
+    else:
+        item_sku = order.get("itemSku")
+        quantity = order.get("quantity")
+        items = state.get("items")
+        if (
+            not isinstance(item_sku, str)
+            or not isinstance(quantity, int)
+            or isinstance(quantity, bool)
+            or quantity < 1
+            or not isinstance(items, list)
+        ):
+            return None
+        matching_items = [
+            item
+            for item in items
+            if isinstance(item, Mapping) and item.get("sku") == item_sku
+        ]
+        if len(matching_items) != 1:
+            return None
+        unit_price = matching_items[0].get("price")
+        if (
+            not isinstance(unit_price, int)
+            or isinstance(unit_price, bool)
+            or unit_price < 1
+        ):
+            return None
+        subtotal_mmk = quantity * unit_price
+        if subtotal_mmk > _MAX_SAFE_INTEGER:
+            return None
+    return {
+        "schema": _ORDER_CALCULATION_SCHEMA,
+        "currency": "MMK",
+        "catalogRevision": len(catalog_changes),
+        "subtotalMmk": subtotal_mmk,
+        "taxMode": "not_configured",
+        "taxMmk": 0,
+        "totalMmk": subtotal_mmk,
+    }
+
+
 def _authoritative_command_payload(
     payload: Mapping[str, Any],
     *,
@@ -684,6 +755,10 @@ def _authoritative_command_payload(
                 authoritative_order = dict(order)
                 authoritative_order["createdAt"] = captured_at
                 authoritative_order["owner"] = principal.actor_id
+                calculation = _authoritative_order_calculation(state, order)
+                if calculation is not None:
+                    authoritative_order["calculation"] = calculation
+                    authoritative_order["total"] = calculation["totalMmk"]
                 authoritative_orders[order_index] = authoritative_order
         authoritative_movements = deepcopy(movements)
         for movement_index, movement in enumerate(authoritative_movements):
@@ -736,6 +811,10 @@ def _authoritative_command_payload(
                 authoritative_order = dict(order)
                 authoritative_order["createdAt"] = captured_at
                 authoritative_order["owner"] = principal.actor_id
+                calculation = _authoritative_order_calculation(state, order)
+                if calculation is not None:
+                    authoritative_order["calculation"] = calculation
+                    authoritative_order["total"] = calculation["totalMmk"]
                 authoritative_orders[order_index] = authoritative_order
         authoritative_movements = deepcopy(movements)
         for movement_index, movement in enumerate(authoritative_movements):

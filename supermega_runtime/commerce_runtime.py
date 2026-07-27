@@ -154,10 +154,23 @@ _ORDER_OPTIONAL_FIELDS = frozenset(
         "advancementActionIds",
         "completion",
         "returns",
+        "calculation",
     }
 )
 _ORDER_LINE_REQUIRED_FIELDS = frozenset({"sku", "name", "quantity", "unitPriceMmk"})
 _ORDER_LINE_OPTIONAL_FIELDS = frozenset({"variant"})
+_ORDER_CALCULATION_SCHEMA = "supermega.commerce.order-calculation.v1"
+_ORDER_CALCULATION_FIELDS = frozenset(
+    {
+        "schema",
+        "currency",
+        "catalogRevision",
+        "subtotalMmk",
+        "taxMode",
+        "taxMmk",
+        "totalMmk",
+    }
+)
 _ORDER_RETURN_FIELDS = frozenset(
     {
         "actionId",
@@ -870,6 +883,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 raise TrialValidationError(f"orders[{index}].itemSku is unknown.")
         _integer(order["quantity"], f"orders[{index}].quantity", minimum=1)
         _integer(order["total"], f"orders[{index}].total")
+        captured_total: int | None = None
         if "lines" in order:
             lines = _list(order["lines"], f"orders[{index}].lines")
             if not 1 <= len(lines) <= _MAX_ORDER_LINES:
@@ -928,6 +942,51 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             ):
                 raise TrialValidationError(
                     f"orders[{index}] does not match its immutable line snapshots."
+                )
+        calculation_candidate = order.get("calculation")
+        if calculation_candidate is not None:
+            calculation = _object(
+                calculation_candidate,
+                f"orders[{index}].calculation",
+            )
+            _exact_fields(
+                calculation,
+                f"orders[{index}].calculation",
+                required=_ORDER_CALCULATION_FIELDS,
+            )
+            catalog_revision = _integer(
+                calculation["catalogRevision"],
+                f"orders[{index}].calculation.catalogRevision",
+            )
+            subtotal_mmk = _integer(
+                calculation["subtotalMmk"],
+                f"orders[{index}].calculation.subtotalMmk",
+                minimum=1,
+            )
+            tax_mmk = _integer(
+                calculation["taxMmk"],
+                f"orders[{index}].calculation.taxMmk",
+            )
+            total_mmk = _integer(
+                calculation["totalMmk"],
+                f"orders[{index}].calculation.totalMmk",
+                minimum=1,
+            )
+            if (
+                calculation["schema"] != _ORDER_CALCULATION_SCHEMA
+                or calculation["currency"] != "MMK"
+                or catalog_revision > len(catalog_changes)
+                or calculation["taxMode"] != "not_configured"
+                or tax_mmk != 0
+                or total_mmk != subtotal_mmk
+                or order["total"] != total_mmk
+                or (
+                    captured_total is not None
+                    and subtotal_mmk != captured_total
+                )
+            ):
+                raise TrialValidationError(
+                    f"orders[{index}].calculation must be a deterministic MMK subtotal with tax explicitly not configured."
                 )
         if order["status"] not in _ORDER_STATUSES:
             raise TrialValidationError(f"orders[{index}].status is invalid.")
@@ -2451,6 +2510,14 @@ def _validate_new_order_and_reservation(
         raise TrialValidationError(f"{event_type} must prepend exactly one order.")
     _require_unchanged(current, next_state, "closes")
     order = next_state["orders"][0]
+    calculation = order.get("calculation")
+    if (
+        not isinstance(calculation, Mapping)
+        or calculation.get("catalogRevision") != len(_catalog_changes(current))
+    ):
+        raise TrialValidationError(
+            "a new order requires the current deterministic pricing calculation."
+        )
     if order.get("status") != "confirmed" or order.get("paymentStatus") != "pending" or order.get("refundStatus") != "none":
         raise TrialValidationError("a new order must start confirmed with pending payment and no refund exception.")
     if order.get("fulfilment") not in {"pickup", "delivery"}:

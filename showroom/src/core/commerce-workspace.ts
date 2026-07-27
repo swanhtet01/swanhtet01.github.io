@@ -1,5 +1,6 @@
 export const COMMERCE_WORKSPACE_SCHEMA = 'supermega.commerce.workspace.v2' as const
 export const COMMERCE_STOREFRONT_SCHEMA = 'supermega.ecommerce.storefront.v1' as const
+export const COMMERCE_ORDER_CALCULATION_SCHEMA = 'supermega.commerce.order-calculation.v1' as const
 const COMMERCE_STOREFRONT_PREVIEW_SCHEMA = 'supermega.ecommerce.storefront_preview.v1' as const
 export const COMMERCE_KEY = 'supermega.commerce.workspace.v2'
 export const LEGACY_COMMERCE_KEYS = ['supermega.commerce.workspace.v1', 'supermega.shop.workspace.v2']
@@ -25,6 +26,16 @@ export type CommerceOrderLine = {
   variant?: string
   quantity: number
   unitPriceMmk: number
+}
+
+export type CommerceOrderCalculation = {
+  schema: typeof COMMERCE_ORDER_CALCULATION_SCHEMA
+  currency: 'MMK'
+  catalogRevision: number
+  subtotalMmk: number
+  taxMode: 'not_configured'
+  taxMmk: 0
+  totalMmk: number
 }
 
 export type CommerceOrderReturn = {
@@ -69,6 +80,7 @@ export type CommerceOrder = {
   advancementActionIds?: string[]
   completion?: CommerceActionProof
   returns?: CommerceOrderReturn[]
+  calculation?: CommerceOrderCalculation
   total: number
   status: CommerceOrderStatus
 }
@@ -973,6 +985,7 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (candidate.itemSku !== undefined && !itemSkus.includes(requiredText(candidate.itemSku, `orders[${index}].itemSku`))) throw new Error(`orders[${index}].itemSku is unknown.`)
     assertSafeInteger(candidate.quantity, `orders[${index}].quantity`, 1)
     assertSafeInteger(candidate.total, `orders[${index}].total`)
+    let capturedLineSubtotal: number | null = null
     if (candidate.lines !== undefined) {
       if (!Array.isArray(candidate.lines) || candidate.lines.length < 1 || candidate.lines.length > maxOrderLines) throw new Error(`orders[${index}].lines must contain 1 to ${maxOrderLines} entries.`)
       const lineSkus: string[] = []
@@ -995,12 +1008,39 @@ export function validateCommerceState(value: unknown): CommerceState {
         lineSkus.push(lineSku)
       }
       assertUnique(lineSkus, `orders[${index}] line SKU`)
+      capturedLineSubtotal = capturedTotal
       const capturedLines = candidate.lines as CommerceOrderLine[]
       const expectedItemSku = capturedLines.length === 1 ? capturedLines[0].sku : undefined
       if (candidate.item !== commerceOrderItemSummary(capturedLines)
         || candidate.itemSku !== expectedItemSku
         || candidate.quantity !== capturedQuantity
         || candidate.total !== capturedTotal) throw new Error(`orders[${index}] does not match its immutable line snapshots.`)
+    }
+    if (candidate.calculation !== undefined) {
+      if (!isRecord(candidate.calculation) || !hasExactKeys(candidate.calculation, [
+        'schema',
+        'currency',
+        'catalogRevision',
+        'subtotalMmk',
+        'taxMode',
+        'taxMmk',
+        'totalMmk',
+      ])) throw new Error(`orders[${index}].calculation is invalid.`)
+      const calculation = candidate.calculation
+      assertSafeInteger(calculation.catalogRevision, `orders[${index}].calculation.catalogRevision`)
+      assertSafeInteger(calculation.subtotalMmk, `orders[${index}].calculation.subtotalMmk`, 1)
+      assertSafeInteger(calculation.taxMmk, `orders[${index}].calculation.taxMmk`)
+      assertSafeInteger(calculation.totalMmk, `orders[${index}].calculation.totalMmk`, 1)
+      if (calculation.schema !== COMMERCE_ORDER_CALCULATION_SCHEMA
+        || calculation.currency !== 'MMK'
+        || Number(calculation.catalogRevision) > catalogChanges.length
+        || calculation.taxMode !== 'not_configured'
+        || calculation.taxMmk !== 0
+        || calculation.totalMmk !== calculation.subtotalMmk
+        || candidate.total !== calculation.totalMmk
+        || (capturedLineSubtotal !== null && calculation.subtotalMmk !== capturedLineSubtotal)) {
+        throw new Error(`orders[${index}].calculation must be a deterministic MMK subtotal with tax explicitly not configured.`)
+      }
     }
     if (!orderStatuses.includes(candidate.status as CommerceOrderStatus)) throw new Error(`orders[${index}].status is invalid.`)
     if (!paymentStatuses.includes(candidate.paymentStatus as CommercePaymentStatus)) throw new Error(`orders[${index}].paymentStatus is invalid.`)
@@ -1820,6 +1860,22 @@ export function commerceCatalogChanges(state: CommerceState) {
   return state.catalogChanges ?? []
 }
 
+export function commerceOrderCalculation(
+  state: CommerceState,
+  subtotalMmk: number,
+): CommerceOrderCalculation | null {
+  if (!Number.isSafeInteger(subtotalMmk) || subtotalMmk < 1) return null
+  return {
+    schema: COMMERCE_ORDER_CALCULATION_SCHEMA,
+    currency: 'MMK',
+    catalogRevision: commerceCatalogChanges(state).length,
+    subtotalMmk,
+    taxMode: 'not_configured',
+    taxMmk: 0,
+    totalMmk: subtotalMmk,
+  }
+}
+
 export function commerceStorefrontRequests(state: CommerceState) {
   return state.storefrontRequests ?? []
 }
@@ -2231,6 +2287,8 @@ export function convertCommerceWebsiteIntake(
     : input.paymentMethod === 'manual_qr'
       ? 'Manual QR review'
       : 'Manual bank transfer'
+  const calculation = commerceOrderCalculation(current, intake.total)
+  if (!calculation) return null
   const order: CommerceOrder = {
     id: orderId,
     createdAt: proof.capturedAt,
@@ -2248,6 +2306,7 @@ export function convertCommerceWebsiteIntake(
     promisedAt: input.promisedAt,
     sourceRecordId: intake.id,
     evidenceReference: proof.evidenceReference,
+    calculation,
     total: intake.total,
     status: 'confirmed',
   }
@@ -2426,13 +2485,17 @@ export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder,
   const proofMovements = state.movements.filter((movement) => movement.actionId === proof.actionId)
   if (proofMovements.length) {
     const storedOrder = state.orders.find((candidate) => candidate.id === order.id)
+    const storedBusinessOrder = storedOrder ? { ...storedOrder } : null
+    if (storedBusinessOrder) delete storedBusinessOrder.calculation
+    const requestedBusinessOrder = { ...order }
+    delete requestedBusinessOrder.calculation
     return proofMovements.length === lines.length
       && lines.every((line) => proofMovements.some((movement) => movement.kind === 'reserve'
         && movement.orderId === order.id
         && movement.sku === line.sku
         && movement.quantityDelta === -line.quantity
         && sameProof(movement, proof)))
-      && JSON.stringify(storedOrder) === JSON.stringify(order) ? state : null
+      && JSON.stringify(storedBusinessOrder) === JSON.stringify(requestedBusinessOrder) ? state : null
   }
   if (actionIdIsUsed(state, proof.actionId)) return null
   const duplicate = state.orders.some((candidate) => candidate.id === order.id || Boolean(order.sourceRecordId && candidate.sourceRecordId === order.sourceRecordId))
@@ -2450,6 +2513,13 @@ export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder,
     if (nextBalance === null) return null
     nextBalances.set(item.sku, nextBalance)
   }
+  const calculation = commerceOrderCalculation(state, order.total)
+  if (!calculation) return null
+  const authoritativeOrder: CommerceOrder = {
+    ...order,
+    calculation,
+    total: calculation.totalMmk,
+  }
   const movements = lines.map((line, index) => movementFor(
     proof,
     { kind: 'reserve', sku: line.sku, quantityDelta: -line.quantity, orderId: order.id },
@@ -2458,7 +2528,7 @@ export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder,
   return validateCommerceState({
     ...state,
     items: state.items.map((candidate) => nextBalances.has(candidate.sku) ? { ...candidate, onHand: nextBalances.get(candidate.sku) as number } : candidate),
-    orders: [order, ...state.orders],
+    orders: [authoritativeOrder, ...state.orders],
     movements: [...movements, ...state.movements],
   })
 }

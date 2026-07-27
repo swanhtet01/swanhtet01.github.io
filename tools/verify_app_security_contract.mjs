@@ -41,6 +41,10 @@ const managedPurchaseReceiptAuthority = trialStore.slice(
   trialStore.indexOf('if event_type == "commerce.purchase_order.received":'),
   trialStore.indexOf('if event_type == "commerce.purchase_order.cancelled":'),
 )
+const managedOrderCalculationAuthority = trialStore.slice(
+  trialStore.indexOf('def _authoritative_order_calculation('),
+  trialStore.indexOf('def _authoritative_command_payload('),
+)
 const managedPurchaseCancellationAuthority = trialStore.slice(
   trialStore.indexOf('if event_type == "commerce.purchase_order.cancelled":'),
   trialStore.indexOf('if event_type == "commerce.payment.reconciled":'),
@@ -349,6 +353,14 @@ requireContract('Shop order and payment attribution is server authoritative',
   && /commerce\.payment\.reconciled/.test(trialStore)
   && /authoritative_order\["paymentReconciledAt"\] = captured_at/.test(trialStore)
   && /authoritative_order\["paymentReconciledBy"\] = principal\.actor_id/.test(trialStore))
+requireContract('managed Shop order calculation is server-derived and tax-honest',
+  /catalog_changes = state\.get\("catalogChanges", \[\]\)/.test(managedOrderCalculationAuthority)
+  && /subtotal_mmk \+= quantity \* unit_price/.test(managedOrderCalculationAuthority)
+  && /"catalogRevision": len\(catalog_changes\)/.test(managedOrderCalculationAuthority)
+  && /"taxMode": "not_configured"/.test(managedOrderCalculationAuthority)
+  && /"taxMmk": 0/.test(managedOrderCalculationAuthority)
+  && /authoritative_order\["calculation"\] = calculation/.test(trialStore)
+  && /a new order requires the current deterministic pricing calculation/.test(commerceRuntime))
 requireContract('Shop catalog update attribution is server authoritative',
   /event_type == "commerce\.item\.updated"/.test(trialStore)
   && /authoritative_change\["proof"\] = deepcopy\(authoritative_evidence\)/.test(trialStore)
