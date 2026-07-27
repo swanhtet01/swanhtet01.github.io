@@ -1975,6 +1975,12 @@ if (coreSource.includes('>All apps</Link>')
 let workflowProfiles = 0
 const solutionProducts = manifest.customerProducts || []
 if (solutionProducts.map((product) => `${product.id}:${product.runtimeId}`).join(',') !== 'shop:commerce,plant:production,website:website,ecommerce:ecommerce') fail('canonical_four_product_order_missing')
+const websiteProductContract = solutionProducts.find((product) => product.id === 'website')
+if (websiteProductContract?.status !== 'available-in-app'
+  || websiteProductContract?.views?.join(',') !== 'Start,Edit,Preview,Download'
+  || websiteProductContract?.templates?.some((template) => template.workflow?.at(-1) !== 'Download website')
+  || manifestText.includes('Approve site file')
+  || manifestText.includes('content approval time')) fail('website_trial_catalog_not_aligned_with_download_outcome')
 for (const product of solutionProducts) {
   if (product.templates?.length !== 3) fail(`wrong_template_count:${product.id}`)
   for (const template of product.templates || []) {
