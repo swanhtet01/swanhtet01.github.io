@@ -38,7 +38,11 @@ if (manifest.customerProducts?.map((product) => product.appRoute).join(',') !== 
 const operatingProducts = manifest.customerProducts?.filter((product) => product.kind === 'operating-product') || []
 const makerProducts = manifest.customerProducts?.filter((product) => product.kind === 'maker-product') || []
 if (operatingProducts.map((product) => product.id).join(',') !== 'shop,plant') fail('operating_product_portfolio_drift')
-if (makerProducts.map((product) => `${product.id}:${product.status}`).join(',') !== 'website:release-candidate-local,ecommerce:release-candidate-local') fail('maker_product_portfolio_drift')
+if (makerProducts.map((product) => `${product.id}:${product.status}`).join(',') !== 'website:available-in-app,ecommerce:release-candidate-local') fail('maker_product_portfolio_drift')
+const website = manifest.customerProducts?.find((product) => product.id === 'website')
+if (website?.views?.join(',') !== 'Start,Edit,Preview,Download'
+  || website?.templates?.some((template) => template.workflow?.at(-1) !== 'Download website')
+  || website?.headline !== 'Turn a short business brief into a usable website.') fail('website_download_trial_contract_drift')
 const ecommerce = manifest.customerProducts?.find((product) => product.id === 'ecommerce')
 if (ecommerce?.views?.join(',') !== 'Storefront,Preview,Request receipt,Shop inbox,Shop review'
   || !ecommerce?.proof?.includes('Idempotent receipt and exact managed replay')
