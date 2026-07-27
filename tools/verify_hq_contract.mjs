@@ -46,6 +46,10 @@ const portfolio = JSON.parse(portfolioText)
 const workforce = JSON.parse(workforceText)
 const agentWorkspace = JSON.parse(agentWorkspaceText)
 const databaseRehearsal = JSON.parse(databaseRehearsalText)
+const executionOrderMarker = '## Execution order'
+const workboardExecutionOrder = workboard.includes(executionOrderMarker)
+  ? workboard.slice(workboard.indexOf(executionOrderMarker))
+  : ''
 const kernelRoster = listCompanyAgents()
 const kernelCrewCapabilities = kernelRoster.flatMap((agent) => [agent.crew, ...agent.capabilityCrews])
 const ceoOutcomeSelection = selectCeoOutcome()
@@ -370,6 +374,17 @@ requireContract('release history is retained and current live state is discovera
   && workboard.includes('strict fast-forward descendant of open draft PR #258 head `338b6fd`')
   && workboard.includes('release-reconciliation-2026-07-26.md')
   && now.includes('Both `supermega.dev` and `app.supermega.dev` serve exact commit `bb6411dc`'))
+requireContract('workboard release authority and active execution order are current',
+  workboard.includes('Integration branch: `main`')
+  && workboard.includes('Current accepted release checkpoint: `bb6411dc533e0ecd491d5000b5aa238adfbfe821`')
+  && workboardExecutionOrder.includes('paired live release `bb6411dc`')
+  && workboardExecutionOrder.includes('newly approved isolated Supabase target')
+  && workboardExecutionOrder.includes('Repeat the 12-profile rehearsal against the live isolated release')
+  && workboardExecutionOrder.includes('exact-commit protected preview')
+  && workboardExecutionOrder.includes('fresh live-HQ snapshot')
+  && workboardExecutionOrder.includes('Keep hosted scheduling and AI provider execution dormant')
+  && !workboardExecutionOrder.includes('PR #258')
+  && !workboardExecutionOrder.includes('fast-forward only the existing draft'))
 requireContract('release reconciliation binds exact Git and Vercel evidence',
   releaseReconciliation.includes('Audited implementation checkpoint: `b67db9422b523df0c1707f8dc39082ffa1c7a8dd`')
   && releaseReconciliation.includes('Live `main`: `6885c3201d523d42d176c3dcd91de28dc1e17f6f`')
