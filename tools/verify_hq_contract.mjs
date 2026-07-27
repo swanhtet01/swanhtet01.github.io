@@ -560,7 +560,10 @@ requireContract('live HQ state is machine-verifiable and read-only',
   && hqLiveStateVerifier.includes("requireCheck('registered_specialists_consume_compute'")
   && !/\b(?:writeFile|appendFile|unlink|rm|POST|PUT|PATCH|DELETE)\b/.test(hqLiveStateVerifier)
   && packageText.includes('"hq:verify:live"')
-  && packageText.includes('"hq:verify:live:self-test"'))
+  && packageText.includes('"hq:verify:live:self-test"')
+  && workboard.includes('| OPS-038 | CEO + Release Operations Codex | done-local |')
+  && workboard.includes('Checkpoint `bc19dac2` adds `supermega.hq-live-state.v1`')
+  && workboard.includes('A one-off non-terminating working-set trim released 2,084.8 MB'))
 
 for (const forbidden of ['Yangon Tyre', 'ytf.supermega.dev', 'pos.supermega.dev', 'twelve product']) {
   requireContract(`retired HQ context absent: ${forbidden}`,
