@@ -363,9 +363,9 @@ export function EcommerceBuyingWorkspace({
               <span>Promotion code <small>optional · Shop checks it</small></span>
               <input maxLength={40} onChange={(event) => { setPromotionCode(event.target.value); setHandoffConfirmed(false) }} placeholder="Optional" value={promotionCode} />
             </label>
-            <button className="core-button primary" disabled={disabled || quoteBusy || recoveryBlocked || !cart.length || quoteCurrent} type="submit">
-              {quoteBusy ? 'Checking…' : quoteCurrent ? 'Total reviewed' : 'Review order'}
-            </button>
+            {!quoteCurrent ? <button className="core-button primary" disabled={disabled || quoteBusy || recoveryBlocked || !cart.length} type="submit">
+              {quoteBusy ? 'Checking…' : 'Review order'}
+            </button> : null}
           </form>
 
           {latestRequest ? (
