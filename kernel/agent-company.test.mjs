@@ -342,6 +342,40 @@ test('runner preserves partial results and never feeds one specialist output to 
   assert.deepEqual(result.retry, { requiresNewCycleId: true })
 })
 
+test('company budget admission failures are blocked, durable, and replay without another crew run', async () => {
+  for (const reason of ['crew_company_budget_exhausted', 'crew_company_budget_unavailable']) {
+    const claims = durableClaimHarness()
+    const records = new Map()
+    let runs = 0
+    const input = cycle({
+      cycleId: `budget-block-${reason}`,
+      agents: ['operations-analyst'],
+      evidence: { 'operations-analyst': 'Approved daily operating evidence.' },
+      roleBudget: 3,
+    })
+    const options = {
+      ...claims,
+      getRunResult: async (key) => records.get(key) || null,
+      putRunResult: async (key, payload) => { records.set(key, structuredClone(payload)); return true },
+      runCrew: async () => { runs += 1; return { ok: false, reason, role: 'ranker', usageByRole: [], trace: [] } },
+    }
+    const result = await runCompanyCycle(input, options)
+    assert.equal(result.ok, false)
+    assert.equal(result.status, 'blocked')
+    assert.equal(result.results[0].status, 'blocked')
+    assert.equal(result.results[0].reason, reason)
+    assert.equal(result.budget.usedRoleCalls, 0)
+    assert.deepEqual(result.retry, { requiresNewCycleId: true })
+    assert.equal(result.durableResultStored, true)
+    assert.equal([...claims.claims.keys()].some((id) => id.startsWith('agent-company-capacity:')), false)
+
+    const replay = await runCompanyCycle(input, options)
+    assert.equal(replay.replayed, true)
+    assert.equal(replay.status, 'blocked')
+    assert.equal(runs, 1, 'the same blocked cycle never calls a crew twice')
+  }
+})
+
 test('runner fails closed without durable idempotency and releases only the unused claim', async () => {
   let released = ''
   let runs = 0

@@ -641,6 +641,45 @@ test('capacity pressure returns a work order to planned for a safe retry', async
   )
 })
 
+test('daily budget pressure records one blocked work order and requires a new cycle', async () => {
+  const state = harness()
+  const created = await createCompanyWorkOrder(work({ cycleId: 'daily-budget-blocked' }), state.options)
+  let runs = 0
+  const args = {
+    clientId: created.workOrder.clientId,
+    workOrderId: created.workOrder.workOrderId,
+    planHash: created.workOrder.planHash,
+    confirmation: `RUN ${created.workOrder.workOrderId}`,
+  }
+  const options = {
+    ...state.options,
+    runCompanyCycle: async () => {
+      runs += 1
+      return {
+        ok: false,
+        mode: 'run',
+        status: 'blocked',
+        reason: 'crew_company_budget_exhausted',
+        results: [{ ok: false, status: 'blocked', reason: 'crew_company_budget_exhausted' }],
+        budget: { usedRoleCalls: 0 },
+        retry: { requiresNewCycleId: true },
+      }
+    },
+  }
+  const result = await runCompanyWorkOrder(args, options)
+  assert.equal(result.ok, true)
+  assert.equal(result.workOrder.status, 'blocked')
+  assert.deepEqual(result.cycleResult.retry, { requiresNewCycleId: true })
+  const stored = state.records.get(`company-work-order-record:${created.workOrder.workOrderId}`)
+  assert.equal(stored.input, null)
+  assert.equal(stored.result.reason, 'crew_company_budget_exhausted')
+
+  const replay = await runCompanyWorkOrder(args, options)
+  assert.equal(replay.replayed, true)
+  assert.equal(replay.workOrder.status, 'blocked')
+  assert.equal(runs, 1, 'a blocked work order never dispatches the same cycle twice')
+})
+
 test('work-order actions reject unknown fields and unbounded listing', async () => {
   assert.equal((await createCompanyWorkOrder({ ...work(), execute: true })).reason, 'company_work_order_unknown_field')
   assert.equal((await listCompanyWorkOrders({ clientId: 'client-acme', limit: 41 })).reason, 'company_work_order_invalid_limit')

@@ -427,9 +427,10 @@ function normalizeCrewResult(assignment, result) {
       guardrails,
     }
   }
+  const budgetBlocked = ['crew_company_budget_exhausted', 'crew_company_budget_unavailable'].includes(result?.reason)
   return {
     ok: false,
-    status: 'failed',
+    status: budgetBlocked ? 'blocked' : 'failed',
     agentId: assignment.agentId,
     department: assignment.department,
     crew: assignment.crew,
@@ -540,10 +541,11 @@ export async function runCompanyCycle(input, options = {}) {
 
     const completed = results.filter((result) => result.status === 'completed').length
     const gated = results.filter((result) => result.status === 'gated').length
-    const failed = results.length - completed - gated
+    const blocked = results.filter((result) => result.status === 'blocked').length
+    const failed = results.length - completed - gated - blocked
     const status = completed === results.length ? 'completed'
       : completed > 0 ? 'partial'
-        : gated > 0 && failed === 0 ? 'blocked'
+        : (gated > 0 || blocked > 0) && failed === 0 ? 'blocked'
           : 'failed'
     const usedRoleCalls = results.reduce((total, result) => total + result.usedRoleCalls, 0)
 
