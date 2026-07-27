@@ -5863,7 +5863,17 @@ export function SettingsPage() {
     ['Review', `${managedApprovalRequests.length || approvals.length} packets`],
     ['AI', runtime.enterpriseDbReady && runtime.writesReady ? 'Ready' : 'Locked'],
   ] as const
-  const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 11, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady, setup, workflowProfile: selectedTemplate, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords, learningRows }, null, 2))}`
+  const activationRows = [
+    ['Trial', isPilotReady ? 'Ready' : `${completion}%`],
+    ['Runtime', runtime.serviceStatus],
+    ['Mode', runtime.operatingMode.replace('_', ' ')],
+    ['Data', runtime.enterpriseDbReady ? 'Ready' : 'Needed'],
+    ['Auth', runtime.authReady ? 'Ready' : 'Needed'],
+    ['Audit', runtime.auditReady ? 'Ready' : 'Needed'],
+    ['Writes', runtime.writesReady ? 'Enabled' : 'Locked'],
+    ['Coverage', `${runtime.coverageScore}%`],
+  ] as const
+  const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 11, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady, setup, workflowProfile: selectedTemplate, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords, activationRows, learningRows }, null, 2))}`
 
   useEffect(() => {
     if (!requestedProduct || requestedProduct === setup.product) return
@@ -6035,7 +6045,7 @@ export function SettingsPage() {
             <div className="panel-head"><div><span className="core-eyebrow">System boundary</span><h2>{runtime.status === 'enterprise' ? 'Managed mode ready' : 'Managed mode locked'}</h2></div><RuntimeBadge status={runtime.status} /></div>
             {runtime.status === 'enterprise' && managedTrialAuthConfigured() ? managedIdentity ? <div className="template-contract"><span>Managed account</span><strong>{managedIdentity.email}</strong><small>{managedIdentity.workspaceId} · membership checked by API</small><button className="text-link" disabled={managedBusy} onClick={() => void disconnectManagedWorkspace()} type="button">Disconnect</button></div> : <form className="core-form compact-form" onSubmit={(event) => void connectManagedWorkspace(event)}><span className="core-eyebrow">Managed workspace</span><div className="form-row"><label>Email<input autoComplete="username" maxLength={160} onChange={(event) => setManagedEmail(event.target.value)} required type="email" value={managedEmail} /></label><label>Password<input autoComplete="current-password" minLength={8} onChange={(event) => setManagedPassword(event.target.value)} required type="password" value={managedPassword} /></label></div><label>Workspace ID<input maxLength={128} onChange={(event) => setManagedWorkspace(event.target.value)} placeholder="Provisioned workspace" required value={managedWorkspace} /></label><button className="core-button primary" disabled={managedBusy} type="submit">{managedBusy ? 'Checking…' : 'Connect workspace'}</button></form> : null}
             {managedNotice ? <p className="form-notice" role="status">{managedNotice}</p> : null}
-            <div className="readiness-list"><span><small>Trial plan</small><strong>{isPilotReady ? 'Ready' : `${completion}% complete`}</strong></span><span><small>Runtime</small><strong>{runtime.serviceStatus}</strong></span><span><small>Mode</small><strong>{runtime.operatingMode.replace('_', ' ')}</strong></span><span><small>Data</small><strong>{runtime.enterpriseDbReady ? 'Ready' : 'Needed'}</strong></span><span><small>Auth</small><strong>{runtime.authReady ? 'Ready' : 'Needed'}</strong></span><span><small>Audit</small><strong>{runtime.auditReady ? 'Ready' : 'Needed'}</strong></span><span><small>Writes</small><strong>{runtime.writesReady ? 'Enabled' : 'Locked'}</strong></span><span><small>Coverage</small><strong>{runtime.coverageScore}%</strong></span></div>
+            <div className="readiness-list" aria-label="Managed activation readiness">{activationRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
             <div className="readiness-list" aria-label="AI learning readiness">{learningRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
             {runtime.status !== 'enterprise' ? <ul className="requirement-list">{(runtime.requirements.length ? runtime.requirements : ['Configure managed tenant persistence.', 'Verify production identity and source coverage.']).map((requirement) => <li key={requirement}>{requirement}</li>)}</ul> : null}
             <p className="authority-note">AI learns from imported records and reviews. Owners approve sends, payments, publishing, access, and production.</p>
