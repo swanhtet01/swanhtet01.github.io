@@ -1293,11 +1293,16 @@ if (!coreSource.includes('<ShopInventoryFoundation')
   || shopInventoryUiSource.includes('fetch(')) fail('shop_inventory_foundation_ui_boundary_missing')
 if (!plantOrderSource.includes("PLANT_ORDER_STATE_SCHEMA = 'supermega.plant.order_foundation.v1'")
   || !plantOrderSource.includes("PLANT_ORDER_PLAN_CONTRACT = 'supermega.plant.reviewed_plan.v1'")
+  || !plantOrderSource.includes("PLANT_ORDER_EXECUTION_PLAN_CONTRACT = 'supermega.plant.reviewed_plan.v2'")
   || !plantOrderSource.includes('PLANT_ORDER_ADDITIONAL_MATERIAL_MAX = 11')
+  || !plantOrderSource.includes('PLANT_ORDER_ADDITIONAL_OPERATION_MAX = 11')
   || !plantOrderSource.includes('export function parsePlantOrderMaterialPaste')
+  || !plantOrderSource.includes('export function parsePlantOrderRoutingPaste')
+  || !plantOrderSource.includes('export function buildPlantOrderExecutionPlan')
   || !plantOrderSource.includes('export function checkPlantOrderAvailability')
   || !plantOrderSource.includes('export function releasePlantOrder')
   || !plantOrderSource.includes('export function issuePlantOrderMaterial')
+  || !plantOrderSource.includes('export function recordPlantOrderOperation')
   || !plantOrderSource.includes('export function inspectPlantOrderOutput')
   || !plantOrderSource.includes('export function releasePlantOrderBatch')
   || !plantOrderSource.includes('export async function mutatePlantOrderWorkspace')
@@ -1308,11 +1313,16 @@ if (!coreSource.includes('<PlantOrderFoundation')
   || !coreSource.includes("lazy(() => import('./PlantOrderFoundation')")
   || !plantOrderUiSource.includes('Run one controlled batch')
   || !plantOrderUiSource.includes('Additional BOM materials (optional)')
+  || !plantOrderUiSource.includes('Additional routing operations (optional)')
   || !plantOrderUiSource.includes('additionalMaterials: event.target.value')
+  || !plantOrderUiSource.includes('additionalOperations: event.target.value')
+  || !plantOrderUiSource.includes('buildPlantOrderExecutionPlan({')
   || !plantOrderUiSource.includes('projection.materials.map((material)')
   || !plantOrderUiSource.includes('projection.plan.workCentres.map((centre)')
   || !plantOrderUiSource.includes('parsePlantOrderQuantityMilli(draft.availableQuantity, true)')
   || !plantOrderUiSource.includes('availableQuantity: milliInputValue(')
+  || !plantOrderUiSource.includes('Review operation progress')
+  || !plantOrderUiSource.includes('Routing progress')
   || (plantOrderUiSource.match(/>Review availability<\/button>/g) || []).length !== 1
   || !plantOrderUiSource.includes('No machine command')
   || !plantOrderUiSource.includes('Shop receipt, delivery, costing, and accounting are not posted automatically.')
@@ -2281,7 +2291,18 @@ async function verifyPlantOrderRuntime() {
     assertThrows(() => model.parsePlantOrderMaterialPaste('MAT-GLUE-001 | Adhesive | kg'), 'plant_order_bom_paste_malformed_row_succeeded')
     const tooManyMaterials = Array.from({ length: model.PLANT_ORDER_ADDITIONAL_MATERIAL_MAX + 1 }, (_, index) => `MAT-EXTRA-${String(index + 1).padStart(2, '0')} | Extra ${index + 1} | pcs | 1`).join('\n')
     assertThrows(() => model.parsePlantOrderMaterialPaste(tooManyMaterials), 'plant_order_bom_paste_row_limit_not_enforced')
-    const plan = model.buildPlantOrderPlan({
+    const pastedRouting = model.parsePlantOrderRoutingPaste('\uFEFFoperation_id | operation_name | work_centre_id | work_centre_name | minutes_per_unit\nop-test-20 | Pressure test | wc-test-01 | Test bench | 1.5\nOP-PACK-30 | Pack | WC-PACK-01 | Packing | 0.25')
+    assert(pastedRouting.length === 2
+      && pastedRouting[0].operationId === 'OP-TEST-20'
+      && pastedRouting[0].workCentreId === 'WC-TEST-01'
+      && pastedRouting[0].minutesPerUnitMilli === 1_500
+      && pastedRouting[1].operationId === 'OP-PACK-30',
+    'plant_order_routing_paste_not_normalized_or_ordered')
+    assertThrows(() => model.parsePlantOrderRoutingPaste('OP-TEST-20 | Test | WC-TEST-01 | Test | 1\nop-test-20 | Duplicate | WC-TEST-02 | Test 2 | 1'), 'plant_order_routing_paste_duplicate_succeeded')
+    assertThrows(() => model.parsePlantOrderRoutingPaste('OP-TEST-20 | Test | WC-TEST-01 | Test'), 'plant_order_routing_paste_malformed_row_succeeded')
+    const tooManyOperations = Array.from({ length: model.PLANT_ORDER_ADDITIONAL_OPERATION_MAX + 1 }, (_, index) => `OP-EXTRA-${String(index + 1).padStart(2, '0')} | Extra ${index + 1} | WC-EXTRA-${String(index + 1).padStart(2, '0')} | Extra ${index + 1} | 1`).join('\n')
+    assertThrows(() => model.parsePlantOrderRoutingPaste(tooManyOperations), 'plant_order_routing_paste_row_limit_not_enforced')
+    const planInput = {
       planId: 'PLN-20260726-001',
       sourceDigest: model.plantOrderEvidenceDigest({ jobId: 'JOB-401', revision: 12, target: 10 }),
       job: { jobId: 'JOB-401', product: 'Premium water filter', targetQuantity: 10, outputBatchId: 'BATCH-20260726-401' },
@@ -2297,10 +2318,15 @@ async function verifyPlantOrderRuntime() {
         { operationId: 'OP-ASSEMBLY-10', sequence: 1, name: 'Assemble', workCentreId: 'WC-ASSEMBLY-01', minutesPerUnitMilli: 500 },
         { operationId: 'OP-TEST-20', sequence: 2, name: 'Pressure test', workCentreId: 'WC-TEST-01', minutesPerUnitMilli: 1_000 },
       ],
-    })
+    }
+    const plan = model.buildPlantOrderPlan(planInput)
+    const executionPlan = model.buildPlantOrderExecutionPlan(planInput)
     assert(plan.sourceDigest === 'sha256:9415e4d6d6dda852c2014d611c1f93e385d31c40df2b4ec30d293b12991ba519'
       && plan.packageDigest === 'sha256:4f34743417e89e3ffcfa6c889fe2b55c14fd48f51926f4f198913cf4ec3d0a5b',
     'plant_order_python_browser_plan_digest_drifted')
+    assert(executionPlan.contract === model.PLANT_ORDER_EXECUTION_PLAN_CONTRACT
+      && executionPlan.packageDigest === 'sha256:a9fc5c9b53444139acc0b83de2ed42882d7359ef4ccd90d42b040ccce8ca6107',
+    'plant_order_v2_python_browser_plan_digest_drifted')
     let result = model.applyPlantOrderPlan(model.createEmptyPlantOrderState(), plan, proof(1, 'approved BOM and routing'), model.EMPTY_PLANT_ORDER_DIGEST)
     assert(!result.replayed && result.state.headDigest === 'sha256:c809f3f30d1df11b3bbed4df8ac7d12ea4afc6f245830059270c32bd14ca1ab1', 'plant_order_plan_head_drifted')
     const plannedState = result.state
@@ -2350,6 +2376,29 @@ async function verifyPlantOrderRuntime() {
     result = model.issuePlantOrderMaterial(result.state, { issueId: 'ISSUE-20260726-002', materialId: 'MAT-SHELL-001', inputLotId: 'LOT-SHELL-2407', quantityMilli: 20_000, proof: proof(5, 'issued reviewed shell lot'), expectedHeadDigest: result.state.headDigest })
     assert(result.state.headDigest === 'sha256:ca49b1df908aeaeb4278d24d6610d41e2eab3c78d13d154cb023196520da30f7' && model.projectPlantOrder(result.state).genealogy.length === 2, 'plant_order_genealogy_or_issue_head_drifted')
     const issuedState = result.state
+
+    let executionResult = model.applyPlantOrderPlan(model.createEmptyPlantOrderState(), executionPlan, proof(1, 'approved BOM and routing'), model.EMPTY_PLANT_ORDER_DIGEST)
+    assert(executionResult.state.headDigest === 'sha256:939e51eeeb320f9ed56975dc8d3a8e77c193f51f7dd67590ea16500057ea4410', 'plant_order_v2_plan_head_drifted')
+    executionResult = model.checkPlantOrderAvailability(executionResult.state, {
+      checkId: 'CHK-V2-001', sourceDigest: model.plantOrderEvidenceDigest({ filter: 15_000, shell: 20_000, assembly: 5, test: 10 }),
+      materials: availabilityMaterials, workCentres: availabilityCentres, proof: proof(2, 'checked v2 availability'), expectedHeadDigest: executionResult.state.headDigest,
+    })
+    executionResult = model.releasePlantOrder(executionResult.state, { releaseId: 'REL-V2-001', availabilityCheckId: 'CHK-V2-001', proof: proof(3, 'released v2 order'), expectedHeadDigest: executionResult.state.headDigest })
+    executionResult = model.issuePlantOrderMaterial(executionResult.state, { issueId: 'ISSUE-V2-001', materialId: 'MAT-FILTER-001', inputLotId: 'LOT-FILTER-2407', quantityMilli: 15_000, proof: proof(4, 'issued v2 filter lot'), expectedHeadDigest: executionResult.state.headDigest })
+    executionResult = model.issuePlantOrderMaterial(executionResult.state, { issueId: 'ISSUE-V2-002', materialId: 'MAT-SHELL-001', inputLotId: 'LOT-SHELL-2407', quantityMilli: 20_000, proof: proof(5, 'issued v2 shell lot'), expectedHeadDigest: executionResult.state.headDigest })
+    const executionIssuedState = executionResult.state
+    assertThrows(() => model.recordPlantOrderOutput(executionIssuedState, { outputId: 'OUT-V2-EARLY-001', outputBatchId: 'BATCH-20260726-401', quantity: 1, proof: proof(6, 'premature v2 output'), expectedHeadDigest: executionIssuedState.headDigest }), 'plant_order_v2_output_without_operations_succeeded')
+    assertThrows(() => model.recordPlantOrderOperation(executionIssuedState, { operationRunId: 'OPRUN-V2-EARLY-001', operationId: 'OP-TEST-20', quantity: 1, actualMinutesMilli: 1_000, proof: proof(6, 'premature downstream operation'), expectedHeadDigest: executionIssuedState.headDigest }), 'plant_order_v2_downstream_operation_without_input_succeeded')
+    executionResult = model.recordPlantOrderOperation(executionIssuedState, { operationRunId: 'OPRUN-V2-ASSEMBLY-001', operationId: 'OP-ASSEMBLY-10', quantity: 4, actualMinutesMilli: 2_200, proof: proof(6, 'recorded assembly transfer quantity'), expectedHeadDigest: executionIssuedState.headDigest })
+    assertThrows(() => model.recordPlantOrderOperation(executionResult.state, { operationRunId: 'OPRUN-V2-TEST-OVER-001', operationId: 'OP-TEST-20', quantity: 5, actualMinutesMilli: 5_000, proof: proof(7, 'overstated downstream quantity'), expectedHeadDigest: executionResult.state.headDigest }), 'plant_order_v2_downstream_quantity_overflow_succeeded')
+    executionResult = model.recordPlantOrderOperation(executionResult.state, { operationRunId: 'OPRUN-V2-TEST-001', operationId: 'OP-TEST-20', quantity: 4, actualMinutesMilli: 4_000, proof: proof(7, 'recorded pressure-test transfer quantity'), expectedHeadDigest: executionResult.state.headDigest })
+    const operationProjection = model.projectPlantOrder(executionResult.state)
+    assert(operationProjection.operations.map((row) => row.completedQuantity).join(',') === '4,4'
+      && operationProjection.metrics.actualOperationMinutesMilli === 6_200
+      && operationProjection.metrics.completedOperationCount === 0,
+    'plant_order_v2_operation_projection_wrong')
+    executionResult = model.recordPlantOrderOutput(executionResult.state, { outputId: 'OUT-V2-TRANSFER-001', outputBatchId: 'BATCH-20260726-401', quantity: 4, proof: proof(8, 'recorded routed transfer output'), expectedHeadDigest: executionResult.state.headDigest })
+    assert(model.projectPlantOrder(executionResult.state).totalOutput === 4, 'plant_order_v2_routed_output_not_recorded')
 
     const heldOutput = model.recordPlantOrderOutput(issuedState, { outputId: 'OUT-HOLD-001', outputBatchId: 'BATCH-20260726-401', quantity: 5, proof: proof(6, 'partial output for hold test'), expectedHeadDigest: issuedState.headDigest })
     const held = model.inspectPlantOrderOutput(heldOutput.state, { inspectionId: 'INSP-HOLD-001', outputBatchId: 'BATCH-20260726-401', inspectedQuantity: 5, acceptedQuantity: 4, rejectedQuantity: 1, result: 'fail', proof: proof(7, 'held failed batch'), expectedHeadDigest: heldOutput.state.headDigest })

@@ -11,10 +11,13 @@ from fastapi.testclient import TestClient
 
 from supermega_runtime.plant_order_foundation import (
     apply_plant_order_plan,
-    build_plant_order_plan,
+    build_plant_order_execution_plan,
     check_plant_order_availability,
     create_empty_plant_order_state,
+    issue_plant_order_material,
     plant_order_evidence_digest,
+    record_plant_order_operation,
+    release_plant_order,
 )
 from supermega_runtime.production_runtime import (
     PRODUCTION_EVENTS,
@@ -89,7 +92,7 @@ def planned_order_execution(
     target: int | None = None,
 ) -> dict[str, object]:
     job = workspace["jobs"][0]  # type: ignore[index]
-    plan = build_plant_order_plan(
+    plan = build_plant_order_execution_plan(
         plan_id="PLN-MANAGED-001",
         source_digest=plant_order_evidence_digest({"job": job}),
         job={
@@ -699,6 +702,75 @@ class ProductionRuntimeTests(unittest.TestCase):
             availability_evidence,
         )
         self.assertEqual(accepted_available["orderExecution"]["revision"], 2)  # type: ignore[index]
+
+        release_evidence = action_evidence(
+            "ACT-ORDER-EXECUTION-003",
+            captured_at=LATEST,
+        )
+        released_execution = release_plant_order(
+            accepted_available["orderExecution"],
+            release_id="REL-MANAGED-001",
+            availability_check_id="CHK-MANAGED-001",
+            proof=release_evidence,
+            expected_head_digest=accepted_available["orderExecution"]["headDigest"],
+        )["state"]
+        released = deepcopy(accepted_available)
+        released["orderExecution"] = released_execution
+        accepted_released = apply_event(
+            accepted_available,
+            "production.order_execution.recorded",
+            released,
+            release_evidence,
+        )
+
+        issue_evidence = action_evidence(
+            "ACT-ORDER-EXECUTION-004",
+            captured_at="2026-07-24T09:45:00.000Z",
+        )
+        issued_execution = issue_plant_order_material(
+            accepted_released["orderExecution"],
+            issue_id="ISSUE-MANAGED-001",
+            material_id="MAT-MANAGED-001",
+            input_lot_id="LOT-MANAGED-001",
+            quantity_milli=10_000,
+            proof=issue_evidence,
+            expected_head_digest=accepted_released["orderExecution"]["headDigest"],
+        )["state"]
+        issued = deepcopy(accepted_released)
+        issued["orderExecution"] = issued_execution
+        accepted_issued = apply_event(
+            accepted_released,
+            "production.order_execution.recorded",
+            issued,
+            issue_evidence,
+        )
+
+        operation_evidence = action_evidence(
+            "ACT-ORDER-EXECUTION-005",
+            captured_at="2026-07-24T10:00:00.000Z",
+        )
+        operated_execution = record_plant_order_operation(
+            accepted_issued["orderExecution"],
+            operation_run_id="OPRUN-MANAGED-001",
+            operation_id="OP-MANAGED-10",
+            quantity=10,
+            actual_minutes_milli=9_500,
+            proof=operation_evidence,
+            expected_head_digest=accepted_issued["orderExecution"]["headDigest"],
+        )["state"]
+        operated = deepcopy(accepted_issued)
+        operated["orderExecution"] = operated_execution
+        accepted_operated = apply_event(
+            accepted_issued,
+            "production.order_execution.recorded",
+            operated,
+            operation_evidence,
+        )
+        self.assertEqual(accepted_operated["orderExecution"]["revision"], 5)  # type: ignore[index]
+        self.assertEqual(
+            accepted_operated["orderExecution"]["commands"][-1]["payload"]["kind"],  # type: ignore[index]
+            "record_operation",
+        )
 
         wrong_job = deepcopy(current)
         wrong_job["orderExecution"] = planned_order_execution(

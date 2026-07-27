@@ -2,8 +2,10 @@ import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 
 import {
   PLANT_ORDER_ADDITIONAL_MATERIAL_MAX,
+  PLANT_ORDER_ADDITIONAL_OPERATION_MAX,
+  PLANT_ORDER_EXECUTION_PLAN_CONTRACT,
   applyPlantOrderPlan,
-  buildPlantOrderPlan,
+  buildPlantOrderExecutionPlan,
   checkPlantOrderAvailability,
   createEmptyPlantOrderState,
   inspectPlantOrderOutput,
@@ -12,8 +14,10 @@ import {
   mutatePlantOrderWorkspace,
   parsePlantOrderMaterialPaste,
   parsePlantOrderQuantityMilli,
+  parsePlantOrderRoutingPaste,
   plantOrderEvidenceDigest,
   projectPlantOrder,
+  recordPlantOrderOperation,
   recordPlantOrderOutput,
   releasePlantOrder,
   releasePlantOrderBatch,
@@ -62,12 +66,15 @@ type SetupDraft = {
   workCentreId: string
   workCentreName: string
   minutesPerUnit: string
+  additionalOperations: string
 }
 
 type AvailabilityDraft = {
   materials: Record<string, { inputLotId: string; availableQuantity: string }>
   workCentres: Record<string, string>
 }
+
+type OperationDraft = { operationId: string; quantity: string; actualMinutes: string }
 
 const setupMaterialUnits: PlantOrderMaterial['unit'][] = ['pcs', 'kg', 'g', 'l', 'ml', 'pack', 'bag', 'roll', 'sheet', 'm', 'cm']
 
@@ -140,6 +147,7 @@ function defaultSetup(job?: ProductionJob): SetupDraft {
     workCentreId: 'WC-ASSEMBLY-01',
     workCentreName: 'Assembly',
     minutesPerUnit: '1',
+    additionalOperations: '',
   }
 }
 
@@ -207,6 +215,7 @@ export function PlantOrderFoundation({ actor, disabled, jobs, managedState, onMa
   const [setupOpen, setSetupOpen] = useState(false)
   const [setupDraft, setSetupDraft] = useState(() => defaultSetup(activeJobs[0]))
   const [availabilityDraft, setAvailabilityDraft] = useState(() => availabilityDefaults(initial.state))
+  const [operationDraft, setOperationDraft] = useState<OperationDraft>({ operationId: '', quantity: '', actualMinutes: '' })
   const [inspectionDraft, setInspectionDraft] = useState({ result: 'pass' as 'pass' | 'fail', rejected: '0' })
   const [review, setReview] = useState<ReviewedTransition | null>(null)
   const setupDialogRef = useRef<HTMLDialogElement>(null)
@@ -218,11 +227,22 @@ export function PlantOrderFoundation({ actor, disabled, jobs, managedState, onMa
   const bindingCurrent = Boolean(!projection.plan || (boundJob && plantOrderEvidenceDigest(jobSnapshot(scope, boundJob)) === projection.plan.sourceDigest))
   const controlsDisabled = disabled || busy || Boolean(review) || (!bindingCurrent && projection.status !== 'released_to_stock')
   const nextMaterial = projection.materials.find((material) => material.remainingToIssueMilli > 0)
+  const requiresOperationEvidence = projection.plan?.contract === PLANT_ORDER_EXECUTION_PLAN_CONTRACT
+  const nextOperation = requiresOperationEvidence ? projection.operations.find((operation) => operation.status === 'ready' || operation.status === 'in_progress') : undefined
+  const nextOperationIndex = nextOperation ? projection.operations.findIndex((operation) => operation.operationId === nextOperation.operationId) : -1
+  const operationInputQuantity = nextOperationIndex < 0 ? 0 : nextOperationIndex === 0
+    ? projection.metrics.targetQuantity
+    : projection.operations[nextOperationIndex - 1].completedQuantity
+  const operationAvailableQuantity = nextOperation ? operationInputQuantity - nextOperation.completedQuantity : 0
+  const activeOperationDraft = operationDraft.operationId === nextOperation?.operationId
+    ? operationDraft
+    : { operationId: nextOperation?.operationId ?? '', quantity: operationAvailableQuantity > 0 ? String(operationAvailableQuantity) : '', actualMinutes: '' }
   const outputRemaining = projection.metrics.targetQuantity - projection.totalOutput
   const inspectedQuantity = projection.totalOutput
   const rejected = /^\d+$/.test(inspectionDraft.rejected) ? Number(inspectionDraft.rejected) : Number.NaN
   const inspectionValid = Number.isSafeInteger(rejected) && rejected >= 0 && rejected <= inspectedQuantity
     && (inspectionDraft.result === 'pass' ? rejected === 0 : rejected > 0)
+
 
   useEffect(() => {
     const dialog = setupDialogRef.current
@@ -320,20 +340,33 @@ export function PlantOrderFoundation({ actor, disabled, jobs, managedState, onMa
       const materials = [primaryMaterial, ...parsePlantOrderMaterialPaste(setupDraft.additionalMaterials)]
         .sort((left, right) => left.materialId < right.materialId ? -1 : left.materialId > right.materialId ? 1 : 0)
       if (new Set(materials.map((material) => material.materialId)).size !== materials.length) throw new Error('Each BOM material ID must be unique, including the primary material.')
+      const primaryWorkCentreId = setupDraft.workCentreId.trim().toUpperCase()
+      const primaryWorkCentreName = setupDraft.workCentreName.trim()
+      const additionalOperations = parsePlantOrderRoutingPaste(setupDraft.additionalOperations)
+      const routing = [{ operationId: `OP-${primaryWorkCentreId.replace(/^WC-/, '')}-10`, sequence: 1, name: primaryWorkCentreName, workCentreId: primaryWorkCentreId, minutesPerUnitMilli }, ...additionalOperations.map((operation, index) => ({ operationId: operation.operationId, sequence: index + 2, name: operation.name, workCentreId: operation.workCentreId, minutesPerUnitMilli: operation.minutesPerUnitMilli }))]
+      if (new Set(routing.map((operation) => operation.operationId)).size !== routing.length) throw new Error('Each routing operation ID must be unique, including the primary operation.')
+      const workCentreNames = new Map([[primaryWorkCentreId, primaryWorkCentreName]])
+      additionalOperations.forEach((operation) => {
+        const retainedName = workCentreNames.get(operation.workCentreId)
+        if (retainedName && retainedName !== operation.workCentreName) throw new Error(`${operation.workCentreId} must use one consistent work-centre name.`)
+        workCentreNames.set(operation.workCentreId, operation.workCentreName)
+      })
+      const workCentres = [...workCentreNames].map(([workCentreId, name]) => ({ workCentreId, name }))
+        .sort((left, right) => left.workCentreId < right.workCentreId ? -1 : left.workCentreId > right.workCentreId ? 1 : 0)
       const targetQuantity = remaining(selectedSetupJob); const expectedHeadDigest = state.headDigest
       const sourceDigest = plantOrderEvidenceDigest(jobSnapshot(scope, selectedSetupJob))
-      const plan = buildPlantOrderPlan({
+      const plan = buildPlantOrderExecutionPlan({
         planId: commandId('PLN'), sourceDigest,
         job: { jobId: selectedSetupJob.id, product: selectedSetupJob.product, targetQuantity, outputBatchId: setupDraft.outputBatchId.trim().toUpperCase() },
         materials,
-        workCentres: [{ workCentreId: setupDraft.workCentreId.trim().toUpperCase(), name: setupDraft.workCentreName.trim() }],
-        routing: [{ operationId: `OP-${setupDraft.workCentreId.trim().toUpperCase().replace(/^WC-/, '')}-10`, sequence: 1, name: setupDraft.workCentreName.trim(), workCentreId: setupDraft.workCentreId.trim().toUpperCase(), minutesPerUnitMilli }],
+        workCentres,
+        routing,
       })
       setAvailabilityDraft(availabilityDefaultsForPlan(plan))
       const actionProof = proof(actor, 'the reviewed BOM and routing')
       stage({
         title: 'Execution plan',
-        summary: `${selectedSetupJob.id} · ${targetQuantity.toLocaleString()} remaining · ${materials.length} ${materials.length === 1 ? 'material' : 'materials'} · 1 operation`,
+        summary: `${selectedSetupJob.id} · ${targetQuantity.toLocaleString()} remaining · ${materials.length} ${materials.length === 1 ? 'material' : 'materials'} · ${routing.length} ${routing.length === 1 ? 'operation' : 'operations'}`,
         boundary: 'Creates an immutable execution package. It does not schedule staff, move stock, post accounting, or control equipment.',
         proof: actionProof,
         apply: (current) => applyPlantOrderPlan(current, plan, actionProof, expectedHeadDigest),
@@ -399,6 +432,18 @@ export function PlantOrderFoundation({ actor, disabled, jobs, managedState, onMa
     stage({ title: 'Material issue', summary: `${formatMilli(nextMaterial.remainingToIssueMilli)} ${nextMaterial.unit} · ${nextMaterial.inputLotId}`, boundary: 'Creates job genealogy evidence only. It does not change purchasing, warehouse, costing, or accounting balances.', proof: actionProof, apply: (current) => issuePlantOrderMaterial(current, { issueId, materialId: nextMaterial.materialId, inputLotId: nextMaterial.inputLotId!, quantityMilli: nextMaterial.remainingToIssueMilli, proof: actionProof, expectedHeadDigest }) })
   }
 
+  function reviewOperation(event: FormEvent) {
+    event.preventDefault()
+    if (!nextOperation || operationAvailableQuantity < 1) return
+    const quantity = /^\d+$/.test(activeOperationDraft.quantity) ? Number(activeOperationDraft.quantity) : Number.NaN
+    const actualMinutesMilli = parsePlantOrderQuantityMilli(activeOperationDraft.actualMinutes)
+    if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > operationAvailableQuantity || !actualMinutesMilli) {
+      return setError(`Enter 1 to ${operationAvailableQuantity.toLocaleString()} completed units and observed minutes with up to three decimals.`)
+    }
+    const operationRunId = commandId('OPRUN'); const expectedHeadDigest = state.headDigest; const actionProof = proof(actor, `progress for ${nextOperation.operationId}`)
+    stage({ title: nextOperation.name, summary: `${quantity.toLocaleString()} units · ${formatMilli(actualMinutesMilli)} actual minutes · ${nextOperation.workCentreId}`, boundary: 'Records reviewed operation progress and time evidence only. It does not control equipment, post labour cost, or move inventory.', proof: actionProof, apply: (current) => recordPlantOrderOperation(current, { operationRunId, operationId: nextOperation.operationId, quantity, actualMinutesMilli, proof: actionProof, expectedHeadDigest }) })
+  }
+
   function reviewOutput() {
     if (!projection.plan || outputRemaining < 1) return
     const outputId = commandId('OUT'); const expectedHeadDigest = state.headDigest; const actionProof = proof(actor, 'produced output quantity')
@@ -453,7 +498,12 @@ export function PlantOrderFoundation({ actor, disabled, jobs, managedState, onMa
 
       {projection.status === 'ready' ? <button className="core-button primary" disabled={controlsDisabled} onClick={reviewOrderRelease} type="button">Review order release</button> : null}
       {(projection.status === 'released' || projection.status === 'in_process') && nextMaterial ? <button className="core-button primary" disabled={controlsDisabled} onClick={reviewMaterialIssue} type="button">Review material issue</button> : null}
-      {projection.status === 'in_process' && !nextMaterial && outputRemaining > 0 ? <button className="core-button primary" disabled={controlsDisabled} onClick={reviewOutput} type="button">Review batch output</button> : null}
+      {(projection.status === 'released' || projection.status === 'in_process') && !nextMaterial && nextOperation ? <form className="core-form compact-form" onSubmit={reviewOperation}>
+        <div><strong>{nextOperation.sequence}. {nextOperation.name}</strong><small>{nextOperation.workCentreId} · {nextOperation.completedQuantity.toLocaleString()} / {projection.metrics.targetQuantity.toLocaleString()} complete</small></div>
+        <div className="form-row"><label>Completed units<input disabled={controlsDisabled} inputMode="numeric" max={operationAvailableQuantity} min="1" onChange={(event) => setOperationDraft({ ...activeOperationDraft, quantity: event.target.value })} required step="1" type="number" value={activeOperationDraft.quantity} /></label><label>Actual minutes<input disabled={controlsDisabled} inputMode="decimal" min="0.001" onChange={(event) => setOperationDraft({ ...activeOperationDraft, actualMinutes: event.target.value })} placeholder={formatMilli(nextOperation.minutesPerUnitMilli * operationAvailableQuantity)} required step="0.001" type="number" value={activeOperationDraft.actualMinutes} /></label></div>
+        <button className="core-button primary" disabled={controlsDisabled} type="submit">Review operation progress</button>
+      </form> : null}
+      {projection.status === 'in_process' && !nextMaterial && !nextOperation && outputRemaining > 0 ? <button className="core-button primary" disabled={controlsDisabled} onClick={reviewOutput} type="button">Review batch output</button> : null}
       {(projection.status === 'inspection_due' || projection.status === 'quality_hold') ? <form className="core-form compact-form" onSubmit={reviewInspection}>
         <div className="form-row"><label>Inspection result<select disabled={controlsDisabled} onChange={(event) => { const result = event.target.value as 'pass' | 'fail'; setInspectionDraft({ result, rejected: result === 'pass' ? '0' : '1' }) }} value={inspectionDraft.result}><option value="pass">Pass</option><option value="fail">Fail and hold</option></select></label><label>Rejected units<input disabled={controlsDisabled} max={inspectedQuantity} min="0" onChange={(event) => setInspectionDraft((current) => ({ ...current, rejected: event.target.value }))} required step="1" type="number" value={inspectionDraft.rejected} /></label></div>
         <button className="core-button primary" disabled={controlsDisabled || !inspectionValid} type="submit">Review inspection</button>
@@ -462,6 +512,7 @@ export function PlantOrderFoundation({ actor, disabled, jobs, managedState, onMa
       {projection.status === 'released_to_stock' ? <div className="stock-receipt-preview" role="status"><small>Human-released batch</small><strong>{projection.plan?.job.outputBatchId} · {projection.metrics.acceptedQuantity.toLocaleString()} accepted</strong></div> : null}
 
       {!bindingCurrent && projection.status !== 'released_to_stock' ? <p className="form-notice warning-text" role="alert">The bound Plant job changed after this execution plan was reviewed. This chain is paused; reconcile the job snapshot before continuing.</p> : null}
+      {requiresOperationEvidence ? <details className="compact-disclosure production-history"><summary>Routing progress <span>{projection.metrics.completedOperationCount}/{projection.operations.length}</span></summary><div className="issue-list">{projection.operations.map((operation) => <article key={operation.operationId}><span aria-hidden="true" className={`issue-mark ${operation.status === 'complete' ? 'resolved' : ''}`}>{operation.sequence}</span><div><strong>{operation.name}</strong><small>{operation.completedQuantity.toLocaleString()} / {projection.metrics.targetQuantity.toLocaleString()} units · {formatMilli(operation.actualMinutesMilli)} actual / {formatMilli(operation.plannedMinutesMilli)} planned minutes · {operation.status.replace('_', ' ')}</small></div></article>)}</div></details> : null}
       {projection.genealogy.length ? <details className="compact-disclosure production-history"><summary>Batch genealogy <span>{projection.genealogy.length}</span></summary><div className="issue-list">{projection.genealogy.map((row) => <article key={row.materialId}><span aria-hidden="true" className="issue-mark resolved">LOT</span><div><strong>{row.inputLotId} → {row.outputBatchId}</strong><small>{row.materialId} · {formatMilli(row.issuedQuantityMilli)} {row.unit}</small></div></article>)}</div></details> : null}
       <p aria-live="polite" className="form-notice">{error || notice || (projection.status === 'released_to_stock' ? 'Batch release is recorded. Post Shop receipt, costing, and accounting only through their own reviewed controls.' : `${managed ? 'Managed' : 'Local'} execution evidence only. No machine command, external send, inventory posting, payment, or accounting action occurs.`)}</p>
     </section>
@@ -472,16 +523,17 @@ export function PlantOrderFoundation({ actor, disabled, jobs, managedState, onMa
         <label>Active job<select disabled={disabled || Boolean(review)} onChange={(event) => { const job = activeJobs.find((candidate) => candidate.id === event.target.value); setSetupDraft(defaultSetup(job)) }} value={selectedSetupJob?.id ?? ''}>{activeJobs.length ? activeJobs.map((job) => <option key={job.id} value={job.id}>{job.id} · {job.product} · {remaining(job).toLocaleString()} left</option>) : <option value="">No active jobs</option>}</select></label>
         <label>Output batch ID<input disabled={disabled || Boolean(review)} maxLength={80} onChange={(event) => setSetupDraft((current) => ({ ...current, outputBatchId: event.target.value }))} required value={setupDraft.outputBatchId} /></label>
         <details className="compact-disclosure production-history">
-          <summary>Customize material and routing <span>Up to {PLANT_ORDER_ADDITIONAL_MATERIAL_MAX + 1} materials · 1 operation</span></summary>
+          <summary>Customize material and routing <span>Up to {PLANT_ORDER_ADDITIONAL_MATERIAL_MAX + 1} materials · {PLANT_ORDER_ADDITIONAL_OPERATION_MAX + 1} operations</span></summary>
           <div className="core-form compact-form">
             <div className="form-row"><label>Material ID<input disabled={disabled || Boolean(review)} maxLength={80} onChange={(event) => setSetupDraft((current) => ({ ...current, materialId: event.target.value }))} required value={setupDraft.materialId} /></label><label>Material name<input disabled={disabled || Boolean(review)} maxLength={180} onChange={(event) => setSetupDraft((current) => ({ ...current, materialName: event.target.value }))} required value={setupDraft.materialName} /></label></div>
             <div className="form-row"><label>Material unit<select disabled={disabled || Boolean(review)} onChange={(event) => setSetupDraft((current) => ({ ...current, materialUnit: event.target.value as PlantOrderMaterial['unit'] }))} value={setupDraft.materialUnit}>{setupMaterialUnits.map((unit) => <option key={unit} value={unit}>{unit}</option>)}</select></label><label>Per output unit<input disabled={disabled || Boolean(review)} inputMode="decimal" min="0.001" onChange={(event) => setSetupDraft((current) => ({ ...current, quantityPerUnit: event.target.value }))} required step="0.001" type="number" value={setupDraft.quantityPerUnit} /></label></div>
             <label>Additional BOM materials (optional)<textarea disabled={disabled || Boolean(review)} maxLength={16_000} onChange={(event) => setSetupDraft((current) => ({ ...current, additionalMaterials: event.target.value }))} placeholder="MAT-RUBBER-01 | Natural rubber | kg | 1.5" rows={4} value={setupDraft.additionalMaterials} /><small>One row per line: material ID | name | unit | quantity per output unit. Add up to {PLANT_ORDER_ADDITIONAL_MATERIAL_MAX}.</small></label>
             <div className="form-row"><label>Work centre ID<input disabled={disabled || Boolean(review)} maxLength={80} onChange={(event) => setSetupDraft((current) => ({ ...current, workCentreId: event.target.value }))} required value={setupDraft.workCentreId} /></label><label>Work centre name<input disabled={disabled || Boolean(review)} maxLength={180} onChange={(event) => setSetupDraft((current) => ({ ...current, workCentreName: event.target.value }))} required value={setupDraft.workCentreName} /></label></div>
             <label>Minutes per output unit<input disabled={disabled || Boolean(review)} inputMode="decimal" min="0.001" onChange={(event) => setSetupDraft((current) => ({ ...current, minutesPerUnit: event.target.value }))} required step="0.001" type="number" value={setupDraft.minutesPerUnit} /></label>
+            <label>Additional routing operations (optional)<textarea disabled={disabled || Boolean(review)} maxLength={16_000} onChange={(event) => setSetupDraft((current) => ({ ...current, additionalOperations: event.target.value }))} placeholder="OP-TEST-20 | Pressure test | WC-TEST-01 | Test bench | 1.5" rows={4} value={setupDraft.additionalOperations} /><small>One row per operation: operation ID | name | work centre ID | work centre name | minutes per output unit. Sequence follows row order.</small></label>
           </div>
         </details>
-        <p className="panel-copy">One material and one operation are prefilled. Paste up to {PLANT_ORDER_ADDITIONAL_MATERIAL_MAX} more BOM rows only when this batch needs them. No stock, staff, machine, costing, or accounting action occurs.</p>
+        <p className="panel-copy">One material and one operation are prefilled. Add only the BOM and routing steps this batch needs. No stock, staff, machine, costing, or accounting action occurs.</p>
         <div className="form-actions"><button className="core-button" onClick={closeSetup} type="button">Cancel</button><button className="core-button primary" disabled={disabled || Boolean(review) || !selectedSetupJob} type="submit">Review execution plan</button></div>
       </form> : null}
     </dialog>

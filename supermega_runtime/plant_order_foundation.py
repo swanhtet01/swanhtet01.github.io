@@ -19,6 +19,7 @@ from typing import Any
 
 PLANT_ORDER_STATE_SCHEMA = "supermega.plant.order_foundation.v1"
 PLANT_ORDER_PLAN_CONTRACT = "supermega.plant.reviewed_plan.v1"
+PLANT_ORDER_EXECUTION_PLAN_CONTRACT = "supermega.plant.reviewed_plan.v2"
 PLANT_ORDER_PROJECTION_CONTRACT = "supermega.plant.order_projection.v1"
 EMPTY_PLANT_ORDER_DIGEST = f"sha256:{'0' * 64}"
 
@@ -37,6 +38,7 @@ _COMMAND_KINDS = frozenset(
         "availability_check",
         "release_order",
         "issue_material",
+        "record_operation",
         "record_output",
         "inspect_output",
         "release_batch",
@@ -329,8 +331,12 @@ def _validate_plan_package(value: object) -> dict[str, Any]:
             "packageDigest",
         ),
     )
-    if source["contract"] != PLANT_ORDER_PLAN_CONTRACT:
+    if source["contract"] not in {
+        PLANT_ORDER_PLAN_CONTRACT,
+        PLANT_ORDER_EXECUTION_PLAN_CONTRACT,
+    }:
         raise _fail("plan package.contract is unsupported.")
+    contract = source["contract"]
     plan_id = _identifier(source["planId"], "plan package.planId", "PLN")
     source_digest = _digest(source["sourceDigest"], "plan package.sourceDigest")
     job = _job(source["job"], "plan package.job")
@@ -354,7 +360,7 @@ def _validate_plan_package(value: object) -> dict[str, Any]:
             f"plan package capacity requirement for {row['operationId']}",
         )
     canonical = {
-        "contract": PLANT_ORDER_PLAN_CONTRACT,
+        "contract": contract,
         "planId": plan_id,
         "sourceDigest": source_digest,
         "job": job,
@@ -381,6 +387,30 @@ def build_plant_order_plan(
 
     candidate = {
         "contract": PLANT_ORDER_PLAN_CONTRACT,
+        "planId": plan_id,
+        "sourceDigest": source_digest,
+        "job": job,
+        "materials": materials,
+        "workCentres": work_centres,
+        "routing": routing,
+    }
+    candidate["packageDigest"] = _canonical_digest(candidate)
+    return _validate_plan_package(candidate)
+
+
+def build_plant_order_execution_plan(
+    *,
+    plan_id: object,
+    source_digest: object,
+    job: object,
+    materials: object,
+    work_centres: object,
+    routing: object,
+) -> dict[str, Any]:
+    """Build a v2 package that requires operation evidence before output."""
+
+    candidate = {
+        "contract": PLANT_ORDER_EXECUTION_PLAN_CONTRACT,
         "planId": plan_id,
         "sourceDigest": source_digest,
         "job": job,
@@ -523,6 +553,27 @@ def _command_payload(value: object, field: str) -> dict[str, Any]:
             ),
             "quantityMilli": _integer(
                 source["quantityMilli"], f"{field}.quantityMilli", minimum=1
+            ),
+            "proof": _proof(source["proof"], f"{field}.proof"),
+        }
+
+    if kind == "record_operation":
+        source = _object(
+            value,
+            field,
+            ("kind", "id", "operationId", "quantity", "actualMinutesMilli", "proof"),
+        )
+        return {
+            "kind": kind,
+            "id": _identifier(source["id"], f"{field}.id", "OPRUN"),
+            "operationId": _identifier(
+                source["operationId"], f"{field}.operationId", "OP"
+            ),
+            "quantity": _integer(source["quantity"], f"{field}.quantity", minimum=1),
+            "actualMinutesMilli": _integer(
+                source["actualMinutesMilli"],
+                f"{field}.actualMinutesMilli",
+                minimum=1,
             ),
             "proof": _proof(source["proof"], f"{field}.proof"),
         }
@@ -698,6 +749,7 @@ def _empty_projection() -> dict[str, Any]:
         "orderRelease": None,
         "materials": [],
         "routing": [],
+        "operations": [],
         "workCentres": [],
         "outputEntries": [],
         "totalOutput": 0,
@@ -709,6 +761,8 @@ def _empty_projection() -> dict[str, Any]:
         "metrics": {
             "targetQuantity": 0,
             "issuedMaterialCount": 0,
+            "completedOperationCount": 0,
+            "actualOperationMinutesMilli": 0,
             "outputQuantity": 0,
             "acceptedQuantity": 0,
         },
@@ -723,7 +777,10 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
     latest_availability: dict[str, Any] | None = None
     order_release: dict[str, Any] | None = None
     issued: dict[str, int] = {}
+    operation_quantities: dict[str, int] = {}
+    operation_minutes: dict[str, int] = {}
     material_issue_commands: list[dict[str, Any]] = []
+    operation_commands: list[dict[str, Any]] = []
     output_entries: list[dict[str, Any]] = []
     inspections: list[dict[str, Any]] = []
     batch_release: dict[str, Any] | None = None
@@ -739,6 +796,12 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
                 raise _fail(f"{field} attempts to replace the immutable reviewed plan.")
             plan = command["package"]
             issued = {row["materialId"]: 0 for row in plan["materials"]}
+            operation_quantities = {
+                row["operationId"]: 0 for row in plan["routing"]
+            }
+            operation_minutes = {
+                row["operationId"]: 0 for row in plan["routing"]
+            }
             continue
         if plan is None:
             raise _fail(f"{field} has no reviewed plan.")
@@ -799,6 +862,57 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
             material_issue_commands.append(command)
             continue
 
+        if kind == "record_operation":
+            if current_hold:
+                raise _fail(f"{field} is blocked by the failed current inspection.")
+            if plan["contract"] != PLANT_ORDER_EXECUTION_PLAN_CONTRACT:
+                raise _fail(f"{field} requires a version 2 execution plan.")
+            operation_index = next(
+                (
+                    route_index
+                    for route_index, row in enumerate(plan["routing"])
+                    if row["operationId"] == command["operationId"]
+                ),
+                -1,
+            )
+            if operation_index < 0:
+                raise _fail(f"{field}.operationId is not in the reviewed routing.")
+            completed_quantity = operation_quantities[command["operationId"]]
+            next_completed_quantity = completed_quantity + command["quantity"]
+            if next_completed_quantity > job["targetQuantity"]:
+                raise _fail(f"{field} exceeds the reviewed operation target.")
+            available_input_quantity = (
+                job["targetQuantity"]
+                if operation_index == 0
+                else operation_quantities[
+                    plan["routing"][operation_index - 1]["operationId"]
+                ]
+            )
+            if next_completed_quantity > available_input_quantity:
+                raise _fail(
+                    f"{field} exceeds quantity completed by the prior operation."
+                )
+            for material in plan["materials"]:
+                required_for_progress = _safe_product(
+                    next_completed_quantity,
+                    material["quantityPerUnitMilli"],
+                    f"material issue requirement for {material['materialId']}",
+                )
+                if issued[material["materialId"]] < required_for_progress:
+                    raise _fail(
+                        f"{field} lacks issued {material['materialId']} for operation progress."
+                    )
+            next_minutes = (
+                operation_minutes[command["operationId"]]
+                + command["actualMinutesMilli"]
+            )
+            if next_minutes > _MAX_SAFE_INTEGER:
+                raise _fail(f"{field}.actualMinutesMilli exceeds the supported range.")
+            operation_quantities[command["operationId"]] = next_completed_quantity
+            operation_minutes[command["operationId"]] = next_minutes
+            operation_commands.append(command)
+            continue
+
         if kind == "record_output":
             if current_hold:
                 raise _fail(f"{field} is blocked by the failed current inspection.")
@@ -807,6 +921,12 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
             next_output = total_output + command["quantity"]
             if next_output > job["targetQuantity"]:
                 raise _fail(f"{field} exceeds the reviewed order target.")
+            if plan["contract"] == PLANT_ORDER_EXECUTION_PLAN_CONTRACT:
+                final_operation_id = plan["routing"][-1]["operationId"]
+                if operation_quantities[final_operation_id] < next_output:
+                    raise _fail(
+                        f"{field} exceeds completed final-operation quantity."
+                    )
             for material in plan["materials"]:
                 required_for_output = _safe_product(
                     next_output,
@@ -885,6 +1005,39 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
                 }
             )
 
+    operations = []
+    for index, row in enumerate(plan["routing"]):
+        completed_quantity = operation_quantities[row["operationId"]]
+        available_input_quantity = (
+            plan["job"]["targetQuantity"]
+            if index == 0
+            else operation_quantities[plan["routing"][index - 1]["operationId"]]
+        )
+        operation_status = (
+            "complete"
+            if completed_quantity == plan["job"]["targetQuantity"]
+            else "in_progress"
+            if completed_quantity
+            else "ready"
+            if available_input_quantity > 0
+            else "blocked"
+        )
+        operations.append(
+            {
+                **row,
+                "completedQuantity": completed_quantity,
+                "remainingQuantity": plan["job"]["targetQuantity"]
+                - completed_quantity,
+                "plannedMinutesMilli": _safe_product(
+                    plan["job"]["targetQuantity"],
+                    row["minutesPerUnitMilli"],
+                    f"planned operation minutes for {row['operationId']}",
+                ),
+                "actualMinutesMilli": operation_minutes[row["operationId"]],
+                "status": operation_status,
+            }
+        )
+
     latest_inspection = inspections[-1] if inspections else None
     inspection_is_current = bool(
         latest_inspection and latest_inspection["inspectedQuantity"] == total_output
@@ -916,7 +1069,7 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
             if inspection_is_current and latest_inspection["result"] == "pass"
             else "inspection_due"
         )
-    elif total_output or material_issue_commands:
+    elif total_output or material_issue_commands or operation_commands:
         status = "in_process"
     else:
         status = "released"
@@ -928,6 +1081,7 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
         "orderRelease": order_release,
         "materials": material_rows,
         "routing": plan["routing"],
+        "operations": operations,
         "workCentres": latest_availability["workCentres"] if latest_availability else [],
         "outputEntries": output_entries,
         "totalOutput": total_output,
@@ -939,6 +1093,10 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
         "metrics": {
             "targetQuantity": plan["job"]["targetQuantity"],
             "issuedMaterialCount": sum(1 for quantity in issued.values() if quantity),
+            "completedOperationCount": sum(
+                1 for operation in operations if operation["status"] == "complete"
+            ),
+            "actualOperationMinutesMilli": sum(operation_minutes.values()),
             "outputQuantity": total_output,
             "acceptedQuantity": (
                 latest_inspection["acceptedQuantity"]
@@ -1162,6 +1320,30 @@ def issue_plant_order_material(
     )
 
 
+def record_plant_order_operation(
+    state: object,
+    *,
+    operation_run_id: object,
+    operation_id: object,
+    quantity: object,
+    actual_minutes_milli: object,
+    proof: object,
+    expected_head_digest: object,
+) -> dict[str, Any]:
+    return _append_command(
+        state,
+        {
+            "kind": "record_operation",
+            "id": operation_run_id,
+            "operationId": operation_id,
+            "quantity": quantity,
+            "actualMinutesMilli": actual_minutes_milli,
+            "proof": _proof(proof, "proof"),
+        },
+        expected_head_digest=expected_head_digest,
+    )
+
+
 def record_plant_order_output(
     state: object,
     *,
@@ -1236,11 +1418,13 @@ def release_plant_order_batch(
 
 __all__ = (
     "EMPTY_PLANT_ORDER_DIGEST",
+    "PLANT_ORDER_EXECUTION_PLAN_CONTRACT",
     "PLANT_ORDER_PLAN_CONTRACT",
     "PLANT_ORDER_PROJECTION_CONTRACT",
     "PLANT_ORDER_STATE_SCHEMA",
     "PlantOrderValidationError",
     "apply_plant_order_plan",
+    "build_plant_order_execution_plan",
     "build_plant_order_plan",
     "check_plant_order_availability",
     "create_empty_plant_order_state",
@@ -1248,6 +1432,7 @@ __all__ = (
     "issue_plant_order_material",
     "plant_order_evidence_digest",
     "project_plant_order",
+    "record_plant_order_operation",
     "record_plant_order_output",
     "release_plant_order",
     "release_plant_order_batch",

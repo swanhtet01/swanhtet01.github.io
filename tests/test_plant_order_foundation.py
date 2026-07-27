@@ -5,9 +5,11 @@ import unittest
 
 from supermega_runtime.plant_order_foundation import (
     EMPTY_PLANT_ORDER_DIGEST,
+    PLANT_ORDER_EXECUTION_PLAN_CONTRACT,
     PLANT_ORDER_PLAN_CONTRACT,
     PlantOrderValidationError,
     apply_plant_order_plan,
+    build_plant_order_execution_plan,
     build_plant_order_plan,
     check_plant_order_availability,
     create_empty_plant_order_state,
@@ -15,6 +17,7 @@ from supermega_runtime.plant_order_foundation import (
     issue_plant_order_material,
     plant_order_evidence_digest,
     project_plant_order,
+    record_plant_order_operation,
     record_plant_order_output,
     release_plant_order,
     release_plant_order_batch,
@@ -78,6 +81,18 @@ def reviewed_plan(*, target: int = 10) -> dict[str, object]:
                 "minutesPerUnitMilli": 1_000,
             },
         ],
+    )
+
+
+def reviewed_execution_plan(*, target: int = 10) -> dict[str, object]:
+    legacy = reviewed_plan(target=target)
+    return build_plant_order_execution_plan(
+        plan_id=legacy["planId"],
+        source_digest=legacy["sourceDigest"],
+        job=legacy["job"],
+        materials=legacy["materials"],
+        work_centres=legacy["workCentres"],
+        routing=legacy["routing"],
     )
 
 
@@ -169,6 +184,42 @@ def fully_issued_state() -> dict[str, object]:
     )["state"]
 
 
+def fully_issued_execution_state() -> dict[str, object]:
+    state = create_empty_plant_order_state()
+    state = apply_plant_order_plan(
+        state,
+        reviewed_execution_plan(),
+        proof(1, "approved v2 BOM and routing"),
+        expected_head_digest=state["headDigest"],
+    )["state"]
+    state = check_state(state)
+    state = release_plant_order(
+        state,
+        release_id="REL-20260726-001",
+        availability_check_id="CHK-20260726-001",
+        proof=proof(3, "released v2 order after reviewed availability"),
+        expected_head_digest=state["headDigest"],
+    )["state"]
+    state = issue_plant_order_material(
+        state,
+        issue_id="ISSUE-20260726-001",
+        material_id="MAT-FILTER-001",
+        input_lot_id="LOT-FILTER-2407",
+        quantity_milli=15_000,
+        proof=proof(4, "issued reviewed filter-media lot"),
+        expected_head_digest=state["headDigest"],
+    )["state"]
+    return issue_plant_order_material(
+        state,
+        issue_id="ISSUE-20260726-002",
+        material_id="MAT-SHELL-001",
+        input_lot_id="LOT-SHELL-2407",
+        quantity_milli=20_000,
+        proof=proof(5, "issued reviewed shell lot"),
+        expected_head_digest=state["headDigest"],
+    )["state"]
+
+
 class PlantOrderFoundationTests(unittest.TestCase):
     def test_reviewed_plan_is_digest_bound_and_projects_requirements(self) -> None:
         package = reviewed_plan()
@@ -181,6 +232,161 @@ class PlantOrderFoundationTests(unittest.TestCase):
         self.assertEqual(projection["plan"]["job"]["jobId"], "JOB-401")
         self.assertEqual(projection["materials"][0]["requiredQuantityMilli"], 15_000)
         self.assertEqual(projection["materials"][1]["requiredQuantityMilli"], 20_000)
+
+    def test_v2_operations_enforce_material_upstream_wip_and_output(self) -> None:
+        plan = reviewed_execution_plan()
+        self.assertEqual(plan["contract"], PLANT_ORDER_EXECUTION_PLAN_CONTRACT)
+
+        unissued = create_empty_plant_order_state()
+        unissued = apply_plant_order_plan(
+            unissued,
+            plan,
+            proof(1, "approved v2 BOM and routing"),
+            expected_head_digest=unissued["headDigest"],
+        )["state"]
+        unissued = check_state(unissued)
+        unissued = release_plant_order(
+            unissued,
+            release_id="REL-UNISSUED-001",
+            availability_check_id="CHK-20260726-001",
+            proof=proof(3),
+            expected_head_digest=unissued["headDigest"],
+        )["state"]
+        with self.assertRaisesRegex(PlantOrderValidationError, "lacks issued"):
+            record_plant_order_operation(
+                unissued,
+                operation_run_id="OPRUN-UNISSUED-001",
+                operation_id="OP-ASSEMBLY-10",
+                quantity=1,
+                actual_minutes_milli=500,
+                proof=proof(4),
+                expected_head_digest=unissued["headDigest"],
+            )
+
+        state = fully_issued_execution_state()
+        with self.assertRaisesRegex(
+            PlantOrderValidationError, "completed final-operation quantity"
+        ):
+            record_plant_order_output(
+                state,
+                output_id="OUT-BEFORE-ROUTING-001",
+                output_batch_id="BATCH-20260726-401",
+                quantity=1,
+                proof=proof(6),
+                expected_head_digest=state["headDigest"],
+            )
+        with self.assertRaisesRegex(PlantOrderValidationError, "prior operation"):
+            record_plant_order_operation(
+                state,
+                operation_run_id="OPRUN-TEST-EARLY-001",
+                operation_id="OP-TEST-20",
+                quantity=1,
+                actual_minutes_milli=1_000,
+                proof=proof(6),
+                expected_head_digest=state["headDigest"],
+            )
+
+        state = record_plant_order_operation(
+            state,
+            operation_run_id="OPRUN-ASSEMBLY-001",
+            operation_id="OP-ASSEMBLY-10",
+            quantity=4,
+            actual_minutes_milli=2_200,
+            proof=proof(6, "recorded four assembled units"),
+            expected_head_digest=state["headDigest"],
+        )["state"]
+        with self.assertRaisesRegex(PlantOrderValidationError, "prior operation"):
+            record_plant_order_operation(
+                state,
+                operation_run_id="OPRUN-TEST-OVERFLOW-001",
+                operation_id="OP-TEST-20",
+                quantity=5,
+                actual_minutes_milli=5_000,
+                proof=proof(7),
+                expected_head_digest=state["headDigest"],
+            )
+        state = record_plant_order_operation(
+            state,
+            operation_run_id="OPRUN-TEST-001",
+            operation_id="OP-TEST-20",
+            quantity=4,
+            actual_minutes_milli=4_000,
+            proof=proof(7, "recorded four pressure-tested units"),
+            expected_head_digest=state["headDigest"],
+        )["state"]
+        projection = project_plant_order(state)
+        self.assertEqual(
+            [operation["completedQuantity"] for operation in projection["operations"]],
+            [4, 4],
+        )
+        self.assertEqual(projection["metrics"]["actualOperationMinutesMilli"], 6_200)
+        self.assertEqual(projection["metrics"]["completedOperationCount"], 0)
+
+        state = record_plant_order_output(
+            state,
+            output_id="OUT-TRANSFER-BATCH-001",
+            output_batch_id="BATCH-20260726-401",
+            quantity=4,
+            proof=proof(8, "recorded routed transfer batch"),
+            expected_head_digest=state["headDigest"],
+        )["state"]
+        self.assertEqual(project_plant_order(state)["totalOutput"], 4)
+
+    def test_v2_complete_routing_reaches_existing_quality_release(self) -> None:
+        state = fully_issued_execution_state()
+        state = record_plant_order_operation(
+            state,
+            operation_run_id="OPRUN-ASSEMBLY-FULL-001",
+            operation_id="OP-ASSEMBLY-10",
+            quantity=10,
+            actual_minutes_milli=5_000,
+            proof=proof(6, "completed assembly operation"),
+            expected_head_digest=state["headDigest"],
+        )["state"]
+        state = record_plant_order_operation(
+            state,
+            operation_run_id="OPRUN-TEST-FULL-001",
+            operation_id="OP-TEST-20",
+            quantity=10,
+            actual_minutes_milli=10_000,
+            proof=proof(7, "completed pressure-test operation"),
+            expected_head_digest=state["headDigest"],
+        )["state"]
+        projection = project_plant_order(state)
+        self.assertEqual(projection["metrics"]["completedOperationCount"], 2)
+        self.assertEqual(
+            [operation["status"] for operation in projection["operations"]],
+            ["complete", "complete"],
+        )
+
+        state = record_plant_order_output(
+            state,
+            output_id="OUT-V2-001",
+            output_batch_id="BATCH-20260726-401",
+            quantity=10,
+            proof=proof(8, "recorded completed routed output"),
+            expected_head_digest=state["headDigest"],
+        )["state"]
+        state = inspect_plant_order_output(
+            state,
+            inspection_id="INSP-V2-001",
+            output_batch_id="BATCH-20260726-401",
+            inspected_quantity=10,
+            accepted_quantity=10,
+            rejected_quantity=0,
+            result="pass",
+            proof=proof(9, "accepted routed output"),
+            expected_head_digest=state["headDigest"],
+        )["state"]
+        state = release_plant_order_batch(
+            state,
+            quality_release_id="QREL-V2-001",
+            output_batch_id="BATCH-20260726-401",
+            inspection_id="INSP-V2-001",
+            proof=proof(10, "released routed batch"),
+            expected_head_digest=state["headDigest"],
+        )["state"]
+        self.assertEqual(project_plant_order(state)["status"], "released_to_stock")
 
     def test_full_lifecycle_retains_genealogy_and_human_releases(self) -> None:
         state = fully_issued_state()

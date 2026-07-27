@@ -1,9 +1,11 @@
 export const PLANT_ORDER_STATE_SCHEMA = 'supermega.plant.order_foundation.v1' as const
 export const PLANT_ORDER_PLAN_CONTRACT = 'supermega.plant.reviewed_plan.v1' as const
+export const PLANT_ORDER_EXECUTION_PLAN_CONTRACT = 'supermega.plant.reviewed_plan.v2' as const
 export const PLANT_ORDER_PROJECTION_CONTRACT = 'supermega.plant.order_projection.v1' as const
 export const EMPTY_PLANT_ORDER_DIGEST = `sha256:${'0'.repeat(64)}`
 export const PLANT_ORDER_STORAGE_PREFIX = 'supermega.plant.order-foundation.v1:'
 export const PLANT_ORDER_ADDITIONAL_MATERIAL_MAX = 11
+export const PLANT_ORDER_ADDITIONAL_OPERATION_MAX = 11
 
 export type PlantOrderProof = {
   actionId: string
@@ -29,8 +31,10 @@ export type PlantOrderRoutingStep = {
   minutesPerUnitMilli: number
 }
 
+export type PlantOrderRoutingDraft = Omit<PlantOrderRoutingStep, 'sequence'> & { workCentreName: string }
+
 export type PlantOrderPlan = {
-  contract: typeof PLANT_ORDER_PLAN_CONTRACT
+  contract: typeof PLANT_ORDER_PLAN_CONTRACT | typeof PLANT_ORDER_EXECUTION_PLAN_CONTRACT
   planId: string
   sourceDigest: string
   job: { jobId: string; product: string; targetQuantity: number; outputBatchId: string }
@@ -62,6 +66,7 @@ type AvailabilityCommand = {
 }
 type ReleaseOrderCommand = { kind: 'release_order'; id: string; availabilityCheckId: string; proof: PlantOrderProof }
 type IssueMaterialCommand = { kind: 'issue_material'; id: string; materialId: string; inputLotId: string; quantityMilli: number; proof: PlantOrderProof }
+export type RecordOperationCommand = { kind: 'record_operation'; id: string; operationId: string; quantity: number; actualMinutesMilli: number; proof: PlantOrderProof }
 type RecordOutputCommand = { kind: 'record_output'; id: string; outputBatchId: string; quantity: number; proof: PlantOrderProof }
 export type InspectOutputCommand = {
   kind: 'inspect_output'
@@ -74,7 +79,7 @@ export type InspectOutputCommand = {
   proof: PlantOrderProof
 }
 type ReleaseBatchCommand = { kind: 'release_batch'; id: string; outputBatchId: string; inspectionId: string; proof: PlantOrderProof }
-export type PlantOrderCommandPayload = ImportPlanCommand | AvailabilityCommand | ReleaseOrderCommand | IssueMaterialCommand | RecordOutputCommand | InspectOutputCommand | ReleaseBatchCommand
+export type PlantOrderCommandPayload = ImportPlanCommand | AvailabilityCommand | ReleaseOrderCommand | IssueMaterialCommand | RecordOperationCommand | RecordOutputCommand | InspectOutputCommand | ReleaseBatchCommand
 
 export type PlantOrderCommand = {
   sequence: number
@@ -113,6 +118,7 @@ export type PlantOrderProjection = {
   orderRelease: ReleaseOrderCommand | null
   materials: Array<PlantOrderMaterial & { requiredQuantityMilli: number; issuedQuantityMilli: number; remainingToIssueMilli: number; inputLotId: string | null; availableQuantityMilli: number | null }>
   routing: PlantOrderRoutingStep[]
+  operations: Array<PlantOrderRoutingStep & { completedQuantity: number; remainingQuantity: number; plannedMinutesMilli: number; actualMinutesMilli: number; status: 'blocked' | 'ready' | 'in_progress' | 'complete' }>
   workCentres: PlantOrderAvailabilityProjection['workCentres']
   outputEntries: RecordOutputCommand[]
   totalOutput: number
@@ -121,7 +127,7 @@ export type PlantOrderProjection = {
   qualityHold: { inspectionId: string; rejectedQuantity: number; proof: PlantOrderProof } | null
   batchRelease: ReleaseBatchCommand | null
   genealogy: Array<{ materialId: string; inputLotId: string; outputBatchId: string; issuedQuantityMilli: number; unit: PlantOrderMaterial['unit'] }>
-  metrics: { targetQuantity: number; issuedMaterialCount: number; outputQuantity: number; acceptedQuantity: number }
+  metrics: { targetQuantity: number; issuedMaterialCount: number; completedOperationCount: number; actualOperationMinutesMilli: number; outputQuantity: number; acceptedQuantity: number }
 }
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
@@ -131,7 +137,7 @@ const digestPattern = /^sha256:[0-9a-f]{64}$/
 const businessIdPattern = /^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+$/
 const timestampPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/
 const materialUnits = new Set(['kg', 'g', 'l', 'ml', 'pcs', 'pack', 'bag', 'roll', 'sheet', 'm', 'cm'])
-const commandKinds = new Set(['import_plan', 'availability_check', 'release_order', 'issue_material', 'record_output', 'inspect_output', 'release_batch'])
+const commandKinds = new Set(['import_plan', 'availability_check', 'release_order', 'issue_material', 'record_operation', 'record_output', 'inspect_output', 'release_batch'])
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -199,6 +205,30 @@ export function parsePlantOrderMaterialPaste(value: string) {
   })
   unique(materials.map((material) => material.materialId), 'Additional BOM material IDs')
   return materials.sort((left, right) => compareCanonicalText(left.materialId, right.materialId))
+}
+
+export function parsePlantOrderRoutingPaste(value: string): PlantOrderRoutingDraft[] {
+  if (value.length > 16_000) throw new Error('Additional routing rows are too large.')
+  const lines = value.replace(/^\uFEFF/, '').split(/\r?\n/)
+    .map((line, index) => ({ line: index + 1, value: line.trim() }))
+    .filter((line) => line.value)
+  if (lines[0]?.value.toLowerCase().replaceAll(' ', '') === 'operation_id|operation_name|work_centre_id|work_centre_name|minutes_per_unit') lines.shift()
+  if (lines.length > PLANT_ORDER_ADDITIONAL_OPERATION_MAX) throw new Error(`Add at most ${PLANT_ORDER_ADDITIONAL_OPERATION_MAX} additional routing operations.`)
+  const operations = lines.map(({ line, value: row }) => {
+    const columns = row.split('|').map((column) => column.trim())
+    if (columns.length !== 5) throw new Error(`Additional routing line ${line} must contain operation ID | name | work centre ID | work centre name | minutes per output unit.`)
+    const minutesPerUnitMilli = parsePlantOrderQuantityMilli(columns[4])
+    if (!minutesPerUnitMilli) throw new Error(`Additional routing line ${line} needs positive minutes with up to three decimals.`)
+    return {
+      operationId: identifier(columns[0].toUpperCase(), `Additional routing line ${line} operation ID`, 'OP'),
+      name: text(columns[1], `Additional routing line ${line} operation name`),
+      workCentreId: identifier(columns[2].toUpperCase(), `Additional routing line ${line} work-centre ID`, 'WC'),
+      workCentreName: text(columns[3], `Additional routing line ${line} work-centre name`),
+      minutesPerUnitMilli,
+    }
+  })
+  unique(operations.map((operation) => operation.operationId), 'Additional routing operation IDs')
+  return operations
 }
 
 function safeProduct(left: number, right: number, field: string) {
@@ -367,14 +397,15 @@ function validateRouting(value: unknown, field: string, workCentreIds: Set<strin
 
 function validatePlanPackage(value: unknown): PlantOrderPlan {
   const source = exact(value, 'plan package', ['contract', 'planId', 'sourceDigest', 'job', 'materials', 'workCentres', 'routing', 'packageDigest'])
-  if (source.contract !== PLANT_ORDER_PLAN_CONTRACT) throw new Error('plan package.contract is unsupported.')
+  if (source.contract !== PLANT_ORDER_PLAN_CONTRACT && source.contract !== PLANT_ORDER_EXECUTION_PLAN_CONTRACT) throw new Error('plan package.contract is unsupported.')
+  const contract = source.contract
   const planId = identifier(source.planId, 'plan package.planId', 'PLN'); const sourceDigest = digest(source.sourceDigest, 'plan package.sourceDigest')
   const job = validateJob(source.job, 'plan package.job'); const materials = validateMaterials(source.materials, 'plan package.materials')
   const workCentres = validateWorkCentres(source.workCentres, 'plan package.workCentres')
   const routing = validateRouting(source.routing, 'plan package.routing', new Set(workCentres.map((row) => row.workCentreId)))
   materials.forEach((row) => safeProduct(job.targetQuantity, row.quantityPerUnitMilli, `plan package material requirement for ${row.materialId}`))
   routing.forEach((row) => safeProduct(job.targetQuantity, row.minutesPerUnitMilli, `plan package capacity requirement for ${row.operationId}`))
-  const canonical = { contract: PLANT_ORDER_PLAN_CONTRACT, planId, sourceDigest, job, materials, workCentres, routing }
+  const canonical = { contract, planId, sourceDigest, job, materials, workCentres, routing }
   const packageDigest = digest(source.packageDigest, 'plan package.packageDigest')
   if (packageDigest !== canonicalDigest(canonical)) throw new Error('plan package.packageDigest does not match its reviewed contents.')
   return { ...canonical, packageDigest }
@@ -382,6 +413,11 @@ function validatePlanPackage(value: unknown): PlantOrderPlan {
 
 export function buildPlantOrderPlan(input: Omit<PlantOrderPlan, 'contract' | 'packageDigest'>) {
   const candidate = { contract: PLANT_ORDER_PLAN_CONTRACT, ...input }
+  return validatePlanPackage({ ...candidate, packageDigest: canonicalDigest(candidate) })
+}
+
+export function buildPlantOrderExecutionPlan(input: Omit<PlantOrderPlan, 'contract' | 'packageDigest'>) {
+  const candidate = { contract: PLANT_ORDER_EXECUTION_PLAN_CONTRACT, ...input }
   return validatePlanPackage({ ...candidate, packageDigest: canonicalDigest(candidate) })
 }
 
@@ -426,6 +462,10 @@ function commandPayload(value: unknown, field: string): PlantOrderCommandPayload
   if (value.kind === 'issue_material') {
     const row = exact(value, field, ['kind', 'id', 'materialId', 'inputLotId', 'quantityMilli', 'proof'])
     return { kind: 'issue_material', id: identifier(row.id, `${field}.id`, 'ISSUE'), materialId: identifier(row.materialId, `${field}.materialId`, 'MAT'), inputLotId: identifier(row.inputLotId, `${field}.inputLotId`, 'LOT'), quantityMilli: integer(row.quantityMilli, `${field}.quantityMilli`, 1), proof: actionProof(row.proof, `${field}.proof`) }
+  }
+  if (value.kind === 'record_operation') {
+    const row = exact(value, field, ['kind', 'id', 'operationId', 'quantity', 'actualMinutesMilli', 'proof'])
+    return { kind: 'record_operation', id: identifier(row.id, `${field}.id`, 'OPRUN'), operationId: identifier(row.operationId, `${field}.operationId`, 'OP'), quantity: integer(row.quantity, `${field}.quantity`, 1), actualMinutesMilli: integer(row.actualMinutesMilli, `${field}.actualMinutesMilli`, 1), proof: actionProof(row.proof, `${field}.proof`) }
   }
   if (value.kind === 'record_output') {
     const row = exact(value, field, ['kind', 'id', 'outputBatchId', 'quantity', 'proof'])
@@ -474,20 +514,20 @@ function availabilityProjection(plan: PlantOrderPlan, command: AvailabilityComma
 }
 
 function emptyProjection(): Omit<PlantOrderProjection, 'contract' | 'revision' | 'headDigest'> {
-  return { plan: null, status: 'unplanned', latestAvailability: null, orderRelease: null, materials: [], routing: [], workCentres: [], outputEntries: [], totalOutput: 0, inspections: [], latestInspection: null, qualityHold: null, batchRelease: null, genealogy: [], metrics: { targetQuantity: 0, issuedMaterialCount: 0, outputQuantity: 0, acceptedQuantity: 0 } }
+  return { plan: null, status: 'unplanned', latestAvailability: null, orderRelease: null, materials: [], routing: [], operations: [], workCentres: [], outputEntries: [], totalOutput: 0, inspections: [], latestInspection: null, qualityHold: null, batchRelease: null, genealogy: [], metrics: { targetQuantity: 0, issuedMaterialCount: 0, completedOperationCount: 0, actualOperationMinutesMilli: 0, outputQuantity: 0, acceptedQuantity: 0 } }
 }
 
 function replayCommands(commands: PlantOrderCommandPayload[]): Omit<PlantOrderProjection, 'contract' | 'revision' | 'headDigest'> {
   if (!commands.length) return emptyProjection()
   let plan: PlantOrderPlan | null = null; let latestAvailability: PlantOrderAvailabilityProjection | null = null; let orderRelease: ReleaseOrderCommand | null = null
-  let issued = new Map<string, number>(); const materialIssueCommands: IssueMaterialCommand[] = []; const outputEntries: RecordOutputCommand[] = []; const inspections: InspectOutputCommand[] = []
+  let issued = new Map<string, number>(); let operationQuantities = new Map<string, number>(); let operationMinutes = new Map<string, number>(); const materialIssueCommands: IssueMaterialCommand[] = []; const operationCommands: RecordOperationCommand[] = []; const outputEntries: RecordOutputCommand[] = []; const inspections: InspectOutputCommand[] = []
   let batchRelease: ReleaseBatchCommand | null = null; let totalOutput = 0
   commands.forEach((command, index) => {
     const field = `commands[${index}].payload`
     if (index === 0 && command.kind !== 'import_plan') throw new Error('The first Plant order command must be the reviewed plan.')
     if (command.kind === 'import_plan') {
       if (plan || index !== 0) throw new Error(`${field} attempts to replace the immutable reviewed plan.`)
-      plan = command.package; issued = new Map(command.package.materials.map((row) => [row.materialId, 0])); return
+      plan = command.package; issued = new Map(command.package.materials.map((row) => [row.materialId, 0])); operationQuantities = new Map(command.package.routing.map((row) => [row.operationId, 0])); operationMinutes = new Map(command.package.routing.map((row) => [row.operationId, 0])); return
     }
     if (!plan) throw new Error(`${field} has no reviewed plan.`)
     const currentPlan = plan as PlantOrderPlan
@@ -517,11 +557,35 @@ function replayCommands(commands: PlantOrderCommandPayload[]): Omit<PlantOrderPr
       if (nextIssued > availability.availableQuantityMilli) throw new Error(`${field} exceeds released material availability.`)
       issued.set(command.materialId, nextIssued); materialIssueCommands.push(command); return
     }
+    if (command.kind === 'record_operation') {
+      if (currentHold) throw new Error(`${field} is blocked by the failed current inspection.`)
+      if (currentPlan.contract !== PLANT_ORDER_EXECUTION_PLAN_CONTRACT) throw new Error(`${field} requires a version 2 execution plan.`)
+      const operationIndex = currentPlan.routing.findIndex((row) => row.operationId === command.operationId)
+      if (operationIndex < 0) throw new Error(`${field}.operationId is not in the reviewed routing.`)
+      const completedQuantity = operationQuantities.get(command.operationId) ?? 0
+      const nextCompletedQuantity = completedQuantity + command.quantity
+      if (nextCompletedQuantity > currentPlan.job.targetQuantity) throw new Error(`${field} exceeds the reviewed operation target.`)
+      const availableInputQuantity = operationIndex === 0
+        ? currentPlan.job.targetQuantity
+        : operationQuantities.get(currentPlan.routing[operationIndex - 1].operationId) ?? 0
+      if (nextCompletedQuantity > availableInputQuantity) throw new Error(`${field} exceeds quantity completed by the prior operation.`)
+      currentPlan.materials.forEach((material) => {
+        const required = safeProduct(nextCompletedQuantity, material.quantityPerUnitMilli, `material issue requirement for ${material.materialId}`)
+        if ((issued.get(material.materialId) ?? 0) < required) throw new Error(`${field} lacks issued ${material.materialId} for operation progress.`)
+      })
+      const nextMinutes = (operationMinutes.get(command.operationId) ?? 0) + command.actualMinutesMilli
+      if (!Number.isSafeInteger(nextMinutes)) throw new Error(`${field}.actualMinutesMilli exceeds the supported range.`)
+      operationQuantities.set(command.operationId, nextCompletedQuantity); operationMinutes.set(command.operationId, nextMinutes); operationCommands.push(command); return
+    }
     if (command.kind === 'record_output') {
       if (currentHold) throw new Error(`${field} is blocked by the failed current inspection.`)
       if (command.outputBatchId !== currentPlan.job.outputBatchId) throw new Error(`${field}.outputBatchId differs from the reviewed batch.`)
       const nextOutput = totalOutput + command.quantity
       if (nextOutput > currentPlan.job.targetQuantity) throw new Error(`${field} exceeds the reviewed order target.`)
+      if (currentPlan.contract === PLANT_ORDER_EXECUTION_PLAN_CONTRACT) {
+        const finalOperation = currentPlan.routing.at(-1)!
+        if ((operationQuantities.get(finalOperation.operationId) ?? 0) < nextOutput) throw new Error(`${field} exceeds completed final-operation quantity.`)
+      }
       currentPlan.materials.forEach((material) => {
         const required = safeProduct(nextOutput, material.quantityPerUnitMilli, `material issue requirement for ${material.materialId}`)
         if ((issued.get(material.materialId) ?? 0) < required) throw new Error(`${field} lacks issued ${material.materialId} for the recorded output.`)
@@ -552,6 +616,12 @@ function replayCommands(commands: PlantOrderCommandPayload[]): Omit<PlantOrderPr
     return { ...row, requiredQuantityMilli, issuedQuantityMilli, remainingToIssueMilli: requiredQuantityMilli - issuedQuantityMilli, inputLotId: available?.inputLotId ?? null, availableQuantityMilli: available?.availableQuantityMilli ?? null }
   })
   const genealogy = materials.filter((row) => row.issuedQuantityMilli && row.inputLotId).map((row) => ({ materialId: row.materialId, inputLotId: row.inputLotId!, outputBatchId: finalPlan.job.outputBatchId, issuedQuantityMilli: row.issuedQuantityMilli, unit: row.unit }))
+  const operations = finalPlan.routing.map((row, index) => {
+    const completedQuantity = operationQuantities.get(row.operationId) ?? 0
+    const availableInputQuantity = index === 0 ? finalPlan.job.targetQuantity : operationQuantities.get(finalPlan.routing[index - 1].operationId) ?? 0
+    const status = completedQuantity === finalPlan.job.targetQuantity ? 'complete' : completedQuantity ? 'in_progress' : availableInputQuantity > 0 ? 'ready' : 'blocked'
+    return { ...row, completedQuantity, remainingQuantity: finalPlan.job.targetQuantity - completedQuantity, plannedMinutesMilli: safeProduct(finalPlan.job.targetQuantity, row.minutesPerUnitMilli, `planned operation minutes for ${row.operationId}`), actualMinutesMilli: operationMinutes.get(row.operationId) ?? 0, status } as PlantOrderProjection['operations'][number]
+  })
   const latestInspection = inspections.at(-1) ?? null; const inspectionIsCurrent = Boolean(latestInspection && latestInspection.inspectedQuantity === totalOutput)
   const qualityHold = inspectionIsCurrent && latestInspection?.result === 'fail' ? { inspectionId: latestInspection.id, rejectedQuantity: latestInspection.rejectedQuantity, proof: latestInspection.proof } : null
   let status: PlantOrderProjection['status']
@@ -559,9 +629,9 @@ function replayCommands(commands: PlantOrderCommandPayload[]): Omit<PlantOrderPr
   else if (qualityHold) status = 'quality_hold'
   else if (!finalOrderRelease) status = !finalAvailability ? 'planned' : finalAvailability.passed ? 'ready' : 'shortfall'
   else if (totalOutput === finalPlan.job.targetQuantity) status = inspectionIsCurrent && latestInspection?.result === 'pass' ? 'ready_to_release' : 'inspection_due'
-  else if (totalOutput || materialIssueCommands.length) status = 'in_process'
+  else if (totalOutput || materialIssueCommands.length || operationCommands.length) status = 'in_process'
   else status = 'released'
-  return { plan: finalPlan, status, latestAvailability: finalAvailability, orderRelease: finalOrderRelease, materials, routing: finalPlan.routing, workCentres: finalAvailability?.workCentres ?? [], outputEntries, totalOutput, inspections, latestInspection, qualityHold, batchRelease: finalBatchRelease, genealogy, metrics: { targetQuantity: finalPlan.job.targetQuantity, issuedMaterialCount: [...issued.values()].filter(Boolean).length, outputQuantity: totalOutput, acceptedQuantity: inspectionIsCurrent && latestInspection ? latestInspection.acceptedQuantity : 0 } }
+  return { plan: finalPlan, status, latestAvailability: finalAvailability, orderRelease: finalOrderRelease, materials, routing: finalPlan.routing, operations, workCentres: finalAvailability?.workCentres ?? [], outputEntries, totalOutput, inspections, latestInspection, qualityHold, batchRelease: finalBatchRelease, genealogy, metrics: { targetQuantity: finalPlan.job.targetQuantity, issuedMaterialCount: [...issued.values()].filter(Boolean).length, completedOperationCount: operations.filter((row) => row.status === 'complete').length, actualOperationMinutesMilli: [...operationMinutes.values()].reduce((total, value) => total + value, 0), outputQuantity: totalOutput, acceptedQuantity: inspectionIsCurrent && latestInspection ? latestInspection.acceptedQuantity : 0 } }
 }
 
 export function validatePlantOrderState(value: unknown): PlantOrderState {
@@ -623,6 +693,10 @@ export function releasePlantOrder(state: unknown, input: { releaseId: unknown; a
 
 export function issuePlantOrderMaterial(state: unknown, input: { issueId: unknown; materialId: unknown; inputLotId: unknown; quantityMilli: unknown; proof: unknown; expectedHeadDigest: unknown }) {
   return appendCommand(state, { kind: 'issue_material', id: input.issueId, materialId: input.materialId, inputLotId: input.inputLotId, quantityMilli: input.quantityMilli, proof: actionProof(input.proof, 'proof') }, input.expectedHeadDigest)
+}
+
+export function recordPlantOrderOperation(state: unknown, input: { operationRunId: unknown; operationId: unknown; quantity: unknown; actualMinutesMilli: unknown; proof: unknown; expectedHeadDigest: unknown }) {
+  return appendCommand(state, { kind: 'record_operation', id: input.operationRunId, operationId: input.operationId, quantity: input.quantity, actualMinutesMilli: input.actualMinutesMilli, proof: actionProof(input.proof, 'proof') }, input.expectedHeadDigest)
 }
 
 export function recordPlantOrderOutput(state: unknown, input: { outputId: unknown; outputBatchId: unknown; quantity: unknown; proof: unknown; expectedHeadDigest: unknown }) {
