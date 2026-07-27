@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "supermega": {
-    "productionSupabaseProjectRef": ""
+    "productionSupabaseProjectRef": "zvtzwcimpvvtkowflhda"
   },
   "scripts": {
     "build": "npm run public:build",
