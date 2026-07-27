@@ -1553,49 +1553,62 @@ export function Empty({ children }: { children: ReactNode }) {
 const customerTracks = [
   {
     name: 'Retail',
-    fit: 'Shops, showrooms, and social sellers.',
-    outcome: 'Sell, reserve stock, and review online requests.',
+    fit: 'Shop, showroom, social selling.',
+    outcome: 'Sell, reserve stock, review requests.',
     path: '/shop/?tab=counter',
+    setupPath: clientSetupPath('commerce'),
   },
   {
     name: 'Factory MES',
-    fit: 'Plants, workshops, and service floors.',
-    outcome: 'Plan jobs, record output, and prepare shift handoffs.',
+    fit: 'Plant, workshop, service floor.',
+    outcome: 'Plan jobs, record output, hand off shifts.',
     path: '/plant/?tab=production',
+    setupPath: clientSetupPath('production'),
   },
   {
     name: 'Website catalog',
-    fit: 'Businesses that need a site and catalog first.',
-    outcome: 'Create the site, package the catalog, and review requests.',
+    fit: 'Business site and proof catalog.',
+    outcome: 'Create pages, package offers, review leads.',
     path: '/website/',
+    setupPath: clientSetupPath('website'),
+  },
+  {
+    name: 'Online orders',
+    fit: 'Catalog sellers and delivery teams.',
+    outcome: 'Build storefronts, quote requests, Shop handoff.',
+    path: '/ecommerce/',
+    setupPath: clientSetupPath('ecommerce'),
   },
 ] as const
 
 export function ProductHomePage() {
   return (
     <div className="workspace-screen product-home-screen">
-      <PageHeading copy="Start from the business type. SuperMega opens the right app and keeps owner approval before sends, payments, changes, or publishing." eyebrow="SuperMega products" title="Pick a track. Run work." />
+      <PageHeading copy="Start from the business type. SuperMega prepares the work; owners approve sends, payments, changes, and publishing." eyebrow="SuperMega products" title="Pick a track. Run work." />
       <section className="product-home-operating-model" aria-label="SuperMega operating model">
         <div>
           <span className="core-eyebrow">Handled by SuperMega</span>
-          <strong>Import, structure, queue, reconcile, and prepare.</strong>
+          <strong>Import, queue, reconcile, and prepare.</strong>
         </div>
         <div>
           <span className="core-eyebrow">Approved by owner</span>
-          <strong>Orders, production, payment movement, messages, and publishing.</strong>
+          <strong>Orders, production, payments, messages, and publishing.</strong>
         </div>
         <Link className="core-button primary" to="/settings/">Set up pilot</Link>
       </section>
       <nav aria-label="Business tracks" className="product-track-grid">
         {customerTracks.map((track) => (
-          <Link className="product-track-card" key={track.name} to={track.path}>
+          <article className="product-track-card" key={track.name}>
             <div>
               <span className="core-eyebrow">{track.fit}</span>
               <h2>{track.name}</h2>
               <p>{track.outcome}</p>
             </div>
-            <strong>Open track</strong>
-          </Link>
+            <div className="product-track-actions">
+              <Link to={track.path}>Open track</Link>
+              <Link to={track.setupPath}>Set up data</Link>
+            </div>
+          </article>
         ))}
       </nav>
     </div>
