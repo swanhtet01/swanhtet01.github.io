@@ -277,6 +277,7 @@ const expectedHumanProductionEvents = [
   'production.maintenance.completed',
   'production.maintenance.started',
   'production.material.consumed',
+  'production.order_execution.recorded',
   'production.output.recorded',
   'production.quality_hold.placed',
   'production.quality_hold.released',

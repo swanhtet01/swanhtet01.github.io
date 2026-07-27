@@ -1302,6 +1302,20 @@ if (!coreSource.includes('<PlantOrderFoundation')
   || !plantOrderUiSource.includes('Shop receipt, delivery, costing, and accounting are not posted automatically.')
   || !plantOrderUiSource.includes('navigator.locks')
   || plantOrderUiSource.includes('fetch(')) fail('plant_order_foundation_ui_boundary_missing')
+if (!plantOrderUiSource.includes('managedState?: PlantOrderState | null')
+  || !plantOrderUiSource.includes('onManagedCommand?:')
+  || !plantOrderUiSource.includes('await onManagedCommand(')
+  || !plantOrderUiSource.includes("`${managed ? 'Managed' : 'Local'} execution evidence only")
+  || !productionSource.includes('orderExecution?: PlantOrderState')
+  || !productionSource.includes('supermega.plant.order_foundation.v1')
+  || !managedProductionRuntime.includes('production state.orderExecution is invalid')
+  || !managedProductionRuntime.includes('must append exactly one chained command')
+  || !managedProductionRuntime.includes('Plant execution command proof must match the authenticated Production evidence')
+  || !managedTrialStoreRuntime.includes('production.order_execution.recorded')
+  || !plantOrderUiSource.includes("'production.order_execution.recorded'")
+  || !plantOrderUiSource.includes('current.orderExecution ?? createEmptyPlantOrderState()')
+  || !coreSource.includes('managedState={managedIdentity ? production.orderExecution ?? null : undefined}')
+  || !coreSource.includes('onManagedCommand={managedIdentity ? mutateProduction : undefined}')) fail('managed_plant_order_execution_contract_missing')
 if (!clientOnboardingSource.includes("CLIENT_IMPORT_SCHEMA = 'supermega.client_import_preview.v1'")
   || !clientOnboardingSource.includes("CLIENT_STAGING_SCHEMA = 'supermega.client_import_staging.v1'")
   || !clientOnboardingSource.includes('CLIENT_IMPORT_MAX_BYTES = 512 * 1024')
@@ -1707,8 +1721,9 @@ if (!managedProductionCommandContract.includes("surface: 'production'")
   || !managedProductionCommandContract.includes('payload: { state: request.state, evidence: request.evidence }')
   || !managedProductionCommandContract.includes('request.identity')
   || !coreSource.includes('identity: managedIdentity')) fail('managed_production_command_client_missing')
-for (const eventType of ['production.workspace.initialized', 'production.job.created', 'production.job.schedule_updated', 'production.job.closed', 'production.output.recorded', 'production.material.consumed', 'production.issue.opened', 'production.issue.resolved', 'production.quality_hold.placed', 'production.quality_hold.released', 'production.machine_state.changed', 'production.downtime.started', 'production.downtime.ended', 'production.maintenance.started', 'production.maintenance.completed']) {
-  if (!coreSource.includes(eventType) || !managedProductionRuntime.includes(eventType)) fail(`managed_production_event_missing:${eventType}`)
+const managedProductionClientSources = `${coreSource}\n${plantOrderUiSource}`
+for (const eventType of ['production.workspace.initialized', 'production.job.created', 'production.job.schedule_updated', 'production.job.closed', 'production.output.recorded', 'production.material.consumed', 'production.issue.opened', 'production.issue.resolved', 'production.quality_hold.placed', 'production.quality_hold.released', 'production.machine_state.changed', 'production.order_execution.recorded', 'production.downtime.started', 'production.downtime.ended', 'production.maintenance.started', 'production.maintenance.completed']) {
+  if (!managedProductionClientSources.includes(eventType) || !managedProductionRuntime.includes(eventType)) fail(`managed_production_event_missing:${eventType}`)
 }
 if (managedProductionRuntime.includes('production.snapshot.saved')
   || !managedProductionRuntime.includes('PRODUCTION_HUMAN_EVENTS = PRODUCTION_EVENTS')
@@ -6542,6 +6557,20 @@ async function verifyProductionRuntime() {
 
   try {
     const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'production-workspace.ts')).href}?verify=${Date.now()}`)
+    const plantModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'plant-order-foundation.ts')).href}?production-embedding-verify=${Date.now()}`)
+    const emptyExecution = plantModel.createEmptyPlantOrderState()
+    const executionProof = proof('ACT-MANAGED-EXECUTION')
+    const executionPlan = plantModel.buildPlantOrderPlan({
+      planId: 'PLN-MANAGED-001', sourceDigest: plantModel.plantOrderEvidenceDigest({ job: 'JOB-1' }),
+      job: { jobId: 'JOB-1', product: 'Test batch', targetQuantity: 100, outputBatchId: 'BATCH-MANAGED-001' },
+      materials: [{ materialId: 'MAT-MANAGED-001', name: 'Managed material', unit: 'kg', quantityPerUnitMilli: 1_000 }],
+      workCentres: [{ workCentreId: 'WC-MANAGED-001', name: 'Managed line' }],
+      routing: [{ operationId: 'OP-MANAGED-10', sequence: 1, name: 'Managed operation', workCentreId: 'WC-MANAGED-001', minutesPerUnitMilli: 1_000 }],
+    })
+    const orderExecution = plantModel.applyPlantOrderPlan(emptyExecution, executionPlan, executionProof, emptyExecution.headDigest).state
+    const embeddedExecution = { ...model.createEmptyProduction(), jobs: [{ id: 'JOB-1', line: 'Line 01', product: 'Test batch', target: 100, output: 0 }], orderExecution }
+    assert(model.validateProductionState(embeddedExecution) === embeddedExecution, 'production_managed_order_execution_rejected')
+    assertThrows(() => model.validateProductionState({ ...embeddedExecution, orderExecution: { ...orderExecution, headDigest: `sha256:${'0'.repeat(64)}` } }), 'production_managed_order_execution_head_tamper_accepted')
     const legacy = {
       jobs: [{ id: 'JOB-1', line: 'Line 01', product: 'Test batch', target: 100, output: 90 }],
       issues: [{ id: 'ISS-LEGACY', createdAt: '2026-07-22T10:00:00.000Z', area: 'Line 01', kind: 'quality', summary: 'Reviewed legacy issue', status: 'resolved' }],

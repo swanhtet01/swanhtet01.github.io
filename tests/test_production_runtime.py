@@ -9,6 +9,13 @@ from uuid import uuid4
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
+from supermega_runtime.plant_order_foundation import (
+    apply_plant_order_plan,
+    build_plant_order_plan,
+    check_plant_order_availability,
+    create_empty_plant_order_state,
+    plant_order_evidence_digest,
+)
 from supermega_runtime.production_runtime import (
     PRODUCTION_EVENTS,
     PRODUCTION_HUMAN_EVENTS,
@@ -73,6 +80,50 @@ def starting_workspace(*, target: int = 100) -> dict[str, object]:
         ],
         "events": [],
     }
+
+
+def planned_order_execution(
+    workspace: dict[str, object],
+    evidence: dict[str, str],
+    *,
+    target: int | None = None,
+) -> dict[str, object]:
+    job = workspace["jobs"][0]  # type: ignore[index]
+    plan = build_plant_order_plan(
+        plan_id="PLN-MANAGED-001",
+        source_digest=plant_order_evidence_digest({"job": job}),
+        job={
+            "jobId": job["id"],
+            "product": job["product"],
+            "targetQuantity": target if target is not None else job["target"],
+            "outputBatchId": "BATCH-MANAGED-001",
+        },
+        materials=[
+            {
+                "materialId": "MAT-MANAGED-001",
+                "name": "Managed material",
+                "unit": "kg",
+                "quantityPerUnitMilli": 1_000,
+            }
+        ],
+        work_centres=[{"workCentreId": "WC-MANAGED-001", "name": "Managed line"}],
+        routing=[
+            {
+                "operationId": "OP-MANAGED-10",
+                "sequence": 1,
+                "name": "Managed operation",
+                "workCentreId": "WC-MANAGED-001",
+                "minutesPerUnitMilli": 1_000,
+            }
+        ],
+    )
+    empty = create_empty_plant_order_state()
+    return apply_plant_order_plan(
+        empty,
+        plan,
+        evidence,
+        expected_head_digest=empty["headDigest"],
+    )["state"]
 
 
 def opening_plan_workspace(
@@ -592,6 +643,7 @@ class ProductionRuntimeTests(unittest.TestCase):
             "production.quality_hold.placed",
             "production.quality_hold.released",
             "production.machine_state.changed",
+            "production.order_execution.recorded",
             "production.downtime.started",
             "production.downtime.ended",
             "production.maintenance.started",
@@ -599,6 +651,96 @@ class ProductionRuntimeTests(unittest.TestCase):
         }
         self.assertEqual(PRODUCTION_EVENTS, expected_events)
         self.assertEqual(PRODUCTION_HUMAN_EVENTS, expected_events)
+
+    def test_managed_order_execution_appends_one_bound_command(self) -> None:
+        current = starting_workspace(target=10)
+        plan_evidence = action_evidence("ACT-ORDER-EXECUTION-001")
+        planned = deepcopy(current)
+        planned["orderExecution"] = planned_order_execution(current, plan_evidence)
+
+        accepted = apply_event(
+            current,
+            "production.order_execution.recorded",
+            planned,
+            plan_evidence,
+        )
+
+        self.assertEqual(accepted["revision"], current["revision"])
+        self.assertEqual(accepted["events"], current["events"])
+        self.assertEqual(accepted["orderExecution"]["revision"], 1)  # type: ignore[index]
+
+        availability_evidence = action_evidence(
+            "ACT-ORDER-EXECUTION-002",
+            captured_at=LATER,
+        )
+        available_execution = check_plant_order_availability(
+            accepted["orderExecution"],
+            check_id="CHK-MANAGED-001",
+            source_digest=plant_order_evidence_digest({"availability": "observed"}),
+            materials=[
+                {
+                    "materialId": "MAT-MANAGED-001",
+                    "inputLotId": "LOT-MANAGED-001",
+                    "availableQuantityMilli": 10_000,
+                }
+            ],
+            work_centres=[
+                {"workCentreId": "WC-MANAGED-001", "availableMinutes": 10}
+            ],
+            proof=availability_evidence,
+            expected_head_digest=accepted["orderExecution"]["headDigest"],  # type: ignore[index]
+        )["state"]
+        available = deepcopy(accepted)
+        available["orderExecution"] = available_execution
+        accepted_available = apply_event(
+            accepted,
+            "production.order_execution.recorded",
+            available,
+            availability_evidence,
+        )
+        self.assertEqual(accepted_available["orderExecution"]["revision"], 2)  # type: ignore[index]
+
+        wrong_job = deepcopy(current)
+        wrong_job["orderExecution"] = planned_order_execution(
+            current,
+            plan_evidence,
+            target=9,
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "production.order_execution.recorded",
+                wrong_job,
+                plan_evidence,
+            )
+
+        spoofed_proof = action_evidence(
+            "ACT-ORDER-EXECUTION-SPOOFED",
+            actor="actor-spoofed",
+        )
+        spoofed = deepcopy(current)
+        spoofed["orderExecution"] = planned_order_execution(current, spoofed_proof)
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "production.order_execution.recorded",
+                spoofed,
+                action_evidence("ACT-ORDER-EXECUTION-SPOOFED"),
+            )
+
+        unrelated = output_state(
+            accepted,
+            1,
+            action_evidence("ACT-OUTPUT-WITH-EXECUTION", captured_at=LATER),
+        )
+        unrelated.pop("orderExecution")
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                accepted,
+                "production.output.recorded",
+                unrelated,
+                action_evidence("ACT-OUTPUT-WITH-EXECUTION", captured_at=LATER),
+            )
 
         retained_history = starting_workspace(target=1_000)
         retained_history["jobs"][0]["output"] = 501

@@ -1,3 +1,5 @@
+import type { PlantOrderState } from './plant-order-foundation'
+
 export const PRODUCTION_WORKSPACE_SCHEMA = 'supermega.production.workspace.v2' as const
 export const PRODUCTION_KEY = 'supermega.production.workspace.v2'
 export const LEGACY_PRODUCTION_KEYS = ['supermega.production.workspace.v1', 'supermega.plant.workspace.v2']
@@ -122,6 +124,7 @@ export type ProductionState = {
   machines: ProductionMachine[]
   events: ProductionEvent[]
   openingPlan?: ProductionOpeningPlan
+  orderExecution?: PlantOrderState
 }
 
 export type ProductionActionProof = {
@@ -309,7 +312,7 @@ const materialOptionalEventFields = ['materialLot']
 const downtimeEndEventFields = [...baseEventFields, 'downtimeStartActionId']
 const maintenanceStartEventFields = [...baseEventFields, 'maintenanceOwner']
 const maintenanceCompleteEventFields = [...baseEventFields, 'maintenanceStartActionId']
-const productionStateFields = ['schema', 'revision', 'jobs', 'issues', 'machines', 'events', 'openingPlan']
+const productionStateFields = ['schema', 'revision', 'jobs', 'issues', 'machines', 'events', 'openingPlan', 'orderExecution']
 const productionOpeningPlanFields = ['contract', 'packageDigest', 'confirmedAt', 'jobIds', 'machineIds']
 const productionJobFields = ['id', 'line', 'product', 'target', 'output', 'owner', 'priority', 'dueAt', 'scrap', 'qualityHold', 'closure']
 const productionIssueFields = ['id', 'createdAt', 'area', 'kind', 'summary', 'status', 'severity', 'owner', 'dueAt', 'containment', 'resolution']
@@ -666,6 +669,19 @@ export function validateProductionState(value: unknown): ProductionState {
     if (JSON.stringify(jobIds.slice(-planJobIds.length)) !== JSON.stringify(planJobIds)) throw new Error('Production opening jobs are not the immutable job suffix.')
     if (JSON.stringify(machineIds) !== JSON.stringify(planMachineIds)) throw new Error('Production opening machines do not match the retained machines.')
     openingJobIds = planJobIds
+  }
+
+  if (Object.hasOwn(value, 'orderExecution')) {
+    if (!isRecord(value.orderExecution)) throw new Error('Production order execution is invalid.')
+    const execution = value.orderExecution
+    assertOnlyFields(execution, ['schema', 'revision', 'headDigest', 'commands'], 'Production order execution')
+    if (execution.schema !== 'supermega.plant.order_foundation.v1') throw new Error('Production order execution contract is invalid.')
+    assertSafeInteger(execution.revision, 'Production order execution revision')
+    if (!Array.isArray(execution.commands) || execution.commands.length > 2_000 || execution.commands.length !== execution.revision) throw new Error('Production order execution command count is invalid.')
+    if (typeof execution.headDigest !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(execution.headDigest)) throw new Error('Production order execution head digest is invalid.')
+    if (execution.revision === 0 && execution.headDigest !== `sha256:${'0'.repeat(64)}`) throw new Error('Empty Production order execution digest is invalid.')
+    const lastCommand = execution.commands.at(-1)
+    if (lastCommand !== undefined && (!isRecord(lastCommand) || lastCommand.digest !== execution.headDigest)) throw new Error('Production order execution head does not match its latest command.')
   }
 
   for (const [index, candidate] of events.entries()) {

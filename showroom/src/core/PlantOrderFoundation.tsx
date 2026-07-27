@@ -17,26 +17,38 @@ import {
   recordPlantOrderOutput,
   releasePlantOrder,
   releasePlantOrderBatch,
+  validatePlantOrderState,
   type PlantOrderProof,
   type PlantOrderMaterial,
   type PlantOrderPlan,
   type PlantOrderState,
+  type PlantOrderTransition,
+  type PlantOrderTransitionResult,
 } from './plant-order-foundation'
-import type { ProductionJob } from './production-workspace'
+import { validateProductionState, type ProductionJob, type ProductionState } from './production-workspace'
 
 
 type PlantOrderFoundationProps = {
   actor: string
   disabled: boolean
   jobs: ProductionJob[]
+  managedState?: PlantOrderState | null
+  onManagedCommand?: (
+    eventType: 'production.order_execution.recorded',
+    commandId: string,
+    proof: PlantOrderProof,
+    transition: (state: ProductionState) => ProductionState | null,
+  ) => Promise<void>
   scope: string
 }
 
 type ReviewedTransition = {
+  commandId: string
   title: string
   summary: string
   boundary: string
-  apply: (state: PlantOrderState) => { state: PlantOrderState; replayed: boolean }
+  proof: PlantOrderProof
+  apply: PlantOrderTransition
 }
 
 type SetupDraft = {
@@ -68,6 +80,10 @@ function commandId(prefix: string) {
     ? crypto.randomUUID().toUpperCase()
     : `${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`
   return `${prefix}-${random}`
+}
+
+function managedCommandId() {
+  return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : ''
 }
 
 function proof(actor: string, label: string): PlantOrderProof {
@@ -157,6 +173,14 @@ function loadState(scope: string) {
   return { state: snapshot.state, error: snapshot.error }
 }
 
+function loadManagedState(value: PlantOrderState | null) {
+  try {
+    return { state: validatePlantOrderState(value ?? createEmptyPlantOrderState()), error: '' }
+  } catch (error) {
+    return { state: createEmptyPlantOrderState(), error: error instanceof Error ? error.message : 'Managed Plant execution could not be validated.' }
+  }
+}
+
 const statusCopy = {
   unplanned: 'Set up execution',
   planned: 'Check availability',
@@ -170,9 +194,12 @@ const statusCopy = {
   released_to_stock: 'Batch released',
 } as const
 
-export function PlantOrderFoundation({ actor, disabled, jobs, scope }: PlantOrderFoundationProps) {
-  const activeJobs = jobs.filter((job) => !job.closure && remaining(job) > 0)
-  const [initial] = useState(() => loadState(scope))
+export function PlantOrderFoundation({ actor, disabled, jobs, managedState, onManagedCommand, scope }: PlantOrderFoundationProps) {
+  const managed = managedState !== undefined
+  const activeJobs = jobs.filter((job) => !job.closure && !job.qualityHold && remaining(job) > 0)
+  const [initial] = useState(() => managed
+    ? loadManagedState(managedState ?? null)
+    : loadState(scope))
   const [state, setState] = useState<PlantOrderState>(initial.state)
   const [error, setError] = useState(initial.error)
   const [notice, setNotice] = useState('')
@@ -217,21 +244,53 @@ export function PlantOrderFoundation({ actor, disabled, jobs, scope }: PlantOrde
     if (!review && dialog.open) dialog.close()
   }, [review])
 
-  function stage(next: ReviewedTransition) {
+  function stage(next: Omit<ReviewedTransition, 'commandId'>) {
     setError('')
     setSetupOpen(false)
-    setReview(next)
+    setReview({ ...next, commandId: managedCommandId() })
     setNotice('Review this one change. Nothing has been written yet.')
   }
 
+  async function mutateManaged(reviewed: ReviewedTransition) {
+    if (!onManagedCommand || !reviewed.commandId) throw new Error('Managed Plant command identity is unavailable.')
+    let applied: PlantOrderTransitionResult | null = null
+    await onManagedCommand(
+      'production.order_execution.recorded',
+      reviewed.commandId,
+      reviewed.proof,
+      (current) => {
+        const currentExecution = validatePlantOrderState(current.orderExecution ?? createEmptyPlantOrderState())
+        const result = reviewed.apply(currentExecution)
+        applied = result
+        if (result.replayed) return current
+        return validateProductionState({ ...current, orderExecution: result.state })
+      },
+    )
+    if (!applied) throw new Error('The managed Plant execution transition did not run.')
+    return applied
+  }
+
   async function confirmReview() {
-    if (!review || typeof localStorage === 'undefined') return
+    if (!review) return
     setBusy(true); setError('')
-    const result = await mutatePlantOrderWorkspace(scope, review.apply, localStorage, browserLocks())
-    setBusy(false)
-    if (!result.ok) { setError(result.error); return }
-    setState(result.state); setReview(null); setSetupOpen(false)
-    setNotice(result.replayed ? 'The exact command was already recorded.' : `${review.title} recorded with attributed evidence.`)
+    try {
+      const result = managed
+        ? await mutateManaged(review)
+        : typeof localStorage !== 'undefined'
+          ? await mutatePlantOrderWorkspace(scope, review.apply, localStorage, browserLocks())
+          : null
+      if (!result) throw new Error(managed ? 'Managed Plant command identity is unavailable.' : 'Browser storage is unavailable.')
+      if ('error' in result) { setError(result.error); return }
+      const accepted: PlantOrderTransitionResult = 'ok' in result
+        ? { state: result.state, replayed: result.replayed }
+        : result
+      setState(accepted.state); setReview(null); setSetupOpen(false)
+      setNotice(accepted.replayed ? 'The exact command was already recorded.' : `${review.title} recorded with attributed evidence.`)
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Plant execution was not confirmed.')
+    } finally {
+      setBusy(false)
+    }
   }
 
   function closeSetup() {
@@ -275,7 +334,8 @@ export function PlantOrderFoundation({ actor, disabled, jobs, scope }: PlantOrde
       stage({
         title: 'Execution plan',
         summary: `${selectedSetupJob.id} · ${targetQuantity.toLocaleString()} remaining · ${materials.length} ${materials.length === 1 ? 'material' : 'materials'} · 1 operation`,
-        boundary: 'Creates an immutable local execution package. It does not schedule staff, move stock, post accounting, or control equipment.',
+        boundary: 'Creates an immutable execution package. It does not schedule staff, move stock, post accounting, or control equipment.',
+        proof: actionProof,
         apply: (current) => applyPlantOrderPlan(current, plan, actionProof, expectedHeadDigest),
       })
     } catch (nextError) {
@@ -308,6 +368,7 @@ export function PlantOrderFoundation({ actor, disabled, jobs, scope }: PlantOrde
         title: 'Availability check',
         summary: `${materials.length} material ${materials.length === 1 ? 'lot' : 'lots'} · ${workCentres.length} work ${workCentres.length === 1 ? 'centre' : 'centres'}`,
         boundary: 'Records a reviewed snapshot only. A shortfall blocks order release; no purchase, reservation, or dispatch occurs.',
+        proof: actionProof,
         apply: (current) => checkPlantOrderAvailability(current, { checkId, sourceDigest, materials, workCentres, proof: actionProof, expectedHeadDigest }),
       })
     } catch (nextError) {
@@ -329,19 +390,19 @@ export function PlantOrderFoundation({ actor, disabled, jobs, scope }: PlantOrde
   function reviewOrderRelease() {
     if (!projection.latestAvailability) return
     const releaseId = commandId('REL'); const expectedHeadDigest = state.headDigest; const actionProof = proof(actor, 'human production-order release')
-    stage({ title: 'Order release', summary: `${projection.plan?.job.jobId} · materials and capacity passed`, boundary: 'Authorizes the recorded work package only. It sends no machine command and makes no inventory or accounting entry.', apply: (current) => releasePlantOrder(current, { releaseId, availabilityCheckId: projection.latestAvailability!.checkId, proof: actionProof, expectedHeadDigest }) })
+    stage({ title: 'Order release', summary: `${projection.plan?.job.jobId} · materials and capacity passed`, boundary: 'Authorizes the recorded work package only. It sends no machine command and makes no inventory or accounting entry.', proof: actionProof, apply: (current) => releasePlantOrder(current, { releaseId, availabilityCheckId: projection.latestAvailability!.checkId, proof: actionProof, expectedHeadDigest }) })
   }
 
   function reviewMaterialIssue() {
     if (!nextMaterial?.inputLotId) return
     const issueId = commandId('ISSUE'); const expectedHeadDigest = state.headDigest; const actionProof = proof(actor, `issue of ${nextMaterial.materialId}`)
-    stage({ title: 'Material issue', summary: `${formatMilli(nextMaterial.remainingToIssueMilli)} ${nextMaterial.unit} · ${nextMaterial.inputLotId}`, boundary: 'Creates job genealogy evidence only. It does not change purchasing, warehouse, costing, or accounting balances.', apply: (current) => issuePlantOrderMaterial(current, { issueId, materialId: nextMaterial.materialId, inputLotId: nextMaterial.inputLotId!, quantityMilli: nextMaterial.remainingToIssueMilli, proof: actionProof, expectedHeadDigest }) })
+    stage({ title: 'Material issue', summary: `${formatMilli(nextMaterial.remainingToIssueMilli)} ${nextMaterial.unit} · ${nextMaterial.inputLotId}`, boundary: 'Creates job genealogy evidence only. It does not change purchasing, warehouse, costing, or accounting balances.', proof: actionProof, apply: (current) => issuePlantOrderMaterial(current, { issueId, materialId: nextMaterial.materialId, inputLotId: nextMaterial.inputLotId!, quantityMilli: nextMaterial.remainingToIssueMilli, proof: actionProof, expectedHeadDigest }) })
   }
 
   function reviewOutput() {
     if (!projection.plan || outputRemaining < 1) return
     const outputId = commandId('OUT'); const expectedHeadDigest = state.headDigest; const actionProof = proof(actor, 'produced output quantity')
-    stage({ title: 'Batch output', summary: `${outputRemaining.toLocaleString()} units · ${projection.plan.job.outputBatchId}`, boundary: 'Records this execution package output. The existing Plant output ledger and Shop receipt remain separate reviewed steps.', apply: (current) => recordPlantOrderOutput(current, { outputId, outputBatchId: projection.plan!.job.outputBatchId, quantity: outputRemaining, proof: actionProof, expectedHeadDigest }) })
+    stage({ title: 'Batch output', summary: `${outputRemaining.toLocaleString()} units · ${projection.plan.job.outputBatchId}`, boundary: 'Records this execution package output. The existing Plant output ledger and Shop receipt remain separate reviewed steps.', proof: actionProof, apply: (current) => recordPlantOrderOutput(current, { outputId, outputBatchId: projection.plan!.job.outputBatchId, quantity: outputRemaining, proof: actionProof, expectedHeadDigest }) })
   }
 
   function reviewInspection(event: FormEvent) {
@@ -349,13 +410,13 @@ export function PlantOrderFoundation({ actor, disabled, jobs, scope }: PlantOrde
     if (!projection.plan || !inspectionValid || inspectedQuantity < 1) return
     const inspectionId = commandId('INSP'); const expectedHeadDigest = state.headDigest; const acceptedQuantity = inspectedQuantity - rejected
     const actionProof = proof(actor, inspectionDraft.result === 'pass' ? 'passing batch inspection' : 'failed batch inspection and quality hold')
-    stage({ title: inspectionDraft.result === 'pass' ? 'Passing inspection' : 'Quality hold', summary: `${inspectedQuantity.toLocaleString()} inspected · ${acceptedQuantity.toLocaleString()} accepted · ${rejected.toLocaleString()} rejected`, boundary: inspectionDraft.result === 'pass' ? 'Acceptance remains separate from final human batch release.' : 'A failed inspection blocks more issue and output until a later passing reinspection.', apply: (current) => inspectPlantOrderOutput(current, { inspectionId, outputBatchId: projection.plan!.job.outputBatchId, inspectedQuantity, acceptedQuantity, rejectedQuantity: rejected, result: inspectionDraft.result, proof: actionProof, expectedHeadDigest }) })
+    stage({ title: inspectionDraft.result === 'pass' ? 'Passing inspection' : 'Quality hold', summary: `${inspectedQuantity.toLocaleString()} inspected · ${acceptedQuantity.toLocaleString()} accepted · ${rejected.toLocaleString()} rejected`, boundary: inspectionDraft.result === 'pass' ? 'Acceptance remains separate from final human batch release.' : 'A failed inspection blocks more issue and output until a later passing reinspection.', proof: actionProof, apply: (current) => inspectPlantOrderOutput(current, { inspectionId, outputBatchId: projection.plan!.job.outputBatchId, inspectedQuantity, acceptedQuantity, rejectedQuantity: rejected, result: inspectionDraft.result, proof: actionProof, expectedHeadDigest }) })
   }
 
   function reviewBatchRelease() {
     if (!projection.plan || !projection.latestInspection) return
     const qualityReleaseId = commandId('QREL'); const expectedHeadDigest = state.headDigest; const actionProof = proof(actor, 'human batch release')
-    stage({ title: 'Batch release', summary: `${projection.plan.job.outputBatchId} · ${projection.totalOutput.toLocaleString()} accepted units`, boundary: 'Records human quality release only. Shop receipt, delivery, costing, and accounting are not posted automatically.', apply: (current) => releasePlantOrderBatch(current, { qualityReleaseId, outputBatchId: projection.plan!.job.outputBatchId, inspectionId: projection.latestInspection!.id, proof: actionProof, expectedHeadDigest }) })
+    stage({ title: 'Batch release', summary: `${projection.plan.job.outputBatchId} · ${projection.totalOutput.toLocaleString()} accepted units`, boundary: 'Records human quality release only. Shop receipt, delivery, costing, and accounting are not posted automatically.', proof: actionProof, apply: (current) => releasePlantOrderBatch(current, { qualityReleaseId, outputBatchId: projection.plan!.job.outputBatchId, inspectionId: projection.latestInspection!.id, proof: actionProof, expectedHeadDigest }) })
   }
 
   return <>
@@ -402,7 +463,7 @@ export function PlantOrderFoundation({ actor, disabled, jobs, scope }: PlantOrde
 
       {!bindingCurrent && projection.status !== 'released_to_stock' ? <p className="form-notice warning-text" role="alert">The bound Plant job changed after this execution plan was reviewed. This chain is paused; reconcile the job snapshot before continuing.</p> : null}
       {projection.genealogy.length ? <details className="compact-disclosure production-history"><summary>Batch genealogy <span>{projection.genealogy.length}</span></summary><div className="issue-list">{projection.genealogy.map((row) => <article key={row.materialId}><span aria-hidden="true" className="issue-mark resolved">LOT</span><div><strong>{row.inputLotId} → {row.outputBatchId}</strong><small>{row.materialId} · {formatMilli(row.issuedQuantityMilli)} {row.unit}</small></div></article>)}</div></details> : null}
-      <p aria-live="polite" className="form-notice">{error || notice || (projection.status === 'released_to_stock' ? 'Batch release is recorded. Post Shop receipt, costing, and accounting only through their own reviewed controls.' : 'Local execution evidence only. No machine command, external send, inventory posting, payment, or accounting action occurs.')}</p>
+      <p aria-live="polite" className="form-notice">{error || notice || (projection.status === 'released_to_stock' ? 'Batch release is recorded. Post Shop receipt, costing, and accounting only through their own reviewed controls.' : `${managed ? 'Managed' : 'Local'} execution evidence only. No machine command, external send, inventory posting, payment, or accounting action occurs.`)}</p>
     </section>
 
     <dialog aria-labelledby="plant-execution-setup-title" className="production-issue-dialog" id="plant-execution-setup" onCancel={(event) => { event.preventDefault(); closeSetup() }} ref={setupDialogRef}>

@@ -90,6 +90,9 @@ export type PlantOrderState = {
   commands: PlantOrderCommand[]
 }
 
+export type PlantOrderTransitionResult = { state: PlantOrderState; replayed: boolean }
+export type PlantOrderTransition = (state: PlantOrderState) => PlantOrderTransitionResult
+
 export type PlantOrderAvailabilityProjection = {
   checkId: string
   sourceDigest: string
@@ -650,7 +653,7 @@ export function loadPlantOrderWorkspace(storage: StorageLike, scope: string) {
 
 export async function mutatePlantOrderWorkspace(
   scope: string,
-  transition: (state: PlantOrderState) => { state: PlantOrderState; replayed: boolean },
+  transition: PlantOrderTransition,
   storage: StorageLike,
   locks: LockLike | null | undefined,
 ) {

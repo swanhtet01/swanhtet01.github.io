@@ -51,6 +51,7 @@ HUMAN_COMMAND_EVENTS = frozenset(
         "production.quality_hold.placed",
         "production.quality_hold.released",
         "production.machine_state.changed",
+        "production.order_execution.recorded",
         "production.downtime.started",
         "production.downtime.ended",
         "production.maintenance.started",

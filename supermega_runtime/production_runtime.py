@@ -9,6 +9,12 @@ from datetime import datetime, timedelta, timezone
 import re
 from typing import Any, Callable
 
+from supermega_runtime.plant_order_foundation import (
+    PlantOrderValidationError,
+    create_empty_plant_order_state,
+    project_plant_order,
+    validate_plant_order_state,
+)
 from supermega_runtime.trial_store import TrialValidationError
 
 
@@ -26,6 +32,7 @@ PRODUCTION_EVENTS = frozenset(
         "production.quality_hold.placed",
         "production.quality_hold.released",
         "production.machine_state.changed",
+        "production.order_execution.recorded",
         "production.downtime.started",
         "production.downtime.ended",
         "production.maintenance.started",
@@ -64,7 +71,7 @@ _MAX_ISSUES = 500
 _MAX_MACHINES = 100
 
 _STATE_FIELDS = frozenset({"schema", "revision", "jobs", "issues", "machines", "events"})
-_STATE_OPTIONAL_FIELDS = frozenset({"openingPlan"})
+_STATE_OPTIONAL_FIELDS = frozenset({"openingPlan", "orderExecution"})
 _OPENING_PLAN_FIELDS = frozenset(
     {"contract", "packageDigest", "confirmedAt", "jobIds", "machineIds"}
 )
@@ -505,6 +512,15 @@ def _validate_opening_plan(
             "production state.openingPlan machines must match the retained machines."
         )
     return plan
+
+
+def _validate_order_execution(candidate: object) -> dict[str, Any]:
+    try:
+        return validate_plant_order_state(candidate)
+    except PlantOrderValidationError as exc:
+        raise TrialValidationError(
+            f"production state.orderExecution is invalid: {exc}"
+        ) from exc
 
 
 def _validate_event(
@@ -1550,6 +1566,11 @@ def validate_production_state(value: object) -> dict[str, Any]:
         if "openingPlan" in state
         else None
     )
+    order_execution = (
+        _validate_order_execution(state["orderExecution"])
+        if "orderExecution" in state
+        else None
+    )
 
     events = [
         _validate_event(
@@ -1563,6 +1584,15 @@ def validate_production_state(value: object) -> dict[str, Any]:
     ]
     _unique([event["id"] for event in events], "Production event ID")
     _unique([event["actionId"] for event in events], "Production action ID")
+    if order_execution is not None:
+        execution_action_ids = {
+            command["payload"]["proof"]["actionId"]
+            for command in order_execution["commands"]
+        }
+        if execution_action_ids.intersection(event["actionId"] for event in events):
+            raise TrialValidationError(
+                "Production order execution action IDs cannot reuse operating event evidence."
+            )
     if revision != len(events):
         raise TrialValidationError(
             "Production revision must equal the append-only event count."
@@ -2201,6 +2231,61 @@ def _validate_maintenance_completed(
         raise TrialValidationError("maintenance completion summary is not canonical.")
 
 
+def _validate_order_execution_recorded(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+    evidence: Mapping[str, str],
+) -> None:
+    _require_unchanged(
+        current,
+        next_state,
+        "revision",
+        "jobs",
+        "issues",
+        "machines",
+        "events",
+    )
+    before = current.get("orderExecution", create_empty_plant_order_state())
+    after = next_state.get("orderExecution")
+    if not isinstance(after, Mapping):
+        raise TrialValidationError(
+            "production.order_execution.recorded must retain one Plant execution state."
+        )
+    if (
+        after["revision"] != before["revision"] + 1
+        or after["commands"][:-1] != before["commands"]
+        or len(after["commands"]) != len(before["commands"]) + 1
+        or after["commands"][-1]["previousDigest"] != before["headDigest"]
+    ):
+        raise TrialValidationError(
+            "production.order_execution.recorded must append exactly one chained command."
+        )
+    command = after["commands"][-1]
+    if command["payload"]["proof"] != dict(evidence):
+        raise TrialValidationError(
+            "Plant execution command proof must match the authenticated Production evidence."
+        )
+    projection = project_plant_order(after)
+    plan = projection["plan"]
+    if not isinstance(plan, Mapping):
+        raise TrialValidationError("Plant execution must retain one reviewed plan.")
+    matching_jobs = [job for job in current["jobs"] if job["id"] == plan["job"]["jobId"]]
+    if len(matching_jobs) != 1:
+        raise TrialValidationError("Plant execution must bind one current Production job.")
+    job = matching_jobs[0]
+    remaining = job["target"] - job["output"] - job.get("scrap", 0)
+    if (
+        "closure" in job
+        or "qualityHold" in job
+        or remaining < 1
+        or plan["job"]["product"] != job["product"]
+        or plan["job"]["targetQuantity"] != remaining
+    ):
+        raise TrialValidationError(
+            "Plant execution no longer matches the current open Production job."
+        )
+
+
 _TRANSITION_VALIDATORS: dict[
     str,
     Callable[
@@ -2260,11 +2345,16 @@ def reduce_production_state(
             and "closure" not in job
             for job in next_state["jobs"]
         )
+        order_execution = next_state.get("orderExecution")
         if (
             next_state["revision"] != 0
             or not (legacy_shape_is_valid or managed_plan_shape_is_valid)
             or next_state["issues"]
             or next_state["events"]
+            or (
+                order_execution is not None
+                and order_execution != create_empty_plant_order_state()
+            )
             or not jobs_are_pristine
             or any(
                 machine["state"] != "running"
@@ -2299,6 +2389,13 @@ def reduce_production_state(
     if current_state.get("openingPlan") != next_state.get("openingPlan"):
         raise TrialValidationError(
             "Production opening plan evidence is immutable after initialization."
+        )
+    if event_type == "production.order_execution.recorded":
+        _validate_order_execution_recorded(current_state, next_state, evidence)
+        return next_state
+    if current_state.get("orderExecution") != next_state.get("orderExecution"):
+        raise TrialValidationError(
+            "Production order execution can change only through its dedicated event."
         )
     event = _appended_event(
         current_state,
