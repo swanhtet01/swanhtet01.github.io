@@ -323,14 +323,12 @@ function documentHtml({ route, title, description, content, robots = 'index,foll
 
 function productCardHtml(product, index) {
   const capabilities = (product.modules?.length ? product.modules : product.workflow).slice(0, 3)
-  const trialRoute = `https://app.supermega.dev/settings/?product=${encodeURIComponent(product.id)}`
   return `<article class="compact-solution" id="${escapeHtml(product.id)}">
     <span class="card-index">0${index + 1} / ${escapeHtml(product.eyebrow)}</span>
     <h3>${escapeHtml(product.name)}</h3>
     <p>${escapeHtml(product.headline)}</p>
     <div class="module-tags" aria-label="Core capabilities">${capabilities.map((capability) => `<span>${escapeHtml(capability)}</span>`).join('')}</div>
-    <div class="template-line" aria-label="Templates">${product.templates.map((template) => `<span>${escapeHtml(template.name)}</span>`).join('')}</div>
-    <a class="card-link" href="${escapeHtml(trialRoute)}">Start guided trial</a>
+    <a class="card-link" href="${escapeHtml(product.appRoute)}">Open product</a>
   </article>`
 }
 
@@ -340,7 +338,7 @@ const homeHtml = documentHtml({
   description: manifest.company.statement,
   content: `<main>
     <section class="frame hero"><div class="hero-copy"><span class="eyebrow">${escapeHtml(manifest.company.positioning)}</span><h1>${escapeHtml(manifest.company.headline)}</h1><p class="lede">${escapeHtml(manifest.company.supporting)}</p><div class="actions"><a class="button primary" href="#products">Choose a product</a></div><div class="hero-note"><span>Four separate products</span><span>One secure foundation</span><span>Mobile-ready workflows</span></div></div></section>
-    <section class="frame section" id="products"><div class="section-head"><span class="eyebrow">SuperMega products</span><h2>Choose a product and workflow template.</h2><p>Each guided trial starts with one proven template, then opens a focused sample workspace with optional CSV import.</p></div><div class="compact-solutions">${manifest.customerProducts.map(productCardHtml).join('')}</div><div class="closing-strip"><div><h2>Need a workspace for your company?</h2><p>Tell us the product, existing data, and first workflow. We will define the implementation and acceptance test.</p></div><a class="button primary" href="/contact/">Contact SuperMega</a></div></section>
+    <section class="frame section" id="products"><div class="section-head"><span class="eyebrow">SuperMega products</span><h2>Open a working product.</h2><p>Each product starts with a usable sample. Explore the main job first; configuration and data import stay out of the way until you need them.</p></div><div class="compact-solutions">${manifest.customerProducts.map(productCardHtml).join('')}</div><div class="closing-strip"><div><h2>Need a workspace for your company?</h2><p>Tell us the product, existing data, and first workflow. We will define the implementation and acceptance test.</p></div><a class="button primary" href="/contact/">Contact SuperMega</a></div></section>
     <section class="frame trust-strip" id="trust" aria-label="Security boundary"><div class="control-line"><span class="eyebrow">Secure by default</span><p>AI may prepare drafts from approved records. Sends, payments, publishing, access changes, and production writes require explicit authority and verified server-side controls.</p></div></section>
   </main>`,
 })

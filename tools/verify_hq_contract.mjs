@@ -408,7 +408,7 @@ requireContract('Shop uses the stable commerce runtime',
   product('shop')?.name === 'Shop'
   && product('shop')?.runtimeSurface === 'commerce'
   && product('shop')?.compatibilityPath === '/operations/commerce/'
-  && product('shop')?.surfaces?.join(',') === 'Orders,Stock'
+  && product('shop')?.surfaces?.join(',') === 'Sell,Orders,Stock'
   && product('shop')?.templateContract?.productId === 'commerce')
 requireContract('Plant uses the stable production runtime',
   product('plant')?.name === 'Plant'
@@ -418,13 +418,13 @@ requireContract('Plant uses the stable production runtime',
   && product('plant')?.templateContract?.productId === 'production')
 requireContract('Website remains truthful',
   product('website')?.status === 'release-candidate-local'
-  && product('website')?.surfaces?.join(',') === 'Site,Preview,Publish'
+  && product('website')?.surfaces?.join(',') === 'Preview,Edit,Download'
   && product('website')?.templateContract?.productId === 'website'
   && product('website')?.nextGate?.includes('named-business brief'))
 requireContract('Ecommerce is separate and truthfully limited after cart-to-Shop completion and before hosted or payment proof',
   product('ecommerce')?.status === 'release-candidate-local'
   && product('ecommerce')?.job?.includes('read-only Shop catalogue')
-  && product('ecommerce')?.surfaces?.join(',') === 'Storefront,Cart,Quote,Request receipt,Shop review'
+  && product('ecommerce')?.surfaces?.join(',') === 'Store,Edit store,Cart,Quote,Shop review'
   && product('ecommerce')?.templateContract?.productId === 'ecommerce'
   && product('ecommerce')?.nextGate?.includes('protected preview')
   && product('ecommerce')?.nextGate?.includes('isolated managed tenant')
@@ -446,10 +446,33 @@ requireContract('manifest has one canonical four-product registry',
     === 'shop:commerce:Shop,plant:production:Plant,website:website:Website,ecommerce:ecommerce:Ecommerce')
 requireContract('manifest customer routes are canonical',
   manifest.customerProducts?.map((entry) => entry.appRoute).join(',')
-    === 'https://app.supermega.dev/shop/?tab=orders,https://app.supermega.dev/plant/?tab=production,https://app.supermega.dev/website/,https://app.supermega.dev/ecommerce/')
+    === 'https://app.supermega.dev/shop/?tab=counter,https://app.supermega.dev/plant/?tab=production,https://app.supermega.dev/website/,https://app.supermega.dev/ecommerce/')
 requireContract('manifest shared capability is separate from products',
   manifest.sharedCapabilities?.map((entry) => `${entry.id}:${entry.status}:${entry.firstWorkflow}`).join(',')
     === 'ai-assistance:gated-r-and-d:Order Intake')
+
+const expectedInternalPackIds = {
+  shop: 'retail,cafe,restaurant,spa,gym,school',
+  plant: 'general-manufacturing,batch-process,food-beverage,apparel,assembly',
+}
+requireContract('internal template packs are bounded configuration, not code forks',
+  manifest.templatePackPolicy?.contract === 'supermega.product-template-pack.v1'
+  && manifest.templatePackPolicy?.internalConfigurationOnly === true
+  && manifest.templatePackPolicy?.sharedCoreNoClientForks === true
+  && manifest.templatePackPolicy?.plannedModulesMayNotBeSoldAsAvailable === true
+  && manifest.templatePackPolicy?.maxEnabledModulesAtLaunch === 6
+  && manifest.templatePackPolicy?.lifecycle?.join(',') === 'choose-pack,map-import,preview-sample,named-operator-pilot,managed-activation,measure-and-iterate'
+  && manifest.templatePackPolicy?.importWorkflow?.join(',') === 'upload,map,validate,preview,named-human-confirm,activate')
+for (const [productId, expectedIds] of Object.entries(expectedInternalPackIds)) {
+  const packs = manifest.customerProducts?.find((entry) => entry.id === productId)?.internalTemplatePacks
+  requireContract(`${productId} internal packs are honest and bounded`,
+    packs?.map((entry) => entry.id).join(',') === expectedIds
+    && packs.every((entry) => entry.status === 'core-compatible'
+      && entry.firstWorkflow?.trim()
+      && entry.availableNow?.length >= 4
+      && entry.availableNow.length <= manifest.templatePackPolicy.maxEnabledModulesAtLaunch
+      && entry.plannedNext?.length >= 1))
+}
 
 const expectedTemplateIds = {
   commerce: 'social-commerce,retail-wholesale,restaurant-ordering',

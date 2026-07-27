@@ -25,6 +25,31 @@
   color-scheme: light;
 }
 
+.theme-dark .website-product {
+  --website-bg: #05080d;
+  --website-panel: #0d131b;
+  --website-panel-raised: #121b25;
+  --website-ink: #f5f8fb;
+  --website-muted: #a4b0be;
+  --website-quiet: #718093;
+  --website-line: rgba(166, 190, 214, .13);
+  --website-line-strong: rgba(166, 190, 214, .24);
+  --website-green: #56f0c1;
+  --website-green-soft: rgba(86, 240, 193, .11);
+  --website-warn: #ffcc7a;
+  --website-danger: #ff8291;
+  background: radial-gradient(circle at 82% -18%, rgba(42, 120, 133, .2), transparent 31%), var(--website-bg);
+  color-scheme: dark;
+}
+
+.theme-dark .website-product input,
+.theme-dark .website-product select,
+.theme-dark .website-product textarea {
+  border-color: var(--website-line-strong);
+  background: #090f16;
+  color: var(--website-ink);
+}
+
 .website-product *,
 .website-product *::before,
 .website-product *::after {

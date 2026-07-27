@@ -49,7 +49,7 @@
       "runtimeSurface": "commerce",
       "compatibilityPath": "/operations/commerce/",
       "job": "Run orders, available-stock counts, purchasing and receipt, fulfilment, payment status, bounded returns, exceptions, and daily close from one accountable shop record.",
-      "surfaces": ["Orders", "Stock"],
+      "surfaces": ["Sell", "Orders", "Stock"],
       "templateContract": { "file": "../site-manifest.json", "productId": "commerce" },
       "nextGate": "Repeat one authenticated order-to-close and return-exception pilot on an isolated hosted tenant with a named operator, baseline, and five-day evidence plan."
     },
@@ -73,7 +73,7 @@
       "status": "release-candidate-local",
       "path": "/website/",
       "job": "Turn an approved business brief into a finite, reviewable website and one deterministic downloadable site file.",
-      "surfaces": ["Site", "Preview", "Publish"],
+      "surfaces": ["Preview", "Edit", "Download"],
       "templateContract": { "file": "../site-manifest.json", "productId": "website" },
       "nextGate": "Complete one named-business brief through accepted responsive preview and retained managed artifact before connecting domain or publish authority."
     },
@@ -84,7 +84,7 @@
       "status": "release-candidate-local",
       "path": "/ecommerce/",
       "job": "Create a simple customer storefront from a read-only Shop catalogue, quote a recoverable cart, and send structured order intent into Shop without duplicating back-office records.",
-      "surfaces": ["Storefront", "Cart", "Quote", "Request receipt", "Shop review"],
+      "surfaces": ["Store", "Edit store", "Cart", "Quote", "Shop review"],
       "templateContract": { "file": "../site-manifest.json", "productId": "ecommerce" },
       "nextGate": "Prove the completed cart-to-Shop handoff on a protected preview and isolated managed tenant, then add real tax, shipping, and payment adapters only behind accountable approval and duplicate-safe recovery."
     }

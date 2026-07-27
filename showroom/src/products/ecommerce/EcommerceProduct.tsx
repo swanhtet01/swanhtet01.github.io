@@ -80,8 +80,8 @@ type ManagedStorefrontView = {
   availableSku: string
 }
 
-const DEFAULT_STORE_NAME = 'My Shop'
-const DEFAULT_STORE_SUMMARY = 'Everyday products, clearly priced and ready to request.'
+const DEFAULT_STORE_NAME = 'Mingalar Market'
+const DEFAULT_STORE_SUMMARY = 'Everyday essentials for pickup or delivery, with clear local pricing.'
 
 function formatMmk(value: number) {
   return `${value.toLocaleString()} MMK`
@@ -97,6 +97,19 @@ function cloneMerchandising(value: CommerceStorefrontMerchandising[] | undefined
 
 function storefrontDisplayName(item: StorefrontPreviewItem) {
   return item.merchandising?.displayName || item.name
+}
+
+function storefrontArtworkKind(sku: string) {
+  return Array.from(sku).reduce((total, character) => total + character.charCodeAt(0), 0) % 5
+}
+
+function StorefrontProductArtwork({ sku }: { sku: string }) {
+  const kind = storefrontArtworkKind(sku)
+  if (kind === 1) return <svg aria-hidden="true" className="storefront-product-art" data-art={kind} focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><rect className="art-main" height="48" rx="7" width="18" x="20" y="34" /><rect className="art-main" height="58" rx="7" width="18" x="41" y="24" /><rect className="art-main" height="44" rx="7" width="18" x="62" y="38" /><path className="art-highlight" d="M24 42h10M45 33h10M66 46h10" /></svg>
+  if (kind === 2) return <svg aria-hidden="true" className="storefront-product-art" data-art={kind} focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><path className="art-main" d="M27 23h46l7 58H20z" /><path className="art-highlight" d="M32 39h36M39 57h22" /><circle className="art-detail" cx="50" cy="69" r="6" /></svg>
+  if (kind === 3) return <svg aria-hidden="true" className="storefront-product-art" data-art={kind} focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><rect className="art-main" height="48" rx="9" width="28" x="22" y="35" /><rect className="art-main" height="55" rx="9" width="26" x="55" y="28" /><path className="art-highlight" d="M29 28h15v8M62 20h13v9M30 54h12M62 49h12" /></svg>
+  if (kind === 4) return <svg aria-hidden="true" className="storefront-product-art" data-art={kind} focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><rect className="art-main" height="58" rx="10" width="62" x="19" y="23" /><path className="art-detail" d="M50 67 34 53c-9-9 4-21 16-8 12-13 25-1 16 8z" /><path className="art-highlight" d="M27 32h46" /></svg>
+  return <svg aria-hidden="true" className="storefront-product-art" data-art={kind} focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><path className="art-highlight" d="M30 41c2-18 38-18 40 0" /><path className="art-main" d="M18 42h64l-8 39H26z" /><rect className="art-detail" height="21" rx="4" width="15" x="31" y="50" /><circle className="art-detail" cx="59" cy="60" r="10" /></svg>
 }
 
 function savedLocalDraft(draft: StorefrontDraft | LegacyStorefrontDraft | null): SavedStorefrontState | null {
@@ -183,7 +196,7 @@ export function EcommerceProduct() {
   const [selectedSkus, setSelectedSkus] = useState(initialState.selectedSkus)
   const [merchandising, setMerchandising] = useState<CommerceStorefrontMerchandising[] | null>(initialState.merchandising)
   const [device, setDevice] = useState<PreviewDevice>('phone')
-  const [mobileWorkspace, setMobileWorkspace] = useState<'setup' | 'preview'>('setup')
+  const [mobileWorkspace, setMobileWorkspace] = useState<'setup' | 'preview'>('preview')
   const [digestState, setDigestState] = useState({ previewJson: '', value: '', error: '' })
   const [managedCatalogDigestState, setManagedCatalogDigestState] = useState({
     source: '',
@@ -633,7 +646,7 @@ export function EcommerceProduct() {
   }
 
   function addToCart(sku: string) {
-    if (catalogHydrating || !savedDraftIsCurrent) return
+    if (catalogHydrating || !previewResult.preview || !digest || (Boolean(managedIdentity) && !savedDraftIsCurrent)) return
     setBuyingCart((current) => current.some((line) => line.sku === sku)
       ? current
       : [...current, { sku, quantity: 1 }])
@@ -736,6 +749,7 @@ export function EcommerceProduct() {
       return collectionDifference || left.sku.localeCompare(right.sku)
     })
     : []
+  const buyingReady = Boolean(previewResult.preview && digest && (savedDraftIsCurrent || !managedIdentity))
 
   return (
     <div className="workspace-screen ecommerce-product">
@@ -743,7 +757,7 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">{managedIdentity ? 'Managed storefront' : 'Local preview'}</span>
           <h1>Ecommerce</h1>
-          <p>Choose Shop products, preview the customer experience, and hand one reviewed quote to Shop.</p>
+          <p>Browse the working storefront, add products, and hand one reviewed order to Shop.</p>
         </div>
         <Link className="text-link" to="/shop/?tab=inventory">Open Shop stock</Link>
       </header>
@@ -754,8 +768,8 @@ export function EcommerceProduct() {
       </div>
 
       <div aria-label="Ecommerce workspace" className="ecommerce-mobile-switch" role="group">
-        <button aria-controls="ecommerce-setup-panel" aria-pressed={mobileWorkspace === 'setup'} onClick={() => showMobileWorkspace('setup')} type="button">1 · Setup</button>
-        <button aria-controls="ecommerce-preview-panel" aria-pressed={mobileWorkspace === 'preview'} onClick={() => showMobileWorkspace('preview')} type="button">2 · Preview</button>
+        <button aria-controls="ecommerce-preview-panel" aria-pressed={mobileWorkspace === 'preview'} onClick={() => showMobileWorkspace('preview')} type="button">Store</button>
+        <button aria-controls="ecommerce-setup-panel" aria-pressed={mobileWorkspace === 'setup'} onClick={() => showMobileWorkspace('setup')} type="button">Edit store</button>
       </div>
 
       <div className="ecommerce-workspace" data-mobile-view={mobileWorkspace}>
@@ -888,18 +902,18 @@ export function EcommerceProduct() {
 
         <section className="core-panel ecommerce-preview-panel" aria-labelledby="ecommerce-preview-title" id="ecommerce-preview-panel">
           <div className="panel-head ecommerce-preview-head">
-            <div><span className="core-eyebrow">2 · Preview</span><h2 id="ecommerce-preview-title" ref={storefrontPreviewHeadingRef} tabIndex={-1}>Customer view</h2></div>
+            <div><span className="core-eyebrow">Storefront demo</span><h2 id="ecommerce-preview-title" ref={storefrontPreviewHeadingRef} tabIndex={-1}>Shop the sample</h2></div>
             <div className="segmented-control" role="group" aria-label="Preview size">
               <button aria-pressed={device === 'phone'} onClick={() => setDevice('phone')} type="button">Phone</button>
               <button aria-pressed={device === 'desktop'} onClick={() => setDevice('desktop')} type="button">Desktop</button>
             </div>
           </div>
 
-          {!savedDraftIsCurrent ? (
+          {!buyingReady && !catalogHydrating ? (
             <div className="ecommerce-preview-gate">
               <span>
-                <strong>Finish setup first</strong>
-                <small>Save this storefront before customer requests are available.</small>
+                <strong>{managedIdentity ? 'Review the store before taking orders' : 'Preparing the sample store'}</strong>
+                <small>{managedIdentity ? 'Save the managed storefront before customer requests are available.' : 'The exact Shop catalog and prices are being checked.'}</small>
               </span>
               <button
                 aria-controls="ecommerce-setup-panel"
@@ -907,7 +921,7 @@ export function EcommerceProduct() {
                 onClick={finishStorefrontSetup}
                 type="button"
               >
-                Finish setup
+                Edit store
               </button>
             </div>
           ) : null}
@@ -930,17 +944,17 @@ export function EcommerceProduct() {
                     const displayName = storefrontDisplayName(item)
                     return (
                     <article
-                      className={available && savedDraftIsCurrent ? 'has-request-action' : undefined}
+                      className={available && buyingReady ? 'has-request-action' : undefined}
                       data-featured={item.merchandising?.featured ? 'true' : 'false'}
                       data-requested={buyingCart.some((line) => line.sku === item.sku) ? 'true' : 'false'}
                       key={item.sku}
                     >
-                      <div aria-hidden="true">{displayName.slice(0, 1).toUpperCase()}</div>
+                      <StorefrontProductArtwork sku={item.sku} />
                       <small>{item.merchandising ? `${item.merchandising.featured ? 'Featured · ' : ''}${item.merchandising.collection}` : item.variant || item.sku}</small>
                       <strong>{displayName}</strong>
                       <span>{formatMmk(item.unitPriceMmk)}</span>
                       <b>{available ? 'Available' : 'Sold out'}</b>
-                      {available && savedDraftIsCurrent ? (
+                      {available && buyingReady ? (
                         <button
                           aria-controls="ecommerce-buying-workspace"
                           aria-label={`${buyingCart.some((line) => line.sku === item.sku) ? 'View' : 'Add'} ${displayName} ${buyingCart.some((line) => line.sku === item.sku) ? 'in cart' : 'to cart'}`}
@@ -967,7 +981,7 @@ export function EcommerceProduct() {
             )}
           </div>
 
-          {savedDraftIsCurrent && previewResult.preview && digest ? (
+          {buyingReady && previewResult.preview && digest ? (
             <EcommerceBuyingWorkspace
               cart={buyingCart}
               currentCatalog={catalog.items}

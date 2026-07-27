@@ -1,4 +1,4 @@
-import { lazy, Suspense, type Dispatch, type FormEvent, type ReactNode, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, type Dispatch, type FormEvent, type MouseEvent, type ReactNode, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate, useOutletContext, useSearchParams } from 'react-router'
 
 import siteManifest from '../../../site-manifest.json'
@@ -289,6 +289,7 @@ type PendingAccountableAction = Omit<AccountableAction, 'capturedAt' | 'actorKin
   confirmation?: AccountableAction
   evidenceReferenceLocked?: boolean
   evidenceReferenceSuggestion?: string
+  presentation?: 'default' | 'counter'
   reasonSuggestion?: string
 }
 
@@ -305,7 +306,7 @@ function productDisplayName(product: SetupProductId) {
 }
 
 function setupProductPreviewPath(product: SetupProductId) {
-  if (product === 'commerce') return '/shop/?tab=orders'
+  if (product === 'commerce') return '/shop/?tab=counter'
   if (product === 'production') return '/plant/?tab=production'
   if (product === 'website') return '/website/'
   return '/ecommerce/'
@@ -361,13 +362,14 @@ type RuntimeHealth = {
   requirements: string[]
 }
 
-type CommerceTab = 'orders' | 'inventory'
+type CommerceTab = 'counter' | 'orders' | 'inventory'
 type ProductionTab = 'production' | 'control'
 
 const APPROVAL_KEY = 'supermega.approvals.v3'
 const SETUP_KEY = 'supermega.setup.v3'
 const SETUP_SYNC_EVENT = 'supermega:setup-updated'
 const ACTION_KEY = 'supermega.accountable.actions.v1'
+const THEME_KEY = 'supermega.interface.theme.v1'
 const STOREFRONT_DRAFT_RESET_PREFIX = 'supermega.ecommerce.storefront_draft.v2.'
 const LEGACY_STOREFRONT_DRAFT_RESET_PREFIX = 'supermega.ecommerce.storefront_draft.v1.'
 const LEGACY_STOREFRONT_DRAFT_RESET_KEY = 'supermega.ecommerce.storefront_draft.v1'
@@ -376,6 +378,19 @@ const SHOP_ORDER_DRAFT_RESET_EPOCH_KEY = 'supermega.shop.order_draft_reset.v1'
 const WEBSITE_RECOVERY_EXPORT_PREFIX = 'supermega.website.workspace.recovery.v1.'
 const LEGACY_APPROVAL_KEYS = ['supermega.approvals.v2']
 const LEGACY_SETUP_KEYS = ['supermega.setup.v2']
+
+type InterfaceTheme = 'light' | 'dark'
+
+function initialInterfaceTheme(): InterfaceTheme {
+  if (typeof window === 'undefined') return 'light'
+  try {
+    const saved = window.localStorage.getItem(THEME_KEY)
+    if (saved === 'light' || saved === 'dark') return saved
+  } catch {
+    // Use the device preference when local theme storage is unavailable.
+  }
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+}
 
 function collectLocalProductRecords(storage: Pick<Storage, 'getItem' | 'key' | 'length'>) {
   const exactKeys = new Set([
@@ -535,6 +550,7 @@ const navigation = [
 ] as const
 
 const commerceTabs: Array<{ id: CommerceTab; label: string }> = [
+  { id: 'counter', label: 'Sell' },
   { id: 'orders', label: 'Orders' },
   { id: 'inventory', label: 'Stock' },
 ]
@@ -1367,6 +1383,7 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
   }, [action, returnFocus])
 
   if (!action) return null
+  const isCounterConfirmation = action.presentation === 'counter'
 
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -1391,10 +1408,11 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
     <form className="core-form action-confirm-form" onSubmit={(event) => void submit(event)}>
       {authenticatedActor
         ? <label>Your account<input readOnly value={authenticatedActor.label} /></label>
-        : <label>Your name<input maxLength={80} readOnly={Boolean(action.confirmation)} required value={action.confirmation?.actor ?? actor} onChange={(event) => setActor(event.target.value)} placeholder="Name or responsible role" /></label>}
-      <label>Reason<input maxLength={180} readOnly={Boolean(action.confirmation)} required value={action.confirmation?.reason ?? reason} onChange={(event) => setReason(event.target.value)} placeholder="Why this change is correct now" /></label>
-      <label>Reference<input maxLength={180} readOnly={Boolean(action.confirmation) || action.evidenceReferenceLocked} required value={action.confirmation?.evidenceReference ?? (action.evidenceReferenceLocked ? action.evidenceReferenceSuggestion ?? '' : evidenceReference)} onChange={(event) => setEvidenceReference(event.target.value)} placeholder="Message ID, receipt, count sheet, or observation" /></label>
-      <div className="form-actions"><button className="core-button" disabled={busy || Boolean(action.confirmation)} onClick={onCancel} type="button">Cancel</button><button className="core-button primary" disabled={busy} type="submit">{busy ? 'Applying…' : action.confirmation ? 'Retry same confirmation' : 'Confirm change'}</button></div>
+        : <label>{isCounterConfirmation ? 'Cashier' : 'Your name'}<input maxLength={80} readOnly={Boolean(action.confirmation)} required value={action.confirmation?.actor ?? actor} onChange={(event) => setActor(event.target.value)} placeholder={isCounterConfirmation ? 'Name on this sale' : 'Name or responsible role'} /></label>}
+      {isCounterConfirmation
+        ? <div className="counter-confirm-proof"><span><small>Reason</small><strong>{action.confirmation?.reason ?? reason}</strong></span><span><small>Receipt</small><strong>{action.confirmation?.evidenceReference ?? evidenceReference}</strong></span></div>
+        : <><label>Reason<input maxLength={180} readOnly={Boolean(action.confirmation)} required value={action.confirmation?.reason ?? reason} onChange={(event) => setReason(event.target.value)} placeholder="Why this change is correct now" /></label><label>Reference<input maxLength={180} readOnly={Boolean(action.confirmation) || action.evidenceReferenceLocked} required value={action.confirmation?.evidenceReference ?? (action.evidenceReferenceLocked ? action.evidenceReferenceSuggestion ?? '' : evidenceReference)} onChange={(event) => setEvidenceReference(event.target.value)} placeholder="Message ID, receipt, count sheet, or observation" /></label></>}
+      <div className="form-actions"><button className="core-button" disabled={busy || Boolean(action.confirmation)} onClick={onCancel} type="button">Cancel</button><button className="core-button primary" disabled={busy} type="submit">{busy ? 'Applying…' : action.confirmation ? 'Retry same confirmation' : isCounterConfirmation ? 'Complete sale' : 'Confirm change'}</button></div>
       {error || action.confirmation ? <p className="form-notice" role="status">{error || 'This command proof is frozen. Any retry reuses the same command and evidence; reload can reconcile managed state.'}</p> : null}
     </form>
   </dialog>
@@ -1467,32 +1485,18 @@ function RuntimeBadge({ status }: { status: RuntimeStatus }) {
   return <span className={`runtime-badge ${status}`}><i />{status === 'checking' ? 'Checking' : status === 'enterprise' ? 'Managed' : 'Sample workspace'}</span>
 }
 
-function ProductTrialContext({ product, setup }: { product: SetupProductId; setup: SetupState }) {
-  const productContract = productContracts[product]
-  const matchesProduct = setup.product === product
-  const started = matchesProduct && Boolean(setup.startedAt)
-  if (started) return null
-
-  return <aside className="product-trial-context" aria-label={`${productContract.name} trial`}>
-    <div><span>Sample workspace</span><strong>Choose a {productContract.name} template</strong><small>Start with one of {productContract.templates.length} proven workflows.</small></div>
-    <div className="product-trial-actions">
-      <Link className="text-link" to={clientSetupPath(product)}>Choose template</Link>
-    </div>
-  </aside>
-}
-
 export function CoreLayout() {
   const location = useLocation()
   const runtime = useRuntimeHealth()
-  const [setup] = useSetupWorkspace()
+  const [theme, setTheme] = useState<InterfaceTheme>(initialInterfaceTheme)
   const workspaceMainRef = useRef<HTMLElement>(null)
   const routeProduct = productFromPathname(location.pathname)
   const routeName = location.pathname.startsWith('/website/')
-    ? 'Website'
+      ? 'Website'
     : location.pathname.startsWith('/ecommerce/')
       ? 'Ecommerce'
       : location.pathname.startsWith('/settings/')
-      ? 'Trial setup'
+      ? 'Workspace'
       : location.pathname.startsWith('/shop/')
         ? 'Shop'
         : location.pathname.startsWith('/plant/')
@@ -1505,21 +1509,32 @@ export function CoreLayout() {
     window.scrollTo({ top: 0, behavior: 'instant' })
   }, [location.pathname, location.search, routeName])
 
+  useEffect(() => {
+    document.documentElement.dataset.supermegaTheme = theme
+    try {
+      window.localStorage.setItem(THEME_KEY, theme)
+    } catch {
+      // Theme remains active for this session when local storage is unavailable.
+    }
+  }, [theme])
+
+  const toggleTheme = () => setTheme((current) => current === 'dark' ? 'light' : 'dark')
+  const themeLabel = theme === 'dark' ? 'Use light theme' : 'Use dark theme'
+
   return (
-    <div className="core-shell">
+    <div className={`core-shell theme-${theme}${theme === 'dark' ? ' shop-shell' : ''}${routeProduct === 'production' ? ' plant-shell' : ''}`}>
       <a className="core-skip" href="#workspace-main" onClick={() => requestAnimationFrame(() => workspaceMainRef.current?.focus())}>Skip to workspace</a>
       <aside className="core-sidebar">
         <Brand />
         <nav className="core-nav" aria-label="Application">
           {navigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={item.end} key={item.to} to={item.to}>{item.label}</NavLink>)}
         </nav>
-        <div className="sidebar-foot"><RuntimeBadge status={runtime.status} /><NavLink to="/settings/">Trial setup</NavLink></div>
+        <div className="sidebar-foot"><RuntimeBadge status={runtime.status} /><button aria-label={themeLabel} className="theme-toggle" onClick={toggleTheme} type="button"><span aria-hidden="true">{theme === 'dark' ? '☼' : '◐'}</span>{theme === 'dark' ? 'Light' : 'Dark'}</button></div>
       </aside>
       <div className="core-stage">
-        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta"><NavLink to="/settings/">Trial</NavLink><RuntimeBadge status={runtime.status} /></div></header>
+        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta"><button aria-label={themeLabel} className="theme-toggle mobile-theme-toggle" onClick={toggleTheme} type="button"><span aria-hidden="true">{theme === 'dark' ? '☼' : '◐'}</span></button><RuntimeBadge status={runtime.status} /></div></header>
         <nav className="mobile-nav" aria-label="Mobile application">{navigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={item.end} key={item.to} to={item.to}>{item.label}</NavLink>)}</nav>
-        <main id="workspace-main" className={`core-main${routeProduct ? ' has-trial-context' : ''}${routeProduct === 'ecommerce' ? ' natural-scroll' : ''}`} ref={workspaceMainRef} tabIndex={-1}>
-          {routeProduct ? <ProductTrialContext product={routeProduct} setup={setup} /> : null}
+        <main id="workspace-main" className={`core-main${routeProduct === 'ecommerce' ? ' natural-scroll' : ''}`} ref={workspaceMainRef} tabIndex={-1}>
           <div className="core-route-content"><Outlet context={runtime} /></div>
         </main>
       </div>
@@ -1537,43 +1552,41 @@ export function Empty({ children }: { children: ReactNode }) {
 
 const customerProducts = [
   {
-    setupProduct: 'commerce' as const,
     number: '01',
     name: 'Shop',
-    copy: 'Run orders, payments, stock, purchasing, returns, and daily close.',
+    copy: 'Tap products, take payment, and keep stock and orders in sync.',
+    path: '/shop/',
   },
   {
-    setupProduct: 'production' as const,
     number: '02',
     name: 'Plant',
     copy: 'Run production jobs, output, quality, maintenance, and shift handoff.',
+    path: '/plant/',
   },
   {
-    setupProduct: 'website' as const,
     number: '03',
     name: 'Website',
     copy: 'Build, review, and export a mobile-ready company website.',
+    path: '/website/',
   },
   {
-    setupProduct: 'ecommerce' as const,
     number: '04',
     name: 'Ecommerce',
     copy: 'Build a Shop-connected storefront and review incoming order requests.',
+    path: '/ecommerce/',
   },
 ] as const
 
 export function ProductHomePage() {
   return (
     <div className="workspace-screen product-home-screen">
-      <PageHeading copy="Choose one product, then pick a proven business template. Sample data is ready; importing your own CSV stays optional." eyebrow="SuperMega products" title="Start with one product." />
+      <PageHeading copy="Each product opens directly to a working sample. No setup is required to understand the main job." eyebrow="SuperMega products" title="Choose what you want to run." />
       <nav aria-label="SuperMega products" className="product-home-grid">
         {customerProducts.map((product) => (
-          <Link className="product-home-card" key={product.name} to={clientSetupPath(product.setupProduct)}>
+          <Link className="product-home-card" key={product.name} to={product.path}>
             <span className="product-home-number">{product.number}</span>
             <div><h2>{product.name}</h2><p>{product.copy}</p></div>
-            <span className="product-home-template-label">Templates</span>
-            <span className="product-home-tasks">{templatesFor(product.setupProduct).map((template) => <small key={template.id}>{template.name}</small>)}</span>
-            <strong>Choose a template<span aria-hidden="true"> →</span></strong>
+            <strong>Open product<span aria-hidden="true"> →</span></strong>
           </Link>
         ))}
       </nav>
@@ -1902,7 +1915,7 @@ export function OperationsPage({ product }: { product?: ProductId }) {
   const isProductRoute = Boolean(product) || routeModule === 'commerce' || routeModule === 'production'
   const view: ProductId = product ?? (routeModule === 'production' || requestedView === 'production' || requestedView === 'plant' ? 'production' : 'commerce')
   const requestedTab = searchParams.get('tab')
-  const commerceTab = commerceTabs.some((tab) => tab.id === requestedTab) ? requestedTab as CommerceTab : 'orders'
+  const commerceTab = commerceTabs.some((tab) => tab.id === requestedTab) ? requestedTab as CommerceTab : 'counter'
   const productionTab = productionTabs.some((tab) => tab.id === requestedTab) ? requestedTab as ProductionTab : 'production'
   const activeTab = view === 'commerce' ? commerceTab : productionTab
   const requestedTabIsCanonical = requestedTab === activeTab
@@ -1919,7 +1932,7 @@ export function OperationsPage({ product }: { product?: ProductId }) {
 
   const tabs = view === 'commerce' ? commerceTabs : productionTabs
   const productCopy = view === 'commerce'
-    ? 'Orders, payments, and stock in one place.'
+    ? 'Tap an item, choose payment, and confirm the sale.'
     : 'Jobs, output, equipment, and problems in one place.'
 
   if (!isProductRoute && !requestedView) {
@@ -1935,12 +1948,123 @@ export function OperationsPage({ product }: { product?: ProductId }) {
   }
 
   return (
-    <div className="workspace-screen operations-screen">
+    <div className={`workspace-screen operations-screen${view === 'commerce' ? ' commerce-screen' : ''}`}>
       <PageHeading title={productDisplayName(view)} copy={productCopy} />
       <nav className="workspace-toolbar view-tabs product-task-tabs" aria-label={`${productDisplayName(view)} tasks`}>{tabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{tab.label}</button>)}</nav>
       <div className="workspace-view">{view === 'commerce' ? <CommercePage ecommerceNavigationDraft={ecommerceNavigationDraft} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedSource={requestedSource} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
     </div>
   )
+}
+
+type ShopCounterReview = {
+  lines: Array<{ sku: string; quantity: number }>
+  customer: string
+  payment: string
+  onCommitted: () => void
+}
+
+function ShopProductArtwork({ kind }: { kind: number }) {
+  if (kind === 1) return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><rect className="art-main" height="48" rx="7" width="18" x="20" y="34" /><rect className="art-main" height="58" rx="7" width="18" x="41" y="24" /><rect className="art-main" height="44" rx="7" width="18" x="62" y="38" /><path className="art-highlight" d="M24 42h10M45 33h10M66 46h10" /></svg>
+  if (kind === 2) return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><path className="art-main" d="M27 23h46l7 58H20z" /><path className="art-highlight" d="M32 39h36M39 57h22" /><circle className="art-detail" cx="50" cy="69" r="6" /></svg>
+  if (kind === 3) return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><rect className="art-main" height="48" rx="9" width="28" x="22" y="35" /><rect className="art-main" height="55" rx="9" width="26" x="55" y="28" /><path className="art-highlight" d="M29 28h15v8M62 20h13v9M30 54h12M62 49h12" /></svg>
+  if (kind === 4) return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><rect className="art-main" height="58" rx="10" width="62" x="19" y="23" /><path className="art-detail" d="M50 67 34 53c-9-9 4-21 16-8 12-13 25-1 16 8z" /><path className="art-highlight" d="M27 32h46" /></svg>
+  return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><path className="art-highlight" d="M30 41c2-18 38-18 40 0" /><path className="art-main" d="M18 42h64l-8 39H26z" /><rect className="art-detail" height="21" rx="4" width="15" x="31" y="50" /><circle className="art-detail" cx="59" cy="60" r="10" /></svg>
+}
+
+function ShopCounter({ disabled, items, lowStockCount, onReview, openOrderCount }: {
+  disabled: boolean
+  items: CommerceItem[]
+  lowStockCount: number
+  onReview: (review: ShopCounterReview, returnFocus: HTMLElement) => void
+  openOrderCount: number
+}) {
+  const [cart, setCart] = useState<Record<string, number>>({})
+  const [customer, setCustomer] = useState('')
+  const [payment, setPayment] = useState('Cash')
+  const [query, setQuery] = useState('')
+  const [cartOpen, setCartOpen] = useState(false)
+  const normalizedQuery = query.trim().toLocaleLowerCase()
+  const visibleItems = normalizedQuery
+    ? items.filter((item) => `${item.name} ${item.variant ?? ''} ${item.sku}`.toLocaleLowerCase().includes(normalizedQuery))
+    : items
+  const lines = items.flatMap((item) => {
+    const quantity = Math.min(cart[item.sku] ?? 0, item.onHand)
+    return quantity > 0 ? [{ item, quantity }] : []
+  })
+  const unitCount = lines.reduce((sum, line) => sum + line.quantity, 0)
+  const total = lines.reduce((sum, line) => sum + line.item.price * line.quantity, 0)
+
+  function changeQuantity(item: CommerceItem, next: number) {
+    setCart((current) => {
+      const quantity = Math.max(0, Math.min(next, item.onHand))
+      if (!quantity) {
+        const remaining = { ...current }
+        delete remaining[item.sku]
+        return remaining
+      }
+      return { ...current, [item.sku]: quantity }
+    })
+  }
+
+  function addItem(item: CommerceItem) {
+    if (item.onHand < 1) return
+    setCart((current) => ({ ...current, [item.sku]: Math.min((current[item.sku] ?? 0) + 1, item.onHand) }))
+  }
+
+  function clearSale() {
+    setCart({})
+    setCustomer('')
+    setPayment('Cash')
+  }
+
+  function reviewSale(event: MouseEvent<HTMLButtonElement>) {
+    if (!lines.length || disabled) return
+    onReview({
+      lines: lines.map((line) => ({ sku: line.item.sku, quantity: line.quantity })),
+      customer: customer.trim(),
+      payment,
+      onCommitted: () => {
+        clearSale()
+        setCartOpen(false)
+      },
+    }, event.currentTarget)
+  }
+
+  return <section aria-label="Sales counter" className="shop-counter-surface">
+    <div className="shop-counter-grid">
+      <section className="shop-catalog-panel">
+        <header className="shop-catalog-head">
+          <div><span className="core-eyebrow">Counter open</span><h2>Tap an item to add it</h2><div className="shop-counter-summary"><span>{openOrderCount} open orders</span><span>{lowStockCount} low stock</span></div></div>
+          <label className="shop-item-search"><span className="sr-only">Find an item</span><input autoComplete="off" onChange={(event) => setQuery(event.target.value)} placeholder="Find an item" type="search" value={query} /></label>
+        </header>
+        {visibleItems.length ? <div className="shop-item-grid">
+          {visibleItems.map((item) => {
+            const quantity = cart[item.sku] ?? 0
+            const artKind = Math.max(0, items.indexOf(item)) % 5
+            return <button aria-label={`Add ${item.name} to this sale`} className="shop-product-tile" data-art={String(artKind)} data-empty={item.onHand < 1 ? 'true' : 'false'} disabled={item.onHand < 1} key={item.sku} onClick={() => addItem(item)} type="button">
+              <ShopProductArtwork kind={artKind} />
+              <span className="shop-product-copy"><strong>{item.name}</strong>{item.variant ? <small>{item.variant}</small> : null}<b>{formatMoney(item.price)}</b><small className={item.onHand <= item.reorderAt ? 'is-low' : ''}>{item.onHand ? `${item.onHand} in stock` : 'Out of stock'}</small></span>
+              {quantity ? <span className="shop-product-quantity" aria-label={`${quantity} in sale`}>{quantity}</span> : <span aria-hidden="true" className="shop-product-add">+</span>}
+            </button>
+          })}
+        </div> : <Empty>No matching item. Search by name or SKU.</Empty>}
+      </section>
+
+      <button aria-label="Close current sale" className={`shop-cart-backdrop${cartOpen ? ' is-open' : ''}`} onClick={() => setCartOpen(false)} type="button" />
+      <aside aria-label="Current sale" className={`shop-current-sale${cartOpen ? ' is-open' : ''}`} id="shop-current-sale">
+        <header><div><span className="core-eyebrow">Current sale</span><h2>{unitCount ? `${unitCount} ${unitCount === 1 ? 'item' : 'items'}` : 'Ready for the first item'}</h2></div><div className="shop-cart-actions"><button className="text-link" disabled={!unitCount} onClick={clearSale} type="button">Clear</button><button aria-label="Close current sale" className="shop-cart-close" onClick={() => setCartOpen(false)} type="button">×</button></div></header>
+        <div className="shop-cart-lines">
+          {lines.length ? lines.map(({ item, quantity }) => <article key={item.sku}><div><strong>{item.name}</strong><small>{formatMoney(item.price)} each</small></div><div className="shop-quantity-stepper"><button aria-label={`Remove one ${item.name}`} onClick={() => changeQuantity(item, quantity - 1)} type="button">−</button><strong>{quantity}</strong><button aria-label={`Add one ${item.name}`} disabled={quantity >= item.onHand} onClick={() => changeQuantity(item, quantity + 1)} type="button">+</button></div><b>{formatMoney(item.price * quantity)}</b></article>) : <div className="shop-empty-cart"><ShopProductArtwork kind={0} /><strong>Your sale is empty</strong><small>Tap any product to begin.</small></div>}
+        </div>
+        <div className="shop-sale-details">
+          <label>Customer <small>optional</small><input maxLength={80} onChange={(event) => setCustomer(event.target.value)} placeholder="Guest" value={customer} /></label>
+          <fieldset><legend>Payment</legend><div className="shop-payment-options">{['Cash', 'KBZPay', 'WavePay'].map((method) => <button aria-pressed={payment === method} key={method} onClick={() => setPayment(method)} type="button">{method}</button>)}</div></fieldset>
+        </div>
+        <footer><div><span>Total</span><strong>{formatMoney(total)}</strong></div><button className="shop-review-sale" disabled={!unitCount || disabled} onClick={reviewSale} type="button">{disabled ? 'Sales paused' : 'Review sale'}<span aria-hidden="true">→</span></button><small>Nothing changes until the cashier confirms.</small></footer>
+      </aside>
+    </div>
+    <button aria-controls="shop-current-sale" aria-expanded={cartOpen} className="shop-mobile-cart" onClick={() => setCartOpen(true)} type="button"><span><small>Current sale</small><strong>{unitCount || 'Empty'}</strong></span><b>{formatMoney(total)}</b></button>
+  </section>
 }
 
 function localCommerceOrderDraftScope(workspaceId?: string) {
@@ -3159,6 +3283,85 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     setNotice('Item removed from this order draft. Shop data has not changed.')
   }
 
+  function reviewCounterSale(review: ShopCounterReview, returnFocus: HTMLElement) {
+    if (!review.lines.length || !review.payment) {
+      setNotice('Add at least one item and choose payment before reviewing the sale.')
+      return
+    }
+    const reviewedAt = new Date()
+    const orderLines: CommerceOrderLine[] = []
+    const seenSkus = new Set<string>()
+    let orderQuantity = 0
+    let orderTotal = 0
+    for (const line of review.lines) {
+      const item = commerce.items.find((candidate) => candidate.sku === line.sku)
+      if (!item || seenSkus.has(line.sku) || !Number.isSafeInteger(line.quantity) || line.quantity < 1 || line.quantity > item.onHand) {
+        setNotice('The catalog or available stock changed. Review the current sale again.')
+        return
+      }
+      const lineTotal = item.price * line.quantity
+      const nextQuantity = orderQuantity + line.quantity
+      const nextTotal = orderTotal + lineTotal
+      if (!Number.isSafeInteger(lineTotal) || !Number.isSafeInteger(nextQuantity) || !Number.isSafeInteger(nextTotal)) {
+        setNotice('This sale exceeds the supported whole-MMK or quantity limit.')
+        return
+      }
+      seenSkus.add(line.sku)
+      orderQuantity = nextQuantity
+      orderTotal = nextTotal
+      orderLines.push({ sku: item.sku, name: item.name, ...(item.variant ? { variant: item.variant } : {}), quantity: line.quantity, unitPriceMmk: item.price })
+    }
+    const orderId = uid('ORD')
+    const promisedAt = new Date(reviewedAt.getTime() + 30 * 60 * 1000).toISOString()
+    const order: CommerceOrder = {
+      id: orderId,
+      createdAt: reviewedAt.toISOString(),
+      customer: review.customer || 'Guest',
+      channel: 'Walk-in',
+      item: commerceOrderItemSummary(orderLines),
+      ...(orderLines.length === 1 ? { itemSku: orderLines[0].sku } : {}),
+      quantity: orderQuantity,
+      payment: review.payment,
+      paymentStatus: 'pending',
+      refundStatus: 'none',
+      fulfilment: 'pickup',
+      fulfilmentReference: `Counter ${orderId}`,
+      promisedAt,
+      lines: orderLines,
+      total: orderTotal,
+      status: 'confirmed',
+    }
+    if (commerce.inventoryFoundation) {
+      try {
+        commerceOrderLocationAllocationPreview(commerce, order)
+      } catch {
+        setNotice('Location stock cannot cover this sale. Receive or move stock, then try again.')
+        return
+      }
+    }
+    const lineReview = orderLines.map((line) => `${line.name} × ${line.quantity}`).join(', ')
+    const stockReview = orderLines.map((line) => {
+      const item = commerce.items.find((candidate) => candidate.sku === line.sku)
+      return `${line.sku} ${item?.onHand ?? 0} → ${(item?.onHand ?? 0) - line.quantity}`
+    }).join(', ')
+    queueAction({
+      kind: 'order_create',
+      subjectId: order.id,
+      summary: `Complete ${formatMoney(order.total)} sale`,
+      before: `${lineReview} · ${review.payment}`,
+      after: `Order ${order.id} · Stock ${stockReview}`,
+      presentation: 'counter',
+      evidenceReferenceSuggestion: `${order.id} counter receipt`,
+      evidenceReferenceLocked: true,
+      reasonSuggestion: 'Walk-in sale reviewed at the Shop counter.',
+      apply: async (action) => {
+        const ownedOrder = { ...order, owner: action.actor }
+        await mutateCommerce('commerce.order.created', action.commandId, commerceActionProof(action), (current) => reserveCommerceOrder(current, ownedOrder, commerceActionProof(action)))
+        review.onCommitted()
+      },
+    }, returnFocus)
+  }
+
   function recordOrder(event: FormEvent) {
     event.preventDefault()
     if (orderDraftConflict || resumedOrderNeedsReview) {
@@ -3967,6 +4170,12 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const orderDraftRecoveryVisible = !orderDraftActive
     && !pendingAction
     && (orderDraftRead.status === 'ready' || orderDraftRecoveryBlocked)
+
+  if (tab === 'counter') return <div className="operation-module shop-counter-module">
+    {commerceBoundary}
+    <ShopCounter disabled={commerceControlsDisabled} items={commerce.items} lowStockCount={lowStock.length} onReview={reviewCounterSale} openOrderCount={openOrders.length} />
+    {actionGate}
+  </div>
 
   if (tab === 'orders') return <div className={`operation-module orders-module${returnDraft && selectedReturnLine ? ' has-return-draft' : ''}`}>
     {commerceBoundary}
@@ -5255,7 +5464,6 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
 
   if (tab === 'production') return <div className="operation-module">
     {productionBoundary}
-    <Suspense fallback={<p className="form-notice" role="status">Loading execution control…</p>}><PlantOrderFoundation actor={managedIdentity?.userId ?? 'Local Plant supervisor'} commerceState={relatedCommerce} disabled={!productionCanWrite || Boolean(pendingAction)} jobs={production.jobs} key={`plant-order:${managedWorkspaceId ?? managedIdentity?.workspaceId ?? 'local-sample'}:${production.orderExecution?.headDigest ?? 'empty'}`} managedState={managedIdentity ? production.orderExecution ?? null : undefined} onManagedCommand={managedIdentity ? mutateProduction : undefined} scope={`plant:${managedWorkspaceId ?? managedIdentity?.workspaceId ?? 'local-sample'}`} /></Suspense>
     <div className="split-workspace production-view">
       <section className="core-panel job-panel">
         <div className="panel-head"><div><span className="core-eyebrow">Plant plan</span><h2>Jobs to finish</h2></div><span className="panel-note">{activeJobs.length} active · {completedJobs.length} finished</span></div>
@@ -5316,6 +5524,10 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         </details>
       </section>
     </div>
+    <details className="plant-execution-disclosure">
+      <summary><span><strong>Batch control</strong><small>BOM, routing, materials, inspection, and release</small></span><b>Open</b></summary>
+      <Suspense fallback={<p className="form-notice" role="status">Loading batch control…</p>}><PlantOrderFoundation actor={managedIdentity?.userId ?? 'Local Plant supervisor'} commerceState={relatedCommerce} disabled={!productionCanWrite || Boolean(pendingAction)} jobs={production.jobs} key={`plant-order:${managedWorkspaceId ?? managedIdentity?.workspaceId ?? 'local-sample'}:${production.orderExecution?.headDigest ?? 'empty'}`} managedState={managedIdentity ? production.orderExecution ?? null : undefined} onManagedCommand={managedIdentity ? mutateProduction : undefined} scope={`plant:${managedWorkspaceId ?? managedIdentity?.workspaceId ?? 'local-sample'}`} /></Suspense>
+    </details>
     <dialog aria-labelledby="job-schedule-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); closeJobSchedule() }} ref={scheduleDialogRef}>
       {scheduleDraft ? <>
         <div className="panel-head"><div><span className="core-eyebrow">Plant plan</span><h2 id="job-schedule-title">Change {scheduleDraft.jobId} plan</h2></div><button aria-label="Close job schedule" className="text-link" onClick={closeJobSchedule} type="button">Close</button></div>

@@ -148,10 +148,10 @@ export function WebsiteProduct() {
   } = useWebsiteWorkspace()
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedView = searchParams.get('view')
-  const [surface, setSurface] = useState<'work' | 'preview'>('work')
+  const [surface, setSurface] = useState<'work' | 'preview'>('preview')
   const [selectedPageId, setSelectedPageId] = useState(workspace.selectedPageId)
   const [siteSettingsOpen, setSiteSettingsOpen] = useState(false)
-  const [starterDismissed, setStarterDismissed] = useState(false)
+  const [starterDismissed, setStarterDismissed] = useState(true)
   const [editSessionState, setEditSessionState] = useState<WebsiteEditSessionState | null>(null)
   const [savingDraft, setSavingDraft] = useState(false)
   const [repairConfirmationRevision, setRepairConfirmationRevision] = useState<number | null>(null)
@@ -194,7 +194,12 @@ export function WebsiteProduct() {
   const canReview = !hasUnsavedChanges && !starterAvailable && contentChecksPass
   const view: WebsiteView = requestedView === 'publish' && canReview ? 'publish' : 'content'
   const starterSetupActive = view === 'content' && starterAvailable && !starterDismissed
-  const activeViewCopy = starterSetupActive
+  const activeViewCopy = view === 'content' && starterAvailable && surface === 'preview'
+    ? {
+        title: 'Website demo',
+        copy: 'Explore the responsive site first. Edit or reuse it only when you are ready.',
+      }
+    : starterSetupActive
     ? {
         title: 'Start your website',
         copy: 'Answer five short questions, then preview before anything is saved.',
@@ -800,7 +805,7 @@ export function WebsiteProduct() {
                 <div className="website-primary-actions">
                 {starterAvailable ? (
                   <button className="website-button is-primary" onClick={openStarterSetup} type="button">
-                    Start site
+                    Use this demo
                   </button>
                 ) : null}
                 {surface === 'work' ? (
@@ -879,7 +884,7 @@ export function WebsiteProduct() {
                   }}
                   type="button"
                 >
-                  {surface === 'preview' ? 'Back' : 'Preview'}
+                  {surface === 'preview' ? 'Edit site' : 'Preview'}
                 </button>
                 {hasUnsavedChanges ? (
                   <>

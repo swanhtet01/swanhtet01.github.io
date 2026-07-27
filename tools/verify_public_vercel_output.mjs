@@ -34,7 +34,7 @@ if (manifest.schemaVersion !== 'supermega.site-context.v2') fail('manifest_schem
 if (manifest.company?.publicPricing !== false) fail('public_pricing_enabled')
 if (manifest.release?.sourceBranch !== 'main') fail('release_source_not_main')
 if (manifest.customerProducts?.map((product) => `${product.id}:${product.runtimeId}:${product.name}`).join(',') !== 'shop:commerce:Shop,plant:production:Plant,website:website:Website,ecommerce:ecommerce:Ecommerce') fail('customer_product_portfolio_drift')
-if (manifest.customerProducts?.map((product) => product.appRoute).join(',') !== 'https://app.supermega.dev/shop/?tab=orders,https://app.supermega.dev/plant/?tab=production,https://app.supermega.dev/website/,https://app.supermega.dev/ecommerce/') fail('customer_product_routes_drift')
+if (manifest.customerProducts?.map((product) => product.appRoute).join(',') !== 'https://app.supermega.dev/shop/?tab=counter,https://app.supermega.dev/plant/?tab=production,https://app.supermega.dev/website/,https://app.supermega.dev/ecommerce/') fail('customer_product_routes_drift')
 const operatingProducts = manifest.customerProducts?.filter((product) => product.kind === 'operating-product') || []
 const makerProducts = manifest.customerProducts?.filter((product) => product.kind === 'maker-product') || []
 if (operatingProducts.map((product) => product.id).join(',') !== 'shop,plant') fail('operating_product_portfolio_drift')
@@ -141,38 +141,34 @@ for (const token of [
   'One secure foundation',
   'Mobile-ready workflows',
   'aria-label="Core capabilities"',
-  'aria-label="Templates"',
   'min-height: 44px',
   'id="products"',
   'SuperMega products',
-  'Choose a product and workflow template.',
-  'Each guided trial starts with one proven template, then opens a focused sample workspace with optional CSV import.',
+  'Open a working product.',
+  'Each product starts with a usable sample. Explore the main job first; configuration and data import stay out of the way until you need them.',
   'Choose a product',
   'Need a workspace for your company?',
   'id="trust"',
   'aria-label="Security boundary"',
   'AI may prepare drafts from approved records.',
-  'https://app.supermega.dev/settings/?product=shop',
-  'https://app.supermega.dev/settings/?product=plant',
+  'https://app.supermega.dev/shop/?tab=counter',
+  'https://app.supermega.dev/plant/?tab=production',
   'id="website"',
-  'https://app.supermega.dev/settings/?product=website',
+  'https://app.supermega.dev/website/',
   'id="ecommerce"',
   'Create a Shop-backed storefront and hand customer intent to human review.',
-  'https://app.supermega.dev/settings/?product=ecommerce',
+  'https://app.supermega.dev/ecommerce/',
 ]) {
   if (!home.includes(token)) fail('homepage_contract_missing', { token })
 }
 for (const product of manifest.customerProducts || []) {
-  const trialRoute = `https://app.supermega.dev/settings/?product=${encodeURIComponent(product.id)}`
-  if (!home.includes(trialRoute)) fail('guided_trial_route_missing', { product: product.id })
+  if (!home.includes(product.appRoute)) fail('direct_product_route_missing', { product: product.id })
   for (const capability of (product.modules?.length ? product.modules : product.workflow).slice(0, 3)) {
     if (!home.includes(capability)) fail('module_catalog_missing', { product: product.id, capability })
   }
-  for (const template of product.templates) {
-    if (!home.includes(template.name)) fail('template_catalog_missing', { product: product.id, template: template.id })
-  }
 }
-if ((home.match(/>Start guided trial<\/a>/g) || []).length !== 4) fail('guided_trial_cta_count_wrong')
+if ((home.match(/>Open product<\/a>/g) || []).length !== 4) fail('direct_product_cta_count_wrong')
+if (home.includes('Start guided trial') || home.includes('app.supermega.dev/settings/?product=') || home.includes('aria-label="Templates"')) fail('setup_first_public_path_returned')
 for (const internalLabel of ['SuperMega HQ', 'One next action for the company', 'Owners, evidence, review, and release', 'Gated R&amp;D']) {
   if (home.includes(internalLabel)) fail('internal_system_exposed_on_public_home', { internalLabel })
 }

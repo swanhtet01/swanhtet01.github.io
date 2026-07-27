@@ -1,7 +1,7 @@
 {
   "schemaVersion": "supermega.site-context.v2",
-  "contextVersion": "2026-07-27.1",
-  "catalogVersion": "2026-07-27.2",
+  "contextVersion": "2026-07-28.1",
+  "catalogVersion": "2026-07-28.1",
   "brand": {
     "name": "SuperMega",
     "domain": "supermega.dev",
@@ -20,6 +20,15 @@
     "supporting": "Shop runs orders and stock. Plant runs production and quality. Website builds company sites. Ecommerce creates Shop-connected ordering.",
     "publicPricing": false
   },
+  "templatePackPolicy": {
+    "contract": "supermega.product-template-pack.v1",
+    "internalConfigurationOnly": true,
+    "sharedCoreNoClientForks": true,
+    "plannedModulesMayNotBeSoldAsAvailable": true,
+    "maxEnabledModulesAtLaunch": 6,
+    "lifecycle": ["choose-pack", "map-import", "preview-sample", "named-operator-pilot", "managed-activation", "measure-and-iterate"],
+    "importWorkflow": ["upload", "map", "validate", "preview", "named-human-confirm", "activate"]
+  },
   "customerProducts": [
     {
       "id": "shop",
@@ -27,7 +36,7 @@
       "kind": "operating-product",
       "name": "Shop",
       "publicAnchor": "/#shop",
-      "appRoute": "https://app.supermega.dev/shop/?tab=orders",
+      "appRoute": "https://app.supermega.dev/shop/?tab=counter",
       "status": "available-in-app",
       "eyebrow": "Shop operations",
       "headline": "Keep every order and stock movement accountable.",
@@ -40,9 +49,18 @@
         "url": "/contact/?product=shop"
       },
       "modules": [
+        "Sell: visual counter, cart, payment choice and accountable confirmation",
         "Orders: intake, fulfilment, payments, follow-up and close",
         "Stock: catalogue, balances, receipts and reorder exceptions",
         "Accountability: evidence, owner review and recovery"
+      ],
+      "internalTemplatePacks": [
+        {"id": "retail", "name": "Retail", "status": "core-compatible", "firstWorkflow": "counter sale", "availableNow": ["Sell", "Orders", "Stock", "Purchasing", "Returns"], "plannedNext": ["Promotions", "Loyalty"]},
+        {"id": "cafe", "name": "Cafe", "status": "core-compatible", "firstWorkflow": "counter order", "availableNow": ["Sell", "Orders", "Stock", "Daily close"], "plannedNext": ["Menu modifiers", "Kitchen tickets"]},
+        {"id": "restaurant", "name": "Restaurant", "status": "core-compatible", "firstWorkflow": "take and prepare order", "availableNow": ["Sell", "Orders", "Stock", "Payments"], "plannedNext": ["Tables", "Kitchen display"]},
+        {"id": "spa", "name": "Spa", "status": "core-compatible", "firstWorkflow": "sell service or product", "availableNow": ["Sell", "Orders", "Stock", "Payments"], "plannedNext": ["Appointments", "Service rooms", "Staff commission"]},
+        {"id": "gym", "name": "Gym", "status": "core-compatible", "firstWorkflow": "sell membership or product", "availableNow": ["Sell", "Orders", "Stock", "Payments"], "plannedNext": ["Memberships", "Check-in", "Classes"]},
+        {"id": "school", "name": "School", "status": "core-compatible", "firstWorkflow": "record fee or supply sale", "availableNow": ["Sell", "Orders", "Stock", "Payments"], "plannedNext": ["Students", "Fees", "Attendance", "Classes"]}
       ],
       "templates": [
         {
@@ -211,6 +229,13 @@
         "Jobs: recurring plans, targets and confirmed output",
         "Problems: quality, materials, equipment and maintenance",
         "Accountability: shift evidence, owner review and recovery"
+      ],
+      "internalTemplatePacks": [
+        {"id": "general-manufacturing", "name": "General manufacturing", "status": "core-compatible", "firstWorkflow": "plan and record output", "availableNow": ["Jobs", "Output", "Materials", "Problems", "Quality", "Maintenance"], "plannedNext": ["Finite scheduling", "Cost rollup"]},
+        {"id": "batch-process", "name": "Batch and process", "status": "core-compatible", "firstWorkflow": "run controlled batch", "availableNow": ["Jobs", "Batch control", "Materials", "Quality holds", "Output", "Shift handoff"], "plannedNext": ["Formula scaling", "Yield variance"]},
+        {"id": "food-beverage", "name": "Food and beverage", "status": "core-compatible", "firstWorkflow": "make and release batch", "availableNow": ["Jobs", "Batch control", "Materials", "Quality holds", "Output", "Maintenance"], "plannedNext": ["Expiry", "Allergen controls", "Recall trace"]},
+        {"id": "apparel", "name": "Apparel", "status": "core-compatible", "firstWorkflow": "run style order", "availableNow": ["Jobs", "Output", "Materials", "Problems", "Quality", "Shift handoff"], "plannedNext": ["Size-color matrix", "Cut and sew WIP"]},
+        {"id": "assembly", "name": "Assembly", "status": "core-compatible", "firstWorkflow": "build and inspect order", "availableNow": ["Jobs", "Batch control", "Materials", "Quality holds", "Output", "Maintenance"], "plannedNext": ["Serial tracking", "Work instructions"]}
       ],
       "templates": [
         {
