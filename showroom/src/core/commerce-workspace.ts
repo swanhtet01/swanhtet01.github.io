@@ -1,4 +1,8 @@
-import type { ShopInventoryState } from './shop-inventory-foundation'
+import {
+  projectShopInventory,
+  receiveShopInventory,
+  type ShopInventoryState,
+} from './shop-inventory-foundation.ts'
 
 export const COMMERCE_WORKSPACE_SCHEMA = 'supermega.commerce.workspace.v2' as const
 export const COMMERCE_STOREFRONT_SCHEMA = 'supermega.ecommerce.storefront.v1' as const
@@ -414,6 +418,14 @@ export type CommercePurchaseOrderInput = {
   supplier: string
   sku: string
   quantityOrdered: number
+}
+
+export type CommercePurchaseOrderLocationReceipt = {
+  receiptId: string
+  stockUnitId: string
+  trackingCode: string
+  locationId: string
+  expectedHeadDigest: string
 }
 
 type CommerceStorage = {
@@ -2873,15 +2885,37 @@ export function receiveCommercePurchaseOrder(
   purchaseOrderId: string,
   quantity: number,
   proof: CommerceActionProof,
+  locationReceipt?: CommercePurchaseOrderLocationReceipt,
 ) {
   if (!validProof(proof) || !Number.isSafeInteger(quantity) || quantity < 1) return null
   const current = validateCommerceState(state)
   const replayMovement = current.movements.find((movement) => movement.actionId === proof.actionId)
   if (replayMovement) {
-    return replayMovement.kind === 'receipt'
+    const aggregateReplayMatches = replayMovement.kind === 'receipt'
       && replayMovement.purchaseOrderId === purchaseOrderId
       && replayMovement.quantityDelta === quantity
-      && sameProof(replayMovement, proof) ? current : null
+      && sameProof(replayMovement, proof)
+    if (!aggregateReplayMatches) return null
+    if (!current.inventoryFoundation) return locationReceipt ? null : current
+    if (!locationReceipt) return null
+    try {
+      const catalogSkus = current.items.map((item) => item.sku).sort()
+      const locationReplay = receiveShopInventory(current.inventoryFoundation, {
+        ...locationReceipt,
+        purchaseOrderId,
+        sku: replayMovement.sku,
+        quantity,
+        proof,
+        catalogSkus,
+      })
+      if (!locationReplay.replayed) return null
+      const projection = projectShopInventory(locationReplay.state, catalogSkus)
+      const totals = new Map(catalogSkus.map((sku) => [sku, 0]))
+      projection.balances.forEach((balance) => totals.set(balance.sku, (totals.get(balance.sku) ?? 0) + balance.onHand))
+      return current.items.every((item) => totals.get(item.sku) === item.onHand) ? current : null
+    } catch {
+      return null
+    }
   }
   if (actionIdIsUsed(current, proof.actionId)) return null
   const purchaseOrder = commercePurchaseOrders(current).find((candidate) => candidate.id === purchaseOrderId)
@@ -2900,10 +2934,39 @@ export function receiveCommercePurchaseOrder(
     quantityDelta: quantity,
     purchaseOrderId,
   })
+  const nextItems = current.items.map((candidate) => candidate.sku === purchaseOrder.sku ? { ...candidate, onHand: nextBalance } : candidate)
+  let inventoryFoundation = current.inventoryFoundation
+  if (inventoryFoundation) {
+    if (!locationReceipt) return null
+    try {
+      const catalogSkus = current.items.map((candidate) => candidate.sku).sort()
+      const beforeProjection = projectShopInventory(inventoryFoundation, catalogSkus)
+      const beforeTotals = new Map(catalogSkus.map((sku) => [sku, 0]))
+      beforeProjection.balances.forEach((balance) => beforeTotals.set(balance.sku, (beforeTotals.get(balance.sku) ?? 0) + balance.onHand))
+      if (!current.items.every((candidate) => beforeTotals.get(candidate.sku) === candidate.onHand)) return null
+      const locationResult = receiveShopInventory(inventoryFoundation, {
+        ...locationReceipt,
+        purchaseOrderId,
+        sku: purchaseOrder.sku,
+        quantity,
+        proof,
+        catalogSkus,
+      })
+      if (locationResult.replayed) return null
+      const afterProjection = projectShopInventory(locationResult.state, catalogSkus)
+      const afterTotals = new Map(catalogSkus.map((sku) => [sku, 0]))
+      afterProjection.balances.forEach((balance) => afterTotals.set(balance.sku, (afterTotals.get(balance.sku) ?? 0) + balance.onHand))
+      if (!nextItems.every((candidate) => afterTotals.get(candidate.sku) === candidate.onHand)) return null
+      inventoryFoundation = locationResult.state
+    } catch {
+      return null
+    }
+  } else if (locationReceipt) return null
   return validateCommerceState({
     ...current,
-    items: current.items.map((candidate) => candidate.sku === purchaseOrder.sku ? { ...candidate, onHand: nextBalance } : candidate),
+    items: nextItems,
     movements: [movement, ...current.movements],
+    ...(inventoryFoundation ? { inventoryFoundation } : {}),
   })
 }
 

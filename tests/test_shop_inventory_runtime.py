@@ -31,6 +31,9 @@ OPEN_AT = "2026-07-27T01:00:00.000Z"
 TRANSFER_AT = "2026-07-27T02:00:00.000Z"
 SERVER_OPEN_AT = "2026-07-27T03:00:00+00:00"
 SERVER_TRANSFER_AT = "2026-07-27T04:00:00+00:00"
+RECEIPT_AT = "2026-07-27T05:00:00.000Z"
+SERVER_RECEIPT_AT = "2026-07-27T05:30:00+00:00"
+PURCHASE_ORDER_ID = "PO-00000000-0000-4000-8000-000000000071"
 
 
 def canonical_digest(value: object) -> str:
@@ -143,6 +146,74 @@ def transferred_inventory(
     return current
 
 
+def received_inventory(
+    state: dict[str, object],
+    proof: dict[str, str] | None = None,
+    *,
+    quantity: int = 4,
+    purchase_order_id: str = PURCHASE_ORDER_ID,
+    location_id: str = "LOC-BRANCH",
+    receipt_id: str = "RCV-PURCHASE-001",
+    stock_unit_id: str = "LOT-PURCHASE-001",
+    tracking_code: str = "PO-000071-LOT-001",
+) -> dict[str, object]:
+    current = deepcopy(state)
+    payload = {
+        "kind": "receipt",
+        "id": receipt_id,
+        "purchaseOrderId": purchase_order_id,
+        "stockUnitId": stock_unit_id,
+        "sku": "SKU-1",
+        "trackingCode": tracking_code,
+        "locationId": location_id,
+        "quantity": quantity,
+        "proof": proof or action_proof("ACT-RECEIPT-001", RECEIPT_AT),
+    }
+    body = {
+        "sequence": int(current["revision"]) + 1,
+        "previousDigest": current["headDigest"],
+        "payload": payload,
+    }
+    command = {**body, "digest": canonical_digest(body)}
+    current["revision"] = body["sequence"]
+    current["headDigest"] = command["digest"]
+    current["commands"] = [*current["commands"], command]  # type: ignore[misc]
+    return current
+
+
+def purchase_order(proof: dict[str, str] | None = None) -> dict[str, object]:
+    creation = proof or action_proof(
+        "ACT-PURCHASE-001", "2026-07-27T04:10:00.000Z"
+    )
+    return {
+        "id": PURCHASE_ORDER_ID,
+        "createdAt": creation["capturedAt"],
+        "expectedAt": "2026-07-28T05:00:00.000Z",
+        "supplier": "Yangon Supply",
+        "sku": "SKU-1",
+        "quantityOrdered": 4,
+        "creation": creation,
+    }
+
+
+def purchase_receipt_movement(
+    proof: dict[str, str] | None = None, *, quantity: int = 4
+) -> dict[str, object]:
+    evidence = proof or action_proof("ACT-RECEIPT-001", RECEIPT_AT)
+    return {
+        "id": f"MOV2:{evidence['actionId']}",
+        "actionId": evidence["actionId"],
+        "createdAt": evidence["capturedAt"],
+        "actor": evidence["actor"],
+        "reason": evidence["reason"],
+        "evidenceReference": evidence["evidenceReference"],
+        "kind": "receipt",
+        "sku": "SKU-1",
+        "quantityDelta": quantity,
+        "purchaseOrderId": PURCHASE_ORDER_ID,
+    }
+
+
 class ShopInventoryRuntimeTests(unittest.TestCase):
     def test_opening_transfer_and_digest_chain_match_the_existing_contract(self) -> None:
         opening = opening_inventory()
@@ -198,6 +269,73 @@ class ShopInventoryRuntimeTests(unittest.TestCase):
                     "state": drifted,
                     "evidence": transferred["commands"][-1]["payload"]["proof"],  # type: ignore[index]
                 },
+            )
+
+    def test_purchase_receipt_links_one_lot_and_conserves_shop_stock(self) -> None:
+        current = commerce_state()
+        opening = opening_inventory()
+        initialized = reduce_commerce_state(
+            "commerce.inventory.initialized",
+            current,
+            {
+                "state": {**current, "inventoryFoundation": opening},
+                "evidence": opening["commands"][-1]["payload"]["proof"],  # type: ignore[index]
+            },
+        )
+        order = purchase_order()
+        ordered = reduce_commerce_state(
+            "commerce.purchase_order.created",
+            initialized,
+            {
+                "state": {**initialized, "purchaseOrders": [order]},
+                "evidence": order["creation"],
+            },
+        )
+        proof = action_proof("ACT-RECEIPT-001", RECEIPT_AT)
+        foundation = received_inventory(ordered["inventoryFoundation"], proof)
+        receipt_state = deepcopy(ordered)
+        receipt_state["items"][0]["onHand"] = 14  # type: ignore[index]
+        receipt_state["movements"] = [purchase_receipt_movement(proof)]
+        receipt_state["inventoryFoundation"] = foundation
+        received = reduce_commerce_state(
+            "commerce.purchase_order.received",
+            ordered,
+            {"state": receipt_state, "evidence": proof},
+        )
+        self.assertEqual(
+            shop_inventory_sku_totals(received["inventoryFoundation"], ["SKU-1"]),
+            {"SKU-1": 14},
+        )
+        location_receipt = received["inventoryFoundation"]["commands"][-1][  # type: ignore[index]
+            "payload"
+        ]
+        self.assertEqual(location_receipt["purchaseOrderId"], PURCHASE_ORDER_ID)
+        self.assertEqual(location_receipt["locationId"], "LOC-BRANCH")
+        self.assertEqual(location_receipt["stockUnitId"], "LOT-PURCHASE-001")
+
+        mismatched = deepcopy(receipt_state)
+        mismatched["inventoryFoundation"] = received_inventory(
+            ordered["inventoryFoundation"], proof, quantity=3
+        )
+        with self.assertRaisesRegex(
+            TrialValidationError,
+            "match its aggregate purchase receipt|conserve aggregate Shop stock",
+        ):
+            reduce_commerce_state(
+                "commerce.purchase_order.received",
+                ordered,
+                {"state": mismatched, "evidence": proof},
+            )
+
+        aggregate_only = deepcopy(receipt_state)
+        aggregate_only["inventoryFoundation"] = ordered["inventoryFoundation"]
+        with self.assertRaisesRegex(
+            TrialValidationError, "append exactly one location receipt"
+        ):
+            reduce_commerce_state(
+                "commerce.purchase_order.received",
+                ordered,
+                {"state": aggregate_only, "evidence": proof},
             )
 
     def test_store_stamps_human_location_commands_and_replays_exactly(self) -> None:
@@ -298,6 +436,82 @@ class ShopInventoryRuntimeTests(unittest.TestCase):
         ]
         self.assertEqual(moved_proof["actor"], operator.actor_id)
         self.assertEqual(moved_proof["capturedAt"], SERVER_TRANSFER_AT)
+
+        order_proof = action_proof(
+            "ACT-PURCHASE-001", "2099-01-01T00:00:00.000Z", "fabricated-buyer"
+        )
+        order = purchase_order(order_proof)
+        with patch(
+            "supermega_runtime.trial_store._utc_now",
+            return_value="2026-07-27T04:10:00+00:00",
+        ):
+            ordered = store.apply_command(
+                operator,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.purchase_order.created",
+                expected_version=moved.version,
+                payload={
+                    "state": {**moved.state, "purchaseOrders": [order]},
+                    "evidence": order_proof,
+                },
+            )
+
+        spoofed_receipt_proof = action_proof(
+            "ACT-RECEIPT-001", "2099-01-01T00:00:00.000Z", "fabricated-receiver"
+        )
+        receipt_state = deepcopy(ordered.state)
+        receipt_state["items"][0]["onHand"] = 14  # type: ignore[index]
+        receipt_state["movements"] = [
+            purchase_receipt_movement(spoofed_receipt_proof)
+        ]
+        receipt_state["inventoryFoundation"] = received_inventory(
+            ordered.state["inventoryFoundation"], spoofed_receipt_proof
+        )
+        receipt_payload = {
+            "state": receipt_state,
+            "evidence": spoofed_receipt_proof,
+        }
+        receipt_command_id = str(uuid4())
+        with patch(
+            "supermega_runtime.trial_store._utc_now", return_value=SERVER_RECEIPT_AT
+        ):
+            received = store.apply_command(
+                operator,
+                command_id=receipt_command_id,
+                surface="commerce",
+                event_type="commerce.purchase_order.received",
+                expected_version=ordered.version,
+                payload=receipt_payload,
+            )
+            receipt_replay = store.apply_command(
+                operator,
+                command_id=receipt_command_id,
+                surface="commerce",
+                event_type="commerce.purchase_order.received",
+                expected_version=ordered.version,
+                payload=receipt_payload,
+            )
+        authoritative_movement = received.state["movements"][0]
+        authoritative_location_proof = received.state["inventoryFoundation"][
+            "commands"
+        ][-1]["payload"]["proof"]
+        self.assertEqual(authoritative_movement["actor"], operator.actor_id)
+        self.assertEqual(
+            authoritative_movement["createdAt"], SERVER_RECEIPT_AT
+        )
+        self.assertEqual(authoritative_location_proof["actor"], operator.actor_id)
+        self.assertEqual(
+            authoritative_location_proof["capturedAt"], SERVER_RECEIPT_AT
+        )
+        self.assertTrue(receipt_replay.idempotent_replay)
+        self.assertEqual(receipt_replay.state, received.state)
+        self.assertEqual(
+            shop_inventory_sku_totals(
+                received.state["inventoryFoundation"], ["SKU-1"]
+            ),
+            {"SKU-1": 14},
+        )
 
 
 if __name__ == "__main__":

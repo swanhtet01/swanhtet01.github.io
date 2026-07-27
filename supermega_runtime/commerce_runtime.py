@@ -3602,6 +3602,68 @@ def _validate_purchase_order_received(
             "purchase receipt must increase stock by no more than the outstanding quantity."
         )
 
+    current_foundation = _inventory_foundation(current)
+    next_foundation = _inventory_foundation(next_state)
+    if current_foundation is None:
+        if next_foundation is not None:
+            raise TrialValidationError(
+                "a purchase receipt cannot initialize location inventory."
+            )
+        return
+    if next_foundation is None:
+        raise TrialValidationError(
+            "managed location stock requires a linked receipt allocation."
+        )
+    catalog_skus = [str(item["sku"]) for item in current["items"]]
+    try:
+        before_foundation = validate_shop_inventory_state(
+            current_foundation, catalog_skus
+        )
+        after_foundation = validate_shop_inventory_state(
+            next_foundation, catalog_skus
+        )
+        before_totals = shop_inventory_sku_totals(
+            before_foundation, catalog_skus
+        )
+        after_totals = shop_inventory_sku_totals(after_foundation, catalog_skus)
+    except ShopInventoryValidationError as exc:
+        raise TrialValidationError(str(exc)) from exc
+    if (
+        after_foundation["revision"] != before_foundation["revision"] + 1
+        or after_foundation["commands"][:-1] != before_foundation["commands"]
+        or after_foundation["commands"][-1]["payload"]["kind"] != "receipt"
+    ):
+        raise TrialValidationError(
+            "managed purchase receipt must append exactly one location receipt."
+        )
+    location_receipt = after_foundation["commands"][-1]["payload"]
+    location_proof = location_receipt["proof"]
+    if (
+        location_receipt["purchaseOrderId"] != purchase_order_id
+        or location_receipt["sku"] != movement["sku"]
+        or location_receipt["quantity"] != movement["quantityDelta"]
+        or any(
+            location_proof[proof_field] != movement[movement_field]
+            for proof_field, movement_field in (
+                ("actionId", "actionId"),
+                ("capturedAt", "createdAt"),
+                ("actor", "actor"),
+                ("reason", "reason"),
+                ("evidenceReference", "evidenceReference"),
+            )
+        )
+    ):
+        raise TrialValidationError(
+            "location receipt must match its aggregate purchase receipt exactly."
+        )
+    if (
+        before_totals != _inventory_item_totals(current)
+        or after_totals != _inventory_item_totals(next_state)
+    ):
+        raise TrialValidationError(
+            "location receipt totals must conserve aggregate Shop stock."
+        )
+
 
 def _validate_purchase_order_cancelled(
     current: Mapping[str, Any],
@@ -3963,6 +4025,7 @@ def reduce_commerce_state(
     if event_type not in {
         "commerce.inventory.initialized",
         "commerce.inventory.transferred",
+        "commerce.purchase_order.received",
     }:
         _require_inventory_foundation_unchanged(current_state, next_state)
     _TRANSITION_VALIDATORS[event_type](current_state, next_state)

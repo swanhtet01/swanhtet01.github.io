@@ -341,6 +341,46 @@ def _payload(value: object, field: str, catalog_skus: list[str]) -> dict[str, An
             "quantity": _integer(row["quantity"], f"{field}.quantity", 1),
             "proof": _proof(row["proof"], f"{field}.proof"),
         }
+    if kind == "receipt":
+        row = _exact(
+            row,
+            field,
+            {
+                "kind",
+                "id",
+                "purchaseOrderId",
+                "stockUnitId",
+                "sku",
+                "trackingCode",
+                "locationId",
+                "quantity",
+                "proof",
+            },
+        )
+        sku = _text(row["sku"], f"{field}.sku", 80)
+        if sku not in catalog_skus:
+            raise ShopInventoryValidationError(
+                f"{field}.sku is not in the Shop catalog."
+            )
+        return {
+            "kind": "receipt",
+            "id": _identifier(row["id"], f"{field}.id", "RCV"),
+            "purchaseOrderId": _identifier(
+                row["purchaseOrderId"], f"{field}.purchaseOrderId", "PO"
+            ),
+            "stockUnitId": _identifier(
+                row["stockUnitId"], f"{field}.stockUnitId", "LOT"
+            ),
+            "sku": sku,
+            "trackingCode": _text(
+                row["trackingCode"], f"{field}.trackingCode", 80
+            ),
+            "locationId": _identifier(
+                row["locationId"], f"{field}.locationId", "LOC"
+            ),
+            "quantity": _integer(row["quantity"], f"{field}.quantity", 1),
+            "proof": _proof(row["proof"], f"{field}.proof"),
+        }
     raise ShopInventoryValidationError(f"{field}.kind is unsupported for managed v1.")
 
 
@@ -362,6 +402,33 @@ def _project(commands: list[dict[str, Any]]) -> dict[str, Any]:
             for opening in package["openings"]:
                 key = (opening["stockUnitId"], opening["locationId"])
                 balances[key] = balances.get(key, 0) + opening["quantity"]
+            continue
+        if command["kind"] == "receipt":
+            if command["locationId"] not in locations:
+                raise ShopInventoryValidationError(
+                    "receipt references an unknown location."
+                )
+            if command["stockUnitId"] in units:
+                raise ShopInventoryValidationError(
+                    "receipt stock unit is already recorded."
+                )
+            trace_identity = f"{command['sku']}|lot|{command['trackingCode']}"
+            if any(
+                f"{unit['sku']}|{unit['tracking']}|{unit['trackingCode']}"
+                == trace_identity
+                for unit in units.values()
+            ):
+                raise ShopInventoryValidationError(
+                    "receipt lot identity is already recorded."
+                )
+            units[command["stockUnitId"]] = {
+                "id": command["stockUnitId"],
+                "sku": command["sku"],
+                "tracking": "lot",
+                "trackingCode": command["trackingCode"],
+            }
+            key = (command["stockUnitId"], command["locationId"])
+            balances[key] = command["quantity"]
             continue
         if command["stockUnitId"] not in units:
             raise ShopInventoryValidationError("transfer references an unknown stock unit.")

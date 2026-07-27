@@ -936,6 +936,9 @@ def _authoritative_command_payload(
         evidence = authoritative.get("evidence")
         state = authoritative.get("state")
         movements = state.get("movements") if isinstance(state, Mapping) else None
+        foundation = (
+            state.get("inventoryFoundation") if isinstance(state, Mapping) else None
+        )
         purchase_orders = (
             state.get("purchaseOrders") if isinstance(state, Mapping) else None
         )
@@ -966,9 +969,46 @@ def _authoritative_command_payload(
             or not isinstance(purchase_order, Mapping)
         ):
             return authoritative
+        location_receipt_matches = False
+        previous_inventory_captured_at = None
+        commands = foundation.get("commands") if isinstance(foundation, Mapping) else None
+        if (
+            isinstance(commands, list)
+            and commands
+            and isinstance(commands[-1], Mapping)
+        ):
+            latest_payload = commands[-1].get("payload")
+            latest_proof = (
+                latest_payload.get("proof")
+                if isinstance(latest_payload, Mapping)
+                else None
+            )
+            location_receipt_matches = bool(
+                isinstance(latest_payload, Mapping)
+                and latest_payload.get("kind") == "receipt"
+                and isinstance(latest_proof, Mapping)
+                and latest_proof.get("actionId") == evidence.get("actionId")
+            )
+            if (
+                location_receipt_matches
+                and len(commands) > 1
+                and isinstance(commands[-2], Mapping)
+            ):
+                previous_payload = commands[-2].get("payload")
+                previous_proof = (
+                    previous_payload.get("proof")
+                    if isinstance(previous_payload, Mapping)
+                    else None
+                )
+                previous_inventory_captured_at = (
+                    previous_proof.get("capturedAt")
+                    if isinstance(previous_proof, Mapping)
+                    else None
+                )
         effective_captured_at = _not_before(
             captured_at,
             purchase_order.get("createdAt"),
+            previous_inventory_captured_at,
             *(
                 prior.get("createdAt")
                 for prior in movements[1:]
@@ -988,6 +1028,18 @@ def _authoritative_command_payload(
             authoritative_movement,
             *deepcopy(movements[1:]),
         ]
+        if location_receipt_matches and isinstance(foundation, Mapping):
+            try:
+                authoritative_state["inventoryFoundation"] = (
+                    restamp_latest_shop_inventory_command(
+                        foundation,
+                        action_id=str(authoritative_evidence.get("actionId", "")),
+                        actor=principal.actor_id,
+                        captured_at=effective_captured_at,
+                    )
+                )
+            except ShopInventoryValidationError as exc:
+                raise TrialValidationError(str(exc)) from exc
         authoritative["evidence"] = authoritative_evidence
         authoritative["state"] = authoritative_state
         return authoritative

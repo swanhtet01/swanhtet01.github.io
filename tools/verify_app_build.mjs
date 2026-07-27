@@ -1285,6 +1285,7 @@ if (!shopInventorySource.includes("SHOP_INVENTORY_STATE_SCHEMA = 'supermega.shop
   || !shopInventorySource.includes("SHOP_INVENTORY_IMPORT_CONTRACT = 'supermega.shop.inventory_import.v1'")
   || !shopInventorySource.includes('export function applyShopInventoryImport')
   || !shopInventorySource.includes('export function transferShopInventory')
+  || !shopInventorySource.includes('export function receiveShopInventory')
   || !shopInventorySource.includes('export function reserveShopInventory')
   || !shopInventorySource.includes('export function releaseShopInventoryReservation')
   || !shopInventorySource.includes('export function fulfilShopInventoryReservation')
@@ -1310,6 +1311,11 @@ if (!commerceSource.includes('inventoryFoundation?: ShopInventoryState')
   || !managedTrialStoreRuntime.includes('restamp_latest_shop_inventory_command')
   || !shopInventoryPythonSource.includes('validate_shop_inventory_state')
   || !shopInventoryPythonSource.includes('inventory command digest is invalid')) fail('managed_shop_inventory_foundation_missing')
+if (!commerceSource.includes('CommercePurchaseOrderLocationReceipt')
+  || !commerceSource.includes('receiveShopInventory(current.inventoryFoundation')
+  || !commerceSource.includes('locationResult.replayed')
+  || !managedCommerceRuntime.includes('managed purchase receipt must append exactly one location receipt')
+  || !managedTrialStoreRuntime.includes('location_receipt_matches')) fail('managed_purchase_receipt_location_contract_missing')
 if (!plantOrderSource.includes("PLANT_ORDER_STATE_SCHEMA = 'supermega.plant.order_foundation.v1'")
   || !plantOrderSource.includes("PLANT_ORDER_PLAN_CONTRACT = 'supermega.plant.reviewed_plan.v1'")
   || !plantOrderSource.includes("PLANT_ORDER_EXECUTION_PLAN_CONTRACT = 'supermega.plant.reviewed_plan.v2'")
@@ -1557,6 +1563,9 @@ if (!commercePageContract.includes('purchaseOrderDraft')
   || !commercePageContract.includes("'commerce.purchase_order.cancelled'")
   || !commercePageContract.includes('createCommercePurchaseOrder(')
   || !commercePageContract.includes('receiveCommercePurchaseOrder(')
+  || !commercePageContract.includes('Receive into<select')
+  || !commercePageContract.includes('Lot or batch<input')
+  || !commercePageContract.includes('purchaseReceiptAllocationReady')
   || !commercePageContract.includes('cancelCommercePurchaseOrder(')
   || !commercePageContract.includes('Order stock')
   || !commercePageContract.includes('Your draft was preserved.')
@@ -1579,6 +1588,8 @@ if (!commercePageContract.includes('purchaseOrderDraft')
   || !coreCssSource.includes('.data-row .text-link, .purchase-order-list .text-link { min-height: 44px; }')
   || !coreCssSource.includes('.core-button:disabled, .text-link:disabled')
   || coreCssSource.includes('.data-row.table-head { display: none; }')
+  || !coreCssSource.includes('.purchase-order-editor[data-mode="receive"] { grid-template-columns: repeat(3,minmax(0,1fr)); }')
+  || !coreCssSource.includes('.purchase-order-editor[data-mode="receive"] { grid-template-columns: 1fr; }')
   || !coreCssSource.includes('.purchase-order-editor[data-mode="create"] { grid-template-columns: repeat(2,minmax(0,1fr)); }')) fail('commerce_purchase_order_ui_missing')
 const commerceOrdersContract = commercePageContract.slice(commercePageContract.indexOf("if (tab === 'orders')"), commercePageContract.indexOf("if (tab === 'inventory')"))
 if (!commerceOrdersContract.includes('order-daily-controls') || !commerceOrdersContract.includes('Save daily close') || !commerceOrdersContract.includes('Close and exceptions')) fail('commerce_daily_controls_not_inside_orders')
@@ -2206,6 +2217,76 @@ async function verifyShopInventoryRuntime() {
       proof: proof(2, 'transfer'), catalogSkus, expectedHeadDigest: model.EMPTY_SHOP_INVENTORY_DIGEST,
     })
     assert(transferReplay.replayed && JSON.stringify(transferReplay.state) === JSON.stringify(transferred.state), 'shop_inventory_transfer_retry_not_idempotent')
+    const received = model.receiveShopInventory(transferred.state, {
+      receiptId: 'RCV-PURCHASE-001', purchaseOrderId: 'PO-00000000-0000-4000-8000-000000000071',
+      stockUnitId: 'LOT-SM1001-BATCH-B', sku: 'SM-1001', trackingCode: 'BATCH-B', locationId: 'LOC-BRANCH', quantity: 4,
+      proof: proof(3, 'receipt'), catalogSkus, expectedHeadDigest: transferred.state.headDigest,
+    })
+    const receiptProjection = model.projectShopInventory(received.state, catalogSkus)
+    const receiptBalance = receiptProjection.balances.find((row) => row.stockUnitId === 'LOT-SM1001-BATCH-B')
+    assert(!received.replayed
+      && received.state.revision === transferred.state.revision + 1
+      && receiptBalance?.locationId === 'LOC-BRANCH'
+      && receiptBalance.onHand === 4
+      && receiptProjection.metrics.totalOnHand === 10
+      && receiptProjection.ledger.at(-1)?.referenceId === 'PO-00000000-0000-4000-8000-000000000071',
+    'shop_inventory_purchase_receipt_not_attributable')
+    const receiptReplay = model.receiveShopInventory(received.state, {
+      receiptId: 'RCV-PURCHASE-001', purchaseOrderId: 'PO-00000000-0000-4000-8000-000000000071',
+      stockUnitId: 'LOT-SM1001-BATCH-B', sku: 'SM-1001', trackingCode: 'BATCH-B', locationId: 'LOC-BRANCH', quantity: 4,
+      proof: proof(3, 'receipt'), catalogSkus, expectedHeadDigest: model.EMPTY_SHOP_INVENTORY_DIGEST,
+    })
+    assert(receiptReplay.replayed && JSON.stringify(receiptReplay.state) === JSON.stringify(received.state), 'shop_inventory_purchase_receipt_retry_not_idempotent')
+    assertThrows(() => model.receiveShopInventory(received.state, {
+      receiptId: 'RCV-PURCHASE-001', purchaseOrderId: 'PO-00000000-0000-4000-8000-000000000071',
+      stockUnitId: 'LOT-SM1001-BATCH-B', sku: 'SM-1001', trackingCode: 'CHANGED-BATCH', locationId: 'LOC-BRANCH', quantity: 4,
+      proof: proof(3, 'receipt'), catalogSkus, expectedHeadDigest: received.state.headDigest,
+    }), 'shop_inventory_changed_receipt_retry_succeeded')
+    assertThrows(() => model.receiveShopInventory(received.state, {
+      receiptId: 'RCV-PURCHASE-002', purchaseOrderId: 'PO-00000000-0000-4000-8000-000000000071',
+      stockUnitId: 'LOT-SM1001-BATCH-C', sku: 'SM-1001', trackingCode: 'BATCH-C', locationId: 'LOC-MAIN', quantity: 1,
+      proof: proof(4, 'receipt'), catalogSkus, expectedHeadDigest: transferred.state.headDigest,
+    }), 'shop_inventory_stale_purchase_receipt_succeeded')
+
+    const commerce = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?shop-inventory-commerce-verify=${Date.now()}`)
+    const managedOpening = model.applyShopInventoryImport(
+      model.createEmptyShopInventoryState(), managedParityPackage, proof(1, 'managed-opening'), ['SKU-1'], model.EMPTY_SHOP_INVENTORY_DIGEST,
+    )
+    const managedBase = commerce.validateCommerceState({
+      ...commerce.createEmptyCommerce(),
+      items: [{ sku: 'SKU-1', name: 'Managed item', onHand: 10, reorderAt: 2, price: 100 }],
+      inventoryFoundation: managedOpening.state,
+    })
+    const managedPurchaseOrderId = 'PO-00000000-0000-4000-8000-000000000072'
+    const managedOrdered = commerce.createCommercePurchaseOrder(managedBase, {
+      id: managedPurchaseOrderId, expectedAt: '2026-07-28T05:00:00.000Z', supplier: 'Yangon Supply', sku: 'SKU-1', quantityOrdered: 6,
+    }, proof(2, 'managed-order'))
+    const managedReceiptProof = proof(3, 'managed-receipt')
+    const managedLocationReceipt = {
+      receiptId: 'RCV-MANAGED-001', stockUnitId: 'LOT-MANAGED-001', trackingCode: 'MANAGED-BATCH-001',
+      locationId: 'LOC-BRANCH', expectedHeadDigest: managedOpening.state.headDigest,
+    }
+    const managedReceived = commerce.receiveCommercePurchaseOrder(
+      managedOrdered, managedPurchaseOrderId, 4, managedReceiptProof, managedLocationReceipt,
+    )
+    const managedReceiptProjection = managedReceived && model.projectShopInventory(managedReceived.inventoryFoundation, ['SKU-1'])
+    assert(managedReceived
+      && managedReceived.items[0].onHand === 14
+      && managedReceiptProjection?.metrics.totalOnHand === 14
+      && managedReceiptProjection.balances.find((row) => row.stockUnitId === 'LOT-MANAGED-001')?.locationId === 'LOC-BRANCH',
+    'managed_purchase_receipt_did_not_conserve_location_stock')
+    assert(commerce.receiveCommercePurchaseOrder(
+      managedReceived, managedPurchaseOrderId, 4, managedReceiptProof, managedLocationReceipt,
+    ) === managedReceived, 'managed_purchase_receipt_exact_retry_not_idempotent')
+    assert(commerce.receiveCommercePurchaseOrder(
+      managedReceived, managedPurchaseOrderId, 4, managedReceiptProof, { ...managedLocationReceipt, trackingCode: 'CHANGED-BATCH' },
+    ) === null, 'managed_purchase_receipt_changed_retry_succeeded')
+    assert(commerce.receiveCommercePurchaseOrder(
+      managedReceived, managedPurchaseOrderId, 1, proof(4, 'managed-receipt'), {
+        receiptId: 'RCV-MANAGED-002', stockUnitId: 'LOT-MANAGED-002', trackingCode: 'MANAGED-BATCH-002',
+        locationId: 'LOC-MAIN', expectedHeadDigest: managedOpening.state.headDigest,
+      },
+    ) === null, 'managed_purchase_receipt_stale_head_succeeded')
     assertThrows(() => model.transferShopInventory(transferred.state, {
       transferId: 'TRF-STALE-001', stockUnitId: 'LOT-SM1001-BATCH-A', fromLocationId: 'LOC-MAIN', toLocationId: 'LOC-BRANCH', quantity: 1,
       proof: proof(3, 'stale'), catalogSkus, expectedHeadDigest: opening.state.headDigest,

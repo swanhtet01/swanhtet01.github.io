@@ -41,6 +41,7 @@ export type ShopInventoryImportPackage = {
 export type ShopInventoryCommandPayload =
   | { kind: 'import'; id: string; package: ShopInventoryImportPackage; proof: ShopInventoryProof }
   | { kind: 'transfer'; id: string; stockUnitId: string; fromLocationId: string; toLocationId: string; quantity: number; proof: ShopInventoryProof }
+  | { kind: 'receipt'; id: string; purchaseOrderId: string; stockUnitId: string; sku: string; trackingCode: string; locationId: string; quantity: number; proof: ShopInventoryProof }
   | { kind: 'reserve'; id: string; clientId: string; stockUnitId: string; locationId: string; quantity: number; proof: ShopInventoryProof }
   | { kind: 'release' | 'fulfil'; id: string; reservationId: string; proof: ShopInventoryProof }
 
@@ -105,7 +106,7 @@ type LockLike = {
 const digestPattern = /^sha256:[0-9a-f]{64}$/
 const businessIdPattern = /^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+$/
 const timestampPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/
-const commandKinds = new Set(['import', 'transfer', 'reserve', 'release', 'fulfil'])
+const commandKinds = new Set(['import', 'transfer', 'receipt', 'reserve', 'release', 'fulfil'])
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -381,6 +382,22 @@ function commandPayload(value: unknown, field: string, catalog: string[]): ShopI
       proof: proof(source.proof, `${field}.proof`),
     }
   }
+  if (value.kind === 'receipt') {
+    const source = exact(value, field, ['kind', 'id', 'purchaseOrderId', 'stockUnitId', 'sku', 'trackingCode', 'locationId', 'quantity', 'proof'])
+    const sku = text(source.sku, `${field}.sku`, 80)
+    if (!catalog.includes(sku)) throw new Error(`${field}.sku is not present in the trusted Shop catalog.`)
+    return {
+      kind: 'receipt',
+      id: identifier(source.id, `${field}.id`, 'RCV'),
+      purchaseOrderId: identifier(source.purchaseOrderId, `${field}.purchaseOrderId`, 'PO'),
+      stockUnitId: identifier(source.stockUnitId, `${field}.stockUnitId`, 'LOT'),
+      sku,
+      trackingCode: text(source.trackingCode, `${field}.trackingCode`, 80),
+      locationId: identifier(source.locationId, `${field}.locationId`, 'LOC'),
+      quantity: quantity(source.quantity, `${field}.quantity`, 1),
+      proof: proof(source.proof, `${field}.proof`),
+    }
+  }
   if (value.kind === 'reserve') {
     const source = exact(value, field, ['kind', 'id', 'clientId', 'stockUnitId', 'locationId', 'quantity', 'proof'])
     return {
@@ -483,6 +500,27 @@ function replayCommands(commands: ShopInventoryCommandPayload[]) {
           onHandDelta: opening.quantity, reservedDelta: 0, referenceId: command.package.importId, vendorId: opening.vendorId,
         }))
       })
+      return
+    }
+    if (command.kind === 'receipt') {
+      if (!locations.has(command.locationId)) throw new Error(`${field}.locationId is unknown.`)
+      if (stockUnits.has(command.stockUnitId)) throw new Error(`${field}.stockUnitId is already recorded.`)
+      const traceIdentity = `${command.sku}|lot|${command.trackingCode}`
+      if ([...stockUnits.values()].some((unit) => `${unit.sku}|${unit.tracking}|${unit.trackingCode}` === traceIdentity)) {
+        throw new Error(`${field}.trackingCode is already recorded for this SKU.`)
+      }
+      stockUnits.set(command.stockUnitId, {
+        id: command.stockUnitId,
+        sku: command.sku,
+        tracking: 'lot',
+        trackingCode: command.trackingCode,
+      })
+      applyDelta(command.stockUnitId, command.locationId, command.quantity, 0, field)
+      ledger.push(ledgerEvent({
+        id: `LED-${command.id}-RECEIPT`, kind: 'receipt', command, stockUnitId: command.stockUnitId,
+        locationId: command.locationId, onHandDelta: command.quantity, reservedDelta: 0,
+        referenceId: command.purchaseOrderId,
+      }))
       return
     }
     const stockUnitId = 'stockUnitId' in command ? command.stockUnitId : ''
@@ -641,6 +679,25 @@ export function transferShopInventory(state: unknown, input: {
   return appendCommand(state, {
     kind: 'transfer', id: input.transferId, stockUnitId: input.stockUnitId, fromLocationId: input.fromLocationId,
     toLocationId: input.toLocationId, quantity: input.quantity, proof: proof(input.proof, 'proof'),
+  }, input.catalogSkus, input.expectedHeadDigest)
+}
+
+export function receiveShopInventory(state: unknown, input: {
+  receiptId: unknown
+  purchaseOrderId: unknown
+  stockUnitId: unknown
+  sku: unknown
+  trackingCode: unknown
+  locationId: unknown
+  quantity: unknown
+  proof: unknown
+  catalogSkus: unknown
+  expectedHeadDigest: unknown
+}) {
+  return appendCommand(state, {
+    kind: 'receipt', id: input.receiptId, purchaseOrderId: input.purchaseOrderId,
+    stockUnitId: input.stockUnitId, sku: input.sku, trackingCode: input.trackingCode,
+    locationId: input.locationId, quantity: input.quantity, proof: proof(input.proof, 'proof'),
   }, input.catalogSkus, input.expectedHeadDigest)
 }
 

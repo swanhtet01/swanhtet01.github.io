@@ -82,6 +82,7 @@ import {
   type CommerceStockMovement,
   type CommerceWebsiteOrderInput,
 } from './commerce-workspace'
+import { projectShopInventory } from './shop-inventory-foundation'
 import { channelOrderDraftIsReady, type ChannelOrderDraft } from './channel-order-intake'
 import type { ClientSolutionId } from './client-onboarding'
 import type {
@@ -242,7 +243,7 @@ type ActionKind =
 
 type PurchaseOrderDraft =
   | { mode: 'create'; sku: string; supplier: string; expectedAt: string; quantity: string }
-  | { mode: 'receive'; purchaseOrderId: string; quantity: string }
+  | { mode: 'receive'; purchaseOrderId: string; quantity: string; locationId: string; trackingCode: string }
 
 type StockCountDraft = {
   sku: string
@@ -2073,6 +2074,20 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       .filter(({ progress }) => progress.status === 'open' || progress.status === 'partially_received')
       .map((row) => [row.purchaseOrder.sku, row]),
   )
+  const managedInventoryProjection = useMemo(() => {
+    if (!commerce.inventoryFoundation) return null
+    try {
+      return projectShopInventory(
+        commerce.inventoryFoundation,
+        commerce.items.map((item) => item.sku).sort(),
+      )
+    } catch {
+      return null
+    }
+  }, [commerce.inventoryFoundation, commerce.items])
+  const defaultReceiptLocationId = managedInventoryProjection?.locations.find((location) => /main/i.test(location.name))?.id
+    ?? managedInventoryProjection?.locations[0]?.id
+    ?? ''
   const purchaseOrderDraftOrder = purchaseOrderDraft?.mode === 'receive'
     ? purchaseOrderRows.find(({ purchaseOrder }) => purchaseOrder.id === purchaseOrderDraft.purchaseOrderId)
     : undefined
@@ -2102,6 +2117,18 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     && purchaseOrderExpectedAtTime > purchaseOrderClock
     ? new Date(purchaseOrderExpectedAtTime).toISOString()
     : null
+  const purchaseReceiptLocation = purchaseOrderDraft?.mode === 'receive'
+    ? managedInventoryProjection?.locations.find((location) => location.id === purchaseOrderDraft.locationId)
+    : undefined
+  const purchaseReceiptTrackingCode = purchaseOrderDraft?.mode === 'receive'
+    ? purchaseOrderDraft.trackingCode.trim().normalize('NFC')
+    : ''
+  const purchaseReceiptAllocationReady = purchaseOrderDraft?.mode !== 'receive' || !commerce.inventoryFoundation || Boolean(
+    managedInventoryProjection
+    && purchaseReceiptLocation
+    && purchaseReceiptTrackingCode
+    && purchaseReceiptTrackingCode.length <= 80,
+  )
   const catalogEditItem = catalogEditDraft
     ? commerce.items.find((item) => item.sku === catalogEditDraft.sku)
     : undefined
@@ -3469,8 +3496,9 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       setNotice(`Continue the ${active ? 'receipt' : 'stock order'} below. Your draft was preserved.`)
       return
     }
+    const receiptDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Yangon' }).format(new Date()).replaceAll('-', '')
     setPurchaseOrderDraft(active
-      ? { mode: 'receive', purchaseOrderId: active.purchaseOrder.id, quantity: '' }
+      ? { mode: 'receive', purchaseOrderId: active.purchaseOrder.id, quantity: '', locationId: defaultReceiptLocationId, trackingCode: `IN-${receiptDate}-${commandUuid().slice(0, 8).toUpperCase()}` }
       : { mode: 'create', sku: itemSku, supplier: '', expectedAt: defaultPurchaseOrderExpectedInput(), quantity: '' })
     setNotice(active
       ? `Record only units counted against ${active.purchaseOrder.id}. Nothing changes until confirmation.`
@@ -3538,12 +3566,25 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     const receiptQuantity = purchaseOrderQuantityResult
     const expectedOnHand = item.onHand
     const expectedRemaining = progress.remaining
+    if (!purchaseReceiptAllocationReady) {
+      setNotice('Choose a receiving location and keep the lot or batch reference within 80 characters.')
+      return
+    }
+    const locationReceipt = commerce.inventoryFoundation && purchaseReceiptLocation
+      ? {
+          receiptId: uid('RCV'),
+          stockUnitId: uid('LOT'),
+          trackingCode: purchaseReceiptTrackingCode,
+          locationId: purchaseReceiptLocation.id,
+          expectedHeadDigest: commerce.inventoryFoundation.headDigest,
+        }
+      : undefined
     queueAction({
       kind: 'purchase_order_receive',
       subjectId: purchaseOrder.id,
       summary: `Receive ${receiptQuantity.toLocaleString()} units against ${purchaseOrder.id}`,
       before: `${progress.received.toLocaleString()} of ${purchaseOrder.quantityOrdered.toLocaleString()} received · ${expectedOnHand.toLocaleString()} on hand`,
-      after: `${(progress.received + receiptQuantity).toLocaleString()} of ${purchaseOrder.quantityOrdered.toLocaleString()} received · ${(expectedOnHand + receiptQuantity).toLocaleString()} on hand`,
+      after: `${(progress.received + receiptQuantity).toLocaleString()} of ${purchaseOrder.quantityOrdered.toLocaleString()} received · ${(expectedOnHand + receiptQuantity).toLocaleString()} on hand${locationReceipt ? ` · ${purchaseReceiptLocation?.name ?? locationReceipt.locationId} · lot ${locationReceipt.trackingCode}` : ''}`,
       apply: async (action) => {
         const proof = commerceActionProof(action)
         await mutateCommerce('commerce.purchase_order.received', action.commandId, proof, (current) => {
@@ -3553,7 +3594,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
             || !currentItem
             || currentItem.onHand !== expectedOnHand
             || commercePurchaseOrderProgress(current, currentPurchaseOrder).remaining !== expectedRemaining) return null
-          return receiveCommercePurchaseOrder(current, purchaseOrder.id, receiptQuantity, proof)
+          return receiveCommercePurchaseOrder(current, purchaseOrder.id, receiptQuantity, proof, locationReceipt)
         })
         setPurchaseOrderDraft((current) => current?.mode === 'receive' && current.purchaseOrderId === purchaseOrder.id ? null : current)
       },
@@ -3934,12 +3975,14 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         {purchaseOrderDraft.mode === 'create' ? <label>Supplier reference<input autoFocus disabled={commerceControlsDisabled} maxLength={120} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'create' ? { ...current, supplier: event.target.value } : current)} placeholder="Supplier name" required value={purchaseOrderDraft.supplier} /></label> : null}
         {purchaseOrderDraft.mode === 'create' ? <label>Expected arrival<input autoComplete="off" disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date())} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'create' ? { ...current, expectedAt: event.target.value } : current)} required type="datetime-local" value={purchaseOrderDraft.expectedAt} /></label> : null}
         <label>{purchaseOrderDraft.mode === 'create' ? 'Quantity to order' : 'Quantity received'}<input aria-describedby="stock-receipt-preview" autoFocus={purchaseOrderDraft.mode === 'receive'} disabled={commerceControlsDisabled} inputMode="numeric" max={purchaseOrderQuantityLimit} min="1" onChange={(event) => setPurchaseOrderDraft((current) => current ? { ...current, quantity: event.target.value } : current)} placeholder="10" required step="1" type="number" value={purchaseOrderDraft.quantity} /></label>
+        {purchaseOrderDraft.mode === 'receive' && commerce.inventoryFoundation ? <label>Receive into<select disabled={commerceControlsDisabled || !managedInventoryProjection} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'receive' ? { ...current, locationId: event.target.value } : current)} required value={purchaseOrderDraft.locationId}><option value="">Choose location</option>{managedInventoryProjection?.locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select></label> : null}
+        {purchaseOrderDraft.mode === 'receive' && commerce.inventoryFoundation ? <label>Lot or batch<input autoComplete="off" disabled={commerceControlsDisabled || !managedInventoryProjection} maxLength={80} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'receive' ? { ...current, trackingCode: event.target.value } : current)} placeholder="Scan or enter lot" required value={purchaseOrderDraft.trackingCode} /></label> : null}
         <div aria-live="polite" className="stock-receipt-preview" id="stock-receipt-preview"><small>{purchaseOrderDraft.mode === 'create' ? 'Internal order' : 'New on hand'}</small><strong>{purchaseOrderQuantityResult === null
           ? 'Enter whole units'
           : purchaseOrderDraft.mode === 'create'
             ? `${purchaseOrderQuantityResult.toLocaleString()} units`
-            : `${purchaseOrderDraftItem.onHand.toLocaleString()} → ${(purchaseOrderDraftItem.onHand + purchaseOrderQuantityResult).toLocaleString()}`}</strong></div>
-        <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelPurchaseOrderEditor} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled || purchaseOrderQuantityResult === null || (purchaseOrderDraft.mode === 'create' && (!purchaseOrderDraft.supplier.trim() || purchaseOrderExpectedAtResult === null))} type="submit">{purchaseOrderDraft.mode === 'create' ? 'Review order' : 'Review receipt'}</button></div>
+            : `${purchaseOrderDraftItem.onHand.toLocaleString()} → ${(purchaseOrderDraftItem.onHand + purchaseOrderQuantityResult).toLocaleString()}${purchaseReceiptLocation ? ` · ${purchaseReceiptLocation.name}` : ''}`}</strong></div>
+        <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelPurchaseOrderEditor} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled || purchaseOrderQuantityResult === null || !purchaseReceiptAllocationReady || (purchaseOrderDraft.mode === 'create' && (!purchaseOrderDraft.supplier.trim() || purchaseOrderExpectedAtResult === null))} type="submit">{purchaseOrderDraft.mode === 'create' ? 'Review order' : 'Review receipt'}</button></div>
       </form> : null}
       <details className="compact-disclosure purchase-order-history" id="purchase-orders" ref={purchaseOrderHistoryRef}>
         <summary><span>Purchase orders</span><strong>{purchaseOrderRows.filter(({ progress }) => progress.status === 'open' || progress.status === 'partially_received').length} active · {purchaseOrderRows.length} total</strong></summary>
