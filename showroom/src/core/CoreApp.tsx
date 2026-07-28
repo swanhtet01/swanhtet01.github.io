@@ -1573,16 +1573,16 @@ export function Empty({ children }: { children: ReactNode }) {
 }
 
 const customerTracks = [
-  ['Retail', 'Shop, showroom, social selling.', 'Sell, reserve, review requests.', '/shop/?tab=counter', 'commerce'],
-  ['Factory MES', 'Plant, workshop, service floor.', 'Plan, record, hand off shifts.', '/plant/?tab=production', 'production'],
-  ['Website catalog', 'Site and proof catalog.', 'Create pages, offers, leads.', '/website/', 'website'],
-  ['Online orders', 'Catalog sellers and delivery.', 'Build storefronts and Shop handoff.', '/ecommerce/', 'ecommerce'],
+  ['Shop', 'Retail, showroom, social selling.', 'Sell, reserve, review requests.', '/shop/?tab=counter', 'commerce'],
+  ['Plant', 'Factory, workshop, service floor.', 'Plan, record, hand off shifts.', '/plant/?tab=production', 'production'],
+  ['Website', 'Company site and proof catalog.', 'Create pages, offers, leads.', '/website/', 'website'],
+  ['Ecommerce', 'Online ordering and delivery.', 'Build storefronts and Shop handoff.', '/ecommerce/', 'ecommerce'],
 ] as const
 
 export function ProductHomePage() {
   return (
     <div className="workspace-screen product-home-screen">
-      <PageHeading copy="Pick a business type. SuperMega prepares work; owners approve sends, payments, changes, publish." eyebrow="Products" title="Pick a track. Run work." />
+      <PageHeading copy="Pick a product. SuperMega prepares work; owners approve sends, payments, changes, publish." eyebrow="Products" title="Choose a product. Run work." />
       <section className="product-home-operating-model" aria-label="SuperMega operating model">
         <div>
           <span className="core-eyebrow">Handled by SuperMega</span>
@@ -1603,8 +1603,8 @@ export function ProductHomePage() {
               <p>{outcome}</p>
             </div>
             <div className="product-track-actions">
-              <Link to={path}>Open track</Link>
-              <Link to={clientSetupPath(product)}>Set up data</Link>
+              <Link to={path}>Open product</Link>
+              <Link to={clientSetupPath(product)}>Set up product</Link>
             </div>
           </article>
         ))}
