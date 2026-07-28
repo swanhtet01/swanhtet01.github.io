@@ -360,6 +360,15 @@ textarea { min-height: 72px; resize: vertical; }
 .orders-module.has-return-draft > .order-daily-controls { flex: 0 0 auto; }
 .orders-module.has-return-draft .order-archive-list { max-height: none; overflow: visible; }
 .order-queue-actions { display: flex; align-items: center; gap: 12px; }
+.shop-order-control { display: grid; grid-template-columns: minmax(220px,.55fr) minmax(0,1fr); gap: 9px; border: 1px solid rgba(11,116,94,.18); border-radius: 10px; padding: 10px; background: rgba(11,116,94,.045); }
+.shop-order-control > div:first-child { min-width: 0; display: grid; align-content: center; gap: 3px; }
+.shop-order-control strong { color: var(--core-ink); font-size: 14px; line-height: 1.25; }
+.shop-order-control small { color: var(--core-muted); font-size: 10px; line-height: 1.35; }
+.shop-order-control-rows { min-width: 0; display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); overflow: hidden; border: 1px solid var(--core-line); border-radius: 8px; background: var(--core-panel); }
+.shop-order-control-rows span { min-width: 0; min-height: 54px; display: grid; align-content: center; gap: 3px; border-right: 1px solid var(--core-line); padding: 7px 8px; }
+.shop-order-control-rows span:last-child { border-right: 0; }
+.shop-order-control-rows small { overflow: hidden; color: var(--core-quiet); font-family: var(--core-mono); font-size: 8px; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.shop-order-control-rows b { overflow: hidden; color: var(--core-ink); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .order-draft-recovery, .order-draft-status { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid rgba(11,116,94,.2); border-radius: 10px; padding: 10px 12px; background: rgba(11,116,94,.05); }
 .order-draft-recovery.is-blocked, .order-draft-status.needs-review { border-color: rgba(150,94,31,.28); background: rgba(150,94,31,.06); }
 .order-draft-recovery > div:first-child, .order-draft-status > div:first-child { min-width: 0; display: grid; gap: 3px; }
@@ -1390,6 +1399,11 @@ textarea { min-height: 72px; resize: vertical; }
   .order-list strong, .order-list small { overflow: visible; text-overflow: clip; white-space: normal; overflow-wrap: anywhere; }
   .order-list article > div:last-child { justify-items: start; }
   .order-row-actions { justify-content: flex-start; }
+  .shop-order-control { grid-template-columns: 1fr; }
+  .shop-order-control-rows { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .shop-order-control-rows span { border-right: 1px solid var(--core-line); border-bottom: 1px solid var(--core-line); }
+  .shop-order-control-rows span:nth-child(2n) { border-right: 0; }
+  .shop-order-control-rows span:last-child { grid-column: 1 / -1; border-right: 0; border-bottom: 0; }
   .order-archive-list article { grid-template-columns: 1fr; }
   .order-archive-actions { display: flex; align-items: center; justify-content: space-between; }
   .production-mode-banner { grid-template-columns: auto minmax(0,1fr); }

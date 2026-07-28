@@ -4359,6 +4359,25 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const orderDraftRecoveryVisible = !orderDraftActive
     && !pendingAction
     && (orderDraftRead.status === 'ready' || orderDraftRecoveryBlocked)
+  const shopOrderControlNext = orderDraftRecoveryBlocked
+    ? 'Repair saved order draft'
+    : pendingStorefrontRequests.length
+      ? 'Review Ecommerce inbox'
+      : actionOrders.length
+        ? 'Finish fulfilment queue'
+        : paymentReview.length
+          ? 'Reconcile payment exceptions'
+          : closableOrders.length
+            ? 'Save daily close'
+            : 'Ready for new orders'
+  const shopOrderControlRows = [
+    ['Online inbox', pendingStorefrontRequests.length ? `${pendingStorefrontRequests.length} waiting` : 'Clear'],
+    ['Fulfilment', actionOrders.length ? `${actionOrders.length} needs action` : 'Clear'],
+    ['Payment', paymentReview.length ? `${paymentReview.length} review` : 'Clear'],
+    ['Recovery', orderDraftRecoveryBlocked ? 'Blocked' : orderDraftRecoveryVisible ? 'Resume available' : 'Ready'],
+    ['Write gate', commerceCanWrite && !pendingAction ? 'Ready' : 'Locked'],
+  ] as const
+  const shopOrderControlBoundary = 'Owner confirms every order, payment, refund, delivery, cancellation, and stock change before Shop writes.'
 
   if (tab === 'counter') return <div className="operation-module shop-counter-module">
     {commerceBoundary}
@@ -4372,6 +4391,10 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     {shopAgentQueue}
     <section className="core-panel order-queue-panel order-workspace">
       <div className="panel-head"><div><span className="core-eyebrow">Orders</span><h2>{actionOrders.length} {actionOrders.length === 1 ? 'order needs' : 'orders need'} action</h2></div><div className="order-queue-actions"><span className="panel-note">{openOrders.length} in fulfilment</span>{!orderDraftRecoveryVisible ? <button className="core-button primary compact" disabled={!commerceCanWrite || Boolean(pendingAction) || !orderDraftInitialized || orderDraftRecoveryBlocked} onClick={openOrderComposer} ref={orderComposerTriggerRef} type="button">{!orderDraftInitialized ? 'Loading orders' : orderDraftRead.status === 'unavailable' ? 'Recovery unavailable' : 'New order'}</button> : null}</div></div>
+      <section className="shop-order-control" aria-label="Shop order control">
+        <div><span className="core-eyebrow">Order control</span><strong>{shopOrderControlNext}</strong><small>{shopOrderControlBoundary}</small></div>
+        <div className="shop-order-control-rows">{shopOrderControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+      </section>
       {orderDraftRecoveryVisible ? <div className={`order-draft-recovery ${orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'is-blocked' : ''}`} role={orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'alert' : 'status'}>
         <div>
           <strong>{orderDraftRecoveryWarning
