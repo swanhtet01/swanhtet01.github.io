@@ -5307,6 +5307,28 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ['Handoff', shiftHandoffIsCurrent ? 'Current' : 'Needed'],
     ['Gate', productionCanWrite && !pendingAction ? 'Owner release' : 'Locked'],
   ] as const
+  const qualityIssuesWithContainment = openQualityIssues.filter((issue) => Boolean(issue.owner && issue.dueAt && issue.containment))
+  const plantInspectionNext = !productionCanWrite
+    ? 'Restore inspection readiness'
+    : pendingAction
+      ? 'Approve pending quality action'
+      : heldJobs.length
+        ? 'Inspect held batches'
+        : openQualityIssues.length > qualityIssuesWithContainment.length
+          ? 'Assign NCR containment'
+          : openQualityIssues.length
+            ? 'Close CAPA evidence'
+            : activeJobs.length && !materialEntries.length
+              ? 'Sample first production run'
+              : 'Inspection queue clear'
+  const plantInspectionRows = [
+    ['Sample', activeJobs.length ? `${activeJobs.length} jobs` : 'No job'],
+    ['NCR', openQualityIssues.length ? `${openQualityIssues.length} open` : 'Clear'],
+    ['Containment', qualityIssuesWithContainment.length === openQualityIssues.length ? 'Owned' : `${openQualityIssues.length - qualityIssuesWithContainment.length} missing`],
+    ['CAPA', resolvedIssues.filter((issue) => issue.kind === 'quality').length ? `${resolvedIssues.filter((issue) => issue.kind === 'quality').length} closed` : 'None yet'],
+    ['Evidence', heldJobs.length || openQualityIssues.length || materialEntries.length ? 'Required' : 'Ready'],
+    ['Release', productionCanWrite && !pendingAction && !heldJobs.length && !openQualityIssues.length ? 'Owner review' : 'Blocked'],
+  ] as const
 
   useEffect(() => {
     const timer = window.setInterval(() => setIssueClock(Date.now()), 60_000)
@@ -5972,6 +5994,10 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     <div><span className="core-eyebrow">ISO release</span><strong>{plantQualityReleaseNext}</strong><small>AI checks quality holds, WCM closure, material trace, shift handoff, and owner release evidence before output can be treated as ready. No quality release, certificate, equipment command, material issue, costing, inventory, or production write runs from this panel.</small></div>
     <div className="plant-control-rows">{plantQualityReleaseRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
+  const plantInspectionControl = <section aria-label="Plant inspection and CAPA" className="plant-control">
+    <div><span className="core-eyebrow">Inspection + CAPA</span><strong>{plantInspectionNext}</strong><small>AI turns sampling, NCR containment, corrective action, evidence, and release review into one quality queue. No certificate, CAPA closure, customer claim, inventory block, costing, or production write runs from this panel.</small></div>
+    <div className="plant-control-rows">{plantInspectionRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+  </section>
 
   if (tab === 'production') return <div className="operation-module">
     {productionBoundary}
@@ -5981,6 +6007,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     {plantLifecycle}
     {plantMrp}
     {plantQualityRelease}
+    {plantInspectionControl}
     <div className="split-workspace production-view">
       <section className="core-panel job-panel">
         <div className="panel-head"><div><span className="core-eyebrow">Plant plan</span><h2>Jobs to finish</h2></div><span className="panel-note">{activeJobs.length} active · {completedJobs.length} finished</span></div>
@@ -6068,6 +6095,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     {plantControl}
     {plantLifecycle}
     {plantMrp}
+    {plantQualityRelease}
+    {plantInspectionControl}
     <div className="control-workspace">
       <div className="split-workspace">
         <section className="core-panel production-issue-launcher">
