@@ -57,8 +57,83 @@ import { formatTime, LEGACY_TEAM_WORK_KEYS, TEAM_WORK_KEY, useTeamWorkspace } fr
 const ClientDataOnboarding = lazy(() => import('./ClientDataOnboarding').then((module) => ({ default: module.ClientDataOnboarding })))
 const ManagedActivationRunbook = lazy(() => import('./ManagedActivationRunbook').then((module) => ({ default: module.ManagedActivationRunbook })))
 
+type SchedulerActivation = {
+  status: string
+  configured: boolean
+  activationRequested: boolean
+  activationEnabled: boolean
+  activationEvidenceContract: string
+  activationEvidenceEnvironmentKey: string
+  activationEvidenceCount: number
+  activationEvidenceDigest: string | null
+  configurationErrors: string[]
+  queueJobTypes: string[]
+  dailyJobTypes: string[]
+  maxJobsPerRun: number
+  budgetGrantsRequired: boolean
+  redirectsAllowed: boolean
+  nextAction: string
+}
+
+function normalizeSchedulerActivation(body: unknown): SchedulerActivation | null {
+  if (!body || typeof body !== 'object') return null
+  const cloud = body as { status?: unknown; scheduler?: Record<string, unknown> }
+  const scheduler = cloud.scheduler
+  if (!scheduler
+    || typeof cloud.status !== 'string'
+    || typeof scheduler.configured !== 'boolean'
+    || typeof scheduler.activation_requested !== 'boolean'
+    || typeof scheduler.activation_enabled !== 'boolean'
+    || typeof scheduler.activation_evidence_contract !== 'string'
+    || typeof scheduler.activation_evidence_environment_key !== 'string'
+    || !Array.isArray(scheduler.configuration_errors)
+    || !Array.isArray(scheduler.queue_job_types)
+    || !Array.isArray(scheduler.daily_job_types)
+    || typeof scheduler.max_jobs_per_run !== 'number'
+    || typeof scheduler.budget_grants_required !== 'boolean'
+    || scheduler.redirects_allowed !== false) return null
+  return {
+    status: cloud.status,
+    configured: scheduler.configured,
+    activationRequested: scheduler.activation_requested,
+    activationEnabled: scheduler.activation_enabled,
+    activationEvidenceContract: scheduler.activation_evidence_contract,
+    activationEvidenceEnvironmentKey: scheduler.activation_evidence_environment_key,
+    activationEvidenceCount: Number.isFinite(scheduler.activation_evidence_count) ? Number(scheduler.activation_evidence_count) : 0,
+    activationEvidenceDigest: typeof scheduler.activation_evidence_digest === 'string' ? scheduler.activation_evidence_digest : null,
+    configurationErrors: scheduler.configuration_errors.filter((item): item is string => typeof item === 'string'),
+    queueJobTypes: scheduler.queue_job_types.filter((item): item is string => typeof item === 'string'),
+    dailyJobTypes: scheduler.daily_job_types.filter((item): item is string => typeof item === 'string'),
+    maxJobsPerRun: Number.isFinite(scheduler.max_jobs_per_run) ? Number(scheduler.max_jobs_per_run) : 0,
+    budgetGrantsRequired: scheduler.budget_grants_required,
+    redirectsAllowed: scheduler.redirects_allowed,
+    nextAction: scheduler.configured ? 'Hosted scheduler can run bounded queues.' : 'Attach signed scheduler evidence, protected cron secret, worker URL, and host allowlist before autopilot runs.',
+  }
+}
+
+function useSchedulerActivation() {
+  const [schedulerActivation, setSchedulerActivation] = useState<SchedulerActivation | null>(null)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    fetch('/api/cloud-autonomy/status', { headers: { accept: 'application/json' }, signal: controller.signal })
+      .then(async (response) => {
+        const type = response.headers.get('content-type') ?? ''
+        if (!response.ok || !type.includes('application/json')) throw new Error('cloud_status_unavailable')
+        setSchedulerActivation(normalizeSchedulerActivation(await response.json()))
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setSchedulerActivation(null)
+      })
+    return () => controller.abort()
+  }, [])
+
+  return schedulerActivation
+}
+
 export function SettingsPage() {
   const runtime = useOutletContext<RuntimeHealth>()
+  const schedulerActivation = useSchedulerActivation()
   const location = useLocation()
   const navigate = useNavigate()
   const [setupSearchParams] = useSearchParams()
@@ -150,12 +225,12 @@ export function SettingsPage() {
     ['Safe enables', runtime.activationManifest?.safe_enable.length ? runtime.activationManifest.safe_enable.join(', ') : 'Browser-local trial only'],
   ] as const
   const schedulerActivationRows = [
-    ['Scheduler', runtime.schedulerActivation?.configured ? 'Ready' : runtime.schedulerActivation?.status ?? 'Blocked'],
-    ['Evidence', runtime.schedulerActivation?.activationEvidenceCount ? `${runtime.schedulerActivation.activationEvidenceCount} signed proofs` : runtime.schedulerActivation?.activationEvidenceContract ?? 'Evidence contract unavailable'],
-    ['Queue jobs', runtime.schedulerActivation?.queueJobTypes.length ? runtime.schedulerActivation.queueJobTypes.join(', ') : 'task_triage, ops_watch'],
-    ['Daily jobs', runtime.schedulerActivation?.dailyJobTypes.length ? runtime.schedulerActivation.dailyJobTypes.join(', ') : 'founder_brief, github_release_watch'],
-    ['Run limit', runtime.schedulerActivation ? `${runtime.schedulerActivation.maxJobsPerRun} jobs per invocation` : '2 jobs per invocation'],
-    ['Next action', runtime.schedulerActivation?.nextAction ?? 'Restore cloud status before enabling scheduler autopilot.'],
+    ['Scheduler', schedulerActivation?.configured ? 'Ready' : schedulerActivation?.status ?? 'Blocked'],
+    ['Evidence', schedulerActivation?.activationEvidenceCount ? `${schedulerActivation.activationEvidenceCount} signed proofs` : schedulerActivation?.activationEvidenceContract ?? 'Evidence contract unavailable'],
+    ['Queue jobs', schedulerActivation?.queueJobTypes.length ? schedulerActivation.queueJobTypes.join(', ') : 'task_triage, ops_watch'],
+    ['Daily jobs', schedulerActivation?.dailyJobTypes.length ? schedulerActivation.dailyJobTypes.join(', ') : 'founder_brief, github_release_watch'],
+    ['Run limit', schedulerActivation ? `${schedulerActivation.maxJobsPerRun} jobs per invocation` : '2 jobs per invocation'],
+    ['Next action', schedulerActivation?.nextAction ?? 'Restore cloud status before enabling scheduler autopilot.'],
   ] as const
   const managedTrialRequest = {
     contract: 'supermega.managed_trial_request.v1',
@@ -178,7 +253,7 @@ export function SettingsPage() {
     approvalPackets: managedApprovalRequests.length || approvals.length,
     behaviorSignals: behaviorSignalCount,
     activationManifest: runtime.activationManifest,
-    schedulerActivation: runtime.schedulerActivation,
+    schedulerActivation,
     blockedGateIds: runtime.activationManifest?.blocked_gate_ids ?? [],
     safeEnable: runtime.activationManifest?.safe_enable ?? ['browser_local_trial', 'evidence_export'],
     nextHostedBlocker: runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? 'Configure managed activation.',
@@ -189,7 +264,7 @@ export function SettingsPage() {
     ['Workspace', managedTrialRequest.workspace],
     ['Product', `${managedTrialRequest.product} / ${managedTrialRequest.templateName}`],
     ['Evidence', `${managedTrialRequest.evidenceFilename} v${managedTrialRequest.evidenceVersion}`],
-    ['Scheduler', runtime.schedulerActivation?.configured ? 'Ready for bounded autopilot' : runtime.schedulerActivation?.nextAction ?? 'Scheduler proof required'],
+    ['Scheduler', schedulerActivation?.configured ? 'Ready for bounded autopilot' : schedulerActivation?.nextAction ?? 'Scheduler proof required'],
     ['Hosted blocker', managedTrialRequest.nextHostedBlocker],
     ['Safe enables', managedTrialRequest.safeEnable.join(', ')],
     ['Write boundary', 'No external send or managed write from this packet'],
@@ -208,7 +283,7 @@ export function SettingsPage() {
       ]),
     ['Coverage', `${runtime.coverageScore}%`],
   ]
-  const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 19, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady, setup, workflowProfile: selectedTemplate, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords, behaviorTrail, agentBehaviorRows, activationRows, activationSteps: runtime.activationSteps, activationEvidencePlan: runtime.evidencePlan, activationManifest: runtime.activationManifest, activationManifestRows, schedulerActivation: runtime.schedulerActivation, schedulerActivationRows, managedTrialRequest, managedTrialRequestRows, learningRows, learningPlanRows, agentPlanRows }, null, 2))}`
+  const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 19, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady, setup, workflowProfile: selectedTemplate, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords, behaviorTrail, agentBehaviorRows, activationRows, activationSteps: runtime.activationSteps, activationEvidencePlan: runtime.evidencePlan, activationManifest: runtime.activationManifest, activationManifestRows, schedulerActivation, schedulerActivationRows, managedTrialRequest, managedTrialRequestRows, learningRows, learningPlanRows, agentPlanRows }, null, 2))}`
   const managedTrialRequestHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(managedTrialRequest, null, 2))}`
 
   useEffect(() => {

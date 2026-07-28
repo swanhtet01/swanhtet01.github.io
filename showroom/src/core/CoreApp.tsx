@@ -372,24 +372,6 @@ type RuntimeActivationManifest = {
   secret_values_exposed: boolean
 }
 
-type RuntimeSchedulerActivation = {
-  status: string
-  configured: boolean
-  activationRequested: boolean
-  activationEnabled: boolean
-  activationEvidenceContract: string
-  activationEvidenceEnvironmentKey: string
-  activationEvidenceCount: number
-  activationEvidenceDigest: string | null
-  configurationErrors: string[]
-  queueJobTypes: string[]
-  dailyJobTypes: string[]
-  maxJobsPerRun: number
-  budgetGrantsRequired: boolean
-  redirectsAllowed: boolean
-  nextAction: string
-}
-
 export type RuntimeHealth = {
   status: RuntimeStatus
   serviceStatus: string
@@ -403,7 +385,6 @@ export type RuntimeHealth = {
   activationSteps: RuntimeActivationStep[]
   evidencePlan: RuntimeEvidencePlanItem[]
   activationManifest: RuntimeActivationManifest | null
-  schedulerActivation: RuntimeSchedulerActivation | null
 }
 
 type CommerceTab = 'counter' | 'orders' | 'inventory'
@@ -587,7 +568,6 @@ const checkingRuntime: RuntimeHealth = {
   activationSteps: [],
   evidencePlan: [],
   activationManifest: null,
-  schedulerActivation: null,
 }
 
 const navigation = [
@@ -1493,15 +1473,10 @@ function useRuntimeHealth() {
 
   useEffect(() => {
     const controller = new AbortController()
-    Promise.all([
-      fetch('/api/health', { headers: { accept: 'application/json' }, signal: controller.signal }),
-      fetch('/api/cloud-autonomy/status', { headers: { accept: 'application/json' }, signal: controller.signal }),
-    ])
-      .then(async ([response, cloudResponse]) => {
+    fetch('/api/health', { headers: { accept: 'application/json' }, signal: controller.signal })
+      .then(async (response) => {
         const type = response.headers.get('content-type') ?? ''
         if (!response.ok || !type.includes('application/json')) throw new Error('health_unavailable')
-        const cloudType = cloudResponse.headers.get('content-type') ?? ''
-        if (!cloudResponse.ok || !cloudType.includes('application/json')) throw new Error('cloud_status_unavailable')
         const body = (await response.json()) as {
           status?: string
           operating_mode?: string
@@ -1511,24 +1486,6 @@ function useRuntimeHealth() {
           authentication?: { trusted_gateway_ready?: boolean; supabase_user_tokens_ready?: boolean }
           trial_backend?: { audit_ready?: boolean; write_enabled?: boolean }
           enterprise_activation?: { requirements?: string[]; steps?: RuntimeActivationStep[]; evidence_plan?: RuntimeEvidencePlanItem[]; manifest?: RuntimeActivationManifest }
-        }
-        const cloud = (await cloudResponse.json()) as {
-          status?: string
-          scheduler?: {
-            configured?: boolean
-            activation_requested?: boolean
-            activation_enabled?: boolean
-            activation_evidence_contract?: string
-            activation_evidence_environment_key?: string
-            activation_evidence_count?: number
-            activation_evidence_digest?: string | null
-            configuration_errors?: string[]
-            queue_job_types?: string[]
-            daily_job_types?: string[]
-            max_jobs_per_run?: number
-            budget_grants_required?: boolean
-            redirects_allowed?: boolean
-          }
         }
         const requirements = Array.isArray(body.enterprise_activation?.requirements) ? body.enterprise_activation.requirements : []
         const activationSteps = Array.isArray(body.enterprise_activation?.steps)
@@ -1560,38 +1517,6 @@ function useRuntimeHealth() {
           && body.security_ready === true
           && writesReady
           && requirements.length === 0
-        const scheduler = cloud.scheduler
-        const schedulerActivation = scheduler
-          && typeof cloud.status === 'string'
-          && typeof scheduler.configured === 'boolean'
-          && typeof scheduler.activation_requested === 'boolean'
-          && typeof scheduler.activation_enabled === 'boolean'
-          && typeof scheduler.activation_evidence_contract === 'string'
-          && typeof scheduler.activation_evidence_environment_key === 'string'
-          && Array.isArray(scheduler.configuration_errors)
-          && Array.isArray(scheduler.queue_job_types)
-          && Array.isArray(scheduler.daily_job_types)
-          && typeof scheduler.max_jobs_per_run === 'number'
-          && typeof scheduler.budget_grants_required === 'boolean'
-          && scheduler.redirects_allowed === false
-          ? {
-            status: cloud.status,
-            configured: scheduler.configured,
-            activationRequested: scheduler.activation_requested,
-            activationEnabled: scheduler.activation_enabled,
-            activationEvidenceContract: scheduler.activation_evidence_contract,
-            activationEvidenceEnvironmentKey: scheduler.activation_evidence_environment_key,
-            activationEvidenceCount: Number.isFinite(scheduler.activation_evidence_count) ? Number(scheduler.activation_evidence_count) : 0,
-            activationEvidenceDigest: typeof scheduler.activation_evidence_digest === 'string' ? scheduler.activation_evidence_digest : null,
-            configurationErrors: scheduler.configuration_errors.filter((item) => typeof item === 'string'),
-            queueJobTypes: scheduler.queue_job_types.filter((item) => typeof item === 'string'),
-            dailyJobTypes: scheduler.daily_job_types.filter((item) => typeof item === 'string'),
-            maxJobsPerRun: Number.isFinite(scheduler.max_jobs_per_run) ? Number(scheduler.max_jobs_per_run) : 0,
-            budgetGrantsRequired: scheduler.budget_grants_required,
-            redirectsAllowed: scheduler.redirects_allowed,
-            nextAction: scheduler.configured ? 'Hosted scheduler can run bounded queues.' : 'Attach signed scheduler evidence, protected cron secret, worker URL, and host allowlist before autopilot runs.',
-          }
-          : null
         setRuntime({
           status: enterpriseReady ? 'enterprise' : 'demo',
           serviceStatus: body.status ?? 'unknown',
@@ -1605,11 +1530,10 @@ function useRuntimeHealth() {
           activationSteps,
           evidencePlan,
           activationManifest,
-          schedulerActivation,
         })
       })
       .catch(() => {
-        if (!controller.signal.aborted) setRuntime({ ...checkingRuntime, status: 'demo', serviceStatus: 'unavailable', operatingMode: 'isolated_demo', requirements: ['Restore health before managed activation.'], schedulerActivation: null })
+        if (!controller.signal.aborted) setRuntime({ ...checkingRuntime, status: 'demo', serviceStatus: 'unavailable', operatingMode: 'isolated_demo', requirements: ['Restore health before managed activation.'] })
       })
     return () => controller.abort()
   }, [])
