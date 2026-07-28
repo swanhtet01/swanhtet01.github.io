@@ -5309,6 +5309,31 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   ] as const
   const openQualityIssues = openIssues.filter((issue) => issue.kind === 'quality')
   const openWcmCount = openDowntimeIntervals.length + openMaintenanceRecords.length
+  const productionGoodUnits = production.jobs.reduce((total, job) => total + job.output, 0)
+  const productionScrapUnits = production.jobs.reduce((total, job) => total + (job.scrap ?? 0), 0)
+  const plantCostReadinessNext = !productionCanWrite
+    ? 'Restore cost evidence readiness'
+    : pendingAction
+      ? 'Approve pending Plant action'
+      : !materialEntries.length
+        ? 'Record material trace before cost'
+        : heldJobs.length || openQualityIssues.length
+          ? 'Resolve quality before cost'
+          : openWcmCount
+            ? 'Close WCM before cost'
+            : !shiftHandoffIsCurrent
+              ? 'Build cost handoff'
+              : completedJobs.length
+                ? 'Cost package ready for review'
+                : 'Run evidence ready'
+  const plantCostReadinessRows = [
+    ['Good', productionGoodUnits ? `${productionGoodUnits.toLocaleString()} units` : 'No output'],
+    ['Scrap', productionScrapUnits ? `${productionScrapUnits.toLocaleString()} units` : 'None'],
+    ['Materials', materialEntries.length ? `${materialEntries.length} traced` : 'Missing'],
+    ['Quality', heldJobs.length || openQualityIssues.length ? 'Blocked' : 'Clear'],
+    ['WCM', openWcmCount ? `${openWcmCount} open` : 'Closed'],
+    ['Cost gate', shiftHandoffIsCurrent && materialEntries.length && !heldJobs.length && !openQualityIssues.length && !openWcmCount ? 'Review only' : 'Blocked'],
+  ] as const
   const plantQualityReleaseNext = !productionCanWrite
     ? 'Restore Plant readiness'
     : pendingAction
@@ -6024,6 +6049,10 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     <div><span className="core-eyebrow">MRP readiness</span><strong>{plantMrpNext}</strong><small>AI reviews job demand, BOM, availability, Shop supply, material blockers, and trace evidence. No purchase, issue, costing, inventory, or production write runs from this panel.</small></div>
     <div className="plant-control-rows">{plantMrpRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
+  const plantCostReadiness = <section aria-label="Plant ERP cost readiness" className="plant-control">
+    <div><span className="core-eyebrow">ERP cost readiness</span><strong>{plantCostReadinessNext}</strong><small>AI checks good output, scrap, material trace, quality release, WCM closure, and shift handoff before any costing package is reviewed. No costing, accounting, inventory, payroll, invoice, or production write runs from this panel.</small></div>
+    <div className="plant-control-rows">{plantCostReadinessRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+  </section>
   const plantQualityRelease = <section aria-label="Plant quality release" className="plant-control">
     <div><span className="core-eyebrow">ISO release</span><strong>{plantQualityReleaseNext}</strong><small>AI checks quality holds, WCM closure, material trace, shift handoff, and owner release evidence before output can be treated as ready. No quality release, certificate, equipment command, material issue, costing, inventory, or production write runs from this panel.</small></div>
     <div className="plant-control-rows">{plantQualityReleaseRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
@@ -6040,6 +6069,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     {plantControl}
     {plantLifecycle}
     {plantMrp}
+    {plantCostReadiness}
     {plantQualityRelease}
     {plantInspectionControl}
     <div className="split-workspace production-view">
@@ -6129,6 +6159,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     {plantControl}
     {plantLifecycle}
     {plantMrp}
+    {plantCostReadiness}
     {plantQualityRelease}
     {plantInspectionControl}
     <div className="control-workspace">
