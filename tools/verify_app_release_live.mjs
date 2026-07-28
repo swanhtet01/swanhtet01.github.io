@@ -112,7 +112,7 @@ const settingsChunk = (await get(`/${settingsChunkPath}`)).body
 for (const required of ['SUPERMEGA', 'Choose a product. Run work.', 'Free workspace', 'Premium activation', 'Managed data, AI context', 'Check readiness', 'Open product', 'Set up product', 'Shop', 'Plant', 'Website', 'Ecommerce', 'Sample workspace', manifest.brand.colors.accent, manifest.brand.colors.ink]) {
   if (!assetCorpus.includes(required)) throw new Error(`missing_live_context:${required}`)
 }
-for (const required of ['Start guided sample', 'Request managed trial', 'Export evidence before managed import.', 'supermega_trial_evidence', 'activationRows', 'learningRows']) {
+for (const required of ['Start guided sample', 'Request managed trial', 'Export evidence before managed import.', 'supermega_trial_evidence', 'activationRows', 'learningRows', 'learningPlanRows', 'Premium AI context', 'What the system can learn', 'Export AI context package']) {
   if (!settingsChunk.includes(required)) throw new Error(`missing_live_settings_context:${required}`)
 }
 for (const forbidden of ['Pick a track. Run work.', 'Handled by SuperMega', 'Approved by owner', 'Factory MES', 'Website catalog', 'Online orders', 'Open track', 'Set up data', 'Choose what you want to run.', 'Each product opens directly to a working sample.', 'SuperMega HQ', 'One next action for the company', 'Agents prepare work', 'pos.supermega.dev', 'ytf.supermega.dev', 'Yangon Tyre', 'ytf-plant-a']) {
