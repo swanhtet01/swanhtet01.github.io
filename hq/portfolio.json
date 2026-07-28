@@ -35,6 +35,7 @@
     "deliveryAttemptMetadataOnly": true,
     "deliveryFailureAutomaticRetry": false,
     "deliveryTransportUncertaintyExplicit": true,
+    "uncertainWorkcellDeliveryAutomaticRetry": false,
     "completionMustBeDurableBeforeNotification": true,
     "explicitOwnerOutcomeAcceptance": true,
     "acceptedOutcomeEfficiencyUnits": "bulk_equivalent_tokens",

@@ -151,6 +151,7 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.agentOperatingModel?.deliveryAttemptMetadataOnly === true
   && portfolio.agentOperatingModel?.deliveryFailureAutomaticRetry === false
   && portfolio.agentOperatingModel?.deliveryTransportUncertaintyExplicit === true
+  && portfolio.agentOperatingModel?.uncertainWorkcellDeliveryAutomaticRetry === false
   && portfolio.agentOperatingModel?.completionMustBeDurableBeforeNotification === true
   && portfolio.agentOperatingModel?.explicitOwnerOutcomeAcceptance === true
   && portfolio.agentOperatingModel?.acceptedOutcomeEfficiencyUnits === COMPANY_USAGE_UNITS
@@ -224,6 +225,8 @@ requireContract('CEO owner delivery is durable, metadata-only, and never unsafel
   && ceoOwnerSendIndex < ceoDeliveryRecordIndex
   && kernelBriefText.includes("retryable: false")
   && kernelBriefText.includes("delivery.status === 'uncertain' ? 'owner_delivery_uncertain'")
+  && kernelBriefText.includes("if (!sent && delivery.status === 'failed')")
+  && kernelBriefText.includes("delivery.status === 'uncertain' ? false : retryable")
   && kernelAlertText.includes("response?.ok === true")
   && kernelAlertText.includes("status: 'uncertain'")
   && kernelOperationsText.includes("export const CEO_OUTCOME_DELIVERY_CONTRACT = 'supermega.ceo-outcome-delivery.v1'")
@@ -350,7 +353,7 @@ requireContract('agent roster consolidation is recorded',
   && workboard.includes('| OPS-042 | CEO + Agent Operations / Cost Security Codex | done-local |')
   && workboard.includes('failed or `unavailable` required fixed-evidence result stops the remaining plan and synthesis')
   && workboard.includes('| OPS-043 | CEO + Agent Operations / Delivery Security Codex | done-local |')
-  && workboard.includes('adds `supermega.ceo-outcome-delivery.v1`')
+  && workboard.includes('Checkpoints `cafdafe` and `f626ee7` add `supermega.ceo-outcome-delivery.v1`')
   && workboard.includes('Current accepted agent-operations checkpoint: `a2e1b89`')
   && now.includes('agent operations `a2e1b89`')
   && now.includes('operations `63a245f`')
@@ -361,7 +364,7 @@ requireContract('agent roster consolidation is recorded',
   && now.includes('Hosted scheduling remains deliberately dormant')
   && now.includes('flag-only, preview, stale, incomplete, or tampered activation attempts stop before worker invocation')
   && now.includes('Each CEO cycle selects one outcome')
-  && now.includes('each owner-send attempt gets an output-free `sent`/`failed`/`uncertain` receipt and is never auto-retried')
+  && now.includes('owner-send uncertainty is explicit, retains claims, and is never auto-retried')
   && now.includes('Storage privacy now has a six-request owner-confirmed verifier')
   && now.includes('zero-network configuration preflight')
   && now.includes('overrides fail closed and duplicate ceilings are removed'))
@@ -388,7 +391,7 @@ requireContract('agent security brief is reconciled to current controls',
   && agentSecurity.includes('Every ready weekly CEO outcome now reads `supermega.company-operations-status.v1`')
   && agentSecurity.includes('Scheduled CEO startup now follows `supermega.kernel-function-footprint.v1`')
   && agentSecurity.includes('Scheduled CEO preflight now fails before spend (`f1328a0`)')
-  && agentSecurity.includes('CEO owner delivery now follows `supermega.ceo-outcome-delivery.v1` (`cafdafe`)')
+  && agentSecurity.includes('Scheduled owner delivery now follows acknowledgement-aware idempotency (`cafdafe`, `f626ee7`)')
   && agentSecurity.includes('Efficiency remains unavailable unless the tenant-bound records are durable')
   && agentSecurity.includes('Hosted cleanup still requires a protected deployment')
   && agentSecurity.includes('The unlinked claimable-preview service is retired')
@@ -490,7 +493,7 @@ requireContract('accepted core checkpoints lead directly to real work',
   && workboard.includes('Checkpoints `0831ad7` and `920c13d` add an immutable reviewed BOM/routing package')
   && workboard.includes('Checkpoints `0f3dc09` and `03e1f1b` add tenant-bound')
   && workboard.includes('Retain the completed Shop, Plant, Website, and Ecommerce checkpoints')
-  && now.includes('Current checkpoints: product `7ae8c80`, CEO preflight `f1328a0`, delivery `cafdafe`, CEO operations `909807d`, performance `6bad4e7`, release `39642eb`')
+  && now.includes('Current checkpoints: product `7ae8c80`, CEO preflight `f1328a0`, delivery `cafdafe`/`f626ee7`, CEO operations `909807d`, performance `6bad4e7`, release `39642eb`')
   && now.includes('First-action QA routes Shop, Plant, and Website blockers to the next task')
   && now.includes('The active delivery focus is:')
   && now.includes('Plant Jobs persists managed BOM/routing, WIP, minutes')
