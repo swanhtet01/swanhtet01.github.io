@@ -5329,6 +5329,47 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ['Handoff', shiftHandoffIsCurrent ? 'Ready' : 'Build'],
   ] as const
   const plantControlBoundary = 'Owner confirms production, quality, WCM, maintenance, material, and handoff writes.'
+  const openWcmCount = openDowntimeIntervals.length + openMaintenanceRecords.length
+  const mesDispatchStation = activeJobs[0]?.line ?? selectedDowntimeMachine?.name ?? selectedMaintenanceMachine?.name ?? 'Plant floor'
+  const mesDispatchTarget = urgentIssueCount
+    ? `${urgentIssueCount} urgent issue${urgentIssueCount === 1 ? '' : 's'}`
+    : heldJobs[0]
+      ? heldJobs[0].id
+      : activeJobs[0]
+        ? `${activeJobs[0].id} / ${(activeJobs[0].target - activeJobs[0].output - (activeJobs[0].scrap ?? 0)).toLocaleString()} left`
+        : shiftHandoffIsCurrent
+          ? 'Next plan'
+          : 'Shift handoff'
+  const mesDispatchBlocker = !productionCanWrite
+    ? 'Write readiness'
+    : pendingAction
+      ? 'Owner approval'
+      : urgentIssueCount
+        ? 'Containment'
+        : heldJobs.length
+          ? 'Quality hold'
+          : openWcmCount
+            ? 'WCM close'
+            : activeJobs.length && !materialEntries.length
+              ? 'Trace start'
+              : !shiftHandoffIsCurrent
+                ? 'Handoff'
+                : 'None'
+  const mesDispatchEvidence = materialEntries.length
+    ? `${materialEntries.length} material trace`
+    : shiftHandoffIsCurrent
+      ? 'Handoff current'
+      : activeJobs.length
+        ? 'Need trace'
+        : 'Plan evidence'
+  const mesDispatchRows = [
+    ['Station', mesDispatchStation],
+    ['Target', mesDispatchTarget],
+    ['Blocker', mesDispatchBlocker],
+    ['Evidence', mesDispatchEvidence],
+    ['Handoff', shiftHandoffIsCurrent ? 'Current' : 'Build'],
+    ['Boundary', 'No equipment write'],
+  ] as const
   const openMaterialIssues = openIssues.filter((issue) => issue.kind === 'materials')
   const shopLowStock = relatedCommerce.items.filter((item) => item.onHand <= item.reorderAt)
   const orderExecutionProjection = production.orderExecution ? projectPlantOrder(production.orderExecution) : null
@@ -5352,7 +5393,6 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ['Trace', materialEntries.length ? `${materialEntries.length} consumed` : 'Not started'],
   ] as const
   const openQualityIssues = openIssues.filter((issue) => issue.kind === 'quality')
-  const openWcmCount = openDowntimeIntervals.length + openMaintenanceRecords.length
   const productionGoodUnits = production.jobs.reduce((total, job) => total + job.output, 0)
   const productionScrapUnits = production.jobs.reduce((total, job) => total + (job.scrap ?? 0), 0)
   const plantCostReadinessNext = !productionCanWrite
@@ -6094,6 +6134,10 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     <div><span className="core-eyebrow">Plant control</span><strong>{plantControlNext}</strong><small>{plantControlBoundary}</small></div>
     <div className="plant-control-rows">{plantControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
+  const mesDispatch = <section aria-label="MES dispatch autopilot" className="plant-control mes-dispatch-control">
+    <div><span className="core-eyebrow">MES dispatch</span><strong>{plantAgentJob}</strong><small>AI chooses the next station, blocker, evidence need, and handoff route from live Plant state. No equipment command or production write runs from this panel.</small></div>
+    <div className="plant-control-rows">{mesDispatchRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+  </section>
   const plantLifecycle = <section aria-label="Plant lifecycle control" className="plant-control">
     <div><span className="core-eyebrow">MES lifecycle</span><strong>Plan to handoff</strong><small>AI guides plan, execution, quality, WCM, trace, and handoff. No equipment or production write runs without owner approval.</small></div>
     <div className="plant-control-rows">{plantLifecycleRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
@@ -6123,6 +6167,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     {productionBoundary}
     {plantStatus}
     {plantAgentQueue}
+    {mesDispatch}
     {plantControl}
     {plantLifecycle}
     {plantMrp}
@@ -6214,6 +6259,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     {productionBoundary}
     {plantStatus}
     {plantAgentQueue}
+    {mesDispatch}
     {plantControl}
     {plantLifecycle}
     {plantMrp}

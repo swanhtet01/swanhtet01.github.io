@@ -381,6 +381,7 @@ textarea { min-height: 72px; resize: vertical; }
 .shop-order-control-rows small { overflow: hidden; color: var(--core-quiet); font-family: var(--core-mono); font-size: 8px; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
 .shop-order-control-rows b { overflow: hidden; color: var(--core-ink); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .plant-control { display: grid; grid-template-columns: minmax(220px,.5fr) minmax(0,1fr); gap: 9px; border: 1px solid rgba(11,116,94,.18); border-radius: 10px; padding: 10px; background: rgba(11,116,94,.045); }
+.mes-dispatch-control { border-color: rgba(30, 64, 175, .18); background: rgba(30, 64, 175, .045); }
 .plant-control > div:first-child { min-width: 0; display: grid; align-content: center; gap: 3px; }
 .plant-control strong { color: var(--core-ink); font-size: 14px; line-height: 1.25; }
 .plant-control small { color: var(--core-muted); font-size: 10px; line-height: 1.35; }
