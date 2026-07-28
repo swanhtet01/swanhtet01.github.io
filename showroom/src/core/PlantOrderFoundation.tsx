@@ -14,11 +14,13 @@ import {
   mutatePlantOrderWorkspace,
   parsePlantOrderDowntimePaste,
   parsePlantOrderMaterialPaste,
+  parsePlantOrderMmkRate,
   parsePlantOrderQuantityMilli,
   parsePlantOrderRoutingPaste,
   plantOrderEvidenceDigest,
   projectPlantOrder,
   projectPlantOrderCostDrivers,
+  projectPlantOrderFinancialCost,
   projectPlantOrderEffectiveness,
   recordPlantOrderEffectiveness,
   recordPlantOrderOperation,
@@ -70,10 +72,12 @@ type SetupDraft = {
   materialName: string
   materialUnit: PlantOrderMaterial['unit']
   quantityPerUnit: string
+  standardCostPerUnitMmk: string
   additionalMaterials: string
   workCentreId: string
   workCentreName: string
   minutesPerUnit: string
+  standardCostPerMinuteMmk: string
   additionalOperations: string
 }
 
@@ -145,6 +149,10 @@ function formatBasisPoints(value: number) {
   return `${(value / 100).toLocaleString(undefined, { maximumFractionDigits: 2 })}%`
 }
 
+function formatMmk(value: number) {
+  return `${value.toLocaleString()} MMK`
+}
+
 function explicitOffsetTimestamp(value: string, field: string) {
   if (!value) throw new Error(`Enter ${field}.`)
   const parsed = new Date(value)
@@ -168,10 +176,12 @@ function defaultSetup(job?: ProductionJob): SetupDraft {
     materialName: 'Primary material',
     materialUnit: 'pcs',
     quantityPerUnit: '1',
+    standardCostPerUnitMmk: '',
     additionalMaterials: '',
     workCentreId: 'WC-ASSEMBLY-01',
     workCentreName: 'Assembly',
     minutesPerUnit: '1',
+    standardCostPerMinuteMmk: '',
     additionalOperations: '',
   }
 }
@@ -250,6 +260,7 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, jobs, man
   const projection = useMemo(() => projectPlantOrder(state), [state])
   const effectiveness = useMemo(() => projectPlantOrderEffectiveness(projection), [projection])
   const costDrivers = useMemo(() => projectPlantOrderCostDrivers(projection), [projection])
+  const financialCost = useMemo(() => projectPlantOrderFinancialCost(projection), [projection])
   const pendingWarehouseIssues = useMemo(
     () => pendingProductionMaterialHandoffs(state, commerceState),
     [commerceState, state],
@@ -401,21 +412,26 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, jobs, man
     if (!selectedSetupJob) return setError('Add or choose one active Plant job first.')
     try {
       const quantityPerUnitMilli = parsePlantOrderQuantityMilli(setupDraft.quantityPerUnit); const minutesPerUnitMilli = parsePlantOrderQuantityMilli(setupDraft.minutesPerUnit)
-      if (!quantityPerUnitMilli || !minutesPerUnitMilli) throw new Error('Material and work-centre rates must be positive numbers with up to three decimals.')
+      const standardCostPerUnitMmk = parsePlantOrderMmkRate(setupDraft.standardCostPerUnitMmk); const standardCostPerMinuteMmk = parsePlantOrderMmkRate(setupDraft.standardCostPerMinuteMmk)
+      if (!quantityPerUnitMilli || !minutesPerUnitMilli) throw new Error('Material and work-centre quantities must be positive numbers with up to three decimals.')
+      if (!standardCostPerUnitMmk || !standardCostPerMinuteMmk) throw new Error('Reviewed standard rates must be positive whole-MMK amounts.')
       const primaryMaterial: PlantOrderMaterial = {
         materialId: setupDraft.materialId.trim().toUpperCase(),
         name: setupDraft.materialName.trim(),
         unit: setupDraft.materialUnit,
         quantityPerUnitMilli,
+        standardCostPerUnitMmk,
       }
       const materials = [primaryMaterial, ...parsePlantOrderMaterialPaste(setupDraft.additionalMaterials)]
         .sort((left, right) => left.materialId < right.materialId ? -1 : left.materialId > right.materialId ? 1 : 0)
       if (new Set(materials.map((material) => material.materialId)).size !== materials.length) throw new Error('Each BOM material ID must be unique, including the primary material.')
+      if (materials.some((material) => !material.standardCostPerUnitMmk)) throw new Error('Every additional BOM row needs its reviewed MMK cost per material unit.')
       const primaryWorkCentreId = setupDraft.workCentreId.trim().toUpperCase()
       const primaryWorkCentreName = setupDraft.workCentreName.trim()
       const additionalOperations = parsePlantOrderRoutingPaste(setupDraft.additionalOperations)
-      const routing = [{ operationId: `OP-${primaryWorkCentreId.replace(/^WC-/, '')}-10`, sequence: 1, name: primaryWorkCentreName, workCentreId: primaryWorkCentreId, minutesPerUnitMilli }, ...additionalOperations.map((operation, index) => ({ operationId: operation.operationId, sequence: index + 2, name: operation.name, workCentreId: operation.workCentreId, minutesPerUnitMilli: operation.minutesPerUnitMilli }))]
+      const routing = [{ operationId: `OP-${primaryWorkCentreId.replace(/^WC-/, '')}-10`, sequence: 1, name: primaryWorkCentreName, workCentreId: primaryWorkCentreId, minutesPerUnitMilli, standardCostPerMinuteMmk }, ...additionalOperations.map((operation, index) => ({ operationId: operation.operationId, sequence: index + 2, name: operation.name, workCentreId: operation.workCentreId, minutesPerUnitMilli: operation.minutesPerUnitMilli, ...(operation.standardCostPerMinuteMmk ? { standardCostPerMinuteMmk: operation.standardCostPerMinuteMmk } : {}) }))]
       if (new Set(routing.map((operation) => operation.operationId)).size !== routing.length) throw new Error('Each routing operation ID must be unique, including the primary operation.')
+      if (routing.some((operation) => !operation.standardCostPerMinuteMmk)) throw new Error('Every additional routing row needs its reviewed MMK cost per minute.')
       const workCentreNames = new Map([[primaryWorkCentreId, primaryWorkCentreName]])
       additionalOperations.forEach((operation) => {
         const retainedName = workCentreNames.get(operation.workCentreId)
@@ -440,8 +456,8 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, jobs, man
         summary: `${selectedSetupJob.id} · ${targetQuantity.toLocaleString()} units remaining`,
         details: [
           { label: 'Output batch', value: `${selectedSetupJob.product} · ${targetQuantity.toLocaleString()} units → ${plan.job.outputBatchId}` },
-          { label: 'Materials', value: materials.map((material) => `${material.name} (${material.materialId}) · ${formatMilli(material.quantityPerUnitMilli)} ${material.unit}/unit`).join(' · ') },
-          { label: 'Routing', value: routing.map((operation) => `${operation.name} (${operation.operationId}) · ${formatMilli(operation.minutesPerUnitMilli)} min/unit · ${operation.workCentreId}`).join(' → ') },
+          { label: 'Materials', value: materials.map((material) => `${material.name} (${material.materialId}) · ${formatMilli(material.quantityPerUnitMilli)} ${material.unit}/unit · ${formatMmk(material.standardCostPerUnitMmk!)}/${material.unit}`).join(' · ') },
+          { label: 'Routing', value: routing.map((operation) => `${operation.name} (${operation.operationId}) · ${formatMilli(operation.minutesPerUnitMilli)} min/unit · ${formatMmk(operation.standardCostPerMinuteMmk!)}/min · ${operation.workCentreId}`).join(' → ') },
         ],
         boundary: 'Creates an immutable execution package. It does not schedule staff, move stock, post accounting, or control equipment.',
         proof: actionProof,
@@ -634,10 +650,10 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, jobs, man
 
       {!bindingCurrent && projection.status !== 'released_to_stock' ? <p className="form-notice warning-text" role="alert">The bound Plant job changed after this execution plan was reviewed. This chain is paused; reconcile the job snapshot before continuing.</p> : null}
       {requiresOperationEvidence ? <details className="compact-disclosure production-history"><summary>Routing progress <span>{projection.metrics.completedOperationCount}/{projection.operations.length}</span></summary><div className="issue-list">{projection.operations.map((operation) => <article key={operation.operationId}><span aria-hidden="true" className={`issue-mark ${operation.status === 'complete' ? 'resolved' : ''}`}>{operation.sequence}</span><div><strong>{operation.name}</strong><small>{operation.completedQuantity.toLocaleString()} / {projection.metrics.targetQuantity.toLocaleString()} units · {formatMilli(operation.actualMinutesMilli)} actual / {formatMilli(operation.plannedMinutesMilli)} planned minutes · {operation.status.replace('_', ' ')}</small></div></article>)}</div></details> : null}
-      {projection.plan ? <details className="compact-disclosure production-history"><summary>Standard vs actual <span>{costDrivers.status === 'not_started' ? 'No activity' : `${formatMilli(costDrivers.conversion.varianceMinutesMilli)} min variance`}</span></summary><div className="issue-list">
+      {projection.plan ? <details className="compact-disclosure production-history"><summary>Standard vs actual <span>{financialCost.status === 'setup_required' ? 'Rates required' : formatMmk(financialCost.varianceMmk ?? 0)}</span></summary>{financialCost.status !== 'setup_required' ? <div className="form-row"><span className="status-pill">Planned {formatMmk(financialCost.planned.totalMmk)}</span><span className="status-pill">Earned {formatMmk(financialCost.earned.totalMmk)}</span><span className="status-pill">Actual {formatMmk(financialCost.actual.totalMmk)}</span><span className={`status-pill ${(financialCost.varianceMmk ?? 0) <= 0 ? 'bounded' : 'pending'}`}>Variance {formatMmk(financialCost.varianceMmk ?? 0)}</span><span className={`status-pill ${(financialCost.qualityLossMmk ?? 0) === 0 ? 'bounded' : 'pending'}`}>Quality loss {formatMmk(financialCost.qualityLossMmk ?? 0)}</span></div> : null}<div className="issue-list">
         {costDrivers.materials.map((material) => <article key={material.materialId}><span aria-hidden="true" className={`issue-mark ${material.varianceQuantityMilli <= 0 ? 'resolved' : ''}`}>MAT</span><div><strong>{material.name}</strong><small>{formatMilli(material.actualQuantityMilli)} actual / {formatMilli(material.standardQuantityMilli)} standard {material.unit} · {formatMilli(material.varianceQuantityMilli)} variance</small></div></article>)}
         {costDrivers.operations.map((operation) => <article key={operation.operationId}><span aria-hidden="true" className={`issue-mark ${operation.varianceMinutesMilli <= 0 ? 'resolved' : ''}`}>MIN</span><div><strong>{operation.name}</strong><small>{formatMilli(operation.actualMinutesMilli)} actual / {formatMilli(operation.standardMinutesMilli)} standard minutes · {formatMilli(operation.varianceMinutesMilli)} variance</small></div></article>)}
-      </div><p className="panel-copy">{costDrivers.financialCostReason} This view uses reviewed BOM quantities, completed routing units, and actual minutes only.</p></details> : null}
+      </div><p className="panel-copy">{financialCost.status === 'setup_required' ? `${costDrivers.financialCostReason} Missing: ${financialCost.missingRates.join(', ') || 'reviewed execution plan'}.` : 'MMK costs are calculated only from the immutable reviewed rate card, BOM allowances, issued materials, completed routing units, actual minutes, and current inspection.'}</p></details> : null}
       {projection.plan ? <details className="compact-disclosure production-history"><summary>Effectiveness <span>{effectiveness.oeeBasisPoints !== null ? formatBasisPoints(effectiveness.oeeBasisPoints) : effectiveness.status === 'availability_setup_required' ? 'Setup availability' : 'Collecting'}</span></summary><div className="issue-list">
         <article><span aria-hidden="true" className={`issue-mark ${effectiveness.availability ? 'resolved' : ''}`}>A</span><div><strong>Availability · {effectiveness.availability ? formatBasisPoints(effectiveness.availability.basisPoints) : 'Setup required'}</strong><small>{effectiveness.availability ? `${formatMilli(effectiveness.availability.operatingMinutesMilli)} operating / ${formatMilli(effectiveness.availability.plannedProductiveMinutesMilli)} planned productive minutes · ${formatMilli(effectiveness.availability.downtimeMinutesMilli)} downtime · ${effectiveness.availability.downtimeIntervalCount} closed intervals` : 'Bind planned productive time and closed downtime to this exact order, window, and routed work centre.'}</small></div></article>
         <article><span aria-hidden="true" className={`issue-mark ${effectiveness.performance ? 'resolved' : ''}`}>P</span><div><strong>Performance · {effectiveness.performance ? formatBasisPoints(effectiveness.performance.basisPoints) : 'Collecting'}</strong><small>{effectiveness.performance ? `${formatMilli(effectiveness.performance.designedMinutesMilli)} designed / ${formatMilli(effectiveness.performance.actualMinutesMilli)} actual minutes · ${formatMilli(effectiveness.performance.speedLossMinutesMilli)} speed loss` : 'Record completed routing units and actual minutes.'}</small></div></article>
@@ -663,10 +679,11 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, jobs, man
           <div className="core-form compact-form">
             <div className="form-row"><label>Material ID<input disabled={disabled || Boolean(review)} maxLength={80} onChange={(event) => setSetupDraft((current) => ({ ...current, materialId: event.target.value }))} required value={setupDraft.materialId} /></label><label>Material name<input disabled={disabled || Boolean(review)} maxLength={180} onChange={(event) => setSetupDraft((current) => ({ ...current, materialName: event.target.value }))} required value={setupDraft.materialName} /></label></div>
             <div className="form-row"><label>Material unit<select disabled={disabled || Boolean(review)} onChange={(event) => setSetupDraft((current) => ({ ...current, materialUnit: event.target.value as PlantOrderMaterial['unit'] }))} value={setupDraft.materialUnit}>{setupMaterialUnits.map((unit) => <option key={unit} value={unit}>{unit}</option>)}</select></label><label>Per output unit<input disabled={disabled || Boolean(review)} inputMode="decimal" min="0.001" onChange={(event) => setSetupDraft((current) => ({ ...current, quantityPerUnit: event.target.value }))} required step="0.001" type="number" value={setupDraft.quantityPerUnit} /></label></div>
-            <label>Additional BOM materials (optional)<textarea disabled={disabled || Boolean(review)} maxLength={16_000} onChange={(event) => setSetupDraft((current) => ({ ...current, additionalMaterials: event.target.value }))} placeholder="MAT-RUBBER-01 | Natural rubber | kg | 1.5" rows={4} value={setupDraft.additionalMaterials} /><small>One row per line: material ID | name | unit | quantity per output unit. Add up to {PLANT_ORDER_ADDITIONAL_MATERIAL_MAX}.</small></label>
+            <label>Standard material cost (MMK per material unit)<input disabled={disabled || Boolean(review)} inputMode="numeric" min="1" onChange={(event) => setSetupDraft((current) => ({ ...current, standardCostPerUnitMmk: event.target.value }))} placeholder="Enter reviewed rate" required step="1" type="number" value={setupDraft.standardCostPerUnitMmk} /></label>
+            <label>Additional BOM materials (optional)<textarea disabled={disabled || Boolean(review)} maxLength={16_000} onChange={(event) => setSetupDraft((current) => ({ ...current, additionalMaterials: event.target.value }))} placeholder="MAT-RUBBER-01 | Natural rubber | kg | 1.5 | 4200" rows={4} value={setupDraft.additionalMaterials} /><small>One row: material ID | name | unit | quantity per output unit | MMK per material unit. Add up to {PLANT_ORDER_ADDITIONAL_MATERIAL_MAX}.</small></label>
             <div className="form-row"><label>Work centre ID<input disabled={disabled || Boolean(review)} maxLength={80} onChange={(event) => setSetupDraft((current) => ({ ...current, workCentreId: event.target.value }))} required value={setupDraft.workCentreId} /></label><label>Work centre name<input disabled={disabled || Boolean(review)} maxLength={180} onChange={(event) => setSetupDraft((current) => ({ ...current, workCentreName: event.target.value }))} required value={setupDraft.workCentreName} /></label></div>
-            <label>Minutes per output unit<input disabled={disabled || Boolean(review)} inputMode="decimal" min="0.001" onChange={(event) => setSetupDraft((current) => ({ ...current, minutesPerUnit: event.target.value }))} required step="0.001" type="number" value={setupDraft.minutesPerUnit} /></label>
-            <label>Additional routing operations (optional)<textarea disabled={disabled || Boolean(review)} maxLength={16_000} onChange={(event) => setSetupDraft((current) => ({ ...current, additionalOperations: event.target.value }))} placeholder="OP-TEST-20 | Pressure test | WC-TEST-01 | Test bench | 1.5" rows={4} value={setupDraft.additionalOperations} /><small>One row per operation: operation ID | name | work centre ID | work centre name | minutes per output unit. Sequence follows row order.</small></label>
+            <div className="form-row"><label>Minutes per output unit<input disabled={disabled || Boolean(review)} inputMode="decimal" min="0.001" onChange={(event) => setSetupDraft((current) => ({ ...current, minutesPerUnit: event.target.value }))} required step="0.001" type="number" value={setupDraft.minutesPerUnit} /></label><label>Standard conversion cost (MMK per minute)<input disabled={disabled || Boolean(review)} inputMode="numeric" min="1" onChange={(event) => setSetupDraft((current) => ({ ...current, standardCostPerMinuteMmk: event.target.value }))} placeholder="Enter reviewed rate" required step="1" type="number" value={setupDraft.standardCostPerMinuteMmk} /></label></div>
+            <label>Additional routing operations (optional)<textarea disabled={disabled || Boolean(review)} maxLength={16_000} onChange={(event) => setSetupDraft((current) => ({ ...current, additionalOperations: event.target.value }))} placeholder="OP-TEST-20 | Pressure test | WC-TEST-01 | Test bench | 1.5 | 600" rows={4} value={setupDraft.additionalOperations} /><small>One row: operation ID | name | work centre ID | work centre name | minutes per output unit | MMK per minute. Sequence follows row order.</small></label>
           </div>
         </details>
         <p className="panel-copy">One material and one operation are prefilled. Add only the BOM and routing steps this batch needs. No stock, staff, machine, costing, or accounting action occurs.</p>

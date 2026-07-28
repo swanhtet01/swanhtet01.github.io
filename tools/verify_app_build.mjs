@@ -3135,6 +3135,8 @@ async function verifyPlantOrderRuntime() {
       && pastedMaterials[1].materialId === 'MAT-SHELL-001'
       && pastedMaterials[1].unit === 'pcs',
     'plant_order_bom_paste_not_normalized_or_sorted')
+    const pricedMaterial = model.parsePlantOrderMaterialPaste('MAT-RUBBER-001 | Rubber | kg | 1.25 | 4200')[0]
+    assert(pricedMaterial.standardCostPerUnitMmk === 4_200 && model.parsePlantOrderMmkRate('500') === 500 && model.parsePlantOrderMmkRate('1.5') === null, 'plant_order_material_rate_not_canonical')
     assert(model.parsePlantOrderQuantityMilli('0', true) === 0
       && model.parsePlantOrderQuantityMilli('0') === null
       && model.parsePlantOrderQuantityMilli('1.234') === 1_234,
@@ -3151,6 +3153,8 @@ async function verifyPlantOrderRuntime() {
       && pastedRouting[0].minutesPerUnitMilli === 1_500
       && pastedRouting[1].operationId === 'OP-PACK-30',
     'plant_order_routing_paste_not_normalized_or_ordered')
+    const pricedOperation = model.parsePlantOrderRoutingPaste('OP-CURE-20 | Cure | WC-CURE-01 | Curing | 2.5 | 600')[0]
+    assert(pricedOperation.standardCostPerMinuteMmk === 600, 'plant_order_conversion_rate_not_canonical')
     assertThrows(() => model.parsePlantOrderRoutingPaste('OP-TEST-20 | Test | WC-TEST-01 | Test | 1\nop-test-20 | Duplicate | WC-TEST-02 | Test 2 | 1'), 'plant_order_routing_paste_duplicate_succeeded')
     assertThrows(() => model.parsePlantOrderRoutingPaste('OP-TEST-20 | Test | WC-TEST-01 | Test'), 'plant_order_routing_paste_malformed_row_succeeded')
     const tooManyOperations = Array.from({ length: model.PLANT_ORDER_ADDITIONAL_OPERATION_MAX + 1 }, (_, index) => `OP-EXTRA-${String(index + 1).padStart(2, '0')} | Extra ${index + 1} | WC-EXTRA-${String(index + 1).padStart(2, '0')} | Extra ${index + 1} | 1`).join('\n')
@@ -3180,6 +3184,16 @@ async function verifyPlantOrderRuntime() {
     }
     const plan = model.buildPlantOrderPlan(planInput)
     const executionPlan = model.buildPlantOrderExecutionPlan(planInput)
+    const pricedExecutionPlan = model.buildPlantOrderExecutionPlan({
+      ...planInput,
+      planId: 'PLN-20260726-402',
+      materials: planInput.materials.map((material, index) => ({ ...material, standardCostPerUnitMmk: index ? 2_000 : 1_000 })),
+      routing: planInput.routing.map((operation, index) => ({ ...operation, standardCostPerMinuteMmk: index ? 600 : 500 })),
+    })
+    assert(pricedExecutionPlan.materials.every((material) => material.standardCostPerUnitMmk)
+      && pricedExecutionPlan.routing.every((operation) => operation.standardCostPerMinuteMmk)
+      && model.validatePlantOrderState(model.applyPlantOrderPlan(model.createEmptyPlantOrderState(), pricedExecutionPlan, proof(1, 'reviewed priced execution plan'), model.EMPTY_PLANT_ORDER_DIGEST).state).revision === 1,
+    'plant_order_priced_plan_not_immutable_or_valid')
     assert(plan.sourceDigest === 'sha256:9415e4d6d6dda852c2014d611c1f93e385d31c40df2b4ec30d293b12991ba519'
       && plan.packageDigest === 'sha256:4f34743417e89e3ffcfa6c889fe2b55c14fd48f51926f4f198913cf4ec3d0a5b',
     'plant_order_python_browser_plan_digest_drifted')
@@ -3282,6 +3296,22 @@ async function verifyPlantOrderRuntime() {
       && collectingCostDrivers.conversion.varianceMinutesMilli === 200
       && collectingCostDrivers.financialCostAvailable === false,
     'plant_order_cost_driver_variance_not_evidence_bound')
+    const legacyFinancialCost = model.projectPlantOrderFinancialCost(operationProjection)
+    assert(legacyFinancialCost.status === 'setup_required' && legacyFinancialCost.missingRates.join(',') === 'MAT-FILTER-001,MAT-SHELL-001,OP-ASSEMBLY-10,OP-TEST-20' && legacyFinancialCost.varianceMmk === null, 'plant_order_legacy_plan_invented_financial_cost')
+    const pricedOperationProjection = structuredClone(operationProjection)
+    pricedOperationProjection.materials[0].standardCostPerUnitMmk = 1_000
+    pricedOperationProjection.materials[1].standardCostPerUnitMmk = 2_000
+    pricedOperationProjection.operations[0].standardCostPerMinuteMmk = 500
+    pricedOperationProjection.operations[1].standardCostPerMinuteMmk = 600
+    const collectingFinancialCost = model.projectPlantOrderFinancialCost(pricedOperationProjection)
+    assert(collectingFinancialCost.contract === 'supermega.plant.financial_job_cost.v1'
+      && collectingFinancialCost.status === 'collecting'
+      && collectingFinancialCost.planned.totalMmk === 63_500
+      && collectingFinancialCost.earned.totalMmk === 25_400
+      && collectingFinancialCost.actual.totalMmk === 58_500
+      && collectingFinancialCost.varianceMmk === 33_100
+      && collectingFinancialCost.qualityLossMmk === 0,
+    'plant_order_collecting_financial_cost_wrong')
     executionResult = model.recordPlantOrderOutput(executionResult.state, { outputId: 'OUT-V2-TRANSFER-001', outputBatchId: 'BATCH-20260726-401', quantity: 4, proof: proof(8, 'recorded routed transfer output'), expectedHeadDigest: executionResult.state.headDigest })
     assert(model.projectPlantOrder(executionResult.state).totalOutput === 4, 'plant_order_v2_routed_output_not_recorded')
     executionResult = model.recordPlantOrderOperation(executionResult.state, { operationRunId: 'OPRUN-V2-ASSEMBLY-002', operationId: 'OP-ASSEMBLY-10', quantity: 6, actualMinutesMilli: 3_300, proof: proof(9, 'completed assembly transfer quantity'), expectedHeadDigest: executionResult.state.headDigest })
@@ -3296,6 +3326,17 @@ async function verifyPlantOrderRuntime() {
       && completedCostDrivers.conversion.actualMinutesMilli === 15_500
       && completedCostDrivers.conversion.varianceMinutesMilli === 500,
     'plant_order_completed_cost_driver_variance_wrong')
+    const pricedCompletedProjection = structuredClone(model.projectPlantOrder(executionResult.state))
+    pricedCompletedProjection.materials[0].standardCostPerUnitMmk = 1_000
+    pricedCompletedProjection.materials[1].standardCostPerUnitMmk = 2_000
+    pricedCompletedProjection.operations[0].standardCostPerMinuteMmk = 500
+    pricedCompletedProjection.operations[1].standardCostPerMinuteMmk = 600
+    const completedFinancialCost = model.projectPlantOrderFinancialCost(pricedCompletedProjection)
+    assert(completedFinancialCost.earned.totalMmk === 63_500
+      && completedFinancialCost.actual.totalMmk === 63_750
+      && completedFinancialCost.varianceMmk === 250
+      && completedFinancialCost.qualityLossMmk === 12_700,
+    'plant_order_completed_financial_cost_wrong')
     assert(effectiveness.status === 'availability_setup_required'
       && effectiveness.availabilityBasisPoints === null
       && effectiveness.performance?.basisPoints === 9_677

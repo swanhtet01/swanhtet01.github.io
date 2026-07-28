@@ -4,6 +4,7 @@ export const PLANT_ORDER_EXECUTION_PLAN_CONTRACT = 'supermega.plant.reviewed_pla
 export const PLANT_ORDER_PROJECTION_CONTRACT = 'supermega.plant.order_projection.v1' as const
 export const PLANT_ORDER_EFFECTIVENESS_CONTRACT = 'supermega.plant.order_effectiveness.v2' as const
 export const PLANT_ORDER_COST_DRIVER_CONTRACT = 'supermega.plant.cost_driver_variance.v1' as const
+export const PLANT_ORDER_FINANCIAL_COST_CONTRACT = 'supermega.plant.financial_job_cost.v1' as const
 export const EMPTY_PLANT_ORDER_DIGEST = `sha256:${'0'.repeat(64)}`
 export const PLANT_ORDER_STORAGE_PREFIX = 'supermega.plant.order-foundation.v1:'
 export const PLANT_ORDER_ADDITIONAL_MATERIAL_MAX = 11
@@ -22,6 +23,7 @@ export type PlantOrderMaterial = {
   name: string
   unit: 'kg' | 'g' | 'l' | 'ml' | 'pcs' | 'pack' | 'bag' | 'roll' | 'sheet' | 'm' | 'cm'
   quantityPerUnitMilli: number
+  standardCostPerUnitMmk?: number
 }
 
 export type PlantOrderWorkCentre = { workCentreId: string; name: string }
@@ -31,6 +33,7 @@ export type PlantOrderRoutingStep = {
   name: string
   workCentreId: string
   minutesPerUnitMilli: number
+  standardCostPerMinuteMmk?: number
 }
 
 export type PlantOrderRoutingDraft = Omit<PlantOrderRoutingStep, 'sequence'> & { workCentreName: string }
@@ -204,6 +207,18 @@ export type PlantOrderCostDriverProjection = {
   financialCostReason: string
 }
 
+export type PlantOrderFinancialCostProjection = {
+  contract: typeof PLANT_ORDER_FINANCIAL_COST_CONTRACT
+  status: 'setup_required' | 'collecting' | 'complete'
+  currency: 'MMK'
+  missingRates: string[]
+  planned: { materialMmk: number; conversionMmk: number; totalMmk: number }
+  earned: { materialMmk: number; conversionMmk: number; totalMmk: number }
+  actual: { materialMmk: number; conversionMmk: number; totalMmk: number }
+  varianceMmk: number | null
+  qualityLossMmk: number | null
+}
+
 type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
 type LockLike = { request: <T>(name: string, options: { mode: 'exclusive' }, callback: () => T | Promise<T>) => Promise<T> }
 
@@ -261,20 +276,23 @@ export function parsePlantOrderMaterialPaste(value: string) {
   const lines = value.replace(/^\uFEFF/, '').split(/\r?\n/)
     .map((line, index) => ({ line: index + 1, value: line.trim() }))
     .filter((line) => line.value)
-  if (lines[0]?.value.toLowerCase().replaceAll(' ', '') === 'material_id|material_name|unit|quantity_per_unit') lines.shift()
+  if (['material_id|material_name|unit|quantity_per_unit', 'material_id|material_name|unit|quantity_per_unit|mmk_per_material_unit'].includes(lines[0]?.value.toLowerCase().replaceAll(' ', '') ?? '')) lines.shift()
   if (lines.length > PLANT_ORDER_ADDITIONAL_MATERIAL_MAX) throw new Error(`Add at most ${PLANT_ORDER_ADDITIONAL_MATERIAL_MAX} additional BOM materials.`)
   const materials = lines.map(({ line, value: row }) => {
     const columns = row.split('|').map((column) => column.trim())
-    if (columns.length !== 4) throw new Error(`Additional BOM material line ${line} must contain material ID | name | unit | quantity per output unit.`)
+    if (columns.length !== 4 && columns.length !== 5) throw new Error(`Additional BOM material line ${line} must contain material ID | name | unit | quantity per output unit | optional MMK per material unit.`)
     const unit = columns[2].toLowerCase()
     if (!materialUnits.has(unit)) throw new Error(`Additional BOM material line ${line} has an unsupported unit.`)
     const quantityPerUnitMilli = parsePlantOrderQuantityMilli(columns[3])
     if (!quantityPerUnitMilli) throw new Error(`Additional BOM material line ${line} needs a positive quantity with up to three decimals.`)
+    const standardCostPerUnitMmk = columns[4] === undefined ? null : parsePlantOrderMmkRate(columns[4])
+    if (columns[4] !== undefined && !standardCostPerUnitMmk) throw new Error(`Additional BOM material line ${line} needs a positive whole-MMK standard cost.`)
     return {
       materialId: identifier(columns[0].toUpperCase(), `Additional BOM material line ${line} ID`, 'MAT'),
       name: text(columns[1], `Additional BOM material line ${line} name`),
       unit: unit as PlantOrderMaterial['unit'],
       quantityPerUnitMilli,
+      ...(standardCostPerUnitMmk ? { standardCostPerUnitMmk } : {}),
     }
   })
   unique(materials.map((material) => material.materialId), 'Additional BOM material IDs')
@@ -286,19 +304,22 @@ export function parsePlantOrderRoutingPaste(value: string): PlantOrderRoutingDra
   const lines = value.replace(/^\uFEFF/, '').split(/\r?\n/)
     .map((line, index) => ({ line: index + 1, value: line.trim() }))
     .filter((line) => line.value)
-  if (lines[0]?.value.toLowerCase().replaceAll(' ', '') === 'operation_id|operation_name|work_centre_id|work_centre_name|minutes_per_unit') lines.shift()
+  if (['operation_id|operation_name|work_centre_id|work_centre_name|minutes_per_unit', 'operation_id|operation_name|work_centre_id|work_centre_name|minutes_per_unit|mmk_per_minute'].includes(lines[0]?.value.toLowerCase().replaceAll(' ', '') ?? '')) lines.shift()
   if (lines.length > PLANT_ORDER_ADDITIONAL_OPERATION_MAX) throw new Error(`Add at most ${PLANT_ORDER_ADDITIONAL_OPERATION_MAX} additional routing operations.`)
   const operations = lines.map(({ line, value: row }) => {
     const columns = row.split('|').map((column) => column.trim())
-    if (columns.length !== 5) throw new Error(`Additional routing line ${line} must contain operation ID | name | work centre ID | work centre name | minutes per output unit.`)
+    if (columns.length !== 5 && columns.length !== 6) throw new Error(`Additional routing line ${line} must contain operation ID | name | work centre ID | work centre name | minutes per output unit | optional MMK per minute.`)
     const minutesPerUnitMilli = parsePlantOrderQuantityMilli(columns[4])
     if (!minutesPerUnitMilli) throw new Error(`Additional routing line ${line} needs positive minutes with up to three decimals.`)
+    const standardCostPerMinuteMmk = columns[5] === undefined ? null : parsePlantOrderMmkRate(columns[5])
+    if (columns[5] !== undefined && !standardCostPerMinuteMmk) throw new Error(`Additional routing line ${line} needs a positive whole-MMK standard cost.`)
     return {
       operationId: identifier(columns[0].toUpperCase(), `Additional routing line ${line} operation ID`, 'OP'),
       name: text(columns[1], `Additional routing line ${line} operation name`),
       workCentreId: identifier(columns[2].toUpperCase(), `Additional routing line ${line} work-centre ID`, 'WC'),
       workCentreName: text(columns[3], `Additional routing line ${line} work-centre name`),
       minutesPerUnitMilli,
+      ...(standardCostPerMinuteMmk ? { standardCostPerMinuteMmk } : {}),
     }
   })
   unique(operations.map((operation) => operation.operationId), 'Additional routing operation IDs')
@@ -438,10 +459,11 @@ function validateJob(value: unknown, field: string) {
 function validateMaterials(value: unknown, field: string): PlantOrderMaterial[] {
   const rows = array(value, field, 1, 100).map((candidate, index): PlantOrderMaterial => {
     const rowField = `${field}[${index}]`
-    const row = exact(candidate, rowField, ['materialId', 'name', 'unit', 'quantityPerUnitMilli'])
+    const hasCost = isRecord(candidate) && candidate.standardCostPerUnitMmk !== undefined
+    const row = exact(candidate, rowField, ['materialId', 'name', 'unit', 'quantityPerUnitMilli', ...(hasCost ? ['standardCostPerUnitMmk'] : [])])
     const unit = text(row.unit, `${rowField}.unit`, 10)
     if (!materialUnits.has(unit)) throw new Error(`${rowField}.unit is unsupported.`)
-    return { materialId: identifier(row.materialId, `${rowField}.materialId`, 'MAT'), name: text(row.name, `${rowField}.name`), unit: unit as PlantOrderMaterial['unit'], quantityPerUnitMilli: integer(row.quantityPerUnitMilli, `${rowField}.quantityPerUnitMilli`, 1) }
+    return { materialId: identifier(row.materialId, `${rowField}.materialId`, 'MAT'), name: text(row.name, `${rowField}.name`), unit: unit as PlantOrderMaterial['unit'], quantityPerUnitMilli: integer(row.quantityPerUnitMilli, `${rowField}.quantityPerUnitMilli`, 1), ...(hasCost ? { standardCostPerUnitMmk: integer(row.standardCostPerUnitMmk, `${rowField}.standardCostPerUnitMmk`, 1) } : {}) }
   })
   unique(rows.map((row) => row.materialId), `${field} material IDs`); sorted(rows.map((row) => row.materialId), `${field} material IDs`)
   return rows
@@ -458,12 +480,12 @@ function validateWorkCentres(value: unknown, field: string): PlantOrderWorkCentr
 
 function validateRouting(value: unknown, field: string, workCentreIds: Set<string>): PlantOrderRoutingStep[] {
   const rows = array(value, field, 1, 100).map((candidate, index): PlantOrderRoutingStep => {
-    const rowField = `${field}[${index}]`; const row = exact(candidate, rowField, ['operationId', 'sequence', 'name', 'workCentreId', 'minutesPerUnitMilli'])
+    const rowField = `${field}[${index}]`; const hasCost = isRecord(candidate) && candidate.standardCostPerMinuteMmk !== undefined; const row = exact(candidate, rowField, ['operationId', 'sequence', 'name', 'workCentreId', 'minutesPerUnitMilli', ...(hasCost ? ['standardCostPerMinuteMmk'] : [])])
     const workCentreId = identifier(row.workCentreId, `${rowField}.workCentreId`, 'WC')
     if (!workCentreIds.has(workCentreId)) throw new Error(`${rowField}.workCentreId is unknown.`)
     const sequence = integer(row.sequence, `${rowField}.sequence`, 1)
     if (sequence !== index + 1) throw new Error(`${rowField}.sequence must be contiguous and ordered.`)
-    return { operationId: identifier(row.operationId, `${rowField}.operationId`, 'OP'), sequence, name: text(row.name, `${rowField}.name`), workCentreId, minutesPerUnitMilli: integer(row.minutesPerUnitMilli, `${rowField}.minutesPerUnitMilli`, 1) }
+    return { operationId: identifier(row.operationId, `${rowField}.operationId`, 'OP'), sequence, name: text(row.name, `${rowField}.name`), workCentreId, minutesPerUnitMilli: integer(row.minutesPerUnitMilli, `${rowField}.minutesPerUnitMilli`, 1), ...(hasCost ? { standardCostPerMinuteMmk: integer(row.standardCostPerMinuteMmk, `${rowField}.standardCostPerMinuteMmk`, 1) } : {}) }
   })
   unique(rows.map((row) => row.operationId), `${field} operation IDs`)
   return rows
@@ -515,6 +537,10 @@ function validateCapacityAvailability(value: unknown, field: string): PlantOrder
   })
   unique(rows.map((row) => row.workCentreId), `${field} work-centre IDs`); sorted(rows.map((row) => row.workCentreId), `${field} work-centre IDs`)
   return rows
+}
+
+export function parsePlantOrderMmkRate(value: string) {
+  return /^(?:0|[1-9]\d*)$/.test(value) && Number.isSafeInteger(Number(value)) && Number(value) > 0 ? Number(value) : null
 }
 
 function validateEffectivenessWorkCentres(value: unknown, field: string): PlantOrderEffectivenessWorkCentre[] {
@@ -973,6 +999,65 @@ export function projectPlantOrderCostDrivers(projection: PlantOrderProjection): 
     conversion: { standardMinutesMilli, actualMinutesMilli, varianceMinutesMilli: actualMinutesMilli - standardMinutesMilli },
     financialCostAvailable: false,
     financialCostReason: 'Configure reviewed material and work-centre rates before claiming MMK cost.',
+  }
+}
+
+function mmkFromMilliBasis(quantityMilli: number, rateMmk: number, field: string) {
+  const rounded = ((BigInt(quantityMilli) * BigInt(rateMmk)) + 500n) / 1_000n
+  if (rounded > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error(`${field} exceeds the supported MMK range.`)
+  return Number(rounded)
+}
+
+function proportionalMmk(totalMmk: number, numerator: number, denominator: number, field: string) {
+  const rounded = ((BigInt(totalMmk) * BigInt(numerator)) + (BigInt(denominator) / 2n)) / BigInt(denominator)
+  if (rounded > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error(`${field} exceeds the supported MMK range.`)
+  return Number(rounded)
+}
+
+export function projectPlantOrderFinancialCost(projection: PlantOrderProjection): PlantOrderFinancialCostProjection {
+  const missingRates = [
+    ...projection.materials.filter((material) => !material.standardCostPerUnitMmk).map((material) => material.materialId),
+    ...projection.operations.filter((operation) => !operation.standardCostPerMinuteMmk).map((operation) => operation.operationId),
+  ]
+  const empty = { materialMmk: 0, conversionMmk: 0, totalMmk: 0 }
+  if (!projection.plan || missingRates.length) return {
+    contract: PLANT_ORDER_FINANCIAL_COST_CONTRACT,
+    status: 'setup_required',
+    currency: 'MMK',
+    missingRates,
+    planned: empty,
+    earned: empty,
+    actual: empty,
+    varianceMmk: null,
+    qualityLossMmk: null,
+  }
+  const drivers = projectPlantOrderCostDrivers(projection)
+  const plannedMaterialMmk = projection.materials.reduce((total, material) => total + mmkFromMilliBasis(material.requiredQuantityMilli, material.standardCostPerUnitMmk!, `planned material cost for ${material.materialId}`), 0)
+  const actualMaterialMmk = projection.materials.reduce((total, material) => total + mmkFromMilliBasis(material.issuedQuantityMilli, material.standardCostPerUnitMmk!, `actual material cost for ${material.materialId}`), 0)
+  const earnedMaterialMmk = drivers.materials.reduce((total, driver) => {
+    const material = projection.materials.find((row) => row.materialId === driver.materialId)!
+    return total + mmkFromMilliBasis(driver.standardQuantityMilli, material.standardCostPerUnitMmk!, `earned material cost for ${driver.materialId}`)
+  }, 0)
+  const plannedConversionMmk = projection.operations.reduce((total, operation) => total + mmkFromMilliBasis(operation.plannedMinutesMilli, operation.standardCostPerMinuteMmk!, `planned conversion cost for ${operation.operationId}`), 0)
+  const actualConversionMmk = projection.operations.reduce((total, operation) => total + mmkFromMilliBasis(operation.actualMinutesMilli, operation.standardCostPerMinuteMmk!, `actual conversion cost for ${operation.operationId}`), 0)
+  const earnedConversionMmk = drivers.operations.reduce((total, driver) => {
+    const operation = projection.operations.find((row) => row.operationId === driver.operationId)!
+    return total + mmkFromMilliBasis(driver.standardMinutesMilli, operation.standardCostPerMinuteMmk!, `earned conversion cost for ${driver.operationId}`)
+  }, 0)
+  const planned = { materialMmk: plannedMaterialMmk, conversionMmk: plannedConversionMmk, totalMmk: plannedMaterialMmk + plannedConversionMmk }
+  const earned = { materialMmk: earnedMaterialMmk, conversionMmk: earnedConversionMmk, totalMmk: earnedMaterialMmk + earnedConversionMmk }
+  const actual = { materialMmk: actualMaterialMmk, conversionMmk: actualConversionMmk, totalMmk: actualMaterialMmk + actualConversionMmk }
+  const rejectedQuantity = projection.latestInspection?.rejectedQuantity ?? 0
+  return {
+    contract: PLANT_ORDER_FINANCIAL_COST_CONTRACT,
+    status: projection.status === 'released_to_stock' ? 'complete' : 'collecting',
+    currency: 'MMK',
+    missingRates: [],
+    planned,
+    earned,
+    actual,
+    varianceMmk: actual.totalMmk - earned.totalMmk,
+    qualityLossMmk: rejectedQuantity ? proportionalMmk(planned.totalMmk, rejectedQuantity, projection.metrics.targetQuantity, 'quality loss cost') : 0,
   }
 }
 
