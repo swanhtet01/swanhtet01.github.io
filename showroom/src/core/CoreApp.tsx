@@ -5757,6 +5757,17 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     }, issueTriggerRef.current)
   }
 
+  function startInspectionNcr() {
+    setKind('quality')
+    setArea('Quality')
+    setSeverity('high')
+    setIssueOwner(managedIdentity?.userId ?? 'Quality owner')
+    setSummary('Inspection sample needs NCR review')
+    setContainment('Hold affected output until sample evidence, root cause, and corrective action are reviewed.')
+    setIssueDueInput(defaultIssueDueInput())
+    setIssueDialogOpen(true)
+  }
+
   function resolveIssue(issueId: string) {
     const issue = production.issues.find((candidate) => candidate.id === issueId)
     if (!issue || issue.status === 'resolved') return
@@ -5995,7 +6006,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     <div className="plant-control-rows">{plantQualityReleaseRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantInspectionControl = <section aria-label="Plant inspection and CAPA" className="plant-control">
-    <div><span className="core-eyebrow">Inspection + CAPA</span><strong>{plantInspectionNext}</strong><small>AI turns sampling, NCR containment, corrective action, evidence, and release review into one quality queue. No certificate, CAPA closure, customer claim, inventory block, costing, or production write runs from this panel.</small></div>
+    <div><span className="core-eyebrow">Inspection + CAPA</span><strong>{plantInspectionNext}</strong><small>AI turns sampling, NCR containment, corrective action, evidence, and release review into one quality queue. No certificate, CAPA closure, customer claim, inventory block, costing, or production write runs from this panel.</small>{tab === 'control' ? <button className="text-link" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={startInspectionNcr} type="button">Start inspection NCR</button> : <Link className="text-link" to="/plant/?tab=control">Open inspection queue</Link>}</div>
     <div className="plant-control-rows">{plantInspectionRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
 
