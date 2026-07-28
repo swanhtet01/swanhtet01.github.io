@@ -5284,6 +5284,29 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ['Issue gate', openMaterialIssues.length ? `${openMaterialIssues.length} open` : 'Clear'],
     ['Trace', materialEntries.length ? `${materialEntries.length} consumed` : 'Not started'],
   ] as const
+  const openQualityIssues = openIssues.filter((issue) => issue.kind === 'quality')
+  const openWcmCount = openDowntimeIntervals.length + openMaintenanceRecords.length
+  const plantQualityReleaseNext = !productionCanWrite
+    ? 'Restore Plant readiness'
+    : pendingAction
+      ? 'Approve pending Plant action'
+      : heldJobs.length || openQualityIssues.length
+        ? 'Resolve quality holds'
+        : openWcmCount
+          ? 'Close WCM work'
+          : openMaterialIssues.length || !materialEntries.length
+            ? 'Complete trace evidence'
+            : !shiftHandoffIsCurrent
+              ? 'Build release handoff'
+              : 'Release package ready'
+  const plantQualityReleaseRows = [
+    ['Holds', heldJobs.length ? `${heldJobs.length} held` : 'Clear'],
+    ['Quality', openQualityIssues.length ? `${openQualityIssues.length} open` : 'Clear'],
+    ['WCM', openWcmCount ? `${openWcmCount} open` : 'Closed'],
+    ['Trace', materialEntries.length ? `${materialEntries.length} material` : 'Missing'],
+    ['Handoff', shiftHandoffIsCurrent ? 'Current' : 'Needed'],
+    ['Gate', productionCanWrite && !pendingAction ? 'Owner release' : 'Locked'],
+  ] as const
 
   useEffect(() => {
     const timer = window.setInterval(() => setIssueClock(Date.now()), 60_000)
@@ -5945,6 +5968,10 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     <div><span className="core-eyebrow">MRP readiness</span><strong>{plantMrpNext}</strong><small>AI reviews job demand, BOM, availability, Shop supply, material blockers, and trace evidence. No purchase, issue, costing, inventory, or production write runs from this panel.</small></div>
     <div className="plant-control-rows">{plantMrpRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
+  const plantQualityRelease = <section aria-label="Plant quality release" className="plant-control">
+    <div><span className="core-eyebrow">ISO release</span><strong>{plantQualityReleaseNext}</strong><small>AI checks quality holds, WCM closure, material trace, shift handoff, and owner release evidence before output can be treated as ready. No quality release, certificate, equipment command, material issue, costing, inventory, or production write runs from this panel.</small></div>
+    <div className="plant-control-rows">{plantQualityReleaseRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+  </section>
 
   if (tab === 'production') return <div className="operation-module">
     {productionBoundary}
@@ -5953,6 +5980,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     {plantControl}
     {plantLifecycle}
     {plantMrp}
+    {plantQualityRelease}
     <div className="split-workspace production-view">
       <section className="core-panel job-panel">
         <div className="panel-head"><div><span className="core-eyebrow">Plant plan</span><h2>Jobs to finish</h2></div><span className="panel-note">{activeJobs.length} active · {completedJobs.length} finished</span></div>
