@@ -58,6 +58,7 @@ import './ecommerce-product.css'
 
 type PreviewDevice = 'phone' | 'desktop'
 type RequestInboxFilter = 'all' | 'stock' | 'expiring' | 'payment' | 'delivery'
+type ReplyChannelTemplate = 'viber' | 'line' | 'wechat' | 'email'
 type EcommerceCatalog = {
   source: 'shop-local' | 'sample' | 'unavailable' | 'managed-shop'
   items: CommerceItem[]
@@ -226,6 +227,8 @@ export function EcommerceProduct() {
   const [customerFollowUpDraft, setCustomerFollowUpDraft] = useState('')
   const [deliveryReviewDraft, setDeliveryReviewDraft] = useState('')
   const [deliveryAreaTemplateDraft, setDeliveryAreaTemplateDraft] = useState('')
+  const [replyChannelTemplate, setReplyChannelTemplate] = useState<ReplyChannelTemplate>('viber')
+  const [channelReplyDraft, setChannelReplyDraft] = useState('')
   const storefrontSaveRef = useRef<HTMLButtonElement>(null)
   const storefrontPreviewHeadingRef = useRef<HTMLHeadingElement>(null)
 
@@ -708,6 +711,29 @@ export function EcommerceProduct() {
     setCustomerFollowUpDraft(`Owner draft only: Hi ${request.customerReference}, your ${itemSummary} request totals ${formatMmk(request.totalMmk)}. Shop is reviewing ${fulfilmentText} before anything is confirmed.${expiryText} Reference ${request.id}.`)
   }
 
+  function prepareChannelReplyTemplate() {
+    if (!customerFollowUpRequest) {
+      if (!buyingReady) {
+        finishStorefrontSetup()
+        return
+      }
+      setChannelReplyDraft('Owner draft only: channel reply templates are ready. Wait for a reviewed customer request, then approve the channel, source evidence, payment boundary, and Shop review status before sending.')
+      return
+    }
+    const lines = commerceStorefrontRequestLines(customerFollowUpRequest)
+    const itemSummary = lines.length === 1 ? lines[0].name : `${lines.length} items`
+    const reason = requestHasStockRisk(customerFollowUpRequest)
+      ? 'availability check'
+      : requestIsExpiring(customerFollowUpRequest)
+        ? 'quote refresh'
+        : requestNeedsPaymentReview(customerFollowUpRequest)
+          ? 'manual payment review'
+          : customerFollowUpRequest.fulfilment === 'delivery'
+            ? 'delivery confirmation'
+            : 'Shop review update'
+    setChannelReplyDraft(`Owner draft only: ${replyChannelTemplate.toUpperCase()} reply for ${customerFollowUpRequest.customerReference}: Shop is reviewing ${itemSummary} for ${reason}. Confirm stock, payment, delivery, and owner approval before any send. Reference ${customerFollowUpRequest.id}.`)
+  }
+
   function prepareDeliveryFeeReview() {
     if (!deliveryReviewRequest) {
       if (!buyingReady) {
@@ -1000,6 +1026,28 @@ export function EcommerceProduct() {
     ['Delivery', deliveryReviewCount ? `${deliveryReviewCount} review` : pickupReviewCount ? 'Pickup allowed' : 'None yet'],
     ['Boundary', 'Draft only'],
   ] as const
+  const replyChannelButtons = [
+    ['viber', 'Viber'],
+    ['line', 'LINE'],
+    ['wechat', 'WeChat'],
+    ['email', 'Email'],
+  ] as const
+  const channelReplyStage = importNeeded
+    ? 'Import catalog before reply templates'
+    : !savedDraftIsCurrent
+      ? 'Save storefront before reply templates'
+      : customerFollowUpRequest
+        ? 'Prepare reviewed channel reply'
+        : buyingReady
+          ? 'Reply templates ready'
+          : 'Reply templates locked'
+  const channelReplyRows = [
+    ['Channel', replyChannelButtons.find(([value]) => value === replyChannelTemplate)?.[1] ?? 'Viber'],
+    ['Intent', customerFollowUpRequest ? customerFollowUpStage.replace('Draft ', '') : 'Wait for request'],
+    ['Evidence', customerFollowUpRequest ? customerFollowUpRequest.id : 'No request yet'],
+    ['Review', customerFollowUpRequest ? 'Owner approves' : 'Locked'],
+    ['Boundary', 'No send'],
+  ] as const
   const deliveryReviewRequest = pendingManagedRequests.find((request) => request.fulfilment === 'delivery')
     ?? null
   const deliveryZoneHint = deliveryReviewRequest ? deliveryAreaFromCustomerReference(deliveryReviewRequest.customerReference) : ''
@@ -1276,6 +1324,22 @@ export function EcommerceProduct() {
           {customerFollowUpRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
         </div>
         {customerFollowUpDraft ? <p className="ecommerce-follow-up-draft" role="status">{customerFollowUpDraft}</p> : null}
+      </section>
+
+      <section aria-label="Channel reply template controls" className="ecommerce-ops-cockpit ecommerce-channel-reply-cockpit">
+        <div>
+          <span className="core-eyebrow">Channel reply templates</span>
+          <h2>{channelReplyStage}</h2>
+          <p>AI prepares owner-reviewed Viber, LINE, WeChat, and email reply templates from the same customer request evidence. No message send, clipboard copy, discount, payment, delivery booking, refund, stock move, or Shop write runs here.</p>
+          <div className="ecommerce-request-filter" role="group" aria-label="Reply channel template">
+            {replyChannelButtons.map(([value, label]) => <button aria-pressed={replyChannelTemplate === value} key={value} onClick={() => setReplyChannelTemplate(value)} type="button">{label}</button>)}
+          </div>
+          <button className="text-link" disabled={catalogHydrating || (!customerFollowUpRequest && !buyingReady)} onClick={prepareChannelReplyTemplate} type="button">Prepare reply template</button>
+        </div>
+        <div className="ecommerce-ops-cockpit-rows">
+          {channelReplyRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+        </div>
+        {channelReplyDraft ? <p className="ecommerce-channel-reply-draft" role="status">{channelReplyDraft}</p> : null}
       </section>
 
       <div aria-label="Ecommerce workspace" className="ecommerce-mobile-switch" role="group">

@@ -231,8 +231,14 @@
   background: #f7f7ff;
 }
 
+.ecommerce-channel-reply-cockpit {
+  border-color: rgba(14, 116, 144, .18);
+  background: #f0f9fb;
+}
+
 .ecommerce-delivery-review-draft,
 .ecommerce-delivery-template-draft,
+.ecommerce-channel-reply-draft,
 .ecommerce-follow-up-draft {
   grid-column: 1 / -1;
   border-radius: 9px;
@@ -253,6 +259,10 @@
 
 .ecommerce-follow-up-draft {
   border: 1px solid rgba(79, 70, 229, .16);
+}
+
+.ecommerce-channel-reply-draft {
+  border: 1px solid rgba(14, 116, 144, .16);
 }
 
 .ecommerce-ops-cockpit h2 {
