@@ -172,6 +172,11 @@
   background: #f5faf6;
 }
 
+.ecommerce-payment-delivery-cockpit {
+  border-color: rgba(21, 94, 117, .2);
+  background: #f2f8fb;
+}
+
 .ecommerce-ops-cockpit h2 {
   margin: 2px 0 4px;
   color: #17231d;

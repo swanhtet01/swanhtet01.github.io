@@ -775,6 +775,18 @@ export function EcommerceProduct() {
     return !item || item.onHand < line.quantity
   })).length
   const orderOpsPaymentRiskCount = pendingManagedRequests.filter((request) => 'quote' in request && request.quote.payment.adapter === 'kbzpay_manual').length
+  const deliveryReviewCount = pendingManagedRequests.filter((request) => request.fulfilment === 'delivery').length
+  const pickupReviewCount = pendingManagedRequests.filter((request) => request.fulfilment === 'pickup').length
+  const controlPaymentsVisible = buyingReady || pendingManagedRequests.length > 0
+  const paymentDeliveryStage = importNeeded
+    ? 'Import catalog before checkout'
+    : !savedDraftIsCurrent
+      ? 'Save storefront before checkout'
+      : pendingManagedRequests.length
+        ? 'Review payment and delivery'
+        : buyingCart.length
+          ? 'Quote payment and delivery'
+          : 'Checkout controls ready'
   const orderOpsPriority = orderOpsStockRiskCount
     ? 'Resolve stock risk'
     : orderOpsExpiringCount
@@ -801,6 +813,13 @@ export function EcommerceProduct() {
     ['ATP', orderOpsStockRiskCount ? `${orderOpsStockRiskCount} risk` : catalog.items.length ? 'Shop stock' : 'Need catalog'],
     ['Fulfil', pendingManagedRequests.length ? 'Shop queue' : savedDraftIsCurrent ? 'Pickup/delivery ready' : 'Setup first'],
     ['Return', 'Shop accountable'],
+  ] as const
+  const paymentDeliveryRows = [
+    ['Payment', orderOpsPaymentRiskCount ? `${orderOpsPaymentRiskCount} manual QR` : controlPaymentsVisible ? 'Not authorized' : 'Locked'],
+    ['Delivery', deliveryReviewCount ? `${deliveryReviewCount} review` : savedDraftIsCurrent ? 'Owner priced' : 'Locked'],
+    ['Pickup', pickupReviewCount ? `${pickupReviewCount} review` : savedDraftIsCurrent ? 'Allowed' : 'Locked'],
+    ['Expiry', orderOpsExpiringCount ? `${orderOpsExpiringCount} quote` : buyingReady ? '30 min quote' : 'No quote'],
+    ['Control', pendingManagedRequests.length ? 'Shop confirms' : 'No customer send'],
   ] as const
   const orderingReadinessStage = importNeeded
     ? 'Import Shop catalog'
@@ -964,6 +983,17 @@ export function EcommerceProduct() {
         </div>
         <div className="ecommerce-ops-cockpit-rows">
           {lifecycleRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+        </div>
+      </section>
+
+      <section aria-label="Payment and delivery controls" className="ecommerce-ops-cockpit ecommerce-payment-delivery-cockpit">
+        <div>
+          <span className="core-eyebrow">Payment and delivery controls</span>
+          <h2>{paymentDeliveryStage}</h2>
+          <p>AI prepares pickup, local delivery, manual QR review, quote expiry, and Shop confirmation from the same checkout request. No card charge, wallet debit, driver booking, customer message, or settlement write runs here.</p>
+        </div>
+        <div className="ecommerce-ops-cockpit-rows">
+          {paymentDeliveryRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
         </div>
       </section>
 
