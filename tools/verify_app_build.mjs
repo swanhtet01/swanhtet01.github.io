@@ -32,11 +32,12 @@ let commerceRuntimeChecks = 0
 let productionRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
 if (normalizeSourceText('line one\r\nline two\rline three') !== 'line one\nline two\nline three') fail('source_line_ending_normalization_failed')
-const [manifestText, appPackageText, appSource, coreSource, catalogImportSource, clientOnboardingSource, clientOnboardingUiSource, commerceSource, commerceOrderDraftSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedTrialStoreRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, managedWebsiteSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, managedStorefrontSource, storefrontSource, storefrontDraftSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource, schedulerSource] = await Promise.all([
+const [manifestText, appPackageText, appSource, coreSource, behaviorTrailSource, catalogImportSource, clientOnboardingSource, clientOnboardingUiSource, commerceSource, commerceOrderDraftSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedTrialStoreRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, managedWebsiteSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, managedStorefrontSource, storefrontSource, storefrontDraftSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource, schedulerSource] = await Promise.all([
   readFile(resolve(root, 'site-manifest.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'package.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'App.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'CoreApp.tsx'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'core', 'behavior-trail.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'shop-catalog-import.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'client-onboarding.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'ClientDataOnboarding.tsx'), 'utf8'),
@@ -310,11 +311,21 @@ if (!coreCssSource.includes('.product-home-autopilot')
 if (!settingsPageSource.includes('const learningRows = [')
   || !settingsPageSource.includes('const learningPlanRows = [')
   || !settingsPageSource.includes('const agentPlanRows = [')
-  || !coreSource.includes("export const BEHAVIOR_TRAIL_KEY = 'supermega.behavior-trail.v1'")
-  || !coreSource.includes('export function readBehaviorTrail(storage: Storage)')
-  || !coreSource.includes('export function recordBehaviorSignal(storage: Storage')
-  || !coreSource.includes('const behaviorTrailLimit = 80')
+  || !behaviorTrailSource.includes("export const BEHAVIOR_TRAIL_KEY = 'supermega.behavior-trail.v1'")
+  || !behaviorTrailSource.includes('export function readBehaviorTrail(storage: Storage)')
+  || !behaviorTrailSource.includes('export function recordBehaviorSignal(storage: Storage')
+  || !behaviorTrailSource.includes('const behaviorTrailLimit = 80')
+  || !behaviorTrailSource.includes("'agent_job_seen'")
+  || !behaviorTrailSource.includes("'agent_job_chosen'")
   || !coreSource.includes('recordBehaviorSignal(window.localStorage')
+  || !websiteSource.includes('recordBehaviorSignal(window.localStorage')
+  || !ecommerceSource.includes('recordBehaviorSignal(window.localStorage')
+  || !coreSource.includes("event: 'agent_job_seen'")
+  || !coreSource.includes("event: 'agent_job_chosen'")
+  || !websiteSource.includes("event: 'agent_job_seen'")
+  || !websiteSource.includes("event: 'agent_job_chosen'")
+  || !ecommerceSource.includes("event: 'agent_job_seen'")
+  || !ecommerceSource.includes("event: 'agent_job_chosen'")
   || !settingsPageSource.includes('BEHAVIOR_TRAIL_KEY')
   || !settingsPageSource.includes('const behaviorTrail = readBehaviorTrail(window.localStorage)')
   || !settingsPageSource.includes('const behaviorSignalCount = behaviorTrail.length')

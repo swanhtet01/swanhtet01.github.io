@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router'
+import { useLocation, useSearchParams } from 'react-router'
 
+import { recordBehaviorSignal } from '../../core/behavior-trail'
 import { ContentWorkspace } from './ContentWorkspace'
 import { NavigationWorkspace } from './NavigationWorkspace'
 import { PublishWorkspace } from './PublishWorkspace'
@@ -136,6 +137,7 @@ function editSessionStorageKey(scope: string) {
 }
 
 export function WebsiteProduct() {
+  const location = useLocation()
   const {
     workspace,
     mutateWorkspace,
@@ -801,7 +803,22 @@ export function WebsiteProduct() {
     ['Reason', websiteAgentReason],
     ['Owner gate', websiteOwnerGate],
   ]
+  useEffect(() => {
+    recordBehaviorSignal(window.localStorage, {
+      event: 'agent_job_seen',
+      product: 'website',
+      route: location.pathname + location.search,
+      detail: websiteAgentJob,
+    })
+  }, [location.pathname, location.search, websiteAgentJob])
+
   function runWebsiteAgentJob() {
+    recordBehaviorSignal(window.localStorage, {
+      event: 'agent_job_chosen',
+      product: 'website',
+      route: location.pathname + location.search,
+      detail: websiteAgentJob,
+    })
     if (storageIssue || canRepairLocalStorage) {
       requestRecoveryFocus()
       return

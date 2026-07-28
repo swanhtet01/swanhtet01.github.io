@@ -127,6 +127,9 @@ const activationRunbookChunk = (await get(`/${activationRunbookChunkPath}`)).bod
 for (const required of ['SUPERMEGA', 'Choose a product. Run work.', 'Free workspace', 'Premium activation', 'Managed data, AI context', 'Check readiness', 'Open product', 'Set up product', 'Shop', 'Plant', 'Website', 'Ecommerce', 'Sample workspace', manifest.brand.colors.accent, manifest.brand.colors.ink]) {
   if (!assetCorpus.includes(required)) throw new Error(`missing_live_context:${required}`)
 }
+for (const required of ['supermega.behavior-trail.v1', 'agent_job_seen', 'agent_job_chosen']) {
+  if (!assetCorpus.includes(required)) throw new Error(`missing_live_behavior_context:${required}`)
+}
 for (const required of ['Plant agent queue', 'Recommended Plant agent job', 'Agent job', 'Owner gate', 'Record next job output', 'Contain urgent Plant problems', 'Review quality holds', 'Close WCM records', 'Build shift handoff']) {
   if (!assetCorpus.includes(required)) throw new Error(`missing_live_plant_context:${required}`)
 }

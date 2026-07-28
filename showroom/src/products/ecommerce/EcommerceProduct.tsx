@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router'
+import { Link, useLocation, useNavigate } from 'react-router'
 
+import { recordBehaviorSignal } from '../../core/behavior-trail'
 import {
   COMMERCE_KEY,
   commerceCatalogDigest,
@@ -180,6 +181,7 @@ function initialEcommerceState() {
 
 export function EcommerceProduct() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [initialState] = useState(initialEcommerceState)
   const [catalog, setCatalog] = useState<EcommerceCatalog>(initialState.catalog)
   const [catalogHydrating, setCatalogHydrating] = useState(true)
@@ -804,7 +806,16 @@ export function EcommerceProduct() {
       ? { label: 'Import catalog', to: '/settings/?product=ecommerce' }
       : !savedDraftIsCurrent
         ? null
-        : { label: 'Open storefront', to: '#ecommerce-preview-panel' }
+      : { label: 'Open storefront', to: '#ecommerce-preview-panel' }
+
+  useEffect(() => {
+    recordBehaviorSignal(window.localStorage, {
+      event: 'agent_job_seen',
+      product: 'ecommerce',
+      route: location.pathname + location.search,
+      detail: aiAgentJob,
+    })
+  }, [aiAgentJob, location.pathname, location.search])
 
   return (
     <div className="workspace-screen ecommerce-product">
@@ -848,8 +859,13 @@ export function EcommerceProduct() {
           {aiAgentQueueRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
         </div>
         {aiDeskAction
-          ? <Link className="core-button primary compact" to={aiDeskAction.to}>{aiDeskAction.label}</Link>
-          : <button className="core-button primary compact" onClick={finishStorefrontSetup} type="button">Finish setup</button>}
+          ? <Link className="core-button primary compact" onClick={() => {
+              recordBehaviorSignal(window.localStorage, { event: 'agent_job_chosen', product: 'ecommerce', route: location.pathname + location.search, detail: aiAgentJob })
+            }} to={aiDeskAction.to}>{aiDeskAction.label}</Link>
+          : <button className="core-button primary compact" onClick={() => {
+              recordBehaviorSignal(window.localStorage, { event: 'agent_job_chosen', product: 'ecommerce', route: location.pathname + location.search, detail: aiAgentJob })
+              finishStorefrontSetup()
+            }} type="button">Finish setup</button>}
       </section>
 
       <div aria-label="Ecommerce workspace" className="ecommerce-mobile-switch" role="group">

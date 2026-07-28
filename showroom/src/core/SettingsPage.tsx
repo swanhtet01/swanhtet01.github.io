@@ -7,10 +7,10 @@ import {
   WEBSITE_STORAGE_KEY,
 } from '../products/product-handoff'
 import { COMMERCE_KEY, LEGACY_COMMERCE_KEYS } from './commerce-workspace'
+import { BEHAVIOR_TRAIL_KEY, readBehaviorTrail } from './behavior-trail'
 import {
   ACTION_KEY,
   APPROVAL_KEY,
-  BEHAVIOR_TRAIL_KEY,
   collectLocalProductRecords,
   clientSetupPath,
   LEGACY_APPROVAL_KEYS,
@@ -24,7 +24,6 @@ import {
   pilotReady,
   productContracts,
   productDisplayName,
-  readBehaviorTrail,
   RuntimeBadge,
   SETUP_KEY,
   setupProductFromQuery,

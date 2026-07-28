@@ -28,6 +28,7 @@ import {
   type ManagedProductionEvent,
   type ManagedStateRecord,
 } from './managed-trial'
+import { recordBehaviorSignal } from './behavior-trail'
 import { formatTime, teamDefinitions, useTeamWorkspace } from './team-work'
 import {
   advanceCommerceOrder,
@@ -529,84 +530,6 @@ function productFromPathname(pathname: string): SetupProductId | null {
   if (pathname.startsWith('/website/')) return 'website'
   if (pathname.startsWith('/ecommerce/')) return 'ecommerce'
   return null
-}
-
-export const BEHAVIOR_TRAIL_KEY = 'supermega.behavior-trail.v1'
-
-export type BehaviorTrailEvent = 'home_opened' | 'product_opened' | 'setup_opened' | 'settings_opened'
-
-export type BehaviorTrailEntry = {
-  id: string
-  event: BehaviorTrailEvent
-  product: SetupProductId | 'unknown'
-  route: string
-  detail: string
-  createdAt: string
-}
-
-const behaviorTrailLimit = 80
-
-function boundedText(value: unknown, fallback: string, limit: number) {
-  const text = typeof value === 'string' && value.trim() ? value.trim() : fallback
-  return text.slice(0, limit)
-}
-
-function normalizeBehaviorTrail(value: unknown): BehaviorTrailEntry[] {
-  if (!Array.isArray(value)) return []
-  return value
-    .map((entry) => {
-      if (!entry || typeof entry !== 'object') return null
-      const source = entry as Partial<BehaviorTrailEntry>
-      const event = source.event === 'home_opened'
-        || source.event === 'product_opened'
-        || source.event === 'setup_opened'
-        || source.event === 'settings_opened'
-        ? source.event
-        : null
-      if (!event) return null
-      const product = source.product === 'commerce'
-        || source.product === 'production'
-        || source.product === 'website'
-        || source.product === 'ecommerce'
-        ? source.product
-        : 'unknown'
-      return {
-        id: boundedText(source.id, uid('BEHAVIOR'), 80),
-        event,
-        product,
-        route: boundedText(source.route, '/', 120),
-        detail: boundedText(source.detail, 'Local workspace activity', 160),
-        createdAt: boundedText(source.createdAt, new Date().toISOString(), 40),
-      }
-    })
-    .filter((entry): entry is BehaviorTrailEntry => Boolean(entry))
-    .slice(-behaviorTrailLimit)
-}
-
-export function readBehaviorTrail(storage: Storage): BehaviorTrailEntry[] {
-  try {
-    const raw = storage.getItem(BEHAVIOR_TRAIL_KEY)
-    return raw ? normalizeBehaviorTrail(JSON.parse(raw)) : []
-  } catch {
-    return []
-  }
-}
-
-export function recordBehaviorSignal(storage: Storage, entry: Omit<BehaviorTrailEntry, 'id' | 'createdAt'>) {
-  try {
-    const current = readBehaviorTrail(storage)
-    const normalized = normalizeBehaviorTrail([{
-      ...entry,
-      id: uid('BEHAVIOR'),
-      createdAt: new Date().toISOString(),
-    }])[0]
-    if (!normalized) return
-    const previous = current.at(-1)
-    if (previous && previous.event === normalized.event && previous.route === normalized.route && previous.product === normalized.product && previous.detail === normalized.detail) return
-    storage.setItem(BEHAVIOR_TRAIL_KEY, JSON.stringify([...current, normalized].slice(-behaviorTrailLimit)))
-  } catch {
-    // Behavior learning remains optional when browser storage is unavailable.
-  }
 }
 
 export function pilotProgress(setup: SetupState) {
@@ -3020,8 +2943,19 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       <p>AI prepares the next Shop move. Humans approve every consequential action.</p>
     </div>
     <div>{shopAgentRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
-    <Link className="core-button compact" to={shopAgentPath}>{shopAgentPath.includes('settings') ? 'Open Settings' : shopAgentPath.includes('inventory') ? 'Open Inventory' : shopAgentPath.includes('orders') ? 'Open Orders' : 'Open Counter'}</Link>
+    <Link className="core-button compact" onClick={() => {
+      recordBehaviorSignal(window.localStorage, { event: 'agent_job_chosen', product: 'commerce', route: commerceLocation.pathname + commerceLocation.search, detail: shopAgentJob })
+    }} to={shopAgentPath}>{shopAgentPath.includes('settings') ? 'Open Settings' : shopAgentPath.includes('inventory') ? 'Open Inventory' : shopAgentPath.includes('orders') ? 'Open Orders' : 'Open Counter'}</Link>
   </section>
+
+  useEffect(() => {
+    recordBehaviorSignal(window.localStorage, {
+      event: 'agent_job_seen',
+      product: 'commerce',
+      route: commerceLocation.pathname + commerceLocation.search,
+      detail: shopAgentJob,
+    })
+  }, [commerceLocation.pathname, commerceLocation.search, shopAgentJob])
 
   function showOrderComposer() {
     const dialog = orderComposerRef.current
@@ -4935,6 +4869,7 @@ function ProductionEventHistory({ events }: { events: ProductionEvent[] }) {
 }
 
 function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIdentity | null; tab: ProductionTab }) {
+  const productionLocation = useLocation()
   const [production, mutateProduction, productionStorageError, workspaceMode, managedVersion, managedWorkspaceId, productionCanWrite] = useProductionWorkspace(managedIdentity)
   const [relatedCommerce] = useCommerceWorkspace(managedIdentity)
   const [, setActions] = useStoredState<AccountableAction[]>(ACTION_KEY, [], normalizeActions)
@@ -5181,6 +5116,15 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     }
     if (!scheduleDraft && dialog.open) dialog.close()
   }, [scheduleDraft, tab])
+
+  useEffect(() => {
+    recordBehaviorSignal(window.localStorage, {
+      event: 'agent_job_seen',
+      product: 'production',
+      route: productionLocation.pathname + productionLocation.search,
+      detail: plantAgentJob,
+    })
+  }, [plantAgentJob, productionLocation.pathname, productionLocation.search])
 
   async function initializeManagedProduction(event: FormEvent) {
     event.preventDefault()
@@ -5762,7 +5706,9 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const plantAgentQueue = <section aria-label="Recommended Plant agent job" className="plant-agent-queue">
     <div><span className="core-eyebrow">Plant agent queue</span><h2>{plantAgentJob}</h2><p>AI prepares the next Plant record from live jobs, quality, WCM, trace, and handoff state. Humans still approve every consequential action.</p></div>
     <div>{plantAgentRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
-    <Link className="core-button primary compact" to={plantAgentAction.to}>{plantAgentAction.label}</Link>
+    <Link className="core-button primary compact" onClick={() => {
+      recordBehaviorSignal(window.localStorage, { event: 'agent_job_chosen', product: 'production', route: productionLocation.pathname + productionLocation.search, detail: plantAgentJob })
+    }} to={plantAgentAction.to}>{plantAgentAction.label}</Link>
   </section>
 
   if (tab === 'production') return <div className="operation-module">
