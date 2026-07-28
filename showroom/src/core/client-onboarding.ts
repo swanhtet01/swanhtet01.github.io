@@ -1,5 +1,6 @@
 export const CLIENT_IMPORT_SCHEMA = 'supermega.client_import_preview.v1' as const
 export const CLIENT_STAGING_SCHEMA = 'supermega.client_import_staging.v1' as const
+export const CLIENT_DEMO_BLUEPRINT_SCHEMA = 'supermega.client_demo_blueprint.v1' as const
 export const CLIENT_IMPORT_MAX_BYTES = 512 * 1024
 export const CLIENT_IMPORT_MAX_ROWS = 500
 
@@ -7,6 +8,50 @@ export type ClientSolutionId = 'commerce' | 'production' | 'website' | 'ecommerc
 export type ClientImportMapping = Record<string, string>
 export type ClientImportRowStatus = 'ready' | 'invalid' | 'duplicate'
 export type ClientImportSuggestionBasis = 'exact' | 'alias' | 'ambiguous' | 'unmapped'
+export type ClientDemoPresetId = 'social-seller' | 'retail-network' | 'food-service' | 'manufacturing' | 'service-business'
+
+export type ClientDemoSelection = {
+  product: ClientSolutionId
+  templateId: string
+}
+
+export type ClientDemoPreset = {
+  id: ClientDemoPresetId
+  name: string
+  description: string
+  selections: readonly ClientDemoSelection[]
+}
+
+export type ClientDemoBlueprint = {
+  schema: typeof CLIENT_DEMO_BLUEPRINT_SCHEMA
+  client: {
+    workspace: string
+    owner: string
+    presetId: ClientDemoPresetId
+  }
+  products: Array<{
+    product: ClientSolutionId
+    label: string
+    templateId: string
+    demoPath: string
+    setupPath: string
+    importObject: string
+    importLabel: string
+    sampleCsv: string
+    checklist: ClientImportChecklistRow[]
+    activationBoundary: string
+  }>
+  integrations: Array<{
+    from: ClientSolutionId
+    to: ClientSolutionId
+    outcome: string
+  }>
+  controls: {
+    localDemoOnly: true
+    humanReviewRequired: true
+    externalWritesPerformed: false
+  }
+}
 
 type ClientImportFieldKind = 'boolean' | 'date' | 'integer' | 'slug' | 'sku' | 'text' | 'url'
 
@@ -174,6 +219,68 @@ const objects: Record<ClientSolutionId, ClientImportObject> = {
     ],
   },
 }
+
+const clientDemoProductOrder: readonly ClientSolutionId[] = ['commerce', 'production', 'website', 'ecommerce']
+
+const clientDemoProductDetails: Record<ClientSolutionId, { label: string; demoPath: string; setupPath: string }> = {
+  commerce: { label: 'Shop', demoPath: '/shop/?tab=counter', setupPath: '/settings/?product=shop' },
+  production: { label: 'Plant', demoPath: '/plant/?tab=production', setupPath: '/settings/?product=plant' },
+  website: { label: 'Website', demoPath: '/website/', setupPath: '/settings/?product=website' },
+  ecommerce: { label: 'Ecommerce', demoPath: '/ecommerce/', setupPath: '/settings/?product=ecommerce' },
+}
+
+export const clientDemoPresets: readonly ClientDemoPreset[] = [
+  {
+    id: 'social-seller',
+    name: 'Social seller',
+    description: 'Chat orders, a clear website, and a Shop-backed storefront.',
+    selections: [
+      { product: 'commerce', templateId: 'social-commerce' },
+      { product: 'website', templateId: 'lead-generation' },
+      { product: 'ecommerce', templateId: 'social-storefront' },
+    ],
+  },
+  {
+    id: 'retail-network',
+    name: 'Retail / wholesale',
+    description: 'Stock, purchasing, catalog presentation, pickup, and wholesale requests.',
+    selections: [
+      { product: 'commerce', templateId: 'retail-wholesale' },
+      { product: 'website', templateId: 'catalog-showcase' },
+      { product: 'ecommerce', templateId: 'pickup-preorder' },
+    ],
+  },
+  {
+    id: 'food-service',
+    name: 'Cafe / restaurant',
+    description: 'Counter and channel orders with a menu site and preorder collection.',
+    selections: [
+      { product: 'commerce', templateId: 'restaurant-ordering' },
+      { product: 'website', templateId: 'business-presence' },
+      { product: 'ecommerce', templateId: 'pickup-preorder' },
+    ],
+  },
+  {
+    id: 'manufacturing',
+    name: 'Manufacturing',
+    description: 'Demand, stock, production, catalog, and wholesale request handoffs.',
+    selections: [
+      { product: 'commerce', templateId: 'retail-wholesale' },
+      { product: 'production', templateId: 'production-control' },
+      { product: 'website', templateId: 'catalog-showcase' },
+      { product: 'ecommerce', templateId: 'wholesale-request' },
+    ],
+  },
+  {
+    id: 'service-business',
+    name: 'Service business',
+    description: 'Service sales, lead generation, and accountable follow-up.',
+    selections: [
+      { product: 'commerce', templateId: 'social-commerce' },
+      { product: 'website', templateId: 'lead-generation' },
+    ],
+  },
+]
 
 function hasControlCharacter(value: string) {
   return Array.from(value).some((character) => {
@@ -514,6 +621,66 @@ function boundedContext(value: string, label: string, maximum = 120) {
   if (!normalized || hasControlCharacter(normalized)) throw new Error(`${label} is required before staging.`)
   if (normalized.length > maximum) throw new Error(`${label} must be ${maximum} characters or fewer.`)
   return normalized
+}
+
+export function clientDemoPreset(id: ClientDemoPresetId) {
+  const preset = clientDemoPresets.find((candidate) => candidate.id === id)
+  if (!preset) throw new Error('Choose a supported client business type.')
+  return preset
+}
+
+export function buildClientDemoBlueprint(input: {
+  workspace: string
+  owner: string
+  presetId: ClientDemoPresetId
+  selections: readonly ClientDemoSelection[]
+}): ClientDemoBlueprint {
+  const workspace = boundedContext(input.workspace, 'Client name', 60)
+  const owner = boundedContext(input.owner, 'Responsible owner', 80)
+  const preset = clientDemoPreset(input.presetId)
+  if (input.selections.length < 1 || input.selections.length > clientDemoProductOrder.length) {
+    throw new Error('Choose between one and four products for this client demo.')
+  }
+  const byProduct = new Map<ClientSolutionId, string>()
+  for (const selection of input.selections) {
+    if (!clientDemoProductOrder.includes(selection.product)) throw new Error('Choose a supported SuperMega product.')
+    if (byProduct.has(selection.product)) throw new Error(`Choose ${clientDemoProductDetails[selection.product].label} only once.`)
+    byProduct.set(selection.product, resolveWorkflowTemplateId(selection.product, selection.templateId))
+  }
+  const products = clientDemoProductOrder.flatMap((product) => {
+    const templateId = byProduct.get(product)
+    if (!templateId) return []
+    const object = clientImportObject(product)
+    const details = clientDemoProductDetails[product]
+    return [{
+      product,
+      label: details.label,
+      templateId,
+      demoPath: details.demoPath,
+      setupPath: details.setupPath,
+      importObject: object.id,
+      importLabel: object.label,
+      sampleCsv: clientImportTemplate(product, templateId),
+      checklist: clientImportChecklist(product, templateId),
+      activationBoundary: object.activationBoundary,
+    }]
+  })
+  const selected = new Set(products.map((product) => product.product))
+  const integrations: ClientDemoBlueprint['integrations'] = []
+  if (selected.has('website') && selected.has('ecommerce')) integrations.push({ from: 'website', to: 'ecommerce', outcome: 'Approved site content and catalog presentation stay aligned.' })
+  if (selected.has('ecommerce') && selected.has('commerce')) integrations.push({ from: 'ecommerce', to: 'commerce', outcome: 'Storefront requests enter Shop review before any order or stock change.' })
+  if (selected.has('production') && selected.has('commerce')) integrations.push({ from: 'commerce', to: 'production', outcome: 'Demand and material evidence connect Shop stock with Plant execution.' })
+  return {
+    schema: CLIENT_DEMO_BLUEPRINT_SCHEMA,
+    client: { workspace, owner, presetId: preset.id },
+    products,
+    integrations,
+    controls: {
+      localDemoOnly: true,
+      humanReviewRequired: true,
+      externalWritesPerformed: false,
+    },
+  }
 }
 
 export function buildClientImportStagingPackage(preview: ClientImportPreview, context: {

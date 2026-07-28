@@ -11,7 +11,6 @@ import {
   ACTION_KEY,
   APPROVAL_KEY,
   collectLocalProductRecords,
-  clientSetupPath,
   LEGACY_APPROVAL_KEYS,
   LEGACY_SETUP_KEYS,
   LEGACY_STOREFRONT_DRAFT_RESET_KEY,
@@ -52,6 +51,13 @@ import {
 } from './managed-trial'
 import { LEGACY_PRODUCTION_KEYS, PRODUCTION_KEY } from './production-workspace'
 import { formatTime, LEGACY_TEAM_WORK_KEYS, TEAM_WORK_KEY, useTeamWorkspace } from './team-work'
+import {
+  buildClientDemoBlueprint,
+  clientDemoPresets,
+  clientImportWorkflowTemplateIds,
+  type ClientDemoBlueprint,
+  type ClientDemoPresetId,
+} from './client-onboarding'
 
 const ClientDataOnboarding = lazy(() => import('./ClientDataOnboarding').then((module) => ({ default: module.ClientDataOnboarding })))
 const ManagedActivationRunbook = lazy(() => import('./ManagedActivationRunbook').then((module) => ({ default: module.ManagedActivationRunbook })))
@@ -77,17 +83,27 @@ export function SettingsPage() {
   const [managedWorkspace, setManagedWorkspace] = useState(currentManagedWorkspace())
   const [managedNotice, setManagedNotice] = useState('')
   const [managedBusy, setManagedBusy] = useState(false)
+  const [demoPresetId, setDemoPresetId] = useState<ClientDemoPresetId>('social-seller')
+  const [demoSelections, setDemoSelections] = useState<Partial<Record<SetupProductId, string>>>(() => Object.fromEntries(clientDemoPresets[0].selections.map((selection) => [selection.product, selection.templateId])))
+  const [demoBlueprint, setDemoBlueprint] = useState<ClientDemoBlueprint | null>(null)
   const completion = pilotProgress(setup)
   const isPilotReady = pilotReady(setup)
-  const workflowReady = Boolean(setup.workspace.trim() && setup.owner.trim() && setup.entryPoint.trim())
-  const workflowCompletion = Math.round(([setup.templateId, setup.entryPoint, setup.workspace.trim(), setup.owner.trim()].filter(Boolean).length / 4) * 100)
+  const requestedProduct = setupProductFromQuery(setupSearchParams.get('product'))
+  const selectedDemoEntries = Object.entries(demoSelections).filter((entry): entry is [SetupProductId, string] => Boolean(entry[1]))
+  const workflowReady = requestedProduct
+    ? Boolean(setup.workspace.trim() && setup.owner.trim() && setup.entryPoint.trim())
+    : Boolean(setup.workspace.trim() && setup.owner.trim() && selectedDemoEntries.length)
+  const workflowCompletion = requestedProduct
+    ? Math.round(([setup.templateId, setup.entryPoint, setup.workspace.trim(), setup.owner.trim()].filter(Boolean).length / 4) * 100)
+    : Math.round(([setup.workspace.trim(), setup.owner.trim(), selectedDemoEntries.length ? 'products' : ''].filter(Boolean).length / 3) * 100)
   const displayedCompletion = settingsStep === 'workflow' ? workflowCompletion : completion
   const displayedReady = settingsStep === 'workflow' ? workflowReady : isPilotReady
-  const requestedProduct = setupProductFromQuery(setupSearchParams.get('product'))
   const selectedProduct = productContracts[setup.product]
   const selectedTemplate = templateFor(setup.product, setup.templateId)
   const evidenceDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Yangon' }).format(new Date())
   const evidenceFilename = `supermega-trial-evidence-${evidenceDate}.json`
+  const demoBlueprintFilename = `supermega-client-demo-${setup.workspace.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || evidenceDate}.json`
+  const demoBlueprintHref = demoBlueprint ? `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ ...demoBlueprint, exportedAt: new Date().toISOString() }, null, 2))}` : ''
   const managedApprovalRequests = approvals.map(toManagedApprovalRequest).filter((request): request is NonNullable<typeof request> => Boolean(request))
   const localProductRecords = collectLocalProductRecords(window.localStorage)
   const localRecordCount = Object.keys(localProductRecords).length
@@ -139,25 +155,66 @@ export function SettingsPage() {
 
   function updateSetup(patch: Partial<SetupState>) {
     setSetup((current) => ({ ...current, ...patch, savedAt: undefined }))
+    setDemoBlueprint(null)
+  }
+
+  function chooseDemoPreset(presetId: ClientDemoPresetId) {
+    const preset = clientDemoPresets.find((candidate) => candidate.id === presetId) ?? clientDemoPresets[0]
+    setDemoPresetId(preset.id)
+    setDemoSelections(Object.fromEntries(preset.selections.map((selection) => [selection.product, selection.templateId])))
+    setDemoBlueprint(null)
+    setNotice(`${preset.name} modules selected. Adjust products only if this client needs a different operating loop.`)
+  }
+
+  function toggleDemoProduct(product: SetupProductId) {
+    setDemoSelections((current) => {
+      const next = { ...current }
+      if (next[product]) delete next[product]
+      else next[product] = clientImportWorkflowTemplateIds(product)[0]
+      return next
+    })
+    setDemoBlueprint(null)
+  }
+
+  function changeDemoTemplate(product: SetupProductId, templateId: string) {
+    setDemoSelections((current) => ({ ...current, [product]: templateId }))
+    setDemoBlueprint(null)
+  }
+
+  function configureDemoProduct(product: SetupProductId, templateId: string, openProduct: boolean) {
+    const template = templateFor(product, templateId)
+    setSetup((current) => ({
+      ...current,
+      product,
+      templateId: template.id,
+      entryPoint: template.entryPoints[0] ?? '',
+      startedAt: openProduct ? new Date().toISOString() : current.startedAt,
+      savedAt: undefined,
+    }))
+    if (openProduct) navigate(setupProductPreviewPath(product))
+    else setNotice(`${productDisplayName(product)} is selected below. Add client data or try the prepared sample.`)
+  }
+
+  function createDemoKit() {
+    try {
+      const blueprint = buildClientDemoBlueprint({
+        workspace: setup.workspace,
+        owner: setup.owner,
+        presetId: demoPresetId,
+        selections: selectedDemoEntries.map(([product, templateId]) => ({ product, templateId })),
+      })
+      setDemoBlueprint(blueprint)
+      const first = blueprint.products[0]
+      if (first) configureDemoProduct(first.product, first.templateId, false)
+      setNotice(`${blueprint.products.length}-product demo kit ready. Prepare data or open a product.`)
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'The client demo kit could not be prepared.')
+    }
   }
 
   function chooseSettingsStep(step: 'workflow' | 'success') {
     setSettingsStep(step)
     if (location.hash) navigate('/settings/', { replace: true })
-  }
-
-  function changeProduct(product: SetupProductId) {
-    const template = templateFor(product, '')
-    navigate(clientSetupPath(product), { replace: true })
-    setSetup((current) => ({
-      ...current,
-      product,
-      templateId: template.id,
-      entryPoint: template.entryPoints.includes(current.entryPoint) ? current.entryPoint : template.entryPoints[0] ?? '',
-      startedAt: undefined,
-      savedAt: undefined,
-    }))
-    setNotice(`Selected ${productDisplayName(product)}. Your client details were kept.`)
   }
 
   function changeTemplate(templateId: string) {
@@ -256,22 +313,40 @@ export function SettingsPage() {
 
   return (
     <div className="workspace-screen settings-screen">
-      <PageHeading eyebrow="Guided trial" title="Start with one workflow" copy="Pick template, owner, sample." />
+      <PageHeading eyebrow={requestedProduct ? 'Guided trial' : 'Internal demo builder'} title={requestedProduct ? `Set up ${selectedProduct.name}` : 'Set up one client. Open the whole system.'} copy={requestedProduct ? 'Name the client, choose one workflow, and prepare their data.' : 'Choose a business type once. SuperMega prepares the connected products, templates, data checklists, and demo links.'} />
       <nav aria-label="Setup steps" className="settings-step-nav">
-        <button aria-current={settingsStep === 'workflow' ? 'step' : undefined} onClick={() => chooseSettingsStep('workflow')} type="button"><span>1</span>Template</button>
+        <button aria-current={settingsStep === 'workflow' ? 'step' : undefined} onClick={() => chooseSettingsStep('workflow')} type="button"><span>1</span>{requestedProduct ? 'Template' : 'Demo kit'}</button>
         <button aria-current={settingsStep === 'success' ? 'step' : undefined} onClick={() => chooseSettingsStep('success')} type="button"><span>2</span>Trial plan</button>
       </nav>
       <div className="settings-grid settings-step-content">
         <form className="core-panel setup-form" onSubmit={save}>
-          <div className="panel-head"><div><span className="core-eyebrow">One product</span><h2>{settingsStep === 'workflow' ? 'Choose the trial' : 'Define success'}</h2></div><span className={`status-pill ${displayedReady ? 'approved' : 'bounded'}`}>{displayedReady ? 'ready' : `${displayedCompletion}%`}</span></div>
-          <div className="pilot-progress"><div className="progress-track"><i style={{ width: `${displayedCompletion}%` }} /></div><small>{settingsStep === 'workflow' ? 'Template - owner' : 'Record - target - evidence'}</small></div>
+          <div className="panel-head"><div><span className="core-eyebrow">{requestedProduct ? 'One product' : 'Client system'}</span><h2>{settingsStep === 'workflow' ? requestedProduct ? 'Choose the trial' : 'Build the demo kit' : 'Define success'}</h2></div><span className={`status-pill ${displayedReady ? 'approved' : 'bounded'}`}>{displayedReady ? 'ready' : `${displayedCompletion}%`}</span></div>
+          <div className="pilot-progress"><div className="progress-track"><i style={{ width: `${displayedCompletion}%` }} /></div><small>{settingsStep === 'workflow' ? requestedProduct ? 'Template - owner' : 'Client - products - data' : 'Record - target - evidence'}</small></div>
           <fieldset className="settings-step-fields" disabled={settingsStep !== 'workflow'} hidden={settingsStep !== 'workflow'}>
-          {requestedProduct ? <div className="setup-selected-product"><span><small>Selected product</small><strong>{selectedProduct.name}</strong></span><Link className="text-link" to="/">Change product</Link></div> : <div aria-label="Choose solution" className="setup-product-grid" role="group">{Object.values(productContracts).map((product) => <button aria-pressed={setup.product === product.id} key={product.id} onClick={() => changeProduct(product.id)} type="button"><span><strong>{product.name}</strong><small>{product.headline}</small></span><b>{product.templates.length} templates</b></button>)}</div>}
-          <div className="form-row"><label>Starting template<select value={setup.templateId} onChange={(event) => changeTemplate(event.target.value)}>{templatesFor(setup.product).map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select></label><label>Starting point<select value={setup.entryPoint} onChange={(event) => updateSetup({ entryPoint: event.target.value })}>{selectedTemplate.entryPoints.map((entryPoint) => <option key={entryPoint}>{entryPoint}</option>)}</select></label></div>
-          <div className="setup-template-summary"><div><span>Outcome</span><strong>{selectedTemplate.outcome}</strong></div><ol aria-label={`${selectedTemplate.name} workflow`}>{selectedTemplate.workflow.map((step) => <li key={step}>{step}</li>)}</ol><small>Measure success with {selectedTemplate.metric.toLowerCase()}.</small></div>
-          <div className="form-row"><label>Workspace name<input maxLength={80} required value={setup.workspace} onChange={(event) => updateSetup({ workspace: event.target.value })} placeholder={setup.product === 'commerce' ? 'Example: Social sales team' : setup.product === 'production' ? 'Example: Main plant' : setup.product === 'website' ? 'Example: Company website' : 'Example: Online order desk'} /></label><label>Responsible owner<input maxLength={80} required value={setup.owner} onChange={(event) => updateSetup({ owner: event.target.value })} placeholder="Name or role" /></label></div>
-          <Suspense fallback={<p className="form-notice" role="status">Loading the client data template...</p>}><ClientDataOnboarding managedIdentity={managedIdentity} owner={setup.owner} product={setup.product} productName={selectedProduct.name} productSlug={selectedProduct.slug} workflowTemplateId={selectedTemplate.id} workspace={setup.workspace} /></Suspense>
-          <div className="settings-step-actions"><span>Sample first. Plan when needed.</span><div className="setup-action-group"><button className="text-link" disabled={!workflowReady} onClick={() => chooseSettingsStep('success')} type="button">Add trial plan</button><button className="core-button primary" disabled={!workflowReady} onClick={startGuidedTrial} type="button">Start guided sample</button></div></div>
+          {requestedProduct ? <div className="setup-selected-product"><span><small>Selected product</small><strong>{selectedProduct.name}</strong></span><Link className="text-link" to="/settings/">Build full demo kit</Link></div> : null}
+          <div className="form-row"><label>Client or workspace name<input maxLength={60} required value={setup.workspace} onChange={(event) => updateSetup({ workspace: event.target.value })} placeholder="Example: Golden Valley Trading" /></label><label>Responsible owner<input maxLength={80} required value={setup.owner} onChange={(event) => updateSetup({ owner: event.target.value })} placeholder="Name or role" /></label></div>
+          {requestedProduct ? <>
+            <div className="form-row"><label>Workflow<select value={setup.templateId} onChange={(event) => changeTemplate(event.target.value)}>{templatesFor(setup.product).map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select></label><label>Current starting point<select value={setup.entryPoint} onChange={(event) => updateSetup({ entryPoint: event.target.value })}>{selectedTemplate.entryPoints.map((entryPoint) => <option key={entryPoint}>{entryPoint}</option>)}</select></label></div>
+            <div className="setup-template-summary"><div><span>Outcome</span><strong>{selectedTemplate.outcome}</strong></div><ol aria-label={`${selectedTemplate.name} workflow`}>{selectedTemplate.workflow.map((step) => <li key={step}>{step}</li>)}</ol><small>Measure success with {selectedTemplate.metric.toLowerCase()}.</small></div>
+          </> : <>
+            <div aria-label="Choose client business type" className="demo-preset-grid" role="group">{clientDemoPresets.map((preset) => <button aria-pressed={demoPresetId === preset.id} key={preset.id} onClick={() => chooseDemoPreset(preset.id)} type="button"><strong>{preset.name}</strong><small>{preset.description}</small></button>)}</div>
+            <div><span className="core-eyebrow">Products and workflows</span><p className="panel-copy">Keep only what this client will actually use. Every selected product shares the client name and owner.</p></div>
+            <div aria-label="Choose products for the client demo" className="demo-solution-grid">{Object.values(productContracts).map((product) => {
+              const templateId = demoSelections[product.id]
+              return <section className="demo-solution-card" data-selected={Boolean(templateId)} key={product.id}>
+                <label><input checked={Boolean(templateId)} onChange={() => toggleDemoProduct(product.id)} type="checkbox" /><span><strong>{product.name}</strong><small>{product.headline}</small></span></label>
+                {templateId ? <select aria-label={`${product.name} workflow`} onChange={(event) => changeDemoTemplate(product.id, event.target.value)} value={templateId}>{templatesFor(product.id).map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select> : <small>Not included in this demo.</small>}
+              </section>
+            })}</div>
+            <div className="settings-step-actions"><span>Creates a local setup package. No client data is sent.</span><button className="core-button primary" disabled={!workflowReady} onClick={createDemoKit} type="button">Build client demo kit</button></div>
+            {demoBlueprint ? <section aria-label="Client demo kit" className="demo-kit-result">
+              <div className="panel-head"><div><span className="core-eyebrow">Demo kit ready</span><h3>{demoBlueprint.client.workspace}</h3><p>{demoBlueprint.products.length} connected products · owner {demoBlueprint.client.owner}</p></div><a className="core-button" download={demoBlueprintFilename} href={demoBlueprintHref}>Download setup kit</a></div>
+              {demoBlueprint.integrations.length ? <ol className="demo-integration-flow">{demoBlueprint.integrations.map((integration) => <li key={`${integration.from}-${integration.to}`}><strong>{productDisplayName(integration.from)} → {productDisplayName(integration.to)}</strong><span>{integration.outcome}</span></li>)}</ol> : <p className="form-notice">This demo has one standalone product.</p>}
+              <div className="demo-kit-products">{demoBlueprint.products.map((product) => <article key={product.product}><div><strong>{product.label}</strong><small>{templateFor(product.product, product.templateId).name} · {product.checklist.length} data fields</small></div><div><button className="text-link" onClick={() => configureDemoProduct(product.product, product.templateId, false)} type="button">Prepare data</button><button className="core-button" onClick={() => configureDemoProduct(product.product, product.templateId, true)} type="button">Open demo</button></div></article>)}</div>
+            </section> : null}
+          </>}
+          {requestedProduct || demoBlueprint ? <section className="demo-data-setup"><div><span className="core-eyebrow">Client data</span><h3>Prepare {selectedProduct.name}</h3><p>Try the safe sample now or drop in the client's matching CSV for review.</p></div><Suspense fallback={<p className="form-notice" role="status">Loading the client data template...</p>}><ClientDataOnboarding managedIdentity={managedIdentity} owner={setup.owner} product={setup.product} productName={selectedProduct.name} productSlug={selectedProduct.slug} workflowTemplateId={selectedTemplate.id} workspace={setup.workspace} /></Suspense></section> : null}
+          <div className="settings-step-actions"><span>{requestedProduct ? 'Sample first. Plan when needed.' : 'Add measurable success criteria after the demo kit is ready.'}</span><div className="setup-action-group"><button className="text-link" disabled={!workflowReady} onClick={() => chooseSettingsStep('success')} type="button">Add trial plan</button>{requestedProduct ? <button className="core-button primary" disabled={!workflowReady} onClick={startGuidedTrial} type="button">Start guided sample</button> : null}</div></div>
           </fieldset>
           <fieldset className="settings-step-fields" disabled={settingsStep !== 'success'} hidden={settingsStep !== 'success'}>
           <div className="template-contract settings-workflow-summary"><span>{productDisplayName(setup.product)}</span><strong>{setup.workspace || 'Unnamed workspace'}</strong><small>{selectedTemplate.name} - {setup.owner || 'Owner needed'}</small></div>
